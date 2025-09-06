@@ -1,0 +1,218 @@
+use nom::{
+    IResult,
+    bytes::complete::tag,
+    number::complete::{le_f32, le_u8, le_u32},
+};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum GatError {
+    #[error("Invalid GAT header")]
+    InvalidHeader,
+    #[error("Unsupported GAT version: {0}")]
+    UnsupportedVersion(String),
+    #[error("Parse error: {0}")]
+    ParseError(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GatCellType(u32);
+
+impl GatCellType {
+    pub const NONE: Self = Self(1 << 0);
+    pub const WALKABLE: Self = Self(1 << 1);
+    pub const WATER: Self = Self(1 << 2);
+    pub const SNIPABLE: Self = Self(1 << 3);
+
+    pub fn is_walkable(&self) -> bool {
+        self.0 & Self::WALKABLE.0 != 0
+    }
+
+    pub fn is_water(&self) -> bool {
+        self.0 & Self::WATER.0 != 0
+    }
+
+    pub fn is_snipable(&self) -> bool {
+        self.0 & Self::SNIPABLE.0 != 0
+    }
+}
+
+impl From<u32> for GatCellType {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GatCell {
+    pub height: [f32; 4],
+    pub cell_type: GatCellType,
+}
+
+#[derive(Debug, Clone)]
+pub struct RoAltitude {
+    pub version: String,
+    pub width: u32,
+    pub height: u32,
+    pub cells: Vec<GatCell>,
+}
+
+impl RoAltitude {
+    pub fn from_bytes(input: &[u8]) -> Result<Self, GatError> {
+        match parse_gat(input) {
+            Ok((_, gat)) => Ok(gat),
+            Err(e) => Err(GatError::ParseError(e.to_string())),
+        }
+    }
+
+    pub fn get_cell(&self, x: usize, y: usize) -> Option<&GatCell> {
+        if x < self.width as usize && y < self.height as usize {
+            self.cells.get(y * self.width as usize + x)
+        } else {
+            None
+        }
+    }
+
+    pub fn is_walkable(&self, x: usize, y: usize) -> bool {
+        self.get_cell(x, y)
+            .map(|cell| cell.cell_type.is_walkable())
+            .unwrap_or(false)
+    }
+
+    pub fn get_height(&self, x: f32, y: f32) -> f32 {
+        let ix = x as usize;
+        let iy = y as usize;
+
+        if let Some(cell) = self.get_cell(ix, iy) {
+            let fx = x - ix as f32;
+            let fy = y - iy as f32;
+
+            // Bilinear interpolation
+            let h1 = cell.height[0] * (1.0 - fx) * (1.0 - fy);
+            let h2 = cell.height[1] * fx * (1.0 - fy);
+            let h3 = cell.height[2] * (1.0 - fx) * fy;
+            let h4 = cell.height[3] * fx * fy;
+
+            h1 + h2 + h3 + h4
+        } else {
+            0.0
+        }
+    }
+
+    pub fn count_walkable_cells(&self) -> usize {
+        self.cells
+            .iter()
+            .filter(|cell| cell.cell_type.is_walkable())
+            .count()
+    }
+
+    pub fn count_water_cells(&self) -> usize {
+        self.cells
+            .iter()
+            .filter(|cell| cell.cell_type.is_water())
+            .count()
+    }
+}
+
+fn parse_header(input: &[u8]) -> IResult<&[u8], String> {
+    let (input, _) = tag(&b"GRAT"[..])(input)?;
+    let (input, major) = le_u8(input)?;
+    let (input, minor) = le_u8(input)?;
+    Ok((input, format!("{}.{}", major, minor)))
+}
+
+fn parse_cells(input: &[u8], width: u32, height: u32) -> IResult<&[u8], Vec<GatCell>> {
+    let count = (width * height) as usize;
+    let mut cells = Vec::with_capacity(count);
+    let mut current_input = input;
+
+    for _ in 0..count {
+        // Parse 4 height values (bottom-left, bottom-right, top-left, top-right)
+        let (remaining, h1) = le_f32(current_input)?;
+        let (remaining, h2) = le_f32(remaining)?;
+        let (remaining, h3) = le_f32(remaining)?;
+        let (remaining, h4) = le_f32(remaining)?;
+
+        // Parse cell type flags
+        let (remaining, cell_type) = le_u32(remaining)?;
+
+        cells.push(GatCell {
+            height: [h1, h2, h3, h4],
+            cell_type: GatCellType::from(cell_type),
+        });
+        current_input = remaining;
+    }
+
+    Ok((current_input, cells))
+}
+
+fn parse_gat(input: &[u8]) -> IResult<&[u8], RoAltitude> {
+    let (input, version) = parse_header(input)?;
+    let (input, width) = le_u32(input)?;
+    let (input, height) = le_u32(input)?;
+    let (input, cells) = parse_cells(input, width, height)?;
+
+    Ok((
+        input,
+        RoAltitude {
+            version,
+            width,
+            height,
+            cells,
+        },
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_header() {
+        let data = b"GRAT\x01\x02";
+        let (_, version) = parse_header(data).unwrap();
+        assert_eq!(version, "1.2");
+    }
+
+    #[test]
+    fn test_cell_type_flags() {
+        let walkable = GatCellType::WALKABLE;
+        assert!(walkable.is_walkable());
+        assert!(!walkable.is_water());
+
+        let water = GatCellType::WATER;
+        assert!(water.is_water());
+        assert!(!water.is_walkable());
+
+        let combined = GatCellType(GatCellType::WALKABLE.0 | GatCellType::WATER.0);
+        assert!(combined.is_walkable());
+        assert!(combined.is_water());
+    }
+
+    #[test]
+    fn test_altitude_access() {
+        let gat = RoAltitude {
+            version: "1.2".to_string(),
+            width: 10,
+            height: 10,
+            cells: vec![
+                GatCell {
+                    height: [1.0, 2.0, 3.0, 4.0],
+                    cell_type: GatCellType::WALKABLE,
+                };
+                100
+            ],
+        };
+
+        assert!(gat.get_cell(0, 0).is_some());
+        assert!(gat.get_cell(9, 9).is_some());
+        assert!(gat.get_cell(10, 10).is_none());
+
+        assert!(gat.is_walkable(0, 0));
+        assert!(!gat.is_walkable(10, 10));
+
+        // Test height interpolation
+        let h = gat.get_height(0.5, 0.5);
+        assert_eq!(h, 2.5); // Average of 1, 2, 3, 4
+    }
+}

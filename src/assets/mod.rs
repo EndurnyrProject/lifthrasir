@@ -1,5 +1,6 @@
-pub mod loaders;
+pub mod bmp_loader;
 pub mod converters;
+pub mod loaders;
 
-pub use loaders::*;
 pub use converters::*;
+pub use loaders::*;

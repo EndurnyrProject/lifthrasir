@@ -1,6 +1,6 @@
-use bevy::prelude::*;
 use crate::assets::RoAssetsPlugin;
-use crate::systems::setup;
+use crate::systems::{camera_movement_system, setup};
+use bevy::prelude::*;
 // Animation system available: use crate::systems::animate_sprites;
 
 pub struct LifthrasirPlugin;
@@ -8,7 +8,8 @@ pub struct LifthrasirPlugin;
 impl Plugin for LifthrasirPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(RoAssetsPlugin)
-            .add_systems(Startup, setup);
-            // .add_systems(Update, animate_sprites); // Ready for map entities
+            .add_systems(Startup, setup)
+            .add_systems(Update, camera_movement_system);
+        // .add_systems(Update, animate_sprites); // Ready for map entities
     }
 }

@@ -1,8 +1,8 @@
 use nom::{
-    bytes::complete::take,
-    number::complete::{le_f32, le_i32, le_u16, le_u32, le_u8},
-    error::Error as NomError,
     IResult,
+    bytes::complete::take,
+    error::Error as NomError,
+    number::complete::{le_f32, le_i32, le_u8, le_u16, le_u32},
 };
 use thiserror::Error;
 
@@ -60,12 +60,12 @@ pub enum ActError {
 fn parse_header(input: &[u8]) -> IResult<&[u8], (String, f32), NomError<&[u8]>> {
     let (input, signature) = take(2usize)(input)?;
     let signature = String::from_utf8_lossy(signature).to_string();
-    
+
     let (input, version_major) = le_u8(input)?;
     let (input, version_minor) = le_u8(input)?;
-    
+
     let version = (version_major as f32) / 10.0 + (version_minor as f32);
-    
+
     Ok((input, (signature, version)))
 }
 
@@ -74,7 +74,7 @@ fn parse_layer(input: &[u8], version: f32) -> IResult<&[u8], Layer, NomError<&[u
     let (input, pos_y) = le_i32(input)?;
     let (input, sprite_index) = le_i32(input)?;
     let (input, is_mirror) = le_i32(input)?;
-    
+
     let mut layer = Layer {
         pos: [pos_x, pos_y],
         sprite_index,
@@ -86,35 +86,35 @@ fn parse_layer(input: &[u8], version: f32) -> IResult<&[u8], Layer, NomError<&[u
         width: 0,
         height: 0,
     };
-    
+
     let input = if version >= 2.0 {
         let (input, color_r) = le_u8(input)?;
         let (input, color_g) = le_u8(input)?;
         let (input, color_b) = le_u8(input)?;
         let (input, color_a) = le_u8(input)?;
-        
+
         layer.color = [
             color_r as f32 / 255.0,
             color_g as f32 / 255.0,
             color_b as f32 / 255.0,
             color_a as f32 / 255.0,
         ];
-        
+
         let (input, scale_x) = le_f32(input)?;
         let (input, scale_y) = if version <= 2.3 {
             (input, scale_x)
         } else {
             le_f32(input)?
         };
-        
+
         layer.scale = [scale_x, scale_y];
-        
+
         let (input, angle) = le_i32(input)?;
         let (input, sprite_type) = le_i32(input)?;
-        
+
         layer.angle = angle;
         layer.sprite_type = sprite_type;
-        
+
         let input = if version >= 2.5 {
             let (input, width) = le_i32(input)?;
             let (input, height) = le_i32(input)?;
@@ -124,19 +124,19 @@ fn parse_layer(input: &[u8], version: f32) -> IResult<&[u8], Layer, NomError<&[u
         } else {
             input
         };
-        
+
         input
     } else {
         input
     };
-    
+
     Ok((input, layer))
 }
 
 fn parse_animation_impl(input: &[u8], version: f32) -> IResult<&[u8], Animation, NomError<&[u8]>> {
     let (input, _) = take(32usize)(input)?; // Unknown bytes
     let (input, layer_count) = le_u32(input)?;
-    
+
     // Parse layers manually
     let mut remaining = input;
     let mut layers = Vec::new();
@@ -145,13 +145,13 @@ fn parse_animation_impl(input: &[u8], version: f32) -> IResult<&[u8], Animation,
         layers.push(layer);
         remaining = new_remaining;
     }
-    
+
     let (input, sound_id) = if version >= 2.0 {
         le_i32(remaining)?
     } else {
         (remaining, -1)
     };
-    
+
     let (input, positions) = if version >= 2.3 {
         let (input, pos_count) = le_u32(input)?;
         let mut remaining = input;
@@ -168,17 +168,23 @@ fn parse_animation_impl(input: &[u8], version: f32) -> IResult<&[u8], Animation,
     } else {
         (input, Vec::new())
     };
-    
-    Ok((input, Animation {
-        layers,
-        sound_id,
-        positions,
-    }))
+
+    Ok((
+        input,
+        Animation {
+            layers,
+            sound_id,
+            positions,
+        },
+    ))
 }
 
-fn parse_action_sequence_impl(input: &[u8], version: f32) -> IResult<&[u8], ActionSequence, NomError<&[u8]>> {
+fn parse_action_sequence_impl(
+    input: &[u8],
+    version: f32,
+) -> IResult<&[u8], ActionSequence, NomError<&[u8]>> {
     let (input, animation_count) = le_u32(input)?;
-    
+
     // Parse animations manually
     let mut remaining = input;
     let mut animations = Vec::new();
@@ -187,16 +193,19 @@ fn parse_action_sequence_impl(input: &[u8], version: f32) -> IResult<&[u8], Acti
         animations.push(animation);
         remaining = new_remaining;
     }
-    
-    Ok((remaining, ActionSequence {
-        animations,
-        delay: 150.0, // Default delay, may be overridden later
-    }))
+
+    Ok((
+        remaining,
+        ActionSequence {
+            animations,
+            delay: 150.0, // Default delay, may be overridden later
+        },
+    ))
 }
 
 fn parse_sounds(input: &[u8]) -> IResult<&[u8], Vec<String>, NomError<&[u8]>> {
     let (input, sound_count) = le_u32(input)?;
-    
+
     let mut remaining = input;
     let mut sounds = Vec::new();
     for _ in 0..sound_count {
@@ -207,28 +216,28 @@ fn parse_sounds(input: &[u8]) -> IResult<&[u8], Vec<String>, NomError<&[u8]>> {
         sounds.push(sound_name);
         remaining = new_remaining;
     }
-    
+
     Ok((remaining, sounds))
 }
 
 pub fn parse_act(data: &[u8]) -> Result<RoAction, ActError> {
     let (input, (signature, version)) = parse_header(data)
         .map_err(|_| ActError::ParseError("Failed to parse header".to_string()))?;
-    
+
     if signature != "AC" {
         return Err(ActError::InvalidHeader);
     }
-    
+
     if version < 2.0 || version > 2.5 {
         return Err(ActError::UnsupportedVersion(version));
     }
-    
+
     let (input, action_count) = le_u16::<&[u8], NomError<&[u8]>>(input)
         .map_err(|_| ActError::ParseError("Failed to parse action count".to_string()))?;
-    
+
     let (input, _) = take::<usize, &[u8], NomError<&[u8]>>(10usize)(input)
         .map_err(|_| ActError::ParseError("Failed to skip unknown bytes".to_string()))?;
-    
+
     // Parse actions manually
     let mut remaining = input;
     let mut actions = Vec::new();
@@ -238,16 +247,16 @@ pub fn parse_act(data: &[u8]) -> Result<RoAction, ActError> {
         actions.push(action);
         remaining = new_remaining;
     }
-    
+
     let (input, sounds) = if version >= 2.1 {
         parse_sounds(remaining)
             .map_err(|_| ActError::ParseError("Failed to parse sounds".to_string()))?
     } else {
         (remaining, Vec::new())
     };
-    
+
     let mut actions = actions;
-    
+
     if version >= 2.2 && !input.is_empty() {
         for (i, action) in actions.iter_mut().enumerate() {
             if let Ok((_, delay)) = le_f32::<&[u8], NomError<&[u8]>>(&input[i * 4..]) {
@@ -255,7 +264,7 @@ pub fn parse_act(data: &[u8]) -> Result<RoAction, ActError> {
             }
         }
     }
-    
+
     Ok(RoAction {
         version,
         actions,

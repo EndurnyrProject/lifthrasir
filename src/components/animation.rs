@@ -1,6 +1,6 @@
-use bevy::prelude::*;
-use crate::assets::{RoSpriteAsset, RoActAsset};
+use crate::assets::{RoActAsset, RoSpriteAsset};
 use crate::utils::DEFAULT_ANIMATION_DELAY;
+use bevy::prelude::*;
 
 /// Controls animation playback for RO sprites
 #[derive(Component)]
@@ -26,7 +26,7 @@ impl RoAnimationController {
             action_handle,
         }
     }
-    
+
     pub fn reset(&mut self) {
         self.action_index = 0;
         self.animation_index = 0;

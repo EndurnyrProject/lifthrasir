@@ -5,6 +5,11 @@ edition = "2024"
 
 [dependencies]
 bevy = { version = "0.16.1", features = ["dynamic_linking"] }
-nom = "8"
-thiserror = "2"
-image = "0.25"
+bevy_egui = "0.36.0"
+nom = "8.0.0"
+thiserror = "2.0.16"
+image = "0.25.8"
+futures-lite = "2.6.1"
+flate2 = "1.1.2"
+encoding_rs = "0.8.35"
+nalgebra = "0.33"
