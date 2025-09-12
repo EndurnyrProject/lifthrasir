@@ -1,4 +1,7 @@
 use crate::assets::loaders::{GrfAsset, RoGroundAsset, RoWorldAsset};
+use crate::components::rsm_animation::{
+    AnimatedTransform, AnimationType, RsmAnimationController, RsmNodeAnimation,
+};
 use crate::components::{GrfMapLoader, MapLoader};
 use crate::ro_formats::{RsmFile, RswObject};
 use crate::utils::{get_map_dimensions_from_ground, rsw_to_bevy_transform};
@@ -17,6 +20,16 @@ pub struct MapModel {
 
 #[derive(Component)]
 pub struct ModelProcessed;
+
+#[derive(Component)]
+pub struct AnimationSpeed(pub f32);
+
+/// Component to mark and identify RSM node entities
+#[derive(Component, Debug)]
+pub struct RsmNode {
+    pub index: usize,
+    pub name: String,
+}
 
 #[derive(Resource, Default)]
 pub struct RsmCache {
@@ -45,7 +58,8 @@ pub fn spawn_map_models(
 
         let (map_width, map_height) = get_map_dimensions_from_ground(&ground_asset.ground);
 
-        let mut model_groups: HashMap<String, Vec<(Transform, String)>> = HashMap::new();
+        let mut model_groups: HashMap<String, Vec<(Transform, String, AnimationType, f32)>> =
+            HashMap::new();
         let mut model_count = 0;
         let mut empty_count = 0;
 
@@ -64,10 +78,28 @@ pub fn spawn_map_models(
                 }
 
                 let transform = rsw_to_bevy_transform(model, map_width, map_height);
+
+                // Convert RSW animation type to our enum
+                // Most RO models should loop by default for continuous animation
+                let anim_type = match model.anim_type {
+                    0 => AnimationType::None, // Explicitly no animation
+                    1 => AnimationType::Loop, // Loop animation
+                    2 => AnimationType::Loop, // Default to Loop instead of Once to prevent stopping
+                    _ => {
+                        // Default to Loop for any unknown animation types
+                        AnimationType::Loop
+                    }
+                };
+
                 model_groups
                     .entry(model.filename.clone())
                     .or_default()
-                    .push((transform, model.node_name.clone()));
+                    .push((
+                        transform,
+                        model.node_name.clone(),
+                        anim_type,
+                        model.anim_speed,
+                    ));
             }
         }
 
@@ -79,20 +111,29 @@ pub fn spawn_map_models(
         }
 
         for (filename, instances) in model_groups {
-            for (transform, node_name) in instances {
-                commands.spawn((
-                    Transform::from_translation(transform.translation)
-                        .with_rotation(transform.rotation)
-                        .with_scale(transform.scale),
-                    GlobalTransform::default(),
-                    Visibility::default(),
-                    ViewVisibility::default(),
-                    InheritedVisibility::default(),
-                    MapModel {
-                        filename: filename.clone(),
-                        node_name: node_name.clone(),
-                    },
-                ));
+            for (transform, node_name, anim_type, anim_speed) in instances {
+                let entity = commands
+                    .spawn((
+                        Transform::from_translation(transform.translation)
+                            .with_rotation(transform.rotation)
+                            .with_scale(transform.scale),
+                        GlobalTransform::default(),
+                        Visibility::default(),
+                        ViewVisibility::default(),
+                        InheritedVisibility::default(),
+                        MapModel {
+                            filename: filename.clone(),
+                            node_name: node_name.clone(),
+                        },
+                    ))
+                    .id();
+
+                // Store animation data for later processing in update_model_meshes
+                if anim_type != AnimationType::None {
+                    commands
+                        .entity(entity)
+                        .insert((anim_type, AnimationSpeed(anim_speed)));
+                }
             }
         }
     }
@@ -100,7 +141,15 @@ pub fn spawn_map_models(
 
 pub fn update_model_meshes(
     mut commands: Commands,
-    model_query: Query<(Entity, &MapModel), (With<MapModel>, Without<ModelProcessed>)>,
+    model_query: Query<
+        (
+            Entity,
+            &MapModel,
+            Option<&AnimationType>,
+            Option<&AnimationSpeed>,
+        ),
+        (With<MapModel>, Without<ModelProcessed>),
+    >,
     grf_assets: Res<Assets<GrfAsset>>,
     grf_query: Query<&GrfMapLoader>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -108,11 +157,6 @@ pub fn update_model_meshes(
     mut images: ResMut<Assets<Image>>,
     mut rsm_cache: ResMut<RsmCache>,
 ) {
-    // Count models to process
-    let models_to_process = model_query.iter().count();
-    // Process models that don't have meshes yet
-
-    // Find the GRF asset
     let grf_asset = grf_query
         .iter()
         .next()
@@ -122,13 +166,10 @@ pub fn update_model_meshes(
         return; // No GRF loaded yet
     };
 
-    for (entity, map_model) in model_query.iter() {
+    for (entity, map_model, anim_type, anim_speed) in model_query.iter() {
         if map_model.filename.is_empty() {
             continue;
         }
-
-        // Note: We don't cache meshes anymore since we create multiple meshes per model
-        // Materials are still cached per texture
 
         let parsed_rsm = {
             let parsed_cache = rsm_cache.parsed_rsms.read().unwrap();
@@ -162,48 +203,120 @@ pub fn update_model_meshes(
             }
         };
 
-        let meshes_by_texture = convert_rsm_to_mesh(&rsm);
+        let node_meshes = convert_rsm_to_mesh(&rsm);
 
-        // Create child entities for each texture's mesh
-        let mut children = Vec::new();
+        // Create entity hierarchy: Model -> Node Entities -> Mesh Children
+        let mut node_entities = vec![None; rsm.nodes.len()];
 
-        for (actual_texture_idx, mesh) in meshes_by_texture {
-            let mesh_handle = meshes.add(mesh);
+        // First pass: Create all node entities with their transforms
+        for (node_idx, node) in rsm.nodes.iter().enumerate() {
+            let node_transform = rsm_node_to_bevy_transform(&rsm, node, node_idx);
 
-            // Get or create material for this specific texture
-            let material_handle = get_or_create_material_for_texture(
-                &rsm,
-                &map_model.node_name,
-                actual_texture_idx,
-                grf_asset,
-                &mut rsm_cache,
-                &mut materials,
-                &mut images,
-            );
+            let node_entity_commands = commands.spawn((
+                node_transform,
+                GlobalTransform::default(),
+                Visibility::default(),
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+                RsmNode {
+                    index: node_idx,
+                    name: node.name.clone(),
+                },
+            ));
 
-            // Create a child entity for this texture's mesh
-            let child = commands
-                .spawn((
-                    Mesh3d(mesh_handle),
-                    MeshMaterial3d(material_handle),
-                    Transform::default(),
-                    GlobalTransform::default(),
-                ))
-                .id();
+            // Store node entity ID for animation setup
+            let node_entity_id = node_entity_commands.id();
 
-            children.push(child);
+            node_entities[node_idx] = Some(node_entity_id);
+
+            // Create animation components if this node has keyframes and model has animation
+            if node_has_animation(node) && anim_type.is_some() {
+                let speed = anim_speed.map(|s| s.0).unwrap_or(1.0);
+                let anim_type_value = *anim_type.unwrap();
+
+                // Create base transform from current node transform
+                let base_transform = AnimatedTransform::from_transform(&node_transform);
+
+                // Create node animation component
+                let node_animation = RsmNodeAnimation::new(
+                    node.pos_keyframes.clone(),
+                    node.rot_keyframes.clone(),
+                    base_transform,
+                    rsm.anim_len,
+                );
+
+                // Create animation controller
+                let mut controller = RsmAnimationController::new();
+                controller.play(anim_type_value);
+                controller.set_speed(speed);
+                // RSM anim_len is duration in milliseconds, not FPS
+                // Use standard RO animation frame rate: 25 FPS
+                let fps = 25.0; // Standard Ragnarok Online frame rate
+                controller.set_frame_rate(fps);
+
+                // Add animation components to node entity
+                commands
+                    .entity(node_entity_id)
+                    .insert((node_animation, controller));
+            }
         }
 
-        // Add children to the parent entity and mark as processed
-        if !children.is_empty() {
-            commands
-                .entity(entity)
-                .add_children(&children)
-                .insert(ModelProcessed);
-        } else {
-            // Even if no children were created, mark as processed to avoid reprocessing
-            commands.entity(entity).insert(ModelProcessed);
+        // Second pass: Set up parent-child relationships between nodes
+        for (node_idx, node) in rsm.nodes.iter().enumerate() {
+            let node_entity = node_entities[node_idx].unwrap();
+
+            // Find and set parent
+            if let Some(parent_idx) = find_parent_node_index(&rsm, node) {
+                if let Some(parent_entity) = node_entities[parent_idx] {
+                    commands.entity(parent_entity).add_child(node_entity);
+                } else {
+                    // Parent not found, attach to model entity
+                    commands.entity(entity).add_child(node_entity);
+                    warn!(
+                        "Parent '{}' not found for node '{}', attaching to model",
+                        node.parent_name, node.name
+                    );
+                }
+            } else {
+                // Root node - attach directly to model entity
+                commands.entity(entity).add_child(node_entity);
+            }
         }
+
+        // Third pass: Add mesh children to their respective nodes
+        for (node_idx, node_mesh_list) in node_meshes {
+            let node_entity = node_entities[node_idx].unwrap();
+
+            for (texture_id, mesh) in node_mesh_list {
+                let mesh_handle = meshes.add(mesh);
+
+                // Get or create material for this specific texture
+                let material_handle = get_or_create_material_for_texture(
+                    &rsm,
+                    &map_model.node_name,
+                    texture_id,
+                    grf_asset,
+                    &mut rsm_cache,
+                    &mut materials,
+                    &mut images,
+                );
+
+                // Create mesh entity with local space transform (IDENTITY)
+                let mesh_entity = commands
+                    .spawn((
+                        Mesh3d(mesh_handle),
+                        MeshMaterial3d(material_handle),
+                        Transform::IDENTITY, // Local space - let Bevy handle hierarchy transforms
+                        GlobalTransform::default(),
+                    ))
+                    .id();
+
+                // Add mesh as child of its node
+                commands.entity(node_entity).add_child(mesh_entity);
+            }
+        }
+
+        commands.entity(entity).insert(ModelProcessed);
     }
 }
 
@@ -217,150 +330,72 @@ fn mat3_to_mat4(mat3: &[f32; 9]) -> Mat4 {
     )
 }
 
-fn convert_rsm_to_mesh(rsm: &RsmFile) -> Vec<(i32, Mesh)> {
-    let hierarchy_matrices = build_node_hierarchy_matrices(rsm);
-    let mut all_meshes = Vec::new();
+/// Returns a map of node index -> vec of (texture_id, mesh) pairs
+fn convert_rsm_to_mesh(rsm: &RsmFile) -> HashMap<usize, Vec<(i32, Mesh)>> {
+    let mut node_meshes = HashMap::new();
 
     for (idx, node) in rsm.nodes.iter().enumerate() {
-        let hierarchy_matrix = hierarchy_matrices[idx];
-        let node_meshes = convert_node_with_hierarchy_matrix(rsm, node, hierarchy_matrix);
-
-        if node_meshes.is_empty() {
-            warn!("No meshes generated for node '{}'", node.name);
-        } else {
-            all_meshes.extend(node_meshes);
+        let meshes = extract_node_meshes(rsm, node);
+        if !meshes.is_empty() {
+            node_meshes.insert(idx, meshes);
         }
     }
 
-    if all_meshes.is_empty() {
-        warn!("No meshes generated from RSM nodes, using fallback cube");
+    // If no meshes were generated at all, create a fallback for the main node
+    if node_meshes.is_empty() {
+        warn!("No meshes generated from RSM nodes, using fallback cube for main node");
         let mesh = Mesh::from(Cuboid::new(1.0, 1.0, 1.0));
-        all_meshes.push((-1, mesh));
+        let main_node_idx = rsm
+            .nodes
+            .iter()
+            .position(|n| n.name == rsm.main_node_name)
+            .unwrap_or(0);
+        node_meshes.insert(main_node_idx, vec![(-1, mesh)]);
     }
 
-    all_meshes
+    node_meshes
 }
 
-fn build_node_hierarchy_matrices(rsm: &RsmFile) -> Vec<Mat4> {
-    let mut node_matrices = vec![Mat4::IDENTITY; rsm.nodes.len()];
-
-    // Find the main node (starting point for hierarchy)
-    let main_node_idx = rsm
-        .nodes
-        .iter()
-        .position(|n| n.name == rsm.main_node_name)
-        .unwrap_or(0);
-
-    calculate_node_hierarchy_matrix(rsm, main_node_idx, Mat4::IDENTITY, &mut node_matrices);
-
-    // Also process any orphaned nodes (nodes without parents or whose parents weren't processed)
-    for (idx, _node) in rsm.nodes.iter().enumerate() {
-        if node_matrices[idx] == Mat4::IDENTITY && idx != main_node_idx {
-            calculate_node_hierarchy_matrix(rsm, idx, Mat4::IDENTITY, &mut node_matrices);
-        }
-    }
-
-    node_matrices
-}
-
-fn calculate_node_hierarchy_matrix(
-    rsm: &RsmFile,
-    node_idx: usize,
-    parent_matrix: Mat4,
-    node_matrices: &mut Vec<Mat4>,
-) {
-    if node_matrices[node_idx] != Mat4::IDENTITY {
-        return;
-    }
-
-    let node = &rsm.nodes[node_idx];
-    let mut matrix = parent_matrix;
-
-    // Apply node position
-    let pos_trans = Mat4::from_translation(Vec3::from_array(node.pos));
-    matrix *= pos_trans;
-
-    // Apply rotation (static or keyframe-based)
-    if node.rot_angle != 0.0 {
-        let axis = Vec3::from_array(node.rot_axis);
-        if axis.length() > 0.0 {
-            let normalized_axis = axis.normalize();
-            let rotation = Mat4::from_axis_angle(normalized_axis, node.rot_angle);
-            matrix *= rotation;
-        }
-    }
-
-    // Apply scale
-    let scale_trans = Mat4::from_scale(Vec3::from_array(node.scale));
-    matrix *= scale_trans;
-
-    // Store this node's accumulated hierarchy matrix
-    node_matrices[node_idx] = matrix;
-    debug!("  Stored matrix for node {} '{}'", node_idx, node.name);
-
-    // This is crucial - we process ALL children, not just those with geometry
-    for (child_idx, child_node) in rsm.nodes.iter().enumerate() {
-        if child_node.parent_name == node.name
-            && child_node.name != child_node.parent_name
-            && !child_node.parent_name.is_empty()
-            && child_idx != node_idx
-        {
-            calculate_node_hierarchy_matrix(rsm, child_idx, matrix, node_matrices);
-        }
-    }
-}
-
-fn convert_node_with_hierarchy_matrix(
-    rsm: &RsmFile,
-    node: &crate::ro_formats::rsm::Node,
-    hierarchy_matrix: Mat4,
-) -> Vec<(i32, Mesh)> {
+fn extract_node_meshes(rsm: &RsmFile, node: &crate::ro_formats::rsm::Node) -> Vec<(i32, Mesh)> {
     if node.vertices.is_empty() || node.faces.is_empty() {
         return Vec::new();
     }
 
     let is_only = rsm.nodes.len() == 1;
 
-    // Apply complete transformation chain like RoBrowser's compile method
-    // but adapted for our coordinate system
     let mut transform = Mat4::IDENTITY;
 
-    // 1. Apply bounding box translation FIRST (keeps our working coordinate system)
-    if let Some(ref bbox) = rsm.bounding_box {
-        let bbox_trans =
-            Mat4::from_translation(Vec3::new(-bbox.center[0], -bbox.max[1], -bbox.center[2]));
-        transform = transform * bbox_trans;
-    }
-
-    // 2. Apply the hierarchy matrix (this is the key difference from our previous approach)
-    transform = transform * hierarchy_matrix;
-
-    // 3. Apply offset (only if not is_only) - like RoBrowser
+    // 1. Apply offset (only if not is_only) - following RoBrowser pattern
     if !is_only {
         let offset_trans = Mat4::from_translation(Vec3::from_array(node.offset));
-        transform = transform * offset_trans;
+        transform *= offset_trans;
     }
 
-    // 4. Apply mat3 transformation - like RoBrowser
+    // 2. Apply mat3 transformation - local node transform matrix
     let mat3_as_mat4 = mat3_to_mat4(&node.mat3);
-    transform = transform * mat3_as_mat4;
+    transform *= mat3_as_mat4;
 
-    // Apply transformations to vertices (same as before)
+    // Apply transformations to vertices (keeping them in local node space)
     let mut transformed_vertices: Vec<[f32; 3]> = Vec::with_capacity(node.vertices.len());
     for vertex in &node.vertices {
-        // Transform vertex by the complete matrix
+        // Transform vertex by local node matrix only
         let v = Vec4::new(vertex[0], vertex[1], vertex[2], 1.0);
         let transformed = transform * v;
 
-        // Apply Y-flip after all transformations
-        let final_v = Vec3::new(transformed.x, transformed.y, transformed.z);
-
-        transformed_vertices.push(final_v.to_array());
+        // Store in local space (no Y-flip or global transforms here)
+        let local_v = Vec3::new(transformed.x, transformed.y, transformed.z);
+        transformed_vertices.push(local_v.to_array());
     }
 
-    // Rest of the mesh generation logic remains the same...
-    let mut faces_by_texture: HashMap<i32, Vec<usize>> = HashMap::new();
+    generate_meshes_from_vertices_and_faces(node, &transformed_vertices)
+}
 
+fn generate_meshes_from_vertices_and_faces(
+    node: &crate::ro_formats::rsm::Node,
+    transformed_vertices: &[[f32; 3]],
+) -> Vec<(i32, Mesh)> {
+    // Group faces by texture
+    let mut faces_by_texture: HashMap<i32, Vec<usize>> = HashMap::new();
     for (idx, face) in node.faces.iter().enumerate() {
         let actual_texture_idx = if (face.tex_id as usize) < node.texture_ids.len() {
             node.texture_ids[face.tex_id as usize]
@@ -373,6 +408,7 @@ fn convert_node_with_hierarchy_matrix(
             .push(idx);
     }
 
+    // Calculate face normals
     let mut face_normals = Vec::with_capacity(node.faces.len());
     for face in &node.faces {
         let v1_idx = face.vertex_ids[0] as usize;
@@ -399,6 +435,7 @@ fn convert_node_with_hierarchy_matrix(
 
     let mut result = Vec::new();
 
+    // Generate mesh for each texture
     for (actual_texture_idx, face_indices) in faces_by_texture {
         let mut final_positions: Vec<[f32; 3]> = Vec::new();
         let mut final_normals: Vec<[f32; 3]> = Vec::new();
@@ -474,6 +511,56 @@ fn convert_node_with_hierarchy_matrix(
     } else {
         result
     }
+}
+
+/// Convert RSM node properties to Bevy Transform (local space)
+/// This handles the node's local position, rotation, and scale
+fn rsm_node_to_bevy_transform(
+    rsm: &RsmFile,
+    node: &crate::ro_formats::rsm::Node,
+    node_idx: usize,
+) -> Transform {
+    let mut transform = Transform::from_translation(Vec3::from_array(node.pos));
+
+    // Apply rotation if present
+    if node.rot_angle != 0.0 {
+        let axis = Vec3::from_array(node.rot_axis);
+        if axis.length() > 0.0 {
+            let normalized_axis = axis.normalize();
+            transform.rotation = Quat::from_axis_angle(normalized_axis, node.rot_angle);
+        }
+    }
+
+    // Apply scale
+    transform.scale = Vec3::from_array(node.scale);
+
+    // Special handling for the main node: apply bounding box adjustment
+    // This maintains the coordinate system setup with NEG_Y camera
+    let is_main_node = node.name == rsm.main_node_name || node_idx == 0;
+    if is_main_node {
+        if let Some(ref bbox) = rsm.bounding_box {
+            // Apply bounding box translation to the main node's transform
+            // This replaces the global bbox transform that was applied to all vertices
+            let bbox_offset = Vec3::new(-bbox.center[0], -bbox.max[1], -bbox.center[2]);
+            transform.translation += bbox_offset;
+        }
+    }
+
+    transform
+}
+
+/// Find the parent node index for a given node in the RSM hierarchy
+fn find_parent_node_index(rsm: &RsmFile, node: &crate::ro_formats::rsm::Node) -> Option<usize> {
+    if node.parent_name.is_empty() || node.parent_name == node.name {
+        return None; // Root node or self-referencing
+    }
+
+    rsm.nodes.iter().position(|n| n.name == node.parent_name)
+}
+
+/// Helper to check if a node has animation keyframes
+fn node_has_animation(node: &crate::ro_formats::rsm::Node) -> bool {
+    !node.pos_keyframes.is_empty() || !node.rot_keyframes.is_empty()
 }
 
 fn get_or_create_material_for_texture(
@@ -623,4 +710,36 @@ fn create_rsm_material_for_texture(
     }
 
     materials.add(material)
+}
+
+/// Update RSM animation components each frame
+pub fn update_rsm_animations(
+    mut node_query: Query<(
+        &mut Transform,
+        &mut RsmAnimationController,
+        &RsmNodeAnimation,
+    )>,
+    time: Res<Time>,
+) {
+    let delta_time = time.delta_secs();
+
+    for (mut transform, mut controller, animation) in node_query.iter_mut() {
+        if !controller.is_playing {
+            continue;
+        }
+
+        // Update animation frame using RSM animation length in milliseconds
+        controller.update_frame(delta_time, animation.duration_frames);
+
+        // Apply keyframe interpolation to transform
+        let current_frame = controller.current_frame;
+
+        // Get interpolated position and rotation from animation data
+        let new_position = animation.get_position_at_frame(current_frame);
+        let new_rotation = animation.get_rotation_at_frame(current_frame);
+
+        // Update transform (keep current scale)
+        transform.translation = new_position;
+        transform.rotation = new_rotation;
+    }
 }

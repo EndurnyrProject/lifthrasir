@@ -583,31 +583,6 @@ mod tests {
                 assert_eq!(rsm.version, 1.5);
                 assert_eq!(rsm.nodes.len(), 2);
 
-                println!("Main node name: '{}'", rsm.main_node_name);
-                println!("Main node name bytes: {:?}", rsm.main_node_name.as_bytes());
-                println!("Main node name len: {}", rsm.main_node_name.len());
-
-                println!("\nNodes:");
-                for (i, node) in rsm.nodes.iter().enumerate() {
-                    println!(
-                        "  Node {}: name='{}', parent='{}'",
-                        i, node.name, node.parent_name
-                    );
-                    println!("    name bytes: {:?}", node.name.as_bytes());
-                    println!(
-                        "    name == main_node_name: {}",
-                        node.name == rsm.main_node_name
-                    );
-                }
-
-                // Check if we're looking for 'cherryflower_s_01' but the actual node might be different
-                if rsm.main_node_name.contains("cherryflower") {
-                    println!(
-                        "\nWARNING: main_node_name contains 'cherryflower' but actual nodes might be 'cherrytree'"
-                    );
-                }
-
-                println!("✓ cherrytree_s_01.rsm parsed successfully");
             }
             Err(e) => panic!("Failed to parse cherrytree_s_01.rsm: {e:?}"),
         }
@@ -621,7 +596,6 @@ mod tests {
             Ok((_, rsm)) => {
                 assert_eq!(rsm.version, 1.5);
                 assert_eq!(rsm.nodes.len(), 2);
-                println!("✓ cherrytree_s_02.rsm parsed successfully");
             }
             Err(e) => panic!("Failed to parse cherrytree_s_02.rsm: {e:?}"),
         }

@@ -3,7 +3,8 @@
 #
 
 # RoBrowser
-robrowser_src.xml
+robrowser-src
+grf-editor-src
 
 .mcp.json
 

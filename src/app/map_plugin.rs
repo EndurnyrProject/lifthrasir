@@ -4,7 +4,7 @@ use crate::{
     ro_formats::RswObject,
     systems::{
         RsmCache, generate_terrain_mesh, setup_terrain_camera, spawn_map_models,
-        update_model_meshes,
+        update_model_meshes, update_rsm_animations,
     },
 };
 use bevy::prelude::*;
@@ -21,6 +21,7 @@ impl Plugin for MapPlugin {
                 setup_terrain_camera,
                 spawn_map_models,
                 update_model_meshes,
+                update_rsm_animations,
             ),
         );
     }
