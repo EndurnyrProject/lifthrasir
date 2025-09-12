@@ -7,10 +7,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum GatError {
-    #[error("Invalid GAT header")]
-    InvalidHeader,
-    #[error("Unsupported GAT version: {0}")]
-    UnsupportedVersion(String),
     #[error("Parse error: {0}")]
     ParseError(String),
 }
@@ -118,7 +114,7 @@ fn parse_header(input: &[u8]) -> IResult<&[u8], String> {
     let (input, _) = tag(&b"GRAT"[..])(input)?;
     let (input, major) = le_u8(input)?;
     let (input, minor) = le_u8(input)?;
-    Ok((input, format!("{}.{}", major, minor)))
+    Ok((input, format!("{major}.{minor}")))
 }
 
 fn parse_cells(input: &[u8], width: u32, height: u32) -> IResult<&[u8], Vec<GatCell>> {

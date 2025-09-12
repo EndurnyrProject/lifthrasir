@@ -1,5 +1,5 @@
 use crate::ro_formats::des;
-use encoding_rs::{EUC_KR, WINDOWS_1252};
+use crate::utils::string_utils::parse_korean_string;
 use flate2::read::ZlibDecoder;
 use nom::{IResult, Parser, bytes::complete::take, number::complete::le_u32};
 use std::collections::HashMap;
@@ -54,7 +54,6 @@ pub struct GrfEntry {
 
 #[derive(Debug)]
 pub struct GrfFile {
-    pub header: GrfHeader,
     pub entries: Vec<GrfEntry>,
     pub entry_map: HashMap<String, usize>,
     file_path: PathBuf,
@@ -96,7 +95,6 @@ impl GrfFile {
     }
 
     pub fn from_path(path: PathBuf) -> Result<Self, GrfError> {
-        // Open file and read only header and file table
         let mut file = File::open(&path).map_err(|e| GrfError::IoError(e.to_string()))?;
         let mut header_bytes = vec![0u8; 46];
 
@@ -108,7 +106,6 @@ impl GrfFile {
         let metadata = std::fs::metadata(&path).map_err(|e| GrfError::IoError(e.to_string()))?;
         Self::validate_header(&header, metadata.len() as usize)?;
 
-        // Read file table
         use std::io::Seek;
         file.seek(std::io::SeekFrom::Start(
             header.file_table_offset as u64 + HEADER_SIZE,
@@ -135,11 +132,9 @@ impl GrfFile {
         let mut entry_map = HashMap::new();
         for (index, entry) in entries.iter().enumerate() {
             entry_map.insert(entry.filename.clone(), index);
-            // Debug: log all entries containing bgate3, lamp3, wag1, or floshp4
         }
 
         Ok(GrfFile {
-            header,
             entries,
             entry_map,
             file_path: path,
@@ -207,23 +202,9 @@ impl GrfFile {
                 pos += 1;
             }
 
-            // Try to detect if this is Korean text by checking for common Korean byte patterns
-            // Korean text in EUC-KR typically has bytes in the range 0xA1-0xFE
-            let is_korean = filename_bytes.iter().any(|&b| b >= 0xA1 && b <= 0xFE);
-
-            let filename = if is_korean {
-                // Try EUC-KR first for Korean text
-                let (decoded, _, had_errors) = EUC_KR.decode(&filename_bytes);
-                if had_errors {
-                    // Fall back to WINDOWS_1252 if EUC-KR fails
-                    WINDOWS_1252.decode(&filename_bytes).0.to_string()
-                } else {
-                    decoded.to_string()
-                }
-            } else {
-                // Use WINDOWS_1252 for non-Korean text
-                WINDOWS_1252.decode(&filename_bytes).0.to_string()
-            };
+            let filename = parse_korean_string(&filename_bytes, filename_bytes.len())
+                .map_err(|e| GrfError::ParseError(format!("Filename parse error: {e:?}")))?
+                .1;
 
             if pos >= data.len() {
                 break;
@@ -265,7 +246,6 @@ impl GrfFile {
     }
 
     pub fn get_file(&self, filename: &str) -> Option<Vec<u8>> {
-        // Debug logging for Korean texture lookups
         let entry_index = if let Some(&index) = self.entry_map.get(filename) {
             index
         } else {
@@ -296,7 +276,6 @@ impl GrfFile {
 
         // Handle decryption if needed
         let was_encrypted = if entry.file_type & FILELIST_TYPE_ENCRYPT_MIXED != 0 {
-            // Note: RoBrowser uses pack_size, not real_size for the cycle calculation!
             des::decode_full(&mut file_data, entry.length_aligned, entry.pack_size);
             true
         } else if entry.file_type & FILELIST_TYPE_ENCRYPT_HEADER != 0 {
@@ -318,14 +297,6 @@ impl GrfFile {
         } else {
             Some(file_data)
         }
-    }
-
-    pub fn list_files(&self) -> Vec<&str> {
-        self.entries
-            .iter()
-            .filter(|entry| (entry.file_type & FILELIST_TYPE_FILE) != 0)
-            .map(|entry| entry.filename.as_str())
-            .collect()
     }
 }
 

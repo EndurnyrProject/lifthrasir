@@ -1,5 +1,5 @@
+use crate::utils::string_utils::parse_korean_string;
 use bevy::log::error;
-use encoding_rs::{EUC_KR, WINDOWS_1252};
 use nom::{
     IResult, Parser,
     bytes::complete::{tag, take},
@@ -9,10 +9,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum GndError {
-    #[error("Invalid GND header")]
-    InvalidHeader,
-    #[error("Unsupported GND version: {0}")]
-    UnsupportedVersion(String),
     #[error("Parse error: {0}")]
     ParseError(String),
 }
@@ -72,32 +68,6 @@ impl RoGround {
     }
 }
 
-fn parse_string(input: &[u8], length: usize) -> IResult<&[u8], String> {
-    let (input, bytes) = take(length)(input)?;
-    let end_pos = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-
-    // Try to detect if this is Korean text by checking for common Korean byte patterns
-    // Korean text in EUC-KR typically has bytes in the range 0xA1-0xFE
-    let string_bytes = &bytes[..end_pos];
-    let is_korean = string_bytes.iter().any(|&b| b >= 0xA1 && b <= 0xFE);
-
-    let filename = if is_korean {
-        // Try EUC-KR first for Korean text
-        let (decoded, _, had_errors) = EUC_KR.decode(string_bytes);
-        if had_errors {
-            // Fall back to WINDOWS_1252 if EUC-KR fails
-            WINDOWS_1252.decode(string_bytes).0.into_owned()
-        } else {
-            decoded.into_owned()
-        }
-    } else {
-        // Use WINDOWS_1252 for non-Korean text
-        WINDOWS_1252.decode(string_bytes).0.into_owned()
-    };
-
-    Ok((input, filename))
-}
-
 fn parse_header(input: &[u8]) -> IResult<&[u8], String> {
     let (input, _) = tag(&b"GRGN"[..])(input)?;
     let (input, major) = le_u8(input)?;
@@ -114,7 +84,7 @@ fn parse_textures(input: &[u8]) -> IResult<&[u8], (Vec<String>, Vec<usize>)> {
     let mut current_input = input;
 
     for _ in 0..count {
-        let (remaining, texture) = parse_string(current_input, length as usize)?;
+        let (remaining, texture) = parse_korean_string(current_input, length as usize)?;
         let pos = if let Some(idx) = unique_textures.iter().position(|t| t == &texture) {
             idx
         } else {
@@ -195,7 +165,7 @@ fn parse_surfaces(input: &[u8], width: u32, height: u32) -> IResult<&[u8], Vec<G
     let mut surfaces = Vec::with_capacity(count);
     let mut current_input = input;
 
-    for i in 0..count {
+    for _ in 0..count {
         let (remaining, h1) = le_f32(current_input)?;
         let (remaining, h2) = le_f32(remaining)?;
         let (remaining, h3) = le_f32(remaining)?;

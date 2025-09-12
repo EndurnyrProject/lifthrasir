@@ -14,4 +14,3 @@ pub use grf::*;
 pub use rsm::*;
 pub use rsw::*;
 pub use sprite::*;
-

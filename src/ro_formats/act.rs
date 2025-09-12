@@ -53,8 +53,6 @@ pub enum ActError {
     UnsupportedVersion(f32),
     #[error("Parse error: {0}")]
     ParseError(String),
-    #[error("Incomplete data")]
-    IncompleteData,
 }
 
 fn parse_header(input: &[u8]) -> IResult<&[u8], (String, f32), NomError<&[u8]>> {
@@ -115,7 +113,7 @@ fn parse_layer(input: &[u8], version: f32) -> IResult<&[u8], Layer, NomError<&[u
         layer.angle = angle;
         layer.sprite_type = sprite_type;
 
-        let input = if version >= 2.5 {
+        if version >= 2.5 {
             let (input, width) = le_i32(input)?;
             let (input, height) = le_i32(input)?;
             layer.width = width;
@@ -123,9 +121,7 @@ fn parse_layer(input: &[u8], version: f32) -> IResult<&[u8], Layer, NomError<&[u
             input
         } else {
             input
-        };
-
-        input
+        }
     } else {
         input
     };
@@ -228,7 +224,7 @@ pub fn parse_act(data: &[u8]) -> Result<RoAction, ActError> {
         return Err(ActError::InvalidHeader);
     }
 
-    if version < 2.0 || version > 2.5 {
+    if !(2.0..=2.5).contains(&version) {
         return Err(ActError::UnsupportedVersion(version));
     }
 
@@ -254,8 +250,6 @@ pub fn parse_act(data: &[u8]) -> Result<RoAction, ActError> {
     } else {
         (remaining, Vec::new())
     };
-
-    let mut actions = actions;
 
     if version >= 2.2 && !input.is_empty() {
         for (i, action) in actions.iter_mut().enumerate() {

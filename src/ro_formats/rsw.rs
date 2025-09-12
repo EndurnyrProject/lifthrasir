@@ -1,18 +1,14 @@
+use crate::utils::string_utils::parse_korean_string;
 use bevy::log::{debug, error, warn};
-use encoding_rs::{EUC_KR, WINDOWS_1252};
 use nom::{
     IResult, Parser,
-    bytes::complete::{tag, take},
+    bytes::complete::tag,
     number::complete::{le_f32, le_u8, le_u32},
 };
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RswError {
-    #[error("Invalid RSW header")]
-    InvalidHeader,
-    #[error("Unsupported RSW version: {0}")]
-    UnsupportedVersion(String),
     #[error("Parse error: {0}")]
     ParseError(String),
 }
@@ -169,32 +165,6 @@ impl RoWorld {
     }
 }
 
-fn parse_string(input: &[u8], length: usize) -> IResult<&[u8], String> {
-    let (input, bytes) = take(length)(input)?;
-    let end_pos = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-
-    // Try to detect if this is Korean text by checking for common Korean byte patterns
-    // Korean text in EUC-KR typically has bytes in the range 0xA1-0xFE
-    let string_bytes = &bytes[..end_pos];
-    let is_korean = string_bytes.iter().any(|&b| b >= 0xA1 && b <= 0xFE);
-
-    let filename = if is_korean {
-        // Try EUC-KR first for Korean text
-        let (decoded, _, had_errors) = EUC_KR.decode(string_bytes);
-        if had_errors {
-            // Fall back to WINDOWS_1252 if EUC-KR fails
-            WINDOWS_1252.decode(string_bytes).0.into_owned()
-        } else {
-            decoded.into_owned()
-        }
-    } else {
-        // Use WINDOWS_1252 for non-Korean text
-        WINDOWS_1252.decode(string_bytes).0.into_owned()
-    };
-
-    Ok((input, filename))
-}
-
 fn parse_header(input: &[u8]) -> IResult<&[u8], (u8, u8)> {
     let (input, _) = tag(&b"GRSW"[..])(input)?;
     let (input, major) = le_u8(input)?;
@@ -286,7 +256,7 @@ fn parse_ground<'a>(input: &'a [u8], version: (u8, u8)) -> IResult<&'a [u8], Rsw
 
 fn parse_model(input: &[u8], version: (u8, u8)) -> IResult<&[u8], RswModel> {
     let (input, name) = if version >= (1, 3) {
-        parse_string(input, 40)?
+        parse_korean_string(input, 40)?
     } else {
         (input, String::new())
     };
@@ -309,8 +279,8 @@ fn parse_model(input: &[u8], version: (u8, u8)) -> IResult<&[u8], RswModel> {
         (input, 0)
     };
 
-    let (input, filename) = parse_string(input, 80)?;
-    let (input, mut node_name) = parse_string(input, 80)?;
+    let (input, filename) = parse_korean_string(input, 80)?;
+    let (input, mut node_name) = parse_korean_string(input, 80)?;
 
     // Validate node_name - check for corrupted data
     // Corrupted names are usually very short and contain non-ASCII characters
@@ -365,7 +335,7 @@ fn parse_objects(input: &[u8], count: u32, version: (u8, u8)) -> IResult<&[u8], 
             }
             2 => {
                 // Light
-                let (remaining, name) = parse_string(remaining, 80)?;
+                let (remaining, name) = parse_korean_string(remaining, 80)?;
                 let (remaining, (x, y, z)) = (le_f32, le_f32, le_f32).parse(remaining)?;
                 let (remaining, (r, g, b)) = (le_f32, le_f32, le_f32).parse(remaining)?;
                 let (remaining, range) = le_f32(remaining)?;
@@ -382,8 +352,8 @@ fn parse_objects(input: &[u8], count: u32, version: (u8, u8)) -> IResult<&[u8], 
             }
             3 => {
                 // Sound
-                let (remaining, name) = parse_string(remaining, 80)?;
-                let (remaining, wav_file) = parse_string(remaining, 80)?;
+                let (remaining, name) = parse_korean_string(remaining, 80)?;
+                let (remaining, wav_file) = parse_korean_string(remaining, 80)?;
                 let (remaining, (x, y, z)) = (le_f32, le_f32, le_f32).parse(remaining)?;
                 let (remaining, volume) = le_f32(remaining)?;
                 let (remaining, width) = le_u32(remaining)?;
@@ -411,7 +381,7 @@ fn parse_objects(input: &[u8], count: u32, version: (u8, u8)) -> IResult<&[u8], 
             }
             4 => {
                 // Effect
-                let (remaining, name) = parse_string(remaining, 80)?;
+                let (remaining, name) = parse_korean_string(remaining, 80)?;
                 let (remaining, (x, y, z)) = (le_f32, le_f32, le_f32).parse(remaining)?;
                 let (remaining, effect_type) = le_u32(remaining)?;
                 let (remaining, emit_speed) = le_f32(remaining)?;
@@ -445,12 +415,12 @@ fn parse_objects(input: &[u8], count: u32, version: (u8, u8)) -> IResult<&[u8], 
 
 fn parse_rsw(input: &[u8]) -> IResult<&[u8], RoWorld> {
     let (input, version) = parse_header(input)?;
-    let (input, ini_file) = parse_string(input, 40)?;
-    let (input, gnd_file) = parse_string(input, 40)?;
-    let (input, gat_file) = parse_string(input, 40)?;
+    let (input, ini_file) = parse_korean_string(input, 40)?;
+    let (input, gnd_file) = parse_korean_string(input, 40)?;
+    let (input, gat_file) = parse_korean_string(input, 40)?;
 
     let (input, src_file) = if version >= (1, 4) {
-        let (input, src) = parse_string(input, 40)?;
+        let (input, src) = parse_korean_string(input, 40)?;
         (input, Some(src))
     } else {
         (input, None)

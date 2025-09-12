@@ -8,10 +8,7 @@ use bevy::{
 
 use crate::{
     assets::loaders::{GrfAsset, RoAltitudeAsset, RoGroundAsset},
-    components::{
-        GrfMapLoader, MapLoader,
-        map::{MapData, TerrainChunk},
-    },
+    components::{GrfMapLoader, MapLoader, map::MapData},
     systems::camera_controls::CameraController,
     utils::constants::CELL_SIZE,
 };
@@ -207,9 +204,7 @@ fn calculate_smooth_normals(ground: &crate::ro_formats::RoGround) -> Vec<[Vec3; 
     smooth_normals
 }
 
-
-
-/// Generate front wall using exact heights (no smoothing) 
+/// Generate front wall using exact heights (no smoothing)
 fn generate_front_wall(
     meshes_by_texture: &mut std::collections::HashMap<
         usize,
@@ -264,10 +259,16 @@ fn generate_front_wall(
 
     // Create wall quad between the two cells using exact heights
     // Wall connects current cell's north edge (NW, NE) to next cell's south edge (SW, SE)
-    mesh_data.0.push(Vec3::new(base_x, current_heights[2], base_z)); // Current NW
-    mesh_data.0.push(Vec3::new(base_x + CELL_SIZE, current_heights[3], base_z)); // Current NE
+    mesh_data
+        .0
+        .push(Vec3::new(base_x, current_heights[2], base_z)); // Current NW
+    mesh_data
+        .0
+        .push(Vec3::new(base_x + CELL_SIZE, current_heights[3], base_z)); // Current NE
     mesh_data.0.push(Vec3::new(base_x, next_heights[0], base_z)); // Next SW
-    mesh_data.0.push(Vec3::new(base_x + CELL_SIZE, next_heights[1], base_z)); // Next SE
+    mesh_data
+        .0
+        .push(Vec3::new(base_x + CELL_SIZE, next_heights[1], base_z)); // Next SE
 
     // Hard normal for front wall (facing negative Z direction) - no smoothing
     let wall_normal = Vec3::new(0.0, 0.0, -1.0);
@@ -288,7 +289,7 @@ fn generate_front_wall(
     mesh_data.3.push([tile.u4, tile.v4]); // Next SE -> tile SE
 
     // Indices for wall quad
-    mesh_data.4.push(vertex_offset);     // Current NW
+    mesh_data.4.push(vertex_offset); // Current NW
     mesh_data.4.push(vertex_offset + 1); // Current NE
     mesh_data.4.push(vertex_offset + 2); // Next SW
     mesh_data.4.push(vertex_offset + 2); // Next SW
@@ -351,10 +352,16 @@ fn generate_right_wall(
 
     // Create wall quad between the two cells using exact heights
     // Wall connects current cell's east edge (SE, NE) to next cell's west edge (SW, NW)
-    mesh_data.0.push(Vec3::new(base_x, current_heights[1], base_z)); // Current SE (at y+0)
-    mesh_data.0.push(Vec3::new(base_x, current_heights[3], base_z + CELL_SIZE)); // Current NE (at y+1)
+    mesh_data
+        .0
+        .push(Vec3::new(base_x, current_heights[1], base_z)); // Current SE (at y+0)
+    mesh_data
+        .0
+        .push(Vec3::new(base_x, current_heights[3], base_z + CELL_SIZE)); // Current NE (at y+1)
     mesh_data.0.push(Vec3::new(base_x, next_heights[0], base_z)); // Next SW (at y+0)
-    mesh_data.0.push(Vec3::new(base_x, next_heights[2], base_z + CELL_SIZE)); // Next NW (at y+1)
+    mesh_data
+        .0
+        .push(Vec3::new(base_x, next_heights[2], base_z + CELL_SIZE)); // Next NW (at y+1)
 
     // Hard normal for right wall (facing negative X direction) - no smoothing
     let wall_normal = Vec3::new(-1.0, 0.0, 0.0);
@@ -375,7 +382,7 @@ fn generate_right_wall(
     mesh_data.3.push([tile.u3, tile.v3]); // Top-right
 
     // Indices for wall quad
-    mesh_data.4.push(vertex_offset);     // Current SE
+    mesh_data.4.push(vertex_offset); // Current SE
     mesh_data.4.push(vertex_offset + 1); // Current NE
     mesh_data.4.push(vertex_offset + 2); // Next SW
     mesh_data.4.push(vertex_offset + 2); // Next SW
@@ -391,7 +398,7 @@ pub fn generate_terrain_mesh(
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
     grf_assets: Res<Assets<GrfAsset>>,
-    query: Query<(Entity, &MapLoader, &GrfMapLoader), Without<TerrainChunk>>,
+    query: Query<(Entity, &MapLoader, &GrfMapLoader), Without<MapData>>,
 ) {
     for (entity, map_loader, grf_loader) in query.iter() {
         let Some(ground) = ground_assets.get(&map_loader.ground) else {
@@ -455,20 +462,11 @@ pub fn generate_terrain_mesh(
         }
 
         // Update the original entity with map data
-        commands.entity(entity).insert((
-            TerrainChunk {
-                x: 0,
-                y: 0,
-                width: ground.ground.width,
-                height: ground.ground.height,
-            },
-            MapData {
-                name: "Map".to_string(),
-                width: ground.ground.width,
-                height: ground.ground.height,
-                cell_size: CELL_SIZE,
-            },
-        ));
+        commands.entity(entity).insert((MapData {
+            name: "Map".to_string(),
+            width: ground.ground.width,
+            height: ground.ground.height,
+        },));
     }
 }
 
@@ -485,8 +483,10 @@ fn create_terrain_meshes_robrowser_style(
     let smooth_normals = calculate_smooth_normals(ground);
 
     // Group triangles by texture, storing vertex data and indices
-    let mut meshes_by_texture: HashMap<usize, (Vec<Vec3>, Vec<Vec3>, Vec<[f32; 4]>, Vec<[f32; 2]>, Vec<u32>)> =
-        HashMap::new();
+    let mut meshes_by_texture: HashMap<
+        usize,
+        (Vec<Vec3>, Vec<Vec3>, Vec<[f32; 4]>, Vec<[f32; 2]>, Vec<u32>),
+    > = HashMap::new();
 
     // Generate terrain quads (roBrowser approach - 6 vertices per cell, no sharing)
     for y in 0..height {
@@ -527,16 +527,40 @@ fn create_terrain_meshes_robrowser_style(
 
             // Generate 6 vertices for 2 triangles (roBrowser approach)
             // Positions: (x+0)*2, h[0], (y+0)*2 etc. (matching roBrowser exactly)
-            
+
             // Triangle 1: (x+0,y+0) -> (x+1,y+0) -> (x+1,y+1)
-            mesh_data.0.push(Vec3::new((x as f32 + 0.0) * CELL_SIZE, h[0] * 5.0, (y as f32 + 0.0) * CELL_SIZE));
-            mesh_data.0.push(Vec3::new((x as f32 + 1.0) * CELL_SIZE, h[1] * 5.0, (y as f32 + 0.0) * CELL_SIZE));
-            mesh_data.0.push(Vec3::new((x as f32 + 1.0) * CELL_SIZE, h[3] * 5.0, (y as f32 + 1.0) * CELL_SIZE));
-            
+            mesh_data.0.push(Vec3::new(
+                (x as f32 + 0.0) * CELL_SIZE,
+                h[0] * 5.0,
+                (y as f32 + 0.0) * CELL_SIZE,
+            ));
+            mesh_data.0.push(Vec3::new(
+                (x as f32 + 1.0) * CELL_SIZE,
+                h[1] * 5.0,
+                (y as f32 + 0.0) * CELL_SIZE,
+            ));
+            mesh_data.0.push(Vec3::new(
+                (x as f32 + 1.0) * CELL_SIZE,
+                h[3] * 5.0,
+                (y as f32 + 1.0) * CELL_SIZE,
+            ));
+
             // Triangle 2: (x+1,y+1) -> (x+0,y+1) -> (x+0,y+0)
-            mesh_data.0.push(Vec3::new((x as f32 + 1.0) * CELL_SIZE, h[3] * 5.0, (y as f32 + 1.0) * CELL_SIZE));
-            mesh_data.0.push(Vec3::new((x as f32 + 0.0) * CELL_SIZE, h[2] * 5.0, (y as f32 + 1.0) * CELL_SIZE));
-            mesh_data.0.push(Vec3::new((x as f32 + 0.0) * CELL_SIZE, h[0] * 5.0, (y as f32 + 0.0) * CELL_SIZE));
+            mesh_data.0.push(Vec3::new(
+                (x as f32 + 1.0) * CELL_SIZE,
+                h[3] * 5.0,
+                (y as f32 + 1.0) * CELL_SIZE,
+            ));
+            mesh_data.0.push(Vec3::new(
+                (x as f32 + 0.0) * CELL_SIZE,
+                h[2] * 5.0,
+                (y as f32 + 1.0) * CELL_SIZE,
+            ));
+            mesh_data.0.push(Vec3::new(
+                (x as f32 + 0.0) * CELL_SIZE,
+                h[0] * 5.0,
+                (y as f32 + 0.0) * CELL_SIZE,
+            ));
 
             // Normals (roBrowser mapping: n[0]=UL, n[1]=UR, n[2]=BR, n[3]=BL)
             mesh_data.1.push(normals[0]); // UL (x+0,y+0)
@@ -577,7 +601,7 @@ fn create_terrain_meshes_robrowser_style(
                 generate_front_wall(&mut meshes_by_texture, ground, x, y, width, surface);
             }
 
-            // Generate right wall ONLY when tile_right is explicitly defined  
+            // Generate right wall ONLY when tile_right is explicitly defined
             if surface.tile_right >= 0 && (x + 1) < width {
                 generate_right_wall(&mut meshes_by_texture, ground, x, y, width, surface);
             }
@@ -596,18 +620,21 @@ fn create_terrain_meshes_robrowser_style(
             // Convert Vec3 positions to [f32; 3] arrays
             mesh.insert_attribute(
                 Mesh::ATTRIBUTE_POSITION,
-                positions.iter().map(|v| [v.x, v.y, v.z]).collect::<Vec<_>>(),
+                positions
+                    .iter()
+                    .map(|v| [v.x, v.y, v.z])
+                    .collect::<Vec<_>>(),
             );
-            
-            // Convert Vec3 normals to [f32; 3] arrays  
+
+            // Convert Vec3 normals to [f32; 3] arrays
             mesh.insert_attribute(
                 Mesh::ATTRIBUTE_NORMAL,
                 normals.iter().map(|v| [v.x, v.y, v.z]).collect::<Vec<_>>(),
             );
-            
+
             // Colors are already [f32; 4] arrays
             mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-            
+
             // UVs are already [f32; 2] arrays
             mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
 

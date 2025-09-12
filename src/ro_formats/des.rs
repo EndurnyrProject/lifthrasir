@@ -80,7 +80,7 @@ fn tp(src: &mut Bit64) {
     unsafe {
         for i in 0..TP_TABLE.len() {
             let j = (TP_TABLE[i] - 1) as usize;
-            if src.b[(j >> 3) + 0] & MASK[j & 7] != 0 {
+            if src.b[j >> 3] & MASK[j & 7] != 0 {
                 tmp.b[(i >> 3) + 4] |= MASK[i & 7];
             }
         }
@@ -123,10 +123,10 @@ fn sbox(src: &mut Bit64) {
     ];
 
     unsafe {
-        for i in 0..S_TABLE.len() {
-            tmp.b[i] = (S_TABLE[i][src.b[i * 2 + 0] as usize] & 0xf0)
+        (0..S_TABLE.len()).for_each(|i| {
+            tmp.b[i] = (S_TABLE[i][src.b[i * 2] as usize] & 0xf0)
                 | (S_TABLE[i][src.b[i * 2 + 1] as usize] & 0x0f);
-        }
+        });
         *src = tmp;
     }
 }
@@ -185,15 +185,15 @@ fn shuffle_decode(data: &mut [u8], offset: usize) {
         tmp[0] = data[offset + 3];
         tmp[1] = data[offset + 4];
         tmp[2] = data[offset + 6];
-        tmp[3] = data[offset + 0];
+        tmp[3] = data[offset];
         tmp[4] = data[offset + 1];
         tmp[5] = data[offset + 2];
         tmp[6] = data[offset + 5];
         tmp[7] = SHUFFLE_TABLE[data[offset + 7] as usize];
 
-        for i in 0..8 {
+        (0..8).for_each(|i| {
             data[offset + i] = tmp[i];
-        }
+        });
     }
 }
 
@@ -259,4 +259,3 @@ pub fn decode_header(data: &mut [u8], length_aligned: u32) {
     }
     // The rest is plaintext, done.
 }
-

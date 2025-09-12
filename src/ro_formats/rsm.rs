@@ -1,4 +1,4 @@
-use encoding_rs::{EUC_KR, WINDOWS_1252};
+use crate::utils::string_utils::parse_korean_string;
 use nalgebra::{Matrix4, Vector3, Vector4};
 use nom::{
     IResult,
@@ -11,15 +11,9 @@ use thiserror::Error;
 pub enum RsmError {
     #[error("Failed to parse RSM file: {0}")]
     ParseError(String),
-    #[error("Invalid RSM header")]
-    InvalidHeader,
-    #[error("Unsupported RSM version: {0}")]
-    UnsupportedVersion(f32),
 }
 
-// Type aliases for compatibility
 pub type RsmFile = Rsm;
-pub type RsmNode = Node;
 
 #[derive(Debug, Clone)]
 pub struct BoundingBox {
@@ -260,29 +254,6 @@ impl Rsm {
     }
 }
 
-fn parse_string(input: &[u8], length: usize) -> IResult<&[u8], String> {
-    let (input, bytes) = take(length)(input)?;
-    let end_pos = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-
-    // Try to detect if this is Korean text by checking for common Korean byte patterns
-    // Korean text in EUC-KR typically has bytes in the range 0xA1-0xFE
-    let string_bytes = &bytes[..end_pos];
-    let is_korean = string_bytes.iter().any(|&b| (0xA1..=0xFE).contains(&b));
-
-    let filename = if is_korean {
-        let (decoded, _, had_errors) = EUC_KR.decode(string_bytes);
-        if had_errors {
-            WINDOWS_1252.decode(string_bytes).0.into_owned()
-        } else {
-            decoded.into_owned()
-        }
-    } else {
-        WINDOWS_1252.decode(string_bytes).0.into_owned()
-    };
-
-    Ok((input, filename))
-}
-
 fn parse_header(input: &[u8]) -> IResult<&[u8], (f32, i32, i32, f32)> {
     let (input, _) = tag(&b"GRSM"[..])(input)?;
     let (input, major) = le_u8(input)?;
@@ -310,7 +281,7 @@ fn parse_textures(input: &[u8]) -> IResult<&[u8], Vec<String>> {
     let mut textures = Vec::new();
 
     for _ in 0..tex_count {
-        let (new_remaining, texture) = parse_string(remaining, 40)?;
+        let (new_remaining, texture) = parse_korean_string(remaining, 40)?;
         textures.push(texture);
         remaining = new_remaining;
     }
@@ -407,8 +378,8 @@ fn parse_float_array<const N: usize>(input: &[u8]) -> IResult<&[u8], [f32; N]> {
 }
 
 fn parse_node(input: &[u8], version: f32, _is_only: bool) -> IResult<&[u8], Node> {
-    let (input, name) = parse_string(input, 40)?;
-    let (input, parent_name) = parse_string(input, 40)?;
+    let (input, name) = parse_korean_string(input, 40)?;
+    let (input, parent_name) = parse_korean_string(input, 40)?;
 
     let (input, tex_count) = le_i32(input)?;
     let mut texture_ids = Vec::new();
@@ -540,7 +511,7 @@ pub fn parse_rsm(input: &[u8]) -> IResult<&[u8], Rsm> {
     let (input, (version, anim_len, shade_type, alpha)) = parse_header(input)?;
     let (input, textures) = parse_textures(input)?;
 
-    let (input, main_node_name) = parse_string(input, 40)?;
+    let (input, main_node_name) = parse_korean_string(input, 40)?;
     let (input, node_count) = le_i32(input)?;
 
     let is_only = node_count == 1;
