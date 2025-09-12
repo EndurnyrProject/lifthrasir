@@ -162,14 +162,7 @@ pub fn update_model_meshes(
             }
         };
 
-        // Convert RSM to meshes (one per texture)
-        let node_name = if map_model.node_name.is_empty() {
-            None
-        } else {
-            Some(map_model.node_name.as_str())
-        };
-
-        let meshes_by_texture = convert_rsm_to_mesh(&rsm, node_name);
+        let meshes_by_texture = convert_rsm_to_mesh(&rsm);
 
         // Create child entities for each texture's mesh
         let mut children = Vec::new();
@@ -224,73 +217,135 @@ fn mat3_to_mat4(mat3: &[f32; 9]) -> Mat4 {
     )
 }
 
-fn convert_rsm_to_mesh(rsm: &RsmFile, node_name: Option<&str>) -> Vec<(i32, Mesh)> {
-    let target_node = if let Some(name) = node_name {
-        rsm.nodes.iter().find(|node| node.name == name)
-    } else {
-        rsm.nodes
-            .iter()
-            .find(|node| node.name == rsm.main_node_name)
-            .or_else(|| rsm.nodes.first())
-    };
+fn convert_rsm_to_mesh(rsm: &RsmFile) -> Vec<(i32, Mesh)> {
+    let hierarchy_matrices = build_node_hierarchy_matrices(rsm);
+    let mut all_meshes = Vec::new();
 
-    let Some(node) = target_node else {
-        warn!(
-            "No valid node found in RSM, using fallback cube, rsm.main_node_name='{}', version={}",
-            rsm.main_node_name, rsm.version
-        );
-        let mesh = Mesh::from(Cuboid::new(1.0, 1.0, 1.0));
-        return vec![(-1, mesh)];
-    };
+    for (idx, node) in rsm.nodes.iter().enumerate() {
+        let hierarchy_matrix = hierarchy_matrices[idx];
+        let node_meshes = convert_node_with_hierarchy_matrix(rsm, node, hierarchy_matrix);
 
-    if node.vertices.is_empty() || node.faces.is_empty() {
-        warn!("Node '{}' has no geometry, using fallback cube", node.name);
-        let mesh = Mesh::from(Cuboid::new(1.0, 1.0, 1.0));
-        return vec![(-1, mesh)];
+        if node_meshes.is_empty() {
+            warn!("No meshes generated for node '{}'", node.name);
+        } else {
+            all_meshes.extend(node_meshes);
+        }
     }
 
-    // Check if this is a single node model
-    let is_only = rsm.nodes.len() == 1;
-
-    // Build transformation matrix following RoBrowser's order
-    let mut transform = Mat4::IDENTITY;
-
-    // 1. Apply bounding box translation FIRST (as a matrix)
-    if let Some(ref bbox) = rsm.bounding_box {
-        let bbox_trans =
-            Mat4::from_translation(Vec3::new(-bbox.center[0], -bbox.max[1], -bbox.center[2]));
-        transform *= bbox_trans;
+    if all_meshes.is_empty() {
+        warn!("No meshes generated from RSM nodes, using fallback cube");
+        let mesh = Mesh::from(Cuboid::new(1.0, 1.0, 1.0));
+        all_meshes.push((-1, mesh));
     }
 
-    // Apply position
+    all_meshes
+}
+
+fn build_node_hierarchy_matrices(rsm: &RsmFile) -> Vec<Mat4> {
+    let mut node_matrices = vec![Mat4::IDENTITY; rsm.nodes.len()];
+
+    // Find the main node (starting point for hierarchy)
+    let main_node_idx = rsm
+        .nodes
+        .iter()
+        .position(|n| n.name == rsm.main_node_name)
+        .unwrap_or(0);
+
+    calculate_node_hierarchy_matrix(rsm, main_node_idx, Mat4::IDENTITY, &mut node_matrices);
+
+    // Also process any orphaned nodes (nodes without parents or whose parents weren't processed)
+    for (idx, _node) in rsm.nodes.iter().enumerate() {
+        if node_matrices[idx] == Mat4::IDENTITY && idx != main_node_idx {
+            calculate_node_hierarchy_matrix(rsm, idx, Mat4::IDENTITY, &mut node_matrices);
+        }
+    }
+
+    node_matrices
+}
+
+fn calculate_node_hierarchy_matrix(
+    rsm: &RsmFile,
+    node_idx: usize,
+    parent_matrix: Mat4,
+    node_matrices: &mut Vec<Mat4>,
+) {
+    if node_matrices[node_idx] != Mat4::IDENTITY {
+        return;
+    }
+
+    let node = &rsm.nodes[node_idx];
+    let mut matrix = parent_matrix;
+
+    // Apply node position
     let pos_trans = Mat4::from_translation(Vec3::from_array(node.pos));
-    transform *= pos_trans;
+    matrix *= pos_trans;
 
-    // Apply rotation (if exists)
+    // Apply rotation (static or keyframe-based)
     if node.rot_angle != 0.0 {
         let axis = Vec3::from_array(node.rot_axis);
         if axis.length() > 0.0 {
             let normalized_axis = axis.normalize();
             let rotation = Mat4::from_axis_angle(normalized_axis, node.rot_angle);
-            transform *= rotation;
+            matrix *= rotation;
         }
     }
 
     // Apply scale
     let scale_trans = Mat4::from_scale(Vec3::from_array(node.scale));
-    transform *= scale_trans;
+    matrix *= scale_trans;
 
-    // 2. Apply offset (only if not is_only)
-    if !is_only {
-        let offset_trans = Mat4::from_translation(Vec3::from_array(node.offset));
-        transform *= offset_trans;
+    // Store this node's accumulated hierarchy matrix
+    node_matrices[node_idx] = matrix;
+    debug!("  Stored matrix for node {} '{}'", node_idx, node.name);
+
+    // This is crucial - we process ALL children, not just those with geometry
+    for (child_idx, child_node) in rsm.nodes.iter().enumerate() {
+        if child_node.parent_name == node.name
+            && child_node.name != child_node.parent_name
+            && !child_node.parent_name.is_empty()
+            && child_idx != node_idx
+        {
+            calculate_node_hierarchy_matrix(rsm, child_idx, matrix, node_matrices);
+        }
+    }
+}
+
+fn convert_node_with_hierarchy_matrix(
+    rsm: &RsmFile,
+    node: &crate::ro_formats::rsm::Node,
+    hierarchy_matrix: Mat4,
+) -> Vec<(i32, Mesh)> {
+    if node.vertices.is_empty() || node.faces.is_empty() {
+        return Vec::new();
     }
 
-    // 3. Apply mat3 transformation
-    let mat3_as_mat4 = mat3_to_mat4(&node.mat3);
-    transform *= mat3_as_mat4;
+    let is_only = rsm.nodes.len() == 1;
 
-    // Apply transformations to vertices
+    // Apply complete transformation chain like RoBrowser's compile method
+    // but adapted for our coordinate system
+    let mut transform = Mat4::IDENTITY;
+
+    // 1. Apply bounding box translation FIRST (keeps our working coordinate system)
+    if let Some(ref bbox) = rsm.bounding_box {
+        let bbox_trans =
+            Mat4::from_translation(Vec3::new(-bbox.center[0], -bbox.max[1], -bbox.center[2]));
+        transform = transform * bbox_trans;
+    }
+
+    // 2. Apply the hierarchy matrix (this is the key difference from our previous approach)
+    transform = transform * hierarchy_matrix;
+
+    // 3. Apply offset (only if not is_only) - like RoBrowser
+    if !is_only {
+        let offset_trans = Mat4::from_translation(Vec3::from_array(node.offset));
+        transform = transform * offset_trans;
+    }
+
+    // 4. Apply mat3 transformation - like RoBrowser
+    let mat3_as_mat4 = mat3_to_mat4(&node.mat3);
+    transform = transform * mat3_as_mat4;
+
+    // Apply transformations to vertices (same as before)
     let mut transformed_vertices: Vec<[f32; 3]> = Vec::with_capacity(node.vertices.len());
     for vertex in &node.vertices {
         // Transform vertex by the complete matrix
@@ -303,6 +358,7 @@ fn convert_rsm_to_mesh(rsm: &RsmFile, node_name: Option<&str>) -> Vec<(i32, Mesh
         transformed_vertices.push(final_v.to_array());
     }
 
+    // Rest of the mesh generation logic remains the same...
     let mut faces_by_texture: HashMap<i32, Vec<usize>> = HashMap::new();
 
     for (idx, face) in node.faces.iter().enumerate() {
