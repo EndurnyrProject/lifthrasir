@@ -24,7 +24,6 @@ pub struct GndTile {
     pub v3: f32,
     pub v4: f32,
     pub texture: u16,
-    pub light: u16,
     pub color: [u8; 4],
 }
 
@@ -37,21 +36,12 @@ pub struct GndSurface {
 }
 
 #[derive(Debug, Clone)]
-pub struct GndLightmap {
-    pub per_cell: u32,
-    pub count: u32,
-    pub data: Vec<u8>,
-}
-
-#[derive(Debug, Clone)]
 pub struct RoGround {
     pub version: String,
     pub width: u32,
     pub height: u32,
-    pub zoom: f32,
     pub textures: Vec<String>,
     pub texture_indexes: Vec<usize>,
-    pub lightmap: GndLightmap,
     pub tiles: Vec<GndTile>,
     pub surfaces: Vec<GndSurface>,
 }
@@ -99,7 +89,7 @@ fn parse_textures(input: &[u8]) -> IResult<&[u8], (Vec<String>, Vec<usize>)> {
     Ok((current_input, (unique_textures, indexes)))
 }
 
-fn parse_lightmap(input: &[u8]) -> IResult<&[u8], GndLightmap> {
+fn parse_lightmap(input: &[u8]) -> IResult<&[u8], &str> {
     let (input, count) = le_u32(input)?;
     let (input, per_cell_x) = le_i32(input)?;
     let (input, per_cell_y) = le_i32(input)?;
@@ -108,16 +98,9 @@ fn parse_lightmap(input: &[u8]) -> IResult<&[u8], GndLightmap> {
 
     let data_size = (count * per_cell * 4) as usize;
 
-    let (input, data) = take(data_size)(input)?;
+    let (input, _) = take(data_size)(input)?;
 
-    Ok((
-        input,
-        GndLightmap {
-            per_cell,
-            count,
-            data: data.to_vec(),
-        },
-    ))
+    Ok((input, "meh"))
 }
 
 fn parse_tiles<'a>(input: &'a [u8], count: u32, version: &str) -> IResult<&'a [u8], Vec<GndTile>> {
@@ -129,7 +112,7 @@ fn parse_tiles<'a>(input: &'a [u8], count: u32, version: &str) -> IResult<&'a [u
             (le_f32, le_f32, le_f32, le_f32).parse(current_input)?;
         let (remaining, (v1, v2, v3, v4)) = (le_f32, le_f32, le_f32, le_f32).parse(remaining)?;
         let (remaining, texture) = le_u16(remaining)?;
-        let (remaining, light) = le_u16(remaining)?;
+        let (remaining, _) = le_u16(remaining)?; // Light, we have our own better lightmaps
 
         let (remaining, color) = if version >= "1.7" {
             let (remaining, a) = le_u8(remaining)?;
@@ -151,7 +134,6 @@ fn parse_tiles<'a>(input: &'a [u8], count: u32, version: &str) -> IResult<&'a [u
             v3,
             v4,
             texture,
-            light,
             color,
         });
         current_input = remaining;
@@ -190,9 +172,9 @@ fn parse_gnd(input: &[u8]) -> IResult<&[u8], RoGround> {
     let (input, version) = parse_header(input)?;
     let (input, width) = le_u32(input)?;
     let (input, height) = le_u32(input)?;
-    let (input, zoom) = le_f32(input)?;
+    let (input, _) = le_f32(input)?;
     let (input, (textures, texture_indexes)) = parse_textures(input)?;
-    let (input, lightmap) = parse_lightmap(input)?;
+    let (input, _) = parse_lightmap(input)?; // We parse it just to move the input forward
     let (input, tile_count) = le_u32(input)?;
     let (input, tiles) = parse_tiles(input, tile_count, &version)?;
     let (input, surfaces) = parse_surfaces(input, width, height)?;
@@ -203,10 +185,8 @@ fn parse_gnd(input: &[u8]) -> IResult<&[u8], RoGround> {
             version,
             width,
             height,
-            zoom,
             textures,
             texture_indexes,
-            lightmap,
             tiles,
             surfaces,
         },

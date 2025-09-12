@@ -276,10 +276,15 @@ fn generate_front_wall(
         mesh_data.1.push(wall_normal);
     }
 
-    // White color to let texture show through
-    let color = [1.0, 1.0, 1.0, 1.0];
+    // Use tile color for artistic variation (GND uses ARGB format)
+    let tile_color = [
+        tile.color[1] as f32 / 255.0, // R
+        tile.color[2] as f32 / 255.0, // G
+        tile.color[3] as f32 / 255.0, // B
+        tile.color[0] as f32 / 255.0, // A
+    ];
     for _ in 0..4 {
-        mesh_data.2.push(color);
+        mesh_data.2.push(tile_color);
     }
 
     // UV coordinates from tile - matching corrected vertex order
@@ -369,10 +374,15 @@ fn generate_right_wall(
         mesh_data.1.push(wall_normal);
     }
 
-    // White color to let texture show through
-    let color = [1.0, 1.0, 1.0, 1.0];
+    // Use tile color for artistic variation (GND uses ARGB format)
+    let tile_color = [
+        tile.color[1] as f32 / 255.0, // R
+        tile.color[2] as f32 / 255.0, // G
+        tile.color[3] as f32 / 255.0, // B
+        tile.color[0] as f32 / 255.0, // A
+    ];
     for _ in 0..4 {
-        mesh_data.2.push(color);
+        mesh_data.2.push(tile_color);
     }
 
     // UV coordinates from tile - matching roBrowser right wall pattern
@@ -570,10 +580,15 @@ fn create_terrain_meshes_robrowser_style(
             mesh_data.1.push(normals[3]); // BL (x+0,y+1)
             mesh_data.1.push(normals[0]); // UL (x+0,y+0) - repeated
 
-            // White color to let texture show through
-            let color = [1.0, 1.0, 1.0, 1.0];
+            // Use tile color for artistic variation (GND uses ARGB format)
+            let tile_color = [
+                tile.color[1] as f32 / 255.0, // R
+                tile.color[2] as f32 / 255.0, // G
+                tile.color[3] as f32 / 255.0, // B
+                tile.color[0] as f32 / 255.0, // A
+            ];
             for _ in 0..6 {
-                mesh_data.2.push(color);
+                mesh_data.2.push(tile_color);
             }
 
             // UV coordinates from tile (roBrowser mapping)
