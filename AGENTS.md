@@ -159,6 +159,18 @@ let normal = diag1.cross(diag2).normalize();
 
 Normals are then smoothed by averaging with neighboring cells for better lighting.
 
+## Development Guidelines
+
+1. **Always use Context7** to check libraries' available modules and functions before writing any code
+2. **Consult the Bevy Cheatbook** for good practices and examples: https://bevy-cheatbook.github.io/
+3. **Use Bevy code examples thoroughly** - find them at: https://github.com/bevyengine/bevy/tree/latest/examples#examples
+
+### Best Practices
+- Verify API availability before using any Bevy features or external crates
+- Follow ECS patterns and conventions from the Bevy Cheatbook
+- Reference official Bevy examples for implementation patterns
+- Check Context7 documentation for up-to-date API usage
+
 ## Important Notes
 - The project uses Bevy's dynamic linking feature for faster compilation during development
 - Asset files in the `assets/` directory are gitignored and need to be provided separately

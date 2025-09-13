@@ -582,7 +582,6 @@ mod tests {
             Ok((_, rsm)) => {
                 assert_eq!(rsm.version, 1.5);
                 assert_eq!(rsm.nodes.len(), 2);
-
             }
             Err(e) => panic!("Failed to parse cherrytree_s_01.rsm: {e:?}"),
         }

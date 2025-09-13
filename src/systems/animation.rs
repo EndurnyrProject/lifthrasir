@@ -110,4 +110,3 @@ pub fn animate_sprites(
         }
     }
 }
-

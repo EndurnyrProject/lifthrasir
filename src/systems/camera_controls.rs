@@ -119,4 +119,3 @@ pub fn camera_movement_system(
         }
     }
 }
-

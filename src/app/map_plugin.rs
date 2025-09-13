@@ -1,10 +1,10 @@
 use crate::{
     assets::loaders::{RoGroundAsset, RoWorldAsset},
-    components::MapLoader,
+    components::{MapLoader, WaterMaterial},
     ro_formats::RswObject,
     systems::{
-        RsmCache, generate_terrain_mesh, setup_terrain_camera, spawn_map_models,
-        update_model_meshes, update_rsm_animations,
+        RsmCache, animate_water_system, generate_terrain_mesh, load_water_system,
+        setup_terrain_camera, spawn_map_models, update_model_meshes, update_rsm_animations,
     },
 };
 use bevy::prelude::*;
@@ -13,17 +13,21 @@ pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<RsmCache>().add_systems(
-            Update,
-            (
-                log_loaded_world_data,
-                generate_terrain_mesh,
-                setup_terrain_camera,
-                spawn_map_models,
-                update_model_meshes,
-                update_rsm_animations,
-            ),
-        );
+        app.init_resource::<RsmCache>()
+            .add_plugins(MaterialPlugin::<WaterMaterial>::default())
+            .add_systems(
+                Update,
+                (
+                    log_loaded_world_data,
+                    generate_terrain_mesh,
+                    setup_terrain_camera,
+                    spawn_map_models,
+                    update_model_meshes,
+                    update_rsm_animations,
+                    load_water_system,
+                    animate_water_system,
+                ),
+            );
     }
 }
 
@@ -64,6 +68,7 @@ fn log_loaded_world_data(
                 info!("  Version: {}", world_asset.world.version);
                 info!("  GND file: {}", world_asset.world.gnd_file);
                 info!("  GAT file: {}", world_asset.world.gat_file);
+                info!("  Water level: {}", world_asset.world.water.level);
                 info!("  Total objects: {}", world_asset.world.objects.len());
                 info!("    Models: {}", model_count);
                 info!("    Lights: {}", light_count);

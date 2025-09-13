@@ -99,3 +99,62 @@ pub fn apply_magenta_transparency(rgba_data: &mut [u8]) {
         }
     }
 }
+
+/// Decode image data from bytes based on file extension
+/// Supports BMP, TGA, JPG, and PNG formats commonly used in RO
+pub fn decode_image_from_bytes(
+    data: &[u8],
+    filename: &str,
+) -> Result<Image, Box<dyn std::error::Error>> {
+    use image::ImageFormat;
+
+    // Determine format from filename extension
+    let format = if filename.ends_with(".bmp") || filename.ends_with(".BMP") {
+        ImageFormat::Bmp
+    } else if filename.ends_with(".tga") || filename.ends_with(".TGA") {
+        ImageFormat::Tga
+    } else if filename.ends_with(".jpg")
+        || filename.ends_with(".JPG")
+        || filename.ends_with(".jpeg")
+        || filename.ends_with(".JPEG")
+    {
+        ImageFormat::Jpeg
+    } else if filename.ends_with(".png") || filename.ends_with(".PNG") {
+        ImageFormat::Png
+    } else {
+        ImageFormat::Bmp
+    };
+
+    let img = image::load_from_memory_with_format(data, format)?;
+    let rgba = img.to_rgba8();
+    let dimensions = rgba.dimensions();
+
+    let mut rgba_data = rgba.into_raw();
+    apply_magenta_transparency(&mut rgba_data);
+
+    let mut bevy_image = Image::new(
+        Extent3d {
+            width: dimensions.0,
+            height: dimensions.1,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        rgba_data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+
+    // Set sampler to repeat for tiling textures like water
+    use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
+    bevy_image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        address_mode_u: ImageAddressMode::Repeat,
+        address_mode_v: ImageAddressMode::Repeat,
+        address_mode_w: ImageAddressMode::Repeat,
+        mag_filter: ImageFilterMode::Linear,
+        min_filter: ImageFilterMode::Linear,
+        mipmap_filter: ImageFilterMode::Linear,
+        ..Default::default()
+    });
+
+    Ok(bevy_image)
+}

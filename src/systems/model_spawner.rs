@@ -1,3 +1,4 @@
+use crate::assets::converters::decode_image_from_bytes;
 use crate::assets::loaders::{GrfAsset, RoGroundAsset, RoWorldAsset};
 use crate::components::rsm_animation::{
     AnimatedTransform, AnimationType, RsmAnimationController, RsmNodeAnimation,
@@ -610,52 +611,6 @@ fn get_or_create_material_for_texture(
     }
 
     material_handle
-}
-
-fn decode_image_from_bytes(
-    data: &[u8],
-    filename: &str,
-) -> Result<Image, Box<dyn std::error::Error>> {
-    use crate::assets::converters::apply_magenta_transparency;
-    use image::ImageFormat;
-
-    // Determine format from filename extension
-    let format = if filename.ends_with(".bmp") || filename.ends_with(".BMP") {
-        ImageFormat::Bmp
-    } else if filename.ends_with(".tga") || filename.ends_with(".TGA") {
-        ImageFormat::Tga
-    } else if filename.ends_with(".jpg")
-        || filename.ends_with(".JPG")
-        || filename.ends_with(".jpeg")
-        || filename.ends_with(".JPEG")
-    {
-        ImageFormat::Jpeg
-    } else if filename.ends_with(".png") || filename.ends_with(".PNG") {
-        ImageFormat::Png
-    } else {
-        ImageFormat::Bmp
-    };
-
-    let img = image::load_from_memory_with_format(data, format)?;
-    let rgba = img.to_rgba8();
-    let dimensions = rgba.dimensions();
-
-    let mut rgba_data = rgba.into_raw();
-    apply_magenta_transparency(&mut rgba_data);
-
-    let bevy_image = Image::new(
-        bevy::render::render_resource::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        },
-        bevy::render::render_resource::TextureDimension::D2,
-        rgba_data,
-        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
-        bevy::render::render_asset::RenderAssetUsages::RENDER_WORLD,
-    );
-
-    Ok(bevy_image)
 }
 
 fn create_rsm_material_for_texture(

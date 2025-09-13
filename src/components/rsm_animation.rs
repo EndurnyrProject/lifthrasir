@@ -282,4 +282,3 @@ impl RsmAnimationController {
         self.frame_rate = frame_rate.max(1.0); // Ensure at least 1 FPS
     }
 }
-

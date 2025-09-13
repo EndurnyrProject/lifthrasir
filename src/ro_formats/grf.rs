@@ -1,5 +1,6 @@
 use crate::ro_formats::des;
 use crate::utils::string_utils::parse_korean_string;
+use bevy::prelude::info;
 use flate2::read::ZlibDecoder;
 use nom::{IResult, Parser, bytes::complete::take, number::complete::le_u32};
 use std::collections::HashMap;
@@ -231,6 +232,14 @@ impl GrfFile {
                 data[pos + 16],
             ]);
             pos += 17;
+
+            // Log water-related files during GRF parsing
+            if filename.to_lowercase().contains("water")
+                || filename.contains("물")
+                || filename.contains("워터")
+            {
+                info!("Found water-related file in GRF: {}", filename);
+            }
 
             entries.push(GrfEntry {
                 filename,
