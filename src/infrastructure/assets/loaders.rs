@@ -11,6 +11,7 @@ use thiserror::Error;
 use crate::infrastructure::assets::{
     HierarchicalAssetManager, bmp_loader::BmpLoader, config::AssetConfig,
 };
+use crate::infrastructure::config::ClientConfig;
 use crate::infrastructure::ro_formats::{
     ActError, GatError, GndError, GrfError, GrfFile, RoAction as ParsedRoAction, RoAltitude,
     RoGround, RoSprite as ParsedRoSprite, RoWorld, RsmError, RsmFile, RswError, SpriteError,
@@ -21,23 +22,26 @@ pub struct RoAssetsPlugin;
 
 impl Plugin for RoAssetsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(TomlAssetPlugin::<AssetConfig>::new(&["toml"]))
-            .init_resource::<HierarchicalAssetManager>()
-            .init_asset::<RoSpriteAsset>()
-            .init_asset_loader::<RoSpriteLoader>()
-            .init_asset::<RoActAsset>()
-            .init_asset_loader::<RoActLoader>()
-            .init_asset::<RoWorldAsset>()
-            .init_asset_loader::<RoWorldLoader>()
-            .init_asset::<RoGroundAsset>()
-            .init_asset_loader::<RoGroundLoader>()
-            .init_asset::<RoAltitudeAsset>()
-            .init_asset_loader::<RoAltitudeLoader>()
-            .init_asset::<RsmAsset>()
-            .init_asset_loader::<RsmLoader>()
-            .init_asset::<GrfAsset>()
-            .init_asset_loader::<GrfLoader>()
-            .init_asset_loader::<BmpLoader>();
+        app.add_plugins((
+            TomlAssetPlugin::<AssetConfig>::new(&["data.toml"]),
+            TomlAssetPlugin::<ClientConfig>::new(&["client.toml"]),
+        ))
+        .init_resource::<HierarchicalAssetManager>()
+        .init_asset::<RoSpriteAsset>()
+        .init_asset_loader::<RoSpriteLoader>()
+        .init_asset::<RoActAsset>()
+        .init_asset_loader::<RoActLoader>()
+        .init_asset::<RoWorldAsset>()
+        .init_asset_loader::<RoWorldLoader>()
+        .init_asset::<RoGroundAsset>()
+        .init_asset_loader::<RoGroundLoader>()
+        .init_asset::<RoAltitudeAsset>()
+        .init_asset_loader::<RoAltitudeLoader>()
+        .init_asset::<RsmAsset>()
+        .init_asset_loader::<RsmLoader>()
+        .init_asset::<GrfAsset>()
+        .init_asset_loader::<GrfLoader>()
+        .init_asset_loader::<BmpLoader>();
     }
 }
 

@@ -22,7 +22,7 @@ pub struct GrfConfig {
 }
 
 fn default_data_folder() -> String {
-    "./data/".to_string()
+    "./assets/data/".to_string()
 }
 
 impl Default for AssetConfig {

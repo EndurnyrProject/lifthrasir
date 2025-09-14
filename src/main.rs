@@ -1,5 +1,6 @@
 use crate::utils::{WINDOW_HEIGHT, WINDOW_WIDTH};
 use bevy::prelude::*;
+use bevy_tokio_tasks::TokioTasksPlugin;
 
 mod app;
 mod core;
@@ -9,9 +10,9 @@ mod plugins;
 mod presentation;
 mod utils;
 
-use app::LifthrasirPlugin; // MapPlugin disabled for UI development
+use app::{AuthenticationPlugin, LifthrasirPlugin}; // MapPlugin disabled for UI development
 use plugins::{AssetsPlugin, InputPlugin}; // WorldPlugin, RenderingPlugin disabled for UI development
-use presentation::ui::{EnhancedInteractionsPlugin, LoginPlugin};
+use presentation::ui::{EnhancedInteractionsPlugin, LoginPlugin, PopupPlugin};
 
 fn main() {
     App::new()
@@ -24,6 +25,7 @@ fn main() {
             ..default()
         }))
         .add_plugins((
+            TokioTasksPlugin::default(), // Add Tokio runtime integration
             LifthrasirPlugin,
             // MapPlugin,              // Disabled for UI development
             // WorldPlugin,            // Disabled for UI development
@@ -31,7 +33,9 @@ fn main() {
             InputPlugin,
             AssetsPlugin,
             LoginPlugin,
+            PopupPlugin,
             EnhancedInteractionsPlugin,
+            AuthenticationPlugin, // New authentication plugin
         ))
         .run();
 }

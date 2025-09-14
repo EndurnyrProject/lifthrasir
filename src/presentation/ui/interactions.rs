@@ -2,6 +2,7 @@ use super::{components::*, theme::*};
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use bevy::window::Ime;
+use secrecy::{ExposeSecret, SecretString};
 
 /// Enhanced interaction system for buttons with dynamic transparency and border radius effects
 pub fn handle_enhanced_button_interactions(
@@ -159,11 +160,18 @@ pub fn handle_text_input(
     for event in ime_events.read() {
         match event {
             Ime::Commit { value, .. } => {
-                // Committed text from IME
+                // Committed text from IME with length validation
                 if is_username {
-                    login_data.username.push_str(value);
+                    if login_data.username.len() + value.len() <= MAX_USERNAME_LENGTH {
+                        login_data.username.push_str(value);
+                    }
                 } else if is_password {
-                    login_data.password.push_str(value);
+                    let current_password = login_data.password.expose_secret();
+                    if current_password.len() + value.len() <= MAX_PASSWORD_LENGTH {
+                        let mut new_password = current_password.to_string();
+                        new_password.push_str(value);
+                        login_data.password = SecretString::from(new_password);
+                    }
                 }
             }
             _ => {}
@@ -182,16 +190,28 @@ pub fn handle_text_input(
                 if is_username {
                     login_data.username.pop();
                 } else if is_password {
-                    login_data.password.pop();
+                    let current_password = login_data.password.expose_secret();
+                    if !current_password.is_empty() {
+                        let mut new_password = current_password.to_string();
+                        new_password.pop();
+                        login_data.password = SecretString::from(new_password);
+                    }
                 }
             }
             (_, Some(text)) => {
                 // Use event.text for better character handling (includes IME fallback)
                 if text.chars().all(|c| !c.is_control()) {
                     if is_username {
-                        login_data.username.push_str(text);
+                        if login_data.username.len() + text.len() <= MAX_USERNAME_LENGTH {
+                            login_data.username.push_str(text);
+                        }
                     } else if is_password {
-                        login_data.password.push_str(text);
+                        let current_password = login_data.password.expose_secret();
+                        if current_password.len() + text.len() <= MAX_PASSWORD_LENGTH {
+                            let mut new_password = current_password.to_string();
+                            new_password.push_str(text);
+                            login_data.password = SecretString::from(new_password);
+                        }
                     }
                 }
             }
@@ -233,7 +253,7 @@ pub fn update_input_display(
             for child in children {
                 if let Ok(mut text) = text_query.get_mut(*child) {
                     // Use correct Bevy text API - Text.0 is the string content
-                    let expected_text = "*".repeat(login_data.password.len());
+                    let expected_text = "*".repeat(login_data.password.expose_secret().len());
                     let current_text = &text.0;
                     // Only update if different to avoid unnecessary work
                     if current_text != &expected_text {

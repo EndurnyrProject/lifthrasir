@@ -1,5 +1,5 @@
 [assets]
-data_folder = "./data/"
+data_folder = "assets/data"
 
 [[assets.grf]]
 path = "data.grf"

@@ -1,9 +1,10 @@
 use bevy::prelude::*;
+use secrecy::SecretString;
 
 #[derive(Event)]
 pub struct LoginAttemptEvent {
     pub username: String,
-    pub password: String,
+    pub password: SecretString,
 }
 
 #[derive(Event)]

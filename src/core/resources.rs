@@ -1,5 +1,9 @@
 use bevy::prelude::*;
 
+// Re-export authentication resources for convenience
+pub use crate::domain::authentication::models::{AuthenticationContext, ServerConfiguration};
+pub use crate::infrastructure::networking::session::UserSession;
+
 #[derive(Resource)]
 pub struct GameSettings {
     pub render_distance: f32,

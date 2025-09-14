@@ -1,5 +1,8 @@
 use bevy::prelude::*;
 
+// Re-export authentication events for convenience
+pub use crate::domain::authentication::events::*;
+
 #[derive(Event)]
 pub struct MapLoadedEvent {
     pub map_name: String,

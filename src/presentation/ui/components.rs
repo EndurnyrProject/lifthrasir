@@ -1,4 +1,9 @@
 use bevy::prelude::*;
+use secrecy::SecretString;
+
+// Input validation constants from protocol
+pub const MAX_USERNAME_LENGTH: usize = 23; // 24 bytes - 1 for null terminator
+pub const MAX_PASSWORD_LENGTH: usize = 23; // 24 bytes - 1 for null terminator
 
 // Component markers for different UI elements
 #[derive(Component)]
@@ -38,16 +43,33 @@ pub struct EnterGameButton;
 pub struct BackToLoginButton;
 
 // Resources to hold form data
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct LoginFormData {
     pub username: String,
-    pub password: String,
+    pub password: SecretString,
     pub remember_me: bool,
+}
+
+impl Default for LoginFormData {
+    fn default() -> Self {
+        Self {
+            username: String::new(),
+            password: SecretString::from(String::new()),
+            remember_me: false,
+        }
+    }
 }
 
 // Focus tracking component for input fields
 #[derive(Component)]
 pub struct FocusedInput;
+
+// Status display components for login UI
+#[derive(Component)]
+pub struct StatusTextArea;
+
+#[derive(Component)]
+pub struct StatusText;
 
 // Character data structure
 #[derive(Resource, Default)]

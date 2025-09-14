@@ -1,4 +1,5 @@
 pub mod assets;
+pub mod authentication;
 pub mod camera;
 pub mod entities;
 pub mod world;
