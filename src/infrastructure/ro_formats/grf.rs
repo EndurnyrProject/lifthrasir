@@ -233,14 +233,6 @@ impl GrfFile {
             ]);
             pos += 17;
 
-            // Log water-related files during GRF parsing
-            if filename.to_lowercase().contains("water")
-                || filename.contains("물")
-                || filename.contains("워터")
-            {
-                info!("Found water-related file in GRF: {}", filename);
-            }
-
             entries.push(GrfEntry {
                 filename,
                 pack_size,

@@ -1,0 +1,15 @@
+[assets]
+data_folder = "./data/"
+
+[[assets.grf]]
+path = "data.grf"
+priority = 0
+
+# Example additional GRF files:
+# [[grf]]
+# path = "sdata.grf"  
+# priority = 1
+#
+# [[grf]]
+# path = "rdata.grf"
+# priority = 2

@@ -5,9 +5,12 @@ use bevy::{
     prelude::*,
     reflect::TypePath,
 };
+use bevy_common_assets::toml::TomlAssetPlugin;
 use thiserror::Error;
 
-use crate::infrastructure::assets::bmp_loader::BmpLoader;
+use crate::infrastructure::assets::{
+    HierarchicalAssetManager, bmp_loader::BmpLoader, config::AssetConfig,
+};
 use crate::infrastructure::ro_formats::{
     ActError, GatError, GndError, GrfError, GrfFile, RoAction as ParsedRoAction, RoAltitude,
     RoGround, RoSprite as ParsedRoSprite, RoWorld, RsmError, RsmFile, RswError, SpriteError,
@@ -18,7 +21,9 @@ pub struct RoAssetsPlugin;
 
 impl Plugin for RoAssetsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_asset::<RoSpriteAsset>()
+        app.add_plugins(TomlAssetPlugin::<AssetConfig>::new(&["toml"]))
+            .init_resource::<HierarchicalAssetManager>()
+            .init_asset::<RoSpriteAsset>()
             .init_asset_loader::<RoSpriteLoader>()
             .init_asset::<RoActAsset>()
             .init_asset_loader::<RoActLoader>()

@@ -8,14 +8,17 @@ use bevy::{
 
 use crate::{
     domain::camera::controller::CameraController,
-    domain::world::{components::MapLoader, map::MapData, map_loader::GrfMapLoader},
-    infrastructure::assets::loaders::{GrfAsset, RoAltitudeAsset, RoGroundAsset},
+    domain::world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
+    infrastructure::assets::{
+        HierarchicalAssetManager,
+        loaders::{RoAltitudeAsset, RoGroundAsset},
+    },
     utils::constants::CELL_SIZE,
 };
 
 fn load_terrain_textures(
     ground: &crate::infrastructure::ro_formats::RoGround,
-    grf_asset: &GrfAsset,
+    asset_manager: &HierarchicalAssetManager,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     images: &mut ResMut<Assets<Image>>,
 ) -> Vec<Handle<StandardMaterial>> {
@@ -30,7 +33,7 @@ fn load_terrain_textures(
 
             let mut texture_handle = None;
             for path in &texture_paths {
-                if let Some(texture_data) = grf_asset.grf.get_file(path) {
+                if let Ok(texture_data) = asset_manager.load(path) {
                     if let Ok(image) = load_bmp_from_bytes(&texture_data) {
                         texture_handle = Some(images.add(image));
                         break;
@@ -409,10 +412,14 @@ pub fn generate_terrain_mesh(
     mut images: ResMut<Assets<Image>>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
-    grf_assets: Res<Assets<GrfAsset>>,
-    query: Query<(Entity, &MapLoader, &GrfMapLoader), Without<MapData>>,
+    asset_manager: Option<Res<HierarchicalAssetManager>>,
+    query: Query<(Entity, &MapLoader, &MapRequestLoader), Without<MapData>>,
 ) {
-    for (entity, map_loader, grf_loader) in query.iter() {
+    let Some(ref asset_manager) = asset_manager else {
+        return;
+    };
+
+    for (entity, map_loader, _map_request) in query.iter() {
         let Some(ground) = ground_assets.get(&map_loader.ground) else {
             continue;
         };
@@ -423,13 +430,9 @@ pub fn generate_terrain_mesh(
             .and_then(|h| altitude_assets.get(h))
             .map(|a| &a.altitude);
 
-        let Some(grf_asset) = grf_assets.get(&grf_loader.grf_handle) else {
-            continue;
-        };
-
-        // Load textures
+        // Load textures using hierarchical asset manager
         let texture_materials =
-            load_terrain_textures(&ground.ground, grf_asset, &mut materials, &mut images);
+            load_terrain_textures(&ground.ground, asset_manager, &mut materials, &mut images);
 
         // GAT is used for collision detection, not terrain rendering
         // GND surfaces contain the height data we need for terrain mesh generation

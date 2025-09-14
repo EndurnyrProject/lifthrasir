@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 bevy = { version = "0.16.1", features = ["dynamic_linking"] }
 bevy_egui = "0.36.0"
+bevy_common_assets = { version = "0.13", features = ["toml"] }
+bevy_asset_loader = "0.23"
 nom = "8.0.0"
 thiserror = "2.0.16"
 image = "0.25.8"
@@ -13,3 +15,4 @@ futures-lite = "2.6.1"
 flate2 = "1.1.2"
 encoding_rs = "0.8.35"
 nalgebra = "0.34"
+serde = { version = "1.0", features = ["derive"] }

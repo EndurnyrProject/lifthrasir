@@ -1,9 +1,12 @@
 use crate::domain::entities::systems::{
     AnimatedTransform, AnimationType, RsmAnimationController, RsmNodeAnimation,
 };
-use crate::domain::world::{components::MapLoader, map_loader::GrfMapLoader};
+use crate::domain::world::components::MapLoader;
 use crate::infrastructure::assets::converters::decode_image_from_bytes;
-use crate::infrastructure::assets::loaders::{GrfAsset, RoGroundAsset, RoWorldAsset};
+use crate::infrastructure::assets::{
+    HierarchicalAssetManager,
+    loaders::{RoGroundAsset, RoWorldAsset},
+};
 use crate::infrastructure::ro_formats::{RsmFile, RswObject};
 use crate::utils::{get_map_dimensions_from_ground, rsw_to_bevy_transform};
 use bevy::math::{Mat4, Vec4};
@@ -151,20 +154,14 @@ pub fn update_model_meshes(
         ),
         (With<MapModel>, Without<ModelProcessed>),
     >,
-    grf_assets: Res<Assets<GrfAsset>>,
-    grf_query: Query<&GrfMapLoader>,
+    asset_manager: Option<Res<HierarchicalAssetManager>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut rsm_cache: ResMut<RsmCache>,
 ) {
-    let grf_asset = grf_query
-        .iter()
-        .next()
-        .and_then(|loader| grf_assets.get(&loader.grf_handle));
-
-    let Some(grf_asset) = grf_asset else {
-        return; // No GRF loaded yet
+    let Some(ref asset_manager) = asset_manager else {
+        return; // No asset manager available yet
     };
 
     for (entity, map_model, anim_type, anim_speed) in model_query.iter() {
@@ -184,7 +181,7 @@ pub fn update_model_meshes(
 
             let mut found_rsm = None;
             for alt_path in alt_paths {
-                if let Some(rsm_data) = grf_asset.grf.get_file(&alt_path) {
+                if let Ok(rsm_data) = asset_manager.load(&alt_path) {
                     if let Ok(rsm) = RsmFile::from_bytes(&rsm_data) {
                         let rsm_arc = Arc::new(rsm);
                         {
@@ -296,7 +293,7 @@ pub fn update_model_meshes(
                     &rsm,
                     &map_model.node_name,
                     texture_id,
-                    grf_asset,
+                    asset_manager,
                     &mut rsm_cache,
                     &mut materials,
                     &mut images,
@@ -574,7 +571,7 @@ fn get_or_create_material_for_texture(
     rsm: &RsmFile,
     _node_name: &str,
     actual_texture_idx: i32,
-    grf_asset: &GrfAsset,
+    asset_manager: &HierarchicalAssetManager,
     rsm_cache: &mut RsmCache,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     images: &mut ResMut<Assets<Image>>,
@@ -608,7 +605,7 @@ fn get_or_create_material_for_texture(
 
     // Create new material for this texture
     let material_handle =
-        create_rsm_material_for_texture(rsm, texture_name, grf_asset, materials, images);
+        create_rsm_material_for_texture(rsm, texture_name, asset_manager, materials, images);
 
     // Cache it
     {
@@ -622,7 +619,7 @@ fn get_or_create_material_for_texture(
 fn create_rsm_material_for_texture(
     rsm: &RsmFile,
     texture_name: &str,
-    grf_asset: &GrfAsset,
+    asset_manager: &HierarchicalAssetManager,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     images: &mut ResMut<Assets<Image>>,
 ) -> Handle<StandardMaterial> {
@@ -656,7 +653,7 @@ fn create_rsm_material_for_texture(
     ];
 
     for texture_path in &texture_paths {
-        if let Some(texture_data) = grf_asset.grf.get_file(texture_path) {
+        if let Ok(texture_data) = asset_manager.load(texture_path) {
             match decode_image_from_bytes(&texture_data, texture_name) {
                 Ok(image) => {
                     let texture_handle = images.add(image);

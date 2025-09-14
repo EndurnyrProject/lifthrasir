@@ -1,6 +1,9 @@
 use crate::{
     core::{GameSettings, GameState, MapState},
-    domain::world::systems::{extract_map_from_grf, setup_grf_map_loading},
+    domain::world::systems::{
+        extract_map_from_hierarchical_assets, setup_hierarchical_map_loading,
+    },
+    infrastructure::assets::loading_states::AssetLoadingState,
 };
 use bevy::prelude::*;
 
@@ -11,7 +14,13 @@ impl Plugin for WorldPlugin {
         app.init_state::<GameState>()
             .init_state::<MapState>()
             .init_resource::<GameSettings>()
-            .add_systems(Startup, setup_grf_map_loading)
-            .add_systems(Update, extract_map_from_grf);
+            .add_systems(
+                OnEnter(AssetLoadingState::Ready),
+                setup_hierarchical_map_loading,
+            )
+            .add_systems(
+                Update,
+                extract_map_from_hierarchical_assets.run_if(in_state(AssetLoadingState::Ready)),
+            );
     }
 }

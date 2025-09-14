@@ -9,11 +9,12 @@ use bevy::{
 use crate::{
     domain::{
         assets::components::{WaterAnimation, WaterExtension, WaterMaterial, WaterSurface},
-        world::{components::MapLoader, map::MapData, map_loader::GrfMapLoader},
+        world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
     },
     infrastructure::assets::{
+        HierarchicalAssetManager,
         converters::decode_image_from_bytes,
-        loaders::{GrfAsset, RoGroundAsset, RoWorldAsset},
+        loaders::{RoGroundAsset, RoWorldAsset},
     },
     utils::constants::CELL_SIZE,
 };
@@ -24,23 +25,23 @@ pub fn load_water_system(
     mut materials: ResMut<Assets<WaterMaterial>>,
     mut images: ResMut<Assets<Image>>,
     world_assets: Res<Assets<RoWorldAsset>>,
-    grf_assets: Res<Assets<GrfAsset>>,
+    asset_manager: Option<Res<HierarchicalAssetManager>>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     query: Query<
-        (Entity, &MapLoader, &GrfMapLoader, &MapData),
+        (Entity, &MapLoader, &MapRequestLoader, &MapData),
         (Without<WaterSurface>, With<MapData>),
     >,
 ) {
-    for (entity, map_loader, grf_loader, map_data) in query.iter() {
+    let Some(ref asset_manager) = asset_manager else {
+        return; // No asset manager available yet
+    };
+
+    for (entity, map_loader, _map_request, _) in query.iter() {
         let Some(world_handle) = map_loader.world.as_ref() else {
             continue;
         };
 
         let Some(world_asset) = world_assets.get(world_handle) else {
-            continue;
-        };
-
-        let Some(grf_asset) = grf_assets.get(&grf_loader.grf_handle) else {
             continue;
         };
 
@@ -71,18 +72,6 @@ pub fn load_water_system(
             "Water detection: water.level={}, water.wave_height={}, calculated wave_height={}",
             water.level, water.wave_height, wave_height
         );
-
-        // Sample a few terrain heights for debugging
-        if width > 0 && height > 0 {
-            let sample_surface = &ground.surfaces[0];
-            info!(
-                "Sample terrain heights: [{}, {}, {}, {}]",
-                sample_surface.height[0],
-                sample_surface.height[1],
-                sample_surface.height[2],
-                sample_surface.height[3]
-            );
-        }
 
         // Check each terrain cell for water presence
         for y in 0..height {
@@ -116,8 +105,8 @@ pub fn load_water_system(
 
         info!("Creating single water mesh for {} tiles", water_tiles.len());
 
-        // Load water texture from GRF, or use fallback
-        let water_texture = load_water_texture(water.water_type, 0, grf_asset, &mut images)
+        // Load water texture from hierarchical asset manager, or use fallback
+        let water_texture = load_water_texture(water.water_type, 0, asset_manager, &mut images)
             .unwrap_or_else(|| {
                 warn!("Water texture loading failed, using fallback white texture");
                 // Create a fallback white texture if loading fails
@@ -294,12 +283,12 @@ fn create_water_tiles_mesh(water_tiles: &[(usize, usize)], water_y: f32) -> Mesh
 fn load_water_texture(
     water_type: u32,
     frame: u32,
-    grf_asset: &GrfAsset,
+    asset_manager: &HierarchicalAssetManager,
     images: &mut ResMut<Assets<Image>>,
 ) -> Option<Handle<Image>> {
     let texture_path = format!("data\\texture\\워터\\water{water_type}{frame:02}.jpg");
 
-    if let Some(texture_data) = grf_asset.grf.get_file(&texture_path) {
+    if let Ok(texture_data) = asset_manager.load(&texture_path) {
         match decode_image_from_bytes(&texture_data, &texture_path) {
             Ok(image) => {
                 return Some(images.add(image));

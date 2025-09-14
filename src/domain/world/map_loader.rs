@@ -1,17 +1,14 @@
-use crate::infrastructure::assets::loaders::GrfAsset;
 use bevy::prelude::*;
 
 #[derive(Component)]
-pub struct GrfMapLoader {
-    pub grf_handle: Handle<GrfAsset>,
+pub struct MapRequestLoader {
     pub map_name: String,
     pub loaded: bool,
 }
 
-impl GrfMapLoader {
-    pub fn new(grf_handle: Handle<GrfAsset>, map_name: String) -> Self {
+impl MapRequestLoader {
+    pub fn new(map_name: String) -> Self {
         Self {
-            grf_handle,
             map_name,
             loaded: false,
         }
