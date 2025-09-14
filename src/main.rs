@@ -9,8 +9,9 @@ mod plugins;
 mod presentation;
 mod utils;
 
-use app::{LifthrasirPlugin, MapPlugin};
-use plugins::*;
+use app::LifthrasirPlugin; // MapPlugin disabled for UI development
+use plugins::{AssetsPlugin, InputPlugin}; // WorldPlugin, RenderingPlugin disabled for UI development
+use presentation::ui::{EnhancedInteractionsPlugin, LoginPlugin};
 
 fn main() {
     App::new()
@@ -24,11 +25,13 @@ fn main() {
         }))
         .add_plugins((
             LifthrasirPlugin,
-            MapPlugin,
-            WorldPlugin,
-            RenderingPlugin,
+            // MapPlugin,              // Disabled for UI development
+            // WorldPlugin,            // Disabled for UI development
+            // RenderingPlugin,        // Disabled for UI development
             InputPlugin,
             AssetsPlugin,
+            LoginPlugin,
+            EnhancedInteractionsPlugin,
         ))
         .run();
 }

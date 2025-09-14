@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 bevy = { version = "0.16.1", features = ["dynamic_linking"] }
-bevy_egui = "0.36.0"
 bevy_common_assets = { version = "0.13", features = ["toml"] }
 bevy_asset_loader = "0.23"
 nom = "8.0.0"

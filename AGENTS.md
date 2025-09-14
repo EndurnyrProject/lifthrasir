@@ -200,3 +200,38 @@ Normals are then smoothed by averaging with neighboring cells for better lightin
 - Korean text encoding is handled via `encoding_rs` for proper string parsing from game files
 - Terrain is generated at world origin (0, 0, 0) with models positioned relative to it
 - The coordinate translation preserves RO's visual style while adapting to Bevy's coordinate conventions
+
+
+## Colour Pallete
+
+# UI Color Palette: Ashen Forged
+
+This palette is designed for a clean, sharp, and modern UI with a dark theme. It uses a foundation of strong grays, allowing the vibrant "Runic Glow" to act as a clear and effective accent for all interactive elements.
+
+## Main Palette
+
+| Role      | Hex Code    | Name & Description                                                                            |
+| :-------- | :---------- | :-------------------------------------------------------------------------------------------- |
+| **Primary** | ` #1A1C20 ` | **Forge Soot:** A very dark, near-black charcoal. Forms the base of your UI.                    |
+| **Secondary** | ` #2D3038 ` | **Slate Gray:** A dark gray for panels, windows, and surfaces that sit on the primary background. |
+| **Tertiary** | ` #4F5460 ` | **Polished Steel:** A lighter gray for hover states, borders, and dividers.                   |
+| **Accent** | ` #6EE3F4 ` | **Runic Glow:** The bright, magical cyan from your logo. For all interactive elements.      |
+| **Highlight** | ` #E1E1E1 ` | **Ashen White:** A soft off-white for all primary body text and icons for readability.        |
+| **Special** | ` #D4AF37 ` | **Gilded Accent:** The gold from the logo's text. Use sparingly for legendary items or titles. |
+
+## Feedback Colors
+
+These colors should be used to provide clear feedback to the player for common actions.
+
+| State     | Hex Code    | Name & Description                                    |
+| :-------- | :---------- | :---------------------------------------------------- |
+| **Success** | ` #3E8A6B ` | **Muted Jade:** For positive confirmation and success messages. |
+| **Warning** | ` #C7883C ` | **Amber:** For warnings or potentially risky actions.     |
+| **Error** | ` #A44242 ` | **Worn Crimson:** For errors, failed actions, and alerts.  |
+
+### Usage Notes
+
+- **Contrast is key:** Ensure that the `Ashen White` text has sufficient contrast against both the `Forge Soot` and `Slate Gray` backgrounds for good readability.
+- **Use accents intentionally:** The `Runic Glow` color should guide the user's eye to things they can click or interact with. Avoid using it for static text or non-interactive elements.
+- **Keep it clean:** The strength of this palette is its simplicity. Avoid introducing many new colors to maintain a cohesive and professional look.
+- Slight transparency can be applied to the grays for overlays or modals to add depth without introducing new colors.
