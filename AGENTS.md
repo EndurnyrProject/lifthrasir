@@ -24,33 +24,55 @@ Lifthrasir is a Ragnarok Online client implementation written in Rust using the 
 ## Architecture
 
 ### Core Structure
-The codebase is organized around Bevy's ECS (Entity Component System) pattern with the following main modules:
+The codebase follows Clean Architecture principles with Domain-Driven Design, organized into layers with clear separation of concerns:
 
-- **`ro_formats/`** - Parsers for Ragnarok Online file formats (GRF, RSM, RSW, GND, GAT, ACT, SPR)
-  - Each format has its own module with parsing logic using the `nom` crate
-  - Includes deserialization for game resources and DES encryption support
+#### **`src/domain/`** - Domain Layer (Core Business Logic)
+- **`assets/`** - Asset management domain
+  - Components for asset caching and management
+  - Systems for asset lifecycle management
+- **`camera/`** - Camera domain logic
+  - Camera components and controller logic
+  - Camera movement and control systems
+- **`entities/`** - Game entity management
+  - Animation systems and components
+  - Entity lifecycle management
+- **`world/`** - World and map domain
+  - Terrain generation and management
+  - Map loading and world state management
 
-- **`assets/`** - Asset loading and conversion
+#### **`src/infrastructure/`** - Infrastructure Layer (External Concerns)
+- **`ro_formats/`** - Ragnarok Online file format parsers
+  - GRF, RSM, RSW, GND, GAT, ACT, SPR format parsing using `nom`
+  - DES encryption support for legacy formats
+- **`assets/`** - Asset loading infrastructure
   - Custom Bevy asset loaders for RO formats
-  - Converters to transform RO formats into Bevy-compatible resources
-  - BMP texture loading support
+  - Asset converters and BMP texture loading
+- **`storage/`** - File system and storage
+  - GRF file reading and caching mechanisms
 
-- **`systems/`** - Bevy systems for game logic
-  - Camera controls and movement
-  - Terrain generation from GND (ground) files  
-  - Model spawning from RSM files
-  - Enhanced lighting system
-  - GRF map extraction and loading
-  - Animation systems for sprites and models
+#### **`src/presentation/`** - Presentation Layer (User Interface)
+- **`input/`** - Input handling systems
+  - Camera, keyboard, and mouse input processing
+- **`rendering/`** - Rendering systems
+  - Model rendering and material management
+  - Lighting systems and terrain rendering
+  - Water rendering with shaders
 
-- **`components/`** - ECS components
-  - `MapLoader` - Manages map asset handles
-  - `GrfMapLoader` - Handles GRF file extraction
-  - `RsmAnimation` - Model animation data
+#### **`src/app/`** - Application Layer (Orchestration)
+- Main application plugin and map loading plugin
+- Coordinates between different layers
 
-- **`app/`** - Application plugins
-  - `LifthrasirPlugin` - Main application plugin
-  - `MapPlugin` - Map loading and rendering plugin
+#### **`src/plugins/`** - Bevy Plugin Organization
+- Individual plugins for assets, input, rendering, and world systems
+- Clean separation of Bevy-specific concerns
+
+#### **`src/core/`** - Shared Core Components
+- Events, resources, and application state management
+- Cross-cutting concerns shared across layers
+
+#### **`src/utils/`** - Utility Functions
+- Constants, coordinate transformations, and string utilities
+- Helper functions used across the application
 
 ### Key Dependencies
 - `bevy` - Game engine with dynamic linking enabled
@@ -96,7 +118,7 @@ The RO world uses a cell-based system where:
 
 #### Terrain Positioning (GND → Bevy)
 ```rust
-// In terrain.rs, we use CELL_SIZE = 10.0 (double RO's 5.0 for better visual scale)
+// In domain/world/terrain.rs, we use CELL_SIZE = 10.0 (double RO's 5.0 for better visual scale)
 let base_x = x as f32 * CELL_SIZE;
 let base_z = y as f32 * CELL_SIZE;
 // Heights are multiplied by 5.0 to match the horizontal scale
@@ -105,7 +127,7 @@ let height = surface.height[i] * 5.0;
 
 #### Model Positioning (RSW → Bevy)
 ```rust
-// From coordinates.rs
+// From utils/coordinates.rs
 let position = Vec3::new(
     model.position[0] + (map_width * 5.0),  // Center in X by adding half terrain width
     model.position[1],                       // Y (height) unchanged
@@ -128,7 +150,7 @@ let rotation = quat_z * quat_x * quat_y;  // Apply in RO's order
 #### Initial Camera Position
 The camera is positioned to view the map from an isometric-like perspective:
 ```rust
-// From terrain.rs - setup_terrain_camera
+// From domain/world/terrain.rs - setup_terrain_camera
 let camera_pos = Vec3::new(
     map_center_x,           // Center horizontally
     -2000.0,                // High above the terrain
