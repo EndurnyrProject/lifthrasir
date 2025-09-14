@@ -1,4 +1,4 @@
-use crate::ro_formats::RswModel;
+use crate::infrastructure::ro_formats::RswModel;
 use bevy::prelude::*;
 
 pub fn rsw_to_bevy_transform(model: &RswModel, map_width: f32, map_height: f32) -> Transform {
@@ -22,7 +22,9 @@ pub fn rsw_to_bevy_transform(model: &RswModel, map_width: f32, map_height: f32) 
     }
 }
 
-pub fn get_map_dimensions_from_ground(ground: &crate::ro_formats::RoGround) -> (f32, f32) {
+pub fn get_map_dimensions_from_ground(
+    ground: &crate::infrastructure::ro_formats::RoGround,
+) -> (f32, f32) {
     let width = ground.width as f32;
     let height = ground.height as f32;
 

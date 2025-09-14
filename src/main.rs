@@ -2,14 +2,15 @@ use crate::utils::{WINDOW_HEIGHT, WINDOW_WIDTH};
 use bevy::prelude::*;
 
 mod app;
-mod assets;
-mod components;
-mod ro_formats;
-mod systems;
+mod core;
+mod domain;
+mod infrastructure;
+mod plugins;
+mod presentation;
 mod utils;
 
 use app::{LifthrasirPlugin, MapPlugin};
-use systems::{EnhancedLightingPlugin, extract_map_from_grf, setup_grf_map_loading};
+use plugins::*;
 
 fn main() {
     App::new()
@@ -21,9 +22,13 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins((LifthrasirPlugin, MapPlugin))
-        .add_plugins(EnhancedLightingPlugin)
-        .add_systems(Startup, setup_grf_map_loading)
-        .add_systems(Update, extract_map_from_grf)
+        .add_plugins((
+            LifthrasirPlugin,
+            MapPlugin,
+            WorldPlugin,
+            RenderingPlugin,
+            InputPlugin,
+            AssetsPlugin,
+        ))
         .run();
 }

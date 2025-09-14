@@ -1,11 +1,14 @@
 use crate::{
-    assets::loaders::{RoGroundAsset, RoWorldAsset},
-    components::{MapLoader, WaterMaterial},
-    ro_formats::RswObject,
-    systems::{
-        RsmCache, animate_water_system, generate_terrain_mesh, load_water_system,
-        setup_terrain_camera, spawn_map_models, update_model_meshes, update_rsm_animations,
+    domain::assets::components::WaterMaterial,
+    domain::world::components::MapLoader,
+    domain::world::terrain::{generate_terrain_mesh, setup_terrain_camera},
+    infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
+    infrastructure::ro_formats::RswObject,
+    presentation::rendering::lighting::EnhancedLightingPlugin,
+    presentation::rendering::models::{
+        spawn_map_models, update_model_meshes, update_rsm_animations, RsmCache,
     },
+    presentation::rendering::water::{animate_water_system, load_water_system},
 };
 use bevy::prelude::*;
 
@@ -14,7 +17,10 @@ pub struct MapPlugin;
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RsmCache>()
-            .add_plugins(MaterialPlugin::<WaterMaterial>::default())
+            .add_plugins((
+                MaterialPlugin::<WaterMaterial>::default(),
+                EnhancedLightingPlugin,
+            ))
             .add_systems(
                 Update,
                 (
