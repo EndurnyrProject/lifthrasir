@@ -6,6 +6,8 @@ pub enum GameState {
     Loading,
     Login,
     Connecting, // New state for network connection
+    ServerSelection,
+    CharacterSelection,
     InGame,
     Paused,
 }

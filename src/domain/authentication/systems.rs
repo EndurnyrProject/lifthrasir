@@ -112,13 +112,13 @@ pub fn handle_login_success(
     mut commands: Commands,
 ) {
     for event in success_events.read() {
-        info!("Authentication successful - transitioning to InGame state");
+        info!("Authentication successful - transitioning to ServerSelection state");
 
         // Store session data as a resource
         commands.insert_resource(event.session.clone());
 
-        // Transition to the in-game state
-        next_state.set(GameState::InGame);
+        // Transition to the server selection state
+        next_state.set(GameState::ServerSelection);
     }
 }
 

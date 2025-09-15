@@ -1,14 +1,14 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use nom::{IResult, bytes::complete::take, number::complete::le_u16};
 use serde::{Deserialize, Serialize};
-use std::io::Cursor;
 
 // Protocol constants
 pub const USERNAME_MAX_BYTES: usize = 24;
 pub const PASSWORD_MAX_BYTES: usize = 24;
 pub const LAST_LOGIN_TIME_BYTES: usize = 26;
 pub const SERVER_NAME_BYTES: usize = 20;
-pub const SERVER_INFO_SIZE: usize = 32; // 4 + 2 + 20 + 2 + 2 + 2
+pub const WEB_AUTH_TOKEN_LENGTH: usize = 16; // Token length
+pub const SERVER_INFO_SIZE: usize = 160; // 4 + 2 + 20 + 2 + 2 + 2 + 128 (unknown padding)
 pub const BLOCK_DATE_BYTES: usize = 20;
 
 // Packet Type Constants
@@ -78,13 +78,47 @@ pub struct AcAcceptLoginPacket {
     pub server_list: Vec<ServerInfo>,
 }
 
+// Server type enum for better type safety
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ServerType {
+    Normal,
+    Maintenance,
+    PvP,
+    PK,
+    Special(u16),
+}
+
+impl From<u16> for ServerType {
+    fn from(value: u16) -> Self {
+        match value {
+            0 => ServerType::Normal,
+            1 => ServerType::Maintenance,
+            2 => ServerType::PvP,
+            3 => ServerType::PK,
+            other => ServerType::Special(other),
+        }
+    }
+}
+
+impl ServerType {
+    pub fn as_u16(&self) -> u16 {
+        match self {
+            ServerType::Normal => 0,
+            ServerType::Maintenance => 1,
+            ServerType::PvP => 2,
+            ServerType::PK => 3,
+            ServerType::Special(value) => *value,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerInfo {
     pub ip: u32,
     pub port: u16,
     pub name: String,
     pub users: u16,
-    pub maintenance: u16,
+    pub server_type: ServerType,
     pub new_server: u16,
 }
 
@@ -99,6 +133,7 @@ pub struct AcRefuseLoginPacket {
 pub fn parse_ac_accept_login(input: &[u8]) -> IResult<&[u8], AcAcceptLoginPacket> {
     let (input, _packet_id) = le_u16(input)?;
     let (input, packet_length) = le_u16(input)?;
+
     let (input, login_id1) = nom::number::complete::le_u32(input)?;
     let (input, account_id) = nom::number::complete::le_u32(input)?;
     let (input, login_id2) = nom::number::complete::le_u32(input)?;
@@ -106,37 +141,50 @@ pub fn parse_ac_accept_login(input: &[u8]) -> IResult<&[u8], AcAcceptLoginPacket
     let (input, last_login_time) = take(LAST_LOGIN_TIME_BYTES)(input)?;
     let (input, sex) = nom::number::complete::le_u8(input)?;
 
+    // Read the web auth token (16 bytes + 1 null terminator)
+    let (input, token_bytes) = take(WEB_AUTH_TOKEN_LENGTH + 1)(input)?;
+
     // Calculate number of servers from packet length
-    // Base size: 2 (id) + 2 (len) + 4 (login1) + 4 (account) + 4 (login2) + 4 (ip) + 26 (time) + 1 (sex) = 47
-    // Each server: 4 (ip) + 2 (port) + 20 (name) + 2 (users) + 2 (maint) + 2 (new) = 32
-    let base_size = 47;
+    // Base size: 2 (id) + 2 (len) + 4 (login1) + 4 (account) + 4 (login2) + 4 (ip) + 26 (time) + 1 (sex) + 17 (token) = 64
+    // Each server: 4 (ip) + 2 (port) + 20 (name) + 2 (users) + 2 (type) + 2 (new) + 128 (unknown) = 160
+    let base_size = 64;
     let remaining_size = packet_length as usize - base_size + 4; // +4 for packet id and length
     let server_count = remaining_size / SERVER_INFO_SIZE;
 
     let mut server_list = Vec::new();
     let mut current_input = input;
 
-    for _ in 0..server_count {
-        let (remaining, ip) = nom::number::complete::le_u32(current_input)?;
+    for _i in 0..server_count {
+        // Parse IP as 4 separate bytes (not little-endian u32)
+        let (remaining, ip_bytes) = take(4usize)(current_input)?;
+        let ip = u32::from_be_bytes([ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]]);
+
         let (remaining, port) = le_u16(remaining)?;
         let (remaining, name_bytes) = take(SERVER_NAME_BYTES)(remaining)?;
         let (remaining, users) = le_u16(remaining)?;
-        let (remaining, maintenance) = le_u16(remaining)?;
+        let (remaining, server_type_raw) = le_u16(remaining)?;
         let (remaining, new_server) = le_u16(remaining)?;
+
+        // Skip the 128-byte unknown field
+        let (remaining, _unknown) = take(128usize)(remaining)?;
 
         // Parse server name (null-terminated string)
         let name_end = name_bytes
             .iter()
             .position(|&b| b == 0)
             .unwrap_or(SERVER_NAME_BYTES);
+
         let name = String::from_utf8_lossy(&name_bytes[..name_end]).to_string();
+
+        // Convert raw server type to enum
+        let server_type = ServerType::from(server_type_raw);
 
         server_list.push(ServerInfo {
             ip,
             port,
             name,
             users,
-            maintenance,
+            server_type,
             new_server,
         });
 

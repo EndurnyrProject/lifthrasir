@@ -18,6 +18,7 @@ pub const BACKGROUND_PRIMARY: Color = FORGE_SOOT;
 pub const BACKGROUND_SECONDARY: Color = SLATE_GRAY;
 pub const BORDER_COLOR: Color = POLISHED_STEEL;
 pub const TEXT_PRIMARY: Color = ASHEN_WHITE;
+pub const TEXT_SECONDARY: Color = Color::srgb(0.600, 0.600, 0.600); // Muted text
 pub const TEXT_GOLD: Color = GILDED_ACCENT;
 pub const BUTTON_NORMAL: Color = POLISHED_STEEL;
 pub const BUTTON_HOVER: Color = RUNIC_GLOW;
@@ -25,6 +26,9 @@ pub const BUTTON_PRESSED: Color = Color::srgb(0.250, 0.260, 0.300); // Darker st
 pub const INPUT_BACKGROUND: Color = Color::srgb(0.220, 0.235, 0.260); // Darker than slate
 pub const INPUT_BORDER: Color = POLISHED_STEEL;
 pub const INPUT_BORDER_FOCUS: Color = RUNIC_GLOW;
+pub const SUCCESS_COLOR: Color = MUTED_JADE;
+pub const WARNING_COLOR: Color = AMBER;
+pub const ERROR_COLOR: Color = WORN_CRIMSON;
 
 // Enhanced Color Variants with Transparency
 pub const BACKGROUND_PRIMARY_TRANSPARENT: Color =
@@ -100,6 +104,7 @@ pub const FONT_SIZE_SUBTITLE: f32 = 12.0; // Reduced from 16.0
 pub const FONT_SIZE_LABEL: f32 = 14.0; // Reduced from 18.0
 pub const FONT_SIZE_BODY: f32 = 12.0; // Reduced from 16.0
 pub const FONT_SIZE_BUTTON: f32 = 14.0; // Reduced from 18.0
+pub const FONT_SIZE_SMALL: f32 = 10.0; // Small text for secondary info
 
 // Component markers for theming
 #[derive(Component)]

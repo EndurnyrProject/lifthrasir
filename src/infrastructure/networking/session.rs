@@ -27,6 +27,8 @@ pub struct UserSession {
     pub login_timestamp: std::time::SystemTime,
     pub last_login_ip: u32,
     pub sex: u8,
+    pub server_list: Vec<ServerInfo>,
+    pub selected_server: Option<ServerInfo>,
 }
 
 impl UserSession {
@@ -37,6 +39,8 @@ impl UserSession {
             login_timestamp: std::time::SystemTime::now(),
             last_login_ip: login_response.last_login_ip,
             sex: login_response.sex,
+            server_list: login_response.server_list,
+            selected_server: None,
         }
     }
 }

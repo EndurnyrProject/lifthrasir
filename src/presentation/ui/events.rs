@@ -1,3 +1,4 @@
+use crate::infrastructure::networking::protocols::ro_login::ServerInfo;
 use bevy::prelude::*;
 use secrecy::SecretString;
 
@@ -5,6 +6,11 @@ use secrecy::SecretString;
 pub struct LoginAttemptEvent {
     pub username: String,
     pub password: SecretString,
+}
+
+#[derive(Event)]
+pub struct ServerSelectedEvent {
+    pub server: ServerInfo,
 }
 
 #[derive(Event)]
@@ -22,3 +28,6 @@ pub struct DeleteCharacterEvent {
 
 #[derive(Event)]
 pub struct BackToLoginEvent;
+
+#[derive(Event)]
+pub struct BackToServerSelectionEvent;
