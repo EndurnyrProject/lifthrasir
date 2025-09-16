@@ -1146,6 +1146,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_lunex"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb38dabdb450a75dfb5a0e52f0ab4773fbbaa67265fcd39cd224e885728c09b6"
+dependencies = [
+ "bevy_app",
+ "bevy_asset",
+ "bevy_color",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_gizmos",
+ "bevy_image",
+ "bevy_input",
+ "bevy_log",
+ "bevy_math",
+ "bevy_pbr",
+ "bevy_picking",
+ "bevy_platform",
+ "bevy_reflect",
+ "bevy_render",
+ "bevy_rich_text3d",
+ "bevy_sprite",
+ "bevy_text",
+ "bevy_time",
+ "bevy_transform",
+ "bevy_window",
+ "bevy_winit",
+ "colored",
+ "radsort",
+ "rand 0.9.2",
+]
+
+[[package]]
 name = "bevy_macro_utils"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1400,6 +1433,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_rich_text3d"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80bf486c7e1e9921086cef1c99e33132d8d87e6efc2295a9a51dbf753db31ffc"
+dependencies = [
+ "bevy",
+ "cosmic-text 0.14.2",
+ "rustc-hash 2.1.1",
+ "sys-locale",
+ "thiserror 2.0.16",
+ "zeno",
+]
+
+[[package]]
 name = "bevy_scene"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1521,7 +1568,7 @@ dependencies = [
  "bevy_transform",
  "bevy_utils",
  "bevy_window",
- "cosmic-text",
+ "cosmic-text 0.13.2",
  "serde",
  "smallvec",
  "sys-locale",
@@ -2035,6 +2082,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
+name = "colored"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
+dependencies = [
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2181,6 +2237,29 @@ name = "cosmic-text"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e418dd4f5128c3e93eab12246391c54a20c496811131f85754dc8152ee207892"
+dependencies = [
+ "bitflags 2.9.4",
+ "fontdb",
+ "log",
+ "rangemap",
+ "rustc-hash 1.1.0",
+ "rustybuzz",
+ "self_cell",
+ "smol_str",
+ "swash",
+ "sys-locale",
+ "ttf-parser 0.21.1",
+ "unicode-bidi",
+ "unicode-linebreak",
+ "unicode-script",
+ "unicode-segmentation",
+]
+
+[[package]]
+name = "cosmic-text"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da46a9d5a8905cc538a4a5bceb6a4510de7a51049c5588c0114efce102bcbbe8"
 dependencies = [
  "bitflags 2.9.4",
  "fontdb",
@@ -3937,6 +4016,7 @@ dependencies = [
  "bevy-tokio-tasks",
  "bevy_asset_loader",
  "bevy_common_assets",
+ "bevy_lunex",
  "byteorder",
  "encoding_rs",
  "flate2",

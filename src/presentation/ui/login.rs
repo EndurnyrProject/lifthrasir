@@ -1,28 +1,30 @@
 use super::{
-    components::*, events::*, interactions::*, popup::ShowPopupEvent, theme::*, widgets::*,
+    components::*, events::*, interactions::*, popup::ShowPopupEvent, theme::*,
 };
 use crate::{
     core::state::GameState,
-    domain::authentication::{AuthenticationContext, events::*},
-    infrastructure::assets::HierarchicalAssetManager,
+    domain::authentication::events::*,
     infrastructure::networking::errors::NetworkError,
 };
 use bevy::prelude::*;
+use bevy::render::view::RenderLayers;
+use bevy_lunex::prelude::*;
 
 pub struct LoginPlugin;
 
 impl Plugin for LoginPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Login), setup_login_ui)
+        app.add_plugins((UiLunexPlugins, LunexInteractionsPlugin))
+            .add_systems(OnEnter(GameState::Login), setup_login_ui)
             .add_systems(
                 Update,
                 (
-                    handle_login_interactions,
+                    handle_login_button_click,
+                    handle_enter_key_login,
                     process_login_attempts,
                     handle_login_started,
                     handle_login_failure_ui,
                     handle_login_success_ui,
-                    update_status_display,
                 )
                     .run_if(in_state(GameState::Login)),
             )
@@ -34,183 +36,373 @@ impl Plugin for LoginPlugin {
 }
 
 fn setup_login_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // Setup UI camera for login screen
-    commands.spawn((Camera2d, LoginScreen));
-
-    // Load background image
-    let background_image = asset_server.load("data/login_screen.png");
-
-    // Create main container with background image
-    let mut root_entity = commands.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::FlexEnd, // Align to bottom
-            padding: UiRect::all(Val::Px(SPACING_XXL)), // Add bottom padding
-            ..default()
-        },
+    // Spawn UI camera with proper source configuration
+    commands.spawn((
+        Camera2d,
+        UiSourceCamera::<0>,
+        Transform::from_translation(Vec3::Z * 1000.0),
+        RenderLayers::from_layers(&[0, 1]),
         LoginScreen,
     ));
 
-    // Add background image
-    root_entity.insert(ImageNode::new(background_image));
+    // Load assets
+    let background_image = asset_server.load("data/login_screen.png");
 
-    root_entity.with_children(|parent| {
-        // Small login panel with medium transparency for better visibility
-        parent
-            .spawn(ro_panel_preset(PANEL_SIZE_SMALL, PANEL_BACKGROUND_LIGHT))
-            .with_children(|parent| {
-                // Simple login form
+    // Create UI root
+    commands
+        .spawn((
+            Name::new("Login UI Root"),
+            UiLayoutRoot::new_2d(),
+            UiFetchFromCamera::<0>,
+            LoginScreen,
+        ))
+        .with_children(|ui| {
+            // Background image
+            ui.spawn((
+                Name::new("Background"),
+                UiLayout::window().full().pack(),
+                Sprite::from_image(background_image),
+                Pickable::IGNORE,
+            ));
 
-                // Username section
-                parent.spawn(ro_label("Username:"));
-                parent
-                    .spawn((ro_text_input(), UsernameInput))
-                    .with_children(|parent| {
-                        parent.spawn((
-                            Text::new(""),
-                            TextFont::from_font_size(FONT_SIZE_BODY),
-                            TextColor(ASHEN_WHITE),
-                            Node {
-                                align_self: AlignSelf::Center,
-                                margin: UiRect::left(Val::Px(2.0)),
-                                ..default()
-                            },
-                        ));
-                    });
-
-                // Password section
-                parent.spawn(ro_label("Password:"));
-                parent
-                    .spawn((ro_text_input(), PasswordInput))
-                    .with_children(|parent| {
-                        parent.spawn((
-                            Text::new(""),
-                            TextFont::from_font_size(FONT_SIZE_BODY),
-                            TextColor(ASHEN_WHITE),
-                            Node {
-                                align_self: AlignSelf::Center,
-                                margin: UiRect::left(Val::Px(2.0)),
-                                ..default()
-                            },
-                        ));
-                    });
-
-                // Remember me checkbox using reusable components
-                parent
-                    .spawn((ro_checkbox_container(), RememberMeCheckbox))
-                    .with_children(|parent| {
-                        parent.spawn(ro_checkbox_box());
-                        parent.spawn((
-                            Text::new("Remember Me"),
-                            TextFont::from_font_size(FONT_SIZE_BODY),
-                            TextColor(TEXT_PRIMARY),
-                        ));
-                    });
-
-                // Login button using reusable component
-                parent
-                    .spawn((ro_button_with_width("Login", 120.0), LoginButton))
-                    .with_children(|parent| {
-                        parent.spawn((
-                            Text::new("Login"),
-                            TextFont::from_font_size(FONT_SIZE_BUTTON),
-                            TextColor(TEXT_PRIMARY),
-                        ));
-                    });
-
-                // Status text area for connection status and errors
-                parent
-                    .spawn((
-                        Node {
-                            width: Val::Percent(100.0),
-                            height: Val::Px(40.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            margin: UiRect::top(Val::Px(SPACING_MD)),
+            // Login panel positioned at bottom center
+            ui.spawn((
+                Name::new("Login Panel"),
+                UiLayout::window()
+                    .pos(Rl((50.0, 80.0)))
+                    .anchor(Anchor::Center)
+                    .size(PANEL_SIZE_SMALL)
+                    .pack(),
+                UiColor::from(PANEL_BACKGROUND_LIGHT),
+                Sprite::default(),
+            ))
+            .with_children(|ui| {
+                // Panel content container
+                ui.spawn((
+                    Name::new("Panel Content"),
+                    UiLayout::window()
+                        .pos(Rl((50.0, 5.0)))
+                        .anchor(Anchor::TopCenter)
+                        .size(Rl((90.0, 90.0)))
+                        .pack(),
+                ))
+                .with_children(|ui| {
+                    // Username label
+                    ui.spawn((
+                        UiLayout::window()
+                            .pos(Rl((10.0, 15.0)))
+                            .anchor(Anchor::CenterLeft)
+                            .pack(),
+                        UiTextSize::from(Ab(FONT_SIZE_LABEL)),
+                        Text2d::new("Username:"),
+                        TextFont {
+                            font_size: FONT_SIZE_LABEL,
                             ..default()
                         },
-                        StatusTextArea,
+                        TextColor(TEXT_PRIMARY),
+                    ));
+
+                    // Username input
+                    let username_input = ui.spawn((
+                        Name::new("Username Input"),
+                        UiLayout::window()
+                            .pos(Rl((10.0, 25.0)))
+                            .size((Rl(80.0), INPUT_HEIGHT))
+                            .pack(),
+                        UiColor::new(vec![
+                            (UiBase::id(), INPUT_BACKGROUND_TRANSPARENT),
+                            (UiHover::id(), Color::srgba(0.220, 0.235, 0.260, TRANSPARENCY_SUBTLE)),
+                        ]),
+                        UiHover::new().forward_speed(10.0).backward_speed(5.0),
+                        Sprite::default(),
+                        Pickable::default(),
+                        LunexUsernameInput,
+                        LunexInput,
+                        LunexFocusedInput,
                     ))
-                    .with_children(|parent| {
-                        parent.spawn((
-                            Text::new(""),
-                            TextFont::from_font_size(FONT_SIZE_BODY),
-                            TextColor(Color::srgb(1.0, 0.4, 0.4)), // Error color
-                            StatusText,
+                    .observe(focus_input)
+                    .with_children(|ui| {
+                        // Border effect on hover/focus
+                        ui.spawn((
+                            UiLayout::window().full().pack(),
+                            UiColor::new(vec![
+                                (UiBase::id(), Color::NONE),
+                                (UiHover::id(), RUNIC_GLOW.with_alpha(0.3)),
+                            ]),
+                            UiHover::new().forward_speed(10.0).backward_speed(5.0),
+                            Sprite::default(),
+                            Pickable::IGNORE,
+                        ));
+
+                        // Text content for the input
+                        ui.spawn((
+                            UiLayout::window()
+                                .pos((Rh(10.0), Rl(50.0)))
+                                .anchor(Anchor::CenterLeft)
+                                .pack(),
+                            UiTextSize::from(Ab(FONT_SIZE_BODY)),
+                            Text2d::new(""),
+                            TextFont {
+                                font_size: FONT_SIZE_BODY,
+                                ..default()
+                            },
+                            TextColor(ASHEN_WHITE),
+                            Pickable::IGNORE,
+                        ));
+                    })
+                    .id();
+
+                    // Password label
+                    ui.spawn((
+                        UiLayout::window()
+                            .pos(Rl((10.0, 45.0)))
+                            .anchor(Anchor::CenterLeft)
+                            .pack(),
+                        UiTextSize::from(Ab(FONT_SIZE_LABEL)),
+                        Text2d::new("Password:"),
+                        TextFont {
+                            font_size: FONT_SIZE_LABEL,
+                            ..default()
+                        },
+                        TextColor(TEXT_PRIMARY),
+                    ));
+
+                    // Password input
+                    ui.spawn((
+                        Name::new("Password Input"),
+                        UiLayout::window()
+                            .pos(Rl((10.0, 53.0)))
+                            .size((Rl(80.0), INPUT_HEIGHT))
+                            .pack(),
+                        UiColor::new(vec![
+                            (UiBase::id(), INPUT_BACKGROUND_TRANSPARENT),
+                            (UiHover::id(), Color::srgba(0.220, 0.235, 0.260, TRANSPARENCY_SUBTLE)),
+                        ]),
+                        UiHover::new().forward_speed(10.0).backward_speed(5.0),
+                        Sprite::default(),
+                        Pickable::default(),
+                        LunexPasswordInput,
+                        LunexInput,
+                    ))
+                    .observe(focus_input)
+                    .with_children(|ui| {
+                        // Border effect on hover/focus
+                        ui.spawn((
+                            UiLayout::window().full().pack(),
+                            UiColor::new(vec![
+                                (UiBase::id(), Color::NONE),
+                                (UiHover::id(), RUNIC_GLOW.with_alpha(0.3)),
+                            ]),
+                            UiHover::new().forward_speed(10.0).backward_speed(5.0),
+                            Sprite::default(),
+                            Pickable::IGNORE,
+                        ));
+
+                        // Text content for the input
+                        ui.spawn((
+                            UiLayout::window()
+                                .pos((Rh(10.0), Rl(50.0)))
+                                .anchor(Anchor::CenterLeft)
+                                .pack(),
+                            UiTextSize::from(Ab(FONT_SIZE_BODY)),
+                            Text2d::new(""),
+                            TextFont {
+                                font_size: FONT_SIZE_BODY,
+                                ..default()
+                            },
+                            TextColor(ASHEN_WHITE),
+                            Pickable::IGNORE,
                         ));
                     });
+
+                    // Remember me checkbox
+                    ui.spawn((
+                        Name::new("Checkbox Container"),
+                        UiLayout::window()
+                            .pos(Rl((10.0, 72.0)))
+                            .size((200.0, CHECKBOX_SIZE))
+                            .pack(),
+                        LunexCheckbox { checked: false },
+                    ))
+                    .observe(toggle_checkbox)
+                    .with_children(|ui| {
+                        // Checkbox box
+                        ui.spawn((
+                            Name::new("Checkbox Box"),
+                            UiLayout::window()
+                                .pos((0.0, Rl(50.0)))
+                                .anchor(Anchor::CenterLeft)
+                                .size((CHECKBOX_SIZE, CHECKBOX_SIZE))
+                                .pack(),
+                            UiColor::new(vec![
+                                (UiBase::id(), INPUT_BACKGROUND_TRANSPARENT),
+                                (UiHover::id(), Color::srgba(0.220, 0.235, 0.260, TRANSPARENCY_SUBTLE)),
+                            ]),
+                            UiHover::new().forward_speed(10.0).backward_speed(5.0),
+                            Sprite::default(),
+                            OnHoverSetCursor::new(SystemCursorIcon::Pointer),
+                        ))
+                        .with_children(|ui| {
+                            // Checkmark (initially hidden)
+                            ui.spawn((
+                                Name::new("Checkmark"),
+                                UiLayout::window()
+                                    .pos(Rl(50.0))
+                                    .anchor(Anchor::Center)
+                                    .pack(),
+                                UiTextSize::from(Ab(FONT_SIZE_BODY)),
+                                Text2d::new(""),
+                                TextFont {
+                                    font_size: FONT_SIZE_BODY,
+                                    ..default()
+                                },
+                                TextColor(RUNIC_GLOW),
+                                Pickable::IGNORE,
+                            ));
+                        });
+
+                        // Checkbox label
+                        ui.spawn((
+                            UiLayout::window()
+                                .pos((CHECKBOX_SIZE + SPACING_SM, Rl(50.0)))
+                                .anchor(Anchor::CenterLeft)
+                                .pack(),
+                            UiTextSize::from(Ab(FONT_SIZE_BODY)),
+                            Text2d::new("Remember Me"),
+                            TextFont {
+                                font_size: FONT_SIZE_BODY,
+                                ..default()
+                            },
+                            TextColor(TEXT_PRIMARY),
+                            Pickable::IGNORE,
+                        ));
+                    });
+
+                    // Login button
+                    ui.spawn((
+                        Name::new("Login Button"),
+                        UiLayout::window()
+                            .pos(Rl((50.0, 82.0)))
+                            .size((120.0, BUTTON_HEIGHT))
+                            .pack(),
+                        OnHoverSetCursor::new(SystemCursorIcon::Pointer),
+                        LunexLoginButton,
+                    ))
+                    .observe(hover_set::<Pointer<Over>, true>)
+                    .observe(hover_set::<Pointer<Out>, false>)
+                    .observe(on_login_click)
+                    .with_children(|ui| {
+                        // Button background with states
+                        ui.spawn((
+                            UiLayout::new(vec![
+                                (UiBase::id(), UiLayout::window().full()),
+                                (UiHover::id(), UiLayout::window().full()),
+                            ]),
+                            UiHover::new().forward_speed(15.0).backward_speed(6.0),
+                            UiColor::new(vec![
+                                (UiBase::id(), BUTTON_NORMAL_TRANSPARENT),
+                                (UiHover::id(), BUTTON_HOVER_TRANSPARENT),
+                            ]),
+                            Sprite::default(),
+                            Pickable::IGNORE,
+                        ))
+                        .with_children(|ui| {
+                            // Button text
+                            ui.spawn((
+                                UiLayout::window()
+                                    .pos(Rl(50.0))
+                                    .anchor(Anchor::Center)
+                                    .pack(),
+                                UiColor::new(vec![
+                                    (UiBase::id(), TEXT_PRIMARY),
+                                    (UiHover::id(), FORGE_SOOT),
+                                ]),
+                                UiHover::new().forward_speed(15.0).backward_speed(6.0),
+                                UiTextSize::from(Ab(FONT_SIZE_BUTTON)),
+                                Text2d::new("Login"),
+                                TextFont {
+                                    font_size: FONT_SIZE_BUTTON,
+                                    ..default()
+                                },
+                                Pickable::IGNORE,
+                            ));
+                        });
+                    });
+
+                    // Status text
+                    ui.spawn((
+                        Name::new("Status Text"),
+                        UiLayout::window()
+                            .pos(Rl((50.0, 90.0)))
+                            .anchor(Anchor::Center)
+                            .pack(),
+                        UiTextSize::from(Ab(FONT_SIZE_BODY)),
+                        Text2d::new(""),
+                        TextFont {
+                            font_size: FONT_SIZE_BODY,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(1.0, 0.4, 0.4)),
+                        LunexStatusText,
+                    ));
+                });
             });
-    });
+        });
 }
 
 fn cleanup_login_ui(mut commands: Commands, query: Query<Entity, With<LoginScreen>>) {
     for entity in &query {
-        commands.entity(entity).despawn();
+        commands.entity(entity).despawn_recursive();
     }
 }
 
-fn handle_login_interactions(
-    mut interaction_query: Query<
-        (
-            &Interaction,
-            &mut BackgroundColor,
-            &mut BorderColor,
-            Option<&mut BorderRadius>,
-        ),
-        (Changed<Interaction>, With<LoginButton>),
-    >,
+/// Observer for login button clicks
+fn on_login_click(
+    _trigger: Trigger<Pointer<Click>>,
     mut login_events: EventWriter<LoginAttemptEvent>,
     login_data: Res<LoginFormData>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut ui_state: ResMut<LoginUiState>,
-    time: Res<Time>,
+    ui_state: Res<LoginUiState>,
 ) {
-    // Tick the cooldown timer
-    ui_state.login_cooldown.tick(time.delta());
-    // Handle button interactions with enhanced transparency and radius effects
-    for (interaction, mut bg_color, mut border_color, mut border_radius) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                *bg_color = BUTTON_PRESSED_TRANSPARENT.into();
-                border_color.0 = BORDER_COLOR;
-                // Slightly smaller radius when pressed for tactile feedback
-                if let Some(ref mut radius) = border_radius {
-                    **radius = BorderRadius::all(Val::Px(RADIUS_SM));
-                }
+    if !login_data.username.trim().is_empty()
+        && ui_state.login_cooldown.finished()
+        && !ui_state.is_connecting
+    {
+        login_events.send(LoginAttemptEvent {
+            username: login_data.username.clone(),
+            password: login_data.password.clone(),
+        });
+    }
+}
 
-                // Trigger login attempt with cooldown check
-                if !login_data.username.trim().is_empty()
-                    && ui_state.login_cooldown.finished()
-                    && !ui_state.is_connecting
-                {
-                    login_events.send(LoginAttemptEvent {
-                        username: login_data.username.clone(),
-                        password: login_data.password.clone(),
-                    });
-                }
-            }
-            Interaction::Hovered => {
-                *bg_color = BUTTON_HOVER_TRANSPARENT.into();
-                border_color.0 = RUNIC_GLOW;
-                // Slightly larger radius on hover for visual feedback
-                if let Some(ref mut radius) = border_radius {
-                    **radius = BorderRadius::all(Val::Px(RADIUS_MD + 2.0));
-                }
-            }
-            Interaction::None => {
-                *bg_color = BUTTON_NORMAL_TRANSPARENT.into();
-                border_color.0 = BORDER_COLOR;
-                // Return to default radius
-                if let Some(ref mut radius) = border_radius {
-                    **radius = BorderRadius::all(Val::Px(RADIUS_MD));
-                }
+/// System to handle login button clicks (alternative to observer)
+fn handle_login_button_click(
+    interaction_query: Query<&Interaction, (Changed<Interaction>, With<LunexLoginButton>)>,
+    mut login_events: EventWriter<LoginAttemptEvent>,
+    login_data: Res<LoginFormData>,
+    ui_state: Res<LoginUiState>,
+) {
+    for interaction in &interaction_query {
+        if *interaction == Interaction::Pressed {
+            if !login_data.username.trim().is_empty()
+                && ui_state.login_cooldown.finished()
+                && !ui_state.is_connecting
+            {
+                login_events.send(LoginAttemptEvent {
+                    username: login_data.username.clone(),
+                    password: login_data.password.clone(),
+                });
             }
         }
     }
+}
 
-    // Handle Enter key for login with cooldown check
+/// System to handle Enter key for login
+fn handle_enter_key_login(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut login_events: EventWriter<LoginAttemptEvent>,
+    login_data: Res<LoginFormData>,
+    ui_state: Res<LoginUiState>,
+) {
     if keys.just_pressed(KeyCode::Enter)
         && !login_data.username.trim().is_empty()
         && ui_state.login_cooldown.finished()
@@ -239,33 +431,10 @@ fn process_login_attempts(
 
             // Transition to connecting state
             next_state.set(GameState::Connecting);
-
-            // The domain layer will handle the actual login attempt
         }
     }
 }
 
-// Add new resource for UI state
-#[derive(Resource)]
-pub struct LoginUiState {
-    pub is_connecting: bool,
-    pub error_message: Option<String>,
-    pub last_username: String,
-    pub login_cooldown: Timer,
-}
-
-impl Default for LoginUiState {
-    fn default() -> Self {
-        Self {
-            is_connecting: false,
-            error_message: None,
-            last_username: String::new(),
-            login_cooldown: Timer::from_seconds(0.0, TimerMode::Once),
-        }
-    }
-}
-
-// Add new systems for handling authentication events
 fn handle_login_started(
     mut events: EventReader<LoginAttemptStartedEvent>,
     mut ui_state: ResMut<LoginUiState>,
@@ -281,13 +450,14 @@ fn handle_login_failure_ui(
     mut events: EventReader<LoginFailureEvent>,
     mut ui_state: ResMut<LoginUiState>,
     mut popup_events: EventWriter<ShowPopupEvent>,
+    _time: Res<Time>,
 ) {
     for event in events.read() {
         ui_state.is_connecting = false;
         let error_message = format_login_error(&event.error);
         ui_state.error_message = Some(error_message.clone());
 
-        // Set a 3-second cooldown after failed login attempts to prevent brute force
+        // Set a 3-second cooldown after failed login attempts
         ui_state.login_cooldown = Timer::from_seconds(3.0, TimerMode::Once);
 
         // Show error popup
@@ -324,18 +494,22 @@ fn format_login_error(error: &NetworkError) -> String {
     }
 }
 
-// Update status text based on UI state
-fn update_status_display(
-    mut status_text: Query<&mut Text, With<StatusText>>,
-    ui_state: Res<LoginUiState>,
-) {
-    if let Ok(mut text) = status_text.get_single_mut() {
-        if ui_state.is_connecting {
-            text.0 = "Connecting to server...".to_string();
-        } else if let Some(error) = &ui_state.error_message {
-            text.0 = error.clone();
-        } else {
-            text.0 = "".to_string();
+// LoginUiState resource for managing UI state
+#[derive(Resource)]
+pub struct LoginUiState {
+    pub is_connecting: bool,
+    pub error_message: Option<String>,
+    pub last_username: String,
+    pub login_cooldown: Timer,
+}
+
+impl Default for LoginUiState {
+    fn default() -> Self {
+        Self {
+            is_connecting: false,
+            error_message: None,
+            last_username: String::new(),
+            login_cooldown: Timer::from_seconds(0.0, TimerMode::Once),
         }
     }
 }

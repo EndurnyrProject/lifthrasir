@@ -1,86 +1,254 @@
 use super::theme::*;
 use bevy::prelude::*;
+use bevy_lunex::prelude::*;
 
-// Helper functions to create common UI component bundles
+/// Create a Lunex text input field with interactive states
+pub fn text_input(
+    commands: &mut Commands,
+    name: impl Into<String>,
+    position: impl Into<UiValue<Vec2>>,
+    width: f32,
+) -> Entity {
+    commands.spawn((
+        Name::new(name.into()),
+        UiLayout::window()
+            .pos(position)
+            .size((width, INPUT_HEIGHT))
+            .pack(),
+        UiColor::new(vec![
+            (UiBase::id(), INPUT_BACKGROUND_TRANSPARENT),
+            (UiHover::id(), Color::srgba(0.220, 0.235, 0.260, TRANSPARENCY_SUBTLE)),
+        ]),
+        UiHover::new().forward_speed(10.0).backward_speed(5.0),
+        Sprite::default(),
+        Pickable::default(),
+    ))
+    .with_children(|ui| {
+        // Border effect on hover/focus
+        ui.spawn((
+            UiLayout::window().full().pack(),
+            UiColor::new(vec![
+                (UiBase::id(), Color::NONE),
+                (UiHover::id(), RUNIC_GLOW.with_alpha(0.3)),
+            ]),
+            UiHover::new().forward_speed(10.0).backward_speed(5.0),
+            Sprite::default(),
+            Pickable::IGNORE,
+        ));
 
-// Label bundle
-pub fn ro_label(text: impl Into<String>) -> impl Bundle {
-    ro_label_styled(text, FONT_SIZE_LABEL, TEXT_PRIMARY, SPACING_XS)
+        // Text content for the input
+        ui.spawn((
+            UiLayout::window()
+                .pos((Rh(10.0), Rl(50.0)))
+                .anchor(Anchor::CenterLeft)
+                .pack(),
+            UiTextSize::from(Rh(60.0)),
+            Text2d::new(""),
+            TextFont {
+                font_size: FONT_SIZE_BODY,
+                ..default()
+            },
+            TextColor(ASHEN_WHITE),
+            Pickable::IGNORE,
+        ));
+    })
+    .id()
 }
 
-pub fn ro_label_styled(
+/// Create a Lunex button with hover and pressed states
+pub fn button(
+    commands: &mut Commands,
     text: impl Into<String>,
-    font_size: f32,
+    name: impl Into<String>,
+    position: impl Into<UiValue<Vec2>>,
+    width: Option<f32>,
+) -> Entity {
+    let button_width = width.unwrap_or(120.0);
+
+    commands.spawn((
+        Name::new(name.into()),
+        UiLayout::window()
+            .pos(position)
+            .size((button_width, BUTTON_HEIGHT))
+            .pack(),
+        OnHoverSetCursor::new(SystemCursorIcon::Pointer),
+    ))
+    .with_children(|ui| {
+        // Button background with states
+        ui.spawn((
+            UiLayout::new(vec![
+                (UiBase::id(), UiLayout::window().full()),
+                (UiHover::id(), UiLayout::window().anchor(Anchor::Center).size(Rl(102.0))),
+            ]),
+            UiHover::new().forward_speed(15.0).backward_speed(6.0),
+            UiColor::new(vec![
+                (UiBase::id(), BUTTON_NORMAL_TRANSPARENT),
+                (UiHover::id(), BUTTON_HOVER_TRANSPARENT),
+            ]),
+            Sprite::default(),
+            Pickable::IGNORE,
+        ))
+        .with_children(|ui| {
+            // Button text
+            ui.spawn((
+                UiLayout::window()
+                    .pos(Rl(50.0))
+                    .anchor(Anchor::Center)
+                    .pack(),
+                UiColor::new(vec![
+                    (UiBase::id(), TEXT_PRIMARY),
+                    (UiHover::id(), RUNIC_GLOW),
+                ]),
+                UiHover::new().forward_speed(15.0).backward_speed(6.0),
+                UiTextSize::from(Rh(55.0)),
+                Text2d::new(text.into()),
+                TextFont {
+                    font_size: FONT_SIZE_BUTTON,
+                    ..default()
+                },
+                Pickable::IGNORE,
+            ));
+        });
+    })
+    .id()
+}
+
+/// Create a Lunex panel with transparency
+pub fn panel(
+    commands: &mut Commands,
+    name: impl Into<String>,
+    position: impl Into<UiValue<Vec2>>,
+    size: (f32, f32),
+    background_color: Color,
+) -> Entity {
+    commands.spawn((
+        Name::new(name.into()),
+        UiLayout::window()
+            .pos(position)
+            .size(size)
+            .pack(),
+        UiColor::from(background_color),
+        Sprite::default(),
+    ))
+    .id()
+}
+
+/// Create a Lunex label
+pub fn label(
+    commands: &mut Commands,
+    text: impl Into<String>,
+    position: impl Into<UiValue<Vec2>>,
     color: Color,
-    margin_bottom: f32,
-) -> impl Bundle {
-    (
-        Text::new(text.into()),
-        TextFont::from_font_size(font_size),
+    font_size: f32,
+) -> Entity {
+    commands.spawn((
+        UiLayout::window()
+            .pos(position)
+            .anchor(Anchor::CenterLeft)
+            .pack(),
+        UiTextSize::from(Rh(100.0)),
+        Text2d::new(text.into()),
+        TextFont {
+            font_size,
+            ..default()
+        },
         TextColor(color),
-        Node {
-            width: Val::Percent(100.0),
-            margin: UiRect::bottom(Val::Px(margin_bottom)),
+    ))
+    .id()
+}
+
+/// Create a Lunex checkbox
+pub fn checkbox(
+    commands: &mut Commands,
+    label: impl Into<String>,
+    position: impl Into<UiValue<Vec2>>,
+) -> Entity {
+    commands.spawn((
+        Name::new("Checkbox Container"),
+        UiLayout::window()
+            .pos(position)
+            .size((200.0, CHECKBOX_SIZE))
+            .pack(),
+    ))
+    .with_children(|ui| {
+        // Checkbox box
+        ui.spawn((
+            Name::new("Checkbox Box"),
+            UiLayout::window()
+                .pos((0.0, Rl(50.0)))
+                .anchor(Anchor::CenterLeft)
+                .size((CHECKBOX_SIZE, CHECKBOX_SIZE))
+                .pack(),
+            UiColor::new(vec![
+                (UiBase::id(), INPUT_BACKGROUND_TRANSPARENT),
+                (UiHover::id(), Color::srgba(0.220, 0.235, 0.260, TRANSPARENCY_SUBTLE)),
+            ]),
+            UiHover::new().forward_speed(10.0).backward_speed(5.0),
+            Sprite::default(),
+            OnHoverSetCursor::new(SystemCursorIcon::Pointer),
+        ))
+        .with_children(|ui| {
+            // Checkmark (initially hidden)
+            ui.spawn((
+                Name::new("Checkmark"),
+                UiLayout::window()
+                    .pos(Rl(50.0))
+                    .anchor(Anchor::Center)
+                    .pack(),
+                UiTextSize::from(Rh(80.0)),
+                Text2d::new(""),
+                TextFont {
+                    font_size: FONT_SIZE_BODY,
+                    ..default()
+                },
+                TextColor(RUNIC_GLOW),
+                Pickable::IGNORE,
+            ));
+        });
+
+        // Checkbox label
+        ui.spawn((
+            UiLayout::window()
+                .pos((CHECKBOX_SIZE + SPACING_SM, Rl(50.0)))
+                .anchor(Anchor::CenterLeft)
+                .pack(),
+            UiTextSize::from(Rh(100.0)),
+            Text2d::new(label.into()),
+            TextFont {
+                font_size: FONT_SIZE_BODY,
+                ..default()
+            },
+            TextColor(TEXT_PRIMARY),
+            Pickable::IGNORE,
+        ));
+    })
+    .id()
+}
+
+/// Create a status text area for displaying messages
+pub fn status_text(
+    commands: &mut Commands,
+    position: impl Into<UiValue<Vec2>>,
+) -> Entity {
+    commands.spawn((
+        Name::new("Status Text"),
+        UiLayout::window()
+            .pos(position)
+            .anchor(Anchor::Center)
+            .pack(),
+        UiTextSize::from(Rh(100.0)),
+        Text2d::new(""),
+        TextFont {
+            font_size: FONT_SIZE_BODY,
             ..default()
         },
-        RoText,
-    )
+        TextColor(Color::srgb(1.0, 0.4, 0.4)),
+    ))
+    .id()
 }
 
-// Title bundles
-pub fn ro_title(text: impl Into<String>) -> impl Bundle {
-    (
-        Text::new(text.into()),
-        TextFont::from_font_size(FONT_SIZE_TITLE),
-        TextColor(TEXT_GOLD),
-        Node {
-            margin: UiRect::bottom(Val::Px(SPACING_XS)),
-            ..default()
-        },
-        RoText,
-    )
-}
-
-pub fn ro_subtitle(text: impl Into<String>) -> impl Bundle {
-    (
-        Text::new(text.into()),
-        TextFont::from_font_size(FONT_SIZE_SUBTITLE),
-        TextColor(TEXT_PRIMARY),
-        Node {
-            margin: UiRect::bottom(Val::Px(SPACING_XXL)),
-            ..default()
-        },
-        RoText,
-    )
-}
-
-// Input bundle
-pub fn ro_text_input() -> impl Bundle {
-    ro_text_input_styled(INPUT_HEIGHT, ELEMENT_SPACING)
-}
-
-pub fn ro_text_input_styled(height: f32, margin_bottom: f32) -> impl Bundle {
-    (
-        Button,
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Px(height),
-            border: UiRect::all(Val::Px(BORDER_WIDTH)),
-            padding: UiRect::all(Val::Px(INPUT_PADDING)),
-            margin: UiRect::bottom(Val::Px(margin_bottom)),
-            ..default()
-        },
-        BackgroundColor(INPUT_BACKGROUND_TRANSPARENT),
-        BorderColor(INPUT_BORDER),
-        BorderRadius::all(Val::Px(RADIUS_SM)),
-        RoInput,
-    )
-}
-
-// Button bundle
-pub fn ro_button(text: impl Into<String>) -> impl Bundle {
-    ro_button_styled(text, None, BUTTON_HEIGHT)
-}
+// Compatibility functions for old Bevy UI widgets (used by server_selection.rs)
+use super::components::*;
 
 pub fn ro_button_with_width(text: impl Into<String>, width: f32) -> impl Bundle {
     ro_button_styled(text, Some(width), BUTTON_HEIGHT)
@@ -108,31 +276,6 @@ pub fn ro_button_styled(text: impl Into<String>, width: Option<f32>, height: f32
     )
 }
 
-// Panel bundles with configurable size and transparency
-pub fn ro_panel() -> impl Bundle {
-    ro_panel_preset(PANEL_SIZE_FULL, PANEL_BACKGROUND_LIGHT)
-}
-
-pub fn ro_panel_small() -> impl Bundle {
-    ro_panel_preset(PANEL_SIZE_SMALL, PANEL_BACKGROUND_MEDIUM)
-}
-
-pub fn ro_panel_medium() -> impl Bundle {
-    ro_panel_preset(PANEL_SIZE_MEDIUM, PANEL_BACKGROUND_LIGHT)
-}
-
-pub fn ro_panel_large() -> impl Bundle {
-    ro_panel_preset(PANEL_SIZE_LARGE, PANEL_BACKGROUND_SUBTLE)
-}
-
-pub fn ro_panel_preset(size: (f32, f32), background_color: Color) -> impl Bundle {
-    ro_panel_custom(size.0, size.1, background_color)
-}
-
-pub fn ro_panel_sized(width: f32, height: f32) -> impl Bundle {
-    ro_panel_custom(width, height, BACKGROUND_SECONDARY_TRANSPARENT)
-}
-
 pub fn ro_panel_custom(width: f32, height: f32, background_color: Color) -> impl Bundle {
     (
         Node {
@@ -149,32 +292,5 @@ pub fn ro_panel_custom(width: f32, height: f32, background_color: Color) -> impl
         BorderColor(BORDER_COLOR),
         BorderRadius::all(Val::Px(RADIUS_LG)),
         RoPanel,
-    )
-}
-
-// Checkbox bundle (just the container)
-pub fn ro_checkbox_container() -> impl Bundle {
-    (Node {
-        flex_direction: FlexDirection::Row,
-        align_items: AlignItems::Center,
-        margin: UiRect::vertical(Val::Px(ELEMENT_SPACING)),
-        ..default()
-    },)
-}
-
-// Checkbox box bundle
-pub fn ro_checkbox_box() -> impl Bundle {
-    (
-        Button,
-        Node {
-            width: Val::Px(CHECKBOX_SIZE),
-            height: Val::Px(CHECKBOX_SIZE),
-            border: UiRect::all(Val::Px(BORDER_WIDTH)),
-            margin: UiRect::right(Val::Px(SPACING_SM)),
-            ..default()
-        },
-        BackgroundColor(INPUT_BACKGROUND_TRANSPARENT),
-        BorderColor(INPUT_BORDER),
-        BorderRadius::all(Val::Px(RADIUS_SM)),
     )
 }

@@ -13,7 +13,7 @@ mod utils;
 use app::{AuthenticationPlugin, LifthrasirPlugin}; // MapPlugin disabled for UI development
 use plugins::{AssetsPlugin, InputPlugin}; // WorldPlugin, RenderingPlugin disabled for UI development
 use presentation::ui::{
-    EnhancedInteractionsPlugin, LoginPlugin, PopupPlugin, ServerSelectionPlugin,
+    LoginPlugin, PopupPlugin, ServerSelectionPlugin,
 };
 
 fn main() {
@@ -37,7 +37,6 @@ fn main() {
             LoginPlugin,
             ServerSelectionPlugin,
             PopupPlugin,
-            EnhancedInteractionsPlugin,
             AuthenticationPlugin, // New authentication plugin
         ))
         .run();

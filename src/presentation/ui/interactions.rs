@@ -1,150 +1,53 @@
-use super::{components::*, theme::*};
+use super::{components::*, login::LoginUiState};
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use bevy::window::Ime;
+use bevy_lunex::prelude::*;
 use secrecy::{ExposeSecret, SecretString};
 
-/// Enhanced interaction system for buttons with dynamic transparency and border radius effects
-pub fn handle_enhanced_button_interactions(
-    mut interaction_query: Query<
-        (
-            &Interaction,
-            &mut BackgroundColor,
-            &mut BorderColor,
-            Option<&mut BorderRadius>,
-        ),
-        (Changed<Interaction>, With<RoButton>),
-    >,
-) {
-    for (interaction, mut bg_color, mut border_color, mut border_radius) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                *bg_color = BUTTON_PRESSED_TRANSPARENT.into();
-                border_color.0 = BORDER_COLOR;
-                // Slightly smaller radius when pressed for tactile feedback
-                if let Some(ref mut radius) = border_radius {
-                    **radius = BorderRadius::all(Val::Px(RADIUS_SM));
-                }
-            }
-            Interaction::Hovered => {
-                *bg_color = BUTTON_HOVER_TRANSPARENT.into();
-                border_color.0 = RUNIC_GLOW;
-                // Slightly larger radius on hover for visual feedback
-                if let Some(ref mut radius) = border_radius {
-                    **radius = BorderRadius::all(Val::Px(RADIUS_MD + 2.0));
-                }
-            }
-            Interaction::None => {
-                *bg_color = BUTTON_NORMAL_TRANSPARENT.into();
-                border_color.0 = BORDER_COLOR;
-                // Return to default radius
-                if let Some(ref mut radius) = border_radius {
-                    **radius = BorderRadius::all(Val::Px(RADIUS_MD));
-                }
-            }
-        }
-    }
+/// Component to mark Lunex input fields
+#[derive(Component)]
+pub struct LunexInput;
+
+/// Component to mark username input field
+#[derive(Component)]
+pub struct LunexUsernameInput;
+
+/// Component to mark password input field
+#[derive(Component)]
+pub struct LunexPasswordInput;
+
+/// Component to mark the login button
+#[derive(Component)]
+pub struct LunexLoginButton;
+
+/// Component to mark checkbox
+#[derive(Component)]
+pub struct LunexCheckbox {
+    pub checked: bool,
 }
 
-/// Enhanced interaction system for input fields with focus effects
-pub fn handle_enhanced_input_interactions(
-    mut interaction_query: Query<
-        (&Interaction, &mut BackgroundColor, &mut BorderColor),
-        (Changed<Interaction>, With<RoInput>),
-    >,
-) {
-    for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                // Input field is selected/focused
-                *bg_color = INPUT_BACKGROUND_TRANSPARENT.into();
-                border_color.0 = INPUT_BORDER_FOCUS;
-            }
-            Interaction::Hovered => {
-                // Input field is being hovered
-                *bg_color = Color::srgba(0.220, 0.235, 0.260, TRANSPARENCY_SUBTLE).into();
-                border_color.0 = RUNIC_GLOW;
-            }
-            Interaction::None => {
-                // Input field is in normal state
-                *bg_color = INPUT_BACKGROUND_TRANSPARENT.into();
-                border_color.0 = INPUT_BORDER;
-            }
-        }
-    }
-}
+/// Component to mark status text
+#[derive(Component)]
+pub struct LunexStatusText;
 
-/// Enhanced interaction system for panels with subtle hover effects
-pub fn handle_enhanced_panel_interactions(
-    mut interaction_query: Query<
-        (&Interaction, &mut BackgroundColor, &mut BorderColor),
-        (Changed<Interaction>, With<RoPanel>),
-    >,
-) {
-    for (interaction, mut bg_color, mut border_color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                // Panel is being interacted with (if it's interactive)
-                *bg_color = Color::srgba(0.176, 0.188, 0.220, TRANSPARENCY_SUBTLE).into();
-                border_color.0 = RUNIC_GLOW;
-            }
-            Interaction::Hovered => {
-                // Panel is being hovered (subtle effect)
-                *bg_color = Color::srgba(0.176, 0.188, 0.220, TRANSPARENCY_MODERATE + 0.05).into();
-                border_color.0 = POLISHED_STEEL;
-            }
-            Interaction::None => {
-                // Panel is in normal state
-                *bg_color = BACKGROUND_SECONDARY_TRANSPARENT.into();
-                border_color.0 = BORDER_COLOR;
-            }
-        }
-    }
-}
+/// Component to track focused input
+#[derive(Component)]
+pub struct LunexFocusedInput;
 
-/// Focus management for text input fields
-pub fn handle_input_focus(
-    mut commands: Commands,
-    mouse_input: Res<ButtonInput<MouseButton>>,
-    focused_query: Query<Entity, With<FocusedInput>>,
-    input_query: Query<
-        (&Interaction, Entity),
-        (
-            Changed<Interaction>,
-            Or<(With<UsernameInput>, With<PasswordInput>)>,
-        ),
-    >,
-) {
-    if mouse_input.just_pressed(MouseButton::Left) {
-        // Remove focus from all inputs first
-        for entity in focused_query.iter() {
-            commands.entity(entity).remove::<FocusedInput>();
-        }
+// Use the hover_set function from bevy_lunex directly
 
-        // Add focus to clicked input
-        for (interaction, entity) in input_query.iter() {
-            if *interaction == Interaction::Pressed {
-                commands.entity(entity).insert(FocusedInput);
-            }
-        }
-    }
-}
-
-/// Text input handling for focused input fields with IME support
+/// System to handle text input for focused Lunex input fields
 pub fn handle_text_input(
     mut keyboard_events: EventReader<KeyboardInput>,
     mut ime_events: EventReader<Ime>,
     mut login_data: ResMut<LoginFormData>,
-    focused_query: Query<Entity, With<FocusedInput>>,
-    username_query: Query<Entity, With<UsernameInput>>,
-    password_query: Query<Entity, With<PasswordInput>>,
+    focused_query: Query<Entity, With<LunexFocusedInput>>,
+    username_query: Query<Entity, With<LunexUsernameInput>>,
+    password_query: Query<Entity, With<LunexPasswordInput>>,
 ) {
     // Check if any input is focused
-    if focused_query.is_empty() {
-        return;
-    }
-
-    let Ok(focused_entity) = focused_query.single() else {
+    let Ok(focused_entity) = focused_query.get_single() else {
         return;
     };
 
@@ -160,7 +63,6 @@ pub fn handle_text_input(
     for event in ime_events.read() {
         match event {
             Ime::Commit { value, .. } => {
-                // Committed text from IME with length validation
                 if is_username {
                     if login_data.username.len() + value.len() <= MAX_USERNAME_LENGTH {
                         login_data.username.push_str(value);
@@ -180,7 +82,6 @@ pub fn handle_text_input(
 
     // Handle keyboard events
     for event in keyboard_events.read() {
-        // Only trigger changes when the key is first pressed
         if !event.state.is_pressed() {
             continue;
         }
@@ -198,8 +99,10 @@ pub fn handle_text_input(
                     }
                 }
             }
+            (Key::Tab, _) => {
+                // Tab navigation between fields will be handled by focus system
+            }
             (_, Some(text)) => {
-                // Use event.text for better character handling (includes IME fallback)
                 if text.chars().all(|c| !c.is_control()) {
                     if is_username {
                         if login_data.username.len() + text.len() <= MAX_USERNAME_LENGTH {
@@ -220,66 +123,156 @@ pub fn handle_text_input(
     }
 }
 
-/// Update displayed text in input fields
+/// System to update the displayed text in Lunex input fields
 pub fn update_input_display(
     login_data: Res<LoginFormData>,
-    username_query: Query<Entity, With<UsernameInput>>,
-    password_query: Query<Entity, With<PasswordInput>>,
-    children_query: Query<&Children>,
-    mut text_query: Query<&mut Text>,
+    username_query: Query<&Children, With<LunexUsernameInput>>,
+    password_query: Query<&Children, With<LunexPasswordInput>>,
+    mut text_query: Query<&mut Text2d>,
 ) {
-    // Always update to ensure text is visible - this is more reliable than checking is_changed
     // Update username display
-    if let Ok(entity) = username_query.single() {
-        if let Ok(children) = children_query.get(entity) {
-            for child in children {
-                if let Ok(mut text) = text_query.get_mut(*child) {
-                    // Use correct Bevy text API - Text.0 is the string content
-                    let current_text = &text.0;
-                    let expected_text = &login_data.username;
-                    // Only update if different to avoid unnecessary work
-                    if current_text != expected_text {
-                        text.0 = login_data.username.clone();
-                    }
-                    break;
+    if let Ok(children) = username_query.get_single() {
+        for child in children.iter() {
+            if let Ok(mut text) = text_query.get_mut(child) {
+                if text.0 != login_data.username {
+                    text.0 = login_data.username.clone();
                 }
+                break;
             }
         }
     }
 
     // Update password display (show asterisks)
-    if let Ok(entity) = password_query.single() {
-        if let Ok(children) = children_query.get(entity) {
-            for child in children {
-                if let Ok(mut text) = text_query.get_mut(*child) {
-                    // Use correct Bevy text API - Text.0 is the string content
-                    let expected_text = "*".repeat(login_data.password.expose_secret().len());
-                    let current_text = &text.0;
-                    // Only update if different to avoid unnecessary work
-                    if current_text != &expected_text {
-                        text.0 = expected_text;
+    if let Ok(children) = password_query.get_single() {
+        for child in children.iter() {
+            if let Ok(mut text) = text_query.get_mut(child) {
+                let password_display = "*".repeat(login_data.password.expose_secret().len());
+                if text.0 != password_display {
+                    text.0 = password_display;
+                }
+                break;
+            }
+        }
+    }
+}
+
+/// System to update status text
+pub fn update_status_text(
+    ui_state: Res<LoginUiState>,
+    mut query: Query<&mut Text2d, With<LunexStatusText>>,
+) {
+    if let Ok(mut text) = query.get_single_mut() {
+        if ui_state.is_connecting {
+            text.0 = "Connecting to server...".to_string();
+        } else if let Some(error) = &ui_state.error_message {
+            text.0 = error.clone();
+        } else {
+            text.0 = "".to_string();
+        }
+    }
+}
+
+/// Observer for handling checkbox clicks
+pub fn toggle_checkbox(
+    trigger: Trigger<Pointer<Click>>,
+    mut query: Query<(&mut LunexCheckbox, &Children)>,
+    mut text_query: Query<&mut Text2d>,
+    mut login_data: ResMut<LoginFormData>,
+) {
+    if let Ok((mut checkbox, children)) = query.get_mut(trigger.target()) {
+        checkbox.checked = !checkbox.checked;
+        let checked = checkbox.checked;
+        login_data.remember_me = checked;
+
+        // Copy children to avoid borrowing issues
+        let children_vec: Vec<Entity> = children.to_vec();
+
+        // Drop the mutable borrow by exiting the if let scope
+        // Update checkmark display
+        for child in children_vec.iter() {
+            // Find the checkbox box child
+            if let Ok((_, box_children)) = query.get(*child) {
+                for checkmark_child in box_children.iter() {
+                    if let Ok(mut text) = text_query.get_mut(checkmark_child) {
+                        text.0 = if checked { "✓" } else { "" }.to_string();
+                        break;
                     }
-                    break;
                 }
             }
         }
     }
 }
 
-/// Plugin to register all enhanced interaction systems
-pub struct EnhancedInteractionsPlugin;
+/// Observer for handling input field focus
+pub fn focus_input(
+    trigger: Trigger<Pointer<Click>>,
+    mut commands: Commands,
+    focused_query: Query<Entity, With<LunexFocusedInput>>,
+) {
+    // Remove focus from all inputs
+    for entity in focused_query.iter() {
+        commands.entity(entity).remove::<LunexFocusedInput>();
+    }
 
-impl Plugin for EnhancedInteractionsPlugin {
+    // Add focus to clicked input
+    commands.entity(trigger.target()).insert(LunexFocusedInput);
+}
+
+/// System to handle Tab navigation between input fields
+pub fn handle_tab_navigation(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    focused_query: Query<Entity, With<LunexFocusedInput>>,
+    username_query: Query<Entity, With<LunexUsernameInput>>,
+    password_query: Query<Entity, With<LunexPasswordInput>>,
+) {
+    if !keys.just_pressed(KeyCode::Tab) {
+        return;
+    }
+
+    // Get currently focused entity if any
+    let current_focus = focused_query.get_single().ok();
+
+    // Remove current focus
+    if let Some(entity) = current_focus {
+        commands.entity(entity).remove::<LunexFocusedInput>();
+    }
+
+    // Determine next focus
+    match current_focus {
+        Some(entity) if username_query.contains(entity) => {
+            // Move focus to password field
+            if let Ok(password_entity) = password_query.get_single() {
+                commands.entity(password_entity).insert(LunexFocusedInput);
+            }
+        }
+        Some(entity) if password_query.contains(entity) => {
+            // Move focus back to username field
+            if let Ok(username_entity) = username_query.get_single() {
+                commands.entity(username_entity).insert(LunexFocusedInput);
+            }
+        }
+        _ => {
+            // No focus or unknown focus, start with username field
+            if let Ok(username_entity) = username_query.get_single() {
+                commands.entity(username_entity).insert(LunexFocusedInput);
+            }
+        }
+    }
+}
+
+/// Plugin to register Lunex interaction systems
+pub struct LunexInteractionsPlugin;
+
+impl Plugin for LunexInteractionsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
             (
-                handle_enhanced_button_interactions,
-                handle_enhanced_input_interactions,
-                handle_enhanced_panel_interactions,
-                handle_input_focus,
                 handle_text_input,
                 update_input_display,
+                update_status_text,
+                handle_tab_navigation,
             ),
         );
     }
