@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_init_resource;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +47,7 @@ impl<'de> Deserialize<'de> for LoginCredentials {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Resource)]
+#[auto_init_resource(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct ServerConfiguration {
     pub login_server_address: String,
     pub client_version: u32,
@@ -63,6 +65,7 @@ impl Default for ServerConfiguration {
 }
 
 #[derive(Debug, Clone, Resource)]
+#[auto_init_resource(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct AuthenticationContext {
     pub server_config: ServerConfiguration,
     pub retry_attempts: u32,

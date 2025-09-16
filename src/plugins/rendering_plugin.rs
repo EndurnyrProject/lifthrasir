@@ -1,10 +1,7 @@
 use crate::presentation::rendering::*;
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::AutoPlugin;
 
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
 pub struct RenderingPlugin;
-
-impl Plugin for RenderingPlugin {
-    fn build(&self, app: &mut App) {
-        // Rendering systems will be added here
-    }
-}

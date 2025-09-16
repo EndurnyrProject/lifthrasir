@@ -1,6 +1,9 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::{auto_init_state, auto_register_state_type};
 
-#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default, Reflect)]
+#[auto_init_state(plugin = crate::app::plugin::LifthrasirPlugin)]
+#[auto_register_state_type(plugin = crate::app::plugin::LifthrasirPlugin)]
 pub enum GameState {
     #[default]
     Loading,
@@ -12,7 +15,9 @@ pub enum GameState {
     Paused,
 }
 
-#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default, Reflect)]
+#[auto_init_state(plugin = crate::app::plugin::LifthrasirPlugin)]
+#[auto_register_state_type(plugin = crate::app::plugin::LifthrasirPlugin)]
 pub enum MapState {
     #[default]
     NotLoaded,
@@ -20,7 +25,9 @@ pub enum MapState {
     Loaded,
 }
 
-#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default, Reflect)]
+#[auto_init_state(plugin = crate::app::plugin::LifthrasirPlugin)]
+#[auto_register_state_type(plugin = crate::app::plugin::LifthrasirPlugin)]
 pub enum LoginState {
     #[default]
     LoginForm,
@@ -29,7 +36,9 @@ pub enum LoginState {
     Failed,
 }
 
-#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default, Reflect)]
+#[auto_init_state(plugin = crate::app::plugin::LifthrasirPlugin)]
+#[auto_register_state_type(plugin = crate::app::plugin::LifthrasirPlugin)]
 pub enum NetworkState {
     #[default]
     Disconnected,

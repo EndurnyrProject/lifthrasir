@@ -1,10 +1,7 @@
 use crate::{domain::camera::*, presentation::input::*};
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::AutoPlugin;
 
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
 pub struct InputPlugin;
-
-impl Plugin for InputPlugin {
-    fn build(&self, app: &mut App) {
-        // Input handling systems will be added here
-    }
-}

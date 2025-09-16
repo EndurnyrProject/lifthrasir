@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy_tokio_tasks::TokioTasksRuntime;
 use secrecy::ExposeSecret;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 
 use super::{components::*, events::*, models::*};
 use crate::{
@@ -9,6 +10,10 @@ use crate::{
     presentation::ui::events::LoginAttemptEvent,
 };
 
+#[auto_add_system(
+    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    schedule = Update
+)]
 pub fn handle_login_attempts(
     mut commands: Commands,
     mut login_attempts: EventReader<LoginAttemptEvent>,
@@ -62,6 +67,10 @@ pub fn handle_login_attempts(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    schedule = Update
+)]
 pub fn poll_login_tasks(
     mut commands: Commands,
     mut tasks: Query<(Entity, &mut LoginTask, &mut ConnectionStateComponent)>,
@@ -106,6 +115,10 @@ pub fn poll_login_tasks(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    schedule = Update
+)]
 pub fn handle_login_success(
     mut success_events: EventReader<LoginSuccessEvent>,
     mut next_state: ResMut<NextState<GameState>>,
@@ -122,6 +135,10 @@ pub fn handle_login_success(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    schedule = Update
+)]
 pub fn handle_login_failure(
     mut failure_events: EventReader<LoginFailureEvent>,
     mut next_state: ResMut<NextState<GameState>>,
@@ -138,6 +155,10 @@ pub fn handle_login_failure(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    schedule = Update
+)]
 pub fn cleanup_failed_connections(
     mut commands: Commands,
     failed_connections: Query<(Entity, &ConnectionStateComponent, &AuthenticationAttempt)>,
