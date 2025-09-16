@@ -25,42 +25,31 @@ pub fn extract_map_from_hierarchical_assets(
         let mut extracted = ExtractedMapFiles::new();
         let map_name = &map_loader.map_name;
 
-        let possible_paths = vec![
-            format!("data\\{}.gnd", map_name),
-            format!("data\\{}.gat", map_name),
-            format!("data\\{}.rsw", map_name),
-            // Also try forward slashes as fallback
-            format!("data/{}.gnd", map_name),
-            format!("data/{}.gat", map_name),
-            format!("data/{}.rsw", map_name),
-            // Try without data/ prefix
-            format!("{}.gnd", map_name),
-            format!("{}.gat", map_name),
-            format!("{}.rsw", map_name),
-        ];
+        // Let the HierarchicalAssetManager handle path resolution
+        // Use canonical RO path format - the asset manager will try different sources
+        let gnd_path = format!("data\\{}.gnd", map_name);
+        let gat_path = format!("data\\{}.gat", map_name);
+        let rsw_path = format!("data\\{}.rsw", map_name);
 
-        // Try to load .gnd file
-        for &path in &[&possible_paths[0], &possible_paths[3], &possible_paths[6]] {
-            if let Ok(gnd_data) = manager.load(path) {
-                extracted.ground_data = Some(gnd_data);
-                break;
-            }
+        // Load .gnd file
+        if let Ok(gnd_data) = manager.load(&gnd_path) {
+            extracted.ground_data = Some(gnd_data);
+        } else {
+            warn!("Failed to load ground data for map '{}' at path '{}'", map_name, gnd_path);
         }
 
-        // Try to load .gat file
-        for &path in &[&possible_paths[1], &possible_paths[4], &possible_paths[7]] {
-            if let Ok(gat_data) = manager.load(path) {
-                extracted.altitude_data = Some(gat_data);
-                break;
-            }
+        // Load .gat file
+        if let Ok(gat_data) = manager.load(&gat_path) {
+            extracted.altitude_data = Some(gat_data);
+        } else {
+            warn!("Failed to load altitude data for map '{}' at path '{}'", map_name, gat_path);
         }
 
-        // Try to load .rsw file
-        for &path in &[&possible_paths[2], &possible_paths[5], &possible_paths[8]] {
-            if let Ok(rsw_data) = manager.load(path) {
-                extracted.world_data = Some(rsw_data);
-                break;
-            }
+        // Load .rsw file
+        if let Ok(rsw_data) = manager.load(&rsw_path) {
+            extracted.world_data = Some(rsw_data);
+        } else {
+            warn!("Failed to load world data for map '{}' at path '{}'", map_name, rsw_path);
         }
 
         // Convert extracted data to Bevy assets
