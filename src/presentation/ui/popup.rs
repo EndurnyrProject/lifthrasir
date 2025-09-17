@@ -75,26 +75,26 @@ pub fn spawn_popup_system(
 
         let (bg_color, border_color, text_color, icon) = match event.popup_type {
             PopupType::Error => (
-                Color::srgba(0.643, 0.259, 0.259, 0.95), // Worn Crimson with transparency
-                Color::srgb(0.643, 0.259, 0.259),        // Worn Crimson
+                ERROR_COLOR_TRANSPARENT,
+                ERROR_COLOR,
                 TEXT_PRIMARY,
                 "X",
             ),
             PopupType::Success => (
-                Color::srgba(0.243, 0.541, 0.420, 0.95), // Muted Jade with transparency
-                Color::srgb(0.243, 0.541, 0.420),        // Muted Jade
+                SUCCESS_COLOR_TRANSPARENT,
+                SUCCESS_COLOR,
                 TEXT_PRIMARY,
                 "V",
             ),
             PopupType::Warning => (
-                Color::srgba(0.780, 0.533, 0.235, 0.95), // Amber with transparency
-                Color::srgb(0.780, 0.533, 0.235),        // Amber
+                WARNING_COLOR_TRANSPARENT,
+                WARNING_COLOR,
                 TEXT_PRIMARY,
                 "!",
             ),
             PopupType::Info => (
-                Color::srgba(0.310, 0.329, 0.376, 0.95), // Polished Steel with transparency
-                RUNIC_GLOW,                              // Runic Glow for border
+                INFO_COLOR_TRANSPARENT,
+                RUNIC_GLOW,
                 TEXT_PRIMARY,
                 "i",
             ),

@@ -1,15 +1,29 @@
-use super::theme::*;
+use super::{interactions::*, theme::*};
+use crate::infrastructure::assets::HierarchicalAssetManager;
+use crate::infrastructure::assets::converters::decode_image_from_bytes;
 use bevy::prelude::*;
 use bevy_lunex::prelude::*;
 
+#[derive(Clone, Copy)]
+pub enum InputType {
+    Username,
+    Password,
+}
+
+#[derive(Clone, Copy)]
+pub enum ButtonType {
+    Login,
+}
+
 /// Create a Lunex text input field with interactive states
 pub fn text_input(
-    commands: &mut Commands,
+    ui: &mut ChildSpawnerCommands,
     name: impl Into<String>,
     position: impl Into<UiValue<Vec2>>,
     width: f32,
+    input_type: InputType,
 ) -> Entity {
-    commands.spawn((
+    let mut spawn_bundle = ui.spawn((
         Name::new(name.into()),
         UiLayout::window()
             .pos(position)
@@ -17,158 +31,190 @@ pub fn text_input(
             .pack(),
         UiColor::new(vec![
             (UiBase::id(), INPUT_BACKGROUND_TRANSPARENT),
-            (UiHover::id(), Color::srgba(0.220, 0.235, 0.260, TRANSPARENCY_SUBTLE)),
+            (
+                UiHover::id(),
+                INPUT_BACKGROUND_TRANSPARENT,
+            ),
         ]),
         UiHover::new().forward_speed(10.0).backward_speed(5.0),
         Sprite::default(),
         Pickable::default(),
-    ))
-    .with_children(|ui| {
-        // Border effect on hover/focus
-        ui.spawn((
-            UiLayout::window().full().pack(),
-            UiColor::new(vec![
-                (UiBase::id(), Color::NONE),
-                (UiHover::id(), RUNIC_GLOW.with_alpha(0.3)),
-            ]),
-            UiHover::new().forward_speed(10.0).backward_speed(5.0),
-            Sprite::default(),
-            Pickable::IGNORE,
-        ));
+        LunexInput,
+    ));
 
-        // Text content for the input
-        ui.spawn((
-            UiLayout::window()
-                .pos((Rh(10.0), Rl(50.0)))
-                .anchor(Anchor::CenterLeft)
-                .pack(),
-            UiTextSize::from(Rh(60.0)),
-            Text2d::new(""),
-            TextFont {
-                font_size: FONT_SIZE_BODY,
-                ..default()
-            },
-            TextColor(ASHEN_WHITE),
-            Pickable::IGNORE,
-        ));
-    })
-    .id()
-}
+    // Add specific input type markers
+    match input_type {
+        InputType::Username => {
+            spawn_bundle.insert((LunexUsernameInput, LunexFocusedInput));
+        }
+        InputType::Password => {
+            spawn_bundle.insert(LunexPasswordInput);
+        }
+    }
 
-/// Create a Lunex button with hover and pressed states
-pub fn button(
-    commands: &mut Commands,
-    text: impl Into<String>,
-    name: impl Into<String>,
-    position: impl Into<UiValue<Vec2>>,
-    width: Option<f32>,
-) -> Entity {
-    let button_width = width.unwrap_or(120.0);
-
-    commands.spawn((
-        Name::new(name.into()),
-        UiLayout::window()
-            .pos(position)
-            .size((button_width, BUTTON_HEIGHT))
-            .pack(),
-        OnHoverSetCursor::new(SystemCursorIcon::Pointer),
-    ))
-    .with_children(|ui| {
-        // Button background with states
-        ui.spawn((
-            UiLayout::new(vec![
-                (UiBase::id(), UiLayout::window().full()),
-                (UiHover::id(), UiLayout::window().anchor(Anchor::Center).size(Rl(102.0))),
-            ]),
-            UiHover::new().forward_speed(15.0).backward_speed(6.0),
-            UiColor::new(vec![
-                (UiBase::id(), BUTTON_NORMAL_TRANSPARENT),
-                (UiHover::id(), BUTTON_HOVER_TRANSPARENT),
-            ]),
-            Sprite::default(),
-            Pickable::IGNORE,
-        ))
+    spawn_bundle
         .with_children(|ui| {
-            // Button text
+            // Simple border background - fills entire input area with transparent color by default, border color on hover
             ui.spawn((
-                UiLayout::window()
-                    .pos(Rl(50.0))
-                    .anchor(Anchor::Center)
-                    .pack(),
+                UiLayout::window().full().pack(),
                 UiColor::new(vec![
-                    (UiBase::id(), TEXT_PRIMARY),
-                    (UiHover::id(), RUNIC_GLOW),
+                    (UiBase::id(), INPUT_BORDER.with_alpha(0.6)),
+                    (UiHover::id(), INPUT_BORDER_FOCUS.with_alpha(0.9)),
                 ]),
-                UiHover::new().forward_speed(15.0).backward_speed(6.0),
-                UiTextSize::from(Rh(55.0)),
-                Text2d::new(text.into()),
-                TextFont {
-                    font_size: FONT_SIZE_BUTTON,
-                    ..default()
-                },
+                UiHover::new().forward_speed(10.0).backward_speed(5.0),
+                Sprite::default(),
                 Pickable::IGNORE,
             ));
-        });
-    })
-    .id()
+
+            // Input background - slightly smaller to create border effect
+            ui.spawn((
+                UiLayout::window()
+                    .pos((Rl(50.0), Rl(50.0)))
+                    .anchor(Anchor::Center)
+                    .size((width - (BORDER_WIDTH * 2.0), INPUT_HEIGHT - (BORDER_WIDTH * 2.0)))
+                    .pack(),
+                UiColor::from(INPUT_BACKGROUND),
+                Sprite::default(),
+                Pickable::IGNORE,
+            ));
+
+            // Text content for the input
+            ui.spawn((
+                UiLayout::window()
+                    .pos((Rh(10.0), Rl(50.0)))
+                    .anchor(Anchor::CenterLeft)
+                    .pack(),
+                UiTextSize::from(Rh(60.0)),
+                Text2d::new(""),
+                TextFont {
+                    font_size: FONT_SIZE_BODY,
+                    ..default()
+                },
+                TextColor(ASHEN_WHITE),
+                Pickable::IGNORE,
+            ));
+        })
+        .observe(hover_set::<Pointer<Over>, true>)
+        .observe(hover_set::<Pointer<Out>, false>)
+        .id()
 }
 
-/// Create a Lunex panel with transparency
-pub fn panel(
-    commands: &mut Commands,
+/// Create a Lunex button with texture and hover/pressed states
+pub fn textured_button(
+    ui: &mut ChildSpawnerCommands,
+    asset_manager: Option<&HierarchicalAssetManager>,
+    images: &mut ResMut<Assets<Image>>,
+    text: impl Into<String>,
     name: impl Into<String>,
     position: impl Into<UiValue<Vec2>>,
-    size: (f32, f32),
-    background_color: Color,
+    size: Option<(f32, f32)>,
+    button_type: Option<ButtonType>,
 ) -> Entity {
-    commands.spawn((
+    let (button_width, button_height) = size.unwrap_or((120.0, BUTTON_HEIGHT));
+
+    // Try to load texture from hierarchical asset manager
+    let texture_handle = if let Some(manager) = asset_manager {
+        if let Ok(texture_data) = manager.load(TEXTURE_BUTTON) {
+            match decode_image_from_bytes(&texture_data, TEXTURE_BUTTON) {
+                Ok(image) => Some(images.add(image)),
+                Err(e) => {
+                    warn!("Failed to decode button texture: {}", e);
+                    None
+                }
+            }
+        } else {
+            warn!("Failed to load button texture from asset manager");
+            None
+        }
+    } else {
+        warn!("No hierarchical asset manager available for textured button");
+        None
+    };
+
+    let mut spawn_bundle = ui.spawn((
         Name::new(name.into()),
         UiLayout::window()
             .pos(position)
-            .size(size)
+            .size((button_width, button_height))
             .pack(),
-        UiColor::from(background_color),
-        Sprite::default(),
-    ))
-    .id()
-}
+        OnHoverSetCursor::new(SystemCursorIcon::Pointer),
+        Pickable::default(),
+    ));
 
-/// Create a Lunex label
-pub fn label(
-    commands: &mut Commands,
-    text: impl Into<String>,
-    position: impl Into<UiValue<Vec2>>,
-    color: Color,
-    font_size: f32,
-) -> Entity {
-    commands.spawn((
-        UiLayout::window()
-            .pos(position)
-            .anchor(Anchor::CenterLeft)
-            .pack(),
-        UiTextSize::from(Rh(100.0)),
-        Text2d::new(text.into()),
-        TextFont {
-            font_size,
-            ..default()
-        },
-        TextColor(color),
-    ))
-    .id()
+    // Add specific button type markers
+    if let Some(btn_type) = button_type {
+        match btn_type {
+            ButtonType::Login => {
+                spawn_bundle.insert(LunexLoginButton);
+            }
+        }
+    }
+
+    spawn_bundle
+        .with_children(|ui| {
+            // Button background with states
+            let mut background_spawn = ui.spawn((
+                UiLayout::new(vec![
+                    (UiBase::id(), UiLayout::window().full()),
+                    (
+                        UiHover::id(),
+                        UiLayout::window().anchor(Anchor::Center).size(Rl(102.0)),
+                    ),
+                ]),
+                Pickable::IGNORE,
+            ));
+
+            // Apply texture if available, otherwise fall back to solid color
+            if let Some(texture) = texture_handle {
+                background_spawn.insert(Sprite {
+                    image: texture,
+                    image_mode: SpriteImageMode::Sliced(TextureSlicer {
+                        border: BorderRect::all(BUTTON_SLICE_BORDER),
+                        center_scale_mode: SliceScaleMode::Stretch,
+                        sides_scale_mode: SliceScaleMode::Stretch,
+                        max_corner_scale: 1.0,
+                    }),
+                    ..default()
+                });
+            } else {
+                // Fallback to solid color button style
+                background_spawn.insert((Sprite::default()));
+            }
+
+            background_spawn.with_children(|ui| {
+                // Button text
+                ui.spawn((
+                    UiLayout::window()
+                        .pos(Rl(50.0))
+                        .anchor(Anchor::Center)
+                        .pack(),
+                    UiColor::new(vec![
+                        (UiBase::id(), TEXT_PRIMARY),
+                        (UiHover::id(), RUNIC_GLOW),
+                    ]),
+                    UiTextSize::from(Rh(20.0)),
+                    Text2d::new(text.into()),
+                    TextFont { ..default() },
+                    Pickable::IGNORE,
+                ));
+            });
+        })
+        .id()
 }
 
 /// Create a Lunex checkbox
 pub fn checkbox(
-    commands: &mut Commands,
+    ui: &mut ChildSpawnerCommands,
     label: impl Into<String>,
     position: impl Into<UiValue<Vec2>>,
 ) -> Entity {
-    commands.spawn((
+    ui.spawn((
         Name::new("Checkbox Container"),
         UiLayout::window()
             .pos(position)
             .size((200.0, CHECKBOX_SIZE))
             .pack(),
+        LunexCheckbox { checked: false },
     ))
     .with_children(|ui| {
         // Checkbox box
@@ -181,7 +227,10 @@ pub fn checkbox(
                 .pack(),
             UiColor::new(vec![
                 (UiBase::id(), INPUT_BACKGROUND_TRANSPARENT),
-                (UiHover::id(), Color::srgba(0.220, 0.235, 0.260, TRANSPARENCY_SUBTLE)),
+                (
+                    UiHover::id(),
+                    INPUT_BACKGROUND_TRANSPARENT,
+                ),
             ]),
             UiHover::new().forward_speed(10.0).backward_speed(5.0),
             Sprite::default(),
@@ -226,29 +275,24 @@ pub fn checkbox(
 }
 
 /// Create a status text area for displaying messages
-pub fn status_text(
-    commands: &mut Commands,
-    position: impl Into<UiValue<Vec2>>,
-) -> Entity {
-    commands.spawn((
+pub fn status_text(ui: &mut ChildSpawnerCommands, position: impl Into<UiValue<Vec2>>) -> Entity {
+    ui.spawn((
         Name::new("Status Text"),
         UiLayout::window()
             .pos(position)
             .anchor(Anchor::Center)
             .pack(),
-        UiTextSize::from(Rh(100.0)),
+        UiTextSize::from(Ab(FONT_SIZE_BODY)),
         Text2d::new(""),
         TextFont {
             font_size: FONT_SIZE_BODY,
             ..default()
         },
-        TextColor(Color::srgb(1.0, 0.4, 0.4)),
+        TextColor(ERROR_COLOR),
+        LunexStatusText,
     ))
     .id()
 }
-
-// Compatibility functions for old Bevy UI widgets (used by server_selection.rs)
-use super::components::*;
 
 pub fn ro_button_with_width(text: impl Into<String>, width: f32) -> impl Bundle {
     ro_button_styled(text, Some(width), BUTTON_HEIGHT)

@@ -8,7 +8,9 @@ use crate::{
     infrastructure::config::ClientConfig,
 };
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::{auto_plugin, auto_init_resource, auto_add_system, AutoPlugin};
+use bevy_auto_plugin::modes::global::prelude::{
+    AutoPlugin, auto_add_system, auto_init_resource, auto_plugin,
+};
 
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]

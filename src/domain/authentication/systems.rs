@@ -1,7 +1,7 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use bevy_tokio_tasks::TokioTasksRuntime;
 use secrecy::ExposeSecret;
-use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 
 use super::{components::*, events::*, models::*};
 use crate::{
@@ -35,13 +35,12 @@ pub fn handle_login_attempts(
         let username = attempt.username.clone();
         let password = attempt.password.expose_secret().to_string();
         let username_for_task = username.clone();
-        let password_for_task = password.clone();
 
         let task = runtime.spawn_background_task(move |_ctx| async move {
             login_client::attempt_login(
                 &server_address,
                 &username_for_task,
-                &password_for_task,
+                &password,
                 client_version,
             )
             .await

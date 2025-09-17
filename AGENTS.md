@@ -212,11 +212,12 @@ This palette is designed for a clean, sharp, and modern UI with a dark theme. It
 
 | Role      | Hex Code    | Name & Description                                                                            |
 | :-------- | :---------- | :-------------------------------------------------------------------------------------------- |
-| **Primary** | ` #1A1C20 ` | **Forge Soot:** A very dark, near-black charcoal. Forms the base of your UI.                    |
+| **Primary** | ` #1A1A1A ` | **Forge Soot:** A very dark, near-black charcoal. Forms the base of your UI.                    |
 | **Secondary** | ` #2D3038 ` | **Slate Gray:** A dark gray for panels, windows, and surfaces that sit on the primary background. |
-| **Tertiary** | ` #4F5460 ` | **Polished Steel:** A lighter gray for hover states, borders, and dividers.                   |
-| **Accent** | ` #6EE3F4 ` | **Runic Glow:** The bright, magical cyan from your logo. For all interactive elements.      |
+| **Tertiary** | ` #444444 ` | **Polished Steel:** A lighter gray for hover states, borders, and dividers.                   |
+| **Accent** | ` #00E57A ` | **Energetic Green:** The bright, magical green from your logo. For all interactive elements. |
 | **Highlight** | ` #E1E1E1 ` | **Ashen White:** A soft off-white for all primary body text and icons for readability.        |
+| **SecondaryAccent** | ` #008080 ` | **Mystic:** Blueish Green for secondary accents.      |
 | **Special** | ` #D4AF37 ` | **Gilded Accent:** The gold from the logo's text. Use sparingly for legendary items or titles. |
 
 ## Feedback Colors
@@ -232,6 +233,6 @@ These colors should be used to provide clear feedback to the player for common a
 ### Usage Notes
 
 - **Contrast is key:** Ensure that the `Ashen White` text has sufficient contrast against both the `Forge Soot` and `Slate Gray` backgrounds for good readability.
-- **Use accents intentionally:** The `Runic Glow` color should guide the user's eye to things they can click or interact with. Avoid using it for static text or non-interactive elements.
+- **Use accents intentionally:** The `Energetic Green` color should guide the user's eye to things they can click or interact with. Avoid using it for static text or non-interactive elements.
 - **Keep it clean:** The strength of this palette is its simplicity. Avoid introducing many new colors to maintain a cohesive and professional look.
 - Slight transparency can be applied to the grays for overlays or modals to add depth without introducing new colors.

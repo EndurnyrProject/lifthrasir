@@ -2,7 +2,7 @@ use crate::core::state::{GameState, LoginState, MapState, NetworkState};
 // use crate::domain::camera::controller::camera_movement_system;  // Disabled for UI development
 // use crate::presentation::rendering::terrain::setup;            // Disabled for UI development
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::{auto_plugin, auto_add_system, AutoPlugin};
+use bevy_auto_plugin::modes::global::prelude::{AutoPlugin, auto_add_system, auto_plugin};
 // Animation system available: use crate::systems::animate_sprites;
 
 #[derive(AutoPlugin)]

@@ -4,8 +4,9 @@ use bevy::prelude::*;
 pub const FORGE_SOOT: Color = Color::srgb(0.102, 0.110, 0.125); // #1A1C20 - Primary background
 pub const SLATE_GRAY: Color = Color::srgb(0.176, 0.188, 0.220); // #2D3038 - Secondary panels 
 pub const POLISHED_STEEL: Color = Color::srgb(0.310, 0.329, 0.376); // #4F5460 - Hover/borders
-pub const RUNIC_GLOW: Color = Color::srgb(0.431, 0.890, 0.957); // #6EE3F4 - Interactive accent
+pub const RUNIC_GLOW: Color = Color::srgb(0.000, 0.898, 0.478); // #00E57A - Energetic Green accent
 pub const ASHEN_WHITE: Color = Color::srgb(0.882, 0.882, 0.882); // #E1E1E1 - Primary text
+pub const MYSTIC: Color = Color::srgb(0.000, 0.502, 0.502); // #008080 - Secondary accent
 pub const GILDED_ACCENT: Color = Color::srgb(0.831, 0.686, 0.216); // #D4AF37 - Gold titles
 
 // Feedback Colors
@@ -38,9 +39,15 @@ pub const BACKGROUND_SECONDARY_TRANSPARENT: Color =
 pub const INPUT_BACKGROUND_TRANSPARENT: Color =
     Color::srgba(0.220, 0.235, 0.260, TRANSPARENCY_MODERATE);
 pub const BUTTON_NORMAL_TRANSPARENT: Color = Color::srgba(0.310, 0.329, 0.376, TRANSPARENCY_SUBTLE);
-pub const BUTTON_HOVER_TRANSPARENT: Color = Color::srgba(0.431, 0.890, 0.957, TRANSPARENCY_HOVER);
+pub const BUTTON_HOVER_TRANSPARENT: Color = Color::srgba(0.000, 0.898, 0.478, TRANSPARENCY_HOVER);
 pub const BUTTON_PRESSED_TRANSPARENT: Color =
     Color::srgba(0.250, 0.260, 0.300, TRANSPARENCY_SUBTLE);
+
+// Transparent feedback colors for popups
+pub const ERROR_COLOR_TRANSPARENT: Color = Color::srgba(0.643, 0.259, 0.259, 0.95);
+pub const SUCCESS_COLOR_TRANSPARENT: Color = Color::srgba(0.243, 0.541, 0.420, 0.95);
+pub const WARNING_COLOR_TRANSPARENT: Color = Color::srgba(0.780, 0.533, 0.235, 0.95);
+pub const INFO_COLOR_TRANSPARENT: Color = Color::srgba(0.310, 0.329, 0.376, 0.95);
 
 // Configurable Panel Background Colors
 pub const PANEL_BACKGROUND_SUBTLE: Color =
@@ -81,8 +88,8 @@ pub const RADIUS_LG: f32 = 12.0; // Panels, containers
 pub const RADIUS_PILL: f32 = 999.0; // Pill-shaped buttons
 
 // Panel Size Presets
-pub const PANEL_SIZE_SMALL: (f32, f32) = (280.0, 200.0); // Compact login panel
-pub const PANEL_SIZE_MEDIUM: (f32, f32) = (400.0, 300.0); // Standard dialog
+pub const PANEL_SIZE_SMALL: (f32, f32) = (280.0, 360.0); // Compact login panel
+pub const PANEL_SIZE_MEDIUM: (f32, f32) = (400.0, 460.0); // Standard dialog
 pub const PANEL_SIZE_LARGE: (f32, f32) = (500.0, 400.0); // Large content panel
 pub const PANEL_SIZE_FULL: (f32, f32) = (400.0, 500.0); // Original full panel
 
@@ -105,6 +112,12 @@ pub const FONT_SIZE_LABEL: f32 = 14.0; // Reduced from 18.0
 pub const FONT_SIZE_BODY: f32 = 12.0; // Reduced from 16.0
 pub const FONT_SIZE_BUTTON: f32 = 14.0; // Reduced from 18.0
 pub const FONT_SIZE_SMALL: f32 = 10.0; // Small text for secondary info
+
+// UI Texture Assets
+pub const TEXTURE_BUTTON: &str = "textures/ui/button.png";
+pub const BUTTON_SLICE_BORDER: f32 = 16.0; // 9-slice border size for button texture
+pub const TEXTURE_PANEL: &str = "textures/ui/panel.png";
+pub const PANEL_SLICE_BORDER: f32 = 16.0; // 9-slice border size for panel texture
 
 // Component markers for theming
 #[derive(Component)]

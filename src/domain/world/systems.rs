@@ -35,21 +35,30 @@ pub fn extract_map_from_hierarchical_assets(
         if let Ok(gnd_data) = manager.load(&gnd_path) {
             extracted.ground_data = Some(gnd_data);
         } else {
-            warn!("Failed to load ground data for map '{}' at path '{}'", map_name, gnd_path);
+            warn!(
+                "Failed to load ground data for map '{}' at path '{}'",
+                map_name, gnd_path
+            );
         }
 
         // Load .gat file
         if let Ok(gat_data) = manager.load(&gat_path) {
             extracted.altitude_data = Some(gat_data);
         } else {
-            warn!("Failed to load altitude data for map '{}' at path '{}'", map_name, gat_path);
+            warn!(
+                "Failed to load altitude data for map '{}' at path '{}'",
+                map_name, gat_path
+            );
         }
 
         // Load .rsw file
         if let Ok(rsw_data) = manager.load(&rsw_path) {
             extracted.world_data = Some(rsw_data);
         } else {
-            warn!("Failed to load world data for map '{}' at path '{}'", map_name, rsw_path);
+            warn!(
+                "Failed to load world data for map '{}' at path '{}'",
+                map_name, rsw_path
+            );
         }
 
         // Convert extracted data to Bevy assets
