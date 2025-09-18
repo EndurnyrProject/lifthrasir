@@ -1,4 +1,4 @@
-use super::{AssetConfig, AssetConfigHandle, HierarchicalAssetManager};
+use super::{AssetConfig, HierarchicalAssetManager};
 use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
 

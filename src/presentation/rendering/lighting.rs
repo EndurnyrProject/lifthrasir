@@ -168,7 +168,7 @@ fn calculate_global_lux(light: &RswLight) -> f32 {
 
 /// System to cleanup map lights when switching maps
 pub fn cleanup_map_lights(
-    mut commands: Commands,
+    commands: Commands,
     query: Query<Entity, With<MapLight>>,
     // This system will be expanded later to detect map changes
     // For now, it provides the foundation for cleanup

@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy_lunex::prelude::*;
 
 /// Component to mark server card in Lunex
 #[derive(Component)]

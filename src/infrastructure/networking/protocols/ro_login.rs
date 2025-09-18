@@ -1,4 +1,4 @@
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{LittleEndian, WriteBytesExt};
 use nom::{IResult, bytes::complete::take, number::complete::le_u16};
 use serde::{Deserialize, Serialize};
 

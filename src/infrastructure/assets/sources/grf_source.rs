@@ -1,6 +1,6 @@
 use super::{AssetSource, AssetSourceError};
 use crate::infrastructure::ro_formats::GrfFile;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub struct GrfSource {
     name: String,

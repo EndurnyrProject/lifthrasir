@@ -176,31 +176,15 @@ impl HierarchicalAssetManager {
         info!("Reloading hierarchical asset manager from config");
         self.setup_sources_from_config(config)
     }
+
+    /// Get access to the internal composite source for migration purposes
+    pub fn composite_source(&self) -> &Arc<RwLock<CompositeAssetSource>> {
+        &self.composite_source
+    }
 }
 
 impl Default for HierarchicalAssetManager {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-// System to help debug asset resolution
-pub fn debug_asset_sources(
-    manager: Option<Res<HierarchicalAssetManager>>,
-    input: Res<ButtonInput<KeyCode>>,
-) {
-    if input.just_pressed(KeyCode::F1) {
-        if let Some(manager) = manager {
-            info!("=== Asset Manager Debug Info ===");
-            info!("{}", manager.get_debug_info());
-
-            let sources = manager.list_sources();
-            info!("Available sources:");
-            for (idx, source) in sources.iter().enumerate() {
-                info!("  [{}] {}", idx, source);
-            }
-        } else {
-            warn!("HierarchicalAssetManager not available");
-        }
     }
 }

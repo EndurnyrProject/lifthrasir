@@ -236,3 +236,152 @@ These colors should be used to provide clear feedback to the player for common a
 - **Use accents intentionally:** The `Energetic Green` color should guide the user's eye to things they can click or interact with. Avoid using it for static text or non-interactive elements.
 - **Keep it clean:** The strength of this palette is its simplicity. Avoid introducing many new colors to maintain a cohesive and professional look.
 - Slight transparency can be applied to the grays for overlays or modals to add depth without introducing new colors.
+
+
+## Libraries That we Use
+
+- **bevy_auto_plugin**: Instead of registering systems, events, components and other bevy resources manually, always use bevy_auto_plugin, you can find examples in the 
+codebase and also using context7.
+- **moonshine-object**: An extension to Bevy which provides an ergonomic interface for managing complex Entity hierarchies. Use it when you need
+to query complex hierarchies for the entities, like equipment on characters, or child entities on models.
+- **moonshine-kind**: A problem with using entities in this way is the lack of information about the "kind" of the entity. This results in code that is error prone, hard to debug, and read.
+This crate attempts to solve this problem by introducing a new Instance<T> type which behaves like an Entity but also contains information about the "kind" of the entity
+- **moonshine-tag:** Cheap, fast, mostly unique identifiers designed for Bevy.
+- **bevy_lunex**: Blazingly fast retained layout engine for Bevy entities, built around vanilla Bevy ECS. It gives you the ability to make your own custom UI using regular ECS like every other part of your app.
+every UI should use bevy_lunex.
+
+
+
+## Generic Sprite Rendering System
+
+The project includes a generic, reusable sprite rendering system in `/src/domain/entities/` that can render any RO sprite with animation support. This system is independent of the character hierarchy and can be used for various purposes like UI sprites, item previews, effects, and character customization screens.
+
+### Core Components
+
+#### **`RoAnimationController`** (`/src/domain/entities/components.rs`)
+The main component for controlling sprite animations:
+- Supports custom palettes for hair colors and other variations
+- Configurable action indices and looping behavior
+- Tracks animation state (current frame, timer, delays)
+
+#### **`RoSpriteFactory`** (`/src/domain/entities/sprite_factory.rs`)
+Factory for spawning animated sprites with convenience methods:
+
+**Spawn from pre-loaded handles** (immediate):
+```rust
+RoSpriteFactory::spawn_from_handles(
+    &mut commands,
+    sprite_handle,
+    act_handle,
+    Some(palette_handle), // Optional custom palette
+    Vec3::new(0.0, 0.0, 0.0), // Position
+    0, // Action index (0 = idle, 1 = walking, etc.)
+)
+```
+
+**Spawn from file paths** (async loading):
+```rust
+RoSpriteFactory::spawn_from_paths(
+    &mut commands,
+    &asset_server,
+    "data\\sprite\\인간족\\머리통\\여\\1_여.spr".to_string(),
+    "data\\sprite\\인간족\\머리통\\여\\1_여.act".to_string(),
+    Some("data\\palette\\머리\\1_여_5.pal".to_string()), // Hair color palette
+    Vec3::new(0.0, 0.0, 0.0),
+    0,
+)
+```
+
+**Convenience methods**:
+```rust
+// For hair previews in character creation
+RoSpriteFactory::spawn_hair_preview(
+    &mut commands,
+    head_sprite_handle,
+    head_act_handle,
+    Some(hair_color_palette_handle),
+    position,
+)
+
+// For equipment previews
+RoSpriteFactory::spawn_equipment_preview(
+    &mut commands,
+    equipment_sprite_handle,
+    equipment_act_handle,
+    position,
+)
+```
+
+### Animation System
+
+The `animate_sprites` system (`/src/domain/entities/animation.rs`) automatically:
+- Advances animation frames based on ACT timing data
+- Applies custom palettes if provided
+- Supports looping and non-looping animations
+- Converts sprite frames to Bevy images with proper transparency
+
+### Usage Patterns
+
+#### Character Customization Preview
+```rust
+// Preview hair style with custom color
+let hair_sprite = asset_server.load("ro://data\\sprite\\인간족\\머리통\\여\\5_여.spr");
+let hair_act = asset_server.load("ro://data\\sprite\\인간족\\머리통\\여\\5_여.act");
+let hair_palette = asset_server.load("ro://data\\palette\\머리\\5_여_12.pal"); // Red hair
+
+RoSpriteFactory::spawn_hair_preview(
+    &mut commands,
+    hair_sprite,
+    hair_act,
+    Some(hair_palette),
+    Vec3::new(100.0, 200.0, 0.0),
+);
+```
+
+#### Item/Equipment Preview
+```rust
+// Show equipment before equipping
+let equipment = asset_server.load("ro://data\\sprite\\악세사리\\여\\여_aura.spr");
+let equipment_act = asset_server.load("ro://data\\sprite\\악세사리\\여\\여_aura.act");
+
+RoSpriteFactory::spawn_equipment_preview(
+    &mut commands,
+    equipment,
+    equipment_act,
+    Vec3::new(50.0, 50.0, 0.0),
+);
+```
+
+#### Advanced Control
+```rust
+// Full control with builder pattern
+let sprite_entity = RoSpriteFactory::spawn_from_handles(
+    &mut commands,
+    sprite_handle,
+    act_handle,
+    None, // No palette
+    position,
+    1, // Walking action
+);
+
+// Modify controller for custom behavior
+if let Some(mut entity_commands) = commands.get_entity(sprite_entity) {
+    entity_commands.insert(
+        RoAnimationController::new(sprite_handle, act_handle)
+            .with_action(2) // Custom action
+            .looping(false) // Play once
+    );
+}
+```
+
+### Integration with Existing Systems
+
+- **Character Selection**: Can replace `CharacterSelectionSprite` for simpler implementation
+- **Character Creation**: Perfect for hair/face/color previews
+- **UI Elements**: Animated icons, effect previews, tooltips
+- **In-game Effects**: Buff/debuff visual indicators
+
+The system automatically integrates with:
+- Bevy's asset loading (async)
+- Existing RO format parsers (SPR, ACT, PAL)
+- Sprite rendering pipeline with proper transparency handling

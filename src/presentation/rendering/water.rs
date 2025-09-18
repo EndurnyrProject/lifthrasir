@@ -11,11 +11,7 @@ use crate::{
         assets::components::{WaterAnimation, WaterExtension, WaterMaterial, WaterSurface},
         world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
     },
-    infrastructure::assets::{
-        HierarchicalAssetManager,
-        converters::decode_image_from_bytes,
-        loaders::{RoGroundAsset, RoWorldAsset},
-    },
+    infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
     utils::constants::CELL_SIZE,
 };
 
@@ -25,16 +21,14 @@ pub fn load_water_system(
     mut materials: ResMut<Assets<WaterMaterial>>,
     mut images: ResMut<Assets<Image>>,
     world_assets: Res<Assets<RoWorldAsset>>,
-    asset_manager: Option<Res<HierarchicalAssetManager>>,
+    asset_server: Res<AssetServer>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     query: Query<
         (Entity, &MapLoader, &MapRequestLoader, &MapData),
         (Without<WaterSurface>, With<MapData>),
     >,
 ) {
-    let Some(ref asset_manager) = asset_manager else {
-        return; // No asset manager available yet
-    };
+    // AssetServer is always available
 
     for (entity, map_loader, _map_request, _) in query.iter() {
         let Some(world_handle) = map_loader.world.as_ref() else {
@@ -105,24 +99,8 @@ pub fn load_water_system(
 
         info!("Creating single water mesh for {} tiles", water_tiles.len());
 
-        // Load water texture from hierarchical asset manager, or use fallback
-        let water_texture = load_water_texture(water.water_type, 0, asset_manager, &mut images)
-            .unwrap_or_else(|| {
-                warn!("Water texture loading failed, using fallback white texture");
-                // Create a fallback white texture if loading fails
-                let fallback_image = Image::new_fill(
-                    bevy::render::render_resource::Extent3d {
-                        width: 1,
-                        height: 1,
-                        depth_or_array_layers: 1,
-                    },
-                    bevy::render::render_resource::TextureDimension::D2,
-                    &[255, 255, 255, 255], // White pixel
-                    bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
-                    bevy::render::render_asset::RenderAssetUsages::default(),
-                );
-                images.add(fallback_image)
-            });
+        // Load water texture using AssetServer
+        let water_texture = load_water_texture(water.water_type, 0, &asset_server);
 
         info!("Water texture handle created: {:?}", water_texture);
 
@@ -280,28 +258,11 @@ fn create_water_tiles_mesh(water_tiles: &[(usize, usize)], water_y: f32) -> Mesh
 }
 
 /// Load water texture from GRF based on water type and frame
-fn load_water_texture(
-    water_type: u32,
-    frame: u32,
-    asset_manager: &HierarchicalAssetManager,
-    images: &mut ResMut<Assets<Image>>,
-) -> Option<Handle<Image>> {
-    let texture_path = format!("data\\texture\\워터\\water{water_type}{frame:02}.jpg");
+fn load_water_texture(water_type: u32, frame: u32, asset_server: &AssetServer) -> Handle<Image> {
+    let texture_path = format!("ro://data\\texture\\워터\\water{water_type}{frame:02}.jpg");
 
-    if let Ok(texture_data) = asset_manager.load(&texture_path) {
-        match decode_image_from_bytes(&texture_data, &texture_path) {
-            Ok(image) => {
-                return Some(images.add(image));
-            }
-            Err(e) => {
-                warn!("Failed to decode water texture {}: {}", texture_path, e);
-            }
-        }
-    } else {
-        warn!("Water texture not found in GRF: {}", texture_path);
-    }
-
-    None
+    // Use AssetServer to load the texture directly
+    asset_server.load(texture_path)
 }
 
 /// Generate a procedural normal map for water surface detail

@@ -1,4 +1,4 @@
-use super::theme::*;
+use super::shared::theme::*;
 use bevy::prelude::*;
 use std::time::Duration;
 
@@ -74,30 +74,10 @@ pub fn spawn_popup_system(
         }
 
         let (bg_color, border_color, text_color, icon) = match event.popup_type {
-            PopupType::Error => (
-                ERROR_COLOR_TRANSPARENT,
-                ERROR_COLOR,
-                TEXT_PRIMARY,
-                "X",
-            ),
-            PopupType::Success => (
-                SUCCESS_COLOR_TRANSPARENT,
-                SUCCESS_COLOR,
-                TEXT_PRIMARY,
-                "V",
-            ),
-            PopupType::Warning => (
-                WARNING_COLOR_TRANSPARENT,
-                WARNING_COLOR,
-                TEXT_PRIMARY,
-                "!",
-            ),
-            PopupType::Info => (
-                INFO_COLOR_TRANSPARENT,
-                RUNIC_GLOW,
-                TEXT_PRIMARY,
-                "i",
-            ),
+            PopupType::Error => (ERROR_COLOR_TRANSPARENT, ERROR_COLOR, TEXT_PRIMARY, "X"),
+            PopupType::Success => (SUCCESS_COLOR_TRANSPARENT, SUCCESS_COLOR, TEXT_PRIMARY, "V"),
+            PopupType::Warning => (WARNING_COLOR_TRANSPARENT, WARNING_COLOR, TEXT_PRIMARY, "!"),
+            PopupType::Info => (INFO_COLOR_TRANSPARENT, RUNIC_GLOW, TEXT_PRIMARY, "i"),
         };
 
         // Create popup container

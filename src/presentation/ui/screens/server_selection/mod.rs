@@ -3,15 +3,10 @@ pub mod interactions;
 pub mod resources;
 pub mod systems;
 
-pub use interactions::*;
 pub use resources::*;
 pub use systems::*;
 
-use crate::{
-    core::state::GameState,
-    infrastructure::assets::loading_states::AssetLoadingState,
-    presentation::ui::events::*,
-};
+use crate::{core::state::GameState, presentation::ui::events::*};
 use bevy::prelude::*;
 
 pub struct ServerSelectionPlugin;
@@ -20,9 +15,7 @@ impl Plugin for ServerSelectionPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            setup_server_selection_ui_once.run_if(
-                in_state(GameState::ServerSelection).and(in_state(AssetLoadingState::Ready)),
-            ),
+            setup_server_selection_ui_once.run_if(in_state(GameState::ServerSelection)),
         )
         .add_systems(
             Update,

@@ -1,9 +1,10 @@
-use crate::presentation::ui::shared::components::{LoginFormData, MAX_USERNAME_LENGTH, MAX_PASSWORD_LENGTH};
 use super::resources::LoginUiState;
+use crate::presentation::ui::shared::components::{
+    LoginFormData, MAX_PASSWORD_LENGTH, MAX_USERNAME_LENGTH,
+};
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use bevy::window::Ime;
-use bevy_lunex::prelude::*;
 use secrecy::{ExposeSecret, SecretString};
 
 /// Component to mark Lunex input fields
@@ -46,7 +47,7 @@ pub fn handle_text_input(
     password_query: Query<Entity, With<LunexPasswordInput>>,
 ) {
     // Check if any input is focused
-    let Ok(focused_entity) = focused_query.get_single() else {
+    let Ok(focused_entity) = focused_query.single() else {
         return;
     };
 
@@ -130,7 +131,7 @@ pub fn update_input_display(
     mut text_query: Query<&mut Text2d>,
 ) {
     // Update username display
-    if let Ok(children) = username_query.get_single() {
+    if let Ok(children) = username_query.single() {
         for child in children.iter() {
             if let Ok(mut text) = text_query.get_mut(child) {
                 if text.0 != login_data.username {
@@ -142,7 +143,7 @@ pub fn update_input_display(
     }
 
     // Update password display (show asterisks)
-    if let Ok(children) = password_query.get_single() {
+    if let Ok(children) = password_query.single() {
         for child in children.iter() {
             if let Ok(mut text) = text_query.get_mut(child) {
                 let password_display = "*".repeat(login_data.password.expose_secret().len());
@@ -160,7 +161,7 @@ pub fn update_status_text(
     ui_state: Res<LoginUiState>,
     mut query: Query<&mut Text2d, With<LunexStatusText>>,
 ) {
-    if let Ok(mut text) = query.get_single_mut() {
+    if let Ok(mut text) = query.single_mut() {
         if ui_state.is_connecting {
             text.0 = "Connecting to server...".to_string();
         } else if let Some(error) = &ui_state.error_message {
@@ -230,7 +231,7 @@ pub fn handle_tab_navigation(
     }
 
     // Get currently focused entity if any
-    let current_focus = focused_query.get_single().ok();
+    let current_focus = focused_query.single().ok();
 
     // Remove current focus
     if let Some(entity) = current_focus {
@@ -241,19 +242,19 @@ pub fn handle_tab_navigation(
     match current_focus {
         Some(entity) if username_query.contains(entity) => {
             // Move focus to password field
-            if let Ok(password_entity) = password_query.get_single() {
+            if let Ok(password_entity) = password_query.single() {
                 commands.entity(password_entity).insert(LunexFocusedInput);
             }
         }
         Some(entity) if password_query.contains(entity) => {
             // Move focus back to username field
-            if let Ok(username_entity) = username_query.get_single() {
+            if let Ok(username_entity) = username_query.single() {
                 commands.entity(username_entity).insert(LunexFocusedInput);
             }
         }
         _ => {
             // No focus or unknown focus, start with username field
-            if let Ok(username_entity) = username_query.get_single() {
+            if let Ok(username_entity) = username_query.single() {
                 commands.entity(username_entity).insert(LunexFocusedInput);
             }
         }

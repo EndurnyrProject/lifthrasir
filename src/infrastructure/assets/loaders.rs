@@ -1,49 +1,16 @@
 use bevy::{
-    app::{App, Plugin},
-    asset::{Asset, AssetApp, AssetLoader, LoadContext, io::Reader},
-    log::info,
+    asset::{Asset, AssetLoader, LoadContext, io::Reader},
+    log::{error, info},
     prelude::*,
     reflect::TypePath,
 };
-use bevy_common_assets::toml::TomlAssetPlugin;
 use thiserror::Error;
 
-use crate::infrastructure::assets::{
-    HierarchicalAssetManager, bmp_loader::BmpLoader, config::AssetConfig,
-};
-use crate::infrastructure::config::ClientConfig;
 use crate::infrastructure::ro_formats::{
     ActError, GatError, GndError, GrfError, GrfFile, RoAction as ParsedRoAction, RoAltitude,
     RoGround, RoSprite as ParsedRoSprite, RoWorld, RsmError, RsmFile, RswError, SpriteError,
-    parse_act, parse_spr,
+    parse_act, parse_spr as parse_sprite,
 };
-
-pub struct RoAssetsPlugin;
-
-impl Plugin for RoAssetsPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins((
-            TomlAssetPlugin::<AssetConfig>::new(&["data.toml"]),
-            TomlAssetPlugin::<ClientConfig>::new(&["client.toml"]),
-        ))
-        .init_resource::<HierarchicalAssetManager>()
-        .init_asset::<RoSpriteAsset>()
-        .init_asset_loader::<RoSpriteLoader>()
-        .init_asset::<RoActAsset>()
-        .init_asset_loader::<RoActLoader>()
-        .init_asset::<RoWorldAsset>()
-        .init_asset_loader::<RoWorldLoader>()
-        .init_asset::<RoGroundAsset>()
-        .init_asset_loader::<RoGroundLoader>()
-        .init_asset::<RoAltitudeAsset>()
-        .init_asset_loader::<RoAltitudeLoader>()
-        .init_asset::<RsmAsset>()
-        .init_asset_loader::<RsmLoader>()
-        .init_asset::<GrfAsset>()
-        .init_asset_loader::<GrfLoader>()
-        .init_asset_loader::<BmpLoader>();
-    }
-}
 
 #[derive(Asset, TypePath, Debug)]
 pub struct RoSpriteAsset {
@@ -80,6 +47,11 @@ pub struct GrfAsset {
     pub grf: GrfFile,
 }
 
+#[derive(Asset, TypePath, Debug, Clone)]
+pub struct RoPaletteAsset {
+    pub colors: Vec<[u8; 4]>, // RGBA
+}
+
 #[derive(Default)]
 pub struct RoSpriteLoader;
 
@@ -100,6 +72,9 @@ pub struct RsmLoader;
 
 #[derive(Default)]
 pub struct GrfLoader;
+
+#[derive(Default)]
+pub struct RoPaletteLoader;
 
 #[derive(Debug, Error)]
 pub enum RoSpriteLoaderError {
@@ -157,6 +132,14 @@ pub enum GrfLoaderError {
     Parse(#[from] GrfError),
 }
 
+#[derive(Debug, Error)]
+pub enum RoPaletteLoaderError {
+    #[error("Could not load palette: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Invalid palette format")]
+    InvalidFormat,
+}
+
 impl AssetLoader for RoSpriteLoader {
     type Asset = RoSpriteAsset;
     type Settings = ();
@@ -168,10 +151,9 @@ impl AssetLoader for RoSpriteLoader {
         _settings: &Self::Settings,
         _load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        use futures_lite::AsyncReadExt;
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
-        let sprite = parse_spr(&bytes)?;
+        let sprite = parse_sprite(&bytes)?;
         Ok(RoSpriteAsset { sprite })
     }
 
@@ -191,7 +173,6 @@ impl AssetLoader for RoActLoader {
         _settings: &Self::Settings,
         _load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        use futures_lite::AsyncReadExt;
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
         let action = parse_act(&bytes)?;
@@ -214,10 +195,8 @@ impl AssetLoader for RoWorldLoader {
         _settings: &Self::Settings,
         _load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        use futures_lite::AsyncReadExt;
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
-        info!("RSW file loaded, size: {} bytes", bytes.len());
         let world = RoWorld::from_bytes(&bytes)?;
         Ok(RoWorldAsset { world })
     }
@@ -238,7 +217,6 @@ impl AssetLoader for RoGroundLoader {
         _settings: &Self::Settings,
         _load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        use futures_lite::AsyncReadExt;
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
         info!("GND file loaded, size: {} bytes", bytes.len());
@@ -262,7 +240,6 @@ impl AssetLoader for RoAltitudeLoader {
         _settings: &Self::Settings,
         _load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        use futures_lite::AsyncReadExt;
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
         let altitude = RoAltitude::from_bytes(&bytes)?;
@@ -285,17 +262,9 @@ impl AssetLoader for RsmLoader {
         _settings: &Self::Settings,
         _load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        use futures_lite::AsyncReadExt;
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
-        info!("RSM file loaded, size: {} bytes", bytes.len());
         let model = RsmFile::from_bytes(&bytes)?;
-        info!(
-            "RSM parsed successfully: version {}, {} nodes, {} textures",
-            model.version,
-            model.nodes.len(),
-            model.textures.len()
-        );
         Ok(RsmAsset { model })
     }
 
@@ -336,5 +305,37 @@ impl AssetLoader for GrfLoader {
 
     fn extensions(&self) -> &[&str] {
         &["grf"]
+    }
+}
+
+impl AssetLoader for RoPaletteLoader {
+    type Asset = RoPaletteAsset;
+    type Settings = ();
+    type Error = RoPaletteLoaderError;
+
+    async fn load(
+        &self,
+        reader: &mut dyn Reader,
+        _settings: &Self::Settings,
+        _load_context: &mut LoadContext<'_>,
+    ) -> Result<Self::Asset, Self::Error> {
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).await?;
+
+        // RO palette files are 1024 bytes (256 colors * 4 bytes RGBA)
+        if bytes.len() != 1024 {
+            return Err(RoPaletteLoaderError::InvalidFormat);
+        }
+
+        let mut colors = Vec::with_capacity(256);
+        for chunk in bytes.chunks_exact(4) {
+            colors.push([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        }
+
+        Ok(RoPaletteAsset { colors })
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["pal"]
     }
 }

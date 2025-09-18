@@ -1,5 +1,3 @@
-use crate::{domain::camera::*, presentation::input::*};
-use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::AutoPlugin;
 
 #[derive(AutoPlugin)]

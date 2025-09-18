@@ -5,8 +5,7 @@ pub mod systems;
 
 use crate::{
     core::state::GameState,
-    infrastructure::assets::loading_states::AssetLoadingState,
-    presentation::ui::{shared::LoginFormData, events::LoginAttemptEvent},
+    presentation::ui::{events::LoginAttemptEvent, shared::LoginFormData},
 };
 use bevy::prelude::*;
 use bevy_lunex::prelude::*;
@@ -22,8 +21,7 @@ impl Plugin for LoginPlugin {
         app.add_plugins(UiLunexPlugins)
             .add_systems(
                 Update,
-                setup_login_ui_once
-                    .run_if(in_state(GameState::Login).and(in_state(AssetLoadingState::Ready))),
+                setup_login_ui_once.run_if(in_state(GameState::Login)),
             )
             .add_systems(
                 Update,

@@ -1,6 +1,5 @@
 use crate::infrastructure::ro_formats::des;
 use crate::utils::string_utils::parse_korean_string;
-use bevy::prelude::info;
 use flate2::read::ZlibDecoder;
 use nom::{IResult, Parser, bytes::complete::take, number::complete::le_u32};
 use std::collections::HashMap;

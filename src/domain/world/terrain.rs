@@ -9,36 +9,31 @@ use bevy::{
 use crate::{
     domain::camera::controller::CameraController,
     domain::world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
-    infrastructure::assets::{
-        HierarchicalAssetManager,
-        loaders::{RoAltitudeAsset, RoGroundAsset},
-    },
+    infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
     utils::constants::CELL_SIZE,
 };
 
 fn load_terrain_textures(
     ground: &crate::infrastructure::ro_formats::RoGround,
-    asset_manager: &HierarchicalAssetManager,
+    asset_server: &AssetServer,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    images: &mut ResMut<Assets<Image>>,
 ) -> Vec<Handle<StandardMaterial>> {
     let mut texture_materials = Vec::new();
 
     for (i, texture_name) in ground.textures.iter().enumerate() {
         if !texture_name.is_empty() {
+            // Try loading texture from unified asset source
             let texture_paths = vec![
-                texture_name.clone(),
-                format!("data\\texture\\{}", texture_name),
+                format!("ro://{}", texture_name),
+                format!("ro://data/texture/{}", texture_name),
             ];
 
             let mut texture_handle = None;
             for path in &texture_paths {
-                if let Ok(texture_data) = asset_manager.load(path) {
-                    if let Ok(image) = load_bmp_from_bytes(&texture_data) {
-                        texture_handle = Some(images.add(image));
-                        break;
-                    }
-                }
+                // Use AssetServer to load texture through unified source
+                let handle: Handle<Image> = asset_server.load(path);
+                texture_handle = Some(handle);
+                break; // Take the first path for now - AssetServer handles loading asynchronously
             }
 
             let material = if let Some(tex_handle) = texture_handle {
@@ -409,16 +404,11 @@ pub fn generate_terrain_mesh(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
-    asset_manager: Option<Res<HierarchicalAssetManager>>,
+    asset_server: Res<AssetServer>,
     query: Query<(Entity, &MapLoader, &MapRequestLoader), Without<MapData>>,
 ) {
-    let Some(ref asset_manager) = asset_manager else {
-        return;
-    };
-
     for (entity, map_loader, _map_request) in query.iter() {
         let Some(ground) = ground_assets.get(&map_loader.ground) else {
             continue;
@@ -430,9 +420,9 @@ pub fn generate_terrain_mesh(
             .and_then(|h| altitude_assets.get(h))
             .map(|a| &a.altitude);
 
-        // Load textures using hierarchical asset manager
+        // Load textures using unified asset server
         let texture_materials =
-            load_terrain_textures(&ground.ground, asset_manager, &mut materials, &mut images);
+            load_terrain_textures(&ground.ground, &asset_server, &mut materials);
 
         // GAT is used for collision detection, not terrain rendering
         // GND surfaces contain the height data we need for terrain mesh generation
@@ -687,33 +677,4 @@ pub fn setup_terrain_camera(mut commands: Commands, query: Query<&MapData, Added
             CameraController::default(),
         ));
     }
-}
-
-fn load_bmp_from_bytes(data: &[u8]) -> Result<Image, Box<dyn std::error::Error>> {
-    use crate::infrastructure::assets::converters::apply_magenta_transparency;
-    use image::ImageFormat;
-
-    // Use the image crate to decode BMP
-    let img = image::load_from_memory_with_format(data, ImageFormat::Bmp)?;
-    let rgba = img.to_rgba8();
-    let dimensions = rgba.dimensions();
-
-    // Get raw RGBA data and apply magenta transparency
-    let mut rgba_data = rgba.into_raw();
-    apply_magenta_transparency(&mut rgba_data);
-
-    // Convert to Bevy Image
-    let bevy_image = Image::new(
-        bevy::render::render_resource::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        },
-        bevy::render::render_resource::TextureDimension::D2,
-        rgba_data,
-        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
-        bevy::render::render_asset::RenderAssetUsages::RENDER_WORLD,
-    );
-
-    Ok(bevy_image)
 }

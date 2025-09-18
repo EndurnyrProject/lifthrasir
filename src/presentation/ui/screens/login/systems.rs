@@ -1,24 +1,17 @@
 use super::{interactions::*, resources::LoginUiState};
-use crate::presentation::ui::{
-    events::*, popup::ShowPopupEvent, shared::*,
-};
+use crate::presentation::ui::{events::*, popup::ShowPopupEvent, shared::*};
 use crate::{
-    core::state::GameState,
     domain::authentication::events::*,
-    infrastructure::{
-        assets::{HierarchicalAssetManager, loading_states::AssetLoadingState},
-        networking::errors::NetworkError,
-    },
+    infrastructure::networking::errors::NetworkError,
 };
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
 use bevy_lunex::prelude::*;
 
 pub fn setup_login_ui_once(
-    mut commands: Commands,
+    commands: Commands,
     asset_server: Res<AssetServer>,
-    asset_manager: Option<Res<HierarchicalAssetManager>>,
-    mut images: ResMut<Assets<Image>>,
+    images: ResMut<Assets<Image>>,
     mut ui_state: ResMut<LoginUiState>,
 ) {
     if ui_state.initialized {
@@ -26,14 +19,13 @@ pub fn setup_login_ui_once(
     }
     ui_state.initialized = true;
 
-    setup_login_ui(commands, asset_server, asset_manager, images);
+    setup_login_ui(commands, asset_server, images);
 }
 
 fn setup_login_ui(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    asset_manager: Option<Res<HierarchicalAssetManager>>,
-    mut images: ResMut<Assets<Image>>,
+    images: ResMut<Assets<Image>>,
 ) {
     // Spawn UI camera with proper source configuration
     commands.spawn((
@@ -125,8 +117,7 @@ fn setup_login_ui(
             // Login button using textured button
             let login_button_entity = textured_button(
                 ui,
-                asset_manager.as_deref(),
-                &mut images,
+                &asset_server,
                 "Login",
                 "Login Button",
                 Rl((43.0, 70.0)),
@@ -150,7 +141,7 @@ pub fn cleanup_login_ui(
     mut ui_state: ResMut<LoginUiState>,
 ) {
     for entity in &query {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
     ui_state.initialized = false;
 }
@@ -167,7 +158,7 @@ fn on_login_click(
     let not_connecting = !ui_state.is_connecting;
 
     if username_valid && cooldown_ready && not_connecting {
-        login_events.send(LoginAttemptEvent {
+        login_events.write(LoginAttemptEvent {
             username: login_data.username.clone(),
             password: login_data.password.clone(),
         });
@@ -186,7 +177,7 @@ pub fn handle_enter_key_login(
         && ui_state.login_cooldown.finished()
         && !ui_state.is_connecting
     {
-        login_events.send(LoginAttemptEvent {
+        login_events.write(LoginAttemptEvent {
             username: login_data.username.clone(),
             password: login_data.password.clone(),
         });
@@ -234,7 +225,7 @@ pub fn handle_login_failure_ui(
         ui_state.login_cooldown = Timer::from_seconds(3.0, TimerMode::Once);
 
         // Show error popup
-        popup_events.send(ShowPopupEvent::error(error_message));
+        popup_events.write(ShowPopupEvent::error(error_message));
     }
 }
 

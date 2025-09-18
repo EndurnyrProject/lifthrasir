@@ -2,11 +2,7 @@ use crate::domain::entities::systems::{
     AnimatedTransform, AnimationType, RsmAnimationController, RsmNodeAnimation,
 };
 use crate::domain::world::components::MapLoader;
-use crate::infrastructure::assets::converters::decode_image_from_bytes;
-use crate::infrastructure::assets::{
-    HierarchicalAssetManager,
-    loaders::{RoGroundAsset, RoWorldAsset},
-};
+use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset};
 use crate::infrastructure::ro_formats::{RsmFile, RswObject};
 use crate::utils::{get_map_dimensions_from_ground, rsw_to_bevy_transform};
 use bevy::math::{Mat4, Vec4};
@@ -154,15 +150,13 @@ pub fn update_model_meshes(
         ),
         (With<MapModel>, Without<ModelProcessed>),
     >,
-    asset_manager: Option<Res<HierarchicalAssetManager>>,
+    asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut rsm_cache: ResMut<RsmCache>,
 ) {
-    let Some(ref asset_manager) = asset_manager else {
-        return; // No asset manager available yet
-    };
+    // AssetServer is always available
 
     for (entity, map_model, anim_type, anim_speed) in model_query.iter() {
         if map_model.filename.is_empty() {
@@ -177,28 +171,17 @@ pub fn update_model_meshes(
         let rsm = if let Some(rsm) = parsed_rsm {
             rsm
         } else {
-            let alt_paths = vec![format!("data\\model\\{}", map_model.filename)];
+            // Load RSM file using AssetServer
+            let rsm_path = format!("ro://data\\model\\{}", map_model.filename);
 
-            let mut found_rsm = None;
-            for alt_path in alt_paths {
-                if let Ok(rsm_data) = asset_manager.load(&alt_path) {
-                    if let Ok(rsm) = RsmFile::from_bytes(&rsm_data) {
-                        let rsm_arc = Arc::new(rsm);
-                        {
-                            let mut parsed_cache = rsm_cache.parsed_rsms.write().unwrap();
-                            parsed_cache.insert(map_model.filename.clone(), rsm_arc.clone());
-                        }
-                        found_rsm = Some(rsm_arc);
-                        break;
-                    }
-                }
-            }
-
-            if let Some(rsm) = found_rsm {
-                rsm
-            } else {
-                continue; // RSM file not found in GRF
-            }
+            // For now, we'll need to implement RSM asset loading through the AssetServer
+            // This is a placeholder - the actual RSM loading will need to be handled
+            // by a proper AssetLoader implementation
+            warn!(
+                "RSM loading through AssetServer not yet implemented for: {}",
+                rsm_path
+            );
+            continue; // Skip for now - TODO: Implement RSM AssetLoader
         };
 
         let node_meshes = convert_rsm_to_mesh(&rsm);
@@ -293,7 +276,7 @@ pub fn update_model_meshes(
                     &rsm,
                     &map_model.node_name,
                     texture_id,
-                    asset_manager,
+                    &asset_server,
                     &mut rsm_cache,
                     &mut materials,
                     &mut images,
@@ -571,7 +554,7 @@ fn get_or_create_material_for_texture(
     rsm: &RsmFile,
     _node_name: &str,
     actual_texture_idx: i32,
-    asset_manager: &HierarchicalAssetManager,
+    asset_server: &AssetServer,
     rsm_cache: &mut RsmCache,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     images: &mut ResMut<Assets<Image>>,
@@ -605,7 +588,7 @@ fn get_or_create_material_for_texture(
 
     // Create new material for this texture
     let material_handle =
-        create_rsm_material_for_texture(rsm, texture_name, asset_manager, materials, images);
+        create_rsm_material_for_texture(rsm, texture_name, asset_server, materials, images);
 
     // Cache it
     {
@@ -619,7 +602,7 @@ fn get_or_create_material_for_texture(
 fn create_rsm_material_for_texture(
     rsm: &RsmFile,
     texture_name: &str,
-    asset_manager: &HierarchicalAssetManager,
+    asset_server: &AssetServer,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     images: &mut ResMut<Assets<Image>>,
 ) -> Handle<StandardMaterial> {
@@ -646,25 +629,17 @@ fn create_rsm_material_for_texture(
         .trim_end_matches(".tga");
 
     let texture_paths = vec![
-        texture_name.to_string(),
-        format!("data\\texture\\{}", texture_name),
-        format!("data\\texture\\{}.tga", base_name),
-        format!("{}.tga", base_name),
+        format!("ro://{}", texture_name),
+        format!("ro://data\\texture\\{}", texture_name),
+        format!("ro://data\\texture\\{}.tga", base_name),
+        format!("ro://{}.tga", base_name),
     ];
 
     for texture_path in &texture_paths {
-        if let Ok(texture_data) = asset_manager.load(texture_path) {
-            match decode_image_from_bytes(&texture_data, texture_name) {
-                Ok(image) => {
-                    let texture_handle = images.add(image);
-                    material.base_color_texture = Some(texture_handle);
-                    break;
-                }
-                Err(e) => {
-                    warn!("Failed to decode texture '{}': {}", texture_path, e);
-                }
-            }
-        }
+        // Use AssetServer to load texture directly
+        let texture_handle: Handle<Image> = asset_server.load(texture_path.as_str());
+        material.base_color_texture = Some(texture_handle);
+        break; // AssetServer handles async loading, so we use the first path
     }
 
     materials.add(material)

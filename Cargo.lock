@@ -597,6 +597,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "base31"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ba7424f58c37cd9f6739e013526009b0fb7df29f8051ae6b07d17ce579e0c23"
+dependencies = [
+ "phf",
+]
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4178,9 +4187,15 @@ dependencies = [
  "futures-lite",
  "image",
  "lightyear",
+ "moonshine-kind",
+ "moonshine-object",
+ "moonshine-tag",
  "nalgebra 0.34.0",
  "nom 8.0.0",
+ "once_cell",
+ "regex",
  "secrecy",
+ "seldom_state",
  "serde",
  "thiserror 2.0.16",
  "tokio",
@@ -4911,6 +4926,59 @@ dependencies = [
 ]
 
 [[package]]
+name = "moonshine-kind"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09cde62764f17fb92f472549e0d38551c9dcc51d6ac202c0b14e43b45e976149"
+dependencies = [
+ "bevy_ecs",
+ "bevy_reflect",
+ "bevy_utils",
+ "disqualified",
+]
+
+[[package]]
+name = "moonshine-object"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9c0a2a731aecd7410474242ee3d68f5bd91763b1f308a05878e989727804033"
+dependencies = [
+ "bevy_ecs",
+ "moonshine-kind",
+ "moonshine-util",
+]
+
+[[package]]
+name = "moonshine-tag"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4274e31b311d9384ec843af96312a3475adf4bf3d134fb274436d7a2b3dec90"
+dependencies = [
+ "base31",
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_platform",
+ "bevy_reflect",
+ "bevy_utils",
+ "const-fnv1a-hash",
+ "inventory",
+ "itertools 0.14.0",
+ "once_cell",
+ "serde",
+]
+
+[[package]]
+name = "moonshine-util"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12534e20e4ec4953e53fb7541dcef4c51cb14b2a64728a668cf593c664132a2e"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "disqualified",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5558,9 +5626,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.21.3"
+version = "1.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
+checksum = "945462a4b81e43c4e3ba96bd7b49d834c6f61198356aa858733bc4acf3cbe62e"
 
 [[package]]
 name = "oneshot"
@@ -5731,6 +5799,48 @@ dependencies = [
  "indexmap",
  "serde",
  "serde_derive",
+]
+
+[[package]]
+name = "phf"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
+dependencies = [
+ "phf_macros",
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_generator"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
+dependencies = [
+ "phf_shared",
+ "rand 0.8.5",
+]
+
+[[package]]
+name = "phf_macros"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f84ac04429c13a7ff43785d75ad27569f2951ce0ffd30a3321230db2fc727216"
+dependencies = [
+ "phf_generator",
+ "phf_shared",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
+dependencies = [
+ "siphasher",
 ]
 
 [[package]]
@@ -6615,6 +6725,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "seldom_state"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbf7a739419a8fcd4b4341067a5ac4559d0e2dbfe98b788ea866b5a81c58b28e"
+dependencies = [
+ "bevy_app",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_log",
+ "bevy_math",
+ "bevy_utils",
+ "either",
+ "variadics_please",
+]
+
+[[package]]
 name = "self_cell"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6766,6 +6892,12 @@ checksum = "95890f873bec569a0362c235787f3aca6e1e887302ba4840839bcc6459c42da6"
 dependencies = [
  "quote",
 ]
+
+[[package]]
+name = "siphasher"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
 
 [[package]]
 name = "skrifa"

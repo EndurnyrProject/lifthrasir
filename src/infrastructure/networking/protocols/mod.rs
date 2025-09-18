@@ -1,3 +1,2 @@
+pub mod ro_char;
 pub mod ro_login;
-
-pub use ro_login::*;

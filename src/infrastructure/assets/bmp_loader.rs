@@ -1,3 +1,4 @@
+use crate::infrastructure::assets::converters::apply_magenta_transparency;
 use bevy::{
     asset::{AssetLoader, LoadContext, io::Reader},
     prelude::*,
@@ -134,6 +135,9 @@ impl AssetLoader for BmpLoader {
                 )));
             }
         }
+
+        // Apply magenta transparency (RGB 255, 0, 255 becomes transparent)
+        apply_magenta_transparency(&mut rgba_data);
 
         Ok(Image::new(
             Extent3d {

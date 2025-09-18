@@ -1,16 +1,10 @@
 use crate::{
     core::state::GameState,
-    domain::authentication::{
-        events::*,
-        models::{AuthenticationContext, ServerConfiguration},
-        systems::*,
-    },
+    domain::authentication::models::{AuthenticationContext, ServerConfiguration},
     infrastructure::config::ClientConfig,
 };
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::{
-    AutoPlugin, auto_add_system, auto_init_resource, auto_plugin,
-};
+use bevy_auto_plugin::modes::global::prelude::{AutoPlugin, auto_add_system, auto_plugin};
 
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]
@@ -55,7 +49,7 @@ fn load_client_config(
 fn check_client_config_loaded(
     config_handle: Option<Res<ClientConfigHandle>>,
     client_configs: Res<Assets<ClientConfig>>,
-    mut config_loaded: Option<ResMut<ConfigLoaded>>,
+    config_loaded: Option<ResMut<ConfigLoaded>>,
     mut auth_context: ResMut<AuthenticationContext>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {

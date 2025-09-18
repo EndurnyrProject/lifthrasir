@@ -1,13 +1,7 @@
 use super::{interactions::*, resources::*};
 use crate::{
     core::state::GameState,
-    infrastructure::{
-        assets::{HierarchicalAssetManager, loading_states::AssetLoadingState},
-        networking::{
-            protocols::ro_login::{ServerInfo, ServerType},
-            session::UserSession,
-        },
-    },
+    infrastructure::networking::{protocols::ro_login::ServerType, session::UserSession},
     presentation::ui::{events::*, shared::*},
 };
 use bevy::prelude::*;
@@ -15,10 +9,9 @@ use bevy::render::view::RenderLayers;
 use bevy_lunex::prelude::*;
 
 pub fn setup_server_selection_ui_once(
-    mut commands: Commands,
+    commands: Commands,
     asset_server: Res<AssetServer>,
-    asset_manager: Option<Res<HierarchicalAssetManager>>,
-    mut images: ResMut<Assets<Image>>,
+    images: ResMut<Assets<Image>>,
     session: Res<UserSession>,
     mut state: ResMut<ServerSelectionState>,
 ) {
@@ -27,13 +20,12 @@ pub fn setup_server_selection_ui_once(
     }
     state.initialized = true;
 
-    setup_server_selection_ui(commands, asset_server, asset_manager, images, session);
+    setup_server_selection_ui(commands, asset_server, images, session);
 }
 
 pub fn setup_server_selection_ui(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    _asset_manager: Option<Res<HierarchicalAssetManager>>,
     _images: ResMut<Assets<Image>>,
     session: Res<UserSession>,
 ) {
@@ -253,7 +245,7 @@ pub fn cleanup_server_selection_ui(
     mut state: ResMut<ServerSelectionState>,
 ) {
     for entity in &query {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
     state.initialized = false;
     state.selected_server_index = None;
@@ -324,7 +316,7 @@ pub fn on_back_button_click(
     mut back_events: EventWriter<BackToLoginEvent>,
 ) {
     info!("Going back to login screen");
-    back_events.send(BackToLoginEvent);
+    back_events.write(BackToLoginEvent);
     next_state.set(GameState::Login);
 }
 
@@ -344,7 +336,7 @@ pub fn on_connect_button_click(
             session.selected_server = Some(server.clone());
 
             // Send server selected event
-            server_events.send(ServerSelectedEvent { server: server });
+            server_events.write(ServerSelectedEvent { server: server });
 
             // Transition to character selection
             next_state.set(GameState::CharacterSelection);
@@ -382,7 +374,7 @@ pub fn handle_connect_button(
     mut button_query: Query<(&Children, &mut UiColor), With<LunexConnectButton>>,
     mut text_query: Query<&mut TextColor>,
 ) {
-    if let Ok((children, mut color)) = button_query.get_single_mut() {
+    if let Ok((children, mut color)) = button_query.single_mut() {
         let is_enabled = state.selected_server_index.is_some();
 
         if is_enabled {
@@ -420,7 +412,7 @@ pub fn handle_back_to_login(
 ) {
     if keys.just_pressed(KeyCode::Escape) {
         info!("ESC pressed, going back to login");
-        back_events.send(BackToLoginEvent);
+        back_events.write(BackToLoginEvent);
         next_state.set(GameState::Login);
     }
 }

@@ -1,20 +1,22 @@
 use crate::domain::entities::components::RoAnimationController;
 use crate::infrastructure::assets::{
-    RoActAsset, RoSpriteAsset, calculate_sprite_scale, convert_indexed_to_rgba, create_bevy_image,
+    RoActAsset, RoPaletteAsset, RoSpriteAsset, calculate_sprite_scale,
+    convert_sprite_frame_to_rgba, create_bevy_image,
 };
-use crate::utils::MAX_DISPLAYED_ACTIONS;
 use bevy::prelude::*;
+use bevy_lunex::UiLayout;
 
-/// Animation system for RO sprites - ready for map entities
+/// Animation system for RO sprites - supports palettes and configurable looping
 pub fn animate_sprites(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut RoAnimationController, &Transform)>,
+    mut query: Query<(Entity, &mut RoAnimationController, &Transform, Option<&UiLayout>)>,
     ro_sprites: Res<Assets<RoSpriteAsset>>,
     ro_actions: Res<Assets<RoActAsset>>,
+    ro_palettes: Res<Assets<RoPaletteAsset>>,
     mut images: ResMut<Assets<Image>>,
     time: Res<Time>,
 ) {
-    for (entity, mut controller, _transform) in query.iter_mut() {
+    for (entity, mut controller, _transform, ui_layout) in query.iter_mut() {
         let sprite_asset = ro_sprites.get(&controller.sprite_handle);
         let action_asset = ro_actions.get(&controller.action_handle);
 
@@ -22,8 +24,10 @@ pub fn animate_sprites(
             let sprite = &sprite_asset.sprite;
             let action = &action_asset.action;
 
-            // Update timer
-            controller.timer += time.delta().as_millis() as f32;
+            // Update timer only if not paused
+            if !controller.paused {
+                controller.timer += time.delta().as_millis() as f32;
+            }
 
             // Check if we need to advance to next frame
             if controller.timer >= controller.current_delay {
@@ -34,13 +38,11 @@ pub fn animate_sprites(
                     // Advance animation index
                     controller.animation_index += 1;
                     if controller.animation_index >= action_seq.animations.len() {
-                        controller.animation_index = 0;
-                        // Move to next action
-                        controller.action_index += 1;
-                        if controller.action_index
-                            >= action.actions.len().min(MAX_DISPLAYED_ACTIONS)
-                        {
-                            controller.action_index = 0; // Loop back to first action
+                        if controller.loop_animation {
+                            controller.animation_index = 0;
+                        } else {
+                            // Stop at last frame if not looping
+                            controller.animation_index = action_seq.animations.len() - 1;
                         }
                     }
 
@@ -53,22 +55,27 @@ pub fn animate_sprites(
             if let Some(action_seq) = action.actions.get(controller.action_index) {
                 if let Some(animation) = action_seq.animations.get(controller.animation_index) {
                     if let Some(first_layer) = animation.layers.first() {
-                        let sprite_index = first_layer.sprite_index as usize;
+                        // Handle negative sprite indices (use index 0 as fallback)
+                        let sprite_index = if first_layer.sprite_index < 0 {
+                            0
+                        } else {
+                            first_layer.sprite_index as usize
+                        };
 
                         // Ensure sprite index is valid
                         if let Some(sprite_frame) = sprite.frames.get(sprite_index) {
-                            // Convert sprite frame to Bevy Image
-                            let rgba_data = if sprite_frame.is_rgba {
-                                sprite_frame.data.clone()
-                            } else if let Some(palette) = &sprite.palette {
-                                convert_indexed_to_rgba(&sprite_frame.data, palette)
-                            } else {
-                                sprite_frame
-                                    .data
-                                    .iter()
-                                    .flat_map(|&pixel| [pixel, pixel, pixel, 255])
-                                    .collect()
-                            };
+                            // Get custom palette if provided
+                            let custom_palette = controller
+                                .palette_handle
+                                .as_ref()
+                                .and_then(|handle| ro_palettes.get(handle));
+
+                            // Convert sprite frame to RGBA using shared utility
+                            let rgba_data = convert_sprite_frame_to_rgba(
+                                sprite_frame,
+                                sprite.palette.as_ref(),
+                                custom_palette,
+                            );
 
                             let bevy_image = create_bevy_image(
                                 sprite_frame.width as u32,
@@ -78,28 +85,41 @@ pub fn animate_sprites(
 
                             let image_handle = images.add(bevy_image);
 
-                            // Calculate scale
-                            let scale = calculate_sprite_scale(
-                                sprite_frame.width as u32,
-                                sprite_frame.height as u32,
-                            );
+                            // For UI sprites (with UiLayout), apply ACT layer offset to Transform
+                            // RO uses Y-negative = up, Bevy uses Y-positive = up, so negate Y
+                            if ui_layout.is_some() {
+                                // UI sprite: apply ACT offset with Y negation
+                                let layer_offset = Vec3::new(
+                                    first_layer.pos[0] as f32,
+                                    -first_layer.pos[1] as f32, // Negate Y for Bevy coordinate system
+                                    _transform.translation.z,   // Preserve Z for layering
+                                );
 
-                            // Apply layer positioning offset relative to current transform
-                            let layer_offset = Vec3::new(
-                                first_layer.pos[0] as f32,
-                                first_layer.pos[1] as f32,
-                                0.0,
-                            );
+                                commands.entity(entity).insert((
+                                    Sprite::from_image(image_handle),
+                                    Transform::from_translation(layer_offset),
+                                ));
+                            } else {
+                                // World sprite: update both sprite and transform with ACT offset
+                                let scale = calculate_sprite_scale(
+                                    sprite_frame.width as u32,
+                                    sprite_frame.height as u32,
+                                );
 
-                            // Use entity's current position plus layer offset
-                            let new_transform =
-                                Transform::from_translation(_transform.translation + layer_offset)
-                                    .with_scale(Vec3::splat(scale));
+                                let layer_offset = Vec3::new(
+                                    first_layer.pos[0] as f32,
+                                    first_layer.pos[1] as f32,
+                                    0.0,
+                                );
 
-                            // Update entity with new sprite and transform
-                            commands
-                                .entity(entity)
-                                .insert((Sprite::from_image(image_handle), new_transform));
+                                let new_transform =
+                                    Transform::from_translation(_transform.translation + layer_offset)
+                                        .with_scale(Vec3::splat(scale));
+
+                                commands
+                                    .entity(entity)
+                                    .insert((Sprite::from_image(image_handle), new_transform));
+                            }
 
                             // Update frame index for tracking
                             controller.frame_index = sprite_index;

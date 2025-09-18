@@ -1,4 +1,5 @@
-use crate::{domain::assets::*, infrastructure::assets::*};
+use crate::infrastructure::assets::{bmp_loader::BmpLoader, *};
+use crate::infrastructure::config::ClientConfig;
 use bevy::prelude::*;
 use bevy_common_assets::toml::TomlAssetPlugin;
 
@@ -6,65 +7,57 @@ pub struct AssetsPlugin;
 
 impl Plugin for AssetsPlugin {
     fn build(&self, app: &mut App) {
-        // Ensure default config exists before starting
-        if let Err(e) = ensure_default_config() {
-            error!("Failed to ensure default config: {}", e);
-        }
-
-        app.add_plugins((
-            RoAssetsPlugin,     // This already includes TOML plugin and asset loaders
-            AssetLoadingPlugin, // Our new loading state management
-        ))
-        .add_systems(Startup, setup_debug_systems)
-        .add_systems(Update, debug_asset_sources);
+        // Register all RO asset types and loaders (AssetServer is now available)
+        app.init_asset::<ClientConfig>()
+            .init_asset::<AssetConfig>()
+            .init_asset::<RoSpriteAsset>()
+            .init_asset_loader::<RoSpriteLoader>()
+            .init_asset::<RoActAsset>()
+            .init_asset_loader::<RoActLoader>()
+            .init_asset::<RoWorldAsset>()
+            .init_asset_loader::<RoWorldLoader>()
+            .init_asset::<RoGroundAsset>()
+            .init_asset_loader::<RoGroundLoader>()
+            .init_asset::<RoAltitudeAsset>()
+            .init_asset_loader::<RoAltitudeLoader>()
+            .init_asset::<RsmAsset>()
+            .init_asset_loader::<RsmLoader>()
+            .init_asset::<GrfAsset>()
+            .init_asset_loader::<GrfLoader>()
+            .init_asset::<RoPaletteAsset>()
+            .init_asset_loader::<RoPaletteLoader>()
+            .init_asset_loader::<BmpLoader>()
+            .add_plugins((
+                TomlAssetPlugin::<AssetConfig>::new(&["data.toml"]),
+                TomlAssetPlugin::<ClientConfig>::new(&["client.toml"]),
+            ))
+            .add_systems(Startup, setup_debug_systems)
+            .add_systems(Update, debug_asset_sources);
     }
 }
 
 fn setup_debug_systems() {
-    info!("Hierarchical asset loading system initialized");
-    info!("Press F1 to display asset source debug information");
+    info!("Unified asset system initialized");
+    info!("Press F1 to display asset loading debug information");
 }
 
-fn debug_asset_sources(
-    manager: Option<Res<HierarchicalAssetManager>>,
-    input: Res<ButtonInput<KeyCode>>,
-    state: Res<State<AssetLoadingState>>,
-) {
+fn debug_asset_sources(input: Res<ButtonInput<KeyCode>>, asset_server: Option<Res<AssetServer>>) {
     if input.just_pressed(KeyCode::F1) {
-        info!("=== Asset Loading Debug Info ===");
-        info!("Current loading state: {:?}", state.get());
+        info!("=== Unified Asset System Debug Info ===");
+        info!("Asset server using unified 'ro://' source for RO assets");
+        info!("Standard Bevy AssetServer handles all asset loading");
 
-        if let Some(ref manager) = manager {
-            info!("{}", manager.get_debug_info());
-
-            let sources = manager.list_sources();
-            info!("Available sources:");
-            for (idx, source) in sources.iter().enumerate() {
-                info!("  [{}] {}", idx, source);
-            }
+        if asset_server.is_some() {
+            info!("AssetServer is ready and operational");
         } else {
-            warn!("HierarchicalAssetManager not available yet");
+            info!("AssetServer not yet available");
         }
     }
 
     if input.just_pressed(KeyCode::F2) {
-        if let Some(ref manager) = manager {
-            info!("=== Asset Files Sample ===");
-            let files = manager.list_files();
-            info!("Total files available: {}", files.len());
-
-            // Show first 20 files as sample
-            for (idx, file) in files.iter().take(20).enumerate() {
-                if let Some(source_info) = manager.get_source_info(file) {
-                    info!("  [{}] {} -> {}", idx, file, source_info);
-                } else {
-                    info!("  [{}] {} -> NOT FOUND", idx, file);
-                }
-            }
-
-            if files.len() > 20 {
-                info!("  ... and {} more files", files.len() - 20);
-            }
-        }
+        info!("=== Asset Loading Information ===");
+        info!("All RO assets are loaded through 'ro://' prefix");
+        info!("Example: 'ro://sprite/body/male/01_m.spr'");
+        info!("Assets are sourced from GRF files and data folder as configured");
     }
 }

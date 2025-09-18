@@ -3,7 +3,6 @@ use crate::{
     domain::world::components::MapLoader,
     domain::world::terrain::{generate_terrain_mesh, setup_terrain_camera},
     infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
-    infrastructure::assets::loading_states::AssetLoadingState,
     infrastructure::ro_formats::RswObject,
     presentation::rendering::lighting::EnhancedLightingPlugin,
     presentation::rendering::models::{
@@ -33,8 +32,7 @@ impl Plugin for MapPlugin {
                     update_rsm_animations,
                     load_water_system,
                     animate_water_system,
-                )
-                    .run_if(in_state(AssetLoadingState::Ready)),
+                ),
             );
     }
 }

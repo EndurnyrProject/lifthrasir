@@ -2,7 +2,6 @@ pub mod composite;
 pub mod data_folder;
 pub mod grf_source;
 
-use std::path::Path;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

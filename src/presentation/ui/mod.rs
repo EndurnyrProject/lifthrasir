@@ -3,7 +3,6 @@ pub mod popup;
 pub mod screens;
 pub mod shared;
 
-pub use events::*;
-pub use popup::{PopupPlugin, ShowPopupEvent};
+pub use popup::PopupPlugin;
 pub use screens::*;
-pub use shared::*;
+pub use shared::ScrollPlugin;

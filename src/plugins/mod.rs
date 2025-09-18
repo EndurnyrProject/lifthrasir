@@ -5,5 +5,3 @@ pub mod world_plugin;
 
 pub use assets_plugin::*;
 pub use input_plugin::*;
-pub use rendering_plugin::*;
-pub use world_plugin::*;

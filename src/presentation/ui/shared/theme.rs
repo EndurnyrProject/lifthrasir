@@ -105,6 +105,11 @@ pub const BUTTON_HEIGHT: f32 = 32.0; // Reduced from 40.0
 pub const INPUT_HEIGHT: f32 = 28.0; // Reduced from 35.0
 pub const CHECKBOX_SIZE: f32 = 16.0; // Reduced from 20.0
 
+// Scrollbar Dimensions and Behavior
+pub const SCROLLBAR_WIDTH: f32 = 8.0; // Width of the scrollbar track and thumb
+pub const SCROLLBAR_MIN_THUMB_HEIGHT: f32 = 20.0; // Minimum thumb height for usability
+pub const SCROLL_SPEED: f32 = 20.0; // Mouse wheel scroll speed in pixels
+
 // Typography Scale (Compact sizes for smaller panels)
 pub const FONT_SIZE_TITLE: f32 = 24.0; // Reduced from 32.0
 pub const FONT_SIZE_HEADING: f32 = 20.0; // For headings
@@ -117,10 +122,12 @@ pub const FONT_SIZE_SERVER: f32 = 36.0; // Large font for server names
 pub const FONT_SIZE_SERVER_HOVER: f32 = 38.0; // Slightly larger on hover
 
 // UI Texture Assets
-pub const TEXTURE_BUTTON: &str = "textures/ui/button.png";
+pub const TEXTURE_BUTTON: &str = "ro://textures/ui/button.png";
 pub const BUTTON_SLICE_BORDER: f32 = 16.0; // 9-slice border size for button texture
-pub const TEXTURE_PANEL: &str = "textures/ui/panel.png";
+pub const TEXTURE_PANEL: &str = "ro://textures/ui/panel.png";
 pub const PANEL_SLICE_BORDER: f32 = 16.0; // 9-slice border size for panel texture
+pub const TEXTURE_NO_CHARACTER_FRAME: &str = "ro://textures/ui/no_char_frame.png";
+pub const TEXTURE_WITH_CHARACTER_FRAME: &str = "ro://textures/ui/frame_with_char.png";
 
 // Component markers for theming
 #[derive(Component)]
@@ -159,3 +166,9 @@ pub const GAUGE_BACKGROUND: Color = Color::srgba(0.102, 0.110, 0.125, 0.5); // D
 pub const SERVER_CARD_WIDTH: f32 = 360.0;
 pub const SERVER_CARD_HEIGHT: f32 = 100.0;
 pub const SERVER_CARD_SPACING: f32 = 8.0;
+
+// Scrollbar Colors
+pub const SCROLLBAR_TRACK: Color = Color::srgba(0.102, 0.110, 0.125, 0.3); // Dark transparent background
+pub const SCROLLBAR_THUMB: Color = Color::srgba(0.310, 0.329, 0.376, 0.6); // Polished steel semi-transparent
+pub const SCROLLBAR_THUMB_HOVER: Color = Color::srgba(0.310, 0.329, 0.376, 0.8); // More opaque on hover
+pub const SCROLLBAR_THUMB_ACTIVE: Color = Color::srgba(0.000, 0.898, 0.478, 0.5); // Runic glow when dragging

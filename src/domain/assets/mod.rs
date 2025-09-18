@@ -1,7 +1,8 @@
 pub mod cache;
+pub mod catalog;
 pub mod components;
+pub mod patterns;
 pub mod systems;
 
-pub use cache::*;
-pub use components::*;
-pub use systems::*;
+pub use catalog::*;
+pub use patterns::*;

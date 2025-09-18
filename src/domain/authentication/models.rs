@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::auto_init_resource;
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]

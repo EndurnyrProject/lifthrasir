@@ -1,5 +1,5 @@
 use bevy::prelude::*;
 
-pub fn setup(mut commands: Commands) {
+pub fn setup(commands: Commands) {
     info!("🚀 Lifthrasir client ready");
 }

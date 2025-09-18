@@ -1,4 +1,5 @@
-use crate::infrastructure::ro_formats::Palette;
+use crate::infrastructure::assets::loaders::RoPaletteAsset;
+use crate::infrastructure::ro_formats::{Palette, sprite::SpriteFrame};
 use crate::utils::SPRITE_SCALE_SMALL;
 use bevy::{
     prelude::*,
@@ -58,6 +59,69 @@ pub fn convert_indexed_to_rgba(indexed_data: &[u8], palette: &Palette) -> Vec<u8
     }
 
     rgba_data
+}
+
+/// Convert indexed sprite data to RGBA using a custom RoPaletteAsset
+/// This is used for custom palettes like hair colors
+/// Handles transparency for index 0 and magenta (255, 0, 255)
+pub fn convert_indexed_to_rgba_with_custom_palette(
+    indexed_data: &[u8],
+    palette: &RoPaletteAsset,
+) -> Vec<u8> {
+    let mut rgba_data = Vec::with_capacity(indexed_data.len() * 4);
+
+    for &index in indexed_data {
+        if let Some(color) = palette.colors.get(index as usize) {
+            // Check for magenta transparency marker (255, 0, 255)
+            let is_magenta = color[0] == 255 && color[1] == 0 && color[2] == 255;
+
+            // Index 0 OR magenta color = transparent
+            let final_color = if index == 0 || is_magenta {
+                [color[0], color[1], color[2], 0] // Transparent
+            } else {
+                *color // Opaque (already RGBA with alpha)
+            };
+
+            rgba_data.extend_from_slice(&final_color);
+        } else {
+            // Fallback for invalid palette indices - transparent
+            rgba_data.extend_from_slice(&[0, 0, 0, 0]);
+        }
+    }
+
+    rgba_data
+}
+
+/// Convert a sprite frame to RGBA, handling both indexed and RGBA formats
+/// Supports custom palettes for hair colors and other customizations
+pub fn convert_sprite_frame_to_rgba(
+    frame: &SpriteFrame,
+    default_palette: Option<&Palette>,
+    custom_palette: Option<&RoPaletteAsset>,
+) -> Vec<u8> {
+    if frame.is_rgba {
+        // Already RGBA format - return as-is
+        frame.data.clone()
+    } else if let Some(custom_pal) = custom_palette {
+        // Use custom palette (for hair colors, etc)
+        convert_indexed_to_rgba_with_custom_palette(&frame.data, custom_pal)
+    } else if let Some(default_pal) = default_palette {
+        // Use default palette from sprite file
+        convert_indexed_to_rgba(&frame.data, default_pal)
+    } else {
+        // Fallback: grayscale conversion
+        frame
+            .data
+            .iter()
+            .flat_map(|&pixel| {
+                if pixel == 0 {
+                    [0, 0, 0, 0] // Transparent
+                } else {
+                    [pixel, pixel, pixel, 255] // Opaque grayscale
+                }
+            })
+            .collect()
+    }
 }
 
 /// Create a Bevy Image from sprite frame data
