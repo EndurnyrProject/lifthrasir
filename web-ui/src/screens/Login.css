@@ -1,0 +1,101 @@
+/* Ashen Forged Color Palette */
+:root {
+  --forge-soot: #1A1A1A;
+  --slate-gray: #2D3038;
+  --polished-steel: #444444;
+  --energetic-green: #00E57A;
+  --ashen-white: #E1E1E1;
+  --worn-crimson: #A44242;
+}
+
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: var(--forge-soot);
+}
+
+.login-box {
+  background-color: var(--slate-gray);
+  border: 1px solid var(--polished-steel);
+  border-radius: 8px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 400px;
+}
+
+.login-title {
+  color: var(--ashen-white);
+  text-align: center;
+  margin-bottom: 2rem;
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.input-group label {
+  color: var(--ashen-white);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.input-group input {
+  background-color: var(--forge-soot);
+  border: 1px solid var(--polished-steel);
+  color: var(--ashen-white);
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: var(--energetic-green);
+}
+
+.input-group input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background-color: var(--worn-crimson);
+  color: var(--ashen-white);
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.login-button {
+  background-color: var(--energetic-green);
+  color: var(--forge-soot);
+  border: none;
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.login-button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.login-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

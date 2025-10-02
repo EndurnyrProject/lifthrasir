@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Lifthrasir",
+  "version": "0.1.0",
+  "identifier": "com.lifthrasir.app",
+  "build": {
+    "beforeDevCommand": "cd web-ui && npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "cd web-ui && npm run build",
+    "frontendDist": "./web-ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lifthrasir - Ragnarok Online Client",
+        "width": 1440,
+        "height": 1080,
+        "transparent": true,
+        "resizable": false
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
+}

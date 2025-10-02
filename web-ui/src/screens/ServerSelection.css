@@ -1,0 +1,169 @@
+.server-selection-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1A1A1A;
+}
+
+.server-selection-box {
+  background: rgba(45, 48, 56, 0.95);
+  border: 2px solid #444444;
+  border-radius: 8px;
+  padding: 40px;
+  min-width: 500px;
+  max-width: 600px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.server-selection-title {
+  color: #E1E1E1;
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0 0 30px 0;
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.server-list {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+  padding: 10px;
+  background: rgba(26, 26, 26, 0.5);
+  border-radius: 4px;
+}
+
+.server-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  margin: 8px 0;
+  background: rgba(68, 68, 68, 0.3);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.server-item:hover:not(.maintenance) {
+  background: rgba(0, 229, 122, 0.1);
+  border-color: #00E57A;
+  transform: translateX(4px);
+}
+
+.server-item.selected {
+  background: rgba(0, 229, 122, 0.2);
+  border-color: #00E57A;
+}
+
+.server-item.maintenance {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.server-item.maintenance:hover {
+  transform: none;
+}
+
+.server-name {
+  color: #E1E1E1;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.server-item.selected .server-name {
+  color: #00E57A;
+  font-size: 20px;
+  text-shadow: 0 0 8px rgba(0, 229, 122, 0.4);
+}
+
+.server-item.maintenance .server-name {
+  color: #888;
+}
+
+.maintenance-badge {
+  background: #A44242;
+  color: #E1E1E1;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.error-message {
+  background: rgba(164, 66, 66, 0.2);
+  color: #E1E1E1;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  border-left: 3px solid #A44242;
+}
+
+.buttons-container {
+  display: flex;
+  gap: 15px;
+  justify-content: space-between;
+}
+
+.back-button,
+.connect-button {
+  flex: 1;
+  padding: 12px 24px;
+  border: 2px solid #444444;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(68, 68, 68, 0.3);
+  color: #E1E1E1;
+}
+
+.back-button:hover:not(:disabled) {
+  background: rgba(68, 68, 68, 0.5);
+  border-color: #666;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.connect-button {
+  background: rgba(0, 229, 122, 0.3);
+  border-color: #00E57A;
+  color: #00E57A;
+}
+
+.connect-button:hover:not(:disabled) {
+  background: rgba(0, 229, 122, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 229, 122, 0.3);
+}
+
+.connect-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background: rgba(68, 68, 68, 0.3);
+  border-color: #444444;
+  color: #888;
+}
+
+/* Scrollbar styling */
+.server-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.server-list::-webkit-scrollbar-track {
+  background: rgba(26, 26, 26, 0.5);
+  border-radius: 4px;
+}
+
+.server-list::-webkit-scrollbar-thumb {
+  background: #444444;
+  border-radius: 4px;
+}
+
+.server-list::-webkit-scrollbar-thumb:hover {
+  background: #00E57A;
+}

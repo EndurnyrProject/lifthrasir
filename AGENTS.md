@@ -1,387 +1,610 @@
-# CLAUDE.md
+# AGENTS.md - Lifthrasir Codebase Documentation
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Table of Contents
+1. [Project Overview](#project-overview)
+2. [Technology Stack](#technology-stack)
+3. [Architecture](#architecture)
+4. [Core Libraries](#core-libraries)
+5. [How to Use bevy_auto_plugin](#how-to-use-bevy_auto_plugin)
+6. [Project Structure](#project-structure)
+7. [Key Systems](#key-systems)
+8. [Integrations](#integrations)
+9. [Development Workflow](#development-workflow)
+10. [Known Technical Debt](#known-technical-debt)
+
+---
 
 ## Project Overview
 
-Lifthrasir is a Ragnarok Online client implementation written in Rust using the Bevy game engine. The project focuses on loading and rendering game assets from the original Ragnarok Online GRF (Game Resource File) format.
+**Lifthrasir** is a Ragnarok Online client implementation written in Rust using the Bevy game engine with a React-based UI powered by Tauri. The project aims to recreate the classic MMORPG client while leveraging modern technologies for cross-platform compatibility, performance, and maintainability.
 
-## Development Commands
+### Key Features
+- Full support for Ragnarok Online file formats (GRF, GND, GAT, RSW, RSM, SPR, ACT)
+- 3D terrain rendering with proper coordinate system translation
+- Character rendering with equipment and animation systems
+- Authentication and character management
+- Modern UI built with React overlaying the game world
 
-### Build & Check
-- `cargo build` - Build the project
-- `cargo build --release` - Build optimized release version
-- `cargo check` - Check code for compilation errors without building
-- `cargo run` - Run the application
+---
 
-### Testing & Quality
-- `cargo test` - Run all tests
-- `cargo test <test_name>` - Run a specific test
-- `cargo clippy` - Run linter to catch common mistakes
-- `cargo fmt` - Format code using rustfmt
-- `cargo fmt --check` - Check formatting without applying changes
+## Technology Stack
+
+### Core Technologies
+- **Rust (Edition 2021)**: Primary programming language for game engine
+- **Bevy 0.16.1**: ECS-based game engine for rendering and game logic
+- **Tauri v2**: Desktop application framework for UI integration
+- **React 18.3.1**: Frontend UI framework
+- **TypeScript 5.6.2**: Type-safe JavaScript for UI code
+- **Vite 6.0.3**: Frontend build tool and dev server
+
+### Key Paradigms
+- **Entity Component System (ECS)**: Bevy's core architecture pattern
+- **Clean Architecture**: Layered design with clear separation of concerns
+- **Domain-Driven Design (DDD)**: Business logic organized by domain concepts
+- **Event-Driven Architecture**: Communication via Bevy events and IPC
+
+---
 
 ## Architecture
 
-### Core Structure
-The codebase follows Clean Architecture principles with Domain-Driven Design, organized into layers with clear separation of concerns:
+### Workspace Structure
+The project is organized as a Cargo workspace with two main Rust crates and a React application:
 
-#### **`src/domain/`** - Domain Layer (Core Business Logic)
-- **`assets/`** - Asset management domain
-  - Components for asset caching and management
-  - Systems for asset lifecycle management
-- **`camera/`** - Camera domain logic
-  - Camera components and controller logic
-  - Camera movement and control systems
-- **`entities/`** - Game entity management
-  - Animation systems and components
-  - Entity lifecycle management
-- **`world/`** - World and map domain
-  - Terrain generation and management
-  - Map loading and world state management
-
-#### **`src/infrastructure/`** - Infrastructure Layer (External Concerns)
-- **`ro_formats/`** - Ragnarok Online file format parsers
-  - GRF, RSM, RSW, GND, GAT, ACT, SPR format parsing using `nom`
-  - DES encryption support for legacy formats
-- **`assets/`** - Asset loading infrastructure
-  - Custom Bevy asset loaders for RO formats
-  - Asset converters and BMP texture loading
-- **`storage/`** - File system and storage
-  - GRF file reading and caching mechanisms
-
-#### **`src/presentation/`** - Presentation Layer (User Interface)
-- **`input/`** - Input handling systems
-  - Camera, keyboard, and mouse input processing
-- **`rendering/`** - Rendering systems
-  - Model rendering and material management
-  - Lighting systems and terrain rendering
-  - Water rendering with shaders
-
-#### **`src/app/`** - Application Layer (Orchestration)
-- Main application plugin and map loading plugin
-- Coordinates between different layers
-
-#### **`src/plugins/`** - Bevy Plugin Organization
-- Individual plugins for assets, input, rendering, and world systems
-- Clean separation of Bevy-specific concerns
-
-#### **`src/core/`** - Shared Core Components
-- Events, resources, and application state management
-- Cross-cutting concerns shared across layers
-
-#### **`src/utils/`** - Utility Functions
-- Constants, coordinate transformations, and string utilities
-- Helper functions used across the application
-
-### Key Dependencies
-- `bevy` - Game engine with dynamic linking enabled
-- `nom` - Parser combinators for binary format parsing
-- `flate2` - zlib decompression for GRF files
-- `nalgebra` - Linear algebra for transformations
-- `encoding_rs` - Korean text encoding support
-
-## Ragnarok Online Format Overview
-
-### File Formats
-- **GRF (Game Resource File)**: Archive format containing all game assets, compressed with zlib
-- **GND (Ground)**: Terrain mesh data with height maps, texture information, and lightmaps
-- **GAT (Ground Altitude)**: Collision and walkability data for pathfinding
-- **RSW (Resource World)**: World description with references to all objects, lights, sounds, and effects
-- **RSM (Resource Model)**: 3D model format with hierarchical node structure for animated objects
-- **ACT/SPR**: 2D sprite animations and sprite sheets
-
-### Ragnarok Online World Structure
-The RO world uses a cell-based system where:
-- Each map is divided into a grid of cells
-- GND defines the visual terrain (height, textures, normals)
-- GAT defines walkability and collision for each cell
-- RSW places all objects (models, lights, sounds, effects) in the world
-
-## Coordinate System Translation
-
-### Ragnarok Online Coordinate System
-- **Origin**: Top-left corner of the map
-- **X-axis**: Increases to the right (East)
-- **Y-axis**: Height/elevation (up is positive)
-- **Z-axis**: Increases downward (South)
-- **Cell size**: Each terrain cell is 5x5 units in RO coordinates
-- **Rotation order**: Z → X → Y (important for RSM model rotations)
-
-### Bevy Coordinate System
-- **Origin**: Center of the world
-- **X-axis**: Right is positive
-- **Y-axis**: Up is positive (standard 3D convention)
-- **Z-axis**: Forward is negative (right-handed system)
-
-### Our Translation Approach
-
-#### Terrain Positioning (GND → Bevy)
-```rust
-// In domain/world/terrain.rs, we use CELL_SIZE = 10.0 (double RO's 5.0 for better visual scale)
-let base_x = x as f32 * CELL_SIZE;
-let base_z = y as f32 * CELL_SIZE;
-// Heights are multiplied by 5.0 to match the horizontal scale
-let height = surface.height[i] * 5.0;
+```
+lifthrasir/
+├── game-engine/        # Core game engine (Bevy ECS)
+├── src-tauri/          # Tauri integration layer
+└── web-ui/             # React frontend UI
 ```
 
-#### Model Positioning (RSW → Bevy)
+## Core Libraries
+
+### Entity Hierarchy & State Management
+
+**Entity Hierarchies**
+- `moonshine-object = "0.2.6"`
+  - Ergonomic interface for complex entity hierarchies
+  - Used for character sprite layers (body, equipment, effects)
+  - Provides object-based queries
+
+- `moonshine-kind = "0.3"`
+  - Adds type information to entities
+  - `Instance<T>` type for typed entity references
+  - Prevents errors from mixing different entity types
+
+- `moonshine-tag = "0.3.0"`
+  - Fast, unique identifiers for entities
+
+**State Machines**
+- `seldom_state = "0.14.0"`
+  - State machine implementation for Bevy
+  - Used for character animation states
+  - Supports complex state transitions with triggers
+
+### Frontend (React UI)
+
+**Core**
+- `react = "18.3.1"`
+- `react-dom = "18.3.1"`
+- `@tauri-apps/api = "^2"`
+  - Tauri API for React
+  - IPC communication with backend
+
+**Development**
+- `typescript = "~5.6.2"`
+- `vite = "^6.0.3"`
+- `@vitejs/plugin-react = "^4.3.4"`
+- `@types/react = "^18.3.1"`
+- `@types/react-dom = "^18.3.1"`
+---
+
+## How to Use bevy_auto_plugin
+
+### Overview
+
+`bevy_auto_plugin` is a critical library in Lifthrasir that eliminates boilerplate code in Bevy plugins. Instead of manually registering components, events, systems, and resources in the `Plugin::build()` method, bevy_auto_plugin uses attribute macros to automatically handle registration at compile time.
+
+**Why We Use It:**
+- **Reduces Boilerplate**: No more writing repetitive `.add_systems()`, `.register_type()`, `.init_resource()` calls
+- **Prevents Errors**: Can't forget to register a component or event
+- **Cleaner Code**: Keep type definitions and registration logic together
+- **Better Organization**: Each type is self-contained with its registration metadata
+
+**Version**: `bevy_auto_plugin = "0.5.0"`
+
+**Compatibility**: Bevy 0.17 (we're on 0.16.1, but it's compatible)
+
+---
+
+### Creating Auto Plugins
+
+#### Basic Plugin Declaration
+
 ```rust
-// From utils/coordinates.rs
-let position = Vec3::new(
-    model.position[0] + (map_width * 5.0),  // Center in X by adding half terrain width
-    model.position[1],                       // Y (height) unchanged
-    model.position[2] + (map_height * 5.0),  // Center in Z by adding half terrain height
-);
+use bevy_auto_plugin::prelude::*;
+
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct MyDomainPlugin;
 ```
 
-#### Rotation Conversion
-RO uses Euler angles in degrees with ZXY rotation order:
+**Attributes Explained:**
+- `#[derive(AutoPlugin)]`: Derives the auto-plugin functionality
+- `#[auto_plugin(impl_plugin_trait)]`: Automatically implements `Plugin` trait for you
+
+This generates the `Plugin` implementation with all registered types automatically added to `App` in the `build()` method.
+
+---
+
+### Auto-Registering Components
+
+Components are automatically registered with reflection support:
+
 ```rust
-// Convert RO rotation to Bevy quaternion
-let quat_z = Quat::from_rotation_z(model.rotation[2].to_radians());
-let quat_x = Quat::from_rotation_x(model.rotation[0].to_radians());  
-let quat_y = Quat::from_rotation_y(model.rotation[1].to_radians());
-let rotation = quat_z * quat_x * quat_y;  // Apply in RO's order
-```
+use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
-### Camera System
-
-#### Initial Camera Position
-The camera is positioned to view the map from an isometric-like perspective:
-```rust
-// From domain/world/terrain.rs - setup_terrain_camera
-let camera_pos = Vec3::new(
-    map_center_x,           // Center horizontally
-    -2000.0,                // High above the terrain
-    -map_center_z * 2.5     // Back from center for better view
-);
-// Camera looks at map center with Y-down as up vector (inverted for RO style)
-Transform::from_translation(camera_pos).looking_at(look_at, Vec3::NEG_Y)
-```
-
-#### Camera Controls
-- **WASD/Arrow Keys**: Move camera in world space
-- **Q/E**: Move camera up/down
-- **Mouse Wheel**: Zoom in/out along view direction
-- **Left Mouse Drag**: Pan camera
-- **Right Mouse Drag**: Rotate camera view
-- **R Key**: Reset camera to initial position
-
-The camera uses `Vec3::NEG_Y` as the up vector to match Ragnarok Online's inverted Y-axis convention, creating the familiar RO viewing angle.
-
-### Normal Calculation
-Terrain normals are calculated using the cross product of quad diagonals (matching roBrowser's approach):
-```rust
-// SW to NE diagonal and SE to NW diagonal
-let diag1 = northeast - southwest;
-let diag2 = northwest - southeast;
-let normal = diag1.cross(diag2).normalize();
-```
-
-Normals are then smoothed by averaging with neighboring cells for better lighting.
-
-## Development Guidelines
-
-1. **Always use Context7** to check libraries' available modules and functions before writing any code
-2. **Consult the Bevy Cheatbook** for good practices and examples: https://bevy-cheatbook.github.io/
-3. **Use Bevy code examples thoroughly** - find them at: https://github.com/bevyengine/bevy/tree/latest/examples#examples
-
-### Best Practices
-- Verify API availability before using any Bevy features or external crates
-- Follow ECS patterns and conventions from the Bevy Cheatbook
-- Reference official Bevy examples for implementation patterns
-- Check Context7 documentation for up-to-date API usage
-
-## Important Notes
-- The project uses Bevy's dynamic linking feature for faster compilation during development
-- Asset files in the `assets/` directory are gitignored and need to be provided separately
-- The main window is configured with constants from `utils/constants.rs`
-- Korean text encoding is handled via `encoding_rs` for proper string parsing from game files
-- Terrain is generated at world origin (0, 0, 0) with models positioned relative to it
-- The coordinate translation preserves RO's visual style while adapting to Bevy's coordinate conventions
-
-
-## Colour Pallete
-
-# UI Color Palette: Ashen Forged
-
-This palette is designed for a clean, sharp, and modern UI with a dark theme. It uses a foundation of strong grays, allowing the vibrant "Runic Glow" to act as a clear and effective accent for all interactive elements.
-
-## Main Palette
-
-| Role      | Hex Code    | Name & Description                                                                            |
-| :-------- | :---------- | :-------------------------------------------------------------------------------------------- |
-| **Primary** | ` #1A1A1A ` | **Forge Soot:** A very dark, near-black charcoal. Forms the base of your UI.                    |
-| **Secondary** | ` #2D3038 ` | **Slate Gray:** A dark gray for panels, windows, and surfaces that sit on the primary background. |
-| **Tertiary** | ` #444444 ` | **Polished Steel:** A lighter gray for hover states, borders, and dividers.                   |
-| **Accent** | ` #00E57A ` | **Energetic Green:** The bright, magical green from your logo. For all interactive elements. |
-| **Highlight** | ` #E1E1E1 ` | **Ashen White:** A soft off-white for all primary body text and icons for readability.        |
-| **SecondaryAccent** | ` #008080 ` | **Mystic:** Blueish Green for secondary accents.      |
-| **Special** | ` #D4AF37 ` | **Gilded Accent:** The gold from the logo's text. Use sparingly for legendary items or titles. |
-
-## Feedback Colors
-
-These colors should be used to provide clear feedback to the player for common actions.
-
-| State     | Hex Code    | Name & Description                                    |
-| :-------- | :---------- | :---------------------------------------------------- |
-| **Success** | ` #3E8A6B ` | **Muted Jade:** For positive confirmation and success messages. |
-| **Warning** | ` #C7883C ` | **Amber:** For warnings or potentially risky actions.     |
-| **Error** | ` #A44242 ` | **Worn Crimson:** For errors, failed actions, and alerts.  |
-
-### Usage Notes
-
-- **Contrast is key:** Ensure that the `Ashen White` text has sufficient contrast against both the `Forge Soot` and `Slate Gray` backgrounds for good readability.
-- **Use accents intentionally:** The `Energetic Green` color should guide the user's eye to things they can click or interact with. Avoid using it for static text or non-interactive elements.
-- **Keep it clean:** The strength of this palette is its simplicity. Avoid introducing many new colors to maintain a cohesive and professional look.
-- Slight transparency can be applied to the grays for overlays or modals to add depth without introducing new colors.
-
-
-## Libraries That we Use
-
-- **bevy_auto_plugin**: Instead of registering systems, events, components and other bevy resources manually, always use bevy_auto_plugin, you can find examples in the 
-codebase and also using context7.
-- **moonshine-object**: An extension to Bevy which provides an ergonomic interface for managing complex Entity hierarchies. Use it when you need
-to query complex hierarchies for the entities, like equipment on characters, or child entities on models.
-- **moonshine-kind**: A problem with using entities in this way is the lack of information about the "kind" of the entity. This results in code that is error prone, hard to debug, and read.
-This crate attempts to solve this problem by introducing a new Instance<T> type which behaves like an Entity but also contains information about the "kind" of the entity
-- **moonshine-tag:** Cheap, fast, mostly unique identifiers designed for Bevy.
-- **bevy_lunex**: Blazingly fast retained layout engine for Bevy entities, built around vanilla Bevy ECS. It gives you the ability to make your own custom UI using regular ECS like every other part of your app.
-every UI should use bevy_lunex.
-
-
-
-## Generic Sprite Rendering System
-
-The project includes a generic, reusable sprite rendering system in `/src/domain/entities/` that can render any RO sprite with animation support. This system is independent of the character hierarchy and can be used for various purposes like UI sprites, item previews, effects, and character customization screens.
-
-### Core Components
-
-#### **`RoAnimationController`** (`/src/domain/entities/components.rs`)
-The main component for controlling sprite animations:
-- Supports custom palettes for hair colors and other variations
-- Configurable action indices and looping behavior
-- Tracks animation state (current frame, timer, delays)
-
-#### **`RoSpriteFactory`** (`/src/domain/entities/sprite_factory.rs`)
-Factory for spawning animated sprites with convenience methods:
-
-**Spawn from pre-loaded handles** (immediate):
-```rust
-RoSpriteFactory::spawn_from_handles(
-    &mut commands,
-    sprite_handle,
-    act_handle,
-    Some(palette_handle), // Optional custom palette
-    Vec3::new(0.0, 0.0, 0.0), // Position
-    0, // Action index (0 = idle, 1 = walking, etc.)
-)
-```
-
-**Spawn from file paths** (async loading):
-```rust
-RoSpriteFactory::spawn_from_paths(
-    &mut commands,
-    &asset_server,
-    "data\\sprite\\인간족\\머리통\\여\\1_여.spr".to_string(),
-    "data\\sprite\\인간족\\머리통\\여\\1_여.act".to_string(),
-    Some("data\\palette\\머리\\1_여_5.pal".to_string()), // Hair color palette
-    Vec3::new(0.0, 0.0, 0.0),
-    0,
-)
-```
-
-**Convenience methods**:
-```rust
-// For hair previews in character creation
-RoSpriteFactory::spawn_hair_preview(
-    &mut commands,
-    head_sprite_handle,
-    head_act_handle,
-    Some(hair_color_palette_handle),
-    position,
-)
-
-// For equipment previews
-RoSpriteFactory::spawn_equipment_preview(
-    &mut commands,
-    equipment_sprite_handle,
-    equipment_act_handle,
-    position,
-)
-```
-
-### Animation System
-
-The `animate_sprites` system (`/src/domain/entities/animation.rs`) automatically:
-- Advances animation frames based on ACT timing data
-- Applies custom palettes if provided
-- Supports looping and non-looping animations
-- Converts sprite frames to Bevy images with proper transparency
-
-### Usage Patterns
-
-#### Character Customization Preview
-```rust
-// Preview hair style with custom color
-let hair_sprite = asset_server.load("ro://data\\sprite\\인간족\\머리통\\여\\5_여.spr");
-let hair_act = asset_server.load("ro://data\\sprite\\인간족\\머리통\\여\\5_여.act");
-let hair_palette = asset_server.load("ro://data\\palette\\머리\\5_여_12.pal"); // Red hair
-
-RoSpriteFactory::spawn_hair_preview(
-    &mut commands,
-    hair_sprite,
-    hair_act,
-    Some(hair_palette),
-    Vec3::new(100.0, 200.0, 0.0),
-);
-```
-
-#### Item/Equipment Preview
-```rust
-// Show equipment before equipping
-let equipment = asset_server.load("ro://data\\sprite\\악세사리\\여\\여_aura.spr");
-let equipment_act = asset_server.load("ro://data\\sprite\\악세사리\\여\\여_aura.act");
-
-RoSpriteFactory::spawn_equipment_preview(
-    &mut commands,
-    equipment,
-    equipment_act,
-    Vec3::new(50.0, 50.0, 0.0),
-);
-```
-
-#### Advanced Control
-```rust
-// Full control with builder pattern
-let sprite_entity = RoSpriteFactory::spawn_from_handles(
-    &mut commands,
-    sprite_handle,
-    act_handle,
-    None, // No palette
-    position,
-    1, // Walking action
-);
-
-// Modify controller for custom behavior
-if let Some(mut entity_commands) = commands.get_entity(sprite_entity) {
-    entity_commands.insert(
-        RoAnimationController::new(sprite_handle, act_handle)
-            .with_action(2) // Custom action
-            .looping(false) // Play once
-    );
+#[auto_component(
+    plugin = MyDomainPlugin,
+    derive(Debug, Default, Clone),
+    reflect(Debug, Default),
+    register,
+    auto_name,
+)]
+pub struct CharacterData {
+    pub id: u32,
+    pub name: String,
+    pub level: u8,
 }
 ```
 
-### Integration with Existing Systems
+**Attributes Explained:**
+- `plugin = MyDomainPlugin`: Associates this component with MyDomainPlugin
+- `derive(...)`: Standard Rust derives
+- `reflect(...)`: Traits to register with Bevy's reflection system
+- `register`: Registers the type with Bevy's type registry (for reflection)
+- `auto_name`: Automatically sets the type name for reflection
 
-- **Character Selection**: Can replace `CharacterSelectionSprite` for simpler implementation
-- **Character Creation**: Perfect for hair/face/color previews
-- **UI Elements**: Animated icons, effect previews, tooltips
-- **In-game Effects**: Buff/debuff visual indicators
+**What This Does:**
+1. Adds `Component` derive
+2. Adds `Reflect` derive
+3. Automatically calls `app.register_type::<CharacterData>()` in plugin
+4. Registers reflection traits (Debug, Default)
 
-The system automatically integrates with:
-- Bevy's asset loading (async)
-- Existing RO format parsers (SPR, ACT, PAL)
-- Sprite rendering pipeline with proper transparency handling
+---
+
+### Auto-Registering Events
+
+Events work similarly to components:
+
+```rust
+#[auto_event(
+    plugin = MyDomainPlugin,
+    derive(Debug, Clone),
+    reflect(Debug),
+    register,
+    auto_name,
+)]
+pub struct CharacterSpawned {
+    pub character_id: u32,
+    pub position: Vec3,
+}
+```
+
+**What This Does:**
+1. Adds `Event` derive
+2. Adds `Reflect` derive
+3. Automatically calls `app.add_event::<CharacterSpawned>()` in plugin
+4. Registers type with reflection system
+
+---
+
+### Auto-Registering Systems
+
+Systems are registered to run in specific schedules with configuration:
+
+```rust
+#[auto_system(
+    plugin = MyDomainPlugin,
+    schedule = Update,
+)]
+pub fn update_character_positions(
+    mut query: Query<(&mut Transform, &Velocity), With<CharacterData>>,
+    time: Res<Time>,
+) {
+    for (mut transform, velocity) in &mut query {
+        transform.translation += velocity.0 * time.delta_secs();
+    }
+}
+```
+
+**Attributes Explained:**
+- `plugin = MyDomainPlugin`: Associates system with plugin
+- `schedule = Update`: Runs in `Update` schedule (can be `Startup`, `PostUpdate`, etc.)
+
+**Advanced System Configuration:**
+
+```rust
+#[auto_system(
+    plugin = MyDomainPlugin,
+    schedule = Update,
+    config(
+        run_if = in_state(GameState::Playing),
+        after = physics_system,
+        before = render_system,
+    ),
+)]
+pub fn complex_system(/* ... */) {
+    // System logic
+}
+```
+
+**Configuration Options:**
+- `run_if = <condition>`: System only runs if condition is true
+- `after = <system>`: Runs after specified system
+- `before = <system>`: Runs before specified system
+- `in_set = <system_set>`: Adds to a system set
+
+---
+
+### Auto-Registering Resources
+
+Resources can be automatically initialized:
+
+```rust
+#[auto_resource(
+    plugin = MyDomainPlugin,
+    derive(Debug, Default),
+    reflect(Debug),
+    register,
+    auto_name,
+)]
+pub struct GameSettings {
+    pub music_volume: f32,
+    pub sfx_volume: f32,
+}
+```
+
+**What This Does:**
+1. Adds `Resource` derive
+2. Adds `Reflect` derive (if specified)
+3. Automatically calls `app.init_resource::<GameSettings>()` in plugin
+4. Requires `Default` implementation for initialization
+
+**For Resources Without Default:**
+
+If your resource doesn't implement `Default`, you can insert it manually in the plugin's `build()` method while still using auto-registration for reflection:
+
+```rust
+#[auto_resource(
+    plugin = MyDomainPlugin,
+    reflect(Debug),
+    register,
+    auto_name,
+    // Note: no init attribute, so won't call init_resource
+)]
+pub struct ConnectionPool {
+    pool: Vec<Connection>,
+}
+
+// Then in plugin implementation:
+impl Plugin for MyDomainPlugin {
+    fn build(&self, app: &mut App) {
+        // Auto-registered types are added here automatically
+
+        // Manually insert resource with custom initialization
+        app.insert_resource(ConnectionPool {
+            pool: create_connection_pool(),
+        });
+    }
+}
+```
+
+---
+
+### Working with Generic Types
+
+bevy_auto_plugin supports generic types with concrete type specification:
+
+```rust
+#[auto_component(
+    plugin = MyDomainPlugin,
+    generics(String),  // Specify concrete type for generic
+    derive(Debug, Clone),
+    register,
+    auto_name,
+)]
+pub struct Container<T> {
+    pub value: T,
+}
+```
+
+**Multiple Generic Parameters:**
+
+```rust
+#[auto_component(
+    plugin = MyDomainPlugin,
+    generics(String, u32),  // First is T, second is U
+    derive(Debug),
+    register,
+    auto_name,
+)]
+pub struct GenericPair<T, U> {
+    pub first: T,
+    pub second: U,
+}
+```
+
+This registers `Container<String>` and `GenericPair<String, u32>` specifically.
+
+---
+
+### Quick Reference
+
+| Task | Attribute | Required Fields |
+|------|-----------|----------------|
+| Create Plugin | `#[derive(AutoPlugin)]` + `#[auto_plugin(impl_plugin_trait)]` | None |
+| Register Component | `#[auto_component(...)]` | `plugin` |
+| Register Event | `#[auto_event(...)]` | `plugin` |
+| Register Resource | `#[auto_resource(...)]` | `plugin` |
+| Register System | `#[auto_system(...)]` | `plugin`, `schedule` |
+
+**Common Attributes:**
+- `plugin = <PluginName>` - Required on all
+- `derive(...)` - Standard Rust derives
+- `reflect(...)` - Reflection trait registration
+- `register` - Enable type registration
+- `auto_name` - Auto-set type name
+- `schedule = <Schedule>` - System schedule (Update, Startup, etc.)
+- `config(...)` - System configuration (run_if, before, after, in_set)
+- `generics(...)` - Concrete types for generics
+
+---
+
+### Further Reading
+
+- [bevy_auto_plugin GitHub](https://github.com/StrikeForceZero/bevy_auto_plugin)
+- [Bevy Plugin Documentation](https://docs.rs/bevy/latest/bevy/app/trait.Plugin.html)
+- [Bevy Reflection Guide](https://bevyengine.org/learn/book/plugin-development/)
+
+## Key Systems
+
+### 1. Hierarchical Asset System
+
+**Purpose**: Unified asset loading from multiple sources (GRF archives, data folders, embedded assets)
+
+**Implementation**:
+- Custom `ro://` asset protocol registered with Bevy
+- `RoAssetsPlugin` sets up the asset source before `AssetPlugin`
+- `CompositeAssetSource` combines multiple sources with priority:
+  1. Data folder (highest priority)
+  2. GRF archives (in configured order)
+  3. Embedded assets (fallback)
+
+**Key Files**:
+- `game-engine/src/infrastructure/assets/ro_assets_plugin.rs`
+- `game-engine/src/infrastructure/assets/sources/composite.rs`
+- `game-engine/src/infrastructure/assets/hierarchical_reader.rs`
+
+**Usage**:
+```rust
+// Load any RO asset using ro:// protocol
+let sprite = asset_server.load("ro://data\\sprite\\인간족\\몸통\\여\\여_body.spr");
+let act = asset_server.load("ro://data\\sprite\\인간족\\몸통\\여\\여_body.act");
+```
+
+**Configuration**: `assets/loader.data.toml`
+```toml
+[assets]
+grf = [
+    { path = "data.grf", priority = 2 },
+    { path = "en.grf", priority = 1 }
+]
+data_folder = "assets/data"
+```
+
+### 2. Generic Sprite Rendering System
+
+**Purpose**: Reusable sprite animation system for any RO sprite (characters, items, effects)
+
+**Core Components**:
+- `RoAnimationController`: Controls sprite animation state
+  - Current action index
+  - Frame tracking
+  - Animation delays
+  - Optional palette for color variations
+  - Looping control
+
+- `RoSpriteFactory`: Factory for spawning sprites
+  - `spawn_from_handles()`: Immediate spawn with loaded assets
+  - `spawn_from_paths()`: Async spawn with asset loading
+  - `spawn_hair_preview()`: Convenience for hair previews
+  - `spawn_equipment_preview()`: Convenience for equipment
+
+**Animation System**: `animate_sprites` system
+- Advances frames based on ACT timing data
+- Applies custom palettes (hair colors, etc.)
+- Converts SPR frames to Bevy images with transparency
+
+**Key Files**:
+- `game-engine/src/domain/entities/components.rs`
+- `game-engine/src/domain/entities/sprite_factory.rs`
+- `game-engine/src/domain/entities/animation.rs`
+
+**Usage Example**:
+```rust
+// Character customization preview
+RoSpriteFactory::spawn_hair_preview(
+    &mut commands,
+    hair_sprite_handle,
+    hair_act_handle,
+    Some(hair_color_palette_handle),
+    position,
+);
+```
+
+### 3. Unified Character Entity System
+
+**Purpose**: Complete character representation with state machines and sprite hierarchies
+
+**Architecture**:
+- Uses `moonshine-object` for complex entity hierarchies
+- Uses `seldom_state` for character state machines
+- Three-tier state system:
+  - `AnimationState`: Visual state (Idle, Walking, Attacking, etc.)
+  - `GameplayState`: Game logic state (Normal, Dead, Mounted, etc.)
+  - `ContextState`: Screen context (CharacterSelection, InGame, etc.)
+
+**Components**:
+- `CharacterData`: ID, name, stats
+- `CharacterAppearance`: Job, gender, hair style/color
+- `EquipmentSet`: All equipped items by slot
+- `CharacterSprite`: Visual representation
+
+**Sprite Hierarchy**:
+```
+CharacterRoot
+├── Body
+├── Equipment/HeadBottom
+├── Equipment/HeadTop
+├── Equipment/HeadMid
+├── Equipment/Weapon
+├── Equipment/Shield
+├── Effects/Aura
+└── Shadow
+```
+
+**Key Files**:
+- `game-engine/src/domain/entities/character/mod.rs`
+- `game-engine/src/domain/entities/character/sprite_hierarchy.rs`
+- `game-engine/src/domain/entities/character/states.rs`
+- `game-engine/src/domain/entities/character/components/`
+
+### 4. Terrain Generation
+
+**Purpose**: Convert RO ground files (GND) to 3D Bevy meshes
+
+**Process**:
+1. Load GND file (terrain heightmap, textures, lighting)
+2. Generate mesh vertices from height data
+3. Calculate normals using cross product of diagonals
+4. Smooth normals by averaging neighbors
+5. Apply textures and lighting
+6. Create Bevy mesh and material
+
+**Coordinate Translation**: RO → Bevy
+- RO: Top-left origin, Y=up, Z=south
+- Bevy: Center origin, Y=up, Z=forward
+- Cell size: 10.0 (2x RO's 5.0 for scale)
+- Height multiplier: 5.0
+
+**Key Files**:
+- `game-engine/src/domain/world/terrain.rs`
+- `game-engine/src/utils/coordinates.rs`
+- `game-engine/src/infrastructure/ro_formats/gnd.rs`
+
+### 5. Camera System
+
+**Purpose**: RO-style camera with full control
+
+**Features**:
+- Isometric-like view angle
+- WASD/Arrow keys: Move horizontally
+- Q/E: Move up/down
+- Mouse wheel: Zoom
+- Left mouse drag: Pan
+- Right mouse drag: Rotate
+- R: Reset to initial position
+
+**Implementation**:
+- `Vec3::NEG_Y` as up vector (inverted for RO style)
+- Camera positioned high above terrain
+- Looks at map center
+
+**Key Files**:
+- `game-engine/src/domain/camera/controller.rs`
+- `game-engine/src/domain/camera/components.rs`
+
+## Development Workflow
+
+### Building
+
+```bash
+# Build game engine only
+cd game-engine
+cargo build
+
+# Build entire workspace
+cargo build
+
+# Release build
+cargo build --release
+```
+
+### Running
+
+```bash
+# Run Tauri app (includes UI + game engine)
+cd src-tauri
+cargo tauri dev
+
+# Or from root
+cargo run
+```
+
+### Testing
+
+```bash
+# Run all tests
+cargo test
+
+# Run specific test
+cargo test <test_name>
+```
+
+### Code Quality
+
+```bash
+# Format code
+cargo fmt
+
+# Check formatting
+cargo fmt --check
+
+# Lint with Clippy
+cargo clippy
+
+# Check without building
+cargo check
+```
+
+### Asset Configuration
+
+Edit `assets/loader.data.toml`:
+```toml
+[assets]
+grf = [
+    { path = "path/to/data.grf", priority = 2 },
+    { path = "path/to/en.grf", priority = 1 }
+]
+data_folder = "assets/data"
+```
+
+---
+
+## Best Practices for Contributors
+
+### When Adding New Features
+
+1. **Check existing patterns**: Look for similar features before implementing
+2. **Use bevy_auto_plugin**: Don't manually register systems/events
+3. **Follow layer separation**: Domain logic separate from infrastructure
+4. **Write tests**: Add tests for new domain logic
+5. **Update documentation**: Keep CLAUDE.md and this file current
+
+---
+
+**Last Updated**: 2025-10-03
+**Project Version**: 0.1.0
+**Bevy Version**: 0.16.1
+**Tauri Version**: 2.0
