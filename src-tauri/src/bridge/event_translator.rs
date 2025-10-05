@@ -144,8 +144,8 @@ pub fn translate_tauri_events(
                     hair_color,
                 });
             }
-            TauriEvent::EnterCharacterCreation => {
-                open_creation_events.write(OpenCharacterCreationEvent { slot: 0 });
+            TauriEvent::EnterCharacterCreation { slot } => {
+                open_creation_events.write(OpenCharacterCreationEvent { slot });
             }
             TauriEvent::ExitCharacterCreation => {
                 close_creation_events.write(CloseCharacterCreationEvent);

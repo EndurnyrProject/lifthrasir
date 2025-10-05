@@ -35,8 +35,11 @@ pub async fn update_creation_preview(
 
 /// Enter character creation screen
 #[tauri::command]
-pub async fn enter_character_creation(app_bridge: State<'_, AppBridge>) -> Result<(), String> {
-    app_bridge.enter_character_creation().await
+pub async fn enter_character_creation(
+    slot: u8,
+    app_bridge: State<'_, AppBridge>,
+) -> Result<(), String> {
+    app_bridge.enter_character_creation(slot).await
 }
 
 /// Exit character creation screen

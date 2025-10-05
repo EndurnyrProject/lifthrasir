@@ -82,7 +82,9 @@ pub enum TauriEvent {
         hair_color: u16,
     },
     /// Enter character creation screen
-    EnterCharacterCreation,
+    EnterCharacterCreation {
+        slot: u8,
+    },
     /// Exit character creation screen
     ExitCharacterCreation,
 }
@@ -271,9 +273,9 @@ impl AppBridge {
     }
 
     /// Enter character creation screen
-    pub async fn enter_character_creation(&self) -> Result<(), String> {
+    pub async fn enter_character_creation(&self, slot: u8) -> Result<(), String> {
         self.tauri_tx
-            .send(TauriEvent::EnterCharacterCreation)
+            .send(TauriEvent::EnterCharacterCreation { slot })
             .map_err(|e| format!("Failed to enter creation screen: {}", e))?;
         Ok(())
     }

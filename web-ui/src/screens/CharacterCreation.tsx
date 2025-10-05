@@ -50,11 +50,11 @@ export default function CharacterCreation({
   useEffect(() => {
     if (!enteredRef.current) {
       enteredRef.current = true;
-      invoke('enter_character_creation').catch((err) => {
+      invoke('enter_character_creation', { slot: selectedSlot }).catch((err) => {
         setError('Failed to enter character creation');
       });
     }
-  }, []);
+  }, [selectedSlot]);
 
   useEffect(() => {
     if (assetsLoadedRef.current) {
