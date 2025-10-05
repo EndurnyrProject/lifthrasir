@@ -66,10 +66,6 @@ pub enum TauriEvent {
         char_id: u32,
         response_tx: oneshot::Sender<Result<(), String>>,
     },
-    /// Update sprite positions event
-    UpdateSpritePositions {
-        positions: Vec<crate::commands::character_selection::SpritePosition>,
-    },
     /// Get available hairstyles for a gender
     GetHairstyles {
         gender: u8,
@@ -82,9 +78,7 @@ pub enum TauriEvent {
         hair_color: u16,
     },
     /// Enter character creation screen
-    EnterCharacterCreation {
-        slot: u8,
-    },
+    EnterCharacterCreation { slot: u8 },
     /// Exit character creation screen
     ExitCharacterCreation,
 }
@@ -224,17 +218,6 @@ impl AppBridge {
             .await
             .map_err(|_| "Delete character timeout".to_string())?
             .map_err(|_| "Response channel closed unexpectedly".to_string())?
-    }
-
-    /// Send sprite position updates (fire-and-forget, no response)
-    pub async fn update_sprite_positions(
-        &self,
-        positions: Vec<crate::commands::character_selection::SpritePosition>,
-    ) -> Result<(), String> {
-        self.tauri_tx
-            .send(TauriEvent::UpdateSpritePositions { positions })
-            .map_err(|e| format!("Failed to send sprite positions: {}", e))?;
-        Ok(())
     }
 
     /// Get available hairstyles for a gender

@@ -7,8 +7,8 @@ use game_engine::domain::character::{
     CreateCharacterRequestEvent, DeleteCharacterRequestEvent, Gender, JobClass,
     OpenCharacterCreationEvent, RequestCharacterListEvent, SelectCharacterEvent,
 };
-use game_engine::presentation::ui::character_creation::UpdateCharacterPreviewEvent;
 use game_engine::infrastructure::networking::session::UserSession;
+use game_engine::presentation::ui::character_creation::UpdateCharacterPreviewEvent;
 use game_engine::presentation::ui::events::{LoginAttemptEvent, ServerSelectedEvent};
 use secrecy::SecretString;
 
@@ -25,12 +25,11 @@ pub fn translate_tauri_events(
     mut update_preview_events: EventWriter<UpdateCharacterPreviewEvent>,
     mut open_creation_events: EventWriter<OpenCharacterCreationEvent>,
     mut close_creation_events: EventWriter<CloseCharacterCreationEvent>,
-    mut next_state: ResMut<NextState<GameState>>,
+    next_state: ResMut<NextState<GameState>>,
     mut pending: ResMut<PendingSenders>,
     session: Option<Res<UserSession>>,
     catalog: Option<Res<HeadStyleCatalog>>,
 ) {
-    // Try to receive all pending events without blocking
     while let Ok(event) = tauri_rx.0.try_recv() {
         match event {
             TauriEvent::Login {
@@ -106,7 +105,6 @@ pub fn translate_tauri_events(
                     character_id: char_id,
                 });
             }
-            TauriEvent::UpdateSpritePositions { .. } => {}
             TauriEvent::GetHairstyles {
                 gender,
                 response_tx,

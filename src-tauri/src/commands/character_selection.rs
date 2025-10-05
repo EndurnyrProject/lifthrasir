@@ -1,5 +1,5 @@
 use crate::bridge::AppBridge;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tauri::State;
 
 #[derive(Debug, Deserialize)]
@@ -9,13 +9,6 @@ pub struct CreateCharacterRequest {
     pub hair_style: u16,
     pub hair_color: u16,
     pub sex: u8, // 0 = Female, 1 = Male
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct SpritePosition {
-    pub slot: u32,
-    pub x: f32,
-    pub y: f32,
 }
 
 /// Get character list command - fetches all characters from Bevy
@@ -66,13 +59,4 @@ pub async fn delete_character(
 ) -> Result<serde_json::Value, String> {
     app_bridge.delete_character(char_id).await?;
     Ok(serde_json::json!({ "success": true }))
-}
-
-/// Update sprite positions command - sends measured card positions to Bevy
-#[tauri::command]
-pub async fn update_sprite_positions(
-    positions: Vec<SpritePosition>,
-    app_bridge: State<'_, AppBridge>,
-) -> Result<(), String> {
-    app_bridge.update_sprite_positions(positions).await
 }

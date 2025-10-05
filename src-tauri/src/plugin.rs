@@ -96,7 +96,6 @@ pub struct TauriIntegrationPlugin;
 
 impl Plugin for TauriIntegrationPlugin {
     fn build(&self, app: &mut BevyApp) {
-        // CRITICAL: Add RO asset source BEFORE AssetPlugin (which is part of DefaultPlugins)
         let ro_asset_source_plugin =
             game_engine::infrastructure::assets::ro_assets_plugin::RoAssetsPlugin::with_unified_source();
         app.add_plugins(ro_asset_source_plugin);
@@ -134,7 +133,7 @@ impl Plugin for TauriIntegrationPlugin {
             bevy_tokio_tasks::TokioTasksPlugin::default(),
             game_engine::LifthrasirPlugin,
             game_engine::AssetsPlugin,
-            game_engine::AssetCatalogPlugin, // Build head style catalog on startup
+            game_engine::AssetCatalogPlugin,
             game_engine::CharacterDomainPlugin,
             game_engine::AuthenticationPlugin,
         ));
@@ -174,7 +173,6 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::character_selection::select_character,
                 commands::character_selection::create_character,
                 commands::character_selection::delete_character,
-                commands::character_selection::update_sprite_positions,
                 commands::character_creation::get_hairstyles,
                 commands::character_creation::update_creation_preview,
                 commands::character_creation::enter_character_creation,
@@ -263,7 +261,6 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
             bevy::audio::AudioPlugin::default(),
             bevy::animation::AnimationPlugin::default(),
             bevy::gizmos::GizmoPlugin::default(),
-            // Note: DefaultPickingPlugins is NOT disabled from DefaultPlugins, so don't add it here
         ));
 
         // Wait for all plugins to be ready

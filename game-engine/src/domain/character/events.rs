@@ -1,4 +1,4 @@
-use super::models::{CharacterCreationError, CharacterCreationForm, CharacterData};
+use super::models::{CharacterCreationForm, CharacterData};
 use bevy::prelude::*;
 
 #[derive(Event, Debug)]

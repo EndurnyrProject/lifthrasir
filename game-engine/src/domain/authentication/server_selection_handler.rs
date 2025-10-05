@@ -1,5 +1,4 @@
 use crate::{
-    core::state::GameState,
     infrastructure::networking::{session::UserSession, CharServerClient},
     presentation::ui::events::ServerSelectedEvent,
 };

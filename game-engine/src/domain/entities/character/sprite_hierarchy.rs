@@ -174,7 +174,7 @@ pub fn spawn_character_sprite_hierarchy(
                     character_entity, root_entity
                 );
                 // Clean up the orphaned root entity we just created
-                if let Ok(mut root) = world.get_entity_mut(root_entity) {
+                if let Ok(root) = world.get_entity_mut(root_entity) {
                     root.despawn();
                 }
             }

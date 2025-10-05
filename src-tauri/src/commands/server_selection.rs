@@ -1,11 +1,5 @@
 use crate::bridge::AppBridge;
-use serde::Deserialize;
 use tauri::State;
-
-#[derive(Debug, Deserialize)]
-pub struct ServerSelectionRequest {
-    pub server_index: usize,
-}
 
 /// Server selection command that sends the selected server index to Bevy
 /// Returns success on completion

@@ -5,7 +5,6 @@ use crate::{
         models::{AuthenticationContext, ServerConfiguration},
     },
     infrastructure::config::ClientConfig,
-    presentation::ui::events::LoginAttemptEvent,
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_plugin, AutoPlugin};
@@ -91,8 +90,8 @@ fn check_client_config_loaded(
     schedule = Update
 )]
 fn server_selection_handler(
-    mut commands: Commands,
-    mut server_events: EventReader<crate::presentation::ui::events::ServerSelectedEvent>,
+    commands: Commands,
+    server_events: EventReader<crate::presentation::ui::events::ServerSelectedEvent>,
     session: Option<ResMut<crate::infrastructure::networking::session::UserSession>>,
     char_client: Option<ResMut<crate::infrastructure::networking::CharServerClient>>,
 ) {

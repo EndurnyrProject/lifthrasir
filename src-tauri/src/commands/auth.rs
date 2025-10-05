@@ -17,7 +17,6 @@ pub async fn login(
 ) -> Result<serde_json::Value, String> {
     let session_data = app_bridge.login(request.username, request.password).await?;
 
-    // Wrap in the format the frontend expects
     Ok(serde_json::json!({
         "success": true,
         "session_data": session_data
