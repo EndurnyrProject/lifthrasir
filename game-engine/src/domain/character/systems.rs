@@ -186,13 +186,7 @@ pub fn handle_create_character(
         if let Some(client) = char_client.as_deref_mut() {
             let packet = ChMakeCharPacket {
                 name: event.form.name.clone(),
-                str: event.form.str,
-                agi: event.form.agi,
-                vit: event.form.vit,
-                int: event.form.int,
-                dex: event.form.dex,
-                luk: event.form.luk,
-                char_num: event.form.slot,
+                slot: event.form.slot,
                 hair_color: event.form.hair_color,
                 hair_style: event.form.hair_style,
                 starting_job: event.form.starting_job as u16,
@@ -234,14 +228,11 @@ pub fn handle_zone_server_info(
 
 pub fn handle_character_created(
     mut events: EventReader<CharacterCreatedEvent>,
-    mut refresh_events: EventWriter<RefreshCharacterListEvent>,
     mut state: ResMut<CharacterSelectionState>,
 ) {
-    for event in events.read() {
+    for _event in events.read() {
         state.is_creating_character = false;
         state.creation_slot = None;
-
-        refresh_events.write(RefreshCharacterListEvent);
     }
 }
 
@@ -251,6 +242,49 @@ pub fn handle_character_deleted(
 ) {
     for _event in events.read() {
         refresh_events.write(RefreshCharacterListEvent);
+    }
+}
+
+pub fn handle_open_character_creation(
+    mut events: EventReader<OpenCharacterCreationEvent>,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut selection_state: ResMut<CharacterSelectionState>,
+) {
+    for event in events.read() {
+        selection_state.is_creating_character = true;
+        selection_state.creation_slot = Some(event.slot);
+        next_state.set(GameState::CharacterCreation);
+    }
+}
+
+pub fn handle_close_character_creation(
+    mut events: EventReader<CloseCharacterCreationEvent>,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut selection_state: ResMut<CharacterSelectionState>,
+    mut refresh_events: EventWriter<RefreshCharacterListEvent>,
+) {
+    for _event in events.read() {
+        selection_state.is_creating_character = false;
+        selection_state.creation_slot = None;
+        next_state.set(GameState::CharacterSelection);
+
+        // Request fresh character list from server when exiting creation
+        refresh_events.write(RefreshCharacterListEvent);
+    }
+}
+
+pub fn handle_refresh_character_list(
+    mut events: EventReader<RefreshCharacterListEvent>,
+    mut char_client: Option<ResMut<CharServerClient>>,
+) {
+    for _event in events.read() {
+        if let Some(client) = char_client.as_deref_mut() {
+            if let Err(e) = client.request_charlist() {
+                error!("Failed to request character list refresh: {:?}", e);
+            }
+        } else {
+            warn!("CharServerClient not initialized - cannot refresh character list");
+        }
     }
 }
 

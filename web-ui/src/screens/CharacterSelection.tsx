@@ -86,6 +86,7 @@ export default function CharacterSelection({
   const [screen, setScreen] = useState<Screen>('loading');
   const [characters, setCharacters] = useState<CharacterData[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [creationSlot, setCreationSlot] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
@@ -132,6 +133,7 @@ export default function CharacterSelection({
 
   const handleCharacterSelect = async (slot: number, character: CharacterData | null) => {
     if (!character) {
+      setCreationSlot(slot);
       setScreen('creation');
       return;
     }
@@ -163,6 +165,11 @@ export default function CharacterSelection({
   };
 
   const handleCharacterCreated = async () => {
+    // Exit character creation in backend
+    await invoke('exit_character_creation').catch(err => {
+      console.error('Failed to exit character creation:', err);
+    });
+
     try {
       const result = await invoke<CharacterListResponse>('get_character_list');
 
@@ -221,8 +228,14 @@ export default function CharacterSelection({
   if (screen === 'creation') {
     return (
       <CharacterCreation
+        selectedSlot={creationSlot}
         onCharacterCreated={handleCharacterCreated}
-        onCancel={() => setScreen('list')}
+        onCancel={async () => {
+          await invoke('exit_character_creation').catch(err => {
+            console.error('Failed to exit character creation:', err);
+          });
+          setScreen('list');
+        }}
       />
     );
   }

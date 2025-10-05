@@ -28,7 +28,7 @@ pub struct CharacterSlotContainer {
 
 /// System to spawn sprite containers for all character slots
 pub fn setup_character_slot_containers(mut commands: Commands, windows: Query<&Window>) {
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         warn!("No window found for character slot container setup");
         return;
     };
@@ -36,8 +36,6 @@ pub fn setup_character_slot_containers(mut commands: Commands, windows: Query<&W
     // Create containers for all 8 slots
     for slot in 0..8 {
         let position = slot_position(slot, window);
-
-        info!("📍 Slot {} container at position: {:?}", slot, position);
 
         commands.spawn((
             Name::new(format!("CharacterSlotContainer_{}", slot)),
@@ -50,8 +48,6 @@ pub fn setup_character_slot_containers(mut commands: Commands, windows: Query<&W
             InheritedVisibility::default(),
         ));
     }
-
-    info!("📦 Created character slot containers for 8 slots");
 }
 
 /// System to spawn character sprites when character list is received
@@ -70,35 +66,20 @@ pub fn spawn_character_sprites_on_list_received(
 ) {
     // Only process the last event to avoid duplicates
     if let Some(event) = char_list_events.read().last() {
-        info!(
-            "🎮 CharacterListReceivedEvent received with {} slots",
-            event.characters.len()
-        );
-
         // Clear existing character entities
         for character_entity in existing_characters.iter() {
             commands.entity(character_entity).despawn();
         }
 
-        info!(
-            "✨ Spawning unified character entities for {} slots",
-            event.characters.len()
-        );
-
         // Spawn unified character entities for each slot
         for (slot, char_data_opt) in event.characters.iter().enumerate() {
             if let Some(character) = char_data_opt {
                 // Find the container for this slot
-                if let Some((container_entity, mut sprite_container, container_transform)) =
+                if let Some((_container_entity, mut sprite_container, container_transform)) =
                     containers
                         .iter_mut()
                         .find(|(_, container, _)| container.slot == slot as u8)
                 {
-                    info!(
-                        "👤 Creating unified character entity for: {} in slot {}",
-                        character.name, slot
-                    );
-
                     // Use container position as spawn position for character
                     let spawn_position = container_transform.translation;
 
@@ -121,11 +102,6 @@ pub fn spawn_character_sprites_on_list_received(
                             spawn_position,
                         });
                     });
-
-                    info!(
-                        "✅ Spawned unified character entity {:?} for: {} at position {:?}",
-                        character_entity, character.name, spawn_position
-                    );
                 }
             }
         }
@@ -137,7 +113,7 @@ pub fn update_sprite_positions_on_window_resize(
     mut containers: Query<(&CharacterSlotContainer, &mut Transform)>,
     windows: Query<&Window, Changed<Window>>,
 ) {
-    if let Ok(window) = windows.get_single() {
+    if let Ok(window) = windows.single() {
         for (container, mut transform) in containers.iter_mut() {
             let new_position = slot_position(container.slot, window);
             transform.translation = new_position;
@@ -158,29 +134,17 @@ pub fn cleanup_character_selection(
     slot_containers: Query<Entity, With<CharacterSlotContainer>>,
     camera_query: Query<Entity, With<super::CharacterSelectionCamera>>,
 ) {
-    info!("🧹 Cleaning up character selection entities on state exit");
-
-    // Despawn all character entities
     for entity in character_entities.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
-    info!(
-        "🗑️ Despawned {} character entities",
-        character_entities.iter().count()
-    );
 
     // Despawn all slot containers
     for entity in slot_containers.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
-    info!(
-        "🗑️ Despawned {} slot container entities",
-        slot_containers.iter().count()
-    );
 
     // Despawn camera
     for entity in camera_query.iter() {
         commands.entity(entity).despawn();
-        info!("🗑️ Despawned character selection camera: {:?}", entity);
     }
 }

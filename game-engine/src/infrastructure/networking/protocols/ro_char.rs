@@ -8,14 +8,16 @@ pub const CH_ENTER: u16 = 0x0065;
 pub const HC_ACCEPT_ENTER: u16 = 0x006B;
 pub const CH_SELECT_CHAR: u16 = 0x0066;
 pub const HC_NOTIFY_ZONESVR: u16 = 0x0071;
-pub const CH_MAKE_CHAR: u16 = 0x0067;
-pub const HC_ACCEPT_MAKECHAR: u16 = 0x006D;
+pub const CH_MAKE_CHAR: u16 = 0x0A39;
+pub const HC_ACCEPT_MAKECHAR: u16 = 0x0B6F;
 pub const CH_DELETE_CHAR: u16 = 0x0068;
-pub const HC_ACCEPT_DELETECHAR: u16 = 0x006E;
+pub const HC_REFUSE_MAKECHAR: u16 = 0x006E;
+pub const HC_ACCEPT_DELETECHAR: u16 = 0x006F;
 pub const HC_REFUSE_DELETECHAR: u16 = 0x0070;
-pub const HC_REFUSE_MAKECHAR: u16 = 0x006F; // Fixed duplicate ID
 pub const CH_PING: u16 = 0x0187;
 pub const HC_PING: u16 = 0x0187;
+pub const CH_CHARLIST_REQ: u16 = 0x09A1;
+pub const HC_ACK_CHARINFO_PER_PAGE: u16 = 0x099D;
 pub const HC_CHARACTER_LIST: u16 = 0x082D;
 pub const HC_BLOCK_CHARACTER: u16 = 0x020D;
 pub const HC_SECOND_PASSWD_LOGIN: u16 = 0x08B9;
@@ -116,7 +118,10 @@ impl CharacterInfo {
         let dex = cursor.read_u8()?;
         let luk = cursor.read_u8()?;
         let char_num = cursor.read_u8()?;
-        let rename = cursor.read_u8()?;
+        let _hair_color_alt = cursor.read_u8()?; // Second hair color field (duplicate)
+
+        let rename_u16 = cursor.read_u16::<LittleEndian>()?; // rename is u16 not u8
+        let rename = rename_u16 as u8; // Convert to u8 for our structure
 
         // Read last map (16 bytes)
         let mut map_bytes = [0u8; 16];
@@ -563,13 +568,7 @@ impl HcSecondPasswdLoginPacket {
 #[derive(Debug, Clone)]
 pub struct ChMakeCharPacket {
     pub name: String,
-    pub str: u8,
-    pub agi: u8,
-    pub vit: u8,
-    pub int: u8,
-    pub dex: u8,
-    pub luk: u8,
-    pub char_num: u8,
+    pub slot: u8,
     pub hair_color: u16,
     pub hair_style: u16,
     pub starting_job: u16,
@@ -581,20 +580,14 @@ impl ChMakeCharPacket {
         let mut buf = Vec::new();
         buf.write_u16::<LittleEndian>(CH_MAKE_CHAR).unwrap();
 
-        // Write character name (24 bytes)
+        // Write character name (24 bytes, null-terminated)
         let mut name_bytes = [0u8; 24];
         let name_data = self.name.as_bytes();
         let len = name_data.len().min(23);
         name_bytes[..len].copy_from_slice(&name_data[..len]);
         buf.write_all(&name_bytes).unwrap();
 
-        buf.write_u8(self.str).unwrap();
-        buf.write_u8(self.agi).unwrap();
-        buf.write_u8(self.vit).unwrap();
-        buf.write_u8(self.int).unwrap();
-        buf.write_u8(self.dex).unwrap();
-        buf.write_u8(self.luk).unwrap();
-        buf.write_u8(self.char_num).unwrap();
+        buf.write_u8(self.slot).unwrap();
         buf.write_u16::<LittleEndian>(self.hair_color).unwrap();
         buf.write_u16::<LittleEndian>(self.hair_style).unwrap();
         buf.write_u16::<LittleEndian>(self.starting_job).unwrap();
@@ -641,12 +634,72 @@ impl ChPingPacket {
 }
 
 #[derive(Debug, Clone)]
+pub struct ChCharlistReqPacket;
+
+impl ChCharlistReqPacket {
+    pub fn serialize() -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.write_u16::<LittleEndian>(CH_CHARLIST_REQ).unwrap();
+        buf
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HcAckCharinfoPerPagePacket {
+    pub characters: Vec<CharacterInfo>,
+}
+
+impl HcAckCharinfoPerPagePacket {
+    pub fn parse(data: &[u8]) -> io::Result<Self> {
+        let mut cursor = Cursor::new(data);
+
+        let _packet_id = cursor.read_u16::<LittleEndian>()?;
+        let packet_len = cursor.read_u16::<LittleEndian>()?;
+
+        if packet_len < 4 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid packet length",
+            ));
+        }
+
+        let data_len = (packet_len - 4) as usize;
+        const CHAR_INFO_SIZE: usize = 175; // Size of each character entry
+
+        if data_len % CHAR_INFO_SIZE != 0 {
+            warn!(
+                "HC_ACK_CHARINFO_PER_PAGE data length {} not multiple of {}",
+                data_len, CHAR_INFO_SIZE
+            );
+        }
+
+        let char_count = data_len / CHAR_INFO_SIZE;
+        let mut characters = Vec::with_capacity(char_count);
+
+        for _ in 0..char_count {
+            let mut char_data = vec![0u8; CHAR_INFO_SIZE];
+            cursor.read_exact(&mut char_data)?;
+            match CharacterInfo::parse(&char_data) {
+                Ok(char_info) => characters.push(char_info),
+                Err(e) => {
+                    error!("Failed to parse character info: {}", e);
+                    continue;
+                }
+            }
+        }
+
+        Ok(Self { characters })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum CharServerPacket {
     ChEnter(ChEnterPacket),
     ChSelectChar(ChSelectCharPacket),
     ChMakeChar(ChMakeCharPacket),
     ChDeleteChar(ChDeleteCharPacket),
     ChPing,
+    ChCharlistReq,
 }
 
 #[derive(Debug, Clone)]
@@ -659,6 +712,7 @@ pub enum CharServerResponse {
     HcRefuseDeleteChar(u8), // error code
     HcPing,
     HcCharacterList(HcCharacterListPacket),
+    HcAckCharinfoPerPage(HcAckCharinfoPerPagePacket),
     HcBlockCharacter(HcBlockCharacterPacket),
     HcSecondPasswdLogin(HcSecondPasswdLoginPacket),
 }

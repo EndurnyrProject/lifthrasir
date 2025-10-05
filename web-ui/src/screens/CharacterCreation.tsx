@@ -21,11 +21,13 @@ interface HairstylesResponse {
 }
 
 interface CharacterCreationProps {
+  selectedSlot: number;
   onCharacterCreated: () => void;
   onCancel: () => void;
 }
 
 export default function CharacterCreation({
+  selectedSlot,
   onCharacterCreated,
   onCancel
 }: CharacterCreationProps) {
@@ -161,7 +163,7 @@ export default function CharacterCreation({
       const result = await invoke<{ success: boolean; error?: string }>('create_character', {
         request: {
           name: characterName,
-          slot: 0, // Find first empty slot
+          slot: selectedSlot,
           hair_style: selectedHairStyle,
           hair_color: selectedHairColor,
           sex: selectedGender

@@ -1,8 +1,8 @@
-use super::{Gender, JobClass};
+use crate::domain::character::{Gender, JobClass};
 use crate::domain::entities::character::{
     components::{CharacterAppearance, CharacterData, CharacterStats, EquipmentSet},
     spawn_unified_character,
-    sprite_hierarchy::SpawnCharacterSpriteEvent,
+    sprite_hierarchy::{CharacterObjectTree, SpawnCharacterSpriteEvent},
 };
 use bevy::prelude::*;
 
@@ -148,14 +148,24 @@ pub fn update_preview_position_on_window_resize(
 
 pub fn cleanup_character_creation_preview(
     mut commands: Commands,
-    preview_query: Query<Entity, With<CharacterCreationPreview>>,
+    preview_query: Query<(Entity, Option<&CharacterObjectTree>), With<CharacterCreationPreview>>,
     camera_query: Query<Entity, With<CharacterCreationCamera>>,
     mut creation_state: ResMut<CharacterCreationState>,
 ) {
-    for entity in preview_query.iter() {
-        commands.entity(entity).despawn_recursive();
+    // Despawn preview characters and their sprite hierarchies
+    for (entity, object_tree) in preview_query.iter() {
+        // Despawn the sprite root (which recursively despawns all sprite children)
+        if let Some(tree) = object_tree {
+            commands.entity(tree.root).despawn();
+        } else {
+            warn!("Preview entity {:?} has no CharacterObjectTree", entity);
+        }
+
+        // Despawn the character entity itself
+        commands.entity(entity).despawn();
     }
 
+    // Despawn camera
     for entity in camera_query.iter() {
         commands.entity(entity).despawn();
     }

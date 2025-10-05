@@ -1,11 +1,11 @@
 use super::components::CharacterSelectionState;
-use super::creation::{
+use super::events::*;
+use super::systems::*;
+use crate::presentation::ui::character_creation::{
     cleanup_character_creation_preview, handle_enter_character_creation,
     handle_update_character_preview, setup_character_creation_camera,
     update_preview_position_on_window_resize, CharacterCreationState,
 };
-use super::events::*;
-use super::systems::*;
 use crate::core::state::GameState;
 use crate::domain::entities::animation::animate_sprites;
 use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
@@ -54,7 +54,7 @@ impl Plugin for CharacterDomainPlugin {
             .add_event::<CloseCharacterCreationEvent>()
             .add_event::<CharacterHoverEvent>()
             .add_event::<RefreshCharacterListEvent>()
-            .add_event::<super::creation::UpdateCharacterPreviewEvent>();
+            .add_event::<crate::presentation::ui::character_creation::UpdateCharacterPreviewEvent>();
 
         // Setup character selection rendering (camera and containers)
         app.add_systems(
@@ -84,6 +84,9 @@ impl Plugin for CharacterDomainPlugin {
                 handle_zone_server_info,
                 handle_character_created,
                 handle_character_deleted,
+                handle_open_character_creation,
+                handle_close_character_creation,
+                handle_refresh_character_list, // Handle character list refresh requests
             )
                 .chain(), // Chain them to ensure update runs before event handlers
         );

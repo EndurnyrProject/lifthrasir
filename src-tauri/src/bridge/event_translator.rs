@@ -3,10 +3,11 @@ use crate::bridge::pending_senders::PendingSenders;
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::character::{
-    catalog::HeadStyleCatalog, creation::UpdateCharacterPreviewEvent, CharacterCreationForm,
+    catalog::HeadStyleCatalog, CharacterCreationForm, CloseCharacterCreationEvent,
     CreateCharacterRequestEvent, DeleteCharacterRequestEvent, Gender, JobClass,
-    RequestCharacterListEvent, SelectCharacterEvent,
+    OpenCharacterCreationEvent, RequestCharacterListEvent, SelectCharacterEvent,
 };
+use game_engine::presentation::ui::character_creation::UpdateCharacterPreviewEvent;
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::{LoginAttemptEvent, ServerSelectedEvent};
 use secrecy::SecretString;
@@ -22,6 +23,8 @@ pub fn translate_tauri_events(
     mut create_char_events: EventWriter<CreateCharacterRequestEvent>,
     mut delete_char_events: EventWriter<DeleteCharacterRequestEvent>,
     mut update_preview_events: EventWriter<UpdateCharacterPreviewEvent>,
+    mut open_creation_events: EventWriter<OpenCharacterCreationEvent>,
+    mut close_creation_events: EventWriter<CloseCharacterCreationEvent>,
     mut next_state: ResMut<NextState<GameState>>,
     mut pending: ResMut<PendingSenders>,
     session: Option<Res<UserSession>>,
@@ -142,10 +145,10 @@ pub fn translate_tauri_events(
                 });
             }
             TauriEvent::EnterCharacterCreation => {
-                next_state.set(GameState::CharacterCreation);
+                open_creation_events.write(OpenCharacterCreationEvent { slot: 0 });
             }
             TauriEvent::ExitCharacterCreation => {
-                next_state.set(GameState::CharacterSelection);
+                close_creation_events.write(CloseCharacterCreationEvent);
             }
         }
     }

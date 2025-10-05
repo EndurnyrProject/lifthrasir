@@ -1,10 +1,11 @@
 use super::errors::NetworkError;
 use super::protocols::ro_char::{
-    ChDeleteCharPacket, ChEnterPacket, ChMakeCharPacket, ChPingPacket, ChSelectCharPacket,
-    CharServerResponse, CharacterInfo, HcAcceptEnterPacket, HcBlockCharacterPacket,
-    HcCharacterListPacket, HcNotifyZonesvrPacket, HcSecondPasswdLoginPacket, HC_ACCEPT_DELETECHAR,
-    HC_ACCEPT_ENTER, HC_ACCEPT_MAKECHAR, HC_BLOCK_CHARACTER, HC_CHARACTER_LIST, HC_NOTIFY_ZONESVR,
-    HC_PING, HC_REFUSE_DELETECHAR, HC_REFUSE_MAKECHAR, HC_SECOND_PASSWD_LOGIN,
+    ChCharlistReqPacket, ChDeleteCharPacket, ChEnterPacket, ChMakeCharPacket, ChPingPacket,
+    ChSelectCharPacket, CharServerResponse, CharacterInfo, HcAcceptEnterPacket,
+    HcAckCharinfoPerPagePacket, HcBlockCharacterPacket, HcCharacterListPacket,
+    HcNotifyZonesvrPacket, HcSecondPasswdLoginPacket, HC_ACCEPT_DELETECHAR, HC_ACCEPT_ENTER,
+    HC_ACCEPT_MAKECHAR, HC_ACK_CHARINFO_PER_PAGE, HC_BLOCK_CHARACTER, HC_CHARACTER_LIST,
+    HC_NOTIFY_ZONESVR, HC_PING, HC_REFUSE_DELETECHAR, HC_REFUSE_MAKECHAR, HC_SECOND_PASSWD_LOGIN,
 };
 use super::session::UserSession;
 use bevy::prelude::*;
@@ -104,6 +105,12 @@ impl CharServerClient {
         // The character list is received automatically after CH_ENTER
         // This function just returns the cached list
         Ok(self.characters.clone())
+    }
+
+    pub fn request_charlist(&mut self) -> Result<(), NetworkError> {
+        self.send_packet(&ChCharlistReqPacket::serialize())?;
+        info!("Sent CH_CHARLIST_REQ to refresh character list");
+        Ok(())
     }
 
     pub fn select_character(&mut self, char_num: u8) -> Result<(), NetworkError> {
@@ -443,6 +450,55 @@ impl CharServerClient {
                                         }
                                     }
                                 }
+                                HC_ACK_CHARINFO_PER_PAGE => {
+                                    // Variable length packet - check for packet length
+                                    if data.len() - cursor < 4 {
+                                        debug!("Incomplete HC_ACK_CHARINFO_PER_PAGE packet header");
+                                        break;
+                                    }
+
+                                    let packet_len =
+                                        u16::from_le_bytes([data[cursor + 2], data[cursor + 3]])
+                                            as usize;
+                                    debug!("HC_ACK_CHARINFO_PER_PAGE packet length: {}", packet_len);
+
+                                    if data.len() - cursor < packet_len {
+                                        debug!(
+                                            "Incomplete HC_ACK_CHARINFO_PER_PAGE packet: have {}, need {}",
+                                            data.len() - cursor,
+                                            packet_len
+                                        );
+                                        break;
+                                    }
+
+                                    match HcAckCharinfoPerPagePacket::parse(
+                                        &data[cursor..cursor + packet_len],
+                                    ) {
+                                        Ok(packet) => {
+                                            // Only update character list if packet contains characters
+                                            // Empty packets are end-of-pagination markers
+                                            if !packet.characters.is_empty() {
+                                                info!(
+                                                    "Received character list refresh with {} characters",
+                                                    packet.characters.len()
+                                                );
+                                                self.characters = packet.characters.clone();
+                                                responses.push(CharServerResponse::HcAckCharinfoPerPage(
+                                                    packet,
+                                                ));
+                                            }
+
+                                            cursor += packet_len;
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                "Failed to parse HC_ACK_CHARINFO_PER_PAGE packet: {:?}",
+                                                e
+                                            );
+                                            cursor += packet_len;
+                                        }
+                                    }
+                                }
                                 _ => {
                                     warn!(
                                         "Unknown packet ID: 0x{:04X} at cursor position {} of {}",
@@ -617,6 +673,13 @@ pub fn char_client_update_system(
                             state: packet.state,
                             description: packet.state_description().to_string(),
                         });
+                    }
+                    CharServerResponse::HcAckCharinfoPerPage(packet) => {
+                        info!(
+                            "Received character list page with {} characters",
+                            packet.characters.len()
+                        );
+                        events.write(CharServerEvent::CharacterListReceived(packet.characters));
                     }
                 }
             }
