@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useState, useEffect } from 'react';
-import { loadAsset } from '../lib/assets';
+import { useState } from 'react';
 import './ServerSelection.css';
 
 interface ServerInfo {
@@ -31,26 +30,6 @@ export default function ServerSelection({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadBackground = async () => {
-      try {
-        const url = await loadAsset('login_screen.png');
-        setBackgroundUrl(url);
-      } catch (err) {
-        setError('Failed to load background image');
-      }
-    };
-
-    loadBackground();
-
-    return () => {
-      if (backgroundUrl) {
-        URL.revokeObjectURL(backgroundUrl);
-      }
-    };
-  }, []);
 
   const handleServerSelect = (index: number, server: ServerInfo) => {
     // Don't select maintenance servers
@@ -114,12 +93,6 @@ export default function ServerSelection({
   return (
     <div
       className="server-selection-container"
-      style={backgroundUrl ? {
-        backgroundImage: `url(${backgroundUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
-      } : {}}
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >

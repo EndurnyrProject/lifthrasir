@@ -7,6 +7,19 @@
   background: transparent;
 }
 
+/* Dark overlay to dim the background */
+.character-creation-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 0;
+  pointer-events: none;
+}
+
 /* Left half - Character preview */
 .character-preview-container {
   flex: 1;
@@ -15,6 +28,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 1; /* Above the overlay */
 }
 
 .character-sprite-preview {
@@ -44,6 +58,8 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  position: relative;
+  z-index: 1; /* Above the overlay */
 }
 
 .customization-panel h1 {

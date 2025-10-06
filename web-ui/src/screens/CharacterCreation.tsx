@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect, useRef } from 'react';
-import { loadAsset } from '../lib/assets';
 import { SpriteImage } from '../components';
 import { Gender, getBodySpritePath, getHairSpritePath, getHairPalettePath } from '../lib/characterSprites';
 import './CharacterCreation.css';
@@ -38,7 +37,6 @@ export default function CharacterCreation({
   const [availableColors, setAvailableColors] = useState<number[]>([0]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
 
   const assetsLoadedRef = useRef(false);
 
@@ -51,24 +49,12 @@ export default function CharacterCreation({
     const loadAssets = async () => {
       try {
         await loadHairstyles(selectedGender);
-
-        const url = await loadAsset('login_screen.png');
-        setBackgroundUrl(url);
       } catch (err) {
         setError('Failed to load assets');
       }
     };
 
     loadAssets();
-
-    return () => {
-      setBackgroundUrl((currentUrl) => {
-        if (currentUrl) {
-          URL.revokeObjectURL(currentUrl);
-        }
-        return null;
-      });
-    };
   }, []);
 
   const loadHairstyles = async (gender: Gender) => {
@@ -149,16 +135,10 @@ export default function CharacterCreation({
     }
   };
 
+  // Show simple loading indicator while hairstyles load
   if (hairstyles.length === 0 && !loading && !error) {
     return (
-      <div
-        className="character-creation-container"
-        style={backgroundUrl ? {
-          backgroundImage: `url(${backgroundUrl})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        } : {}}
-      >
+      <div className="character-creation-container">
         <div className="customization-panel">
           <h1>Loading...</h1>
         </div>
@@ -168,22 +148,6 @@ export default function CharacterCreation({
 
   return (
     <div className="character-creation-container">
-      {backgroundUrl && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundImage: `url(${backgroundUrl})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            opacity: 0.3,
-            zIndex: -1,
-          }}
-        />
-      )}
 
       <div className="character-preview-container">
         <div className="character-sprite-preview">

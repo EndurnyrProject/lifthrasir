@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useState, useEffect } from 'react';
-import { loadAsset } from '../lib/assets';
+import { useState } from 'react';
 import './Login.css';
 
 interface ServerInfo {
@@ -36,26 +35,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadBackground = async () => {
-      try {
-        const url = await loadAsset('login_screen.png');
-        setBackgroundUrl(url);
-      } catch (err) {
-        setError('Failed to load background image');
-      }
-    };
-
-    loadBackground();
-
-    return () => {
-      if (backgroundUrl) {
-        URL.revokeObjectURL(backgroundUrl);
-      }
-    };
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,15 +59,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   };
 
   return (
-    <div
-      className="login-container"
-      style={backgroundUrl ? {
-        backgroundImage: `url(${backgroundUrl})`,
-        backgroundSize: '100% 100%',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
-      } : {}}
-    >
+    <div className="login-container">
       <div className="login-box">
         <form onSubmit={handleSubmit} className="login-form">
           <div className="input-group">

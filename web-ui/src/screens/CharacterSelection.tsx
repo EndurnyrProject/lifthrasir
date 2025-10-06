@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect } from 'react';
-import { loadAsset } from '../lib/assets';
 import { SpriteImage } from '../components';
 import { Gender, getBodySpritePath, getHairSpritePath, getHairPalettePath } from '../lib/characterSprites';
 import CharacterCreation from './CharacterCreation';
@@ -88,26 +87,6 @@ export default function CharacterSelection({
   const [creationSlot, setCreationSlot] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadBackground = async () => {
-      try {
-        const url = await loadAsset('login_screen.png');
-        setBackgroundUrl(url);
-      } catch (err) {
-        setError('Failed to load background image');
-      }
-    };
-
-    loadBackground();
-
-    return () => {
-      if (backgroundUrl) {
-        URL.revokeObjectURL(backgroundUrl);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const loadCharacters = async () => {
@@ -202,16 +181,10 @@ export default function CharacterSelection({
     return names[jobClass] || 'Unknown';
   };
 
+  // Show simple loading indicator while characters load
   if (screen === 'loading') {
     return (
-      <div
-        className="character-selection-container"
-        style={backgroundUrl ? {
-          backgroundImage: `url(${backgroundUrl})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        } : {}}
-      >
+      <div className="character-selection-container">
         <div className="character-selection-box">
           <h1>Loading Characters...</h1>
         </div>
