@@ -2,6 +2,7 @@ import { useState } from "react";
 import Login from "./screens/Login";
 import ServerSelection from "./screens/ServerSelection";
 import CharacterSelection from "./screens/CharacterSelection";
+import "./styles/theme.css";
 import "./App.css";
 
 type AppScreen = "login" | "server_selection" | "character_selection" | "in_game";

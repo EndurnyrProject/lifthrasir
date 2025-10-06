@@ -84,14 +84,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       className="login-container"
       style={backgroundUrl ? {
         backgroundImage: `url(${backgroundUrl})`,
-        backgroundSize: 'cover',
+        backgroundSize: '100% 100%',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat'
       } : {}}
     >
       <div className="login-box">
-        <h1 className="login-title">Lifthrasir</h1>
-
         <form onSubmit={handleSubmit} className="login-form">
           <div className="input-group">
             <label htmlFor="username">Username</label>
