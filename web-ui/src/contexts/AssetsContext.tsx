@@ -3,6 +3,9 @@ import { loadAsset } from '../lib/assets';
 
 interface AssetsContextValue {
   backgroundUrl: string | null;
+  slotWithCharUrl: string | null;
+  slotNoCharUrl: string | null;
+  slotBlockedUrl: string | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -23,6 +26,9 @@ interface AssetsProviderProps {
  */
 export function AssetsProvider({ children }: AssetsProviderProps) {
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
+  const [slotWithCharUrl, setSlotWithCharUrl] = useState<string | null>(null);
+  const [slotNoCharUrl, setSlotNoCharUrl] = useState<string | null>(null);
+  const [slotBlockedUrl, setSlotBlockedUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +40,17 @@ export function AssetsProvider({ children }: AssetsProviderProps) {
         // Preload the login screen background (used by all screens)
         const bgUrl = await loadAsset('login_screen.png');
         setBackgroundUrl(bgUrl);
+
+        // Preload character slot background images
+        const slotWithChar = await loadAsset('textures/ui/character_screen/slot_with_char.png');
+        setSlotWithCharUrl(slotWithChar);
+
+        const slotNoChar = await loadAsset('textures/ui/character_screen/slot_no_char.png');
+        setSlotNoCharUrl(slotNoChar);
+
+        const slotBlocked = await loadAsset('textures/ui/character_screen/slot_blocked_char.png');
+        setSlotBlockedUrl(slotBlocked);
+
         setError(null);
       } catch (err) {
         setError(`Failed to load assets: ${err}`);
@@ -47,14 +64,15 @@ export function AssetsProvider({ children }: AssetsProviderProps) {
 
     // Cleanup on unmount
     return () => {
-      if (backgroundUrl) {
-        URL.revokeObjectURL(backgroundUrl);
-      }
+      if (backgroundUrl) URL.revokeObjectURL(backgroundUrl);
+      if (slotWithCharUrl) URL.revokeObjectURL(slotWithCharUrl);
+      if (slotNoCharUrl) URL.revokeObjectURL(slotNoCharUrl);
+      if (slotBlockedUrl) URL.revokeObjectURL(slotBlockedUrl);
     };
   }, []);
 
   return (
-    <AssetsContext.Provider value={{ backgroundUrl, isLoading, error }}>
+    <AssetsContext.Provider value={{ backgroundUrl, slotWithCharUrl, slotNoCharUrl, slotBlockedUrl, isLoading, error }}>
       {children}
     </AssetsContext.Provider>
   );

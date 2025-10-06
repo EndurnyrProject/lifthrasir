@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect } from 'react';
 import { SpriteImage } from '../components';
 import { Gender, getBodySpritePath, getHairSpritePath, getHairPalettePath } from '../lib/characterSprites';
+import { useAssets } from '../contexts/AssetsContext';
 import CharacterCreation from './CharacterCreation';
 import './CharacterSelection.css';
 
@@ -81,6 +82,7 @@ export default function CharacterSelection({
   onCharacterSelected,
   onBackToServerSelection
 }: CharacterSelectionProps) {
+  const { slotWithCharUrl, slotNoCharUrl } = useAssets();
   const [screen, setScreen] = useState<Screen>('loading');
   const [characters, setCharacters] = useState<CharacterData[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
@@ -181,6 +183,18 @@ export default function CharacterSelection({
     return names[jobClass] || 'Unknown';
   };
 
+  const getSlotBackgroundImage = (character: CharacterData | null): string | undefined => {
+    // For now, we don't have blocked slot info, so we just use two states:
+    // - Character exists: use slot_with_char
+    // - Empty slot: use slot_no_char
+    // TODO: Add blocked state when backend provides blocked slot info
+    if (character) {
+      return slotWithCharUrl || undefined;
+    } else {
+      return slotNoCharUrl || undefined;
+    }
+  };
+
   // Show simple loading indicator while characters load
   if (screen === 'loading') {
     return (
@@ -219,12 +233,19 @@ export default function CharacterSelection({
           {[...Array(8)].map((_, index) => {
             const character = characters[index] || null;
             const isSelected = selectedSlot === index;
+            const backgroundImage = getSlotBackgroundImage(character);
 
             return (
               <div
                 key={index}
                 className={`character-card ${isSelected ? 'selected' : ''} ${!character ? 'empty' : ''}`}
                 onClick={() => character && handleCharacterSelect(index, character)}
+                style={{
+                  backgroundImage: backgroundImage ? `url(${backgroundImage})` : undefined,
+                  backgroundSize: 'contain',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat',
+                }}
               >
                 {character ? (
                   <>

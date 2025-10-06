@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { SpriteImage, CharacterPreview } from '../components';
 import { useSpritePngBatch } from '../hooks';
 import { clearSpriteCache } from '../lib/spritePng';
+import { Gender } from '../lib/characterSprites';
 
 /**
  * Test screen for sprite PNG rendering system
@@ -94,7 +95,7 @@ export default function SpritePngTest() {
                 </div>
 
                 <CharacterPreview
-                    gender="female"
+                    gender={Gender.Female}
                     hairStyle={hairStyle}
                     hairColor={hairColor}
                     scale={2.0}
