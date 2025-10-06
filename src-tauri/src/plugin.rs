@@ -21,7 +21,7 @@ use super::bridge::{
     translate_tauri_events, write_character_creation_response, write_character_deletion_response,
     write_character_list_response, write_character_selection_response,
     write_login_failure_response, write_login_success_response, write_server_selection_response,
-    AppBridge, PendingSenders, TauriEventReceiver,
+    zone_status_event_emitter, AppBridge, PendingSenders, TauriEventEmitter, TauriEventReceiver,
 };
 use super::commands;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
@@ -169,6 +169,7 @@ impl Plugin for TauriIntegrationPlugin {
             game_engine::AssetCatalogPlugin,
             game_engine::CharacterDomainPlugin,
             game_engine::AuthenticationPlugin,
+            game_engine::WorldPlugin,
         ));
 
         // Create AppBridge and event receiver
@@ -211,6 +212,7 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::sprite_png::get_sprite_png,
                 commands::sprite_png::preload_sprite_batch,
                 commands::sprite_png::clear_sprite_cache,
+                commands::zone_status::get_zone_status,
             ])
             .build(tauri::generate_context!())
             .expect("error while building tauri application");
@@ -219,6 +221,14 @@ impl Plugin for TauriIntegrationPlugin {
             Startup,
             (create_window_handle, register_composite_asset_source).chain(),
         );
+
+        // Create and insert TauriEventEmitter for zone status events
+        let event_emitter = TauriEventEmitter::new(tauri_app.handle().clone());
+        app.insert_non_send_resource(event_emitter);
+
+        // Add zone status event emitter system
+        app.add_systems(Update, zone_status_event_emitter);
+
         app.insert_non_send_resource(tauri_app.handle().clone());
         app.insert_non_send_resource(tauri_app);
         app.set_runner(run_tauri_app);
@@ -275,6 +285,13 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
     if app.plugins_state() != PluginsState::Cleaned {
         let window = app_handle.get_webview_window("main").unwrap();
 
+        // Open devtools in debug mode for frontend debugging
+        #[cfg(debug_assertions)]
+        {
+            window.open_devtools();
+            info!("DevTools opened for debugging");
+        }
+
         // Add custom renderer plugin that creates WGPU surface from Tauri window
         // This replaces the default RenderPlugin which we disabled in build()
         app.add_plugins(CustomRendererPlugin {
@@ -295,6 +312,7 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
             bevy::audio::AudioPlugin::default(),
             bevy::animation::AnimationPlugin::default(),
             bevy::gizmos::GizmoPlugin::default(),
+            game_engine::MapPlugin,
         ));
 
         // Wait for all plugins to be ready

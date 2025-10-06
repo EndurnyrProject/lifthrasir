@@ -8,10 +8,10 @@ pub mod presentation;
 pub mod utils;
 
 // Re-export commonly used types
-pub use app::{AuthenticationPlugin, LifthrasirPlugin};
+pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin};
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
-pub use plugins::{AssetsPlugin, InputPlugin};
+pub use plugins::{AssetsPlugin, InputPlugin, WorldPlugin};
 
 use bevy::prelude::*;
 use bevy_tokio_tasks::TokioTasksPlugin;
@@ -33,6 +33,7 @@ pub fn create_app() -> App {
             AssetsPlugin,          // ENABLED: Registers ClientConfig asset type
             CharacterDomainPlugin, // ENABLED: Character events and networking (no UI)
             AuthenticationPlugin,  // ENABLED: Reads LoginAttemptEvent and handles auth
+            WorldPlugin,           // ENABLED: Map loading and world systems
         ));
 
     app

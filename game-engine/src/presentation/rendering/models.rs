@@ -2,7 +2,7 @@ use crate::domain::entities::systems::{
     AnimatedTransform, AnimationType, RsmAnimationController, RsmNodeAnimation,
 };
 use crate::domain::world::components::MapLoader;
-use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset};
+use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset, RsmAsset};
 use crate::infrastructure::ro_formats::{RsmFile, RswObject};
 use crate::utils::{get_map_dimensions_from_ground, rsw_to_bevy_transform};
 use bevy::math::{Mat4, Vec4};
@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 #[derive(Component)]
 pub struct MapModel {
@@ -22,7 +22,28 @@ pub struct MapModel {
 pub struct ModelProcessed;
 
 #[derive(Component)]
+pub struct ModelsSpawned;
+
+#[derive(Component)]
 pub struct AnimationSpeed(pub f32);
+
+/// Component to track RSM asset handle during async loading
+#[derive(Component)]
+pub struct RsmLoading {
+    pub handle: Handle<RsmAsset>,
+}
+
+/// Component to track RSM model textures that are loading
+#[derive(Component)]
+pub struct ModelTexturesLoading {
+    pub texture_handles: Vec<Handle<Image>>,
+    pub texture_names: Vec<String>,
+    pub rsm: Arc<RsmFile>,
+    pub node_meshes: HashMap<usize, Vec<(i32, Mesh)>>,
+    pub node_entities: Vec<Option<Entity>>,
+    pub anim_type: Option<AnimationType>,
+    pub anim_speed: f32,
+}
 
 /// Component to mark and identify RSM node entities
 #[derive(Component, Debug)]
@@ -31,19 +52,13 @@ pub struct RsmNode {
     pub name: String,
 }
 
-#[derive(Resource, Default)]
-pub struct RsmCache {
-    materials: Arc<RwLock<HashMap<String, Handle<StandardMaterial>>>>,
-    parsed_rsms: Arc<RwLock<HashMap<String, Arc<RsmFile>>>>,
-}
-
 pub fn spawn_map_models(
     mut commands: Commands,
     world_assets: Res<Assets<RoWorldAsset>>,
     ground_assets: Res<Assets<RoGroundAsset>>,
-    query: Query<&MapLoader, Added<MapLoader>>,
+    query: Query<(Entity, &MapLoader), Without<ModelsSpawned>>,
 ) {
-    for map_loader in query.iter() {
+    for (entity, map_loader) in query.iter() {
         let Some(world_handle) = &map_loader.world else {
             continue;
         };
@@ -112,7 +127,7 @@ pub fn spawn_map_models(
 
         for (filename, instances) in model_groups {
             for (transform, node_name, anim_type, anim_speed) in instances {
-                let entity = commands
+                let model_entity = commands
                     .spawn((
                         Transform::from_translation(transform.translation)
                             .with_rotation(transform.rotation)
@@ -131,11 +146,33 @@ pub fn spawn_map_models(
                 // Store animation data for later processing in update_model_meshes
                 if anim_type != AnimationType::None {
                     commands
-                        .entity(entity)
+                        .entity(model_entity)
                         .insert((anim_type, AnimationSpeed(anim_speed)));
                 }
             }
         }
+
+        // Mark this MapLoader entity as having models spawned
+        commands.entity(entity).insert(ModelsSpawned);
+    }
+}
+
+pub fn load_rsm_assets(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    query: Query<(Entity, &MapModel), Without<RsmLoading>>,
+) {
+    for (entity, map_model) in query.iter() {
+        if map_model.filename.is_empty() {
+            continue;
+        }
+
+        let rsm_path = format!("ro://data\\model\\{}", map_model.filename);
+        let rsm_handle: Handle<RsmAsset> = asset_server.load(&rsm_path);
+
+        commands.entity(entity).insert(RsmLoading {
+            handle: rsm_handle,
+        });
     }
 }
 
@@ -145,44 +182,25 @@ pub fn update_model_meshes(
         (
             Entity,
             &MapModel,
+            &RsmLoading,
             Option<&AnimationType>,
             Option<&AnimationSpeed>,
         ),
-        (With<MapModel>, Without<ModelProcessed>),
+        (With<MapModel>, Without<ModelProcessed>, Without<ModelTexturesLoading>),
     >,
     asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
-    mut rsm_cache: ResMut<RsmCache>,
+    rsm_assets: Res<Assets<RsmAsset>>,
 ) {
-    // AssetServer is always available
-
-    for (entity, map_model, anim_type, anim_speed) in model_query.iter() {
+    for (entity, map_model, rsm_loading, anim_type, anim_speed) in model_query.iter() {
         if map_model.filename.is_empty() {
             continue;
         }
 
-        let parsed_rsm = {
-            let parsed_cache = rsm_cache.parsed_rsms.read().unwrap();
-            parsed_cache.get(&map_model.filename).cloned()
+        // Get RSM from loaded assets
+        let Some(rsm_asset) = rsm_assets.get(&rsm_loading.handle) else {
+            continue; // Still loading
         };
-
-        let rsm = if let Some(rsm) = parsed_rsm {
-            rsm
-        } else {
-            // Load RSM file using AssetServer
-            let rsm_path = format!("ro://data\\model\\{}", map_model.filename);
-
-            // For now, we'll need to implement RSM asset loading through the AssetServer
-            // This is a placeholder - the actual RSM loading will need to be handled
-            // by a proper AssetLoader implementation
-            warn!(
-                "RSM loading through AssetServer not yet implemented for: {}",
-                rsm_path
-            );
-            continue; // Skip for now - TODO: Implement RSM AssetLoader
-        };
+        let rsm = Arc::new(rsm_asset.model.clone());
 
         let node_meshes = convert_rsm_to_mesh(&rsm);
 
@@ -264,23 +282,114 @@ pub fn update_model_meshes(
             }
         }
 
-        // Third pass: Add mesh children to their respective nodes
-        for (node_idx, node_mesh_list) in node_meshes {
-            let node_entity = node_entities[node_idx].unwrap();
+        // Third pass: Load textures asynchronously
+        let mut texture_handles = Vec::new();
+        let mut texture_names = Vec::new();
+
+        for texture_name in rsm.textures.iter() {
+            if !texture_name.is_empty() {
+                let texture_path = format!("ro://data\\texture\\{}", texture_name);
+                let handle: Handle<Image> = asset_server.load(&texture_path);
+                texture_handles.push(handle);
+                texture_names.push(texture_name.clone());
+            } else {
+                // Empty texture name - add default handle
+                texture_handles.push(Handle::default());
+                texture_names.push(String::new());
+            }
+        }
+
+        // Add component to track texture loading
+        // Materials and mesh spawning will happen in create_model_materials_when_textures_ready
+        commands.entity(entity).insert(ModelTexturesLoading {
+            texture_handles,
+            texture_names,
+            rsm,
+            node_meshes,
+            node_entities,
+            anim_type: anim_type.copied(),
+            anim_speed: anim_speed.map(|s| s.0).unwrap_or(1.0),
+        });
+    }
+}
+
+pub fn create_model_materials_when_textures_ready(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
+    query: Query<(Entity, &ModelTexturesLoading)>,
+) {
+    use bevy::asset::LoadState;
+
+    for (entity, textures_loading) in query.iter() {
+        // Check if all textures are loaded or failed
+        let mut all_ready = true;
+        let mut loaded_count = 0;
+        let mut failed_count = 0;
+
+        for (i, handle) in textures_loading.texture_handles.iter().enumerate() {
+            if handle.id() == AssetId::default() {
+                continue; // Empty texture name
+            }
+
+            match asset_server.load_state(handle) {
+                LoadState::Loaded => {
+                    loaded_count += 1;
+                }
+                LoadState::Failed(err) => {
+                    warn!(
+                        "Failed to load RSM texture '{}': {:?}",
+                        textures_loading.texture_names.get(i).unwrap_or(&"unknown".to_string()),
+                        err
+                    );
+                    failed_count += 1;
+                }
+                LoadState::Loading | LoadState::NotLoaded => {
+                    all_ready = false;
+                    break; // Wait for all textures
+                }
+            }
+        }
+
+        if !all_ready {
+            continue; // Not ready yet, check next frame
+        }
+
+        debug!(
+            "All RSM textures ready for model - loaded: {}, failed: {}, total: {}",
+            loaded_count,
+            failed_count,
+            textures_loading.texture_handles.len()
+        );
+
+        // Create materials from loaded textures
+        let texture_materials = create_model_materials_from_loaded_textures(
+            &textures_loading.rsm,
+            &textures_loading.texture_handles,
+            &textures_loading.texture_names,
+            &asset_server,
+            &mut materials,
+        );
+
+        // Spawn mesh children with materials
+        for (node_idx, node_mesh_list) in &textures_loading.node_meshes {
+            let node_entity = textures_loading.node_entities[*node_idx].unwrap();
 
             for (texture_id, mesh) in node_mesh_list {
-                let mesh_handle = meshes.add(mesh);
+                let mesh_handle = meshes.add(mesh.clone());
 
-                // Get or create material for this specific texture
-                let material_handle = get_or_create_material_for_texture(
-                    &rsm,
-                    &map_model.node_name,
-                    texture_id,
-                    &asset_server,
-                    &mut rsm_cache,
-                    &mut materials,
-                    &mut images,
-                );
+                // Get material for this texture ID
+                let material_handle = texture_materials
+                    .get(texture_id)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        warn!(
+                            "No material found for texture ID {}, using fallback",
+                            texture_id
+                        );
+                        create_colored_fallback_material_for_model(*texture_id as usize, &mut materials)
+                    });
 
                 // Create mesh entity with local space transform (IDENTITY)
                 let mesh_entity = commands
@@ -297,8 +406,85 @@ pub fn update_model_meshes(
             }
         }
 
-        commands.entity(entity).insert(ModelProcessed);
+        // Mark as processed and remove loading component
+        commands
+            .entity(entity)
+            .insert(ModelProcessed)
+            .remove::<ModelTexturesLoading>();
+
+        debug!("Model materials created and meshes spawned successfully");
     }
+}
+
+fn create_model_materials_from_loaded_textures(
+    rsm: &RsmFile,
+    texture_handles: &[Handle<Image>],
+    _texture_names: &[String],
+    asset_server: &AssetServer,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) -> HashMap<i32, Handle<StandardMaterial>> {
+    use bevy::asset::LoadState;
+
+    let mut material_map = HashMap::new();
+
+    for (i, _texture_name) in rsm.textures.iter().enumerate() {
+        let material = if i < texture_handles.len() && texture_handles[i].id() != AssetId::default() {
+            match asset_server.load_state(&texture_handles[i]) {
+                LoadState::Loaded => {
+                    materials.add(StandardMaterial {
+                        base_color_texture: Some(texture_handles[i].clone()),
+                        base_color: Color::WHITE,
+                        alpha_mode: if rsm.alpha < 1.0 {
+                            AlphaMode::Blend
+                        } else {
+                            AlphaMode::Mask(0.5)
+                        },
+                        perceptual_roughness: 0.8,
+                        metallic: 0.0,
+                        reflectance: 0.1,
+                        cull_mode: None,
+                        ..default()
+                    })
+                }
+                _ => create_colored_fallback_material_for_model(i, materials),
+            }
+        } else {
+            create_colored_fallback_material_for_model(i, materials)
+        };
+
+        material_map.insert(i as i32, material);
+    }
+
+    material_map
+}
+
+fn create_colored_fallback_material_for_model(
+    index: usize,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) -> Handle<StandardMaterial> {
+    let color = match index % 10 {
+        0 => Color::srgb(0.8, 0.6, 0.4), // Brown
+        1 => Color::srgb(0.4, 0.8, 0.4), // Green
+        2 => Color::srgb(0.4, 0.4, 0.8), // Blue
+        3 => Color::srgb(0.8, 0.8, 0.4), // Yellow
+        4 => Color::srgb(0.8, 0.4, 0.8), // Magenta
+        5 => Color::srgb(0.4, 0.8, 0.8), // Cyan
+        6 => Color::srgb(0.8, 0.4, 0.4), // Red
+        7 => Color::srgb(0.6, 0.6, 0.8), // Light Blue
+        8 => Color::srgb(0.6, 0.8, 0.6), // Light Green
+        9 => Color::srgb(0.8, 0.6, 0.6), // Light Red
+        _ => Color::srgb(0.7, 0.7, 0.7), // Grey
+    };
+
+    materials.add(StandardMaterial {
+        base_color: color,
+        perceptual_roughness: 0.8,
+        metallic: 0.0,
+        reflectance: 0.1,
+        cull_mode: None,
+        alpha_mode: AlphaMode::Mask(0.5),
+        ..default()
+    })
 }
 
 fn mat3_to_mat4(mat3: &[f32; 9]) -> Mat4 {
@@ -548,101 +734,6 @@ fn find_parent_node_index(
 /// Helper to check if a node has animation keyframes
 fn node_has_animation(node: &crate::infrastructure::ro_formats::rsm::Node) -> bool {
     !node.pos_keyframes.is_empty() || !node.rot_keyframes.is_empty()
-}
-
-fn get_or_create_material_for_texture(
-    rsm: &RsmFile,
-    _node_name: &str,
-    actual_texture_idx: i32,
-    asset_server: &AssetServer,
-    rsm_cache: &mut RsmCache,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
-    images: &mut ResMut<Assets<Image>>,
-) -> Handle<StandardMaterial> {
-    if actual_texture_idx < 0 || actual_texture_idx as usize >= rsm.textures.len() {
-        warn!(
-            "Invalid texture index {} for RSM (max: {})",
-            actual_texture_idx,
-            rsm.textures.len()
-        );
-        return materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 1.0, 1.0),
-            cull_mode: None,
-            reflectance: 0.05,
-            metallic: 0.0,
-            perceptual_roughness: 0.8,
-            alpha_mode: AlphaMode::Mask(0.5),
-            ..default()
-        });
-    }
-
-    let texture_name = &rsm.textures[actual_texture_idx as usize];
-
-    // Check cache for this specific texture
-    {
-        let materials_cache = rsm_cache.materials.read().unwrap();
-        if let Some(handle) = materials_cache.get(texture_name) {
-            return handle.clone();
-        }
-    }
-
-    // Create new material for this texture
-    let material_handle =
-        create_rsm_material_for_texture(rsm, texture_name, asset_server, materials, images);
-
-    // Cache it
-    {
-        let mut materials_cache = rsm_cache.materials.write().unwrap();
-        materials_cache.insert(texture_name.to_string(), material_handle.clone());
-    }
-
-    material_handle
-}
-
-fn create_rsm_material_for_texture(
-    rsm: &RsmFile,
-    texture_name: &str,
-    asset_server: &AssetServer,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
-    images: &mut ResMut<Assets<Image>>,
-) -> Handle<StandardMaterial> {
-    let mut material = StandardMaterial {
-        base_color: Color::srgb(1.0, 1.0, 1.0),
-        alpha_mode: if rsm.alpha < 1.0 {
-            AlphaMode::Blend
-        } else {
-            AlphaMode::Mask(0.5)
-        },
-        perceptual_roughness: 0.8,
-        metallic: 0.0,
-        reflectance: 0.1,
-        cull_mode: None,
-        ..default()
-    };
-
-    if rsm.alpha < 1.0 {
-        material.base_color = material.base_color.with_alpha(rsm.alpha);
-    }
-
-    let base_name = texture_name
-        .trim_end_matches(".bmp")
-        .trim_end_matches(".tga");
-
-    let texture_paths = vec![
-        format!("ro://{}", texture_name),
-        format!("ro://data\\texture\\{}", texture_name),
-        format!("ro://data\\texture\\{}.tga", base_name),
-        format!("ro://{}.tga", base_name),
-    ];
-
-    for texture_path in &texture_paths {
-        // Use AssetServer to load texture directly
-        let texture_handle: Handle<Image> = asset_server.load(texture_path.as_str());
-        material.base_color_texture = Some(texture_handle);
-        break; // AssetServer handles async loading, so we use the first path
-    }
-
-    materials.add(material)
 }
 
 /// Update RSM animation components each frame

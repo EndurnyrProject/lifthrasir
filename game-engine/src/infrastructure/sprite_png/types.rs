@@ -209,6 +209,8 @@ mod tests {
             png_data: vec![0x89, 0x50, 0x4E, 0x47], // PNG header
             width: 64,
             height: 64,
+            offset_x: 0,
+            offset_y: 0,
             from_cache: false,
         };
 

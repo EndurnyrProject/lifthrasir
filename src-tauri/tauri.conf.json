@@ -21,7 +21,27 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main-capability",
+          "description": "Main window capabilities",
+          "windows": ["main"],
+          "permissions": [
+            "core:default",
+            "core:event:default",
+            "core:event:allow-listen",
+            "core:event:allow-emit",
+            "core:window:default",
+            "core:window:allow-show",
+            "core:window:allow-hide",
+            "core:app:default",
+            "core:resources:default",
+            "core:menu:default",
+            "core:tray:default"
+          ]
+        }
+      ]
     },
     "macOSPrivateApi": true
   },

@@ -243,3 +243,10 @@ pub struct CharacterSelectionState {
     pub is_creating_character: bool,
     pub creation_slot: Option<u8>,
 }
+
+// Resource to track map loading timeout
+#[derive(Resource)]
+pub struct MapLoadingTimer {
+    pub started: std::time::Instant,
+    pub map_name: String,
+}

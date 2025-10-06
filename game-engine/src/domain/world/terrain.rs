@@ -8,79 +8,95 @@ use bevy::{
 
 use crate::{
     domain::camera::controller::CameraController,
-    domain::world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
+    domain::world::{
+        components::MapLoader, map::MapData, map_loader::MapRequestLoader,
+        spawn_context::MapSpawnContext,
+    },
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
-    utils::constants::CELL_SIZE,
+    utils::{constants::CELL_SIZE, coordinates::spawn_coords_to_world_position},
 };
 
-fn load_terrain_textures(
+/// Component to track terrain textures that are loading
+#[derive(Component)]
+pub struct TerrainTexturesLoading {
+    texture_handles: Vec<Handle<Image>>,
+    texture_names: Vec<String>,
+    ground_handle: Handle<RoGroundAsset>,
+    altitude_handle: Option<Handle<RoAltitudeAsset>>,
+}
+
+/// Create materials from loaded texture handles
+/// Only called after textures are confirmed loaded/failed
+fn create_terrain_materials_from_loaded_textures(
     ground: &crate::infrastructure::ro_formats::RoGround,
+    texture_handles: &[Handle<Image>],
+    texture_names: &[String],
     asset_server: &AssetServer,
     materials: &mut ResMut<Assets<StandardMaterial>>,
 ) -> Vec<Handle<StandardMaterial>> {
+    use bevy::asset::LoadState;
     let mut texture_materials = Vec::new();
 
     for (i, texture_name) in ground.textures.iter().enumerate() {
-        if !texture_name.is_empty() {
-            // Try loading texture from unified asset source
-            let texture_paths = vec![
-                format!("ro://{}", texture_name),
-                format!("ro://data/texture/{}", texture_name),
-            ];
-
-            let mut texture_handle = None;
-            for path in &texture_paths {
-                // Use AssetServer to load texture through unified source
-                let handle: Handle<Image> = asset_server.load(path);
-                texture_handle = Some(handle);
-                break; // Take the first path for now - AssetServer handles loading asynchronously
+        let material = if i < texture_handles.len() && texture_handles[i].id() != AssetId::default() {
+            // Check if texture actually loaded successfully
+            match asset_server.load_state(&texture_handles[i]) {
+                LoadState::Loaded => {
+                    // Texture loaded successfully - use it!
+                    info!("Using loaded texture #{}: {}", i, texture_name);
+                    materials.add(StandardMaterial {
+                        base_color_texture: Some(texture_handles[i].clone()),
+                        base_color: Color::WHITE,
+                        perceptual_roughness: 0.8,
+                        metallic: 0.0,
+                        cull_mode: None,
+                        alpha_mode: AlphaMode::Mask(0.5),
+                        ..default()
+                    })
+                }
+                _ => {
+                    // Texture failed or not loaded - use colored fallback
+                    warn!("Texture failed, using colored fallback for: {}", texture_name);
+                    create_colored_fallback_material(i, materials)
+                }
             }
-
-            let material = if let Some(tex_handle) = texture_handle {
-                materials.add(StandardMaterial {
-                    base_color_texture: Some(tex_handle),
-                    base_color: Color::WHITE,
-                    perceptual_roughness: 0.8,
-                    metallic: 0.0,
-                    cull_mode: None,
-                    alpha_mode: AlphaMode::Mask(0.5),
-                    ..default()
-                })
-            } else {
-                // Fallback to colored material
-                let fallback_color = match i {
-                    0 => Color::srgb(0.8, 0.6, 0.4),
-                    1 => Color::srgb(0.4, 0.8, 0.4),
-                    2 => Color::srgb(0.6, 0.6, 0.8),
-                    3 => Color::srgb(0.8, 0.8, 0.6),
-                    _ => Color::srgb(0.7, 0.7, 0.7),
-                };
-                materials.add(StandardMaterial {
-                    base_color: fallback_color,
-                    perceptual_roughness: 0.8,
-                    metallic: 0.0,
-                    cull_mode: None,
-                    alpha_mode: AlphaMode::Mask(0.5),
-                    ..default()
-                })
-            };
-            texture_materials.push(material);
         } else {
-            // Empty texture - use dark grey
-            let material = materials.add(StandardMaterial {
-                base_color: Color::srgb(0.3, 0.3, 0.3),
-                perceptual_roughness: 0.9,
-                metallic: 0.0,
-                double_sided: true,
-                cull_mode: None,
-                alpha_mode: AlphaMode::Mask(0.5),
-                ..default()
-            });
-            texture_materials.push(material);
-        }
+            // Empty texture name or no handle - use colored fallback
+            create_colored_fallback_material(i, materials)
+        };
+
+        texture_materials.push(material);
     }
 
     texture_materials
+}
+
+/// Create a colored fallback material
+fn create_colored_fallback_material(
+    index: usize,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) -> Handle<StandardMaterial> {
+    let color = match index % 10 {
+        0 => Color::srgb(0.8, 0.6, 0.4), // Brown
+        1 => Color::srgb(0.4, 0.8, 0.4), // Green
+        2 => Color::srgb(0.6, 0.6, 0.8), // Blue
+        3 => Color::srgb(0.8, 0.8, 0.6), // Yellow
+        4 => Color::srgb(0.8, 0.4, 0.4), // Red
+        5 => Color::srgb(0.4, 0.8, 0.8), // Cyan
+        6 => Color::srgb(0.8, 0.4, 0.8), // Magenta
+        7 => Color::srgb(0.6, 0.8, 0.4), // Lime
+        8 => Color::srgb(0.4, 0.6, 0.8), // Sky blue
+        _ => Color::srgb(0.7, 0.7, 0.7), // Grey
+    };
+
+    materials.add(StandardMaterial {
+        base_color: color,
+        perceptual_roughness: 0.8,
+        metallic: 0.0,
+        cull_mode: None,
+        alpha_mode: AlphaMode::Mask(0.5),
+        ..default()
+    })
 }
 
 /// Calculate smooth normals by averaging neighboring cell normals
@@ -402,27 +418,164 @@ fn generate_right_wall(
 
 pub fn generate_terrain_mesh(
     mut commands: Commands,
+    ground_assets: Res<Assets<RoGroundAsset>>,
+    altitude_assets: Res<Assets<RoAltitudeAsset>>,
+    asset_server: Res<AssetServer>,
+    query: Query<(Entity, &MapLoader, &MapRequestLoader), (Without<MapData>, Without<TerrainTexturesLoading>)>,
+) {
+    for (entity, map_loader, map_request) in query.iter() {
+        debug!(
+            "generate_terrain_mesh: Processing MapLoader for map '{}'",
+            map_request.map_name
+        );
+
+        // Check if ground asset and its dependencies are actually loaded via AssetServer
+        if !asset_server.is_loaded_with_dependencies(&map_loader.ground) {
+            debug!(
+                "generate_terrain_mesh: Waiting for ground asset and dependencies to load for '{}'",
+                map_request.map_name
+            );
+            continue;
+        }
+
+        // Check optional altitude asset
+        if let Some(ref alt_handle) = map_loader.altitude {
+            if !asset_server.is_loaded_with_dependencies(alt_handle) {
+                debug!(
+                    "generate_terrain_mesh: Waiting for altitude asset to load for '{}'",
+                    map_request.map_name
+                );
+                continue;
+            }
+        }
+
+        // Check optional world asset
+        if let Some(ref world_handle) = map_loader.world {
+            if !asset_server.is_loaded_with_dependencies(world_handle) {
+                debug!(
+                    "generate_terrain_mesh: Waiting for world asset to load for '{}'",
+                    map_request.map_name
+                );
+                continue;
+            }
+        }
+
+        // NOW it's safe to access - assets are guaranteed loaded
+        let Some(ground) = ground_assets.get(&map_loader.ground) else {
+            error!(
+                "generate_terrain_mesh: Asset marked as loaded but not in storage for '{}'",
+                map_request.map_name
+            );
+            continue;
+        };
+
+        debug!(
+            "generate_terrain_mesh: Ground asset loaded for map '{}', starting texture loading",
+            map_request.map_name
+        );
+
+        // Start loading textures asynchronously
+        let mut texture_handles = Vec::new();
+        let mut texture_names = Vec::new();
+
+        for texture_name in ground.ground.textures.iter() {
+            if !texture_name.is_empty() {
+                let texture_path = format!("ro://data\\texture\\{}", texture_name);
+                let handle: Handle<Image> = asset_server.load(&texture_path);
+                texture_handles.push(handle);
+                texture_names.push(texture_name.clone());
+                info!("Started loading terrain texture: {}", texture_path);
+            } else {
+                // For empty texture names, push a default handle (will use colored fallback)
+                texture_handles.push(Handle::default());
+                texture_names.push(String::new());
+            }
+        }
+
+        // Add component to track texture loading
+        commands.entity(entity).insert(TerrainTexturesLoading {
+            texture_handles,
+            texture_names,
+            ground_handle: map_loader.ground.clone(),
+            altitude_handle: map_loader.altitude.clone(),
+        });
+
+        info!(
+            "generate_terrain_mesh: Started loading {} textures for map '{}'",
+            ground.ground.textures.len(),
+            map_request.map_name
+        );
+    }
+}
+
+/// System that waits for textures to load, then generates terrain meshes
+pub fn generate_terrain_when_textures_ready(
+    mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
     asset_server: Res<AssetServer>,
-    query: Query<(Entity, &MapLoader, &MapRequestLoader), Without<MapData>>,
+    query: Query<(Entity, &TerrainTexturesLoading, &MapRequestLoader)>,
 ) {
-    for (entity, map_loader, _map_request) in query.iter() {
-        let Some(ground) = ground_assets.get(&map_loader.ground) else {
+    use bevy::asset::LoadState;
+
+    for (entity, textures_loading, map_request) in query.iter() {
+        // Check if all textures are loaded or failed
+        let mut all_ready = true;
+        let mut loaded_count = 0;
+        let mut failed_count = 0;
+
+        for (i, handle) in textures_loading.texture_handles.iter().enumerate() {
+            if handle.id() == AssetId::default() {
+                // Empty texture, skip
+                continue;
+            }
+
+            match asset_server.load_state(handle) {
+                LoadState::Loaded => {
+                    loaded_count += 1;
+                }
+                LoadState::Failed(_) => {
+                    failed_count += 1;
+                    warn!("Failed to load texture: {}", textures_loading.texture_names[i]);
+                }
+                LoadState::Loading | LoadState::NotLoaded => {
+                    all_ready = false;
+                    break;
+                }
+            }
+        }
+
+        if !all_ready {
+            debug!("Waiting for textures to load for map '{}'", map_request.map_name);
+            continue;
+        }
+
+        info!(
+            "All textures ready for map '{}': {} loaded, {} failed",
+            map_request.map_name, loaded_count, failed_count
+        );
+
+        // Get ground asset
+        let Some(ground) = ground_assets.get(&textures_loading.ground_handle) else {
+            error!("Ground asset not found in storage");
             continue;
         };
 
-        let altitude = map_loader
-            .altitude
+        let altitude = textures_loading.altitude_handle
             .as_ref()
             .and_then(|h| altitude_assets.get(h))
             .map(|a| &a.altitude);
 
-        // Load textures using unified asset server
-        let texture_materials =
-            load_terrain_textures(&ground.ground, &asset_server, &mut materials);
+        // Create materials now that textures are loaded
+        let texture_materials = create_terrain_materials_from_loaded_textures(
+            &ground.ground,
+            &textures_loading.texture_handles,
+            &textures_loading.texture_names,
+            &asset_server,
+            &mut materials,
+        );
 
         // GAT is used for collision detection, not terrain rendering
         // GND surfaces contain the height data we need for terrain mesh generation
@@ -431,10 +584,23 @@ pub fn generate_terrain_mesh(
         let meshes_by_texture = create_terrain_meshes_robrowser_style(&ground.ground, altitude);
 
         // Spawn a mesh entity for each texture
+        let mut mesh_count = 0;
         for (texture_idx, mesh) in meshes_by_texture {
-            if mesh.count_vertices() == 0 {
+            let vertex_count = mesh.count_vertices();
+            if vertex_count == 0 {
+                debug!(
+                    "generate_terrain_mesh: Skipping empty mesh for texture_idx {}",
+                    texture_idx
+                );
                 continue; // Skip empty meshes
             }
+
+            info!(
+                "generate_terrain_mesh: Spawning mesh #{} at (0,0,0), vertices: {}, texture_idx: {}",
+                mesh_count + 1,
+                vertex_count,
+                texture_idx
+            );
 
             let mesh_handle = meshes.add(mesh);
 
@@ -443,6 +609,10 @@ pub fn generate_terrain_mesh(
                 texture_materials[texture_idx].clone()
             } else {
                 // Fallback material - bright cyan to make it obvious
+                warn!(
+                    "generate_terrain_mesh: Using fallback material for texture_idx {}",
+                    texture_idx
+                );
                 materials.add(StandardMaterial {
                     base_color: Color::srgb(0.0, 1.0, 1.0),
                     perceptual_roughness: 0.5,
@@ -464,14 +634,28 @@ pub fn generate_terrain_mesh(
                     0.0, // Start at origin Z
                 ),
             ));
+
+            mesh_count += 1;
         }
 
-        // Update the original entity with map data
-        commands.entity(entity).insert(MapData {
-            name: "Map".to_string(),
-            width: ground.ground.width,
-            height: ground.ground.height,
-        });
+        info!(
+            "generate_terrain_mesh: Spawned {} terrain mesh entities total for map '{}'",
+            mesh_count, map_request.map_name
+        );
+
+        // Update the original entity with map data and remove loading component
+        commands.entity(entity)
+            .insert(MapData {
+                name: "Map".to_string(),
+                width: ground.ground.width,
+                height: ground.ground.height,
+            })
+            .remove::<TerrainTexturesLoading>();
+
+        info!(
+            "generate_terrain_when_textures_ready: Successfully generated terrain mesh and inserted MapData for map '{}'",
+            map_request.map_name
+        );
     }
 }
 
@@ -663,18 +847,49 @@ fn create_terrain_meshes_robrowser_style(
     result
 }
 
-pub fn setup_terrain_camera(mut commands: Commands, query: Query<&MapData, Added<MapData>>) {
-    for map_data in query.iter() {
-        let map_center_x = map_data.width as f32 * CELL_SIZE / 2.0;
-        let map_center_z = map_data.height as f32 * CELL_SIZE / 2.0;
+/// Set up the camera when entering the game
+pub fn setup_terrain_camera(
+    mut commands: Commands,
+    query: Query<&MapData>,
+    spawn_context: Option<Res<MapSpawnContext>>,
+) {
+    let Some(spawn_context) = spawn_context else {
+        warn!("setup_terrain_camera: MapSpawnContext not available");
+        return;
+    };
 
-        let camera_pos = Vec3::new(map_center_x, -2000.0, -map_center_z * 2.5);
-        let look_at = Vec3::new(map_center_x, 0.0, -map_center_z);
+    // Use get_single() to expect exactly one MapData entity
+    // This is more robust than iter().next() as it will error if our assumption is violated
+    let map_data = match query.get_single() {
+        Ok(data) => data,
+        Err(e) => {
+            error!("setup_terrain_camera: Failed to get MapData: {}", e);
+            return;
+        }
+    };
 
-        commands.spawn((
-            Camera3d::default(),
-            Transform::from_translation(camera_pos).looking_at(look_at, Vec3::NEG_Y),
-            CameraController::default(),
-        ));
-    }
+    info!("setup_terrain_camera: MapData detected, spawning camera");
+
+    // Convert spawn cell coords to world position
+    let spawn_world_pos = spawn_coords_to_world_position(
+        spawn_context.spawn_x,
+        spawn_context.spawn_y,
+        map_data.width,
+        map_data.height,
+    );
+
+    // Position camera above and behind the spawn point
+    let camera_offset = Vec3::new(0.0, -2000.0, -500.0);
+    let camera_pos = spawn_world_pos + camera_offset;
+
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_translation(camera_pos).looking_at(spawn_world_pos, Vec3::NEG_Y),
+        CameraController::default(),
+    ));
+
+    info!(
+        "Camera spawned at {:?}, looking at spawn point {:?}",
+        camera_pos, spawn_world_pos
+    );
 }

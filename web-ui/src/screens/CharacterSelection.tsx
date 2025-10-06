@@ -124,20 +124,26 @@ export default function CharacterSelection({
   const handlePlayCharacter = async () => {
     if (selectedSlot === null) return;
 
+    console.log(`🎮 [FRONTEND] User clicked ENTER button for slot ${selectedSlot}`);
     setLoading(true);
     setError(null);
 
     try {
+      console.log(`🎮 [FRONTEND] Invoking select_character command for slot ${selectedSlot}`);
       const result = await invoke<{ success: boolean; error?: string }>('select_character', {
         slot: selectedSlot
       });
+      console.log(`🎮 [FRONTEND] Received response from select_character:`, result);
 
       if (result.success) {
+        console.log(`🎮 [FRONTEND] Character selection successful, transitioning to in_game screen`);
         onCharacterSelected();
       } else {
+        console.error(`🎮 [FRONTEND] Character selection failed:`, result.error);
         setError(result.error || 'Character selection failed');
       }
     } catch (err) {
+      console.error(`🎮 [FRONTEND] Network error during character selection:`, err);
       setError('Network error: ' + err);
     } finally {
       setLoading(false);

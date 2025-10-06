@@ -1,12 +1,12 @@
 use crate::{
     domain::assets::components::WaterMaterial,
     domain::world::components::MapLoader,
-    domain::world::terrain::{generate_terrain_mesh, setup_terrain_camera},
     infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
     infrastructure::ro_formats::RswObject,
     presentation::rendering::lighting::EnhancedLightingPlugin,
     presentation::rendering::models::{
-        spawn_map_models, update_model_meshes, update_rsm_animations, RsmCache,
+        spawn_map_models, load_rsm_assets, update_model_meshes,
+        create_model_materials_when_textures_ready, update_rsm_animations,
     },
     presentation::rendering::water::{animate_water_system, load_water_system},
 };
@@ -16,8 +16,7 @@ pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<RsmCache>()
-            .add_plugins((
+        app.add_plugins((
                 MaterialPlugin::<WaterMaterial>::default(),
                 EnhancedLightingPlugin,
             ))
@@ -25,10 +24,15 @@ impl Plugin for MapPlugin {
                 Update,
                 (
                     log_loaded_world_data,
-                    generate_terrain_mesh,
-                    setup_terrain_camera,
                     spawn_map_models,
+                    load_rsm_assets,
+                ),
+            )
+            .add_systems(
+                Update,
+                (
                     update_model_meshes,
+                    create_model_materials_when_textures_ready,
                     update_rsm_animations,
                     load_water_system,
                     animate_water_system,

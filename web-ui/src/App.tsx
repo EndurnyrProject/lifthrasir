@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import Login from "./screens/Login";
 import ServerSelection from "./screens/ServerSelection";
 import CharacterSelection from "./screens/CharacterSelection";
@@ -20,8 +21,81 @@ interface ServerInfo {
 
 function AppContent() {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>("login");
+  const [isGameLoading, setIsGameLoading] = useState(false);
   const [servers, setServers] = useState<ServerInfo[]>([]);
+  const [zoneStatus, setZoneStatus] = useState<string>("Connecting to zone server...");
   const { backgroundUrl } = useAssets();
+
+  // Set up zone event listeners
+  useEffect(() => {
+    const unlistenPromises: Promise<UnlistenFn>[] = [];
+
+    // Zone connecting event
+    unlistenPromises.push(listen('zone-connecting', (event: any) => {
+      const mapName = event.payload.map_name || 'unknown';
+      console.log(`📥 [FRONTEND] Received 'zone-connecting' event for map:`, mapName);
+      setZoneStatus(`Connecting to ${mapName}...`);
+    }));
+
+    // Zone connected event
+    unlistenPromises.push(listen('zone-connected', () => {
+      console.log(`📥 [FRONTEND] Received 'zone-connected' event`);
+      setZoneStatus('Connected! Authenticating...');
+    }));
+
+    // Zone authenticated event
+    unlistenPromises.push(listen('zone-authenticated', (event: any) => {
+      const { spawn_x, spawn_y } = event.payload;
+      console.log(`📥 [FRONTEND] Received 'zone-authenticated' event - spawn at (${spawn_x}, ${spawn_y})`);
+      setZoneStatus(`Authenticated! Loading map at (${spawn_x}, ${spawn_y})...`);
+    }));
+
+    // Map loading event
+    unlistenPromises.push(listen('map-loading', (event: any) => {
+      const mapName = event.payload.map_name || 'map';
+      console.log(`📥 [FRONTEND] Received 'map-loading' event for map:`, mapName);
+      setZoneStatus(`Loading ${mapName}...`);
+    }));
+
+    // Map loaded event
+    unlistenPromises.push(listen('map-loaded', (event: any) => {
+      const mapName = event.payload.map_name || 'map';
+      console.log(`📥 [FRONTEND] Received 'map-loaded' event for map:`, mapName);
+      setZoneStatus(`${mapName} loaded! Entering world...`);
+    }));
+
+    // Entering world event
+    unlistenPromises.push(listen('entering-world', () => {
+      console.log(`📥 [FRONTEND] Received 'entering-world' event`);
+      setZoneStatus('Entering world...');
+      setIsGameLoading(false);
+    }));
+
+    // Zone error event - return to character selection
+    unlistenPromises.push(listen('zone-error', (event: any) => {
+      const error = event.payload.error || 'Connection failed';
+      console.error(`📥 [FRONTEND] Received 'zone-error' event:`, error);
+      alert(`Zone connection failed: ${error}`);
+      setCurrentScreen('character_selection');
+      setZoneStatus('Connecting to zone server...');
+    }));
+
+    // Map loading failed event - return to character selection
+    unlistenPromises.push(listen('map-loading-failed', (event: any) => {
+      const error = event.payload.error || 'Map loading failed';
+      console.error(`📥 [FRONTEND] Received 'map-loading-failed' event:`, error);
+      alert(`Map loading failed: ${error}`);
+      setCurrentScreen('character_selection');
+      setZoneStatus('Connecting to zone server...');
+    }));
+
+    // Cleanup function
+    return () => {
+      unlistenPromises.forEach(promise => {
+        promise.then(unlisten => unlisten()).catch(console.error);
+      });
+    };
+  }, []);
 
   const handleLoginSuccess = (serverList: ServerInfo[]) => {
     setServers(serverList);
@@ -33,8 +107,10 @@ function AppContent() {
   };
 
   const handleCharacterSelected = () => {
-    // Character selected - transition to game
+    // Character selected - transition to game loading screen
+    console.log(`🎮 [FRONTEND] Transitioning UI to 'in_game' screen (loading screen)`);
     setCurrentScreen("in_game");
+    setIsGameLoading(true);
   };
 
   const handleBackToLogin = () => {
@@ -49,7 +125,8 @@ function AppContent() {
   return (
     <div style={{ position: 'relative', minHeight: '100vh' }}>
       {/* Static background layer - doesn't transition */}
-      {backgroundUrl && (
+      {/* Hide background when in game to reveal Bevy 3D canvas */}
+      {backgroundUrl && !(currentScreen === "in_game" && !isGameLoading) && (
         <div
           style={{
             position: 'fixed',
@@ -85,9 +162,12 @@ function AppContent() {
           />
         )}
         {currentScreen === "in_game" && (
-          <div style={{ color: "white", padding: "20px" }}>
-            Loading game world...
-          </div>
+          isGameLoading ? (
+            <LoadingScreen
+              message={zoneStatus}
+              backgroundUrl={backgroundUrl}
+            />
+          ) : null
         )}
       </ScreenTransition>
     </div>

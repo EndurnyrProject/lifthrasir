@@ -14,6 +14,9 @@ impl Plugin for CharacterDomainPlugin {
         // Initialize character selection state resource
         app.insert_resource(CharacterSelectionState::default());
 
+        // Initialize zone server client resource
+        app.init_resource::<crate::infrastructure::networking::ZoneServerClient>();
+
         // Add unified character entity plugin (includes sprite hierarchy and state machines)
         app.add_plugins(UnifiedCharacterEntityPlugin);
 
@@ -34,7 +37,15 @@ impl Plugin for CharacterDomainPlugin {
             .add_event::<CharacterDeletedEvent>()
             .add_event::<CharacterDeletionFailedEvent>()
             .add_event::<CharacterHoverEvent>()
-            .add_event::<RefreshCharacterListEvent>();
+            .add_event::<RefreshCharacterListEvent>()
+            .add_event::<ZoneServerConnected>()
+            .add_event::<ZoneServerConnectionFailed>()
+            .add_event::<ZoneAuthenticationSuccess>()
+            .add_event::<ZoneAuthenticationFailed>()
+            .add_event::<MapLoadingStarted>()
+            .add_event::<MapLoadCompleted>()
+            .add_event::<MapLoadingFailed>()
+            .add_event::<ActorInitSent>();
 
         // Register character networking systems
         app.add_systems(
@@ -50,6 +61,14 @@ impl Plugin for CharacterDomainPlugin {
                 handle_character_created,
                 handle_character_deleted,
                 handle_refresh_character_list, // Handle character list refresh requests
+                crate::infrastructure::networking::zone_connection_system,
+                crate::infrastructure::networking::zone_packet_handler_system,
+                handle_zone_auth_success,
+                start_map_loading_timer,
+                detect_map_loading_timeout,
+                detect_map_load_complete,
+                handle_map_load_complete,
+                handle_actor_init_sent,
             )
                 .chain(), // Chain them to ensure update runs before event handlers
         );

@@ -4,3 +4,4 @@ pub mod character_creation;
 pub mod character_selection;
 pub mod server_selection;
 pub mod sprite_png;
+pub mod zone_status;

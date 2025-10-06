@@ -3,4 +3,5 @@ pub mod map_plugin;
 pub mod plugin;
 
 pub use authentication_plugin::*;
+pub use map_plugin::MapPlugin;
 pub use plugin::*;

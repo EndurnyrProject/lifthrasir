@@ -1,9 +1,11 @@
 pub mod app_bridge;
+pub mod event_emitter;
 pub mod event_translator;
 pub mod pending_senders;
 pub mod response_writer;
 
 pub use app_bridge::{AppBridge, HairstyleInfo, SessionData, TauriEvent, TauriEventReceiver};
+pub use event_emitter::{zone_status_event_emitter, TauriEventEmitter};
 pub use event_translator::translate_tauri_events;
 pub use pending_senders::PendingSenders;
 pub use response_writer::{
