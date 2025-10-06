@@ -68,14 +68,27 @@
   transform: none;
 }
 
-/* Transparent sprite viewport for Bevy rendering */
-.character-sprite-viewport {
-  width: 140px;
-  height: 200px;
-  background: transparent;
-  pointer-events: none;
+/* Character sprite container with layered rendering */
+.character-sprite-container {
   position: relative;
-  flex-shrink: 0;
+  width: 100%;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+/* Body and hair sprites - positioned absolutely for layering */
+.character-body-sprite,
+.character-hair-sprite {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  image-rendering: pixelated; /* Maintain pixel art quality */
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
 }
 
 /* Character info container with solid background */

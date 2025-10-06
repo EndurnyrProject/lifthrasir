@@ -3666,6 +3666,7 @@ name = "game-engine"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "bevy",
  "bevy-tokio-tasks",
  "bevy_asset_loader",
@@ -3679,6 +3680,7 @@ dependencies = [
  "futures-lite",
  "image",
  "lightyear",
+ "lru",
  "moonshine-kind",
  "moonshine-object",
  "moonshine-tag",
@@ -5188,6 +5190,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "tokio",
+ "toml 0.8.23",
  "uuid",
  "wgpu",
 ]
@@ -5801,6 +5804,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fae87c125b03c1d2c0150c90365d7d6bcc53fb73a9acaef207d2d065860f062"
 dependencies = [
  "imgref",
+]
+
+[[package]]
+name = "lru"
+version = "0.12.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
+dependencies = [
+ "hashbrown 0.15.5",
 ]
 
 [[package]]

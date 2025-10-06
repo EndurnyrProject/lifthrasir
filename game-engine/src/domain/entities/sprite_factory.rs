@@ -103,42 +103,6 @@ impl RoSpriteFactory {
         entity
     }
 
-    /// Spawn a hair preview sprite (for character creation)
-    /// Convenience method for rendering hair with custom colors
-    pub fn spawn_hair_preview(
-        commands: &mut Commands,
-        head_sprite: Handle<RoSpriteAsset>,
-        head_act: Handle<RoActAsset>,
-        head_palette: Option<Handle<RoPaletteAsset>>,
-        position: Vec3,
-    ) -> Entity {
-        Self::spawn_from_handles(
-            commands,
-            head_sprite,
-            head_act,
-            head_palette,
-            position,
-            0, // Idle action for previews
-        )
-    }
-
-    /// Spawn an equipment preview sprite
-    /// Convenience method for showing equipment items
-    pub fn spawn_equipment_preview(
-        commands: &mut Commands,
-        equipment_sprite: Handle<RoSpriteAsset>,
-        equipment_act: Handle<RoActAsset>,
-        position: Vec3,
-    ) -> Entity {
-        Self::spawn_from_handles(
-            commands,
-            equipment_sprite,
-            equipment_act,
-            None,
-            position,
-            0, // Idle action for previews
-        )
-    }
 }
 
 /// Component to track sprites waiting for asset loading

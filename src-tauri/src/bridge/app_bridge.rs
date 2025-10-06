@@ -71,16 +71,6 @@ pub enum TauriEvent {
         gender: u8,
         response_tx: oneshot::Sender<Result<Vec<HairstyleInfo>, String>>,
     },
-    /// Update character creation preview (fire-and-forget)
-    UpdateCreationPreview {
-        gender: u8,
-        hair_style: u16,
-        hair_color: u16,
-    },
-    /// Enter character creation screen
-    EnterCharacterCreation { slot: u8 },
-    /// Exit character creation screen
-    ExitCharacterCreation,
 }
 
 // ============================================================================
@@ -236,39 +226,6 @@ impl AppBridge {
             .await
             .map_err(|_| "Get hairstyles timeout".to_string())?
             .map_err(|_| "Response channel closed unexpectedly".to_string())?
-    }
-
-    /// Update character creation preview (fire-and-forget, no response)
-    pub async fn update_creation_preview(
-        &self,
-        gender: u8,
-        hair_style: u16,
-        hair_color: u16,
-    ) -> Result<(), String> {
-        self.tauri_tx
-            .send(TauriEvent::UpdateCreationPreview {
-                gender,
-                hair_style,
-                hair_color,
-            })
-            .map_err(|e| format!("Failed to send preview update: {}", e))?;
-        Ok(())
-    }
-
-    /// Enter character creation screen
-    pub async fn enter_character_creation(&self, slot: u8) -> Result<(), String> {
-        self.tauri_tx
-            .send(TauriEvent::EnterCharacterCreation { slot })
-            .map_err(|e| format!("Failed to enter creation screen: {}", e))?;
-        Ok(())
-    }
-
-    /// Exit character creation screen
-    pub async fn exit_character_creation(&self) -> Result<(), String> {
-        self.tauri_tx
-            .send(TauriEvent::ExitCharacterCreation)
-            .map_err(|e| format!("Failed to exit creation screen: {}", e))?;
-        Ok(())
     }
 }
 

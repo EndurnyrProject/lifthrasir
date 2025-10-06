@@ -7,11 +7,32 @@
   background: transparent;
 }
 
-/* Left half - Preview viewport */
-.preview-viewport {
+/* Left half - Character preview */
+.character-preview-container {
   flex: 1;
   background: transparent;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.character-sprite-preview {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 300px;
+  height: 400px;
+}
+
+.character-body-sprite,
+.character-hair-sprite {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 /* Right half - Customization panel */
@@ -320,7 +341,7 @@
     flex-direction: column;
   }
 
-  .preview-viewport {
+  .character-preview-container {
     min-height: 40vh;
   }
 

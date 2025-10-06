@@ -28,5 +28,8 @@ secrecy = { version = "0.10", features = ["serde"] }
 # Async dependencies (used in bridge)
 tokio = { version = "1.40", features = ["sync"] }
 
+# Configuration parsing
+toml = "0.8"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

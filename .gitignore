@@ -9,6 +9,9 @@
 robrowser-src
 grf-editor-src
 
+# Claude
+.claude_consciousness.m8
+
 
 .mcp.json
 
@@ -20,7 +23,6 @@ grf-editor-src
 
 # Icon must end with two \r
 Icon
-
 
 
 # Thumbnails

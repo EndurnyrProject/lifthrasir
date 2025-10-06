@@ -1,14 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect } from 'react';
 import { loadAsset } from '../lib/assets';
+import { SpriteImage } from '../components';
+import { Gender, getBodySpritePath, getHairSpritePath, getHairPalettePath } from '../lib/characterSprites';
 import CharacterCreation from './CharacterCreation';
 import './CharacterSelection.css';
 
-// Gender enum matching Rust Gender type
-enum Gender {
-  Female = 0,
-  Male = 1,
-}
+// Re-export Gender for backward compatibility
+export { Gender };
 
 // Job class enum matching Rust JobClass type
 enum JobClass {
@@ -165,11 +164,6 @@ export default function CharacterSelection({
   };
 
   const handleCharacterCreated = async () => {
-    // Exit character creation in backend
-    await invoke('exit_character_creation').catch(err => {
-      console.error('Failed to exit character creation:', err);
-    });
-
     try {
       const result = await invoke<CharacterListResponse>('get_character_list');
 
@@ -230,12 +224,7 @@ export default function CharacterSelection({
       <CharacterCreation
         selectedSlot={creationSlot}
         onCharacterCreated={handleCharacterCreated}
-        onCancel={async () => {
-          await invoke('exit_character_creation').catch(err => {
-            console.error('Failed to exit character creation:', err);
-          });
-          setScreen('list');
-        }}
+        onCancel={() => setScreen('list')}
       />
     );
   }
@@ -266,11 +255,32 @@ export default function CharacterSelection({
               >
                 {character ? (
                   <>
-                    <div
-                      className="character-sprite-viewport"
-                      data-slot={index}
-                    >
-                      {/* Transparent area - Bevy renders here */}
+                    <div className="character-sprite-container">
+                      {/* Body sprite - no offset, this is the anchor */}
+                      <SpriteImage
+                        spritePath={getBodySpritePath(character.class, character.sex)}
+                        actionIndex={0}
+                        frameIndex={0}
+                        scale={1.5}
+                        className="character-body-sprite"
+                        alt={`${character.name} body`}
+                        applyOffset={false}
+                      />
+
+                      {/* Hair sprite with palette */}
+                      <SpriteImage
+                        spritePath={getHairSpritePath(character.hair_style, character.sex)}
+                        actionIndex={0}
+                        frameIndex={0}
+                        palettePath={getHairPalettePath(
+                          character.hair_style,
+                          character.sex,
+                          character.hair_color
+                        )}
+                        scale={1.5}
+                        className="character-hair-sprite"
+                        alt={`${character.name} hair`}
+                      />
                     </div>
                     <div className="character-info">
                       <div className="character-name">{character.name}</div>

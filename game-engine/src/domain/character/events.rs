@@ -69,14 +69,6 @@ pub struct CharacterDeletionFailedEvent {
 }
 
 #[derive(Event, Debug)]
-pub struct OpenCharacterCreationEvent {
-    pub slot: u8,
-}
-
-#[derive(Event, Debug)]
-pub struct CloseCharacterCreationEvent;
-
-#[derive(Event, Debug)]
 pub struct CharacterHoverEvent {
     pub slot: Option<u8>,
 }

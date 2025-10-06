@@ -11,7 +11,6 @@ pub enum GameState {
     Connecting, // New state for network connection
     ServerSelection,
     CharacterSelection,
-    CharacterCreation,
     InGame,
     Paused,
 }

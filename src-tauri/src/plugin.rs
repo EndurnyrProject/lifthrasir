@@ -100,6 +100,39 @@ impl Plugin for TauriIntegrationPlugin {
             game_engine::infrastructure::assets::ro_assets_plugin::RoAssetsPlugin::with_unified_source();
         app.add_plugins(ro_asset_source_plugin);
 
+        // Load asset configuration for sprite renderer
+        let config_path = "assets/loader.data.toml";
+        let config: game_engine::infrastructure::assets::AssetConfig = {
+            let config_content = std::fs::read_to_string(config_path)
+                .expect("Failed to read asset config");
+            toml::from_str(&config_content)
+                .expect("Failed to parse asset config")
+        };
+
+        // Create HierarchicalAssetManager for sprite rendering
+        let asset_manager = game_engine::infrastructure::assets::HierarchicalAssetManager::from_config(&config)
+            .expect("Failed to create HierarchicalAssetManager");
+
+        // Create SpriteRenderer
+        let sprite_renderer = Arc::new(
+            game_engine::infrastructure::sprite_png::SpriteRenderer::new(asset_manager)
+        );
+
+        // Set up cache directory
+        let cache_dir = std::env::current_dir()
+            .unwrap()
+            .join(".cache")
+            .join("sprites");
+
+        // Create SpritePngCache
+        let sprite_png_cache = Arc::new(
+            game_engine::infrastructure::sprite_png::SpritePngCache::new(
+                sprite_renderer,
+                cache_dir,
+                100  // 100 sprites in memory cache
+            ).expect("Failed to create SpritePngCache")
+        );
+
         // Add DefaultPlugins with customizations
         // - WindowPlugin is customized to set primary window
         // - WinitPlugin is disabled because Tauri manages the window and event loop
@@ -165,6 +198,7 @@ impl Plugin for TauriIntegrationPlugin {
         // Set up Tauri app with custom runner
         let tauri_app = tauri::Builder::default()
             .manage(app_bridge)
+            .manage(sprite_png_cache)
             .invoke_handler(tauri::generate_handler![
                 commands::auth::login,
                 commands::assets::get_asset,
@@ -174,9 +208,9 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::character_selection::create_character,
                 commands::character_selection::delete_character,
                 commands::character_creation::get_hairstyles,
-                commands::character_creation::update_creation_preview,
-                commands::character_creation::enter_character_creation,
-                commands::character_creation::exit_character_creation
+                commands::sprite_png::get_sprite_png,
+                commands::sprite_png::preload_sprite_batch,
+                commands::sprite_png::clear_sprite_cache,
             ])
             .build(tauri::generate_context!())
             .expect("error while building tauri application");

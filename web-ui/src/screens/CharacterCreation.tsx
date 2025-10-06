@@ -1,13 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect, useRef } from 'react';
 import { loadAsset } from '../lib/assets';
+import { SpriteImage } from '../components';
+import { Gender, getBodySpritePath, getHairSpritePath, getHairPalettePath } from '../lib/characterSprites';
 import './CharacterCreation.css';
-
-// Gender enum matching Rust Gender type
-enum Gender {
-  Female = 0,
-  Male = 1,
-}
 
 interface HairstyleInfo {
   id: number;
@@ -44,17 +40,7 @@ export default function CharacterCreation({
   const [error, setError] = useState<string | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
 
-  const enteredRef = useRef(false);
   const assetsLoadedRef = useRef(false);
-
-  useEffect(() => {
-    if (!enteredRef.current) {
-      enteredRef.current = true;
-      invoke('enter_character_creation', { slot: selectedSlot }).catch((err) => {
-        setError('Failed to enter character creation');
-      });
-    }
-  }, [selectedSlot]);
 
   useEffect(() => {
     if (assetsLoadedRef.current) {
@@ -98,28 +84,12 @@ export default function CharacterCreation({
           setSelectedHairStyle(firstStyle.id);
           setAvailableColors(firstStyle.available_colors);
           setSelectedHairColor(firstStyle.available_colors[0] || 0);
-
-          await updatePreview(gender, firstStyle.id, firstStyle.available_colors[0] || 0);
         }
       } else {
         setError(result.error || 'Failed to load hairstyles');
       }
     } catch (err) {
       setError('Network error: ' + err);
-    }
-  };
-
-  const updatePreview = async (gender: Gender, hairStyle: number, hairColor: number) => {
-    try {
-      await invoke('update_creation_preview', {
-        preview: {
-          gender,
-          hair_style: hairStyle,
-          hair_color: hairColor,
-        }
-      });
-    } catch (err) {
-      setError('Failed to update preview');
     }
   };
 
@@ -130,19 +100,16 @@ export default function CharacterCreation({
     setLoading(false);
   };
 
-  const handleHairstyleSelect = async (styleInfo: HairstyleInfo) => {
+  const handleHairstyleSelect = (styleInfo: HairstyleInfo) => {
     setSelectedHairStyle(styleInfo.id);
     setAvailableColors(styleInfo.available_colors);
 
     const newColor = styleInfo.available_colors[0] || 0;
     setSelectedHairColor(newColor);
-
-    await updatePreview(selectedGender, styleInfo.id, newColor);
   };
 
-  const handleHairColorSelect = async (color: number) => {
+  const handleHairColorSelect = (color: number) => {
     setSelectedHairColor(color);
-    await updatePreview(selectedGender, selectedHairStyle, color);
   };
 
   const handleCreateCharacter = async () => {
@@ -218,7 +185,35 @@ export default function CharacterCreation({
         />
       )}
 
-      <div className="preview-viewport" />
+      <div className="character-preview-container">
+        <div className="character-sprite-preview">
+          {/* Body sprite - Novice class (0) - no offset, this is the anchor */}
+          <SpriteImage
+            spritePath={getBodySpritePath(0, selectedGender)}
+            actionIndex={0}
+            frameIndex={0}
+            scale={1.5}
+            className="character-body-sprite"
+            alt="Character body"
+            applyOffset={false}
+          />
+
+          {/* Hair sprite with palette - offset applied for alignment */}
+          <SpriteImage
+            spritePath={getHairSpritePath(selectedHairStyle, selectedGender)}
+            actionIndex={0}
+            frameIndex={0}
+            palettePath={getHairPalettePath(
+              selectedHairStyle,
+              selectedGender,
+              selectedHairColor
+            )}
+            scale={1.5}
+            className="character-hair-sprite"
+            alt="Character hair"
+          />
+        </div>
+      </div>
 
       <div className="customization-panel">
         <h1>Create Character</h1>
