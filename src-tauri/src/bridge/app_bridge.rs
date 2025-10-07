@@ -71,6 +71,11 @@ pub enum TauriEvent {
         gender: u8,
         response_tx: oneshot::Sender<Result<Vec<HairstyleInfo>, String>>,
     },
+    /// Forward keyboard input from JavaScript to Bevy
+    KeyboardInput {
+        code: String,
+        pressed: bool,
+    },
 }
 
 // ============================================================================
@@ -226,6 +231,15 @@ impl AppBridge {
             .await
             .map_err(|_| "Get hairstyles timeout".to_string())?
             .map_err(|_| "Response channel closed unexpectedly".to_string())?
+    }
+
+    /// Forward keyboard input from JavaScript to Bevy (fire and forget)
+    pub fn forward_keyboard_input(&self, code: String, pressed: bool) -> Result<(), String> {
+        self.tauri_tx
+            .send(TauriEvent::KeyboardInput { code, pressed })
+            .map_err(|e| format!("Failed to send keyboard input event: {}", e))?;
+
+        Ok(())
     }
 }
 

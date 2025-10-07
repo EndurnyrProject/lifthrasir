@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import Login from "./screens/Login";
 import ServerSelection from "./screens/ServerSelection";
 import CharacterSelection from "./screens/CharacterSelection";
@@ -96,6 +97,41 @@ function AppContent() {
       });
     };
   }, []);
+
+  // Forward keyboard events to Bevy when in-game and not focused on UI elements
+  useEffect(() => {
+    if (currentScreen !== "in_game" || isGameLoading) return;
+
+    const isInteractiveElement = (target: EventTarget | null): boolean => {
+      if (!(target instanceof Element)) return false;
+      const tag = target.tagName.toLowerCase();
+      return ['input', 'textarea', 'select', 'button'].includes(tag) ||
+             target.hasAttribute('contenteditable');
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isInteractiveElement(e.target)) {
+        e.preventDefault(); // Prevent browser shortcuts
+        invoke('forward_keyboard_input', { code: e.code, pressed: true }).catch(console.error);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!isInteractiveElement(e.target)) {
+        invoke('forward_keyboard_input', { code: e.code, pressed: false }).catch(console.error);
+      }
+    };
+
+    console.log('🎮 [FRONTEND] Setting up keyboard event forwarding to Bevy');
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      console.log('🖱️ [FRONTEND] Removing keyboard event forwarding');
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [currentScreen, isGameLoading]);
 
   const handleLoginSuccess = (serverList: ServerInfo[]) => {
     setServers(serverList);

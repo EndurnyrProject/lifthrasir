@@ -213,6 +213,7 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::sprite_png::preload_sprite_batch,
                 commands::sprite_png::clear_sprite_cache,
                 commands::zone_status::get_zone_status,
+                commands::input::forward_keyboard_input,
             ])
             .build(tauri::generate_context!())
             .expect("error while building tauri application");

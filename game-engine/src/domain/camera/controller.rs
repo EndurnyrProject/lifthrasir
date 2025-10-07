@@ -1,5 +1,6 @@
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_system;
 
 #[derive(Component)]
 pub struct CameraController {
@@ -20,6 +21,10 @@ impl Default for CameraController {
     }
 }
 
+#[auto_system(
+    plugin = crate::app::plugin::LifthrasirPlugin,
+    schedule = Update,
+)]
 pub fn camera_movement_system(
     time: Res<Time>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -28,6 +33,11 @@ pub fn camera_movement_system(
     mut mouse_wheel_events: EventReader<MouseWheel>,
     mut camera_query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
+    let camera_count = camera_query.iter().count();
+    if camera_count == 0 {
+        return;
+    }
+
     for (mut transform, mut controller) in camera_query.iter_mut() {
         let delta = time.delta_secs();
 
@@ -63,10 +73,10 @@ pub fn camera_movement_system(
         let mut movement = Vec3::ZERO;
 
         if keyboard_input.pressed(KeyCode::KeyW) || keyboard_input.pressed(KeyCode::ArrowUp) {
-            movement.z -= 1.0;
+            movement.z += 1.0;
         }
         if keyboard_input.pressed(KeyCode::KeyS) || keyboard_input.pressed(KeyCode::ArrowDown) {
-            movement.z += 1.0;
+            movement.z -= 1.0;
         }
         if keyboard_input.pressed(KeyCode::KeyA) || keyboard_input.pressed(KeyCode::ArrowLeft) {
             movement.x -= 1.0;
@@ -84,10 +94,10 @@ pub fn camera_movement_system(
         if movement != Vec3::ZERO {
             movement = movement.normalize();
 
-            // Transform movement to camera space
-            let right = transform.rotation * Vec3::X;
-            let up = Vec3::Y; // Keep up as world up
-            let forward = transform.rotation * Vec3::NEG_Z;
+            // Use world-space axes for RO-style controls
+            let right = Vec3::X; // World east-west
+            let up = Vec3::Y; // World up-down
+            let forward = Vec3::Z; // World north-south
 
             let movement_world = right * movement.x + up * movement.y + forward * movement.z;
             transform.translation += movement_world * controller.move_speed * delta;

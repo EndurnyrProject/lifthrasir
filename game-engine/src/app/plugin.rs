@@ -1,5 +1,3 @@
-// use crate::domain::camera::controller::camera_movement_system;  // Disabled for UI development
-// use crate::presentation::rendering::terrain::setup;            // Disabled for UI development
 use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_plugin, AutoPlugin};
 // Animation system available: use crate::systems::animate_sprites;

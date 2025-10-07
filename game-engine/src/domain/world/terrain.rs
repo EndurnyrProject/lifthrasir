@@ -878,8 +878,8 @@ pub fn setup_terrain_camera(
         map_data.height,
     );
 
-    // Position camera above and behind the spawn point
-    let camera_offset = Vec3::new(0.0, -2000.0, -500.0);
+    // Position camera above and behind the spawn point (RO isometric style)
+    let camera_offset = Vec3::new(0.0, -300.0, -300.0);
     let camera_pos = spawn_world_pos + camera_offset;
 
     commands.spawn((

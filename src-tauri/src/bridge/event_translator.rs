@@ -1,6 +1,7 @@
 use super::{HairstyleInfo, TauriEvent, TauriEventReceiver};
 use crate::bridge::pending_senders::PendingSenders;
 use bevy::prelude::*;
+use bevy::input::ButtonInput;
 use game_engine::domain::character::{
     catalog::HeadStyleCatalog, CharacterCreationForm, CreateCharacterRequestEvent,
     DeleteCharacterRequestEvent, Gender, JobClass, RequestCharacterListEvent,
@@ -9,6 +10,65 @@ use game_engine::domain::character::{
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::{LoginAttemptEvent, ServerSelectedEvent};
 use secrecy::SecretString;
+
+/// Convert JavaScript KeyboardEvent.code to Bevy KeyCode
+fn js_code_to_bevy_keycode(code: &str) -> Option<KeyCode> {
+    match code {
+        // Letters
+        "KeyA" => Some(KeyCode::KeyA),
+        "KeyB" => Some(KeyCode::KeyB),
+        "KeyC" => Some(KeyCode::KeyC),
+        "KeyD" => Some(KeyCode::KeyD),
+        "KeyE" => Some(KeyCode::KeyE),
+        "KeyF" => Some(KeyCode::KeyF),
+        "KeyG" => Some(KeyCode::KeyG),
+        "KeyH" => Some(KeyCode::KeyH),
+        "KeyI" => Some(KeyCode::KeyI),
+        "KeyJ" => Some(KeyCode::KeyJ),
+        "KeyK" => Some(KeyCode::KeyK),
+        "KeyL" => Some(KeyCode::KeyL),
+        "KeyM" => Some(KeyCode::KeyM),
+        "KeyN" => Some(KeyCode::KeyN),
+        "KeyO" => Some(KeyCode::KeyO),
+        "KeyP" => Some(KeyCode::KeyP),
+        "KeyQ" => Some(KeyCode::KeyQ),
+        "KeyR" => Some(KeyCode::KeyR),
+        "KeyS" => Some(KeyCode::KeyS),
+        "KeyT" => Some(KeyCode::KeyT),
+        "KeyU" => Some(KeyCode::KeyU),
+        "KeyV" => Some(KeyCode::KeyV),
+        "KeyW" => Some(KeyCode::KeyW),
+        "KeyX" => Some(KeyCode::KeyX),
+        "KeyY" => Some(KeyCode::KeyY),
+        "KeyZ" => Some(KeyCode::KeyZ),
+        // Arrow keys
+        "ArrowUp" => Some(KeyCode::ArrowUp),
+        "ArrowDown" => Some(KeyCode::ArrowDown),
+        "ArrowLeft" => Some(KeyCode::ArrowLeft),
+        "ArrowRight" => Some(KeyCode::ArrowRight),
+        // Numbers
+        "Digit1" => Some(KeyCode::Digit1),
+        "Digit2" => Some(KeyCode::Digit2),
+        "Digit3" => Some(KeyCode::Digit3),
+        "Digit4" => Some(KeyCode::Digit4),
+        "Digit5" => Some(KeyCode::Digit5),
+        "Digit6" => Some(KeyCode::Digit6),
+        "Digit7" => Some(KeyCode::Digit7),
+        "Digit8" => Some(KeyCode::Digit8),
+        "Digit9" => Some(KeyCode::Digit9),
+        "Digit0" => Some(KeyCode::Digit0),
+        // Special keys
+        "Space" => Some(KeyCode::Space),
+        "Enter" => Some(KeyCode::Enter),
+        "Escape" => Some(KeyCode::Escape),
+        "Tab" => Some(KeyCode::Tab),
+        "Backspace" => Some(KeyCode::Backspace),
+        "ShiftLeft" | "ShiftRight" => Some(KeyCode::ShiftLeft),
+        "ControlLeft" | "ControlRight" => Some(KeyCode::ControlLeft),
+        "AltLeft" | "AltRight" => Some(KeyCode::AltLeft),
+        _ => None,
+    }
+}
 
 /// System that translates Tauri events to Bevy domain events
 /// Runs in the Update schedule, checking for new events from Tauri
@@ -21,6 +81,7 @@ pub fn translate_tauri_events(
     mut create_char_events: EventWriter<CreateCharacterRequestEvent>,
     mut delete_char_events: EventWriter<DeleteCharacterRequestEvent>,
     mut pending: ResMut<PendingSenders>,
+    mut keyboard_input: ResMut<ButtonInput<KeyCode>>,
     session: Option<Res<UserSession>>,
     catalog: Option<Res<HeadStyleCatalog>>,
 ) {
@@ -124,6 +185,15 @@ pub fn translate_tauri_events(
                 };
 
                 let _ = response_tx.send(result);
+            }
+            TauriEvent::KeyboardInput { code, pressed } => {
+                if let Some(keycode) = js_code_to_bevy_keycode(&code) {
+                    if pressed {
+                        keyboard_input.press(keycode);
+                    } else {
+                        keyboard_input.release(keycode);
+                    }
+                }
             }
         }
     }

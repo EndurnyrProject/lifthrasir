@@ -33,18 +33,18 @@ pub fn get_map_dimensions_from_ground(
 }
 
 /// Convert RO spawn coordinates (cell coords) to Bevy world position
-/// RO coordinates are in cells, this converts to world space centered like terrain
-pub fn spawn_coords_to_world_position(x: u16, y: u16, map_width: u32, map_height: u32) -> Vec3 {
-    // Convert cell coords to world space, centering the map
-    let world_x = (x as f32 * CELL_SIZE) - (map_width as f32 * CELL_SIZE / 2.0);
-    let world_z = -((y as f32 * CELL_SIZE) - (map_height as f32 * CELL_SIZE / 2.0));
+/// RO coordinates are in cells, this converts to world space starting from origin
+pub fn spawn_coords_to_world_position(x: u16, y: u16, _map_width: u32, _map_height: u32) -> Vec3 {
+    // Convert cell coords to world space, origin-based like terrain mesh
+    let world_x = x as f32 * CELL_SIZE;
+    let world_z = y as f32 * CELL_SIZE;
 
     Vec3::new(world_x, 0.0, world_z)
 }
 
 /// Convert Bevy world position to RO spawn coordinates (cell coords)
-pub fn world_position_to_spawn_coords(pos: Vec3, map_width: u32, map_height: u32) -> (u16, u16) {
-    let x = ((pos.x + (map_width as f32 * CELL_SIZE / 2.0)) / CELL_SIZE) as u16;
-    let y = ((-(pos.z) + (map_height as f32 * CELL_SIZE / 2.0)) / CELL_SIZE) as u16;
+pub fn world_position_to_spawn_coords(pos: Vec3, _map_width: u32, _map_height: u32) -> (u16, u16) {
+    let x = (pos.x / CELL_SIZE) as u16;
+    let y = (pos.z / CELL_SIZE) as u16;
     (x, y)
 }
