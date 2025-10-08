@@ -7,6 +7,7 @@ use game_engine::domain::character::{
     DeleteCharacterRequestEvent, Gender, JobClass, RequestCharacterListEvent,
     SelectCharacterEvent,
 };
+use game_engine::domain::input::ForwardedCursorPosition;
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::{LoginAttemptEvent, ServerSelectedEvent};
 use secrecy::SecretString;
@@ -82,6 +83,7 @@ pub fn translate_tauri_events(
     mut delete_char_events: EventWriter<DeleteCharacterRequestEvent>,
     mut pending: ResMut<PendingSenders>,
     mut keyboard_input: ResMut<ButtonInput<KeyCode>>,
+    mut cursor_position: ResMut<ForwardedCursorPosition>,
     session: Option<Res<UserSession>>,
     catalog: Option<Res<HeadStyleCatalog>>,
 ) {
@@ -194,6 +196,9 @@ pub fn translate_tauri_events(
                         keyboard_input.release(keycode);
                     }
                 }
+            }
+            TauriEvent::MousePosition { x, y } => {
+                cursor_position.position = Some(Vec2::new(x, y));
             }
         }
     }

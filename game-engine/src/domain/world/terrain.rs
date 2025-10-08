@@ -38,7 +38,8 @@ fn create_terrain_materials_from_loaded_textures(
     let mut texture_materials = Vec::new();
 
     for (i, texture_name) in ground.textures.iter().enumerate() {
-        let material = if i < texture_handles.len() && texture_handles[i].id() != AssetId::default() {
+        let material = if i < texture_handles.len() && texture_handles[i].id() != AssetId::default()
+        {
             // Check if texture actually loaded successfully
             match asset_server.load_state(&texture_handles[i]) {
                 LoadState::Loaded => {
@@ -56,7 +57,10 @@ fn create_terrain_materials_from_loaded_textures(
                 }
                 _ => {
                     // Texture failed or not loaded - use colored fallback
-                    warn!("Texture failed, using colored fallback for: {}", texture_name);
+                    warn!(
+                        "Texture failed, using colored fallback for: {}",
+                        texture_name
+                    );
                     create_colored_fallback_material(i, materials)
                 }
             }
@@ -421,7 +425,10 @@ pub fn generate_terrain_mesh(
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
     asset_server: Res<AssetServer>,
-    query: Query<(Entity, &MapLoader, &MapRequestLoader), (Without<MapData>, Without<TerrainTexturesLoading>)>,
+    query: Query<
+        (Entity, &MapLoader, &MapRequestLoader),
+        (Without<MapData>, Without<TerrainTexturesLoading>),
+    >,
 ) {
     for (entity, map_loader, map_request) in query.iter() {
         debug!(
@@ -538,7 +545,10 @@ pub fn generate_terrain_when_textures_ready(
                 }
                 LoadState::Failed(_) => {
                     failed_count += 1;
-                    warn!("Failed to load texture: {}", textures_loading.texture_names[i]);
+                    warn!(
+                        "Failed to load texture: {}",
+                        textures_loading.texture_names[i]
+                    );
                 }
                 LoadState::Loading | LoadState::NotLoaded => {
                     all_ready = false;
@@ -548,7 +558,10 @@ pub fn generate_terrain_when_textures_ready(
         }
 
         if !all_ready {
-            debug!("Waiting for textures to load for map '{}'", map_request.map_name);
+            debug!(
+                "Waiting for textures to load for map '{}'",
+                map_request.map_name
+            );
             continue;
         }
 
@@ -563,7 +576,8 @@ pub fn generate_terrain_when_textures_ready(
             continue;
         };
 
-        let altitude = textures_loading.altitude_handle
+        let altitude = textures_loading
+            .altitude_handle
             .as_ref()
             .and_then(|h| altitude_assets.get(h))
             .map(|a| &a.altitude);
@@ -595,7 +609,7 @@ pub fn generate_terrain_when_textures_ready(
                 continue; // Skip empty meshes
             }
 
-            info!(
+            debug!(
                 "generate_terrain_mesh: Spawning mesh #{} at (0,0,0), vertices: {}, texture_idx: {}",
                 mesh_count + 1,
                 vertex_count,
@@ -644,7 +658,8 @@ pub fn generate_terrain_when_textures_ready(
         );
 
         // Update the original entity with map data and remove loading component
-        commands.entity(entity)
+        commands
+            .entity(entity)
             .insert(MapData {
                 name: "Map".to_string(),
                 width: ground.ground.width,

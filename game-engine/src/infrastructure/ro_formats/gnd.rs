@@ -1,5 +1,5 @@
-use crate::utils::string_utils::parse_korean_string;
-use bevy::log::error;
+use crate::utils::{constants::CELL_SIZE, string_utils::parse_korean_string};
+use bevy::{log::error, prelude::Vec3};
 use nom::{
     bytes::complete::{tag, take},
     number::complete::{le_f32, le_i32, le_u16, le_u32, le_u8},
@@ -55,6 +55,55 @@ impl RoGround {
                 Err(GndError::ParseError(e.to_string()))
             }
         }
+    }
+
+    /// Calculates the terrain height at a given world position using bilinear interpolation.
+    /// Returns `None` if the position is outside the map boundaries.
+    ///
+    /// # Arguments
+    /// * `world_pos` - The world position to query (X, Y, Z coordinates)
+    ///
+    /// # Returns
+    /// * `Some(height)` - The interpolated terrain height in world coordinates
+    /// * `None` - If the position is outside the terrain bounds
+    pub fn get_terrain_height_at_position(&self, world_pos: Vec3) -> Option<f32> {
+        // Convert world position to cell coordinates using floor for correct negative handling
+        let cell_x = (world_pos.x / CELL_SIZE).floor() as i32;
+        let cell_z = (world_pos.z / CELL_SIZE).floor() as i32;
+
+        // Bounds check
+        if cell_x < 0
+            || cell_x >= self.width as i32
+            || cell_z < 0
+            || cell_z >= self.height as i32
+        {
+            return None;
+        }
+
+        // Get surface at this cell (surfaces are stored row-major: index = z * width + x)
+        let surface_index = (cell_z as usize) * (self.width as usize) + (cell_x as usize);
+        let surface = self.surfaces.get(surface_index)?;
+
+        // Calculate fractional position within cell [0.0, 1.0]
+        let fx = (world_pos.x / CELL_SIZE).fract().abs();
+        let fz = (world_pos.z / CELL_SIZE).fract().abs();
+
+        // Bilinear interpolation based on corner heights
+        // height[0]=SW, height[1]=SE, height[2]=NW, height[3]=NE
+        let h_sw = surface.height[0];
+        let h_se = surface.height[1];
+        let h_nw = surface.height[2];
+        let h_ne = surface.height[3];
+
+        // Interpolate along south edge (z=0): SW to SE
+        let height_south = h_sw * (1.0 - fx) + h_se * fx;
+        // Interpolate along north edge (z=1): NW to NE
+        let height_north = h_nw * (1.0 - fx) + h_ne * fx;
+        // Interpolate between south and north edges
+        let interpolated_height = height_south * (1.0 - fz) + height_north * fz;
+
+        // Apply world scale (heights are stored divided by 5.0, so multiply back)
+        Some(interpolated_height * 5.0)
     }
 }
 

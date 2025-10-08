@@ -141,7 +141,10 @@ impl Plugin for TauriIntegrationPlugin {
         app.add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
-                    primary_window: Some(Window::default()),
+                    primary_window: Some(Window {
+                        resolution: (1440.0, 1080.0).into(),
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 })
                 .build()
@@ -157,7 +160,7 @@ impl Plugin for TauriIntegrationPlugin {
                 .disable::<bevy::gltf::GltfPlugin>()
                 .disable::<bevy::audio::AudioPlugin>()
                 .disable::<bevy::animation::AnimationPlugin>()
-                .disable::<bevy::gizmos::GizmoPlugin>(),
+                .disable::<bevy::gizmos::GizmoPlugin>(),  // Re-added later with render pipeline
         );
 
         // Add game engine plugins (AFTER core Bevy plugins are set up)
@@ -170,6 +173,7 @@ impl Plugin for TauriIntegrationPlugin {
             game_engine::CharacterDomainPlugin,
             game_engine::AuthenticationPlugin,
             game_engine::WorldPlugin,
+            game_engine::InputPlugin,   // Input handling (cursor, clicks, terrain cursor)
         ));
 
         // Create AppBridge and event receiver
@@ -214,6 +218,7 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::sprite_png::clear_sprite_cache,
                 commands::zone_status::get_zone_status,
                 commands::input::forward_keyboard_input,
+                commands::input::forward_mouse_position,
             ])
             .build(tauri::generate_context!())
             .expect("error while building tauri application");

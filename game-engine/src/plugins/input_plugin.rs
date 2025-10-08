@@ -1,5 +1,2 @@
-use bevy_auto_plugin::modes::global::prelude::AutoPlugin;
-
-#[derive(AutoPlugin)]
-#[auto_plugin(impl_plugin_trait)]
-pub struct InputPlugin;
+// Re-export the InputPlugin from domain
+pub use crate::domain::input::InputPlugin;

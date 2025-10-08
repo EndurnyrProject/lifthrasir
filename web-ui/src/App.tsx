@@ -133,6 +133,29 @@ function AppContent() {
     };
   }, [currentScreen, isGameLoading]);
 
+  // Forward mouse position to Bevy for debug visualization
+  useEffect(() => {
+    if (currentScreen !== "in_game" || isGameLoading) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // Bevy's Camera::viewport_to_world expects top-left origin coordinates
+      // (same as browser clientX/clientY), so pass them directly without inversion
+      invoke('forward_mouse_position', {
+        x: e.clientX,
+        y: e.clientY
+      }).catch(console.error);
+    };
+
+    console.log('🖱️ [FRONTEND] Setting up mouse position forwarding to Bevy');
+    console.log(`🖱️ [FRONTEND] Window dimensions: ${window.innerWidth}x${window.innerHeight}`);
+    document.addEventListener('mousemove', handleMouseMove);
+
+    return () => {
+      console.log('🖱️ [FRONTEND] Removing mouse position forwarding');
+      document.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [currentScreen, isGameLoading]);
+
   const handleLoginSuccess = (serverList: ServerInfo[]) => {
     setServers(serverList);
     setCurrentScreen("server_selection");
