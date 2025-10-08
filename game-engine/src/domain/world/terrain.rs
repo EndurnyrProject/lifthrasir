@@ -873,9 +873,7 @@ pub fn setup_terrain_camera(
         return;
     };
 
-    // Use get_single() to expect exactly one MapData entity
-    // This is more robust than iter().next() as it will error if our assumption is violated
-    let map_data = match query.get_single() {
+    let map_data = match query.single() {
         Ok(data) => data,
         Err(e) => {
             error!("setup_terrain_camera: Failed to get MapData: {}", e);
@@ -883,6 +881,10 @@ pub fn setup_terrain_camera(
         }
     };
 
+    info!(
+        "Spawn X: {}, Spawn Y: {}",
+        spawn_context.spawn_x, spawn_context.spawn_y,
+    );
     info!("setup_terrain_camera: MapData detected, spawning camera");
 
     // Convert spawn cell coords to world position
@@ -894,7 +896,7 @@ pub fn setup_terrain_camera(
     );
 
     // Position camera above and behind the spawn point (RO isometric style)
-    let camera_offset = Vec3::new(0.0, -300.0, -300.0);
+    let camera_offset = Vec3::new(0.0, -150.0, -150.0);
     let camera_pos = spawn_world_pos + camera_offset;
 
     commands.spawn((

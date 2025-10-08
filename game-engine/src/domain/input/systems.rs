@@ -1,6 +1,4 @@
-use crate::{
-    domain::world::components::MapLoader, infrastructure::assets::loaders::RoGroundAsset,
-};
+use crate::{domain::world::components::MapLoader, infrastructure::assets::loaders::RoGroundAsset};
 use bevy::math::primitives::InfinitePlane3d;
 use bevy::prelude::*;
 
@@ -46,7 +44,9 @@ pub fn render_terrain_cursor(
     let world_pos = ray.origin + ray.direction * distance;
 
     // Get the actual terrain height at this position
-    let Some(terrain_height) = ground_asset.ground.get_terrain_height_at_position(world_pos)
+    let Some(terrain_height) = ground_asset
+        .ground
+        .get_terrain_height_at_position(world_pos)
     else {
         return; // Position outside terrain bounds
     };

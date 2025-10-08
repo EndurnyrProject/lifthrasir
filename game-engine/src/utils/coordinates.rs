@@ -32,19 +32,24 @@ pub fn get_map_dimensions_from_ground(
     (width, height)
 }
 
-/// Convert RO spawn coordinates (cell coords) to Bevy world position
-/// RO coordinates are in cells, this converts to world space starting from origin
+/// Convert RO spawn coordinates to Bevy world position
+/// RO coordinates use 5.0 units per cell, while Bevy uses 10.0 (CELL_SIZE)
+/// This is because CELL_SIZE is 2x RO's native scale for rendering
 pub fn spawn_coords_to_world_position(x: u16, y: u16, _map_width: u32, _map_height: u32) -> Vec3 {
-    // Convert cell coords to world space, origin-based like terrain mesh
-    let world_x = x as f32 * CELL_SIZE;
-    let world_z = y as f32 * CELL_SIZE;
+    // RO uses 5.0 units per cell in its native coordinate system
+    // Bevy's CELL_SIZE (10.0) is 2x this for scaled rendering
+    const RO_UNITS_PER_CELL: f32 = 5.0;
+    let world_x = x as f32 * RO_UNITS_PER_CELL;
+    let world_z = y as f32 * RO_UNITS_PER_CELL;
 
     Vec3::new(world_x, 0.0, world_z)
 }
 
-/// Convert Bevy world position to RO spawn coordinates (cell coords)
+/// Convert Bevy world position to RO spawn coordinates
+/// Inverse of spawn_coords_to_world_position, using RO's native 5.0 units per cell
 pub fn world_position_to_spawn_coords(pos: Vec3, _map_width: u32, _map_height: u32) -> (u16, u16) {
-    let x = (pos.x / CELL_SIZE) as u16;
-    let y = (pos.z / CELL_SIZE) as u16;
+    const RO_UNITS_PER_CELL: f32 = 5.0;
+    let x = (pos.x / RO_UNITS_PER_CELL) as u16;
+    let y = (pos.z / RO_UNITS_PER_CELL) as u16;
     (x, y)
 }
