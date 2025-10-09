@@ -8,7 +8,7 @@ use crate::{
         spawn_map_models, load_rsm_assets, update_model_meshes,
         create_model_materials_when_textures_ready, update_rsm_animations,
     },
-    presentation::rendering::water::{animate_water_system, load_water_system},
+    presentation::rendering::water::{animate_water_system, finalize_water_loading_system, load_water_system},
 };
 use bevy::prelude::*;
 
@@ -35,6 +35,7 @@ impl Plugin for MapPlugin {
                     create_model_materials_when_textures_ready,
                     update_rsm_animations,
                     load_water_system,
+                    finalize_water_loading_system,
                     animate_water_system,
                 ),
             );

@@ -1,4 +1,5 @@
 use bevy::{
+    image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     prelude::*,
     render::{
         mesh::{Indices, PrimitiveTopology},
@@ -15,21 +16,29 @@ use crate::{
     utils::constants::CELL_SIZE,
 };
 
+/// Temporary component to track water texture loading state
+#[derive(Component)]
+pub struct WaterLoadingState {
+    texture_handle: Handle<Image>,
+    water_tiles: Vec<(usize, usize)>,
+    wave_height: f32,
+    water_level: f32,
+    wave_height_param: f32,
+    wave_speed: f32,
+    wave_pitch: f32,
+    animation_speed: f32,
+}
+
 pub fn load_water_system(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<WaterMaterial>>,
-    mut images: ResMut<Assets<Image>>,
     world_assets: Res<Assets<RoWorldAsset>>,
     asset_server: Res<AssetServer>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     query: Query<
         (Entity, &MapLoader, &MapRequestLoader, &MapData),
-        (Without<WaterSurface>, With<MapData>),
+        (Without<WaterSurface>, Without<WaterLoadingState>, With<MapData>),
     >,
 ) {
-    // AssetServer is always available
-
     for (entity, map_loader, _map_request, _) in query.iter() {
         let Some(world_handle) = map_loader.world.as_ref() else {
             continue;
@@ -99,71 +108,137 @@ pub fn load_water_system(
 
         info!("Creating single water mesh for {} tiles", water_tiles.len());
 
-        // Load water texture using AssetServer
+        // Start loading water texture using AssetServer (async)
         let water_texture = load_water_texture(water.water_type, 0, &asset_server);
 
-        info!("Water texture handle created: {:?}", water_texture);
+        info!(
+            "Water texture loading started: {:?}, waiting for asset to load...",
+            water_texture
+        );
 
-        // Generate procedural normal map for water
-        let normal_map = generate_water_normal_map(&mut images);
-        info!("Generated procedural water normal map");
+        // Add loading state component to track async texture loading
+        commands.entity(entity).insert(WaterLoadingState {
+            texture_handle: water_texture,
+            water_tiles,
+            wave_height,
+            water_level: water.level,
+            wave_height_param: water.wave_height,
+            wave_speed: water.wave_speed,
+            wave_pitch: water.wave_pitch,
+            animation_speed: water.anim_speed as f32,
+        });
+    }
+}
 
-        // Create single mesh containing all water tiles
-        let water_mesh = create_water_tiles_mesh(&water_tiles, wave_height);
-        let mesh_handle = meshes.add(water_mesh);
+/// System to finalize water loading once textures are ready
+pub fn finalize_water_loading_system(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<WaterMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    asset_server: Res<AssetServer>,
+    query: Query<(Entity, &WaterLoadingState)>,
+) {
+    for (entity, loading_state) in query.iter() {
+        // Check if texture is loaded
+        if asset_server.is_loaded_with_dependencies(&loading_state.texture_handle) {
+            info!("Water texture loaded successfully, creating water mesh and material");
 
-        // Calculate texture scale based on map size
-        // This determines how many tiles the texture spans
-        let texture_scale = 0.125; // Adjust this value to control texture tiling (0.125 = texture repeats every 8 tiles)
+            // Debug: Verify texture data and fix sampler for tiling
+            if let Some(image) = images.get_mut(&loading_state.texture_handle) {
+                info!(
+                    "✅ Water texture data verified: {}x{}, format: {:?}, sampler: {:?}",
+                    image.width(),
+                    image.height(),
+                    image.texture_descriptor.format,
+                    image.sampler
+                );
 
-        // Create a single material for all water
-        let water_extension = WaterExtension {
-            water_data: crate::domain::assets::components::WaterData {
-                wave_params: Vec4::new(water.wave_height, water.wave_speed, water.wave_pitch, 0.0),
-                animation_params: Vec4::ZERO,
-                tile_coords: Vec4::new(0.0, 0.0, texture_scale, 0.0),
-            },
-            water_texture,
-            normal_map,
-        };
+                // Override sampler to Repeat mode for proper tiling across water surface
+                // Bevy's built-in JPEG loader uses Default (ClampToEdge), but we need Repeat
+                image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                    address_mode_u: ImageAddressMode::Repeat,
+                    address_mode_v: ImageAddressMode::Repeat,
+                    address_mode_w: ImageAddressMode::Repeat,
+                    mag_filter: ImageFilterMode::Linear,
+                    min_filter: ImageFilterMode::Linear,
+                    mipmap_filter: ImageFilterMode::Linear,
+                    ..Default::default()
+                });
+                info!("✅ Set water texture sampler to Repeat mode for tiling");
+            } else {
+                warn!("⚠️  Water texture handle is 'loaded' but image data is not in Assets<Image>!");
+            }
 
-        let water_material = WaterMaterial {
-            base: StandardMaterial {
-                base_color: Color::srgba(1.0, 1.0, 1.0, 0.3), // Much more transparent
-                alpha_mode: AlphaMode::Blend,                 // Use Blend for proper transparency
-                perceptual_roughness: 0.1,
-                metallic: 0.0,
-                reflectance: 0.9,
-                ..default()
-            },
-            extension: water_extension,
-        };
+            // Generate procedural normal map for water
+            let normal_map = generate_water_normal_map(&mut images);
 
-        let material_handle = materials.add(water_material);
+            // Create single mesh containing all water tiles
+            let water_mesh = create_water_tiles_mesh(&loading_state.water_tiles, loading_state.wave_height);
+            let mesh_handle = meshes.add(water_mesh);
 
-        // Spawn single entity with all water
-        commands.spawn((
-            Mesh3d(mesh_handle.clone()),
-            MeshMaterial3d(material_handle.clone()),
-            Transform::IDENTITY,
-        ));
+            // Calculate texture scale based on map size
+            let texture_scale = 0.125;
 
-        // Add water surface component to the main entity
-        commands.entity(entity).insert((
-            WaterSurface {
-                water_level: water.level,
-                wave_height: water.wave_height,
-                wave_speed: water.wave_speed,
-                wave_pitch: water.wave_pitch,
-                animation_speed: water.anim_speed as f32,
-                mesh_handle,
-                material_handle,
-            },
-            WaterAnimation {
-                time: 0.0,
-                uv_offset: Vec2::ZERO,
-            },
-        ));
+            // Create a single material for all water with loaded texture
+            let water_extension = WaterExtension {
+                water_data: crate::domain::assets::components::WaterData {
+                    wave_params: Vec4::new(
+                        loading_state.wave_height_param,
+                        loading_state.wave_speed,
+                        loading_state.wave_pitch,
+                        0.0,
+                    ),
+                    animation_params: Vec4::ZERO,
+                    tile_coords: Vec4::new(0.0, 0.0, texture_scale, 0.0),
+                },
+                water_texture: loading_state.texture_handle.clone(),
+                normal_map,
+            };
+
+            let water_material = WaterMaterial {
+                base: StandardMaterial {
+                    base_color: Color::srgba(1.0, 1.0, 1.0, 0.3),
+                    alpha_mode: AlphaMode::Blend,
+                    perceptual_roughness: 0.1,
+                    metallic: 0.0,
+                    reflectance: 0.9,
+                    ..default()
+                },
+                extension: water_extension,
+            };
+
+            let material_handle = materials.add(water_material);
+
+            // Spawn single entity with all water
+            commands.spawn((
+                Mesh3d(mesh_handle.clone()),
+                MeshMaterial3d(material_handle.clone()),
+                Transform::IDENTITY,
+            ));
+
+            // Add water surface component to the main entity and remove loading state
+            commands
+                .entity(entity)
+                .insert((
+                    WaterSurface {
+                        water_level: loading_state.water_level,
+                        wave_height: loading_state.wave_height_param,
+                        wave_speed: loading_state.wave_speed,
+                        wave_pitch: loading_state.wave_pitch,
+                        animation_speed: loading_state.animation_speed,
+                        mesh_handle,
+                        material_handle,
+                    },
+                    WaterAnimation {
+                        time: 0.0,
+                        uv_offset: Vec2::ZERO,
+                    },
+                ))
+                .remove::<WaterLoadingState>();
+
+            info!("Water rendering setup complete");
+        }
     }
 }
 
