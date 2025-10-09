@@ -8,7 +8,7 @@ edition.workspace = true
 game-engine = { path = "../game-engine" }
 
 # Bevy dependencies (needed for Tauri integration plugin)
-bevy = { version = "0.16.1", features = ["dynamic_linking"] }
+bevy = { version = "0.16.1", features = ["dynamic_linking", "jpeg"] }
 bevy-tokio-tasks = "0.16"
 
 # Tauri dependencies

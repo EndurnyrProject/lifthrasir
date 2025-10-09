@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 # Bevy game engine
-bevy = { version = "0.16.1", features = ["dynamic_linking"] }
+bevy = { version = "0.16.1", features = ["dynamic_linking", "jpeg"] }
 bevy_auto_plugin = "0.5.0"
 bevy_common_assets = { version = "0.13", features = ["toml"] }
 bevy_asset_loader = "0.23"
