@@ -170,10 +170,11 @@ impl Plugin for TauriIntegrationPlugin {
             game_engine::LifthrasirPlugin,
             game_engine::AssetsPlugin,
             game_engine::AssetCatalogPlugin,
-            game_engine::CharacterDomainPlugin,
+            game_engine::CharacterDomainPlugin,  // Includes UnifiedCharacterEntityPlugin with 3D sprite hierarchy
             game_engine::AuthenticationPlugin,
             game_engine::WorldPlugin,
-            game_engine::InputPlugin,   // Input handling (cursor, clicks, terrain cursor)
+            game_engine::BillboardPlugin,       // 3D billboard rendering infrastructure
+            game_engine::InputPlugin,           // Input handling (cursor, clicks, terrain cursor)
         ));
 
         // Create AppBridge and event receiver

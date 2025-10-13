@@ -1,4 +1,4 @@
-use crate::domain::character::Gender;
+use crate::domain::entities::character::components::Gender;
 use bevy::prelude::*;
 use std::collections::BTreeMap;
 

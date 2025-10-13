@@ -1,4 +1,5 @@
-use super::models::{CharacterCreationForm, CharacterData};
+use super::forms::CharacterCreationForm;
+use crate::domain::entities::character::components::CharacterInfo;
 use bevy::prelude::*;
 
 #[derive(Event, Debug)]
@@ -6,7 +7,7 @@ pub struct RequestCharacterListEvent;
 
 #[derive(Event, Debug)]
 pub struct CharacterListReceivedEvent {
-    pub characters: Vec<Option<CharacterData>>,
+    pub characters: Vec<Option<CharacterInfo>>,
     pub max_slots: u8,
     pub available_slots: u8,
 }
@@ -18,7 +19,7 @@ pub struct SelectCharacterEvent {
 
 #[derive(Event, Debug)]
 pub struct CharacterSelectedEvent {
-    pub character: CharacterData,
+    pub character: CharacterInfo,
     pub slot: u8,
 }
 
@@ -45,7 +46,7 @@ pub struct CreateCharacterRequestEvent {
 
 #[derive(Event, Debug)]
 pub struct CharacterCreatedEvent {
-    pub character: CharacterData,
+    pub character: CharacterInfo,
     pub slot: u8,
 }
 

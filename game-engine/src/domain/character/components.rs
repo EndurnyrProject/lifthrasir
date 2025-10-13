@@ -1,10 +1,10 @@
-use super::models::CharacterData;
+use crate::domain::entities::character::components::{CharacterInfo, Gender};
 use bevy::prelude::*;
 
 #[derive(Component, Clone)]
 pub struct CharacterCard {
     pub slot: u8,
-    pub character: Option<CharacterData>,
+    pub character: Option<CharacterInfo>,
 }
 
 #[derive(Component)]
@@ -162,12 +162,12 @@ pub struct ValidationErrorDisplay;
 // Phase 2: Gender Selection Components
 #[derive(Component)]
 pub struct GenderToggleButton {
-    pub gender: crate::domain::character::models::Gender,
+    pub gender: Gender,
     pub is_selected: bool,
 }
 
 impl GenderToggleButton {
-    pub fn new(gender: crate::domain::character::models::Gender) -> Self {
+    pub fn new(gender: Gender) -> Self {
         Self {
             gender,
             is_selected: false,
@@ -175,11 +175,11 @@ impl GenderToggleButton {
     }
 
     pub fn male() -> Self {
-        Self::new(crate::domain::character::models::Gender::Male)
+        Self::new(Gender::Male)
     }
 
     pub fn female() -> Self {
-        Self::new(crate::domain::character::models::Gender::Female)
+        Self::new(Gender::Female)
     }
 }
 

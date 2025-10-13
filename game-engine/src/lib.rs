@@ -10,6 +10,7 @@ pub mod utils;
 // Re-export commonly used types
 pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin};
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
+pub use domain::entities::billboard::BillboardPlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
 pub use plugins::{AssetsPlugin, InputPlugin, WorldPlugin};
 
@@ -34,6 +35,8 @@ pub fn create_app() -> App {
             CharacterDomainPlugin, // ENABLED: Character events and networking (no UI)
             AuthenticationPlugin,  // ENABLED: Reads LoginAttemptEvent and handles auth
             WorldPlugin,           // ENABLED: Map loading and world systems
+            BillboardPlugin,       // ENABLED: 3D billboard rendering infrastructure
+            UnifiedCharacterEntityPlugin, // ENABLED: Unified character system with 3D billboard sprite hierarchy
         ));
 
     app

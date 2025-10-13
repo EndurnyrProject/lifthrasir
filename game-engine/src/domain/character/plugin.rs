@@ -1,6 +1,7 @@
 use super::components::CharacterSelectionState;
 use super::events::*;
 use super::systems::*;
+use crate::core::state::GameState;
 use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
 use crate::infrastructure::networking::CharServerEvent;
 use bevy::prelude::*;
@@ -55,6 +56,7 @@ impl Plugin for CharacterDomainPlugin {
                 handle_char_server_events,
                 handle_request_character_list, // Handle explicit requests for cached character list
                 handle_select_character,
+                spawn_unified_character_from_selection, // Spawn character entities
                 handle_create_character,
                 handle_delete_character,
                 handle_zone_server_info,
@@ -71,6 +73,12 @@ impl Plugin for CharacterDomainPlugin {
                 handle_actor_init_sent,
             )
                 .chain(), // Chain them to ensure update runs before event handlers
+        );
+
+        // System that spawns character sprite on game start
+        app.add_systems(
+            OnEnter(GameState::InGame),
+            spawn_character_sprite_on_game_start,
         );
     }
 }

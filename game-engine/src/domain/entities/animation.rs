@@ -3,6 +3,7 @@ use crate::infrastructure::assets::{
     convert_sprite_frame_to_rgba, create_bevy_image, RoActAsset,
     RoPaletteAsset, RoSpriteAsset,
 };
+use crate::utils::constants::SPRITE_WORLD_SCALE;
 use bevy::prelude::*;
 
 /// Animation system for RO sprites - supports palettes and configurable looping
@@ -118,9 +119,10 @@ pub fn animate_sprites(
 
                             // Apply ACT offset relative to parent (not accumulated)
                             // ACT pos is a STATIC offset from character anchor, not a delta
+                            // ACT offsets are in pixel coordinates, scale to world units
                             let layer_offset = Vec3::new(
-                                first_layer.pos[0] as f32,
-                                -first_layer.pos[1] as f32, // Negate Y: RO Y-negative=up, Bevy Y-positive=up
+                                first_layer.pos[0] as f32 * SPRITE_WORLD_SCALE,
+                                -first_layer.pos[1] as f32 * SPRITE_WORLD_SCALE, // Negate Y: RO Y-negative=up, Bevy Y-positive=up
                                 transform.translation.z, // Preserve Z-layering (0.0 for body, 0.1 for head)
                             );
 

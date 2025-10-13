@@ -4,9 +4,10 @@ use bevy::prelude::*;
 use bevy::input::ButtonInput;
 use game_engine::domain::character::{
     catalog::HeadStyleCatalog, CharacterCreationForm, CreateCharacterRequestEvent,
-    DeleteCharacterRequestEvent, Gender, JobClass, RequestCharacterListEvent,
+    DeleteCharacterRequestEvent, RequestCharacterListEvent,
     SelectCharacterEvent,
 };
+use game_engine::domain::entities::character::components::{Gender, JobClass};
 use game_engine::domain::input::ForwardedCursorPosition;
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::{LoginAttemptEvent, ServerSelectedEvent};

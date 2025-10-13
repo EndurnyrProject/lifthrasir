@@ -68,14 +68,17 @@ pub fn parse_spr(data: &[u8]) -> Result<RoSprite, SpriteError> {
     // Parse palette from end of file if we have indexed frames and version > 1.0
     let palette = if indexed_count > 0 && version > 1.0 {
         if data.len() >= 1024 {
-            // 256 colors * 4 bytes (RGBA)
+            // 256 colors * 4 bytes (RGB + reserved byte)
             let palette_data = &data[data.len() - 1024..];
 
             let mut colors = Vec::with_capacity(256);
-            for chunk in palette_data.chunks(4) {
+            for (i, chunk) in palette_data.chunks(4).enumerate() {
                 if chunk.len() >= 4 {
-                    // RO palette is RGBA format
-                    colors.push([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                    // RO palette format: RGB + reserved byte (not alpha)
+                    // Index 0 is reserved for transparency
+                    // All other colors should be fully opaque (alpha=255)
+                    let alpha = if i == 0 { 0 } else { 255 };
+                    colors.push([chunk[0], chunk[1], chunk[2], alpha]);
                 }
             }
             Some(Palette { colors })

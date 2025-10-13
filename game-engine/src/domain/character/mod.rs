@@ -2,7 +2,7 @@ pub mod catalog;
 pub mod catalog_builder;
 pub mod components;
 pub mod events;
-pub mod models;
+pub mod forms;
 pub mod plugin;
 pub mod systems;
 
@@ -10,5 +10,8 @@ pub use catalog::*;
 pub use catalog_builder::*;
 pub use components::*;
 pub use events::*;
-pub use models::*;
+pub use forms::*;
 pub use plugin::CharacterDomainPlugin;
+
+// Re-export Gender and JobClass from the unified character system for backwards compatibility
+pub use crate::domain::entities::character::components::{Gender, JobClass};

@@ -67,22 +67,6 @@ pub fn spawn_unified_character(
     character_entity
 }
 
-// Conversion function from old character model to new unified system
-pub fn convert_legacy_character_to_unified(
-    commands: &mut Commands,
-    legacy_character: &crate::domain::character::models::CharacterData,
-    slot: u8,
-    position: Vec3,
-) -> Entity {
-    let character_data = components::CharacterData::from(legacy_character.clone());
-    let mut character_data = character_data;
-    character_data.slot = slot;
-
-    let appearance = components::CharacterAppearance::from(legacy_character.clone());
-    let equipment = components::EquipmentSet::from(legacy_character);
-
-    spawn_unified_character(commands, character_data, appearance, equipment, position)
-}
 
 // Helper to check if an entity has the unified character components
 pub fn is_unified_character(
@@ -98,3 +82,7 @@ pub fn is_unified_character(
 ) -> bool {
     characters.get(entity).is_ok()
 }
+
+// Note: 3D billboard sprite rendering is now unified into CharacterSpriteHierarchyPlugin
+// The previous Character3dSpritePlugin has been removed as its functionality
+// is fully integrated into the sprite hierarchy system

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use game_engine::domain::character::CharacterData;
+use game_engine::domain::entities::character::components::CharacterInfo;
 use game_engine::infrastructure::networking::protocols::ro_login::ServerInfo;
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
@@ -45,7 +45,7 @@ pub enum TauriEvent {
     },
     /// Get character list event
     GetCharacterList {
-        response_tx: oneshot::Sender<Result<Vec<CharacterData>, String>>,
+        response_tx: oneshot::Sender<Result<Vec<CharacterInfo>, String>>,
     },
     /// Select character event
     SelectCharacter {
@@ -59,7 +59,7 @@ pub enum TauriEvent {
         hair_style: u16,
         hair_color: u16,
         sex: u8,
-        response_tx: oneshot::Sender<Result<CharacterData, String>>,
+        response_tx: oneshot::Sender<Result<CharacterInfo, String>>,
     },
     /// Delete character event
     DeleteCharacter {
@@ -141,7 +141,7 @@ impl AppBridge {
     }
 
     /// Get character list event and wait for response
-    pub async fn get_character_list(&self) -> Result<Vec<CharacterData>, String> {
+    pub async fn get_character_list(&self) -> Result<Vec<CharacterInfo>, String> {
         let (tx, rx) = oneshot::channel();
 
         self.tauri_tx
@@ -181,7 +181,7 @@ impl AppBridge {
         hair_style: u16,
         hair_color: u16,
         sex: u8,
-    ) -> Result<CharacterData, String> {
+    ) -> Result<CharacterInfo, String> {
         let (tx, rx) = oneshot::channel();
 
         self.tauri_tx

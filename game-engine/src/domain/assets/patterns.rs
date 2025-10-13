@@ -1,4 +1,4 @@
-use crate::domain::character::Gender;
+use crate::domain::entities::character::components::Gender;
 use once_cell::sync::Lazy;
 use regex::Regex;
 

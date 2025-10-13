@@ -1,6 +1,6 @@
 use crate::bridge::{HairstyleInfo, SessionData};
 use bevy::prelude::*;
-use game_engine::domain::character::CharacterData;
+use game_engine::domain::entities::character::components::CharacterInfo;
 use std::collections::HashMap;
 use tokio::sync::oneshot;
 
@@ -19,7 +19,7 @@ pub struct PendingServerSelectionSenders {
 /// Stores pending oneshot senders for character list requests
 #[derive(Resource, Default)]
 pub struct PendingCharacterListSenders {
-    pub senders: Vec<oneshot::Sender<Result<Vec<CharacterData>, String>>>,
+    pub senders: Vec<oneshot::Sender<Result<Vec<CharacterInfo>, String>>>,
 }
 
 /// Stores pending oneshot senders for character selection requests
@@ -31,7 +31,7 @@ pub struct PendingCharacterSelectionSenders {
 /// Stores pending oneshot senders for character creation requests
 #[derive(Resource, Default)]
 pub struct PendingCharacterCreationSenders {
-    pub senders: HashMap<u8, oneshot::Sender<Result<CharacterData, String>>>,
+    pub senders: HashMap<u8, oneshot::Sender<Result<CharacterInfo, String>>>,
 }
 
 /// Stores pending oneshot senders for character deletion requests

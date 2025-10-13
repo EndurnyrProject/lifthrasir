@@ -1,7 +1,7 @@
 use super::components::{CharacterSelectionState, MapLoadingTimer};
 use super::events::*;
-use super::models::CharacterData;
 use crate::core::state::GameState;
+use crate::domain::entities::character::components::CharacterInfo;
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::infrastructure::networking::protocols::ro_char::ChMakeCharPacket;
 use crate::infrastructure::networking::session::UserSession;
@@ -22,10 +22,10 @@ pub fn handle_request_character_list(
             let mut char_list = vec![None; 15]; // Support up to 15 slots
 
             for net_char in &client.characters {
-                let char_data = CharacterData::from(net_char.clone());
+                let char_info = CharacterInfo::from(net_char.clone());
                 let slot = net_char.char_num as usize;
                 if slot < char_list.len() {
-                    char_list[slot] = Some(char_data);
+                    char_list[slot] = Some(char_info);
                 }
             }
 
@@ -57,10 +57,10 @@ pub fn handle_char_server_events(
                 let mut char_list = vec![None; 15];
 
                 for net_char in characters {
-                    let char_data = CharacterData::from(net_char.clone());
+                    let char_info = CharacterInfo::from(net_char.clone());
                     let slot = net_char.char_num as usize;
                     if slot < char_list.len() {
-                        char_list[slot] = Some(char_data);
+                        char_list[slot] = Some(char_info);
                     }
                 }
 
@@ -94,11 +94,11 @@ pub fn handle_char_server_events(
                     sex: session.sex,
                 });
             }
-            CharServerEvent::CharacterCreated(char_info) => {
-                let char_data = CharacterData::from(char_info.clone());
+            CharServerEvent::CharacterCreated(net_char) => {
+                let char_info = CharacterInfo::from(net_char.clone());
                 created_events.write(CharacterCreatedEvent {
-                    character: char_data,
-                    slot: char_info.char_num,
+                    character: char_info,
+                    slot: net_char.char_num,
                 });
             }
             CharServerEvent::CharacterDeleted => {
@@ -166,6 +166,30 @@ pub fn handle_char_server_events(
     }
 }
 
+/// System that spawns unified character entities from CharacterSelectedEvent
+/// Creates a complete character entity with all three ECS components
+pub fn spawn_unified_character_from_selection(
+    mut events: EventReader<CharacterSelectedEvent>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        let (char_data, appearance, meta) = event.character.clone().into_components();
+
+        commands.spawn((
+            char_data,
+            appearance,
+            meta,
+            crate::domain::entities::character::components::visual::CharacterSprite::default(),
+            Name::new(format!("Character_{}", event.character.char_id)),
+        ));
+
+        info!(
+            "Spawned unified character entity for char_id: {} ({})",
+            event.character.char_id, event.character.name
+        );
+    }
+}
+
 pub fn handle_select_character(
     mut events: EventReader<SelectCharacterEvent>,
     mut char_client: Option<ResMut<CharServerClient>>,
@@ -183,13 +207,13 @@ pub fn handle_select_character(
                 .find(|c| c.char_num == event.slot)
                 .cloned();
 
-            if let Some(char_info) = character {
+            if let Some(net_char) = character {
                 if let Err(e) = client.select_character(event.slot) {
                     error!("Failed to select character: {:?}", e);
                 } else {
                     // Emit success event with character data so Tauri bridge can respond
                     selected_events.write(CharacterSelectedEvent {
-                        character: CharacterData::from(char_info),
+                        character: CharacterInfo::from(net_char),
                         slot: event.slot,
                     });
                 }
@@ -456,4 +480,58 @@ pub fn detect_map_loading_timeout(
         // Return to character selection
         game_state.set(GameState::CharacterSelection);
     }
+}
+
+/// System that spawns character sprite hierarchy when entering InGame state
+/// This bridges the character entity creation with the unified sprite system
+pub fn spawn_character_sprite_on_game_start(
+    mut spawn_events: EventWriter<crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent>,
+    spawn_context: Res<MapSpawnContext>,
+    characters: Query<(Entity, &crate::domain::entities::character::components::CharacterMeta)>,
+    map_loader_query: Query<&crate::domain::world::components::MapLoader>,
+    ground_assets: Res<Assets<crate::infrastructure::assets::loaders::RoGroundAsset>>,
+) {
+    // Find character entity matching spawn context
+    let Some((character_entity, _meta)) = characters
+        .iter()
+        .find(|(_, meta)| meta.char_id == spawn_context.character_id)
+    else {
+        error!(
+            "Character entity not found for char_id: {}",
+            spawn_context.character_id
+        );
+        return;
+    };
+
+    // Get map dimensions from loaded ground data
+    let (map_width, map_height) = if let Ok(map_loader) = map_loader_query.single() {
+        if let Some(ground_asset) = ground_assets.get(&map_loader.ground) {
+            (ground_asset.ground.width, ground_asset.ground.height)
+        } else {
+            warn!("Ground asset not loaded yet, using default dimensions");
+            (100, 100)
+        }
+    } else {
+        warn!("No MapLoader entity found, using default dimensions");
+        (100, 100)
+    };
+
+    // Calculate world position from spawn coordinates
+    let world_pos = crate::utils::coordinates::spawn_coords_to_world_position(
+        spawn_context.spawn_x,
+        spawn_context.spawn_y,
+        map_width,
+        map_height,
+    );
+
+    // Emit event to spawn sprite hierarchy
+    spawn_events.write(crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent {
+        character_entity,
+        spawn_position: world_pos,
+    });
+
+    info!(
+        "Emitted SpawnCharacterSpriteEvent for character {:?} at position {:?}",
+        character_entity, world_pos
+    );
 }

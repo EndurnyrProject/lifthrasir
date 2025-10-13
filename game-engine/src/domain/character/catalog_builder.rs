@@ -1,6 +1,6 @@
 use crate::domain::assets::{normalize_path, parse_gender, HAIR_PALETTE, HAIR_SPRITE};
 use crate::domain::character::catalog::{HeadStyleCatalog, HeadStyleEntry};
-use crate::domain::character::Gender;
+use crate::domain::entities::character::components::Gender;
 use crate::infrastructure::assets::HierarchicalAssetManager;
 use bevy::prelude::*;
 use std::collections::HashMap;
