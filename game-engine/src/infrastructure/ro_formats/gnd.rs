@@ -72,11 +72,7 @@ impl RoGround {
         let cell_z = (world_pos.z / CELL_SIZE).floor() as i32;
 
         // Bounds check
-        if cell_x < 0
-            || cell_x >= self.width as i32
-            || cell_z < 0
-            || cell_z >= self.height as i32
-        {
+        if cell_x < 0 || cell_x >= self.width as i32 || cell_z < 0 || cell_z >= self.height as i32 {
             return None;
         }
 

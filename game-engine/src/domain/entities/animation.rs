@@ -1,7 +1,6 @@
 use crate::domain::entities::components::RoAnimationController;
 use crate::infrastructure::assets::{
-    convert_sprite_frame_to_rgba, create_bevy_image, RoActAsset,
-    RoPaletteAsset, RoSpriteAsset,
+    convert_sprite_frame_to_rgba, create_bevy_image, RoActAsset, RoPaletteAsset, RoSpriteAsset,
 };
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 use bevy::prelude::*;

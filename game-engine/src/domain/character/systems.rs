@@ -79,7 +79,9 @@ pub fn handle_char_server_events(
                 port,
             } => {
                 let Some(session) = user_session.as_ref() else {
-                    error!("ZoneServerInfo received but UserSession not available - cannot proceed");
+                    error!(
+                        "ZoneServerInfo received but UserSession not available - cannot proceed"
+                    );
                     continue;
                 };
 
@@ -137,8 +139,8 @@ pub fn handle_char_server_events(
                 premium_slots,
                 valid_slots,
             } => {
-                info!(
-                    "Character slots configured - normal: {}, premium: {}, valid: {}",
+                debug!(
+                    "Character slots - normal: {}, premium: {}, valid: {}",
                     normal_slots, premium_slots, valid_slots
                 );
                 // Slot info is primarily for UI display
@@ -183,8 +185,8 @@ pub fn spawn_unified_character_from_selection(
             Name::new(format!("Character_{}", event.character.char_id)),
         ));
 
-        info!(
-            "Spawned unified character entity for char_id: {} ({})",
+        debug!(
+            "Spawned character entity for char_id: {} ({})",
             event.character.char_id, event.character.name
         );
     }
@@ -276,7 +278,7 @@ pub fn handle_zone_server_info(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     for event in events.read() {
-        info!("Transitioning to zone server for map: {}", event.map_name);
+        info!("Connecting to zone server: {}", event.map_name);
         game_state.set(GameState::Connecting);
         // zone_connection_system will handle the actual connection
     }
@@ -293,10 +295,7 @@ pub fn handle_zone_auth_success(
     for event in events.read() {
         if let Some(client) = zone_client.as_ref() {
             if let Some(session) = &client.session_data {
-                info!(
-                    "Zone auth success! Loading map: {} at ({}, {})",
-                    session.map_name, event.spawn_x, event.spawn_y
-                );
+                info!("Loading map: {}", session.map_name);
 
                 commands.insert_resource(MapSpawnContext::new(
                     session.map_name.clone(),
@@ -309,10 +308,7 @@ pub fn handle_zone_auth_success(
                     map_name: session.map_name.clone(),
                 });
 
-                info!("🔄 Requesting GameState transition: {:?} → Loading", current_state.get());
                 game_state.set(GameState::Loading);
-                info!("📌 State transition queued - will take effect at end of frame");
-                info!("   Current state is STILL: {:?} (will change next frame if transition works)", current_state.get());
             }
         }
     }
@@ -329,7 +325,7 @@ pub fn detect_map_load_complete(
             continue;
         };
 
-        info!("Map loading completed: {}", context.map_name);
+        debug!("Map loading completed: {}", context.map_name);
         events.write(MapLoadCompleted {
             map_name: context.map_name.clone(),
         });
@@ -342,7 +338,10 @@ pub fn handle_map_load_complete(
     mut actor_init_events: EventWriter<ActorInitSent>,
 ) {
     for event in events.read() {
-        info!("Map '{}' loaded, sending CZ_NOTIFY_ACTORINIT", event.map_name);
+        debug!(
+            "Map '{}' loaded, sending CZ_NOTIFY_ACTORINIT",
+            event.map_name
+        );
 
         if let Some(client) = zone_client.as_deref_mut() {
             if let Err(e) = client.send_actor_init() {
@@ -359,7 +358,7 @@ pub fn handle_actor_init_sent(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     for _event in events.read() {
-        info!("Actor init sent, entering game world");
+        info!("Entering game world");
         // TODO: Spawn player character entity here in future
         game_state.set(GameState::InGame);
     }
@@ -408,15 +407,9 @@ pub fn update_char_client(char_client: Option<ResMut<CharServerClient>>) {
 }
 
 /// System to start map loading timer when map loading begins
-pub fn start_map_loading_timer(
-    mut events: EventReader<MapLoadingStarted>,
-    mut commands: Commands,
-) {
+pub fn start_map_loading_timer(mut events: EventReader<MapLoadingStarted>, mut commands: Commands) {
     for event in events.read() {
-        info!(
-            "Starting map loading timeout timer for map: {}",
-            event.map_name
-        );
+        debug!("Starting map loading timeout timer for: {}", event.map_name);
         commands.insert_resource(MapLoadingTimer {
             started: Instant::now(),
             map_name: event.map_name.clone(),
@@ -442,7 +435,7 @@ pub fn detect_map_loading_timeout(
 
     // If MapData exists, map loaded successfully - remove timer
     if !map_data_query.is_empty() {
-        info!(
+        debug!(
             "Map '{}' loaded successfully, removing timeout timer",
             timer_res.map_name
         );
@@ -470,7 +463,7 @@ pub fn detect_map_loading_timeout(
 
         // Disconnect from zone server
         if let Some(client) = zone_client.as_deref_mut() {
-            info!("Disconnecting from zone server due to map loading timeout");
+            debug!("Disconnecting from zone server due to timeout");
             client.disconnect();
         }
 
@@ -485,9 +478,14 @@ pub fn detect_map_loading_timeout(
 /// System that spawns character sprite hierarchy when entering InGame state
 /// This bridges the character entity creation with the unified sprite system
 pub fn spawn_character_sprite_on_game_start(
-    mut spawn_events: EventWriter<crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent>,
+    mut spawn_events: EventWriter<
+        crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent,
+    >,
     spawn_context: Res<MapSpawnContext>,
-    characters: Query<(Entity, &crate::domain::entities::character::components::CharacterMeta)>,
+    characters: Query<(
+        Entity,
+        &crate::domain::entities::character::components::CharacterMeta,
+    )>,
     map_loader_query: Query<&crate::domain::world::components::MapLoader>,
     ground_assets: Res<Assets<crate::infrastructure::assets::loaders::RoGroundAsset>>,
 ) {
@@ -525,13 +523,12 @@ pub fn spawn_character_sprite_on_game_start(
     );
 
     // Emit event to spawn sprite hierarchy
-    spawn_events.write(crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent {
-        character_entity,
-        spawn_position: world_pos,
-    });
-
-    info!(
-        "Emitted SpawnCharacterSpriteEvent for character {:?} at position {:?}",
-        character_entity, world_pos
+    spawn_events.write(
+        crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent {
+            character_entity,
+            spawn_position: world_pos,
+        },
     );
+
+    debug!("Spawning character sprite at {:?}", world_pos);
 }

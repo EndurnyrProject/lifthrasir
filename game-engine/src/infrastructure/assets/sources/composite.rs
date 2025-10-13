@@ -1,5 +1,5 @@
 use super::{AssetSource, AssetSourceError};
-use bevy::log::{debug, info, warn};
+use bevy::log::debug;
 use std::collections::HashMap;
 
 pub struct CompositeAssetSource {
@@ -18,7 +18,7 @@ impl CompositeAssetSource {
     }
 
     pub fn add_source(&mut self, source: Box<dyn AssetSource>) {
-        info!(
+        debug!(
             "Added asset source: {} (priority: {})",
             source.name(),
             source.priority()
@@ -30,7 +30,7 @@ impl CompositeAssetSource {
 
     pub fn add_sources(&mut self, sources: Vec<Box<dyn AssetSource>>) {
         for source in sources {
-            info!(
+            debug!(
                 "Added asset source: {} (priority: {})",
                 source.name(),
                 source.priority()
@@ -57,12 +57,11 @@ impl CompositeAssetSource {
         // Search through sources by priority
         for (idx, source) in self.sources.iter().enumerate() {
             if source.exists(path) {
-                debug!("Asset '{}' found in source: {}", path, source.name());
                 return Some(idx);
             }
         }
 
-        warn!("Asset '{}' not found in any source", path);
+        debug!("Asset '{}' not found in any source", path);
         None
     }
 
@@ -109,7 +108,7 @@ impl CompositeAssetSource {
     }
 
     pub fn warm_cache(&mut self, common_paths: &[&str]) {
-        info!(
+        debug!(
             "Warming asset resolution cache with {} paths",
             common_paths.len()
         );
@@ -118,7 +117,7 @@ impl CompositeAssetSource {
                 self.resolution_cache.insert(path.to_string(), source_idx);
             }
         }
-        info!("Cache warmed with {} entries", self.resolution_cache.len());
+        debug!("Cache warmed with {} entries", self.resolution_cache.len());
     }
 }
 
@@ -147,17 +146,7 @@ impl AssetSource for CompositeAssetSource {
                 // Note: We would cache the successful resolution here, but due to borrowing constraints
                 // in this trait method, we'll rely on the find_source_for_asset method's internal caching
 
-                let result = source.load(path);
-                if result.is_ok() {
-                    debug!(
-                        "Successfully loaded '{}' from source: {}",
-                        path,
-                        source.name()
-                    );
-                } else {
-                    warn!("Failed to load '{}' from source: {}", path, source.name());
-                }
-                return result;
+                return source.load(path);
             }
         }
 

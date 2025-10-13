@@ -460,7 +460,10 @@ impl CharServerClient {
                                     let packet_len =
                                         u16::from_le_bytes([data[cursor + 2], data[cursor + 3]])
                                             as usize;
-                                    debug!("HC_ACK_CHARINFO_PER_PAGE packet length: {}", packet_len);
+                                    debug!(
+                                        "HC_ACK_CHARINFO_PER_PAGE packet length: {}",
+                                        packet_len
+                                    );
 
                                     if data.len() - cursor < packet_len {
                                         debug!(
@@ -483,9 +486,11 @@ impl CharServerClient {
                                                     packet.characters.len()
                                                 );
                                                 self.characters = packet.characters.clone();
-                                                responses.push(CharServerResponse::HcAckCharinfoPerPage(
-                                                    packet,
-                                                ));
+                                                responses.push(
+                                                    CharServerResponse::HcAckCharinfoPerPage(
+                                                        packet,
+                                                    ),
+                                                );
                                             }
 
                                             cursor += packet_len;

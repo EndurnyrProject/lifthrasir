@@ -102,7 +102,6 @@ impl RoSpriteFactory {
 
         entity
     }
-
 }
 
 /// Component to track sprites waiting for asset loading

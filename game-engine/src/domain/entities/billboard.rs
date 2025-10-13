@@ -68,9 +68,7 @@ pub fn setup_shared_sprite_quad(mut commands: Commands, mut meshes: ResMut<Asset
     let quad_mesh = create_sprite_quad_mesh();
     let mesh_handle = meshes.add(quad_mesh);
 
-    commands.insert_resource(SharedSpriteQuad {
-        mesh: mesh_handle,
-    });
+    commands.insert_resource(SharedSpriteQuad { mesh: mesh_handle });
 
     info!("Initialized shared sprite quad mesh for 3D billboards");
 }
@@ -104,7 +102,8 @@ impl Plugin for BillboardPlugin {
             // Update: Apply billboard rotation after transform propagation
             .add_systems(
                 PostUpdate,
-                billboard_rotation_system.after(bevy::transform::TransformSystem::TransformPropagate),
+                billboard_rotation_system
+                    .after(bevy::transform::TransformSystem::TransformPropagate),
             );
     }
 }

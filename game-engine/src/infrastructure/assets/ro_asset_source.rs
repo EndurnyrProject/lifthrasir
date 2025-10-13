@@ -3,7 +3,7 @@ use super::{
 };
 use bevy::{
     asset::io::{AssetSource, AssetSourceBuilder, AssetSourceId},
-    log::{error, info},
+    log::{debug, error},
 };
 use std::sync::{Arc, RwLock};
 
@@ -33,7 +33,7 @@ use std::sync::{Arc, RwLock};
 pub fn create_ro_asset_source(
     config: &AssetConfig,
 ) -> Result<AssetSource, Box<dyn std::error::Error>> {
-    info!("Creating RO asset source with hierarchical resolution");
+    debug!("Creating RO asset source with hierarchical resolution");
 
     // Create the composite source with the same logic as HierarchicalAssetManager
     let composite_source = setup_composite_source_from_config(config)?;
@@ -47,7 +47,7 @@ pub fn create_ro_asset_source(
         })
         .build(AssetSourceId::Default, false, false);
 
-    info!("RO asset source created successfully");
+    debug!("RO asset source created successfully");
     Ok(asset_source.unwrap())
 }
 
@@ -65,10 +65,10 @@ pub fn setup_composite_source_from_config(
     let data_folder_path = config.data_folder_path();
     if data_folder_path.exists() {
         let data_source = DataFolderSource::new(data_folder_path.clone());
-        info!("Adding data folder source: {}", data_folder_path.display());
+        debug!("Adding data folder source: {}", data_folder_path.display());
         composite.add_source(Box::new(data_source));
     } else {
-        info!(
+        debug!(
             "Data folder not found, skipping: {}",
             data_folder_path.display()
         );
@@ -95,8 +95,8 @@ pub fn setup_composite_source_from_config(
                 match GrfSource::new(potential_path.clone(), grf_config.priority + 1) {
                     // +1 to ensure data folder has priority 0
                     Ok(grf_source) => {
-                        info!(
-                            "Successfully loaded GRF: {} (priority: {})",
+                        debug!(
+                            "Loaded GRF: {} (priority: {})",
                             potential_path.display(),
                             grf_config.priority + 1
                         );
@@ -116,9 +116,6 @@ pub fn setup_composite_source_from_config(
         }
     }
 
-    info!("Composite asset source setup complete");
-    info!("{}", composite.get_debug_info());
-
     Ok(composite)
 }
 
@@ -130,7 +127,7 @@ pub fn setup_composite_source_from_config(
 pub fn create_ro_asset_source_from_manager(
     manager: &crate::infrastructure::assets::HierarchicalAssetManager,
 ) -> AssetSource {
-    info!("Creating RO asset source from existing HierarchicalAssetManager");
+    debug!("Creating RO asset source from existing HierarchicalAssetManager");
 
     // Extract the composite source from the manager
     // Note: This creates a new Arc pointing to the same CompositeAssetSource
@@ -143,7 +140,7 @@ pub fn create_ro_asset_source_from_manager(
         })
         .build(AssetSourceId::Default, false, false);
 
-    info!("RO asset source created from existing manager");
+    debug!("RO asset source created from existing manager");
     asset_source.unwrap()
 }
 

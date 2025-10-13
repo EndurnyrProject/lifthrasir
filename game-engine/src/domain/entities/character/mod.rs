@@ -67,7 +67,6 @@ pub fn spawn_unified_character(
     character_entity
 }
 
-
 // Helper to check if an entity has the unified character components
 pub fn is_unified_character(
     entity: Entity,

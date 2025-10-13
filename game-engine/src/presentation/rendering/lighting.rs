@@ -119,7 +119,7 @@ fn spawn_enhanced_point_lights(commands: &mut Commands, rsw_objects: &[RswObject
         }
     }
 
-    info!("Spawned {} point lights from RSW data", point_light_count);
+    debug!("Spawned {} point lights", point_light_count);
 }
 
 /// Spawn individual point light from RSW light object

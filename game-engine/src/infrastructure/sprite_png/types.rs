@@ -55,7 +55,9 @@ impl SpritePngRequest {
             act_path.clone()
         } else {
             // Replace .spr extension with .act
-            self.sprite_path.replace(".spr", ".act").replace(".SPR", ".act")
+            self.sprite_path
+                .replace(".spr", ".act")
+                .replace(".SPR", ".act")
         }
     }
 }
@@ -90,7 +92,14 @@ impl SpritePngResponse {
     }
 
     /// Create response from PNG data
-    pub fn new(png_data: Vec<u8>, width: u32, height: u32, offset_x: i32, offset_y: i32, from_cache: bool) -> Self {
+    pub fn new(
+        png_data: Vec<u8>,
+        width: u32,
+        height: u32,
+        offset_x: i32,
+        offset_y: i32,
+        from_cache: bool,
+    ) -> Self {
         Self {
             png_data,
             width,

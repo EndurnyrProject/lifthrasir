@@ -7,7 +7,9 @@ use crate::domain::entities::character::components::{
 };
 use crate::domain::entities::components::RoAnimationController;
 use crate::domain::world::components::MapLoader;
-use crate::infrastructure::assets::loaders::{RoActAsset, RoGroundAsset, RoPaletteAsset, RoSpriteAsset};
+use crate::infrastructure::assets::loaders::{
+    RoActAsset, RoGroundAsset, RoPaletteAsset, RoSpriteAsset,
+};
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 use bevy::{
     prelude::*,
@@ -114,7 +116,10 @@ pub fn spawn_character_sprite_hierarchy(
         // Try to get terrain height at spawn position
         if let Ok(map_loader) = map_loader_query.single() {
             if let Some(ground_asset) = ground_assets.get(&map_loader.ground) {
-                if let Some(terrain_height) = ground_asset.ground.get_terrain_height_at_position(world_position) {
+                if let Some(terrain_height) = ground_asset
+                    .ground
+                    .get_terrain_height_at_position(world_position)
+                {
                     world_position.y = terrain_height;
                     info!("Character positioned at terrain height: {}", terrain_height);
                 }
@@ -408,7 +413,8 @@ pub fn update_sprite_layer_transforms(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (entity, mut transform, hierarchy, ro_sprite_layer, controller) in sprite_layers.iter_mut() {
+    for (entity, mut transform, hierarchy, ro_sprite_layer, controller) in sprite_layers.iter_mut()
+    {
         info!(
             "🖼️ update_sprite_layer_transforms: Processing sprite layer entity={:?}, layer_type={:?}",
             entity, hierarchy.layer_type
@@ -427,13 +433,21 @@ pub fn update_sprite_layer_transforms(
                 info!("✅ Both SPR and ACT assets loaded, rendering frame...");
                 let current_action = character_sprite.current_action as usize;
 
-                info!("🎯 Layer {:?}: current_action={}, total_actions={}",
-                    hierarchy.layer_type, current_action, act_asset.action.actions.len());
+                info!(
+                    "🎯 Layer {:?}: current_action={}, total_actions={}",
+                    hierarchy.layer_type,
+                    current_action,
+                    act_asset.action.actions.len()
+                );
 
                 // Ensure action index is valid
                 if current_action >= act_asset.action.actions.len() {
-                    warn!("❌ Action index out of bounds for {:?}: action {} >= total_actions {}",
-                        hierarchy.layer_type, current_action, act_asset.action.actions.len());
+                    warn!(
+                        "❌ Action index out of bounds for {:?}: action {} >= total_actions {}",
+                        hierarchy.layer_type,
+                        current_action,
+                        act_asset.action.actions.len()
+                    );
                     continue;
                 }
             } else {
@@ -459,10 +473,11 @@ pub fn update_sprite_layer_transforms(
                 // We only want headDir 0 (looking forward) to match body animation
                 let current_frame = if matches!(
                     hierarchy.layer_type,
-                    SpriteLayerType::Equipment(EquipmentSlot::HeadBottom
-                        | EquipmentSlot::HeadMid
-                        | EquipmentSlot::HeadTop)
-                ) && current_action == 0 // Idle action
+                    SpriteLayerType::Equipment(
+                        EquipmentSlot::HeadBottom | EquipmentSlot::HeadMid | EquipmentSlot::HeadTop
+                    )
+                ) && current_action == 0
+                // Idle action
                 {
                     // Divide by 3 to get frames per doridori variant
                     let head_frames_per_variant = action_sequence.animations.len() / 3;
@@ -476,19 +491,32 @@ pub fn update_sprite_layer_transforms(
                     character_sprite.current_frame as usize
                 };
 
-                info!("📊 Layer {:?}: action={}, frame={}, animation_count={}",
-                    hierarchy.layer_type, current_action, current_frame, action_sequence.animations.len());
+                info!(
+                    "📊 Layer {:?}: action={}, frame={}, animation_count={}",
+                    hierarchy.layer_type,
+                    current_action,
+                    current_frame,
+                    action_sequence.animations.len()
+                );
 
                 // Ensure frame index is valid
                 if current_frame >= action_sequence.animations.len() {
-                    warn!("❌ Frame index out of bounds for {:?}: frame {} >= animation_count {}",
-                        hierarchy.layer_type, current_frame, action_sequence.animations.len());
+                    warn!(
+                        "❌ Frame index out of bounds for {:?}: frame {} >= animation_count {}",
+                        hierarchy.layer_type,
+                        current_frame,
+                        action_sequence.animations.len()
+                    );
                     continue;
                 }
 
                 let animation = &action_sequence.animations[current_frame];
 
-                info!("🎨 Layer {:?}: animation has {} layers", hierarchy.layer_type, animation.layers.len());
+                info!(
+                    "🎨 Layer {:?}: animation has {} layers",
+                    hierarchy.layer_type,
+                    animation.layers.len()
+                );
 
                 // Process the first layer (main sprite layer)
                 if let Some(layer) = animation.layers.first() {
@@ -500,12 +528,15 @@ pub fn update_sprite_layer_transforms(
                         layer.sprite_index as usize
                     };
 
-                    info!("🖼️ Layer {:?}: sprite_index={}, total_sprite_frames={}",
-                        hierarchy.layer_type, sprite_index, spr_asset.sprite.frames.len());
+                    info!(
+                        "🖼️ Layer {:?}: sprite_index={}, total_sprite_frames={}",
+                        hierarchy.layer_type,
+                        sprite_index,
+                        spr_asset.sprite.frames.len()
+                    );
 
                     // Ensure sprite index is valid
-                    if sprite_index < spr_asset.sprite.frames.len()
-                    {
+                    if sprite_index < spr_asset.sprite.frames.len() {
                         let sprite_frame = &spr_asset.sprite.frames[sprite_index];
 
                         // Convert SPR frame to Bevy Image
@@ -564,8 +595,12 @@ pub fn update_sprite_layer_transforms(
                             hierarchy.layer_type, current_action, current_frame, sprite_index
                         );
                     } else {
-                        warn!("❌ Invalid sprite_index for {:?}: index={} (must be < {})",
-                            hierarchy.layer_type, sprite_index, spr_asset.sprite.frames.len());
+                        warn!(
+                            "❌ Invalid sprite_index for {:?}: index={} (must be < {})",
+                            hierarchy.layer_type,
+                            sprite_index,
+                            spr_asset.sprite.frames.len()
+                        );
                     }
                 } else {
                     warn!("❌ Animation has no layers for {:?}!", hierarchy.layer_type);
@@ -643,7 +678,10 @@ pub fn advance_character_animations(
             // Get ACT asset to determine timing and frame count
             let mut act_asset_handle = None;
 
-            info!("🔍 Searching for ACT handles in {} sprite layers", sprite_layers.iter().count());
+            info!(
+                "🔍 Searching for ACT handles in {} sprite layers",
+                sprite_layers.iter().count()
+            );
 
             // Find an ACT asset handle from the RoAnimationController components
             for controller in sprite_layers.iter() {
@@ -656,7 +694,11 @@ pub fn advance_character_animations(
             if let Some(act_handle) = act_asset_handle {
                 info!("✅ Found ACT handle, checking if asset is loaded...");
                 if let Some(act_asset) = act_assets.get(act_handle) {
-                    info!("✅ ACT asset loaded! Actions: {}, current_action: {}", act_asset.action.actions.len(), character_sprite.current_action);
+                    info!(
+                        "✅ ACT asset loaded! Actions: {}, current_action: {}",
+                        act_asset.action.actions.len(),
+                        character_sprite.current_action
+                    );
                     let current_action = character_sprite.current_action as usize;
 
                     if current_action < act_asset.action.actions.len() {
@@ -764,16 +806,24 @@ pub fn populate_sprite_layers_with_assets(
     map_spawn_context: Option<Res<crate::domain::world::spawn_context::MapSpawnContext>>,
 ) {
     for (entity, hierarchy, layer_info) in sprite_layers.iter() {
-        info!("📦 populate_sprite_layers_with_assets: Processing layer entity={:?}, layer_type={:?}", entity, layer_info.layer_type);
+        info!(
+            "📦 populate_sprite_layers_with_assets: Processing layer entity={:?}, layer_type={:?}",
+            entity, layer_info.layer_type
+        );
 
         // Get character data and appearance to determine which assets to load
         let Ok((char_data, appearance)) = characters.get(hierarchy.character_entity) else {
-            warn!("❌ Failed to get character data for entity {:?}", hierarchy.character_entity);
+            warn!(
+                "❌ Failed to get character data for entity {:?}",
+                hierarchy.character_entity
+            );
             continue;
         };
 
-        info!("✅ Got character data: job_id={}, gender={:?}, hair_style={}, hair_color={}",
-            char_data.job_id, appearance.gender, appearance.hair_style, appearance.hair_color);
+        info!(
+            "✅ Got character data: job_id={}, gender={:?}, hair_style={}, hair_color={}",
+            char_data.job_id, appearance.gender, appearance.hair_style, appearance.hair_color
+        );
 
         // Generate asset paths based on layer type
         let (sprite_path, act_path, palette_path) = match &layer_info.layer_type {
@@ -825,7 +875,10 @@ pub fn populate_sprite_layers_with_assets(
                 (sprite, act, palette)
             }
             _ => {
-                warn!("⏭️ Skipping unsupported layer type: {:?}", layer_info.layer_type);
+                warn!(
+                    "⏭️ Skipping unsupported layer type: {:?}",
+                    layer_info.layer_type
+                );
                 continue; // Skip other layer types for now
             }
         };
@@ -863,7 +916,10 @@ pub fn populate_sprite_layers_with_assets(
 
         info!(
             "Created RoAnimationController for layer {:?}: paused={}, action={}, looping={}",
-            layer_info.layer_type, controller.paused, controller.action_index, controller.loop_animation
+            layer_info.layer_type,
+            controller.paused,
+            controller.action_index,
+            controller.loop_animation
         );
 
         // Create material for 3D rendering

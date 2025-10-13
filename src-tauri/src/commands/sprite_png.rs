@@ -118,7 +118,7 @@ pub async fn preload_sprite_batch(
                 Ok(_) => successes.push(cache_key),
                 Err(e) => {
                     // Log error and track failure
-                    eprintln!("Failed to preload sprite {}: {}", cache_key, e);
+                    error!("Failed to preload sprite {}: {}", cache_key, e);
                     failures.push(cache_key);
                 }
             }

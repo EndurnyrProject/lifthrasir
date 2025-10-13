@@ -36,7 +36,11 @@ pub fn load_water_system(
     ground_assets: Res<Assets<RoGroundAsset>>,
     query: Query<
         (Entity, &MapLoader, &MapRequestLoader, &MapData),
-        (Without<WaterSurface>, Without<WaterLoadingState>, With<MapData>),
+        (
+            Without<WaterSurface>,
+            Without<WaterLoadingState>,
+            With<MapData>,
+        ),
     >,
 ) {
     for (entity, map_loader, _map_request, _) in query.iter() {
@@ -58,7 +62,7 @@ pub fn load_water_system(
             continue;
         }
 
-        info!(
+        debug!(
             "Creating water surface at level: {}, wave_height: {}, wave_speed: {}, wave_pitch: {}, anim_speed: {}",
             water.level, water.wave_height, water.wave_speed, water.wave_pitch, water.anim_speed
         );
@@ -70,11 +74,6 @@ pub fn load_water_system(
         let width = ground.width as usize;
         let height = ground.height as usize;
         let mut water_tiles = Vec::new();
-
-        info!(
-            "Water detection: water.level={}, water.wave_height={}, calculated wave_height={}",
-            water.level, water.wave_height, wave_height
-        );
 
         // Check each terrain cell for water presence
         for y in 0..height {
@@ -100,21 +99,14 @@ pub fn load_water_system(
         }
 
         if water_tiles.is_empty() {
-            info!("No water tiles detected for this map");
+            debug!("No water tiles detected for this map");
             continue;
         }
 
-        info!("Detected {} water tiles", water_tiles.len());
-
-        info!("Creating single water mesh for {} tiles", water_tiles.len());
+        debug!("Detected {} water tiles, creating mesh", water_tiles.len());
 
         // Start loading water texture using AssetServer (async)
         let water_texture = load_water_texture(water.water_type, 0, &asset_server);
-
-        info!(
-            "Water texture loading started: {:?}, waiting for asset to load...",
-            water_texture
-        );
 
         // Add loading state component to track async texture loading
         commands.entity(entity).insert(WaterLoadingState {
@@ -142,18 +134,10 @@ pub fn finalize_water_loading_system(
     for (entity, loading_state) in query.iter() {
         // Check if texture is loaded
         if asset_server.is_loaded_with_dependencies(&loading_state.texture_handle) {
-            info!("Water texture loaded successfully, creating water mesh and material");
+            debug!("Water texture loaded, creating mesh and material");
 
-            // Debug: Verify texture data and fix sampler for tiling
+            // Fix sampler for tiling
             if let Some(image) = images.get_mut(&loading_state.texture_handle) {
-                info!(
-                    "✅ Water texture data verified: {}x{}, format: {:?}, sampler: {:?}",
-                    image.width(),
-                    image.height(),
-                    image.texture_descriptor.format,
-                    image.sampler
-                );
-
                 // Override sampler to Repeat mode for proper tiling across water surface
                 // Bevy's built-in JPEG loader uses Default (ClampToEdge), but we need Repeat
                 image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
@@ -165,16 +149,16 @@ pub fn finalize_water_loading_system(
                     mipmap_filter: ImageFilterMode::Linear,
                     ..Default::default()
                 });
-                info!("✅ Set water texture sampler to Repeat mode for tiling");
             } else {
-                warn!("⚠️  Water texture handle is 'loaded' but image data is not in Assets<Image>!");
+                warn!("Water texture handle loaded but image data not in Assets<Image>");
             }
 
             // Generate procedural normal map for water
             let normal_map = generate_water_normal_map(&mut images);
 
             // Create single mesh containing all water tiles
-            let water_mesh = create_water_tiles_mesh(&loading_state.water_tiles, loading_state.wave_height);
+            let water_mesh =
+                create_water_tiles_mesh(&loading_state.water_tiles, loading_state.wave_height);
             let mesh_handle = meshes.add(water_mesh);
 
             // Calculate texture scale based on map size
@@ -237,7 +221,7 @@ pub fn finalize_water_loading_system(
                 ))
                 .remove::<WaterLoadingState>();
 
-            info!("Water rendering setup complete");
+            debug!("Water rendering setup complete");
         }
     }
 }

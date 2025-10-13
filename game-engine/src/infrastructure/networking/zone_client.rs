@@ -1,7 +1,7 @@
 use super::errors::NetworkError;
 use super::protocols::ro_zone::{
-    CzEnter2Packet, CzNotifyActorinitPacket, ZcAcceptEnterPacket, ZcAidPacket,
-    ZcRefuseEnterPacket, ZC_ACCEPT_ENTER, ZC_AID, ZC_REFUSE_ENTER,
+    CzEnter2Packet, CzNotifyActorinitPacket, ZcAcceptEnterPacket, ZcAidPacket, ZcRefuseEnterPacket,
+    ZC_ACCEPT_ENTER, ZC_AID, ZC_REFUSE_ENTER,
 };
 use crate::domain::character::events::{
     ZoneAuthenticationFailed, ZoneAuthenticationSuccess, ZoneServerConnected,
@@ -174,7 +174,10 @@ impl ZoneServerClient {
 
                         // Check buffer size to prevent DoS
                         if self.buffer.len() > MAX_BUFFER_SIZE {
-                            error!("Receive buffer exceeded max size ({} bytes). Disconnecting.", MAX_BUFFER_SIZE);
+                            error!(
+                                "Receive buffer exceeded max size ({} bytes). Disconnecting.",
+                                MAX_BUFFER_SIZE
+                            );
                             self.disconnect();
                             return Err(NetworkError::UnexpectedDisconnect);
                         }
@@ -197,10 +200,12 @@ impl ZoneServerClient {
                                                 "Zone authentication successful! Spawn at ({}, {}) dir {}",
                                                 packet.x, packet.y, packet.dir
                                             );
-                                            self.spawn_position = Some((packet.x, packet.y, packet.dir));
+                                            self.spawn_position =
+                                                Some((packet.x, packet.y, packet.dir));
                                             self.server_tick = packet.start_time;
                                             self.state = ZoneConnectionState::WaitingForMapLoad;
-                                            responses.push(ZoneServerResponse::ZcAcceptEnter(packet));
+                                            responses
+                                                .push(ZoneServerResponse::ZcAcceptEnter(packet));
                                             self.buffer.drain(..PACKET_SIZE);
                                         }
                                         Err(e) => {
@@ -217,7 +222,10 @@ impl ZoneServerClient {
 
                                     match ZcAidPacket::parse(&self.buffer[..PACKET_SIZE]) {
                                         Ok(packet) => {
-                                            info!("Received account ID from zone server: {}", packet.account_id);
+                                            info!(
+                                                "Received account ID from zone server: {}",
+                                                packet.account_id
+                                            );
                                             // This packet is informational only, no need to emit event
                                             self.buffer.drain(..PACKET_SIZE);
                                         }
@@ -240,7 +248,8 @@ impl ZoneServerClient {
                                                 packet.error_description(),
                                                 packet.error_code
                                             );
-                                            responses.push(ZoneServerResponse::ZcRefuseEnter(packet));
+                                            responses
+                                                .push(ZoneServerResponse::ZcRefuseEnter(packet));
                                             self.buffer.drain(..PACKET_SIZE);
                                         }
                                         Err(e) => {
@@ -296,7 +305,9 @@ pub enum ZoneServerResponse {
 
 /// System to handle zone server connection requests
 pub fn zone_connection_system(
-    mut zone_info_events: EventReader<crate::domain::character::events::ZoneServerInfoReceivedEvent>,
+    mut zone_info_events: EventReader<
+        crate::domain::character::events::ZoneServerInfoReceivedEvent,
+    >,
     mut zone_client: Option<ResMut<ZoneServerClient>>,
     mut char_client: Option<ResMut<super::CharServerClient>>,
     mut connected_events: EventWriter<ZoneServerConnected>,

@@ -62,22 +62,25 @@ impl SpritePngCache {
     ) -> Result<Self, SpritePngError> {
         // Create cache directory if it doesn't exist
         if !cache_dir.exists() {
-            fs::create_dir_all(&cache_dir)
-                .map_err(|e| SpritePngError::CacheError(format!("Failed to create cache directory: {}", e)))?;
+            fs::create_dir_all(&cache_dir).map_err(|e| {
+                SpritePngError::CacheError(format!("Failed to create cache directory: {}", e))
+            })?;
         }
 
         // Load metadata from disk
         let metadata_path = cache_dir.join("cache.json");
         let metadata = if metadata_path.exists() {
-            let metadata_str = fs::read_to_string(&metadata_path)
-                .map_err(|e| SpritePngError::CacheError(format!("Failed to read metadata: {}", e)))?;
+            let metadata_str = fs::read_to_string(&metadata_path).map_err(|e| {
+                SpritePngError::CacheError(format!("Failed to read metadata: {}", e))
+            })?;
             serde_json::from_str(&metadata_str).unwrap_or_default()
         } else {
             CacheMetadata::default()
         };
 
-        let capacity = NonZeroUsize::new(memory_capacity)
-            .ok_or_else(|| SpritePngError::CacheError("Memory capacity must be non-zero".to_string()))?;
+        let capacity = NonZeroUsize::new(memory_capacity).ok_or_else(|| {
+            SpritePngError::CacheError("Memory capacity must be non-zero".to_string())
+        })?;
 
         Ok(Self {
             memory_cache: Arc::new(Mutex::new(LruCache::new(capacity))),
@@ -93,14 +96,17 @@ impl SpritePngCache {
     /// 1. Check memory cache → return if hit
     /// 2. Check disk cache → promote to memory if hit
     /// 3. Generate via renderer → save to both caches
-    pub fn get_or_generate(&self, request: &SpritePngRequest) -> Result<SpritePngResponse, SpritePngError> {
+    pub fn get_or_generate(
+        &self,
+        request: &SpritePngRequest,
+    ) -> Result<SpritePngResponse, SpritePngError> {
         let cache_key = request.cache_key();
 
         // 1. Check memory cache
         {
-            let mut memory_cache = self.memory_cache
-                .lock()
-                .map_err(|e| SpritePngError::CacheError(format!("Memory cache lock error: {}", e)))?;
+            let mut memory_cache = self.memory_cache.lock().map_err(|e| {
+                SpritePngError::CacheError(format!("Memory cache lock error: {}", e))
+            })?;
 
             if let Some(response) = memory_cache.get(&cache_key) {
                 let mut cached_response = response.clone();
@@ -123,7 +129,10 @@ impl SpritePngCache {
                 }
                 Err(e) => {
                     // Disk cache corrupted, remove the file and regenerate
-                    eprintln!("Disk cache corrupted for {}: {}, regenerating", cache_key, e);
+                    eprintln!(
+                        "Disk cache corrupted for {}: {}, regenerating",
+                        cache_key, e
+                    );
                     let _ = fs::remove_file(&cache_file_path);
 
                     // Remove stale metadata entry to prevent unbounded growth
@@ -155,7 +164,10 @@ impl SpritePngCache {
     /// Preload a batch of sprites into cache
     ///
     /// Useful for preloading commonly used sprites (e.g., all character customization options)
-    pub fn preload_batch(&self, requests: &[SpritePngRequest]) -> Result<Vec<SpritePngResponse>, SpritePngError> {
+    pub fn preload_batch(
+        &self,
+        requests: &[SpritePngRequest],
+    ) -> Result<Vec<SpritePngResponse>, SpritePngError> {
         requests
             .iter()
             .map(|request| self.get_or_generate(request))
@@ -172,8 +184,9 @@ impl SpritePngCache {
         // Clear disk cache
         if self.cache_dir.exists() {
             // Remove all .png files
-            let entries = fs::read_dir(&self.cache_dir)
-                .map_err(|e| SpritePngError::CacheError(format!("Failed to read cache directory: {}", e)))?;
+            let entries = fs::read_dir(&self.cache_dir).map_err(|e| {
+                SpritePngError::CacheError(format!("Failed to read cache directory: {}", e))
+            })?;
 
             for entry in entries.flatten() {
                 if let Some(ext) = entry.path().extension() {
@@ -194,16 +207,23 @@ impl SpritePngCache {
     }
 
     /// Load a PNG from disk cache
-    fn load_from_disk(&self, cache_key: &str, path: &PathBuf) -> Result<SpritePngResponse, SpritePngError> {
+    fn load_from_disk(
+        &self,
+        cache_key: &str,
+        path: &PathBuf,
+    ) -> Result<SpritePngResponse, SpritePngError> {
         let png_data = fs::read(path)
             .map_err(|e| SpritePngError::CacheError(format!("Failed to read from disk: {}", e)))?;
 
         // Get dimensions from metadata
-        let metadata = self.metadata
+        let metadata = self
+            .metadata
             .lock()
             .map_err(|e| SpritePngError::CacheError(format!("Metadata lock error: {}", e)))?;
 
-        let entry = metadata.entries.get(cache_key)
+        let entry = metadata
+            .entries
+            .get(cache_key)
             .ok_or_else(|| SpritePngError::CacheError("Metadata entry not found".to_string()))?;
 
         Ok(SpritePngResponse::new(
@@ -224,14 +244,17 @@ impl SpritePngCache {
         path: &PathBuf,
     ) -> Result<(), SpritePngError> {
         // Write PNG file
-        let mut file = fs::File::create(path)
-            .map_err(|e| SpritePngError::CacheError(format!("Failed to create cache file: {}", e)))?;
+        let mut file = fs::File::create(path).map_err(|e| {
+            SpritePngError::CacheError(format!("Failed to create cache file: {}", e))
+        })?;
 
-        file.write_all(&response.png_data)
-            .map_err(|e| SpritePngError::CacheError(format!("Failed to write cache file: {}", e)))?;
+        file.write_all(&response.png_data).map_err(|e| {
+            SpritePngError::CacheError(format!("Failed to write cache file: {}", e))
+        })?;
 
         // Update metadata
-        let mut metadata = self.metadata
+        let mut metadata = self
+            .metadata
             .lock()
             .map_err(|e| SpritePngError::CacheError(format!("Metadata lock error: {}", e)))?;
 
@@ -259,29 +282,34 @@ impl SpritePngCache {
         let metadata_path = self.cache_dir.join("cache.json");
         let temp_path = self.cache_dir.join("cache.json.tmp");
 
-        let metadata_str = serde_json::to_string_pretty(metadata)
-            .map_err(|e| SpritePngError::CacheError(format!("Failed to serialize metadata: {}", e)))?;
+        let metadata_str = serde_json::to_string_pretty(metadata).map_err(|e| {
+            SpritePngError::CacheError(format!("Failed to serialize metadata: {}", e))
+        })?;
 
         // Write to temporary file first
-        fs::write(&temp_path, metadata_str)
-            .map_err(|e| SpritePngError::CacheError(format!("Failed to write temporary metadata: {}", e)))?;
+        fs::write(&temp_path, metadata_str).map_err(|e| {
+            SpritePngError::CacheError(format!("Failed to write temporary metadata: {}", e))
+        })?;
 
         // Atomically rename temporary file to final destination
         // This ensures the original file is never left in a corrupted state
-        fs::rename(&temp_path, &metadata_path)
-            .map_err(|e| SpritePngError::CacheError(format!("Failed to rename metadata file: {}", e)))?;
+        fs::rename(&temp_path, &metadata_path).map_err(|e| {
+            SpritePngError::CacheError(format!("Failed to rename metadata file: {}", e))
+        })?;
 
         Ok(())
     }
 
     /// Get cache statistics
     pub fn get_stats(&self) -> Result<CacheStats, SpritePngError> {
-        let memory_count = self.memory_cache
+        let memory_count = self
+            .memory_cache
             .lock()
             .map_err(|e| SpritePngError::CacheError(format!("Memory cache lock error: {}", e)))?
             .len();
 
-        let metadata = self.metadata
+        let metadata = self
+            .metadata
             .lock()
             .map_err(|e| SpritePngError::CacheError(format!("Metadata lock error: {}", e)))?;
 

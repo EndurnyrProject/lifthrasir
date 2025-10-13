@@ -103,20 +103,19 @@ impl Plugin for TauriIntegrationPlugin {
         // Load asset configuration for sprite renderer
         let config_path = "assets/loader.data.toml";
         let config: game_engine::infrastructure::assets::AssetConfig = {
-            let config_content = std::fs::read_to_string(config_path)
-                .expect("Failed to read asset config");
-            toml::from_str(&config_content)
-                .expect("Failed to parse asset config")
+            let config_content =
+                std::fs::read_to_string(config_path).expect("Failed to read asset config");
+            toml::from_str(&config_content).expect("Failed to parse asset config")
         };
 
         // Create HierarchicalAssetManager for sprite rendering
-        let asset_manager = game_engine::infrastructure::assets::HierarchicalAssetManager::from_config(&config)
-            .expect("Failed to create HierarchicalAssetManager");
+        let asset_manager =
+            game_engine::infrastructure::assets::HierarchicalAssetManager::from_config(&config)
+                .expect("Failed to create HierarchicalAssetManager");
 
         // Create SpriteRenderer
-        let sprite_renderer = Arc::new(
-            game_engine::infrastructure::sprite_png::SpriteRenderer::new(asset_manager)
-        );
+        let sprite_renderer =
+            Arc::new(game_engine::infrastructure::sprite_png::SpriteRenderer::new(asset_manager));
 
         // Set up cache directory
         let cache_dir = std::env::current_dir()
@@ -129,8 +128,9 @@ impl Plugin for TauriIntegrationPlugin {
             game_engine::infrastructure::sprite_png::SpritePngCache::new(
                 sprite_renderer,
                 cache_dir,
-                100  // 100 sprites in memory cache
-            ).expect("Failed to create SpritePngCache")
+                100, // 100 sprites in memory cache
+            )
+            .expect("Failed to create SpritePngCache"),
         );
 
         // Add DefaultPlugins with customizations
@@ -160,7 +160,7 @@ impl Plugin for TauriIntegrationPlugin {
                 .disable::<bevy::gltf::GltfPlugin>()
                 .disable::<bevy::audio::AudioPlugin>()
                 .disable::<bevy::animation::AnimationPlugin>()
-                .disable::<bevy::gizmos::GizmoPlugin>(),  // Re-added later with render pipeline
+                .disable::<bevy::gizmos::GizmoPlugin>(), // Re-added later with render pipeline
         );
 
         // Add game engine plugins (AFTER core Bevy plugins are set up)
@@ -170,11 +170,11 @@ impl Plugin for TauriIntegrationPlugin {
             game_engine::LifthrasirPlugin,
             game_engine::AssetsPlugin,
             game_engine::AssetCatalogPlugin,
-            game_engine::CharacterDomainPlugin,  // Includes UnifiedCharacterEntityPlugin with 3D sprite hierarchy
+            game_engine::CharacterDomainPlugin, // Includes UnifiedCharacterEntityPlugin with 3D sprite hierarchy
             game_engine::AuthenticationPlugin,
             game_engine::WorldPlugin,
-            game_engine::BillboardPlugin,       // 3D billboard rendering infrastructure
-            game_engine::InputPlugin,           // Input handling (cursor, clicks, terrain cursor)
+            game_engine::BillboardPlugin, // 3D billboard rendering infrastructure
+            game_engine::InputPlugin,     // Input handling (cursor, clicks, terrain cursor)
         ));
 
         // Create AppBridge and event receiver

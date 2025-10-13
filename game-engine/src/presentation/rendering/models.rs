@@ -85,7 +85,7 @@ pub fn spawn_map_models(
                 if model.filename.is_empty() {
                     empty_count += 1;
                     if empty_count <= 5 {
-                        warn!(
+                        debug!(
                             "Empty filename model #{}: name='{}', node='{}', pos={:?}",
                             empty_count, model.name, model.node_name, model.position
                         );
@@ -119,10 +119,7 @@ pub fn spawn_map_models(
         }
 
         if empty_count > 0 {
-            error!(
-                "{} out of {} models have empty filenames!",
-                empty_count, model_count
-            );
+            warn!("{} models have empty filenames", empty_count);
         }
 
         for (filename, instances) in model_groups {
@@ -170,9 +167,9 @@ pub fn load_rsm_assets(
         let rsm_path = format!("ro://data\\model\\{}", map_model.filename);
         let rsm_handle: Handle<RsmAsset> = asset_server.load(&rsm_path);
 
-        commands.entity(entity).insert(RsmLoading {
-            handle: rsm_handle,
-        });
+        commands
+            .entity(entity)
+            .insert(RsmLoading { handle: rsm_handle });
     }
 }
 
@@ -186,7 +183,11 @@ pub fn update_model_meshes(
             Option<&AnimationType>,
             Option<&AnimationSpeed>,
         ),
-        (With<MapModel>, Without<ModelProcessed>, Without<ModelTexturesLoading>),
+        (
+            With<MapModel>,
+            Without<ModelProcessed>,
+            Without<ModelTexturesLoading>,
+        ),
     >,
     asset_server: Res<AssetServer>,
     rsm_assets: Res<Assets<RsmAsset>>,
@@ -271,7 +272,7 @@ pub fn update_model_meshes(
                 } else {
                     // Parent not found, attach to model entity
                     commands.entity(entity).add_child(node_entity);
-                    warn!(
+                    debug!(
                         "Parent '{}' not found for node '{}', attaching to model",
                         node.parent_name, node.name
                     );
@@ -338,9 +339,12 @@ pub fn create_model_materials_when_textures_ready(
                     loaded_count += 1;
                 }
                 LoadState::Failed(err) => {
-                    warn!(
+                    debug!(
                         "Failed to load RSM texture '{}': {:?}",
-                        textures_loading.texture_names.get(i).unwrap_or(&"unknown".to_string()),
+                        textures_loading
+                            .texture_names
+                            .get(i)
+                            .unwrap_or(&"unknown".to_string()),
                         err
                     );
                     failed_count += 1;
@@ -380,16 +384,20 @@ pub fn create_model_materials_when_textures_ready(
                 let mesh_handle = meshes.add(mesh.clone());
 
                 // Get material for this texture ID
-                let material_handle = texture_materials
-                    .get(texture_id)
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        warn!(
-                            "No material found for texture ID {}, using fallback",
-                            texture_id
-                        );
-                        create_colored_fallback_material_for_model(*texture_id as usize, &mut materials)
-                    });
+                let material_handle =
+                    texture_materials
+                        .get(texture_id)
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            debug!(
+                                "No material found for texture ID {}, using fallback",
+                                texture_id
+                            );
+                            create_colored_fallback_material_for_model(
+                                *texture_id as usize,
+                                &mut materials,
+                            )
+                        });
 
                 // Create mesh entity with local space transform (IDENTITY)
                 let mesh_entity = commands
@@ -411,8 +419,6 @@ pub fn create_model_materials_when_textures_ready(
             .entity(entity)
             .insert(ModelProcessed)
             .remove::<ModelTexturesLoading>();
-
-        debug!("Model materials created and meshes spawned successfully");
     }
 }
 
@@ -428,24 +434,23 @@ fn create_model_materials_from_loaded_textures(
     let mut material_map = HashMap::new();
 
     for (i, _texture_name) in rsm.textures.iter().enumerate() {
-        let material = if i < texture_handles.len() && texture_handles[i].id() != AssetId::default() {
+        let material = if i < texture_handles.len() && texture_handles[i].id() != AssetId::default()
+        {
             match asset_server.load_state(&texture_handles[i]) {
-                LoadState::Loaded => {
-                    materials.add(StandardMaterial {
-                        base_color_texture: Some(texture_handles[i].clone()),
-                        base_color: Color::WHITE,
-                        alpha_mode: if rsm.alpha < 1.0 {
-                            AlphaMode::Blend
-                        } else {
-                            AlphaMode::Mask(0.5)
-                        },
-                        perceptual_roughness: 0.8,
-                        metallic: 0.0,
-                        reflectance: 0.1,
-                        cull_mode: None,
-                        ..default()
-                    })
-                }
+                LoadState::Loaded => materials.add(StandardMaterial {
+                    base_color_texture: Some(texture_handles[i].clone()),
+                    base_color: Color::WHITE,
+                    alpha_mode: if rsm.alpha < 1.0 {
+                        AlphaMode::Blend
+                    } else {
+                        AlphaMode::Mask(0.5)
+                    },
+                    perceptual_roughness: 0.8,
+                    metallic: 0.0,
+                    reflectance: 0.1,
+                    cull_mode: None,
+                    ..default()
+                }),
                 _ => create_colored_fallback_material_for_model(i, materials),
             }
         } else {
@@ -510,7 +515,7 @@ fn convert_rsm_to_mesh(rsm: &RsmFile) -> HashMap<usize, Vec<(i32, Mesh)>> {
 
     // If no meshes were generated at all, create a fallback for the main node
     if node_meshes.is_empty() {
-        warn!("No meshes generated from RSM nodes, using fallback cube for main node");
+        debug!("No meshes generated from RSM nodes, using fallback cube");
         let mesh = Mesh::from(Cuboid::new(1.0, 1.0, 1.0));
         let main_node_idx = rsm
             .nodes

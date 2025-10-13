@@ -1,11 +1,10 @@
 use super::{HairstyleInfo, TauriEvent, TauriEventReceiver};
 use crate::bridge::pending_senders::PendingSenders;
-use bevy::prelude::*;
 use bevy::input::ButtonInput;
+use bevy::prelude::*;
 use game_engine::domain::character::{
     catalog::HeadStyleCatalog, CharacterCreationForm, CreateCharacterRequestEvent,
-    DeleteCharacterRequestEvent, RequestCharacterListEvent,
-    SelectCharacterEvent,
+    DeleteCharacterRequestEvent, RequestCharacterListEvent, SelectCharacterEvent,
 };
 use game_engine::domain::entities::character::components::{Gender, JobClass};
 use game_engine::domain::input::ForwardedCursorPosition;

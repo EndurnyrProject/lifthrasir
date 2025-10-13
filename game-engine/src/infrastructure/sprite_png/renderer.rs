@@ -1,6 +1,11 @@
-use super::{error::SpritePngError, types::{SpritePngRequest, SpritePngResponse}};
+use super::{
+    error::SpritePngError,
+    types::{SpritePngRequest, SpritePngResponse},
+};
 use crate::infrastructure::{
-    assets::{converters::convert_sprite_frame_to_rgba, hierarchical_manager::HierarchicalAssetManager},
+    assets::{
+        converters::convert_sprite_frame_to_rgba, hierarchical_manager::HierarchicalAssetManager,
+    },
     ro_formats::{parse_act, parse_spr},
 };
 use image::{imageops::FilterType, ImageFormat, RgbaImage};
@@ -18,10 +23,15 @@ impl SpriteRenderer {
     }
 
     /// Render a sprite frame to PNG format
-    pub fn render_to_png(&self, request: &SpritePngRequest) -> Result<SpritePngResponse, SpritePngError> {
+    pub fn render_to_png(
+        &self,
+        request: &SpritePngRequest,
+    ) -> Result<SpritePngResponse, SpritePngError> {
         // 1. Normalize and load sprite file
         let sprite_path = Self::normalize_path(&request.sprite_path);
-        let sprite_data = self.asset_manager.load(&sprite_path)
+        let sprite_data = self
+            .asset_manager
+            .load(&sprite_path)
             .map_err(|_| SpritePngError::FileNotFound(sprite_path.clone()))?;
 
         // 2. Parse sprite file
@@ -29,14 +39,18 @@ impl SpriteRenderer {
 
         // 3. Load and parse ACT file
         let act_path = Self::normalize_path(&request.get_act_path());
-        let act_data = self.asset_manager.load(&act_path)
+        let act_data = self
+            .asset_manager
+            .load(&act_path)
             .map_err(|_| SpritePngError::FileNotFound(act_path.clone()))?;
         let act = parse_act(&act_data)?;
 
         // 4. Load optional custom palette
         let custom_palette = if let Some(ref palette_path) = request.palette_path {
             let palette_path = Self::normalize_path(palette_path);
-            let palette_data = self.asset_manager.load(&palette_path)
+            let palette_data = self
+                .asset_manager
+                .load(&palette_path)
                 .map_err(|_| SpritePngError::FileNotFound(palette_path.clone()))?;
             Some(Self::parse_palette(&palette_data)?)
         } else {
@@ -44,7 +58,8 @@ impl SpriteRenderer {
         };
 
         // 5. Extract the specific frame from ACT
-        let (sprite_frame, width, height, offset_x, offset_y) = self.extract_frame(&sprite, &act, request)?;
+        let (sprite_frame, width, height, offset_x, offset_y) =
+            self.extract_frame(&sprite, &act, request)?;
 
         // 6. Convert to RGBA
         let rgba_data = convert_sprite_frame_to_rgba(
@@ -62,13 +77,13 @@ impl SpriteRenderer {
             // Validate scale parameter before use
             if request.scale <= 0.0 || !request.scale.is_finite() {
                 return Err(SpritePngError::EncodingError(
-                    "Scale must be a positive finite number".to_string()
+                    "Scale must be a positive finite number".to_string(),
                 ));
             }
             // Limit scale to prevent excessive memory usage
             if request.scale > 16.0 {
                 return Err(SpritePngError::EncodingError(
-                    "Scale too large (maximum: 16.0)".to_string()
+                    "Scale too large (maximum: 16.0)".to_string(),
                 ));
             }
             Self::scale_image(&image, request.scale)
@@ -95,7 +110,16 @@ impl SpriteRenderer {
         sprite: &crate::infrastructure::ro_formats::RoSprite,
         act: &crate::infrastructure::ro_formats::RoAction,
         request: &SpritePngRequest,
-    ) -> Result<(crate::infrastructure::ro_formats::sprite::SpriteFrame, u16, u16, i32, i32), SpritePngError> {
+    ) -> Result<
+        (
+            crate::infrastructure::ro_formats::sprite::SpriteFrame,
+            u16,
+            u16,
+            i32,
+            i32,
+        ),
+        SpritePngError,
+    > {
         // Validate action index
         if request.action_index >= act.actions.len() {
             return Err(SpritePngError::InvalidAction(request.action_index));
@@ -142,7 +166,9 @@ impl SpriteRenderer {
     }
 
     /// Parse a 1024-byte palette file to Palette struct
-    fn parse_palette(data: &[u8]) -> Result<crate::infrastructure::assets::loaders::RoPaletteAsset, SpritePngError> {
+    fn parse_palette(
+        data: &[u8],
+    ) -> Result<crate::infrastructure::assets::loaders::RoPaletteAsset, SpritePngError> {
         if data.len() != 1024 {
             return Err(SpritePngError::InvalidPalette);
         }
@@ -170,7 +196,8 @@ impl SpriteRenderer {
         let mut buffer = Vec::new();
         let mut cursor = Cursor::new(&mut buffer);
 
-        image.write_to(&mut cursor, ImageFormat::Png)
+        image
+            .write_to(&mut cursor, ImageFormat::Png)
             .map_err(|e| SpritePngError::EncodingError(e.to_string()))?;
 
         Ok(buffer)

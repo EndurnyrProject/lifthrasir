@@ -72,15 +72,9 @@ pub enum TauriEvent {
         response_tx: oneshot::Sender<Result<Vec<HairstyleInfo>, String>>,
     },
     /// Forward keyboard input from JavaScript to Bevy
-    KeyboardInput {
-        code: String,
-        pressed: bool,
-    },
+    KeyboardInput { code: String, pressed: bool },
     /// Forward mouse position from JavaScript to Bevy
-    MousePosition {
-        x: f32,
-        y: f32,
-    },
+    MousePosition { x: f32, y: f32 },
 }
 
 // ============================================================================
