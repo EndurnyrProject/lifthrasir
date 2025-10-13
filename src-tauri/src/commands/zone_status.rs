@@ -1,7 +1,4 @@
 use crate::bridge::AppBridge;
-use bevy::ecs::system::SystemState;
-use game_engine::core::state::GameState;
-use game_engine::infrastructure::networking::ZoneServerClient;
 use serde::Serialize;
 use tauri::State;
 
@@ -19,7 +16,7 @@ pub struct ZoneStatus {
 /// Get the current zone server connection status
 /// Returns detailed information about the zone connection state
 #[tauri::command]
-pub async fn get_zone_status(app_bridge: State<'_, AppBridge>) -> Result<ZoneStatus, String> {
+pub async fn get_zone_status(_app_bridge: State<'_, AppBridge>) -> Result<ZoneStatus, String> {
     // Access Bevy world through AppBridge to query current state
     // This is a read-only query, so we don't need to send events
 

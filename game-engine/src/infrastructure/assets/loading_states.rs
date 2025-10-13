@@ -105,7 +105,7 @@ pub fn ensure_default_config() -> std::io::Result<()> {
 
         // Create default config
         AssetConfig::save_default_config(config_path)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
 
         info!("Created default data.toml at: {}", config_path.display());
     }

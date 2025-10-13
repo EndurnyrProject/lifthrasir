@@ -46,7 +46,7 @@ pub fn animate_sprites(
                 if let Some(action_seq) = action.actions.get(controller.action_index) {
                     // Check if this is a head layer during IDLE action
                     // Head animations have 3x frames for doridori (head nodding), only use first 1/3
-                    let is_head_layer = sprite_layer.map_or(false, |layer| {
+                    let is_head_layer = sprite_layer.is_some_and(|layer| {
                         use crate::domain::entities::character::components::visual::SpriteLayerType;
                         use crate::domain::entities::character::components::equipment::EquipmentSlot;
                         matches!(

@@ -245,25 +245,18 @@ impl Plugin for TauriIntegrationPlugin {
 /// Custom runner that integrates Tauri's event loop with Bevy's update loop
 fn run_tauri_app(app: App) -> AppExit {
     let app = Rc::new(RefCell::new(app));
-    let mut tauri_app = app
+    let tauri_app = app
         .borrow_mut()
         .world_mut()
         .remove_non_send_resource::<tauri::App>()
         .unwrap();
 
-    loop {
-        let app_clone = app.clone();
-        tauri_app.run_iteration(move |app_handle, event: RunEvent| {
-            handle_tauri_events(app_handle, event, app_clone.borrow_mut());
-        });
+    tauri_app.run_return(move |app_handle, event: RunEvent| {
+        handle_tauri_events(app_handle, event, app.borrow_mut());
 
-        if tauri_app.webview_windows().is_empty() {
-            tauri_app.cleanup_before_exit();
-            break;
-        }
-
+        // Update Bevy after each event
         app.borrow_mut().update();
-    }
+    });
 
     AppExit::Success
 }
@@ -356,7 +349,7 @@ fn handle_window_resize(size: tauri::PhysicalSize<u32>, mut app: RefMut<'_, Bevy
 
     for (entity, mut window) in window_query.iter_mut() {
         window.resolution = WindowResolution::new(size.width as f32, size.height as f32);
-        window_resized.send(WindowResized {
+        window_resized.write(WindowResized {
             window: entity,
             width: size.width as f32,
             height: size.height as f32,
@@ -382,11 +375,11 @@ fn handle_window_factor_change(
     for (entity, mut window) in window_query.iter_mut() {
         window.resolution =
             WindowResolution::new(new_inner_size.width as f32, new_inner_size.height as f32);
-        window_scale_factor_changed.send(WindowScaleFactorChanged {
+        window_scale_factor_changed.write(WindowScaleFactorChanged {
             window: entity,
             scale_factor,
         });
-        window_resized.send(WindowResized {
+        window_resized.write(WindowResized {
             window: entity,
             width: new_inner_size.width as f32,
             height: new_inner_size.height as f32,

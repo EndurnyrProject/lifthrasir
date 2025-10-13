@@ -1,5 +1,7 @@
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub enum ConnectionState {
+    #[default]
     Disconnected,
     Connecting,
     Authenticating,
@@ -7,8 +9,3 @@ pub enum ConnectionState {
     Failed(String),
 }
 
-impl Default for ConnectionState {
-    fn default() -> Self {
-        ConnectionState::Disconnected
-    }
-}

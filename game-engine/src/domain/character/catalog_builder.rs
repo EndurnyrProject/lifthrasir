@@ -109,7 +109,7 @@ impl HeadStyleCatalogBuilder {
                     ) {
                         palette_map
                             .entry((gender, id))
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(color);
                         palettes_found += 1;
                     }

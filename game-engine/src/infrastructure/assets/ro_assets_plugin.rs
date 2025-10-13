@@ -20,18 +20,12 @@ use toml;
 pub struct SharedCompositeAssetSource(pub Arc<RwLock<CompositeAssetSource>>);
 
 /// Enhanced RO Assets plugin that optionally sets up the unified asset source
+#[derive(Default)]
 pub struct RoAssetsPlugin {
     /// Whether to register the unified "ro://" asset source
     pub enable_unified_source: bool,
 }
 
-impl Default for RoAssetsPlugin {
-    fn default() -> Self {
-        Self {
-            enable_unified_source: false, // Start with false for backward compatibility
-        }
-    }
-}
 
 impl RoAssetsPlugin {
     /// Create plugin with unified asset source enabled
@@ -120,7 +114,7 @@ fn register_unified_asset_source(
     if let Some(config) = configs.get(&config_assets.config) {
         info!("Registering unified RO asset source as 'ro://' with loaded config");
 
-        match setup_composite_source_from_config(&config) {
+        match setup_composite_source_from_config(config) {
             Ok(composite_source) => {
                 let composite_arc = Arc::new(RwLock::new(composite_source));
 

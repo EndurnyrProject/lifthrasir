@@ -1,3 +1,4 @@
+use bevy::prelude::error;
 use game_engine::infrastructure::sprite_png::{SpritePngCache, SpritePngRequest};
 use serde::Serialize;
 use std::sync::Arc;

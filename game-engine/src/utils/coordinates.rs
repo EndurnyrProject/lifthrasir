@@ -1,5 +1,4 @@
 use crate::infrastructure::ro_formats::RswModel;
-use crate::utils::constants::CELL_SIZE;
 use bevy::prelude::*;
 
 pub fn rsw_to_bevy_transform(model: &RswModel, map_width: f32, map_height: f32) -> Transform {

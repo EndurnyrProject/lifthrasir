@@ -22,6 +22,12 @@ pub struct ExtractedMapFiles {
     pub world_data: Option<Vec<u8>>,
 }
 
+impl Default for ExtractedMapFiles {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExtractedMapFiles {
     pub fn new() -> Self {
         Self {

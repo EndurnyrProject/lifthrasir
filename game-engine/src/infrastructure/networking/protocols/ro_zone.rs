@@ -161,7 +161,7 @@ fn encode_position(x: u16, y: u16, dir: u8) -> [u8; 3] {
 fn decode_position(pos_dir: [u8; 3]) -> (u16, u16, u8) {
     let x = ((pos_dir[0] as u16) << 2) | ((pos_dir[1] as u16) >> 6);
     let y = (((pos_dir[1] as u16) & 0x3F) << 4) | ((pos_dir[2] as u16) >> 4);
-    let dir = (pos_dir[2] & 0x0F) as u8;
+    let dir = (pos_dir[2] & 0x0F);
     (x, y, dir)
 }
 

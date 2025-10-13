@@ -83,7 +83,7 @@ impl AssetLoader for BmpLoader {
                 }
 
                 // Calculate row size (rows are padded to 4-byte boundaries)
-                let row_size = ((width + 3) / 4) * 4;
+                let row_size = width.div_ceil(4) * 4;
 
                 for y in 0..height {
                     let source_y = if bottom_up { height - 1 - y } else { y };
@@ -107,7 +107,7 @@ impl AssetLoader for BmpLoader {
             }
             24 => {
                 // 24-bit BGR
-                let row_size = ((width * 3 + 3) / 4) * 4;
+                let row_size = (width * 3).div_ceil(4) * 4;
 
                 for y in 0..height {
                     let source_y = if bottom_up { height - 1 - y } else { y };

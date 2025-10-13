@@ -312,7 +312,7 @@ pub fn zone_connection_system(
     mut char_client: Option<ResMut<super::CharServerClient>>,
     mut connected_events: EventWriter<ZoneServerConnected>,
     mut failed_events: EventWriter<ZoneServerConnectionFailed>,
-    mut commands: Commands,
+    commands: Commands,
 ) {
     for event in zone_info_events.read() {
         info!(

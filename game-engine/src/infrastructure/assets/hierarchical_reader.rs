@@ -55,8 +55,7 @@ impl HierarchicalAssetReader {
                             "Failed to acquire read lock for asset '{}': {}",
                             path_str, e
                         );
-                        Err(AssetReaderError::Io(Arc::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        Err(AssetReaderError::Io(Arc::new(std::io::Error::other(
                             format!("Lock error: {}", e),
                         ))))
                     }
@@ -83,8 +82,7 @@ impl HierarchicalAssetReader {
                             "Failed to acquire read lock for exists check '{}': {}",
                             path_str, e
                         );
-                        Err(AssetReaderError::Io(Arc::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        Err(AssetReaderError::Io(Arc::new(std::io::Error::other(
                             format!("Lock error: {}", e),
                         ))))
                     }
@@ -190,8 +188,7 @@ impl AssetReader for HierarchicalAssetReader {
                             "Failed to acquire read lock for directory '{}': {}",
                             path_str, e
                         );
-                        Err(AssetReaderError::Io(Arc::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        Err(AssetReaderError::Io(Arc::new(std::io::Error::other(
                             format!("Lock error: {}", e),
                         ))))
                     }
@@ -199,8 +196,7 @@ impl AssetReader for HierarchicalAssetReader {
             })
             .await
             .map_err(|e| {
-                AssetReaderError::Io(Arc::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                AssetReaderError::Io(Arc::new(std::io::Error::other(
                     format!("Task join error: {}", e),
                 )))
             })?;
@@ -237,8 +233,7 @@ impl AssetReader for HierarchicalAssetReader {
                             "Failed to acquire read lock for is_directory '{}': {}",
                             path_str, e
                         );
-                        Err(AssetReaderError::Io(Arc::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
+                        Err(AssetReaderError::Io(Arc::new(std::io::Error::other(
                             format!("Lock error: {}", e),
                         ))))
                     }

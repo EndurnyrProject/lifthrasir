@@ -99,10 +99,9 @@ pub fn check_config_loaded(
     mut config_handle: ResMut<AssetConfigHandle>,
     configs: Res<Assets<AssetConfig>>,
 ) {
-    if !config_handle.loaded {
-        if configs.get(&config_handle.handle).is_some() {
+    if !config_handle.loaded
+        && configs.get(&config_handle.handle).is_some() {
             config_handle.loaded = true;
             info!("Asset configuration loaded successfully");
         }
-    }
 }

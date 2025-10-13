@@ -537,8 +537,7 @@ impl CharServerClient {
                                                 data[cursor + 3],
                                             ])
                                                 as usize;
-                                            if potential_len >= 4
-                                                && potential_len <= 65535
+                                            if (4..=65535).contains(&potential_len)
                                                 && data.len() - cursor >= potential_len
                                             {
                                                 warn!(

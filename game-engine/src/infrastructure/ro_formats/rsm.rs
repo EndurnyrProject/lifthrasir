@@ -23,6 +23,12 @@ pub struct BoundingBox {
     pub range: [f32; 3],
 }
 
+impl Default for BoundingBox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BoundingBox {
     pub fn new() -> Self {
         Self {

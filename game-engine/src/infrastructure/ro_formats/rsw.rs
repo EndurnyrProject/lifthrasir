@@ -172,7 +172,7 @@ fn parse_header(input: &[u8]) -> IResult<&[u8], (u8, u8)> {
     Ok((input, (major, minor)))
 }
 
-fn parse_water<'a>(input: &'a [u8], version: (u8, u8)) -> IResult<&'a [u8], RswWater> {
+fn parse_water(input: &[u8], version: (u8, u8)) -> IResult<&[u8], RswWater> {
     let mut water = RswWater::default();
     let input = if version >= (1, 3) {
         let (input, level) = le_f32(input)?;
@@ -207,7 +207,7 @@ fn parse_water<'a>(input: &'a [u8], version: (u8, u8)) -> IResult<&'a [u8], RswW
     Ok((input, water))
 }
 
-fn parse_light<'a>(input: &'a [u8], version: (u8, u8)) -> IResult<&'a [u8], RswLight> {
+fn parse_light(input: &[u8], version: (u8, u8)) -> IResult<&[u8], RswLight> {
     let mut light = RswLight::default();
     let input = if version >= (1, 5) {
         let (input, longitude) = le_u32(input)?;
@@ -234,7 +234,7 @@ fn parse_light<'a>(input: &'a [u8], version: (u8, u8)) -> IResult<&'a [u8], RswL
     Ok((input, light))
 }
 
-fn parse_ground<'a>(input: &'a [u8], version: (u8, u8)) -> IResult<&'a [u8], RswGround> {
+fn parse_ground(input: &[u8], version: (u8, u8)) -> IResult<&[u8], RswGround> {
     if version >= (1, 6) {
         let (input, top) = le_u32(input)?;
         let (input, bottom) = le_u32(input)?;

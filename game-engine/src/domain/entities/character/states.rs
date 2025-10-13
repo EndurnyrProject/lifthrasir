@@ -9,7 +9,9 @@ use seldom_state::prelude::*;
 // Animation states for character actions
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Component, Reflect)]
 #[component(storage = "SparseSet")]
+#[derive(Default)]
 pub enum AnimationState {
+    #[default]
     Idle,
     Walking,
     Sitting,
@@ -24,7 +26,9 @@ pub enum AnimationState {
 // Gameplay states that affect character behavior
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Component, Reflect)]
 #[component(storage = "SparseSet")]
+#[derive(Default)]
 pub enum GameplayState {
+    #[default]
     Normal,
     Stunned,
     Frozen,
@@ -40,7 +44,9 @@ pub enum GameplayState {
 // Context states for different game modes
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Component, Reflect)]
 #[component(storage = "SparseSet")]
+#[derive(Default)]
 pub enum ContextState {
+    #[default]
     CharacterSelection,
     InGame,
     InBattle,
@@ -143,23 +149,8 @@ pub struct OpenTrade;
 pub struct CloseTrade;
 
 // Default states
-impl Default for AnimationState {
-    fn default() -> Self {
-        AnimationState::Idle
-    }
-}
 
-impl Default for GameplayState {
-    fn default() -> Self {
-        GameplayState::Normal
-    }
-}
 
-impl Default for ContextState {
-    fn default() -> Self {
-        ContextState::CharacterSelection
-    }
-}
 
 // Mapping from AnimationState to ActionType for sprite animations
 impl From<AnimationState> for ActionType {

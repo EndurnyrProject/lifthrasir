@@ -181,8 +181,8 @@ fn parse_rgba_frame(data: &[u8]) -> IResult<&[u8], SpriteFrame> {
     let (data, height_signed) = le_i16(data)?;
 
     // Convert signed to unsigned, handle negative values
-    let width = width_signed.abs() as u16;
-    let height = height_signed.abs() as u16;
+    let width = width_signed.unsigned_abs();
+    let height = height_signed.unsigned_abs();
 
     let data_size = (width as usize) * (height as usize) * 4; // RGBA = 4 bytes per pixel
     let (data, pixel_data) = take(data_size)(data)?;
