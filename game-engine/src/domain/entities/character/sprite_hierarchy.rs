@@ -377,7 +377,6 @@ pub fn update_sprite_layer_transforms(
             Entity,
             &mut Transform,
             &CharacterSpriteHierarchy,
-            &RoSpriteLayer,
             &RoAnimationController,
         ),
         With<RoAnimationController>,
@@ -388,11 +387,11 @@ pub fn update_sprite_layer_transforms(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (entity, mut transform, hierarchy, _ro_sprite_layer, controller) in sprite_layers.iter_mut()
+    for (entity, mut transform, hierarchy, controller) in sprite_layers.iter_mut()
     {
         if let Ok(character_sprite) = characters.get(hierarchy.character_entity) {
-            // Get the sprite and action assets from RoAnimationController (not RoSpriteLayer)
-            if let (Some(_spr_asset), Some(act_asset)) = (
+            // Get the sprite and action assets from RoAnimationController (single fetch)
+            if let (Some(spr_asset), Some(act_asset)) = (
                 spr_assets.get(&controller.sprite_handle),
                 act_assets.get(&controller.action_handle),
             ) {
@@ -408,16 +407,6 @@ pub fn update_sprite_layer_transforms(
                     );
                     continue;
                 }
-            } else {
-                continue;
-            }
-
-            // Re-get assets after check (needed for borrow checker)
-            if let (Some(spr_asset), Some(act_asset)) = (
-                spr_assets.get(&controller.sprite_handle),
-                act_assets.get(&controller.action_handle),
-            ) {
-                let current_action = character_sprite.current_action as usize;
 
                 let action_sequence = &act_asset.action.actions[current_action];
 

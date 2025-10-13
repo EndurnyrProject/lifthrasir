@@ -245,18 +245,25 @@ impl Plugin for TauriIntegrationPlugin {
 /// Custom runner that integrates Tauri's event loop with Bevy's update loop
 fn run_tauri_app(app: App) -> AppExit {
     let app = Rc::new(RefCell::new(app));
-    let tauri_app = app
+    let mut tauri_app = app
         .borrow_mut()
         .world_mut()
         .remove_non_send_resource::<tauri::App>()
         .unwrap();
 
-    tauri_app.run_return(move |app_handle, event: RunEvent| {
-        handle_tauri_events(app_handle, event, app.borrow_mut());
+    loop {
+        let app_clone = app.clone();
+        tauri_app.run_iteration(move |app_handle, event: RunEvent| {
+            handle_tauri_events(app_handle, event, app_clone.borrow_mut());
+        });
 
-        // Update Bevy after each event
+        if tauri_app.webview_windows().is_empty() {
+            tauri_app.cleanup_before_exit();
+            break;
+        }
+
         app.borrow_mut().update();
-    });
+    }
 
     AppExit::Success
 }
