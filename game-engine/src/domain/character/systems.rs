@@ -478,6 +478,7 @@ pub fn detect_map_loading_timeout(
 /// System that spawns character sprite hierarchy when entering InGame state
 /// This bridges the character entity creation with the unified sprite system
 pub fn spawn_character_sprite_on_game_start(
+    mut commands: Commands,
     mut spawn_events: EventWriter<
         crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent,
     >,
@@ -500,6 +501,11 @@ pub fn spawn_character_sprite_on_game_start(
         );
         return;
     };
+
+    // Add PlayerCharacter marker to identify this as the player's character
+    commands
+        .entity(character_entity)
+        .insert(crate::domain::camera::components::PlayerCharacter);
 
     // Get map dimensions from loaded ground data
     let (map_width, map_height) = if let Ok(map_loader) = map_loader_query.single() {

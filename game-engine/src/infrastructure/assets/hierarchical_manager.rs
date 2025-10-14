@@ -112,9 +112,10 @@ impl HierarchicalAssetManager {
             Ok(composite) => composite.load(path),
             Err(e) => {
                 error!("Failed to acquire read lock for load: {}", e);
-                Err(AssetSourceError::Io(std::io::Error::other(
-                    format!("Lock error: {}", e),
-                )))
+                Err(AssetSourceError::Io(std::io::Error::other(format!(
+                    "Lock error: {}",
+                    e
+                ))))
             }
         }
     }

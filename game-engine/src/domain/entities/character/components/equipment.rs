@@ -1,8 +1,7 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Component, Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Component, Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EquipmentSet {
     pub head_top: Option<EquipmentItem>,
     pub head_mid: Option<EquipmentItem>,
@@ -44,7 +43,6 @@ pub struct EquipmentOption {
     pub option_value: u16,
     pub option_param: u8,
 }
-
 
 impl EquipmentSet {
     pub fn get_item(&self, slot: EquipmentSlot) -> &Option<EquipmentItem> {

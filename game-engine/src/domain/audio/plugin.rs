@@ -2,8 +2,8 @@ use super::{
     events::{MuteBgmEvent, PlayBgmEvent, SetBgmVolumeEvent, StopBgmEvent},
     resources::{AudioSettings, BgmManager, BgmNameTable},
     systems::{
-        cleanup_fading_bgm, handle_bgm_change, handle_bgm_stop, handle_map_bgm,
-        handle_mute_change, handle_volume_change, load_bgm_name_table,
+        cleanup_fading_bgm, handle_bgm_change, handle_bgm_stop, handle_map_bgm, handle_mute_change,
+        handle_volume_change, load_bgm_name_table,
     },
 };
 use bevy::prelude::*;

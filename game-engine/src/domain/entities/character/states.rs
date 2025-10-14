@@ -150,8 +150,6 @@ pub struct CloseTrade;
 
 // Default states
 
-
-
 // Mapping from AnimationState to ActionType for sprite animations
 impl From<AnimationState> for ActionType {
     fn from(state: AnimationState) -> Self {

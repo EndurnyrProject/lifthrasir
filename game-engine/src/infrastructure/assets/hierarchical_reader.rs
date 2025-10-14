@@ -196,9 +196,10 @@ impl AssetReader for HierarchicalAssetReader {
             })
             .await
             .map_err(|e| {
-                AssetReaderError::Io(Arc::new(std::io::Error::other(
-                    format!("Task join error: {}", e),
-                )))
+                AssetReaderError::Io(Arc::new(std::io::Error::other(format!(
+                    "Task join error: {}",
+                    e
+                ))))
             })?;
 
         // Convert to PathStream - PathStream expects Stream<Item = PathBuf>

@@ -2,9 +2,9 @@ use super::{
     events::{MuteBgmEvent, PlayBgmEvent, SetBgmVolumeEvent, StopBgmEvent},
     resources::{AudioSettings, BgmManager, BgmNameTable},
 };
+use crate::infrastructure::assets::BgmNameTableAsset;
 use bevy::prelude::*;
 use bevy_kira_audio::{Audio, AudioControl, AudioInstance, AudioSource, AudioTween};
-use crate::infrastructure::assets::BgmNameTableAsset;
 
 /// System to handle BGM change requests with crossfading
 /// Listens for PlayBgmEvent and manages track transitions
@@ -31,7 +31,10 @@ pub fn handle_bgm_change(
         // Fade out current track if one is playing
         if let Some(active_handle) = bgm_manager.take_active_for_fadeout() {
             if let Some(active_instance) = audio_instances.get_mut(&active_handle) {
-                debug!("Fading out previous BGM track over {}s", event.fade_out_duration);
+                debug!(
+                    "Fading out previous BGM track over {}s",
+                    event.fade_out_duration
+                );
                 active_instance.stop(AudioTween::linear(std::time::Duration::from_secs_f32(
                     event.fade_out_duration,
                 )));
@@ -208,9 +211,7 @@ pub fn handle_map_bgm(
         // Normalize map name for BGM table lookup
         // Strip .gat extension and lowercase to match table keys
         // Table has keys like "aldebaran" (from "aldebaran.rsw")
-        let map_name = map_request.map_name
-            .trim_end_matches(".gat")
-            .to_lowercase();
+        let map_name = map_request.map_name.trim_end_matches(".gat").to_lowercase();
 
         // Look up BGM path from the table
         if let Some(bgm_path) = bgm_table_asset.table.get(&map_name) {
@@ -237,4 +238,3 @@ pub fn handle_map_bgm(
         }
     }
 }
-

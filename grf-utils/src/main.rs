@@ -99,12 +99,19 @@ fn list_files(grf: &GrfFile) {
 
 fn extract_files(grf: &GrfFile, files: &[String], output_path: &PathBuf) -> Result<()> {
     // Create and canonicalize output directory for path traversal protection
-    fs::create_dir_all(output_path)
-        .with_context(|| format!("Failed to create output directory: {}", output_path.display()))?;
+    fs::create_dir_all(output_path).with_context(|| {
+        format!(
+            "Failed to create output directory: {}",
+            output_path.display()
+        )
+    })?;
 
-    let canonical_output = output_path
-        .canonicalize()
-        .with_context(|| format!("Failed to canonicalize output path: {}", output_path.display()))?;
+    let canonical_output = output_path.canonicalize().with_context(|| {
+        format!(
+            "Failed to canonicalize output path: {}",
+            output_path.display()
+        )
+    })?;
 
     if files.is_empty() {
         // Extract all files
@@ -215,7 +222,9 @@ fn extract_specific_files(
     let pb = ProgressBar::new(files.len() as u64);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} - {msg}")
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} - {msg}",
+            )
             .unwrap()
             .progress_chars("#>-"),
     );
@@ -237,7 +246,10 @@ fn extract_specific_files(
             match output_file_path.canonicalize() {
                 Ok(canonical_file) => {
                     if !canonical_file.starts_with(canonical_output) {
-                        eprintln!("Warning: Skipping potentially malicious file path '{}'", file_name);
+                        eprintln!(
+                            "Warning: Skipping potentially malicious file path '{}'",
+                            file_name
+                        );
                         pb.inc(1);
                         continue;
                     }
@@ -317,7 +329,11 @@ fn show_info(grf: &GrfFile) {
     println!("Compression:    {:.1}%", compression_ratio);
 
     // File type statistics
-    let encrypted_count = grf.entries.iter().filter(|e| e.file_type & 0x06 != 0).count();
+    let encrypted_count = grf
+        .entries
+        .iter()
+        .filter(|e| e.file_type & 0x06 != 0)
+        .count();
     if encrypted_count > 0 {
         println!("Encrypted:      {} files", encrypted_count);
     }

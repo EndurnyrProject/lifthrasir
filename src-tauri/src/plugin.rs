@@ -169,7 +169,7 @@ impl Plugin for TauriIntegrationPlugin {
             bevy_tokio_tasks::TokioTasksPlugin::default(),
             game_engine::LifthrasirPlugin,
             game_engine::AssetsPlugin,
-            game_engine::AudioPlugin,     // Audio system with BGM support and crossfading
+            game_engine::AudioPlugin, // Audio system with BGM support and crossfading
             game_engine::AssetCatalogPlugin,
             game_engine::CharacterDomainPlugin, // Includes UnifiedCharacterEntityPlugin with 3D sprite hierarchy
             game_engine::AuthenticationPlugin,
@@ -177,6 +177,9 @@ impl Plugin for TauriIntegrationPlugin {
             game_engine::BillboardPlugin, // 3D billboard rendering infrastructure
             game_engine::InputPlugin,     // Input handling (cursor, clicks, terrain cursor)
         ));
+
+        // Add camera systems separately (LifthrasirPlugin doesn't auto-register these)
+        game_engine::LifthrasirPlugin::add_camera_systems(app);
 
         // Create AppBridge and event receiver
         let (app_bridge, tauri_rx) = AppBridge::new();

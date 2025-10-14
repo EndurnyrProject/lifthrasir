@@ -387,8 +387,7 @@ pub fn update_sprite_layer_transforms(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (entity, mut transform, hierarchy, controller) in sprite_layers.iter_mut()
-    {
+    for (entity, mut transform, hierarchy, controller) in sprite_layers.iter_mut() {
         if let Ok(character_sprite) = characters.get(hierarchy.character_entity) {
             // Get the sprite and action assets from RoAnimationController (single fetch)
             if let (Some(spr_asset), Some(act_asset)) = (

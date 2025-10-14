@@ -1,5 +1,4 @@
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum ConnectionState {
     #[default]
     Disconnected,
@@ -8,4 +7,3 @@ pub enum ConnectionState {
     Connected,
     Failed(String),
 }
-

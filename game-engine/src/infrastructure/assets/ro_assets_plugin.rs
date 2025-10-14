@@ -26,7 +26,6 @@ pub struct RoAssetsPlugin {
     pub enable_unified_source: bool,
 }
 
-
 impl RoAssetsPlugin {
     /// Create plugin with unified asset source enabled
     pub fn with_unified_source() -> Self {

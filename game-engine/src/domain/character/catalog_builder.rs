@@ -107,10 +107,7 @@ impl HeadStyleCatalogBuilder {
                         parse_gender(gender_str.as_str()),
                         color_str.as_str().parse::<u16>(),
                     ) {
-                        palette_map
-                            .entry((gender, id))
-                            .or_default()
-                            .push(color);
+                        palette_map.entry((gender, id)).or_default().push(color);
                         palettes_found += 1;
                     }
                 }

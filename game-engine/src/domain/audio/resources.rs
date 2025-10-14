@@ -1,6 +1,6 @@
+use crate::infrastructure::assets::BgmNameTableAsset;
 use bevy::prelude::*;
 use bevy_kira_audio::AudioInstance;
-use crate::infrastructure::assets::BgmNameTableAsset;
 
 /// Resource that manages the BGM playback state
 /// Tracks active and fading out audio instances for crossfading

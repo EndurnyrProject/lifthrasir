@@ -7,13 +7,9 @@ use bevy::{
 };
 
 use crate::{
-    domain::camera::controller::CameraController,
-    domain::world::{
-        components::MapLoader, map::MapData, map_loader::MapRequestLoader,
-        spawn_context::MapSpawnContext,
-    },
+    domain::world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
-    utils::{constants::CELL_SIZE, coordinates::spawn_coords_to_world_position},
+    utils::constants::CELL_SIZE,
 };
 
 /// Component to track terrain textures that are loading
@@ -860,53 +856,4 @@ fn create_terrain_meshes_robrowser_style(
     }
 
     result
-}
-
-/// Set up the camera when entering the game
-pub fn setup_terrain_camera(
-    mut commands: Commands,
-    query: Query<&MapData>,
-    spawn_context: Option<Res<MapSpawnContext>>,
-) {
-    let Some(spawn_context) = spawn_context else {
-        warn!("setup_terrain_camera: MapSpawnContext not available");
-        return;
-    };
-
-    let map_data = match query.single() {
-        Ok(data) => data,
-        Err(e) => {
-            error!("setup_terrain_camera: Failed to get MapData: {}", e);
-            return;
-        }
-    };
-
-    info!(
-        "Spawn X: {}, Spawn Y: {}",
-        spawn_context.spawn_x, spawn_context.spawn_y,
-    );
-    info!("setup_terrain_camera: MapData detected, spawning camera");
-
-    // Convert spawn cell coords to world position
-    let spawn_world_pos = spawn_coords_to_world_position(
-        spawn_context.spawn_x,
-        spawn_context.spawn_y,
-        map_data.width,
-        map_data.height,
-    );
-
-    // Position camera above and behind the spawn point (RO isometric style)
-    let camera_offset = Vec3::new(0.0, -150.0, -150.0);
-    let camera_pos = spawn_world_pos + camera_offset;
-
-    commands.spawn((
-        Camera3d::default(),
-        Transform::from_translation(camera_pos).looking_at(spawn_world_pos, Vec3::NEG_Y),
-        CameraController::default(),
-    ));
-
-    info!(
-        "Camera spawned at {:?}, looking at spawn point {:?}",
-        camera_pos, spawn_world_pos
-    );
 }

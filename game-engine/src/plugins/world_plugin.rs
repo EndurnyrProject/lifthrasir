@@ -6,9 +6,7 @@ use crate::{
             cleanup_map_loading_state, detect_asset_load_failures, extract_map_from_unified_assets,
             monitor_game_state, on_enter_loading_state, setup_unified_map_loading,
         },
-        terrain::{
-            generate_terrain_mesh, generate_terrain_when_textures_ready, setup_terrain_camera,
-        },
+        terrain::{generate_terrain_mesh, generate_terrain_when_textures_ready},
     },
 };
 use bevy::prelude::*;
@@ -33,7 +31,6 @@ impl Plugin for WorldPlugin {
                 )
                     .run_if(in_state(GameState::Loading)),
             )
-            .add_systems(OnEnter(GameState::InGame), setup_terrain_camera)
             .add_systems(OnExit(GameState::Loading), cleanup_map_loading_state)
             .add_systems(OnExit(GameState::Connecting), cleanup_map_loading_state);
     }

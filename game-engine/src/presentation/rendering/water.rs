@@ -176,7 +176,9 @@ pub fn finalize_water_loading_system(
                     wave_params: Vec4::new(
                         loading_state.wave_height_param.min(MAX_WAVE_HEIGHT),
                         loading_state.wave_speed.min(MAX_WAVE_SPEED),
-                        loading_state.wave_pitch.clamp(MIN_WAVE_PITCH, MAX_WAVE_PITCH),
+                        loading_state
+                            .wave_pitch
+                            .clamp(MIN_WAVE_PITCH, MAX_WAVE_PITCH),
                         0.0,
                     ),
                     animation_params: Vec4::ZERO,
