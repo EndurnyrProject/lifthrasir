@@ -92,10 +92,10 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     let world_from_local = get_world_from_local(vertex.instance_index);
     let world_position = world_from_local * vec4<f32>(vertex.position, 1.0);
 
-    // Wave parameters
-    let wave_height = water.wave_params.x;
-    let wave_speed = water.wave_params.y;
-    let wave_pitch = water.wave_params.z;
+    // Wave parameters (clamped for safety)
+    let wave_height = min(water.wave_params.x, 0.5);
+    let wave_speed = min(water.wave_params.y, 1.5);
+    let wave_pitch = clamp(water.wave_params.z, 0.5, 2.0);
     let time = water.wave_params.w;
 
     // Apply multiple Gerstner waves for complex ocean surface

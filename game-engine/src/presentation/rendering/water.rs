@@ -122,6 +122,12 @@ pub fn load_water_system(
     }
 }
 
+// Maximum water parameter values to prevent excessive movement in some maps
+const MAX_WAVE_HEIGHT: f32 = 0.5;
+const MAX_WAVE_SPEED: f32 = 1.5;
+const MAX_WAVE_PITCH: f32 = 2.0;
+const MIN_WAVE_PITCH: f32 = 0.5;
+
 /// System to finalize water loading once textures are ready
 pub fn finalize_water_loading_system(
     mut commands: Commands,
@@ -168,9 +174,9 @@ pub fn finalize_water_loading_system(
             let water_extension = WaterExtension {
                 water_data: crate::domain::assets::components::WaterData {
                     wave_params: Vec4::new(
-                        loading_state.wave_height_param,
-                        loading_state.wave_speed,
-                        loading_state.wave_pitch,
+                        loading_state.wave_height_param.min(MAX_WAVE_HEIGHT),
+                        loading_state.wave_speed.min(MAX_WAVE_SPEED),
+                        loading_state.wave_pitch.clamp(MIN_WAVE_PITCH, MAX_WAVE_PITCH),
                         0.0,
                     ),
                     animation_params: Vec4::ZERO,
