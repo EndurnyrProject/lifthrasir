@@ -12,7 +12,7 @@ pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin};
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
 pub use domain::entities::billboard::BillboardPlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
-pub use plugins::{AssetsPlugin, InputPlugin, WorldPlugin};
+pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
 
 use bevy::prelude::*;
 use bevy_tokio_tasks::TokioTasksPlugin;
@@ -32,6 +32,7 @@ pub fn create_app() -> App {
             TokioTasksPlugin::default(), // ENABLED: Required for async networking
             LifthrasirPlugin,
             AssetsPlugin,                 // ENABLED: Registers ClientConfig asset type
+            AudioPlugin,                  // ENABLED: Audio system with BGM support and crossfading
             CharacterDomainPlugin,        // ENABLED: Character events and networking (no UI)
             AuthenticationPlugin,         // ENABLED: Reads LoginAttemptEvent and handles auth
             WorldPlugin,                  // ENABLED: Map loading and world systems

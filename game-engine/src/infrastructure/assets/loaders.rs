@@ -12,6 +12,11 @@ use crate::infrastructure::ro_formats::{
     RsmError, RsmFile, RswError, SpriteError,
 };
 
+// Re-export BGM name table types
+pub use super::bgm_name_table_loader::{
+    BgmNameTableAsset, BgmNameTableLoader, BgmNameTableLoaderError,
+};
+
 #[derive(Asset, TypePath, Debug)]
 pub struct RoSpriteAsset {
     pub sprite: ParsedRoSprite,

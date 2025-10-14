@@ -51,10 +51,7 @@ pub fn extract_map_from_unified_assets(
             world: Some(world_handle),
         });
 
-        debug!(
-            "extract_map_from_unified_assets: Inserted MapLoader component for map '{}'",
-            map_name
-        );
+        debug!("MapLoader component inserted for map '{}'", map_name);
 
         // Mark as loaded - AssetServer handles the actual loading asynchronously
         map_loader.loaded = true;
