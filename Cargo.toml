@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "game-engine",
     "src-tauri",
+    "grf-utils",
 ]
 
 [workspace.package]
