@@ -169,6 +169,7 @@ impl Plugin for TauriIntegrationPlugin {
             bevy_tokio_tasks::TokioTasksPlugin::default(),
             game_engine::LifthrasirPlugin,
             game_engine::AssetsPlugin,
+            game_engine::AudioPlugin,     // Audio system with BGM support and crossfading
             game_engine::AssetCatalogPlugin,
             game_engine::CharacterDomainPlugin, // Includes UnifiedCharacterEntityPlugin with 3D sprite hierarchy
             game_engine::AuthenticationPlugin,
@@ -316,7 +317,8 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
             bevy::ui::UiPlugin::default(),
             bevy::pbr::PbrPlugin::default(),
             bevy::gltf::GltfPlugin::default(),
-            bevy::audio::AudioPlugin::default(),
+            // NOTE: bevy::audio::AudioPlugin is NOT added here - we use bevy_kira_audio instead
+            // (added via game_engine::AudioPlugin on line 172)
             bevy::animation::AnimationPlugin::default(),
             bevy::gizmos::GizmoPlugin::default(),
             game_engine::MapPlugin,

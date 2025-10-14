@@ -26,6 +26,8 @@ impl Plugin for AssetsPlugin {
             .init_asset_loader::<GrfLoader>()
             .init_asset::<RoPaletteAsset>()
             .init_asset_loader::<RoPaletteLoader>()
+            .init_asset::<BgmNameTableAsset>()
+            .init_asset_loader::<BgmNameTableLoader>()
             .init_asset_loader::<BmpLoader>()
             .add_plugins((
                 TomlAssetPlugin::<AssetConfig>::new(&["data.toml"]),

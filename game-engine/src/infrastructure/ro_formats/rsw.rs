@@ -415,7 +415,9 @@ fn parse_objects(input: &[u8], count: u32, version: (u8, u8)) -> IResult<&[u8], 
 
 fn parse_rsw(input: &[u8]) -> IResult<&[u8], RoWorld> {
     let (input, version) = parse_header(input)?;
+
     let (input, ini_file) = parse_korean_string(input, 40)?;
+
     let (input, gnd_file) = parse_korean_string(input, 40)?;
     let (input, gat_file) = parse_korean_string(input, 40)?;
 
