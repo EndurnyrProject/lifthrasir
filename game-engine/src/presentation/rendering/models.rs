@@ -437,20 +437,24 @@ fn create_model_materials_from_loaded_textures(
         let material = if i < texture_handles.len() && texture_handles[i].id() != AssetId::default()
         {
             match asset_server.load_state(&texture_handles[i]) {
-                LoadState::Loaded => materials.add(StandardMaterial {
-                    base_color_texture: Some(texture_handles[i].clone()),
-                    base_color: Color::WHITE,
-                    alpha_mode: if rsm.alpha < 1.0 {
-                        AlphaMode::Blend
-                    } else {
-                        AlphaMode::Mask(0.5)
-                    },
-                    perceptual_roughness: 0.8,
-                    metallic: 0.0,
-                    reflectance: 0.1,
-                    cull_mode: None,
-                    ..default()
-                }),
+                LoadState::Loaded => {
+                    materials.add(StandardMaterial {
+                        base_color_texture: Some(texture_handles[i].clone()),
+                        base_color: Color::WHITE,
+                        // Use Mask with very low threshold (0.01) to cut off transparent pixels
+                        // This avoids Blend mode's depth sorting issues while preventing magenta bleeding
+                        alpha_mode: if rsm.alpha < 1.0 {
+                            AlphaMode::Blend
+                        } else {
+                            AlphaMode::Mask(0.01)
+                        },
+                        perceptual_roughness: 0.8,
+                        metallic: 0.0,
+                        reflectance: 0.1,
+                        cull_mode: None,
+                        ..default()
+                    })
+                }
                 _ => create_colored_fallback_material_for_model(i, materials),
             }
         } else {
