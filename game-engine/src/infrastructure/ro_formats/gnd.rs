@@ -98,8 +98,7 @@ impl RoGround {
         // Interpolate between south and north edges
         let interpolated_height = height_south * (1.0 - fz) + height_north * fz;
 
-        // Apply world scale (heights are stored divided by 5.0, so multiply back)
-        Some(interpolated_height * 5.0)
+        Some(interpolated_height)
     }
 }
 
@@ -202,7 +201,7 @@ fn parse_surfaces(input: &[u8], width: u32, height: u32) -> IResult<&[u8], Vec<G
         let (remaining, tile_right) = le_i32(remaining)?;
 
         surfaces.push(GndSurface {
-            height: [h1 / 5.0, h2 / 5.0, h3 / 5.0, h4 / 5.0],
+            height: [h1, h2, h3, h4],
             tile_up,
             tile_front,
             tile_right,

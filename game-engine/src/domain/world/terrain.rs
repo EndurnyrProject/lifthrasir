@@ -117,15 +117,15 @@ fn calculate_smooth_normals(
 
             // Only calculate normal if tile_up exists
             if surface.tile_up >= 0 {
-                // Calculate positions of the 4 corners using GND coordinate system
-                let a = Vec3::new((x as f32) * 2.0, surface.height[0], (y as f32) * 2.0); // SW
-                let b = Vec3::new((x as f32 + 1.0) * 2.0, surface.height[1], (y as f32) * 2.0); // SE
+                // Calculate positions of the 4 corners matching actual mesh coordinates
+                let a = Vec3::new((x as f32) * CELL_SIZE, surface.height[0], (y as f32) * CELL_SIZE); // SW
+                let b = Vec3::new((x as f32 + 1.0) * CELL_SIZE, surface.height[1], (y as f32) * CELL_SIZE); // SE
                 let c = Vec3::new(
-                    (x as f32 + 1.0) * 2.0,
+                    (x as f32 + 1.0) * CELL_SIZE,
                     surface.height[3],
-                    (y as f32 + 1.0) * 2.0,
+                    (y as f32 + 1.0) * CELL_SIZE,
                 ); // NE
-                let d = Vec3::new((x as f32) * 2.0, surface.height[2], (y as f32 + 1.0) * 2.0); // NW
+                let d = Vec3::new((x as f32) * CELL_SIZE, surface.height[2], (y as f32 + 1.0) * CELL_SIZE); // NW
 
                 // Calculate normal using cross product of quad diagonals (like roBrowser)
                 let diag1 = c - a; // SW to NE diagonal
@@ -258,17 +258,17 @@ fn generate_front_wall(
 
     // Use EXACT heights from GND data (no smoothing for walls)
     let current_heights = [
-        surface.height[0] * 5.0, // SW
-        surface.height[1] * 5.0, // SE
-        surface.height[2] * 5.0, // NW
-        surface.height[3] * 5.0, // NE
+        surface.height[0], // SW
+        surface.height[1], // SE
+        surface.height[2], // NW
+        surface.height[3], // NE
     ];
 
     let next_heights = [
-        next_surface.height[0] * 5.0, // SW
-        next_surface.height[1] * 5.0, // SE
-        next_surface.height[2] * 5.0, // NW
-        next_surface.height[3] * 5.0, // NE
+        next_surface.height[0], // SW
+        next_surface.height[1], // SE
+        next_surface.height[2], // NW
+        next_surface.height[3], // NE
     ];
 
     let vertex_offset = mesh_data.0.len() as u32;
@@ -356,17 +356,17 @@ fn generate_right_wall(
 
     // Use EXACT heights from GND data (no smoothing for walls)
     let current_heights = [
-        surface.height[0] * 5.0, // SW
-        surface.height[1] * 5.0, // SE
-        surface.height[2] * 5.0, // NW
-        surface.height[3] * 5.0, // NE
+        surface.height[0], // SW
+        surface.height[1], // SE
+        surface.height[2], // NW
+        surface.height[3], // NE
     ];
 
     let next_heights = [
-        next_surface.height[0] * 5.0, // SW
-        next_surface.height[1] * 5.0, // SE
-        next_surface.height[2] * 5.0, // NW
-        next_surface.height[3] * 5.0, // NE
+        next_surface.height[0], // SW
+        next_surface.height[1], // SE
+        next_surface.height[2], // NW
+        next_surface.height[3], // NE
     ];
 
     let vertex_offset = mesh_data.0.len() as u32;
@@ -731,34 +731,34 @@ fn create_terrain_meshes_robrowser_style(
             // Triangle 1: (x+0,y+0) -> (x+1,y+0) -> (x+1,y+1)
             mesh_data.0.push(Vec3::new(
                 (x as f32 + 0.0) * CELL_SIZE,
-                h[0] * 5.0,
+                h[0],
                 (y as f32 + 0.0) * CELL_SIZE,
             ));
             mesh_data.0.push(Vec3::new(
                 (x as f32 + 1.0) * CELL_SIZE,
-                h[1] * 5.0,
+                h[1],
                 (y as f32 + 0.0) * CELL_SIZE,
             ));
             mesh_data.0.push(Vec3::new(
                 (x as f32 + 1.0) * CELL_SIZE,
-                h[3] * 5.0,
+                h[3],
                 (y as f32 + 1.0) * CELL_SIZE,
             ));
 
             // Triangle 2: (x+1,y+1) -> (x+0,y+1) -> (x+0,y+0)
             mesh_data.0.push(Vec3::new(
                 (x as f32 + 1.0) * CELL_SIZE,
-                h[3] * 5.0,
+                h[3],
                 (y as f32 + 1.0) * CELL_SIZE,
             ));
             mesh_data.0.push(Vec3::new(
                 (x as f32 + 0.0) * CELL_SIZE,
-                h[2] * 5.0,
+                h[2],
                 (y as f32 + 1.0) * CELL_SIZE,
             ));
             mesh_data.0.push(Vec3::new(
                 (x as f32 + 0.0) * CELL_SIZE,
-                h[0] * 5.0,
+                h[0],
                 (y as f32 + 0.0) * CELL_SIZE,
             ));
 

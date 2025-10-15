@@ -68,8 +68,7 @@ pub fn load_water_system(
         );
 
         // Implement per-tile water detection logic (based on GRF Editor)
-        // Scale water level to match terrain height scaling (÷5.0 applied in GND parsing)
-        let wave_height = (water.level - water.wave_height) / 5.0;
+        let wave_height = water.level - water.wave_height;
         let ground = &ground_asset.ground;
         let width = ground.width as usize;
         let height = ground.height as usize;
@@ -284,18 +283,18 @@ fn create_water_tiles_mesh(water_tiles: &[(usize, usize)], water_y: f32) -> Mesh
         // The shader will calculate actual UVs from world position
 
         // Triangle 1: SW -> SE -> NE
-        positions.push([x_pos, water_y * 5.0, z_pos]); // SW
-        positions.push([x_pos_end, water_y * 5.0, z_pos]); // SE
-        positions.push([x_pos_end, water_y * 5.0, z_pos_end]); // NE
+        positions.push([x_pos, water_y, z_pos]); // SW
+        positions.push([x_pos_end, water_y, z_pos]); // SE
+        positions.push([x_pos_end, water_y, z_pos_end]); // NE
 
         uvs.push([0.0, 0.0]); // SW
         uvs.push([1.0, 0.0]); // SE
         uvs.push([1.0, 1.0]); // NE
 
         // Triangle 2: SW -> NE -> NW
-        positions.push([x_pos, water_y * 5.0, z_pos]); // SW
-        positions.push([x_pos_end, water_y * 5.0, z_pos_end]); // NE
-        positions.push([x_pos, water_y * 5.0, z_pos_end]); // NW
+        positions.push([x_pos, water_y, z_pos]); // SW
+        positions.push([x_pos_end, water_y, z_pos_end]); // NE
+        positions.push([x_pos, water_y, z_pos_end]); // NW
 
         uvs.push([0.0, 0.0]); // SW
         uvs.push([1.0, 1.0]); // NE
