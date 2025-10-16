@@ -124,7 +124,6 @@ pub struct CreateCharacterSubmitButton;
 #[derive(Component)]
 pub struct CancelCharacterCreationButton;
 
-// Phase 1: Character Creation Foundation Components
 #[derive(Component)]
 pub struct CharacterCreationBackButton;
 
@@ -159,7 +158,6 @@ pub struct CharacterCreationPreviewSection;
 #[derive(Component)]
 pub struct ValidationErrorDisplay;
 
-// Phase 2: Gender Selection Components
 #[derive(Component)]
 pub struct GenderToggleButton {
     pub gender: Gender,
@@ -186,7 +184,6 @@ impl GenderToggleButton {
 #[derive(Component)]
 pub struct GenderSelectionContainer;
 
-// Phase 3: Hair Customization Components
 #[derive(Component)]
 pub struct HairStyleButton {
     pub style_id: u16,
@@ -235,7 +232,6 @@ pub struct HairStyleGrid;
 #[derive(Component)]
 pub struct HairColorGrid;
 
-// Resource to track selection state
 #[derive(Resource, Default)]
 pub struct CharacterSelectionState {
     pub selected_slot: Option<u8>,
@@ -244,7 +240,6 @@ pub struct CharacterSelectionState {
     pub creation_slot: Option<u8>,
 }
 
-// Resource to track map loading timeout
 #[derive(Resource)]
 pub struct MapLoadingTimer {
     pub started: std::time::Instant,

@@ -15,12 +15,9 @@ pub fn handle_server_selection(
     for event in server_events.read() {
         info!("Server selected: {}", event.server.name);
 
-        // Update session with selected server
         session.selected_server = Some(event.server.clone());
 
-        // Create or reconnect CharServerClient
         if let Some(client) = char_client.as_deref_mut() {
-            // Disconnect existing connection if any
             client.disconnect();
 
             // Connect to the selected server
@@ -39,7 +36,6 @@ pub fn handle_server_selection(
                 );
             }
         } else {
-            // Create new CharServerClient
             let mut client = CharServerClient::new(session.clone());
 
             let ip_bytes = event.server.ip.to_be_bytes();
@@ -59,8 +55,5 @@ pub fn handle_server_selection(
 
             commands.insert_resource(client);
         }
-
-        // Note: State transition to character selection is now handled by Tauri UI
-        // The Bevy backend stays in ServerSelection state while Tauri shows character selection UI
     }
 }

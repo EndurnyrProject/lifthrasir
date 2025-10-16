@@ -4,7 +4,6 @@ pub mod plugin;
 pub mod resources;
 pub mod systems;
 
-// Re-export commonly used types
 pub use events::{MuteBgmEvent, PlayBgmEvent, SetBgmVolumeEvent, StopBgmEvent};
 pub use plugin::AudioDomainPlugin;
 pub use resources::{AudioSettings, BgmManager};

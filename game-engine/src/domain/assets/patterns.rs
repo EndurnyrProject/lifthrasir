@@ -2,9 +2,6 @@ use crate::domain::entities::character::components::Gender;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-/// Centralized asset path patterns - Single source of truth
-/// Prevents drift between path generation and parsing logic
-
 // Hair sprite pattern: data[\\/]sprite[\\/]인간족[\\/]머리통[\\/]{sex}[\\/]{id}_{sex}.spr
 pub static HAIR_SPRITE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"data[\\/]sprite[\\/]인간족[\\/]머리통[\\/](남|여)[\\/](\d+)_(남|여)\.spr")

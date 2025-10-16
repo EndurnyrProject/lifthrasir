@@ -9,7 +9,6 @@ use super::{
 use bevy::prelude::*;
 
 /// Domain plugin for audio systems
-/// Manually registers all audio components, events, resources, and systems
 pub struct AudioDomainPlugin;
 
 impl Plugin for AudioDomainPlugin {

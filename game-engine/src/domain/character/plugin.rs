@@ -7,7 +7,6 @@ use crate::infrastructure::networking::CharServerEvent;
 use bevy::prelude::*;
 
 /// Minimal character domain plugin that registers events and systems
-/// but no UI (UI is handled by Tauri)
 pub struct CharacterDomainPlugin;
 
 impl Plugin for CharacterDomainPlugin {

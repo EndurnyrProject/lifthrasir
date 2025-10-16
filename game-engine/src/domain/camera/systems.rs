@@ -51,7 +51,7 @@ pub fn spawn_camera_on_player_ready(
     }
 
     // Find player entity with CharacterObjectTree
-    let Ok((player_entity, object_tree)) = player_query.single() else {
+    let Ok((_player_entity, object_tree)) = player_query.single() else {
         return;
     };
 
@@ -85,7 +85,6 @@ pub fn spawn_camera_on_player_ready(
         Name::new("FollowCamera"),
     ));
 
-    // Mark camera as spawned
     camera_spawned.0 = true;
 
     info!("Character-follow camera spawned successfully");

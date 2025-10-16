@@ -34,7 +34,6 @@ impl PlayBgmEvent {
 #[derive(Event, Debug, Clone, Copy, Reflect)]
 #[reflect(Debug)]
 pub struct StopBgmEvent {
-    /// Fade-out duration in seconds (default: 2.0)
     pub fade_out_duration: f32,
 }
 

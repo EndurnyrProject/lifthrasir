@@ -296,13 +296,6 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
     if app.plugins_state() != PluginsState::Cleaned {
         let window = app_handle.get_webview_window("main").unwrap();
 
-        // Open devtools in debug mode for frontend debugging
-        #[cfg(debug_assertions)]
-        {
-            window.open_devtools();
-            info!("DevTools opened for debugging");
-        }
-
         // Add custom renderer plugin that creates WGPU surface from Tauri window
         // This replaces the default RenderPlugin which we disabled in build()
         app.add_plugins(CustomRendererPlugin {
@@ -311,21 +304,20 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
 
         // Add all rendering-related plugins that were disabled from DefaultPlugins
         // These must be added AFTER CustomRendererPlugin sets up the rendering resources
-        app.add_plugins((
+        let plugins = (
             bevy::render::texture::ImagePlugin::default(),
-            bevy::render::pipelined_rendering::PipelinedRenderingPlugin::default(),
-            bevy::core_pipeline::CorePipelinePlugin::default(),
-            bevy::sprite::SpritePlugin::default(),
-            bevy::text::TextPlugin::default(),
+            bevy::render::pipelined_rendering::PipelinedRenderingPlugin,
+            bevy::core_pipeline::CorePipelinePlugin,
+            bevy::sprite::SpritePlugin,
+            bevy::text::TextPlugin,
             bevy::ui::UiPlugin::default(),
             bevy::pbr::PbrPlugin::default(),
             bevy::gltf::GltfPlugin::default(),
-            // NOTE: bevy::audio::AudioPlugin is NOT added here - we use bevy_kira_audio instead
-            // (added via game_engine::AudioPlugin on line 172)
-            bevy::animation::AnimationPlugin::default(),
-            bevy::gizmos::GizmoPlugin::default(),
+            bevy::animation::AnimationPlugin,
+            bevy::gizmos::GizmoPlugin,
             game_engine::MapPlugin,
-        ));
+        );
+        app.add_plugins(plugins);
 
         // Wait for all plugins to be ready
         while app.plugins_state() != PluginsState::Ready {

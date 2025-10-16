@@ -26,19 +26,18 @@ impl Default for CharacterCreationForm {
             hair_color: 0,
             starting_job: JobClass::Novice,
             sex: Gender::Male,
-            str: 5,
-            agi: 5,
-            vit: 5,
-            int: 5,
-            dex: 5,
-            luk: 5,
+            str: 1,
+            agi: 1,
+            vit: 1,
+            int: 1,
+            dex: 1,
+            luk: 1,
         }
     }
 }
 
 impl CharacterCreationForm {
     pub fn validate(&self) -> Result<(), CharacterCreationError> {
-        // Name validation
         if self.name.is_empty() {
             return Err(CharacterCreationError::NameEmpty);
         }
@@ -50,21 +49,6 @@ impl CharacterCreationForm {
         }
         if !self.name.chars().all(|c| c.is_alphanumeric() || c == '_') {
             return Err(CharacterCreationError::NameInvalidCharacters);
-        }
-
-        // Check forbidden names
-        let forbidden_words = ["gm", "admin", "test", "bot"];
-        let name_lower = self.name.to_lowercase();
-        for word in &forbidden_words {
-            if name_lower.contains(word) {
-                return Err(CharacterCreationError::NameForbidden);
-            }
-        }
-
-        // Stats validation (total should be 30 for starting character)
-        let total_stats = self.str + self.agi + self.vit + self.int + self.dex + self.luk;
-        if total_stats != 30 {
-            return Err(CharacterCreationError::InvalidStats);
         }
 
         Ok(())

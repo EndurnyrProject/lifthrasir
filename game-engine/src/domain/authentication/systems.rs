@@ -77,9 +77,7 @@ pub fn poll_login_tasks(
     for (entity, mut login_task, mut connection_state) in &mut tasks {
         connection_state.state = ConnectionState::Authenticating;
 
-        // Try to get the result using try_join (non-blocking check)
         if login_task.task.is_finished() {
-            // Use block_on to get the result since we know it's finished
             let result = futures_lite::future::block_on(&mut login_task.task).unwrap();
             match result {
                 Ok(login_response) => {
@@ -104,7 +102,6 @@ pub fn poll_login_tasks(
                 }
             }
 
-            // Remove the completed task
             commands.entity(entity).despawn();
         }
     }
@@ -139,8 +136,6 @@ pub fn handle_login_failure(
             event.username, event.error
         );
 
-        // Stay in login state to allow retry
-        // The UI will handle displaying the error message
         next_state.set(GameState::Login);
     }
 }

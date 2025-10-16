@@ -191,7 +191,7 @@ pub fn handle_map_bgm(
     bgm_table_assets: Res<Assets<BgmNameTableAsset>>,
     bgm_manager: Res<BgmManager>,
 ) {
-    for (map_loader, map_request) in query.iter() {
+    for (_map_loader, map_request) in query.iter() {
         // Skip if map is not loaded yet
         if !map_request.loaded {
             continue;
@@ -213,10 +213,7 @@ pub fn handle_map_bgm(
         // Table has keys like "aldebaran" (from "aldebaran.rsw")
         let map_name = map_request.map_name.trim_end_matches(".gat").to_lowercase();
 
-        // Look up BGM path from the table
         if let Some(bgm_path) = bgm_table_asset.table.get(&map_name) {
-            // Convert to ro:// asset path
-            // bgm_path is already normalized from parser (e.g., "bgm/08.mp3")
             let full_bgm_path = format!("ro://data/{}", bgm_path);
 
             // Skip if already playing this track
@@ -230,7 +227,6 @@ pub fn handle_map_bgm(
             );
             events.write(PlayBgmEvent::new(full_bgm_path));
         } else {
-            // No BGM entry for this map - that's valid, some maps have no music
             debug!(
                 "No BGM entry found in mp3nametable.txt for map '{}'",
                 map_name

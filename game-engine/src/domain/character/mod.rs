@@ -13,5 +13,4 @@ pub use events::*;
 pub use forms::*;
 pub use plugin::CharacterDomainPlugin;
 
-// Re-export Gender and JobClass from the unified character system for backwards compatibility
 pub use crate::domain::entities::character::components::{Gender, JobClass};
