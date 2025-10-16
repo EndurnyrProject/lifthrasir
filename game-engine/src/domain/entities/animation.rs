@@ -5,8 +5,156 @@ use crate::infrastructure::assets::{
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 use bevy::prelude::*;
 
+/// Helper struct to hold validated animation assets
+struct AnimationAssets<'a> {
+    sprite: &'a RoSpriteAsset,
+    action: &'a RoActAsset,
+}
+
+/// Retrieves and validates animation assets for a controller
+/// Returns None if assets aren't loaded
+fn get_animation_assets<'a>(
+    controller: &RoAnimationController,
+    sprites: &'a Assets<RoSpriteAsset>,
+    actions: &'a Assets<RoActAsset>,
+) -> Option<AnimationAssets<'a>> {
+    let sprite = sprites.get(&controller.sprite_handle)?;
+    let action = actions.get(&controller.action_handle)?;
+    Some(AnimationAssets { sprite, action })
+}
+
+/// Checks if a sprite layer is a head layer during idle animation
+/// Head layers have special doridori (head nodding) animation handling
+fn is_head_layer_during_idle(
+    sprite_layer: Option<&crate::domain::entities::character::components::visual::RoSpriteLayer>,
+    action_index: usize,
+) -> bool {
+    let is_idle = action_index == 0;
+    sprite_layer.is_some_and(|layer| {
+        use crate::domain::entities::character::components::equipment::EquipmentSlot;
+        use crate::domain::entities::character::components::visual::SpriteLayerType;
+        matches!(
+            layer.layer_type,
+            SpriteLayerType::Equipment(EquipmentSlot::HeadBottom)
+                | SpriteLayerType::Equipment(EquipmentSlot::HeadMid)
+                | SpriteLayerType::Equipment(EquipmentSlot::HeadTop)
+        )
+    }) && is_idle
+}
+
+/// Calculates the effective frame count for an animation sequence
+/// Head layers during idle divide by 3 to skip doridori variants (headDir 1 and 2)
+fn calculate_effective_frame_count(
+    action_seq: &crate::infrastructure::ro_formats::act::ActionSequence,
+    is_head_layer_idle: bool,
+) -> usize {
+    if is_head_layer_idle {
+        // Divide by 3 to skip doridori variants (headDir 1 and 2)
+        action_seq.animations.len() / 3
+    } else {
+        action_seq.animations.len()
+    }
+}
+
+/// Advances the animation frame based on elapsed time
+fn advance_animation_frame(
+    controller: &mut RoAnimationController,
+    action: &crate::infrastructure::ro_formats::RoAction,
+    sprite_layer: Option<&crate::domain::entities::character::components::visual::RoSpriteLayer>,
+    time: &Time,
+) {
+    if !controller.paused {
+        controller.timer += time.delta().as_millis() as f32;
+    }
+
+    if controller.timer < controller.current_delay {
+        return;
+    }
+
+    controller.timer = 0.0;
+
+    let Some(action_seq) = action.actions.get(controller.action_index) else {
+        return;
+    };
+
+    let is_head_idle = is_head_layer_during_idle(sprite_layer, controller.action_index);
+    let frame_count = calculate_effective_frame_count(action_seq, is_head_idle);
+
+    controller.animation_index += 1;
+    if controller.animation_index >= frame_count {
+        controller.animation_index = if controller.loop_animation {
+            0
+        } else {
+            frame_count.saturating_sub(1)
+        };
+    }
+
+    controller.current_delay = action_seq.delay;
+}
+
+/// Renders the current animation frame for an entity
+fn render_current_frame(
+    entity: Entity,
+    controller: &mut RoAnimationController,
+    sprite: &crate::infrastructure::ro_formats::RoSprite,
+    action: &crate::infrastructure::ro_formats::RoAction,
+    transform: &Transform,
+    ro_palettes: &Assets<RoPaletteAsset>,
+    images: &mut Assets<Image>,
+    commands: &mut Commands,
+) {
+    let Some(action_seq) = action.actions.get(controller.action_index) else {
+        return;
+    };
+
+    let Some(animation) = action_seq.animations.get(controller.animation_index) else {
+        return;
+    };
+
+    let Some(first_layer) = animation.layers.first() else {
+        return;
+    };
+
+    let sprite_index = first_layer.sprite_index.max(0) as usize;
+
+    let Some(sprite_frame) = sprite.frames.get(sprite_index) else {
+        return;
+    };
+
+    let custom_palette = controller
+        .palette_handle
+        .as_ref()
+        .and_then(|handle| ro_palettes.get(handle));
+
+    let rgba_data =
+        convert_sprite_frame_to_rgba(sprite_frame, sprite.palette.as_ref(), custom_palette);
+
+    let bevy_image = create_bevy_image(
+        sprite_frame.width as u32,
+        sprite_frame.height as u32,
+        rgba_data,
+    );
+
+    let image_handle = images.add(bevy_image);
+
+    // Apply ACT offset relative to parent (not accumulated)
+    // ACT pos is a STATIC offset from character anchor, not a delta
+    // ACT offsets are in pixel coordinates, scale to world units
+    let layer_offset = Vec3::new(
+        first_layer.pos[0] as f32 * SPRITE_WORLD_SCALE,
+        -first_layer.pos[1] as f32 * SPRITE_WORLD_SCALE, // Negate Y: RO Y-negative=up, Bevy Y-positive=up
+        transform.translation.z, // Preserve Z-layering (0.0 for body, 0.1 for head)
+    );
+
+    commands.entity(entity).insert((
+        Sprite::from_image(image_handle),
+        Transform::from_translation(layer_offset),
+    ));
+
+    controller.frame_index = sprite_index;
+}
+
 /// Animation system for RO sprites - supports palettes and configurable looping
-/// Includes special handling for head layers with doridori animation
 pub fn animate_sprites(
     mut commands: Commands,
     mut query: Query<(
@@ -22,120 +170,24 @@ pub fn animate_sprites(
     time: Res<Time>,
 ) {
     for (entity, mut controller, transform, sprite_layer) in query.iter_mut() {
-        let sprite_asset = ro_sprites.get(&controller.sprite_handle);
-        let action_asset = ro_actions.get(&controller.action_handle);
-
-        if sprite_asset.is_none() || action_asset.is_none() {
+        let Some(assets) = get_animation_assets(&controller, &ro_sprites, &ro_actions) else {
             continue;
-        }
+        };
 
-        if let (Some(sprite_asset), Some(action_asset)) = (sprite_asset, action_asset) {
-            let sprite = &sprite_asset.sprite;
-            let action = &action_asset.action;
+        let sprite = &assets.sprite.sprite;
+        let action = &assets.action.action;
 
-            // Update timer only if not paused
-            if !controller.paused {
-                controller.timer += time.delta().as_millis() as f32;
-            }
+        advance_animation_frame(&mut controller, action, sprite_layer, &time);
 
-            // Check if we need to advance to next frame
-            if controller.timer >= controller.current_delay {
-                controller.timer = 0.0;
-
-                // Get current action sequence
-                if let Some(action_seq) = action.actions.get(controller.action_index) {
-                    // Check if this is a head layer during IDLE action
-                    // Head animations have 3x frames for doridori (head nodding), only use first 1/3
-                    let is_head_layer = sprite_layer.is_some_and(|layer| {
-                        use crate::domain::entities::character::components::visual::SpriteLayerType;
-                        use crate::domain::entities::character::components::equipment::EquipmentSlot;
-                        matches!(
-                            layer.layer_type,
-                            SpriteLayerType::Equipment(EquipmentSlot::HeadBottom)
-                                | SpriteLayerType::Equipment(EquipmentSlot::HeadMid)
-                                | SpriteLayerType::Equipment(EquipmentSlot::HeadTop)
-                        )
-                    });
-                    let is_idle = controller.action_index == 0;
-
-                    // Calculate effective frame count
-                    let frame_count = if is_head_layer && is_idle {
-                        // Divide by 3 to skip doridori variants (headDir 1 and 2)
-                        action_seq.animations.len() / 3
-                    } else {
-                        action_seq.animations.len()
-                    };
-
-                    // Advance animation index
-                    controller.animation_index += 1;
-                    if controller.animation_index >= frame_count {
-                        if controller.loop_animation {
-                            controller.animation_index = 0;
-                        } else {
-                            // Stop at last frame if not looping
-                            controller.animation_index = frame_count.saturating_sub(1);
-                        }
-                    }
-
-                    // Update delay for next frame
-                    controller.current_delay = action_seq.delay;
-                }
-            }
-
-            // Get current animation and its first layer to determine sprite frame
-            if let Some(action_seq) = action.actions.get(controller.action_index) {
-                if let Some(animation) = action_seq.animations.get(controller.animation_index) {
-                    if let Some(first_layer) = animation.layers.first() {
-                        // Handle negative sprite indices (use index 0 as fallback)
-                        let sprite_index = if first_layer.sprite_index < 0 {
-                            0
-                        } else {
-                            first_layer.sprite_index as usize
-                        };
-
-                        // Ensure sprite index is valid
-                        if let Some(sprite_frame) = sprite.frames.get(sprite_index) {
-                            // Get custom palette if provided
-                            let custom_palette = controller
-                                .palette_handle
-                                .as_ref()
-                                .and_then(|handle| ro_palettes.get(handle));
-
-                            // Convert sprite frame to RGBA using shared utility
-                            let rgba_data = convert_sprite_frame_to_rgba(
-                                sprite_frame,
-                                sprite.palette.as_ref(),
-                                custom_palette,
-                            );
-
-                            let bevy_image = create_bevy_image(
-                                sprite_frame.width as u32,
-                                sprite_frame.height as u32,
-                                rgba_data,
-                            );
-
-                            let image_handle = images.add(bevy_image);
-
-                            // Apply ACT offset relative to parent (not accumulated)
-                            // ACT pos is a STATIC offset from character anchor, not a delta
-                            // ACT offsets are in pixel coordinates, scale to world units
-                            let layer_offset = Vec3::new(
-                                first_layer.pos[0] as f32 * SPRITE_WORLD_SCALE,
-                                -first_layer.pos[1] as f32 * SPRITE_WORLD_SCALE, // Negate Y: RO Y-negative=up, Bevy Y-positive=up
-                                transform.translation.z, // Preserve Z-layering (0.0 for body, 0.1 for head)
-                            );
-
-                            commands.entity(entity).insert((
-                                Sprite::from_image(image_handle),
-                                Transform::from_translation(layer_offset),
-                            ));
-
-                            // Update frame index for tracking
-                            controller.frame_index = sprite_index;
-                        }
-                    }
-                }
-            }
-        }
+        render_current_frame(
+            entity,
+            &mut controller,
+            sprite,
+            action,
+            transform,
+            &ro_palettes,
+            &mut images,
+            &mut commands,
+        );
     }
 }
