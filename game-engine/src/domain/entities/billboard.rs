@@ -96,10 +96,7 @@ pub struct BillboardPlugin;
 
 impl Plugin for BillboardPlugin {
     fn build(&self, app: &mut App) {
-        app
-            // Startup: Create shared quad mesh
-            .add_systems(Startup, setup_shared_sprite_quad)
-            // Update: Apply billboard rotation after transform propagation
+        app.add_systems(Startup, setup_shared_sprite_quad)
             .add_systems(
                 PostUpdate,
                 billboard_rotation_system

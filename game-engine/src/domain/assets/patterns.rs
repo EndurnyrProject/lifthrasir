@@ -73,3 +73,51 @@ pub fn hair_palette_path(style_id: u16, gender: Gender, color_id: u16) -> String
         style_id, sex, color_id
     )
 }
+
+/// Generate body sprite path
+pub fn body_sprite_path(gender: Gender, job_name: &str) -> String {
+    let sex = match gender {
+        Gender::Male => "남",
+        Gender::Female => "여",
+    };
+    format!(
+        "ro://data/sprite/인간족/몸통/{}/{}_{}.spr",
+        sex, job_name, sex
+    )
+}
+
+/// Generate body action path
+pub fn body_action_path(gender: Gender, job_name: &str) -> String {
+    let sex = match gender {
+        Gender::Male => "남",
+        Gender::Female => "여",
+    };
+    format!(
+        "ro://data/sprite/인간족/몸통/{}/{}_{}.act",
+        sex, job_name, sex
+    )
+}
+
+/// Generate head sprite path
+pub fn head_sprite_path(gender: Gender, style_id: u16) -> String {
+    let sex = match gender {
+        Gender::Male => "남",
+        Gender::Female => "여",
+    };
+    format!(
+        "ro://data/sprite/인간족/머리통/{}/{}_{}.spr",
+        sex, style_id, sex
+    )
+}
+
+/// Generate head action path
+pub fn head_action_path(gender: Gender, style_id: u16) -> String {
+    let sex = match gender {
+        Gender::Male => "남",
+        Gender::Female => "여",
+    };
+    format!(
+        "ro://data/sprite/인간족/머리통/{}/{}_{}.act",
+        sex, style_id, sex
+    )
+}

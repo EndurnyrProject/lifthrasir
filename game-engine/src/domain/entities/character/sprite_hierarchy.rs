@@ -1,4 +1,7 @@
 use super::kinds::{CharacterRoot, SpriteLayer};
+use crate::domain::assets::patterns::{
+    body_action_path, body_sprite_path, hair_palette_path, head_action_path, head_sprite_path,
+};
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::{
     equipment::EquipmentSlot,
@@ -83,17 +86,163 @@ impl Default for SpriteHierarchyConfig {
     }
 }
 
+/// Context struct holding validated animation data for sprite layer updates
+/// Reduces repeated unwrapping and simplifies function signatures
+struct AnimationContext<'a> {
+    spr_asset: &'a RoSpriteAsset,
+    sprite_frame: &'a crate::infrastructure::ro_formats::sprite::SpriteFrame,
+    layer: &'a crate::infrastructure::ro_formats::act::Layer,
+}
+
+/// Query type for sprite layers that need asset population
+/// Queries sprite layers that don't yet have animation controllers attached
+type SpriteLayersNeedingAssets<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static CharacterSpriteHierarchy,
+        &'static RoSpriteLayer,
+    ),
+    (Without<RoAnimationController>, With<SpriteLayer>),
+>;
+
+/// Shared bundle components for sprite layers
+#[derive(Bundle)]
+struct SpriteLayerBaseBundle {
+    name: Name,
+    mesh: Mesh3d,
+    material: MeshMaterial3d<StandardMaterial>,
+    transform: Transform,
+    global_transform: GlobalTransform,
+    visibility: Visibility,
+    inherited_visibility: InheritedVisibility,
+    view_visibility: ViewVisibility,
+    ro_sprite_layer: RoSpriteLayer,
+    hierarchy: CharacterSpriteHierarchy,
+}
+
+impl SpriteLayerBaseBundle {
+    fn new(
+        name: String,
+        material: Handle<StandardMaterial>,
+        mesh: Handle<Mesh>,
+        layer_type: SpriteLayerType,
+        character_entity: Entity,
+        z_offset: f32,
+    ) -> Self {
+        Self {
+            name: Name::new(name),
+            mesh: Mesh3d(mesh),
+            material: MeshMaterial3d(material),
+            transform: Transform::from_xyz(0.0, 0.0, z_offset),
+            global_transform: GlobalTransform::default(),
+            visibility: Visibility::default(),
+            inherited_visibility: InheritedVisibility::default(),
+            view_visibility: ViewVisibility::default(),
+            ro_sprite_layer: RoSpriteLayer {
+                layer_type: layer_type.clone(),
+                z_offset,
+                ..default()
+            },
+            hierarchy: CharacterSpriteHierarchy {
+                character_entity,
+                layer_type,
+            },
+        }
+    }
+}
+
+/// Helper to spawn equipment layer
+fn create_equipment_bundle(
+    slot: EquipmentSlot,
+    character_entity: Entity,
+    material: Handle<StandardMaterial>,
+    mesh: Handle<Mesh>,
+    config: &SpriteHierarchyConfig,
+) -> (SpriteLayer, SpriteLayerBaseBundle) {
+    let z_offset = slot.z_order() * config.default_z_spacing;
+    let layer_type = SpriteLayerType::Equipment(slot);
+    (
+        SpriteLayer,
+        SpriteLayerBaseBundle::new(
+            format!("Equipment/{:?}", slot),
+            material,
+            mesh,
+            layer_type,
+            character_entity,
+            z_offset,
+        ),
+    )
+}
+
+/// Helper to spawn effect layer
+fn create_effect_bundle(
+    effect_type: EffectType,
+    character_entity: Entity,
+    material: Handle<StandardMaterial>,
+    mesh: Handle<Mesh>,
+    z_offset: f32,
+) -> (EffectLayer, SpriteLayerBaseBundle) {
+    let layer_type = SpriteLayerType::Effect(effect_type);
+    (
+        EffectLayer,
+        SpriteLayerBaseBundle::new(
+            format!("{:?}", effect_type),
+            material,
+            mesh,
+            layer_type,
+            character_entity,
+            z_offset,
+        ),
+    )
+}
+
+/// SystemParam bundle for rendering-related resources
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct RenderingResources<'w> {
+    pub materials: ResMut<'w, Assets<StandardMaterial>>,
+    pub shared_quad: Res<'w, SharedSpriteQuad>,
+    pub config: Res<'w, SpriteHierarchyConfig>,
+}
+
+/// SystemParam bundle for terrain-related resources
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct TerrainResources<'w, 's> {
+    pub map_loader_query: Query<'w, 's, &'static MapLoader>,
+    pub altitude_assets: Res<'w, Assets<RoAltitudeAsset>>,
+}
+
+/// Helper function to calculate terrain height at a given position
+/// Returns the adjusted position with terrain height applied (if available)
+fn calculate_terrain_height(position: Vec3, terrain: &TerrainResources) -> Vec3 {
+    let mut world_position = position;
+
+    if let Some(terrain_height) = terrain
+        .map_loader_query
+        .single()
+        .ok()
+        .and_then(|loader| loader.altitude.as_ref())
+        .and_then(|handle| terrain.altitude_assets.get(handle))
+        .and_then(|asset| {
+            asset
+                .altitude
+                .get_terrain_height_at_position(world_position)
+        })
+    {
+        world_position.y = terrain_height;
+    }
+
+    world_position
+}
+
 // System to spawn character sprite hierarchies using moonshine-object patterns
-// Now creates 3D billboard sprites with proper world positioning
 pub fn spawn_character_sprite_hierarchy(
     mut commands: Commands,
     mut spawn_events: EventReader<SpawnCharacterSpriteEvent>,
-    config: Res<SpriteHierarchyConfig>,
     character_query: Query<Entity>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    shared_quad: Res<SharedSpriteQuad>,
-    map_loader_query: Query<&MapLoader>,
-    altitude_assets: Res<Assets<RoAltitudeAsset>>,
+    mut rendering: RenderingResources,
+    terrain: TerrainResources,
 ) {
     for event in spawn_events.read() {
         // Check if the character entity still exists before spawning sprites
@@ -106,32 +255,10 @@ pub fn spawn_character_sprite_hierarchy(
         }
 
         // Calculate world position with terrain height (if available)
-        let mut world_position = event.spawn_position;
-
-        // Try to get terrain height at spawn position from GAT (collision/walkable terrain)
-        // GAT height is used for gameplay positioning, not GND (visual terrain)
-        if let Ok(map_loader) = map_loader_query.single() {
-            if let Some(altitude_handle) = &map_loader.altitude {
-                if let Some(altitude_asset) = altitude_assets.get(altitude_handle) {
-                    if let Some(terrain_height) = altitude_asset
-                        .altitude
-                        .get_terrain_height_at_position(world_position)
-                    {
-                        world_position.y = terrain_height;
-                    }
-                }
-            }
-        }
+        let world_position = calculate_terrain_height(event.spawn_position, &terrain);
 
         // Create root material - will be updated by animation system
-        let root_material = materials.add(StandardMaterial {
-            base_color_texture: None,
-            base_color: Color::WHITE,
-            alpha_mode: AlphaMode::Blend,
-            unlit: true,
-            cull_mode: None,
-            ..default()
-        });
+        let root_material = create_sprite_material(&mut rendering.materials);
 
         // Create root character object with 3D billboard components
         // CRITICAL: Only the root gets Billboard component!
@@ -139,7 +266,7 @@ pub fn spawn_character_sprite_hierarchy(
             .spawn((
                 CharacterRoot,
                 Name::new("CharacterRoot"),
-                Mesh3d(shared_quad.mesh.clone()),
+                Mesh3d(rendering.shared_quad.mesh.clone()),
                 MeshMaterial3d(root_material),
                 Transform::from_translation(world_position),
                 GlobalTransform::default(),
@@ -163,27 +290,19 @@ pub fn spawn_character_sprite_hierarchy(
         ];
 
         for (i, layer_name) in layer_names.iter().enumerate() {
-            let z_offset = i as f32 * config.default_z_spacing;
+            let z_offset = i as f32 * rendering.config.default_z_spacing;
 
             // Create material for this layer
-            let layer_material = materials.add(StandardMaterial {
-                base_color_texture: None,
-                base_color: Color::WHITE,
-                alpha_mode: AlphaMode::Blend,
-                unlit: true,
-                cull_mode: None,
-                ..default()
-            });
+            let layer_material = create_sprite_material(&mut rendering.materials);
 
             let _layer_entity = commands
                 .spawn((
                     SpriteLayer,
                     Name::new(layer_name.to_string()),
-                    Mesh3d(shared_quad.mesh.clone()),
+                    Mesh3d(rendering.shared_quad.mesh.clone()),
                     MeshMaterial3d(layer_material),
                     Transform::from_xyz(0.0, 0.0, z_offset),
                     GlobalTransform::default(),
-                    // NO Billboard component on children!
                     Visibility::default(),
                     InheritedVisibility::default(),
                     ViewVisibility::default(),
@@ -205,7 +324,7 @@ pub fn spawn_character_sprite_hierarchy(
         let _effects_container = commands
             .spawn((
                 Name::new("Effects"),
-                Transform::from_xyz(0.0, 0.0, config.effect_z_offset),
+                Transform::from_xyz(0.0, 0.0, rendering.config.effect_z_offset),
                 GlobalTransform::default(),
                 Visibility::default(),
                 InheritedVisibility::default(),
@@ -249,58 +368,70 @@ pub fn handle_equipment_changes(
     shared_quad: Res<SharedSpriteQuad>,
 ) {
     for event in equipment_events.read() {
-        if let Ok(object_tree) = characters.get(event.character) {
-            // Get the character object using moonshine-object
-            if let Ok(character_obj) = character_objects.get(object_tree.root) {
-                let equipment_path = format!("Equipment/{:?}", event.slot);
+        let Ok(object_tree) = characters.get(event.character) else {
+            warn!(
+                "Character entity {:?} not found for equipment change",
+                event.character
+            );
+            continue;
+        };
 
-                // Remove old equipment layer if it exists using path traversal
-                if let Some(old_equipment) = character_obj.find_by_path(&equipment_path) {
-                    commands.entity(old_equipment.entity()).despawn();
-                }
+        let Ok(character_obj) = character_objects.get(object_tree.root) else {
+            warn!("Character object root {:?} not found", object_tree.root);
+            continue;
+        };
 
-                // Add new equipment layer if item is equipped
-                if let Some(_item_id) = event.new_item_id {
-                    let z_offset = event.slot.z_order() * config.default_z_spacing;
+        let equipment_path = equipment_layer_path(event.slot);
 
-                    // Create material for this equipment layer
-                    let layer_material = materials.add(StandardMaterial {
-                        base_color_texture: None,
-                        base_color: Color::WHITE,
-                        alpha_mode: AlphaMode::Blend,
-                        unlit: true,
-                        cull_mode: None,
-                        ..default()
-                    });
+        remove_old_equipment(&mut commands, &character_obj, &equipment_path);
 
-                    // Spawn the equipment sprite entity with proper naming for moonshine-object
-                    commands
-                        .spawn((
-                            SpriteLayer,
-                            Name::new(format!("Equipment/{:?}", event.slot)),
-                            Mesh3d(shared_quad.mesh.clone()),
-                            MeshMaterial3d(layer_material),
-                            Transform::from_xyz(0.0, 0.0, z_offset),
-                            GlobalTransform::default(),
-                            // NO Billboard on children!
-                            Visibility::default(),
-                            InheritedVisibility::default(),
-                            ViewVisibility::default(),
-                            RoSpriteLayer {
-                                layer_type: SpriteLayerType::Equipment(event.slot),
-                                z_offset,
-                                ..default()
-                            },
-                            CharacterSpriteHierarchy {
-                                character_entity: event.character,
-                                layer_type: SpriteLayerType::Equipment(event.slot),
-                            },
-                        ))
-                        .insert(ChildOf(object_tree.get_root_entity()));
-                }
-            }
+        if event.new_item_id.is_some() {
+            spawn_equipment_layer(
+                &mut commands,
+                event.slot,
+                event.character,
+                object_tree.root,
+                &config,
+                &mut materials,
+                &shared_quad,
+            );
         }
     }
+}
+
+/// Removes an existing equipment layer from the character
+fn remove_old_equipment(
+    commands: &mut Commands,
+    character_obj: &Object<CharacterRoot>,
+    equipment_path: &str,
+) {
+    if let Some(old_equipment) = character_obj.find_by_path(equipment_path) {
+        commands.entity(old_equipment.entity()).despawn();
+    }
+}
+
+/// Spawns a new equipment layer as a child of the character root
+fn spawn_equipment_layer(
+    commands: &mut Commands,
+    slot: EquipmentSlot,
+    character_entity: Entity,
+    root_entity: Entity,
+    config: &SpriteHierarchyConfig,
+    materials: &mut Assets<StandardMaterial>,
+    shared_quad: &SharedSpriteQuad,
+) {
+    let material = create_sprite_material(materials);
+    let (marker, bundle) = create_equipment_bundle(
+        slot,
+        character_entity,
+        material,
+        shared_quad.mesh.clone(),
+        config,
+    );
+
+    commands
+        .spawn((marker, bundle))
+        .insert(ChildOf(root_entity));
 }
 
 // System to handle status effect visuals using moonshine-object
@@ -314,65 +445,290 @@ pub fn handle_status_effect_visuals(
     shared_quad: Res<SharedSpriteQuad>,
 ) {
     for event in effect_events.read() {
-        if let Ok(object_tree) = characters.get(event.character) {
-            // Get the character object using moonshine-object
-            if let Ok(character_obj) = character_objects.get(object_tree.root) {
-                let effect_path = format!("Effects/{:?}", event.effect_type);
+        let Ok(object_tree) = characters.get(event.character) else {
+            warn!(
+                "Character entity {:?} not found for effect visual",
+                event.character
+            );
+            continue;
+        };
 
-                if event.add {
-                    // Check if effect already exists using path traversal
-                    if character_obj.find_by_path(&effect_path).is_some() {
-                        continue; // Effect already exists
-                    }
+        let Ok(character_obj) = character_objects.get(object_tree.root) else {
+            warn!("Character object root {:?} not found", object_tree.root);
+            continue;
+        };
 
-                    // Find Effects container
-                    if let Some(effects_container) = character_obj.find_by_path("Effects") {
-                        // Count existing effects for z-offset
-                        let effect_count = effects_container.children().count();
-                        let z_offset = effect_count as f32 * config.default_z_spacing;
+        let effect_path = format!("Effects/{:?}", event.effect_type);
 
-                        // Create material for effect layer
-                        let effect_material = materials.add(StandardMaterial {
-                            base_color_texture: None,
-                            base_color: Color::WHITE,
-                            alpha_mode: AlphaMode::Blend,
-                            unlit: true,
-                            cull_mode: None,
-                            ..default()
-                        });
-
-                        commands
-                            .spawn((
-                                EffectLayer,
-                                Name::new(format!("{:?}", event.effect_type)),
-                                Mesh3d(shared_quad.mesh.clone()),
-                                MeshMaterial3d(effect_material),
-                                Transform::from_xyz(0.0, 0.0, z_offset),
-                                GlobalTransform::default(),
-                                // NO Billboard on children!
-                                Visibility::default(),
-                                InheritedVisibility::default(),
-                                ViewVisibility::default(),
-                                CharacterSpriteHierarchy {
-                                    character_entity: event.character,
-                                    layer_type: SpriteLayerType::Effect(event.effect_type),
-                                },
-                            ))
-                            .insert(ChildOf(effects_container.entity()));
-                    }
-                } else {
-                    // Remove status effect visual using path traversal
-                    if let Some(effect_entity) = character_obj.find_by_path(&effect_path) {
-                        commands.entity(effect_entity.entity()).despawn();
-                    }
-                }
-            }
+        if event.add {
+            add_status_effect(
+                &mut commands,
+                &character_obj,
+                &effect_path,
+                event.effect_type,
+                event.character,
+                &config,
+                &mut materials,
+                &shared_quad,
+            );
+        } else {
+            remove_status_effect(&mut commands, &character_obj, &effect_path);
         }
     }
 }
 
+/// Adds a status effect visual to the character
+fn add_status_effect(
+    commands: &mut Commands,
+    character_obj: &Object<CharacterRoot>,
+    effect_path: &str,
+    effect_type: EffectType,
+    character_entity: Entity,
+    config: &SpriteHierarchyConfig,
+    materials: &mut Assets<StandardMaterial>,
+    shared_quad: &SharedSpriteQuad,
+) {
+    // Check if effect already exists
+    if character_obj.find_by_path(effect_path).is_some() {
+        return;
+    }
+
+    // Find Effects container
+    let Some(effects_container) = character_obj.find_by_path("Effects") else {
+        warn!("Effects container not found for character");
+        return;
+    };
+
+    // Count existing effects for z-offset
+    let effect_count = effects_container.children().count();
+    let z_offset = effect_count as f32 * config.default_z_spacing;
+
+    let material = create_sprite_material(materials);
+    let (marker, bundle) = create_effect_bundle(
+        effect_type,
+        character_entity,
+        material,
+        shared_quad.mesh.clone(),
+        z_offset,
+    );
+
+    commands
+        .spawn((marker, bundle))
+        .insert(ChildOf(effects_container.entity()));
+}
+
+/// Removes a status effect visual from the character
+fn remove_status_effect(
+    commands: &mut Commands,
+    character_obj: &Object<CharacterRoot>,
+    effect_path: &str,
+) {
+    if let Some(effect_entity) = character_obj.find_by_path(effect_path) {
+        commands.entity(effect_entity.entity()).despawn();
+    }
+}
+
+/// Helper function to calculate the correct frame index for a sprite layer
+/// Handles special case for head equipment doridori animation
+fn calculate_layer_frame_index(
+    layer_type: &SpriteLayerType,
+    current_action: usize,
+    base_frame: usize,
+    animation_count: usize,
+) -> usize {
+    // Special handling for head equipment doridori animation
+    // Head ACT files have 3x frames (8 directions × 3 headDir variants for doridori)
+    // We only want headDir 0 (looking forward) to match body animation
+    if matches!(
+        layer_type,
+        SpriteLayerType::Equipment(
+            EquipmentSlot::HeadBottom | EquipmentSlot::HeadMid | EquipmentSlot::HeadTop
+        )
+    ) && current_action == 0
+    {
+        // Divide by 3 to get frames per doridori variant
+        let frames_per_variant = animation_count / 3;
+        // Clamp to first variant (headDir 0)
+        if frames_per_variant > 0 {
+            return base_frame % frames_per_variant;
+        }
+    }
+    base_frame
+}
+
+/// Helper function to get and validate animation context
+/// Returns None if any validation fails, with appropriate warnings
+fn get_animation_context<'a>(
+    hierarchy: &CharacterSpriteHierarchy,
+    controller: &RoAnimationController,
+    characters: &Query<&crate::domain::entities::character::components::visual::CharacterSprite>,
+    spr_assets: &'a Assets<RoSpriteAsset>,
+    act_assets: &'a Assets<RoActAsset>,
+) -> Option<AnimationContext<'a>> {
+    // Get character sprite component
+    let character_sprite = characters.get(hierarchy.character_entity).ok()?;
+
+    // Get sprite and action assets
+    let spr_asset = spr_assets.get(&controller.sprite_handle)?;
+    let act_asset = act_assets.get(&controller.action_handle)?;
+
+    let current_action = character_sprite.current_action as usize;
+
+    // Validate action index
+    if current_action >= act_asset.action.actions.len() {
+        warn!(
+            "Action index out of bounds for {:?}: action {} >= total_actions {}",
+            hierarchy.layer_type,
+            current_action,
+            act_asset.action.actions.len()
+        );
+        return None;
+    }
+
+    let action_sequence = &act_asset.action.actions[current_action];
+
+    // Calculate the correct frame index (handles doridori animation)
+    let current_frame = calculate_layer_frame_index(
+        &hierarchy.layer_type,
+        current_action,
+        character_sprite.current_frame as usize,
+        action_sequence.animations.len(),
+    );
+
+    // Validate frame index
+    if current_frame >= action_sequence.animations.len() {
+        warn!(
+            "Frame index out of bounds for {:?}: frame {} >= animation_count {}",
+            hierarchy.layer_type,
+            current_frame,
+            action_sequence.animations.len()
+        );
+        return None;
+    }
+
+    let animation = &action_sequence.animations[current_frame];
+
+    // Get the first layer (main sprite layer)
+    let layer = animation.layers.first()?;
+
+    // Handle negative sprite indices (use index 0 as fallback)
+    // RO uses -1 to indicate "no sprite" or invisible layers
+    let sprite_index = if layer.sprite_index < 0 {
+        0
+    } else {
+        layer.sprite_index as usize
+    };
+
+    // Validate sprite index
+    if sprite_index >= spr_asset.sprite.frames.len() {
+        warn!(
+            "Invalid sprite_index for {:?}: index={} (must be < {})",
+            hierarchy.layer_type,
+            sprite_index,
+            spr_asset.sprite.frames.len()
+        );
+        return None;
+    }
+
+    let sprite_frame = &spr_asset.sprite.frames[sprite_index];
+
+    Some(AnimationContext {
+        spr_asset,
+        sprite_frame,
+        layer,
+    })
+}
+
+/// Helper function to apply ACT layer transformations to entity transform
+/// Handles position, scale, and rotation based on ACT data
+fn apply_layer_transform(
+    transform: &mut Transform,
+    layer: &crate::infrastructure::ro_formats::act::Layer,
+    sprite_frame: &crate::infrastructure::ro_formats::sprite::SpriteFrame,
+) {
+    // Apply ACT positioning offset from layer data
+    // ACT offsets are in pixel coordinates, scale to world units
+    let offset_x = layer.pos[0] as f32 * SPRITE_WORLD_SCALE;
+    let offset_y = -layer.pos[1] as f32 * SPRITE_WORLD_SCALE; // Flip Y for Bevy coordinate system
+    transform.translation.x = offset_x;
+    transform.translation.y = offset_y;
+    // Keep z-offset from RoSpriteLayer (already set by spawn)
+
+    // Apply ACT scale
+    // The quad mesh is -0.5 to 0.5 (1 unit total)
+    // Scale by pixel dimensions using SPRITE_WORLD_SCALE for 3D world
+    transform.scale = Vec3::new(
+        layer.scale[0] * sprite_frame.width as f32 * SPRITE_WORLD_SCALE,
+        layer.scale[1] * sprite_frame.height as f32 * SPRITE_WORLD_SCALE,
+        1.0,
+    );
+
+    // Apply ACT rotation
+    if layer.angle != 0 {
+        transform.rotation =
+            Quat::from_rotation_z(layer.angle as f32 * std::f32::consts::PI / 180.0);
+    }
+}
+
+/// Helper function to create a material for a sprite layer
+/// Converts sprite frame to image and creates StandardMaterial with proper settings
+fn create_layer_material(
+    images: &mut Assets<Image>,
+    materials: &mut Assets<StandardMaterial>,
+    sprite_frame: &crate::infrastructure::ro_formats::sprite::SpriteFrame,
+    sprite_palette: &Option<crate::infrastructure::ro_formats::sprite::Palette>,
+    layer: &crate::infrastructure::ro_formats::act::Layer,
+) -> Handle<StandardMaterial> {
+    // Convert SPR frame to Bevy Image
+    let bevy_image = convert_sprite_frame_to_image(sprite_frame, sprite_palette);
+
+    // Create new image handle
+    let image_handle = images.add(bevy_image);
+
+    // Create new material with the updated texture
+    // This replaces the entire material to force Bevy's render system to update GPU bindings
+    materials.add(StandardMaterial {
+        base_color_texture: Some(image_handle),
+        base_color: Color::srgba(
+            layer.color[0],
+            layer.color[1],
+            layer.color[2],
+            layer.color[3],
+        ),
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        cull_mode: None,
+        ..default()
+    })
+}
+
+/// Helper function to process a sprite layer with validated animation context
+/// Applies transforms and creates materials
+fn process_sprite_layer(
+    ctx: &AnimationContext,
+    transform: &mut Transform,
+    entity: Entity,
+    commands: &mut Commands,
+    images: &mut Assets<Image>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    // Apply layer transformations (position, scale, rotation)
+    apply_layer_transform(transform, ctx.layer, ctx.sprite_frame);
+
+    // Create material with sprite texture
+    let material = create_layer_material(
+        images,
+        materials,
+        ctx.sprite_frame,
+        &ctx.spr_asset.sprite.palette,
+        ctx.layer,
+    );
+
+    // Replace the material component to trigger Bevy's change detection
+    commands.entity(entity).insert(MeshMaterial3d(material));
+}
+
 // System to update sprite layer positions and textures based on animation
-// Now updates 3D materials instead of 2D Sprite components
 pub fn update_sprite_layer_transforms(
     mut commands: Commands,
     mut sprite_layers: Query<
@@ -391,140 +747,22 @@ pub fn update_sprite_layer_transforms(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (entity, mut transform, hierarchy, controller) in sprite_layers.iter_mut() {
-        if let Ok(character_sprite) = characters.get(hierarchy.character_entity) {
-            // Get the sprite and action assets from RoAnimationController (single fetch)
-            if let (Some(spr_asset), Some(act_asset)) = (
-                spr_assets.get(&controller.sprite_handle),
-                act_assets.get(&controller.action_handle),
-            ) {
-                let current_action = character_sprite.current_action as usize;
+        // Get and validate animation context
+        let Some(ctx) =
+            get_animation_context(hierarchy, controller, &characters, &spr_assets, &act_assets)
+        else {
+            continue;
+        };
 
-                // Ensure action index is valid
-                if current_action >= act_asset.action.actions.len() {
-                    warn!(
-                        "Action index out of bounds for {:?}: action {} >= total_actions {}",
-                        hierarchy.layer_type,
-                        current_action,
-                        act_asset.action.actions.len()
-                    );
-                    continue;
-                }
-
-                let action_sequence = &act_asset.action.actions[current_action];
-
-                // Map frame index for head layers at idle to fix doridori animation
-                // Head ACT files have 3x frames (8 directions × 3 headDir variants for doridori)
-                // We only want headDir 0 (looking forward) to match body animation
-                let current_frame = if matches!(
-                    hierarchy.layer_type,
-                    SpriteLayerType::Equipment(
-                        EquipmentSlot::HeadBottom | EquipmentSlot::HeadMid | EquipmentSlot::HeadTop
-                    )
-                ) && current_action == 0
-                // Idle action
-                {
-                    // Divide by 3 to get frames per doridori variant
-                    let head_frames_per_variant = action_sequence.animations.len() / 3;
-                    // Clamp to first variant (headDir 0)
-                    if head_frames_per_variant > 0 {
-                        (character_sprite.current_frame as usize) % head_frames_per_variant
-                    } else {
-                        character_sprite.current_frame as usize
-                    }
-                } else {
-                    character_sprite.current_frame as usize
-                };
-
-                // Ensure frame index is valid
-                if current_frame >= action_sequence.animations.len() {
-                    warn!(
-                        "Frame index out of bounds for {:?}: frame {} >= animation_count {}",
-                        hierarchy.layer_type,
-                        current_frame,
-                        action_sequence.animations.len()
-                    );
-                    continue;
-                }
-
-                let animation = &action_sequence.animations[current_frame];
-
-                // Process the first layer (main sprite layer)
-                if let Some(layer) = animation.layers.first() {
-                    // Handle negative sprite indices (use index 0 as fallback)
-                    // RO uses -1 to indicate "no sprite" or invisible layers
-                    let sprite_index = if layer.sprite_index < 0 {
-                        0
-                    } else {
-                        layer.sprite_index as usize
-                    };
-
-                    // Ensure sprite index is valid
-                    if sprite_index < spr_asset.sprite.frames.len() {
-                        let sprite_frame = &spr_asset.sprite.frames[sprite_index];
-
-                        // Convert SPR frame to Bevy Image
-                        let bevy_image =
-                            convert_sprite_frame_to_image(sprite_frame, &spr_asset.sprite.palette);
-
-                        // Create new image handle
-                        let image_handle = images.add(bevy_image);
-
-                        // Apply ACT positioning offset from layer data
-                        // ACT offsets are in pixel coordinates, scale to world units
-                        let offset_x = layer.pos[0] as f32 * SPRITE_WORLD_SCALE;
-                        let offset_y = -layer.pos[1] as f32 * SPRITE_WORLD_SCALE; // Flip Y for Bevy coordinate system
-                        transform.translation.x = offset_x;
-                        transform.translation.y = offset_y;
-                        // Keep z-offset from RoSpriteLayer
-                        // transform.translation.z is already set by spawn
-
-                        // Apply ACT scale
-                        // The quad mesh is -0.5 to 0.5 (1 unit total)
-                        // Scale by pixel dimensions using SPRITE_WORLD_SCALE for 3D world
-                        transform.scale = Vec3::new(
-                            layer.scale[0] * sprite_frame.width as f32 * SPRITE_WORLD_SCALE,
-                            layer.scale[1] * sprite_frame.height as f32 * SPRITE_WORLD_SCALE,
-                            1.0,
-                        );
-
-                        // Apply ACT rotation
-                        if layer.angle != 0 {
-                            transform.rotation = Quat::from_rotation_z(
-                                layer.angle as f32 * std::f32::consts::PI / 180.0,
-                            );
-                        }
-
-                        // Create new material with the updated texture
-                        // This replaces the entire material to force Bevy's render system to update GPU bindings
-                        let new_material = materials.add(StandardMaterial {
-                            base_color_texture: Some(image_handle),
-                            base_color: Color::srgba(
-                                layer.color[0],
-                                layer.color[1],
-                                layer.color[2],
-                                layer.color[3],
-                            ),
-                            alpha_mode: AlphaMode::Blend,
-                            unlit: true,
-                            cull_mode: None,
-                            ..default()
-                        });
-
-                        // Replace the material component to trigger Bevy's change detection
-                        commands.entity(entity).insert(MeshMaterial3d(new_material));
-                    } else {
-                        warn!(
-                            "Invalid sprite_index for {:?}: index={} (must be < {})",
-                            hierarchy.layer_type,
-                            sprite_index,
-                            spr_asset.sprite.frames.len()
-                        );
-                    }
-                } else {
-                    warn!("Animation has no layers for {:?}!", hierarchy.layer_type);
-                }
-            }
-        }
+        // Process the sprite layer with the validated context
+        process_sprite_layer(
+            &ctx,
+            &mut transform,
+            entity,
+            &mut commands,
+            &mut images,
+            &mut materials,
+        );
     }
 }
 
@@ -577,6 +815,51 @@ fn convert_sprite_frame_to_image(
     )
 }
 
+/// Helper function to find the first valid ACT asset handle from sprite layers
+/// Returns None if no valid (non-weak) handle is found
+fn find_act_handle<'a>(
+    sprite_layers: &'a Query<&RoAnimationController, With<CharacterSpriteHierarchy>>,
+) -> Option<&'a Handle<RoActAsset>> {
+    sprite_layers
+        .iter()
+        .find(|controller| !controller.action_handle.is_weak())
+        .map(|controller| &controller.action_handle)
+}
+
+/// Helper function to get the action sequence for a given action index
+/// Returns None if the index is out of bounds
+fn get_action_sequence(
+    act_asset: &RoActAsset,
+    action_index: usize,
+) -> Option<&crate::infrastructure::ro_formats::act::ActionSequence> {
+    act_asset.action.actions.get(action_index)
+}
+
+/// Helper function to advance the animation frame and update timer
+/// Handles frame wraparound and minimum delay validation
+fn advance_animation_frame(
+    character_sprite: &mut crate::domain::entities::character::components::visual::CharacterSprite,
+    action_sequence: &crate::infrastructure::ro_formats::act::ActionSequence,
+) {
+    let frame_count = action_sequence.animations.len();
+
+    // Guard: Skip if no frames available
+    if frame_count == 0 {
+        return;
+    }
+
+    // Advance to next frame with wraparound
+    character_sprite.current_frame = (character_sprite.current_frame + 1) % (frame_count as u8);
+
+    // Update timer duration from ACT delay (convert from milliseconds to seconds)
+    // Apply minimum delay of 0.1s to prevent infinite loops
+    let delay_seconds = (action_sequence.delay / 1000.0).max(0.1);
+    character_sprite
+        .animation_timer
+        .set_duration(std::time::Duration::from_secs_f32(delay_seconds));
+    character_sprite.animation_timer.reset();
+}
+
 // System to advance character animation frames based on timing
 pub fn advance_character_animations(
     time: Res<Time>,
@@ -586,46 +869,38 @@ pub fn advance_character_animations(
     act_assets: Res<Assets<crate::infrastructure::assets::loaders::RoActAsset>>,
     sprite_layers: Query<&RoAnimationController, With<CharacterSpriteHierarchy>>,
 ) {
+    // Optimization: Find ACT handle once outside the character loop (O(m) instead of O(n*m))
+    // This works because all characters share the same ACT file format structure
+    let Some(act_handle) = find_act_handle(&sprite_layers) else {
+        // No valid ACT handle found - skip all character animations this frame
+        return;
+    };
+
+    // Get the ACT asset once for all characters
+    let Some(act_asset) = act_assets.get(act_handle) else {
+        // ACT asset not yet loaded - skip this frame
+        return;
+    };
+
+    // Process each character's animation state
     for mut character_sprite in character_sprites.iter_mut() {
         // Tick the animation timer
         character_sprite.animation_timer.tick(time.delta());
 
-        if character_sprite.animation_timer.finished() {
-            // Get ACT asset to determine timing and frame count
-            let mut act_asset_handle = None;
-
-            // Find an ACT asset handle from the RoAnimationController components
-            for controller in sprite_layers.iter() {
-                if !controller.action_handle.is_weak() {
-                    act_asset_handle = Some(&controller.action_handle);
-                    break;
-                }
-            }
-
-            if let Some(act_handle) = act_asset_handle {
-                if let Some(act_asset) = act_assets.get(act_handle) {
-                    let current_action = character_sprite.current_action as usize;
-
-                    if current_action < act_asset.action.actions.len() {
-                        let action_sequence = &act_asset.action.actions[current_action];
-                        let frame_count = action_sequence.animations.len();
-
-                        if frame_count > 0 {
-                            // Advance to next frame
-                            character_sprite.current_frame =
-                                (character_sprite.current_frame + 1) % (frame_count as u8);
-
-                            // Set timer duration from ACT delay (convert from milliseconds to seconds)
-                            let delay_seconds = action_sequence.delay / 1000.0;
-                            character_sprite.animation_timer.set_duration(
-                                std::time::Duration::from_secs_f32(delay_seconds.max(0.1)), // Minimum 0.1s delay
-                            );
-                            character_sprite.animation_timer.reset();
-                        }
-                    }
-                }
-            }
+        // Skip if timer hasn't finished yet
+        if !character_sprite.animation_timer.finished() {
+            continue;
         }
+
+        // Get the action sequence for the current action
+        let current_action = character_sprite.current_action as usize;
+        let Some(action_sequence) = get_action_sequence(act_asset, current_action) else {
+            // Invalid action index - skip this character
+            continue;
+        };
+
+        // Advance the animation frame and reset timer
+        advance_animation_frame(&mut character_sprite, action_sequence);
     }
 }
 
@@ -685,14 +960,10 @@ pub fn spawn_complete_character_sprite(
 
 /// System to populate sprite layers with asset handles and RoAnimationController
 /// This bridges the gap between the entity hierarchy and the rendering system
-/// Now adds 3D mesh/material components instead of 2D Sprite
 pub fn populate_sprite_layers_with_assets(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    sprite_layers: Query<
-        (Entity, &CharacterSpriteHierarchy, &RoSpriteLayer),
-        (Without<RoAnimationController>, With<SpriteLayer>),
-    >,
+    sprite_layers: SpriteLayersNeedingAssets,
     characters: Query<(
         &super::components::core::CharacterData,
         &CharacterAppearance,
@@ -702,7 +973,6 @@ pub fn populate_sprite_layers_with_assets(
     map_spawn_context: Option<Res<crate::domain::world::spawn_context::MapSpawnContext>>,
 ) {
     for (entity, hierarchy, layer_info) in sprite_layers.iter() {
-        // Get character data and appearance to determine which assets to load
         let Ok((char_data, appearance)) = characters.get(hierarchy.character_entity) else {
             warn!(
                 "Failed to get character data for entity {:?}",
@@ -711,48 +981,27 @@ pub fn populate_sprite_layers_with_assets(
             continue;
         };
 
-        // Generate asset paths based on layer type
         let (sprite_path, act_path, palette_path) = match &layer_info.layer_type {
             SpriteLayerType::Body => {
                 let job_class = crate::domain::character::JobClass::from(char_data.job_id);
                 let job_name = job_class.to_sprite_name();
-                let sex_suffix = match appearance.gender {
-                    crate::domain::character::Gender::Male => "남",
-                    crate::domain::character::Gender::Female => "여",
-                };
 
-                let sprite = format!(
-                    "ro://data/sprite/인간족/몸통/{}/{}_{}.spr",
-                    sex_suffix, job_name, sex_suffix
-                );
-                let act = format!(
-                    "ro://data/sprite/인간족/몸통/{}/{}_{}.act",
-                    sex_suffix, job_name, sex_suffix
-                );
+                let sprite = body_sprite_path(appearance.gender, &job_name);
+                let act = body_action_path(appearance.gender, &job_name);
                 (sprite, act, None)
             }
             SpriteLayerType::Equipment(EquipmentSlot::HeadBottom)
             | SpriteLayerType::Equipment(EquipmentSlot::HeadMid)
             | SpriteLayerType::Equipment(EquipmentSlot::HeadTop) => {
                 // For now, use head sprites for all head layers
-                let sex_suffix = match appearance.gender {
-                    crate::domain::character::Gender::Male => "남",
-                    crate::domain::character::Gender::Female => "여",
-                };
-
-                let sprite = format!(
-                    "ro://data/sprite/인간족/머리통/{}/{}_{}.spr",
-                    sex_suffix, appearance.hair_style, sex_suffix
-                );
-                let act = format!(
-                    "ro://data/sprite/인간족/머리통/{}/{}_{}.act",
-                    sex_suffix, appearance.hair_style, sex_suffix
-                );
+                let sprite = head_sprite_path(appearance.gender, appearance.hair_style);
+                let act = head_action_path(appearance.gender, appearance.hair_style);
 
                 let palette = if appearance.hair_color > 0 {
-                    Some(format!(
-                        "ro://data/palette/머리/{}_{}_{}.pal",
-                        appearance.hair_style, sex_suffix, appearance.hair_color
+                    Some(hair_palette_path(
+                        appearance.hair_style,
+                        appearance.gender,
+                        appearance.hair_color,
                     ))
                 } else {
                     None
@@ -765,7 +1014,6 @@ pub fn populate_sprite_layers_with_assets(
             }
         };
 
-        // Load assets via AssetServer
         let sprite_handle: Handle<RoSpriteAsset> = asset_server.load(&sprite_path);
         let act_handle: Handle<RoActAsset> = asset_server.load(&act_path);
         let palette_handle = palette_path
@@ -775,9 +1023,8 @@ pub fn populate_sprite_layers_with_assets(
         // Determine if we should pause based on context
         // We're in InGame when MapSpawnContext exists and character is being spawned for gameplay
         // Default to NOT paused for in-game rendering
-        let should_pause = map_spawn_context.is_none(); // Paused only for character selection (no map context)
+        let should_pause = map_spawn_context.is_none();
 
-        // Create RoAnimationController
         let mut controller = RoAnimationController::new(sprite_handle.clone(), act_handle.clone())
             .with_action(0) // Idle action
             .looping(true)
@@ -787,7 +1034,6 @@ pub fn populate_sprite_layers_with_assets(
             controller = controller.with_palette(palette);
         }
 
-        // Create material for 3D rendering
         let material = materials.add(StandardMaterial {
             base_color_texture: None, // Will be set by animation system
             base_color: Color::WHITE,
@@ -797,7 +1043,6 @@ pub fn populate_sprite_layers_with_assets(
             ..default()
         });
 
-        // Add controller, mesh, and material components to the entity
         commands.entity(entity).insert((
             controller,
             Mesh3d(shared_quad.mesh.clone()),
@@ -825,52 +1070,31 @@ pub fn update_sprite_layers_on_appearance_change(
     >,
 ) {
     for (character_entity, char_data, appearance) in changed_characters.iter() {
-        // Find all sprite layers for this character
         for (hierarchy, layer_info, mut controller) in sprite_layers.iter_mut() {
-            // Only process layers that belong to this character
             if hierarchy.character_entity != character_entity {
                 continue;
             }
 
-            let sex_suffix = match appearance.gender {
-                crate::domain::character::Gender::Male => "남",
-                crate::domain::character::Gender::Female => "여",
-            };
-
-            // Generate new asset paths based on layer type
             let (sprite_path, act_path, palette_path) = match &layer_info.layer_type {
                 SpriteLayerType::Body => {
-                    // Update body sprite when gender changes
                     let job_class = crate::domain::character::JobClass::from(char_data.job_id);
                     let job_name = job_class.to_sprite_name();
 
-                    let sprite = format!(
-                        "ro://data/sprite/인간족/몸통/{}/{}_{}.spr",
-                        sex_suffix, job_name, sex_suffix
-                    );
-                    let act = format!(
-                        "ro://data/sprite/인간족/몸통/{}/{}_{}.act",
-                        sex_suffix, job_name, sex_suffix
-                    );
+                    let sprite = body_sprite_path(appearance.gender, &job_name);
+                    let act = body_action_path(appearance.gender, &job_name);
                     (sprite, act, None)
                 }
                 SpriteLayerType::Equipment(EquipmentSlot::HeadBottom)
                 | SpriteLayerType::Equipment(EquipmentSlot::HeadMid)
                 | SpriteLayerType::Equipment(EquipmentSlot::HeadTop) => {
-                    // Update head sprites when hair style/color or gender changes
-                    let sprite = format!(
-                        "ro://data/sprite/인간족/머리통/{}/{}_{}.spr",
-                        sex_suffix, appearance.hair_style, sex_suffix
-                    );
-                    let act = format!(
-                        "ro://data/sprite/인간족/머리통/{}/{}_{}.act",
-                        sex_suffix, appearance.hair_style, sex_suffix
-                    );
+                    let sprite = head_sprite_path(appearance.gender, appearance.hair_style);
+                    let act = head_action_path(appearance.gender, appearance.hair_style);
 
                     let palette = if appearance.hair_color > 0 {
-                        Some(format!(
-                            "ro://data/palette/머리/{}_{}_{}.pal",
-                            appearance.hair_style, sex_suffix, appearance.hair_color
+                        Some(hair_palette_path(
+                            appearance.hair_style,
+                            appearance.gender,
+                            appearance.hair_color,
                         ))
                     } else {
                         None
@@ -881,20 +1105,35 @@ pub fn update_sprite_layers_on_appearance_change(
                 _ => continue, // Skip other layer types
             };
 
-            // Load new assets
             let new_sprite_handle: Handle<RoSpriteAsset> = asset_server.load(&sprite_path);
             let new_act_handle: Handle<RoActAsset> = asset_server.load(&act_path);
             let palette_handle = palette_path
                 .as_ref()
                 .map(|path| asset_server.load::<RoPaletteAsset>(path));
 
-            // Update the animation controller with new assets
             controller.sprite_handle = new_sprite_handle;
             controller.action_handle = new_act_handle;
             controller.palette_handle = palette_handle;
             controller.reset(); // Reset animation to frame 0
         }
     }
+}
+
+/// Creates a standard sprite material for character layers
+fn create_sprite_material(materials: &mut Assets<StandardMaterial>) -> Handle<StandardMaterial> {
+    materials.add(StandardMaterial {
+        base_color_texture: None,
+        base_color: Color::WHITE,
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        cull_mode: None,
+        ..default()
+    })
+}
+
+/// Generates the moonshine-object path for an equipment slot
+fn equipment_layer_path(slot: EquipmentSlot) -> String {
+    format!("Equipment/{:?}", slot)
 }
 
 // Plugin to set up sprite hierarchy systems
@@ -911,8 +1150,8 @@ impl Plugin for CharacterSpriteHierarchyPlugin {
                 Update,
                 (
                     spawn_character_sprite_hierarchy,
-                    populate_sprite_layers_with_assets, // Load assets and add RoAnimationController
-                    update_sprite_layers_on_appearance_change, // Update assets when appearance changes
+                    populate_sprite_layers_with_assets,
+                    update_sprite_layers_on_appearance_change,
                     handle_equipment_changes,
                     handle_status_effect_visuals,
                     handle_sprite_animation_changes,

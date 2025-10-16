@@ -7,18 +7,21 @@ use bevy::prelude::*;
 
 use crate::domain::entities::character::states::{AnimationState, ContextState, GameplayState};
 
+// Type alias for querying unified character entities
+type UnifiedCharacterFilter = (
+    With<components::CharacterData>,
+    With<components::CharacterAppearance>,
+    With<components::EquipmentSet>,
+);
+
 // Plugin that sets up the unified character entity system
 pub struct UnifiedCharacterEntityPlugin;
 
 impl Plugin for UnifiedCharacterEntityPlugin {
     fn build(&self, app: &mut App) {
-        // Setup character state machines
         states::setup_character_state_machines(app);
 
-        app
-            // Add sprite hierarchy management
-            .add_plugins(sprite_hierarchy::CharacterSpriteHierarchyPlugin)
-            // Add trigger insertion systems
+        app.add_plugins(sprite_hierarchy::CharacterSpriteHierarchyPlugin)
             .add_systems(
                 Update,
                 (
@@ -70,18 +73,7 @@ pub fn spawn_unified_character(
 // Helper to check if an entity has the unified character components
 pub fn is_unified_character(
     entity: Entity,
-    characters: &Query<
-        (),
-        (
-            With<components::CharacterData>,
-            With<components::CharacterAppearance>,
-            With<components::EquipmentSet>,
-        ),
-    >,
+    characters: &Query<(), UnifiedCharacterFilter>,
 ) -> bool {
     characters.get(entity).is_ok()
 }
-
-// Note: 3D billboard sprite rendering is now unified into CharacterSpriteHierarchyPlugin
-// The previous Character3dSpritePlugin has been removed as its functionality
-// is fully integrated into the sprite hierarchy system

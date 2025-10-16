@@ -30,7 +30,6 @@ impl Default for AnimatedRoSpriteBundle {
     }
 }
 
-/// Factory for creating animated RO sprites with various configurations
 pub struct RoSpriteFactory;
 
 impl RoSpriteFactory {
@@ -75,14 +74,12 @@ impl RoSpriteFactory {
         position: Vec3,
         action_index: usize,
     ) -> Entity {
-        // Load assets using AssetServer (paths should already have "ro://" prefix)
         let sprite_handle: Handle<RoSpriteAsset> = asset_server.load(&sprite_path);
         let act_handle: Handle<RoActAsset> = asset_server.load(&act_path);
         let palette_handle = palette_path
             .as_ref()
             .map(|path| asset_server.load::<RoPaletteAsset>(path));
 
-        // Create entity with loading handles
         let entity = commands
             .spawn((
                 Transform::from_translation(position),
@@ -117,17 +114,14 @@ pub struct PendingSpriteLoad {
 pub fn finalize_pending_sprite_loads(
     mut commands: Commands,
     pending_query: Query<(Entity, &PendingSpriteLoad)>,
-    asset_server: Res<AssetServer>,
     sprites: Res<Assets<RoSpriteAsset>>,
     actions: Res<Assets<RoActAsset>>,
 ) {
     for (entity, pending) in pending_query.iter() {
-        // Check if all required assets are loaded
         let sprite_loaded = sprites.get(&pending.sprite_handle).is_some();
         let act_loaded = actions.get(&pending.act_handle).is_some();
 
         if sprite_loaded && act_loaded {
-            // All assets loaded - create controller
             let mut controller = RoAnimationController::new(
                 pending.sprite_handle.clone(),
                 pending.act_handle.clone(),
@@ -139,14 +133,12 @@ pub fn finalize_pending_sprite_loads(
                 controller = controller.with_palette(palette.clone());
             }
 
-            // Update entity with animation controller
             commands.entity(entity).insert((
                 controller,
                 Sprite::default(),
                 Name::new("RoSprite_Active"),
             ));
 
-            // Remove pending component
             commands.entity(entity).remove::<PendingSpriteLoad>();
 
             info!("Finalized sprite load for entity: {:?}", entity);
