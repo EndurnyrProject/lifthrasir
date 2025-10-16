@@ -1,4 +1,7 @@
-use crate::{domain::world::components::MapLoader, infrastructure::assets::loaders::RoGroundAsset};
+use crate::{
+    domain::world::components::MapLoader,
+    infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
+};
 use bevy::math::primitives::InfinitePlane3d;
 use bevy::prelude::*;
 
@@ -10,7 +13,7 @@ pub fn render_terrain_cursor(
     mut gizmos: Gizmos,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     map_loader_query: Query<&MapLoader>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
+    altitude_assets: Res<Assets<RoAltitudeAsset>>,
     cursor_pos: Res<ForwardedCursorPosition>,
 ) {
     let Ok((camera, camera_transform)) = camera_query.single() else {
@@ -21,8 +24,13 @@ pub fn render_terrain_cursor(
         return; // Map not loaded yet
     };
 
-    let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
-        return; // Ground asset not loaded yet
+    // Get altitude (GAT) asset for collision/walkable terrain height
+    let Some(altitude_handle) = &map_loader.altitude else {
+        return; // Altitude not available
+    };
+
+    let Some(altitude_asset) = altitude_assets.get(altitude_handle) else {
+        return; // Altitude asset not loaded yet
     };
 
     let Some(cursor_position) = cursor_pos.position else {
@@ -43,16 +51,13 @@ pub fn render_terrain_cursor(
     // Calculate world position where ray hits ground
     let world_pos = ray.origin + ray.direction * distance;
 
-    // Get the actual terrain height at this position
-    let Some(terrain_height) = ground_asset
-        .ground
+    // Get GAT (collision/walkable terrain) height
+    let Some(gizmo_height) = altitude_asset
+        .altitude
         .get_terrain_height_at_position(world_pos)
     else {
         return; // Position outside terrain bounds
     };
-
-    // Subtract offset to move gizmo UP (since NEG_Y is up in RO coordinate system)
-    let gizmo_height = terrain_height - 2.0;
 
     // Draw crosshair at intersection point
     gizmos.line(

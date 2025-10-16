@@ -8,7 +8,7 @@ use crate::domain::entities::character::components::{
 use crate::domain::entities::components::RoAnimationController;
 use crate::domain::world::components::MapLoader;
 use crate::infrastructure::assets::loaders::{
-    RoActAsset, RoGroundAsset, RoPaletteAsset, RoSpriteAsset,
+    RoActAsset, RoAltitudeAsset, RoPaletteAsset, RoSpriteAsset,
 };
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 use bevy::{
@@ -93,7 +93,7 @@ pub fn spawn_character_sprite_hierarchy(
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_quad: Res<SharedSpriteQuad>,
     map_loader_query: Query<&MapLoader>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
+    altitude_assets: Res<Assets<RoAltitudeAsset>>,
 ) {
     for event in spawn_events.read() {
         // Check if the character entity still exists before spawning sprites
@@ -108,14 +108,17 @@ pub fn spawn_character_sprite_hierarchy(
         // Calculate world position with terrain height (if available)
         let mut world_position = event.spawn_position;
 
-        // Try to get terrain height at spawn position
+        // Try to get terrain height at spawn position from GAT (collision/walkable terrain)
+        // GAT height is used for gameplay positioning, not GND (visual terrain)
         if let Ok(map_loader) = map_loader_query.single() {
-            if let Some(ground_asset) = ground_assets.get(&map_loader.ground) {
-                if let Some(terrain_height) = ground_asset
-                    .ground
-                    .get_terrain_height_at_position(world_position)
-                {
-                    world_position.y = terrain_height;
+            if let Some(altitude_handle) = &map_loader.altitude {
+                if let Some(altitude_asset) = altitude_assets.get(altitude_handle) {
+                    if let Some(terrain_height) = altitude_asset
+                        .altitude
+                        .get_terrain_height_at_position(world_position)
+                    {
+                        world_position.y = terrain_height;
+                    }
                 }
             }
         }

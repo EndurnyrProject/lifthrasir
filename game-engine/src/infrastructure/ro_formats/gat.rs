@@ -1,3 +1,5 @@
+use crate::utils::constants::CELL_SIZE;
+use bevy::{log::info, prelude::Vec3};
 use nom::{
     bytes::complete::tag,
     number::complete::{le_f32, le_u32, le_u8},
@@ -95,6 +97,51 @@ impl RoAltitude {
         }
     }
 
+    /// Calculates the terrain height at a given world position using bilinear interpolation.
+    /// This method should be used for character positioning and gameplay logic.
+    /// Returns `None` if the position is outside the map boundaries.
+    ///
+    /// # Arguments
+    /// * `world_pos` - The world position to query (X, Y, Z coordinates)
+    ///
+    /// # Returns
+    /// * `Some(height)` - The interpolated terrain height in world coordinates
+    /// * `None` - If the position is outside the terrain bounds
+    ///
+    pub fn get_terrain_height_at_position(&self, world_pos: Vec3) -> Option<f32> {
+        // Convert world position to cell coordinates
+        // GAT has 2x the resolution of GND (200×200 vs 100×100), so scale by 2
+        let cell_x = (world_pos.x / CELL_SIZE * 2.0).floor() as i32;
+        let cell_z = (world_pos.z / CELL_SIZE * 2.0).floor() as i32;
+
+        // Bounds check
+        if cell_x < 0 || cell_x >= self.width as i32 || cell_z < 0 || cell_z >= self.height as i32 {
+            return None;
+        }
+
+        // Get cell at this position (cells are stored row-major: index = z * width + x)
+        let cell_index = (cell_z as usize) * (self.width as usize) + (cell_x as usize);
+        let cell = self.cells.get(cell_index)?;
+
+        // Calculate fractional position within cell [0.0, 1.0]
+        // Account for 2x resolution scaling
+        let fx = (world_pos.x / CELL_SIZE * 2.0).fract().abs();
+        let fz = (world_pos.z / CELL_SIZE * 2.0).fract().abs();
+
+        // info!("GAT: fx={}, fz={}", fx, fz);
+
+        // Bilinear interpolation based on corner heights
+        // GAT height layout: height[0]=bottom-left, height[1]=bottom-right,
+        //                    height[2]=top-left, height[3]=top-right
+        let v1 = cell.height[0] * (1.0 - fx) * fz;
+        let v2 = cell.height[1] * fx * fz;
+        let v3 = cell.height[2] * (1.0 - fx) * (1.0 - fz);
+        let v4 = cell.height[3] * fx * (1.0 - fz);
+        let interpolated_height = v1 + v2 + v3 + v4;
+
+        Some(interpolated_height - 1.5)
+    }
+
     pub fn count_walkable_cells(&self) -> usize {
         self.cells
             .iter()
@@ -139,6 +186,56 @@ fn parse_cells(input: &[u8], width: u32, height: u32) -> IResult<&[u8], Vec<GatC
         current_input = remaining;
     }
 
+    // Log statistics about loaded cells
+    if !cells.is_empty() {
+        // Calculate min/max heights
+        let mut min_height = f32::MAX;
+        let mut max_height = f32::MIN;
+        for cell in &cells {
+            for &h in &cell.height {
+                min_height = min_height.min(h);
+                max_height = max_height.max(h);
+            }
+        }
+
+        // Count unique height combinations
+        use std::collections::HashSet;
+        let unique_combinations: HashSet<_> = cells
+            .iter()
+            .map(|cell| {
+                (
+                    (cell.height[0] * 1000.0) as i32,
+                    (cell.height[1] * 1000.0) as i32,
+                    (cell.height[2] * 1000.0) as i32,
+                    (cell.height[3] * 1000.0) as i32,
+                )
+            })
+            .collect();
+
+        // Sample cells from different parts of the map
+        let sample_indices = [
+            count / 4,     // 25%
+            count / 2,     // 50%
+            count * 3 / 4, // 75%
+            count - 1,     // Last cell
+        ];
+
+        info!("GAT Parse Statistics:");
+        info!("  Total cells: {}", count);
+        info!("  Min height: {}, Max height: {}", min_height, max_height);
+        info!(
+            "  Unique height combinations: {}",
+            unique_combinations.len()
+        );
+        for &idx in &sample_indices {
+            let cell = &cells[idx];
+            info!(
+                "  Cell[{}]: heights=[{}, {}, {}, {}]",
+                idx, cell.height[0], cell.height[1], cell.height[2], cell.height[3]
+            );
+        }
+    }
+
     Ok((current_input, cells))
 }
 
@@ -147,6 +244,14 @@ fn parse_gat(input: &[u8]) -> IResult<&[u8], RoAltitude> {
     let (input, width) = le_u32(input)?;
     let (input, height) = le_u32(input)?;
     let (input, cells) = parse_cells(input, width, height)?;
+
+    info!(
+        "Parsed GAT: version={}, width={}, height={}, cells={}",
+        version,
+        width,
+        height,
+        cells.len()
+    );
 
     Ok((
         input,

@@ -1,5 +1,8 @@
 use crate::utils::{constants::CELL_SIZE, string_utils::parse_korean_string};
-use bevy::{log::error, prelude::Vec3};
+use bevy::{
+    log::{error, info},
+    prelude::Vec3,
+};
 use nom::{
     bytes::complete::{tag, take},
     number::complete::{le_f32, le_i32, le_u16, le_u32, le_u8},
@@ -49,7 +52,16 @@ pub struct RoGround {
 impl RoGround {
     pub fn from_bytes(input: &[u8]) -> Result<Self, GndError> {
         match parse_gnd(input) {
-            Ok((_, gnd)) => Ok(gnd),
+            Ok((_, gnd)) => {
+                info!(
+                    "Parsed GND: version={}, width={}, height={}, surfaces={}",
+                    gnd.version,
+                    gnd.width,
+                    gnd.height,
+                    gnd.surfaces.len()
+                );
+                Ok(gnd)
+            }
             Err(e) => {
                 error!("GND parse error: {:?}", e);
                 Err(GndError::ParseError(e.to_string()))
@@ -91,11 +103,8 @@ impl RoGround {
         let h_nw = surface.height[2];
         let h_ne = surface.height[3];
 
-        // Interpolate along south edge (z=0): SW to SE
         let height_south = h_sw * (1.0 - fx) + h_se * fx;
-        // Interpolate along north edge (z=1): NW to NE
         let height_north = h_nw * (1.0 - fx) + h_ne * fx;
-        // Interpolate between south and north edges
         let interpolated_height = height_south * (1.0 - fz) + height_north * fz;
 
         Some(interpolated_height)
