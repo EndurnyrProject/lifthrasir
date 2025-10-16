@@ -48,33 +48,52 @@ impl Plugin for CharacterDomainPlugin {
             .add_event::<ActorInitSent>();
 
         // Register character networking systems
+        // Split into smaller groups to avoid Rust tuple size limits
         app.add_systems(
             Update,
             (
                 crate::infrastructure::networking::char_client_update_system,
-                handle_char_server_events,
-                handle_request_character_list, // Handle explicit requests for cached character list
-                handle_select_character,
-                spawn_unified_character_from_selection, // Spawn character entities
-                handle_create_character,
-                handle_delete_character,
-                handle_zone_server_info,
-                handle_character_created,
-                handle_character_deleted,
-                handle_refresh_character_list, // Handle character list refresh requests
-                crate::infrastructure::networking::zone_connection_system,
-                crate::infrastructure::networking::zone_packet_handler_system,
-                handle_zone_auth_success,
-                start_map_loading_timer,
-                detect_map_loading_timeout,
-                detect_map_load_complete,
-                handle_map_load_complete,
-                handle_actor_init_sent,
+                (
+                    handle_character_list_events,
+                    handle_character_operations_success,
+                    handle_character_operations_errors,
+                    handle_zone_server_info_events,
+                    log_connection_info_events,
+                )
+                    .chain(),
+                (
+                    handle_request_character_list,
+                    handle_select_character,
+                    spawn_unified_character_from_selection,
+                    handle_create_character,
+                    handle_delete_character,
+                )
+                    .chain(),
+                (
+                    handle_zone_server_info,
+                    handle_character_created,
+                    handle_character_deleted,
+                    handle_refresh_character_list,
+                )
+                    .chain(),
+                (
+                    crate::infrastructure::networking::zone_connection_system,
+                    crate::infrastructure::networking::zone_packet_handler_system,
+                    handle_zone_auth_success,
+                )
+                    .chain(),
+                (
+                    start_map_loading_timer,
+                    detect_map_loading_timeout,
+                    detect_map_load_complete,
+                    handle_map_load_complete,
+                    handle_actor_init_sent,
+                )
+                    .chain(),
             )
-                .chain(), // Chain them to ensure update runs before event handlers
+                .chain(),
         );
 
-        // System that spawns character sprite on game start
         app.add_systems(
             OnEnter(GameState::InGame),
             spawn_character_sprite_on_game_start,

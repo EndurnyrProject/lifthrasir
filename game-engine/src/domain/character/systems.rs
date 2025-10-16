@@ -40,62 +40,43 @@ pub fn handle_request_character_list(
     }
 }
 
-pub fn handle_char_server_events(
+/// System 1: Handle character list received events
+pub fn handle_character_list_events(
     mut char_events: EventReader<CharServerEvent>,
-    user_session: Option<Res<UserSession>>,
     mut list_events: EventWriter<CharacterListReceivedEvent>,
-    mut zone_events: EventWriter<ZoneServerInfoReceivedEvent>,
-    mut created_events: EventWriter<CharacterCreatedEvent>,
-    mut deleted_events: EventWriter<CharacterDeletedEvent>,
-    mut creation_failed_events: EventWriter<CharacterCreationFailedEvent>,
-    mut deletion_failed_events: EventWriter<CharacterDeletionFailedEvent>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     for event in char_events.read() {
-        match event {
-            CharServerEvent::CharacterListReceived(characters) => {
-                let mut char_list = vec![None; 15];
+        if let CharServerEvent::CharacterListReceived(characters) = event {
+            let mut char_list = vec![None; 15];
 
-                for net_char in characters {
-                    let char_info = CharacterInfo::from(net_char.clone());
-                    let slot = net_char.char_num as usize;
-                    if slot < char_list.len() {
-                        char_list[slot] = Some(char_info);
-                    }
+            for net_char in characters {
+                let char_info = CharacterInfo::from(net_char.clone());
+                let slot = net_char.char_num as usize;
+                if slot < char_list.len() {
+                    char_list[slot] = Some(char_info);
                 }
-
-                list_events.write(CharacterListReceivedEvent {
-                    characters: char_list,
-                    max_slots: 9,
-                    available_slots: 9,
-                });
-
-                next_state.set(GameState::CharacterSelection);
             }
-            CharServerEvent::ZoneServerInfo {
-                char_id,
-                map_name,
-                ip,
-                port,
-            } => {
-                let Some(session) = user_session.as_ref() else {
-                    error!(
-                        "ZoneServerInfo received but UserSession not available - cannot proceed"
-                    );
-                    continue;
-                };
 
-                let server_ip = format!("{}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
-                zone_events.write(ZoneServerInfoReceivedEvent {
-                    char_id: *char_id,
-                    map_name: map_name.clone(),
-                    server_ip,
-                    server_port: *port,
-                    account_id: session.tokens.account_id,
-                    login_id1: session.tokens.login_id1,
-                    sex: session.sex,
-                });
-            }
+            list_events.write(CharacterListReceivedEvent {
+                characters: char_list,
+                max_slots: 9,
+                available_slots: 9,
+            });
+
+            next_state.set(GameState::CharacterSelection);
+        }
+    }
+}
+
+/// System 2: Handle successful character operations
+pub fn handle_character_operations_success(
+    mut char_events: EventReader<CharServerEvent>,
+    mut created_events: EventWriter<CharacterCreatedEvent>,
+    mut deleted_events: EventWriter<CharacterDeletedEvent>,
+) {
+    for event in char_events.read() {
+        match event {
             CharServerEvent::CharacterCreated(net_char) => {
                 let char_info = CharacterInfo::from(net_char.clone());
                 created_events.write(CharacterCreatedEvent {
@@ -106,6 +87,19 @@ pub fn handle_char_server_events(
             CharServerEvent::CharacterDeleted => {
                 deleted_events.write(CharacterDeletedEvent { character_id: 0 });
             }
+            _ => {}
+        }
+    }
+}
+
+/// System 3: Handle character operation errors
+pub fn handle_character_operations_errors(
+    mut char_events: EventReader<CharServerEvent>,
+    mut creation_failed_events: EventWriter<CharacterCreationFailedEvent>,
+    mut deletion_failed_events: EventWriter<CharacterDeletionFailedEvent>,
+) {
+    for event in char_events.read() {
+        match event {
             CharServerEvent::CharacterCreationFailed(error_code) => {
                 let error_msg = match error_code {
                     0x00 => "Character name already exists",
@@ -131,6 +125,48 @@ pub fn handle_char_server_events(
                     error: error_msg.to_string(),
                 });
             }
+            _ => {}
+        }
+    }
+}
+
+/// System 4: Handle zone server information
+pub fn handle_zone_server_info_events(
+    mut char_events: EventReader<CharServerEvent>,
+    user_session: Option<Res<UserSession>>,
+    mut zone_events: EventWriter<ZoneServerInfoReceivedEvent>,
+) {
+    for event in char_events.read() {
+        if let CharServerEvent::ZoneServerInfo {
+            char_id,
+            map_name,
+            ip,
+            port,
+        } = event
+        {
+            let Some(session) = user_session.as_ref() else {
+                error!("ZoneServerInfo received but UserSession not available - cannot proceed");
+                continue;
+            };
+
+            let server_ip = format!("{}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
+            zone_events.write(ZoneServerInfoReceivedEvent {
+                char_id: *char_id,
+                map_name: map_name.clone(),
+                server_ip,
+                server_port: *port,
+                account_id: session.tokens.account_id,
+                login_id1: session.tokens.login_id1,
+                sex: session.sex,
+            });
+        }
+    }
+}
+
+/// System 5: Log connection info events
+pub fn log_connection_info_events(mut char_events: EventReader<CharServerEvent>) {
+    for event in char_events.read() {
+        match event {
             CharServerEvent::ConnectionError(error) => {
                 error!("Character server connection error: {:?}", error);
             }
@@ -164,6 +200,7 @@ pub fn handle_char_server_events(
                     _ => warn!("Unknown pincode state: {}", state),
                 }
             }
+            _ => {}
         }
     }
 }
@@ -233,7 +270,6 @@ pub fn handle_create_character(
     mut char_client: Option<ResMut<CharServerClient>>,
 ) {
     for event in events.read() {
-        // Validate form before sending
         if let Err(e) = event.form.validate() {
             error!("Character creation validation failed: {:?}", e);
             continue;
@@ -280,14 +316,12 @@ pub fn handle_zone_server_info(
     for event in events.read() {
         info!("Connecting to zone server: {}", event.map_name);
         game_state.set(GameState::Connecting);
-        // zone_connection_system will handle the actual connection
     }
 }
 
 pub fn handle_zone_auth_success(
     mut events: EventReader<ZoneAuthenticationSuccess>,
     zone_client: Option<Res<crate::infrastructure::networking::ZoneServerClient>>,
-    current_state: Res<State<GameState>>,
     mut commands: Commands,
     mut map_loading_events: EventWriter<MapLoadingStarted>,
     mut game_state: ResMut<NextState<GameState>>,
@@ -433,7 +467,6 @@ pub fn detect_map_loading_timeout(
         return;
     };
 
-    // If MapData exists, map loaded successfully - remove timer
     if !map_data_query.is_empty() {
         debug!(
             "Map '{}' loaded successfully, removing timeout timer",
@@ -443,7 +476,6 @@ pub fn detect_map_loading_timeout(
         return;
     }
 
-    // Check if timeout has occurred
     if timer_res.started.elapsed() > MAP_LOADING_TIMEOUT {
         error!(
             "Map loading timeout for '{}' - assets failed to load within 30 seconds",
@@ -452,7 +484,6 @@ pub fn detect_map_loading_timeout(
 
         let map_name = timer_res.map_name.clone();
 
-        // Emit failure event
         failed_events.write(MapLoadingFailed {
             map_name: map_name.clone(),
             reason: format!(
@@ -461,16 +492,13 @@ pub fn detect_map_loading_timeout(
             ),
         });
 
-        // Disconnect from zone server
         if let Some(client) = zone_client.as_deref_mut() {
             debug!("Disconnecting from zone server due to timeout");
             client.disconnect();
         }
 
-        // Remove timer resource
         commands.remove_resource::<MapLoadingTimer>();
 
-        // Return to character selection
         game_state.set(GameState::CharacterSelection);
     }
 }
@@ -512,12 +540,10 @@ pub fn spawn_character_sprite_on_game_start(
         if let Some(ground_asset) = ground_assets.get(&map_loader.ground) {
             (ground_asset.ground.width, ground_asset.ground.height)
         } else {
-            warn!("Ground asset not loaded yet, using default dimensions");
-            (100, 100)
+            panic!("MapLoader entity found but ground asset not loaded yet");
         }
     } else {
-        warn!("No MapLoader entity found, using default dimensions");
-        (100, 100)
+        panic!("No MapLoader entity found - cannot determine map dimensions");
     };
 
     // Calculate world position from spawn coordinates
