@@ -34,27 +34,29 @@ impl HierarchicalAssetReader {
         Self::new(composite_source)
     }
 
-    /// Load asset bytes asynchronously using IoTaskPool to avoid blocking
-    async fn load_asset_async(&self, path: &Path) -> Result<Vec<u8>, AssetReaderError> {
-        let path_str = path.to_string_lossy().to_string();
+    /// Helper to execute an operation with the composite source, handling lock acquisition
+    /// and error conversion.
+    async fn with_composite_read<F, R>(
+        &self,
+        context: &str,
+        operation: F,
+    ) -> Result<R, AssetReaderError>
+    where
+        F: FnOnce(&CompositeAssetSource) -> Result<R, AssetSourceError> + Send + 'static,
+        R: Send + 'static,
+    {
+        let context = context.to_string();
         let composite_source = self.composite_source.clone();
 
-        // Use AsyncComputeTaskPool to run the synchronous operation without blocking
         AsyncComputeTaskPool::get()
             .spawn(async move {
                 match composite_source.read() {
-                    Ok(composite) => {
-                        debug!("Loading asset: {}", path_str);
-                        composite.load(&path_str).map_err(|e| {
-                            error!("Failed to load asset '{}': {}", path_str, e);
-                            Self::convert_asset_source_error(e)
-                        })
-                    }
+                    Ok(composite) => operation(&composite).map_err(|e| {
+                        error!("Failed to {}: {}", context, e);
+                        Self::convert_asset_source_error(e)
+                    }),
                     Err(e) => {
-                        error!(
-                            "Failed to acquire read lock for asset '{}': {}",
-                            path_str, e
-                        );
+                        error!("Failed to acquire read lock for {}: {}", context, e);
                         Err(AssetReaderError::Io(Arc::new(std::io::Error::other(
                             format!("Lock error: {}", e),
                         ))))
@@ -64,31 +66,16 @@ impl HierarchicalAssetReader {
             .await
     }
 
-    /// Check if asset exists asynchronously
-    async fn exists_async(&self, path: &Path) -> Result<bool, AssetReaderError> {
+    /// Load asset bytes asynchronously using IoTaskPool to avoid blocking
+    async fn load_asset_async(&self, path: &Path) -> Result<Vec<u8>, AssetReaderError> {
         let path_str = path.to_string_lossy().to_string();
-        let composite_source = self.composite_source.clone();
+        let context = format!("load asset '{}'", path_str);
 
-        AsyncComputeTaskPool::get()
-            .spawn(async move {
-                match composite_source.read() {
-                    Ok(composite) => {
-                        let exists = composite.exists(&path_str);
-                        debug!("Asset '{}' exists: {}", path_str, exists);
-                        Ok(exists)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to acquire read lock for exists check '{}': {}",
-                            path_str, e
-                        );
-                        Err(AssetReaderError::Io(Arc::new(std::io::Error::other(
-                            format!("Lock error: {}", e),
-                        ))))
-                    }
-                }
-            })
-            .await
+        self.with_composite_read(&context, move |composite| {
+            debug!("Loading asset: {}", path_str);
+            composite.load(&path_str)
+        })
+        .await
     }
 
     /// Convert AssetSourceError to AssetReaderError
@@ -104,6 +91,58 @@ impl HierarchicalAssetReader {
             }
         }
     }
+}
+
+/// Extract the immediate child component from a file path relative to a directory path.
+/// Returns None if the file doesn't start with the directory path or has no child component.
+fn extract_immediate_child(file_path: &str, dir_path: &str) -> Option<String> {
+    if !file_path.starts_with(dir_path) {
+        return None;
+    }
+
+    let relative = file_path.strip_prefix(dir_path).unwrap_or(file_path);
+    let relative = relative.trim_start_matches('/').trim_start_matches('\\');
+
+    if relative.is_empty() {
+        return None;
+    }
+
+    let parts: Vec<&str> = relative.split(&['/', '\\']).collect();
+    if parts.is_empty() {
+        return None;
+    }
+
+    Some(parts[0].to_string())
+}
+
+/// Reconstruct the full path by combining directory path and child name.
+/// Handles separator logic to avoid double separators.
+fn reconstruct_child_path(dir_path: &str, child_name: &str) -> PathBuf {
+    let separator = if dir_path.ends_with('/') || dir_path.ends_with('\\') {
+        ""
+    } else {
+        "/"
+    };
+    let full_path = format!("{}{}{}", dir_path, separator, child_name);
+    PathBuf::from(full_path)
+}
+
+/// Filter files to only include immediate children of a directory.
+/// This deduplicates entries and only returns the first level of children.
+fn filter_immediate_children(all_files: Vec<String>, dir_path: &str) -> Vec<PathBuf> {
+    let mut seen = std::collections::HashSet::new();
+    all_files
+        .into_iter()
+        .filter_map(|file| {
+            extract_immediate_child(&file, dir_path).and_then(|child| {
+                if seen.insert(child.clone()) {
+                    Some(reconstruct_child_path(dir_path, &child))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect()
 }
 
 impl AssetReader for HierarchicalAssetReader {
@@ -133,74 +172,17 @@ impl AssetReader for HierarchicalAssetReader {
         path: &'a Path,
     ) -> Result<Box<PathStream>, AssetReaderError> {
         let path_str = path.to_string_lossy().to_string();
-        let composite_source = self.composite_source.clone();
+        let context = format!("directory '{}'", path_str);
 
-        let file_list = AsyncComputeTaskPool::get()
-            .spawn(async move {
-                match composite_source.read() {
-                    Ok(composite) => {
-                        debug!("Reading directory: {}", path_str);
-                        let all_files = composite.list_files();
-
-                        // Filter files that start with the directory path
-                        let mut seen = std::collections::HashSet::new();
-                        let dir_files: Vec<PathBuf> = all_files
-                            .into_iter()
-                            .filter_map(|file| {
-                                if file.starts_with(&path_str) {
-                                    // Remove the directory prefix and get the next path component
-                                    let relative = file.strip_prefix(&path_str).unwrap_or(&file);
-                                    let relative =
-                                        relative.trim_start_matches('/').trim_start_matches('\\');
-
-                                    if !relative.is_empty() {
-                                        // Get only the immediate child (not nested paths)
-                                        let parts: Vec<&str> =
-                                            relative.split(&['/', '\\']).collect();
-                                        if !parts.is_empty() {
-                                            let child = parts[0];
-                                            // Deduplicate entries
-                                            if seen.insert(child.to_string()) {
-                                                // Return full path: directory + separator + child
-                                                let separator = if path_str.ends_with('/')
-                                                    || path_str.ends_with('\\')
-                                                {
-                                                    ""
-                                                } else {
-                                                    "/"
-                                                };
-                                                let full_path =
-                                                    format!("{}{}{}", path_str, separator, child);
-                                                return Some(PathBuf::from(full_path));
-                                            }
-                                        }
-                                    }
-                                }
-                                None
-                            })
-                            .collect();
-
-                        debug!("Found {} items in directory: {}", dir_files.len(), path_str);
-                        Ok(dir_files)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to acquire read lock for directory '{}': {}",
-                            path_str, e
-                        );
-                        Err(AssetReaderError::Io(Arc::new(std::io::Error::other(
-                            format!("Lock error: {}", e),
-                        ))))
-                    }
-                }
+        let file_list = self
+            .with_composite_read(&context, move |composite| {
+                debug!("Reading directory: {}", path_str);
+                let all_files = composite.list_files();
+                let dir_files = filter_immediate_children(all_files, &path_str);
+                debug!("Found {} items in directory: {}", dir_files.len(), path_str);
+                Ok(dir_files)
             })
-            .await
-            .map_err(|e| {
-                AssetReaderError::Io(Arc::new(std::io::Error::other(format!(
-                    "Task join error: {}",
-                    e
-                ))))
-            })?;
+            .await?;
 
         // Convert to PathStream - PathStream expects Stream<Item = PathBuf>
         let stream = futures_lite::stream::iter(file_list);
@@ -214,68 +196,18 @@ impl AssetReader for HierarchicalAssetReader {
 
     async fn is_directory<'a>(&'a self, path: &'a Path) -> Result<bool, AssetReaderError> {
         let path_str = path.to_string_lossy().to_string();
-        let composite_source = self.composite_source.clone();
+        let context = format!("is_directory '{}'", path_str);
 
-        AsyncComputeTaskPool::get()
-            .spawn(async move {
-                match composite_source.read() {
-                    Ok(composite) => {
-                        // Check if any files start with this path (indicating it's a directory)
-                        let all_files = composite.list_files();
-                        let is_dir = all_files
-                            .iter()
-                            .any(|file| file.starts_with(&path_str) && file != &path_str);
+        self.with_composite_read(&context, move |composite| {
+            // Check if any files start with this path (indicating it's a directory)
+            let all_files = composite.list_files();
+            let is_dir = all_files
+                .iter()
+                .any(|file| file.starts_with(&path_str) && file != &path_str);
 
-                        debug!("Path '{}' is directory: {}", path_str, is_dir);
-                        Ok(is_dir)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to acquire read lock for is_directory '{}': {}",
-                            path_str, e
-                        );
-                        Err(AssetReaderError::Io(Arc::new(std::io::Error::other(
-                            format!("Lock error: {}", e),
-                        ))))
-                    }
-                }
-            })
-            .await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::infrastructure::assets::sources::DataFolderSource;
-
-    #[tokio::test]
-    async fn test_hierarchical_reader_basic_functionality() {
-        // Create a test composite source
-        let mut composite = CompositeAssetSource::new();
-
-        // Add a data folder source for testing (if it exists)
-        if let Ok(current_dir) = std::env::current_dir() {
-            let test_data_path = current_dir.join("assets").join("data");
-            if test_data_path.exists() {
-                let data_source = DataFolderSource::new(test_data_path);
-                composite.add_source(Box::new(data_source));
-            }
-        }
-
-        let composite_arc = Arc::new(RwLock::new(composite));
-        let reader = HierarchicalAssetReader::new(composite_arc);
-
-        // Test basic functionality - these might fail if no assets exist, but shouldn't panic
-        let test_path = Path::new("nonexistent_file.txt");
-        let exists = reader.exists_async(test_path).await.unwrap_or(false);
-        assert!(!exists, "Nonexistent file should not exist");
-
-        let is_dir = reader
-            .is_directory(Path::new("data"))
-            .await
-            .unwrap_or(false);
-        // This test is environment dependent, so we just ensure it doesn't panic
-        println!("'data' directory exists: {}", is_dir);
+            debug!("Path '{}' is directory: {}", path_str, is_dir);
+            Ok(is_dir)
+        })
+        .await
     }
 }

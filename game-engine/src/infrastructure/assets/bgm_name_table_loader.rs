@@ -41,7 +41,6 @@ impl AssetLoader for BgmNameTableLoader {
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
 
-        // Parse the file as EUC-KR (Korean encoding used in RO files)
         let (decoded, _, _) = EUC_KR.decode(&bytes);
         let content = decoded.into_owned();
 

@@ -1,6 +1,7 @@
 use crate::infrastructure::assets::loaders::RoPaletteAsset;
 use crate::infrastructure::ro_formats::{sprite::SpriteFrame, Palette};
 use crate::utils::SPRITE_SCALE_SMALL;
+use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::{
     prelude::*,
     render::{
@@ -158,7 +159,7 @@ pub fn apply_magenta_transparency(rgba_data: &mut [u8]) {
     // Thresholds for near-magenta detection
     // Broad thresholds to catch variations from texture filtering/compression
     const MAGENTA_THRESHOLD: u8 = 240; // R and B should be >= 240 (was 250)
-    const GREEN_THRESHOLD: u8 = 15;     // G should be <= 15 (was 5)
+    const GREEN_THRESHOLD: u8 = 15; // G should be <= 15 (was 5)
 
     // Process every 4 bytes (RGBA)
     for pixel in rgba_data.chunks_exact_mut(4) {
@@ -224,7 +225,6 @@ pub fn decode_image_from_bytes(
     );
 
     // Set sampler to repeat for tiling textures like water
-    use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
     bevy_image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
         address_mode_u: ImageAddressMode::Repeat,
         address_mode_v: ImageAddressMode::Repeat,

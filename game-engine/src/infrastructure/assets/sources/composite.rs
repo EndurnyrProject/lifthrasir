@@ -143,9 +143,6 @@ impl AssetSource for CompositeAssetSource {
     fn load(&self, path: &str) -> Result<Vec<u8>, AssetSourceError> {
         if let Some(source_idx) = self.find_source_for_asset(path) {
             if let Some(source) = self.sources.get(source_idx) {
-                // Note: We would cache the successful resolution here, but due to borrowing constraints
-                // in this trait method, we'll rely on the find_source_for_asset method's internal caching
-
                 return source.load(path);
             }
         }
