@@ -96,13 +96,14 @@ fn advance_animation_frame(
 fn render_current_frame(
     entity: Entity,
     controller: &mut RoAnimationController,
-    sprite: &crate::infrastructure::ro_formats::RoSprite,
-    action: &crate::infrastructure::ro_formats::RoAction,
+    assets: &AnimationAssets,
     transform: &Transform,
     ro_palettes: &Assets<RoPaletteAsset>,
     images: &mut Assets<Image>,
     commands: &mut Commands,
 ) {
+    let sprite = &assets.sprite.sprite;
+    let action = &assets.action.action;
     let Some(action_seq) = action.actions.get(controller.action_index) else {
         return;
     };
@@ -174,7 +175,6 @@ pub fn animate_sprites(
             continue;
         };
 
-        let sprite = &assets.sprite.sprite;
         let action = &assets.action.action;
 
         advance_animation_frame(&mut controller, action, sprite_layer, &time);
@@ -182,8 +182,7 @@ pub fn animate_sprites(
         render_current_frame(
             entity,
             &mut controller,
-            sprite,
-            action,
+            &assets,
             transform,
             &ro_palettes,
             &mut images,

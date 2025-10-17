@@ -39,7 +39,11 @@ impl ClientPacket for ChCharlistReqPacket {
 
         buf.put_u16_le(Self::PACKET_ID);
 
-        debug_assert_eq!(buf.len(), PACKET_SIZE, "CH_CHARLIST_REQ packet size mismatch");
+        debug_assert_eq!(
+            buf.len(),
+            PACKET_SIZE,
+            "CH_CHARLIST_REQ packet size mismatch"
+        );
 
         buf.freeze()
     }

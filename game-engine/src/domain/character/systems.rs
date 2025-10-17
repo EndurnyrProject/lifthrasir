@@ -3,12 +3,12 @@ use super::events::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
 use crate::domain::world::spawn_context::MapSpawnContext;
+use crate::infrastructure::networking::client::CharServerClient;
 use crate::infrastructure::networking::protocol::character::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
     CharacterServerConnected, ZoneServerInfoReceived,
 };
 use crate::infrastructure::networking::session::UserSession;
-use crate::infrastructure::networking::client::CharServerClient;
 use bevy::prelude::*;
 use std::time::{Duration, Instant};
 
@@ -296,10 +296,11 @@ pub fn handle_zone_server_info(
         }
 
         // Create ZoneServerClient with session data
-        let mut zone_client_instance = crate::infrastructure::networking::client::ZoneServerClient::with_session(
-            event.account_id,
-            event.char_id,
-        );
+        let mut zone_client_instance =
+            crate::infrastructure::networking::client::ZoneServerClient::with_session(
+                event.account_id,
+                event.char_id,
+            );
 
         // Connect immediately using the newly created instance
         let server_address = format!("{}:{}", event.server_ip, event.server_port);
@@ -335,7 +336,9 @@ pub fn handle_zone_server_info(
 /// System: Handle successful zone connection from protocol events
 /// Replaces the old zone_packet_handler_system
 pub fn handle_zone_server_connected_protocol(
-    mut protocol_events: EventReader<crate::infrastructure::networking::protocol::zone::ZoneServerConnected>,
+    mut protocol_events: EventReader<
+        crate::infrastructure::networking::protocol::zone::ZoneServerConnected,
+    >,
     zone_session: Option<Res<ZoneSessionData>>,
     mut domain_events: EventWriter<ZoneAuthenticationSuccess>,
     mut commands: Commands,
@@ -345,9 +348,7 @@ pub fn handle_zone_server_connected_protocol(
     for event in protocol_events.read() {
         info!(
             "Zone server accepted entry! Spawning at ({}, {}) facing {}",
-            event.spawn_data.position.x,
-            event.spawn_data.position.y,
-            event.spawn_data.position.dir
+            event.spawn_data.position.x, event.spawn_data.position.y, event.spawn_data.position.dir
         );
 
         // Get session data from resource
@@ -383,7 +384,9 @@ pub fn handle_zone_server_connected_protocol(
 
 /// System: Handle zone entry refused
 pub fn handle_zone_entry_refused_protocol(
-    mut protocol_events: EventReader<crate::infrastructure::networking::protocol::zone::ZoneEntryRefused>,
+    mut protocol_events: EventReader<
+        crate::infrastructure::networking::protocol::zone::ZoneEntryRefused,
+    >,
     mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
     mut domain_events: EventWriter<ZoneAuthenticationFailed>,
     mut game_state: ResMut<NextState<GameState>>,
@@ -421,7 +424,9 @@ pub fn handle_zone_entry_refused_protocol(
 /// System: Handle account ID received (ZC_AID packet)
 /// This is informational but we log it for debugging
 pub fn handle_account_id_received_protocol(
-    mut protocol_events: EventReader<crate::infrastructure::networking::protocol::zone::AccountIdReceived>,
+    mut protocol_events: EventReader<
+        crate::infrastructure::networking::protocol::zone::AccountIdReceived,
+    >,
 ) {
     for event in protocol_events.read() {
         debug!("Account ID confirmed by zone server: {}", event.account_id);

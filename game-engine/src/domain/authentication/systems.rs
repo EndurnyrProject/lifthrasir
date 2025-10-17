@@ -8,7 +8,9 @@ use crate::{
     infrastructure::{
         config::ClientConfig,
         networking::{
-            client::{login_client_update_system, CharServerClient, LoginClient, LoginEventWriters},
+            client::{
+                login_client_update_system, CharServerClient, LoginClient, LoginEventWriters,
+            },
             protocol::login::{LoginAccepted, LoginRefused},
             session::UserSession,
         },
@@ -253,10 +255,7 @@ fn check_client_config_loaded(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
     schedule = Update
 )]
-fn run_login_client_update(
-    client: Option<ResMut<LoginClient>>,
-    events: LoginEventWriters,
-) {
+fn run_login_client_update(client: Option<ResMut<LoginClient>>, events: LoginEventWriters) {
     login_client_update_system(client, events);
 }
 

@@ -158,9 +158,7 @@ fn parse_indexed_frame_rle(data: &[u8]) -> IResult<&[u8], SpriteFrame> {
                 decompressed_data.push(0);
             } else {
                 // Repeat the zero byte (count - 1) more times
-                for _ in 1..count {
-                    decompressed_data.push(0);
-                }
+                decompressed_data.extend(std::iter::repeat_n(0, (count - 1) as usize));
             }
         }
     }

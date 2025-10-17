@@ -16,10 +16,14 @@ pub fn write_login_success_response(
     mut pending: ResMut<PendingSenders>,
 ) {
     for event in success_events.read() {
-        info!("[BRIDGE] 📥 Received LoginSuccessEvent for account_id: {}",
-              event.session.tokens.account_id);
-        info!("[BRIDGE] 📋 Session contains {} server(s)",
-              event.session.server_list.len());
+        info!(
+            "[BRIDGE] 📥 Received LoginSuccessEvent for account_id: {}",
+            event.session.tokens.account_id
+        );
+        info!(
+            "[BRIDGE] 📋 Session contains {} server(s)",
+            event.session.server_list.len()
+        );
 
         // Find the sender for this username
         if let Some(sender) = pending.logins.senders.remove(&event.session.username) {
@@ -34,8 +38,10 @@ pub fn write_login_success_response(
                 servers: event.session.server_list.clone(),
             };
 
-            info!("[BRIDGE] 🚀 Sending session data to UI with {} server(s)",
-                  session_data.servers.len());
+            info!(
+                "[BRIDGE] 🚀 Sending session data to UI with {} server(s)",
+                session_data.servers.len()
+            );
 
             // Send response through oneshot channel
             match sender.send(Ok(session_data)) {
@@ -43,10 +49,14 @@ pub fn write_login_success_response(
                 Err(_) => warn!("[BRIDGE] ⚠️ Failed to send session data - receiver dropped"),
             }
         } else {
-            warn!("[BRIDGE] ⚠️ No pending sender found for username: '{}'",
-                  event.session.username);
-            warn!("[BRIDGE] 🔍 Available pending senders: {:?}",
-                  pending.logins.senders.keys().collect::<Vec<_>>());
+            warn!(
+                "[BRIDGE] ⚠️ No pending sender found for username: '{}'",
+                event.session.username
+            );
+            warn!(
+                "[BRIDGE] 🔍 Available pending senders: {:?}",
+                pending.logins.senders.keys().collect::<Vec<_>>()
+            );
         }
     }
 }

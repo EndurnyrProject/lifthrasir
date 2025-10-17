@@ -213,6 +213,14 @@ pub struct TerrainResources<'w, 's> {
     pub altitude_assets: Res<'w, Assets<RoAltitudeAsset>>,
 }
 
+/// Context struct for rendering resources passed to helper functions
+/// Groups config, materials, and shared quad to reduce parameter count
+struct RenderingContext<'a> {
+    config: &'a SpriteHierarchyConfig,
+    materials: &'a mut Assets<StandardMaterial>,
+    shared_quad: &'a SharedSpriteQuad,
+}
+
 /// Helper function to calculate terrain height at a given position
 /// Returns the adjusted position with terrain height applied (if available)
 fn calculate_terrain_height(position: Vec3, terrain: &TerrainResources) -> Vec3 {
@@ -386,14 +394,17 @@ pub fn handle_equipment_changes(
         remove_old_equipment(&mut commands, &character_obj, &equipment_path);
 
         if event.new_item_id.is_some() {
+            let mut rendering = RenderingContext {
+                config: &config,
+                materials: &mut materials,
+                shared_quad: &shared_quad,
+            };
             spawn_equipment_layer(
                 &mut commands,
                 event.slot,
                 event.character,
                 object_tree.root,
-                &config,
-                &mut materials,
-                &shared_quad,
+                &mut rendering,
             );
         }
     }
@@ -416,17 +427,15 @@ fn spawn_equipment_layer(
     slot: EquipmentSlot,
     character_entity: Entity,
     root_entity: Entity,
-    config: &SpriteHierarchyConfig,
-    materials: &mut Assets<StandardMaterial>,
-    shared_quad: &SharedSpriteQuad,
+    rendering: &mut RenderingContext,
 ) {
-    let material = create_sprite_material(materials);
+    let material = create_sprite_material(rendering.materials);
     let (marker, bundle) = create_equipment_bundle(
         slot,
         character_entity,
         material,
-        shared_quad.mesh.clone(),
-        config,
+        rendering.shared_quad.mesh.clone(),
+        rendering.config,
     );
 
     commands
@@ -461,15 +470,18 @@ pub fn handle_status_effect_visuals(
         let effect_path = format!("Effects/{:?}", event.effect_type);
 
         if event.add {
+            let mut rendering = RenderingContext {
+                config: &config,
+                materials: &mut materials,
+                shared_quad: &shared_quad,
+            };
             add_status_effect(
                 &mut commands,
                 &character_obj,
                 &effect_path,
                 event.effect_type,
                 event.character,
-                &config,
-                &mut materials,
-                &shared_quad,
+                &mut rendering,
             );
         } else {
             remove_status_effect(&mut commands, &character_obj, &effect_path);
@@ -484,9 +496,7 @@ fn add_status_effect(
     effect_path: &str,
     effect_type: EffectType,
     character_entity: Entity,
-    config: &SpriteHierarchyConfig,
-    materials: &mut Assets<StandardMaterial>,
-    shared_quad: &SharedSpriteQuad,
+    rendering: &mut RenderingContext,
 ) {
     // Check if effect already exists
     if character_obj.find_by_path(effect_path).is_some() {
@@ -501,14 +511,14 @@ fn add_status_effect(
 
     // Count existing effects for z-offset
     let effect_count = effects_container.children().count();
-    let z_offset = effect_count as f32 * config.default_z_spacing;
+    let z_offset = effect_count as f32 * rendering.config.default_z_spacing;
 
-    let material = create_sprite_material(materials);
+    let material = create_sprite_material(rendering.materials);
     let (marker, bundle) = create_effect_bundle(
         effect_type,
         character_entity,
         material,
-        shared_quad.mesh.clone(),
+        rendering.shared_quad.mesh.clone(),
         z_offset,
     );
 
@@ -986,8 +996,8 @@ pub fn populate_sprite_layers_with_assets(
                 let job_class = crate::domain::character::JobClass::from(char_data.job_id);
                 let job_name = job_class.to_sprite_name();
 
-                let sprite = body_sprite_path(appearance.gender, &job_name);
-                let act = body_action_path(appearance.gender, &job_name);
+                let sprite = body_sprite_path(appearance.gender, job_name);
+                let act = body_action_path(appearance.gender, job_name);
                 (sprite, act, None)
             }
             SpriteLayerType::Equipment(EquipmentSlot::HeadBottom)
@@ -1080,8 +1090,8 @@ pub fn update_sprite_layers_on_appearance_change(
                     let job_class = crate::domain::character::JobClass::from(char_data.job_id);
                     let job_name = job_class.to_sprite_name();
 
-                    let sprite = body_sprite_path(appearance.gender, &job_name);
-                    let act = body_action_path(appearance.gender, &job_name);
+                    let sprite = body_sprite_path(appearance.gender, job_name);
+                    let act = body_action_path(appearance.gender, job_name);
                     (sprite, act, None)
                 }
                 SpriteLayerType::Equipment(EquipmentSlot::HeadBottom)

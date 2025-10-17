@@ -16,6 +16,23 @@ use crate::{
     utils::constants::CELL_SIZE,
 };
 
+/// Type alias for maps ready for water loading
+type MapsReadyForWater<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static MapLoader,
+        &'static MapRequestLoader,
+        &'static MapData,
+    ),
+    (
+        Without<WaterSurface>,
+        Without<WaterLoadingState>,
+        With<MapData>,
+    ),
+>;
+
 /// Temporary component to track water texture loading state
 #[derive(Component)]
 pub struct WaterLoadingState {
@@ -34,14 +51,7 @@ pub fn load_water_system(
     world_assets: Res<Assets<RoWorldAsset>>,
     asset_server: Res<AssetServer>,
     ground_assets: Res<Assets<RoGroundAsset>>,
-    query: Query<
-        (Entity, &MapLoader, &MapRequestLoader, &MapData),
-        (
-            Without<WaterSurface>,
-            Without<WaterLoadingState>,
-            With<MapData>,
-        ),
-    >,
+    query: MapsReadyForWater,
 ) {
     for (entity, map_loader, _map_request, _) in query.iter() {
         let Some(world_handle) = map_loader.world.as_ref() else {

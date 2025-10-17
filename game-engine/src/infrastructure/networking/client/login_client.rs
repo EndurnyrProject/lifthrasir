@@ -240,10 +240,11 @@ pub fn login_client_update_system(
     }
 
     // Dispatch type-erased events to their corresponding EventWriters
-    crate::dispatch_events!(event_buffer, events, [
-        (LoginAccepted, accepted),
-        (LoginRefused, refused),
-    ]);
+    crate::dispatch_events!(
+        event_buffer,
+        events,
+        [(LoginAccepted, accepted), (LoginRefused, refused),]
+    );
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 use crate::{
-    infrastructure::networking::{session::UserSession, client::CharServerClient},
+    infrastructure::networking::{client::CharServerClient, session::UserSession},
     presentation::ui::events::ServerSelectedEvent,
 };
 use bevy::prelude::*;

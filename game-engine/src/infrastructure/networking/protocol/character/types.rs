@@ -1,6 +1,6 @@
+use byteorder::{LittleEndian, ReadBytesExt};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Cursor, Read};
-use byteorder::{LittleEndian, ReadBytesExt};
 
 /// Character information structure
 ///
@@ -59,15 +59,16 @@ impl CharacterInfo {
     ///
     /// Structure breakdown:
     /// - 12x u32 (48 bytes): char_id, zeny, job_level, body_state, health_state, option,
-    ///                       karma, manner, delete_date, robe, char_slot_change, char_rename
+    ///   karma, manner, delete_date, robe, char_slot_change, char_rename
     /// - 6x u64 (48 bytes): base_exp, job_exp, hp, max_hp, sp, max_sp
     /// - 15x u16 (30 bytes): status_point, walk_speed, class, hair, body, weapon, base_level,
-    ///                       skill_point, head_bottom, shield, head_top, head_mid, hair_color,
-    ///                       clothes_color, rename
+    ///   skill_point, head_bottom, shield, head_top, head_mid, hair_color,
+    ///   clothes_color, rename
     /// - 9x u8 (9 bytes): str, agi, vit, int, dex, luk, char_num, hair_color_alt, sex
     /// - name: [u8; 24] (24 bytes)
     /// - last_map: [u8; 16] (16 bytes)
-    /// Total: 175 bytes
+    ///
+    ///   Total: 175 bytes
     pub const SIZE_ACCEPT_ENTER: usize = 175;
 
     /// Size of a character info structure in bytes (175 bytes for HC_ACK_CHARINFO_PER_PAGE)
@@ -228,7 +229,10 @@ pub struct ZoneServerInfo {
 impl ZoneServerInfo {
     /// Convert IP address to dotted decimal notation
     pub fn ip_string(&self) -> String {
-        format!("{}.{}.{}.{}", self.ip[0], self.ip[1], self.ip[2], self.ip[3])
+        format!(
+            "{}.{}.{}.{}",
+            self.ip[0], self.ip[1], self.ip[2], self.ip[3]
+        )
     }
 }
 

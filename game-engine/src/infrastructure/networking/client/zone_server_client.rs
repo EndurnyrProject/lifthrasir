@@ -274,11 +274,15 @@ pub fn zone_server_update_system(
     }
 
     // Dispatch type-erased events to their corresponding EventWriters
-    crate::dispatch_events!(event_buffer, events, [
-        (ZoneServerConnected, connected),
-        (AccountIdReceived, aid_received),
-        (ZoneEntryRefused, entry_refused),
-    ]);
+    crate::dispatch_events!(
+        event_buffer,
+        events,
+        [
+            (ZoneServerConnected, connected),
+            (AccountIdReceived, aid_received),
+            (ZoneEntryRefused, entry_refused),
+        ]
+    );
 }
 
 #[cfg(test)]

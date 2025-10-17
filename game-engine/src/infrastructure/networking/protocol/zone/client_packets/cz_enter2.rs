@@ -36,13 +36,7 @@ pub struct CzEnter2Packet {
 
 impl CzEnter2Packet {
     /// Create a new CZ_ENTER2 packet
-    pub fn new(
-        account_id: u32,
-        char_id: u32,
-        auth_code: u32,
-        client_time: u32,
-        sex: u8,
-    ) -> Self {
+    pub fn new(account_id: u32, char_id: u32, auth_code: u32, client_time: u32, sex: u8) -> Self {
         Self {
             account_id,
             char_id,

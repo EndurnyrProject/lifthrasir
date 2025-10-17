@@ -216,10 +216,7 @@ pub fn setup_character_state_machines(app: &mut App) {
 // Trigger insertion systems for automatic state transitions
 pub fn insert_animation_triggers_from_gameplay_changes(
     mut commands: Commands,
-    characters: Query<
-        (Entity, &GameplayState, &AnimationState),
-        (With<StateMachine>, Changed<GameplayState>),
-    >,
+    characters: CharactersWithChangedGameplayState,
 ) {
     for (entity, gameplay_state, animation_state) in characters.iter() {
         match (gameplay_state, animation_state) {
@@ -253,10 +250,7 @@ pub fn insert_animation_triggers_from_gameplay_changes(
 /// Observes AnimationState changes and emits sprite animation events
 pub fn observe_animation_state_changes(
     mut animation_events: EventWriter<SpriteAnimationChangeEvent>,
-    changed_animations: Query<
-        (Entity, &AnimationState),
-        (Changed<AnimationState>, With<StateMachine>),
-    >,
+    changed_animations: CharactersWithChangedAnimationState,
 ) {
     for (entity, animation_state) in changed_animations.iter() {
         animation_events.write(SpriteAnimationChangeEvent {
@@ -275,7 +269,7 @@ pub fn observe_animation_state_changes(
 /// Observes GameplayState changes and emits status effect visual events
 pub fn observe_gameplay_state_changes(
     mut effect_events: EventWriter<StatusEffectVisualEvent>,
-    changed_gameplay: Query<(Entity, &GameplayState), (Changed<GameplayState>, With<StateMachine>)>,
+    changed_gameplay: CharactersWithChangedGameplay,
 ) {
     for (entity, gameplay_state) in changed_gameplay.iter() {
         info!(
@@ -357,6 +351,22 @@ type AnimationTriggerFilter = (
     )>,
     With<StateMachine>,
 );
+
+/// Type alias for characters with changed gameplay state
+type CharactersWithChangedGameplayState<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static GameplayState, &'static AnimationState),
+    (With<StateMachine>, Changed<GameplayState>),
+>;
+
+/// Type alias for characters with changed animation state
+type CharactersWithChangedAnimationState<'w, 's> =
+    Query<'w, 's, (Entity, &'static AnimationState), (Changed<AnimationState>, With<StateMachine>)>;
+
+/// Type alias for characters with changed gameplay state (simple version)
+type CharactersWithChangedGameplay<'w, 's> =
+    Query<'w, 's, (Entity, &'static GameplayState), (Changed<GameplayState>, With<StateMachine>)>;
 
 // System to automatically clear triggers after they've been processed
 pub fn cleanup_processed_triggers(

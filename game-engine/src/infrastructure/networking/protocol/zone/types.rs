@@ -67,13 +67,7 @@ pub struct SpawnData {
 
 impl SpawnData {
     /// Create new spawn data
-    pub fn new(
-        server_tick: u32,
-        position: Position,
-        x_size: u8,
-        y_size: u8,
-        font: u16,
-    ) -> Self {
+    pub fn new(server_tick: u32, position: Position, x_size: u8, y_size: u8, font: u16) -> Self {
         Self {
             server_tick,
             position,
@@ -128,9 +122,7 @@ impl ZoneEntryError {
             ZoneEntryError::AlreadyLoggedIn => "Someone has already logged in with this ID",
             ZoneEntryError::AlreadyLoggedInAlt => "Already logged in",
             ZoneEntryError::EnvironmentError => "Environment error",
-            ZoneEntryError::PreviousConnectionActive => {
-                "Server still recognizes last connection"
-            }
+            ZoneEntryError::PreviousConnectionActive => "Server still recognizes last connection",
             ZoneEntryError::Unknown(_) => "Unknown error",
         }
     }
@@ -155,9 +147,21 @@ mod tests {
             let encoded = position.encode();
             let decoded = Position::decode(encoded);
 
-            assert_eq!(position.x, decoded.x, "X coordinate mismatch for ({}, {}, {})", x, y, dir);
-            assert_eq!(position.y, decoded.y, "Y coordinate mismatch for ({}, {}, {})", x, y, dir);
-            assert_eq!(position.dir, decoded.dir, "Direction mismatch for ({}, {}, {})", x, y, dir);
+            assert_eq!(
+                position.x, decoded.x,
+                "X coordinate mismatch for ({}, {}, {})",
+                x, y, dir
+            );
+            assert_eq!(
+                position.y, decoded.y,
+                "Y coordinate mismatch for ({}, {}, {})",
+                x, y, dir
+            );
+            assert_eq!(
+                position.dir, decoded.dir,
+                "Direction mismatch for ({}, {}, {})",
+                x, y, dir
+            );
         }
     }
 

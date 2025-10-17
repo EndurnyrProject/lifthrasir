@@ -79,7 +79,10 @@ mod tests {
 
         assert_eq!(bytes.len(), PACKET_SIZE);
         assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), CH_ENTER);
-        assert_eq!(u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]), 123456);
+        assert_eq!(
+            u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]),
+            123456
+        );
     }
 
     #[test]

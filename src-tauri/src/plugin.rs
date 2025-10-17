@@ -26,6 +26,19 @@ use super::bridge::{
 use super::commands;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
 
+/// Type alias for window resize event system state
+type WindowResizeSystemState = SystemState<(
+    EventWriter<'static, WindowResized>,
+    Query<'static, 'static, (Entity, &'static mut Window)>,
+)>;
+
+/// Type alias for window scale factor change event system state
+type WindowFactorChangeSystemState = SystemState<(
+    EventWriter<'static, WindowResized>,
+    EventWriter<'static, WindowScaleFactorChanged>,
+    Query<'static, 'static, (Entity, &'static mut Window)>,
+)>;
+
 /// Custom renderer plugin that creates the WGPU surface from Tauri window
 struct CustomRendererPlugin {
     webview_window: WebviewWindow,
@@ -278,10 +291,8 @@ fn handle_tauri_events(
     event: RunEvent,
     mut app: RefMut<'_, BevyApp>,
 ) {
-    if app.plugins_state() != PluginsState::Cleaned {
-        if app.plugins_state() != PluginsState::Ready {
-            tick_global_task_pools_on_main_thread();
-        }
+    if app.plugins_state() != PluginsState::Cleaned && app.plugins_state() != PluginsState::Ready {
+        tick_global_task_pools_on_main_thread();
     }
 
     match event {
@@ -344,10 +355,7 @@ fn handle_window_event(event: tauri::WindowEvent, app: RefMut<'_, BevyApp>) {
 
 /// Handle window resize events
 fn handle_window_resize(size: tauri::PhysicalSize<u32>, mut app: RefMut<'_, BevyApp>) {
-    let mut event_writer_system_state: SystemState<(
-        EventWriter<WindowResized>,
-        Query<(Entity, &mut Window)>,
-    )> = SystemState::new(app.world_mut());
+    let mut event_writer_system_state: WindowResizeSystemState = SystemState::new(app.world_mut());
 
     let (mut window_resized, mut window_query) = event_writer_system_state.get_mut(app.world_mut());
 
@@ -367,11 +375,8 @@ fn handle_window_factor_change(
     new_inner_size: tauri::PhysicalSize<u32>,
     mut app: RefMut<'_, BevyApp>,
 ) {
-    let mut event_writer_system_state: SystemState<(
-        EventWriter<WindowResized>,
-        EventWriter<WindowScaleFactorChanged>,
-        Query<(Entity, &mut Window)>,
-    )> = SystemState::new(app.world_mut());
+    let mut event_writer_system_state: WindowFactorChangeSystemState =
+        SystemState::new(app.world_mut());
 
     let (mut window_resized, mut window_scale_factor_changed, mut window_query) =
         event_writer_system_state.get_mut(app.world_mut());

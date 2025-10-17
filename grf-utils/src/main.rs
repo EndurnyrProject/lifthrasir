@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use game_engine::infrastructure::ro_formats::GrfFile;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "grf-utils")]
@@ -72,8 +72,8 @@ fn run() -> Result<()> {
     Ok(())
 }
 
-fn load_grf(path: &PathBuf) -> Result<GrfFile> {
-    GrfFile::from_path(path.clone())
+fn load_grf(path: &Path) -> Result<GrfFile> {
+    GrfFile::from_path(path.to_path_buf())
         .with_context(|| format!("Failed to load GRF file: {}", path.display()))
 }
 
@@ -97,7 +97,7 @@ fn list_files(grf: &GrfFile) {
     println!("Total files: {}", grf.entries.len());
 }
 
-fn extract_files(grf: &GrfFile, files: &[String], output_path: &PathBuf) -> Result<()> {
+fn extract_files(grf: &GrfFile, files: &[String], output_path: &Path) -> Result<()> {
     // Create and canonicalize output directory for path traversal protection
     fs::create_dir_all(output_path).with_context(|| {
         format!(
@@ -124,7 +124,7 @@ fn extract_files(grf: &GrfFile, files: &[String], output_path: &PathBuf) -> Resu
     Ok(())
 }
 
-fn extract_all_files(grf: &GrfFile, canonical_output: &PathBuf) -> Result<()> {
+fn extract_all_files(grf: &GrfFile, canonical_output: &Path) -> Result<()> {
     let entries_count = grf.entries.len() as u64;
 
     println!("Extracting {} files...", entries_count);
@@ -212,11 +212,7 @@ fn extract_all_files(grf: &GrfFile, canonical_output: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn extract_specific_files(
-    grf: &GrfFile,
-    files: &[String],
-    canonical_output: &PathBuf,
-) -> Result<()> {
+fn extract_specific_files(grf: &GrfFile, files: &[String], canonical_output: &Path) -> Result<()> {
     println!("Extracting {} specific file(s)...", files.len());
 
     let pb = ProgressBar::new(files.len() as u64);

@@ -371,19 +371,23 @@ pub fn char_server_update_system(
     }
 
     // Dispatch type-erased events to their corresponding EventWriters
-    crate::dispatch_events!(event_buffer, events, [
-        (CharacterServerConnected, connected),
-        (ZoneServerInfoReceived, zone_info),
-        (CharacterCreated, char_created),
-        (CharacterCreationFailed, char_creation_failed),
-        (CharacterDeleted, char_deleted),
-        (CharacterDeletionFailed, char_deletion_failed),
-        (PingReceived, ping_received),
-        (SecondPasswordRequested, second_password),
-        (CharacterInfoPageReceived, char_info_page),
-        (CharacterSlotInfoReceived, char_slot_info),
-        (BlockedCharactersReceived, blocked_chars),
-    ]);
+    crate::dispatch_events!(
+        event_buffer,
+        events,
+        [
+            (CharacterServerConnected, connected),
+            (ZoneServerInfoReceived, zone_info),
+            (CharacterCreated, char_created),
+            (CharacterCreationFailed, char_creation_failed),
+            (CharacterDeleted, char_deleted),
+            (CharacterDeletionFailed, char_deletion_failed),
+            (PingReceived, ping_received),
+            (SecondPasswordRequested, second_password),
+            (CharacterInfoPageReceived, char_info_page),
+            (CharacterSlotInfoReceived, char_slot_info),
+            (BlockedCharactersReceived, blocked_chars),
+        ]
+    );
 }
 
 #[cfg(test)]

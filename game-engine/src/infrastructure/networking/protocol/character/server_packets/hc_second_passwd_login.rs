@@ -1,6 +1,5 @@
 use crate::infrastructure::networking::protocol::{
-    character::types::SecondPasswordState,
-    traits::ServerPacket,
+    character::types::SecondPasswordState, traits::ServerPacket,
 };
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{self, Cursor};

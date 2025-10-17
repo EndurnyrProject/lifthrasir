@@ -1,6 +1,5 @@
 use crate::infrastructure::networking::protocol::{
-    character::types::ZoneServerInfo,
-    traits::ServerPacket,
+    character::types::ZoneServerInfo, traits::ServerPacket,
 };
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{self, Cursor, Read};

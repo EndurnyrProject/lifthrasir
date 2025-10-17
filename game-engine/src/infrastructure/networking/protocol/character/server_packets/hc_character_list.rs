@@ -1,6 +1,5 @@
 use crate::infrastructure::networking::protocol::{
-    character::types::CharacterSlotInfo,
-    traits::ServerPacket,
+    character::types::CharacterSlotInfo, traits::ServerPacket,
 };
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{self, Cursor, Read};
@@ -86,11 +85,11 @@ mod tests {
         let mut data = vec![0u8; PACKET_SIZE];
         data[0..2].copy_from_slice(&HC_CHARACTER_LIST.to_le_bytes());
         data[2..4].copy_from_slice(&(PACKET_SIZE as u16).to_le_bytes());
-        data[4] = 9;  // normal_slots
-        data[5] = 6;  // premium_slots
-        data[6] = 0;  // billing_slots
-        data[7] = 9;  // producible_slots
-        data[8] = 9;  // valid_slots
+        data[4] = 9; // normal_slots
+        data[5] = 6; // premium_slots
+        data[6] = 0; // billing_slots
+        data[7] = 9; // producible_slots
+        data[8] = 9; // valid_slots
 
         let packet = HcCharacterListPacket::parse(&data).unwrap();
         assert_eq!(packet.slot_info.normal_slots, 9);

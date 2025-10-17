@@ -25,28 +25,29 @@ impl DataFolderSource {
         let normalized_path = path.trim_start_matches('/').trim_start_matches('\\');
         self.root_path.join(normalized_path)
     }
+}
 
-    fn scan_directory_recursive(&self, dir: &Path, relative_to: &Path) -> Vec<String> {
-        let mut files = Vec::new();
+/// Recursively scans a directory and returns relative file paths
+fn scan_directory_recursive(dir: &Path, relative_to: &Path) -> Vec<String> {
+    let mut files = Vec::new();
 
-        if let Ok(entries) = fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
 
-                if path.is_file() {
-                    if let Ok(relative_path) = path.strip_prefix(relative_to) {
-                        if let Some(path_str) = relative_path.to_str() {
-                            files.push(path_str.replace('\\', "/"));
-                        }
+            if path.is_file() {
+                if let Ok(relative_path) = path.strip_prefix(relative_to) {
+                    if let Some(path_str) = relative_path.to_str() {
+                        files.push(path_str.replace('\\', "/"));
                     }
-                } else if path.is_dir() {
-                    files.extend(self.scan_directory_recursive(&path, relative_to));
                 }
+            } else if path.is_dir() {
+                files.extend(scan_directory_recursive(&path, relative_to));
             }
         }
-
-        files
     }
+
+    files
 }
 
 impl AssetSource for DataFolderSource {
@@ -78,6 +79,6 @@ impl AssetSource for DataFolderSource {
             return Vec::new();
         }
 
-        self.scan_directory_recursive(&self.root_path, &self.root_path)
+        scan_directory_recursive(&self.root_path, &self.root_path)
     }
 }

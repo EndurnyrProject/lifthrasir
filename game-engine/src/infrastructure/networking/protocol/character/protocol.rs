@@ -1,8 +1,10 @@
-use crate::infrastructure::networking::protocol::traits::{ClientPacket, PacketSize, Protocol, ServerPacket};
 use super::{
     client_packets::*,
     server_packets::*,
     types::{CharacterInfo, ZoneServerInfo},
+};
+use crate::infrastructure::networking::protocol::traits::{
+    ClientPacket, PacketSize, Protocol, ServerPacket,
 };
 use bytes::Bytes;
 use std::io;

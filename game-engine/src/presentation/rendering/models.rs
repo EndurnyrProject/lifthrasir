@@ -52,6 +52,24 @@ pub struct RsmNode {
     pub name: String,
 }
 
+/// Type alias for the model mesh update query to improve readability
+type ModelMeshUpdateQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static MapModel,
+        &'static RsmLoading,
+        Option<&'static AnimationType>,
+        Option<&'static AnimationSpeed>,
+    ),
+    (
+        With<MapModel>,
+        Without<ModelProcessed>,
+        Without<ModelTexturesLoading>,
+    ),
+>;
+
 pub fn spawn_map_models(
     mut commands: Commands,
     world_assets: Res<Assets<RoWorldAsset>>,
@@ -172,20 +190,7 @@ pub fn load_rsm_assets(
 
 pub fn update_model_meshes(
     mut commands: Commands,
-    model_query: Query<
-        (
-            Entity,
-            &MapModel,
-            &RsmLoading,
-            Option<&AnimationType>,
-            Option<&AnimationSpeed>,
-        ),
-        (
-            With<MapModel>,
-            Without<ModelProcessed>,
-            Without<ModelTexturesLoading>,
-        ),
-    >,
+    model_query: ModelMeshUpdateQuery,
     asset_server: Res<AssetServer>,
     rsm_assets: Res<Assets<RsmAsset>>,
 ) {
@@ -227,9 +232,8 @@ pub fn update_model_meshes(
             node_entities[node_idx] = Some(node_entity_id);
 
             // Create animation components if this node has keyframes and model has animation
-            if node_has_animation(node) && anim_type.is_some() {
+            if let Some(&anim_type_value) = anim_type.filter(|_| node_has_animation(node)) {
                 let speed = anim_speed.map(|s| s.0).unwrap_or(1.0);
-                let anim_type_value = *anim_type.unwrap();
 
                 // Create base transform from current node transform
                 let base_transform = AnimatedTransform::from_transform(&node_transform);

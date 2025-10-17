@@ -5,6 +5,14 @@ use super::components::{CameraFollowSettings, CameraFollowTarget, PlayerCharacte
 use crate::domain::entities::character::kinds::CharacterRoot;
 use crate::domain::entities::character::sprite_hierarchy::CharacterObjectTree;
 
+/// Type alias for player query with added CharacterObjectTree
+type PlayerReadyQuery<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static CharacterObjectTree),
+    (With<PlayerCharacter>, Added<CharacterObjectTree>),
+>;
+
 /// Resource to track if the camera has been spawned.
 /// Prevents multiple camera entities from being created.
 ///
@@ -28,10 +36,7 @@ pub struct CameraSpawned(pub bool);
 /// - Runs in PostUpdate schedule
 pub fn spawn_camera_on_player_ready(
     mut commands: Commands,
-    player_query: Query<
-        (Entity, &CharacterObjectTree),
-        (With<PlayerCharacter>, Added<CharacterObjectTree>),
-    >,
+    player_query: PlayerReadyQuery,
     root_query: Query<&Transform, With<CharacterRoot>>,
     camera_query: Query<Entity, With<Camera3d>>,
     mut camera_spawned: ResMut<CameraSpawned>,

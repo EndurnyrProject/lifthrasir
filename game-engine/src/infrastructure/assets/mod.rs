@@ -20,4 +20,3 @@ pub use loaders::{
     RsmLoader,
 };
 pub use ro_assets_plugin::SharedCompositeAssetSource;
-

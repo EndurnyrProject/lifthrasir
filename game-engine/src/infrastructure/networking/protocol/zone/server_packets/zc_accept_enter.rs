@@ -64,7 +64,7 @@ impl ServerPacket for ZcAcceptEnterPacket {
             ));
         }
 
-        let mut buf = &data[..];
+        let mut buf = data;
 
         // Skip packet ID (already parsed)
         buf.advance(2);

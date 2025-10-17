@@ -12,12 +12,12 @@ pub use client_packets::{
 };
 
 pub use handlers::{
-    AcceptDeletecharHandler, AcceptEnterHandler, AcceptMakecharHandler,
-    AckCharinfoPerPageHandler, BlockCharacterHandler, CharacterCreated, CharacterCreationFailed,
+    AcceptDeletecharHandler, AcceptEnterHandler, AcceptMakecharHandler, AckCharinfoPerPageHandler,
+    BlockCharacterHandler, BlockedCharactersReceived, CharacterCreated, CharacterCreationFailed,
     CharacterDeleted, CharacterDeletionFailed, CharacterInfoPageReceived, CharacterListHandler,
-    CharacterServerConnected, CharacterSlotInfoReceived, BlockedCharactersReceived, NotifyZonesvrHandler,
-    PingHandler, PingReceived, RefuseDeletecharHandler, RefuseMakecharHandler,
-    SecondPasswdLoginHandler, SecondPasswordRequested, ZoneServerInfoReceived,
+    CharacterServerConnected, CharacterSlotInfoReceived, NotifyZonesvrHandler, PingHandler,
+    PingReceived, RefuseDeletecharHandler, RefuseMakecharHandler, SecondPasswdLoginHandler,
+    SecondPasswordRequested, ZoneServerInfoReceived,
 };
 
 pub use protocol::{
@@ -34,6 +34,6 @@ pub use server_packets::{
 };
 
 pub use types::{
-    BlockedCharacterEntry, CharCreationError, CharDeletionError, CharacterInfo,
-    CharacterSlotInfo, SecondPasswordState, ZoneServerInfo,
+    BlockedCharacterEntry, CharCreationError, CharDeletionError, CharacterInfo, CharacterSlotInfo,
+    SecondPasswordState, ZoneServerInfo,
 };

@@ -55,7 +55,11 @@ impl ClientPacket for ChDeleteCharPacket {
         email_bytes[..copy_len].copy_from_slice(&email_data[..copy_len]);
         buf.put_slice(&email_bytes);
 
-        debug_assert_eq!(buf.len(), PACKET_SIZE, "CH_DELETE_CHAR packet size mismatch");
+        debug_assert_eq!(
+            buf.len(),
+            PACKET_SIZE,
+            "CH_DELETE_CHAR packet size mismatch"
+        );
 
         buf.freeze()
     }
@@ -72,7 +76,10 @@ mod tests {
 
         assert_eq!(bytes.len(), PACKET_SIZE);
         assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), CH_DELETE_CHAR);
-        assert_eq!(u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]), 150000);
+        assert_eq!(
+            u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]),
+            150000
+        );
     }
 
     #[test]

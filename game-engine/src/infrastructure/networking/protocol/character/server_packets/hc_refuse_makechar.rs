@@ -1,9 +1,8 @@
 use crate::infrastructure::networking::protocol::{
-    character::types::CharCreationError,
-    traits::ServerPacket,
+    character::types::CharCreationError, traits::ServerPacket,
 };
-use std::io::{self, Cursor};
 use byteorder::ReadBytesExt;
+use std::io::{self, Cursor};
 
 pub const HC_REFUSE_MAKECHAR: u16 = 0x006E;
 const PACKET_SIZE: usize = 3;

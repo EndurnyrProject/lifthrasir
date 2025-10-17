@@ -41,7 +41,11 @@ impl ClientPacket for ChSelectCharPacket {
         buf.put_u16_le(Self::PACKET_ID);
         buf.put_u8(self.char_num);
 
-        debug_assert_eq!(buf.len(), PACKET_SIZE, "CH_SELECT_CHAR packet size mismatch");
+        debug_assert_eq!(
+            buf.len(),
+            PACKET_SIZE,
+            "CH_SELECT_CHAR packet size mismatch"
+        );
 
         buf.freeze()
     }

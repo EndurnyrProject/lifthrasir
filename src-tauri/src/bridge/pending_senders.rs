@@ -1,4 +1,4 @@
-use crate::bridge::{HairstyleInfo, SessionData};
+use crate::bridge::SessionData;
 use bevy::prelude::*;
 use game_engine::domain::entities::character::components::CharacterInfo;
 use std::collections::HashMap;
@@ -40,12 +40,6 @@ pub struct PendingCharacterDeletionSenders {
     pub senders: HashMap<u32, oneshot::Sender<Result<(), String>>>,
 }
 
-/// Stores pending oneshot senders for hairstyle requests
-#[derive(Resource, Default)]
-pub struct PendingHairstyleSenders {
-    pub senders: HashMap<u8, oneshot::Sender<Result<Vec<HairstyleInfo>, String>>>,
-}
-
 /// Aggregated resource for all pending senders
 #[derive(Resource, Default)]
 pub struct PendingSenders {
@@ -55,5 +49,4 @@ pub struct PendingSenders {
     pub char_selections: PendingCharacterSelectionSenders,
     pub char_creations: PendingCharacterCreationSenders,
     pub char_deletions: PendingCharacterDeletionSenders,
-    pub hairstyles: PendingHairstyleSenders,
 }

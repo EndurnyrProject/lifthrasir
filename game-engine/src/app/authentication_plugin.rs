@@ -1,4 +1,4 @@
-use bevy_auto_plugin::modes::global::prelude::{AutoPlugin, auto_plugin};
+use bevy_auto_plugin::modes::global::prelude::{auto_plugin, AutoPlugin};
 
 /// Authentication Plugin
 ///

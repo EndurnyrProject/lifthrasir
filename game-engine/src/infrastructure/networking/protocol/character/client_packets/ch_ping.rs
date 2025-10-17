@@ -16,7 +16,7 @@ const PACKET_SIZE: usize = 6;
 ///
 /// # Direction
 /// Client → Character Server
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ChPingPacket {
     pub account_id: u32,
 }
@@ -29,11 +29,6 @@ impl ChPingPacket {
     /// * `account_id` - Account ID (typically 0)
     pub fn new(account_id: u32) -> Self {
         Self { account_id }
-    }
-
-    /// Create a ping packet with default account ID (0)
-    pub fn default() -> Self {
-        Self { account_id: 0 }
     }
 }
 
@@ -63,7 +58,10 @@ mod tests {
 
         assert_eq!(bytes.len(), PACKET_SIZE);
         assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), CH_PING);
-        assert_eq!(u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]), 0);
+        assert_eq!(
+            u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]),
+            0
+        );
     }
 
     #[test]

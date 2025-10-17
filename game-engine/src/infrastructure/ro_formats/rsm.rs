@@ -40,9 +40,9 @@ impl BoundingBox {
     }
 
     pub fn update(&mut self, point: &[f32; 3]) {
-        for i in 0..3 {
-            self.min[i] = self.min[i].min(point[i]);
-            self.max[i] = self.max[i].max(point[i]);
+        for ((&p, min), max) in point.iter().zip(&mut self.min).zip(&mut self.max) {
+            *min = (*min).min(p);
+            *max = (*max).max(p);
         }
     }
 
@@ -374,9 +374,9 @@ fn parse_float_array<const N: usize>(input: &[u8]) -> IResult<&[u8], [f32; N]> {
     let mut array = [0.0; N];
     let mut remaining = input;
 
-    for i in 0..N {
+    for item in &mut array {
         let (new_remaining, value) = le_f32(remaining)?;
-        array[i] = value;
+        *item = value;
         remaining = new_remaining;
     }
 

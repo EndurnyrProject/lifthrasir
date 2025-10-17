@@ -234,6 +234,8 @@ mod tests {
         let mut event_writer = super::super::traits::EventBuffer::new();
 
         // Should panic on unknown packet to prevent buffer corruption
-        dispatcher.dispatch(0x9999, &[], &mut context, &mut event_writer).unwrap();
+        dispatcher
+            .dispatch(0x9999, &[], &mut context, &mut event_writer)
+            .unwrap();
     }
 }

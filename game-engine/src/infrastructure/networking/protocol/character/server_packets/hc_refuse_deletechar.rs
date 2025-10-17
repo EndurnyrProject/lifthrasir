@@ -1,9 +1,8 @@
 use crate::infrastructure::networking::protocol::{
-    character::types::CharDeletionError,
-    traits::ServerPacket,
+    character::types::CharDeletionError, traits::ServerPacket,
 };
-use std::io::{self, Cursor};
 use byteorder::ReadBytesExt;
+use std::io::{self, Cursor};
 
 pub const HC_REFUSE_DELETECHAR: u16 = 0x0070;
 const PACKET_SIZE: usize = 3;

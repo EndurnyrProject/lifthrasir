@@ -1,7 +1,7 @@
+use super::{client_packets::*, server_packets::*, types::SpawnData};
 use crate::infrastructure::networking::protocol::traits::{
     ClientPacket, PacketSize, Protocol, ServerPacket,
 };
-use super::{client_packets::*, server_packets::*, types::SpawnData};
 use bytes::Bytes;
 use std::io;
 
@@ -197,9 +197,7 @@ mod tests {
         // Set spawn data
         let spawn_data = SpawnData::new(
             1000,
-            crate::infrastructure::networking::protocol::zone::types::Position::new(
-                100, 100, 0,
-            ),
+            crate::infrastructure::networking::protocol::zone::types::Position::new(100, 100, 0),
             5,
             5,
             0,

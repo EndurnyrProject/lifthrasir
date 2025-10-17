@@ -1,7 +1,9 @@
-use crate::infrastructure::networking::protocol::traits::{ClientPacket, PacketSize, Protocol, ServerPacket};
 use super::{
     client_packets::{CaLoginPacket, CA_LOGIN},
     server_packets::{AcAcceptLoginPacket, AcRefuseLoginPacket, AC_ACCEPT_LOGIN, AC_REFUSE_LOGIN},
+};
+use crate::infrastructure::networking::protocol::traits::{
+    ClientPacket, PacketSize, Protocol, ServerPacket,
 };
 use bytes::Bytes;
 use std::io;
