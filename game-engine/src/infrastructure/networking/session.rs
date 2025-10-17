@@ -1,4 +1,5 @@
-use super::protocols::ro_login::{AcAcceptLoginPacket, ServerInfo};
+use super::protocol::login::server_packets::AcAcceptLoginPacket;
+use super::protocol::login::types::ServerInfo;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -3811,6 +3811,7 @@ dependencies = [
  "bevy_kira_audio",
  "bevy_lunex",
  "byteorder",
+ "bytes",
  "encoding_rs",
  "flate2",
  "futures",

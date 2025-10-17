@@ -211,8 +211,8 @@ impl CharacterInfo {
 }
 
 /// Conversion from network protocol CharacterInfo to domain CharacterInfo DTO
-impl From<crate::infrastructure::networking::protocols::ro_char::CharacterInfo> for CharacterInfo {
-    fn from(net: crate::infrastructure::networking::protocols::ro_char::CharacterInfo) -> Self {
+impl From<crate::infrastructure::networking::protocol::character::CharacterInfo> for CharacterInfo {
+    fn from(net: crate::infrastructure::networking::protocol::character::CharacterInfo) -> Self {
         Self {
             name: net.name,
             job_id: net.class,

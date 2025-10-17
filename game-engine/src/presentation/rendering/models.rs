@@ -75,13 +75,10 @@ pub fn spawn_map_models(
 
         let mut model_groups: HashMap<String, Vec<(Transform, String, AnimationType, f32)>> =
             HashMap::new();
-        let mut model_count = 0;
         let mut empty_count = 0;
 
         for obj in &world_asset.world.objects {
             if let RswObject::Model(model) = obj {
-                model_count += 1;
-
                 if model.filename.is_empty() {
                     empty_count += 1;
                     if empty_count <= 5 {

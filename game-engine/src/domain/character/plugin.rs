@@ -3,7 +3,14 @@ use super::events::*;
 use super::systems::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
-use crate::infrastructure::networking::CharServerEvent;
+use crate::infrastructure::networking::protocol::character::{
+    BlockedCharactersReceived, CharacterCreated, CharacterCreationFailed, CharacterDeleted,
+    CharacterDeletionFailed, CharacterInfoPageReceived, CharacterServerConnected,
+    CharacterSlotInfoReceived, PingReceived, SecondPasswordRequested, ZoneServerInfoReceived,
+};
+use crate::infrastructure::networking::protocol::zone::{
+    AccountIdReceived, ZoneEntryRefused, ZoneServerConnected as ZoneServerConnectedProtocol,
+};
 use bevy::prelude::*;
 
 /// Minimal character domain plugin that registers events and systems
@@ -14,16 +21,29 @@ impl Plugin for CharacterDomainPlugin {
         // Initialize character selection state resource
         app.insert_resource(CharacterSelectionState::default());
 
-        // Initialize zone server client resource
-        app.init_resource::<crate::infrastructure::networking::ZoneServerClient>();
-
         // Add unified character entity plugin (includes sprite hierarchy and state machines)
         app.add_plugins(UnifiedCharacterEntityPlugin);
 
-        // Register networking events
-        app.add_event::<CharServerEvent>();
+        // Register protocol layer events (from new networking architecture)
+        // Character protocol events
+        app.add_event::<CharacterServerConnected>()
+            .add_event::<CharacterCreated>()
+            .add_event::<CharacterCreationFailed>()
+            .add_event::<CharacterDeleted>()
+            .add_event::<CharacterDeletionFailed>()
+            .add_event::<ZoneServerInfoReceived>()
+            .add_event::<PingReceived>()
+            .add_event::<SecondPasswordRequested>()
+            .add_event::<CharacterInfoPageReceived>()
+            .add_event::<CharacterSlotInfoReceived>()
+            .add_event::<BlockedCharactersReceived>();
 
-        // Register all character-related events
+        // Zone protocol events (new modular architecture)
+        app.add_event::<ZoneServerConnectedProtocol>()
+            .add_event::<AccountIdReceived>()
+            .add_event::<ZoneEntryRefused>();
+
+        // Register all character-related domain events
         app.add_event::<RequestCharacterListEvent>()
             .add_event::<CharacterListReceivedEvent>()
             .add_event::<SelectCharacterEvent>()
@@ -52,16 +72,21 @@ impl Plugin for CharacterDomainPlugin {
         app.add_systems(
             Update,
             (
-                crate::infrastructure::networking::char_client_update_system,
+                // Character server systems
+                crate::infrastructure::networking::client::char_server_update_system,
+                update_char_client, // Keep-alive pings
                 (
-                    handle_character_list_events,
-                    handle_character_operations_success,
-                    handle_character_operations_errors,
-                    handle_zone_server_info_events,
-                    log_connection_info_events,
+                    // Protocol event handlers - translate protocol events to domain events
+                    handle_character_server_connected,
+                    handle_character_created_protocol,
+                    handle_character_creation_failed_protocol,
+                    handle_character_deleted_protocol,
+                    handle_character_deletion_failed_protocol,
+                    handle_zone_server_info_protocol,
                 )
                     .chain(),
                 (
+                    // Domain event handlers
                     handle_request_character_list,
                     handle_select_character,
                     spawn_unified_character_from_selection,
@@ -77,12 +102,15 @@ impl Plugin for CharacterDomainPlugin {
                 )
                     .chain(),
                 (
-                    crate::infrastructure::networking::zone_connection_system,
-                    crate::infrastructure::networking::zone_packet_handler_system,
-                    handle_zone_auth_success,
+                    // Zone server systems (new modular architecture)
+                    crate::infrastructure::networking::client::zone_server_update_system,
+                    handle_zone_server_connected_protocol,
+                    handle_zone_entry_refused_protocol,
+                    handle_account_id_received_protocol,
                 )
                     .chain(),
                 (
+                    // Map loading systems
                     start_map_loading_timer,
                     detect_map_loading_timeout,
                     detect_map_load_complete,

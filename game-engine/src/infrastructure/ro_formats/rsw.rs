@@ -94,14 +94,6 @@ pub enum RswObject {
     Effect(RswEffect),
 }
 
-#[derive(Debug)]
-enum ObjectType {
-    Model = 1,
-    Light = 2,
-    Sound = 3,
-    Effect = 4,
-}
-
 #[derive(Debug, Clone)]
 pub struct RswModel {
     pub name: String,

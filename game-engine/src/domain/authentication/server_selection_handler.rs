@@ -1,5 +1,5 @@
 use crate::{
-    infrastructure::networking::{session::UserSession, CharServerClient},
+    infrastructure::networking::{session::UserSession, client::CharServerClient},
     presentation::ui::events::ServerSelectedEvent,
 };
 use bevy::prelude::*;
@@ -26,31 +26,40 @@ pub fn handle_server_selection(
                 "{}.{}.{}.{}",
                 ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]
             );
+            let address = format!("{}:{}", server_ip, event.server.port);
 
-            if let Err(e) = client.connect(&server_ip, event.server.port) {
+            if let Err(e) = client.connect(&address) {
                 error!("Failed to connect to character server: {:?}", e);
             } else {
-                info!(
-                    "Connected to character server at {}:{}",
-                    server_ip, event.server.port
-                );
+                info!("Connected to character server at {}", address);
+                // Send CH_ENTER packet immediately after connection
+                if let Err(e) = client.enter_server() {
+                    error!("Failed to send CH_ENTER: {:?}", e);
+                }
             }
         } else {
-            let mut client = CharServerClient::new(session.clone());
+            let mut client = CharServerClient::with_session(
+                session.tokens.account_id,
+                session.tokens.login_id1,
+                session.tokens.login_id2,
+                session.sex,
+            );
 
             let ip_bytes = event.server.ip.to_be_bytes();
             let server_ip = format!(
                 "{}.{}.{}.{}",
                 ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]
             );
+            let address = format!("{}:{}", server_ip, event.server.port);
 
-            if let Err(e) = client.connect(&server_ip, event.server.port) {
+            if let Err(e) = client.connect(&address) {
                 error!("Failed to connect to character server: {:?}", e);
             } else {
-                info!(
-                    "Connected to character server at {}:{}",
-                    server_ip, event.server.port
-                );
+                info!("Connected to character server at {}", address);
+                // Send CH_ENTER packet immediately after connection
+                if let Err(e) = client.enter_server() {
+                    error!("Failed to send CH_ENTER: {:?}", e);
+                }
             }
 
             commands.insert_resource(client);

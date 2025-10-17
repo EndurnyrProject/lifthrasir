@@ -107,7 +107,7 @@ impl Direction {
 }
 
 impl CharacterSprite {
-    pub fn has_effect_visual(&self, effect_type: EffectType) -> bool {
+    pub fn has_effect_visual(&self, _effect_type: EffectType) -> bool {
         // For now, we'll implement this simply
         // In a full implementation, we'd check if any effect layer
         // corresponds to the given effect type
@@ -120,7 +120,7 @@ impl CharacterSprite {
         self.animation_timer.reset();
     }
 
-    pub fn set_direction(&mut self, direction: Direction) {
+    pub fn set_direction(&mut self, _direction: Direction) {
         // This would update the sprite direction
         // For now, just store it - actual implementation would
         // update the sprite rendering based on direction

@@ -3,9 +3,12 @@ use super::events::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
 use crate::domain::world::spawn_context::MapSpawnContext;
-use crate::infrastructure::networking::protocols::ro_char::ChMakeCharPacket;
+use crate::infrastructure::networking::protocol::character::{
+    CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
+    CharacterServerConnected, ZoneServerInfoReceived,
+};
 use crate::infrastructure::networking::session::UserSession;
-use crate::infrastructure::networking::{CharServerClient, CharServerEvent};
+use crate::infrastructure::networking::client::CharServerClient;
 use bevy::prelude::*;
 use std::time::{Duration, Instant};
 
@@ -21,7 +24,7 @@ pub fn handle_request_character_list(
             // Convert cached characters to domain model
             let mut char_list = vec![None; 15]; // Support up to 15 slots
 
-            for net_char in &client.characters {
+            for net_char in client.characters() {
                 let char_info = CharacterInfo::from(net_char.clone());
                 let slot = net_char.char_num as usize;
                 if slot < char_list.len() {
@@ -40,168 +43,122 @@ pub fn handle_request_character_list(
     }
 }
 
-/// System 1: Handle character list received events
-pub fn handle_character_list_events(
-    mut char_events: EventReader<CharServerEvent>,
+/// System: Handle character server connection and emit character list
+/// The new architecture receives character list upon HC_ACCEPT_ENTER
+pub fn handle_character_server_connected(
+    mut connected_events: EventReader<CharacterServerConnected>,
+    char_client: Option<Res<CharServerClient>>,
     mut list_events: EventWriter<CharacterListReceivedEvent>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
-    for event in char_events.read() {
-        if let CharServerEvent::CharacterListReceived(characters) = event {
-            let mut char_list = vec![None; 15];
+    for _event in connected_events.read() {
+        let Some(client) = char_client.as_ref() else {
+            continue;
+        };
 
-            for net_char in characters {
-                let char_info = CharacterInfo::from(net_char.clone());
-                let slot = net_char.char_num as usize;
-                if slot < char_list.len() {
-                    char_list[slot] = Some(char_info);
-                }
+        let mut char_list = vec![None; 15];
+
+        for net_char in client.characters() {
+            let char_info = CharacterInfo::from(net_char.clone());
+            let slot = net_char.char_num as usize;
+            if slot < char_list.len() {
+                char_list[slot] = Some(char_info);
             }
-
-            list_events.write(CharacterListReceivedEvent {
-                characters: char_list,
-                max_slots: 9,
-                available_slots: 9,
-            });
-
-            next_state.set(GameState::CharacterSelection);
         }
+
+        list_events.write(CharacterListReceivedEvent {
+            characters: char_list,
+            max_slots: 9,
+            available_slots: 9,
+        });
+
+        next_state.set(GameState::CharacterSelection);
     }
 }
 
-/// System 2: Handle successful character operations
-pub fn handle_character_operations_success(
-    mut char_events: EventReader<CharServerEvent>,
-    mut created_events: EventWriter<CharacterCreatedEvent>,
-    mut deleted_events: EventWriter<CharacterDeletedEvent>,
+/// System: Handle character creation success from protocol
+pub fn handle_character_created_protocol(
+    mut protocol_events: EventReader<CharacterCreated>,
+    mut domain_events: EventWriter<CharacterCreatedEvent>,
 ) {
-    for event in char_events.read() {
-        match event {
-            CharServerEvent::CharacterCreated(net_char) => {
-                let char_info = CharacterInfo::from(net_char.clone());
-                created_events.write(CharacterCreatedEvent {
-                    character: char_info,
-                    slot: net_char.char_num,
-                });
-            }
-            CharServerEvent::CharacterDeleted => {
-                deleted_events.write(CharacterDeletedEvent { character_id: 0 });
-            }
-            _ => {}
-        }
+    for event in protocol_events.read() {
+        let char_info = CharacterInfo::from(event.character.clone());
+        domain_events.write(CharacterCreatedEvent {
+            character: char_info,
+            slot: event.character.char_num,
+        });
     }
 }
 
-/// System 3: Handle character operation errors
-pub fn handle_character_operations_errors(
-    mut char_events: EventReader<CharServerEvent>,
-    mut creation_failed_events: EventWriter<CharacterCreationFailedEvent>,
-    mut deletion_failed_events: EventWriter<CharacterDeletionFailedEvent>,
+/// System: Handle character deletion success from protocol
+pub fn handle_character_deleted_protocol(
+    mut protocol_events: EventReader<CharacterDeleted>,
+    mut domain_events: EventWriter<CharacterDeletedEvent>,
 ) {
-    for event in char_events.read() {
-        match event {
-            CharServerEvent::CharacterCreationFailed(error_code) => {
-                let error_msg = match error_code {
-                    0x00 => "Character name already exists",
-                    0x01 => "Invalid character name",
-                    0x02 => "Character slot is full",
-                    0x03 => "Character creation denied",
-                    _ => "Unknown error",
-                };
-                creation_failed_events.write(CharacterCreationFailedEvent {
-                    slot: 0,
-                    error: error_msg.to_string(),
-                });
-            }
-            CharServerEvent::CharacterDeletionFailed(error_code) => {
-                let error_msg = match error_code {
-                    0x00 => "Character not found",
-                    0x01 => "Character cannot be deleted",
-                    0x02 => "Invalid email address",
-                    _ => "Unknown error",
-                };
-                deletion_failed_events.write(CharacterDeletionFailedEvent {
-                    character_id: 0,
-                    error: error_msg.to_string(),
-                });
-            }
-            _ => {}
-        }
+    for _event in protocol_events.read() {
+        domain_events.write(CharacterDeletedEvent { character_id: 0 });
     }
 }
 
-/// System 4: Handle zone server information
-pub fn handle_zone_server_info_events(
-    mut char_events: EventReader<CharServerEvent>,
+/// System: Handle character creation failures from protocol
+pub fn handle_character_creation_failed_protocol(
+    mut protocol_events: EventReader<CharacterCreationFailed>,
+    mut domain_events: EventWriter<CharacterCreationFailedEvent>,
+) {
+    for event in protocol_events.read() {
+        use crate::infrastructure::networking::protocol::character::CharCreationError;
+        let error_msg = match event.error {
+            CharCreationError::NameExists => "Character name already exists",
+            CharCreationError::InvalidName => "Invalid character name",
+            CharCreationError::Unknown(_) => "Unknown error",
+        };
+        domain_events.write(CharacterCreationFailedEvent {
+            slot: 0,
+            error: error_msg.to_string(),
+        });
+    }
+}
+
+/// System: Handle character deletion failures from protocol
+pub fn handle_character_deletion_failed_protocol(
+    mut protocol_events: EventReader<CharacterDeletionFailed>,
+    mut domain_events: EventWriter<CharacterDeletionFailedEvent>,
+) {
+    for event in protocol_events.read() {
+        use crate::infrastructure::networking::protocol::character::CharDeletionError;
+        let error_msg = match event.error {
+            CharDeletionError::NotEligible => "Not eligible to delete",
+            CharDeletionError::Unknown(_) => "Unknown error",
+        };
+        domain_events.write(CharacterDeletionFailedEvent {
+            character_id: 0,
+            error: error_msg.to_string(),
+        });
+    }
+}
+
+/// System: Handle zone server info from protocol
+pub fn handle_zone_server_info_protocol(
+    mut protocol_events: EventReader<ZoneServerInfoReceived>,
     user_session: Option<Res<UserSession>>,
-    mut zone_events: EventWriter<ZoneServerInfoReceivedEvent>,
+    mut domain_events: EventWriter<super::events::ZoneServerInfoReceivedEvent>,
 ) {
-    for event in char_events.read() {
-        if let CharServerEvent::ZoneServerInfo {
-            char_id,
-            map_name,
-            ip,
-            port,
-        } = event
-        {
-            let Some(session) = user_session.as_ref() else {
-                error!("ZoneServerInfo received but UserSession not available - cannot proceed");
-                continue;
-            };
+    for event in protocol_events.read() {
+        let Some(session) = user_session.as_ref() else {
+            error!("ZoneServerInfo received but UserSession not available - cannot proceed");
+            continue;
+        };
 
-            let server_ip = format!("{}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
-            zone_events.write(ZoneServerInfoReceivedEvent {
-                char_id: *char_id,
-                map_name: map_name.clone(),
-                server_ip,
-                server_port: *port,
-                account_id: session.tokens.account_id,
-                login_id1: session.tokens.login_id1,
-                sex: session.sex,
-            });
-        }
-    }
-}
-
-/// System 5: Log connection info events
-pub fn log_connection_info_events(mut char_events: EventReader<CharServerEvent>) {
-    for event in char_events.read() {
-        match event {
-            CharServerEvent::ConnectionError(error) => {
-                error!("Character server connection error: {:?}", error);
-            }
-            CharServerEvent::CharacterSlotInfo {
-                normal_slots,
-                premium_slots,
-                valid_slots,
-            } => {
-                debug!(
-                    "Character slots - normal: {}, premium: {}, valid: {}",
-                    normal_slots, premium_slots, valid_slots
-                );
-                // Slot info is primarily for UI display
-            }
-            CharServerEvent::BlockedCharacterList(blocked) => {
-                if !blocked.is_empty() {
-                    warn!("Received {} blocked characters", blocked.len());
-                    for (char_id, expire_date) in blocked {
-                        warn!("Character ID {} is blocked until: {}", char_id, expire_date);
-                    }
-                }
-            }
-            CharServerEvent::PincodeState { state, description } => {
-                info!("Pincode state {}: {}", state, description);
-                match state {
-                    0 => {} // Pincode disabled or correct - continue normally
-                    1 => warn!("Server requires pincode input - not yet implemented"),
-                    2 | 4 => warn!("Server requires creating new pincode - not yet implemented"),
-                    3 => warn!("Server requires changing pincode - not yet implemented"),
-                    8 => error!("Pincode was incorrect"),
-                    _ => warn!("Unknown pincode state: {}", state),
-                }
-            }
-            _ => {}
-        }
+        let server_ip = event.zone_server_info.ip_string();
+        domain_events.write(super::events::ZoneServerInfoReceivedEvent {
+            char_id: event.zone_server_info.char_id,
+            map_name: event.zone_server_info.map_name.clone(),
+            server_ip,
+            server_port: event.zone_server_info.port,
+            account_id: session.tokens.account_id,
+            login_id1: session.tokens.login_id1,
+            sex: session.sex,
+        });
     }
 }
 
@@ -241,7 +198,7 @@ pub fn handle_select_character(
         if let Some(client) = char_client.as_deref_mut() {
             // Find the character data for this slot
             let character = client
-                .characters
+                .characters()
                 .iter()
                 .find(|c| c.char_num == event.slot)
                 .cloned();
@@ -276,16 +233,13 @@ pub fn handle_create_character(
         }
 
         if let Some(client) = char_client.as_deref_mut() {
-            let packet = ChMakeCharPacket {
-                name: event.form.name.clone(),
-                slot: event.form.slot,
-                hair_color: event.form.hair_color,
-                hair_style: event.form.hair_style,
-                starting_job: event.form.starting_job as u16,
-                sex: event.form.sex as u8,
-            };
-
-            if let Err(e) = client.create_character(packet) {
+            if let Err(e) = client.create_character(
+                &event.form.name,
+                event.form.slot,
+                event.form.hair_color,
+                event.form.hair_style,
+                event.form.starting_job as u16,
+            ) {
                 error!("Failed to create character: {:?}", e);
             }
         } else {
@@ -300,7 +254,7 @@ pub fn handle_delete_character(
 ) {
     for event in events.read() {
         if let Some(client) = char_client.as_deref_mut() {
-            if let Err(e) = client.delete_character(event.character_id, String::new()) {
+            if let Err(e) = client.delete_character(event.character_id, "") {
                 error!("Failed to delete character: {:?}", e);
             }
         } else {
@@ -309,42 +263,168 @@ pub fn handle_delete_character(
     }
 }
 
+/// Temporary resource to store zone session data for use after protocol events
+#[derive(Resource, Debug, Clone)]
+pub struct ZoneSessionData {
+    pub map_name: String,
+    pub character_id: u32,
+    pub account_id: u32,
+}
+
+/// System: Handle zone server info and connect to zone server
+/// Uses the new ZoneServerClient architecture
 pub fn handle_zone_server_info(
     mut events: EventReader<ZoneServerInfoReceivedEvent>,
+    mut char_client: Option<ResMut<CharServerClient>>,
     mut game_state: ResMut<NextState<GameState>>,
+    mut commands: Commands,
 ) {
     for event in events.read() {
-        info!("Connecting to zone server: {}", event.map_name);
-        game_state.set(GameState::Connecting);
+        info!("Connecting to zone server for map: {}", event.map_name);
+
+        // Store session data for use after protocol events
+        commands.insert_resource(ZoneSessionData {
+            map_name: event.map_name.clone(),
+            character_id: event.char_id,
+            account_id: event.account_id,
+        });
+
+        // Disconnect from character server (no longer needed)
+        if let Some(ref mut client) = char_client.as_deref_mut() {
+            info!("Disconnecting from character server");
+            client.disconnect();
+        }
+
+        // Create ZoneServerClient with session data
+        let mut zone_client_instance = crate::infrastructure::networking::client::ZoneServerClient::with_session(
+            event.account_id,
+            event.char_id,
+        );
+
+        // Connect immediately using the newly created instance
+        let server_address = format!("{}:{}", event.server_ip, event.server_port);
+
+        match zone_client_instance.connect(&server_address) {
+            Ok(()) => {
+                info!("Connected to zone server at {}", server_address);
+
+                // Send CZ_ENTER2 packet
+                if let Err(e) = zone_client_instance.enter_world(
+                    event.account_id,
+                    event.char_id,
+                    event.login_id1,
+                    0, // client_time (can be 0)
+                    event.sex,
+                ) {
+                    error!("Failed to send zone entry packet: {:?}", e);
+                } else {
+                    info!("Sent CZ_ENTER2 to zone server");
+                    game_state.set(GameState::Connecting);
+                }
+            }
+            Err(e) => {
+                error!("Failed to connect to zone server: {:?}", e);
+            }
+        }
+
+        // Insert the connected client as a resource for other systems to use
+        commands.insert_resource(zone_client_instance);
     }
 }
 
-pub fn handle_zone_auth_success(
-    mut events: EventReader<ZoneAuthenticationSuccess>,
-    zone_client: Option<Res<crate::infrastructure::networking::ZoneServerClient>>,
+/// System: Handle successful zone connection from protocol events
+/// Replaces the old zone_packet_handler_system
+pub fn handle_zone_server_connected_protocol(
+    mut protocol_events: EventReader<crate::infrastructure::networking::protocol::zone::ZoneServerConnected>,
+    zone_session: Option<Res<ZoneSessionData>>,
+    mut domain_events: EventWriter<ZoneAuthenticationSuccess>,
     mut commands: Commands,
     mut map_loading_events: EventWriter<MapLoadingStarted>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
-    for event in events.read() {
-        if let Some(client) = zone_client.as_ref() {
-            if let Some(session) = &client.session_data {
-                info!("Loading map: {}", session.map_name);
+    for event in protocol_events.read() {
+        info!(
+            "Zone server accepted entry! Spawning at ({}, {}) facing {}",
+            event.spawn_data.position.x,
+            event.spawn_data.position.y,
+            event.spawn_data.position.dir
+        );
 
-                commands.insert_resource(MapSpawnContext::new(
-                    session.map_name.clone(),
-                    event.spawn_x,
-                    event.spawn_y,
-                    session.character_id,
-                ));
+        // Get session data from resource
+        let Some(session) = zone_session.as_ref() else {
+            error!("ZoneSessionData not available - cannot proceed with spawn");
+            continue;
+        };
 
-                map_loading_events.write(MapLoadingStarted {
-                    map_name: session.map_name.clone(),
-                });
+        // Store spawn context
+        commands.insert_resource(MapSpawnContext::new(
+            session.map_name.clone(),
+            event.spawn_data.position.x,
+            event.spawn_data.position.y,
+            session.character_id,
+        ));
 
-                game_state.set(GameState::Loading);
-            }
+        // Emit domain event for compatibility
+        domain_events.write(ZoneAuthenticationSuccess {
+            spawn_x: event.spawn_data.position.x,
+            spawn_y: event.spawn_data.position.y,
+            spawn_dir: event.spawn_data.position.dir,
+            server_tick: event.spawn_data.server_tick,
+        });
+
+        // Emit map loading started
+        map_loading_events.write(MapLoadingStarted {
+            map_name: session.map_name.clone(),
+        });
+
+        game_state.set(GameState::Loading);
+    }
+}
+
+/// System: Handle zone entry refused
+pub fn handle_zone_entry_refused_protocol(
+    mut protocol_events: EventReader<crate::infrastructure::networking::protocol::zone::ZoneEntryRefused>,
+    mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
+    mut domain_events: EventWriter<ZoneAuthenticationFailed>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
+    for event in protocol_events.read() {
+        warn!(
+            "Zone entry refused: {:?} - {}",
+            event.error, event.error_description
+        );
+
+        // Convert ZoneEntryError to a simple error code for the domain event
+        let error_code = match event.error {
+            crate::infrastructure::networking::protocol::zone::ZoneEntryError::Normal => 0,
+            crate::infrastructure::networking::protocol::zone::ZoneEntryError::ServerClosed => 1,
+            crate::infrastructure::networking::protocol::zone::ZoneEntryError::AlreadyLoggedIn => 2,
+            crate::infrastructure::networking::protocol::zone::ZoneEntryError::AlreadyLoggedInAlt => 3,
+            crate::infrastructure::networking::protocol::zone::ZoneEntryError::EnvironmentError => 4,
+            crate::infrastructure::networking::protocol::zone::ZoneEntryError::PreviousConnectionActive => 8,
+            crate::infrastructure::networking::protocol::zone::ZoneEntryError::Unknown(code) => code,
+        };
+
+        // Emit domain event
+        domain_events.write(ZoneAuthenticationFailed { error_code });
+
+        // Disconnect zone client
+        if let Some(ref mut client) = zone_client.as_deref_mut() {
+            client.disconnect();
         }
+
+        // Return to character selection
+        game_state.set(GameState::CharacterSelection);
+    }
+}
+
+/// System: Handle account ID received (ZC_AID packet)
+/// This is informational but we log it for debugging
+pub fn handle_account_id_received_protocol(
+    mut protocol_events: EventReader<crate::infrastructure::networking::protocol::zone::AccountIdReceived>,
+) {
+    for event in protocol_events.read() {
+        debug!("Account ID confirmed by zone server: {}", event.account_id);
     }
 }
 
@@ -368,7 +448,7 @@ pub fn detect_map_load_complete(
 
 pub fn handle_map_load_complete(
     mut events: EventReader<MapLoadCompleted>,
-    mut zone_client: Option<ResMut<crate::infrastructure::networking::ZoneServerClient>>,
+    mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
     mut actor_init_events: EventWriter<ActorInitSent>,
 ) {
     for event in events.read() {
@@ -378,9 +458,10 @@ pub fn handle_map_load_complete(
         );
 
         if let Some(client) = zone_client.as_deref_mut() {
-            if let Err(e) = client.send_actor_init() {
+            if let Err(e) = client.notify_ready() {
                 error!("Failed to send actor init: {:?}", e);
             } else {
+                info!("Sent CZ_NOTIFY_ACTORINIT to zone server");
                 actor_init_events.write(ActorInitSent);
             }
         }
@@ -421,22 +502,37 @@ pub fn handle_character_deleted(
 
 pub fn handle_refresh_character_list(
     mut events: EventReader<RefreshCharacterListEvent>,
-    mut char_client: Option<ResMut<CharServerClient>>,
+    char_client: Option<Res<CharServerClient>>,
+    mut list_events: EventWriter<CharacterListReceivedEvent>,
 ) {
     for _event in events.read() {
-        if let Some(client) = char_client.as_deref_mut() {
-            if let Err(e) = client.request_charlist() {
-                error!("Failed to request character list refresh: {:?}", e);
+        // New architecture: Characters are automatically updated in the context by handlers
+        // Just re-emit the current character list
+        if let Some(client) = char_client.as_ref() {
+            let mut char_list = vec![None; 15];
+
+            for net_char in client.characters() {
+                let char_info = CharacterInfo::from(net_char.clone());
+                let slot = net_char.char_num as usize;
+                if slot < char_list.len() {
+                    char_list[slot] = Some(char_info);
+                }
             }
-        } else {
-            warn!("CharServerClient not initialized - cannot refresh character list");
+
+            list_events.write(CharacterListReceivedEvent {
+                characters: char_list,
+                max_slots: 9,
+                available_slots: 9,
+            });
         }
     }
 }
 
+/// System that sends periodic pings to keep the connection alive
+/// Note: The new architecture handles this via the send_ping() method
 pub fn update_char_client(char_client: Option<ResMut<CharServerClient>>) {
     if let Some(mut client) = char_client {
-        let _ = client.send_keepalive();
+        let _ = client.send_ping();
     }
 }
 
@@ -456,7 +552,7 @@ pub fn start_map_loading_timer(mut events: EventReader<MapLoadingStarted>, mut c
 pub fn detect_map_loading_timeout(
     timer: Option<Res<MapLoadingTimer>>,
     map_data_query: Query<&crate::domain::world::map::MapData>,
-    mut zone_client: Option<ResMut<crate::infrastructure::networking::ZoneServerClient>>,
+    mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
     mut failed_events: EventWriter<MapLoadingFailed>,
     mut commands: Commands,
     mut game_state: ResMut<NextState<GameState>>,

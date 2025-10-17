@@ -1,12 +1,28 @@
-pub mod char_client;
-pub mod connection;
+pub mod client;
 pub mod errors;
-pub mod login_client;
-pub mod protocols;
+pub mod macros;
+pub mod protocol;
 pub mod session;
-pub mod zone_client;
+pub mod transport;
 
-pub use char_client::{char_client_update_system, CharServerClient, CharServerEvent};
-pub use connection::ConnectionState;
+pub use client::{
+    char_server_update_system, login_client_update_system, zone_server_update_system,
+    CharServerClient, LoginClient, NetworkClient, ZoneServerClient,
+};
+pub use errors::{NetworkError, NetworkResult};
+pub use protocol::{
+    ClientPacket, EventBuffer, EventWriter, PacketDispatcher, PacketHandler, PacketSize, Protocol,
+    ServerPacket,
+};
 pub use session::UserSession;
-pub use zone_client::{zone_connection_system, zone_packet_handler_system, ZoneServerClient};
+pub use transport::TcpTransport;
+
+pub use protocol::{
+    character::{
+        BlockedCharactersReceived, CharacterCreated, CharacterCreationFailed, CharacterDeleted,
+        CharacterDeletionFailed, CharacterInfoPageReceived, CharacterServerConnected,
+        CharacterSlotInfoReceived, PingReceived, SecondPasswordRequested, ZoneServerInfoReceived,
+    },
+    login::{LoginAccepted, LoginRefused},
+    zone::{AccountIdReceived, ZoneEntryRefused, ZoneServerConnected as ZoneServerConnectedEvent},
+};

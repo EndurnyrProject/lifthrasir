@@ -345,20 +345,6 @@ fn generate_water_normal_map(images: &mut ResMut<Assets<Image>>) -> Handle<Image
             let fx = x as f32 / SIZE as f32;
             let fy = y as f32 / SIZE as f32;
 
-            // Primary wave pattern
-            let wave1 = (fx * 8.0 * std::f32::consts::PI).sin() * 0.5
-                + (fy * 8.0 * std::f32::consts::PI).cos() * 0.5;
-
-            // Secondary wave pattern (higher frequency, lower amplitude)
-            let wave2 = (fx * 16.0 * std::f32::consts::PI + 1.57).sin() * 0.25
-                + (fy * 16.0 * std::f32::consts::PI + 0.78).cos() * 0.25;
-
-            // Tertiary ripples
-            let wave3 = ((fx * 32.0 + fy * 24.0) * std::f32::consts::PI).sin() * 0.125;
-
-            // Combine waves
-            let height = wave1 + wave2 + wave3;
-
             // Calculate normal from height gradient
             // Sample neighboring pixels for gradient calculation
             let dx = if x > 0 && x < SIZE - 1 {

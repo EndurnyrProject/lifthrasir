@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use game_engine::domain::entities::character::components::CharacterInfo;
-use game_engine::infrastructure::networking::protocols::ro_login::ServerInfo;
+use game_engine::infrastructure::networking::protocol::login::types::ServerInfo;
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 

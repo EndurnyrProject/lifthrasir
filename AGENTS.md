@@ -525,6 +525,121 @@ CharacterRoot
 - `game-engine/src/domain/camera/controller.rs`
 - `game-engine/src/domain/camera/components.rs`
 
+### 6. Modular Networking Architecture
+
+**Purpose**: Type-safe, protocol-agnostic networking system for Ragnarok Online server communication
+
+**Architecture Overview**:
+The networking system follows a layered architecture with clear separation of concerns:
+
+```
+┌─────────────────────────────────────────┐
+│  Bevy Systems (Game Logic)             │
+├─────────────────────────────────────────┤
+│  Wrapper Clients                        │
+│  (LoginClient, CharServerClient, etc.)  │
+├─────────────────────────────────────────┤
+│  NetworkClient<P> (Generic)             │
+├─────────────────────────────────────────┤
+│  Protocol Implementations               │
+│  (LoginProtocol, CharacterProtocol, etc)│
+├─────────────────────────────────────────┤
+│  PacketDispatcher + Handlers            │
+├─────────────────────────────────────────┤
+│  TcpTransport (Low-level I/O)           │
+└─────────────────────────────────────────┘
+```
+
+**Core Components**:
+
+1. **Protocol Trait**: Defines a protocol's behavior
+   - Type-safe client and server packet enums
+   - Packet parsing and size calculation
+   - Protocol-specific context (state)
+
+2. **NetworkClient<P>**: Generic reusable client
+   - Connection management
+   - Packet sending and receiving
+   - Buffer management
+   - Handler dispatch
+
+3. **Packet Handlers**: Individual handler per packet type
+   - Parse packet data
+   - Update protocol context
+   - Emit Bevy events
+
+4. **Wrapper Clients**: High-level convenience APIs
+   - `LoginClient`: Login server authentication
+   - `CharServerClient`: Character management and selection
+   - `ZoneServerClient`: In-game world interaction
+
+**Key Features**:
+- **Type Safety**: Compile-time verification of packet types per protocol
+- **Reusability**: `NetworkClient<P>` works with any protocol implementation
+- **Event-Driven**: Clean integration with Bevy ECS via typed events
+- **Testability**: Protocols are pure functions, easy to unit test
+- **Performance**: Zero-copy parsing, efficient buffer management
+
+**Protocol Implementations**:
+
+1. **LoginProtocol**
+   - Handles authentication with login server
+   - Packets: CA_LOGIN, AC_ACCEPT_LOGIN, AC_REFUSE_LOGIN
+   - Context: Tracks login attempts and errors
+
+2. **CharacterProtocol**
+   - Manages character listing, creation, deletion, selection
+   - 11 server packets, 6 client packets
+   - Context: Character list, session IDs, zone server info
+
+3. **ZoneProtocol**
+   - In-game world communication (initial connection)
+   - Packets: CZ_ENTER2, ZC_ACCEPT_ENTER, ZC_AID, etc.
+   - Context: Spawn data, account ID, ready state
+
+**Key Files**:
+- `game-engine/src/infrastructure/networking/client/network_client.rs` - Generic client
+- `game-engine/src/infrastructure/networking/client/login_client.rs` - Login wrapper
+- `game-engine/src/infrastructure/networking/client/char_server_client.rs` - Character wrapper
+- `game-engine/src/infrastructure/networking/client/zone_server_client.rs` - Zone wrapper
+- `game-engine/src/infrastructure/networking/protocol/` - Protocol implementations
+- `game-engine/src/infrastructure/networking/transport/` - TCP transport layer
+
+**Usage Example**:
+```rust
+use game_engine::infrastructure::networking::{
+    LoginClient, LoginAccepted, LoginRefused,
+    login_client_update_system,
+};
+
+// Setup
+app.insert_resource(LoginClient::new())
+   .add_event::<LoginAccepted>()
+   .add_event::<LoginRefused>()
+   .add_systems(Update, login_client_update_system);
+
+// Usage in system
+fn login_system(
+    mut client: ResMut<LoginClient>,
+    mut accepted: EventReader<LoginAccepted>,
+) {
+    client.connect("127.0.0.1:6900").unwrap();
+    client.attempt_login("username", "password", 55).unwrap();
+
+    for event in accepted.read() {
+        info!("Login successful! Account ID: {}", event.account_id);
+    }
+}
+```
+
+**Design Principles**:
+- **Fail-Fast**: Critical errors disconnect immediately
+- **Graceful Degradation**: Non-critical errors are logged but don't stop processing
+- **Context Preservation**: Each protocol maintains its own state
+- **Event Buffering**: Events are batched and flushed to Bevy efficiently
+
+**Migration**: See `NETWORKING_MIGRATION_GUIDE.md` for upgrading from legacy clients
+
 ## Development Workflow
 
 ### Building
