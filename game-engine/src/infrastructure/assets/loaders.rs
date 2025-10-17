@@ -226,7 +226,10 @@ impl AssetLoader for RoGroundLoader {
         reader.read_to_end(&mut bytes).await?;
         info!("GND file loaded, size: {} bytes", bytes.len());
         let ground = RoGround::from_bytes(&bytes)?;
-        info!("📐 GND Dimensions: width={}, height={}", ground.width, ground.height);
+        info!(
+            "📐 GND Dimensions: width={}, height={}",
+            ground.width, ground.height
+        );
         Ok(RoGroundAsset { ground })
     }
 
@@ -249,7 +252,10 @@ impl AssetLoader for RoAltitudeLoader {
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
         let altitude = RoAltitude::from_bytes(&bytes)?;
-        info!("📐 GAT Dimensions: width={}, height={}", altitude.width, altitude.height);
+        info!(
+            "📐 GAT Dimensions: width={}, height={}",
+            altitude.width, altitude.height
+        );
         Ok(RoAltitudeAsset { altitude })
     }
 
@@ -287,7 +293,7 @@ impl AssetLoader for GrfLoader {
 
     async fn load(
         &self,
-        reader: &mut dyn Reader,
+        _reader: &mut dyn Reader,
         _settings: &Self::Settings,
         load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {

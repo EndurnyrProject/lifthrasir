@@ -13,11 +13,11 @@ pub mod sources;
 pub use config::*;
 pub use converters::*;
 pub use hierarchical_manager::*;
-pub use ro_assets_plugin::SharedCompositeAssetSource;
-// Export asset types and loaders (but not RoAssetsPlugin - use ro_assets_plugin instead)
 pub use loaders::{
     BgmNameTableAsset, BgmNameTableLoader, GrfAsset, GrfLoader, RoActAsset, RoActLoader,
     RoAltitudeAsset, RoAltitudeLoader, RoGroundAsset, RoGroundLoader, RoPaletteAsset,
     RoPaletteLoader, RoSpriteAsset, RoSpriteLoader, RoWorldAsset, RoWorldLoader, RsmAsset,
     RsmLoader,
 };
+pub use ro_assets_plugin::SharedCompositeAssetSource;
+

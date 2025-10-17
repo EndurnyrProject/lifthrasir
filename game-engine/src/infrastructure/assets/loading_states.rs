@@ -82,8 +82,6 @@ fn monitor_loading_progress(
     mut next_state: ResMut<NextState<AssetLoadingState>>,
 ) {
     if let Some(_manager) = manager {
-        // For now, we'll just mark as ready immediately
-        // In a real implementation, you might want to preload certain assets here
         info!("Asset loading complete, system ready");
         next_state.set(AssetLoadingState::Ready);
     }

@@ -1,5 +1,5 @@
 use super::{
-    hierarchical_reader::HierarchicalAssetReader, loading_states::ConfigAssets,
+    hierarchical_reader::HierarchicalAssetReader,
     ro_asset_source::setup_composite_source_from_config, sources::CompositeAssetSource,
     AssetConfig, HierarchicalAssetManager,
 };
@@ -9,7 +9,7 @@ use bevy::{
         io::{AssetSourceBuilder, AssetSourceId},
         AssetApp,
     },
-    log::{error, info},
+    log::info,
     prelude::*,
 };
 use std::sync::{Arc, RwLock};
@@ -97,40 +97,3 @@ impl Plugin for RoAssetsPlugin {
 /// Resource to track if unified asset source has been registered
 #[derive(Resource, Default)]
 pub struct UnifiedAssetSourceRegistered(pub bool);
-
-/// System to register the unified asset source once configuration is loaded
-fn register_unified_asset_source(
-    commands: Commands,
-    config_assets: Res<ConfigAssets>,
-    configs: Res<Assets<AssetConfig>>,
-    app: Commands,
-    mut registered: Local<bool>,
-) {
-    if *registered {
-        return; // Already registered
-    }
-
-    if let Some(config) = configs.get(&config_assets.config) {
-        info!("Registering unified RO asset source as 'ro://' with loaded config");
-
-        match setup_composite_source_from_config(config) {
-            Ok(composite_source) => {
-                let composite_arc = Arc::new(RwLock::new(composite_source));
-
-                // Note: Unfortunately, we can't dynamically register asset sources after app setup
-                // This is a limitation of Bevy's asset system architecture
-                // The asset source must be registered during app building phase
-
-                info!(
-                    "Composite source created successfully, but asset source registration must happen during app setup"
-                );
-                *registered = true;
-            }
-            Err(e) => {
-                error!("Failed to create composite asset source: {}", e);
-            }
-        }
-    }
-}
-
-// Re-export all the asset types from the main loaders module
