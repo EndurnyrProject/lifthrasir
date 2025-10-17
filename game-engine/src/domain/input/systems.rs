@@ -1,6 +1,5 @@
 use crate::{
-    domain::world::components::MapLoader,
-    infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
+    domain::world::components::MapLoader, infrastructure::assets::loaders::RoAltitudeAsset,
 };
 use bevy::math::primitives::InfinitePlane3d;
 use bevy::prelude::*;

@@ -65,13 +65,12 @@ pub fn setup_unified_map_loading(
 ) {
     // Only run if MapSpawnContext exists and no loader already exists
     let Some(context) = spawn_context else {
-        warn!("setup_unified_map_loading: MapSpawnContext not found - waiting for zone auth to complete");
-        return; // Context not ready yet
+        return;
     };
 
     // Check if a map loader already exists to prevent duplicate loading
     if !existing_loaders.is_empty() {
-        return; // Already loading a map
+        return;
     }
 
     // FAIL-FAST: Panic if map name is invalid/empty
@@ -85,7 +84,6 @@ pub fn setup_unified_map_loading(
         context.map_name, context.spawn_x, context.spawn_y
     );
 
-    // Request loading of the specified map through the unified asset system
     commands.spawn(MapRequestLoader::new(context.map_name.clone()));
     info!(
         "Spawned MapRequestLoader entity for map '{}'",
@@ -143,7 +141,6 @@ pub fn detect_asset_load_failures(
     use bevy::asset::LoadState;
 
     for (map_loader, map_request) in query.iter() {
-        // Check ground asset state with detailed reporting
         match asset_server.load_state(&map_loader.ground) {
             LoadState::Failed(err) => {
                 panic!(
@@ -165,7 +162,6 @@ pub fn detect_asset_load_failures(
             }
         }
 
-        // Check altitude asset if present
         if let Some(ref alt_handle) = map_loader.altitude {
             match asset_server.load_state(alt_handle) {
                 LoadState::Failed(err) => {

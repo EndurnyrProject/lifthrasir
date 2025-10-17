@@ -340,29 +340,29 @@ pub fn observe_gameplay_state_changes(
     }
 }
 
+/// Query filter for entities with any animation trigger component
+type AnimationTriggerFilter = (
+    Or<(
+        With<StartWalking>,
+        With<StopWalking>,
+        With<StartAttacking>,
+        With<FinishAttack>,
+        With<StartCasting>,
+        With<FinishCasting>,
+        With<TakeDamage>,
+        With<Die>,
+        With<Resurrect>,
+        With<Sit>,
+        With<Stand>,
+    )>,
+    With<StateMachine>,
+);
+
 // System to automatically clear triggers after they've been processed
 pub fn cleanup_processed_triggers(
     mut commands: Commands,
     // Query for entities with triggers (seldom_state will process these automatically)
-    trigger_entities: Query<
-        Entity,
-        (
-            Or<(
-                With<StartWalking>,
-                With<StopWalking>,
-                With<StartAttacking>,
-                With<FinishAttack>,
-                With<StartCasting>,
-                With<FinishCasting>,
-                With<TakeDamage>,
-                With<Die>,
-                With<Resurrect>,
-                With<Sit>,
-                With<Stand>,
-            )>,
-            With<StateMachine>,
-        ),
-    >,
+    trigger_entities: Query<Entity, AnimationTriggerFilter>,
 ) {
     // Explicitly clean up triggers to prevent accumulation and ensure single-frame behavior
     for entity in trigger_entities.iter() {

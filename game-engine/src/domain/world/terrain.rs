@@ -1,3 +1,8 @@
+use crate::{
+    domain::world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
+    infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
+    utils::constants::CELL_SIZE,
+};
 use bevy::{
     prelude::*,
     render::{
@@ -5,12 +10,72 @@ use bevy::{
         render_asset::RenderAssetUsages,
     },
 };
+use std::collections::HashMap;
 
-use crate::{
-    domain::world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
-    infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
-    utils::constants::CELL_SIZE,
-};
+/// Type alias for mesh data grouped by texture index.
+/// Maps texture index to its associated mesh data
+type MeshDataByTexture = HashMap<usize, MeshData>;
+
+/// Type alias for querying map entities ready for terrain generation
+type TerrainGenerationQuery<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static MapLoader, &'static MapRequestLoader),
+    (Without<MapData>, Without<TerrainTexturesLoading>),
+>;
+
+/// Material property constants for terrain rendering
+const TERRAIN_ROUGHNESS: f32 = 0.8;
+const TERRAIN_METALLIC: f32 = 0.0;
+const TERRAIN_ALPHA_THRESHOLD: f32 = 0.5;
+
+/// Mesh data grouped by texture index for terrain generation
+#[derive(Debug, Default)]
+struct MeshData {
+    positions: Vec<Vec3>,
+    normals: Vec<Vec3>,
+    colors: Vec<[f32; 4]>,
+    uvs: Vec<[f32; 2]>,
+    indices: Vec<u32>,
+}
+
+/// Convert ARGB color format to normalized RGBA values
+/// GND files use ARGB format (alpha in index 0), we need RGBA for rendering
+#[inline]
+fn argb_to_rgba_normalized(argb: &[u8; 4]) -> [f32; 4] {
+    [
+        argb[1] as f32 / 255.0, // R
+        argb[2] as f32 / 255.0, // G
+        argb[3] as f32 / 255.0, // B
+        argb[0] as f32 / 255.0, // A
+    ]
+}
+
+/// Resolve the actual texture index from a tile's texture reference
+/// Returns 0 as fallback if the index is out of bounds
+#[inline]
+fn resolve_texture_index(
+    tile: &crate::infrastructure::ro_formats::GndTile,
+    ground: &crate::infrastructure::ro_formats::RoGround,
+) -> usize {
+    let idx = tile.texture as usize;
+    if idx < ground.texture_indexes.len() {
+        ground.texture_indexes[idx]
+    } else {
+        0
+    }
+}
+
+/// Calculate 3D position for a cell vertex
+/// Applies CELL_SIZE scaling and supports fractional offsets for sub-cell positioning
+#[inline]
+fn cell_vertex_position(x: usize, y: usize, height: f32, offset_x: f32, offset_y: f32) -> Vec3 {
+    Vec3::new(
+        (x as f32 + offset_x) * CELL_SIZE,
+        height,
+        (y as f32 + offset_y) * CELL_SIZE,
+    )
+}
 
 /// Component to track terrain textures that are loading
 #[derive(Component)]
@@ -26,7 +91,6 @@ pub struct TerrainTexturesLoading {
 fn create_terrain_materials_from_loaded_textures(
     ground: &crate::infrastructure::ro_formats::RoGround,
     texture_handles: &[Handle<Image>],
-    texture_names: &[String],
     asset_server: &AssetServer,
     materials: &mut ResMut<Assets<StandardMaterial>>,
 ) -> Vec<Handle<StandardMaterial>> {
@@ -36,23 +100,20 @@ fn create_terrain_materials_from_loaded_textures(
     for (i, texture_name) in ground.textures.iter().enumerate() {
         let material = if i < texture_handles.len() && texture_handles[i].id() != AssetId::default()
         {
-            // Check if texture actually loaded successfully
             match asset_server.load_state(&texture_handles[i]) {
                 LoadState::Loaded => {
-                    // Texture loaded successfully - use it!
                     info!("Using loaded texture #{}: {}", i, texture_name);
                     materials.add(StandardMaterial {
                         base_color_texture: Some(texture_handles[i].clone()),
                         base_color: Color::WHITE,
-                        perceptual_roughness: 0.8,
-                        metallic: 0.0,
+                        perceptual_roughness: TERRAIN_ROUGHNESS,
+                        metallic: TERRAIN_METALLIC,
                         cull_mode: None,
-                        alpha_mode: AlphaMode::Mask(0.5),
+                        alpha_mode: AlphaMode::Mask(TERRAIN_ALPHA_THRESHOLD),
                         ..default()
                     })
                 }
                 _ => {
-                    // Texture failed or not loaded - use colored fallback
                     warn!(
                         "Texture failed, using colored fallback for: {}",
                         texture_name
@@ -61,7 +122,6 @@ fn create_terrain_materials_from_loaded_textures(
                 }
             }
         } else {
-            // Empty texture name or no handle - use colored fallback
             create_colored_fallback_material(i, materials)
         };
 
@@ -91,24 +151,151 @@ fn create_colored_fallback_material(
 
     materials.add(StandardMaterial {
         base_color: color,
-        perceptual_roughness: 0.8,
-        metallic: 0.0,
+        perceptual_roughness: TERRAIN_ROUGHNESS,
+        metallic: TERRAIN_METALLIC,
         cull_mode: None,
-        alpha_mode: AlphaMode::Mask(0.5),
+        alpha_mode: AlphaMode::Mask(TERRAIN_ALPHA_THRESHOLD),
         ..default()
     })
 }
 
-/// Calculate smooth normals by averaging neighboring cell normals
-/// Port of roBrowser's getSmoothNormal function
-fn calculate_smooth_normals(
-    ground: &crate::infrastructure::ro_formats::RoGround,
-) -> Vec<[Vec3; 4]> {
-    let width = ground.width as usize;
-    let height = ground.height as usize;
-    let surfaces = &ground.surfaces;
+/// Wall direction for parametric wall generation
+enum WallDirection {
+    /// Front wall (facing negative Z)
+    Front,
+    /// Right wall (facing negative X)
+    Right,
+}
 
-    // Calculate normal for each cell first
+/// Generate a wall quad (front or right) using exact heights
+/// Unifies the logic from generate_front_wall and generate_right_wall
+fn generate_wall(
+    meshes_by_texture: &mut MeshDataByTexture,
+    ground: &crate::infrastructure::ro_formats::RoGround,
+    x: usize,
+    y: usize,
+    width: usize,
+    surface: &crate::infrastructure::ro_formats::GndSurface,
+    direction: WallDirection,
+) {
+    // Get the appropriate tile index and next surface based on direction
+    let (tile_field, next_surface_offset) = match direction {
+        WallDirection::Front => (surface.tile_front, (y + 1) * width + x),
+        WallDirection::Right => (surface.tile_right, y * width + (x + 1)),
+    };
+
+    let tile_idx = tile_field as usize;
+    if tile_idx >= ground.tiles.len() {
+        return;
+    }
+
+    let tile = &ground.tiles[tile_idx];
+    let final_texture_idx = resolve_texture_index(tile, ground);
+
+    // Get mesh data for this texture
+    let mesh_data = meshes_by_texture.entry(final_texture_idx).or_default();
+
+    let next_surface = &ground.surfaces[next_surface_offset];
+
+    // Heights from GND data (no smoothing for walls)
+    let current_heights = [
+        surface.height[0], // SW
+        surface.height[1], // SE
+        surface.height[2], // NW
+        surface.height[3], // NE
+    ];
+
+    let next_heights = [
+        next_surface.height[0], // SW
+        next_surface.height[1], // SE
+        next_surface.height[2], // NW
+        next_surface.height[3], // NE
+    ];
+
+    let vertex_offset = mesh_data.positions.len() as u32;
+
+    // Generate vertices based on wall direction
+    match direction {
+        WallDirection::Front => {
+            let base_x = x as f32 * CELL_SIZE;
+            let base_z = (y + 1) as f32 * CELL_SIZE; // Wall is at Y+1 boundary
+
+            // Wall connects current cell's north edge (NW, NE) to next cell's south edge (SW, SE)
+            mesh_data
+                .positions
+                .push(Vec3::new(base_x, current_heights[2], base_z)); // Current NW
+            mesh_data
+                .positions
+                .push(Vec3::new(base_x + CELL_SIZE, current_heights[3], base_z)); // Current NE
+            mesh_data
+                .positions
+                .push(Vec3::new(base_x, next_heights[0], base_z)); // Next SW
+            mesh_data
+                .positions
+                .push(Vec3::new(base_x + CELL_SIZE, next_heights[1], base_z)); // Next SE
+
+            // UV coordinates for front wall
+            mesh_data.uvs.push([tile.u1, tile.v1]); // Current NW -> tile NW
+            mesh_data.uvs.push([tile.u2, tile.v2]); // Current NE -> tile NE
+            mesh_data.uvs.push([tile.u3, tile.v3]); // Next SW -> tile SW
+            mesh_data.uvs.push([tile.u4, tile.v4]); // Next SE -> tile SE
+        }
+        WallDirection::Right => {
+            let base_x = (x + 1) as f32 * CELL_SIZE; // Wall is at X+1 boundary
+            let base_z = y as f32 * CELL_SIZE;
+
+            // Wall connects current cell's east edge (SE, NE) to next cell's west edge (SW, NW)
+            mesh_data
+                .positions
+                .push(Vec3::new(base_x, current_heights[1], base_z)); // Current SE (at y+0)
+            mesh_data
+                .positions
+                .push(Vec3::new(base_x, current_heights[3], base_z + CELL_SIZE)); // Current NE (at y+1)
+            mesh_data
+                .positions
+                .push(Vec3::new(base_x, next_heights[0], base_z)); // Next SW (at y+0)
+            mesh_data
+                .positions
+                .push(Vec3::new(base_x, next_heights[2], base_z + CELL_SIZE)); // Next NW (at y+1)
+
+            // UV coordinates for right wall
+            mesh_data.uvs.push([tile.u2, tile.v2]); // Bottom-left
+            mesh_data.uvs.push([tile.u1, tile.v1]); // Bottom-right
+            mesh_data.uvs.push([tile.u4, tile.v4]); // Top-left
+            mesh_data.uvs.push([tile.u3, tile.v3]); // Top-right
+        }
+    }
+
+    // Hard normal based on wall direction - no smoothing
+    let wall_normal = match direction {
+        WallDirection::Front => Vec3::new(0.0, 0.0, -1.0),
+        WallDirection::Right => Vec3::new(-1.0, 0.0, 0.0),
+    };
+    for _ in 0..4 {
+        mesh_data.normals.push(wall_normal);
+    }
+
+    // Use tile color for artistic variation (GND uses ARGB format)
+    let tile_color = argb_to_rgba_normalized(&tile.color);
+    for _ in 0..4 {
+        mesh_data.colors.push(tile_color);
+    }
+
+    // Indices for wall quad (same for both directions)
+    mesh_data.indices.push(vertex_offset); // First vertex
+    mesh_data.indices.push(vertex_offset + 1); // Second vertex
+    mesh_data.indices.push(vertex_offset + 2); // Third vertex
+    mesh_data.indices.push(vertex_offset + 2); // Third vertex (repeated)
+    mesh_data.indices.push(vertex_offset + 1); // Second vertex (repeated)
+    mesh_data.indices.push(vertex_offset + 3); // Fourth vertex
+}
+
+/// Calculate the base normal for each cell using cross product of diagonals
+fn calculate_cell_normals(
+    surfaces: &[crate::infrastructure::ro_formats::GndSurface],
+    width: usize,
+    height: usize,
+) -> Vec<Vec3> {
     let mut cell_normals = vec![Vec3::ZERO; width * height];
 
     for y in 0..height {
@@ -118,14 +305,26 @@ fn calculate_smooth_normals(
             // Only calculate normal if tile_up exists
             if surface.tile_up >= 0 {
                 // Calculate positions of the 4 corners matching actual mesh coordinates
-                let a = Vec3::new((x as f32) * CELL_SIZE, surface.height[0], (y as f32) * CELL_SIZE); // SW
-                let b = Vec3::new((x as f32 + 1.0) * CELL_SIZE, surface.height[1], (y as f32) * CELL_SIZE); // SE
+                let a = Vec3::new(
+                    (x as f32) * CELL_SIZE,
+                    surface.height[0],
+                    (y as f32) * CELL_SIZE,
+                ); // SW
+                let b = Vec3::new(
+                    (x as f32 + 1.0) * CELL_SIZE,
+                    surface.height[1],
+                    (y as f32) * CELL_SIZE,
+                ); // SE
                 let c = Vec3::new(
                     (x as f32 + 1.0) * CELL_SIZE,
                     surface.height[3],
                     (y as f32 + 1.0) * CELL_SIZE,
                 ); // NE
-                let d = Vec3::new((x as f32) * CELL_SIZE, surface.height[2], (y as f32 + 1.0) * CELL_SIZE); // NW
+                let d = Vec3::new(
+                    (x as f32) * CELL_SIZE,
+                    surface.height[2],
+                    (y as f32 + 1.0) * CELL_SIZE,
+                ); // NW
 
                 // Calculate normal using cross product of quad diagonals (like roBrowser)
                 let diag1 = c - a; // SW to NE diagonal
@@ -137,7 +336,20 @@ fn calculate_smooth_normals(
         }
     }
 
-    // Now smooth normals by averaging neighbors (like roBrowser getSmoothNormal)
+    cell_normals
+}
+
+/// Calculate smooth normals by averaging neighboring cell normals
+fn calculate_smooth_normals(
+    ground: &crate::infrastructure::ro_formats::RoGround,
+) -> Vec<[Vec3; 4]> {
+    let width = ground.width as usize;
+    let height = ground.height as usize;
+
+    // First calculate base normal for each cell
+    let cell_normals = calculate_cell_normals(&ground.surfaces, width, height);
+
+    // Now smooth normals by averaging neighbors
     let mut smooth_normals = vec![[Vec3::ZERO; 4]; width * height];
 
     for y in 0..height {
@@ -220,211 +432,11 @@ fn calculate_smooth_normals(
     smooth_normals
 }
 
-/// Generate front wall using exact heights (no smoothing)
-fn generate_front_wall(
-    meshes_by_texture: &mut std::collections::HashMap<
-        usize,
-        (Vec<Vec3>, Vec<Vec3>, Vec<[f32; 4]>, Vec<[f32; 2]>, Vec<u32>),
-    >,
-    ground: &crate::infrastructure::ro_formats::RoGround,
-    x: usize,
-    y: usize,
-    width: usize,
-    surface: &crate::infrastructure::ro_formats::GndSurface,
-) {
-    let next_surface = &ground.surfaces[(y + 1) * width + x];
-
-    // Get tile for this wall
-    let tile_idx = surface.tile_front as usize;
-    if tile_idx >= ground.tiles.len() {
-        return;
-    }
-
-    let tile = &ground.tiles[tile_idx];
-    let texture_index_idx = tile.texture as usize;
-    let final_texture_idx = if texture_index_idx < ground.texture_indexes.len() {
-        ground.texture_indexes[texture_index_idx]
-    } else {
-        0
-    };
-
-    // Get mesh data for this texture
-    let mesh_data = meshes_by_texture
-        .entry(final_texture_idx)
-        .or_insert_with(|| (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()));
-
-    let base_x = x as f32 * CELL_SIZE;
-    let base_z = (y + 1) as f32 * CELL_SIZE; // Wall is at Y+1 boundary
-
-    // Use EXACT heights from GND data (no smoothing for walls)
-    let current_heights = [
-        surface.height[0], // SW
-        surface.height[1], // SE
-        surface.height[2], // NW
-        surface.height[3], // NE
-    ];
-
-    let next_heights = [
-        next_surface.height[0], // SW
-        next_surface.height[1], // SE
-        next_surface.height[2], // NW
-        next_surface.height[3], // NE
-    ];
-
-    let vertex_offset = mesh_data.0.len() as u32;
-
-    // Create wall quad between the two cells using exact heights
-    // Wall connects current cell's north edge (NW, NE) to next cell's south edge (SW, SE)
-    mesh_data
-        .0
-        .push(Vec3::new(base_x, current_heights[2], base_z)); // Current NW
-    mesh_data
-        .0
-        .push(Vec3::new(base_x + CELL_SIZE, current_heights[3], base_z)); // Current NE
-    mesh_data.0.push(Vec3::new(base_x, next_heights[0], base_z)); // Next SW
-    mesh_data
-        .0
-        .push(Vec3::new(base_x + CELL_SIZE, next_heights[1], base_z)); // Next SE
-
-    // Hard normal for front wall (facing negative Z direction) - no smoothing
-    let wall_normal = Vec3::new(0.0, 0.0, -1.0);
-    for _ in 0..4 {
-        mesh_data.1.push(wall_normal);
-    }
-
-    // Use tile color for artistic variation (GND uses ARGB format)
-    let tile_color = [
-        tile.color[1] as f32 / 255.0, // R
-        tile.color[2] as f32 / 255.0, // G
-        tile.color[3] as f32 / 255.0, // B
-        tile.color[0] as f32 / 255.0, // A
-    ];
-    for _ in 0..4 {
-        mesh_data.2.push(tile_color);
-    }
-
-    // UV coordinates from tile - matching corrected vertex order
-    mesh_data.3.push([tile.u1, tile.v1]); // Current NW -> tile NW
-    mesh_data.3.push([tile.u2, tile.v2]); // Current NE -> tile NE
-    mesh_data.3.push([tile.u3, tile.v3]); // Next SW -> tile SW
-    mesh_data.3.push([tile.u4, tile.v4]); // Next SE -> tile SE
-
-    // Indices for wall quad
-    mesh_data.4.push(vertex_offset); // Current NW
-    mesh_data.4.push(vertex_offset + 1); // Current NE
-    mesh_data.4.push(vertex_offset + 2); // Next SW
-    mesh_data.4.push(vertex_offset + 2); // Next SW
-    mesh_data.4.push(vertex_offset + 1); // Current NE
-    mesh_data.4.push(vertex_offset + 3); // Next SE
-}
-
-/// Generate right wall using exact heights (no smoothing)
-fn generate_right_wall(
-    meshes_by_texture: &mut std::collections::HashMap<
-        usize,
-        (Vec<Vec3>, Vec<Vec3>, Vec<[f32; 4]>, Vec<[f32; 2]>, Vec<u32>),
-    >,
-    ground: &crate::infrastructure::ro_formats::RoGround,
-    x: usize,
-    y: usize,
-    width: usize,
-    surface: &crate::infrastructure::ro_formats::GndSurface,
-) {
-    let next_surface = &ground.surfaces[y * width + (x + 1)];
-
-    // Get tile for this wall
-    let tile_idx = surface.tile_right as usize;
-    if tile_idx >= ground.tiles.len() {
-        return;
-    }
-
-    let tile = &ground.tiles[tile_idx];
-    let texture_index_idx = tile.texture as usize;
-    let final_texture_idx = if texture_index_idx < ground.texture_indexes.len() {
-        ground.texture_indexes[texture_index_idx]
-    } else {
-        0
-    };
-
-    // Get mesh data for this texture
-    let mesh_data = meshes_by_texture
-        .entry(final_texture_idx)
-        .or_insert_with(|| (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()));
-
-    let base_x = (x + 1) as f32 * CELL_SIZE; // Wall is at X+1 boundary
-    let base_z = y as f32 * CELL_SIZE;
-
-    // Use EXACT heights from GND data (no smoothing for walls)
-    let current_heights = [
-        surface.height[0], // SW
-        surface.height[1], // SE
-        surface.height[2], // NW
-        surface.height[3], // NE
-    ];
-
-    let next_heights = [
-        next_surface.height[0], // SW
-        next_surface.height[1], // SE
-        next_surface.height[2], // NW
-        next_surface.height[3], // NE
-    ];
-
-    let vertex_offset = mesh_data.0.len() as u32;
-
-    // Create wall quad between the two cells using exact heights
-    // Wall connects current cell's east edge (SE, NE) to next cell's west edge (SW, NW)
-    mesh_data
-        .0
-        .push(Vec3::new(base_x, current_heights[1], base_z)); // Current SE (at y+0)
-    mesh_data
-        .0
-        .push(Vec3::new(base_x, current_heights[3], base_z + CELL_SIZE)); // Current NE (at y+1)
-    mesh_data.0.push(Vec3::new(base_x, next_heights[0], base_z)); // Next SW (at y+0)
-    mesh_data
-        .0
-        .push(Vec3::new(base_x, next_heights[2], base_z + CELL_SIZE)); // Next NW (at y+1)
-
-    // Hard normal for right wall (facing negative X direction) - no smoothing
-    let wall_normal = Vec3::new(-1.0, 0.0, 0.0);
-    for _ in 0..4 {
-        mesh_data.1.push(wall_normal);
-    }
-
-    // Use tile color for artistic variation (GND uses ARGB format)
-    let tile_color = [
-        tile.color[1] as f32 / 255.0, // R
-        tile.color[2] as f32 / 255.0, // G
-        tile.color[3] as f32 / 255.0, // B
-        tile.color[0] as f32 / 255.0, // A
-    ];
-    for _ in 0..4 {
-        mesh_data.2.push(tile_color);
-    }
-
-    // UV coordinates from tile - matching roBrowser right wall pattern
-    mesh_data.3.push([tile.u2, tile.v2]); // Bottom-left
-    mesh_data.3.push([tile.u1, tile.v1]); // Bottom-right
-    mesh_data.3.push([tile.u4, tile.v4]); // Top-left
-    mesh_data.3.push([tile.u3, tile.v3]); // Top-right
-
-    // Indices for wall quad
-    mesh_data.4.push(vertex_offset); // Current SE
-    mesh_data.4.push(vertex_offset + 1); // Current NE
-    mesh_data.4.push(vertex_offset + 2); // Next SW
-    mesh_data.4.push(vertex_offset + 2); // Next SW
-    mesh_data.4.push(vertex_offset + 1); // Current NE
-    mesh_data.4.push(vertex_offset + 3); // Next NW
-}
-
 pub fn generate_terrain_mesh(
     mut commands: Commands,
     ground_assets: Res<Assets<RoGroundAsset>>,
-    altitude_assets: Res<Assets<RoAltitudeAsset>>,
     asset_server: Res<AssetServer>,
-    query: Query<
-        (Entity, &MapLoader, &MapRequestLoader),
-        (Without<MapData>, Without<TerrainTexturesLoading>),
-    >,
+    query: TerrainGenerationQuery,
 ) {
     for (entity, map_loader, map_request) in query.iter() {
         debug!(
@@ -432,7 +444,6 @@ pub fn generate_terrain_mesh(
             map_request.map_name
         );
 
-        // Check if ground asset and its dependencies are actually loaded via AssetServer
         if !asset_server.is_loaded_with_dependencies(&map_loader.ground) {
             debug!(
                 "generate_terrain_mesh: Waiting for ground asset and dependencies to load for '{}'",
@@ -582,16 +593,11 @@ pub fn generate_terrain_when_textures_ready(
         let texture_materials = create_terrain_materials_from_loaded_textures(
             &ground.ground,
             &textures_loading.texture_handles,
-            &textures_loading.texture_names,
             &asset_server,
             &mut materials,
         );
 
-        // GAT is used for collision detection, not terrain rendering
-        // GND surfaces contain the height data we need for terrain mesh generation
-
-        // Create separate meshes for each texture using roBrowser approach (6 vertices per cell, no sharing)
-        let meshes_by_texture = create_terrain_meshes_robrowser_style(&ground.ground, altitude);
+        let meshes_by_texture = create_terrain_meshes(&ground.ground, altitude);
 
         // Spawn a mesh entity for each texture
         let mut mesh_count = 0;
@@ -614,27 +620,24 @@ pub fn generate_terrain_when_textures_ready(
 
             let mesh_handle = meshes.add(mesh);
 
-            // Get the material for this texture index
             let material = if texture_idx < texture_materials.len() {
                 texture_materials[texture_idx].clone()
             } else {
-                // Fallback material - bright cyan to make it obvious
                 warn!(
                     "generate_terrain_mesh: Using fallback material for texture_idx {}",
                     texture_idx
                 );
                 materials.add(StandardMaterial {
                     base_color: Color::srgb(0.0, 1.0, 1.0),
-                    perceptual_roughness: 0.5,
-                    metallic: 0.0,
+                    perceptual_roughness: TERRAIN_ROUGHNESS,
+                    metallic: TERRAIN_METALLIC,
                     double_sided: true,
                     cull_mode: None,
-                    alpha_mode: AlphaMode::Mask(0.5),
+                    alpha_mode: AlphaMode::Mask(TERRAIN_ALPHA_THRESHOLD),
                     ..default()
                 })
             };
 
-            // Spawn terrain chunk at origin like RoBrowser
             commands.spawn((
                 Mesh3d(mesh_handle),
                 MeshMaterial3d(material),
@@ -653,7 +656,6 @@ pub fn generate_terrain_when_textures_ready(
             mesh_count, map_request.map_name
         );
 
-        // Update the original entity with map data and remove loading component
         commands
             .entity(entity)
             .insert(MapData {
@@ -670,23 +672,16 @@ pub fn generate_terrain_when_textures_ready(
     }
 }
 
-fn create_terrain_meshes_robrowser_style(
+fn create_terrain_meshes(
     ground: &crate::infrastructure::ro_formats::RoGround,
     _altitude: Option<&crate::infrastructure::ro_formats::RoAltitude>,
 ) -> Vec<(usize, Mesh)> {
-    use std::collections::HashMap;
-
     let width = ground.width as usize;
     let height = ground.height as usize;
-
-    // Calculate smooth normals for all cells (same as roBrowser)
     let smooth_normals = calculate_smooth_normals(ground);
 
     // Group triangles by texture, storing vertex data and indices
-    let mut meshes_by_texture: HashMap<
-        usize,
-        (Vec<Vec3>, Vec<Vec3>, Vec<[f32; 4]>, Vec<[f32; 2]>, Vec<u32>),
-    > = HashMap::new();
+    let mut meshes_by_texture: MeshDataByTexture = HashMap::new();
 
     // Generate terrain quads (roBrowser approach - 6 vertices per cell, no sharing)
     for y in 0..height {
@@ -707,91 +702,67 @@ fn create_terrain_meshes_robrowser_style(
             };
 
             // Get texture index (same logic as roBrowser)
-            let texture_index_idx = tile.texture as usize;
-            let final_texture_idx = if texture_index_idx < ground.texture_indexes.len() {
-                ground.texture_indexes[texture_index_idx]
-            } else {
-                0
-            };
+            let final_texture_idx = resolve_texture_index(tile, ground);
 
             // Get or create mesh data for this texture
-            let mesh_data = meshes_by_texture
-                .entry(final_texture_idx)
-                .or_insert_with(|| (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()));
+            let mesh_data = meshes_by_texture.entry(final_texture_idx).or_default();
 
             // Get heights for this cell (exact heights like roBrowser)
             let h = &surface.height;
             let normals = &smooth_normals[y * width + x];
 
-            let vertex_offset = mesh_data.0.len() as u32;
+            let vertex_offset = mesh_data.positions.len() as u32;
 
             // Generate 6 vertices for 2 triangles (roBrowser approach)
             // Positions: (x+0)*2, h[0], (y+0)*2 etc. (matching roBrowser exactly)
 
             // Triangle 1: (x+0,y+0) -> (x+1,y+0) -> (x+1,y+1)
-            mesh_data.0.push(Vec3::new(
-                (x as f32 + 0.0) * CELL_SIZE,
-                h[0],
-                (y as f32 + 0.0) * CELL_SIZE,
-            ));
-            mesh_data.0.push(Vec3::new(
-                (x as f32 + 1.0) * CELL_SIZE,
-                h[1],
-                (y as f32 + 0.0) * CELL_SIZE,
-            ));
-            mesh_data.0.push(Vec3::new(
-                (x as f32 + 1.0) * CELL_SIZE,
-                h[3],
-                (y as f32 + 1.0) * CELL_SIZE,
-            ));
+            mesh_data
+                .positions
+                .push(cell_vertex_position(x, y, h[0], 0.0, 0.0));
+            mesh_data
+                .positions
+                .push(cell_vertex_position(x, y, h[1], 1.0, 0.0));
+            mesh_data
+                .positions
+                .push(cell_vertex_position(x, y, h[3], 1.0, 1.0));
 
             // Triangle 2: (x+1,y+1) -> (x+0,y+1) -> (x+0,y+0)
-            mesh_data.0.push(Vec3::new(
-                (x as f32 + 1.0) * CELL_SIZE,
-                h[3],
-                (y as f32 + 1.0) * CELL_SIZE,
-            ));
-            mesh_data.0.push(Vec3::new(
-                (x as f32 + 0.0) * CELL_SIZE,
-                h[2],
-                (y as f32 + 1.0) * CELL_SIZE,
-            ));
-            mesh_data.0.push(Vec3::new(
-                (x as f32 + 0.0) * CELL_SIZE,
-                h[0],
-                (y as f32 + 0.0) * CELL_SIZE,
-            ));
+            mesh_data
+                .positions
+                .push(cell_vertex_position(x, y, h[3], 1.0, 1.0));
+            mesh_data
+                .positions
+                .push(cell_vertex_position(x, y, h[2], 0.0, 1.0));
+            mesh_data
+                .positions
+                .push(cell_vertex_position(x, y, h[0], 0.0, 0.0));
 
             // Normals (roBrowser mapping: n[0]=UL, n[1]=UR, n[2]=BR, n[3]=BL)
-            mesh_data.1.push(normals[0]); // UL (x+0,y+0)
-            mesh_data.1.push(normals[1]); // UR (x+1,y+0)
-            mesh_data.1.push(normals[2]); // BR (x+1,y+1)
-            mesh_data.1.push(normals[2]); // BR (x+1,y+1) - repeated
-            mesh_data.1.push(normals[3]); // BL (x+0,y+1)
-            mesh_data.1.push(normals[0]); // UL (x+0,y+0) - repeated
+            mesh_data.normals.push(normals[0]); // UL (x+0,y+0)
+            mesh_data.normals.push(normals[1]); // UR (x+1,y+0)
+            mesh_data.normals.push(normals[2]); // BR (x+1,y+1)
+            mesh_data.normals.push(normals[2]); // BR (x+1,y+1) - repeated
+            mesh_data.normals.push(normals[3]); // BL (x+0,y+1)
+            mesh_data.normals.push(normals[0]); // UL (x+0,y+0) - repeated
 
             // Use tile color for artistic variation (GND uses ARGB format)
-            let tile_color = [
-                tile.color[1] as f32 / 255.0, // R
-                tile.color[2] as f32 / 255.0, // G
-                tile.color[3] as f32 / 255.0, // B
-                tile.color[0] as f32 / 255.0, // A
-            ];
+            let tile_color = argb_to_rgba_normalized(&tile.color);
             for _ in 0..6 {
-                mesh_data.2.push(tile_color);
+                mesh_data.colors.push(tile_color);
             }
 
             // UV coordinates from tile (roBrowser mapping)
-            mesh_data.3.push([tile.u1, tile.v1]); // UL
-            mesh_data.3.push([tile.u2, tile.v2]); // UR
-            mesh_data.3.push([tile.u4, tile.v4]); // BR
-            mesh_data.3.push([tile.u4, tile.v4]); // BR - repeated
-            mesh_data.3.push([tile.u3, tile.v3]); // BL
-            mesh_data.3.push([tile.u1, tile.v1]); // UL - repeated
+            mesh_data.uvs.push([tile.u1, tile.v1]); // UL
+            mesh_data.uvs.push([tile.u2, tile.v2]); // UR
+            mesh_data.uvs.push([tile.u4, tile.v4]); // BR
+            mesh_data.uvs.push([tile.u4, tile.v4]); // BR - repeated
+            mesh_data.uvs.push([tile.u3, tile.v3]); // BL
+            mesh_data.uvs.push([tile.u1, tile.v1]); // UL - repeated
 
             // Indices (sequential, no sharing)
             for i in 0..6 {
-                mesh_data.4.push(vertex_offset + i);
+                mesh_data.indices.push(vertex_offset + i);
             }
         }
     }
@@ -803,29 +774,46 @@ fn create_terrain_meshes_robrowser_style(
 
             // Generate front wall ONLY when tile_front is explicitly defined
             if surface.tile_front >= 0 && (y + 1) < height {
-                generate_front_wall(&mut meshes_by_texture, ground, x, y, width, surface);
+                generate_wall(
+                    &mut meshes_by_texture,
+                    ground,
+                    x,
+                    y,
+                    width,
+                    surface,
+                    WallDirection::Front,
+                );
             }
 
             // Generate right wall ONLY when tile_right is explicitly defined
             if surface.tile_right >= 0 && (x + 1) < width {
-                generate_right_wall(&mut meshes_by_texture, ground, x, y, width, surface);
+                generate_wall(
+                    &mut meshes_by_texture,
+                    ground,
+                    x,
+                    y,
+                    width,
+                    surface,
+                    WallDirection::Right,
+                );
             }
         }
     }
 
     let mut result = Vec::new();
 
-    for (texture_idx, (positions, normals, colors, uvs, indices)) in meshes_by_texture {
+    for (texture_idx, mesh_data) in meshes_by_texture {
         let mut mesh = Mesh::new(
             PrimitiveTopology::TriangleList,
             RenderAssetUsages::default(),
         );
 
-        if !positions.is_empty() {
+        if !mesh_data.positions.is_empty() {
             // Convert Vec3 positions to [f32; 3] arrays
             mesh.insert_attribute(
                 Mesh::ATTRIBUTE_POSITION,
-                positions
+                mesh_data
+                    .positions
                     .iter()
                     .map(|v| [v.x, v.y, v.z])
                     .collect::<Vec<_>>(),
@@ -834,22 +822,16 @@ fn create_terrain_meshes_robrowser_style(
             // Convert Vec3 normals to [f32; 3] arrays
             mesh.insert_attribute(
                 Mesh::ATTRIBUTE_NORMAL,
-                normals.iter().map(|v| [v.x, v.y, v.z]).collect::<Vec<_>>(),
+                mesh_data
+                    .normals
+                    .iter()
+                    .map(|v| [v.x, v.y, v.z])
+                    .collect::<Vec<_>>(),
             );
 
-            // Colors are already [f32; 4] arrays
-            mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
-
-            // UVs are already [f32; 2] arrays
-            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-
-            mesh.insert_indices(Indices::U32(indices));
-
-            if texture_idx < ground.textures.len() {
-                &ground.textures[texture_idx]
-            } else {
-                "unknown"
-            };
+            mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, mesh_data.colors);
+            mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, mesh_data.uvs);
+            mesh.insert_indices(Indices::U32(mesh_data.indices));
 
             result.push((texture_idx, mesh));
         }
