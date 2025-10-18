@@ -18,10 +18,19 @@ use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindow};
 use wgpu::RequestAdapterOptions;
 
 use super::bridge::{
-    translate_tauri_events, write_character_creation_response, write_character_deletion_response,
-    write_character_list_response, write_character_selection_response,
-    write_login_failure_response, write_login_success_response, write_server_selection_response,
-    zone_status_event_emitter, AppBridge, PendingSenders, TauriEventEmitter, TauriEventReceiver,
+    cleanup_stale_correlations, demux_tauri_events, emit_world_events,
+    handle_create_character_request, handle_delete_character_request,
+    handle_get_character_list_request, handle_get_hairstyles_request, handle_keyboard_input,
+    handle_login_request, handle_mouse_position, handle_select_character_request,
+    handle_server_selection_request, write_character_creation_response,
+    write_character_deletion_response, write_character_list_response,
+    write_character_selection_response, write_login_failure_response,
+    write_login_success_response, write_server_selection_response, AppBridge,
+    CharacterCorrelation, CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent,
+    GetCharacterListRequestedEvent, GetHairstylesRequestedEvent, KeyboardInputEvent,
+    LoginCorrelation, LoginRequestedEvent, MousePositionEvent, PendingSenders,
+    SelectCharacterRequestedEvent, ServerCorrelation, ServerSelectionRequestedEvent,
+    TauriEventReceiver, WorldEmitter,
 };
 use super::commands;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
@@ -200,22 +209,59 @@ impl Plugin for TauriIntegrationPlugin {
         app.insert_resource(app_bridge.clone());
         app.insert_resource(TauriEventReceiver(tauri_rx));
         app.insert_resource(PendingSenders::default());
+        app.insert_resource(LoginCorrelation::default());
+        app.insert_resource(CharacterCorrelation::default());
+        app.insert_resource(ServerCorrelation::default());
 
-        // Add event translation systems
-        // Split into multiple add_systems to avoid tuple size limits
-        app.add_systems(Update, translate_tauri_events);
+        // Register typed Bevy events for Tauri bridge
+        app.add_event::<LoginRequestedEvent>()
+            .add_event::<ServerSelectionRequestedEvent>()
+            .add_event::<GetCharacterListRequestedEvent>()
+            .add_event::<SelectCharacterRequestedEvent>()
+            .add_event::<CreateCharacterRequestedEvent>()
+            .add_event::<DeleteCharacterRequestedEvent>()
+            .add_event::<GetHairstylesRequestedEvent>()
+            .add_event::<KeyboardInputEvent>()
+            .add_event::<MousePositionEvent>();
+
+        // Add new event-driven system architecture
+        // 1. demux_tauri_events: Reads from flume channel, emits typed events (runs first)
+        // 2. Handler systems: Process typed events, emit game engine events (run after demux)
+        // 3. Response writer systems: Capture game engine response events, send to UI (run after demux)
         app.add_systems(
             Update,
             (
-                write_login_success_response,
-                write_login_failure_response,
-                write_server_selection_response,
-                write_character_list_response,
-                write_character_selection_response,
-                write_character_creation_response,
-                write_character_deletion_response,
-            )
-                .after(translate_tauri_events),
+                // Single demux system processes all events from flume channel (O(n))
+                demux_tauri_events,
+                // Handler systems process typed events and emit game engine events
+                // These can run in parallel since they read different event types
+                (
+                    handle_login_request,
+                    handle_server_selection_request,
+                    handle_get_character_list_request,
+                    handle_select_character_request,
+                    handle_create_character_request,
+                    handle_delete_character_request,
+                    handle_get_hairstyles_request,
+                    handle_keyboard_input,
+                    handle_mouse_position,
+                )
+                    .after(demux_tauri_events),
+                // Response writers capture game engine events and send responses to UI
+                // These can run in parallel since they write to different oneshot channels
+                (
+                    write_login_success_response,
+                    write_login_failure_response,
+                    write_server_selection_response,
+                    write_character_list_response,
+                    write_character_selection_response,
+                    write_character_creation_response,
+                    write_character_deletion_response,
+                )
+                    .after(demux_tauri_events),
+                // Cleanup system runs periodically to remove stale correlations
+                cleanup_stale_correlations,
+            ),
         );
 
         // Set up Tauri app with custom runner
@@ -237,6 +283,8 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::zone_status::get_zone_status,
                 commands::input::forward_keyboard_input,
                 commands::input::forward_mouse_position,
+                commands::dev::open_devtools,
+                commands::dev::close_devtools,
             ])
             .build(tauri::generate_context!())
             .expect("error while building tauri application");
@@ -246,12 +294,12 @@ impl Plugin for TauriIntegrationPlugin {
             (create_window_handle, register_composite_asset_source).chain(),
         );
 
-        // Create and insert TauriEventEmitter for zone status events
-        let event_emitter = TauriEventEmitter::new(tauri_app.handle().clone());
-        app.insert_non_send_resource(event_emitter);
+        // Create and insert world emitter (for streaming zone/map status updates)
+        let world_emitter = WorldEmitter::new(tauri_app.handle().clone());
+        app.insert_resource(world_emitter);
 
-        // Add zone status event emitter system
-        app.add_systems(Update, zone_status_event_emitter);
+        // Add world emitter system (streaming status updates to frontend)
+        app.add_systems(Update, emit_world_events);
 
         app.insert_non_send_resource(tauri_app.handle().clone());
         app.insert_non_send_resource(tauri_app);

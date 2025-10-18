@@ -44,6 +44,7 @@ pub fn handle_login_attempts(
         let password = attempt.password.expose_secret();
 
         info!("Login attempt for user: {}", username);
+        debug!("Attempting login to server: {}", server_address);
 
         // Connect to login server (non-blocking)
         if let Err(e) = login_client.connect(server_address) {
@@ -54,12 +55,16 @@ pub fn handle_login_attempts(
             continue;
         }
 
+        debug!("Connected to login server, sending CA_LOGIN packet...");
+
         // Send login packet (non-blocking)
         if let Err(e) = login_client.attempt_login(username, password, client_version) {
             error!("Failed to send login packet for {}: {:?}", username, e);
             login_client.disconnect();
             continue;
         }
+
+        debug!("CA_LOGIN packet sent for username: '{}'", username);
 
         // Emit event for UI feedback
         login_started_events.write(LoginAttemptStartedEvent {

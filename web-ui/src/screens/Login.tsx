@@ -41,19 +41,29 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
     setError(null);
 
+    console.log('[FRONTEND] ========== LOGIN ATTEMPT ==========');
+    console.log('[FRONTEND] Username:', username);
+    console.log('[FRONTEND] Calling invoke("login")...');
+
     try {
       const result = await invoke<LoginResponse>('login', {
         request: { username, password }
       });
 
+      console.log('[FRONTEND] Login result received:', result);
+
       if (result.success && result.session_data) {
+        console.log('[FRONTEND] Login successful! Server list:', result.session_data.servers);
         onLoginSuccess(result.session_data.servers);
       } else {
+        console.error('[FRONTEND] Login failed:', result.error);
         setError(result.error || 'Login failed');
       }
     } catch (err) {
+      console.error('[FRONTEND] Login error caught:', err);
       setError('Network error: ' + err);
     } finally {
+      console.log('[FRONTEND] Login attempt completed');
       setLoading(false);
     }
   };

@@ -98,6 +98,23 @@ function AppContent() {
     };
   }, []);
 
+  // Global keyboard shortcut for dev tools (F12)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F12') {
+        e.preventDefault();
+        console.log('[FRONTEND] F12 pressed - Opening dev tools...');
+        invoke('open_devtools').catch(console.error);
+      }
+    };
+
+    document.addEventListener('keydown', handleGlobalKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, []);
+
   // Forward keyboard events to Bevy when in-game and not focused on UI elements
   useEffect(() => {
     if (currentScreen !== "in_game" || isGameLoading) return;

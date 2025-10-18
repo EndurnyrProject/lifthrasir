@@ -16,7 +16,17 @@ pub struct CreateCharacterRequest {
 pub async fn get_character_list(
     app_bridge: State<'_, AppBridge>,
 ) -> Result<serde_json::Value, String> {
-    let characters = app_bridge.get_character_list().await?;
+    let receiver = app_bridge.send_get_character_list();
+
+    let characters = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        receiver
+    ).await {
+        Ok(Ok(result)) => result?,
+        Ok(Err(_)) => return Err("Response channel closed".into()),
+        Err(_) => return Err("Get character list request timed out".into()),
+    };
+
     Ok(serde_json::json!({
         "success": true,
         "characters": characters
@@ -29,7 +39,17 @@ pub async fn select_character(
     slot: u8,
     app_bridge: State<'_, AppBridge>,
 ) -> Result<serde_json::Value, String> {
-    app_bridge.select_character(slot).await?;
+    let receiver = app_bridge.send_select_character(slot);
+
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        receiver
+    ).await {
+        Ok(Ok(result)) => result?,
+        Ok(Err(_)) => return Err("Response channel closed".into()),
+        Err(_) => return Err("Select character request timed out".into()),
+    };
+
     Ok(serde_json::json!({ "success": true }))
 }
 
@@ -39,15 +59,23 @@ pub async fn create_character(
     request: CreateCharacterRequest,
     app_bridge: State<'_, AppBridge>,
 ) -> Result<serde_json::Value, String> {
-    let _character = app_bridge
-        .create_character(
-            request.name,
-            request.slot,
-            request.hair_style,
-            request.hair_color,
-            request.sex,
-        )
-        .await?;
+    let receiver = app_bridge.send_create_character(
+        request.name,
+        request.slot,
+        request.hair_style,
+        request.hair_color,
+        request.sex,
+    );
+
+    let _character = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        receiver
+    ).await {
+        Ok(Ok(result)) => result?,
+        Ok(Err(_)) => return Err("Response channel closed".into()),
+        Err(_) => return Err("Create character request timed out".into()),
+    };
+
     Ok(serde_json::json!({ "success": true }))
 }
 
@@ -57,6 +85,16 @@ pub async fn delete_character(
     char_id: u32,
     app_bridge: State<'_, AppBridge>,
 ) -> Result<serde_json::Value, String> {
-    app_bridge.delete_character(char_id).await?;
+    let receiver = app_bridge.send_delete_character(char_id);
+
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        receiver
+    ).await {
+        Ok(Ok(result)) => result?,
+        Ok(Err(_)) => return Err("Response channel closed".into()),
+        Err(_) => return Err("Delete character request timed out".into()),
+    };
+
     Ok(serde_json::json!({ "success": true }))
 }

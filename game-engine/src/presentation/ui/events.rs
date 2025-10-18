@@ -17,6 +17,8 @@ pub struct LoginAttemptEvent {
 #[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct ServerSelectedEvent {
     pub server: ServerInfo,
+    /// Optional server index for correlation with UI requests
+    pub server_index: Option<usize>,
 }
 
 #[derive(Event)]

@@ -27,6 +27,7 @@ secrecy = { version = "0.10", features = ["serde"] }
 
 # Async dependencies (used in bridge)
 tokio = { version = "1.40", features = ["sync"] }
+flume = "0.11"
 
 # Configuration parsing
 toml = "0.8"
