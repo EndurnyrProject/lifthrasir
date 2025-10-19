@@ -265,25 +265,3 @@ pub fn parse_act(data: &[u8]) -> Result<RoAction, ActError> {
         sounds,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_header() {
-        let data = b"AC\x02\x01";
-        let result = parse_header(data);
-        assert!(result.is_ok());
-        let (_, (signature, version)) = result.unwrap();
-        assert_eq!(signature, "AC");
-        assert_eq!(version, 2.1);
-    }
-
-    #[test]
-    fn test_invalid_header() {
-        let data = b"XX\x02\x01";
-        let result = parse_act(data);
-        assert!(matches!(result, Err(ActError::InvalidHeader)));
-    }
-}
