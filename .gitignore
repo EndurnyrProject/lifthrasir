@@ -5,14 +5,13 @@
 # GRF
 *.grf
 
-# RoBrowser
+# Reference
 robrowser-src
 grf-editor-src
+reference.xml
 
 # Claude
 .claude_consciousness.m8
-
-
 .mcp.json
 
 ### macOS ###
