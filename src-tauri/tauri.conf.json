@@ -48,8 +48,13 @@
     "macOSPrivateApi": true
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "targets": "all",
+    "publisher": "Lifthrasir Project",
+    "copyright": "Copyright © 2025 Lifthrasir Project",
+    "category": "Game",
+    "shortDescription": "Modern Ragnarok Online client built with Rust and Bevy",
+    "longDescription": "Lifthrasir is a cross-platform Ragnarok Online client implementation written in Rust using the Bevy game engine with a React-based UI. This project aims to recreate the classic MMORPG client experience while leveraging modern technologies for performance and maintainability.",
     "icon": [
       "icons/icon.png"
     ]
