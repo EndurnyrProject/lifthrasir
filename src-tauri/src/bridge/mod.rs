@@ -34,7 +34,7 @@ pub use character::{
 pub use customization::handle_get_hairstyles_request;
 
 // Re-export input functionality
-pub use input::{handle_keyboard_input, handle_mouse_position};
+pub use input::{handle_keyboard_input, handle_mouse_click, handle_mouse_position};
 
 // Re-export world functionality
 pub use world::{emit_world_events, WorldEmitter};

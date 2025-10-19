@@ -34,6 +34,14 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcRefuseEnterPacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcRefuseEnter(packet))
             }
+            ZC_NOTIFY_PLAYERMOVE => {
+                let packet = ZcNotifyPlayermovePacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyPlayermove(packet))
+            }
+            ZC_NOTIFY_MOVE_STOP => {
+                let packet = ZcNotifyMoveStopPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyMoveStop(packet))
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unknown zone packet ID: 0x{:04X}", packet_id),
@@ -46,6 +54,8 @@ impl Protocol for ZoneProtocol {
             ZC_ACCEPT_ENTER => PacketSize::Fixed(13),
             ZC_AID => PacketSize::Fixed(6),
             ZC_REFUSE_ENTER => PacketSize::Fixed(3),
+            ZC_NOTIFY_PLAYERMOVE => PacketSize::Fixed(12),
+            ZC_NOTIFY_MOVE_STOP => PacketSize::Fixed(10),
             _ => PacketSize::Variable {
                 length_offset: 2,
                 length_bytes: 2,
@@ -126,6 +136,7 @@ impl ZoneContext {
 pub enum ZoneClientPacket {
     CzEnter2(CzEnter2Packet),
     CzNotifyActorinit(CzNotifyActorinitPacket),
+    CzRequestMove2(CzRequestMove2Packet),
 }
 
 impl ClientPacket for ZoneClientPacket {
@@ -135,6 +146,7 @@ impl ClientPacket for ZoneClientPacket {
         match self {
             Self::CzEnter2(p) => p.serialize(),
             Self::CzNotifyActorinit(p) => p.serialize(),
+            Self::CzRequestMove2(p) => p.serialize(),
         }
     }
 
@@ -142,6 +154,7 @@ impl ClientPacket for ZoneClientPacket {
         match self {
             Self::CzEnter2(_) => CZ_ENTER2,
             Self::CzNotifyActorinit(_) => CZ_NOTIFY_ACTORINIT,
+            Self::CzRequestMove2(_) => CZ_REQUEST_MOVE2,
         }
     }
 }
@@ -152,6 +165,8 @@ pub enum ZoneServerPacket {
     ZcAcceptEnter(ZcAcceptEnterPacket),
     ZcAid(ZcAidPacket),
     ZcRefuseEnter(ZcRefuseEnterPacket),
+    ZcNotifyPlayermove(ZcNotifyPlayermovePacket),
+    ZcNotifyMoveStop(ZcNotifyMoveStopPacket),
 }
 
 impl ServerPacket for ZoneServerPacket {
@@ -166,6 +181,8 @@ impl ServerPacket for ZoneServerPacket {
             Self::ZcAcceptEnter(_) => ZC_ACCEPT_ENTER,
             Self::ZcAid(_) => ZC_AID,
             Self::ZcRefuseEnter(_) => ZC_REFUSE_ENTER,
+            Self::ZcNotifyPlayermove(_) => ZC_NOTIFY_PLAYERMOVE,
+            Self::ZcNotifyMoveStop(_) => ZC_NOTIFY_MOVE_STOP,
         }
     }
 }

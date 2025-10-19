@@ -278,3 +278,13 @@ impl CharacterStats {
             && self.luk >= 1
     }
 }
+
+/// Marker component for entities that should automatically follow terrain height.
+/// Entities with this component will have their Y position updated every frame
+/// to match the terrain altitude at their current X/Z position.
+///
+/// Used by the altitude system to enable automatic terrain following for grounded entities.
+/// Flying units or entities that should not follow terrain should not have this component.
+#[derive(Component, Debug, Clone, Copy, Reflect)]
+#[reflect(Component)]
+pub struct Grounded;

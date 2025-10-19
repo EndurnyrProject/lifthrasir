@@ -45,7 +45,7 @@ impl ServerPacket for HcAckCharinfoPerPagePacket {
 
         let data_len = (packet_len - 4) as usize;
 
-        if data_len % CharacterInfo::SIZE_CHARINFO_PER_PAGE != 0 {
+        if !data_len.is_multiple_of(CharacterInfo::SIZE_CHARINFO_PER_PAGE) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(

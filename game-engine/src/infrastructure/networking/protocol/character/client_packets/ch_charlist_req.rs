@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn test_ch_charlist_req_default() {
-        let packet = ChCharlistReqPacket::default();
+        let packet = ChCharlistReqPacket;
         let bytes = packet.serialize();
         assert_eq!(bytes.len(), PACKET_SIZE);
     }

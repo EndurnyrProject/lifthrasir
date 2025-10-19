@@ -23,44 +23,11 @@ fn get_animation_assets<'a>(
     Some(AnimationAssets { sprite, action })
 }
 
-/// Checks if a sprite layer is a head layer during idle animation
-/// Head layers have special doridori (head nodding) animation handling
-fn is_head_layer_during_idle(
-    sprite_layer: Option<&crate::domain::entities::character::components::visual::RoSpriteLayer>,
-    action_index: usize,
-) -> bool {
-    let is_idle = action_index == 0;
-    sprite_layer.is_some_and(|layer| {
-        use crate::domain::entities::character::components::equipment::EquipmentSlot;
-        use crate::domain::entities::character::components::visual::SpriteLayerType;
-        matches!(
-            layer.layer_type,
-            SpriteLayerType::Equipment(EquipmentSlot::HeadBottom)
-                | SpriteLayerType::Equipment(EquipmentSlot::HeadMid)
-                | SpriteLayerType::Equipment(EquipmentSlot::HeadTop)
-        )
-    }) && is_idle
-}
-
-/// Calculates the effective frame count for an animation sequence
-/// Head layers during idle divide by 3 to skip doridori variants (headDir 1 and 2)
-fn calculate_effective_frame_count(
-    action_seq: &crate::infrastructure::ro_formats::act::ActionSequence,
-    is_head_layer_idle: bool,
-) -> usize {
-    if is_head_layer_idle {
-        // Divide by 3 to skip doridori variants (headDir 1 and 2)
-        action_seq.animations.len() / 3
-    } else {
-        action_seq.animations.len()
-    }
-}
-
 /// Advances the animation frame based on elapsed time
 fn advance_animation_frame(
     controller: &mut RoAnimationController,
     action: &crate::infrastructure::ro_formats::RoAction,
-    sprite_layer: Option<&crate::domain::entities::character::components::visual::RoSpriteLayer>,
+    _sprite_layer: Option<&crate::domain::entities::character::components::visual::RoSpriteLayer>,
     time: &Time,
 ) {
     if !controller.paused {
@@ -77,8 +44,7 @@ fn advance_animation_frame(
         return;
     };
 
-    let is_head_idle = is_head_layer_during_idle(sprite_layer, controller.action_index);
-    let frame_count = calculate_effective_frame_count(action_seq, is_head_idle);
+    let frame_count = action_seq.animations.len();
 
     controller.animation_index += 1;
     if controller.animation_index >= frame_count {

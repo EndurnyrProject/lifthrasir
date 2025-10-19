@@ -87,6 +87,8 @@ pub enum TauriIncomingEvent {
     KeyboardInput { code: String, pressed: bool },
     /// Forward mouse position from JavaScript to Bevy (no response)
     MousePosition { x: f32, y: f32 },
+    /// Forward mouse click from JavaScript to Bevy (no response)
+    MouseClick { x: f32, y: f32 },
 }
 
 // ============================================================================
@@ -242,6 +244,15 @@ impl AppBridge {
         self.tauri_tx
             .send(TauriIncomingEvent::MousePosition { x, y })
             .map_err(|e| format!("Failed to send mouse position event: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Forward mouse click from JavaScript to Bevy (fire and forget)
+    pub fn forward_mouse_click(&self, x: f32, y: f32) -> Result<(), String> {
+        self.tauri_tx
+            .send(TauriIncomingEvent::MouseClick { x, y })
+            .map_err(|e| format!("Failed to send mouse click event: {}", e))?;
 
         Ok(())
     }

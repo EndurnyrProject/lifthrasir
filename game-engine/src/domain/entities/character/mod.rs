@@ -1,7 +1,9 @@
 pub mod components;
 pub mod kinds;
+pub mod movement;
 pub mod sprite_hierarchy;
 pub mod states;
+pub mod visual;
 
 use bevy::prelude::*;
 
@@ -21,15 +23,11 @@ impl Plugin for UnifiedCharacterEntityPlugin {
     fn build(&self, app: &mut App) {
         states::setup_character_state_machines(app);
 
-        app.add_plugins(sprite_hierarchy::CharacterSpriteHierarchyPlugin)
-            .add_systems(
-                Update,
-                (
-                    states::insert_animation_triggers_from_gameplay_changes,
-                    states::cleanup_processed_triggers,
-                )
-                    .chain(),
-            );
+        app.add_plugins((
+            sprite_hierarchy::CharacterSpriteHierarchyPlugin,
+            movement::MovementPlugin,
+        ))
+        .add_systems(Update, visual::update_character_facing_on_direction_change);
     }
 }
 
@@ -68,6 +66,36 @@ pub fn spawn_unified_character(
         .id();
 
     character_entity
+}
+
+/// Add gameplay components to an existing character entity
+///
+/// This helper adds all components required for in-game character functionality:
+/// - Movement system components (speed, state)
+/// - State machine for animation transitions
+/// - Initial animation, gameplay, and context states
+/// - Grounded marker for automatic terrain following
+///
+/// Use this when transitioning a character entity from character selection to in-game.
+///
+/// # Example
+/// ```ignore
+/// add_gameplay_components_to_entity(&mut commands.entity(character_entity));
+/// ```
+pub fn add_gameplay_components_to_entity(commands: &mut bevy::ecs::system::EntityCommands) {
+    commands.insert((
+        // Movement components
+        movement::components::MovementSpeed::default_walk(),
+        movement::components::MovementState::Idle,
+        // State machine for animation transitions
+        states::create_animation_state_machine(),
+        // Initial states (required by StateMachine)
+        AnimationState::Idle,
+        GameplayState::Normal,
+        ContextState::InGame,
+        // Terrain following
+        components::core::Grounded,
+    ));
 }
 
 // Helper to check if an entity has the unified character components

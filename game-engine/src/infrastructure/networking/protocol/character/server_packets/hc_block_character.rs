@@ -38,7 +38,7 @@ impl ServerPacket for HcBlockCharacterPacket {
         let data_len = packet_len as usize - 4;
         let entry_count = data_len / BlockedCharacterEntry::SIZE;
 
-        if data_len % BlockedCharacterEntry::SIZE != 0 {
+        if !data_len.is_multiple_of(BlockedCharacterEntry::SIZE) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(

@@ -11,5 +11,6 @@ crate::define_event_writers! {
         hairstyles: GetHairstylesRequestedEvent,
         keyboard: KeyboardInputEvent,
         mouse: MousePositionEvent,
+        mouse_click: MouseClickEvent,
     }
 }

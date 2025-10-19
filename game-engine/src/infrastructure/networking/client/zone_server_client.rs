@@ -5,8 +5,10 @@ use crate::infrastructure::networking::{
         dispatcher::PacketDispatcher,
         zone::{
             AcceptEnterHandler, AccountIdReceived, AidHandler, CzEnter2Packet,
-            CzNotifyActorinitPacket, RefuseEnterHandler, SpawnData, ZoneClientPacket, ZoneContext,
-            ZoneEntryRefused, ZoneProtocol, ZoneServerConnected,
+            CzNotifyActorinitPacket, CzRequestMove2Packet, MoveStopHandler,
+            MovementConfirmedByServer, MovementStoppedByServer, PlayermoveHandler,
+            RefuseEnterHandler, SpawnData, ZoneClientPacket, ZoneContext, ZoneEntryRefused,
+            ZoneProtocol, ZoneServerConnected,
         },
         EventBuffer,
     },
@@ -77,6 +79,8 @@ impl ZoneServerClient {
         dispatcher.register(AcceptEnterHandler);
         dispatcher.register(AidHandler);
         dispatcher.register(RefuseEnterHandler);
+        dispatcher.register(PlayermoveHandler);
+        dispatcher.register(MoveStopHandler);
 
         let client = NetworkClient::new(context).with_dispatcher(dispatcher);
 
@@ -158,6 +162,26 @@ impl ZoneServerClient {
         self.inner.send_packet(&packet)
     }
 
+    /// Request character movement to a target position
+    ///
+    /// Sends a CZ_REQUEST_MOVE2 packet to request movement to the specified coordinates.
+    /// The server will validate the movement and respond with either ZC_NOTIFY_PLAYERMOVE
+    /// (to confirm and synchronize the movement) or ZC_NOTIFY_MOVE_STOP (if movement is blocked).
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - Target X coordinate (10-bit value, 0-1023)
+    /// * `y` - Target Y coordinate (10-bit value, 0-1023)
+    /// * `dir` - Facing direction after movement (4-bit value, 0-15)
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if packet was sent, NetworkError otherwise
+    pub fn request_move(&mut self, x: u16, y: u16, dir: u8) -> NetworkResult<()> {
+        let packet = ZoneClientPacket::CzRequestMove2(CzRequestMove2Packet::new(x, y, dir));
+        self.inner.send_packet(&packet)
+    }
+
     /// Process incoming packets and emit Bevy events
     ///
     /// This should be called regularly (e.g., in a Bevy Update system) to:
@@ -226,13 +250,15 @@ impl ZoneServerClient {
 
 /// SystemParam that bundles all ZoneServer event writers
 ///
-/// This reduces the parameter count of zone_server_update_system from 4 to 2
+/// This reduces the parameter count of zone_server_update_system from many to 2
 /// by grouping all related EventWriters into a single logical parameter.
 #[derive(SystemParam)]
 pub struct ZoneServerEventWriters<'w> {
     pub connected: MessageWriter<'w, ZoneServerConnected>,
     pub aid_received: MessageWriter<'w, AccountIdReceived>,
     pub entry_refused: MessageWriter<'w, ZoneEntryRefused>,
+    pub movement_confirmed: MessageWriter<'w, MovementConfirmedByServer>,
+    pub movement_stopped: MessageWriter<'w, MovementStoppedByServer>,
 }
 
 /// Bevy system to update the zone server client
@@ -281,6 +307,8 @@ pub fn zone_server_update_system(
             (ZoneServerConnected, connected),
             (AccountIdReceived, aid_received),
             (ZoneEntryRefused, entry_refused),
+            (MovementConfirmedByServer, movement_confirmed),
+            (MovementStoppedByServer, movement_stopped),
         ]
     );
 }

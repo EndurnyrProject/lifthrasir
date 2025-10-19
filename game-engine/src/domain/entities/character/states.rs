@@ -207,7 +207,6 @@ pub fn setup_character_state_machines(app: &mut App) {
                 insert_animation_triggers_from_gameplay_changes,
                 observe_animation_state_changes,
                 observe_gameplay_state_changes,
-                cleanup_processed_triggers,
             )
                 .chain(),
         );
@@ -247,22 +246,41 @@ pub fn insert_animation_triggers_from_gameplay_changes(
 
 // State change observer systems - these connect state machine to sprite visuals
 
+type ChangedAnimationsQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static AnimationState,
+        Option<&'static crate::domain::entities::character::components::visual::CharacterDirection>,
+    ),
+    (
+        Changed<AnimationState>,
+        With<seldom_state::prelude::StateMachine>,
+    ),
+>;
+
 /// Observes AnimationState changes and emits sprite animation events
 pub fn observe_animation_state_changes(
     mut animation_events: MessageWriter<SpriteAnimationChangeEvent>,
-    changed_animations: CharactersWithChangedAnimationState,
+    changed_animations: ChangedAnimationsQuery,
 ) {
-    for (entity, animation_state) in changed_animations.iter() {
+    for (entity, animation_state, direction) in changed_animations.iter() {
+        let action_type = (*animation_state).into();
+
+        debug!(
+            "🎭 AnimationState CHANGED for {:?}: {:?} -> ActionType::{:?}",
+            entity, animation_state, action_type
+        );
+
         animation_events.write(SpriteAnimationChangeEvent {
             character_entity: entity,
-            action_type: (*animation_state).into(),
+            action_type,
         });
-        info!(
-            "Animation state changed for {:?}: {:?} -> {:?}",
-            entity,
-            animation_state,
-            ActionType::from(*animation_state)
-        );
+
+        if let Some(dir) = direction {
+            debug!("   └─ Direction: {:?}", dir.facing);
+        }
     }
 }
 
@@ -334,24 +352,6 @@ pub fn observe_gameplay_state_changes(
     }
 }
 
-/// Query filter for entities with any animation trigger component
-type AnimationTriggerFilter = (
-    Or<(
-        With<StartWalking>,
-        With<StopWalking>,
-        With<StartAttacking>,
-        With<FinishAttack>,
-        With<StartCasting>,
-        With<FinishCasting>,
-        With<TakeDamage>,
-        With<Die>,
-        With<Resurrect>,
-        With<Sit>,
-        With<Stand>,
-    )>,
-    With<StateMachine>,
-);
-
 /// Type alias for characters with changed gameplay state
 type CharactersWithChangedGameplayState<'w, 's> = Query<
     'w,
@@ -360,37 +360,9 @@ type CharactersWithChangedGameplayState<'w, 's> = Query<
     (With<StateMachine>, Changed<GameplayState>),
 >;
 
-/// Type alias for characters with changed animation state
-type CharactersWithChangedAnimationState<'w, 's> =
-    Query<'w, 's, (Entity, &'static AnimationState), (Changed<AnimationState>, With<StateMachine>)>;
-
 /// Type alias for characters with changed gameplay state (simple version)
 type CharactersWithChangedGameplay<'w, 's> =
     Query<'w, 's, (Entity, &'static GameplayState), (Changed<GameplayState>, With<StateMachine>)>;
-
-// System to automatically clear triggers after they've been processed
-pub fn cleanup_processed_triggers(
-    mut commands: Commands,
-    // Query for entities with triggers (seldom_state will process these automatically)
-    trigger_entities: Query<Entity, AnimationTriggerFilter>,
-) {
-    // Explicitly clean up triggers to prevent accumulation and ensure single-frame behavior
-    for entity in trigger_entities.iter() {
-        commands
-            .entity(entity)
-            .remove::<StartWalking>()
-            .remove::<StopWalking>()
-            .remove::<StartAttacking>()
-            .remove::<FinishAttack>()
-            .remove::<StartCasting>()
-            .remove::<FinishCasting>()
-            .remove::<TakeDamage>()
-            .remove::<Die>()
-            .remove::<Resurrect>()
-            .remove::<Sit>()
-            .remove::<Stand>();
-    }
-}
 
 // Create a unified state machine that handles all character state types
 pub fn create_animation_state_machine() -> StateMachine {
@@ -398,11 +370,21 @@ pub fn create_animation_state_machine() -> StateMachine {
         // ANIMATION STATE TRANSITIONS
         // Basic movement transitions
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&StartWalking>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&StartWalking>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Walking))
+            },
             AnimationState::Walking,
         )
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&StopWalking>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&StopWalking>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // Combat transitions
@@ -411,7 +393,12 @@ pub fn create_animation_state_machine() -> StateMachine {
             AnimationState::Attacking,
         )
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&FinishAttack>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&FinishAttack>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // Casting transitions
@@ -420,7 +407,12 @@ pub fn create_animation_state_machine() -> StateMachine {
             AnimationState::Casting,
         )
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&FinishCasting>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&FinishCasting>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // Sitting transitions
@@ -429,7 +421,10 @@ pub fn create_animation_state_machine() -> StateMachine {
             AnimationState::Sitting,
         )
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&Stand>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>, triggers: Query<&Stand>, states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // Damage and death transitions
@@ -444,7 +439,12 @@ pub fn create_animation_state_machine() -> StateMachine {
         )
         // Resurrection
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&Resurrect>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&Resurrect>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // Enable transition logging in debug mode
@@ -454,13 +454,23 @@ pub fn create_animation_state_machine() -> StateMachine {
 pub fn create_unified_character_state_machine() -> StateMachine {
     StateMachine::default()
         // ANIMATION STATE TRANSITIONS
-        // Basic movement transitions
+        // Basic movement transitions with guards to prevent redundant state changes
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&StartWalking>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&StartWalking>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Walking))
+            },
             AnimationState::Walking,
         )
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&StopWalking>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&StopWalking>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // Combat transitions
@@ -469,7 +479,12 @@ pub fn create_unified_character_state_machine() -> StateMachine {
             AnimationState::Attacking,
         )
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&FinishAttack>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&FinishAttack>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // Casting transitions
@@ -478,7 +493,12 @@ pub fn create_unified_character_state_machine() -> StateMachine {
             AnimationState::Casting,
         )
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&FinishCasting>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&FinishCasting>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // Sitting transitions
@@ -487,7 +507,10 @@ pub fn create_unified_character_state_machine() -> StateMachine {
             AnimationState::Sitting,
         )
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&Stand>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>, triggers: Query<&Stand>, states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // Damage and death transitions
@@ -502,7 +525,12 @@ pub fn create_unified_character_state_machine() -> StateMachine {
         )
         // Resurrection
         .trans::<AnimationState, _>(
-            |In(entity): In<Entity>, triggers: Query<&Resurrect>| triggers.get(entity).is_ok(),
+            |In(entity): In<Entity>,
+             triggers: Query<&Resurrect>,
+             states: Query<&AnimationState>| {
+                triggers.get(entity).is_ok()
+                    && !matches!(states.get(entity), Ok(AnimationState::Idle))
+            },
             AnimationState::Idle,
         )
         // GAMEPLAY STATE TRANSITIONS
@@ -572,6 +600,5 @@ pub fn create_unified_character_state_machine() -> StateMachine {
             |In(entity): In<Entity>, triggers: Query<&CloseTrade>| triggers.get(entity).is_ok(),
             ContextState::InGame,
         )
-        // Enable transition logging in debug mode
         .set_trans_logging(cfg!(debug_assertions))
 }

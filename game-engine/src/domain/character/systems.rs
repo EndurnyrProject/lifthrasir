@@ -183,6 +183,7 @@ pub fn spawn_unified_character_from_selection(
             appearance,
             meta,
             crate::domain::entities::character::components::visual::CharacterSprite::default(),
+            crate::domain::entities::character::components::visual::CharacterDirection::default(),
             Name::new(format!("Character_{}", event.character.char_id)),
         ));
 
@@ -648,10 +649,20 @@ pub fn spawn_character_sprite_on_game_start(
         return;
     };
 
-    // Add PlayerCharacter marker to identify this as the player's character
+    // Add gameplay components (movement, state machine, animation states)
+    crate::domain::entities::character::add_gameplay_components_to_entity(
+        &mut commands.entity(character_entity),
+    );
+
+    // Add PlayerCharacter marker
     commands
         .entity(character_entity)
         .insert(crate::domain::camera::components::PlayerCharacter);
+
+    info!(
+        "✅ Added gameplay components to player character entity {:?}",
+        character_entity
+    );
 
     // Get map dimensions from loaded ground data
     let (map_width, map_height) = if let Ok(map_loader) = map_loader_query.single() {

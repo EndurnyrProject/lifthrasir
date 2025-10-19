@@ -290,10 +290,14 @@ pub fn spawn_character_sprite_hierarchy(
         // Create named sprite layers using moonshine naming convention
         let layer_names = [
             "Body",
+            "Head",
             "Equipment/HeadBottom",
             "Equipment/HeadMid",
             "Equipment/HeadTop",
         ];
+
+        let mut body_entity = Entity::PLACEHOLDER;
+        let mut head_entity = Entity::PLACEHOLDER;
 
         for (i, layer_name) in layer_names.iter().enumerate() {
             let z_offset = i as f32 * rendering.config.default_z_spacing;
@@ -301,7 +305,7 @@ pub fn spawn_character_sprite_hierarchy(
             // Create material for this layer
             let layer_material = create_sprite_material(&mut rendering.materials);
 
-            let _layer_entity = commands
+            let layer_entity = commands
                 .spawn((
                     SpriteLayer,
                     Name::new(layer_name.to_string()),
@@ -324,6 +328,18 @@ pub fn spawn_character_sprite_hierarchy(
                 ))
                 .insert(ChildOf(root_entity))
                 .id();
+
+            match *layer_name {
+                "Body" => {
+                    body_entity = layer_entity;
+                    info!("🎭 Spawned Body layer: entity {:?}", layer_entity);
+                }
+                "Head" => {
+                    head_entity = layer_entity;
+                    info!("🎭 Spawned Head layer: entity {:?}", layer_entity);
+                }
+                _ => {}
+            }
         }
 
         // Create Effects container
@@ -342,13 +358,19 @@ pub fn spawn_character_sprite_hierarchy(
         // Create the character object tree with just the root entity
         let object_tree = CharacterObjectTree { root: root_entity };
 
-        // Add the object tree to the character entity
+        // Add the object tree to the character entity and update CharacterSprite
         // Use a command closure to check entity existence at command-application time
         // This prevents panic if the entity was despawned between the check and the insert
         let character_entity = event.character_entity;
         commands.queue(move |world: &mut World| {
             if let Ok(mut entity_mut) = world.get_entity_mut(character_entity) {
                 entity_mut.insert(object_tree);
+
+                // Update CharacterSprite with body and head entities
+                if let Some(mut character_sprite) = entity_mut.get_mut::<crate::domain::entities::character::components::visual::CharacterSprite>() {
+                    character_sprite.body_sprite = body_entity;
+                    character_sprite.head_sprite = head_entity;
+                }
             } else {
                 warn!(
                     "Character entity {:?} no longer exists when inserting CharacterObjectTree, cleaning up root {:?}",
@@ -538,30 +560,53 @@ fn remove_status_effect(
 
 /// Helper function to calculate the correct frame index for a sprite layer
 /// Handles special case for head equipment doridori animation
+///
+/// # Doridori Animation Structure
+///
+/// Head equipment ACT files contain directional idle animations with 3 head tilt variants:
+/// - Total frames: 8 directions × 3 headDir variants = 24 frames
+/// - Frame layout:
+///   - Frames 0-7: headDir 0 (forward), directions South to SouthEast
+///   - Frames 8-15: headDir 1 (looking up), directions South to SouthEast
+///   - Frames 16-23: headDir 2 (looking down), directions South to SouthEast
+///
+/// # With Directional Body Animations
+///
+/// When body uses directional action indices (e.g., action 4 for Idle-North),
+/// we extract the direction from the action index and map it to the head frame
+/// using only headDir 0 to match the body's direction.
+///
+/// Formula: `direction % 8` gives us frame 0-7 (headDir 0 range)
 fn calculate_layer_frame_index(
     layer_type: &SpriteLayerType,
     current_action: usize,
     base_frame: usize,
     animation_count: usize,
 ) -> usize {
-    // Special handling for head equipment doridori animation
-    // Head ACT files have 3x frames (8 directions × 3 headDir variants for doridori)
-    // We only want headDir 0 (looking forward) to match body animation
-    if matches!(
-        layer_type,
+    match layer_type {
+        // Head equipment: doridori structure (24 frames = 8 directions × 3 tilts)
+        // Equipment ACT files contain idle animations with 3 head tilt variants:
+        // - Frames 0-7: headDir 0 (forward), directions South to SouthEast
+        // - Frames 8-15: headDir 1 (looking up), directions South to SouthEast
+        // - Frames 16-23: headDir 2 (looking down), directions South to SouthEast
         SpriteLayerType::Equipment(
-            EquipmentSlot::HeadBottom | EquipmentSlot::HeadMid | EquipmentSlot::HeadTop
-        )
-    ) && current_action == 0
-    {
-        // Divide by 3 to get frames per doridori variant
-        let frames_per_variant = animation_count / 3;
-        // Clamp to first variant (headDir 0)
-        if frames_per_variant > 0 {
-            return base_frame % frames_per_variant;
+            EquipmentSlot::HeadBottom | EquipmentSlot::HeadMid | EquipmentSlot::HeadTop,
+        ) if animation_count > 0 => {
+            let direction = current_action % 8;
+            let frames_per_variant = animation_count / 3;
+            if frames_per_variant >= 8 {
+                // Use headDir 0 range (frames 0-7) to match body direction
+                direction
+            } else {
+                base_frame
+            }
         }
+
+        // All other layers (body, head, shadow, effects) use base_frame from animation timer
+        // Head and Body ACT structure: 103 actions with multiple frames per action
+        // The sprite_index in each frame tells us which sprite to use
+        _ => base_frame,
     }
-    base_frame
 }
 
 /// Helper function to get and validate animation context
@@ -573,16 +618,12 @@ fn get_animation_context<'a>(
     spr_assets: &'a Assets<RoSpriteAsset>,
     act_assets: &'a Assets<RoActAsset>,
 ) -> Option<AnimationContext<'a>> {
-    // Get character sprite component
     let character_sprite = characters.get(hierarchy.character_entity).ok()?;
-
-    // Get sprite and action assets
     let spr_asset = spr_assets.get(&controller.sprite_handle)?;
     let act_asset = act_assets.get(&controller.action_handle)?;
 
     let current_action = character_sprite.current_action as usize;
 
-    // Validate action index
     if current_action >= act_asset.action.actions.len() {
         warn!(
             "Action index out of bounds for {:?}: action {} >= total_actions {}",
@@ -603,28 +644,43 @@ fn get_animation_context<'a>(
         action_sequence.animations.len(),
     );
 
-    // Validate frame index
-    if current_frame >= action_sequence.animations.len() {
-        warn!(
-            "Frame index out of bounds for {:?}: frame {} >= animation_count {}",
-            hierarchy.layer_type,
-            current_frame,
-            action_sequence.animations.len()
-        );
-        return None;
-    }
+    // Clamp frame to available frames (like reference code does)
+    // This prevents child sprites (head) from stopping when they have fewer frames than parent (body)
+    let current_frame = if current_frame >= action_sequence.animations.len() {
+        action_sequence.animations.len().saturating_sub(1)
+    } else {
+        current_frame
+    };
 
     let animation = &action_sequence.animations[current_frame];
-
-    // Get the first layer (main sprite layer)
     let layer = animation.layers.first()?;
 
-    // Handle negative sprite indices (use index 0 as fallback)
-    // RO uses -1 to indicate "no sprite" or invisible layers
-    let sprite_index = if layer.sprite_index < 0 {
-        0
-    } else {
-        layer.sprite_index as usize
+    let sprite_index = match &hierarchy.layer_type {
+        SpriteLayerType::Head => {
+            // Head ACT files have sprite_index=0 for all frames (confirmed by logs)
+            // Direction is NOT encoded in ACT sprite_index
+            // Must manually extract direction from action and map to sprite index
+            let direction = current_action % 8;
+            match direction {
+                0 => 0, // South
+                1 => 1, // SouthWest
+                2 => 2, // West
+                3 => 3, // NorthWest
+                4 => 4, // North
+                5 => 3, // NorthEast → use NorthWest sprite (flipped by transform)
+                6 => 2, // East → use West sprite (flipped by transform)
+                7 => 1, // SouthEast → use SouthWest sprite (flipped by transform)
+                _ => 0,
+            }
+        }
+        _ => {
+            // Body and other layers use sprite_index from ACT file
+            if layer.sprite_index < 0 {
+                0
+            } else {
+                layer.sprite_index as usize
+            }
+        }
     };
 
     // Validate sprite index
@@ -649,29 +705,25 @@ fn get_animation_context<'a>(
 
 /// Helper function to apply ACT layer transformations to entity transform
 /// Handles position, scale, and rotation based on ACT data
+/// Uses the is_mirror flag from ACT data to determine sprite flipping
 fn apply_layer_transform(
     transform: &mut Transform,
     layer: &crate::infrastructure::ro_formats::act::Layer,
     sprite_frame: &crate::infrastructure::ro_formats::sprite::SpriteFrame,
 ) {
-    // Apply ACT positioning offset from layer data
-    // ACT offsets are in pixel coordinates, scale to world units
     let offset_x = layer.pos[0] as f32 * SPRITE_WORLD_SCALE;
-    let offset_y = -layer.pos[1] as f32 * SPRITE_WORLD_SCALE; // Flip Y for Bevy coordinate system
+    let mut scale_x = layer.scale[0] * sprite_frame.width as f32 * SPRITE_WORLD_SCALE;
+    let offset_y = -layer.pos[1] as f32 * SPRITE_WORLD_SCALE;
+    let scale_y = layer.scale[1] * sprite_frame.height as f32 * SPRITE_WORLD_SCALE;
+
+    if layer.is_mirror {
+        scale_x = -scale_x;
+    }
+
     transform.translation.x = offset_x;
     transform.translation.y = offset_y;
-    // Keep z-offset from RoSpriteLayer (already set by spawn)
+    transform.scale = Vec3::new(scale_x, scale_y, 1.0);
 
-    // Apply ACT scale
-    // The quad mesh is -0.5 to 0.5 (1 unit total)
-    // Scale by pixel dimensions using SPRITE_WORLD_SCALE for 3D world
-    transform.scale = Vec3::new(
-        layer.scale[0] * sprite_frame.width as f32 * SPRITE_WORLD_SCALE,
-        layer.scale[1] * sprite_frame.height as f32 * SPRITE_WORLD_SCALE,
-        1.0,
-    );
-
-    // Apply ACT rotation
     if layer.angle != 0 {
         transform.rotation =
             Quat::from_rotation_z(layer.angle as f32 * std::f32::consts::PI / 180.0);
@@ -714,25 +766,23 @@ fn create_layer_material(
 /// Applies transforms and creates materials
 fn process_sprite_layer(
     ctx: &AnimationContext,
+    layer: &crate::infrastructure::ro_formats::act::Layer,
     transform: &mut Transform,
     entity: Entity,
     commands: &mut Commands,
     images: &mut Assets<Image>,
     materials: &mut Assets<StandardMaterial>,
 ) {
-    // Apply layer transformations (position, scale, rotation)
-    apply_layer_transform(transform, ctx.layer, ctx.sprite_frame);
+    apply_layer_transform(transform, layer, ctx.sprite_frame);
 
-    // Create material with sprite texture
     let material = create_layer_material(
         images,
         materials,
         ctx.sprite_frame,
         &ctx.spr_asset.sprite.palette,
-        ctx.layer,
+        layer,
     );
 
-    // Replace the material component to trigger Bevy's change detection
     commands.entity(entity).insert(MeshMaterial3d(material));
 }
 
@@ -755,16 +805,19 @@ pub fn update_sprite_layer_transforms(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (entity, mut transform, hierarchy, controller) in sprite_layers.iter_mut() {
-        // Get and validate animation context
         let Some(ctx) =
             get_animation_context(hierarchy, controller, &characters, &spr_assets, &act_assets)
         else {
+            warn!(
+                "❌ update_sprite_layer_transforms: Failed to get animation context for entity {:?}, type {:?}",
+                entity, hierarchy.layer_type
+            );
             continue;
         };
 
-        // Process the sprite layer with the validated context
         process_sprite_layer(
             &ctx,
+            ctx.layer,
             &mut transform,
             entity,
             &mut commands,
@@ -782,30 +835,26 @@ fn convert_sprite_frame_to_image(
     let mut rgba_data = Vec::with_capacity((frame.width as usize) * (frame.height as usize) * 4);
 
     if frame.is_rgba {
-        // RGBA frame - data is already in RGBA format
         rgba_data.extend_from_slice(&frame.data);
-    } else {
-        // Indexed frame - convert using palette
-        if let Some(palette) = palette {
-            for &index in &frame.data {
-                if (index as usize) < palette.colors.len() {
-                    let color = palette.colors[index as usize];
-                    rgba_data.extend_from_slice(&color);
-                } else {
-                    // Transparent pixel for invalid palette index
-                    rgba_data.extend_from_slice(&[0, 0, 0, 0]);
-                }
+    } else if let Some(palette) = palette {
+        for &index in &frame.data {
+            if (index as usize) < palette.colors.len() {
+                let color = palette.colors[index as usize];
+                rgba_data.extend_from_slice(&color);
+            } else {
+                // Transparent pixel for invalid palette index
+                rgba_data.extend_from_slice(&[0, 0, 0, 0]);
             }
-        } else {
-            // No palette available - treat as grayscale with alpha
-            for &index in &frame.data {
-                if index == 0 {
-                    // Index 0 is typically transparent
-                    rgba_data.extend_from_slice(&[0, 0, 0, 0]);
-                } else {
-                    // Convert index to grayscale
-                    rgba_data.extend_from_slice(&[index, index, index, 255]);
-                }
+        }
+    } else {
+        // No palette available - treat as grayscale with alpha
+        for &index in &frame.data {
+            if index == 0 {
+                // Index 0 is typically transparent
+                rgba_data.extend_from_slice(&[0, 0, 0, 0]);
+            } else {
+                // Convert index to grayscale
+                rgba_data.extend_from_slice(&[index, index, index, 255]);
             }
         }
     }
@@ -845,19 +894,30 @@ fn get_action_sequence(
 
 /// Helper function to advance the animation frame and update timer
 /// Handles frame wraparound and minimum delay validation
+/// During idle animations (actions 0-7), keeps frame locked at 0 to prevent doridori head nodding
 fn advance_animation_frame(
     character_sprite: &mut crate::domain::entities::character::components::visual::CharacterSprite,
     action_sequence: &crate::infrastructure::ro_formats::act::ActionSequence,
+    current_action: usize,
 ) {
     let frame_count = action_sequence.animations.len();
 
-    // Guard: Skip if no frames available
     if frame_count == 0 {
         return;
     }
 
-    // Advance to next frame with wraparound
-    character_sprite.current_frame = (character_sprite.current_frame + 1) % (frame_count as u8);
+    // Actions 0-7 are directional idle animations
+    // During idle, keep frame at 0 (headDir 0 - forward facing)
+    // This prevents doridori head nodding animation from auto-playing
+    // Reference: In RO, HeadFacing is a state (Center/Right/Left), not an auto-cycling animation
+    let is_idle = current_action < 8;
+
+    if is_idle {
+        character_sprite.current_frame = 0;
+    } else {
+        // Normal frame advancement for non-idle animations
+        character_sprite.current_frame = (character_sprite.current_frame + 1) % (frame_count as u8);
+    }
 
     // Update timer duration from ACT delay (convert from milliseconds to seconds)
     // Apply minimum delay of 0.1s to prevent infinite loops
@@ -871,57 +931,57 @@ fn advance_animation_frame(
 // System to advance character animation frames based on timing
 pub fn advance_character_animations(
     time: Res<Time>,
-    mut character_sprites: Query<
+    mut character_sprites: Query<(
+        Entity,
         &mut crate::domain::entities::character::components::visual::CharacterSprite,
-    >,
+    )>,
     act_assets: Res<Assets<crate::infrastructure::assets::loaders::RoActAsset>>,
     sprite_layers: Query<&RoAnimationController, With<CharacterSpriteHierarchy>>,
 ) {
-    // Optimization: Find ACT handle once outside the character loop (O(m) instead of O(n*m))
-    // This works because all characters share the same ACT file format structure
     let Some(act_handle) = find_act_handle(&sprite_layers) else {
-        // No valid ACT handle found - skip all character animations this frame
         return;
     };
 
-    // Get the ACT asset once for all characters
     let Some(act_asset) = act_assets.get(act_handle) else {
-        // ACT asset not yet loaded - skip this frame
         return;
     };
 
-    // Process each character's animation state
-    for mut character_sprite in character_sprites.iter_mut() {
-        // Tick the animation timer
+    for (entity, mut character_sprite) in character_sprites.iter_mut() {
         character_sprite.animation_timer.tick(time.delta());
 
-        // Skip if timer hasn't finished yet
         if !character_sprite.animation_timer.is_finished() {
             continue;
         }
 
-        // Get the action sequence for the current action
         let current_action = character_sprite.current_action as usize;
         let Some(action_sequence) = get_action_sequence(act_asset, current_action) else {
-            // Invalid action index - skip this character
+            warn!(
+                "⚠️ advance_character_animations: Invalid action index {} for entity {:?}",
+                current_action, entity
+            );
             continue;
         };
 
-        // Advance the animation frame and reset timer
-        advance_animation_frame(&mut character_sprite, action_sequence);
+        advance_animation_frame(&mut character_sprite, action_sequence, current_action);
     }
 }
 
 // System to handle sprite animation changes from state machine
 pub fn handle_sprite_animation_changes(
     mut animation_events: MessageReader<SpriteAnimationChangeEvent>,
-    mut character_sprites: Query<
+    mut character_sprites: Query<(
         &mut crate::domain::entities::character::components::visual::CharacterSprite,
-    >,
+        &crate::domain::entities::character::components::visual::CharacterDirection,
+    )>,
 ) {
     for event in animation_events.read() {
-        if let Ok(mut sprite) = character_sprites.get_mut(event.character_entity) {
-            sprite.play_action(event.action_type);
+        if let Ok((mut sprite, direction)) = character_sprites.get_mut(event.character_entity) {
+            sprite.play_action(event.action_type, direction.facing);
+        } else {
+            warn!(
+                "   └─ ❌ Failed to get CharacterSprite for entity {:?}",
+                event.character_entity
+            );
         }
     }
 }
@@ -933,16 +993,13 @@ pub fn cleanup_orphaned_sprites(
     characters: Query<&CharacterObjectTree>,
 ) {
     for (root_entity, hierarchy) in sprite_roots.iter() {
-        // Check if the parent character still exists
         if characters.get(hierarchy.character_entity).is_err() {
-            // Despawn root - children are automatically despawned
             commands.entity(root_entity).despawn();
         }
     }
 }
 
 // Helper function to spawn a complete character sprite hierarchy
-// Note: This function signature needs to be used with EventWriter parameters
 pub fn spawn_complete_character_sprite(
     spawn_events: &mut MessageWriter<SpawnCharacterSpriteEvent>,
     equipment_events: &mut MessageWriter<EquipmentChangeEvent>,
@@ -950,13 +1007,11 @@ pub fn spawn_complete_character_sprite(
     position: Vec3,
     equipment_slots: &HashMap<EquipmentSlot, u32>,
 ) {
-    // Send spawn event
     spawn_events.write(SpawnCharacterSpriteEvent {
         character_entity,
         spawn_position: position,
     });
 
-    // Send equipment events for each equipped item
     for (&slot, &item_id) in equipment_slots {
         equipment_events.write(EquipmentChangeEvent {
             character: character_entity,
@@ -998,10 +1053,7 @@ pub fn populate_sprite_layers_with_assets(
                 let act = body_action_path(appearance.gender, job_name);
                 (sprite, act, None)
             }
-            SpriteLayerType::Equipment(EquipmentSlot::HeadBottom)
-            | SpriteLayerType::Equipment(EquipmentSlot::HeadMid)
-            | SpriteLayerType::Equipment(EquipmentSlot::HeadTop) => {
-                // For now, use head sprites for all head layers
+            SpriteLayerType::Head => {
                 let sprite = head_sprite_path(appearance.gender, appearance.hair_style);
                 let act = head_action_path(appearance.gender, appearance.hair_style);
 
@@ -1092,9 +1144,7 @@ pub fn update_sprite_layers_on_appearance_change(
                     let act = body_action_path(appearance.gender, job_name);
                     (sprite, act, None)
                 }
-                SpriteLayerType::Equipment(EquipmentSlot::HeadBottom)
-                | SpriteLayerType::Equipment(EquipmentSlot::HeadMid)
-                | SpriteLayerType::Equipment(EquipmentSlot::HeadTop) => {
+                SpriteLayerType::Head => {
                     let sprite = head_sprite_path(appearance.gender, appearance.hair_style);
                     let act = head_action_path(appearance.gender, appearance.hair_style);
 

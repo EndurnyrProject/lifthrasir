@@ -173,6 +173,29 @@ function AppContent() {
     };
   }, [currentScreen, isGameLoading]);
 
+  // Forward mouse clicks to Bevy for terrain interaction
+  useEffect(() => {
+    if (currentScreen !== "in_game" || isGameLoading) return;
+
+    const handleMouseClick = (e: MouseEvent) => {
+      // Only handle left clicks
+      if (e.button === 0) {
+        invoke('forward_mouse_click', {
+          x: e.clientX,
+          y: e.clientY
+        }).catch(console.error);
+      }
+    };
+
+    console.log('🖱️ [FRONTEND] Setting up mouse click forwarding to Bevy');
+    document.addEventListener('click', handleMouseClick);
+
+    return () => {
+      console.log('🖱️ [FRONTEND] Removing mouse click forwarding');
+      document.removeEventListener('click', handleMouseClick);
+    };
+  }, [currentScreen, isGameLoading]);
+
   const handleLoginSuccess = (serverList: ServerInfo[]) => {
     setServers(serverList);
     setCurrentScreen("server_selection");

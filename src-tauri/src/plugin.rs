@@ -20,15 +20,16 @@ use super::bridge::{
     cleanup_stale_correlations, demux_tauri_events, emit_world_events,
     handle_create_character_request, handle_delete_character_request,
     handle_get_character_list_request, handle_get_hairstyles_request, handle_keyboard_input,
-    handle_login_request, handle_mouse_position, handle_select_character_request,
-    handle_server_selection_request, write_character_creation_response,
-    write_character_deletion_response, write_character_list_response,
-    write_character_selection_response, write_login_failure_response, write_login_success_response,
-    write_server_selection_response, AppBridge, CharacterCorrelation,
-    CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent, GetCharacterListRequestedEvent,
-    GetHairstylesRequestedEvent, KeyboardInputEvent, LoginCorrelation, LoginRequestedEvent,
-    MousePositionEvent, PendingSenders, SelectCharacterRequestedEvent, ServerCorrelation,
-    ServerSelectionRequestedEvent, TauriEventReceiver, WorldEmitter,
+    handle_login_request, handle_mouse_click, handle_mouse_position,
+    handle_select_character_request, handle_server_selection_request,
+    write_character_creation_response, write_character_deletion_response,
+    write_character_list_response, write_character_selection_response,
+    write_login_failure_response, write_login_success_response, write_server_selection_response,
+    AppBridge, CharacterCorrelation, CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent,
+    GetCharacterListRequestedEvent, GetHairstylesRequestedEvent, KeyboardInputEvent,
+    LoginCorrelation, LoginRequestedEvent, MouseClickEvent, MousePositionEvent, PendingSenders,
+    SelectCharacterRequestedEvent, ServerCorrelation, ServerSelectionRequestedEvent,
+    TauriEventReceiver, WorldEmitter,
 };
 use super::commands;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
@@ -200,7 +201,8 @@ impl Plugin for TauriIntegrationPlugin {
             .add_message::<DeleteCharacterRequestedEvent>()
             .add_message::<GetHairstylesRequestedEvent>()
             .add_message::<KeyboardInputEvent>()
-            .add_message::<MousePositionEvent>();
+            .add_message::<MousePositionEvent>()
+            .add_message::<MouseClickEvent>();
 
         // Add new event-driven system architecture
         // 1. demux_tauri_events: Reads from flume channel, emits typed events (runs first)
@@ -221,6 +223,7 @@ impl Plugin for TauriIntegrationPlugin {
                     handle_get_hairstyles_request,
                     handle_keyboard_input,
                     handle_mouse_position,
+                    handle_mouse_click,
                 ),
                 (
                     write_login_success_response,
@@ -255,6 +258,7 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::zone_status::get_zone_status,
                 commands::input::forward_keyboard_input,
                 commands::input::forward_mouse_position,
+                commands::input::forward_mouse_click,
                 commands::dev::open_devtools,
                 commands::dev::close_devtools,
             ])
@@ -280,6 +284,7 @@ impl Plugin for TauriIntegrationPlugin {
 }
 
 /// Custom runner that integrates Tauri's event loop with Bevy's update loop
+#[allow(deprecated)]
 fn run_tauri_app(app: App) -> AppExit {
     let app = Rc::new(RefCell::new(app));
     let mut tauri_app = app

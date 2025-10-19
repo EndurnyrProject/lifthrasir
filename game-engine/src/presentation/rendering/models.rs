@@ -663,7 +663,7 @@ fn generate_meshes_from_vertices_and_faces(
 
             // Correct winding order for the last triangle added
             let idx_count = final_indices.len();
-            if idx_count >= 3 && idx_count % 3 == 0 {
+            if idx_count >= 3 && idx_count.is_multiple_of(3) {
                 final_indices.swap(idx_count - 2, idx_count - 1);
             }
         }

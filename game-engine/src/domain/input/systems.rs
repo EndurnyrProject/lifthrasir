@@ -1,10 +1,47 @@
 use crate::{
-    domain::world::components::MapLoader, infrastructure::assets::loaders::RoAltitudeAsset,
+    domain::camera::components::PlayerCharacter,
+    domain::entities::character::movement::events::MovementRequested,
+    domain::world::components::MapLoader,
+    infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
+    utils::coordinates::world_position_to_spawn_coords,
 };
 use bevy::math::primitives::InfinitePlane3d;
 use bevy::prelude::*;
 
-use super::ForwardedCursorPosition;
+use super::{ForwardedCursorPosition, ForwardedMouseClick};
+
+/// Raycast from cursor to terrain and return world position with height
+/// Returns None if raycast fails or position is outside terrain
+fn raycast_terrain_position(
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    cursor_pos: Vec2,
+    map_loader: &MapLoader,
+    altitude_assets: &Assets<RoAltitudeAsset>,
+) -> Option<(Vec3, f32)> {
+    // Get altitude (GAT) asset
+    let altitude_handle = map_loader.altitude.as_ref()?;
+    let altitude_asset = altitude_assets.get(altitude_handle)?;
+
+    // Create ray from camera through cursor position
+    let ray = camera
+        .viewport_to_world(camera_transform, cursor_pos)
+        .ok()?;
+
+    // Intersect ray with ground plane (Y = 0)
+    let ground_plane = InfinitePlane3d::new(Vec3::Y);
+    let distance = ray.intersect_plane(Vec3::ZERO, ground_plane)?;
+
+    // Calculate world position where ray hits ground
+    let world_pos = ray.origin + ray.direction * distance;
+
+    // Get GAT terrain height
+    let terrain_height = altitude_asset
+        .altitude
+        .get_terrain_height_at_position(world_pos)?;
+
+    Some((world_pos, terrain_height))
+}
 
 /// Render terrain cursor gizmo at the world position under the mouse cursor
 /// Shows where the player is pointing on the terrain with visual indicators
@@ -20,42 +57,22 @@ pub fn render_terrain_cursor(
     };
 
     let Ok(map_loader) = map_loader_query.single() else {
-        return; // Map not loaded yet
-    };
-
-    // Get altitude (GAT) asset for collision/walkable terrain height
-    let Some(altitude_handle) = &map_loader.altitude else {
-        return; // Altitude not available
-    };
-
-    let Some(altitude_asset) = altitude_assets.get(altitude_handle) else {
-        return; // Altitude asset not loaded yet
+        return;
     };
 
     let Some(cursor_position) = cursor_pos.position else {
         return;
     };
 
-    // Create ray from camera through cursor position
-    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_position) else {
+    // Use shared raycast logic
+    let Some((world_pos, gizmo_height)) = raycast_terrain_position(
+        camera,
+        camera_transform,
+        cursor_position,
+        map_loader,
+        &altitude_assets,
+    ) else {
         return;
-    };
-
-    // Intersect ray with ground plane (Y = 0) to get approximate world position
-    let ground_plane = InfinitePlane3d::new(Vec3::Y);
-    let Some(distance) = ray.intersect_plane(Vec3::ZERO, ground_plane) else {
-        return;
-    };
-
-    // Calculate world position where ray hits ground
-    let world_pos = ray.origin + ray.direction * distance;
-
-    // Get GAT (collision/walkable terrain) height
-    let Some(gizmo_height) = altitude_asset
-        .altitude
-        .get_terrain_height_at_position(world_pos)
-    else {
-        return; // Position outside terrain bounds
     };
 
     // Draw crosshair at intersection point
@@ -88,5 +105,70 @@ pub fn render_terrain_cursor(
         ),
         5.0,
         Color::srgb(0.0, 1.0, 0.0), // Green
+    );
+}
+
+/// Handle terrain clicks for player movement
+/// Reads ForwardedMouseClick, raycasts to terrain, converts to RO coords, emits MovementRequested
+pub fn handle_terrain_click(
+    mut mouse_click: ResMut<ForwardedMouseClick>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    map_loader_query: Query<&MapLoader>,
+    ground_assets: Res<Assets<RoGroundAsset>>,
+    altitude_assets: Res<Assets<RoAltitudeAsset>>,
+    player_query: Query<Entity, With<PlayerCharacter>>,
+    mut movement_events: MessageWriter<MovementRequested>,
+) {
+    let Some(click_pos) = mouse_click.position.take() else {
+        return;
+    };
+
+    let Ok((camera, camera_transform)) = camera_query.single() else {
+        warn!("No camera found for terrain click");
+        return;
+    };
+
+    let Ok(map_loader) = map_loader_query.single() else {
+        warn!("No map loaded, ignoring terrain click");
+        return;
+    };
+
+    let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
+        warn!("Ground asset not loaded, ignoring terrain click");
+        return;
+    };
+
+    let Some((world_pos, _terrain_height)) = raycast_terrain_position(
+        camera,
+        camera_transform,
+        click_pos,
+        map_loader,
+        &altitude_assets,
+    ) else {
+        debug!("Click raycast missed terrain");
+        return;
+    };
+
+    let (dest_x, dest_y) = world_position_to_spawn_coords(
+        world_pos,
+        ground_asset.ground.width,
+        ground_asset.ground.height,
+    );
+
+    let Ok(player_entity) = player_query.single() else {
+        warn!("No player character found for movement request");
+        return;
+    };
+
+    movement_events.write(MovementRequested {
+        entity: player_entity,
+        dest_x,
+        dest_y,
+        direction: 0,
+    });
+
+    debug!(
+        "Terrain clicked: world_pos={:?}, RO coords=({}, {})",
+        world_pos, dest_x, dest_y
     );
 }

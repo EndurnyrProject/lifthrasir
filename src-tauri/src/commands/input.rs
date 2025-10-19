@@ -22,3 +22,10 @@ pub fn forward_mouse_position(
 ) -> Result<(), String> {
     app_bridge.forward_mouse_position(x, y)
 }
+
+/// Forward mouse click from JavaScript to Bevy
+/// This allows React UI to send mouse click events to the game engine for terrain interaction
+#[tauri::command]
+pub fn forward_mouse_click(x: f32, y: f32, app_bridge: State<'_, AppBridge>) -> Result<(), String> {
+    app_bridge.forward_mouse_click(x, y)
+}

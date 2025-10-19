@@ -85,3 +85,10 @@ pub struct MousePositionEvent {
     pub x: f32,
     pub y: f32,
 }
+
+/// Event forwarding mouse click from UI
+#[derive(Message)]
+pub struct MouseClickEvent {
+    pub x: f32,
+    pub y: f32,
+}

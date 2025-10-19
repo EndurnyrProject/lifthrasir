@@ -142,6 +142,12 @@ pub fn demux_tauri_events(
                     writer: writers.mouse
                 );
             }
+            TauriIncomingEvent::MouseClick { x, y } => {
+                crate::dispatch_tauri_event!(
+                    event: MouseClickEvent { x, y },
+                    writer: writers.mouse_click
+                );
+            }
         }
     }
 }

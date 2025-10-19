@@ -60,7 +60,7 @@ impl ServerPacket for HcAcceptEnterPacket {
         if char_data_size > 0 {
             let char_count = char_data_size / CharacterInfo::SIZE_ACCEPT_ENTER;
 
-            if char_data_size % CharacterInfo::SIZE_ACCEPT_ENTER != 0 {
+            if !char_data_size.is_multiple_of(CharacterInfo::SIZE_ACCEPT_ENTER) {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!(

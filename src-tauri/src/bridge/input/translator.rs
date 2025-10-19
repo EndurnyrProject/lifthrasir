@@ -1,8 +1,8 @@
 use bevy::input::ButtonInput;
 use bevy::prelude::*;
-use game_engine::domain::input::ForwardedCursorPosition;
+use game_engine::domain::input::{ForwardedCursorPosition, ForwardedMouseClick};
 
-use crate::bridge::events::{KeyboardInputEvent, MousePositionEvent};
+use crate::bridge::events::{KeyboardInputEvent, MouseClickEvent, MousePositionEvent};
 
 /// Convert JavaScript KeyboardEvent.code to Bevy KeyCode
 fn js_code_to_bevy_keycode(code: &str) -> Option<KeyCode> {
@@ -88,5 +88,16 @@ pub fn handle_mouse_position(
 ) {
     for event in events.read() {
         cursor_position.position = Some(Vec2::new(event.x, event.y));
+    }
+}
+
+/// System that handles MouseClickEvent
+/// Updates ForwardedMouseClick resource
+pub fn handle_mouse_click(
+    mut events: MessageReader<MouseClickEvent>,
+    mut mouse_click: ResMut<ForwardedMouseClick>,
+) {
+    for event in events.read() {
+        mouse_click.position = Some(Vec2::new(event.x, event.y));
     }
 }
