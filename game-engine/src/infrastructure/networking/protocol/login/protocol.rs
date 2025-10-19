@@ -47,7 +47,10 @@ impl Protocol for LoginProtocol {
                 length_bytes: 2,
             },
             AC_REFUSE_LOGIN => PacketSize::Fixed(23),
-            _ => PacketSize::Fixed(0), // Unknown
+            _ => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            }, // Unknown - assume variable-length and try to skip
         }
     }
 }

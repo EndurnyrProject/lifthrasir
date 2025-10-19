@@ -104,7 +104,10 @@ impl Protocol for CharacterProtocol {
                 length_offset: 2,
                 length_bytes: 2,
             },
-            _ => PacketSize::Fixed(0), // Unknown
+            _ => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            }, // Unknown - assume variable-length and try to skip
         }
     }
 }

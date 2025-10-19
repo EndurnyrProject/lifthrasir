@@ -9,6 +9,11 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 use std::time::Duration;
 
+/// Maximum packet size in RO protocol (65535 bytes)
+const MAX_PACKET_SIZE: usize = 65535;
+/// Minimum packet size (at least packet ID - 2 bytes)
+const MIN_PACKET_SIZE: usize = 2;
+
 /// Generic network client for any protocol
 ///
 /// NetworkClient provides a reusable implementation of network client behavior
@@ -214,8 +219,7 @@ impl<P: Protocol> NetworkClient<P> {
             let packet_size = match P::packet_size(packet_id) {
                 PacketSize::Fixed(size) => {
                     if buffer.len() < size {
-                        // Wait for more data
-                        break;
+                        break; // Wait for more data
                     }
                     size
                 }
@@ -230,8 +234,10 @@ impl<P: Protocol> NetworkClient<P> {
 
                     // Read length field
                     let length = match length_bytes {
-                        2 => u16::from_le_bytes([buffer[length_offset], buffer[length_offset + 1]])
-                            as usize,
+                        2 => u16::from_le_bytes([
+                            buffer[length_offset],
+                            buffer[length_offset + 1],
+                        ]) as usize,
                         4 => u32::from_le_bytes([
                             buffer[length_offset],
                             buffer[length_offset + 1],
@@ -241,12 +247,24 @@ impl<P: Protocol> NetworkClient<P> {
                         _ => {
                             error!(
                                 "{} protocol: Invalid length field size: {}",
-                                P::NAME,
-                                length_bytes
+                                P::NAME, length_bytes
                             );
                             return Err(NetworkError::InvalidPacket);
                         }
                     };
+
+                    // Validate length is reasonable
+                    if !(MIN_PACKET_SIZE..=MAX_PACKET_SIZE).contains(&length) {
+                        error!(
+                            "{} protocol: Invalid packet length {} for packet 0x{:04X}. Disconnecting.",
+                            P::NAME, length, packet_id
+                        );
+                        self.disconnect();
+                        return Err(NetworkError::InvalidPacketLength {
+                            id: packet_id,
+                            length,
+                        });
+                    }
 
                     // Check if we have the complete packet
                     if buffer.len() < length {
@@ -257,35 +275,43 @@ impl<P: Protocol> NetworkClient<P> {
                 }
             };
 
-            // Dispatch packet to handler
+            // CRITICAL: Copy packet data BEFORE consuming
+            let packet_data = buffer[..packet_size].to_vec();
+
+            // CRITICAL: Consume immediately (buffer now safe)
+            transport.consume(packet_size);
+
+            // Check if we have a handler for this packet
+            if !self.dispatcher.has_handler(packet_id) {
+                warn!(
+                    "{} client: Skipping unknown packet 0x{:04X} ({} bytes)",
+                    P::NAME, packet_id, packet_size
+                );
+                // Buffer already consumed, just continue
+                continue;
+            }
+
+            // Dispatch packet to handler (buffer already safe)
             match self.dispatcher.dispatch(
                 packet_id,
-                &buffer[..packet_size],
+                &packet_data,
                 &mut self.context,
                 event_writer,
             ) {
                 Ok(()) => {
                     debug!(
                         "{} client processed packet 0x{:04X} ({} bytes)",
-                        P::NAME,
-                        packet_id,
-                        packet_size
+                        P::NAME, packet_id, packet_size
                     );
                 }
                 Err(e) => {
-                    error!(
-                        "{} client error processing packet 0x{:04X}: {:?}",
-                        P::NAME,
-                        packet_id,
-                        e
+                    warn!(
+                        "{} client: Failed to process packet 0x{:04X}: {:?}. Skipping.",
+                        P::NAME, packet_id, e
                     );
-                    // Log error but continue processing
-                    // In some cases, we might want to disconnect here
+                    // Buffer already consumed, just continue
                 }
             }
-
-            // Consume processed bytes
-            transport.consume(packet_size);
         }
 
         Ok(())

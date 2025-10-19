@@ -39,18 +39,19 @@ where
         event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
         // Parse the specific packet type
-        // We panic on parse failures to prevent buffer corruption from propagating
-        let packet = H::Packet::parse(data).unwrap_or_else(|e| {
-            panic!(
-                "CRITICAL: Failed to parse packet 0x{:04X} ({} bytes): {}. \
-                 This indicates a protocol mismatch or corrupted buffer. \
-                 Data (first 32 bytes): {:02X?}",
+        let packet = H::Packet::parse(data).map_err(|e| {
+            error!(
+                "Failed to parse packet 0x{:04X} ({} bytes): {}. Data (first 32 bytes): {:02X?}",
                 packet_id,
                 data.len(),
                 e,
                 &data[..data.len().min(32)]
             );
-        });
+            NetworkError::ParseFailure {
+                id: packet_id,
+                reason: e.to_string(),
+            }
+        })?;
 
         // Handle the parsed packet
         self.handler.handle(packet, context, event_writer)
@@ -130,11 +131,12 @@ impl<P: Protocol> PacketDispatcher<P> {
         if let Some(handler) = self.handlers.get(&packet_id) {
             handler.handle_dyn(packet_id, data, context, event_writer)
         } else {
-            panic!(
-                "No handler registered for packet 0x{:04X} in {} protocol",
+            warn!(
+                "No handler for packet 0x{:04X} in {} protocol, will be skipped by caller",
                 packet_id,
                 P::NAME
-            )
+            );
+            Err(NetworkError::UnknownPacketId { id: packet_id })
         }
     }
 
@@ -227,15 +229,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "No handler registered for packet 0x9999")]
     fn test_dispatcher_dispatch_unknown_packet() {
         let dispatcher = PacketDispatcher::<TestProtocol>::new();
         let mut context = ();
         let mut event_writer = super::super::traits::EventBuffer::new();
 
-        // Should panic on unknown packet to prevent buffer corruption
-        dispatcher
-            .dispatch(0x9999, &[], &mut context, &mut event_writer)
-            .unwrap();
+        // Should return error for unknown packet (not panic)
+        let result = dispatcher.dispatch(0x9999, &[], &mut context, &mut event_writer);
+        assert!(result.is_err());
+        assert!(matches!(result, Err(NetworkError::UnknownPacketId { id: 0x9999 })));
     }
 }

@@ -27,6 +27,18 @@ pub enum NetworkError {
 
     #[error("Encryption/decryption failed")]
     EncryptionFailed,
+
+    #[error("Unknown packet ID: 0x{id:04X}")]
+    UnknownPacketId { id: u16 },
+
+    #[error("Invalid packet length for 0x{id:04X}: {length} bytes")]
+    InvalidPacketLength { id: u16, length: usize },
+
+    #[error("Parse failure for packet 0x{id:04X}: {reason}")]
+    ParseFailure { id: u16, reason: String },
+
+    #[error("Handler failure for packet 0x{id:04X}: {reason}")]
+    HandlerFailure { id: u16, reason: String },
 }
 
 impl From<io::Error> for NetworkError {

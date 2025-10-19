@@ -46,7 +46,10 @@ impl Protocol for ZoneProtocol {
             ZC_ACCEPT_ENTER => PacketSize::Fixed(13),
             ZC_AID => PacketSize::Fixed(6),
             ZC_REFUSE_ENTER => PacketSize::Fixed(3),
-            _ => PacketSize::Fixed(0), // Unknown
+            _ => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            }, // Unknown - assume variable-length and try to skip
         }
     }
 }
