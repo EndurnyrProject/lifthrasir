@@ -11,7 +11,7 @@ path = "src/main.rs"
 game-engine = { path = "../game-engine" }
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
-indicatif = "0.17"
+indicatif = "0.18"
 
 [profile.release]
 strip = true

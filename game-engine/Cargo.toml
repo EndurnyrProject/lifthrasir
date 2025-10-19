@@ -48,19 +48,12 @@ zeroize = "1.8"
 # Async runtime integration
 bevy-tokio-tasks = "0.16"
 
-# UI dependencies
-bevy_lunex = "0.4"
-
 # Character entity system dependencies
 seldom_state = "0.14.0"
 moonshine-object = "0.2.6"
 moonshine-kind = "0.3"
 moonshine-tag = "0.3.0"
 
-# Optional future dependencies
-lightyear = { version = "0.24.0", optional = true }
-
 [features]
 default = []
-lightyear_ready = ["lightyear"]
 dynamic = ["bevy/dynamic_linking"]
