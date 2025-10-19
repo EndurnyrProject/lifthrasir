@@ -12,13 +12,13 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when character deletion succeeds
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct CharacterDeleted {
     pub char_id: u32,
 }
 
 /// Event emitted when character deletion fails
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct CharacterDeletionFailed {
     pub error: CharDeletionError,
 }

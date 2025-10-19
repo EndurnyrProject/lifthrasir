@@ -18,10 +18,8 @@ pub async fn get_character_list(
 ) -> Result<serde_json::Value, String> {
     let receiver = app_bridge.send_get_character_list();
 
-    let characters = match tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        receiver
-    ).await {
+    let characters = match tokio::time::timeout(std::time::Duration::from_secs(10), receiver).await
+    {
         Ok(Ok(result)) => result?,
         Ok(Err(_)) => return Err("Response channel closed".into()),
         Err(_) => return Err("Get character list request timed out".into()),
@@ -41,10 +39,7 @@ pub async fn select_character(
 ) -> Result<serde_json::Value, String> {
     let receiver = app_bridge.send_select_character(slot);
 
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        receiver
-    ).await {
+    match tokio::time::timeout(std::time::Duration::from_secs(10), receiver).await {
         Ok(Ok(result)) => result?,
         Ok(Err(_)) => return Err("Response channel closed".into()),
         Err(_) => return Err("Select character request timed out".into()),
@@ -67,10 +62,8 @@ pub async fn create_character(
         request.sex,
     );
 
-    let _character = match tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        receiver
-    ).await {
+    let _character = match tokio::time::timeout(std::time::Duration::from_secs(10), receiver).await
+    {
         Ok(Ok(result)) => result?,
         Ok(Err(_)) => return Err("Response channel closed".into()),
         Err(_) => return Err("Create character request timed out".into()),
@@ -87,10 +80,7 @@ pub async fn delete_character(
 ) -> Result<serde_json::Value, String> {
     let receiver = app_bridge.send_delete_character(char_id);
 
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        receiver
-    ).await {
+    match tokio::time::timeout(std::time::Duration::from_secs(10), receiver).await {
         Ok(Ok(result)) => result?,
         Ok(Err(_)) => return Err("Response channel closed".into()),
         Err(_) => return Err("Delete character request timed out".into()),

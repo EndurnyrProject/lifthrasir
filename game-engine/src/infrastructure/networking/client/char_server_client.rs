@@ -46,8 +46,8 @@ use bevy::prelude::*;
 /// // In your update system:
 /// fn update_system(
 ///     mut client: ResMut<CharServerClient>,
-///     mut connected: EventWriter<CharacterServerConnected>,
-///     mut zone_info: EventWriter<ZoneServerInfoReceived>,
+///     mut connected: MessageWriter<CharacterServerConnected>,
+///     mut zone_info: MessageWriter<ZoneServerInfoReceived>,
 ///     // ... other event writers
 /// ) {
 ///     let mut event_buffer = EventBuffer::new();
@@ -319,17 +319,17 @@ impl CharServerClient {
 /// by grouping all related EventWriters into a single logical parameter.
 #[derive(SystemParam)]
 pub struct CharServerEventWriters<'w> {
-    pub connected: EventWriter<'w, CharacterServerConnected>,
-    pub zone_info: EventWriter<'w, ZoneServerInfoReceived>,
-    pub char_created: EventWriter<'w, CharacterCreated>,
-    pub char_creation_failed: EventWriter<'w, CharacterCreationFailed>,
-    pub char_deleted: EventWriter<'w, CharacterDeleted>,
-    pub char_deletion_failed: EventWriter<'w, CharacterDeletionFailed>,
-    pub ping_received: EventWriter<'w, PingReceived>,
-    pub second_password: EventWriter<'w, SecondPasswordRequested>,
-    pub char_info_page: EventWriter<'w, CharacterInfoPageReceived>,
-    pub char_slot_info: EventWriter<'w, CharacterSlotInfoReceived>,
-    pub blocked_chars: EventWriter<'w, BlockedCharactersReceived>,
+    pub connected: MessageWriter<'w, CharacterServerConnected>,
+    pub zone_info: MessageWriter<'w, ZoneServerInfoReceived>,
+    pub char_created: MessageWriter<'w, CharacterCreated>,
+    pub char_creation_failed: MessageWriter<'w, CharacterCreationFailed>,
+    pub char_deleted: MessageWriter<'w, CharacterDeleted>,
+    pub char_deletion_failed: MessageWriter<'w, CharacterDeletionFailed>,
+    pub ping_received: MessageWriter<'w, PingReceived>,
+    pub second_password: MessageWriter<'w, SecondPasswordRequested>,
+    pub char_info_page: MessageWriter<'w, CharacterInfoPageReceived>,
+    pub char_slot_info: MessageWriter<'w, CharacterSlotInfoReceived>,
+    pub blocked_chars: MessageWriter<'w, BlockedCharactersReceived>,
 }
 
 /// Bevy system to update the character server client
@@ -346,8 +346,8 @@ pub struct CharServerEventWriters<'w> {
 ///
 /// ```ignore
 /// app.insert_resource(CharServerClient::with_session(account_id, login_id1, login_id2))
-///    .add_event::<CharacterServerConnected>()
-///    .add_event::<ZoneServerInfoReceived>()
+///    .add_message::<CharacterServerConnected>()
+///    .add_message::<ZoneServerInfoReceived>()
 ///    // ... other events
 ///    .add_systems(Update, char_server_update_system);
 /// ```

@@ -234,10 +234,8 @@ impl<P: Protocol> NetworkClient<P> {
 
                     // Read length field
                     let length = match length_bytes {
-                        2 => u16::from_le_bytes([
-                            buffer[length_offset],
-                            buffer[length_offset + 1],
-                        ]) as usize,
+                        2 => u16::from_le_bytes([buffer[length_offset], buffer[length_offset + 1]])
+                            as usize,
                         4 => u32::from_le_bytes([
                             buffer[length_offset],
                             buffer[length_offset + 1],
@@ -247,7 +245,8 @@ impl<P: Protocol> NetworkClient<P> {
                         _ => {
                             error!(
                                 "{} protocol: Invalid length field size: {}",
-                                P::NAME, length_bytes
+                                P::NAME,
+                                length_bytes
                             );
                             return Err(NetworkError::InvalidPacket);
                         }
@@ -285,29 +284,33 @@ impl<P: Protocol> NetworkClient<P> {
             if !self.dispatcher.has_handler(packet_id) {
                 warn!(
                     "{} client: Skipping unknown packet 0x{:04X} ({} bytes)",
-                    P::NAME, packet_id, packet_size
+                    P::NAME,
+                    packet_id,
+                    packet_size
                 );
                 // Buffer already consumed, just continue
                 continue;
             }
 
             // Dispatch packet to handler (buffer already safe)
-            match self.dispatcher.dispatch(
-                packet_id,
-                &packet_data,
-                &mut self.context,
-                event_writer,
-            ) {
+            match self
+                .dispatcher
+                .dispatch(packet_id, &packet_data, &mut self.context, event_writer)
+            {
                 Ok(()) => {
                     debug!(
                         "{} client processed packet 0x{:04X} ({} bytes)",
-                        P::NAME, packet_id, packet_size
+                        P::NAME,
+                        packet_id,
+                        packet_size
                     );
                 }
                 Err(e) => {
                     warn!(
                         "{} client: Failed to process packet 0x{:04X}: {:?}. Skipping.",
-                        P::NAME, packet_id, e
+                        P::NAME,
+                        packet_id,
+                        e
                     );
                     // Buffer already consumed, just continue
                 }

@@ -12,8 +12,8 @@ use crate::bridge::events::{
 
 /// System that handles GetCharacterListRequestedEvent
 pub fn handle_get_character_list_request(
-    mut events: EventReader<GetCharacterListRequestedEvent>,
-    mut char_list_events: EventWriter<RequestCharacterListEvent>,
+    mut events: MessageReader<GetCharacterListRequestedEvent>,
+    mut char_list_events: MessageWriter<RequestCharacterListEvent>,
 ) {
     for event in events.read() {
         debug!(
@@ -27,8 +27,8 @@ pub fn handle_get_character_list_request(
 
 /// System that handles SelectCharacterRequestedEvent
 pub fn handle_select_character_request(
-    mut events: EventReader<SelectCharacterRequestedEvent>,
-    mut select_char_events: EventWriter<SelectCharacterEvent>,
+    mut events: MessageReader<SelectCharacterRequestedEvent>,
+    mut select_char_events: MessageWriter<SelectCharacterEvent>,
 ) {
     for event in events.read() {
         debug!(
@@ -42,8 +42,8 @@ pub fn handle_select_character_request(
 
 /// System that handles CreateCharacterRequestedEvent
 pub fn handle_create_character_request(
-    mut events: EventReader<CreateCharacterRequestedEvent>,
-    mut create_char_events: EventWriter<CreateCharacterRequestEvent>,
+    mut events: MessageReader<CreateCharacterRequestedEvent>,
+    mut create_char_events: MessageWriter<CreateCharacterRequestEvent>,
 ) {
     for event in events.read() {
         debug!(
@@ -72,8 +72,8 @@ pub fn handle_create_character_request(
 
 /// System that handles DeleteCharacterRequestedEvent
 pub fn handle_delete_character_request(
-    mut events: EventReader<DeleteCharacterRequestedEvent>,
-    mut delete_char_events: EventWriter<DeleteCharacterRequestEvent>,
+    mut events: MessageReader<DeleteCharacterRequestedEvent>,
+    mut delete_char_events: MessageWriter<DeleteCharacterRequestEvent>,
 ) {
     for event in events.read() {
         debug!(

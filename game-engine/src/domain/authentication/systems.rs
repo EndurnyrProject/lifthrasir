@@ -32,8 +32,8 @@ use crate::{
     schedule = Update
 )]
 pub fn handle_login_attempts(
-    mut login_attempts: EventReader<LoginAttemptEvent>,
-    mut login_started_events: EventWriter<LoginAttemptStartedEvent>,
+    mut login_attempts: MessageReader<LoginAttemptEvent>,
+    mut login_started_events: MessageWriter<LoginAttemptStartedEvent>,
     mut login_client: ResMut<LoginClient>,
     auth_context: Res<AuthenticationContext>,
 ) {
@@ -86,8 +86,8 @@ pub fn handle_login_attempts(
     schedule = Update
 )]
 pub fn handle_login_accepted(
-    mut protocol_events: EventReader<LoginAccepted>,
-    mut domain_events: EventWriter<LoginSuccessEvent>,
+    mut protocol_events: MessageReader<LoginAccepted>,
+    mut domain_events: MessageWriter<LoginSuccessEvent>,
     mut login_client: ResMut<LoginClient>,
     mut next_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
@@ -152,8 +152,8 @@ pub fn handle_login_accepted(
     schedule = Update
 )]
 pub fn handle_login_refused(
-    mut protocol_events: EventReader<LoginRefused>,
-    mut domain_events: EventWriter<LoginFailureEvent>,
+    mut protocol_events: MessageReader<LoginRefused>,
+    mut domain_events: MessageWriter<LoginFailureEvent>,
     mut login_client: ResMut<LoginClient>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
@@ -277,7 +277,7 @@ fn run_login_client_update(client: Option<ResMut<LoginClient>>, events: LoginEve
 )]
 pub fn handle_server_selection(
     mut commands: Commands,
-    mut server_events: EventReader<ServerSelectedEvent>,
+    mut server_events: MessageReader<ServerSelectedEvent>,
     session: Option<Res<UserSession>>,
     mut char_client: Option<ResMut<CharServerClient>>,
 ) {

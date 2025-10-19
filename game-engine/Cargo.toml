@@ -5,11 +5,11 @@ edition.workspace = true
 
 [dependencies]
 # Bevy game engine
-bevy = { version = "0.16.1", features = ["jpeg"] }
-bevy_auto_plugin = "0.5.0"
-bevy_common_assets = { version = "0.13", features = ["toml"] }
-bevy_asset_loader = "0.23"
-bevy_kira_audio = { version = "0.23", features = ["mp3", "wav", "ogg"] }
+bevy = { version = "0.17.2", features = ["jpeg"] }
+bevy_auto_plugin = "0.7.1"
+bevy_common_assets = { version = "0.14", features = ["toml"] }
+bevy_asset_loader = "=0.24.0-rc.1"
+bevy_kira_audio = { version = "0.24", features = ["mp3", "wav", "ogg"] }
 
 # Parsing and data processing
 nom = "8.0.0"
@@ -46,13 +46,13 @@ secrecy = { version = "0.10", features = ["serde"] }
 zeroize = "1.8"
 
 # Async runtime integration
-bevy-tokio-tasks = "0.16"
+bevy-tokio-tasks = { git = "https://github.com/TBye101/bevy-tokio-tasks.git", branch = "master" }
 
 # Character entity system dependencies
-seldom_state = "0.14.0"
-moonshine-object = "0.2.6"
-moonshine-kind = "0.3"
-moonshine-tag = "0.3.0"
+seldom_state = "0.15"
+moonshine-object = "0.3"
+moonshine-kind = "0.4"
+moonshine-tag = "0.4"
 
 [features]
 default = []

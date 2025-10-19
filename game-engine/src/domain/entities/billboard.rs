@@ -1,6 +1,7 @@
 use bevy::{
+    asset::RenderAssetUsages,
+    mesh::{Indices, PrimitiveTopology},
     prelude::*,
-    render::{mesh::Indices, render_asset::RenderAssetUsages, render_resource::PrimitiveTopology},
 };
 
 /// Marker component for entities that should always face the camera
@@ -99,8 +100,7 @@ impl Plugin for BillboardPlugin {
         app.add_systems(Startup, setup_shared_sprite_quad)
             .add_systems(
                 PostUpdate,
-                billboard_rotation_system
-                    .after(bevy::transform::TransformSystem::TransformPropagate),
+                billboard_rotation_system.after(bevy::transform::TransformSystems::Propagate),
             );
     }
 }

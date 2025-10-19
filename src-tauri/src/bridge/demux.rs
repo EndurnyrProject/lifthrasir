@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use super::app_bridge::{TauriEventReceiver, TauriIncomingEvent};
 use super::correlation::{CharacterCorrelation, LoginCorrelation, ServerCorrelation};
-use super::event_writers::TauriEventWriters;
+use super::event_writers::TauriMessageWriters;
 use super::events::*;
 use super::pending_senders::PendingSenders;
 
@@ -13,7 +13,7 @@ pub fn demux_tauri_events(
     mut login_correlation: ResMut<LoginCorrelation>,
     mut char_correlation: ResMut<CharacterCorrelation>,
     mut server_correlation: ResMut<ServerCorrelation>,
-    mut writers: TauriEventWriters,
+    mut writers: TauriMessageWriters,
 ) {
     for event in receiver.0.try_iter() {
         match event {

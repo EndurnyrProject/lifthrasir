@@ -11,7 +11,7 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when account ID is received from zone server
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct AccountIdReceived {
     pub account_id: u32,
 }

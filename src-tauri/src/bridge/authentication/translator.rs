@@ -8,8 +8,8 @@ use crate::bridge::pending_senders::PendingSenders;
 /// System that handles LoginRequestedEvent and translates to game engine LoginAttemptEvent
 /// Also stores the oneshot sender for response correlation
 pub fn handle_login_request(
-    mut events: EventReader<LoginRequestedEvent>,
-    mut login_events: EventWriter<LoginAttemptEvent>,
+    mut events: MessageReader<LoginRequestedEvent>,
+    mut login_events: MessageWriter<LoginAttemptEvent>,
 ) {
     for event in events.read() {
         debug!(
@@ -26,10 +26,10 @@ pub fn handle_login_request(
 
 /// System that handles ServerSelectionRequestedEvent and translates to game engine ServerSelectedEvent
 pub fn handle_server_selection_request(
-    mut events: EventReader<ServerSelectionRequestedEvent>,
+    mut events: MessageReader<ServerSelectionRequestedEvent>,
     mut pending: ResMut<PendingSenders>,
     session: Option<Res<UserSession>>,
-    mut server_events: EventWriter<ServerSelectedEvent>,
+    mut server_events: MessageWriter<ServerSelectedEvent>,
 ) {
     for event in events.read() {
         debug!(

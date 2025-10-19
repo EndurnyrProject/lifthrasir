@@ -72,15 +72,17 @@ struct WaterData {
     tile_coords: vec4<f32>, // xy = tile position, zw = texture scale
 };
 
-@group(2) @binding(100)
+// Bevy 0.17: StandardMaterial in @group(3) bindings 0-12
+// MaterialExtension in @group(3) bindings 100+ to avoid conflicts
+@group(3) @binding(100)
 var<uniform> water: WaterData;
-@group(2) @binding(101)
+@group(3) @binding(101)
 var water_texture: texture_2d<f32>;
-@group(2) @binding(102)
+@group(3) @binding(102)
 var water_sampler: sampler;
-@group(2) @binding(103)
+@group(3) @binding(103)
 var normal_map: texture_2d<f32>;
-@group(2) @binding(104)
+@group(3) @binding(104)
 var normal_sampler: sampler;
 
 

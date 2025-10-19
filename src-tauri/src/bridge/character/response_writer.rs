@@ -9,7 +9,7 @@ use game_engine::domain::character::events::{
 /// System to capture CharacterListReceivedEvent and send response through oneshot channel
 /// Character list has no correlation - we just send to the first pending request (FIFO)
 pub fn write_character_list_response(
-    mut list_events: EventReader<CharacterListReceivedEvent>,
+    mut list_events: MessageReader<CharacterListReceivedEvent>,
     mut pending: ResMut<PendingSenders>,
 ) {
     for event in list_events.read() {
@@ -36,7 +36,7 @@ pub fn write_character_list_response(
 /// System to capture CharacterSelectedEvent and send response through oneshot channel
 /// Uses correlation map to find the RequestId from slot
 pub fn write_character_selection_response(
-    mut select_events: EventReader<CharacterSelectedEvent>,
+    mut select_events: MessageReader<CharacterSelectedEvent>,
     mut pending: ResMut<PendingSenders>,
     mut correlation: ResMut<CharacterCorrelation>,
 ) {
@@ -44,7 +44,10 @@ pub fn write_character_selection_response(
         // Use correlation to find request_id from slot
         if let Some(request_id) = correlation.remove_slot(&event.slot) {
             if let Some(sender) = pending.char_selections.senders.remove(&request_id) {
-                debug!("Character selected from slot {}, sending response to UI", event.slot);
+                debug!(
+                    "Character selected from slot {}, sending response to UI",
+                    event.slot
+                );
                 if sender.send(Ok(())).is_err() {
                     debug!("Failed to send character selection response - receiver was dropped");
                 }
@@ -66,8 +69,8 @@ pub fn write_character_selection_response(
 /// System to capture character creation events and send response through oneshot channel
 /// Uses correlation map to find the RequestId from slot
 pub fn write_character_creation_response(
-    mut create_events: EventReader<CharacterCreatedEvent>,
-    mut create_fail_events: EventReader<CharacterCreationFailedEvent>,
+    mut create_events: MessageReader<CharacterCreatedEvent>,
+    mut create_fail_events: MessageReader<CharacterCreationFailedEvent>,
     mut pending: ResMut<PendingSenders>,
     mut correlation: ResMut<CharacterCorrelation>,
 ) {
@@ -76,7 +79,10 @@ pub fn write_character_creation_response(
         // Use correlation to find request_id from slot
         if let Some(request_id) = correlation.remove_slot(&event.slot) {
             if let Some(sender) = pending.char_creations.senders.remove(&request_id) {
-                debug!("Character created in slot {}, sending response to UI", event.slot);
+                debug!(
+                    "Character created in slot {}, sending response to UI",
+                    event.slot
+                );
                 if sender.send(Ok(event.character.clone())).is_err() {
                     debug!("Failed to send character creation response - receiver was dropped");
                 }
@@ -99,9 +105,14 @@ pub fn write_character_creation_response(
         // Use correlation to find request_id from slot
         if let Some(request_id) = correlation.remove_slot(&event.slot) {
             if let Some(sender) = pending.char_creations.senders.remove(&request_id) {
-                debug!("Character creation failed in slot {}: {}", event.slot, event.error);
+                debug!(
+                    "Character creation failed in slot {}: {}",
+                    event.slot, event.error
+                );
                 if sender.send(Err(event.error.clone())).is_err() {
-                    debug!("Failed to send character creation failure response - receiver was dropped");
+                    debug!(
+                        "Failed to send character creation failure response - receiver was dropped"
+                    );
                 }
             } else {
                 error!(
@@ -121,8 +132,8 @@ pub fn write_character_creation_response(
 /// System to capture character deletion events and send response through oneshot channel
 /// Uses correlation map to find the RequestId from char_id
 pub fn write_character_deletion_response(
-    mut delete_events: EventReader<CharacterDeletedEvent>,
-    mut delete_fail_events: EventReader<CharacterDeletionFailedEvent>,
+    mut delete_events: MessageReader<CharacterDeletedEvent>,
+    mut delete_fail_events: MessageReader<CharacterDeletionFailedEvent>,
     mut pending: ResMut<PendingSenders>,
     mut correlation: ResMut<CharacterCorrelation>,
 ) {
@@ -131,7 +142,10 @@ pub fn write_character_deletion_response(
         // Use correlation to find request_id from char_id
         if let Some(request_id) = correlation.remove_char_id(&event.character_id) {
             if let Some(sender) = pending.char_deletions.senders.remove(&request_id) {
-                debug!("Character {} deleted, sending response to UI", event.character_id);
+                debug!(
+                    "Character {} deleted, sending response to UI",
+                    event.character_id
+                );
                 if sender.send(Ok(())).is_err() {
                     debug!("Failed to send character deletion response - receiver was dropped");
                 }
@@ -154,9 +168,14 @@ pub fn write_character_deletion_response(
         // Use correlation to find request_id from char_id
         if let Some(request_id) = correlation.remove_char_id(&event.character_id) {
             if let Some(sender) = pending.char_deletions.senders.remove(&request_id) {
-                debug!("Character deletion failed for {}: {}", event.character_id, event.error);
+                debug!(
+                    "Character deletion failed for {}: {}",
+                    event.character_id, event.error
+                );
                 if sender.send(Err(event.error.clone())).is_err() {
-                    debug!("Failed to send character deletion failure response - receiver was dropped");
+                    debug!(
+                        "Failed to send character deletion failure response - receiver was dropped"
+                    );
                 }
             } else {
                 error!(

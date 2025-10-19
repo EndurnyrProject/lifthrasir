@@ -9,7 +9,7 @@ use crate::bridge::pending_senders::PendingSenders;
 /// System that handles GetHairstylesRequestedEvent
 /// This is a synchronous query that responds immediately from the catalog
 pub fn handle_get_hairstyles_request(
-    mut events: EventReader<GetHairstylesRequestedEvent>,
+    mut events: MessageReader<GetHairstylesRequestedEvent>,
     mut pending: ResMut<PendingSenders>,
     catalog: Option<Res<HeadStyleCatalog>>,
 ) {

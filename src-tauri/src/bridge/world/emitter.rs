@@ -116,15 +116,15 @@ impl WorldEmitter {
 #[allow(clippy::too_many_arguments)]
 pub fn emit_world_events(
     emitter: Res<WorldEmitter>,
-    mut zone_info_events: EventReader<ZoneServerInfoReceivedEvent>,
-    mut connected_events: EventReader<ZoneServerConnected>,
-    mut connection_failed_events: EventReader<ZoneServerConnectionFailed>,
-    mut auth_success_events: EventReader<ZoneAuthenticationSuccess>,
-    mut auth_failed_events: EventReader<ZoneAuthenticationFailed>,
-    mut map_loading_events: EventReader<MapLoadingStarted>,
-    mut map_loaded_events: EventReader<MapLoadCompleted>,
-    mut map_loading_failed_events: EventReader<MapLoadingFailed>,
-    mut actor_init_events: EventReader<ActorInitSent>,
+    mut zone_info_events: MessageReader<ZoneServerInfoReceivedEvent>,
+    mut connected_events: MessageReader<ZoneServerConnected>,
+    mut connection_failed_events: MessageReader<ZoneServerConnectionFailed>,
+    mut auth_success_events: MessageReader<ZoneAuthenticationSuccess>,
+    mut auth_failed_events: MessageReader<ZoneAuthenticationFailed>,
+    mut map_loading_events: MessageReader<MapLoadingStarted>,
+    mut map_loaded_events: MessageReader<MapLoadCompleted>,
+    mut map_loading_failed_events: MessageReader<MapLoadingFailed>,
+    mut actor_init_events: MessageReader<ActorInitSent>,
 ) {
     // Zone server info received → starting connection
     for event in zone_info_events.read() {

@@ -4,12 +4,11 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-# Game engine dependency
 game-engine = { path = "../game-engine" }
 
 # Bevy dependencies (needed for Tauri integration plugin)
-bevy = { version = "0.16.1", features = ["dynamic_linking", "jpeg"] }
-bevy-tokio-tasks = "0.16"
+bevy = { version = "0.17.2", features = ["dynamic_linking", "jpeg"] }
+bevy-tokio-tasks = { git = "https://github.com/TBye101/bevy-tokio-tasks.git", branch = "master" }
 
 # Tauri dependencies
 tauri = { version = "2", features = ["macos-private-api"] }
@@ -18,7 +17,7 @@ tauri-plugin-opener = "2"
 # Additional Tauri integration dependencies
 parking_lot = "0.12"
 uuid = { version = "1.18", features = ["v4", "serde"] }
-wgpu = "24.0.5"
+wgpu = "26.0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

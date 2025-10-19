@@ -1,11 +1,8 @@
 use crate::infrastructure::assets::converters::apply_magenta_transparency;
 use bevy::{
-    asset::{io::Reader, AssetLoader, LoadContext},
+    asset::{io::Reader, AssetLoader, LoadContext, RenderAssetUsages},
     prelude::*,
-    render::{
-        render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, TextureDimension, TextureFormat},
-    },
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 use thiserror::Error;
 

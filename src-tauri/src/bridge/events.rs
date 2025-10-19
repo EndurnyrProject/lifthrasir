@@ -8,7 +8,7 @@ use super::request_id::RequestId;
 // ============================================================================
 
 /// Event requesting login with server
-#[derive(Event)]
+#[derive(Message)]
 pub struct LoginRequestedEvent {
     pub request_id: RequestId,
     pub username: String,
@@ -16,7 +16,7 @@ pub struct LoginRequestedEvent {
 }
 
 /// Event requesting server selection
-#[derive(Event)]
+#[derive(Message)]
 pub struct ServerSelectionRequestedEvent {
     pub request_id: RequestId,
     pub server_index: usize,
@@ -27,20 +27,20 @@ pub struct ServerSelectionRequestedEvent {
 // ============================================================================
 
 /// Event requesting character list
-#[derive(Event)]
+#[derive(Message)]
 pub struct GetCharacterListRequestedEvent {
     pub request_id: RequestId,
 }
 
 /// Event requesting character selection
-#[derive(Event)]
+#[derive(Message)]
 pub struct SelectCharacterRequestedEvent {
     pub request_id: RequestId,
     pub slot: u8,
 }
 
 /// Event requesting character creation
-#[derive(Event)]
+#[derive(Message)]
 pub struct CreateCharacterRequestedEvent {
     pub request_id: RequestId,
     pub name: String,
@@ -51,7 +51,7 @@ pub struct CreateCharacterRequestedEvent {
 }
 
 /// Event requesting character deletion
-#[derive(Event)]
+#[derive(Message)]
 pub struct DeleteCharacterRequestedEvent {
     pub request_id: RequestId,
     pub char_id: u32,
@@ -62,7 +62,7 @@ pub struct DeleteCharacterRequestedEvent {
 // ============================================================================
 
 /// Event requesting hairstyle list for a gender
-#[derive(Event)]
+#[derive(Message)]
 pub struct GetHairstylesRequestedEvent {
     pub request_id: RequestId,
     pub gender: u8,
@@ -73,14 +73,14 @@ pub struct GetHairstylesRequestedEvent {
 // ============================================================================
 
 /// Event forwarding keyboard input from UI
-#[derive(Event)]
+#[derive(Message)]
 pub struct KeyboardInputEvent {
     pub code: String,
     pub pressed: bool,
 }
 
 /// Event forwarding mouse position from UI
-#[derive(Event)]
+#[derive(Message)]
 pub struct MousePositionEvent {
     pub x: f32,
     pub y: f32,

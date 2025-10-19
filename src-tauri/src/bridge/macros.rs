@@ -1,13 +1,13 @@
-/// Macro to generate a SystemParam bundle for EventWriters
+/// Macro to generate a SystemParam bundle for MessageWriters
 ///
-/// This reduces the number of function parameters by grouping related EventWriters
+/// This reduces the number of function parameters by grouping related MessageWriters
 /// into a single logical parameter.
 ///
 /// # Usage
 ///
 /// ```ignore
 /// define_event_writers! {
-///     TauriEventWriters {
+///     TauriMessageWriters {
 ///         login: LoginRequestedEvent,
 ///         server_selection: ServerSelectionRequestedEvent,
 ///     }
@@ -17,9 +17,9 @@
 /// This generates:
 /// ```ignore
 /// #[derive(SystemParam)]
-/// pub struct TauriEventWriters<'w> {
-///     pub login: EventWriter<'w, LoginRequestedEvent>,
-///     pub server_selection: EventWriter<'w, ServerSelectionRequestedEvent>,
+/// pub struct TauriMessageWriters<'w> {
+///     pub login: MessageWriter<'w, LoginRequestedEvent>,
+///     pub server_selection: MessageWriter<'w, ServerSelectionRequestedEvent>,
 /// }
 /// ```
 #[macro_export]
@@ -28,13 +28,13 @@ macro_rules! define_event_writers {
         #[derive(bevy::ecs::system::SystemParam)]
         pub struct $struct_name<'w> {
             $(
-                pub $field: bevy::prelude::EventWriter<'w, $event_type>,
+                pub $field: bevy::prelude::MessageWriter<'w, $event_type>,
             )*
         }
     };
 }
 
-/// Macro to dispatch Tauri incoming events to Bevy EventWriters
+/// Macro to dispatch Tauri incoming events to Bevy MessageWriters
 ///
 /// This macro eliminates boilerplate for two common event dispatch patterns:
 /// 1. Fire-and-forget events (no response channel)

@@ -84,15 +84,9 @@ pub enum TauriIncomingEvent {
         response_tx: oneshot::Sender<Result<Vec<HairstyleInfo>, String>>,
     },
     /// Forward keyboard input from JavaScript to Bevy (no response)
-    KeyboardInput {
-        code: String,
-        pressed: bool,
-    },
+    KeyboardInput { code: String, pressed: bool },
     /// Forward mouse position from JavaScript to Bevy (no response)
-    MousePosition {
-        x: f32,
-        y: f32,
-    },
+    MousePosition { x: f32, y: f32 },
 }
 
 // ============================================================================
@@ -138,10 +132,7 @@ impl AppBridge {
     }
 
     /// Send a server selection event and return receiver for response
-    pub fn send_select_server(
-        &self,
-        server_index: usize,
-    ) -> oneshot::Receiver<Result<(), String>> {
+    pub fn send_select_server(&self, server_index: usize) -> oneshot::Receiver<Result<(), String>> {
         let request_id = RequestId::new();
         let (response_tx, response_rx) = oneshot::channel();
 
@@ -155,9 +146,7 @@ impl AppBridge {
     }
 
     /// Send get character list event and return receiver for response
-    pub fn send_get_character_list(
-        &self,
-    ) -> oneshot::Receiver<Result<Vec<CharacterInfo>, String>> {
+    pub fn send_get_character_list(&self) -> oneshot::Receiver<Result<Vec<CharacterInfo>, String>> {
         let request_id = RequestId::new();
         let (response_tx, response_rx) = oneshot::channel();
 
@@ -170,10 +159,7 @@ impl AppBridge {
     }
 
     /// Send select character event and return receiver for response
-    pub fn send_select_character(
-        &self,
-        slot: u8,
-    ) -> oneshot::Receiver<Result<(), String>> {
+    pub fn send_select_character(&self, slot: u8) -> oneshot::Receiver<Result<(), String>> {
         let request_id = RequestId::new();
         let (response_tx, response_rx) = oneshot::channel();
 
@@ -212,10 +198,7 @@ impl AppBridge {
     }
 
     /// Send delete character event and return receiver for response
-    pub fn send_delete_character(
-        &self,
-        char_id: u32,
-    ) -> oneshot::Receiver<Result<(), String>> {
+    pub fn send_delete_character(&self, char_id: u32) -> oneshot::Receiver<Result<(), String>> {
         let request_id = RequestId::new();
         let (response_tx, response_rx) = oneshot::channel();
 

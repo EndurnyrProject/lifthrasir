@@ -4,11 +4,9 @@ use crate::{
     utils::constants::CELL_SIZE,
 };
 use bevy::{
+    asset::RenderAssetUsages,
+    mesh::{Indices, PrimitiveTopology},
     prelude::*,
-    render::{
-        mesh::{Indices, PrimitiveTopology},
-        render_asset::RenderAssetUsages,
-    },
 };
 use std::collections::HashMap;
 

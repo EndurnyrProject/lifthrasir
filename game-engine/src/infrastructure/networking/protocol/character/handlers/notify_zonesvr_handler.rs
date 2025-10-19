@@ -12,7 +12,7 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when zone server connection info is received
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct ZoneServerInfoReceived {
     pub zone_server_info: ZoneServerInfo,
 }

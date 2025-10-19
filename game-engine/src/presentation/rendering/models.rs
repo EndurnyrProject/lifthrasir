@@ -5,10 +5,10 @@ use crate::domain::world::components::MapLoader;
 use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset, RsmAsset};
 use crate::infrastructure::ro_formats::{RsmFile, RswObject};
 use crate::utils::{get_map_dimensions_from_ground, rsw_to_bevy_transform};
+use bevy::asset::RenderAssetUsages;
 use bevy::math::{Mat4, Vec4};
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use bevy::render::mesh::{Indices, PrimitiveTopology};
-use bevy::render::render_asset::RenderAssetUsages;
 use std::collections::HashMap;
 use std::sync::Arc;
 

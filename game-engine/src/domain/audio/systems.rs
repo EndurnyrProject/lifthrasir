@@ -9,7 +9,7 @@ use bevy_kira_audio::{Audio, AudioControl, AudioInstance, AudioSource, AudioTwee
 /// System to handle BGM change requests with crossfading
 /// Listens for PlayBgmEvent and manages track transitions
 pub fn handle_bgm_change(
-    mut events: EventReader<PlayBgmEvent>,
+    mut events: MessageReader<PlayBgmEvent>,
     mut bgm_manager: ResMut<BgmManager>,
     audio_settings: Res<AudioSettings>,
     audio: Res<Audio>,
@@ -55,8 +55,8 @@ pub fn handle_bgm_change(
 
         // Apply fade-in after starting
         if let Some(instance) = audio_instances.get_mut(&instance_handle) {
-            instance.set_volume(
-                effective_volume,
+            instance.set_decibels(
+                effective_volume as f32,
                 AudioTween::linear(std::time::Duration::from_secs_f32(event.fade_in_duration)),
             );
         }
@@ -69,7 +69,7 @@ pub fn handle_bgm_change(
 /// System to handle BGM stop requests
 /// Fades out and stops the current track
 pub fn handle_bgm_stop(
-    mut events: EventReader<StopBgmEvent>,
+    mut events: MessageReader<StopBgmEvent>,
     mut bgm_manager: ResMut<BgmManager>,
     mut audio_instances: ResMut<Assets<AudioInstance>>,
 ) {
@@ -91,7 +91,7 @@ pub fn handle_bgm_stop(
 /// System to handle BGM volume changes
 /// Applies volume immediately to active and fading tracks
 pub fn handle_volume_change(
-    mut events: EventReader<SetBgmVolumeEvent>,
+    mut events: MessageReader<SetBgmVolumeEvent>,
     mut audio_settings: ResMut<AudioSettings>,
     bgm_manager: Res<BgmManager>,
     mut audio_instances: ResMut<Assets<AudioInstance>>,
@@ -106,7 +106,7 @@ pub fn handle_volume_change(
         // Apply to active track
         if let Some(active_handle) = &bgm_manager.active_instance {
             if let Some(instance) = audio_instances.get_mut(active_handle) {
-                instance.set_volume(effective_volume, AudioTween::default());
+                instance.set_decibels(effective_volume as f32, AudioTween::default());
             }
         }
 
@@ -123,7 +123,7 @@ pub fn handle_volume_change(
 /// System to handle BGM mute/unmute requests
 /// Instantly mutes or unmutes all BGM
 pub fn handle_mute_change(
-    mut events: EventReader<MuteBgmEvent>,
+    mut events: MessageReader<MuteBgmEvent>,
     mut audio_settings: ResMut<AudioSettings>,
     bgm_manager: Res<BgmManager>,
     mut audio_instances: ResMut<Assets<AudioInstance>>,
@@ -137,14 +137,14 @@ pub fn handle_mute_change(
         // Apply to active track
         if let Some(active_handle) = &bgm_manager.active_instance {
             if let Some(instance) = audio_instances.get_mut(active_handle) {
-                instance.set_volume(effective_volume, AudioTween::default());
+                instance.set_decibels(effective_volume as f32, AudioTween::default());
             }
         }
 
         // Mute/unmute fading tracks as well
         for fading_handle in &bgm_manager.fading_out_instances {
             if let Some(instance) = audio_instances.get_mut(fading_handle) {
-                instance.set_volume(effective_volume, AudioTween::default());
+                instance.set_decibels(effective_volume as f32, AudioTween::default());
             }
         }
     }
@@ -182,7 +182,7 @@ pub fn load_bgm_name_table(
 /// Reads map name from MapRequestLoader and looks up BGM path from mp3nametable.txt
 /// Runs every frame and checks if we need to start BGM
 pub fn handle_map_bgm(
-    mut events: EventWriter<PlayBgmEvent>,
+    mut events: MessageWriter<PlayBgmEvent>,
     query: Query<(
         &crate::domain::world::components::MapLoader,
         &crate::domain::world::map_loader::MapRequestLoader,

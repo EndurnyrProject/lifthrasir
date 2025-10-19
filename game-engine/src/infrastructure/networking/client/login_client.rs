@@ -37,8 +37,8 @@ use bevy_auto_plugin::modes::global::prelude::auto_init_resource;
 /// // In your update system:
 /// fn update_system(
 ///     mut client: ResMut<LoginClient>,
-///     mut login_accepted: EventWriter<LoginAccepted>,
-///     mut login_refused: EventWriter<LoginRefused>,
+///     mut login_accepted: MessageWriter<LoginAccepted>,
+///     mut login_refused: MessageWriter<LoginRefused>,
 /// ) {
 ///     let mut event_buffer = EventBuffer::new();
 ///     client.update(&mut event_buffer).unwrap();
@@ -198,8 +198,8 @@ impl Default for LoginClient {
 /// by grouping all related EventWriters into a single logical parameter.
 #[derive(SystemParam)]
 pub struct LoginEventWriters<'w> {
-    pub accepted: EventWriter<'w, LoginAccepted>,
-    pub refused: EventWriter<'w, LoginRefused>,
+    pub accepted: MessageWriter<'w, LoginAccepted>,
+    pub refused: MessageWriter<'w, LoginRefused>,
 }
 
 /// Bevy system to update the login client
@@ -216,8 +216,8 @@ pub struct LoginEventWriters<'w> {
 ///
 /// ```ignore
 /// app.insert_resource(LoginClient::new())
-///    .add_event::<LoginAccepted>()
-///    .add_event::<LoginRefused>()
+///    .add_message::<LoginAccepted>()
+///    .add_message::<LoginRefused>()
 ///    .add_systems(Update, login_client_update_system);
 /// ```
 pub fn login_client_update_system(

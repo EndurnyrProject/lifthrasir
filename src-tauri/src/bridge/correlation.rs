@@ -86,8 +86,7 @@ impl CharacterCorrelation {
         self.slot_entries.retain(|_, entry| !entry.is_stale());
         self.char_id_entries.retain(|_, entry| !entry.is_stale());
 
-        (initial_slot - self.slot_entries.len())
-            + (initial_char_id - self.char_id_entries.len())
+        (initial_slot - self.slot_entries.len()) + (initial_char_id - self.char_id_entries.len())
     }
 }
 

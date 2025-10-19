@@ -12,7 +12,7 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when zone server accepts entry and player spawns
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct ZoneServerConnected {
     pub spawn_data: SpawnData,
 }

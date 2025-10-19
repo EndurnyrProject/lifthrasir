@@ -49,7 +49,8 @@ pub struct PendingCharacterDeletionSenders {
 /// Stores pending oneshot senders for hairstyle requests
 #[derive(Default)]
 pub struct PendingHairstyleSenders {
-    pub senders: HashMap<RequestId, oneshot::Sender<Result<Vec<super::app_bridge::HairstyleInfo>, String>>>,
+    pub senders:
+        HashMap<RequestId, oneshot::Sender<Result<Vec<super::app_bridge::HairstyleInfo>, String>>>,
 }
 
 // ============================================================================

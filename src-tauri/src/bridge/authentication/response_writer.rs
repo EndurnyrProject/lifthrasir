@@ -8,7 +8,7 @@ use game_engine::presentation::ui::events::ServerSelectedEvent;
 /// System to capture LoginSuccessEvent and send response through oneshot channel
 /// Uses correlation map to find the RequestId from username
 pub fn write_login_success_response(
-    mut success_events: EventReader<LoginSuccessEvent>,
+    mut success_events: MessageReader<LoginSuccessEvent>,
     mut pending: ResMut<PendingSenders>,
     mut correlation: ResMut<LoginCorrelation>,
 ) {
@@ -52,15 +52,13 @@ pub fn write_login_success_response(
 
 /// System to capture LoginFailureEvent and send response through oneshot channel
 pub fn write_login_failure_response(
-    mut failure_events: EventReader<LoginFailureEvent>,
+    mut failure_events: MessageReader<LoginFailureEvent>,
     mut pending: ResMut<PendingSenders>,
     mut correlation: ResMut<LoginCorrelation>,
 ) {
     for event in failure_events.read() {
         let request_id = if event.username.is_empty() {
-            warn!(
-                "Received LoginFailureEvent with empty username - cannot correlate to request"
-            );
+            warn!("Received LoginFailureEvent with empty username - cannot correlate to request");
             None
         } else {
             // Normal path: use correlation
@@ -96,7 +94,7 @@ pub fn write_login_failure_response(
 /// System to capture ServerSelectedEvent and send success response through oneshot channel
 /// Uses correlation map to find the RequestId from server_index
 pub fn write_server_selection_response(
-    mut server_events: EventReader<ServerSelectedEvent>,
+    mut server_events: MessageReader<ServerSelectedEvent>,
     mut pending: ResMut<PendingSenders>,
     mut correlation: ResMut<ServerCorrelation>,
 ) {
@@ -125,7 +123,9 @@ pub fn write_server_selection_response(
                 );
             }
         } else {
-            warn!("ServerSelectedEvent received without server_index - cannot correlate to request");
+            warn!(
+                "ServerSelectedEvent received without server_index - cannot correlate to request"
+            );
         }
     }
 }

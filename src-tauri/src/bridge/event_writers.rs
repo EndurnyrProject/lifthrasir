@@ -1,7 +1,7 @@
 use super::events::*;
 
 crate::define_event_writers! {
-    TauriEventWriters {
+    TauriMessageWriters {
         login: LoginRequestedEvent,
         server_selection: ServerSelectionRequestedEvent,
         char_list: GetCharacterListRequestedEvent,

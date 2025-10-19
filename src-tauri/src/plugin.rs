@@ -1,10 +1,10 @@
 use bevy::app::{App as BevyApp, AppExit, Plugin, PluginsState};
 use bevy::ecs::entity::Entity;
-use bevy::ecs::event::EventWriter;
 use bevy::ecs::system::{Query, SystemState};
+use bevy::prelude::MessageWriter;
 use bevy::prelude::*;
-use bevy::render::renderer::{initialize_renderer, RenderInstance, WgpuWrapper};
-use bevy::render::settings::{RenderCreation, WgpuSettings};
+use bevy::render::renderer::initialize_renderer;
+use bevy::render::settings::{Backends, RenderCreation, WgpuSettings};
 use bevy::render::RenderPlugin;
 use bevy::tasks::tick_global_task_pools_on_main_thread;
 use bevy::window::{
@@ -15,7 +15,6 @@ use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
 use std::sync::Arc;
 use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindow};
-use wgpu::RequestAdapterOptions;
 
 use super::bridge::{
     cleanup_stale_correlations, demux_tauri_events, emit_world_events,
@@ -24,27 +23,26 @@ use super::bridge::{
     handle_login_request, handle_mouse_position, handle_select_character_request,
     handle_server_selection_request, write_character_creation_response,
     write_character_deletion_response, write_character_list_response,
-    write_character_selection_response, write_login_failure_response,
-    write_login_success_response, write_server_selection_response, AppBridge,
-    CharacterCorrelation, CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent,
-    GetCharacterListRequestedEvent, GetHairstylesRequestedEvent, KeyboardInputEvent,
-    LoginCorrelation, LoginRequestedEvent, MousePositionEvent, PendingSenders,
-    SelectCharacterRequestedEvent, ServerCorrelation, ServerSelectionRequestedEvent,
-    TauriEventReceiver, WorldEmitter,
+    write_character_selection_response, write_login_failure_response, write_login_success_response,
+    write_server_selection_response, AppBridge, CharacterCorrelation,
+    CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent, GetCharacterListRequestedEvent,
+    GetHairstylesRequestedEvent, KeyboardInputEvent, LoginCorrelation, LoginRequestedEvent,
+    MousePositionEvent, PendingSenders, SelectCharacterRequestedEvent, ServerCorrelation,
+    ServerSelectionRequestedEvent, TauriEventReceiver, WorldEmitter,
 };
 use super::commands;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
 
 /// Type alias for window resize event system state
 type WindowResizeSystemState = SystemState<(
-    EventWriter<'static, WindowResized>,
+    MessageWriter<'static, WindowResized>,
     Query<'static, 'static, (Entity, &'static mut Window)>,
 )>;
 
 /// Type alias for window scale factor change event system state
 type WindowFactorChangeSystemState = SystemState<(
-    EventWriter<'static, WindowResized>,
-    EventWriter<'static, WindowScaleFactorChanged>,
+    MessageWriter<'static, WindowResized>,
+    MessageWriter<'static, WindowScaleFactorChanged>,
     Query<'static, 'static, (Entity, &'static mut Window)>,
 )>;
 
@@ -55,27 +53,21 @@ struct CustomRendererPlugin {
 
 impl Plugin for CustomRendererPlugin {
     fn build(&self, app: &mut BevyApp) {
-        let instance = wgpu::Instance::default();
-        let surface = instance.create_surface(&self.webview_window).unwrap();
+        // Create window wrapper and raw handle for Bevy's renderer
+        let window_wrapper = WindowWrapper::new(self.webview_window.clone());
+        let raw_handle = RawHandleWrapper::new(&window_wrapper).unwrap();
+        let raw_handle_holder =
+            RawHandleWrapperHolder(Arc::new(std::sync::Mutex::new(Some(raw_handle))));
 
-        let (device, queue, adapter_info, adapter) = block_on(initialize_renderer(
-            &instance,
+        // Initialize renderer with new Bevy 0.17 API
+        let render_resources = block_on(initialize_renderer(
+            Backends::all(),
+            Some(raw_handle_holder),
             &WgpuSettings::default(),
-            &RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                force_fallback_adapter: false,
-                compatible_surface: Some(&surface),
-            },
         ));
 
         app.add_plugins(RenderPlugin {
-            render_creation: RenderCreation::Manual(bevy::render::settings::RenderResources(
-                device,
-                queue,
-                adapter_info,
-                adapter,
-                RenderInstance(Arc::new(WgpuWrapper::new(instance))),
-            )),
+            render_creation: RenderCreation::Manual(render_resources),
             ..Default::default()
         });
     }
@@ -164,7 +156,7 @@ impl Plugin for TauriIntegrationPlugin {
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        resolution: (1440.0, 1080.0).into(),
+                        resolution: WindowResolution::new(1440, 1080),
                         ..Default::default()
                     }),
                     ..Default::default()
@@ -172,36 +164,22 @@ impl Plugin for TauriIntegrationPlugin {
                 .build()
                 .disable::<bevy::winit::WinitPlugin>()
                 .disable::<RenderPlugin>()
-                .disable::<bevy::render::texture::ImagePlugin>()
+                .disable::<bevy::prelude::ImagePlugin>()
                 .disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>()
                 .disable::<bevy::core_pipeline::CorePipelinePlugin>()
                 .disable::<bevy::sprite::SpritePlugin>()
+                .disable::<bevy::sprite_render::SpriteRenderPlugin>()
                 .disable::<bevy::text::TextPlugin>()
                 .disable::<bevy::ui::UiPlugin>()
+                .disable::<bevy::ui_render::UiRenderPlugin>()
                 .disable::<bevy::pbr::PbrPlugin>()
                 .disable::<bevy::gltf::GltfPlugin>()
                 .disable::<bevy::audio::AudioPlugin>()
                 .disable::<bevy::animation::AnimationPlugin>()
-                .disable::<bevy::gizmos::GizmoPlugin>(), // Re-added later with render pipeline
+                .disable::<bevy::gizmos::GizmoPlugin>()
+                .disable::<bevy::post_process::PostProcessPlugin>()
+                .disable::<bevy::anti_alias::AntiAliasPlugin>(), // Re-added later with render pipeline
         );
-
-        // Add game engine plugins (AFTER core Bevy plugins are set up)
-        // This ensures StatesPlugin is available before game plugins that use states
-        app.add_plugins((
-            bevy_tokio_tasks::TokioTasksPlugin::default(),
-            game_engine::LifthrasirPlugin,
-            game_engine::AssetsPlugin,
-            game_engine::AudioPlugin, // Audio system with BGM support and crossfading
-            game_engine::AssetCatalogPlugin,
-            game_engine::CharacterDomainPlugin, // Includes UnifiedCharacterEntityPlugin with 3D sprite hierarchy
-            game_engine::AuthenticationPlugin,
-            game_engine::WorldPlugin,
-            game_engine::BillboardPlugin, // 3D billboard rendering infrastructure
-            game_engine::InputPlugin,     // Input handling (cursor, clicks, terrain cursor)
-        ));
-
-        // Add camera systems separately (LifthrasirPlugin doesn't auto-register these)
-        game_engine::LifthrasirPlugin::add_camera_systems(app);
 
         // Create AppBridge and event receiver
         let (app_bridge, tauri_rx) = AppBridge::new();
@@ -214,27 +192,25 @@ impl Plugin for TauriIntegrationPlugin {
         app.insert_resource(ServerCorrelation::default());
 
         // Register typed Bevy events for Tauri bridge
-        app.add_event::<LoginRequestedEvent>()
-            .add_event::<ServerSelectionRequestedEvent>()
-            .add_event::<GetCharacterListRequestedEvent>()
-            .add_event::<SelectCharacterRequestedEvent>()
-            .add_event::<CreateCharacterRequestedEvent>()
-            .add_event::<DeleteCharacterRequestedEvent>()
-            .add_event::<GetHairstylesRequestedEvent>()
-            .add_event::<KeyboardInputEvent>()
-            .add_event::<MousePositionEvent>();
+        app.add_message::<LoginRequestedEvent>()
+            .add_message::<ServerSelectionRequestedEvent>()
+            .add_message::<GetCharacterListRequestedEvent>()
+            .add_message::<SelectCharacterRequestedEvent>()
+            .add_message::<CreateCharacterRequestedEvent>()
+            .add_message::<DeleteCharacterRequestedEvent>()
+            .add_message::<GetHairstylesRequestedEvent>()
+            .add_message::<KeyboardInputEvent>()
+            .add_message::<MousePositionEvent>();
 
         // Add new event-driven system architecture
         // 1. demux_tauri_events: Reads from flume channel, emits typed events (runs first)
         // 2. Handler systems: Process typed events, emit game engine events (run after demux)
-        // 3. Response writer systems: Capture game engine response events, send to UI (run after demux)
+        // 3. Response writer systems: Capture game engine response events, send to UI (run after handlers)
+        // 4. Cleanup system runs periodically to remove stale correlations
         app.add_systems(
             Update,
             (
-                // Single demux system processes all events from flume channel (O(n))
                 demux_tauri_events,
-                // Handler systems process typed events and emit game engine events
-                // These can run in parallel since they read different event types
                 (
                     handle_login_request,
                     handle_server_selection_request,
@@ -245,10 +221,7 @@ impl Plugin for TauriIntegrationPlugin {
                     handle_get_hairstyles_request,
                     handle_keyboard_input,
                     handle_mouse_position,
-                )
-                    .after(demux_tauri_events),
-                // Response writers capture game engine events and send responses to UI
-                // These can run in parallel since they write to different oneshot channels
+                ),
                 (
                     write_login_success_response,
                     write_login_failure_response,
@@ -257,11 +230,10 @@ impl Plugin for TauriIntegrationPlugin {
                     write_character_selection_response,
                     write_character_creation_response,
                     write_character_deletion_response,
-                )
-                    .after(demux_tauri_events),
-                // Cleanup system runs periodically to remove stale correlations
+                ),
                 cleanup_stale_correlations,
-            ),
+            )
+                .chain(),
         );
 
         // Set up Tauri app with custom runner
@@ -364,19 +336,41 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
         // Add all rendering-related plugins that were disabled from DefaultPlugins
         // These must be added AFTER CustomRendererPlugin sets up the rendering resources
         let plugins = (
-            bevy::render::texture::ImagePlugin::default(),
+            bevy::prelude::ImagePlugin::default(),
             bevy::render::pipelined_rendering::PipelinedRenderingPlugin,
             bevy::core_pipeline::CorePipelinePlugin,
             bevy::sprite::SpritePlugin,
+            bevy::sprite_render::SpriteRenderPlugin,
             bevy::text::TextPlugin,
-            bevy::ui::UiPlugin::default(),
+            bevy::ui::UiPlugin,
+            bevy::ui_render::UiRenderPlugin,
             bevy::pbr::PbrPlugin::default(),
             bevy::gltf::GltfPlugin::default(),
             bevy::animation::AnimationPlugin,
             bevy::gizmos::GizmoPlugin,
+            bevy::post_process::PostProcessPlugin,
+            bevy::anti_alias::AntiAliasPlugin,
             game_engine::MapPlugin,
         );
         app.add_plugins(plugins);
+
+        // Add game engine plugins AFTER rendering plugins are available
+        // This ensures all required asset types are initialized
+        app.add_plugins((
+            bevy_tokio_tasks::TokioTasksPlugin::default(),
+            game_engine::LifthrasirPlugin,
+            game_engine::AssetsPlugin,
+            game_engine::AudioPlugin,
+            game_engine::AssetCatalogPlugin,
+            game_engine::CharacterDomainPlugin,
+            game_engine::AuthenticationPlugin,
+            game_engine::WorldPlugin,
+            game_engine::BillboardPlugin,
+            game_engine::InputPlugin,
+        ));
+
+        // Add camera systems separately
+        game_engine::LifthrasirPlugin::add_camera_systems(&mut app);
 
         // Wait for all plugins to be ready
         while app.plugins_state() != PluginsState::Ready {
@@ -408,7 +402,7 @@ fn handle_window_resize(size: tauri::PhysicalSize<u32>, mut app: RefMut<'_, Bevy
     let (mut window_resized, mut window_query) = event_writer_system_state.get_mut(app.world_mut());
 
     for (entity, mut window) in window_query.iter_mut() {
-        window.resolution = WindowResolution::new(size.width as f32, size.height as f32);
+        window.resolution = WindowResolution::new(size.width, size.height);
         window_resized.write(WindowResized {
             window: entity,
             width: size.width as f32,
@@ -430,8 +424,7 @@ fn handle_window_factor_change(
         event_writer_system_state.get_mut(app.world_mut());
 
     for (entity, mut window) in window_query.iter_mut() {
-        window.resolution =
-            WindowResolution::new(new_inner_size.width as f32, new_inner_size.height as f32);
+        window.resolution = WindowResolution::new(new_inner_size.width, new_inner_size.height);
         window_scale_factor_changed.write(WindowScaleFactorChanged {
             window: entity,
             scale_factor,

@@ -19,10 +19,10 @@ impl Plugin for AudioDomainPlugin {
         app.init_resource::<BgmNameTable>();
 
         // Register events
-        app.add_event::<PlayBgmEvent>();
-        app.add_event::<StopBgmEvent>();
-        app.add_event::<SetBgmVolumeEvent>();
-        app.add_event::<MuteBgmEvent>();
+        app.add_message::<PlayBgmEvent>();
+        app.add_message::<StopBgmEvent>();
+        app.add_message::<SetBgmVolumeEvent>();
+        app.add_message::<MuteBgmEvent>();
 
         // Register startup system to load BGM name table
         app.add_systems(Startup, load_bgm_name_table);

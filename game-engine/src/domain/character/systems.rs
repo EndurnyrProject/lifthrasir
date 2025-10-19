@@ -1,4 +1,4 @@
-use super::components::{CharacterSelectionState, MapLoadingTimer};
+use super::components::{CharServerPingTimer, CharacterSelectionState, MapLoadingTimer};
 use super::events::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
@@ -15,9 +15,9 @@ use std::time::{Duration, Instant};
 /// System to handle explicit character list requests
 /// The character list is cached in CharServerClient after connection
 pub fn handle_request_character_list(
-    mut request_events: EventReader<RequestCharacterListEvent>,
+    mut request_events: MessageReader<RequestCharacterListEvent>,
     char_client: Option<Res<CharServerClient>>,
-    mut list_events: EventWriter<CharacterListReceivedEvent>,
+    mut list_events: MessageWriter<CharacterListReceivedEvent>,
 ) {
     for _event in request_events.read() {
         if let Some(client) = char_client.as_ref() {
@@ -46,15 +46,22 @@ pub fn handle_request_character_list(
 /// System: Handle character server connection and emit character list
 /// The new architecture receives character list upon HC_ACCEPT_ENTER
 pub fn handle_character_server_connected(
-    mut connected_events: EventReader<CharacterServerConnected>,
+    mut connected_events: MessageReader<CharacterServerConnected>,
     char_client: Option<Res<CharServerClient>>,
-    mut list_events: EventWriter<CharacterListReceivedEvent>,
+    mut list_events: MessageWriter<CharacterListReceivedEvent>,
     mut next_state: ResMut<NextState<GameState>>,
+    mut commands: Commands,
 ) {
     for _event in connected_events.read() {
         let Some(client) = char_client.as_ref() else {
             continue;
         };
+
+        // Initialize ping timer for 15-second keep-alive pings
+        commands.insert_resource(CharServerPingTimer(Timer::from_seconds(
+            15.0,
+            TimerMode::Repeating,
+        )));
 
         let mut char_list = vec![None; 15];
 
@@ -78,8 +85,8 @@ pub fn handle_character_server_connected(
 
 /// System: Handle character creation success from protocol
 pub fn handle_character_created_protocol(
-    mut protocol_events: EventReader<CharacterCreated>,
-    mut domain_events: EventWriter<CharacterCreatedEvent>,
+    mut protocol_events: MessageReader<CharacterCreated>,
+    mut domain_events: MessageWriter<CharacterCreatedEvent>,
 ) {
     for event in protocol_events.read() {
         let char_info = CharacterInfo::from(event.character.clone());
@@ -92,8 +99,8 @@ pub fn handle_character_created_protocol(
 
 /// System: Handle character deletion success from protocol
 pub fn handle_character_deleted_protocol(
-    mut protocol_events: EventReader<CharacterDeleted>,
-    mut domain_events: EventWriter<CharacterDeletedEvent>,
+    mut protocol_events: MessageReader<CharacterDeleted>,
+    mut domain_events: MessageWriter<CharacterDeletedEvent>,
 ) {
     for _event in protocol_events.read() {
         domain_events.write(CharacterDeletedEvent { character_id: 0 });
@@ -102,8 +109,8 @@ pub fn handle_character_deleted_protocol(
 
 /// System: Handle character creation failures from protocol
 pub fn handle_character_creation_failed_protocol(
-    mut protocol_events: EventReader<CharacterCreationFailed>,
-    mut domain_events: EventWriter<CharacterCreationFailedEvent>,
+    mut protocol_events: MessageReader<CharacterCreationFailed>,
+    mut domain_events: MessageWriter<CharacterCreationFailedEvent>,
 ) {
     for event in protocol_events.read() {
         use crate::infrastructure::networking::protocol::character::CharCreationError;
@@ -121,8 +128,8 @@ pub fn handle_character_creation_failed_protocol(
 
 /// System: Handle character deletion failures from protocol
 pub fn handle_character_deletion_failed_protocol(
-    mut protocol_events: EventReader<CharacterDeletionFailed>,
-    mut domain_events: EventWriter<CharacterDeletionFailedEvent>,
+    mut protocol_events: MessageReader<CharacterDeletionFailed>,
+    mut domain_events: MessageWriter<CharacterDeletionFailedEvent>,
 ) {
     for event in protocol_events.read() {
         use crate::infrastructure::networking::protocol::character::CharDeletionError;
@@ -139,9 +146,9 @@ pub fn handle_character_deletion_failed_protocol(
 
 /// System: Handle zone server info from protocol
 pub fn handle_zone_server_info_protocol(
-    mut protocol_events: EventReader<ZoneServerInfoReceived>,
+    mut protocol_events: MessageReader<ZoneServerInfoReceived>,
     user_session: Option<Res<UserSession>>,
-    mut domain_events: EventWriter<super::events::ZoneServerInfoReceivedEvent>,
+    mut domain_events: MessageWriter<super::events::ZoneServerInfoReceivedEvent>,
 ) {
     for event in protocol_events.read() {
         let Some(session) = user_session.as_ref() else {
@@ -165,7 +172,7 @@ pub fn handle_zone_server_info_protocol(
 /// System that spawns unified character entities from CharacterSelectedEvent
 /// Creates a complete character entity with all three ECS components
 pub fn spawn_unified_character_from_selection(
-    mut events: EventReader<CharacterSelectedEvent>,
+    mut events: MessageReader<CharacterSelectedEvent>,
     mut commands: Commands,
 ) {
     for event in events.read() {
@@ -187,10 +194,10 @@ pub fn spawn_unified_character_from_selection(
 }
 
 pub fn handle_select_character(
-    mut events: EventReader<SelectCharacterEvent>,
+    mut events: MessageReader<SelectCharacterEvent>,
     mut char_client: Option<ResMut<CharServerClient>>,
     mut state: ResMut<CharacterSelectionState>,
-    mut selected_events: EventWriter<CharacterSelectedEvent>,
+    mut selected_events: MessageWriter<CharacterSelectedEvent>,
 ) {
     for event in events.read() {
         state.selected_slot = Some(event.slot);
@@ -223,7 +230,7 @@ pub fn handle_select_character(
 }
 
 pub fn handle_create_character(
-    mut events: EventReader<CreateCharacterRequestEvent>,
+    mut events: MessageReader<CreateCharacterRequestEvent>,
     mut char_client: Option<ResMut<CharServerClient>>,
 ) {
     for event in events.read() {
@@ -249,7 +256,7 @@ pub fn handle_create_character(
 }
 
 pub fn handle_delete_character(
-    mut events: EventReader<DeleteCharacterRequestEvent>,
+    mut events: MessageReader<DeleteCharacterRequestEvent>,
     mut char_client: Option<ResMut<CharServerClient>>,
 ) {
     for event in events.read() {
@@ -274,7 +281,7 @@ pub struct ZoneSessionData {
 /// System: Handle zone server info and connect to zone server
 /// Uses the new ZoneServerClient architecture
 pub fn handle_zone_server_info(
-    mut events: EventReader<ZoneServerInfoReceivedEvent>,
+    mut events: MessageReader<ZoneServerInfoReceivedEvent>,
     mut char_client: Option<ResMut<CharServerClient>>,
     mut game_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
@@ -336,13 +343,13 @@ pub fn handle_zone_server_info(
 /// System: Handle successful zone connection from protocol events
 /// Replaces the old zone_packet_handler_system
 pub fn handle_zone_server_connected_protocol(
-    mut protocol_events: EventReader<
+    mut protocol_events: MessageReader<
         crate::infrastructure::networking::protocol::zone::ZoneServerConnected,
     >,
     zone_session: Option<Res<ZoneSessionData>>,
-    mut domain_events: EventWriter<ZoneAuthenticationSuccess>,
+    mut domain_events: MessageWriter<ZoneAuthenticationSuccess>,
     mut commands: Commands,
-    mut map_loading_events: EventWriter<MapLoadingStarted>,
+    mut map_loading_events: MessageWriter<MapLoadingStarted>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     for event in protocol_events.read() {
@@ -384,11 +391,11 @@ pub fn handle_zone_server_connected_protocol(
 
 /// System: Handle zone entry refused
 pub fn handle_zone_entry_refused_protocol(
-    mut protocol_events: EventReader<
+    mut protocol_events: MessageReader<
         crate::infrastructure::networking::protocol::zone::ZoneEntryRefused,
     >,
     mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
-    mut domain_events: EventWriter<ZoneAuthenticationFailed>,
+    mut domain_events: MessageWriter<ZoneAuthenticationFailed>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     for event in protocol_events.read() {
@@ -424,7 +431,7 @@ pub fn handle_zone_entry_refused_protocol(
 /// System: Handle account ID received (ZC_AID packet)
 /// This is informational but we log it for debugging
 pub fn handle_account_id_received_protocol(
-    mut protocol_events: EventReader<
+    mut protocol_events: MessageReader<
         crate::infrastructure::networking::protocol::zone::AccountIdReceived,
     >,
 ) {
@@ -436,7 +443,7 @@ pub fn handle_account_id_received_protocol(
 pub fn detect_map_load_complete(
     query: Query<&crate::domain::world::map::MapData, Added<crate::domain::world::map::MapData>>,
     spawn_context: Option<Res<MapSpawnContext>>,
-    mut events: EventWriter<MapLoadCompleted>,
+    mut events: MessageWriter<MapLoadCompleted>,
 ) {
     for _map_data in query.iter() {
         let Some(context) = spawn_context.as_ref() else {
@@ -452,9 +459,9 @@ pub fn detect_map_load_complete(
 }
 
 pub fn handle_map_load_complete(
-    mut events: EventReader<MapLoadCompleted>,
+    mut events: MessageReader<MapLoadCompleted>,
     mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
-    mut actor_init_events: EventWriter<ActorInitSent>,
+    mut actor_init_events: MessageWriter<ActorInitSent>,
 ) {
     for event in events.read() {
         debug!(
@@ -474,7 +481,7 @@ pub fn handle_map_load_complete(
 }
 
 pub fn handle_actor_init_sent(
-    mut events: EventReader<ActorInitSent>,
+    mut events: MessageReader<ActorInitSent>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     for _event in events.read() {
@@ -485,9 +492,9 @@ pub fn handle_actor_init_sent(
 }
 
 pub fn handle_character_created(
-    mut events: EventReader<CharacterCreatedEvent>,
+    mut events: MessageReader<CharacterCreatedEvent>,
     mut state: ResMut<CharacterSelectionState>,
-    mut refresh_events: EventWriter<RefreshCharacterListEvent>,
+    mut refresh_events: MessageWriter<RefreshCharacterListEvent>,
 ) {
     for _event in events.read() {
         state.is_creating_character = false;
@@ -497,8 +504,8 @@ pub fn handle_character_created(
 }
 
 pub fn handle_character_deleted(
-    mut events: EventReader<CharacterDeletedEvent>,
-    mut refresh_events: EventWriter<RefreshCharacterListEvent>,
+    mut events: MessageReader<CharacterDeletedEvent>,
+    mut refresh_events: MessageWriter<RefreshCharacterListEvent>,
 ) {
     for _event in events.read() {
         refresh_events.write(RefreshCharacterListEvent);
@@ -506,9 +513,9 @@ pub fn handle_character_deleted(
 }
 
 pub fn handle_refresh_character_list(
-    mut events: EventReader<RefreshCharacterListEvent>,
+    mut events: MessageReader<RefreshCharacterListEvent>,
     char_client: Option<Res<CharServerClient>>,
-    mut list_events: EventWriter<CharacterListReceivedEvent>,
+    mut list_events: MessageWriter<CharacterListReceivedEvent>,
 ) {
     for _event in events.read() {
         // New architecture: Characters are automatically updated in the context by handlers
@@ -534,15 +541,25 @@ pub fn handle_refresh_character_list(
 }
 
 /// System that sends periodic pings to keep the connection alive
-/// Note: The new architecture handles this via the send_ping() method
-pub fn update_char_client(char_client: Option<ResMut<CharServerClient>>) {
-    if let Some(mut client) = char_client {
-        let _ = client.send_ping();
+/// Throttled to every 15 seconds using CharServerPingTimer
+pub fn update_char_client(
+    char_client: Option<ResMut<CharServerClient>>,
+    time: Res<Time>,
+    ping_timer: Option<ResMut<CharServerPingTimer>>,
+) {
+    if let (Some(mut client), Some(mut timer)) = (char_client, ping_timer) {
+        timer.0.tick(time.delta());
+        if timer.0.just_finished() {
+            let _ = client.send_ping();
+        }
     }
 }
 
 /// System to start map loading timer when map loading begins
-pub fn start_map_loading_timer(mut events: EventReader<MapLoadingStarted>, mut commands: Commands) {
+pub fn start_map_loading_timer(
+    mut events: MessageReader<MapLoadingStarted>,
+    mut commands: Commands,
+) {
     for event in events.read() {
         debug!("Starting map loading timeout timer for: {}", event.map_name);
         commands.insert_resource(MapLoadingTimer {
@@ -558,7 +575,7 @@ pub fn detect_map_loading_timeout(
     timer: Option<Res<MapLoadingTimer>>,
     map_data_query: Query<&crate::domain::world::map::MapData>,
     mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
-    mut failed_events: EventWriter<MapLoadingFailed>,
+    mut failed_events: MessageWriter<MapLoadingFailed>,
     mut commands: Commands,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
@@ -608,7 +625,7 @@ pub fn detect_map_loading_timeout(
 /// This bridges the character entity creation with the unified sprite system
 pub fn spawn_character_sprite_on_game_start(
     mut commands: Commands,
-    mut spawn_events: EventWriter<
+    mut spawn_events: MessageWriter<
         crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent,
     >,
     spawn_context: Res<MapSpawnContext>,

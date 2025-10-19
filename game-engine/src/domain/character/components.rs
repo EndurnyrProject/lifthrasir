@@ -245,3 +245,7 @@ pub struct MapLoadingTimer {
     pub started: std::time::Instant,
     pub map_name: String,
 }
+
+/// Timer resource for throttling character server keep-alive pings to every 15 seconds
+#[derive(Resource)]
+pub struct CharServerPingTimer(pub Timer);

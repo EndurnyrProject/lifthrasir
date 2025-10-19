@@ -12,7 +12,7 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when second password/pincode is requested
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct SecondPasswordRequested {
     pub seed: u32,
     pub account_id: u32,

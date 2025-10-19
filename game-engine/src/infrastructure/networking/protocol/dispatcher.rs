@@ -237,6 +237,9 @@ mod tests {
         // Should return error for unknown packet (not panic)
         let result = dispatcher.dispatch(0x9999, &[], &mut context, &mut event_writer);
         assert!(result.is_err());
-        assert!(matches!(result, Err(NetworkError::UnknownPacketId { id: 0x9999 })));
+        assert!(matches!(
+            result,
+            Err(NetworkError::UnknownPacketId { id: 0x9999 })
+        ));
     }
 }

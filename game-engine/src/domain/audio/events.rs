@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 /// Event to request playing a BGM track with crossfading
-#[derive(Event, Debug, Clone, Reflect)]
+#[derive(Message, Debug, Clone, Reflect)]
 #[reflect(Debug)]
 pub struct PlayBgmEvent {
     /// Path to the BGM file (e.g., "ro://data/bgm/01.mp3")
@@ -31,7 +31,7 @@ impl PlayBgmEvent {
 }
 
 /// Event to request stopping the current BGM
-#[derive(Event, Debug, Clone, Copy, Reflect)]
+#[derive(Message, Debug, Clone, Copy, Reflect)]
 #[reflect(Debug)]
 pub struct StopBgmEvent {
     pub fade_out_duration: f32,
@@ -46,7 +46,7 @@ impl Default for StopBgmEvent {
 }
 
 /// Event to change the BGM volume
-#[derive(Event, Debug, Clone, Copy, Reflect)]
+#[derive(Message, Debug, Clone, Copy, Reflect)]
 #[reflect(Debug)]
 pub struct SetBgmVolumeEvent {
     /// Volume level (0.0 to 1.0)
@@ -54,7 +54,7 @@ pub struct SetBgmVolumeEvent {
 }
 
 /// Event to mute or unmute the BGM
-#[derive(Event, Debug, Clone, Copy, Reflect)]
+#[derive(Message, Debug, Clone, Copy, Reflect)]
 #[reflect(Debug)]
 pub struct MuteBgmEvent {
     /// Whether to mute (true) or unmute (false)

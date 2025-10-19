@@ -8,7 +8,7 @@ use bevy::prelude::*;
 /// Updates the session and connects to character server (UI flow handled by Tauri)
 pub fn handle_server_selection(
     mut commands: Commands,
-    mut server_events: EventReader<ServerSelectedEvent>,
+    mut server_events: MessageReader<ServerSelectedEvent>,
     mut session: ResMut<UserSession>,
     mut char_client: Option<ResMut<CharServerClient>>,
 ) {

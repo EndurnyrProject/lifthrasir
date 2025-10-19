@@ -12,7 +12,7 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when character server connection is accepted
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct CharacterServerConnected {
     pub max_slots: u8,
     pub available_slots: u8,

@@ -66,7 +66,7 @@ fn js_code_to_bevy_keycode(code: &str) -> Option<KeyCode> {
 /// System that handles KeyboardInputEvent
 /// Directly updates Bevy's ButtonInput<KeyCode> resource
 pub fn handle_keyboard_input(
-    mut events: EventReader<KeyboardInputEvent>,
+    mut events: MessageReader<KeyboardInputEvent>,
     mut keyboard_input: ResMut<ButtonInput<KeyCode>>,
 ) {
     for event in events.read() {
@@ -83,7 +83,7 @@ pub fn handle_keyboard_input(
 /// System that handles MousePositionEvent
 /// Directly updates ForwardedCursorPosition resource
 pub fn handle_mouse_position(
-    mut events: EventReader<MousePositionEvent>,
+    mut events: MessageReader<MousePositionEvent>,
     mut cursor_position: ResMut<ForwardedCursorPosition>,
 ) {
     for event in events.read() {

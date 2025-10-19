@@ -12,7 +12,7 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when zone entry is refused
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct ZoneEntryRefused {
     pub error: ZoneEntryError,
     pub error_description: String,

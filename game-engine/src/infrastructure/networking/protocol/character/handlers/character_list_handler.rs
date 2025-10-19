@@ -12,7 +12,7 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when character slot information is received
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct CharacterSlotInfoReceived {
     pub slot_info: CharacterSlotInfo,
 }

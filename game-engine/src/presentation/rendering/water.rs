@@ -1,10 +1,8 @@
 use bevy::{
+    asset::RenderAssetUsages,
     image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
+    mesh::{Indices, PrimitiveTopology},
     prelude::*,
-    render::{
-        mesh::{Indices, PrimitiveTopology},
-        render_asset::RenderAssetUsages,
-    },
 };
 
 use crate::{
@@ -411,7 +409,7 @@ fn generate_water_normal_map(images: &mut ResMut<Assets<Image>>) -> Handle<Image
         bevy::render::render_resource::TextureDimension::D2,
         data,
         bevy::render::render_resource::TextureFormat::Rgba8Unorm,
-        bevy::render::render_asset::RenderAssetUsages::default(),
+        RenderAssetUsages::default(),
     );
 
     images.add(normal_image)

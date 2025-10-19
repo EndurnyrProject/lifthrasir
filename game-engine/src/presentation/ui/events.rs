@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::{auto_add_event, auto_register_type};
 use secrecy::SecretString;
 
-#[derive(Event, Clone, Reflect)]
+#[derive(Message, Clone, Reflect)]
 #[reflect(opaque)]
 #[auto_register_type(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 #[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
@@ -13,7 +13,7 @@ pub struct LoginAttemptEvent {
     pub password: SecretString,
 }
 
-#[derive(Event, Clone)]
+#[derive(Message, Clone)]
 #[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct ServerSelectedEvent {
     pub server: ServerInfo,
@@ -21,21 +21,21 @@ pub struct ServerSelectedEvent {
     pub server_index: Option<usize>,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct CharacterSelectEvent {
     pub character_id: u32,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct CreateCharacterEvent;
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct DeleteCharacterEvent {
     pub character_id: u32,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct BackToLoginEvent;
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct BackToServerSelectionEvent;

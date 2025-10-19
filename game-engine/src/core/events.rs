@@ -1,17 +1,17 @@
 use bevy::prelude::*;
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct MapLoadedEvent {
     pub map_name: String,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct TerrainGeneratedEvent {
     pub width: u32,
     pub height: u32,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct ModelSpawnedEvent {
     pub model_name: String,
     pub entity: Entity,

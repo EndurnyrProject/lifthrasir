@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::auto_add_event;
 
 /// Event emitted when login is accepted
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 #[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct LoginAccepted {
     pub account_id: u32,

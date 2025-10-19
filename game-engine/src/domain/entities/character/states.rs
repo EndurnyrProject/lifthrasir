@@ -57,7 +57,7 @@ pub enum ContextState {
 }
 
 // Events for state changes
-#[derive(Event, Debug)]
+#[derive(Message, Debug)]
 pub struct CharacterStateChangeEvent {
     pub entity: Entity,
     pub animation_state: Option<AnimationState>,
@@ -170,7 +170,7 @@ impl From<AnimationState> for ActionType {
 // State machine setup function
 pub fn setup_character_state_machines(app: &mut App) {
     app.add_plugins(StateMachinePlugin::default())
-        .add_event::<CharacterStateChangeEvent>()
+        .add_message::<CharacterStateChangeEvent>()
         .register_type::<AnimationState>()
         .register_type::<GameplayState>()
         .register_type::<ContextState>()
@@ -249,7 +249,7 @@ pub fn insert_animation_triggers_from_gameplay_changes(
 
 /// Observes AnimationState changes and emits sprite animation events
 pub fn observe_animation_state_changes(
-    mut animation_events: EventWriter<SpriteAnimationChangeEvent>,
+    mut animation_events: MessageWriter<SpriteAnimationChangeEvent>,
     changed_animations: CharactersWithChangedAnimationState,
 ) {
     for (entity, animation_state) in changed_animations.iter() {
@@ -268,7 +268,7 @@ pub fn observe_animation_state_changes(
 
 /// Observes GameplayState changes and emits status effect visual events
 pub fn observe_gameplay_state_changes(
-    mut effect_events: EventWriter<StatusEffectVisualEvent>,
+    mut effect_events: MessageWriter<StatusEffectVisualEvent>,
     changed_gameplay: CharactersWithChangedGameplay,
 ) {
     for (entity, gameplay_state) in changed_gameplay.iter() {

@@ -46,9 +46,9 @@ use bevy::prelude::*;
 /// // In your update system:
 /// fn update_system(
 ///     mut client: ResMut<ZoneServerClient>,
-///     mut connected: EventWriter<ZoneServerConnected>,
-///     mut aid_received: EventWriter<AccountIdReceived>,
-///     mut entry_refused: EventWriter<ZoneEntryRefused>,
+///     mut connected: MessageWriter<ZoneServerConnected>,
+///     mut aid_received: MessageWriter<AccountIdReceived>,
+///     mut entry_refused: MessageWriter<ZoneEntryRefused>,
 /// ) {
 ///     let mut event_buffer = EventBuffer::new();
 ///     client.update(&mut event_buffer).unwrap();
@@ -230,9 +230,9 @@ impl ZoneServerClient {
 /// by grouping all related EventWriters into a single logical parameter.
 #[derive(SystemParam)]
 pub struct ZoneServerEventWriters<'w> {
-    pub connected: EventWriter<'w, ZoneServerConnected>,
-    pub aid_received: EventWriter<'w, AccountIdReceived>,
-    pub entry_refused: EventWriter<'w, ZoneEntryRefused>,
+    pub connected: MessageWriter<'w, ZoneServerConnected>,
+    pub aid_received: MessageWriter<'w, AccountIdReceived>,
+    pub entry_refused: MessageWriter<'w, ZoneEntryRefused>,
 }
 
 /// Bevy system to update the zone server client
@@ -249,9 +249,9 @@ pub struct ZoneServerEventWriters<'w> {
 ///
 /// ```ignore
 /// app.insert_resource(ZoneServerClient::with_session(account_id, char_id))
-///    .add_event::<ZoneServerConnected>()
-///    .add_event::<AccountIdReceived>()
-///    .add_event::<ZoneEntryRefused>()
+///    .add_message::<ZoneServerConnected>()
+///    .add_message::<AccountIdReceived>()
+///    .add_message::<ZoneEntryRefused>()
 ///    .add_systems(Update, zone_server_update_system);
 /// ```
 pub fn zone_server_update_system(

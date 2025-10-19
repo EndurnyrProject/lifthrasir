@@ -15,11 +15,9 @@ use crate::infrastructure::assets::loaders::{
 };
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 use bevy::{
+    asset::RenderAssetUsages,
     prelude::*,
-    render::{
-        render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, TextureDimension, TextureFormat},
-    },
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 use moonshine_object::prelude::*;
 use std::collections::HashMap;
@@ -35,27 +33,27 @@ pub struct CharacterObjectTree {
 }
 
 // Events for sprite hierarchy management
-#[derive(Event)]
+#[derive(Message)]
 pub struct SpawnCharacterSpriteEvent {
     pub character_entity: Entity,
     pub spawn_position: Vec3,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct EquipmentChangeEvent {
     pub character: Entity,
     pub slot: EquipmentSlot,
     pub new_item_id: Option<u32>,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct StatusEffectVisualEvent {
     pub character: Entity,
     pub effect_type: EffectType,
     pub add: bool, // true to add, false to remove
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct SpriteAnimationChangeEvent {
     pub character_entity: Entity,
     pub action_type: crate::domain::entities::character::components::visual::ActionType,
@@ -247,7 +245,7 @@ fn calculate_terrain_height(position: Vec3, terrain: &TerrainResources) -> Vec3 
 // System to spawn character sprite hierarchies using moonshine-object patterns
 pub fn spawn_character_sprite_hierarchy(
     mut commands: Commands,
-    mut spawn_events: EventReader<SpawnCharacterSpriteEvent>,
+    mut spawn_events: MessageReader<SpawnCharacterSpriteEvent>,
     character_query: Query<Entity>,
     mut rendering: RenderingResources,
     terrain: TerrainResources,
@@ -370,7 +368,7 @@ pub fn handle_equipment_changes(
     mut commands: Commands,
     characters: Query<&CharacterObjectTree>,
     character_objects: Objects<CharacterRoot>,
-    mut equipment_events: EventReader<EquipmentChangeEvent>,
+    mut equipment_events: MessageReader<EquipmentChangeEvent>,
     config: Res<SpriteHierarchyConfig>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_quad: Res<SharedSpriteQuad>,
@@ -448,7 +446,7 @@ pub fn handle_status_effect_visuals(
     mut commands: Commands,
     characters: Query<&CharacterObjectTree>,
     character_objects: Objects<CharacterRoot>,
-    mut effect_events: EventReader<StatusEffectVisualEvent>,
+    mut effect_events: MessageReader<StatusEffectVisualEvent>,
     config: Res<SpriteHierarchyConfig>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_quad: Res<SharedSpriteQuad>,
@@ -832,7 +830,7 @@ fn find_act_handle<'a>(
 ) -> Option<&'a Handle<RoActAsset>> {
     sprite_layers
         .iter()
-        .find(|controller| !controller.action_handle.is_weak())
+        .find(|controller| controller.action_handle.is_strong())
         .map(|controller| &controller.action_handle)
 }
 
@@ -898,7 +896,7 @@ pub fn advance_character_animations(
         character_sprite.animation_timer.tick(time.delta());
 
         // Skip if timer hasn't finished yet
-        if !character_sprite.animation_timer.finished() {
+        if !character_sprite.animation_timer.is_finished() {
             continue;
         }
 
@@ -916,7 +914,7 @@ pub fn advance_character_animations(
 
 // System to handle sprite animation changes from state machine
 pub fn handle_sprite_animation_changes(
-    mut animation_events: EventReader<SpriteAnimationChangeEvent>,
+    mut animation_events: MessageReader<SpriteAnimationChangeEvent>,
     mut character_sprites: Query<
         &mut crate::domain::entities::character::components::visual::CharacterSprite,
     >,
@@ -946,8 +944,8 @@ pub fn cleanup_orphaned_sprites(
 // Helper function to spawn a complete character sprite hierarchy
 // Note: This function signature needs to be used with EventWriter parameters
 pub fn spawn_complete_character_sprite(
-    spawn_events: &mut EventWriter<SpawnCharacterSpriteEvent>,
-    equipment_events: &mut EventWriter<EquipmentChangeEvent>,
+    spawn_events: &mut MessageWriter<SpawnCharacterSpriteEvent>,
+    equipment_events: &mut MessageWriter<EquipmentChangeEvent>,
     character_entity: Entity,
     position: Vec3,
     equipment_slots: &HashMap<EquipmentSlot, u32>,
@@ -1152,10 +1150,10 @@ pub struct CharacterSpriteHierarchyPlugin;
 impl Plugin for CharacterSpriteHierarchyPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpriteHierarchyConfig>()
-            .add_event::<SpawnCharacterSpriteEvent>()
-            .add_event::<EquipmentChangeEvent>()
-            .add_event::<StatusEffectVisualEvent>()
-            .add_event::<SpriteAnimationChangeEvent>()
+            .add_message::<SpawnCharacterSpriteEvent>()
+            .add_message::<EquipmentChangeEvent>()
+            .add_message::<StatusEffectVisualEvent>()
+            .add_message::<SpriteAnimationChangeEvent>()
             .add_systems(
                 Update,
                 (

@@ -12,7 +12,7 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when character info page is received
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct CharacterInfoPageReceived {
     pub characters: Vec<CharacterInfo>,
 }

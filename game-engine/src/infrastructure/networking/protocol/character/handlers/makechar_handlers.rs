@@ -12,13 +12,13 @@ use crate::infrastructure::networking::{
 use bevy::prelude::*;
 
 /// Event emitted when character creation succeeds
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct CharacterCreated {
     pub character: CharacterInfo,
 }
 
 /// Event emitted when character creation fails
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct CharacterCreationFailed {
     pub error: CharCreationError,
 }

@@ -160,7 +160,7 @@ pub fn update_camera_target_cache(
 pub fn camera_follow_system(
     time: Res<Time>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut mouse_wheel_events: EventReader<MouseWheel>,
+    mut mouse_wheel_events: MessageReader<MouseWheel>,
     mut camera_query: Query<
         (
             &mut Transform,

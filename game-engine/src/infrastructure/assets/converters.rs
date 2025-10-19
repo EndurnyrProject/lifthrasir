@@ -3,11 +3,9 @@ use crate::infrastructure::ro_formats::{sprite::SpriteFrame, Palette};
 use crate::utils::SPRITE_SCALE_SMALL;
 use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
 use bevy::{
+    asset::RenderAssetUsages,
     prelude::*,
-    render::{
-        render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, TextureDimension, TextureFormat},
-    },
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 use std::collections::HashSet;
 
