@@ -26,6 +26,7 @@ pub struct PlayerCharacter;
 /// # Fields
 /// - `target_entity`: The entity being followed (typically the player)
 /// - `cached_position`: Last known position of the target, updated each frame
+/// - `smoothed_look_at`: Smoothed look-at point to prevent camera direction snapping
 #[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component)]
 pub struct CameraFollowTarget {
@@ -34,6 +35,9 @@ pub struct CameraFollowTarget {
     /// Cached position of the target from the previous frame
     /// Updated by `update_camera_target_cache` system
     pub cached_position: Vec3,
+    /// Smoothed look-at point to prevent sudden camera rotation changes
+    /// when character changes direction or moves to different terrain heights
+    pub smoothed_look_at: Vec3,
 }
 
 impl CameraFollowTarget {
@@ -46,6 +50,7 @@ impl CameraFollowTarget {
         Self {
             target_entity,
             cached_position: initial_position,
+            smoothed_look_at: initial_position,
         }
     }
 }
@@ -58,16 +63,19 @@ impl CameraFollowTarget {
 ///
 /// # Fields
 /// - `offset`: Camera position relative to the player (default: RO isometric style)
-/// - `smoothing_speed`: Speed of exponential decay interpolation (higher = faster)
+/// - `horizontal_smoothing_speed`: Speed for X and Z axis movement (faster)
+/// - `vertical_smoothing_speed`: Speed for Y axis movement (slower, prevents height snapping)
 /// - `min_distance`: Minimum zoom distance (prevents camera from going too close)
 /// - `max_distance`: Maximum zoom distance (prevents camera from going too far)
 /// - `zoom_speed`: Speed of zoom changes via mouse wheel
 ///
 /// # Smoothing Algorithm
-/// Uses exponential decay interpolation:
+/// Uses split-axis exponential decay interpolation:
 /// ```ignore
-/// let decay_factor = 1.0 - (-smoothing_speed * delta).exp();
-/// smoothed_position = current.lerp(target, decay_factor);
+/// let decay_h = 1.0 - (-horizontal_smoothing_speed * delta).exp();
+/// let decay_v = 1.0 - (-vertical_smoothing_speed * delta).exp();
+/// new_position.xz = current.xz.lerp(target.xz, decay_h);
+/// new_position.y = current.y.lerp(target.y, decay_v);
 /// ```
 #[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component)]
@@ -76,10 +84,15 @@ pub struct CameraFollowSettings {
     /// Default: Vec3::new(0.0, -150.0, -150.0) for RO isometric style
     pub offset: Vec3,
 
-    /// Smoothing speed for camera movement (exponential decay)
+    /// Smoothing speed for horizontal movement (X and Z axes)
     /// Higher values = faster following, lower values = smoother but slower
-    /// Recommended range: 5.0 - 15.0
-    pub smoothing_speed: f32,
+    /// Recommended: 3.0 - 5.0 for cinematic feel
+    pub horizontal_smoothing_speed: f32,
+
+    /// Smoothing speed for vertical movement (Y axis)
+    /// Slower than horizontal to prevent harsh height snapping on terrain changes
+    /// Recommended: 2.0 - 3.5 for smooth height transitions
+    pub vertical_smoothing_speed: f32,
 
     /// Minimum allowed distance from the player (zoom in limit)
     pub min_distance: f32,
@@ -98,8 +111,11 @@ impl Default for CameraFollowSettings {
             // Y=-150 (above player), Z=-150 (behind player)
             offset: Vec3::new(0.0, -150.0, -150.0),
 
-            // Smooth but responsive following
-            smoothing_speed: 10.0,
+            // Cinematic horizontal smoothing (X, Z axes)
+            horizontal_smoothing_speed: 4.0,
+
+            // Slower vertical smoothing (Y axis) to prevent height snapping
+            vertical_smoothing_speed: 2.5,
 
             // Reasonable zoom limits for RO-style gameplay
             min_distance: 100.0,
@@ -126,10 +142,25 @@ impl CameraFollowSettings {
     /// Creates settings with custom smoothing speed
     ///
     /// # Arguments
-    /// - `speed`: Smoothing speed (higher = faster, 5.0-15.0 recommended)
+    /// - `speed`: Smoothing speed for horizontal axes (higher = faster, 3.0-5.0 recommended)
+    ///   Vertical speed is automatically set to 62.5% of horizontal for natural feel
     pub fn with_smoothing(speed: f32) -> Self {
         Self {
-            smoothing_speed: speed,
+            horizontal_smoothing_speed: speed,
+            vertical_smoothing_speed: speed * 0.625, // 62.5% of horizontal for natural feel
+            ..Default::default()
+        }
+    }
+
+    /// Creates settings with split-axis smoothing speeds
+    ///
+    /// # Arguments
+    /// - `horizontal_speed`: Smoothing speed for X and Z axes (3.0-5.0 recommended)
+    /// - `vertical_speed`: Smoothing speed for Y axis (2.0-3.5 recommended)
+    pub fn with_split_smoothing(horizontal_speed: f32, vertical_speed: f32) -> Self {
+        Self {
+            horizontal_smoothing_speed: horizontal_speed,
+            vertical_smoothing_speed: vertical_speed,
             ..Default::default()
         }
     }

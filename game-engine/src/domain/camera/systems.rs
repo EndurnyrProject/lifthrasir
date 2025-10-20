@@ -164,7 +164,7 @@ pub fn camera_follow_system(
     mut camera_query: Query<
         (
             &mut Transform,
-            &CameraFollowTarget,
+            &mut CameraFollowTarget,
             &mut CameraFollowSettings,
         ),
         With<Camera3d>,
@@ -172,7 +172,7 @@ pub fn camera_follow_system(
 ) {
     let delta = time.delta_secs();
 
-    for (mut camera_transform, follow_target, mut settings) in camera_query.iter_mut() {
+    for (mut camera_transform, mut follow_target, mut settings) in camera_query.iter_mut() {
         // Get target position from cache (updated by update_camera_target_cache)
         let target_position = follow_target.cached_position;
 
@@ -222,22 +222,33 @@ pub fn camera_follow_system(
         }
 
         // ========================================
-        // SMOOTH FOLLOW (Exponential Decay)
+        // SMOOTH FOLLOW (Split-Axis Exponential Decay)
         // ========================================
 
         // Calculate desired camera position (target + offset)
         let desired_position = target_position + settings.offset;
-
-        // Exponential decay smoothing factor
-        // decay_factor approaches 1.0 as time passes, creating smooth interpolation
-        let decay_factor = 1.0 - (-settings.smoothing_speed * delta).exp();
-        let decay_factor = decay_factor.clamp(0.0, 1.0); // Safety clamp
-
-        // Smoothly interpolate camera position
         let current_position = camera_transform.translation;
-        let new_position = current_position.lerp(desired_position, decay_factor);
 
-        // Validate for NaN (shouldn't happen, but safety check)
+        // Calculate separate decay factors for horizontal and vertical axes
+        // Horizontal (X, Z): Faster, more responsive
+        let decay_horizontal = 1.0 - (-settings.horizontal_smoothing_speed * delta).exp();
+        let decay_horizontal = decay_horizontal.clamp(0.0, 1.0);
+
+        // Vertical (Y): Slower, prevents harsh height snapping
+        let decay_vertical = 1.0 - (-settings.vertical_smoothing_speed * delta).exp();
+        let decay_vertical = decay_vertical.clamp(0.0, 1.0);
+
+        // Apply split-axis interpolation
+        // Horizontal axes (X, Z) use faster smoothing
+        let new_x = current_position.x.lerp(desired_position.x, decay_horizontal);
+        let new_z = current_position.z.lerp(desired_position.z, decay_horizontal);
+
+        // Vertical axis (Y) uses slower smoothing to prevent snapping
+        let new_y = current_position.y.lerp(desired_position.y, decay_vertical);
+
+        let new_position = Vec3::new(new_x, new_y, new_z);
+
+        // Validate for NaN
         if new_position.is_nan() {
             error!(
                 "Camera position calculation resulted in NaN! Current: {:?}, Desired: {:?}",
@@ -249,9 +260,36 @@ pub fn camera_follow_system(
         // Update camera position
         camera_transform.translation = new_position;
 
-        // Always look at the player (maintain RO isometric feel)
+        // ========================================
+        // SMOOTH LOOK-AT (Prevents Direction Snapping)
+        // ========================================
+
+        // Smooth the look-at target to prevent camera rotation snapping
+        // when character changes direction or moves to different heights
+        // Use moderate speed (6.0) - faster than position smoothing but still smooth
+        let look_at_smoothing_speed = 6.0;
+        let decay_look_at = 1.0 - (-look_at_smoothing_speed * delta).exp();
+        let decay_look_at = decay_look_at.clamp(0.0, 1.0);
+
+        // Smoothly interpolate the look-at point
+        let smoothed_look_at = follow_target
+            .smoothed_look_at
+            .lerp(target_position, decay_look_at);
+
+        // Validate smoothed look-at
+        if smoothed_look_at.is_nan() {
+            error!(
+                "Smoothed look-at calculation resulted in NaN! Current: {:?}, Target: {:?}",
+                follow_target.smoothed_look_at, target_position
+            );
+            continue;
+        }
+
+        // Update smoothed look-at in the component for next frame
+        follow_target.smoothed_look_at = smoothed_look_at;
+
+        // Look at the smoothed target position (prevents direction snapping)
         // Use Vec3::NEG_Y as up vector for RO camera orientation
-        let look_target = target_position;
-        camera_transform.look_at(look_target, Vec3::NEG_Y);
+        camera_transform.look_at(smoothed_look_at, Vec3::NEG_Y);
     }
 }
