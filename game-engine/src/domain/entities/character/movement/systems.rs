@@ -48,18 +48,24 @@ pub fn send_movement_requests_system(
 /// 2. Updates character direction based on movement vector
 /// 3. Changes state to Moving
 /// 4. Inserts StartWalking trigger for animation state machine
+///
+/// **Position Continuity:** When a new movement is confirmed during an existing movement,
+/// this system uses the character's current interpolated position as the source instead of
+/// the server's stale position. This prevents the character from snapping back to the old
+/// destination before moving to the new target.
 pub fn handle_movement_confirmed_system(
     mut commands: Commands,
     mut server_events: MessageReader<MovementConfirmedByServer>,
     mut client_events: MessageWriter<MovementConfirmed>,
     player_query: Query<
-        Entity,
+        (Entity, Option<&MovementTarget>, &CharacterObjectTree),
         With<crate::domain::entities::character::components::CharacterData>,
     >,
+    sprite_transforms: Query<&Transform>,
 ) {
     // For now, assume the player is the only character
     // In the future, we'll need to map Account ID to Entity
-    let Ok(player_entity) = player_query.single() else {
+    let Ok((player_entity, existing_target, object_tree)) = player_query.single() else {
         return;
     };
 
@@ -69,14 +75,39 @@ pub fn handle_movement_confirmed_system(
             event.src_x, event.src_y, event.dest_x, event.dest_y, event.server_tick
         );
 
-        // Calculate and cache world positions to avoid per-frame conversions
-        let src_world_pos = spawn_coords_to_world_position(event.src_x, event.src_y, 0, 0);
+        // Determine the actual source position for interpolation
+        // If the character is already moving, use current position to prevent snapping
+        let (actual_src_x, actual_src_y, src_world_pos) = if existing_target.is_some() {
+            // Character is mid-movement - use current interpolated position
+            if let Ok(transform) = sprite_transforms.get(object_tree.root) {
+                let current_pos = transform.translation;
+                let (current_x, current_y) =
+                    crate::utils::coordinates::world_position_to_spawn_coords(current_pos, 0, 0);
+                let current_world_pos = Vec3::new(current_pos.x, 0.0, current_pos.z);
+
+                debug!(
+                    "🔄 Movement interrupted: using current position ({}, {}) instead of server source ({}, {})",
+                    current_x, current_y, event.src_x, event.src_y
+                );
+
+                (current_x, current_y, current_world_pos)
+            } else {
+                // Fallback to server position if transform not found
+                let pos = spawn_coords_to_world_position(event.src_x, event.src_y, 0, 0);
+                (event.src_x, event.src_y, pos)
+            }
+        } else {
+            // Character is idle - use server's source position
+            let pos = spawn_coords_to_world_position(event.src_x, event.src_y, 0, 0);
+            (event.src_x, event.src_y, pos)
+        };
+
         let dest_world_pos = spawn_coords_to_world_position(event.dest_x, event.dest_y, 0, 0);
 
-        // Create movement target with cached distance and world positions
+        // Create movement target with actual current position as source
         let target = MovementTarget::new(
-            event.src_x,
-            event.src_y,
+            actual_src_x,
+            actual_src_y,
             event.dest_x,
             event.dest_y,
             src_world_pos,
@@ -84,9 +115,9 @@ pub fn handle_movement_confirmed_system(
             event.server_tick,
         );
 
-        // Calculate direction from movement vector
-        let dx = (event.dest_x as f32) - (event.src_x as f32);
-        let dy = (event.dest_y as f32) - (event.src_y as f32);
+        // Calculate direction from actual movement vector (current position to destination)
+        let dx = (event.dest_x as f32) - (actual_src_x as f32);
+        let dy = (event.dest_y as f32) - (actual_src_y as f32);
         let direction = Direction::from_movement_vector(-dx, dy);
 
         debug!(

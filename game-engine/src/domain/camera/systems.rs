@@ -240,8 +240,12 @@ pub fn camera_follow_system(
 
         // Apply split-axis interpolation
         // Horizontal axes (X, Z) use faster smoothing
-        let new_x = current_position.x.lerp(desired_position.x, decay_horizontal);
-        let new_z = current_position.z.lerp(desired_position.z, decay_horizontal);
+        let new_x = current_position
+            .x
+            .lerp(desired_position.x, decay_horizontal);
+        let new_z = current_position
+            .z
+            .lerp(desired_position.z, decay_horizontal);
 
         // Vertical axis (Y) uses slower smoothing to prevent snapping
         let new_y = current_position.y.lerp(desired_position.y, decay_vertical);
