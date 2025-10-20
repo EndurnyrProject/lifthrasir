@@ -42,6 +42,14 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcNotifyMoveStopPacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcNotifyMoveStop(packet))
             }
+            ZC_PAR_CHANGE => {
+                let packet = ZcParChangePacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcParChange(packet))
+            }
+            ZC_LONGPAR_CHANGE => {
+                let packet = ZcLongparChangePacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcLongparChange(packet))
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unknown zone packet ID: 0x{:04X}", packet_id),
@@ -56,6 +64,8 @@ impl Protocol for ZoneProtocol {
             ZC_REFUSE_ENTER => PacketSize::Fixed(3),
             ZC_NOTIFY_PLAYERMOVE => PacketSize::Fixed(12),
             ZC_NOTIFY_MOVE_STOP => PacketSize::Fixed(10),
+            ZC_PAR_CHANGE => PacketSize::Fixed(8),
+            ZC_LONGPAR_CHANGE => PacketSize::Fixed(8),
             _ => PacketSize::Variable {
                 length_offset: 2,
                 length_bytes: 2,
@@ -167,6 +177,8 @@ pub enum ZoneServerPacket {
     ZcRefuseEnter(ZcRefuseEnterPacket),
     ZcNotifyPlayermove(ZcNotifyPlayermovePacket),
     ZcNotifyMoveStop(ZcNotifyMoveStopPacket),
+    ZcParChange(ZcParChangePacket),
+    ZcLongparChange(ZcLongparChangePacket),
 }
 
 impl ServerPacket for ZoneServerPacket {
@@ -183,6 +195,8 @@ impl ServerPacket for ZoneServerPacket {
             Self::ZcRefuseEnter(_) => ZC_REFUSE_ENTER,
             Self::ZcNotifyPlayermove(_) => ZC_NOTIFY_PLAYERMOVE,
             Self::ZcNotifyMoveStop(_) => ZC_NOTIFY_MOVE_STOP,
+            Self::ZcParChange(_) => ZC_PAR_CHANGE,
+            Self::ZcLongparChange(_) => ZC_LONGPAR_CHANGE,
         }
     }
 }

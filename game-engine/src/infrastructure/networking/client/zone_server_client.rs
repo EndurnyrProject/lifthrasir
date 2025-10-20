@@ -5,10 +5,10 @@ use crate::infrastructure::networking::{
         dispatcher::PacketDispatcher,
         zone::{
             AcceptEnterHandler, AccountIdReceived, AidHandler, CzEnter2Packet,
-            CzNotifyActorinitPacket, CzRequestMove2Packet, MoveStopHandler,
-            MovementConfirmedByServer, MovementStoppedByServer, PlayermoveHandler,
-            RefuseEnterHandler, SpawnData, ZoneClientPacket, ZoneContext, ZoneEntryRefused,
-            ZoneProtocol, ZoneServerConnected,
+            CzNotifyActorinitPacket, CzRequestMove2Packet, LongparChangeHandler, MoveStopHandler,
+            MovementConfirmedByServer, MovementStoppedByServer, ParChangeHandler,
+            PlayermoveHandler, RefuseEnterHandler, SpawnData, ZoneClientPacket, ZoneContext,
+            ZoneEntryRefused, ZoneProtocol, ZoneServerConnected,
         },
         EventBuffer,
     },
@@ -81,6 +81,8 @@ impl ZoneServerClient {
         dispatcher.register(RefuseEnterHandler);
         dispatcher.register(PlayermoveHandler);
         dispatcher.register(MoveStopHandler);
+        dispatcher.register(ParChangeHandler);
+        dispatcher.register(LongparChangeHandler);
 
         let client = NetworkClient::new(context).with_dispatcher(dispatcher);
 
