@@ -1,6 +1,8 @@
 pub mod zc_accept_enter;
 pub mod zc_aid;
+pub mod zc_equipitem_list;
 pub mod zc_longpar_change;
+pub mod zc_normal_itemlist;
 pub mod zc_notify_move_stop;
 // TODO: Implement ZC_NOTIFY_MOVE (0x007B) for multi-character movement
 // This packet handles movement for all entities (other players, NPCs) and includes
@@ -15,7 +17,9 @@ pub mod zc_refuse_enter;
 
 pub use zc_accept_enter::{ZcAcceptEnterPacket, ZC_ACCEPT_ENTER};
 pub use zc_aid::{ZcAidPacket, ZC_AID};
+pub use zc_equipitem_list::{ZcEquipitemListPacket, ZC_EQUIPITEM_LIST};
 pub use zc_longpar_change::{ZcLongparChangePacket, ZC_LONGPAR_CHANGE};
+pub use zc_normal_itemlist::{ZcNormalItemlistPacket, ZC_NORMAL_ITEMLIST};
 pub use zc_notify_move_stop::{ZcNotifyMoveStopPacket, ZC_NOTIFY_MOVE_STOP};
 pub use zc_notify_moveentry::{ZcNotifyMoveentryPacket, ZC_NOTIFY_MOVEENTRY};
 pub use zc_notify_newentry::{ZcNotifyNewentryPacket, ZC_NOTIFY_NEWENTRY};

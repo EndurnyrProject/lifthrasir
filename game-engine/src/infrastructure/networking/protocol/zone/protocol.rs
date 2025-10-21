@@ -66,6 +66,14 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcLongparChangePacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcLongparChange(packet))
             }
+            ZC_NORMAL_ITEMLIST => {
+                let packet = ZcNormalItemlistPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNormalItemlist(packet))
+            }
+            ZC_EQUIPITEM_LIST => {
+                let packet = ZcEquipitemListPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcEquipitemList(packet))
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unknown zone packet ID: 0x{:04X}", packet_id),
@@ -95,6 +103,14 @@ impl Protocol for ZoneProtocol {
             ZC_NOTIFY_VANISH => PacketSize::Fixed(7),
             ZC_PAR_CHANGE => PacketSize::Fixed(8),
             ZC_LONGPAR_CHANGE => PacketSize::Fixed(8),
+            ZC_NORMAL_ITEMLIST => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            },
+            ZC_EQUIPITEM_LIST => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            },
             _ => PacketSize::Variable {
                 length_offset: 2,
                 length_bytes: 2,
@@ -212,6 +228,8 @@ pub enum ZoneServerPacket {
     ZcNotifyVanish(ZcNotifyVanishPacket),
     ZcParChange(ZcParChangePacket),
     ZcLongparChange(ZcLongparChangePacket),
+    ZcNormalItemlist(ZcNormalItemlistPacket),
+    ZcEquipitemList(ZcEquipitemListPacket),
 }
 
 impl ServerPacket for ZoneServerPacket {
@@ -234,6 +252,8 @@ impl ServerPacket for ZoneServerPacket {
             Self::ZcNotifyVanish(_) => ZC_NOTIFY_VANISH,
             Self::ZcParChange(_) => ZC_PAR_CHANGE,
             Self::ZcLongparChange(_) => ZC_LONGPAR_CHANGE,
+            Self::ZcNormalItemlist(_) => ZC_NORMAL_ITEMLIST,
+            Self::ZcEquipitemList(_) => ZC_EQUIPITEM_LIST,
         }
     }
 }
