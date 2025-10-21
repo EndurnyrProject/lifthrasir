@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::domain::entities::types::ObjectType;
+use bevy::prelude::*;
 
 /// Event to spawn a network entity
 #[derive(Message, Debug, Clone)]
@@ -15,6 +15,7 @@ pub struct SpawnEntity {
     pub direction: u8,
     pub destination: Option<(u16, u16)>,
     pub move_start_time: Option<u32>,
+    pub current_server_tick: u32,
 
     // Appearance
     pub job: u16,
@@ -43,4 +44,16 @@ pub struct SpawnEntity {
 #[derive(Message, Debug, Clone)]
 pub struct DespawnEntity {
     pub aid: u32,
+}
+
+/// Event to request entity vanish (potentially deferred if moving)
+///
+/// This event is emitted by VanishHandler when the server sends VANISH packet.
+/// A system will check if the entity is moving and either:
+/// - Mark it with PendingDespawn if moving (defer despawn until movement completes)
+/// - Emit DespawnEntity immediately if idle
+#[derive(Message, Debug, Clone)]
+pub struct RequestEntityVanish {
+    pub aid: u32,
+    pub vanish_type: u8,
 }

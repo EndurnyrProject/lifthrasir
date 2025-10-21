@@ -155,7 +155,7 @@ impl ServerPacket for ZcEquipitemListPacket {
         let header_size = 4;
         let items_data_size = packet_length as usize - header_size;
 
-        if items_data_size % EquippedItem::ITEM_SIZE != 0 {
+        if !items_data_size.is_multiple_of(EquippedItem::ITEM_SIZE) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(

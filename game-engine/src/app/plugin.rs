@@ -1,9 +1,7 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_plugin, AutoPlugin};
 
-use crate::domain::camera::components::{
-    CameraFollowSettings, CameraFollowTarget,
-};
+use crate::domain::camera::components::{CameraFollowSettings, CameraFollowTarget};
 use crate::domain::camera::systems::{
     camera_follow_system, spawn_camera_on_player_ready, update_camera_target_cache, CameraSpawned,
 };

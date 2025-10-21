@@ -1,9 +1,11 @@
 use super::components::{MovementSpeed, MovementState};
 use super::events::{MovementConfirmed, MovementRequested, MovementStopped};
 use super::systems::{
-    handle_movement_confirmed_system, handle_movement_stopped_system, handle_server_stop_system,
-    interpolate_movement_system, send_movement_requests_system, update_entity_altitude_system,
+    advance_waypoint_system, handle_movement_confirmed_system, handle_movement_stopped_system,
+    handle_server_stop_system, interpolate_movement_system, send_movement_requests_system,
+    update_entity_altitude_system,
 };
+use crate::domain::entities::pathfinding::WalkablePath;
 use crate::infrastructure::networking::protocol::zone::handlers::movement_handlers::{
     MovementConfirmedByServer, MovementStoppedByServer,
 };
@@ -44,7 +46,8 @@ impl Plugin for MovementPlugin {
 
         // Register components for reflection/debugging
         app.register_type::<MovementState>()
-            .register_type::<MovementSpeed>();
+            .register_type::<MovementSpeed>()
+            .register_type::<WalkablePath>();
 
         // Add systems with proper scheduling to avoid event access conflicts
         // Systems that emit events run in Update
@@ -54,15 +57,18 @@ impl Plugin for MovementPlugin {
                 send_movement_requests_system,
                 handle_movement_confirmed_system,
                 interpolate_movement_system,
-                handle_server_stop_system, // Converts server stops to client events
-                update_entity_altitude_system, // Update terrain following after position changes
+                handle_server_stop_system,
+                update_entity_altitude_system,
             )
-                .chain(), // Ensure sequential execution
+                .chain(),
         );
 
         // Systems that read events run in PostUpdate to avoid conflicts
         // This allows event writers in Update to complete before readers process them
-        app.add_systems(PostUpdate, handle_movement_stopped_system);
+        app.add_systems(
+            PostUpdate,
+            (handle_movement_stopped_system, advance_waypoint_system).chain(),
+        );
 
         info!("MovementPlugin initialized");
     }

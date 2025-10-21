@@ -80,6 +80,48 @@ impl MovementTarget {
         }
     }
 
+    /// Create a new movement target with elapsed time for mid-movement spawning
+    ///
+    /// This constructor allows spawning entities that are already mid-movement.
+    /// The start_time is adjusted backwards by elapsed_ms so that progress()
+    /// calculations work correctly for entities entering view while moving.
+    ///
+    /// # Arguments
+    ///
+    /// * `elapsed_ms` - Milliseconds since movement started on server
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_elapsed(
+        src_x: u16,
+        src_y: u16,
+        dest_x: u16,
+        dest_y: u16,
+        src_world_pos: Vec3,
+        dest_world_pos: Vec3,
+        start_tick: u32,
+        elapsed_ms: u32,
+    ) -> Self {
+        let dx = (dest_x as f32) - (src_x as f32);
+        let dy = (dest_y as f32) - (src_y as f32);
+        let total_distance = (dx * dx + dy * dy).sqrt();
+
+        // Adjust start_time backwards to account for elapsed time
+        let start_time = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_millis(elapsed_ms as u64))
+            .unwrap_or_else(std::time::Instant::now);
+
+        Self {
+            src_x,
+            src_y,
+            dest_x,
+            dest_y,
+            src_world_pos,
+            dest_world_pos,
+            start_tick,
+            total_distance,
+            start_time,
+        }
+    }
+
     /// Calculate movement progress (0.0 to 1.0)
     ///
     /// Uses elapsed time and speed to determine how far along the movement we are.

@@ -1,6 +1,8 @@
 use crate::{
+    domain::entities::character::sprite_hierarchy::CharacterObjectTree,
     domain::entities::markers::LocalPlayer,
     domain::entities::movement::events::MovementRequested,
+    domain::entities::pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
     domain::world::components::MapLoader,
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
     utils::coordinates::world_position_to_spawn_coords,
@@ -110,13 +112,17 @@ pub fn render_terrain_cursor(
 
 /// Handle terrain clicks for player movement
 /// Reads ForwardedMouseClick, raycasts to terrain, converts to RO coords, emits MovementRequested
+#[allow(clippy::too_many_arguments)]
 pub fn handle_terrain_click(
+    mut commands: Commands,
     mut mouse_click: ResMut<ForwardedMouseClick>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     map_loader_query: Query<&MapLoader>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
-    player_query: Query<Entity, With<LocalPlayer>>,
+    pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
+    player_query: Query<(Entity, &CharacterObjectTree), With<LocalPlayer>>,
+    sprite_transforms: Query<&Transform>,
     mut movement_events: MessageWriter<MovementRequested>,
 ) {
     let Some(click_pos) = mouse_click.position.take() else {
@@ -155,20 +161,67 @@ pub fn handle_terrain_click(
         ground_asset.ground.height,
     );
 
-    let Ok(player_entity) = player_query.single() else {
+    let Ok((player_entity, object_tree)) = player_query.single() else {
         warn!("No player character found for movement request");
         return;
     };
 
-    movement_events.write(MovementRequested {
-        entity: player_entity,
-        dest_x,
-        dest_y,
-        direction: 0,
-    });
+    let Ok(transform) = sprite_transforms.get(object_tree.root) else {
+        warn!("Player sprite transform not found");
+        return;
+    };
 
-    debug!(
-        "Terrain clicked: world_pos={:?}, RO coords=({}, {})",
-        world_pos, dest_x, dest_y
+    let current_pos = transform.translation;
+    let (current_x, current_y) = world_position_to_spawn_coords(
+        current_pos,
+        ground_asset.ground.width,
+        ground_asset.ground.height,
     );
+
+    let Some(grid) = pathfinding_grid else {
+        warn!("Pathfinding grid not yet loaded, ignoring terrain click");
+        return;
+    };
+
+    let path = find_path(&grid.0, (current_x, current_y), (dest_x, dest_y));
+
+    match path {
+        Some(waypoints) if waypoints.len() > 1 => {
+            debug!("Path found with {} waypoints", waypoints.len());
+
+            commands
+                .entity(player_entity)
+                .insert(WalkablePath::new_at_waypoint(waypoints.clone(), (dest_x, dest_y), 1));
+
+            let (first_x, first_y) = waypoints[1];
+            movement_events.write(MovementRequested {
+                entity: player_entity,
+                dest_x: first_x,
+                dest_y: first_y,
+                direction: 0,
+            });
+
+            debug!(
+                "Terrain clicked: current=({}, {}), destination=({}, {}), first waypoint=({}, {})",
+                current_x, current_y, dest_x, dest_y, first_x, first_y
+            );
+        }
+        Some(_waypoints) => {
+            debug!("Direct path (adjacent or same cell)");
+            movement_events.write(MovementRequested {
+                entity: player_entity,
+                dest_x,
+                dest_y,
+                direction: 0,
+            });
+
+            debug!(
+                "Terrain clicked: direct movement from ({}, {}) to ({}, {})",
+                current_x, current_y, dest_x, dest_y
+            );
+        }
+        None => {
+            warn!("No path found to ({}, {})", dest_x, dest_y);
+        }
+    }
 }

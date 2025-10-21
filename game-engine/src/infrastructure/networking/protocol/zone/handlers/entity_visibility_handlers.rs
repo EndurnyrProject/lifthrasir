@@ -1,5 +1,5 @@
 use crate::{
-    domain::entities::spawning::events::{DespawnEntity, SpawnEntity},
+    domain::entities::spawning::events::{RequestEntityVanish, SpawnEntity},
     infrastructure::networking::{
         errors::NetworkError,
         protocol::{
@@ -41,7 +41,7 @@ impl PacketHandler<ZoneProtocol> for StandentryHandler {
     fn handle(
         &self,
         packet: Self::Packet,
-        _context: &mut ZoneContext,
+        context: &mut ZoneContext,
         event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
         debug!(
@@ -59,6 +59,7 @@ impl PacketHandler<ZoneProtocol> for StandentryHandler {
             direction: packet.dir,
             destination: None,
             move_start_time: None,
+            current_server_tick: context.get_server_time(),
 
             job: packet.job,
             head: packet.head,
@@ -96,7 +97,7 @@ impl PacketHandler<ZoneProtocol> for NewentryHandler {
     fn handle(
         &self,
         packet: Self::Packet,
-        _context: &mut ZoneContext,
+        context: &mut ZoneContext,
         event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
         debug!(
@@ -114,6 +115,7 @@ impl PacketHandler<ZoneProtocol> for NewentryHandler {
             direction: packet.dir,
             destination: None,
             move_start_time: None,
+            current_server_tick: context.get_server_time(),
 
             job: packet.job,
             head: packet.head,
@@ -151,13 +153,18 @@ impl PacketHandler<ZoneProtocol> for MoveentryHandler {
     fn handle(
         &self,
         packet: Self::Packet,
-        _context: &mut ZoneContext,
+        context: &mut ZoneContext,
         event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
         debug!(
-            "Entity move entry: {} ({:?}) moving ({}, {}) -> ({}, {})",
-            packet.name, packet.object_type,
-            packet.src_x, packet.src_y, packet.dst_x, packet.dst_y
+            "Entity move entry: {} ({:?}) moving ({}, {}) -> ({}, {}) at server tick {}",
+            packet.name,
+            packet.object_type,
+            packet.src_x,
+            packet.src_y,
+            packet.dst_x,
+            packet.dst_y,
+            packet.move_start_time
         );
 
         let dx = packet.dst_x as i32 - packet.src_x as i32;
@@ -174,6 +181,7 @@ impl PacketHandler<ZoneProtocol> for MoveentryHandler {
             direction,
             destination: Some((packet.dst_x, packet.dst_y)),
             move_start_time: Some(packet.move_start_time),
+            current_server_tick: context.get_server_time(),
 
             job: packet.job,
             head: packet.head,
@@ -203,6 +211,7 @@ impl PacketHandler<ZoneProtocol> for MoveentryHandler {
 /// Handler for ZC_NOTIFY_VANISH packet
 ///
 /// Processes entities disappearing from view (moved out of range, died, logged out, or teleported).
+/// Emits RequestEntityVanish event which will be handled by a system that can check movement state.
 pub struct VanishHandler;
 
 impl PacketHandler<ZoneProtocol> for VanishHandler {
@@ -223,15 +232,17 @@ impl PacketHandler<ZoneProtocol> for VanishHandler {
         };
 
         debug!(
-            "Entity vanished: GID {} ({})",
+            "Entity vanish requested: GID {} ({})",
             packet.gid, vanish_reason
         );
 
-        event_writer.send_event(Box::new(DespawnEntity {
+        // Emit RequestEntityVanish instead of DespawnEntity
+        // A system will check if entity is moving and defer despawn if needed
+        event_writer.send_event(Box::new(RequestEntityVanish {
             aid: packet.gid,
+            vanish_type: packet.vanish_type,
         }));
 
         Ok(())
     }
 }
-

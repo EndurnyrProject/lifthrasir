@@ -1,5 +1,8 @@
 use crate::{
-    domain::world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
+    domain::{
+        entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid},
+        world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
+    },
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
     utils::constants::CELL_SIZE,
 };
@@ -586,6 +589,15 @@ pub fn generate_terrain_when_textures_ready(
             .as_ref()
             .and_then(|h| altitude_assets.get(h))
             .map(|a| &a.altitude);
+
+        if let Some(altitude_data) = altitude {
+            let pathfinding_grid = PathfindingGrid::from_gat(altitude_data);
+            commands.insert_resource(CurrentMapPathfindingGrid(pathfinding_grid));
+            info!(
+                "Created and cached pathfinding grid for map '{}' ({}x{})",
+                map_request.map_name, altitude_data.width, altitude_data.height
+            );
+        }
 
         // Create materials now that textures are loaded
         let texture_materials = create_terrain_materials_from_loaded_textures(

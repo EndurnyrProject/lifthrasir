@@ -58,6 +58,14 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcNotifyVanishPacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcNotifyVanish(packet))
             }
+            ZC_NOTIFY_TIME => {
+                let packet = ZcNotifyTimePacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyTime(packet))
+            }
+            ZC_NOTIFY_TIME2 => {
+                let packet = ZcNotifyTime2Packet::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyTime2(packet))
+            }
             ZC_PAR_CHANGE => {
                 let packet = ZcParChangePacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcParChange(packet))
@@ -101,6 +109,8 @@ impl Protocol for ZoneProtocol {
                 length_bytes: 2,
             },
             ZC_NOTIFY_VANISH => PacketSize::Fixed(7),
+            ZC_NOTIFY_TIME => PacketSize::Fixed(6),
+            ZC_NOTIFY_TIME2 => PacketSize::Fixed(6),
             ZC_PAR_CHANGE => PacketSize::Fixed(8),
             ZC_LONGPAR_CHANGE => PacketSize::Fixed(8),
             ZC_NORMAL_ITEMLIST => PacketSize::Variable {
@@ -142,6 +152,12 @@ pub struct ZoneContext {
 
     /// Server tick from last update (for synchronization)
     pub server_tick: u32,
+
+    /// Server time offset in milliseconds (server_time = local_time + time_offset)
+    pub time_offset: i64,
+
+    /// Last time sync request timestamp
+    pub last_time_sync: Option<std::time::Instant>,
 }
 
 impl ZoneContext {
@@ -183,6 +199,45 @@ impl ZoneContext {
         self.received_aid = false;
         self.entered_world = false;
         self.server_tick = 0;
+        self.time_offset = 0;
+        self.last_time_sync = None;
+    }
+
+    /// Update time offset based on server response
+    ///
+    /// # Arguments
+    ///
+    /// * `server_time` - Current server time in milliseconds
+    /// * `client_time` - Client time when request was sent in milliseconds
+    pub fn update_time_offset(&mut self, server_time: u32, client_time: u32) {
+        // Calculate round-trip time and assume half was spent in transit
+        let rtt = crate::utils::time::current_milliseconds().wrapping_sub(client_time);
+        let estimated_server_time = server_time.wrapping_add(rtt / 2);
+        let local_time = crate::utils::time::current_milliseconds();
+
+        // Calculate offset (server - local)
+        self.time_offset = estimated_server_time.wrapping_sub(local_time) as i32 as i64;
+        self.last_time_sync = Some(std::time::Instant::now());
+    }
+
+    /// Get current server time based on synchronized offset
+    ///
+    /// # Returns
+    ///
+    /// Estimated server time in milliseconds
+    pub fn get_server_time(&self) -> u32 {
+        let local_ms = crate::utils::time::current_milliseconds();
+        local_ms.wrapping_add(self.time_offset as i32 as u32)
+    }
+
+    /// Check if time sync is needed
+    ///
+    /// Returns true if we haven't synced in the last 30 seconds
+    pub fn needs_time_sync(&self) -> bool {
+        match self.last_time_sync {
+            None => true,
+            Some(last_sync) => last_sync.elapsed().as_secs() >= 30,
+        }
     }
 }
 
@@ -192,6 +247,7 @@ pub enum ZoneClientPacket {
     CzEnter2(CzEnter2Packet),
     CzNotifyActorinit(CzNotifyActorinitPacket),
     CzRequestMove2(CzRequestMove2Packet),
+    CzRequestTime2(CzRequestTime2Packet),
 }
 
 impl ClientPacket for ZoneClientPacket {
@@ -202,6 +258,7 @@ impl ClientPacket for ZoneClientPacket {
             Self::CzEnter2(p) => p.serialize(),
             Self::CzNotifyActorinit(p) => p.serialize(),
             Self::CzRequestMove2(p) => p.serialize(),
+            Self::CzRequestTime2(p) => p.serialize(),
         }
     }
 
@@ -210,6 +267,7 @@ impl ClientPacket for ZoneClientPacket {
             Self::CzEnter2(_) => CZ_ENTER2,
             Self::CzNotifyActorinit(_) => CZ_NOTIFY_ACTORINIT,
             Self::CzRequestMove2(_) => CZ_REQUEST_MOVE2,
+            Self::CzRequestTime2(_) => CZ_REQUEST_TIME2,
         }
     }
 }
@@ -226,6 +284,8 @@ pub enum ZoneServerPacket {
     ZcNotifyNewentry(ZcNotifyNewentryPacket),
     ZcNotifyMoveentry(ZcNotifyMoveentryPacket),
     ZcNotifyVanish(ZcNotifyVanishPacket),
+    ZcNotifyTime(ZcNotifyTimePacket),
+    ZcNotifyTime2(ZcNotifyTime2Packet),
     ZcParChange(ZcParChangePacket),
     ZcLongparChange(ZcLongparChangePacket),
     ZcNormalItemlist(ZcNormalItemlistPacket),
@@ -250,6 +310,8 @@ impl ServerPacket for ZoneServerPacket {
             Self::ZcNotifyNewentry(_) => ZC_NOTIFY_NEWENTRY,
             Self::ZcNotifyMoveentry(_) => ZC_NOTIFY_MOVEENTRY,
             Self::ZcNotifyVanish(_) => ZC_NOTIFY_VANISH,
+            Self::ZcNotifyTime(_) => ZC_NOTIFY_TIME,
+            Self::ZcNotifyTime2(_) => ZC_NOTIFY_TIME2,
             Self::ZcParChange(_) => ZC_PAR_CHANGE,
             Self::ZcLongparChange(_) => ZC_LONGPAR_CHANGE,
             Self::ZcNormalItemlist(_) => ZC_NORMAL_ITEMLIST,

@@ -54,6 +54,9 @@ moonshine-object = "0.3"
 moonshine-kind = "0.4"
 moonshine-tag = "0.4"
 
+# Pathfinding
+pathfinding = "4.14"
+
 [features]
 default = []
 dynamic = ["bevy/dynamic_linking"]

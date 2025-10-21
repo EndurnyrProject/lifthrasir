@@ -4,6 +4,7 @@ pub mod character;
 pub mod components;
 pub mod markers;
 pub mod movement;
+pub mod pathfinding;
 pub mod registry;
 pub mod spawning;
 pub mod sprite_factory;

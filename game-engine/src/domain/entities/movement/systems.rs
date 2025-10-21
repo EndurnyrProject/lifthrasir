@@ -4,6 +4,7 @@ use crate::domain::entities::character::components::core::Grounded;
 use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
 use crate::domain::entities::character::sprite_hierarchy::CharacterObjectTree;
 use crate::domain::entities::character::states::{StartWalking, StopWalking};
+use crate::domain::entities::pathfinding::WalkablePath;
 use crate::domain::world::components::MapLoader;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use crate::infrastructure::networking::client::ZoneServerClient;
@@ -47,13 +48,17 @@ pub fn send_movement_requests_system(
 /// 1. Looks up entity from AID via EntityRegistry
 /// 2. Creates MovementTarget component with interpolation data
 /// 3. Updates character direction based on movement vector
-/// 4. Changes state to Moving
-/// 5. Inserts StartWalking trigger for animation state machine
+/// 4. Changes state to Moving (only if not already walking)
+/// 5. Inserts StartWalking trigger for animation state machine (only if not already walking)
 ///
 /// **Position Continuity:** When a new movement is confirmed during an existing movement,
 /// this system uses the character's current interpolated position as the source instead of
 /// the server's stale position. This prevents the character from snapping back to the old
 /// destination before moving to the new target.
+///
+/// **Pathfinding Optimization:** During multi-step pathfinding, if the entity is already
+/// in Moving state, we only update the MovementTarget and direction without retriggering
+/// the StartWalking animation. This prevents animation restarts at each waypoint.
 pub fn handle_movement_confirmed_system(
     mut commands: Commands,
     mut server_events: MessageReader<MovementConfirmedByServer>,
@@ -61,6 +66,7 @@ pub fn handle_movement_confirmed_system(
     entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
     query: Query<(Option<&MovementTarget>, &CharacterObjectTree)>,
     sprite_transforms: Query<&Transform>,
+    movement_states: Query<&MovementState>,
 ) {
     for event in server_events.read() {
         // Look up entity from AID in packet
@@ -73,7 +79,10 @@ pub fn handle_movement_confirmed_system(
         };
 
         let Ok((existing_target, object_tree)) = query.get(entity) else {
-            warn!("Entity {:?} missing required components for movement", entity);
+            warn!(
+                "Entity {:?} missing required components for movement",
+                entity
+            );
             continue;
         };
 
@@ -127,19 +136,29 @@ pub fn handle_movement_confirmed_system(
         let dy = (event.dest_y as f32) - (actual_src_y as f32);
         let direction = Direction::from_movement_vector(-dx, dy);
 
-        debug!(
-            "🚶 INSERTING StartWalking trigger for entity {:?}",
-            entity
+        let already_walking = matches!(
+            movement_states.get(entity),
+            Ok(MovementState::Moving)
         );
-        commands
-            .entity(entity)
-            .remove::<StopWalking>()
-            .insert((
+
+        if already_walking {
+            debug!(
+                "🔄 Entity {:?} already walking - updating target without retriggering animation",
+                entity
+            );
+            commands.entity(entity).insert((
+                target,
+                CharacterDirection { facing: direction },
+            ));
+        } else {
+            debug!("🚶 INSERTING StartWalking trigger for entity {:?}", entity);
+            commands.entity(entity).remove::<StopWalking>().insert((
                 target,
                 MovementState::Moving,
                 CharacterDirection { facing: direction },
                 StartWalking,
             ));
+        }
 
         client_events.write(MovementConfirmed {
             entity,
@@ -219,10 +238,7 @@ pub fn handle_server_stop_system(
     for server_event in server_stop_events.read() {
         // Look up entity from AID
         let Some(entity) = entity_registry.get_entity(server_event.aid) else {
-            warn!(
-                "Movement stop for unknown entity AID: {}",
-                server_event.aid
-            );
+            warn!("Movement stop for unknown entity AID: {}", server_event.aid);
             continue;
         };
 
@@ -256,22 +272,38 @@ pub fn handle_server_stop_system(
 ///
 /// Cleanup system that runs when movement completes or is interrupted.
 /// - Removes MovementTarget component
-/// - Updates state to Idle
-/// - Inserts StopWalking trigger for animation
+/// - Updates state to Idle (only if no more waypoints)
+/// - Inserts StopWalking trigger for animation (only if no more waypoints)
+///
+/// **Pathfinding Optimization:** If the entity has more waypoints in its path,
+/// we only remove the MovementTarget without stopping the animation. This prevents
+/// the animation from restarting at each waypoint during multi-step pathfinding.
 pub fn handle_movement_stopped_system(
     mut commands: Commands,
     mut events: MessageReader<MovementStopped>,
     movement_states: Query<&MovementState>,
+    path_query: Query<&WalkablePath>,
 ) {
-    // Handle all stop events
     for event in events.read() {
         debug!(
             "Cleaning up movement for {:?}: reason {:?}",
             event.entity, event.reason
         );
 
-        // Guard: Only insert StopWalking trigger if not already idle
-        // This prevents wasteful Idle→Idle state transitions
+        let has_more_waypoints = path_query
+            .get(event.entity)
+            .map(|path| !path.is_complete())
+            .unwrap_or(false);
+
+        if has_more_waypoints {
+            debug!(
+                "🔄 Entity {:?} has more waypoints - keeping walking animation active",
+                event.entity
+            );
+            commands.entity(event.entity).remove::<MovementTarget>();
+            continue;
+        }
+
         if let Ok(movement_state) = movement_states.get(event.entity) {
             if matches!(movement_state, MovementState::Idle) {
                 debug!(
@@ -335,6 +367,45 @@ pub fn update_entity_altitude_system(
             .get_terrain_height_at_position(transform.translation)
         {
             transform.translation.y = height;
+        }
+    }
+}
+
+pub fn advance_waypoint_system(
+    mut commands: Commands,
+    mut stop_events: MessageReader<MovementStopped>,
+    mut movement_requests: MessageWriter<MovementRequested>,
+    mut path_query: Query<(Entity, &mut WalkablePath)>,
+) {
+    for event in stop_events.read() {
+        if event.reason != StopReason::ReachedDestination {
+            continue;
+        }
+
+        let Ok((entity, mut path)) = path_query.get_mut(event.entity) else {
+            continue;
+        };
+
+        if path.advance() {
+            if let Some((next_x, next_y)) = path.next_waypoint() {
+                debug!(
+                    "Advancing to waypoint {}/{}: ({}, {})",
+                    path.current_waypoint + 1,
+                    path.waypoints.len(),
+                    next_x,
+                    next_y
+                );
+
+                movement_requests.write(MovementRequested {
+                    entity,
+                    dest_x: next_x,
+                    dest_y: next_y,
+                    direction: 0,
+                });
+            }
+        } else {
+            debug!("Path complete, removing WalkablePath component");
+            commands.entity(entity).remove::<WalkablePath>();
         }
     }
 }

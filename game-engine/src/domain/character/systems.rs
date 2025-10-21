@@ -626,6 +626,7 @@ pub fn detect_map_loading_timeout(
 
 /// System that spawns character sprite hierarchy when entering InGame state
 /// This bridges the character entity creation with the unified sprite system
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_character_sprite_on_game_start(
     mut commands: Commands,
     mut spawn_events: MessageWriter<

@@ -251,6 +251,11 @@ pub fn spawn_character_sprite_hierarchy(
     terrain: TerrainResources,
 ) {
     for event in spawn_events.read() {
+        info!(
+            "🎭 spawn_character_sprite_hierarchy: Received event for character entity {:?} at {:?}",
+            event.character_entity, event.spawn_position
+        );
+
         // Check if the character entity still exists before spawning sprites
         if character_query.get(event.character_entity).is_err() {
             warn!(

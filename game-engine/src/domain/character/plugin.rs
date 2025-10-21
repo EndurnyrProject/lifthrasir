@@ -104,6 +104,7 @@ impl Plugin for CharacterDomainPlugin {
                 (
                     // Zone server systems (new modular architecture)
                     crate::infrastructure::networking::client::zone_server_update_system,
+                    crate::infrastructure::networking::client::time_sync_system,
                     handle_zone_server_connected_protocol,
                     handle_zone_entry_refused_protocol,
                     handle_account_id_received_protocol,

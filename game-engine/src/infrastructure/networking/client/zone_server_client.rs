@@ -1,17 +1,22 @@
-use crate::infrastructure::networking::{
-    client::NetworkClient,
-    errors::NetworkResult,
-    protocol::{
-        dispatcher::PacketDispatcher,
-        zone::{
-            AcceptEnterHandler, AccountIdReceived, AidHandler, CzEnter2Packet,
-            CzNotifyActorinitPacket, CzRequestMove2Packet, EquipitemListHandler,
-            LongparChangeHandler, MoveentryHandler, MoveStopHandler, MovementConfirmedByServer,
-            MovementStoppedByServer, NewentryHandler, NormalItemlistHandler, ParChangeHandler,
-            PlayermoveHandler, RefuseEnterHandler, SpawnData, StandentryHandler, VanishHandler,
-            ZoneClientPacket, ZoneContext, ZoneEntryRefused, ZoneProtocol, ZoneServerConnected,
+use crate::{
+    domain::entities::spawning::events::{DespawnEntity, RequestEntityVanish, SpawnEntity},
+    infrastructure::networking::{
+        client::NetworkClient,
+        errors::NetworkResult,
+        protocol::{
+            dispatcher::PacketDispatcher,
+            zone::{
+                AcceptEnterHandler, AccountIdReceived, AidHandler, CzEnter2Packet,
+                CzNotifyActorinitPacket, CzRequestMove2Packet, CzRequestTime2Packet,
+                EquipitemListHandler, LongparChangeHandler, MoveStopHandler, MoveentryHandler,
+                MovementConfirmedByServer, MovementStoppedByServer, NewentryHandler,
+                NormalItemlistHandler, ParChangeHandler, PlayermoveHandler, RefuseEnterHandler,
+                SpawnData, StandentryHandler, TimeSyncHandler, TimeSyncLegacyHandler,
+                VanishHandler, ZoneClientPacket, ZoneContext, ZoneEntryRefused, ZoneProtocol,
+                ZoneServerConnected,
+            },
+            EventBuffer,
         },
-        EventBuffer,
     },
 };
 use bevy::ecs::system::SystemParam;
@@ -90,6 +95,8 @@ impl ZoneServerClient {
         dispatcher.register(LongparChangeHandler);
         dispatcher.register(NormalItemlistHandler);
         dispatcher.register(EquipitemListHandler);
+        dispatcher.register(TimeSyncHandler);
+        dispatcher.register(TimeSyncLegacyHandler);
 
         let client = NetworkClient::new(context).with_dispatcher(dispatcher);
 
@@ -191,6 +198,21 @@ impl ZoneServerClient {
         self.inner.send_packet(&packet)
     }
 
+    /// Request server time for client-server synchronization
+    ///
+    /// Sends a CZ_REQUEST_TIME2 packet to request the current server time.
+    /// The server will respond with ZC_NOTIFY_TIME2 containing the server time,
+    /// which is used to calculate time offset for movement interpolation.
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if packet was sent, NetworkError otherwise
+    pub fn request_time(&mut self) -> NetworkResult<()> {
+        let client_time = crate::utils::time::current_milliseconds();
+        let packet = ZoneClientPacket::CzRequestTime2(CzRequestTime2Packet::new(client_time));
+        self.inner.send_packet(&packet)
+    }
+
     /// Process incoming packets and emit Bevy events
     ///
     /// This should be called regularly (e.g., in a Bevy Update system) to:
@@ -268,6 +290,9 @@ pub struct ZoneServerEventWriters<'w> {
     pub entry_refused: MessageWriter<'w, ZoneEntryRefused>,
     pub movement_confirmed: MessageWriter<'w, MovementConfirmedByServer>,
     pub movement_stopped: MessageWriter<'w, MovementStoppedByServer>,
+    pub spawn_entity: MessageWriter<'w, SpawnEntity>,
+    pub despawn_entity: MessageWriter<'w, DespawnEntity>,
+    pub vanish_request: MessageWriter<'w, RequestEntityVanish>,
 }
 
 /// Bevy system to update the zone server client
@@ -318,6 +343,9 @@ pub fn zone_server_update_system(
             (ZoneEntryRefused, entry_refused),
             (MovementConfirmedByServer, movement_confirmed),
             (MovementStoppedByServer, movement_stopped),
+            (SpawnEntity, spawn_entity),
+            (DespawnEntity, despawn_entity),
+            (RequestEntityVanish, vanish_request),
         ]
     );
 }
@@ -347,5 +375,31 @@ mod tests {
         let client = ZoneServerClient::with_session(12345, 67890);
         assert!(client.spawn_data().is_none());
         assert_eq!(client.server_tick(), 0);
+    }
+}
+
+/// System to periodically synchronize time with the server
+///
+/// This system sends CZ_REQUEST_TIME2 packets every 30 seconds to keep
+/// the client-server time offset accurate. The server responds with
+/// ZC_NOTIFY_TIME2 which is handled by TimeSyncHandler.
+pub fn time_sync_system(client: Option<ResMut<ZoneServerClient>>) {
+    let Some(mut client) = client else {
+        return;
+    };
+
+    if !client.is_connected() {
+        return;
+    }
+
+    // Check if we need to sync (first sync or 30 seconds since last sync)
+    if !client.inner.context().needs_time_sync() {
+        return;
+    }
+
+    debug!("Requesting time sync from server");
+
+    if let Err(e) = client.request_time() {
+        error!("Failed to send time sync request: {:?}", e);
     }
 }

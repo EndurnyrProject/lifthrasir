@@ -1,6 +1,6 @@
 pub mod events;
-pub mod systems;
 pub mod plugin;
+pub mod systems;
 
-pub use events::{SpawnEntity, DespawnEntity};
+pub use events::{DespawnEntity, SpawnEntity};
 pub use plugin::EntitySpawningPlugin;

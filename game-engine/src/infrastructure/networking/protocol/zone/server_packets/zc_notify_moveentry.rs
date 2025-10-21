@@ -1,8 +1,8 @@
 use crate::{
     domain::entities::types::ObjectType,
-    infrastructure::networking::protocol::traits::ServerPacket,
-    utils::decode_move_data,
+    infrastructure::networking::protocol::traits::ServerPacket, utils::decode_move_data,
 };
+use bevy::prelude::*;
 use bytes::Buf;
 use std::io;
 
@@ -146,6 +146,11 @@ impl ServerPacket for ZcNotifyMoveentryPacket {
         buf.copy_to_slice(&mut name_bytes);
         let name_end = name_bytes.iter().position(|&b| b == 0).unwrap_or(24);
         let name = String::from_utf8_lossy(&name_bytes[..name_end]).to_string();
+
+        info!(
+            "[PARSE] ZC_NOTIFY_MOVEENTRY: {} (GID: {}, {:?}) moving ({}, {}) -> ({}, {})",
+            name, gid, object_type, src_x, src_y, dst_x, dst_y
+        );
 
         Ok(Self {
             object_type,

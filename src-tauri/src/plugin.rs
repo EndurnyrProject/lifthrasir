@@ -367,6 +367,7 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
             game_engine::AssetsPlugin,
             game_engine::AudioPlugin,
             game_engine::AssetCatalogPlugin,
+            game_engine::EntitySpawningPlugin,
             game_engine::CharacterDomainPlugin,
             game_engine::AuthenticationPlugin,
             game_engine::WorldPlugin,

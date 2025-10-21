@@ -22,7 +22,39 @@ pub struct NetworkEntity {
 
 impl NetworkEntity {
     pub fn new(aid: u32, gid: u32, object_type: ObjectType) -> Self {
-        Self { aid, gid, object_type }
+        Self {
+            aid,
+            gid,
+            object_type,
+        }
+    }
+}
+
+/// Pending despawn component for deferred entity removal
+///
+/// When an entity receives a VANISH packet while still moving, this component
+/// is added to mark it for despawn after movement completes. This prevents
+/// entities from disappearing mid-animation when they move out of view range.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct PendingDespawn {
+    /// Type of vanish event (0=out of sight, 1=died, 2=logged out, 3=teleported)
+    pub vanish_type: u8,
+
+    /// When the despawn was requested
+    pub marked_at: std::time::Instant,
+}
+
+impl PendingDespawn {
+    pub fn new(vanish_type: u8) -> Self {
+        Self {
+            vanish_type,
+            marked_at: std::time::Instant::now(),
+        }
+    }
+
+    /// Check if the pending despawn has timed out (5 second safety timeout)
+    pub fn has_timed_out(&self) -> bool {
+        self.marked_at.elapsed().as_secs() >= 5
     }
 }
 

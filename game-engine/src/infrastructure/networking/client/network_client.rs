@@ -265,7 +265,6 @@ impl<P: Protocol> NetworkClient<P> {
                         });
                     }
 
-                    // Check if we have the complete packet
                     if buffer.len() < length {
                         break; // Wait for complete packet
                     }
@@ -274,13 +273,10 @@ impl<P: Protocol> NetworkClient<P> {
                 }
             };
 
-            // CRITICAL: Copy packet data BEFORE consuming
             let packet_data = buffer[..packet_size].to_vec();
 
-            // CRITICAL: Consume immediately (buffer now safe)
             transport.consume(packet_size);
 
-            // Check if we have a handler for this packet
             if !self.dispatcher.has_handler(packet_id) {
                 warn!(
                     "{} client: Skipping unknown packet 0x{:04X} ({} bytes)",

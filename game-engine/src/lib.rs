@@ -13,6 +13,7 @@ pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
 pub use domain::entities::billboard::BillboardPlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
 pub use domain::entities::movement::MovementPlugin;
+pub use domain::entities::spawning::EntitySpawningPlugin;
 pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
 
 use bevy::prelude::*;
@@ -34,11 +35,12 @@ pub fn create_app() -> App {
             LifthrasirPlugin,
             AssetsPlugin,                 // ENABLED: Registers ClientConfig asset type
             AudioPlugin,                  // ENABLED: Audio system with BGM support and crossfading
-            CharacterDomainPlugin,        // ENABLED: Character events and networking (no UI)
-            AuthenticationPlugin,         // ENABLED: Reads LoginAttemptEvent and handles auth
-            WorldPlugin,                  // ENABLED: Map loading and world systems
-            BillboardPlugin,              // ENABLED: 3D billboard rendering infrastructure
-            MovementPlugin,               // ENABLED: Generic entity movement system
+            EntitySpawningPlugin, // ENABLED: Entity spawning/despawning events for network entities (must be before CharacterDomainPlugin)
+            CharacterDomainPlugin, // ENABLED: Character events and networking (no UI)
+            AuthenticationPlugin, // ENABLED: Reads LoginAttemptEvent and handles auth
+            WorldPlugin,          // ENABLED: Map loading and world systems
+            BillboardPlugin,      // ENABLED: 3D billboard rendering infrastructure
+            MovementPlugin,       // ENABLED: Generic entity movement system
             UnifiedCharacterEntityPlugin, // ENABLED: Unified character system with 3D billboard sprite hierarchy
         ));
 

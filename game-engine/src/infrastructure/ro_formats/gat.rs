@@ -17,10 +17,10 @@ pub enum GatError {
 pub struct GatCellType(u32);
 
 impl GatCellType {
-    pub const NONE: Self = Self(1 << 0);
-    pub const WALKABLE: Self = Self(1 << 1);
-    pub const WATER: Self = Self(1 << 2);
-    pub const SNIPABLE: Self = Self(1 << 3);
+    pub const NONE: Self = Self(0);
+    pub const WALKABLE: Self = Self(1 << 0);
+    pub const WATER: Self = Self(1 << 1);
+    pub const SNIPABLE: Self = Self(1 << 2);
 
     pub fn is_walkable(&self) -> bool {
         self.0 & Self::WALKABLE.0 != 0
@@ -36,8 +36,24 @@ impl GatCellType {
 }
 
 impl From<u32> for GatCellType {
-    fn from(value: u32) -> Self {
-        Self(value)
+    fn from(raw_type: u32) -> Self {
+        let flags = match raw_type {
+            0 => Self::WALKABLE.0 | Self::SNIPABLE.0,
+            1 => Self::NONE.0,
+            2 => Self::WALKABLE.0 | Self::SNIPABLE.0,
+            3 => Self::WALKABLE.0 | Self::SNIPABLE.0 | Self::WATER.0,
+            4 => Self::WALKABLE.0 | Self::SNIPABLE.0,
+            5 => Self::SNIPABLE.0,
+            6 => Self::WALKABLE.0 | Self::SNIPABLE.0,
+            _ => {
+                info!(
+                    "Unknown GAT cell type: {}, treating as non-walkable",
+                    raw_type
+                );
+                Self::NONE.0
+            }
+        };
+        Self(flags)
     }
 }
 
@@ -288,6 +304,19 @@ mod tests {
         let combined = GatCellType(GatCellType::WALKABLE.0 | GatCellType::WATER.0);
         assert!(combined.is_walkable());
         assert!(combined.is_water());
+    }
+
+    #[test]
+    fn test_raw_type_conversion() {
+        assert!(GatCellType::from(0).is_walkable());
+        assert!(!GatCellType::from(1).is_walkable());
+        assert!(GatCellType::from(2).is_walkable());
+        assert!(GatCellType::from(3).is_walkable());
+        assert!(GatCellType::from(3).is_water());
+        assert!(GatCellType::from(4).is_walkable());
+        assert!(!GatCellType::from(5).is_walkable());
+        assert!(GatCellType::from(5).is_snipable());
+        assert!(GatCellType::from(6).is_walkable());
     }
 
     #[test]
