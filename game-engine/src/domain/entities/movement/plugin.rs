@@ -77,6 +77,9 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins).add_plugins(MovementPlugin);
 
+        // Add required EntityRegistry resource for movement systems
+        app.init_resource::<crate::domain::entities::registry::EntityRegistry>();
+
         // Plugin builds successfully - actual message registration would require more setup
         // This is a smoke test to ensure the plugin can be added without panic
         app.update();

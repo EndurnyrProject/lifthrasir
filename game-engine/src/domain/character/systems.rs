@@ -2,6 +2,8 @@ use super::components::{CharServerPingTimer, CharacterSelectionState, MapLoading
 use super::events::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
+use crate::domain::entities::markers::LocalPlayer;
+use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::infrastructure::networking::client::CharServerClient;
 use crate::infrastructure::networking::protocol::character::{
@@ -630,6 +632,8 @@ pub fn spawn_character_sprite_on_game_start(
         crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent,
     >,
     spawn_context: Res<MapSpawnContext>,
+    mut entity_registry: ResMut<EntityRegistry>,
+    user_session: Res<UserSession>,
     characters: Query<(
         Entity,
         &crate::domain::entities::character::components::CharacterMeta,
@@ -654,10 +658,22 @@ pub fn spawn_character_sprite_on_game_start(
         &mut commands.entity(character_entity),
     );
 
-    // Add PlayerCharacter marker
-    commands
-        .entity(character_entity)
-        .insert(crate::domain::camera::components::PlayerCharacter);
+    // Add LocalPlayer marker (for camera and unified entity system)
+    commands.entity(character_entity).insert(LocalPlayer);
+
+    info!(
+        "✅ Added LocalPlayer marker to entity {:?}",
+        character_entity
+    );
+
+    // Register in EntityRegistry
+    let account_id = user_session.tokens.account_id;
+    entity_registry.set_local_player(character_entity, account_id);
+
+    info!(
+        "✅ Registered local player in EntityRegistry: entity={:?}, aid={}",
+        character_entity, account_id
+    );
 
     info!(
         "✅ Added gameplay components to player character entity {:?}",

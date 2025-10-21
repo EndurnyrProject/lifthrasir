@@ -371,6 +371,7 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
             game_engine::AuthenticationPlugin,
             game_engine::WorldPlugin,
             game_engine::BillboardPlugin,
+            game_engine::MovementPlugin,
             game_engine::InputPlugin,
         ));
 

@@ -1,6 +1,5 @@
 pub mod components;
 pub mod kinds;
-pub mod movement;
 pub mod sprite_hierarchy;
 pub mod states;
 pub mod visual;
@@ -8,6 +7,8 @@ pub mod visual;
 use bevy::prelude::*;
 
 use crate::domain::entities::character::states::{AnimationState, ContextState, GameplayState};
+use crate::domain::entities::movement;
+use crate::domain::entities::registry::EntityRegistry;
 
 // Type alias for querying unified character entities
 type UnifiedCharacterFilter = (
@@ -23,11 +24,9 @@ impl Plugin for UnifiedCharacterEntityPlugin {
     fn build(&self, app: &mut App) {
         states::setup_character_state_machines(app);
 
-        app.add_plugins((
-            sprite_hierarchy::CharacterSpriteHierarchyPlugin,
-            movement::MovementPlugin,
-        ))
-        .add_systems(Update, visual::update_character_facing_on_direction_change);
+        app.init_resource::<EntityRegistry>()
+            .add_plugins(sprite_hierarchy::CharacterSpriteHierarchyPlugin)
+            .add_systems(Update, visual::update_character_facing_on_direction_change);
     }
 }
 

@@ -44,10 +44,11 @@ pub fn send_movement_requests_system(
 ///
 /// Processes MovementConfirmedByServer events and initiates client-side interpolation.
 /// This system:
-/// 1. Creates MovementTarget component with interpolation data
-/// 2. Updates character direction based on movement vector
-/// 3. Changes state to Moving
-/// 4. Inserts StartWalking trigger for animation state machine
+/// 1. Looks up entity from AID via EntityRegistry
+/// 2. Creates MovementTarget component with interpolation data
+/// 3. Updates character direction based on movement vector
+/// 4. Changes state to Moving
+/// 5. Inserts StartWalking trigger for animation state machine
 ///
 /// **Position Continuity:** When a new movement is confirmed during an existing movement,
 /// this system uses the character's current interpolated position as the source instead of
@@ -57,22 +58,28 @@ pub fn handle_movement_confirmed_system(
     mut commands: Commands,
     mut server_events: MessageReader<MovementConfirmedByServer>,
     mut client_events: MessageWriter<MovementConfirmed>,
-    player_query: Query<
-        (Entity, Option<&MovementTarget>, &CharacterObjectTree),
-        With<crate::domain::entities::character::components::CharacterData>,
-    >,
+    entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
+    query: Query<(Option<&MovementTarget>, &CharacterObjectTree)>,
     sprite_transforms: Query<&Transform>,
 ) {
-    // For now, assume the player is the only character
-    // In the future, we'll need to map Account ID to Entity
-    let Ok((player_entity, existing_target, object_tree)) = player_query.single() else {
-        return;
-    };
-
     for event in server_events.read() {
+        // Look up entity from AID in packet
+        let Some(entity) = entity_registry.get_entity(event.aid) else {
+            warn!(
+                "Movement confirmed for unknown entity AID: {} - may not be spawned yet",
+                event.aid
+            );
+            continue;
+        };
+
+        let Ok((existing_target, object_tree)) = query.get(entity) else {
+            warn!("Entity {:?} missing required components for movement", entity);
+            continue;
+        };
+
         debug!(
-            "Movement confirmed by server: ({}, {}) -> ({}, {}) at tick {}",
-            event.src_x, event.src_y, event.dest_x, event.dest_y, event.server_tick
+            "Movement confirmed for entity {:?}: ({}, {}) -> ({}, {}) at tick {}",
+            entity, event.src_x, event.src_y, event.dest_x, event.dest_y, event.server_tick
         );
 
         // Determine the actual source position for interpolation
@@ -122,10 +129,10 @@ pub fn handle_movement_confirmed_system(
 
         debug!(
             "🚶 INSERTING StartWalking trigger for entity {:?}",
-            player_entity
+            entity
         );
         commands
-            .entity(player_entity)
+            .entity(entity)
             .remove::<StopWalking>()
             .insert((
                 target,
@@ -135,7 +142,7 @@ pub fn handle_movement_confirmed_system(
             ));
 
         client_events.write(MovementConfirmed {
-            entity: player_entity,
+            entity,
             src_x: event.src_x,
             src_y: event.src_y,
             dest_x: event.dest_x,
@@ -200,27 +207,36 @@ pub fn interpolate_movement_system(
 /// Handle server-initiated movement stops
 ///
 /// Converts MovementStoppedByServer network events into client MovementStopped events.
-/// Also snaps the player's position to the server-provided coordinates.
+/// Looks up the entity from AID via EntityRegistry and snaps its position to the
+/// server-provided coordinates.
 pub fn handle_server_stop_system(
     mut server_stop_events: MessageReader<MovementStoppedByServer>,
     mut client_stop_events: MessageWriter<MovementStopped>,
-    player_query: Query<
-        (Entity, &CharacterObjectTree),
-        With<crate::domain::entities::character::components::CharacterData>,
-    >,
+    entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
+    query: Query<&CharacterObjectTree>,
     mut sprite_transforms: Query<&mut Transform>,
 ) {
-    let Ok((player_entity, object_tree)) = player_query.single() else {
-        // No player entity yet
-        return;
-    };
-
     for server_event in server_stop_events.read() {
+        // Look up entity from AID
+        let Some(entity) = entity_registry.get_entity(server_event.aid) else {
+            warn!(
+                "Movement stop for unknown entity AID: {}",
+                server_event.aid
+            );
+            continue;
+        };
+
+        let Ok(object_tree) = query.get(entity) else {
+            warn!("Entity {:?} missing CharacterObjectTree", entity);
+            continue;
+        };
+
         debug!(
-            "Movement stopped by server at ({}, {}) tick {}",
-            server_event.x, server_event.y, server_event.server_tick
+            "Movement stopped by server for entity {:?} at ({}, {}) tick {}",
+            entity, server_event.x, server_event.y, server_event.server_tick
         );
 
+        // Snap to server position
         if let Ok(mut transform) = sprite_transforms.get_mut(object_tree.root) {
             let final_pos = spawn_coords_to_world_position(server_event.x, server_event.y, 0, 0);
             transform.translation.x = final_pos.x;
@@ -228,7 +244,7 @@ pub fn handle_server_stop_system(
         }
 
         client_stop_events.write(MovementStopped {
-            entity: player_entity,
+            entity,
             x: server_event.x,
             y: server_event.y,
             reason: StopReason::ServerInterrupted,
@@ -329,13 +345,13 @@ mod tests {
 
     #[test]
     fn test_direction_from_movement() {
-        // East
-        assert_eq!(Direction::from_movement_vector(1.0, 0.0), Direction::East);
-        // West
-        assert_eq!(Direction::from_movement_vector(-1.0, 0.0), Direction::West);
-        // North
+        // West (positive X in atan2 = 0° = West in RO coords)
+        assert_eq!(Direction::from_movement_vector(1.0, 0.0), Direction::West);
+        // East (negative X in atan2 = 180° = East in RO coords)
+        assert_eq!(Direction::from_movement_vector(-1.0, 0.0), Direction::East);
+        // North (positive Z in atan2 = 90° = North in RO coords)
         assert_eq!(Direction::from_movement_vector(0.0, 1.0), Direction::North);
-        // South
+        // South (negative Z in atan2 = 270° = South in RO coords)
         assert_eq!(Direction::from_movement_vector(0.0, -1.0), Direction::South);
     }
 }

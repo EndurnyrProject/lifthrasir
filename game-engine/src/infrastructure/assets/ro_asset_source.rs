@@ -20,7 +20,7 @@ use std::sync::{Arc, RwLock};
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// // In your app setup:
 /// app.register_asset_source(
 ///     AssetSourceId::from("ro"),

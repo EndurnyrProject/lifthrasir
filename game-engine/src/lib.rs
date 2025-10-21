@@ -12,6 +12,7 @@ pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin};
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
 pub use domain::entities::billboard::BillboardPlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
+pub use domain::entities::movement::MovementPlugin;
 pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
 
 use bevy::prelude::*;
@@ -37,6 +38,7 @@ pub fn create_app() -> App {
             AuthenticationPlugin,         // ENABLED: Reads LoginAttemptEvent and handles auth
             WorldPlugin,                  // ENABLED: Map loading and world systems
             BillboardPlugin,              // ENABLED: 3D billboard rendering infrastructure
+            MovementPlugin,               // ENABLED: Generic entity movement system
             UnifiedCharacterEntityPlugin, // ENABLED: Unified character system with 3D billboard sprite hierarchy
         ));
 

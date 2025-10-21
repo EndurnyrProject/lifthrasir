@@ -2,6 +2,30 @@ use crate::infrastructure::assets::{RoActAsset, RoPaletteAsset, RoSpriteAsset};
 use crate::utils::DEFAULT_ANIMATION_DELAY;
 use bevy::prelude::*;
 
+use super::types::ObjectType;
+
+/// Network entity identifier component
+///
+/// This component is added to ALL entities spawned from network packets.
+/// Provides the link between server-side Account ID and client-side Entity ID.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct NetworkEntity {
+    /// Account ID from server (unique identifier in network protocol)
+    pub aid: u32,
+
+    /// Game ID from server (may differ from AID in some cases)
+    pub gid: u32,
+
+    /// Type of entity (Pc, Npc, Mob, etc.)
+    pub object_type: ObjectType,
+}
+
+impl NetworkEntity {
+    pub fn new(aid: u32, gid: u32, object_type: ObjectType) -> Self {
+        Self { aid, gid, object_type }
+    }
+}
+
 /// Marker component for sprites that should keep their absolute position and not apply ACT offsets
 #[derive(Component)]
 pub struct KeepAbsolutePosition;

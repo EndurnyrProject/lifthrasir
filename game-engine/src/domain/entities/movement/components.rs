@@ -123,6 +123,18 @@ impl MovementSpeed {
     pub fn default_walk() -> Self {
         Self { ms_per_cell: 150.0 }
     }
+
+    /// Create movement speed from server's speed value
+    /// RO server speed: lower = faster
+    pub fn from_server_speed(server_speed: u16) -> Self {
+        let ms_per_cell = if server_speed > 0 {
+            server_speed as f32
+        } else {
+            150.0
+        };
+
+        Self { ms_per_cell }
+    }
 }
 
 impl Default for MovementSpeed {

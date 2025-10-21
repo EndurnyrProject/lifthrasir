@@ -1,6 +1,6 @@
 use crate::{
-    domain::camera::components::PlayerCharacter,
-    domain::entities::character::movement::events::MovementRequested,
+    domain::entities::markers::LocalPlayer,
+    domain::entities::movement::events::MovementRequested,
     domain::world::components::MapLoader,
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
     utils::coordinates::world_position_to_spawn_coords,
@@ -116,7 +116,7 @@ pub fn handle_terrain_click(
     map_loader_query: Query<&MapLoader>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
-    player_query: Query<Entity, With<PlayerCharacter>>,
+    player_query: Query<Entity, With<LocalPlayer>>,
     mut movement_events: MessageWriter<MovementRequested>,
 ) {
     let Some(click_pos) = mouse_click.position.take() else {

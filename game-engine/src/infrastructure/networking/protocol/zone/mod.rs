@@ -11,17 +11,19 @@ pub use client_packets::{
 };
 
 pub use handlers::{
-    AcceptEnterHandler, AccountIdReceived, AidHandler, LongparChangeHandler, MoveStopHandler,
-    MovementConfirmedByServer, MovementStoppedByServer, ParChangeHandler, ParameterChanged,
-    PlayermoveHandler, RefuseEnterHandler, ZoneEntryRefused, ZoneServerConnected,
+    AcceptEnterHandler, AccountIdReceived, AidHandler, LongparChangeHandler, MoveentryHandler,
+    MoveStopHandler, MovementConfirmedByServer, MovementStoppedByServer, NewentryHandler,
+    ParChangeHandler, ParameterChanged, PlayermoveHandler, RefuseEnterHandler, StandentryHandler,
+    VanishHandler, ZoneEntryRefused, ZoneServerConnected,
 };
 
 pub use protocol::{ZoneClientPacket, ZoneContext, ZoneProtocol, ZoneServerPacket};
 
 pub use server_packets::{
     ZcAcceptEnterPacket, ZcAidPacket, ZcLongparChangePacket, ZcNotifyMoveStopPacket,
-    ZcNotifyPlayermovePacket, ZcParChangePacket, ZcRefuseEnterPacket, ZC_ACCEPT_ENTER, ZC_AID,
-    ZC_LONGPAR_CHANGE, ZC_NOTIFY_MOVE_STOP, ZC_NOTIFY_PLAYERMOVE, ZC_PAR_CHANGE, ZC_REFUSE_ENTER,
+    ZcNotifyPlayermovePacket, ZcNotifyVanishPacket, ZcParChangePacket, ZcRefuseEnterPacket,
+    ZC_ACCEPT_ENTER, ZC_AID, ZC_LONGPAR_CHANGE, ZC_NOTIFY_MOVE_STOP, ZC_NOTIFY_PLAYERMOVE,
+    ZC_NOTIFY_VANISH, ZC_PAR_CHANGE, ZC_REFUSE_ENTER,
 };
 
 pub use types::{Position, SpawnData, ZoneEntryError};

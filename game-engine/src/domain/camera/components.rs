@@ -1,20 +1,5 @@
 use bevy::prelude::*;
 
-/// Marker component to identify the player's character entity.
-/// This is used to distinguish the player's character from other entities
-/// like NPCs, monsters, or other players in multiplayer scenarios.
-///
-/// # Usage
-/// ```ignore
-/// commands.spawn((
-///     CharacterData { ... },
-///     PlayerCharacter,
-/// ));
-/// ```
-#[derive(Component, Debug, Clone, Copy, Default, Reflect)]
-#[reflect(Component)]
-pub struct PlayerCharacter;
-
 /// Component that links a camera to a follow target (the player character).
 /// Caches the target's position to avoid querying it multiple times per frame.
 ///

@@ -1,17 +1,17 @@
-//! Character Registry for Multi-Character Support
+//! Entity Registry for Multi-Entity Support
 //!
-//! This module will provide entity lookup for multiple characters (players and NPCs)
-//! when multi-character movement is implemented.
+//! This module provides entity lookup for all network entities (players, NPCs, mobs, etc.)
+//! when multi-entity movement is implemented.
 //!
 //! # Status: NOT YET IMPLEMENTED
 //!
-//! The current codebase assumes a single local player character. This registry
+//! The current codebase assumes a single local player entity. This registry
 //! design is documented here as a reference for future implementation when
-//! the server starts sending movement packets for other players and NPCs.
+//! the server starts sending movement packets for other players, NPCs, and mobs.
 //!
 //! # Architecture
 //!
-//! The CharacterRegistry provides bidirectional mapping between server-side
+//! The EntityRegistry provides bidirectional mapping between server-side
 //! Account IDs (used in network packets) and client-side Entity IDs (used by Bevy ECS).
 //!
 //! ## When to Implement
@@ -24,26 +24,26 @@
 //! ## Usage Pattern
 //!
 //! ```rust,ignore
-//! // When spawning a character from a network packet
-//! let entity = commands.spawn(/* character components */).id();
-//! character_registry.register_character(account_id, entity);
+//! // When spawning an entity from a network packet
+//! let entity = commands.spawn(/* entity components */).id();
+//! entity_registry.register_entity(account_id, entity);
 //!
 //! // When the local player logs in
-//! character_registry.set_local_player(player_entity, player_account_id);
+//! entity_registry.set_local_player(player_entity, player_account_id);
 //!
 //! // When receiving movement packets with account_id
-//! if let Some(entity) = character_registry.get_entity(packet.account_id) {
+//! if let Some(entity) = entity_registry.get_entity(packet.account_id) {
 //!     // Apply movement to the entity
 //! }
 //!
-//! // When a character despawns
-//! character_registry.unregister_character(account_id);
+//! // When an entity despawns
+//! entity_registry.unregister_entity(account_id);
 //! ```
 
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-/// Maps server Account IDs to client Entity IDs for multi-character support
+/// Maps server Account IDs to client Entity IDs for multi-entity support
 ///
 /// # Implementation Notes
 ///
@@ -53,7 +53,7 @@ use std::collections::HashMap;
 /// - **Cleanup**: When entities despawn, they must be unregistered to prevent stale references
 /// - **Validation**: Consider adding debug assertions to catch double-registration bugs
 #[derive(Resource, Default)]
-pub struct CharacterRegistry {
+pub struct EntityRegistry {
     /// Maps server Account IDs to client Entity IDs
     account_to_entity: HashMap<u32, Entity>,
 
@@ -67,11 +67,11 @@ pub struct CharacterRegistry {
     local_player_account_id: Option<u32>,
 }
 
-impl CharacterRegistry {
-    /// Register a character entity with its server-side account ID
+impl EntityRegistry {
+    /// Register an entity with its server-side account ID
     ///
-    /// This should be called when spawning any character from a network packet.
-    pub fn register_character(&mut self, account_id: u32, entity: Entity) {
+    /// This should be called when spawning any entity from a network packet.
+    pub fn register_entity(&mut self, account_id: u32, entity: Entity) {
         // Debug check for double-registration
         if let Some(old_entity) = self.account_to_entity.insert(account_id, entity) {
             if old_entity != entity {
@@ -85,13 +85,13 @@ impl CharacterRegistry {
         self.entity_to_account.insert(entity, account_id);
 
         debug!(
-            "Registered character: account_id={}, entity={:?}",
+            "Registered entity: account_id={}, entity={:?}",
             account_id, entity
         );
     }
 
-    /// Unregister a character (called when entity despawns)
-    pub fn unregister_character(&mut self, account_id: u32) {
+    /// Unregister an entity (called when entity despawns)
+    pub fn unregister_entity_by_aid(&mut self, account_id: u32) {
         if let Some(entity) = self.account_to_entity.remove(&account_id) {
             self.entity_to_account.remove(&entity);
 
@@ -102,13 +102,13 @@ impl CharacterRegistry {
             }
 
             debug!(
-                "Unregistered character: account_id={}, entity={:?}",
+                "Unregistered entity: account_id={}, entity={:?}",
                 account_id, entity
             );
         }
     }
 
-    /// Unregister a character by entity (alternative for entity-based cleanup)
+    /// Unregister an entity by entity ID (alternative for entity-based cleanup)
     pub fn unregister_entity(&mut self, entity: Entity) {
         if let Some(account_id) = self.entity_to_account.remove(&entity) {
             self.account_to_entity.remove(&account_id);
@@ -120,7 +120,7 @@ impl CharacterRegistry {
             }
 
             debug!(
-                "Unregistered character: entity={:?}, account_id={}",
+                "Unregistered entity: entity={:?}, account_id={}",
                 entity, account_id
             );
         }
@@ -128,7 +128,7 @@ impl CharacterRegistry {
 
     /// Look up the entity for a given account ID
     ///
-    /// Returns `None` if the account is not registered (character not spawned yet).
+    /// Returns `None` if the account is not registered (entity not spawned yet).
     pub fn get_entity(&self, account_id: u32) -> Option<Entity> {
         self.account_to_entity.get(&account_id).copied()
     }
@@ -140,13 +140,13 @@ impl CharacterRegistry {
         self.entity_to_account.get(&entity).copied()
     }
 
-    /// Mark an entity as the local player character
+    /// Mark an entity as the local player
     ///
     /// This should be called once during character selection/spawn.
     /// The local player is cached separately for fast access since most
     /// queries will be for the local player.
     pub fn set_local_player(&mut self, entity: Entity, account_id: u32) {
-        self.register_character(account_id, entity);
+        self.register_entity(account_id, entity);
         self.local_player_entity = Some(entity);
         self.local_player_account_id = Some(account_id);
 
@@ -173,8 +173,8 @@ impl CharacterRegistry {
         self.local_player_entity == Some(entity)
     }
 
-    /// Get the total number of registered characters
-    pub fn character_count(&self) -> usize {
+    /// Get the total number of registered entities
+    pub fn entity_count(&self) -> usize {
         self.account_to_entity.len()
     }
 
@@ -185,18 +185,18 @@ impl CharacterRegistry {
         self.local_player_entity = None;
         self.local_player_account_id = None;
 
-        info!("Cleared all character registrations");
+        info!("Cleared all entity registrations");
     }
 }
 
 // TODO: Implement cleanup system for despawned entities
 //
-// Add a system that runs when CharacterData entities despawn:
+// Add a system that runs when NetworkEntity entities despawn:
 //
 // ```rust,ignore
-// fn cleanup_despawned_characters(
-//     mut registry: ResMut<CharacterRegistry>,
-//     mut removed: RemovedComponents<CharacterData>,
+// fn cleanup_despawned_entities(
+//     mut registry: ResMut<EntityRegistry>,
+//     mut removed: RemovedComponents<NetworkEntity>,
 // ) {
 //     for entity in removed.read() {
 //         registry.unregister_entity(entity);
@@ -209,22 +209,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_character_registration() {
-        let mut registry = CharacterRegistry::default();
-        let entity = Entity::from_raw(42);
+    fn test_entity_registration() {
+        let mut registry = EntityRegistry::default();
+        let entity = Entity::from_bits(42);
         let account_id = 12345;
 
-        registry.register_character(account_id, entity);
+        registry.register_entity(account_id, entity);
 
         assert_eq!(registry.get_entity(account_id), Some(entity));
         assert_eq!(registry.get_account_id(entity), Some(account_id));
-        assert_eq!(registry.character_count(), 1);
+        assert_eq!(registry.entity_count(), 1);
     }
 
     #[test]
     fn test_local_player() {
-        let mut registry = CharacterRegistry::default();
-        let player_entity = Entity::from_raw(1);
+        let mut registry = EntityRegistry::default();
+        let player_entity = Entity::from_bits(1);
         let player_account_id = 99999;
 
         registry.set_local_player(player_entity, player_account_id);
@@ -235,34 +235,34 @@ mod tests {
     }
 
     #[test]
-    fn test_unregister_character() {
-        let mut registry = CharacterRegistry::default();
-        let entity = Entity::from_raw(42);
+    fn test_unregister_entity() {
+        let mut registry = EntityRegistry::default();
+        let entity = Entity::from_bits(42);
         let account_id = 12345;
 
-        registry.register_character(account_id, entity);
-        registry.unregister_character(account_id);
+        registry.register_entity(account_id, entity);
+        registry.unregister_entity_by_aid(account_id);
 
         assert_eq!(registry.get_entity(account_id), None);
         assert_eq!(registry.get_account_id(entity), None);
-        assert_eq!(registry.character_count(), 0);
+        assert_eq!(registry.entity_count(), 0);
     }
 
     #[test]
     fn test_clear() {
-        let mut registry = CharacterRegistry::default();
-        let entity1 = Entity::from_raw(1);
-        let entity2 = Entity::from_raw(2);
+        let mut registry = EntityRegistry::default();
+        let entity1 = Entity::from_bits(1);
+        let entity2 = Entity::from_bits(2);
 
-        registry.register_character(100, entity1);
-        registry.register_character(200, entity2);
+        registry.register_entity(100, entity1);
+        registry.register_entity(200, entity2);
         registry.set_local_player(entity1, 100);
 
-        assert_eq!(registry.character_count(), 2);
+        assert_eq!(registry.entity_count(), 2);
 
         registry.clear();
 
-        assert_eq!(registry.character_count(), 0);
+        assert_eq!(registry.entity_count(), 0);
         assert_eq!(registry.local_player_entity(), None);
     }
 }

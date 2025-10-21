@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Lifthrasir",
+  "version": "0.1.0",
+  "identifier": "com.lifthrasir.app.dev2",
+  "build": {
+    "beforeDevCommand": "cd web-ui && PORT=1430 npm run dev",
+    "devUrl": "http://localhost:1430",
+    "beforeBuildCommand": "cd web-ui && npm run build",
+    "frontendDist": "./web-ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lifthrasir - Instance 2",
+        "width": 1440,
+        "height": 1080,
+        "transparent": true,
+        "resizable": false,
+        "devtools": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main-capability",
+          "description": "Main window capabilities",
+          "windows": [
+            "main"
+          ],
+          "permissions": [
+            "core:default",
+            "core:event:default",
+            "core:event:allow-listen",
+            "core:event:allow-emit",
+            "core:window:default",
+            "core:window:allow-show",
+            "core:window:allow-hide",
+            "core:app:default",
+            "core:resources:default",
+            "core:menu:default",
+            "core:tray:default"
+          ]
+        }
+      ]
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "Lifthrasir Project",
+    "copyright": "Copyright © 2025 Lifthrasir Project",
+    "category": "Game",
+    "shortDescription": "Modern Ragnarok Online client built with Rust and Bevy",
+    "longDescription": "Lifthrasir is a cross-platform Ragnarok Online client implementation written in Rust using the Bevy game engine with a React-based UI. This project aims to recreate the classic MMORPG client experience while leveraging modern technologies for performance and maintainability.",
+    "icon": [
+      "icons/icon.png"
+    ]
+  }
+}

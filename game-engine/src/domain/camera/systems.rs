@@ -1,16 +1,17 @@
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
-use super::components::{CameraFollowSettings, CameraFollowTarget, PlayerCharacter};
+use super::components::{CameraFollowSettings, CameraFollowTarget};
 use crate::domain::entities::character::kinds::CharacterRoot;
 use crate::domain::entities::character::sprite_hierarchy::CharacterObjectTree;
+use crate::domain::entities::markers::LocalPlayer;
 
 /// Type alias for player query with added CharacterObjectTree
 type PlayerReadyQuery<'w, 's> = Query<
     'w,
     's,
     (Entity, &'static CharacterObjectTree),
-    (With<PlayerCharacter>, Added<CharacterObjectTree>),
+    (With<LocalPlayer>, Added<CharacterObjectTree>),
 >;
 
 /// Resource to track if the camera has been spawned.
@@ -22,16 +23,16 @@ type PlayerReadyQuery<'w, 's> = Query<
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct CameraSpawned(pub bool);
 
-/// System that spawns the camera entity when the player character sprite hierarchy is ready.
+/// System that spawns the camera entity when the local player character sprite hierarchy is ready.
 ///
 /// # Behavior
-/// - Runs once when the player character has a CharacterObjectTree component
+/// - Runs once when the local player character has a CharacterObjectTree component
 /// - Creates a camera positioned relative to the player's root transform
 /// - Sets up follow target and settings components
 /// - Prevents duplicate camera spawns via CameraSpawned resource
 ///
 /// # Run Conditions
-/// - Player entity with PlayerCharacter + CharacterObjectTree exists
+/// - Player entity with LocalPlayer + CharacterObjectTree exists
 /// - Camera not already spawned (CameraSpawned resource = false)
 /// - Runs in PostUpdate schedule
 pub fn spawn_camera_on_player_ready(

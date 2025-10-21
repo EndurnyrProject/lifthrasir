@@ -42,6 +42,22 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcNotifyMoveStopPacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcNotifyMoveStop(packet))
             }
+            ZC_NOTIFY_STANDENTRY => {
+                let packet = ZcNotifyStandentryPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyStandentry(packet))
+            }
+            ZC_NOTIFY_NEWENTRY => {
+                let packet = ZcNotifyNewentryPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyNewentry(packet))
+            }
+            ZC_NOTIFY_MOVEENTRY => {
+                let packet = ZcNotifyMoveentryPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyMoveentry(packet))
+            }
+            ZC_NOTIFY_VANISH => {
+                let packet = ZcNotifyVanishPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyVanish(packet))
+            }
             ZC_PAR_CHANGE => {
                 let packet = ZcParChangePacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcParChange(packet))
@@ -64,6 +80,19 @@ impl Protocol for ZoneProtocol {
             ZC_REFUSE_ENTER => PacketSize::Fixed(3),
             ZC_NOTIFY_PLAYERMOVE => PacketSize::Fixed(12),
             ZC_NOTIFY_MOVE_STOP => PacketSize::Fixed(10),
+            ZC_NOTIFY_STANDENTRY => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            },
+            ZC_NOTIFY_NEWENTRY => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            },
+            ZC_NOTIFY_MOVEENTRY => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            },
+            ZC_NOTIFY_VANISH => PacketSize::Fixed(7),
             ZC_PAR_CHANGE => PacketSize::Fixed(8),
             ZC_LONGPAR_CHANGE => PacketSize::Fixed(8),
             _ => PacketSize::Variable {
@@ -177,6 +206,10 @@ pub enum ZoneServerPacket {
     ZcRefuseEnter(ZcRefuseEnterPacket),
     ZcNotifyPlayermove(ZcNotifyPlayermovePacket),
     ZcNotifyMoveStop(ZcNotifyMoveStopPacket),
+    ZcNotifyStandentry(ZcNotifyStandentryPacket),
+    ZcNotifyNewentry(ZcNotifyNewentryPacket),
+    ZcNotifyMoveentry(ZcNotifyMoveentryPacket),
+    ZcNotifyVanish(ZcNotifyVanishPacket),
     ZcParChange(ZcParChangePacket),
     ZcLongparChange(ZcLongparChangePacket),
 }
@@ -195,6 +228,10 @@ impl ServerPacket for ZoneServerPacket {
             Self::ZcRefuseEnter(_) => ZC_REFUSE_ENTER,
             Self::ZcNotifyPlayermove(_) => ZC_NOTIFY_PLAYERMOVE,
             Self::ZcNotifyMoveStop(_) => ZC_NOTIFY_MOVE_STOP,
+            Self::ZcNotifyStandentry(_) => ZC_NOTIFY_STANDENTRY,
+            Self::ZcNotifyNewentry(_) => ZC_NOTIFY_NEWENTRY,
+            Self::ZcNotifyMoveentry(_) => ZC_NOTIFY_MOVEENTRY,
+            Self::ZcNotifyVanish(_) => ZC_NOTIFY_VANISH,
             Self::ZcParChange(_) => ZC_PAR_CHANGE,
             Self::ZcLongparChange(_) => ZC_LONGPAR_CHANGE,
         }
