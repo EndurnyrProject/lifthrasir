@@ -658,7 +658,18 @@ fn get_animation_context<'a>(
     };
 
     let animation = &action_sequence.animations[current_frame];
-    let layer = animation.layers.first()?;
+
+    trace!("🎬 Animation for {:?}: action={}, frame={}, layer_count={}",
+          hierarchy.layer_type, current_action, current_frame, animation.layers.len());
+
+    // Find the first layer with a valid sprite_index (>= 0)
+    // Layer 0 might be a dummy/anchor layer with sprite_index=-1
+    let layer = animation.layers.iter()
+        .find(|l| l.sprite_index >= 0)
+        .or_else(|| animation.layers.first())?;
+
+    trace!("   └─ Using layer: pos=[{}, {}], sprite_index={}",
+          layer.pos[0], layer.pos[1], layer.sprite_index);
 
     let sprite_index = match &hierarchy.layer_type {
         SpriteLayerType::Head => {
@@ -708,26 +719,55 @@ fn get_animation_context<'a>(
     })
 }
 
+
 /// Helper function to apply ACT layer transformations to entity transform
 /// Handles position, scale, and rotation based on ACT data
 /// Uses the is_mirror flag from ACT data to determine sprite flipping
+/// Optional anchor_x_offset is added to offset_x for child sprites (e.g., head positioning)
 fn apply_layer_transform(
     transform: &mut Transform,
     layer: &crate::infrastructure::ro_formats::act::Layer,
     sprite_frame: &crate::infrastructure::ro_formats::sprite::SpriteFrame,
+    layer_type: &SpriteLayerType,
+    anchor_x_offset: Option<f32>,
 ) {
-    let offset_x = layer.pos[0] as f32 * SPRITE_WORLD_SCALE;
-    let mut scale_x = layer.scale[0] * sprite_frame.width as f32 * SPRITE_WORLD_SCALE;
+    trace!("📐 apply_layer_transform for {:?}: raw layer.pos=[{}, {}]",
+          layer_type, layer.pos[0], layer.pos[1]);
+
+    let base_offset_x = layer.pos[0] as f32 * SPRITE_WORLD_SCALE;
+    let offset_x = base_offset_x + anchor_x_offset.unwrap_or(0.0);
+
+    // Use ACT dimensions if specified (ACT v2.5+), otherwise fall back to SPR dimensions
+    // ACT width/height provide the intended rendering dimensions for consistent positioning
+    let sprite_width = if layer.width > 0 {
+        layer.width as f32
+    } else {
+        sprite_frame.width as f32
+    };
+
+    let sprite_height = if layer.height > 0 {
+        layer.height as f32
+    } else {
+        sprite_frame.height as f32
+    };
+
+    let mut scale_x = layer.scale[0] * sprite_width * SPRITE_WORLD_SCALE;
     let offset_y = -layer.pos[1] as f32 * SPRITE_WORLD_SCALE;
-    let scale_y = layer.scale[1] * sprite_frame.height as f32 * SPRITE_WORLD_SCALE;
+    let scale_y = layer.scale[1] * sprite_height * SPRITE_WORLD_SCALE;
 
     if layer.is_mirror {
         scale_x = -scale_x;
     }
 
+    trace!("   └─ Calculated offsets: base_offset_x={:.6}, anchor_offset={:.6}, offset_y={:.6}",
+          base_offset_x, anchor_x_offset.unwrap_or(0.0), offset_y);
+
     transform.translation.x = offset_x;
     transform.translation.y = offset_y;
     transform.scale = Vec3::new(scale_x, scale_y, 1.0);
+
+    trace!("   └─ Final transform: pos=({:.6}, {:.6}), scale=({:.3}, {:.3})",
+          transform.translation.x, transform.translation.y, scale_x, scale_y);
 
     if layer.angle != 0 {
         transform.rotation =
@@ -767,6 +807,38 @@ fn create_layer_material(
     })
 }
 
+/// Helper function to get the current animation from an AnimationContext
+/// Returns the full animation object which includes anchor point data
+fn get_current_animation<'a>(
+    hierarchy: &CharacterSpriteHierarchy,
+    _controller: &RoAnimationController,
+    character_sprite: &crate::domain::entities::character::components::visual::CharacterSprite,
+    act_asset: &'a RoActAsset,
+) -> Option<&'a crate::infrastructure::ro_formats::act::Animation> {
+    let current_action = character_sprite.current_action as usize;
+
+    if current_action >= act_asset.action.actions.len() {
+        return None;
+    }
+
+    let action_sequence = &act_asset.action.actions[current_action];
+
+    let current_frame = calculate_layer_frame_index(
+        &hierarchy.layer_type,
+        current_action,
+        character_sprite.current_frame as usize,
+        action_sequence.animations.len(),
+    );
+
+    let current_frame = if current_frame >= action_sequence.animations.len() {
+        action_sequence.animations.len().saturating_sub(1)
+    } else {
+        current_frame
+    };
+
+    action_sequence.animations.get(current_frame)
+}
+
 /// Helper function to process a sprite layer with validated animation context
 /// Applies transforms and creates materials
 fn process_sprite_layer(
@@ -777,8 +849,10 @@ fn process_sprite_layer(
     commands: &mut Commands,
     images: &mut Assets<Image>,
     materials: &mut Assets<StandardMaterial>,
+    layer_type: &SpriteLayerType,
+    anchor_x_offset: Option<f32>,
 ) {
-    apply_layer_transform(transform, layer, ctx.sprite_frame);
+    apply_layer_transform(transform, layer, ctx.sprite_frame, layer_type, anchor_x_offset);
 
     let material = create_layer_material(
         images,
@@ -792,6 +866,9 @@ fn process_sprite_layer(
 }
 
 // System to update sprite layer positions and textures based on animation
+// Performance: O(n) complexity through character grouping strategy
+// Groups sprite layers by character_entity using HashMap, calculates anchor offset ONCE per character,
+// then processes all layers for that character in a single pass
 pub fn update_sprite_layer_transforms(
     mut commands: Commands,
     mut sprite_layers: Query<
@@ -809,15 +886,97 @@ pub fn update_sprite_layer_transforms(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    // Strategy: Group sprite layers by character entity to reduce O(n²) to O(n)
+    // Step 1: Build character groups and calculate anchor offsets ONCE per character
+    // Step 2: Process all layers using pre-calculated anchor offsets
+
+    let mut character_anchor_offsets: HashMap<Entity, Option<f32>> = HashMap::new();
+
+    // First pass: Group layers and calculate anchor offsets per character
+    let mut character_groups: HashMap<Entity, Vec<Entity>> = HashMap::new();
+
+    for (entity, _, hierarchy, _) in sprite_layers.iter() {
+        character_groups
+            .entry(hierarchy.character_entity)
+            .or_default()
+            .push(entity);
+    }
+
+    // Calculate anchor offsets for each character (O(n) total, not O(n²))
+    for (character_entity, layer_entities) in character_groups.iter() {
+        let mut body_anchor_x: Option<i32> = None;
+        let mut head_anchor_x: Option<i32> = None;
+
+        let Ok(character_sprite) = characters.get(*character_entity) else {
+            continue;
+        };
+
+        // Single iteration through this character's layers to find both anchors
+        for &layer_entity in layer_entities.iter() {
+            let Ok((_, _, hierarchy, controller)) = sprite_layers.get(layer_entity) else {
+                continue;
+            };
+
+            let Some(act_asset) = act_assets.get(&controller.action_handle) else {
+                continue;
+            };
+
+            let Some(animation) = get_current_animation(hierarchy, controller, character_sprite, act_asset) else {
+                continue;
+            };
+
+            let Some(anchor) = animation.positions.first() else {
+                continue;
+            };
+
+            match &hierarchy.layer_type {
+                SpriteLayerType::Body => {
+                    body_anchor_x = Some(anchor.x);
+                }
+                SpriteLayerType::Head => {
+                    head_anchor_x = Some(anchor.x);
+                }
+                _ => {}
+            }
+
+            // Early exit if we found both anchors
+            if body_anchor_x.is_some() && head_anchor_x.is_some() {
+                break;
+            }
+        }
+
+        let anchor_offset = if let (Some(body_x), Some(head_x)) = (body_anchor_x, head_anchor_x) {
+            Some((body_x - head_x) as f32 * SPRITE_WORLD_SCALE)
+        } else {
+            None
+        };
+
+        character_anchor_offsets.insert(*character_entity, anchor_offset);
+    }
+
+    // Second pass: Process all sprite layers with pre-calculated anchor offsets
     for (entity, mut transform, hierarchy, controller) in sprite_layers.iter_mut() {
-        let Some(ctx) =
-            get_animation_context(hierarchy, controller, &characters, &spr_assets, &act_assets)
-        else {
+        let Some(ctx) = get_animation_context(
+            hierarchy,
+            controller,
+            &characters,
+            &spr_assets,
+            &act_assets,
+        ) else {
             warn!(
                 "❌ update_sprite_layer_transforms: Failed to get animation context for entity {:?}, type {:?}",
                 entity, hierarchy.layer_type
             );
             continue;
+        };
+
+        // Determine if this layer uses anchor offset (only Head sprites)
+        let layer_anchor_offset = if matches!(hierarchy.layer_type, SpriteLayerType::Head) {
+            character_anchor_offsets
+                .get(&hierarchy.character_entity)
+                .and_then(|&offset| offset)
+        } else {
+            None
         };
 
         process_sprite_layer(
@@ -828,6 +987,8 @@ pub fn update_sprite_layer_transforms(
             &mut commands,
             &mut images,
             &mut materials,
+            &hierarchy.layer_type,
+            layer_anchor_offset,
         );
     }
 }
