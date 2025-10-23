@@ -132,17 +132,10 @@ impl Plugin for TauriIntegrationPlugin {
         let sprite_renderer =
             Arc::new(game_engine::infrastructure::sprite_png::SpriteRenderer::new(asset_manager));
 
-        // Set up cache directory
-        let cache_dir = std::env::current_dir()
-            .unwrap()
-            .join(".cache")
-            .join("sprites");
-
         // Create SpritePngCache
         let sprite_png_cache = Arc::new(
             game_engine::infrastructure::sprite_png::SpritePngCache::new(
                 sprite_renderer,
-                cache_dir,
                 100, // 100 sprites in memory cache
             )
             .expect("Failed to create SpritePngCache"),

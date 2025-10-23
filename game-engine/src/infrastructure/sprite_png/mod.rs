@@ -2,13 +2,13 @@
 //!
 //! This module provides headless PNG generation from Ragnarok Online sprite files (SPR + ACT)
 //! for use in React UI components. The system works independently of Bevy's rendering context
-//! and includes a three-tier caching system for optimal performance.
+//! and includes a two-tier caching system for optimal performance.
 //!
 //! # Architecture
 //!
 //! - **Types**: Request/response structures for sprite rendering
 //! - **Renderer**: Headless PNG generator using image crate
-//! - **Cache**: Three-tier caching (memory LRU + disk + generation)
+//! - **Cache**: Two-tier caching (memory LRU + generation)
 //!
 //! # Usage Example
 //!
@@ -21,7 +21,7 @@
 //!         types::SpritePngRequest,
 //!     },
 //! };
-//! use std::{path::PathBuf, sync::Arc};
+//! use std::sync::Arc;
 //!
 //! // Initialize asset manager
 //! let asset_manager = HierarchicalAssetManager::new();
@@ -30,8 +30,7 @@
 //! let renderer = Arc::new(SpriteRenderer::new(asset_manager));
 //!
 //! // Create cache
-//! let cache_dir = PathBuf::from(".cache/sprites");
-//! let cache = SpritePngCache::new(renderer, cache_dir, 100).unwrap();
+//! let cache = SpritePngCache::new(renderer, 100).unwrap();
 //!
 //! // Request a sprite PNG
 //! let request = SpritePngRequest {
@@ -53,13 +52,12 @@
 //! # Cache Flow
 //!
 //! 1. **Memory Cache (LRU)**: Check if sprite is in memory → instant return
-//! 2. **Disk Cache**: Load from `.cache/sprites/{hash}.png` → promote to memory
-//! 3. **Generation**: Render via SpriteRenderer → save to both caches
+//! 2. **Generation**: Render via SpriteRenderer → save to memory cache
 //!
 //! # Features
 //!
 //! - Headless rendering (no Bevy context required)
-//! - Three-tier caching for optimal performance
+//! - Two-tier caching for optimal performance
 //! - Support for custom palettes (hair colors, etc.)
 //! - Pixel-perfect scaling with nearest neighbor
 //! - Base64 encoding for web transmission

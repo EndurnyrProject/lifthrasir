@@ -137,9 +137,10 @@ pub async fn preload_sprite_batch(
     })
 }
 
-/// Clear all sprite PNGs from the cache (both memory and disk)
+/// Clear all sprite PNGs from the memory cache
 ///
 /// This is useful for debugging or when asset files have been updated.
+/// Sprites will be regenerated on next access.
 ///
 /// # Arguments
 /// * `cache` - Shared SpritePngCache instance
