@@ -2,6 +2,7 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 use super::components::{CameraFollowSettings, CameraFollowTarget};
+use super::resources::CameraRotationDelta;
 use crate::domain::entities::character::kinds::CharacterRoot;
 use crate::domain::entities::character::sprite_hierarchy::CharacterObjectTree;
 use crate::domain::entities::markers::LocalPlayer;
@@ -70,7 +71,18 @@ pub fn spawn_camera_on_player_ready(
     let player_position = root_transform.translation;
 
     // Create camera settings with default RO-style offset
-    let settings = CameraFollowSettings::default();
+    let mut settings = CameraFollowSettings::default();
+
+    // Initialize yaw and pitch from the default offset
+    // This ensures rotation state matches the initial offset direction
+    let offset = settings.offset;
+    let distance = offset.length();
+    if distance > 0.001 {
+        // Calculate yaw from X and Z components
+        settings.yaw = offset.x.atan2(-offset.z);
+        // Calculate pitch from Y component (negative because NEG_Y is up)
+        settings.pitch = (-offset.y / distance).asin();
+    }
 
     // Calculate initial camera position
     // Offset is relative to player, so we add it to player position
@@ -128,33 +140,30 @@ pub fn update_camera_target_cache(
     }
 }
 
-/// Main camera follow system with smooth interpolation and zoom control.
+/// Main camera follow system with smooth interpolation, zoom control, and rotation.
 ///
 /// # Features
 /// - Smooth exponential decay interpolation for camera movement
 /// - Mouse wheel zoom in/out (adjusts offset magnitude)
-/// - R key to reset zoom to default
-/// - Maintains camera direction while zooming
-/// - Prevents NaN values in all calculations
+/// - Right-click drag rotation (spherical coordinates)
+/// - R key to reset zoom AND rotation to default
+/// - Prevents NaN values and gimbal lock
 ///
 /// # Behavior
-/// 1. **Follow**: Smoothly moves camera to maintain offset from player
+/// 1. **Rotation**: Right-click drag updates yaw/pitch
+///    - Converts mouse deltas to angle changes (sensitivity-based)
+///    - Clamps pitch to prevent camera flipping
+///    - Converts spherical to Cartesian coordinates for offset
+///
+/// 2. **Zoom**: Mouse wheel adjusts offset magnitude
+///    - Preserves rotation while changing distance
+///    - Clamped to min/max distance limits
+///
+/// 3. **Follow**: Smoothly moves camera to maintain offset from player
 ///    - Uses exponential decay: `decay = 1.0 - exp(-speed * dt)`
 ///    - Lerps between current and target position
 ///
-/// 2. **Zoom**: Mouse wheel adjusts offset magnitude
-///    - Preserves offset direction while changing distance
-///    - Clamped to min/max distance limits
-///    - Smooth zoom speed from settings
-///
-/// 3. **Reset**: R key resets offset to default
-///    - Instant reset, no interpolation
-///    - Useful for recovering from awkward camera angles
-///
-/// # Edge Cases
-/// - Handles zero-length offsets (prevents NaN)
-/// - Clamps offset magnitude to prevent extreme values
-/// - Validates all calculations for NaN/infinity
+/// 4. **Reset**: R key resets zoom and rotation to default
 ///
 /// # Ordering
 /// Must run AFTER `update_camera_target_cache` to use fresh player position
@@ -162,6 +171,7 @@ pub fn camera_follow_system(
     time: Res<Time>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut mouse_wheel_events: MessageReader<MouseWheel>,
+    mut rotation_delta: ResMut<CameraRotationDelta>,
     mut camera_query: Query<
         (
             &mut Transform,
@@ -178,6 +188,42 @@ pub fn camera_follow_system(
         let target_position = follow_target.cached_position;
 
         // ========================================
+        // CAMERA ROTATION (Right-Click Drag)
+        // ========================================
+        if rotation_delta.has_delta() {
+            // Convert pixel deltas to angle changes (degrees to radians)
+            let yaw_change = (rotation_delta.delta_x * settings.rotation_sensitivity).to_radians();
+            let pitch_change = (rotation_delta.delta_y * settings.rotation_sensitivity).to_radians();
+
+            // Update yaw and pitch
+            settings.yaw += yaw_change;
+            settings.pitch = (settings.pitch + pitch_change).clamp(settings.min_pitch, settings.max_pitch);
+
+            // Get current distance from offset magnitude
+            let distance = settings.offset.length();
+
+            // Convert spherical coordinates to Cartesian offset
+            // RO coordinate system: Vec3::NEG_Y is up
+            // Yaw: rotation around Y axis (horizontal)
+            // Pitch: angle from horizontal plane (negative = looking down)
+            let offset_x = distance * settings.pitch.cos() * settings.yaw.sin();
+            let offset_y = -distance * settings.pitch.sin(); // Negative for NEG_Y up vector
+            let offset_z = -distance * settings.pitch.cos() * settings.yaw.cos();
+
+            settings.offset = Vec3::new(offset_x, offset_y, offset_z);
+
+            debug!(
+                "Camera rotation updated: yaw={:.2}°, pitch={:.2}°, offset={:?}",
+                settings.yaw.to_degrees(),
+                settings.pitch.to_degrees(),
+                settings.offset
+            );
+
+            // Clear deltas after processing
+            rotation_delta.clear();
+        }
+
+        // ========================================
         // ZOOM CONTROL (Mouse Wheel)
         // ========================================
         let mut zoom_delta = 0.0f32;
@@ -186,40 +232,51 @@ pub fn camera_follow_system(
         }
 
         if zoom_delta.abs() > 0.001 {
-            // Calculate current offset magnitude
-            let current_offset_magnitude = settings.offset.length();
+            // Get current distance
+            let current_distance = settings.offset.length();
 
             // Prevent NaN when offset is zero
-            if current_offset_magnitude < 0.001 {
+            if current_distance < 0.001 {
                 warn!("Camera offset is too small, resetting to default");
-                settings.offset = CameraFollowSettings::default().offset;
+                let defaults = CameraFollowSettings::default();
+                settings.offset = defaults.offset;
+                settings.yaw = defaults.yaw;
+                settings.pitch = defaults.pitch;
                 continue;
             }
 
-            // Calculate new magnitude after zoom
+            // Calculate new distance after zoom
             let zoom_amount = zoom_delta * settings.zoom_speed;
-            let new_magnitude = current_offset_magnitude - zoom_amount;
+            let new_distance = current_distance - zoom_amount;
 
             // Clamp to min/max distance
-            let clamped_magnitude =
-                new_magnitude.clamp(settings.min_distance, settings.max_distance);
+            let clamped_distance = new_distance.clamp(settings.min_distance, settings.max_distance);
 
-            // Preserve offset direction, scale to new magnitude
-            let offset_direction = settings.offset.normalize();
-            settings.offset = offset_direction * clamped_magnitude;
+            // Rebuild offset from spherical coordinates with new distance
+            let offset_x = clamped_distance * settings.pitch.cos() * settings.yaw.sin();
+            let offset_y = -clamped_distance * settings.pitch.sin();
+            let offset_z = -clamped_distance * settings.pitch.cos() * settings.yaw.cos();
+
+            settings.offset = Vec3::new(offset_x, offset_y, offset_z);
 
             debug!(
-                "Zoom changed: offset magnitude {} -> {}",
-                current_offset_magnitude, clamped_magnitude
+                "Zoom changed: distance {} -> {}",
+                current_distance, clamped_distance
             );
         }
 
         // ========================================
-        // RESET ZOOM (R Key)
+        // RESET ZOOM AND ROTATION (R Key)
         // ========================================
         if keyboard_input.just_pressed(KeyCode::KeyR) {
-            settings.offset = CameraFollowSettings::default().offset;
-            info!("Camera zoom reset to default: {:?}", settings.offset);
+            let defaults = CameraFollowSettings::default();
+            settings.offset = defaults.offset;
+            settings.yaw = defaults.yaw;
+            settings.pitch = defaults.pitch;
+            info!("Camera reset to default: yaw={:.2}°, pitch={:.2}°, distance={:.1}",
+                  settings.yaw.to_degrees(),
+                  settings.pitch.to_degrees(),
+                  settings.offset.length());
         }
 
         // ========================================

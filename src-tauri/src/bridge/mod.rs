@@ -26,7 +26,9 @@ pub use character::{
 
 pub use customization::handle_get_hairstyles_request;
 
-pub use input::{handle_keyboard_input, handle_mouse_click, handle_mouse_position};
+pub use input::{
+    handle_camera_rotation, handle_keyboard_input, handle_mouse_click, handle_mouse_position,
+};
 
 pub use world::{emit_world_events, WorldEmitter};
 

@@ -44,7 +44,7 @@ impl CameraFollowTarget {
 ///
 /// # Purpose
 /// Controls how the camera follows the player character with smooth interpolation,
-/// zoom limits, and offset positioning for the Ragnarok Online isometric style.
+/// zoom limits, rotation, and offset positioning for the Ragnarok Online isometric style.
 ///
 /// # Fields
 /// - `offset`: Camera position relative to the player (default: RO isometric style)
@@ -53,6 +53,11 @@ impl CameraFollowTarget {
 /// - `min_distance`: Minimum zoom distance (prevents camera from going too close)
 /// - `max_distance`: Maximum zoom distance (prevents camera from going too far)
 /// - `zoom_speed`: Speed of zoom changes via mouse wheel
+/// - `rotation_sensitivity`: Degrees per pixel for rotation (0.3 recommended)
+/// - `yaw`: Current horizontal rotation in radians (0.0 = facing north)
+/// - `pitch`: Current vertical rotation in radians (-45° default, looking down)
+/// - `min_pitch`: Minimum pitch angle to prevent camera flipping
+/// - `max_pitch`: Maximum pitch angle to prevent camera flipping
 ///
 /// # Smoothing Algorithm
 /// Uses split-axis exponential decay interpolation:
@@ -87,10 +92,29 @@ pub struct CameraFollowSettings {
 
     /// Speed multiplier for zoom operations (mouse wheel)
     pub zoom_speed: f32,
+
+    /// Rotation sensitivity in degrees per pixel (0.3 recommended)
+    pub rotation_sensitivity: f32,
+
+    /// Current horizontal rotation (yaw) in radians
+    /// 0.0 = camera behind player facing north
+    pub yaw: f32,
+
+    /// Current vertical rotation (pitch) in radians
+    /// Negative = looking down (RO style: -45° default)
+    pub pitch: f32,
+
+    /// Minimum pitch angle in radians (prevents camera flipping)
+    pub min_pitch: f32,
+
+    /// Maximum pitch angle in radians (prevents camera flipping)
+    pub max_pitch: f32,
 }
 
 impl Default for CameraFollowSettings {
     fn default() -> Self {
+        use std::f32::consts::PI;
+
         Self {
             // RO-style isometric camera offset
             // Y=-150 (above player), Z=-150 (behind player)
@@ -108,6 +132,17 @@ impl Default for CameraFollowSettings {
 
             // Mouse wheel zoom speed
             zoom_speed: 50.0,
+
+            // Rotation sensitivity: 0.3 degrees per pixel
+            rotation_sensitivity: 0.3,
+
+            // Initial rotation: 0 yaw (behind player), -45 degrees pitch (looking down)
+            yaw: 0.0,
+            pitch: -PI / 4.0, // -45 degrees in radians
+
+            // Pitch limits to prevent gimbal lock (±89 degrees)
+            min_pitch: -89.0 * PI / 180.0,
+            max_pitch: 89.0 * PI / 180.0,
         }
     }
 }

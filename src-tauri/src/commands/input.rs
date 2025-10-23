@@ -29,3 +29,14 @@ pub fn forward_mouse_position(
 pub fn forward_mouse_click(x: f32, y: f32, app_bridge: State<'_, AppBridge>) -> Result<(), String> {
     app_bridge.forward_mouse_click(x, y)
 }
+
+/// Forward camera rotation from JavaScript to Bevy
+/// This allows React UI to send right-click drag deltas to rotate the camera
+#[tauri::command]
+pub fn forward_camera_rotation(
+    delta_x: f32,
+    delta_y: f32,
+    app_bridge: State<'_, AppBridge>,
+) -> Result<(), String> {
+    app_bridge.forward_camera_rotation(delta_x, delta_y)
+}

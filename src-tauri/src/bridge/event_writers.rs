@@ -12,5 +12,6 @@ crate::define_event_writers! {
         keyboard: KeyboardInputEvent,
         mouse: MousePositionEvent,
         mouse_click: MouseClickEvent,
+        camera_rotation: CameraRotationEvent,
     }
 }

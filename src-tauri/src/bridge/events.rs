@@ -56,3 +56,9 @@ pub struct MouseClickEvent {
     pub x: f32,
     pub y: f32,
 }
+
+#[derive(Message)]
+pub struct CameraRotationEvent {
+    pub delta_x: f32,
+    pub delta_y: f32,
+}

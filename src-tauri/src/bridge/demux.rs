@@ -92,6 +92,11 @@ pub fn demux_tauri_events(
             TauriIncomingEvent::MouseClick { x, y } => {
                 writers.mouse_click.write(MouseClickEvent { x, y });
             }
+            TauriIncomingEvent::CameraRotation { delta_x, delta_y } => {
+                writers
+                    .camera_rotation
+                    .write(CameraRotationEvent { delta_x, delta_y });
+            }
         }
     }
 }

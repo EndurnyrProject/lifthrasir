@@ -196,6 +196,64 @@ function AppContent() {
     };
   }, [currentScreen, isGameLoading]);
 
+  // Forward right-click drag for camera rotation
+  useEffect(() => {
+    if (currentScreen !== "in_game" || isGameLoading) return;
+
+    let isRightDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) {
+        isRightDragging = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isRightDragging) {
+        const deltaX = e.clientX - lastMouseX;
+        const deltaY = e.clientY - lastMouseY;
+
+        if (deltaX !== 0 || deltaY !== 0) {
+          invoke('forward_camera_rotation', {
+            deltaX,
+            deltaY
+          }).catch(console.error);
+
+          lastMouseX = e.clientX;
+          lastMouseY = e.clientY;
+        }
+      }
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) {
+        isRightDragging = false;
+      }
+    };
+
+    console.log('🎥 [FRONTEND] Setting up right-click camera rotation');
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      console.log('🎥 [FRONTEND] Removing right-click camera rotation');
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [currentScreen, isGameLoading]);
+
   const handleLoginSuccess = (serverList: ServerInfo[]) => {
     setServers(serverList);
     setCurrentScreen("server_selection");

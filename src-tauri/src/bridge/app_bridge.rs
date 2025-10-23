@@ -66,6 +66,10 @@ pub enum TauriIncomingEvent {
         x: f32,
         y: f32,
     },
+    CameraRotation {
+        delta_x: f32,
+        delta_y: f32,
+    },
 }
 
 #[derive(Resource, Clone)]
@@ -194,6 +198,14 @@ impl AppBridge {
         self.tauri_tx
             .send(TauriIncomingEvent::MouseClick { x, y })
             .map_err(|e| format!("Failed to send mouse click event: {}", e))?;
+
+        Ok(())
+    }
+
+    pub fn forward_camera_rotation(&self, delta_x: f32, delta_y: f32) -> Result<(), String> {
+        self.tauri_tx
+            .send(TauriIncomingEvent::CameraRotation { delta_x, delta_y })
+            .map_err(|e| format!("Failed to send camera rotation event: {}", e))?;
 
         Ok(())
     }

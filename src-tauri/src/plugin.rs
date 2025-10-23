@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindow};
 
 use super::bridge::{
-    cleanup_stale_correlations, demux_tauri_events, emit_world_events,
+    cleanup_stale_correlations, demux_tauri_events, emit_world_events, handle_camera_rotation,
     handle_create_character_request, handle_delete_character_request,
     handle_get_character_list_request, handle_get_hairstyles_request, handle_keyboard_input,
     handle_login_request, handle_mouse_click, handle_mouse_position,
@@ -25,9 +25,9 @@ use super::bridge::{
     write_character_creation_response, write_character_deletion_response,
     write_character_list_response, write_character_selection_response,
     write_login_failure_response, write_login_success_response, write_server_selection_response,
-    AppBridge, CharacterCorrelation, CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent,
-    GetCharacterListRequestedEvent, GetHairstylesRequestedEvent, KeyboardInputEvent,
-    LoginCorrelation, LoginRequestedEvent, MouseClickEvent, MousePositionEvent,
+    AppBridge, CameraRotationEvent, CharacterCorrelation, CreateCharacterRequestedEvent,
+    DeleteCharacterRequestedEvent, GetCharacterListRequestedEvent, GetHairstylesRequestedEvent,
+    KeyboardInputEvent, LoginCorrelation, LoginRequestedEvent, MouseClickEvent, MousePositionEvent,
     PendingCharacterListSenders, PendingHairstyleSenders, SelectCharacterRequestedEvent,
     ServerCorrelation, ServerSelectionRequestedEvent, TauriEventReceiver, WorldEmitter,
 };
@@ -196,7 +196,8 @@ impl Plugin for TauriIntegrationPlugin {
             .add_message::<GetHairstylesRequestedEvent>()
             .add_message::<KeyboardInputEvent>()
             .add_message::<MousePositionEvent>()
-            .add_message::<MouseClickEvent>();
+            .add_message::<MouseClickEvent>()
+            .add_message::<CameraRotationEvent>();
 
         // Add new event-driven system architecture
         // 1. demux_tauri_events: Reads from flume channel, emits typed events (runs first)
@@ -218,6 +219,7 @@ impl Plugin for TauriIntegrationPlugin {
                     handle_keyboard_input,
                     handle_mouse_position,
                     handle_mouse_click,
+                    handle_camera_rotation,
                 ),
                 (
                     write_login_success_response,
@@ -253,6 +255,7 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::input::forward_keyboard_input,
                 commands::input::forward_mouse_position,
                 commands::input::forward_mouse_click,
+                commands::input::forward_camera_rotation,
                 commands::dev::open_devtools,
                 commands::dev::close_devtools,
             ])

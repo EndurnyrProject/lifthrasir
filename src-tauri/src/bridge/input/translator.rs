@@ -1,8 +1,11 @@
 use bevy::input::ButtonInput;
 use bevy::prelude::*;
+use game_engine::domain::camera::CameraRotationDelta;
 use game_engine::domain::input::{ForwardedCursorPosition, ForwardedMouseClick};
 
-use crate::bridge::events::{KeyboardInputEvent, MouseClickEvent, MousePositionEvent};
+use crate::bridge::events::{
+    CameraRotationEvent, KeyboardInputEvent, MouseClickEvent, MousePositionEvent,
+};
 
 /// Convert JavaScript KeyboardEvent.code to Bevy KeyCode
 fn js_code_to_bevy_keycode(code: &str) -> Option<KeyCode> {
@@ -99,5 +102,17 @@ pub fn handle_mouse_click(
 ) {
     for event in events.read() {
         mouse_click.position = Some(Vec2::new(event.x, event.y));
+    }
+}
+
+/// System that handles CameraRotationEvent
+/// Updates CameraRotationDelta resource
+pub fn handle_camera_rotation(
+    mut events: MessageReader<CameraRotationEvent>,
+    mut rotation_delta: ResMut<CameraRotationDelta>,
+) {
+    for event in events.read() {
+        rotation_delta.delta_x += event.delta_x;
+        rotation_delta.delta_y += event.delta_y;
     }
 }
