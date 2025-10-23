@@ -136,20 +136,16 @@ pub fn handle_movement_confirmed_system(
         let dy = (event.dest_y as f32) - (actual_src_y as f32);
         let direction = Direction::from_movement_vector(-dx, dy);
 
-        let already_walking = matches!(
-            movement_states.get(entity),
-            Ok(MovementState::Moving)
-        );
+        let already_walking = matches!(movement_states.get(entity), Ok(MovementState::Moving));
 
         if already_walking {
             debug!(
                 "🔄 Entity {:?} already walking - updating target without retriggering animation",
                 entity
             );
-            commands.entity(entity).insert((
-                target,
-                CharacterDirection { facing: direction },
-            ));
+            commands
+                .entity(entity)
+                .insert((target, CharacterDirection { facing: direction }));
         } else {
             debug!("🚶 INSERTING StartWalking trigger for entity {:?}", entity);
             commands.entity(entity).remove::<StopWalking>().insert((

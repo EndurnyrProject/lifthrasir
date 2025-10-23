@@ -659,17 +659,28 @@ fn get_animation_context<'a>(
 
     let animation = &action_sequence.animations[current_frame];
 
-    trace!("🎬 Animation for {:?}: action={}, frame={}, layer_count={}",
-          hierarchy.layer_type, current_action, current_frame, animation.layers.len());
+    trace!(
+        "🎬 Animation for {:?}: action={}, frame={}, layer_count={}",
+        hierarchy.layer_type,
+        current_action,
+        current_frame,
+        animation.layers.len()
+    );
 
     // Find the first layer with a valid sprite_index (>= 0)
     // Layer 0 might be a dummy/anchor layer with sprite_index=-1
-    let layer = animation.layers.iter()
+    let layer = animation
+        .layers
+        .iter()
         .find(|l| l.sprite_index >= 0)
         .or_else(|| animation.layers.first())?;
 
-    trace!("   └─ Using layer: pos=[{}, {}], sprite_index={}",
-          layer.pos[0], layer.pos[1], layer.sprite_index);
+    trace!(
+        "   └─ Using layer: pos=[{}, {}], sprite_index={}",
+        layer.pos[0],
+        layer.pos[1],
+        layer.sprite_index
+    );
 
     let sprite_index = match &hierarchy.layer_type {
         SpriteLayerType::Head => {
@@ -719,7 +730,6 @@ fn get_animation_context<'a>(
     })
 }
 
-
 /// Helper function to apply ACT layer transformations to entity transform
 /// Handles position, scale, and rotation based on ACT data
 /// Uses the is_mirror flag from ACT data to determine sprite flipping
@@ -731,8 +741,12 @@ fn apply_layer_transform(
     layer_type: &SpriteLayerType,
     anchor_x_offset: Option<f32>,
 ) {
-    trace!("📐 apply_layer_transform for {:?}: raw layer.pos=[{}, {}]",
-          layer_type, layer.pos[0], layer.pos[1]);
+    trace!(
+        "📐 apply_layer_transform for {:?}: raw layer.pos=[{}, {}]",
+        layer_type,
+        layer.pos[0],
+        layer.pos[1]
+    );
 
     let base_offset_x = layer.pos[0] as f32 * SPRITE_WORLD_SCALE;
     let offset_x = base_offset_x + anchor_x_offset.unwrap_or(0.0);
@@ -759,15 +773,24 @@ fn apply_layer_transform(
         scale_x = -scale_x;
     }
 
-    trace!("   └─ Calculated offsets: base_offset_x={:.6}, anchor_offset={:.6}, offset_y={:.6}",
-          base_offset_x, anchor_x_offset.unwrap_or(0.0), offset_y);
+    trace!(
+        "   └─ Calculated offsets: base_offset_x={:.6}, anchor_offset={:.6}, offset_y={:.6}",
+        base_offset_x,
+        anchor_x_offset.unwrap_or(0.0),
+        offset_y
+    );
 
     transform.translation.x = offset_x;
     transform.translation.y = offset_y;
     transform.scale = Vec3::new(scale_x, scale_y, 1.0);
 
-    trace!("   └─ Final transform: pos=({:.6}, {:.6}), scale=({:.3}, {:.3})",
-          transform.translation.x, transform.translation.y, scale_x, scale_y);
+    trace!(
+        "   └─ Final transform: pos=({:.6}, {:.6}), scale=({:.3}, {:.3})",
+        transform.translation.x,
+        transform.translation.y,
+        scale_x,
+        scale_y
+    );
 
     if layer.angle != 0 {
         transform.rotation =
@@ -852,7 +875,13 @@ fn process_sprite_layer(
     layer_type: &SpriteLayerType,
     anchor_x_offset: Option<f32>,
 ) {
-    apply_layer_transform(transform, layer, ctx.sprite_frame, layer_type, anchor_x_offset);
+    apply_layer_transform(
+        transform,
+        layer,
+        ctx.sprite_frame,
+        layer_type,
+        anchor_x_offset,
+    );
 
     let material = create_layer_material(
         images,
@@ -921,7 +950,9 @@ pub fn update_sprite_layer_transforms(
                 continue;
             };
 
-            let Some(animation) = get_current_animation(hierarchy, controller, character_sprite, act_asset) else {
+            let Some(animation) =
+                get_current_animation(hierarchy, controller, character_sprite, act_asset)
+            else {
                 continue;
             };
 
@@ -956,13 +987,9 @@ pub fn update_sprite_layer_transforms(
 
     // Second pass: Process all sprite layers with pre-calculated anchor offsets
     for (entity, mut transform, hierarchy, controller) in sprite_layers.iter_mut() {
-        let Some(ctx) = get_animation_context(
-            hierarchy,
-            controller,
-            &characters,
-            &spr_assets,
-            &act_assets,
-        ) else {
+        let Some(ctx) =
+            get_animation_context(hierarchy, controller, &characters, &spr_assets, &act_assets)
+        else {
             warn!(
                 "❌ update_sprite_layer_transforms: Failed to get animation context for entity {:?}, type {:?}",
                 entity, hierarchy.layer_type

@@ -191,7 +191,11 @@ pub fn handle_terrain_click(
 
             commands
                 .entity(player_entity)
-                .insert(WalkablePath::new_at_waypoint(waypoints.clone(), (dest_x, dest_y), 1));
+                .insert(WalkablePath::new_at_waypoint(
+                    waypoints.clone(),
+                    (dest_x, dest_y),
+                    1,
+                ));
 
             let (first_x, first_y) = waypoints[1];
             movement_events.write(MovementRequested {
