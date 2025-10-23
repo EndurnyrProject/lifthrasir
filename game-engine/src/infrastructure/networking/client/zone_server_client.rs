@@ -350,6 +350,32 @@ pub fn zone_server_update_system(
     );
 }
 
+/// System to periodically synchronize time with the server
+///
+/// This system sends CZ_REQUEST_TIME2 packets every 30 seconds to keep
+/// the client-server time offset accurate. The server responds with
+/// ZC_NOTIFY_TIME2 which is handled by TimeSyncHandler.
+pub fn time_sync_system(client: Option<ResMut<ZoneServerClient>>) {
+    let Some(mut client) = client else {
+        return;
+    };
+
+    if !client.is_connected() {
+        return;
+    }
+
+    // Check if we need to sync (first sync or 30 seconds since last sync)
+    if !client.inner.context().needs_time_sync() {
+        return;
+    }
+
+    debug!("Requesting time sync from server");
+
+    if let Err(e) = client.request_time() {
+        error!("Failed to send time sync request: {:?}", e);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -375,31 +401,5 @@ mod tests {
         let client = ZoneServerClient::with_session(12345, 67890);
         assert!(client.spawn_data().is_none());
         assert_eq!(client.server_tick(), 0);
-    }
-}
-
-/// System to periodically synchronize time with the server
-///
-/// This system sends CZ_REQUEST_TIME2 packets every 30 seconds to keep
-/// the client-server time offset accurate. The server responds with
-/// ZC_NOTIFY_TIME2 which is handled by TimeSyncHandler.
-pub fn time_sync_system(client: Option<ResMut<ZoneServerClient>>) {
-    let Some(mut client) = client else {
-        return;
-    };
-
-    if !client.is_connected() {
-        return;
-    }
-
-    // Check if we need to sync (first sync or 30 seconds since last sync)
-    if !client.inner.context().needs_time_sync() {
-        return;
-    }
-
-    debug!("Requesting time sync from server");
-
-    if let Err(e) = client.request_time() {
-        error!("Failed to send time sync request: {:?}", e);
     }
 }

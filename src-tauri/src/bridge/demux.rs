@@ -1,84 +1,54 @@
 use bevy::prelude::*;
 
 use super::app_bridge::{TauriEventReceiver, TauriIncomingEvent};
-use super::correlation::{CharacterCorrelation, LoginCorrelation, ServerCorrelation};
+use super::correlation::{
+    CharacterCorrelation, LoginCorrelation, PendingCharacterListSenders, PendingHairstyleSenders,
+    ServerCorrelation,
+};
 use super::event_writers::TauriMessageWriters;
 use super::events::*;
-use super::pending_senders::PendingSenders;
 
-/// System that demultiplexes TauriIncomingEvents from the flume channel into typed Bevy events
 pub fn demux_tauri_events(
     receiver: Res<TauriEventReceiver>,
-    mut pending: ResMut<PendingSenders>,
     mut login_correlation: ResMut<LoginCorrelation>,
     mut char_correlation: ResMut<CharacterCorrelation>,
     mut server_correlation: ResMut<ServerCorrelation>,
+    mut char_list_senders: ResMut<PendingCharacterListSenders>,
+    mut hairstyle_senders: ResMut<PendingHairstyleSenders>,
     mut writers: TauriMessageWriters,
 ) {
     for event in receiver.0.try_iter() {
         match event {
             TauriIncomingEvent::Login {
-                request_id,
                 username,
                 password,
                 response_tx,
             } => {
-                // Store correlation before dispatching event
-                login_correlation.insert(username.clone(), request_id);
-
-                crate::dispatch_tauri_event!(
-                    pending: (pending.logins, request_id, response_tx),
-                    event: LoginRequestedEvent {
-                        request_id,
-                        username,
-                        password,
-                    },
-                    writer: writers.login
-                );
+                login_correlation.insert(username.clone(), response_tx);
+                writers
+                    .login
+                    .write(LoginRequestedEvent { username, password });
             }
             TauriIncomingEvent::SelectServer {
-                request_id,
                 server_index,
                 response_tx,
             } => {
-                // Store correlation before dispatching event
-                server_correlation.insert(server_index, request_id);
-
-                crate::dispatch_tauri_event!(
-                    pending: (pending.servers, request_id, response_tx),
-                    event: ServerSelectionRequestedEvent {
-                        request_id,
-                        server_index,
-                    },
-                    writer: writers.server_selection
-                );
+                server_correlation.insert(server_index, response_tx);
+                writers
+                    .server_selection
+                    .write(ServerSelectionRequestedEvent { server_index });
             }
-            TauriIncomingEvent::GetCharacterList {
-                request_id,
-                response_tx,
-            } => {
-                crate::dispatch_tauri_event!(
-                    pending: (pending.char_lists, request_id, response_tx),
-                    event: GetCharacterListRequestedEvent { request_id },
-                    writer: writers.char_list
-                );
+            TauriIncomingEvent::GetCharacterList { response_tx } => {
+                char_list_senders.push(response_tx);
+                writers.char_list.write(GetCharacterListRequestedEvent {});
             }
-            TauriIncomingEvent::SelectCharacter {
-                request_id,
-                slot,
-                response_tx,
-            } => {
-                // Store correlation before dispatching event
-                char_correlation.insert_slot(slot, request_id);
-
-                crate::dispatch_tauri_event!(
-                    pending: (pending.char_selections, request_id, response_tx),
-                    event: SelectCharacterRequestedEvent { request_id, slot },
-                    writer: writers.char_select
-                );
+            TauriIncomingEvent::SelectCharacter { slot, response_tx } => {
+                char_correlation.insert_selection(slot, response_tx);
+                writers
+                    .char_select
+                    .write(SelectCharacterRequestedEvent { slot });
             }
             TauriIncomingEvent::CreateCharacter {
-                request_id,
                 name,
                 slot,
                 hair_style,
@@ -86,67 +56,41 @@ pub fn demux_tauri_events(
                 sex,
                 response_tx,
             } => {
-                // Store correlation before dispatching event
-                char_correlation.insert_slot(slot, request_id);
-
-                crate::dispatch_tauri_event!(
-                    pending: (pending.char_creations, request_id, response_tx),
-                    event: CreateCharacterRequestedEvent {
-                        request_id,
-                        name,
-                        slot,
-                        hair_style,
-                        hair_color,
-                        sex,
-                    },
-                    writer: writers.char_create
-                );
+                char_correlation.insert_creation(slot, response_tx);
+                writers.char_create.write(CreateCharacterRequestedEvent {
+                    name,
+                    slot,
+                    hair_style,
+                    hair_color,
+                    sex,
+                });
             }
             TauriIncomingEvent::DeleteCharacter {
-                request_id,
                 char_id,
                 response_tx,
             } => {
-                // Store correlation before dispatching event
-                char_correlation.insert_char_id(char_id, request_id);
-
-                crate::dispatch_tauri_event!(
-                    pending: (pending.char_deletions, request_id, response_tx),
-                    event: DeleteCharacterRequestedEvent {
-                        request_id,
-                        char_id,
-                    },
-                    writer: writers.char_delete
-                );
+                char_correlation.insert_deletion(char_id, response_tx);
+                writers
+                    .char_delete
+                    .write(DeleteCharacterRequestedEvent { char_id });
             }
             TauriIncomingEvent::GetHairstyles {
-                request_id,
                 gender,
                 response_tx,
             } => {
-                crate::dispatch_tauri_event!(
-                    pending: (pending.hairstyles, request_id, response_tx),
-                    event: GetHairstylesRequestedEvent { request_id, gender },
-                    writer: writers.hairstyles
-                );
+                hairstyle_senders.push(response_tx);
+                writers
+                    .hairstyles
+                    .write(GetHairstylesRequestedEvent { gender });
             }
             TauriIncomingEvent::KeyboardInput { code, pressed } => {
-                crate::dispatch_tauri_event!(
-                    event: KeyboardInputEvent { code, pressed },
-                    writer: writers.keyboard
-                );
+                writers.keyboard.write(KeyboardInputEvent { code, pressed });
             }
             TauriIncomingEvent::MousePosition { x, y } => {
-                crate::dispatch_tauri_event!(
-                    event: MousePositionEvent { x, y },
-                    writer: writers.mouse
-                );
+                writers.mouse.write(MousePositionEvent { x, y });
             }
             TauriIncomingEvent::MouseClick { x, y } => {
-                crate::dispatch_tauri_event!(
-                    event: MouseClickEvent { x, y },
-                    writer: writers.mouse_click
-                );
+                writers.mouse_click.write(MouseClickEvent { x, y });
             }
         }
     }

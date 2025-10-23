@@ -27,9 +27,9 @@ use super::bridge::{
     write_login_failure_response, write_login_success_response, write_server_selection_response,
     AppBridge, CharacterCorrelation, CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent,
     GetCharacterListRequestedEvent, GetHairstylesRequestedEvent, KeyboardInputEvent,
-    LoginCorrelation, LoginRequestedEvent, MouseClickEvent, MousePositionEvent, PendingSenders,
-    SelectCharacterRequestedEvent, ServerCorrelation, ServerSelectionRequestedEvent,
-    TauriEventReceiver, WorldEmitter,
+    LoginCorrelation, LoginRequestedEvent, MouseClickEvent, MousePositionEvent,
+    PendingCharacterListSenders, PendingHairstyleSenders, SelectCharacterRequestedEvent,
+    ServerCorrelation, ServerSelectionRequestedEvent, TauriEventReceiver, WorldEmitter,
 };
 use super::commands;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
@@ -187,10 +187,11 @@ impl Plugin for TauriIntegrationPlugin {
 
         app.insert_resource(app_bridge.clone());
         app.insert_resource(TauriEventReceiver(tauri_rx));
-        app.insert_resource(PendingSenders::default());
         app.insert_resource(LoginCorrelation::default());
         app.insert_resource(CharacterCorrelation::default());
         app.insert_resource(ServerCorrelation::default());
+        app.insert_resource(PendingCharacterListSenders::default());
+        app.insert_resource(PendingHairstyleSenders::default());
 
         // Register typed Bevy events for Tauri bridge
         app.add_message::<LoginRequestedEvent>()

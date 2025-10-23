@@ -1,23 +1,22 @@
 use bevy::prelude::*;
+use game_engine::domain::entities::character::components::CharacterInfo;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+use tokio::sync::oneshot;
 
-use super::request_id::RequestId;
+use super::app_bridge::{HairstyleInfo, SessionData};
 
-/// Timeout for correlation entries (30 seconds)
 const CORRELATION_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Wrapper for correlation entry with timestamp
-#[derive(Clone, Copy)]
-struct CorrelationEntry {
-    request_id: RequestId,
+struct CorrelationEntry<T> {
+    sender: oneshot::Sender<T>,
     created_at: Instant,
 }
 
-impl CorrelationEntry {
-    fn new(request_id: RequestId) -> Self {
+impl<T> CorrelationEntry<T> {
+    fn new(sender: oneshot::Sender<T>) -> Self {
         Self {
-            request_id,
+            sender,
             created_at: Instant::now(),
         }
     }
@@ -27,120 +26,192 @@ impl CorrelationEntry {
     }
 }
 
-/// Maps username to RequestId for correlating login responses
-/// Populated when login request is processed, consumed when login response arrives
 #[derive(Resource, Default)]
 pub struct LoginCorrelation {
-    entries: HashMap<String, CorrelationEntry>,
+    entries: HashMap<String, CorrelationEntry<Result<SessionData, String>>>,
 }
 
 impl LoginCorrelation {
-    pub fn insert(&mut self, username: String, request_id: RequestId) {
-        self.entries
-            .insert(username, CorrelationEntry::new(request_id));
+    pub fn insert(
+        &mut self,
+        username: String,
+        sender: oneshot::Sender<Result<SessionData, String>>,
+    ) {
+        self.entries.insert(username, CorrelationEntry::new(sender));
     }
 
-    pub fn remove(&mut self, username: &str) -> Option<RequestId> {
-        self.entries.remove(username).map(|e| e.request_id)
+    pub fn remove(
+        &mut self,
+        username: &str,
+    ) -> Option<oneshot::Sender<Result<SessionData, String>>> {
+        self.entries.remove(username).map(|e| e.sender)
     }
 
     pub fn cleanup_stale(&mut self) -> usize {
-        let initial_count = self.entries.len();
-        self.entries.retain(|_, entry| !entry.is_stale());
-        initial_count - self.entries.len()
+        let initial = self.entries.len();
+        self.entries.retain(|_, e| !e.is_stale());
+        initial - self.entries.len()
     }
 }
 
-/// Maps character slot and char_id to RequestId for correlating character responses
-/// - slot is used for selection and creation
-/// - char_id is used for deletion
 #[derive(Resource, Default)]
 pub struct CharacterCorrelation {
-    slot_entries: HashMap<u8, CorrelationEntry>,
-    char_id_entries: HashMap<u32, CorrelationEntry>,
+    selection_entries: HashMap<u8, CorrelationEntry<Result<(), String>>>,
+    creation_entries: HashMap<u8, CorrelationEntry<Result<CharacterInfo, String>>>,
+    deletion_entries: HashMap<u32, CorrelationEntry<Result<(), String>>>,
 }
 
 impl CharacterCorrelation {
-    pub fn insert_slot(&mut self, slot: u8, request_id: RequestId) {
-        self.slot_entries
-            .insert(slot, CorrelationEntry::new(request_id));
+    pub fn insert_selection(&mut self, slot: u8, sender: oneshot::Sender<Result<(), String>>) {
+        self.selection_entries
+            .insert(slot, CorrelationEntry::new(sender));
     }
 
-    pub fn remove_slot(&mut self, slot: &u8) -> Option<RequestId> {
-        self.slot_entries.remove(slot).map(|e| e.request_id)
+    pub fn remove_selection(&mut self, slot: &u8) -> Option<oneshot::Sender<Result<(), String>>> {
+        self.selection_entries.remove(slot).map(|e| e.sender)
     }
 
-    pub fn insert_char_id(&mut self, char_id: u32, request_id: RequestId) {
-        self.char_id_entries
-            .insert(char_id, CorrelationEntry::new(request_id));
+    pub fn insert_creation(
+        &mut self,
+        slot: u8,
+        sender: oneshot::Sender<Result<CharacterInfo, String>>,
+    ) {
+        self.creation_entries
+            .insert(slot, CorrelationEntry::new(sender));
     }
 
-    pub fn remove_char_id(&mut self, char_id: &u32) -> Option<RequestId> {
-        self.char_id_entries.remove(char_id).map(|e| e.request_id)
+    pub fn remove_creation(
+        &mut self,
+        slot: &u8,
+    ) -> Option<oneshot::Sender<Result<CharacterInfo, String>>> {
+        self.creation_entries.remove(slot).map(|e| e.sender)
+    }
+
+    pub fn insert_deletion(&mut self, char_id: u32, sender: oneshot::Sender<Result<(), String>>) {
+        self.deletion_entries
+            .insert(char_id, CorrelationEntry::new(sender));
+    }
+
+    pub fn remove_deletion(
+        &mut self,
+        char_id: &u32,
+    ) -> Option<oneshot::Sender<Result<(), String>>> {
+        self.deletion_entries.remove(char_id).map(|e| e.sender)
     }
 
     pub fn cleanup_stale(&mut self) -> usize {
-        let initial_slot = self.slot_entries.len();
-        let initial_char_id = self.char_id_entries.len();
-
-        self.slot_entries.retain(|_, entry| !entry.is_stale());
-        self.char_id_entries.retain(|_, entry| !entry.is_stale());
-
-        (initial_slot - self.slot_entries.len()) + (initial_char_id - self.char_id_entries.len())
+        let initial = self.selection_entries.len()
+            + self.creation_entries.len()
+            + self.deletion_entries.len();
+        self.selection_entries.retain(|_, e| !e.is_stale());
+        self.creation_entries.retain(|_, e| !e.is_stale());
+        self.deletion_entries.retain(|_, e| !e.is_stale());
+        let final_count = self.selection_entries.len()
+            + self.creation_entries.len()
+            + self.deletion_entries.len();
+        initial - final_count
     }
 }
 
-/// Maps server index to RequestId for correlating server selection responses
 #[derive(Resource, Default)]
 pub struct ServerCorrelation {
-    entries: HashMap<usize, CorrelationEntry>,
+    entries: HashMap<usize, CorrelationEntry<Result<(), String>>>,
 }
 
 impl ServerCorrelation {
-    pub fn insert(&mut self, index: usize, request_id: RequestId) {
-        self.entries
-            .insert(index, CorrelationEntry::new(request_id));
+    pub fn insert(&mut self, index: usize, sender: oneshot::Sender<Result<(), String>>) {
+        self.entries.insert(index, CorrelationEntry::new(sender));
     }
 
-    pub fn remove(&mut self, index: &usize) -> Option<RequestId> {
-        self.entries.remove(index).map(|e| e.request_id)
+    pub fn remove(&mut self, index: &usize) -> Option<oneshot::Sender<Result<(), String>>> {
+        self.entries.remove(index).map(|e| e.sender)
     }
 
     pub fn cleanup_stale(&mut self) -> usize {
-        let initial_count = self.entries.len();
-        self.entries.retain(|_, entry| !entry.is_stale());
-        initial_count - self.entries.len()
+        let initial = self.entries.len();
+        self.entries.retain(|_, e| !e.is_stale());
+        initial - self.entries.len()
     }
 }
 
-/// System that periodically cleans up stale correlation entries
-/// Runs every 10 seconds to remove entries older than 30 seconds
+type CharacterListSender = oneshot::Sender<Result<Vec<CharacterInfo>, String>>;
+
+#[derive(Resource, Default)]
+pub struct PendingCharacterListSenders {
+    senders: Vec<(Instant, CharacterListSender)>,
+}
+
+impl PendingCharacterListSenders {
+    pub fn push(&mut self, sender: CharacterListSender) {
+        self.senders.push((Instant::now(), sender));
+    }
+
+    pub fn pop_oldest(&mut self) -> Option<CharacterListSender> {
+        if self.senders.is_empty() {
+            None
+        } else {
+            Some(self.senders.remove(0).1)
+        }
+    }
+
+    pub fn cleanup_stale(&mut self) -> usize {
+        let initial = self.senders.len();
+        self.senders
+            .retain(|(created, _)| created.elapsed() < CORRELATION_TIMEOUT);
+        initial - self.senders.len()
+    }
+}
+
+type HairstyleSender = oneshot::Sender<Result<Vec<HairstyleInfo>, String>>;
+
+#[derive(Resource, Default)]
+pub struct PendingHairstyleSenders {
+    senders: Vec<(Instant, HairstyleSender)>,
+}
+
+impl PendingHairstyleSenders {
+    pub fn push(&mut self, sender: HairstyleSender) {
+        self.senders.push((Instant::now(), sender));
+    }
+
+    pub fn pop_oldest(&mut self) -> Option<HairstyleSender> {
+        if self.senders.is_empty() {
+            None
+        } else {
+            Some(self.senders.remove(0).1)
+        }
+    }
+
+    pub fn cleanup_stale(&mut self) -> usize {
+        let initial = self.senders.len();
+        self.senders
+            .retain(|(created, _)| created.elapsed() < CORRELATION_TIMEOUT);
+        initial - self.senders.len()
+    }
+}
+
 pub fn cleanup_stale_correlations(
-    mut login_corr: ResMut<LoginCorrelation>,
-    mut char_corr: ResMut<CharacterCorrelation>,
-    mut server_corr: ResMut<ServerCorrelation>,
+    mut login: ResMut<LoginCorrelation>,
+    mut character: ResMut<CharacterCorrelation>,
+    mut server: ResMut<ServerCorrelation>,
+    mut char_list: ResMut<PendingCharacterListSenders>,
+    mut hairstyles: ResMut<PendingHairstyleSenders>,
     mut last_cleanup: Local<Option<Instant>>,
 ) {
     let now = Instant::now();
-
-    // Only run cleanup every 10 seconds
     if let Some(last) = *last_cleanup {
         if now.duration_since(last) < Duration::from_secs(10) {
             return;
         }
     }
 
-    let login_cleaned = login_corr.cleanup_stale();
-    let char_cleaned = char_corr.cleanup_stale();
-    let server_cleaned = server_corr.cleanup_stale();
-
-    let total_cleaned = login_cleaned + char_cleaned + server_cleaned;
-    if total_cleaned > 0 {
-        warn!(
-            "Cleaned up {} stale correlation entries (login: {}, character: {}, server: {})",
-            total_cleaned, login_cleaned, char_cleaned, server_cleaned
-        );
+    let total = login.cleanup_stale()
+        + character.cleanup_stale()
+        + server.cleanup_stale()
+        + char_list.cleanup_stale()
+        + hairstyles.cleanup_stale();
+    if total > 0 {
+        warn!("Cleaned up {} stale correlation entries", total);
     }
-
     *last_cleanup = Some(now);
 }

@@ -862,6 +862,12 @@ fn get_current_animation<'a>(
     action_sequence.animations.get(current_frame)
 }
 
+struct LayerMaterialResources<'w, 's, 'a> {
+    commands: &'a mut Commands<'w, 's>,
+    images: &'a mut Assets<Image>,
+    materials: &'a mut Assets<StandardMaterial>,
+}
+
 /// Helper function to process a sprite layer with validated animation context
 /// Applies transforms and creates materials
 fn process_sprite_layer(
@@ -869,9 +875,7 @@ fn process_sprite_layer(
     layer: &crate::infrastructure::ro_formats::act::Layer,
     transform: &mut Transform,
     entity: Entity,
-    commands: &mut Commands,
-    images: &mut Assets<Image>,
-    materials: &mut Assets<StandardMaterial>,
+    resources: &mut LayerMaterialResources,
     layer_type: &SpriteLayerType,
     anchor_x_offset: Option<f32>,
 ) {
@@ -884,14 +888,17 @@ fn process_sprite_layer(
     );
 
     let material = create_layer_material(
-        images,
-        materials,
+        resources.images,
+        resources.materials,
         ctx.sprite_frame,
         &ctx.spr_asset.sprite.palette,
         layer,
     );
 
-    commands.entity(entity).insert(MeshMaterial3d(material));
+    resources
+        .commands
+        .entity(entity)
+        .insert(MeshMaterial3d(material));
 }
 
 // System to update sprite layer positions and textures based on animation
@@ -1006,14 +1013,18 @@ pub fn update_sprite_layer_transforms(
             None
         };
 
+        let mut resources = LayerMaterialResources {
+            commands: &mut commands,
+            images: &mut images,
+            materials: &mut materials,
+        };
+
         process_sprite_layer(
             &ctx,
             ctx.layer,
             &mut transform,
             entity,
-            &mut commands,
-            &mut images,
-            &mut materials,
+            &mut resources,
             &hierarchy.layer_type,
             layer_anchor_offset,
         );
