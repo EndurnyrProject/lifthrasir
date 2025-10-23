@@ -34,6 +34,7 @@ use crate::{
 pub fn handle_login_attempts(
     mut login_attempts: MessageReader<LoginAttemptEvent>,
     mut login_started_events: MessageWriter<LoginAttemptStartedEvent>,
+    mut login_failure_events: MessageWriter<LoginFailureEvent>,
     mut login_client: ResMut<LoginClient>,
     auth_context: Res<AuthenticationContext>,
 ) {
@@ -52,6 +53,12 @@ pub fn handle_login_attempts(
                 "Failed to connect to login server {}: {:?}",
                 server_address, e
             );
+
+            login_failure_events.write(LoginFailureEvent {
+                error: e,
+                username: username.clone(),
+            });
+
             continue;
         }
 
@@ -60,6 +67,12 @@ pub fn handle_login_attempts(
         // Send login packet (non-blocking)
         if let Err(e) = login_client.attempt_login(username, password, client_version) {
             error!("Failed to send login packet for {}: {:?}", username, e);
+
+            login_failure_events.write(LoginFailureEvent {
+                error: e,
+                username: username.clone(),
+            });
+
             login_client.disconnect();
             continue;
         }
@@ -168,7 +181,7 @@ pub fn handle_login_refused(
         // Emit domain event for UI feedback
         domain_events.write(LoginFailureEvent {
             error,
-            username: String::new(), // Username not available in protocol event
+            username: event.username.clone(),
         });
 
         // Disconnect and reset for next attempt

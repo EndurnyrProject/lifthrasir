@@ -15,6 +15,7 @@ use bevy_auto_plugin::modes::global::prelude::auto_add_event;
 #[derive(Message, Debug, Clone)]
 #[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct LoginRefused {
+    pub username: String,
     pub error_code: u8,
     pub error_message: String,
     pub block_date: Option<String>,
@@ -49,7 +50,10 @@ impl PacketHandler<LoginProtocol> for RefuseLoginHandler {
 
         context.record_error(packet.error_code);
 
+        let username = context.username.clone().unwrap_or_default();
+
         let event = LoginRefused {
+            username,
             error_code: packet.error_code,
             error_message: error_message.to_string(),
             block_date,

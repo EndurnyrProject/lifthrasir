@@ -99,7 +99,6 @@ impl SpritePngCache {
         Ok(())
     }
 
-
     /// Get cache statistics
     pub fn get_stats(&self) -> Result<CacheStats, SpritePngError> {
         let memory_count = self
