@@ -24,7 +24,7 @@ impl Plugin for EntitySpawningPlugin {
                 )
                     .chain()
                     .before(
-                        crate::domain::entities::character::sprite_hierarchy::update_sprite_layer_transforms,
+                        crate::domain::entities::sprite_rendering::systems::update_sprite_transforms,
                     ),
             );
     }

@@ -121,3 +121,23 @@ pub fn head_action_path(gender: Gender, style_id: u16) -> String {
         sex, style_id, sex
     )
 }
+
+/// Generate mob sprite path
+pub fn mob_sprite_path(sprite_name: &str) -> String {
+    format!("ro://data/sprite/몬스터/{}.spr", sprite_name)
+}
+
+/// Generate mob action path
+pub fn mob_action_path(sprite_name: &str) -> String {
+    format!("ro://data/sprite/몬스터/{}.act", sprite_name)
+}
+
+/// Generate NPC sprite path
+pub fn npc_sprite_path(sprite_name: &str) -> String {
+    format!("ro://data/sprite/npc/{}.spr", sprite_name)
+}
+
+/// Generate NPC action path
+pub fn npc_action_path(sprite_name: &str) -> String {
+    format!("ro://data/sprite/npc/{}.act", sprite_name)
+}

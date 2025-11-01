@@ -1,4 +1,6 @@
 use super::grid::PathfindingGrid;
+use super::simplify_path;
+use bevy::log::debug;
 use pathfinding::prelude::astar;
 
 pub fn find_path(
@@ -17,7 +19,16 @@ pub fn find_path(
         |&pos| pos == goal,
     );
 
-    result.map(|(path, _cost)| path)
+    result.map(|(path, _cost)| {
+        let original_len = path.len();
+        let simplified = simplify_path(&path, 0.5);
+        debug!(
+            "Path simplified: {} → {} waypoints",
+            original_len,
+            simplified.len()
+        );
+        simplified
+    })
 }
 
 fn successors(grid: &PathfindingGrid, x: u16, y: u16) -> Vec<((u16, u16), u32)> {
@@ -110,9 +121,10 @@ mod tests {
         let grid = create_test_grid(10, 10, &[(0, 0), (1, 0), (2, 0), (3, 0), (4, 0)]);
 
         let path = find_path(&grid, (0, 0), (4, 0)).unwrap();
-        assert_eq!(path.len(), 5);
+        // Path simplification reduces straight paths to just start and end
+        assert_eq!(path.len(), 2);
         assert_eq!(path[0], (0, 0));
-        assert_eq!(path[4], (4, 0));
+        assert_eq!(path[1], (4, 0));
     }
 
     #[test]
@@ -135,9 +147,10 @@ mod tests {
         );
 
         let path = find_path(&grid, (0, 0), (3, 3)).unwrap();
-        assert_eq!(path.len(), 4);
+        // Path simplification reduces diagonal paths to just start and end
+        assert_eq!(path.len(), 2);
         assert_eq!(path[0], (0, 0));
-        assert_eq!(path[3], (3, 3));
+        assert_eq!(path[1], (3, 3));
     }
 
     #[test]

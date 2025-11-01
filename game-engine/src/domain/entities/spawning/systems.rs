@@ -11,8 +11,13 @@ use crate::{
         components::{NetworkEntity, PendingDespawn},
         markers::*,
         movement::components::{MovementSpeed, MovementState, MovementTarget},
+        pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
         registry::EntityRegistry,
         spawning::events::{DespawnEntity, RequestEntityVanish, SpawnEntity},
+        sprite_rendering::{
+            components::{EntitySpriteData, EntitySpriteInfo, EntitySpriteNames},
+            events::SpawnSpriteEvent,
+        },
     },
     infrastructure::networking::{protocol::zone::MovementConfirmedByServer, session::UserSession},
     utils::coordinates::spawn_coords_to_world_position,
@@ -20,15 +25,16 @@ use crate::{
 use bevy::prelude::*;
 
 /// Spawn network entities from SpawnEntity events
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_network_entity_system(
     mut commands: Commands,
     mut spawn_events: MessageReader<SpawnEntity>,
     mut entity_registry: ResMut<EntityRegistry>,
     user_session: Option<Res<UserSession>>,
-    mut sprite_spawn: MessageWriter<
-        crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent,
-    >,
+    mut sprite_spawn_generic: MessageWriter<SpawnSpriteEvent>,
+    entity_sprite_names: Res<EntitySpriteNames>,
     mut movement_events: MessageWriter<MovementConfirmedByServer>,
+    pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
 ) {
     for event in spawn_events.read() {
         if let Some(existing_entity) = entity_registry.get_entity(event.aid) {
@@ -129,20 +135,31 @@ pub fn spawn_network_entity_system(
 
         let mut entity_cmd = commands.spawn((
             NetworkEntity::new(event.aid, event.gid, event.object_type),
-            char_data,
-            appearance,
-            equipment,
-            CharacterSprite::default(),
-            CharacterDirection {
-                facing: Direction::from_u8(event.direction),
-            },
             Transform::from_translation(world_pos),
             Visibility::default(),
             Name::new(format!(
                 "{} ({:?}:{})",
                 event.name, event.object_type, event.aid
             )),
+            CharacterDirection {
+                facing: Direction::from_u8(event.direction),
+            },
         ));
+
+        // Add character-specific components only for PCs
+        match event.object_type {
+            crate::domain::entities::types::ObjectType::Pc => {
+                entity_cmd.insert((char_data, appearance, equipment, CharacterSprite::default()));
+            }
+            crate::domain::entities::types::ObjectType::Mob
+            | crate::domain::entities::types::ObjectType::Npc
+            | crate::domain::entities::types::ObjectType::Homunculus
+            | crate::domain::entities::types::ObjectType::Mercenary
+            | crate::domain::entities::types::ObjectType::Elemental => {
+                // Simple entities don't need character-specific components
+                // They will get EntitySpriteInfo added via sprite spawn event
+            }
+        }
 
         match event.object_type {
             crate::domain::entities::types::ObjectType::Pc => {
@@ -220,17 +237,72 @@ pub fn spawn_network_entity_system(
                 elapsed_ms
             );
 
-            // Use new_with_elapsed to create movement target with correct timing
-            let target = MovementTarget::new_with_elapsed(
-                event.position.0,
-                event.position.1,
-                destination.0,
-                destination.1,
-                world_pos,
-                dest_world_pos,
-                event.move_start_time.unwrap_or(0),
-                elapsed_ms,
-            );
+            // Generate pathfinding waypoints for smooth movement
+            let waypoints = if let Some(grid) = pathfinding_grid.as_ref() {
+                if let Some(waypoints) = find_path(
+                    &grid.0,
+                    (event.position.0, event.position.1),
+                    (destination.0, destination.1),
+                ) {
+                    if waypoints.len() > 1 {
+                        debug!(
+                            "Generated path for spawning entity {} with {} waypoints",
+                            event.name,
+                            waypoints.len()
+                        );
+                        entity_cmd.insert(WalkablePath::new(
+                            waypoints.clone(),
+                            (destination.0, destination.1),
+                        ));
+                        Some(waypoints)
+                    } else {
+                        None
+                    }
+                } else {
+                    warn!(
+                        "Could not find path for entity {} from ({}, {}) to ({}, {}) - will use direct movement",
+                        event.name, event.position.0, event.position.1, destination.0, destination.1
+                    );
+                    None
+                }
+            } else {
+                warn!(
+                    "Pathfinding grid not available for entity {} spawn - will use direct movement",
+                    event.name
+                );
+                None
+            };
+
+            let target = if let Some(waypoints) = waypoints {
+                let waypoint_world_positions: Vec<Vec3> = waypoints
+                    .iter()
+                    .map(|(x, y)| spawn_coords_to_world_position(*x, *y, 0, 0))
+                    .collect();
+
+                MovementTarget::new_with_waypoints_and_elapsed(
+                    event.position.0,
+                    event.position.1,
+                    destination.0,
+                    destination.1,
+                    world_pos,
+                    dest_world_pos,
+                    event.move_start_time.unwrap_or(0),
+                    elapsed_ms,
+                    waypoint_world_positions,
+                    waypoints,
+                )
+            } else {
+                MovementTarget::new_with_elapsed(
+                    event.position.0,
+                    event.position.1,
+                    destination.0,
+                    destination.1,
+                    world_pos,
+                    dest_world_pos,
+                    event.move_start_time.unwrap_or(0),
+                    elapsed_ms,
+                )
+            };
 
             // Update entity transform to spawn at interpolated position
             entity_cmd.insert(Transform::from_translation(interpolated_world_pos));
@@ -260,12 +332,61 @@ pub fn spawn_network_entity_system(
 
         entity_registry.register_entity(event.aid, entity_id);
 
-        sprite_spawn.write(
-            crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent {
-                character_entity: entity_id,
-                spawn_position: world_pos,
-            },
-        );
+        // Route sprite spawning based on entity type
+        match event.object_type {
+            crate::domain::entities::types::ObjectType::Pc => {
+                // Phase 3: Use new generic system for PCs
+                let sprite_data = EntitySpriteData::Character {
+                    job_class: event.job,
+                    gender: Gender::from(event.gender),
+                    head: event.head,
+                };
+
+                sprite_spawn_generic.write(SpawnSpriteEvent {
+                    entity: entity_id,
+                    position: world_pos,
+                    sprite_info: EntitySpriteInfo { sprite_data },
+                });
+            }
+            crate::domain::entities::types::ObjectType::Mob
+            | crate::domain::entities::types::ObjectType::Npc
+            | crate::domain::entities::types::ObjectType::Homunculus
+            | crate::domain::entities::types::ObjectType::Mercenary
+            | crate::domain::entities::types::ObjectType::Elemental => {
+                // Use EntitySpriteNames to lookup sprite name
+                let sprite_name = entity_sprite_names
+                    .monsters
+                    .get(&event.job)
+                    .or_else(|| entity_sprite_names.npcs.get(&event.job))
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        warn!(
+                            "Unknown entity job ID: {} for {:?}, using fallback",
+                            event.job, event.object_type
+                        );
+                        format!("entity_{}", event.job)
+                    });
+
+                let sprite_data = match event.object_type {
+                    crate::domain::entities::types::ObjectType::Mob
+                    | crate::domain::entities::types::ObjectType::Homunculus
+                    | crate::domain::entities::types::ObjectType::Mercenary
+                    | crate::domain::entities::types::ObjectType::Elemental => {
+                        EntitySpriteData::Mob { sprite_name }
+                    }
+                    crate::domain::entities::types::ObjectType::Npc => {
+                        EntitySpriteData::Npc { sprite_name }
+                    }
+                    _ => unreachable!(),
+                };
+
+                sprite_spawn_generic.write(SpawnSpriteEvent {
+                    entity: entity_id,
+                    position: world_pos,
+                    sprite_info: EntitySpriteInfo { sprite_data },
+                });
+            }
+        }
 
         debug!(
             "✅ Spawned entity: {} ({:?}) at ({}, {}) - Entity ID: {:?}",
@@ -295,9 +416,7 @@ pub fn despawn_network_entity_system(
     mut despawn_events: MessageReader<crate::domain::entities::spawning::events::DespawnEntity>,
     mut entity_registry: ResMut<EntityRegistry>,
     mut despawned_this_frame: Local<std::collections::HashSet<u32>>,
-    character_trees: Query<
-        &crate::domain::entities::character::sprite_hierarchy::CharacterObjectTree,
-    >,
+    sprite_trees: Query<&crate::domain::entities::sprite_rendering::components::SpriteObjectTree>,
 ) {
     despawned_this_frame.clear();
 
@@ -312,8 +431,8 @@ pub fn despawn_network_entity_system(
 
         if let Some(entity) = entity_registry.get_entity(event.aid) {
             // Despawn sprite hierarchy first to prevent race condition
-            // where update_sprite_layer_transforms tries to access a despawned character entity
-            if let Ok(object_tree) = character_trees.get(entity) {
+            // where update_sprite_transforms tries to access a despawned entity
+            if let Ok(object_tree) = sprite_trees.get(entity) {
                 commands.entity(object_tree.root).despawn();
             }
 

@@ -1,8 +1,8 @@
 use crate::{
-    domain::entities::character::sprite_hierarchy::CharacterObjectTree,
     domain::entities::markers::LocalPlayer,
     domain::entities::movement::events::MovementRequested,
     domain::entities::pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
+    domain::entities::sprite_rendering::SpriteObjectTree,
     domain::world::components::MapLoader,
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
     utils::coordinates::world_position_to_spawn_coords,
@@ -121,7 +121,7 @@ pub fn handle_terrain_click(
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
-    player_query: Query<(Entity, &CharacterObjectTree), With<LocalPlayer>>,
+    player_query: Query<(Entity, &SpriteObjectTree), With<LocalPlayer>>,
     sprite_transforms: Query<&Transform>,
     mut movement_events: MessageWriter<MovementRequested>,
 ) {
@@ -191,23 +191,22 @@ pub fn handle_terrain_click(
 
             commands
                 .entity(player_entity)
-                .insert(WalkablePath::new_at_waypoint(
-                    waypoints.clone(),
-                    (dest_x, dest_y),
-                    1,
-                ));
+                .insert(WalkablePath::new(waypoints.clone(), (dest_x, dest_y)));
 
-            let (first_x, first_y) = waypoints[1];
             movement_events.write(MovementRequested {
                 entity: player_entity,
-                dest_x: first_x,
-                dest_y: first_y,
+                dest_x,
+                dest_y,
                 direction: 0,
             });
 
             debug!(
-                "Terrain clicked: current=({}, {}), destination=({}, {}), first waypoint=({}, {})",
-                current_x, current_y, dest_x, dest_y, first_x, first_y
+                "Terrain clicked: current=({}, {}), final destination=({}, {}), path length={}",
+                current_x,
+                current_y,
+                dest_x,
+                dest_y,
+                waypoints.len()
             );
         }
         Some(_waypoints) => {

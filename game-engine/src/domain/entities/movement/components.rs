@@ -21,9 +21,9 @@ impl Default for MovementState {
 /// Movement target with timing and distance caching
 ///
 /// This component stores movement data for client-side interpolation.
-/// The total_distance is cached to avoid expensive sqrt() calculations
-/// every frame during interpolation. World positions are also cached
-/// to avoid repeated coordinate conversions during interpolation.
+/// For multi-waypoint paths, it stores all waypoints and calculates
+/// smooth interpolation across the entire path without stopping at
+/// intermediate waypoints.
 #[derive(Component, Debug, Clone)]
 pub struct MovementTarget {
     /// Source position in RO coordinates (10-bit, 0-1023)
@@ -48,6 +48,21 @@ pub struct MovementTarget {
 
     /// Timestamp when movement started (for progress calculation)
     pub start_time: std::time::Instant,
+
+    /// Optional waypoints for smooth multi-segment interpolation
+    /// Each waypoint is cached as world position for performance
+    pub waypoints: Option<Vec<Vec3>>,
+
+    /// Total path length in CELL space for duration calculation (timing)
+    /// Used with ms_per_cell to calculate total movement time
+    pub total_path_length: f32,
+
+    /// Total path length in WORLD space for interpolation (rendering)
+    /// Used to calculate position along the visual path
+    pub total_path_length_world: f32,
+
+    /// Cumulative distances at each waypoint in WORLD space (for efficient segment lookup)
+    pub segment_distances: Vec<f32>,
 }
 
 impl MovementTarget {
@@ -63,9 +78,13 @@ impl MovementTarget {
         dest_world_pos: Vec3,
         start_tick: u32,
     ) -> Self {
+        // Cell space distance (for timing)
         let dx = (dest_x as f32) - (src_x as f32);
         let dy = (dest_y as f32) - (src_y as f32);
         let total_distance = (dx * dx + dy * dy).sqrt();
+
+        // World space distance (for interpolation)
+        let world_distance = src_world_pos.distance(dest_world_pos);
 
         Self {
             src_x,
@@ -77,6 +96,75 @@ impl MovementTarget {
             start_tick,
             total_distance,
             start_time: std::time::Instant::now(),
+            waypoints: None,
+            total_path_length: total_distance,
+            total_path_length_world: world_distance,
+            segment_distances: vec![],
+        }
+    }
+
+    /// Create a movement target with multi-waypoint path support
+    ///
+    /// Calculates cumulative distances for smooth interpolation across all waypoints.
+    /// This allows the character to move continuously without stopping at intermediate points.
+    ///
+    /// # Important
+    /// The `total_path_length` is calculated in **cell space** (not world space) to ensure
+    /// correct duration calculation with `ms_per_cell`. World positions are used only for
+    /// visual interpolation.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_waypoints(
+        src_x: u16,
+        src_y: u16,
+        dest_x: u16,
+        dest_y: u16,
+        src_world_pos: Vec3,
+        dest_world_pos: Vec3,
+        start_tick: u32,
+        waypoint_world_positions: Vec<Vec3>,
+        waypoint_cell_coords: Vec<(u16, u16)>,
+    ) -> Self {
+        let dx = (dest_x as f32) - (src_x as f32);
+        let dy = (dest_y as f32) - (src_y as f32);
+        let total_distance = (dx * dx + dy * dy).sqrt();
+
+        // Calculate cumulative distances in WORLD space for interpolation
+        let mut segment_distances = Vec::new();
+        let mut cumulative_world_distance = 0.0;
+        segment_distances.push(0.0);
+
+        for i in 1..waypoint_world_positions.len() {
+            let prev = waypoint_world_positions[i - 1];
+            let curr = waypoint_world_positions[i];
+            let segment_length = prev.distance(curr);
+            cumulative_world_distance += segment_length;
+            segment_distances.push(cumulative_world_distance);
+        }
+
+        // Calculate total path length in CELL space for duration calculation
+        let mut cell_space_distance = 0.0;
+        for i in 1..waypoint_cell_coords.len() {
+            let (prev_x, prev_y) = waypoint_cell_coords[i - 1];
+            let (curr_x, curr_y) = waypoint_cell_coords[i];
+            let dx = (curr_x as f32) - (prev_x as f32);
+            let dy = (curr_y as f32) - (prev_y as f32);
+            cell_space_distance += (dx * dx + dy * dy).sqrt();
+        }
+
+        Self {
+            src_x,
+            src_y,
+            dest_x,
+            dest_y,
+            src_world_pos,
+            dest_world_pos,
+            start_tick,
+            total_distance,
+            start_time: std::time::Instant::now(),
+            waypoints: Some(waypoint_world_positions),
+            total_path_length: cell_space_distance,
+            total_path_length_world: cumulative_world_distance,
+            segment_distances,
         }
     }
 
@@ -100,11 +188,14 @@ impl MovementTarget {
         start_tick: u32,
         elapsed_ms: u32,
     ) -> Self {
+        // Cell space distance (for timing)
         let dx = (dest_x as f32) - (src_x as f32);
         let dy = (dest_y as f32) - (src_y as f32);
         let total_distance = (dx * dx + dy * dy).sqrt();
 
-        // Adjust start_time backwards to account for elapsed time
+        // World space distance (for interpolation)
+        let world_distance = src_world_pos.distance(dest_world_pos);
+
         let start_time = std::time::Instant::now()
             .checked_sub(std::time::Duration::from_millis(elapsed_ms as u64))
             .unwrap_or_else(std::time::Instant::now);
@@ -119,16 +210,55 @@ impl MovementTarget {
             start_tick,
             total_distance,
             start_time,
+            waypoints: None,
+            total_path_length: total_distance,
+            total_path_length_world: world_distance,
+            segment_distances: vec![],
         }
+    }
+
+    /// Create movement target with waypoints AND elapsed time for mid-movement spawning
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_waypoints_and_elapsed(
+        src_x: u16,
+        src_y: u16,
+        dest_x: u16,
+        dest_y: u16,
+        src_world_pos: Vec3,
+        dest_world_pos: Vec3,
+        start_tick: u32,
+        elapsed_ms: u32,
+        waypoint_world_positions: Vec<Vec3>,
+        waypoint_cell_coords: Vec<(u16, u16)>,
+    ) -> Self {
+        let mut target = Self::new_with_waypoints(
+            src_x,
+            src_y,
+            dest_x,
+            dest_y,
+            src_world_pos,
+            dest_world_pos,
+            start_tick,
+            waypoint_world_positions,
+            waypoint_cell_coords,
+        );
+
+        target.start_time = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_millis(elapsed_ms as u64))
+            .unwrap_or_else(std::time::Instant::now);
+
+        target
     }
 
     /// Calculate movement progress (0.0 to 1.0)
     ///
     /// Uses elapsed time and speed to determine how far along the movement we are.
     /// Returns 1.0 when movement is complete.
+    /// For multi-waypoint paths, uses total_path_length instead of direct distance.
     pub fn progress(&self, speed_ms_per_cell: f32) -> f32 {
         let elapsed_ms = self.start_time.elapsed().as_millis() as f32;
-        let total_duration_ms = self.total_distance * speed_ms_per_cell;
+        let path_length = self.total_path_length;
+        let total_duration_ms = path_length * speed_ms_per_cell;
 
         if total_duration_ms <= 0.0 {
             return 1.0;
@@ -140,6 +270,106 @@ impl MovementTarget {
     /// Check if movement is complete
     pub fn is_complete(&self, speed_ms_per_cell: f32) -> bool {
         self.progress(speed_ms_per_cell) >= 1.0
+    }
+
+    /// Calculate current position along multi-waypoint path
+    ///
+    /// Returns the interpolated world position based on progress through all waypoints.
+    /// For single-segment paths, falls back to simple linear interpolation.
+    pub fn interpolated_position(&self, speed_ms_per_cell: f32) -> Vec3 {
+        let progress = self.progress(speed_ms_per_cell);
+
+        let Some(waypoints) = &self.waypoints else {
+            return self.src_world_pos.lerp(self.dest_world_pos, progress);
+        };
+
+        if waypoints.is_empty() {
+            return self.src_world_pos.lerp(self.dest_world_pos, progress);
+        }
+
+        // Use world space distance for interpolation (matches segment_distances)
+        let target_distance = progress * self.total_path_length_world;
+
+        for i in 1..self.segment_distances.len() {
+            let segment_start_dist = self.segment_distances[i - 1];
+            let segment_end_dist = self.segment_distances[i];
+
+            if target_distance <= segment_end_dist {
+                let segment_length = segment_end_dist - segment_start_dist;
+                if segment_length <= 0.0 {
+                    return waypoints[i - 1];
+                }
+
+                let segment_progress = (target_distance - segment_start_dist) / segment_length;
+                return waypoints[i - 1].lerp(waypoints[i], segment_progress);
+            }
+        }
+
+        waypoints.last().copied().unwrap_or(self.dest_world_pos)
+    }
+
+    /// Calculate current movement direction based on path progress
+    ///
+    /// Returns the direction the character should be facing based on which segment
+    /// of the path they're currently traversing. For multi-waypoint paths, this
+    /// ensures the character faces the correct direction as they turn at corners.
+    ///
+    /// # Arguments
+    ///
+    /// * `speed_ms_per_cell` - Movement speed in milliseconds per cell
+    ///
+    /// # Returns
+    ///
+    /// Direction enum value representing the current facing direction
+    pub fn current_direction(
+        &self,
+        speed_ms_per_cell: f32,
+    ) -> crate::domain::entities::character::components::visual::Direction {
+        use crate::domain::entities::character::components::visual::Direction;
+
+        let progress = self.progress(speed_ms_per_cell);
+
+        let Some(waypoints) = &self.waypoints else {
+            let dx = self.dest_world_pos.x - self.src_world_pos.x;
+            let dz = self.dest_world_pos.z - self.src_world_pos.z;
+            return Direction::from_movement_vector(-dx, dz);
+        };
+
+        if waypoints.is_empty() {
+            let dx = self.dest_world_pos.x - self.src_world_pos.x;
+            let dz = self.dest_world_pos.z - self.src_world_pos.z;
+            return Direction::from_movement_vector(-dx, dz);
+        }
+
+        let target_distance = progress * self.total_path_length_world;
+
+        for i in 1..self.segment_distances.len() {
+            let segment_end_dist = self.segment_distances[i];
+
+            if target_distance <= segment_end_dist {
+                let segment_start = waypoints[i - 1];
+                let segment_end = waypoints[i];
+
+                let dx = segment_end.x - segment_start.x;
+                let dz = segment_end.z - segment_start.z;
+
+                if dx.abs() < 0.01 && dz.abs() < 0.01 {
+                    continue;
+                }
+
+                return Direction::from_movement_vector(-dx, dz);
+            }
+        }
+
+        if let Some(last_waypoint) = waypoints.last() {
+            let dx = self.dest_world_pos.x - last_waypoint.x;
+            let dz = self.dest_world_pos.z - last_waypoint.z;
+            return Direction::from_movement_vector(-dx, dz);
+        }
+
+        let dx = self.dest_world_pos.x - self.src_world_pos.x;
+        let dz = self.dest_world_pos.z - self.src_world_pos.z;
+        Direction::from_movement_vector(-dx, dz)
     }
 }
 
@@ -211,5 +441,65 @@ mod tests {
     fn test_movement_state_default() {
         let state = MovementState::default();
         assert_eq!(state, MovementState::Idle);
+    }
+
+    #[test]
+    fn test_current_direction_simple_path() {
+        use crate::domain::entities::character::components::visual::Direction;
+
+        let target = MovementTarget::new(
+            0,
+            0,
+            10,
+            0,
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(50.0, 0.0, 0.0),
+            1000,
+        );
+
+        let speed = MovementSpeed::new(100.0);
+        let direction = target.current_direction(speed.ms_per_cell);
+
+        assert_eq!(direction, Direction::West);
+    }
+
+    #[test]
+    fn test_current_direction_l_shaped_path() {
+        use crate::domain::entities::character::components::visual::Direction;
+
+        let waypoint_world_positions = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(50.0, 0.0, 0.0),
+            Vec3::new(50.0, 0.0, 50.0),
+        ];
+        let waypoint_cell_coords = vec![(0, 0), (10, 0), (10, 10)];
+
+        let mut target = MovementTarget::new_with_waypoints(
+            0,
+            0,
+            10,
+            10,
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(50.0, 0.0, 50.0),
+            1000,
+            waypoint_world_positions,
+            waypoint_cell_coords,
+        );
+
+        let speed = MovementSpeed::new(100.0);
+
+        target.start_time = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_millis(500))
+            .unwrap_or_else(std::time::Instant::now);
+
+        let direction_at_start = target.current_direction(speed.ms_per_cell);
+        assert_eq!(direction_at_start, Direction::West);
+
+        target.start_time = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_millis(1200))
+            .unwrap_or_else(std::time::Instant::now);
+
+        let direction_at_corner = target.current_direction(speed.ms_per_cell);
+        assert_eq!(direction_at_corner, Direction::North);
     }
 }

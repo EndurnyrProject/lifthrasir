@@ -1,9 +1,8 @@
 use super::components::{MovementSpeed, MovementState};
 use super::events::{MovementConfirmed, MovementRequested, MovementStopped};
 use super::systems::{
-    advance_waypoint_system, handle_movement_confirmed_system, handle_movement_stopped_system,
-    handle_server_stop_system, interpolate_movement_system, send_movement_requests_system,
-    update_entity_altitude_system,
+    handle_movement_confirmed_system, handle_movement_stopped_system, handle_server_stop_system,
+    interpolate_movement_system, send_movement_requests_system, update_entity_altitude_system,
 };
 use crate::domain::entities::pathfinding::WalkablePath;
 use crate::infrastructure::networking::protocol::zone::handlers::movement_handlers::{
@@ -65,10 +64,7 @@ impl Plugin for MovementPlugin {
 
         // Systems that read events run in PostUpdate to avoid conflicts
         // This allows event writers in Update to complete before readers process them
-        app.add_systems(
-            PostUpdate,
-            (handle_movement_stopped_system, advance_waypoint_system).chain(),
-        );
+        app.add_systems(PostUpdate, handle_movement_stopped_system);
 
         info!("MovementPlugin initialized");
     }

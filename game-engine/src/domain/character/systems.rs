@@ -629,9 +629,7 @@ pub fn detect_map_loading_timeout(
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_character_sprite_on_game_start(
     mut commands: Commands,
-    mut spawn_events: MessageWriter<
-        crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent,
-    >,
+    mut spawn_events: MessageWriter<crate::domain::entities::character::SpawnCharacterSpriteEvent>,
     spawn_context: Res<MapSpawnContext>,
     mut entity_registry: ResMut<EntityRegistry>,
     user_session: Res<UserSession>,
@@ -702,7 +700,7 @@ pub fn spawn_character_sprite_on_game_start(
 
     // Emit event to spawn sprite hierarchy
     spawn_events.write(
-        crate::domain::entities::character::sprite_hierarchy::SpawnCharacterSpriteEvent {
+        crate::domain::entities::character::SpawnCharacterSpriteEvent {
             character_entity,
             spawn_position: world_pos,
         },

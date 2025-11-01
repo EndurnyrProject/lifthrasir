@@ -1,7 +1,6 @@
 use crate::domain::entities::character::components::visual::ActionType;
-use crate::domain::entities::character::components::visual::EffectType;
-use crate::domain::entities::character::sprite_hierarchy::{
-    SpriteAnimationChangeEvent, StatusEffectVisualEvent,
+use crate::domain::entities::sprite_rendering::{
+    EffectType, SpriteAnimationChangeEvent, StatusEffectVisualEvent,
 };
 use bevy::prelude::*;
 use seldom_state::prelude::*;

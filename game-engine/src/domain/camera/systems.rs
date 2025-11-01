@@ -4,15 +4,15 @@ use bevy::prelude::*;
 use super::components::{CameraFollowSettings, CameraFollowTarget};
 use super::resources::CameraRotationDelta;
 use crate::domain::entities::character::kinds::CharacterRoot;
-use crate::domain::entities::character::sprite_hierarchy::CharacterObjectTree;
 use crate::domain::entities::markers::LocalPlayer;
+use crate::domain::entities::sprite_rendering::SpriteObjectTree;
 
-/// Type alias for player query with added CharacterObjectTree
+/// Type alias for player query with added SpriteObjectTree
 type PlayerReadyQuery<'w, 's> = Query<
     'w,
     's,
-    (Entity, &'static CharacterObjectTree),
-    (With<LocalPlayer>, Added<CharacterObjectTree>),
+    (Entity, &'static SpriteObjectTree),
+    (With<LocalPlayer>, Added<SpriteObjectTree>),
 >;
 
 /// Resource to track if the camera has been spawned.
@@ -27,13 +27,13 @@ pub struct CameraSpawned(pub bool);
 /// System that spawns the camera entity when the local player character sprite hierarchy is ready.
 ///
 /// # Behavior
-/// - Runs once when the local player character has a CharacterObjectTree component
+/// - Runs once when the local player character has a SpriteObjectTree component
 /// - Creates a camera positioned relative to the player's root transform
 /// - Sets up follow target and settings components
 /// - Prevents duplicate camera spawns via CameraSpawned resource
 ///
 /// # Run Conditions
-/// - Player entity with LocalPlayer + CharacterObjectTree exists
+/// - Player entity with LocalPlayer + SpriteObjectTree exists
 /// - Camera not already spawned (CameraSpawned resource = false)
 /// - Runs in PostUpdate schedule
 pub fn spawn_camera_on_player_ready(
@@ -193,11 +193,13 @@ pub fn camera_follow_system(
         if rotation_delta.has_delta() {
             // Convert pixel deltas to angle changes (degrees to radians)
             let yaw_change = (rotation_delta.delta_x * settings.rotation_sensitivity).to_radians();
-            let pitch_change = (rotation_delta.delta_y * settings.rotation_sensitivity).to_radians();
+            let pitch_change =
+                (rotation_delta.delta_y * settings.rotation_sensitivity).to_radians();
 
             // Update yaw and pitch
             settings.yaw += yaw_change;
-            settings.pitch = (settings.pitch + pitch_change).clamp(settings.min_pitch, settings.max_pitch);
+            settings.pitch =
+                (settings.pitch + pitch_change).clamp(settings.min_pitch, settings.max_pitch);
 
             // Get current distance from offset magnitude
             let distance = settings.offset.length();
@@ -273,10 +275,12 @@ pub fn camera_follow_system(
             settings.offset = defaults.offset;
             settings.yaw = defaults.yaw;
             settings.pitch = defaults.pitch;
-            info!("Camera reset to default: yaw={:.2}°, pitch={:.2}°, distance={:.1}",
-                  settings.yaw.to_degrees(),
-                  settings.pitch.to_degrees(),
-                  settings.offset.length());
+            info!(
+                "Camera reset to default: yaw={:.2}°, pitch={:.2}°, distance={:.1}",
+                settings.yaw.to_degrees(),
+                settings.pitch.to_degrees(),
+                settings.offset.length()
+            );
         }
 
         // ========================================

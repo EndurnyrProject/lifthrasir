@@ -8,6 +8,7 @@ pub mod pathfinding;
 pub mod registry;
 pub mod spawning;
 pub mod sprite_factory;
+pub mod sprite_rendering;
 pub mod systems;
 pub mod types;
 

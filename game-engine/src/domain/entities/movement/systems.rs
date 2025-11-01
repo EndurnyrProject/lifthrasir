@@ -2,9 +2,9 @@ use super::components::{MovementSpeed, MovementState, MovementTarget};
 use super::events::{MovementConfirmed, MovementRequested, MovementStopped, StopReason};
 use crate::domain::entities::character::components::core::Grounded;
 use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
-use crate::domain::entities::character::sprite_hierarchy::CharacterObjectTree;
 use crate::domain::entities::character::states::{StartWalking, StopWalking};
-use crate::domain::entities::pathfinding::WalkablePath;
+use crate::domain::entities::pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath};
+use crate::domain::entities::sprite_rendering::components::SpriteObjectTree;
 use crate::domain::world::components::MapLoader;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use crate::infrastructure::networking::client::ZoneServerClient;
@@ -46,30 +46,35 @@ pub fn send_movement_requests_system(
 /// Processes MovementConfirmedByServer events and initiates client-side interpolation.
 /// This system:
 /// 1. Looks up entity from AID via EntityRegistry
-/// 2. Creates MovementTarget component with interpolation data
+/// 2. Creates MovementTarget component with multi-waypoint interpolation data
 /// 3. Updates character direction based on movement vector
 /// 4. Changes state to Moving (only if not already walking)
 /// 5. Inserts StartWalking trigger for animation state machine (only if not already walking)
+///
+/// **Multi-Waypoint Support:** If the entity has a WalkablePath component with waypoints,
+/// this system creates a MovementTarget that interpolates smoothly across all waypoints
+/// without stopping at intermediate cells. This eliminates the stuttering movement issue.
 ///
 /// **Position Continuity:** When a new movement is confirmed during an existing movement,
 /// this system uses the character's current interpolated position as the source instead of
 /// the server's stale position. This prevents the character from snapping back to the old
 /// destination before moving to the new target.
-///
-/// **Pathfinding Optimization:** During multi-step pathfinding, if the entity is already
-/// in Moving state, we only update the MovementTarget and direction without retriggering
-/// the StartWalking animation. This prevents animation restarts at each waypoint.
+#[allow(clippy::too_many_arguments)]
 pub fn handle_movement_confirmed_system(
     mut commands: Commands,
     mut server_events: MessageReader<MovementConfirmedByServer>,
     mut client_events: MessageWriter<MovementConfirmed>,
     entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
-    query: Query<(Option<&MovementTarget>, &CharacterObjectTree)>,
+    query: Query<(
+        Option<&MovementTarget>,
+        &SpriteObjectTree,
+        Option<&WalkablePath>,
+    )>,
     sprite_transforms: Query<&Transform>,
     movement_states: Query<&MovementState>,
+    pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
 ) {
     for event in server_events.read() {
-        // Look up entity from AID in packet
         let Some(entity) = entity_registry.get_entity(event.aid) else {
             warn!(
                 "Movement confirmed for unknown entity AID: {} - may not be spawned yet",
@@ -78,7 +83,7 @@ pub fn handle_movement_confirmed_system(
             continue;
         };
 
-        let Ok((existing_target, object_tree)) = query.get(entity) else {
+        let Ok((existing_target, object_tree, walkable_path)) = query.get(entity) else {
             warn!(
                 "Entity {:?} missing required components for movement",
                 entity
@@ -91,10 +96,7 @@ pub fn handle_movement_confirmed_system(
             entity, event.src_x, event.src_y, event.dest_x, event.dest_y, event.server_tick
         );
 
-        // Determine the actual source position for interpolation
-        // If the character is already moving, use current position to prevent snapping
         let (actual_src_x, actual_src_y, src_world_pos) = if existing_target.is_some() {
-            // Character is mid-movement - use current interpolated position
             if let Ok(transform) = sprite_transforms.get(object_tree.root) {
                 let current_pos = transform.translation;
                 let (current_x, current_y) =
@@ -108,30 +110,104 @@ pub fn handle_movement_confirmed_system(
 
                 (current_x, current_y, current_world_pos)
             } else {
-                // Fallback to server position if transform not found
                 let pos = spawn_coords_to_world_position(event.src_x, event.src_y, 0, 0);
                 (event.src_x, event.src_y, pos)
             }
         } else {
-            // Character is idle - use server's source position
             let pos = spawn_coords_to_world_position(event.src_x, event.src_y, 0, 0);
             (event.src_x, event.src_y, pos)
         };
 
         let dest_world_pos = spawn_coords_to_world_position(event.dest_x, event.dest_y, 0, 0);
 
-        // Create movement target with actual current position as source
-        let target = MovementTarget::new(
-            actual_src_x,
-            actual_src_y,
-            event.dest_x,
-            event.dest_y,
-            src_world_pos,
-            dest_world_pos,
-            event.server_tick,
-        );
+        // Check if we can reuse existing path
+        let path_to_use = walkable_path
+            .filter(|path| {
+                let destination_matches = path.final_destination == (event.dest_x, event.dest_y);
+                if destination_matches {
+                    debug!("Reusing existing path for entity {:?}", entity);
+                }
+                destination_matches
+            })
+            .cloned();
 
-        // Calculate direction from actual movement vector (current position to destination)
+        // Generate new path only if needed
+        let path_to_use = if path_to_use.is_none() {
+            if let Some(grid) = pathfinding_grid.as_ref() {
+                if let Some(waypoints) = find_path(
+                    &grid.0,
+                    (actual_src_x, actual_src_y),
+                    (event.dest_x, event.dest_y),
+                ) {
+                    if waypoints.len() > 1 {
+                        debug!(
+                            "Generated new path for entity {:?} with {} waypoints",
+                            entity,
+                            waypoints.len()
+                        );
+                        let walkable_path =
+                            WalkablePath::new(waypoints, (event.dest_x, event.dest_y));
+                        commands.entity(entity).insert(walkable_path.clone());
+                        Some(walkable_path)
+                    } else {
+                        None
+                    }
+                } else {
+                    warn!(
+                        "Could not find path for entity {:?} from ({}, {}) to ({}, {}) - will use direct movement",
+                        entity, actual_src_x, actual_src_y, event.dest_x, event.dest_y
+                    );
+                    None
+                }
+            } else {
+                warn!(
+                    "Pathfinding grid not available for entity {:?} - will use direct movement",
+                    entity
+                );
+                None
+            }
+        } else {
+            path_to_use
+        };
+
+        let target = if let Some(path) = path_to_use {
+            let waypoint_world_positions: Vec<Vec3> = path
+                .waypoints
+                .iter()
+                .map(|(x, y)| spawn_coords_to_world_position(*x, *y, 0, 0))
+                .collect();
+
+            // Clone cell coordinates for duration calculation
+            let waypoint_cell_coords = path.waypoints.clone();
+
+            debug!(
+                "Creating multi-waypoint movement target with {} waypoints",
+                waypoint_world_positions.len()
+            );
+
+            MovementTarget::new_with_waypoints(
+                actual_src_x,
+                actual_src_y,
+                event.dest_x,
+                event.dest_y,
+                src_world_pos,
+                dest_world_pos,
+                event.server_tick,
+                waypoint_world_positions,
+                waypoint_cell_coords,
+            )
+        } else {
+            MovementTarget::new(
+                actual_src_x,
+                actual_src_y,
+                event.dest_x,
+                event.dest_y,
+                src_world_pos,
+                dest_world_pos,
+                event.server_tick,
+            )
+        };
+
         let dx = (event.dest_x as f32) - (actual_src_x as f32);
         let dy = (event.dest_y as f32) - (actual_src_y as f32);
         let direction = Direction::from_movement_vector(-dx, dy);
@@ -170,19 +246,26 @@ pub fn handle_movement_confirmed_system(
 /// Interpolate character movement every frame
 ///
 /// This is the core movement system that runs every frame to smoothly
-/// move characters between their source and destination positions.
+/// move characters through their entire path. For multi-waypoint paths,
+/// it interpolates continuously across all waypoints without stopping
+/// at intermediate cells.
+///
+/// The system also updates the character's facing direction dynamically
+/// as they traverse path segments, ensuring proper sprite orientation
+/// during turns.
 pub fn interpolate_movement_system(
-    query: Query<(
+    mut query: Query<(
         Entity,
         &MovementTarget,
         &MovementSpeed,
         &MovementState,
-        &CharacterObjectTree,
+        &SpriteObjectTree,
+        &mut CharacterDirection,
     )>,
     mut sprite_transforms: Query<&mut Transform>,
     mut stop_events: MessageWriter<MovementStopped>,
 ) {
-    for (entity, target, speed, state, object_tree) in query.iter() {
+    for (entity, target, speed, state, object_tree, mut character_direction) in query.iter_mut() {
         if *state != MovementState::Moving {
             continue;
         }
@@ -195,7 +278,6 @@ pub fn interpolate_movement_system(
         let progress = target.progress(speed.ms_per_cell);
 
         if progress >= 1.0 {
-            // Movement complete - snap to final position using cached world position
             transform.translation.x = target.dest_world_pos.x;
             transform.translation.z = target.dest_world_pos.z;
 
@@ -211,10 +293,14 @@ pub fn interpolate_movement_system(
                 entity, target.dest_x, target.dest_y
             );
         } else {
-            transform.translation.x = target.src_world_pos.x
-                + (target.dest_world_pos.x - target.src_world_pos.x) * progress;
-            transform.translation.z = target.src_world_pos.z
-                + (target.dest_world_pos.z - target.src_world_pos.z) * progress;
+            let interpolated_pos = target.interpolated_position(speed.ms_per_cell);
+            transform.translation.x = interpolated_pos.x;
+            transform.translation.z = interpolated_pos.z;
+
+            let current_direction = target.current_direction(speed.ms_per_cell);
+            if character_direction.facing != current_direction {
+                character_direction.facing = current_direction;
+            }
         }
     }
 }
@@ -228,7 +314,7 @@ pub fn handle_server_stop_system(
     mut server_stop_events: MessageReader<MovementStoppedByServer>,
     mut client_stop_events: MessageWriter<MovementStopped>,
     entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
-    query: Query<&CharacterObjectTree>,
+    query: Query<&SpriteObjectTree>,
     mut sprite_transforms: Query<&mut Transform>,
 ) {
     for server_event in server_stop_events.read() {
@@ -239,7 +325,7 @@ pub fn handle_server_stop_system(
         };
 
         let Ok(object_tree) = query.get(entity) else {
-            warn!("Entity {:?} missing CharacterObjectTree", entity);
+            warn!("Entity {:?} missing SpriteObjectTree", entity);
             continue;
         };
 
@@ -268,37 +354,23 @@ pub fn handle_server_stop_system(
 ///
 /// Cleanup system that runs when movement completes or is interrupted.
 /// - Removes MovementTarget component
-/// - Updates state to Idle (only if no more waypoints)
-/// - Inserts StopWalking trigger for animation (only if no more waypoints)
+/// - Removes WalkablePath component (path is complete)
+/// - Updates state to Idle
+/// - Inserts StopWalking trigger for animation
 ///
-/// **Pathfinding Optimization:** If the entity has more waypoints in its path,
-/// we only remove the MovementTarget without stopping the animation. This prevents
-/// the animation from restarting at each waypoint during multi-step pathfinding.
+/// With the new smooth multi-waypoint interpolation, movement only stops
+/// when the character reaches the final destination, so this always triggers
+/// the complete cleanup sequence.
 pub fn handle_movement_stopped_system(
     mut commands: Commands,
     mut events: MessageReader<MovementStopped>,
     movement_states: Query<&MovementState>,
-    path_query: Query<&WalkablePath>,
 ) {
     for event in events.read() {
         debug!(
             "Cleaning up movement for {:?}: reason {:?}",
             event.entity, event.reason
         );
-
-        let has_more_waypoints = path_query
-            .get(event.entity)
-            .map(|path| !path.is_complete())
-            .unwrap_or(false);
-
-        if has_more_waypoints {
-            debug!(
-                "🔄 Entity {:?} has more waypoints - keeping walking animation active",
-                event.entity
-            );
-            commands.entity(event.entity).remove::<MovementTarget>();
-            continue;
-        }
 
         if let Ok(movement_state) = movement_states.get(event.entity) {
             if matches!(movement_state, MovementState::Idle) {
@@ -317,6 +389,7 @@ pub fn handle_movement_stopped_system(
         commands
             .entity(event.entity)
             .remove::<MovementTarget>()
+            .remove::<WalkablePath>()
             .remove::<StartWalking>()
             .insert((MovementState::Idle, StopWalking));
     }
@@ -334,7 +407,7 @@ pub fn handle_movement_stopped_system(
 pub fn update_entity_altitude_system(
     map_loader_query: Query<&MapLoader>,
     altitude_assets: Option<Res<Assets<RoAltitudeAsset>>>,
-    grounded_entities: Query<&CharacterObjectTree, With<Grounded>>,
+    grounded_entities: Query<&SpriteObjectTree, With<Grounded>>,
     mut sprite_transforms: Query<&mut Transform>,
 ) {
     let Some(altitude_assets) = altitude_assets else {
@@ -367,44 +440,49 @@ pub fn update_entity_altitude_system(
     }
 }
 
-pub fn advance_waypoint_system(
-    mut commands: Commands,
-    mut stop_events: MessageReader<MovementStopped>,
-    mut movement_requests: MessageWriter<MovementRequested>,
-    mut path_query: Query<(Entity, &mut WalkablePath)>,
-) {
-    for event in stop_events.read() {
-        if event.reason != StopReason::ReachedDestination {
-            continue;
-        }
-
-        let Ok((entity, mut path)) = path_query.get_mut(event.entity) else {
-            continue;
-        };
-
-        if path.advance() {
-            if let Some((next_x, next_y)) = path.next_waypoint() {
-                debug!(
-                    "Advancing to waypoint {}/{}: ({}, {})",
-                    path.current_waypoint + 1,
-                    path.waypoints.len(),
-                    next_x,
-                    next_y
-                );
-
-                movement_requests.write(MovementRequested {
-                    entity,
-                    dest_x: next_x,
-                    dest_y: next_y,
-                    direction: 0,
-                });
-            }
-        } else {
-            debug!("Path complete, removing WalkablePath component");
-            commands.entity(entity).remove::<WalkablePath>();
-        }
-    }
-}
+// DEPRECATED: This system is no longer used with smooth multi-waypoint interpolation.
+// The new MovementTarget::new_with_waypoints() creates a single movement that
+// interpolates smoothly across all waypoints without stopping at intermediate cells.
+// Keeping this code for reference but it's not registered in the plugin.
+//
+// pub fn advance_waypoint_system(
+//     mut commands: Commands,
+//     mut stop_events: MessageReader<MovementStopped>,
+//     mut movement_requests: MessageWriter<MovementRequested>,
+//     mut path_query: Query<(Entity, &mut WalkablePath)>,
+// ) {
+//     for event in stop_events.read() {
+//         if event.reason != StopReason::ReachedDestination {
+//             continue;
+//         }
+//
+//         let Ok((entity, mut path)) = path_query.get_mut(event.entity) else {
+//             continue;
+//         };
+//
+//         if path.advance() {
+//             if let Some((next_x, next_y)) = path.next_waypoint() {
+//                 debug!(
+//                     "Advancing to waypoint {}/{}: ({}, {})",
+//                     path.current_waypoint + 1,
+//                     path.waypoints.len(),
+//                     next_x,
+//                     next_y
+//                 );
+//
+//                 movement_requests.write(MovementRequested {
+//                     entity,
+//                     dest_x: next_x,
+//                     dest_y: next_y,
+//                     direction: 0,
+//                 });
+//             }
+//         } else {
+//             debug!("Path complete, removing WalkablePath component");
+//             commands.entity(entity).remove::<WalkablePath>();
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
