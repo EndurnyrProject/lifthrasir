@@ -10,6 +10,7 @@ use bevy::{
 use std::collections::HashSet;
 
 /// Convert indexed sprite data to RGBA using palette
+/// Performance: This is called for every animation frame conversion
 pub fn convert_indexed_to_rgba(indexed_data: &[u8], palette: &Palette) -> Vec<u8> {
     let mut rgba_data = Vec::with_capacity(indexed_data.len() * 4);
     let mut invalid_indices = 0;

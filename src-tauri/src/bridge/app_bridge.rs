@@ -188,8 +188,8 @@ impl AppBridge {
 
     pub fn forward_mouse_position(&self, x: f32, y: f32) -> Result<(), String> {
         self.tauri_tx
-            .send(TauriIncomingEvent::MousePosition { x, y })
-            .map_err(|e| format!("Failed to send mouse position event: {}", e))?;
+            .try_send(TauriIncomingEvent::MousePosition { x, y })
+            .ok();
 
         Ok(())
     }
@@ -204,8 +204,8 @@ impl AppBridge {
 
     pub fn forward_camera_rotation(&self, delta_x: f32, delta_y: f32) -> Result<(), String> {
         self.tauri_tx
-            .send(TauriIncomingEvent::CameraRotation { delta_x, delta_y })
-            .map_err(|e| format!("Failed to send camera rotation event: {}", e))?;
+            .try_send(TauriIncomingEvent::CameraRotation { delta_x, delta_y })
+            .ok();
 
         Ok(())
     }

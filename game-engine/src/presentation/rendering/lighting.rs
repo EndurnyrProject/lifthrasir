@@ -71,6 +71,13 @@ fn setup_directional_light(commands: &mut Commands, rsw_light: &RswLight) {
     let light_direction = Vec3::new(sun_dir_x, sun_dir_y, sun_dir_z).normalize();
     let illuminance = calculate_global_lux(rsw_light);
 
+    // PERFORMANCE: Optimized shadow cascade settings for RO-style game
+    // - Reduced num_cascades from 4 to 3 (fewer shadow map passes per frame)
+    // - Reduced maximum_distance from 5000.0 to 1500.0 (cull distant shadows)
+    // - This targets 2-3x shadow rendering speedup on entity-heavy maps (5000+ entities)
+    // NOTE: Bevy 0.17 uses basic orthographic culling for cascades. Per-cascade
+    // frustum culling (github.com/bevyengine/bevy/issues/10397) is not yet implemented.
+    // The distance reduction compensates for this limitation.
     commands.spawn((
         DirectionalLight {
             illuminance,
@@ -82,9 +89,9 @@ fn setup_directional_light(commands: &mut Commands, rsw_light: &RswLight) {
         },
         Transform::from_translation(Vec3::ZERO).looking_to(light_direction, Vec3::NEG_Y),
         CascadeShadowConfigBuilder {
-            num_cascades: 4,
+            num_cascades: 3,
             first_cascade_far_bound: 200.0,
-            maximum_distance: 5000.0,
+            maximum_distance: 1500.0,
             overlap_proportion: 0.2,
             ..default()
         }
@@ -138,24 +145,19 @@ fn spawn_point_light(commands: &mut Commands, light_obj: &RswLightObj) {
 
     let radius = 0.3;
 
+    // PERFORMANCE: Point lights are expensive for shadows in entity-heavy scenes.
+    // Disabled shadows to improve performance on maps with 5000+ entities.
+    // CascadeShadowConfig is only valid for DirectionalLights, not PointLights.
     commands.spawn((
         PointLight {
             intensity: final_intensity,
             color: light_color,
             range: light_obj.range,
             radius,
-            shadows_enabled: true,
+            shadows_enabled: false,
             ..default()
         },
         Transform::from_translation(position),
-        CascadeShadowConfigBuilder {
-            num_cascades: 4,
-            first_cascade_far_bound: 200.0,
-            maximum_distance: 5000.0,
-            overlap_proportion: 0.2,
-            ..default()
-        }
-        .build(),
         MapLight,
     ));
 }

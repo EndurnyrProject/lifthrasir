@@ -14,6 +14,7 @@ impl Plugin for AssetsPlugin {
             .init_asset_loader::<RoSpriteLoader>()
             .init_asset::<RoActAsset>()
             .init_asset_loader::<RoActLoader>()
+            .init_asset::<RoAnimationAsset>()
             .init_asset::<RoWorldAsset>()
             .init_asset_loader::<RoWorldLoader>()
             .init_asset::<RoGroundAsset>()

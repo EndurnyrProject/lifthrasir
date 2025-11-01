@@ -223,7 +223,6 @@ pub fn handle_status_effect_visuals(
 ) {
     for event in effect_events.read() {
         let Ok(object_tree) = entities.get(event.character) else {
-            warn!("Entity {:?} not found for effect visual", event.character);
             continue;
         };
 

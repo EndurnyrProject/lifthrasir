@@ -110,19 +110,13 @@ impl RsmNodeAnimation {
             wrapped_time
         };
 
-        // Find keyframes to interpolate between
-        let mut prev_kf = None;
-        let mut next_kf = None;
-
-        for kf in &self.position_keyframes {
-            if kf.frame as f32 <= current_frame {
-                prev_kf = Some(kf);
-            }
-            if kf.frame as f32 >= current_frame && next_kf.is_none() {
-                next_kf = Some(kf);
-                break;
-            }
-        }
+        let prev_idx = self
+            .position_keyframes
+            .partition_point(|kf| kf.frame as f32 <= current_frame)
+            .saturating_sub(1);
+        let next_idx = prev_idx + 1;
+        let prev_kf = self.position_keyframes.get(prev_idx);
+        let next_kf = self.position_keyframes.get(next_idx);
 
         match (prev_kf, next_kf) {
             (Some(prev), Some(next)) if prev.frame != next.frame => {
@@ -169,19 +163,13 @@ impl RsmNodeAnimation {
             wrapped_time
         };
 
-        // Find keyframes to interpolate between
-        let mut prev_kf = None;
-        let mut next_kf = None;
-
-        for kf in &self.rotation_keyframes {
-            if kf.frame as f32 <= current_frame {
-                prev_kf = Some(kf);
-            }
-            if kf.frame as f32 >= current_frame && next_kf.is_none() {
-                next_kf = Some(kf);
-                break;
-            }
-        }
+        let prev_idx = self
+            .rotation_keyframes
+            .partition_point(|kf| kf.frame as f32 <= current_frame)
+            .saturating_sub(1);
+        let next_idx = prev_idx + 1;
+        let prev_kf = self.rotation_keyframes.get(prev_idx);
+        let next_kf = self.rotation_keyframes.get(next_idx);
 
         match (prev_kf, next_kf) {
             (Some(prev), Some(next)) if prev.frame != next.frame => {

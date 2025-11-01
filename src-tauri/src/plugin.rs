@@ -143,6 +143,7 @@ impl Plugin for TauriIntegrationPlugin {
 
         // Add DefaultPlugins with customizations
         // - WindowPlugin is customized to set primary window
+        // - LogPlugin is customized to output to both console and file
         // - WinitPlugin is disabled because Tauri manages the window and event loop
         // - All rendering-related plugins are disabled and added later in handle_ready_event
         //   after our CustomRendererPlugin creates the WGPU surface from Tauri window
@@ -153,6 +154,25 @@ impl Plugin for TauriIntegrationPlugin {
                         resolution: WindowResolution::new(1440, 1080),
                         ..Default::default()
                     }),
+                    ..Default::default()
+                })
+                .set(bevy::log::LogPlugin {
+                    level: bevy::log::Level::INFO,
+                    filter: "wgpu=error,bevy_render=info,bevy_ecs=warn".to_string(),
+                    custom_layer: |_app| {
+                        use std::{fs::File, sync::Arc};
+
+                        // Create logs directory if it doesn't exist
+                        let _ = std::fs::create_dir_all("logs");
+
+                        // Create file writer for all logs
+                        let file = Arc::new(File::create("logs/lifthrasir.log").ok()?);
+
+                        // Write only to file (console logging handled by default fmt_layer)
+                        Some(Box::new(
+                            bevy::log::tracing_subscriber::fmt::layer().with_writer(file),
+                        ))
+                    },
                     ..Default::default()
                 })
                 .build()
@@ -281,6 +301,7 @@ impl Plugin for TauriIntegrationPlugin {
 }
 
 /// Custom runner that integrates Tauri's event loop with Bevy's update loop
+/// with proper frame-rate limiting to prevent busy-loop and 100% CPU usage
 #[allow(deprecated)]
 fn run_tauri_app(app: App) -> AppExit {
     let app = Rc::new(RefCell::new(app));
@@ -289,6 +310,11 @@ fn run_tauri_app(app: App) -> AppExit {
         .world_mut()
         .remove_non_send_resource::<tauri::App>()
         .unwrap();
+
+    const TARGET_FPS: u64 = 60;
+    const FRAME_DURATION: std::time::Duration =
+        std::time::Duration::from_micros(1_000_000 / TARGET_FPS);
+    let mut last_frame = std::time::Instant::now();
 
     loop {
         let app_clone = app.clone();
@@ -300,6 +326,9 @@ fn run_tauri_app(app: App) -> AppExit {
             tauri_app.cleanup_before_exit();
             break;
         }
+
+        let now = std::time::Instant::now();
+        let elapsed = now.duration_since(last_frame);
 
         app.borrow_mut().update();
     }
@@ -335,6 +364,14 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
             webview_window: window,
         });
 
+        // Add framepace plugin for 60 FPS limiting
+        app.add_plugins(bevy_framepace::FramepacePlugin);
+
+        // Configure framepace to 60 FPS immediately after plugin is added
+        app.world_mut()
+            .resource_mut::<bevy_framepace::FramepaceSettings>()
+            .limiter = bevy_framepace::Limiter::from_framerate(60.0);
+
         // Add all rendering-related plugins that were disabled from DefaultPlugins
         // These must be added AFTER CustomRendererPlugin sets up the rendering resources
         let plugins = (
@@ -356,10 +393,18 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
         );
         app.add_plugins(plugins);
 
+        // Add Bevy diagnostic plugins first
+        app.add_plugins((
+            bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
+            bevy::diagnostic::EntityCountDiagnosticsPlugin::default(),
+            bevy::diagnostic::LogDiagnosticsPlugin::default(),
+        ));
+
         // Add game engine plugins AFTER rendering plugins are available
         // This ensures all required asset types are initialized
         app.add_plugins((
             bevy_tokio_tasks::TokioTasksPlugin::default(),
+            game_engine::RoDiagnosticsPlugin,
             game_engine::LifthrasirPlugin,
             game_engine::AssetsPlugin,
             game_engine::AudioPlugin,
@@ -371,6 +416,7 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
             game_engine::BillboardPlugin,
             game_engine::MovementPlugin,
             game_engine::InputPlugin,
+            game_engine::FpsCounterPlugin,
         ));
 
         // Add camera systems separately

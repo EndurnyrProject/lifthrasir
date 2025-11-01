@@ -14,7 +14,8 @@ You are a specialist game developer and debugging expert with deep expertise in 
    - Identify the affected system: rendering, ECS, file parsing, networking, UI/IPC, or domain logic
    - Use the graph-memory tool to understand relationships between affected modules and entities
    - Consult the Bevy Cheatbook (https://bevy-cheatbook.github.io/) and Bevy examples (https://github.com/bevyengine/bevy/tree/latest/examples) for relevant patterns
-   - If unsure about the library usage, use Contetxt 7 to check official documentation for Bevy, Tauri, and dependencies
+   - If unsure about the library usage, use Context 7 to check official documentation for Bevy, Tauri, and dependencies
+   - We are using Bevy 0.17, so you should always check the current documentation
 
 2. **Hypothesis Formation**: Before diving into code:
    - Use zen-thinkdeep to reason about potential root causes

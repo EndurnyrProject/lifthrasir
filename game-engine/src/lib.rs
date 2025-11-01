@@ -14,7 +14,9 @@ pub use domain::entities::billboard::BillboardPlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
 pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
+pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
 pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
+pub use presentation::ui::fps_counter::FpsCounterPlugin;
 
 use bevy::prelude::*;
 use bevy_tokio_tasks::TokioTasksPlugin;
@@ -32,6 +34,7 @@ pub fn create_app() -> App {
         .add_plugins(ro_asset_source_plugin)
         .add_plugins((
             TokioTasksPlugin::default(), // ENABLED: Required for async networking
+            RoDiagnosticsPlugin,         // ENABLED: Performance diagnostics and profiling
             LifthrasirPlugin,
             AssetsPlugin,                 // ENABLED: Registers ClientConfig asset type
             AudioPlugin,                  // ENABLED: Audio system with BGM support and crossfading

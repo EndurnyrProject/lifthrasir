@@ -446,6 +446,11 @@ fn parse_node(input: &[u8], version: f32, _is_only: bool) -> IResult<&[u8], Node
             remaining = new_remaining;
         }
 
+        debug_assert!(
+            keyframes.windows(2).all(|w| w[0].frame <= w[1].frame),
+            "Position keyframes must be sorted by frame number"
+        );
+
         (remaining, keyframes)
     } else {
         (rem, Vec::new())
@@ -464,6 +469,12 @@ fn parse_node(input: &[u8], version: f32, _is_only: bool) -> IResult<&[u8], Node
             rot_keyframes.push(kf);
             remaining = new_remaining;
         }
+
+        debug_assert!(
+            rot_keyframes.windows(2).all(|w| w[0].frame <= w[1].frame),
+            "Rotation keyframes must be sorted by frame number"
+        );
+
         (remaining, rot_keyframes)
     } else {
         // For version 1.5+, rotation keyframes are not in individual nodes

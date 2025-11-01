@@ -3,8 +3,10 @@ use crate::domain::assets::patterns::{
     body_action_path, body_sprite_path, head_action_path, head_sprite_path,
 };
 use crate::domain::character::JobClass;
+use crate::domain::entities::animation::frame_cache::{FrameCacheKey, RoFrameCache};
 use crate::domain::entities::components::RoAnimationController;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
+use crate::infrastructure::diagnostics::AnimationDiagnostics;
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 use bevy::prelude::*;
 use bevy::{
@@ -117,7 +119,8 @@ fn calculate_head_sprite_index(action_index: usize) -> usize {
 }
 
 /// System to update sprite layer transforms based on animation
-/// Phase 3: Enhanced with PC-specific logic (head direction, anchor offsets)
+/// Phase 3: Enhanced with PC-specific logic (head direction, anchor offsets) and frame caching
+#[allow(clippy::too_many_arguments)]
 pub fn update_sprite_transforms(
     mut sprite_layers: Query<(
         Entity,
@@ -130,6 +133,8 @@ pub fn update_sprite_transforms(
     act_assets: Res<Assets<RoActAsset>>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut frame_cache: ResMut<RoFrameCache>,
+    mut diagnostics: ResMut<AnimationDiagnostics>,
 ) {
     for (_entity, mut transform, hierarchy, controller, material_handle) in sprite_layers.iter_mut()
     {
@@ -216,9 +221,28 @@ pub fn update_sprite_transforms(
 
         // Update existing material's texture instead of creating a new one
         if let Some(material) = materials.get_mut(&material_handle.0) {
-            // Create the texture image for this frame
-            let image = create_sprite_texture_image(sprite_frame, sprite_palette, layer);
-            let texture_handle = images.add(image);
+            // Create cache key for this frame
+            let cache_key = FrameCacheKey::new(
+                &controller.sprite_handle,
+                sprite_index,
+                controller.palette_handle.as_ref(),
+            );
+
+            // Check cache before converting
+            let texture_handle = if let Some(cached_handle) = frame_cache.get(&cache_key) {
+                // Cache HIT - reuse existing texture
+                diagnostics.record_cache_hit();
+                cached_handle
+            } else {
+                // Cache MISS - create and cache the texture
+                diagnostics.record_cache_miss();
+                diagnostics.record_conversion();
+
+                let image = create_sprite_texture_image(sprite_frame, sprite_palette, layer);
+                let handle = images.add(image);
+                frame_cache.insert(cache_key, handle.clone());
+                handle
+            };
 
             // Update the material's texture and color
             material.base_color_texture = Some(texture_handle);
@@ -416,6 +440,7 @@ pub fn populate_sprite_assets(
                             palette_handle: None,
                             loop_animation: true,
                             paused: false,
+                            previous_frame_index: None,
                         };
                         commands.entity(entity).insert(empty_controller);
                         continue; // Skip asset loading, but controller is inserted

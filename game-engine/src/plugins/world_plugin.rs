@@ -6,7 +6,7 @@ use crate::{
             cleanup_map_loading_state, detect_asset_load_failures, extract_map_from_unified_assets,
             monitor_game_state, on_enter_loading_state, setup_unified_map_loading,
         },
-        terrain::{generate_terrain_mesh, generate_terrain_when_textures_ready},
+        terrain::{apply_loaded_terrain_textures, generate_terrain_mesh},
     },
 };
 use bevy::prelude::*;
@@ -27,7 +27,7 @@ impl Plugin for WorldPlugin {
                     extract_map_from_unified_assets,
                     detect_asset_load_failures,
                     generate_terrain_mesh,
-                    generate_terrain_when_textures_ready,
+                    apply_loaded_terrain_textures,
                 )
                     .run_if(in_state(GameState::Loading)),
             )

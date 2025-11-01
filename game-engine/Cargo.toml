@@ -5,11 +5,12 @@ edition.workspace = true
 
 [dependencies]
 # Bevy game engine
-bevy = { version = "0.17.2", features = ["jpeg"] }
+bevy = { version = "0.17.2", features = ["jpeg", "trace", "trace_tracy"] }
 bevy_auto_plugin = "0.8.0"
 bevy_common_assets = { version = "0.14", features = ["toml"] }
 bevy_asset_loader = "=0.24.0-rc.1"
 bevy_kira_audio = { version = "0.24", features = ["mp3", "wav", "ogg"] }
+bevy_framepace = "0.20"
 
 # Parsing and data processing
 nom = "8.0.0"
@@ -56,6 +57,9 @@ moonshine-tag = "0.4"
 
 # Pathfinding
 pathfinding = "4.14"
+
+[dev-dependencies]
+bevy-inspector-egui = "0.29"
 
 [features]
 default = []

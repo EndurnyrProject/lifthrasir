@@ -758,7 +758,7 @@ pub fn update_rsm_animations(
     let delta_time = time.delta_secs();
 
     for (mut transform, mut controller, animation) in node_query.iter_mut() {
-        if !controller.is_playing {
+        if !controller.is_playing || controller.anim_type == AnimationType::None {
             continue;
         }
 
@@ -772,8 +772,13 @@ pub fn update_rsm_animations(
         let new_position = animation.get_position_at_frame(current_frame);
         let new_rotation = animation.get_rotation_at_frame(current_frame);
 
-        // Update transform (keep current scale)
-        transform.translation = new_position;
-        transform.rotation = new_rotation;
+        // Only update transform if values changed to avoid triggering expensive
+        // GlobalTransform propagation through the entire hierarchy on every frame
+        if transform.translation != new_position {
+            transform.translation = new_position;
+        }
+        if transform.rotation != new_rotation {
+            transform.rotation = new_rotation;
+        }
     }
 }

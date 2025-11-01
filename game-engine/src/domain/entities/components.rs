@@ -75,6 +75,8 @@ pub struct RoAnimationController {
     pub palette_handle: Option<Handle<RoPaletteAsset>>,
     pub loop_animation: bool,
     pub paused: bool,
+    /// Track previous frame to detect changes (for early-exit optimization)
+    pub previous_frame_index: Option<usize>,
 }
 
 impl RoAnimationController {
@@ -90,6 +92,7 @@ impl RoAnimationController {
             palette_handle: None,
             loop_animation: true,
             paused: false,
+            previous_frame_index: None,
         }
     }
 

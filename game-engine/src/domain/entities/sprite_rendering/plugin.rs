@@ -7,6 +7,10 @@ use super::systems::{
     update_generic_sprite_direction, update_sprite_transforms, EquipmentChangeEvent,
     SpriteAnimationChangeEvent, StatusEffectVisualEvent,
 };
+use crate::domain::entities::animation::{
+    add_animated_marker, remove_animated_marker, ro_animation_player_system, AnimationSettings,
+    RoFrameCache,
+};
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use std::time::Duration;
@@ -17,6 +21,8 @@ impl Plugin for GenericSpriteRenderingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpriteHierarchyConfig>()
             .init_resource::<EntitySpriteNames>()
+            .init_resource::<AnimationSettings>()
+            .init_resource::<RoFrameCache>()
             .add_message::<SpawnSpriteEvent>()
             .add_message::<EquipmentChangeEvent>()
             .add_message::<StatusEffectVisualEvent>()
@@ -44,7 +50,13 @@ impl Plugin for GenericSpriteRenderingPlugin {
             )
             .add_systems(
                 Update,
-                (advance_animations, update_sprite_transforms)
+                (
+                    add_animated_marker,
+                    remove_animated_marker,
+                    advance_animations,
+                    update_sprite_transforms,
+                    ro_animation_player_system,
+                )
                     .chain()
                     .after(update_generic_sprite_direction),
             )

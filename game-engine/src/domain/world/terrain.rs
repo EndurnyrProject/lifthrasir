@@ -7,11 +7,11 @@ use crate::{
     utils::constants::CELL_SIZE,
 };
 use bevy::{
-    asset::RenderAssetUsages,
+    asset::{AssetEvent, RenderAssetUsages},
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Type alias for mesh data grouped by texture index.
 /// Maps texture index to its associated mesh data
@@ -495,7 +495,7 @@ pub fn generate_terrain_mesh(
 
         for texture_name in ground.ground.textures.iter() {
             if !texture_name.is_empty() {
-                let texture_path = format!("ro://data\\texture\\{}", texture_name);
+                let texture_path = format!("ro://data\\texture\\{}", texture_name.to_lowercase());
                 let handle: Handle<Image> = asset_server.load(&texture_path);
                 texture_handles.push(handle);
                 texture_names.push(texture_name.clone());
@@ -523,27 +523,62 @@ pub fn generate_terrain_mesh(
     }
 }
 
+type TerrainLoadingQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static TerrainTexturesLoading,
+        &'static MapRequestLoader,
+    ),
+>;
+
 /// System that waits for textures to load, then generates terrain meshes
-pub fn generate_terrain_when_textures_ready(
+#[allow(clippy::too_many_arguments)]
+pub fn apply_loaded_terrain_textures(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
     asset_server: Res<AssetServer>,
-    query: Query<(Entity, &TerrainTexturesLoading, &MapRequestLoader)>,
+    mut asset_events: MessageReader<AssetEvent<Image>>,
+    query: TerrainLoadingQuery,
 ) {
     use bevy::asset::LoadState;
 
+    let loaded_asset_ids: HashSet<AssetId<Image>> = asset_events
+        .read()
+        .filter_map(|event| {
+            if let AssetEvent::LoadedWithDependencies { id } = event {
+                Some(*id)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if loaded_asset_ids.is_empty() {
+        return;
+    }
+
+    debug!(
+        "Processing {} loaded texture events",
+        loaded_asset_ids.len()
+    );
+
     for (entity, textures_loading, map_request) in query.iter() {
-        // Check if all textures are loaded or failed
         let mut all_ready = true;
         let mut loaded_count = 0;
         let mut failed_count = 0;
 
         for (i, handle) in textures_loading.texture_handles.iter().enumerate() {
             if handle.id() == AssetId::default() {
-                // Empty texture, skip
+                continue;
+            }
+
+            if loaded_asset_ids.contains(&handle.id()) {
+                loaded_count += 1;
                 continue;
             }
 
@@ -566,10 +601,6 @@ pub fn generate_terrain_when_textures_ready(
         }
 
         if !all_ready {
-            debug!(
-                "Waiting for textures to load for map '{}'",
-                map_request.map_name
-            );
             continue;
         }
 
@@ -578,7 +609,6 @@ pub fn generate_terrain_when_textures_ready(
             map_request.map_name, loaded_count, failed_count
         );
 
-        // Get ground asset
         let Some(ground) = ground_assets.get(&textures_loading.ground_handle) else {
             error!("Ground asset not found in storage");
             continue;
@@ -599,7 +629,6 @@ pub fn generate_terrain_when_textures_ready(
             );
         }
 
-        // Create materials now that textures are loaded
         let texture_materials = create_terrain_materials_from_loaded_textures(
             &ground.ground,
             &textures_loading.texture_handles,
@@ -609,7 +638,6 @@ pub fn generate_terrain_when_textures_ready(
 
         let meshes_by_texture = create_terrain_meshes(&ground.ground, altitude);
 
-        // Spawn a mesh entity for each texture
         let mut mesh_count = 0;
         for (texture_idx, mesh) in meshes_by_texture {
             let vertex_count = mesh.count_vertices();
@@ -618,7 +646,7 @@ pub fn generate_terrain_when_textures_ready(
                     "generate_terrain_mesh: Skipping empty mesh for texture_idx {}",
                     texture_idx
                 );
-                continue; // Skip empty meshes
+                continue;
             }
 
             debug!(
@@ -651,11 +679,7 @@ pub fn generate_terrain_when_textures_ready(
             commands.spawn((
                 Mesh3d(mesh_handle),
                 MeshMaterial3d(material),
-                Transform::from_xyz(
-                    0.0, // Start at origin X
-                    0.0, // Y unchanged
-                    0.0, // Start at origin Z
-                ),
+                Transform::from_xyz(0.0, 0.0, 0.0),
             ));
 
             mesh_count += 1;
@@ -676,7 +700,7 @@ pub fn generate_terrain_when_textures_ready(
             .remove::<TerrainTexturesLoading>();
 
         info!(
-            "generate_terrain_when_textures_ready: Successfully generated terrain mesh and inserted MapData for map '{}'",
+            "apply_loaded_terrain_textures: Successfully generated terrain mesh and inserted MapData for map '{}'",
             map_request.map_name
         );
     }
