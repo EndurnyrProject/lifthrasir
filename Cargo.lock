@@ -793,9 +793,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_auto_plugin"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0fdc3ac81eedaa535d112522eb7d2249f1ceb6b754a3f157d22a05d088dd688"
+checksum = "b9836ed417f3411d13c0a68e39721378be8da50a442011fd090aef85511ba69a"
 dependencies = [
  "bevy_auto_plugin_proc_macros",
  "bevy_auto_plugin_shared",
@@ -805,9 +805,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_auto_plugin_proc_macros"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13ec4cfa7c00dd1a5ce92e29a276eccf22c4bad45fe3a252949ed58904b345e0"
+checksum = "53ed573303fe1236b960838479ed8fd45843e0b86677c7ec6b92941dbdef082c"
 dependencies = [
  "bevy_auto_plugin_shared",
  "darling",
@@ -818,9 +818,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_auto_plugin_shared"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "475552ac7b46f1315e734e09e3973afcebaa44577bffdab77520275c6c33c31c"
+checksum = "c73eeaef12f61044537b53dea1ea7e0afef25efeecc7daa849fd511c4daf0181"
 dependencies = [
  "bevy_app",
  "darling",
