@@ -9,7 +9,8 @@ use crate::infrastructure::networking::protocol::character::{
     CharacterSlotInfoReceived, PingReceived, SecondPasswordRequested, ZoneServerInfoReceived,
 };
 use crate::infrastructure::networking::protocol::zone::{
-    AccountIdReceived, ZoneEntryRefused, ZoneServerConnected as ZoneServerConnectedProtocol,
+    AccountIdReceived, EntityNameAllReceived, EntityNameReceived, ZoneEntryRefused,
+    ZoneServerConnected as ZoneServerConnectedProtocol,
 };
 use bevy::prelude::*;
 
@@ -41,7 +42,9 @@ impl Plugin for CharacterDomainPlugin {
         // Zone protocol events (new modular architecture)
         app.add_message::<ZoneServerConnectedProtocol>()
             .add_message::<AccountIdReceived>()
-            .add_message::<ZoneEntryRefused>();
+            .add_message::<ZoneEntryRefused>()
+            .add_message::<EntityNameReceived>()
+            .add_message::<EntityNameAllReceived>();
 
         // Register all character-related domain events
         app.add_message::<RequestCharacterListEvent>()

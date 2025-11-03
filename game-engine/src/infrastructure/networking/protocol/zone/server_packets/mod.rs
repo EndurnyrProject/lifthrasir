@@ -1,4 +1,6 @@
 pub mod zc_accept_enter;
+pub mod zc_ack_reqname;
+pub mod zc_ack_reqnameall;
 pub mod zc_aid;
 pub mod zc_equipitem_list;
 pub mod zc_longpar_change;
@@ -18,6 +20,8 @@ pub mod zc_par_change;
 pub mod zc_refuse_enter;
 
 pub use zc_accept_enter::{ZcAcceptEnterPacket, ZC_ACCEPT_ENTER};
+pub use zc_ack_reqname::{ZcAckReqnamePacket, ZC_ACK_REQNAME};
+pub use zc_ack_reqnameall::{ZcAckReqnameallPacket, ZC_ACK_REQNAMEALL};
 pub use zc_aid::{ZcAidPacket, ZC_AID};
 pub use zc_equipitem_list::{ZcEquipitemListPacket, ZC_EQUIPITEM_LIST};
 pub use zc_longpar_change::{ZcLongparChangePacket, ZC_LONGPAR_CHANGE};

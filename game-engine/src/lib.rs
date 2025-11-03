@@ -12,6 +12,7 @@ pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin};
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
 pub use domain::entities::billboard::BillboardPlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
+pub use domain::entities::hover_plugin::{EntityHoverPlugin, EntityHoverSystemSet};
 pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
@@ -44,6 +45,9 @@ pub fn create_app() -> App {
             WorldPlugin,          // ENABLED: Map loading and world systems
             BillboardPlugin,      // ENABLED: 3D billboard rendering infrastructure
             MovementPlugin,       // ENABLED: Generic entity movement system
+        ))
+        .add_plugins((
+            EntityHoverPlugin,    // ENABLED: Entity hover detection and name request system
             UnifiedCharacterEntityPlugin, // ENABLED: Unified character system with 3D billboard sprite hierarchy
         ));
 

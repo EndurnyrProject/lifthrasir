@@ -1,0 +1,41 @@
+.entity-tooltip {
+  position: fixed;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.85);
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  pointer-events: none;
+  z-index: 9999;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.entity-tooltip-name {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.entity-tooltip-party,
+.entity-tooltip-guild,
+.entity-tooltip-position {
+  font-size: 11px;
+  color: #cccccc;
+  margin-top: 2px;
+}
+
+.entity-tooltip-party {
+  color: #90caf9;
+}
+
+.entity-tooltip-guild {
+  color: #ffb74d;
+}
+
+.entity-tooltip-position {
+  color: #ce93d8;
+  font-style: italic;
+}

@@ -26,6 +26,14 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcAcceptEnterPacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcAcceptEnter(packet))
             }
+            ZC_ACK_REQNAME => {
+                let packet = ZcAckReqnamePacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcAckReqname(packet))
+            }
+            ZC_ACK_REQNAMEALL => {
+                let packet = ZcAckReqnameallPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcAckReqnameall(packet))
+            }
             ZC_AID => {
                 let packet = ZcAidPacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcAid(packet))
@@ -92,6 +100,8 @@ impl Protocol for ZoneProtocol {
     fn packet_size(packet_id: u16) -> PacketSize {
         match packet_id {
             ZC_ACCEPT_ENTER => PacketSize::Fixed(13),
+            ZC_ACK_REQNAME => PacketSize::Fixed(30),
+            ZC_ACK_REQNAMEALL => PacketSize::Fixed(102),
             ZC_AID => PacketSize::Fixed(6),
             ZC_REFUSE_ENTER => PacketSize::Fixed(3),
             ZC_NOTIFY_PLAYERMOVE => PacketSize::Fixed(12),
@@ -246,6 +256,7 @@ impl ZoneContext {
 pub enum ZoneClientPacket {
     CzEnter2(CzEnter2Packet),
     CzNotifyActorinit(CzNotifyActorinitPacket),
+    CzReqname2(CzReqname2Packet),
     CzRequestMove2(CzRequestMove2Packet),
     CzRequestTime2(CzRequestTime2Packet),
 }
@@ -257,6 +268,7 @@ impl ClientPacket for ZoneClientPacket {
         match self {
             Self::CzEnter2(p) => p.serialize(),
             Self::CzNotifyActorinit(p) => p.serialize(),
+            Self::CzReqname2(p) => p.serialize(),
             Self::CzRequestMove2(p) => p.serialize(),
             Self::CzRequestTime2(p) => p.serialize(),
         }
@@ -266,6 +278,7 @@ impl ClientPacket for ZoneClientPacket {
         match self {
             Self::CzEnter2(_) => CZ_ENTER2,
             Self::CzNotifyActorinit(_) => CZ_NOTIFY_ACTORINIT,
+            Self::CzReqname2(_) => CZ_REQNAME2,
             Self::CzRequestMove2(_) => CZ_REQUEST_MOVE2,
             Self::CzRequestTime2(_) => CZ_REQUEST_TIME2,
         }
@@ -276,6 +289,8 @@ impl ClientPacket for ZoneClientPacket {
 #[derive(Debug, Clone)]
 pub enum ZoneServerPacket {
     ZcAcceptEnter(ZcAcceptEnterPacket),
+    ZcAckReqname(ZcAckReqnamePacket),
+    ZcAckReqnameall(ZcAckReqnameallPacket),
     ZcAid(ZcAidPacket),
     ZcRefuseEnter(ZcRefuseEnterPacket),
     ZcNotifyPlayermove(ZcNotifyPlayermovePacket),
@@ -302,6 +317,8 @@ impl ServerPacket for ZoneServerPacket {
     fn packet_id(&self) -> u16 {
         match self {
             Self::ZcAcceptEnter(_) => ZC_ACCEPT_ENTER,
+            Self::ZcAckReqname(_) => ZC_ACK_REQNAME,
+            Self::ZcAckReqnameall(_) => ZC_ACK_REQNAMEALL,
             Self::ZcAid(_) => ZC_AID,
             Self::ZcRefuseEnter(_) => ZC_REFUSE_ENTER,
             Self::ZcNotifyPlayermove(_) => ZC_NOTIFY_PLAYERMOVE,

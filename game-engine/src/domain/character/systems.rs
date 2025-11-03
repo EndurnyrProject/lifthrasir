@@ -669,6 +669,20 @@ pub fn spawn_character_sprite_on_game_start(
     let account_id = user_session.tokens.account_id;
     entity_registry.set_local_player(character_entity, account_id);
 
+    // Add NetworkEntity component for hover system
+    commands.entity(character_entity).insert(
+        crate::domain::entities::components::NetworkEntity::new(
+            account_id,
+            spawn_context.character_id,
+            crate::domain::entities::types::ObjectType::Pc,
+        ),
+    );
+
+    info!(
+        "✅ Added NetworkEntity to local player: AID={}, GID={}",
+        account_id, spawn_context.character_id
+    );
+
     info!(
         "✅ Registered local player in EntityRegistry: entity={:?}, aid={}",
         character_entity, account_id

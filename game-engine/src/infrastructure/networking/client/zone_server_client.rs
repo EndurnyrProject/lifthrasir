@@ -7,13 +7,14 @@ use crate::{
             dispatcher::PacketDispatcher,
             zone::{
                 AcceptEnterHandler, AccountIdReceived, AidHandler, CzEnter2Packet,
-                CzNotifyActorinitPacket, CzRequestMove2Packet, CzRequestTime2Packet,
+                CzNotifyActorinitPacket, CzReqname2Packet, CzRequestMove2Packet,
+                CzRequestTime2Packet, EntityNameAllReceived, EntityNameReceived,
                 EquipitemListHandler, LongparChangeHandler, MoveStopHandler, MoveentryHandler,
                 MovementConfirmedByServer, MovementStoppedByServer, NewentryHandler,
                 NormalItemlistHandler, ParChangeHandler, PlayermoveHandler, RefuseEnterHandler,
-                SpawnData, StandentryHandler, TimeSyncHandler, TimeSyncLegacyHandler,
-                VanishHandler, ZoneClientPacket, ZoneContext, ZoneEntryRefused, ZoneProtocol,
-                ZoneServerConnected,
+                ReqnameHandler, ReqnameallHandler, SpawnData, StandentryHandler, TimeSyncHandler,
+                TimeSyncLegacyHandler, VanishHandler, ZoneClientPacket, ZoneContext,
+                ZoneEntryRefused, ZoneProtocol, ZoneServerConnected,
             },
             EventBuffer,
         },
@@ -97,6 +98,8 @@ impl ZoneServerClient {
         dispatcher.register(EquipitemListHandler);
         dispatcher.register(TimeSyncHandler);
         dispatcher.register(TimeSyncLegacyHandler);
+        dispatcher.register(ReqnameHandler);
+        dispatcher.register(ReqnameallHandler);
 
         let client = NetworkClient::new(context).with_dispatcher(dispatcher);
 
@@ -213,6 +216,24 @@ impl ZoneServerClient {
         self.inner.send_packet(&packet)
     }
 
+    /// Request entity name from the server
+    ///
+    /// Sends a CZ_REQNAME2 packet to request the name of an entity.
+    /// The server will respond with either ZC_ACK_REQNAME (basic name) or
+    /// ZC_ACK_REQNAMEALL (full details with party/guild info).
+    ///
+    /// # Arguments
+    ///
+    /// * `entity_id` - Account ID of the entity to query
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if packet was sent, NetworkError otherwise
+    pub fn request_entity_name(&mut self, entity_id: u32) -> NetworkResult<()> {
+        let packet = ZoneClientPacket::CzReqname2(CzReqname2Packet::new(entity_id));
+        self.inner.send_packet(&packet)
+    }
+
     /// Process incoming packets and emit Bevy events
     ///
     /// This should be called regularly (e.g., in a Bevy Update system) to:
@@ -293,6 +314,8 @@ pub struct ZoneServerEventWriters<'w> {
     pub spawn_entity: MessageWriter<'w, SpawnEntity>,
     pub despawn_entity: MessageWriter<'w, DespawnEntity>,
     pub vanish_request: MessageWriter<'w, RequestEntityVanish>,
+    pub entity_name_received: MessageWriter<'w, EntityNameReceived>,
+    pub entity_name_all_received: MessageWriter<'w, EntityNameAllReceived>,
 }
 
 /// Bevy system to update the zone server client
@@ -346,6 +369,8 @@ pub fn zone_server_update_system(
             (SpawnEntity, spawn_entity),
             (DespawnEntity, despawn_entity),
             (RequestEntityVanish, vanish_request),
+            (EntityNameReceived, entity_name_received),
+            (EntityNameAllReceived, entity_name_all_received),
         ]
     );
 }
