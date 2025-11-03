@@ -135,6 +135,9 @@ const MAX_WAVE_SPEED: f32 = 1.5;
 const MAX_WAVE_PITCH: f32 = 2.0;
 const MIN_WAVE_PITCH: f32 = 0.5;
 
+// Water mesh subdivision (8x8 = 128 triangles per tile)
+const WATER_TILE_SUBDIVISIONS: usize = 8;
+
 /// System to finalize water loading once textures are ready
 pub fn finalize_water_loading_system(
     mut commands: Commands,
@@ -197,7 +200,7 @@ pub fn finalize_water_loading_system(
 
             let water_material = WaterMaterial {
                 base: StandardMaterial {
-                    base_color: Color::srgba(1.0, 1.0, 1.0, 0.3),
+                    base_color: Color::srgba(1.0, 1.0, 1.0, 0.15),
                     alpha_mode: AlphaMode::Blend,
                     perceptual_roughness: 0.1,
                     metallic: 0.0,
@@ -277,50 +280,52 @@ fn create_water_tiles_mesh(water_tiles: &[(usize, usize)], water_y: f32) -> Mesh
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
 
-    // Create 6 vertices per tile (2 triangles, no sharing)
-    for &(x, y) in water_tiles.iter() {
-        let vertex_offset = positions.len() as u32;
+    let subdivisions = WATER_TILE_SUBDIVISIONS;
+    let verts_per_side = subdivisions + 1;
+    let step_size = CELL_SIZE / subdivisions as f32;
 
-        // Calculate world position for this tile
-        let x_pos = x as f32 * CELL_SIZE;
-        let z_pos = y as f32 * CELL_SIZE;
-        let x_pos_end = x_pos + CELL_SIZE;
-        let z_pos_end = z_pos + CELL_SIZE;
+    // Create subdivided mesh for each tile
+    for &(tile_x, tile_y) in water_tiles.iter() {
+        let base_vertex = positions.len() as u32;
 
-        // Use simple 0-1 UVs for each tile quad
-        // The shader will calculate actual UVs from world position
+        let tile_world_x = tile_x as f32 * CELL_SIZE;
+        let tile_world_z = tile_y as f32 * CELL_SIZE;
 
-        // Triangle 1: SW -> SE -> NE
-        positions.push([x_pos, water_y, z_pos]); // SW
-        positions.push([x_pos_end, water_y, z_pos]); // SE
-        positions.push([x_pos_end, water_y, z_pos_end]); // NE
+        // Create vertex grid for this tile (5x5 for 4x4 subdivision)
+        for row in 0..verts_per_side {
+            for col in 0..verts_per_side {
+                let x = tile_world_x + col as f32 * step_size;
+                let z = tile_world_z + row as f32 * step_size;
 
-        uvs.push([0.0, 0.0]); // SW
-        uvs.push([1.0, 0.0]); // SE
-        uvs.push([1.0, 1.0]); // NE
+                positions.push([x, water_y, z]);
+                normals.push([0.0, -1.0, 0.0]);
 
-        // Triangle 2: SW -> NE -> NW
-        positions.push([x_pos, water_y, z_pos]); // SW
-        positions.push([x_pos_end, water_y, z_pos_end]); // NE
-        positions.push([x_pos, water_y, z_pos_end]); // NW
-
-        uvs.push([0.0, 0.0]); // SW
-        uvs.push([1.0, 1.0]); // NE
-        uvs.push([0.0, 1.0]); // NW
-
-        // Add normals (pointing down for RO water style)
-        for _ in 0..6 {
-            normals.push([0.0, -1.0, 0.0]);
+                // UV coordinates (0-1 within tile, shader calculates world UVs)
+                let u = col as f32 / subdivisions as f32;
+                let v = row as f32 / subdivisions as f32;
+                uvs.push([u, v]);
+            }
         }
 
-        // Add indices for these two triangles
-        indices.push(vertex_offset);
-        indices.push(vertex_offset + 1);
-        indices.push(vertex_offset + 2);
+        // Create indices for quads
+        for row in 0..subdivisions {
+            for col in 0..subdivisions {
+                let i0 = base_vertex + (row * verts_per_side + col) as u32;
+                let i1 = i0 + 1;
+                let i2 = i0 + verts_per_side as u32;
+                let i3 = i2 + 1;
 
-        indices.push(vertex_offset + 3);
-        indices.push(vertex_offset + 4);
-        indices.push(vertex_offset + 5);
+                // Triangle 1: bottom-left, bottom-right, top-right
+                indices.push(i0);
+                indices.push(i1);
+                indices.push(i3);
+
+                // Triangle 2: bottom-left, top-right, top-left
+                indices.push(i0);
+                indices.push(i3);
+                indices.push(i2);
+            }
+        }
     }
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
