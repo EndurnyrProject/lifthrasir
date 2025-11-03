@@ -4,136 +4,87 @@ use crate::{
     domain::entities::pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
     domain::entities::sprite_rendering::SpriteObjectTree,
     domain::world::components::MapLoader,
-    infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
+    infrastructure::assets::loaders::RoGroundAsset,
     utils::coordinates::world_position_to_spawn_coords,
 };
-use bevy::math::primitives::InfinitePlane3d;
 use bevy::prelude::*;
 
 use super::{
     cursor::{CursorChangeRequest, CursorType},
-    ForwardedCursorPosition, ForwardedMouseClick,
+    terrain_raycast::TerrainRaycastCache,
+    ForwardedMouseClick,
 };
 
-/// Raycast from cursor to terrain and return world position with height
-/// Returns None if raycast fails or position is outside terrain
-fn raycast_terrain_position(
-    camera: &Camera,
-    camera_transform: &GlobalTransform,
-    cursor_pos: Vec2,
-    map_loader: &MapLoader,
-    altitude_assets: &Assets<RoAltitudeAsset>,
-) -> Option<(Vec3, f32)> {
-    // Get altitude (GAT) asset
-    let altitude_handle = map_loader.altitude.as_ref()?;
-    let altitude_asset = altitude_assets.get(altitude_handle)?;
-
-    // Create ray from camera through cursor position
-    let ray = camera
-        .viewport_to_world(camera_transform, cursor_pos)
-        .ok()?;
-
-    // Intersect ray with ground plane (Y = 0)
-    let ground_plane = InfinitePlane3d::new(Vec3::Y);
-    let distance = ray.intersect_plane(Vec3::ZERO, ground_plane)?;
-
-    // Calculate world position where ray hits ground
-    let world_pos = ray.origin + ray.direction * distance;
-
-    // Get GAT terrain height
-    let terrain_height = altitude_asset
-        .altitude
-        .get_terrain_height_at_position(world_pos)?;
-
-    Some((world_pos, terrain_height))
-}
-
 /// Render terrain cursor gizmo at the world position under the mouse cursor
-/// Shows where the player is pointing on the terrain with visual indicators
-pub fn render_terrain_cursor(
-    mut gizmos: Gizmos,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
-    map_loader_query: Query<&MapLoader>,
-    altitude_assets: Res<Assets<RoAltitudeAsset>>,
-    cursor_pos: Res<ForwardedCursorPosition>,
-) {
-    let Ok((camera, camera_transform)) = camera_query.single() else {
+/// Shows where the player is pointing on the terrain with corner markers
+pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>) {
+    if !cache.is_walkable {
+        return;
+    }
+
+    let Some(world_pos) = cache.world_position else {
         return;
     };
 
-    let Ok(map_loader) = map_loader_query.single() else {
+    let Some((cell_x, cell_y)) = cache.cell_coords else {
         return;
     };
 
-    let Some(cursor_position) = cursor_pos.position else {
-        return;
-    };
+    const RO_UNITS_PER_CELL: f32 = 5.0;
+    const HALF_RO_CELL: f32 = RO_UNITS_PER_CELL / 2.0;
+    let cell_center_x = cell_x as f32 * RO_UNITS_PER_CELL + HALF_RO_CELL;
+    let cell_center_z = cell_y as f32 * RO_UNITS_PER_CELL + HALF_RO_CELL;
 
-    // Use shared raycast logic
-    let Some((world_pos, gizmo_height)) = raycast_terrain_position(
-        camera,
-        camera_transform,
-        cursor_position,
-        map_loader,
-        &altitude_assets,
-    ) else {
-        return;
-    };
+    const MARKER_SIZE: f32 = 0.4;
+    let color = Srgba::hex("00FF00").unwrap().with_alpha(0.4);
 
-    // Draw crosshair at intersection point
-    gizmos.line(
-        Vec3::new(world_pos.x - 10.0, gizmo_height, world_pos.z),
-        Vec3::new(world_pos.x + 10.0, gizmo_height, world_pos.z),
-        Color::srgb(1.0, 0.0, 0.0), // Red
-    );
-    gizmos.line(
-        Vec3::new(world_pos.x, gizmo_height, world_pos.z - 10.0),
-        Vec3::new(world_pos.x, gizmo_height, world_pos.z + 10.0),
-        Color::srgb(1.0, 0.0, 0.0), // Red
-    );
-
-    // Draw circle around intersection
-    gizmos.circle(
-        Isometry3d::new(
-            Vec3::new(world_pos.x, gizmo_height - 0.1, world_pos.z),
-            Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+    let corners = [
+        Vec3::new(
+            cell_center_x - HALF_RO_CELL,
+            world_pos.y,
+            cell_center_z - HALF_RO_CELL,
         ),
-        15.0,
-        Color::srgb(1.0, 1.0, 0.0), // Yellow
-    );
-
-    // Draw sphere above the cursor (NEG_Y is up, so subtract to go up)
-    gizmos.sphere(
-        Isometry3d::new(
-            Vec3::new(world_pos.x, gizmo_height - 5.0, world_pos.z),
-            Quat::IDENTITY,
+        Vec3::new(
+            cell_center_x + HALF_RO_CELL,
+            world_pos.y,
+            cell_center_z - HALF_RO_CELL,
         ),
-        5.0,
-        Color::srgb(0.0, 1.0, 0.0), // Green
-    );
+        Vec3::new(
+            cell_center_x - HALF_RO_CELL,
+            world_pos.y,
+            cell_center_z + HALF_RO_CELL,
+        ),
+        Vec3::new(
+            cell_center_x + HALF_RO_CELL,
+            world_pos.y,
+            cell_center_z + HALF_RO_CELL,
+        ),
+    ];
+
+    for corner in corners {
+        gizmos.sphere(Isometry3d::from_translation(corner), MARKER_SIZE, color);
+    }
 }
 
 /// Handle terrain clicks for player movement
-/// Reads ForwardedMouseClick, raycasts to terrain, converts to RO coords, emits MovementRequested
-#[allow(clippy::too_many_arguments)]
+/// Reads ForwardedMouseClick and cached raycast data, emits MovementRequested
 pub fn handle_terrain_click(
     mut commands: Commands,
     mut mouse_click: ResMut<ForwardedMouseClick>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    cache: Res<TerrainRaycastCache>,
     map_loader_query: Query<&MapLoader>,
     ground_assets: Res<Assets<RoGroundAsset>>,
-    altitude_assets: Res<Assets<RoAltitudeAsset>>,
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
     player_query: Query<(Entity, &SpriteObjectTree), With<LocalPlayer>>,
     sprite_transforms: Query<&Transform>,
     mut movement_events: MessageWriter<MovementRequested>,
 ) {
-    let Some(click_pos) = mouse_click.position.take() else {
+    if mouse_click.position.take().is_none() {
         return;
-    };
+    }
 
-    let Ok((camera, camera_transform)) = camera_query.single() else {
-        warn!("No camera found for terrain click");
+    let Some((dest_x, dest_y)) = cache.cell_coords else {
+        debug!("Click with no valid raycast cache");
         return;
     };
 
@@ -146,23 +97,6 @@ pub fn handle_terrain_click(
         warn!("Ground asset not loaded, ignoring terrain click");
         return;
     };
-
-    let Some((world_pos, _terrain_height)) = raycast_terrain_position(
-        camera,
-        camera_transform,
-        click_pos,
-        map_loader,
-        &altitude_assets,
-    ) else {
-        debug!("Click raycast missed terrain");
-        return;
-    };
-
-    let (dest_x, dest_y) = world_position_to_spawn_coords(
-        world_pos,
-        ground_asset.ground.width,
-        ground_asset.ground.height,
-    );
 
     let Ok((player_entity, object_tree)) = player_query.single() else {
         warn!("No player character found for movement request");
@@ -234,59 +168,18 @@ pub fn handle_terrain_click(
 
 /// Update cursor based on terrain walkability
 ///
-/// Raycasts terrain under cursor and checks if cell is walkable.
+/// Reads cached raycast data and checks if cell is walkable.
 /// Emits CursorChangeRequest to update cursor to "default" for walkable terrain
 /// or "impossible" for blocked/unwalkable terrain
 pub fn update_cursor_for_terrain(
-    cursor_pos: Res<ForwardedCursorPosition>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
-    map_loader_query: Query<&MapLoader>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
-    altitude_assets: Res<Assets<RoAltitudeAsset>>,
-    pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
+    cache: Res<TerrainRaycastCache>,
     mut cursor_messages: MessageWriter<CursorChangeRequest>,
 ) {
-    let Some(cursor_position) = cursor_pos.position else {
-        return;
-    };
-
-    let Ok((camera, camera_transform)) = camera_query.single() else {
-        return;
-    };
-
-    let Ok(map_loader) = map_loader_query.single() else {
-        return;
-    };
-
-    let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
-        return;
-    };
-
-    let Some((world_pos, _terrain_height)) = raycast_terrain_position(
-        camera,
-        camera_transform,
-        cursor_position,
-        map_loader,
-        &altitude_assets,
-    ) else {
-        cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
-        return;
-    };
-
-    let (dest_x, dest_y) = world_position_to_spawn_coords(
-        world_pos,
-        ground_asset.ground.width,
-        ground_asset.ground.height,
-    );
-
-    let Some(grid) = pathfinding_grid else {
-        cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
-        return;
-    };
-
-    if grid.0.is_walkable(dest_x, dest_y) {
-        cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
+    let cursor_type = if cache.is_walkable {
+        CursorType::Default
     } else {
-        cursor_messages.write(CursorChangeRequest::new(CursorType::Impossible));
-    }
+        CursorType::Impossible
+    };
+
+    cursor_messages.write(CursorChangeRequest::new(cursor_type));
 }

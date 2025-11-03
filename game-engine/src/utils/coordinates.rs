@@ -185,8 +185,8 @@ pub fn spawn_coords_to_world_position(x: u16, y: u16, _map_width: u32, _map_heig
 /// Inverse of spawn_coords_to_world_position, using RO's native 5.0 units per cell
 pub fn world_position_to_spawn_coords(pos: Vec3, _map_width: u32, _map_height: u32) -> (u16, u16) {
     const RO_UNITS_PER_CELL: f32 = 5.0;
-    let x = (pos.x / RO_UNITS_PER_CELL) as u16;
-    let y = (pos.z / RO_UNITS_PER_CELL) as u16;
+    let x = (pos.x / RO_UNITS_PER_CELL).round() as u16;
+    let y = (pos.z / RO_UNITS_PER_CELL).round() as u16;
     (x, y)
 }
 
