@@ -5,7 +5,7 @@ import Login from "./screens/Login";
 import ServerSelection from "./screens/ServerSelection";
 import CharacterSelection from "./screens/CharacterSelection";
 import { AssetsProvider, useAssets } from "./contexts";
-import { LoadingScreen, ScreenTransition } from "./components";
+import { LoadingScreen, ScreenTransition, CursorManager } from "./components";
 import "./styles/theme.css";
 import "./App.css";
 
@@ -281,6 +281,8 @@ function AppContent() {
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <CursorManager />
+
       {/* Static background layer - doesn't transition */}
       {/* Hide background when in game to reveal Bevy 3D canvas */}
       {backgroundUrl && !(currentScreen === "in_game" && !isGameLoading) && (

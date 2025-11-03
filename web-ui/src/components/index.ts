@@ -13,3 +13,4 @@ export type { CharacterPreviewProps } from './CharacterPreview';
 export { LoadingSpinner } from './LoadingSpinner';
 export { LoadingScreen } from './LoadingScreen';
 export { ScreenTransition } from './ScreenTransition';
+export { CursorManager } from './CursorManager';

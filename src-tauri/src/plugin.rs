@@ -17,8 +17,8 @@ use std::sync::Arc;
 use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindow};
 
 use super::bridge::{
-    cleanup_stale_correlations, demux_tauri_events, emit_world_events, handle_camera_rotation,
-    handle_create_character_request, handle_delete_character_request,
+    cleanup_stale_correlations, demux_tauri_events, emit_cursor_changes, emit_world_events,
+    handle_camera_rotation, handle_create_character_request, handle_delete_character_request,
     handle_get_character_list_request, handle_get_hairstyles_request, handle_keyboard_input,
     handle_login_request, handle_mouse_click, handle_mouse_position,
     handle_select_character_request, handle_server_selection_request,
@@ -292,7 +292,7 @@ impl Plugin for TauriIntegrationPlugin {
         app.insert_resource(world_emitter);
 
         // Add world emitter system (streaming status updates to frontend)
-        app.add_systems(Update, emit_world_events);
+        app.add_systems(Update, (emit_world_events, emit_cursor_changes));
 
         app.insert_non_send_resource(tauri_app.handle().clone());
         app.insert_non_send_resource(tauri_app);
@@ -301,7 +301,6 @@ impl Plugin for TauriIntegrationPlugin {
 }
 
 /// Custom runner that integrates Tauri's event loop with Bevy's update loop
-/// with proper frame-rate limiting to prevent busy-loop and 100% CPU usage
 #[allow(deprecated)]
 fn run_tauri_app(app: App) -> AppExit {
     let app = Rc::new(RefCell::new(app));
@@ -310,11 +309,6 @@ fn run_tauri_app(app: App) -> AppExit {
         .world_mut()
         .remove_non_send_resource::<tauri::App>()
         .unwrap();
-
-    const TARGET_FPS: u64 = 60;
-    const FRAME_DURATION: std::time::Duration =
-        std::time::Duration::from_micros(1_000_000 / TARGET_FPS);
-    let mut last_frame = std::time::Instant::now();
 
     loop {
         let app_clone = app.clone();
@@ -326,9 +320,6 @@ fn run_tauri_app(app: App) -> AppExit {
             tauri_app.cleanup_before_exit();
             break;
         }
-
-        let now = std::time::Instant::now();
-        let elapsed = now.duration_since(last_frame);
 
         app.borrow_mut().update();
     }

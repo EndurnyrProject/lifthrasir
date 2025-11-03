@@ -10,7 +10,10 @@ use crate::{
 use bevy::math::primitives::InfinitePlane3d;
 use bevy::prelude::*;
 
-use super::{ForwardedCursorPosition, ForwardedMouseClick};
+use super::{
+    cursor::{CursorChangeRequest, CursorType},
+    ForwardedCursorPosition, ForwardedMouseClick,
+};
 
 /// Raycast from cursor to terrain and return world position with height
 /// Returns None if raycast fails or position is outside terrain
@@ -226,5 +229,64 @@ pub fn handle_terrain_click(
         None => {
             warn!("No path found to ({}, {})", dest_x, dest_y);
         }
+    }
+}
+
+/// Update cursor based on terrain walkability
+///
+/// Raycasts terrain under cursor and checks if cell is walkable.
+/// Emits CursorChangeRequest to update cursor to "default" for walkable terrain
+/// or "impossible" for blocked/unwalkable terrain
+pub fn update_cursor_for_terrain(
+    cursor_pos: Res<ForwardedCursorPosition>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    map_loader_query: Query<&MapLoader>,
+    ground_assets: Res<Assets<RoGroundAsset>>,
+    altitude_assets: Res<Assets<RoAltitudeAsset>>,
+    pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
+    mut cursor_messages: MessageWriter<CursorChangeRequest>,
+) {
+    let Some(cursor_position) = cursor_pos.position else {
+        return;
+    };
+
+    let Ok((camera, camera_transform)) = camera_query.single() else {
+        return;
+    };
+
+    let Ok(map_loader) = map_loader_query.single() else {
+        return;
+    };
+
+    let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
+        return;
+    };
+
+    let Some((world_pos, _terrain_height)) = raycast_terrain_position(
+        camera,
+        camera_transform,
+        cursor_position,
+        map_loader,
+        &altitude_assets,
+    ) else {
+        cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
+        return;
+    };
+
+    let (dest_x, dest_y) = world_position_to_spawn_coords(
+        world_pos,
+        ground_asset.ground.width,
+        ground_asset.ground.height,
+    );
+
+    let Some(grid) = pathfinding_grid else {
+        cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
+        return;
+    };
+
+    if grid.0.is_walkable(dest_x, dest_y) {
+        cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
+    } else {
+        cursor_messages.write(CursorChangeRequest::new(CursorType::Impossible));
     }
 }
