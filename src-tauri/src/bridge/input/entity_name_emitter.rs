@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use game_engine::domain::entities::{
-    components::NetworkEntity, hover::HoveredEntity, name_cache::EntityNameCache,
+    components::{EntityName, NetworkEntity},
+    hover::HoveredEntity,
     sprite_rendering::components::SpriteObjectTree,
 };
 use serde::Serialize;
@@ -22,16 +23,12 @@ struct EmptyPayload {}
 
 pub fn emit_entity_names(
     app_handle: NonSend<AppHandle>,
-    name_cache: Option<Res<EntityNameCache>>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    hovered_query: Query<(&NetworkEntity, &SpriteObjectTree), With<HoveredEntity>>,
+    hovered_query: Query<(Entity, &NetworkEntity, &SpriteObjectTree), With<HoveredEntity>>,
+    name_query: Query<&EntityName>,
     sprite_query: Query<&GlobalTransform>,
     mut previous_hovered: Local<Option<u32>>,
 ) {
-    let Some(name_cache) = name_cache else {
-        return;
-    };
-
     let Ok((camera, camera_transform)) = camera_query.single() else {
         return;
     };
@@ -43,7 +40,7 @@ pub fn emit_entity_names(
     let current_hovered = hovered_query.iter().next();
 
     match (current_hovered, *previous_hovered) {
-        (Some((network_entity, sprite_tree)), prev) => {
+        (Some((entity, network_entity, sprite_tree)), prev) => {
             let entity_id = network_entity.aid;
 
             if prev == Some(entity_id) {
@@ -52,7 +49,7 @@ pub fn emit_entity_names(
 
             *previous_hovered = Some(entity_id);
 
-            let Some(cached_name) = name_cache.get(entity_id) else {
+            let Ok(entity_name) = name_query.get(entity) else {
                 return;
             };
 
@@ -71,10 +68,10 @@ pub fn emit_entity_names(
 
             let event = EntityNameEvent {
                 entity_id,
-                name: cached_name.name.clone(),
-                party_name: cached_name.party_name.clone(),
-                guild_name: cached_name.guild_name.clone(),
-                position_name: cached_name.position_name.clone(),
+                name: entity_name.name.clone(),
+                party_name: entity_name.party_name.clone(),
+                guild_name: entity_name.guild_name.clone(),
+                position_name: entity_name.position_name.clone(),
                 screen_x,
                 screen_y,
             };

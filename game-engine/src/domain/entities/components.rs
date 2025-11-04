@@ -30,6 +30,43 @@ impl NetworkEntity {
     }
 }
 
+/// Entity name component
+///
+/// Stores the display name and guild information for an entity.
+/// This component is added when the server responds with entity name data.
+#[derive(Component, Debug, Clone)]
+pub struct EntityName {
+    pub name: String,
+    pub party_name: Option<String>,
+    pub guild_name: Option<String>,
+    pub position_name: Option<String>,
+}
+
+impl EntityName {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            party_name: None,
+            guild_name: None,
+            position_name: None,
+        }
+    }
+
+    pub fn with_full_details(
+        name: String,
+        party_name: String,
+        guild_name: String,
+        position_name: String,
+    ) -> Self {
+        Self {
+            name,
+            party_name: Some(party_name).filter(|s| !s.is_empty()),
+            guild_name: Some(guild_name).filter(|s| !s.is_empty()),
+            position_name: Some(position_name).filter(|s| !s.is_empty()),
+        }
+    }
+}
+
 /// Pending despawn component for deferred entity removal
 ///
 /// When an entity receives a VANISH packet while still moving, this component

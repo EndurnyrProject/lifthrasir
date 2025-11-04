@@ -7,7 +7,6 @@ pub mod hover_plugin;
 pub mod hover_system;
 pub mod markers;
 pub mod movement;
-pub mod name_cache;
 pub mod name_request_system;
 pub mod pathfinding;
 pub mod registry;
