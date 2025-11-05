@@ -16,5 +16,5 @@ pub mod sprite_rendering;
 pub mod systems;
 pub mod types;
 
-pub use hover_plugin::{EntityHoverPlugin, EntityHoverSystemSet};
+pub use hover_plugin::{EntityHoverPlugin, EntityHoverSystems};
 pub use registry::EntityRegistry;

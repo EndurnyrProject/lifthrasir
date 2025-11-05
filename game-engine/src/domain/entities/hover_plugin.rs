@@ -4,7 +4,7 @@ use super::name_request_system::{name_request_system, name_response_handler_syst
 use bevy::prelude::*;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct EntityHoverSystemSet;
+pub struct EntityHoverSystems;
 
 /// Plugin that handles entity hovering and name requests
 ///
@@ -43,7 +43,7 @@ impl Plugin for EntityHoverPlugin {
                 name_response_handler_system,
             )
                 .chain()
-                .in_set(EntityHoverSystemSet),
+                .in_set(EntityHoverSystems),
         );
 
         info!("EntityHoverPlugin initialized");

@@ -22,6 +22,7 @@ use crate::{
     infrastructure::networking::{protocol::zone::MovementConfirmedByServer, session::UserSession},
     utils::coordinates::spawn_coords_to_world_position,
 };
+use bevy::ecs::query::{SpawnDetails, Spawned};
 use bevy::prelude::*;
 
 /// Spawn network entities from SpawnEntity events
@@ -388,7 +389,7 @@ pub fn spawn_network_entity_system(
             }
         }
 
-        debug!(
+        info!(
             "✅ Spawned entity: {} ({:?}) at ({}, {}) - Entity ID: {:?}",
             event.name, event.object_type, event.position.0, event.position.1, entity_id
         );
@@ -553,5 +554,28 @@ pub fn check_pending_despawns_system(
             // Remove PendingDespawn component (entity will be despawned by despawn_network_entity_system)
             commands.entity(entity).remove::<PendingDespawn>();
         }
+    }
+}
+
+/// Debug system to log spawn details for newly spawned network entities
+///
+/// Uses Bevy 0.17's SpawnDetails to track entity spawn timing.
+/// This is useful for debugging spawn order, performance analysis, and
+/// understanding entity creation patterns.
+///
+/// Enable this system in debug builds or when investigating spawn issues.
+#[allow(dead_code)]
+pub fn debug_entity_spawn_timing_system(
+    query: Query<(Entity, &NetworkEntity, SpawnDetails), Spawned>,
+) {
+    for (entity, network_entity, spawn_details) in query.iter() {
+        debug!(
+            "Entity spawned: {:?} (AID: {}, GID: {}, Type: {:?}) at tick {:?}",
+            entity,
+            network_entity.aid,
+            network_entity.gid,
+            network_entity.object_type,
+            spawn_details.spawn_tick()
+        );
     }
 }

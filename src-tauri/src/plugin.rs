@@ -292,11 +292,11 @@ impl Plugin for TauriIntegrationPlugin {
         app.insert_resource(world_emitter);
 
         // Add world emitter system (streaming status updates to frontend)
-        // emit_entity_names must run after EntityHoverSystemSet to ensure cached names are available
+        // emit_entity_names must run after EntityHoverSystems to ensure cached names are available
         app.add_systems(Update, (emit_world_events, emit_cursor_changes));
         app.add_systems(
             Update,
-            emit_entity_names.after(game_engine::EntityHoverSystemSet),
+            emit_entity_names.after(game_engine::EntityHoverSystems),
         );
 
         app.insert_non_send_resource(tauri_app.handle().clone());
@@ -389,12 +389,14 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
         );
         app.add_plugins(plugins);
 
-        // // Add Bevy diagnostic plugins first
-        // app.add_plugins((
-        //     bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
-        //     bevy::diagnostic::EntityCountDiagnosticsPlugin::default(),
-        //     bevy::diagnostic::LogDiagnosticsPlugin::default(),
-        // ));
+        // Add Bevy diagnostic plugins for development
+        #[cfg(debug_assertions)]
+        {
+            app.add_plugins((
+                bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
+                bevy::dev_tools::fps_overlay::FpsOverlayPlugin::default(),
+            ));
+        }
 
         // Add game engine plugins AFTER rendering plugins are available
         // This ensures all required asset types are initialized
