@@ -36,7 +36,10 @@ impl PacketHandler<ZoneProtocol> for ReqnameHandler {
         _context: &mut ZoneContext,
         event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
-        debug!("Entity name received: {} (ID: {})", packet.name, packet.char_id);
+        debug!(
+            "Entity name received: {} (ID: {})",
+            packet.name, packet.char_id
+        );
 
         let event = EntityNameReceived {
             char_id: packet.char_id,

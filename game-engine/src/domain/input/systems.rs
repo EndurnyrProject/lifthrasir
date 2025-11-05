@@ -77,7 +77,6 @@ pub fn handle_terrain_click(
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
     player_query: Query<(Entity, &SpriteObjectTree), With<LocalPlayer>>,
     sprite_transforms: Query<&Transform>,
-    mut movement_events: MessageWriter<MovementRequested>,
 ) {
     if mouse_click.position.take().is_none() {
         return;
@@ -130,7 +129,7 @@ pub fn handle_terrain_click(
                 .entity(player_entity)
                 .insert(WalkablePath::new(waypoints.clone(), (dest_x, dest_y)));
 
-            movement_events.write(MovementRequested {
+            commands.trigger(MovementRequested {
                 entity: player_entity,
                 dest_x,
                 dest_y,
@@ -148,7 +147,7 @@ pub fn handle_terrain_click(
         }
         Some(_waypoints) => {
             debug!("Direct path (adjacent or same cell)");
-            movement_events.write(MovementRequested {
+            commands.trigger(MovementRequested {
                 entity: player_entity,
                 dest_x,
                 dest_y,

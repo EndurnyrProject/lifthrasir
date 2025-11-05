@@ -13,12 +13,12 @@ use crate::infrastructure::networking::protocol::zone::MovementStoppedByServer;
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
 
-/// Send movement requests to the server
+/// Observer for movement requests
 ///
-/// Consumes MovementRequested events and sends CZ_REQUEST_MOVE2 packets.
+/// Handles MovementRequested events and sends CZ_REQUEST_MOVE2 packets to the server.
 /// This is the first step in the client-server movement flow.
-pub fn send_movement_requests_system(
-    mut events: MessageReader<MovementRequested>,
+pub fn send_movement_requests_observer(
+    trigger: On<MovementRequested>,
     client: Option<ResMut<ZoneServerClient>>,
 ) {
     let Some(mut client) = client else {
@@ -29,15 +29,14 @@ pub fn send_movement_requests_system(
         return;
     }
 
-    for event in events.read() {
-        debug!(
-            "Sending movement request for {:?} to ({}, {}) dir {}",
-            event.entity, event.dest_x, event.dest_y, event.direction
-        );
+    let event = trigger.event();
+    debug!(
+        "Sending movement request for {:?} to ({}, {}) dir {}",
+        event.entity, event.dest_x, event.dest_y, event.direction
+    );
 
-        if let Err(e) = client.request_move(event.dest_x, event.dest_y, event.direction) {
-            error!("Failed to send movement request: {:?}", e);
-        }
+    if let Err(e) = client.request_move(event.dest_x, event.dest_y, event.direction) {
+        error!("Failed to send movement request: {:?}", e);
     }
 }
 
@@ -63,7 +62,6 @@ pub fn send_movement_requests_system(
 pub fn handle_movement_confirmed_system(
     mut commands: Commands,
     mut server_events: MessageReader<MovementConfirmedByServer>,
-    mut client_events: MessageWriter<MovementConfirmed>,
     entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
     query: Query<(
         Option<&MovementTarget>,
@@ -232,7 +230,7 @@ pub fn handle_movement_confirmed_system(
             ));
         }
 
-        client_events.write(MovementConfirmed {
+        commands.trigger(MovementConfirmed {
             entity,
             src_x: event.src_x,
             src_y: event.src_y,
@@ -263,7 +261,7 @@ pub fn interpolate_movement_system(
         &mut CharacterDirection,
     )>,
     mut sprite_transforms: Query<&mut Transform>,
-    mut stop_events: MessageWriter<MovementStopped>,
+    mut commands: Commands,
 ) {
     for (entity, target, speed, state, object_tree, mut character_direction) in query.iter_mut() {
         if *state != MovementState::Moving {
@@ -281,7 +279,7 @@ pub fn interpolate_movement_system(
             transform.translation.x = target.dest_world_pos.x;
             transform.translation.z = target.dest_world_pos.z;
 
-            stop_events.write(MovementStopped {
+            commands.trigger(MovementStopped {
                 entity,
                 x: target.dest_x,
                 y: target.dest_y,
@@ -312,7 +310,7 @@ pub fn interpolate_movement_system(
 /// server-provided coordinates.
 pub fn handle_server_stop_system(
     mut server_stop_events: MessageReader<MovementStoppedByServer>,
-    mut client_stop_events: MessageWriter<MovementStopped>,
+    mut commands: Commands,
     entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
     query: Query<&SpriteObjectTree>,
     mut sprite_transforms: Query<&mut Transform>,
@@ -341,7 +339,7 @@ pub fn handle_server_stop_system(
             transform.translation.z = final_pos.z;
         }
 
-        client_stop_events.write(MovementStopped {
+        commands.trigger(MovementStopped {
             entity,
             x: server_event.x,
             y: server_event.y,
@@ -350,9 +348,9 @@ pub fn handle_server_stop_system(
     }
 }
 
-/// Handle movement stopped events
+/// Observer for movement stopped events
 ///
-/// Cleanup system that runs when movement completes or is interrupted.
+/// Cleanup observer that runs when movement completes or is interrupted.
 /// - Removes MovementTarget component
 /// - Removes WalkablePath component (path is complete)
 /// - Updates state to Idle
@@ -361,38 +359,37 @@ pub fn handle_server_stop_system(
 /// With the new smooth multi-waypoint interpolation, movement only stops
 /// when the character reaches the final destination, so this always triggers
 /// the complete cleanup sequence.
-pub fn handle_movement_stopped_system(
+pub fn handle_movement_stopped_observer(
+    trigger: On<MovementStopped>,
     mut commands: Commands,
-    mut events: MessageReader<MovementStopped>,
     movement_states: Query<&MovementState>,
 ) {
-    for event in events.read() {
-        debug!(
-            "Cleaning up movement for {:?}: reason {:?}",
-            event.entity, event.reason
-        );
+    let event = trigger.event();
+    debug!(
+        "Cleaning up movement for {:?}: reason {:?}",
+        event.entity, event.reason
+    );
 
-        if let Ok(movement_state) = movement_states.get(event.entity) {
-            if matches!(movement_state, MovementState::Idle) {
-                debug!(
-                    "⏭️ Skipping StopWalking trigger for {:?}: already Idle",
-                    event.entity
-                );
-                continue;
-            }
+    if let Ok(movement_state) = movement_states.get(event.entity) {
+        if matches!(movement_state, MovementState::Idle) {
+            debug!(
+                "⏭️ Skipping StopWalking trigger for {:?}: already Idle",
+                event.entity
+            );
+            return;
         }
-
-        debug!(
-            "🛑 INSERTING StopWalking trigger for entity {:?}",
-            event.entity
-        );
-        commands
-            .entity(event.entity)
-            .remove::<MovementTarget>()
-            .remove::<WalkablePath>()
-            .remove::<StartWalking>()
-            .insert((MovementState::Idle, StopWalking));
     }
+
+    debug!(
+        "🛑 INSERTING StopWalking trigger for entity {:?}",
+        event.entity
+    );
+    commands
+        .entity(event.entity)
+        .remove::<MovementTarget>()
+        .remove::<WalkablePath>()
+        .remove::<StartWalking>()
+        .insert((MovementState::Idle, StopWalking));
 }
 
 /// Update altitude for all grounded entities to follow terrain height

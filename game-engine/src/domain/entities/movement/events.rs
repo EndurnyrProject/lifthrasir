@@ -4,9 +4,10 @@ use bevy::prelude::*;
 ///
 /// This event represents the user's intent to move. It will be consumed
 /// by the networking layer to send a CZ_REQUEST_MOVE2 packet to the server.
-#[derive(Message, Debug, Clone)]
+#[derive(EntityEvent, Debug, Clone)]
 pub struct MovementRequested {
     /// Entity requesting movement (usually the player character)
+    #[event_target]
     pub entity: Entity,
 
     /// Target X coordinate in RO coordinates (0-1023)
@@ -24,9 +25,10 @@ pub struct MovementRequested {
 /// This event is generated from the ZC_NOTIFY_PLAYERMOVE packet.
 /// It contains the server-authoritative movement data including
 /// source and destination positions for interpolation.
-#[derive(Message, Debug, Clone)]
+#[derive(EntityEvent, Debug, Clone)]
 pub struct MovementConfirmed {
     /// Entity that should move (usually the player character)
+    #[event_target]
     pub entity: Entity,
 
     /// Server-confirmed source position X
@@ -51,9 +53,10 @@ pub struct MovementConfirmed {
 /// - Movement completing naturally (reached destination)
 /// - Server forcing stop (ZC_NOTIFY_MOVE_STOP packet)
 /// - Client-side interruption (e.g., new movement request)
-#[derive(Message, Debug, Clone)]
+#[derive(EntityEvent, Debug, Clone)]
 pub struct MovementStopped {
     /// Entity that stopped moving
+    #[event_target]
     pub entity: Entity,
 
     /// Final X position (RO coordinates)

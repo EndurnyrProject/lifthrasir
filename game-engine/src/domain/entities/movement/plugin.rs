@@ -1,7 +1,6 @@
-use super::events::{MovementConfirmed, MovementRequested, MovementStopped};
 use super::systems::{
-    handle_movement_confirmed_system, handle_movement_stopped_system, handle_server_stop_system,
-    interpolate_movement_system, send_movement_requests_system, update_entity_altitude_system,
+    handle_movement_confirmed_system, handle_movement_stopped_observer, handle_server_stop_system,
+    interpolate_movement_system, send_movement_requests_observer, update_entity_altitude_system,
 };
 use crate::infrastructure::networking::protocol::zone::handlers::movement_handlers::{
     MovementConfirmedByServer, MovementStoppedByServer,
@@ -31,21 +30,19 @@ pub struct MovementPlugin;
 
 impl Plugin for MovementPlugin {
     fn build(&self, app: &mut App) {
-        // Register events (domain-level)
-        app.add_message::<MovementRequested>()
-            .add_message::<MovementConfirmed>()
-            .add_message::<MovementStopped>();
-
         // Register network protocol messages (infrastructure-level)
         app.add_message::<MovementConfirmedByServer>()
             .add_message::<MovementStoppedByServer>();
 
-        // Add systems with proper scheduling to avoid event access conflicts
-        // Systems that emit events run in Update
+        // Register observers for entity-targeted movement events
+        app.add_observer(send_movement_requests_observer)
+            .add_observer(handle_movement_stopped_observer);
+
+        // Add systems with proper scheduling
+        // These systems process network events and trigger observers
         app.add_systems(
             Update,
             (
-                send_movement_requests_system,
                 handle_movement_confirmed_system,
                 interpolate_movement_system,
                 handle_server_stop_system,
@@ -54,11 +51,7 @@ impl Plugin for MovementPlugin {
                 .chain(),
         );
 
-        // Systems that read events run in PostUpdate to avoid conflicts
-        // This allows event writers in Update to complete before readers process them
-        app.add_systems(PostUpdate, handle_movement_stopped_system);
-
-        info!("MovementPlugin initialized");
+        info!("MovementPlugin initialized with observers");
     }
 }
 

@@ -1,4 +1,3 @@
-use bevy::ecs::query::Spawned;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
@@ -8,13 +7,9 @@ use crate::domain::entities::character::kinds::CharacterRoot;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::entities::sprite_rendering::SpriteObjectTree;
 
-/// Type alias for player query with Spawned filter for SpriteObjectTree
-type PlayerReadyQuery<'w, 's> = Query<
-    'w,
-    's,
-    (Entity, &'static SpriteObjectTree),
-    (With<LocalPlayer>, Spawned),
->;
+/// Type alias for player query - matches local player with sprite tree
+type PlayerReadyQuery<'w, 's> =
+    Query<'w, 's, (Entity, &'static SpriteObjectTree), With<LocalPlayer>>;
 
 /// Resource to track if the camera has been spawned.
 /// Prevents multiple camera entities from being created.

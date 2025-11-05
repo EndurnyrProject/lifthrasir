@@ -51,14 +51,14 @@ pub fn entity_hover_detection_system(
     mut commands: Commands,
     cursor_pos: Res<ForwardedCursorPosition>,
     hoverable_query: Query<(Entity, &NetworkEntity, &Hoverable)>,
-    mut hover_entered_events: MessageWriter<EntityHoverEntered>,
-    mut hover_exited_events: MessageWriter<EntityHoverExited>,
     mut previous_hovered: Local<Option<Entity>>,
 ) {
     let Some(cursor_position) = cursor_pos.position else {
         if let Some(prev_entity) = *previous_hovered {
             commands.entity(prev_entity).remove::<HoveredEntity>();
-            hover_exited_events.write(EntityHoverExited { entity: prev_entity });
+            commands.trigger(EntityHoverExited {
+                entity: prev_entity,
+            });
             *previous_hovered = None;
         }
         return;
@@ -72,10 +72,12 @@ pub fn entity_hover_detection_system(
     match (current_hovered, *previous_hovered) {
         (Some((entity, network_entity)), Some(prev_entity)) if entity != prev_entity => {
             commands.entity(prev_entity).remove::<HoveredEntity>();
-            hover_exited_events.write(EntityHoverExited { entity: prev_entity });
+            commands.trigger(EntityHoverExited {
+                entity: prev_entity,
+            });
 
             commands.entity(entity).insert(HoveredEntity);
-            hover_entered_events.write(EntityHoverEntered {
+            commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,
                 object_type: network_entity.object_type,
@@ -89,7 +91,7 @@ pub fn entity_hover_detection_system(
         }
         (Some((entity, network_entity)), None) => {
             commands.entity(entity).insert(HoveredEntity);
-            hover_entered_events.write(EntityHoverEntered {
+            commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,
                 object_type: network_entity.object_type,
@@ -103,7 +105,9 @@ pub fn entity_hover_detection_system(
         }
         (None, Some(prev_entity)) => {
             commands.entity(prev_entity).remove::<HoveredEntity>();
-            hover_exited_events.write(EntityHoverExited { entity: prev_entity });
+            commands.trigger(EntityHoverExited {
+                entity: prev_entity,
+            });
             info!("Entity hover EXITED: {:?}", prev_entity);
 
             *previous_hovered = None;

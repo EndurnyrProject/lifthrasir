@@ -41,19 +41,36 @@ pub struct SpawnEntity {
 }
 
 /// Event to despawn a network entity
-#[derive(Message, Debug, Clone)]
+///
+/// This event uses the observer pattern and is targeted at a specific entity.
+/// When triggered, it will remove the entity and all its sprite hierarchy.
+#[derive(EntityEvent, Debug, Clone)]
 pub struct DespawnEntity {
+    #[event_target]
+    pub entity: Entity,
     pub aid: u32,
 }
 
-/// Event to request entity vanish (potentially deferred if moving)
+/// Network protocol event to request entity vanish (from server)
 ///
 /// This event is emitted by VanishHandler when the server sends VANISH packet.
-/// A system will check if the entity is moving and either:
-/// - Mark it with PendingDespawn if moving (defer despawn until movement completes)
-/// - Emit DespawnEntity immediately if idle
+/// A bridge system converts this to EntityVanishRequested observer event.
 #[derive(Message, Debug, Clone)]
 pub struct RequestEntityVanish {
+    pub aid: u32,
+    pub vanish_type: u8,
+}
+
+/// Entity-targeted event for vanish requests
+///
+/// This observer event is triggered when an entity needs to vanish.
+/// An observer will check if the entity is moving and either:
+/// - Mark it with PendingDespawn if moving (defer despawn until movement completes)
+/// - Trigger DespawnEntity immediately if idle
+#[derive(EntityEvent, Debug, Clone)]
+pub struct EntityVanishRequested {
+    #[event_target]
+    pub entity: Entity,
     pub aid: u32,
     pub vanish_type: u8,
 }

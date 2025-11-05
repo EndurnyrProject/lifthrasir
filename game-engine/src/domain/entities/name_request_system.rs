@@ -10,11 +10,10 @@ use crate::{
 };
 use bevy::prelude::*;
 
-pub fn name_request_system(
+pub fn name_request_observer(
+    trigger: On<EntityHoverEntered>,
     mut client: Option<ResMut<ZoneServerClient>>,
-    mut hover_entered_events: MessageReader<EntityHoverEntered>,
     entity_query: Query<&EntityName>,
-    network_entity_query: Query<(Entity, &NetworkEntity)>,
 ) {
     let Some(ref mut client) = client else {
         return;
@@ -24,20 +23,23 @@ pub fn name_request_system(
         return;
     }
 
-    for event in hover_entered_events.read() {
-        let Some((entity, _)) = network_entity_query.iter().find(|(_, ne)| ne.aid == event.entity_id) else {
-            continue;
-        };
+    let event = trigger.event();
+    let entity = trigger.entity;
 
-        if entity_query.get(entity).is_ok() {
-            continue;
-        }
+    if entity_query.get(entity).is_ok() {
+        return;
+    }
 
-        info!("📤 Sending CZ_REQNAME2 packet for entity ID: {}", event.entity_id);
+    info!(
+        "📤 Sending CZ_REQNAME2 packet for entity ID: {}",
+        event.entity_id
+    );
 
-        if let Err(e) = client.request_entity_name(event.entity_id) {
-            error!("❌ Failed to send name request for entity {}: {:?}", event.entity_id, e);
-        }
+    if let Err(e) = client.request_entity_name(event.entity_id) {
+        error!(
+            "❌ Failed to send name request for entity {}: {:?}",
+            event.entity_id, e
+        );
     }
 }
 
@@ -51,7 +53,8 @@ pub fn name_response_handler_system(
         let gid_to_find = event.char_id;
         let Some((entity, _)) = network_entity_query
             .iter()
-            .find(|(_, ne)| ne.gid == gid_to_find) else {
+            .find(|(_, ne)| ne.gid == gid_to_find)
+        else {
             warn!(
                 "Received name for GID {} but no NetworkEntity found - name: {}",
                 gid_to_find, event.name
@@ -69,7 +72,8 @@ pub fn name_response_handler_system(
         let gid_to_find = event.gid;
         let Some((entity, _)) = network_entity_query
             .iter()
-            .find(|(_, ne)| ne.gid == gid_to_find) else {
+            .find(|(_, ne)| ne.gid == gid_to_find)
+        else {
             warn!(
                 "Received full name for GID {} but no NetworkEntity found - name: {}",
                 gid_to_find, event.name
@@ -91,4 +95,3 @@ pub fn name_response_handler_system(
         );
     }
 }
-

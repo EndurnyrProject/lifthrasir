@@ -1,5 +1,5 @@
 use crate::{
-    domain::entities::spawning::events::{DespawnEntity, RequestEntityVanish, SpawnEntity},
+    domain::entities::spawning::events::{RequestEntityVanish, SpawnEntity},
     infrastructure::networking::{
         client::NetworkClient,
         errors::NetworkResult,
@@ -312,7 +312,6 @@ pub struct ZoneServerEventWriters<'w> {
     pub movement_confirmed: MessageWriter<'w, MovementConfirmedByServer>,
     pub movement_stopped: MessageWriter<'w, MovementStoppedByServer>,
     pub spawn_entity: MessageWriter<'w, SpawnEntity>,
-    pub despawn_entity: MessageWriter<'w, DespawnEntity>,
     pub vanish_request: MessageWriter<'w, RequestEntityVanish>,
     pub entity_name_received: MessageWriter<'w, EntityNameReceived>,
     pub entity_name_all_received: MessageWriter<'w, EntityNameAllReceived>,
@@ -367,7 +366,6 @@ pub fn zone_server_update_system(
             (MovementConfirmedByServer, movement_confirmed),
             (MovementStoppedByServer, movement_stopped),
             (SpawnEntity, spawn_entity),
-            (DespawnEntity, despawn_entity),
             (RequestEntityVanish, vanish_request),
             (EntityNameReceived, entity_name_received),
             (EntityNameAllReceived, entity_name_all_received),

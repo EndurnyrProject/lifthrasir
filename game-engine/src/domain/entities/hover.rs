@@ -31,14 +31,16 @@ impl Hoverable {
     }
 }
 
-#[derive(Message)]
+#[derive(EntityEvent, Debug, Clone)]
 pub struct EntityHoverEntered {
+    #[event_target]
     pub entity: Entity,
     pub entity_id: u32,
     pub object_type: ObjectType,
 }
 
-#[derive(Message)]
+#[derive(EntityEvent, Debug, Clone)]
 pub struct EntityHoverExited {
+    #[event_target]
     pub entity: Entity,
 }

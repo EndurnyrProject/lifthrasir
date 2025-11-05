@@ -81,7 +81,9 @@ pub fn update_terrain_raycast_cache(
 
     let world_pos = ray.origin + ray.direction * distance;
 
-    let Some(terrain_height) = altitude_asset.altitude.get_terrain_height_at_position(world_pos)
+    let Some(terrain_height) = altitude_asset
+        .altitude
+        .get_terrain_height_at_position(world_pos)
     else {
         cache.cell_coords = None;
         cache.world_position = None;

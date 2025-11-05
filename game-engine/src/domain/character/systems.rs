@@ -11,7 +11,6 @@ use crate::infrastructure::networking::protocol::character::{
     CharacterServerConnected, ZoneServerInfoReceived,
 };
 use crate::infrastructure::networking::session::UserSession;
-use bevy::ecs::query::Spawned;
 use bevy::prelude::*;
 use std::time::{Duration, Instant};
 
@@ -445,17 +444,26 @@ pub fn handle_account_id_received_protocol(
 }
 
 pub fn detect_map_load_complete(
-    query: Query<(Entity, &crate::domain::world::map::MapData), Spawned>,
+    query: Query<
+        (Entity, &crate::domain::world::map::MapData),
+        Added<crate::domain::world::map::MapData>,
+    >,
     spawn_context: Option<Res<MapSpawnContext>>,
     mut events: MessageWriter<MapLoadCompleted>,
 ) {
     for (entity, _map_data) in query.iter() {
         let Some(context) = spawn_context.as_ref() else {
-            warn!("MapData spawned (entity {:?}) but MapSpawnContext not available - skipping", entity);
+            warn!(
+                "MapData spawned (entity {:?}) but MapSpawnContext not available - skipping",
+                entity
+            );
             continue;
         };
 
-        debug!("Map loading completed: {} (entity {:?})", context.map_name, entity);
+        debug!(
+            "Map loading completed: {} (entity {:?})",
+            context.map_name, entity
+        );
         events.write(MapLoadCompleted {
             map_name: context.map_name.clone(),
         });

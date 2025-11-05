@@ -13,7 +13,9 @@ use crate::{
         movement::components::{MovementSpeed, MovementState, MovementTarget},
         pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
         registry::EntityRegistry,
-        spawning::events::{DespawnEntity, RequestEntityVanish, SpawnEntity},
+        spawning::events::{
+            DespawnEntity, EntityVanishRequested, RequestEntityVanish, SpawnEntity,
+        },
         sprite_rendering::{
             components::{EntitySpriteData, EntitySpriteInfo, EntitySpriteNames},
             events::SpawnSpriteEvent,
@@ -411,45 +413,30 @@ fn create_equipment_item(
     }
 }
 
-/// Despawn network entities when they leave view
-pub fn despawn_network_entity_system(
+/// Observer for entity despawn events
+///
+/// Handles DespawnEntity observer events and despawns the entity and its sprite hierarchy.
+/// This observer is triggered when an entity needs to be removed from the game world.
+pub fn on_despawn_entity(
+    trigger: On<DespawnEntity>,
     mut commands: Commands,
-    mut despawn_events: MessageReader<crate::domain::entities::spawning::events::DespawnEntity>,
     mut entity_registry: ResMut<EntityRegistry>,
-    mut despawned_this_frame: Local<std::collections::HashSet<u32>>,
     sprite_trees: Query<&crate::domain::entities::sprite_rendering::components::SpriteObjectTree>,
 ) {
-    despawned_this_frame.clear();
+    let event = trigger.event();
+    let entity = trigger.entity;
 
-    for event in despawn_events.read() {
-        if despawned_this_frame.contains(&event.aid) {
-            info!(
-                "🔄 Skipping duplicate despawn event for AID: {} (already processed this frame)",
-                event.aid
-            );
-            continue;
-        }
-
-        if let Some(entity) = entity_registry.get_entity(event.aid) {
-            // Despawn sprite hierarchy first to prevent race condition
-            // where update_sprite_transforms tries to access a despawned entity
-            if let Ok(object_tree) = sprite_trees.get(entity) {
-                commands.entity(object_tree.root).despawn();
-            }
-
-            commands.entity(entity).despawn();
-
-            entity_registry.unregister_entity_by_aid(event.aid);
-            despawned_this_frame.insert(event.aid);
-
-            info!("✅ Despawned entity with AID: {}", event.aid);
-        } else {
-            warn!(
-                "⚠️ Attempted to despawn unknown entity with AID: {}",
-                event.aid
-            );
-        }
+    // Despawn sprite hierarchy first to prevent race condition
+    // where update_sprite_transforms tries to access a despawned entity
+    if let Ok(object_tree) = sprite_trees.get(entity) {
+        commands.entity(object_tree.root).despawn();
     }
+
+    commands.entity(entity).despawn();
+
+    entity_registry.unregister_entity_by_aid(event.aid);
+
+    info!("✅ Despawned entity {:?} with AID: {}", entity, event.aid);
 }
 
 /// Cleanup system: Remove entities from registry when they despawn
@@ -465,18 +452,15 @@ pub fn cleanup_despawned_entities_system(
     }
 }
 
-/// Handle RequestEntityVanish events and defer despawn for moving entities
+/// Bridge system: Convert network RequestEntityVanish to EntityVanishRequested observer
 ///
-/// When an entity vanishes (moves out of range, dies, logs out, or teleports),
-/// this system checks if the entity is currently moving. If so, it marks the
-/// entity with PendingDespawn component to defer actual despawn until movement
-/// completes. This prevents entities from disappearing mid-movement.
-pub fn handle_vanish_request_system(
+/// This system reads RequestEntityVanish messages from the network layer,
+/// looks up the corresponding entity from EntityRegistry, and triggers
+/// EntityVanishRequested observer events.
+pub fn bridge_vanish_requests_system(
     mut commands: Commands,
     mut vanish_requests: MessageReader<RequestEntityVanish>,
-    mut despawn_events: MessageWriter<DespawnEntity>,
     entity_registry: Res<EntityRegistry>,
-    movement_query: Query<&MovementState>,
 ) {
     for request in vanish_requests.read() {
         let Some(entity) = entity_registry.get_entity(request.aid) else {
@@ -487,49 +471,72 @@ pub fn handle_vanish_request_system(
             continue;
         };
 
-        let vanish_reason = match request.vanish_type {
-            0 => "out of sight",
-            1 => "died",
-            2 => "logged out",
-            3 => "teleported",
-            _ => "unknown",
-        };
-
-        // Check if entity is moving
-        if let Ok(movement_state) = movement_query.get(entity) {
-            if matches!(movement_state, MovementState::Moving) {
-                // Entity is moving - defer despawn until movement completes
-                debug!(
-                    "Entity {} is moving, deferring despawn ({})",
-                    request.aid, vanish_reason
-                );
-
-                commands
-                    .entity(entity)
-                    .insert(PendingDespawn::new(request.vanish_type));
-                continue;
-            }
-        }
-
-        // Entity is idle or missing MovementState - despawn immediately
-        debug!(
-            "Entity {} is idle, despawning immediately ({})",
-            request.aid, vanish_reason
-        );
-
-        despawn_events.write(DespawnEntity { aid: request.aid });
+        commands.trigger(EntityVanishRequested {
+            entity,
+            aid: request.aid,
+            vanish_type: request.vanish_type,
+        });
     }
+}
+
+/// Observer for entity vanish requests
+///
+/// When an entity vanishes (moves out of range, dies, logs out, or teleports),
+/// this observer checks if the entity is currently moving. If so, it marks the
+/// entity with PendingDespawn component to defer actual despawn until movement
+/// completes. This prevents entities from disappearing mid-movement.
+pub fn on_entity_vanish_request(
+    trigger: On<EntityVanishRequested>,
+    mut commands: Commands,
+    movement_query: Query<&MovementState>,
+) {
+    let event = trigger.event();
+    let entity = trigger.entity;
+
+    let vanish_reason = match event.vanish_type {
+        0 => "out of sight",
+        1 => "died",
+        2 => "logged out",
+        3 => "teleported",
+        _ => "unknown",
+    };
+
+    // Check if entity is moving
+    if let Ok(movement_state) = movement_query.get(entity) {
+        if matches!(movement_state, MovementState::Moving) {
+            // Entity is moving - defer despawn until movement completes
+            debug!(
+                "Entity {:?} (AID {}) is moving, deferring despawn ({})",
+                entity, event.aid, vanish_reason
+            );
+
+            commands
+                .entity(entity)
+                .insert(PendingDespawn::new(event.vanish_type));
+            return;
+        }
+    }
+
+    // Entity is idle or missing MovementState - despawn immediately
+    debug!(
+        "Entity {:?} (AID {}) is idle, despawning immediately ({})",
+        entity, event.aid, vanish_reason
+    );
+
+    commands.trigger(DespawnEntity {
+        entity,
+        aid: event.aid,
+    });
 }
 
 /// Check pending despawns and despawn entities when movement completes
 ///
 /// This system runs every frame to check entities marked with PendingDespawn.
 /// When an entity finishes moving (MovementState::Idle) or the timeout expires,
-/// it emits a DespawnEntity event to trigger actual despawn.
+/// it triggers a DespawnEntity observer to handle actual despawn.
 pub fn check_pending_despawns_system(
     mut commands: Commands,
     query: Query<(Entity, &PendingDespawn, &MovementState, &NetworkEntity)>,
-    mut despawn_events: MessageWriter<DespawnEntity>,
 ) {
     for (entity, pending, movement_state, network_entity) in query.iter() {
         let should_despawn =
@@ -543,15 +550,16 @@ pub fn check_pending_despawns_system(
             };
 
             debug!(
-                "Pending despawn completed for AID {} ({})",
-                network_entity.aid, reason
+                "Pending despawn completed for entity {:?} (AID {}, reason: {})",
+                entity, network_entity.aid, reason
             );
 
-            despawn_events.write(DespawnEntity {
+            commands.trigger(DespawnEntity {
+                entity,
                 aid: network_entity.aid,
             });
 
-            // Remove PendingDespawn component (entity will be despawned by despawn_network_entity_system)
+            // Remove PendingDespawn component (entity will be despawned by observer)
             commands.entity(entity).remove::<PendingDespawn>();
         }
     }

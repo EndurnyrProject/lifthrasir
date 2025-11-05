@@ -37,8 +37,8 @@ pub fn create_app() -> App {
             TokioTasksPlugin::default(), // ENABLED: Required for async networking
             RoDiagnosticsPlugin,         // ENABLED: Performance diagnostics and profiling
             LifthrasirPlugin,
-            AssetsPlugin,                 // ENABLED: Registers ClientConfig asset type
-            AudioPlugin,                  // ENABLED: Audio system with BGM support and crossfading
+            AssetsPlugin,          // ENABLED: Registers ClientConfig asset type
+            AudioPlugin,           // ENABLED: Audio system with BGM support and crossfading
             EntitySpawningPlugin, // ENABLED: Entity spawning/despawning events for network entities (must be before CharacterDomainPlugin)
             CharacterDomainPlugin, // ENABLED: Character events and networking (no UI)
             AuthenticationPlugin, // ENABLED: Reads LoginAttemptEvent and handles auth
@@ -47,7 +47,7 @@ pub fn create_app() -> App {
             MovementPlugin,       // ENABLED: Generic entity movement system
         ))
         .add_plugins((
-            EntityHoverPlugin,    // ENABLED: Entity hover detection and name request system
+            EntityHoverPlugin, // ENABLED: Entity hover detection and name request system
             UnifiedCharacterEntityPlugin, // ENABLED: Unified character system with 3D billboard sprite hierarchy
         ));
 
