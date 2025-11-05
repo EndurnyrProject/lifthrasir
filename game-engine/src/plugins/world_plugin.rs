@@ -1,7 +1,6 @@
 use crate::{
     core::{GameSettings, GameState, MapState},
     domain::world::{
-        spawn_context::MapSpawnContext,
         systems::{
             cleanup_map_loading_state, detect_asset_load_failures, extract_map_from_unified_assets,
             monitor_game_state, on_enter_loading_state, setup_unified_map_loading,
@@ -17,7 +16,6 @@ impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<MapState>()
             .init_resource::<GameSettings>()
-            .register_type::<MapSpawnContext>()
             .add_systems(Update, monitor_game_state)
             .add_systems(OnEnter(GameState::Loading), on_enter_loading_state)
             .add_systems(

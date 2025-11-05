@@ -170,35 +170,6 @@ impl From<AnimationState> for ActionType {
 pub fn setup_character_state_machines(app: &mut App) {
     app.add_plugins(StateMachinePlugin::default())
         .add_message::<CharacterStateChangeEvent>()
-        .register_type::<AnimationState>()
-        .register_type::<GameplayState>()
-        .register_type::<ContextState>()
-        // Animation triggers
-        .register_type::<StartWalking>()
-        .register_type::<StopWalking>()
-        .register_type::<StartAttacking>()
-        .register_type::<FinishAttack>()
-        .register_type::<StartCasting>()
-        .register_type::<FinishCasting>()
-        .register_type::<TakeDamage>()
-        .register_type::<Die>()
-        .register_type::<Resurrect>()
-        .register_type::<Sit>()
-        .register_type::<Stand>()
-        // Gameplay triggers
-        .register_type::<GetStunned>()
-        .register_type::<RecoverFromStun>()
-        .register_type::<GetPoisoned>()
-        .register_type::<RecoverFromPoison>()
-        .register_type::<StartHiding>()
-        .register_type::<StopHiding>()
-        // Context triggers
-        .register_type::<EnterGame>()
-        .register_type::<ExitGame>()
-        .register_type::<EnterBattle>()
-        .register_type::<ExitBattle>()
-        .register_type::<OpenTrade>()
-        .register_type::<CloseTrade>()
         // State change observer systems - these bridge state machine to visuals
         .add_systems(
             Update,

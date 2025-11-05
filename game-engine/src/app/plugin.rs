@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_plugin, AutoPlugin};
 
-use crate::domain::camera::components::{CameraFollowSettings, CameraFollowTarget};
 use crate::domain::camera::resources::CameraRotationDelta;
 use crate::domain::camera::systems::{
     camera_follow_system, spawn_camera_on_player_ready, update_camera_target_cache, CameraSpawned,
@@ -14,10 +13,6 @@ pub struct LifthrasirPlugin;
 // Extend the auto-generated Plugin implementation with camera systems
 impl LifthrasirPlugin {
     pub fn add_camera_systems(app: &mut App) {
-        // Register camera components for reflection
-        app.register_type::<CameraFollowTarget>()
-            .register_type::<CameraFollowSettings>();
-
         // Initialize camera resources
         app.init_resource::<CameraSpawned>();
         app.init_resource::<CameraRotationDelta>();

@@ -1,4 +1,4 @@
-use super::hover::{EntityHoverEntered, EntityHoverExited, HoverConfig, Hoverable, HoveredEntity};
+use super::hover::{EntityHoverEntered, EntityHoverExited, HoverConfig};
 use super::hover_system::{entity_hover_detection_system, update_entity_bounds_system};
 use super::name_request_system::{name_request_system, name_response_handler_system};
 use bevy::prelude::*;
@@ -10,7 +10,6 @@ pub struct EntityHoverSystemSet;
 ///
 /// This plugin sets up the complete entity hover system including:
 /// - Event registration (EntityHoverEntered, EntityHoverExited)
-/// - Component registration (HoveredEntity, Hoverable)
 /// - System scheduling with proper ordering
 ///
 /// # System Flow
@@ -32,9 +31,6 @@ impl Plugin for EntityHoverPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<EntityHoverEntered>()
             .add_message::<EntityHoverExited>();
-
-        app.register_type::<HoveredEntity>()
-            .register_type::<Hoverable>();
 
         app.init_resource::<HoverConfig>();
 

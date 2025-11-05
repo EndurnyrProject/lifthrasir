@@ -1,10 +1,8 @@
-use super::components::{MovementSpeed, MovementState};
 use super::events::{MovementConfirmed, MovementRequested, MovementStopped};
 use super::systems::{
     handle_movement_confirmed_system, handle_movement_stopped_system, handle_server_stop_system,
     interpolate_movement_system, send_movement_requests_system, update_entity_altitude_system,
 };
-use crate::domain::entities::pathfinding::WalkablePath;
 use crate::infrastructure::networking::protocol::zone::handlers::movement_handlers::{
     MovementConfirmedByServer, MovementStoppedByServer,
 };
@@ -14,7 +12,6 @@ use bevy::prelude::*;
 ///
 /// This plugin sets up the complete movement system including:
 /// - Event registration (MovementRequested, MovementConfirmed, MovementStopped)
-/// - Component registration (MovementState, MovementTarget, MovementSpeed)
 /// - System scheduling with proper ordering
 ///
 /// # System Flow
@@ -42,11 +39,6 @@ impl Plugin for MovementPlugin {
         // Register network protocol messages (infrastructure-level)
         app.add_message::<MovementConfirmedByServer>()
             .add_message::<MovementStoppedByServer>();
-
-        // Register components for reflection/debugging
-        app.register_type::<MovementState>()
-            .register_type::<MovementSpeed>()
-            .register_type::<WalkablePath>();
 
         // Add systems with proper scheduling to avoid event access conflicts
         // Systems that emit events run in Update
