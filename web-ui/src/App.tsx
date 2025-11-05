@@ -158,8 +158,8 @@ function AppContent() {
       // Bevy's Camera::viewport_to_world expects top-left origin coordinates
       // Subtract cursor hotspot offset (17, 17) to align raycast with visual cursor position
       invoke('forward_mouse_position', {
-        x: e.clientX - 50,
-        y: e.clientY
+        x: e.clientX - 34,
+        y: e.clientY + 17
       }).catch(console.error);
     };
 
@@ -180,10 +180,9 @@ function AppContent() {
     const handleMouseClick = (e: MouseEvent) => {
       // Only handle left clicks
       if (e.button === 0) {
-        // Subtract cursor hotspot offset (17, 17) to align click position with visual cursor
         invoke('forward_mouse_click', {
-          x: e.clientX - 50,
-          y: e.clientY
+          x: e.clientX - 34,
+          y: e.clientY + 17
         }).catch(console.error);
       }
     };

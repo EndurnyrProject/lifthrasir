@@ -72,24 +72,49 @@ pub fn update_terrain_raycast_cache(
     };
 
     let ground_plane = InfinitePlane3d::new(Vec3::Y);
-    let Some(distance) = ray.intersect_plane(Vec3::ZERO, ground_plane) else {
+    let plane_normal = Vec3::Y;
+
+    let denominator = ray.direction.dot(plane_normal);
+    if denominator.abs() < 1e-6 {
         cache.cell_coords = None;
         cache.world_position = None;
         cache.is_walkable = false;
         return;
     };
 
-    let world_pos = ray.origin + ray.direction * distance;
-
-    let Some(terrain_height) = altitude_asset
-        .altitude
-        .get_terrain_height_at_position(world_pos)
-    else {
+    let Some(initial_distance) = ray.intersect_plane(Vec3::ZERO, ground_plane) else {
         cache.cell_coords = None;
         cache.world_position = None;
         cache.is_walkable = false;
         return;
     };
+
+    let mut world_pos = ray.origin + ray.direction * initial_distance;
+
+    const MAX_ITERATIONS: u32 = 5;
+    const CONVERGENCE_THRESHOLD: f32 = 0.1;
+
+    for _ in 0..MAX_ITERATIONS {
+        let Some(terrain_height) = altitude_asset
+            .altitude
+            .get_terrain_height_at_position(world_pos)
+        else {
+            cache.cell_coords = None;
+            cache.world_position = None;
+            cache.is_walkable = false;
+            return;
+        };
+
+        let height_diff = (world_pos.y - terrain_height).abs();
+        if height_diff < CONVERGENCE_THRESHOLD {
+            world_pos.y = terrain_height;
+            break;
+        }
+
+        let plane_point = Vec3::new(0.0, terrain_height, 0.0);
+        let distance = (plane_point - ray.origin).dot(plane_normal) / denominator;
+        world_pos = ray.origin + ray.direction * distance;
+    }
 
     let (cell_x, cell_y) = world_position_to_spawn_coords(
         world_pos,
@@ -102,6 +127,6 @@ pub fn update_terrain_raycast_cache(
         .is_walkable(cell_x as usize, cell_y as usize);
 
     cache.cell_coords = Some((cell_x, cell_y));
-    cache.world_position = Some(Vec3::new(world_pos.x, terrain_height, world_pos.z));
+    cache.world_position = Some(world_pos);
     cache.is_walkable = is_walkable;
 }
