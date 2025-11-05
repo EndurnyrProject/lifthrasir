@@ -10,12 +10,20 @@ use crate::infrastructure::networking::{
 };
 use bevy::prelude::*;
 
+/// Basic entity name response (ZC_ACK_REQNAME)
+///
+/// Note: char_id field actually contains AID, not GID.
+/// In Ragnarok Online protocol, GID and AID have the same value.
 #[derive(Message, Debug, Clone)]
 pub struct EntityNameReceived {
     pub char_id: u32,
     pub name: String,
 }
 
+/// Full entity name response with party/guild info (ZC_ACK_REQNAMEALL)
+///
+/// Note: Despite being named 'gid', this field actually contains AID.
+/// In Ragnarok Online protocol, GID and AID have the same value.
 #[derive(Message, Debug, Clone)]
 pub struct EntityNameAllReceived {
     pub gid: u32,

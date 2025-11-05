@@ -1,7 +1,6 @@
 use crate::{
     domain::entities::{
-        components::{EntityName, NetworkEntity},
-        hover::EntityHoverEntered,
+        components::EntityName, hover::EntityHoverEntered, registry::EntityRegistry,
     },
     infrastructure::networking::{
         client::ZoneServerClient,
@@ -13,7 +12,6 @@ use bevy::prelude::*;
 pub fn name_request_observer(
     trigger: On<EntityHoverEntered>,
     mut client: Option<ResMut<ZoneServerClient>>,
-    entity_query: Query<&EntityName>,
 ) {
     let Some(ref mut client) = client else {
         return;
@@ -21,17 +19,12 @@ pub fn name_request_observer(
 
     if !client.is_connected() {
         return;
-    }
+    };
 
     let event = trigger.event();
-    let entity = trigger.entity;
-
-    if entity_query.get(entity).is_ok() {
-        return;
-    }
 
     info!(
-        "📤 Sending CZ_REQNAME2 packet for entity ID: {}",
+        "Sending name request for entity ID {} (AID from event)",
         event.entity_id
     );
 
@@ -47,39 +40,50 @@ pub fn name_response_handler_system(
     mut commands: Commands,
     mut basic_name_events: MessageReader<EntityNameReceived>,
     mut full_name_events: MessageReader<EntityNameAllReceived>,
-    network_entity_query: Query<(Entity, &NetworkEntity)>,
+    entity_registry: Res<EntityRegistry>,
 ) {
     for event in basic_name_events.read() {
-        let gid_to_find = event.char_id;
-        let Some((entity, _)) = network_entity_query
-            .iter()
-            .find(|(_, ne)| ne.gid == gid_to_find)
-        else {
-            warn!(
-                "Received name for GID {} but no NetworkEntity found - name: {}",
-                gid_to_find, event.name
+        let aid = event.char_id;
+
+        let Some(entity) = entity_registry.get_entity(aid) else {
+            debug!(
+                "Received name for AID {} but entity no longer exists (may have despawned) - name: {}",
+                aid, event.name
             );
             continue;
         };
+
+        if commands.get_entity(entity).is_err() {
+            debug!(
+                "Received name for AID {} but entity {:?} was already despawned - name: {}",
+                aid, entity, event.name
+            );
+            continue;
+        }
 
         let entity_name = EntityName::new(event.name.clone());
         commands.entity(entity).insert(entity_name);
-
-        debug!("Added entity name: {} (GID: {})", event.name, gid_to_find);
     }
 
     for event in full_name_events.read() {
-        let gid_to_find = event.gid;
-        let Some((entity, _)) = network_entity_query
-            .iter()
-            .find(|(_, ne)| ne.gid == gid_to_find)
-        else {
-            warn!(
-                "Received full name for GID {} but no NetworkEntity found - name: {}",
-                gid_to_find, event.name
+        // Note: event.gid is misleadingly named - it contains AID
+        let aid = event.gid;
+
+        let Some(entity) = entity_registry.get_entity(aid) else {
+            debug!(
+                "Received full name for AID {} but entity no longer exists (may have despawned) - name: {}",
+                aid, event.name
             );
             continue;
         };
+
+        if commands.get_entity(entity).is_err() {
+            debug!(
+                "Received full name for AID {} but entity {:?} was already despawned - name: {}",
+                aid, entity, event.name
+            );
+            continue;
+        }
 
         let entity_name = EntityName::with_full_details(
             event.name.clone(),
@@ -88,10 +92,5 @@ pub fn name_response_handler_system(
             event.position_name.clone(),
         );
         commands.entity(entity).insert(entity_name);
-
-        debug!(
-            "Added entity full details: {} (GID: {}), Party: {}, Guild: {}, Position: {}",
-            event.name, gid_to_find, event.party_name, event.guild_name, event.position_name
-        );
     }
 }

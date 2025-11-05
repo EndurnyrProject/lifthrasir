@@ -27,8 +27,9 @@ pub use character::{
 pub use customization::handle_get_hairstyles_request;
 
 pub use input::{
-    emit_cursor_changes, emit_entity_names, handle_camera_rotation, handle_keyboard_input,
-    handle_mouse_click, handle_mouse_position,
+    emit_cursor_changes, emit_entity_unhover, emit_hovered_entity_name, handle_camera_rotation,
+    handle_keyboard_input, handle_mouse_click, handle_mouse_position,
+    on_entity_name_added_to_hovered,
 };
 
 pub use world::{emit_world_events, WorldEmitter};

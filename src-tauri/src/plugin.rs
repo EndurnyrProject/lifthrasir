@@ -17,19 +17,21 @@ use std::sync::Arc;
 use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindow};
 
 use super::bridge::{
-    cleanup_stale_correlations, demux_tauri_events, emit_cursor_changes, emit_entity_names,
-    emit_world_events, handle_camera_rotation, handle_create_character_request,
-    handle_delete_character_request, handle_get_character_list_request,
-    handle_get_hairstyles_request, handle_keyboard_input, handle_login_request, handle_mouse_click,
-    handle_mouse_position, handle_select_character_request, handle_server_selection_request,
-    write_character_creation_response, write_character_deletion_response,
-    write_character_list_response, write_character_selection_response,
-    write_login_failure_response, write_login_success_response, write_server_selection_response,
-    AppBridge, CameraRotationEvent, CharacterCorrelation, CreateCharacterRequestedEvent,
-    DeleteCharacterRequestedEvent, GetCharacterListRequestedEvent, GetHairstylesRequestedEvent,
-    KeyboardInputEvent, LoginCorrelation, LoginRequestedEvent, MouseClickEvent, MousePositionEvent,
-    PendingCharacterListSenders, PendingHairstyleSenders, SelectCharacterRequestedEvent,
-    ServerCorrelation, ServerSelectionRequestedEvent, TauriEventReceiver, WorldEmitter,
+    cleanup_stale_correlations, demux_tauri_events, emit_cursor_changes, emit_entity_unhover,
+    emit_hovered_entity_name, emit_world_events, handle_camera_rotation,
+    handle_create_character_request, handle_delete_character_request,
+    handle_get_character_list_request, handle_get_hairstyles_request, handle_keyboard_input,
+    handle_login_request, handle_mouse_click, handle_mouse_position,
+    handle_select_character_request, handle_server_selection_request,
+    on_entity_name_added_to_hovered, write_character_creation_response,
+    write_character_deletion_response, write_character_list_response,
+    write_character_selection_response, write_login_failure_response, write_login_success_response,
+    write_server_selection_response, AppBridge, CameraRotationEvent, CharacterCorrelation,
+    CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent, GetCharacterListRequestedEvent,
+    GetHairstylesRequestedEvent, KeyboardInputEvent, LoginCorrelation, LoginRequestedEvent,
+    MouseClickEvent, MousePositionEvent, PendingCharacterListSenders, PendingHairstyleSenders,
+    SelectCharacterRequestedEvent, ServerCorrelation, ServerSelectionRequestedEvent,
+    TauriEventReceiver, WorldEmitter,
 };
 use super::commands;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
@@ -292,12 +294,14 @@ impl Plugin for TauriIntegrationPlugin {
         app.insert_resource(world_emitter);
 
         // Add world emitter system (streaming status updates to frontend)
-        // emit_entity_names must run after EntityHoverSystems to ensure cached names are available
-        app.add_systems(Update, (emit_world_events, emit_cursor_changes));
         app.add_systems(
             Update,
-            emit_entity_names.after(game_engine::EntityHoverSystems),
+            (emit_world_events, emit_cursor_changes, emit_entity_unhover, emit_hovered_entity_name),
         );
+
+        // Observer triggers when EntityName component is added to hovered entities
+        // This solves the race condition where names arrive from server after hover detection
+        app.add_observer(on_entity_name_added_to_hovered);
 
         app.insert_non_send_resource(tauri_app.handle().clone());
         app.insert_non_send_resource(tauri_app);

@@ -238,6 +238,7 @@ impl PacketHandler<ZoneProtocol> for VanishHandler {
 
         // Emit RequestEntityVanish instead of DespawnEntity
         // A system will check if entity is moving and defer despawn if needed
+        // Note: packet.gid actually contains AID (in Ragnarok Online, GID == AID)
         event_writer.send_event(Box::new(RequestEntityVanish {
             aid: packet.gid,
             vanish_type: packet.vanish_type,

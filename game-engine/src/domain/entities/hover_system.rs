@@ -82,10 +82,6 @@ pub fn entity_hover_detection_system(
                 entity_id: network_entity.aid,
                 object_type: network_entity.object_type,
             });
-            info!(
-                "🎯 Entity hover ENTERED: {:?} (AID: {})",
-                entity, network_entity.aid
-            );
 
             *previous_hovered = Some(entity);
         }
@@ -96,7 +92,7 @@ pub fn entity_hover_detection_system(
                 entity_id: network_entity.aid,
                 object_type: network_entity.object_type,
             });
-            info!(
+            debug!(
                 "🎯 Entity hover ENTERED: {:?} (AID: {})",
                 entity, network_entity.aid
             );
@@ -108,7 +104,6 @@ pub fn entity_hover_detection_system(
             commands.trigger(EntityHoverExited {
                 entity: prev_entity,
             });
-            info!("Entity hover EXITED: {:?}", prev_entity);
 
             *previous_hovered = None;
         }
