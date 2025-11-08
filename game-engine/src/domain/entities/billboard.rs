@@ -3,6 +3,7 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
+use bevy_auto_plugin::prelude::*;
 
 /// Marker component for entities that should always face the camera
 #[derive(Component, Debug, Clone, Copy)]
@@ -65,7 +66,11 @@ pub fn create_sprite_quad_mesh() -> Mesh {
 }
 
 /// System to create the shared sprite quad mesh resource at startup
-pub fn setup_shared_sprite_quad(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
+#[auto_add_system(
+    plugin = crate::domain::entities::billboard::BillboardPlugin,
+    schedule = Startup
+)]
+fn setup_shared_sprite_quad(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
     let quad_mesh = create_sprite_quad_mesh();
     let mesh_handle = meshes.add(quad_mesh);
 
@@ -77,7 +82,12 @@ pub fn setup_shared_sprite_quad(mut commands: Commands, mut meshes: ResMut<Asset
 /// System that makes billboard entities always face the camera
 /// Copies the camera's rotation directly to each billboard transform
 /// Runs after TransformPropagate to ensure proper ordering
-pub fn billboard_rotation_system(
+#[auto_add_system(
+    plugin = crate::domain::entities::billboard::BillboardPlugin,
+    schedule = PostUpdate,
+    config(after = bevy::transform::TransformSystems::Propagate)
+)]
+fn billboard_rotation_system(
     camera_query: Query<&Transform, With<Camera3d>>,
     mut billboard_query: Query<&mut Transform, (With<Billboard>, Without<Camera3d>)>,
 ) {
@@ -93,14 +103,6 @@ pub fn billboard_rotation_system(
 }
 
 /// Plugin that registers billboard systems and resources
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
 pub struct BillboardPlugin;
-
-impl Plugin for BillboardPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_shared_sprite_quad)
-            .add_systems(
-                PostUpdate,
-                billboard_rotation_system.after(bevy::transform::TransformSystems::Propagate),
-            );
-    }
-}

@@ -1,3 +1,4 @@
+use bevy_auto_plugin::prelude::*;
 use crate::domain::entities::character::components::{equipment::EquipmentSlot, Gender};
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
 use bevy::prelude::*;
@@ -71,6 +72,7 @@ pub struct RoSpriteLayer {
 }
 
 #[derive(Resource)]
+#[auto_init_resource(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
 pub struct SpriteHierarchyConfig {
     pub default_z_spacing: f32,
     pub effect_z_offset: f32,
@@ -88,6 +90,7 @@ impl Default for SpriteHierarchyConfig {
 }
 
 #[derive(Resource)]
+#[auto_init_resource(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
 pub struct EntitySpriteNames {
     pub monsters: HashMap<u16, String>,
     pub npcs: HashMap<u16, String>,

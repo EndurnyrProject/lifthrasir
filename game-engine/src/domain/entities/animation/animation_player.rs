@@ -2,7 +2,6 @@ use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use bevy::prelude::*;
 
 /// Lightweight animation player component
-/// No conversion logic - just handle swapping
 #[derive(Component, Debug)]
 pub struct RoAnimationPlayer {
     /// Handle to the pre-rendered animation asset

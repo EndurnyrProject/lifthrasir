@@ -1,5 +1,6 @@
 use crate::infrastructure::assets::{RoPaletteAsset, RoSpriteAsset};
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 use lru::LruCache;
 use std::num::NonZeroUsize;
 
@@ -30,6 +31,7 @@ impl FrameCacheKey {
 
 /// Global cache for pre-rendered animation frames
 #[derive(Resource)]
+#[auto_init_resource(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
 pub struct RoFrameCache {
     cache: LruCache<FrameCacheKey, Handle<Image>>,
 }

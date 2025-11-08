@@ -1,7 +1,9 @@
 use super::components::EntitySpriteInfo;
+use bevy_auto_plugin::prelude::*;
 use bevy::prelude::*;
 
 #[derive(Message)]
+#[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
 pub struct SpawnSpriteEvent {
     pub entity: Entity,
     pub position: Vec3,

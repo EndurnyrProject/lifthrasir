@@ -9,6 +9,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::math::{Mat4, Vec4};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -70,6 +71,71 @@ type ModelMeshUpdateQuery<'w, 's> = Query<
     ),
 >;
 
+#[auto_add_system(
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    schedule = Update
+)]
+pub fn log_loaded_world_data(
+    world_assets: Res<Assets<RoWorldAsset>>,
+    ground_assets: Res<Assets<RoGroundAsset>>,
+    query: Query<&MapLoader, Changed<MapLoader>>,
+) {
+    for map_loader in query.iter() {
+        if let Some(world) = map_loader.world.as_ref() {
+            if let Some(world_asset) = world_assets.get(world) {
+                let model_count = world_asset
+                    .world
+                    .objects
+                    .iter()
+                    .filter(|o| matches!(o, RswObject::Model(_)))
+                    .count();
+                let light_count = world_asset
+                    .world
+                    .objects
+                    .iter()
+                    .filter(|o| matches!(o, RswObject::Light(_)))
+                    .count();
+                let sound_count = world_asset
+                    .world
+                    .objects
+                    .iter()
+                    .filter(|o| matches!(o, RswObject::Sound(_)))
+                    .count();
+                let effect_count = world_asset
+                    .world
+                    .objects
+                    .iter()
+                    .filter(|o| matches!(o, RswObject::Effect(_)))
+                    .count();
+
+                info!("World data loaded:");
+                info!("  Version: {}", world_asset.world.version);
+                info!("  GND file: {}", world_asset.world.gnd_file);
+                info!("  GAT file: {}", world_asset.world.gat_file);
+                info!("  Water level: {}", world_asset.world.water.level);
+                info!("  Total objects: {}", world_asset.world.objects.len());
+                info!("    Models: {}", model_count);
+                info!("    Lights: {}", light_count);
+                info!("    Sounds: {}", sound_count);
+                info!("    Effects: {}", effect_count);
+            }
+        }
+
+        if let Some(ground_asset) = ground_assets.get(&map_loader.ground) {
+            info!("Ground data loaded:");
+            info!(
+                "  Size: {}x{}",
+                ground_asset.ground.width, ground_asset.ground.height
+            );
+            info!("  Textures: {}", ground_asset.ground.textures.len());
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    schedule = Update
+)]
 pub fn spawn_map_models(
     mut commands: Commands,
     world_assets: Res<Assets<RoWorldAsset>>,
@@ -169,6 +235,10 @@ pub fn spawn_map_models(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    schedule = Update
+)]
 pub fn load_rsm_assets(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -188,6 +258,11 @@ pub fn load_rsm_assets(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    schedule = Update,
+    config(after = load_rsm_assets)
+)]
 pub fn update_model_meshes(
     mut commands: Commands,
     model_query: ModelMeshUpdateQuery,
@@ -315,6 +390,11 @@ pub fn update_model_meshes(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    schedule = Update,
+    config(after = load_rsm_assets)
+)]
 pub fn create_model_materials_when_textures_ready(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -747,6 +827,10 @@ fn node_has_animation(node: &crate::infrastructure::ro_formats::rsm::Node) -> bo
 }
 
 /// Update RSM animation components each frame
+#[auto_add_system(
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    schedule = Update
+)]
 pub fn update_rsm_animations(
     mut node_query: Query<(
         &mut Transform,

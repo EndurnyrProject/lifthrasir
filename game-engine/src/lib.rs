@@ -19,37 +19,29 @@ pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
 pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
 pub use presentation::ui::fps_counter::FpsCounterPlugin;
 
+use bevy::app::PluginGroupBuilder;
 use bevy::prelude::*;
 use bevy_tokio_tasks::TokioTasksPlugin;
 
-/// Initialize and return a configured Bevy App (without running it)
-/// This allows the Tauri host to control the app lifecycle
-pub fn create_app() -> App {
-    let ro_asset_source_plugin =
-        crate::infrastructure::assets::ro_assets_plugin::RoAssetsPlugin::with_unified_source();
+pub struct CoreGamePlugins;
 
-    let mut app = App::new();
-
-    app
-        // CRITICAL: Asset sources must be registered BEFORE AssetPlugin
-        .add_plugins(ro_asset_source_plugin)
-        .add_plugins((
-            TokioTasksPlugin::default(), // ENABLED: Required for async networking
-            RoDiagnosticsPlugin,         // ENABLED: Performance diagnostics and profiling
-            LifthrasirPlugin,
-            AssetsPlugin,          // ENABLED: Registers ClientConfig asset type
-            AudioPlugin,           // ENABLED: Audio system with BGM support and crossfading
-            EntitySpawningPlugin, // ENABLED: Entity spawning/despawning events for network entities (must be before CharacterDomainPlugin)
-            CharacterDomainPlugin, // ENABLED: Character events and networking (no UI)
-            AuthenticationPlugin, // ENABLED: Reads LoginAttemptEvent and handles auth
-            WorldPlugin,          // ENABLED: Map loading and world systems
-            BillboardPlugin,      // ENABLED: 3D billboard rendering infrastructure
-            MovementPlugin,       // ENABLED: Generic entity movement system
-        ))
-        .add_plugins((
-            EntityHoverPlugin, // ENABLED: Entity hover detection and name request system
-            UnifiedCharacterEntityPlugin, // ENABLED: Unified character system with 3D billboard sprite hierarchy
-        ));
-
-    app
+impl PluginGroup for CoreGamePlugins {
+    fn build(self) -> PluginGroupBuilder {
+        PluginGroupBuilder::start::<Self>()
+            .add(TokioTasksPlugin::default())
+            .add(RoDiagnosticsPlugin)
+            .add(LifthrasirPlugin)
+            .add(AssetsPlugin)
+            .add(AudioPlugin)
+            .add(AssetCatalogPlugin)
+            .add(EntitySpawningPlugin)
+            .add(CharacterDomainPlugin)
+            .add(AuthenticationPlugin)
+            .add(WorldPlugin)
+            .add(BillboardPlugin)
+            .add(MovementPlugin)
+            .add(EntityHoverPlugin)
+            .add(InputPlugin)
+            .add(FpsCounterPlugin)
+    }
 }

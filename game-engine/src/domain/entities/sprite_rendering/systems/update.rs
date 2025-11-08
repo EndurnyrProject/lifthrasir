@@ -1,4 +1,5 @@
 use super::super::components::{RoSpriteLayer, SpriteHierarchy, SpriteLayerType};
+use bevy_auto_plugin::prelude::*;
 use crate::domain::assets::patterns::{
     body_action_path, body_sprite_path, head_action_path, head_sprite_path,
 };
@@ -14,6 +15,8 @@ use bevy::{
     pbr::MeshMaterial3d,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
+use bevy::time::common_conditions::on_timer;
+use std::time::Duration;
 
 /// Query type for sprite layers that need asset population
 type SpriteLayersNeedingAssets<'w, 's> = Query<
@@ -121,6 +124,11 @@ fn calculate_head_sprite_index(action_index: usize) -> usize {
 /// System to update sprite layer transforms based on animation
 /// Phase 3: Enhanced with PC-specific logic (head direction, anchor offsets) and frame caching
 #[allow(clippy::too_many_arguments)]
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(after = advance_animations)
+)]
 pub fn update_sprite_transforms(
     mut sprite_layers: Query<(
         Entity,
@@ -257,6 +265,11 @@ pub fn update_sprite_transforms(
 }
 
 /// System to advance animations for generic sprites (mobs, NPCs, etc.)
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(after = crate::domain::entities::animation::marker_systems::remove_animated_marker)
+)]
 pub fn advance_animations(
     time: Res<Time>,
     mut controllers: Query<(&mut RoAnimationController, &SpriteHierarchy)>,
@@ -317,6 +330,11 @@ pub fn advance_animations(
 /// System to sync CharacterSprite animation state to RoAnimationController components
 /// This bridges the gap between the old CharacterSprite API and the new generic sprite system
 /// Only affects PC characters; mobs/NPCs use RoAnimationController directly
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(after = crate::domain::entities::sprite_rendering::systems::events::handle_sprite_animation_changes)
+)]
 pub fn sync_character_animations_to_controllers(
     characters: CharacterSpriteQuery,
     mut sprite_layers: Query<(&mut RoAnimationController, &SpriteHierarchy)>,
@@ -348,6 +366,11 @@ pub fn sync_character_animations_to_controllers(
 
 /// System to update RoAnimationController action index for non-PC entities based on direction changes
 /// PCs use CharacterSprite and sync_character_animations_to_controllers instead
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(after = crate::domain::entities::sprite_rendering::systems::events::handle_sprite_animation_changes)
+)]
 pub fn update_generic_sprite_direction(
     changed_entities: ChangedDirectionQuery,
     mut sprite_layers: Query<(&mut RoAnimationController, &SpriteHierarchy)>,
@@ -379,6 +402,11 @@ pub fn update_generic_sprite_direction(
 
 /// System to populate sprite layers with assets
 /// Phase 3: Enhanced to support PC body/head layers in addition to simple entities
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(after = crate::domain::entities::sprite_rendering::systems::spawn::spawn_sprite_hierarchy)
+)]
 pub fn populate_sprite_assets(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -490,6 +518,11 @@ pub fn populate_sprite_assets(
 }
 
 /// System to cleanup orphaned sprite objects
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(run_if = on_timer(Duration::from_secs(5)), after = update_sprite_transforms)
+)]
 pub fn cleanup_orphaned_sprites(
     mut commands: Commands,
     sprite_roots: Query<(Entity, &SpriteHierarchy), Without<RoAnimationController>>,

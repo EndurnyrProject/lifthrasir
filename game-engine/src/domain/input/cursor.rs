@@ -1,4 +1,7 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_init_resource};
+
+use super::events::CursorChangeRequest;
 
 /// Enum representing different cursor types based on game state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -25,6 +28,7 @@ impl CursorType {
 
 /// Resource tracking the current cursor type
 #[derive(Resource, Debug)]
+#[auto_init_resource(plugin = crate::app::input_plugin::InputPlugin)]
 pub struct CurrentCursorType {
     cursor_type: CursorType,
 }
@@ -59,19 +63,12 @@ impl Default for CurrentCursorType {
     }
 }
 
-/// Message requesting a cursor change
-#[derive(Message, Debug, Clone, Copy)]
-pub struct CursorChangeRequest {
-    pub cursor_type: CursorType,
-}
-
-impl CursorChangeRequest {
-    pub fn new(cursor_type: CursorType) -> Self {
-        Self { cursor_type }
-    }
-}
-
 /// System to handle cursor change requests
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = Update,
+    config(after = crate::domain::input::systems::update_cursor_for_terrain)
+)]
 pub fn handle_cursor_change_requests(
     mut current_cursor: ResMut<CurrentCursorType>,
     mut messages: MessageReader<CursorChangeRequest>,

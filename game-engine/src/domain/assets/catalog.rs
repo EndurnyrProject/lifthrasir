@@ -3,7 +3,7 @@ use std::collections::HashMap;
 /// Generic catalog for any asset type with O(1) lookup
 pub struct AssetCatalog<T> {
     items: Vec<T>,
-    by_id: HashMap<u16, usize>, // Fast ID-based lookup
+    by_id: HashMap<u16, usize>,
 }
 
 impl<T> AssetCatalog<T> {

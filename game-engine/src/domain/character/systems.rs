@@ -12,10 +12,16 @@ use crate::infrastructure::networking::protocol::character::{
 };
 use crate::infrastructure::networking::session::UserSession;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 use std::time::{Duration, Instant};
 
 /// System to handle explicit character list requests
 /// The character list is cached in CharServerClient after connection
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_zone_server_info_protocol)
+)]
 pub fn handle_request_character_list(
     mut request_events: MessageReader<RequestCharacterListEvent>,
     char_client: Option<Res<CharServerClient>>,
@@ -23,7 +29,6 @@ pub fn handle_request_character_list(
 ) {
     for _event in request_events.read() {
         if let Some(client) = char_client.as_ref() {
-            // Convert cached characters to domain model
             let mut char_list = vec![None; 15]; // Support up to 15 slots
 
             for net_char in client.characters() {
@@ -46,7 +51,11 @@ pub fn handle_request_character_list(
 }
 
 /// System: Handle character server connection and emit character list
-/// The new architecture receives character list upon HC_ACCEPT_ENTER
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = update_char_client)
+)]
 pub fn handle_character_server_connected(
     mut connected_events: MessageReader<CharacterServerConnected>,
     char_client: Option<Res<CharServerClient>>,
@@ -86,6 +95,11 @@ pub fn handle_character_server_connected(
 }
 
 /// System: Handle character creation success from protocol
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_character_server_connected)
+)]
 pub fn handle_character_created_protocol(
     mut protocol_events: MessageReader<CharacterCreated>,
     mut domain_events: MessageWriter<CharacterCreatedEvent>,
@@ -100,6 +114,11 @@ pub fn handle_character_created_protocol(
 }
 
 /// System: Handle character deletion success from protocol
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_character_created_protocol)
+)]
 pub fn handle_character_deleted_protocol(
     mut protocol_events: MessageReader<CharacterDeleted>,
     mut domain_events: MessageWriter<CharacterDeletedEvent>,
@@ -110,6 +129,11 @@ pub fn handle_character_deleted_protocol(
 }
 
 /// System: Handle character creation failures from protocol
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_character_deleted_protocol)
+)]
 pub fn handle_character_creation_failed_protocol(
     mut protocol_events: MessageReader<CharacterCreationFailed>,
     mut domain_events: MessageWriter<CharacterCreationFailedEvent>,
@@ -129,6 +153,11 @@ pub fn handle_character_creation_failed_protocol(
 }
 
 /// System: Handle character deletion failures from protocol
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_character_creation_failed_protocol)
+)]
 pub fn handle_character_deletion_failed_protocol(
     mut protocol_events: MessageReader<CharacterDeletionFailed>,
     mut domain_events: MessageWriter<CharacterDeletionFailedEvent>,
@@ -147,6 +176,11 @@ pub fn handle_character_deletion_failed_protocol(
 }
 
 /// System: Handle zone server info from protocol
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_character_deletion_failed_protocol)
+)]
 pub fn handle_zone_server_info_protocol(
     mut protocol_events: MessageReader<ZoneServerInfoReceived>,
     user_session: Option<Res<UserSession>>,
@@ -173,6 +207,11 @@ pub fn handle_zone_server_info_protocol(
 
 /// System that spawns unified character entities from CharacterSelectedEvent
 /// Creates a complete character entity with all three ECS components
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_select_character)
+)]
 pub fn spawn_unified_character_from_selection(
     mut events: MessageReader<CharacterSelectedEvent>,
     mut commands: Commands,
@@ -196,6 +235,11 @@ pub fn spawn_unified_character_from_selection(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_request_character_list)
+)]
 pub fn handle_select_character(
     mut events: MessageReader<SelectCharacterEvent>,
     mut char_client: Option<ResMut<CharServerClient>>,
@@ -217,7 +261,6 @@ pub fn handle_select_character(
                 if let Err(e) = client.select_character(event.slot) {
                     error!("Failed to select character: {:?}", e);
                 } else {
-                    // Emit success event with character data so Tauri bridge can respond
                     selected_events.write(CharacterSelectedEvent {
                         character: CharacterInfo::from(net_char),
                         slot: event.slot,
@@ -232,6 +275,11 @@ pub fn handle_select_character(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = spawn_unified_character_from_selection)
+)]
 pub fn handle_create_character(
     mut events: MessageReader<CreateCharacterRequestEvent>,
     mut char_client: Option<ResMut<CharServerClient>>,
@@ -258,6 +306,11 @@ pub fn handle_create_character(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_create_character)
+)]
 pub fn handle_delete_character(
     mut events: MessageReader<DeleteCharacterRequestEvent>,
     mut char_client: Option<ResMut<CharServerClient>>,
@@ -283,6 +336,11 @@ pub struct ZoneSessionData {
 
 /// System: Handle zone server info and connect to zone server
 /// Uses the new ZoneServerClient architecture
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_delete_character)
+)]
 pub fn handle_zone_server_info(
     mut events: MessageReader<ZoneServerInfoReceivedEvent>,
     mut char_client: Option<ResMut<CharServerClient>>,
@@ -292,34 +350,29 @@ pub fn handle_zone_server_info(
     for event in events.read() {
         info!("Connecting to zone server for map: {}", event.map_name);
 
-        // Store session data for use after protocol events
         commands.insert_resource(ZoneSessionData {
             map_name: event.map_name.clone(),
             character_id: event.char_id,
             account_id: event.account_id,
         });
 
-        // Disconnect from character server (no longer needed)
         if let Some(ref mut client) = char_client.as_deref_mut() {
             info!("Disconnecting from character server");
             client.disconnect();
         }
 
-        // Create ZoneServerClient with session data
         let mut zone_client_instance =
             crate::infrastructure::networking::client::ZoneServerClient::with_session(
                 event.account_id,
                 event.char_id,
             );
 
-        // Connect immediately using the newly created instance
         let server_address = format!("{}:{}", event.server_ip, event.server_port);
 
         match zone_client_instance.connect(&server_address) {
             Ok(()) => {
                 info!("Connected to zone server at {}", server_address);
 
-                // Send CZ_ENTER2 packet
                 if let Err(e) = zone_client_instance.enter_world(
                     event.account_id,
                     event.char_id,
@@ -329,7 +382,6 @@ pub fn handle_zone_server_info(
                 ) {
                     error!("Failed to send zone entry packet: {:?}", e);
                 } else {
-                    info!("Sent CZ_ENTER2 to zone server");
                     game_state.set(GameState::Connecting);
                 }
             }
@@ -338,13 +390,16 @@ pub fn handle_zone_server_info(
             }
         }
 
-        // Insert the connected client as a resource for other systems to use
         commands.insert_resource(zone_client_instance);
     }
 }
 
 /// System: Handle successful zone connection from protocol events
-/// Replaces the old zone_packet_handler_system
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_refresh_character_list)
+)]
 pub fn handle_zone_server_connected_protocol(
     mut protocol_events: MessageReader<
         crate::infrastructure::networking::protocol::zone::ZoneServerConnected,
@@ -393,6 +448,11 @@ pub fn handle_zone_server_connected_protocol(
 }
 
 /// System: Handle zone entry refused
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_zone_server_connected_protocol)
+)]
 pub fn handle_zone_entry_refused_protocol(
     mut protocol_events: MessageReader<
         crate::infrastructure::networking::protocol::zone::ZoneEntryRefused,
@@ -418,21 +478,22 @@ pub fn handle_zone_entry_refused_protocol(
             crate::infrastructure::networking::protocol::zone::ZoneEntryError::Unknown(code) => code,
         };
 
-        // Emit domain event
         domain_events.write(ZoneAuthenticationFailed { error_code });
 
-        // Disconnect zone client
         if let Some(ref mut client) = zone_client.as_deref_mut() {
             client.disconnect();
         }
 
-        // Return to character selection
         game_state.set(GameState::CharacterSelection);
     }
 }
 
 /// System: Handle account ID received (ZC_AID packet)
-/// This is informational but we log it for debugging
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_zone_entry_refused_protocol)
+)]
 pub fn handle_account_id_received_protocol(
     mut protocol_events: MessageReader<
         crate::infrastructure::networking::protocol::zone::AccountIdReceived,
@@ -443,6 +504,11 @@ pub fn handle_account_id_received_protocol(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = detect_map_loading_timeout)
+)]
 pub fn detect_map_load_complete(
     query: Query<
         (Entity, &crate::domain::world::map::MapData),
@@ -470,6 +536,11 @@ pub fn detect_map_load_complete(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = detect_map_load_complete)
+)]
 pub fn handle_map_load_complete(
     mut events: MessageReader<MapLoadCompleted>,
     mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
@@ -485,24 +556,32 @@ pub fn handle_map_load_complete(
             if let Err(e) = client.notify_ready() {
                 error!("Failed to send actor init: {:?}", e);
             } else {
-                info!("Sent CZ_NOTIFY_ACTORINIT to zone server");
                 actor_init_events.write(ActorInitSent);
             }
         }
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_map_load_complete)
+)]
 pub fn handle_actor_init_sent(
     mut events: MessageReader<ActorInitSent>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     for _event in events.read() {
         info!("Entering game world");
-        // TODO: Spawn player character entity here in future
         game_state.set(GameState::InGame);
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_zone_server_info)
+)]
 pub fn handle_character_created(
     mut events: MessageReader<CharacterCreatedEvent>,
     mut state: ResMut<CharacterSelectionState>,
@@ -515,6 +594,11 @@ pub fn handle_character_created(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_character_created)
+)]
 pub fn handle_character_deleted(
     mut events: MessageReader<CharacterDeletedEvent>,
     mut refresh_events: MessageWriter<RefreshCharacterListEvent>,
@@ -524,14 +608,17 @@ pub fn handle_character_deleted(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_character_deleted)
+)]
 pub fn handle_refresh_character_list(
     mut events: MessageReader<RefreshCharacterListEvent>,
     char_client: Option<Res<CharServerClient>>,
     mut list_events: MessageWriter<CharacterListReceivedEvent>,
 ) {
     for _event in events.read() {
-        // New architecture: Characters are automatically updated in the context by handlers
-        // Just re-emit the current character list
         if let Some(client) = char_client.as_ref() {
             let mut char_list = vec![None; 15];
 
@@ -554,6 +641,11 @@ pub fn handle_refresh_character_list(
 
 /// System that sends periodic pings to keep the connection alive
 /// Throttled to every 15 seconds using CharServerPingTimer
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = crate::infrastructure::networking::client::char_server_update_system)
+)]
 pub fn update_char_client(
     char_client: Option<ResMut<CharServerClient>>,
     time: Res<Time>,
@@ -568,6 +660,11 @@ pub fn update_char_client(
 }
 
 /// System to start map loading timer when map loading begins
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = handle_account_id_received_protocol)
+)]
 pub fn start_map_loading_timer(
     mut events: MessageReader<MapLoadingStarted>,
     mut commands: Commands,
@@ -583,6 +680,11 @@ pub fn start_map_loading_timer(
 
 /// System to detect map loading timeout
 /// Checks if map assets haven't loaded within 30 seconds
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(after = start_map_loading_timer)
+)]
 pub fn detect_map_loading_timeout(
     timer: Option<Res<MapLoadingTimer>>,
     map_data_query: Query<&crate::domain::world::map::MapData>,
@@ -636,6 +738,10 @@ pub fn detect_map_loading_timeout(
 /// System that spawns character sprite hierarchy when entering InGame state
 /// This bridges the character entity creation with the unified sprite system
 #[allow(clippy::too_many_arguments)]
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = OnEnter(GameState::InGame)
+)]
 pub fn spawn_character_sprite_on_game_start(
     mut commands: Commands,
     mut spawn_events: MessageWriter<crate::domain::entities::character::SpawnCharacterSpriteEvent>,
@@ -669,10 +775,7 @@ pub fn spawn_character_sprite_on_game_start(
     // Add LocalPlayer marker (for camera and unified entity system)
     commands.entity(character_entity).insert(LocalPlayer);
 
-    info!(
-        "✅ Added LocalPlayer marker to entity {:?}",
-        character_entity
-    );
+    debug!("Added LocalPlayer marker to entity {:?}", character_entity);
 
     // Register in EntityRegistry
     let account_id = user_session.tokens.account_id;
@@ -685,21 +788,6 @@ pub fn spawn_character_sprite_on_game_start(
             spawn_context.character_id,
             crate::domain::entities::types::ObjectType::Pc,
         ),
-    );
-
-    info!(
-        "✅ Added NetworkEntity to local player: AID={}, GID={}",
-        account_id, spawn_context.character_id
-    );
-
-    info!(
-        "✅ Registered local player in EntityRegistry: entity={:?}, aid={}",
-        character_entity, account_id
-    );
-
-    info!(
-        "✅ Added gameplay components to player character entity {:?}",
-        character_entity
     );
 
     // Get map dimensions from loaded ground data

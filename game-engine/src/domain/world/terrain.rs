@@ -11,6 +11,7 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
+use bevy_auto_plugin::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 /// Type alias for mesh data grouped by texture index.
@@ -433,6 +434,11 @@ fn calculate_smooth_normals(
     smooth_normals
 }
 
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = Update,
+    config(run_if = in_state(crate::core::GameState::Loading))
+)]
 pub fn generate_terrain_mesh(
     mut commands: Commands,
     ground_assets: Res<Assets<RoGroundAsset>>,
@@ -535,6 +541,11 @@ type TerrainLoadingQuery<'w, 's> = Query<
 
 /// System that waits for textures to load, then generates terrain meshes
 #[allow(clippy::too_many_arguments)]
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = Update,
+    config(run_if = in_state(crate::core::GameState::Loading))
+)]
 pub fn apply_loaded_terrain_textures(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,

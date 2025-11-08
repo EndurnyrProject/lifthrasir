@@ -1,4 +1,5 @@
 use crate::{
+    core::state::GameState,
     domain::entities::markers::LocalPlayer,
     domain::entities::movement::events::MovementRequested,
     domain::entities::pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
@@ -8,15 +9,22 @@ use crate::{
     utils::coordinates::world_position_to_spawn_coords,
 };
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 
 use super::{
-    cursor::{CursorChangeRequest, CursorType},
+    events::CursorChangeRequest,
+    cursor::CursorType,
     terrain_raycast::TerrainRaycastCache,
     ForwardedMouseClick,
 };
 
 /// Render terrain cursor gizmo at the world position under the mouse cursor
 /// Shows where the player is pointing on the terrain with corner markers
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = Update,
+    config(after = crate::domain::input::terrain_raycast::update_terrain_raycast_cache)
+)]
 pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>) {
     if !cache.is_walkable {
         return;
@@ -68,6 +76,11 @@ pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>
 
 /// Handle terrain clicks for player movement
 /// Reads ForwardedMouseClick and cached raycast data, emits MovementRequested
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = Update,
+    config(after = render_terrain_cursor)
+)]
 pub fn handle_terrain_click(
     mut commands: Commands,
     mut mouse_click: ResMut<ForwardedMouseClick>,
@@ -170,6 +183,14 @@ pub fn handle_terrain_click(
 /// Reads cached raycast data and checks if cell is walkable.
 /// Emits CursorChangeRequest to update cursor to "default" for walkable terrain
 /// or "impossible" for blocked/unwalkable terrain
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = Update,
+    config(
+        after = handle_terrain_click,
+        run_if = in_state(GameState::InGame)
+    )
+)]
 pub fn update_cursor_for_terrain(
     cache: Res<TerrainRaycastCache>,
     mut cursor_messages: MessageWriter<CursorChangeRequest>,
@@ -181,4 +202,35 @@ pub fn update_cursor_for_terrain(
     };
 
     cursor_messages.write(CursorChangeRequest::new(cursor_type));
+}
+
+/// System to set default cursor when entering Login state
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = OnEnter(GameState::Login)
+)]
+pub fn set_default_cursor_for_login(mut cursor_messages: MessageWriter<CursorChangeRequest>) {
+    cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
+}
+
+/// System to set default cursor when entering ServerSelection state
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = OnEnter(GameState::ServerSelection)
+)]
+pub fn set_default_cursor_for_server_selection(
+    mut cursor_messages: MessageWriter<CursorChangeRequest>,
+) {
+    cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
+}
+
+/// System to set default cursor when entering CharacterSelection state
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = OnEnter(GameState::CharacterSelection)
+)]
+pub fn set_default_cursor_for_character_selection(
+    mut cursor_messages: MessageWriter<CursorChangeRequest>,
+) {
+    cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
 }

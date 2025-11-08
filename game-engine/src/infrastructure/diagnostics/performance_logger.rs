@@ -2,8 +2,10 @@ use bevy::diagnostic::{
     Diagnostic, DiagnosticsStore, EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin,
 };
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 #[derive(Resource)]
+#[auto_init_resource(plugin = crate::infrastructure::diagnostics::RoDiagnosticsPlugin)]
 pub struct PerformanceLogTimer {
     timer: Timer,
 }
@@ -39,6 +41,10 @@ fn log_diagnostic_smoothed(diagnostic: &Diagnostic, label: &str, format: &str) {
     }
 }
 
+#[auto_add_system(
+    plugin = crate::infrastructure::diagnostics::RoDiagnosticsPlugin,
+    schedule = Update
+)]
 pub fn log_performance_metrics(
     time: Res<Time>,
     mut timer: ResMut<PerformanceLogTimer>,

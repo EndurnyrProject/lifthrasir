@@ -1,16 +1,12 @@
-use super::hover::HoverConfig;
-use super::hover_system::{entity_hover_detection_system, update_entity_bounds_system};
-use super::name_request_system::{name_request_observer, name_response_handler_system};
+use crate::app::entity_hover_plugin::EntityHoverDomainPlugin;
 use bevy::prelude::*;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntityHoverSystems;
 
-/// Plugin that handles entity hovering and name requests
+/// Entity Hover Plugin (Wrapper)
 ///
-/// This plugin sets up the complete entity hover system including:
-/// - Observer registration (EntityHoverEntered, EntityHoverExited)
-/// - System scheduling with proper ordering
+/// Adds the EntityHoverDomainPlugin (auto-plugin).
 ///
 /// # System Flow
 ///
@@ -29,21 +25,9 @@ pub struct EntityHoverPlugin;
 
 impl Plugin for EntityHoverPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<HoverConfig>();
+        // Add entity hover domain plugin (auto-plugin with resource, observer, and systems)
+        app.add_plugins(EntityHoverDomainPlugin);
 
-        app.add_observer(name_request_observer);
-
-        app.add_systems(
-            Update,
-            (
-                update_entity_bounds_system,
-                entity_hover_detection_system,
-                name_response_handler_system,
-            )
-                .chain()
-                .in_set(EntityHoverSystems),
-        );
-
-        info!("EntityHoverPlugin initialized with observers");
+        info!("EntityHoverPlugin initialized");
     }
 }

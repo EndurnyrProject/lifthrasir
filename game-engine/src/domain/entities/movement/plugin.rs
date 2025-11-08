@@ -1,25 +1,23 @@
-use super::systems::{
-    handle_movement_confirmed_system, handle_movement_stopped_observer, handle_server_stop_system,
-    interpolate_movement_system, send_movement_requests_observer, update_entity_altitude_system,
-};
+use crate::app::movement_plugin::MovementDomainPlugin;
 use crate::infrastructure::networking::protocol::zone::handlers::movement_handlers::{
     MovementConfirmedByServer, MovementStoppedByServer,
 };
 use bevy::prelude::*;
 
-/// Plugin that handles all character movement functionality
+/// Movement Plugin (Wrapper)
 ///
-/// This plugin sets up the complete movement system including:
-/// - Event registration (MovementRequested, MovementConfirmed, MovementStopped)
-/// - System scheduling with proper ordering
+/// Composes movement functionality with proper dependency order:
+/// 1. Network protocol messages (infrastructure-level)
+/// 2. MovementDomainPlugin (auto-plugin with observers and systems)
 ///
 /// # System Flow
 ///
-/// 1. `send_movement_requests_system` - Consumes MovementRequested, sends to server
+/// 1. `send_movement_requests_observer` - Consumes MovementRequested, sends to server
 /// 2. Server validates and responds with ZC_NOTIFY_PLAYERMOVE
 /// 3. `handle_movement_confirmed_system` - Starts interpolation, updates direction
 /// 4. `interpolate_movement_system` - Runs every frame to move character smoothly
-/// 5. `handle_movement_stopped_system` - Cleanup when movement completes
+/// 5. `handle_server_stop_system` - Cleanup when movement completes
+/// 6. `update_entity_altitude_system` - Updates entity height based on terrain
 ///
 /// # Integration
 ///
@@ -34,24 +32,10 @@ impl Plugin for MovementPlugin {
         app.add_message::<MovementConfirmedByServer>()
             .add_message::<MovementStoppedByServer>();
 
-        // Register observers for entity-targeted movement events
-        app.add_observer(send_movement_requests_observer)
-            .add_observer(handle_movement_stopped_observer);
+        // Add movement domain plugin (auto-plugin with observers and systems)
+        app.add_plugins(MovementDomainPlugin);
 
-        // Add systems with proper scheduling
-        // These systems process network events and trigger observers
-        app.add_systems(
-            Update,
-            (
-                handle_movement_confirmed_system,
-                interpolate_movement_system,
-                handle_server_stop_system,
-                update_entity_altitude_system,
-            )
-                .chain(),
-        );
-
-        info!("MovementPlugin initialized with observers");
+        info!("MovementPlugin initialized");
     }
 }
 

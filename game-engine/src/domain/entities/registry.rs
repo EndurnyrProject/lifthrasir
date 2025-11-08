@@ -41,6 +41,7 @@
 //! ```
 
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_init_resource;
 use std::collections::HashMap;
 
 /// Maps server Account IDs to client Entity IDs for multi-entity support
@@ -53,6 +54,7 @@ use std::collections::HashMap;
 /// - **Cleanup**: When entities despawn, they must be unregistered to prevent stale references
 /// - **Validation**: Consider adding debug assertions to catch double-registration bugs
 #[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin)]
 pub struct EntityRegistry {
     /// Maps server Account IDs to client Entity IDs
     account_to_entity: HashMap<u32, Entity>,

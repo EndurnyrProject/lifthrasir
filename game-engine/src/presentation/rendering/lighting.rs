@@ -1,5 +1,6 @@
 use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 use std::f32::consts::PI;
 
 const MAX_LUX: f32 = 10_000.0; // Bright daylight
@@ -11,18 +12,18 @@ use crate::{
 };
 
 /// Enhanced Lighting Plugin that creates realistic lighting from RSW data
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
 pub struct EnhancedLightingPlugin;
-
-impl Plugin for EnhancedLightingPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, (setup_enhanced_map_lighting, cleanup_map_lights));
-    }
-}
 
 #[derive(Component)]
 pub struct MapLight;
 
 /// System to setup enhanced map lighting based on RSW data
+#[auto_add_system(
+    plugin = crate::presentation::rendering::lighting::EnhancedLightingPlugin,
+    schedule = Update
+)]
 pub fn setup_enhanced_map_lighting(
     mut commands: Commands,
     world_assets: Res<Assets<RoWorldAsset>>,
@@ -71,10 +72,6 @@ fn setup_directional_light(commands: &mut Commands, rsw_light: &RswLight) {
     let light_direction = Vec3::new(sun_dir_x, sun_dir_y, sun_dir_z).normalize();
     let illuminance = calculate_global_lux(rsw_light);
 
-    // PERFORMANCE: Optimized shadow cascade settings for RO-style game
-    // - Reduced num_cascades from 4 to 3 (fewer shadow map passes per frame)
-    // - Reduced maximum_distance from 5000.0 to 1500.0 (cull distant shadows)
-    // - This targets 2-3x shadow rendering speedup on entity-heavy maps (5000+ entities)
     // NOTE: Bevy 0.17 uses basic orthographic culling for cascades. Per-cascade
     // frustum culling (github.com/bevyengine/bevy/issues/10397) is not yet implemented.
     // The distance reduction compensates for this limitation.
@@ -145,16 +142,13 @@ fn spawn_point_light(commands: &mut Commands, light_obj: &RswLightObj) {
 
     let radius = 0.3;
 
-    // PERFORMANCE: Point lights are expensive for shadows in entity-heavy scenes.
-    // Disabled shadows to improve performance on maps with 5000+ entities.
-    // CascadeShadowConfig is only valid for DirectionalLights, not PointLights.
     commands.spawn((
         PointLight {
             intensity: final_intensity,
             color: light_color,
             range: light_obj.range,
             radius,
-            shadows_enabled: false,
+            shadows_enabled: true,
             ..default()
         },
         Transform::from_translation(position),
@@ -169,6 +163,10 @@ fn calculate_global_lux(light: &RswLight) -> f32 {
 }
 
 /// System to cleanup map lights when switching maps
+#[auto_add_system(
+    plugin = crate::presentation::rendering::lighting::EnhancedLightingPlugin,
+    schedule = Update
+)]
 pub fn cleanup_map_lights(
     _commands: Commands,
     _query: Query<Entity, With<MapLight>>,

@@ -3,6 +3,7 @@ use super::markers::Animated;
 use super::state::AnimationState;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 type AnimatedEntitiesQuery<'w, 's> = Query<
     'w,
@@ -22,6 +23,11 @@ type AnimatedEntitiesQuery<'w, 's> = Query<
 /// - Visibility culling to skip off-screen entities
 /// - AnimationState control for pause/play mechanics
 /// - Image handle swapping with zero runtime RGBA conversions
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(after = crate::domain::entities::sprite_rendering::systems::update::update_sprite_transforms)
+)]
 pub fn ro_animation_player_system(
     time: Res<Time>,
     animation_assets: Res<Assets<RoAnimationAsset>>,

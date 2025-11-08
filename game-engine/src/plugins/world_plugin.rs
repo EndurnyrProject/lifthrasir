@@ -1,35 +1,17 @@
-use crate::{
-    core::{GameSettings, GameState, MapState},
-    domain::world::{
-        systems::{
-            cleanup_map_loading_state, detect_asset_load_failures, extract_map_from_unified_assets,
-            monitor_game_state, on_enter_loading_state, setup_unified_map_loading,
-        },
-        terrain::{apply_loaded_terrain_textures, generate_terrain_mesh},
-    },
-};
+use crate::{core::MapState, plugins::world_domain_plugin::WorldDomainPlugin};
 use bevy::prelude::*;
 
+/// World Plugin (Wrapper)
+///
+/// Minimal wrapper that handles state initialization (cannot be auto-derived).
+/// All systems and resources are managed by WorldDomainPlugin.
 pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.init_state::<MapState>()
-            .init_resource::<GameSettings>()
-            .add_systems(Update, monitor_game_state)
-            .add_systems(OnEnter(GameState::Loading), on_enter_loading_state)
-            .add_systems(
-                Update,
-                (
-                    setup_unified_map_loading,
-                    extract_map_from_unified_assets,
-                    detect_asset_load_failures,
-                    generate_terrain_mesh,
-                    apply_loaded_terrain_textures,
-                )
-                    .run_if(in_state(GameState::Loading)),
-            )
-            .add_systems(OnExit(GameState::Loading), cleanup_map_loading_state)
-            .add_systems(OnExit(GameState::Connecting), cleanup_map_loading_state);
+        app.init_state::<MapState>();
+        app.add_plugins(WorldDomainPlugin);
+
+        info!("WorldPlugin initialized");
     }
 }

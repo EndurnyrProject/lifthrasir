@@ -1,5 +1,6 @@
 use super::super::components::{EffectType, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
 use super::super::kinds::{EffectLayer, SpriteLayer, SpriteRoot};
+use bevy_auto_plugin::prelude::*;
 use crate::domain::entities::billboard::SharedSpriteQuad;
 use crate::domain::entities::character::components::equipment::EquipmentSlot;
 use bevy::prelude::*;
@@ -8,6 +9,7 @@ use moonshine_object::prelude::*;
 use super::super::components::SpriteHierarchyConfig;
 
 #[derive(Message)]
+#[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
 pub struct EquipmentChangeEvent {
     pub character: Entity,
     pub slot: EquipmentSlot,
@@ -15,6 +17,7 @@ pub struct EquipmentChangeEvent {
 }
 
 #[derive(Message)]
+#[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
 pub struct StatusEffectVisualEvent {
     pub character: Entity,
     pub effect_type: EffectType,
@@ -22,6 +25,7 @@ pub struct StatusEffectVisualEvent {
 }
 
 #[derive(Message)]
+#[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
 pub struct SpriteAnimationChangeEvent {
     pub character_entity: Entity,
     pub action_type: crate::domain::entities::character::components::visual::ActionType,
@@ -137,6 +141,11 @@ fn create_effect_bundle(
     )
 }
 
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(after = crate::domain::entities::sprite_rendering::systems::update::populate_sprite_assets)
+)]
 pub fn handle_equipment_changes(
     mut commands: Commands,
     entities: Query<&SpriteObjectTree>,
@@ -212,6 +221,11 @@ fn spawn_equipment_layer(
         .insert(ChildOf(root_entity));
 }
 
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(after = crate::domain::entities::sprite_rendering::systems::update::populate_sprite_assets)
+)]
 pub fn handle_status_effect_visuals(
     mut commands: Commands,
     entities: Query<&SpriteObjectTree>,
@@ -297,6 +311,11 @@ fn remove_status_effect(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(after = crate::domain::entities::sprite_rendering::systems::update::populate_sprite_assets)
+)]
 pub fn handle_sprite_animation_changes(
     mut animation_events: MessageReader<SpriteAnimationChangeEvent>,
     mut character_sprites: Query<

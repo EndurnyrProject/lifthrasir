@@ -5,10 +5,10 @@ pub mod states;
 pub mod visual;
 
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::{auto_plugin, AutoPlugin};
 
 use crate::domain::entities::character::states::{AnimationState, ContextState, GameplayState};
 use crate::domain::entities::movement;
-use crate::domain::entities::registry::EntityRegistry;
 
 pub use events::SpawnCharacterSpriteEvent;
 
@@ -19,27 +19,19 @@ type UnifiedCharacterFilter = (
     With<components::EquipmentSet>,
 );
 
-// Plugin that sets up the unified character entity system
+/// Unified Character Entity Plugin
+///
+/// Handles unified character entity system including:
+/// - Entity registry for multi-entity support
+/// - Character state machines (Animation, Gameplay, Context states)
+/// - Character sprite spawning and event forwarding
+/// - Visual updates (direction changes)
+///
+/// Sub-plugins (StateMachinePlugin, GenericSpriteRenderingPlugin) are registered
+/// by CharacterDomainPlugin before adding this plugin.
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
 pub struct UnifiedCharacterEntityPlugin;
-
-impl Plugin for UnifiedCharacterEntityPlugin {
-    fn build(&self, app: &mut App) {
-        states::setup_character_state_machines(app);
-
-        app.init_resource::<EntityRegistry>()
-            .add_message::<SpawnCharacterSpriteEvent>()
-            .add_plugins(
-                crate::domain::entities::sprite_rendering::plugin::GenericSpriteRenderingPlugin,
-            )
-            .add_systems(
-                Update,
-                (
-                    events::forward_character_sprite_events,
-                    visual::update_character_facing_on_direction_change,
-                ),
-            );
-    }
-}
 
 // Helper function to create a unified character entity
 pub fn spawn_unified_character(

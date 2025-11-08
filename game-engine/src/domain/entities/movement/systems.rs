@@ -12,11 +12,13 @@ use crate::infrastructure::networking::protocol::zone::MovementConfirmedByServer
 use crate::infrastructure::networking::protocol::zone::MovementStoppedByServer;
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 /// Observer for movement requests
 ///
 /// Handles MovementRequested events and sends CZ_REQUEST_MOVE2 packets to the server.
 /// This is the first step in the client-server movement flow.
+#[auto_observer(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
 pub fn send_movement_requests_observer(
     trigger: On<MovementRequested>,
     client: Option<ResMut<ZoneServerClient>>,
@@ -58,6 +60,10 @@ pub fn send_movement_requests_observer(
 /// this system uses the character's current interpolated position as the source instead of
 /// the server's stale position. This prevents the character from snapping back to the old
 /// destination before moving to the new target.
+#[auto_add_system(
+    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    schedule = Update
+)]
 #[allow(clippy::too_many_arguments)]
 pub fn handle_movement_confirmed_system(
     mut commands: Commands,
@@ -251,6 +257,11 @@ pub fn handle_movement_confirmed_system(
 /// The system also updates the character's facing direction dynamically
 /// as they traverse path segments, ensuring proper sprite orientation
 /// during turns.
+#[auto_add_system(
+    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    schedule = Update,
+    config(after = handle_movement_confirmed_system)
+)]
 pub fn interpolate_movement_system(
     mut query: Query<(
         Entity,
@@ -308,6 +319,11 @@ pub fn interpolate_movement_system(
 /// Converts MovementStoppedByServer network events into client MovementStopped events.
 /// Looks up the entity from AID via EntityRegistry and snaps its position to the
 /// server-provided coordinates.
+#[auto_add_system(
+    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    schedule = Update,
+    config(after = interpolate_movement_system)
+)]
 pub fn handle_server_stop_system(
     mut server_stop_events: MessageReader<MovementStoppedByServer>,
     mut commands: Commands,
@@ -359,6 +375,7 @@ pub fn handle_server_stop_system(
 /// With the new smooth multi-waypoint interpolation, movement only stops
 /// when the character reaches the final destination, so this always triggers
 /// the complete cleanup sequence.
+#[auto_observer(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
 pub fn handle_movement_stopped_observer(
     trigger: On<MovementStopped>,
     mut commands: Commands,
@@ -401,6 +418,11 @@ pub fn handle_movement_stopped_observer(
 /// # System Ordering
 /// - Must run AFTER interpolate_movement_system (to update after position changes)
 /// - Must run AFTER handle_server_stop_system (to update after server corrections)
+#[auto_add_system(
+    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    schedule = Update,
+    config(after = handle_server_stop_system)
+)]
 pub fn update_entity_altitude_system(
     map_loader_query: Query<&MapLoader>,
     altitude_assets: Option<Res<Assets<RoAltitudeAsset>>>,

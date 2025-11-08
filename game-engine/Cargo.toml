@@ -59,7 +59,7 @@ moonshine-tag = "0.4"
 pathfinding = "4.14"
 
 [dev-dependencies]
-bevy-inspector-egui = "0.29"
+bevy-inspector-egui = "0.35"
 
 [features]
 default = []

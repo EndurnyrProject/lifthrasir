@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::{auto_add_event, auto_add_system};
 
 use super::components::{CharacterAppearance, CharacterData};
 use crate::domain::entities::sprite_rendering::{
@@ -6,12 +7,17 @@ use crate::domain::entities::sprite_rendering::{
 };
 
 #[derive(Message)]
+#[auto_add_event(plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin)]
 pub struct SpawnCharacterSpriteEvent {
     pub character_entity: Entity,
     pub spawn_position: Vec3,
 }
 
 /// System that converts character-specific spawn events to generic sprite spawn events
+#[auto_add_system(
+    plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
+    schedule = Update
+)]
 pub fn forward_character_sprite_events(
     mut character_events: MessageReader<SpawnCharacterSpriteEvent>,
     mut sprite_events: MessageWriter<SpawnSpriteEvent>,

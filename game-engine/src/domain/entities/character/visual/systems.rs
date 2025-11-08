@@ -1,5 +1,6 @@
 use crate::domain::entities::character::components::visual::{CharacterDirection, CharacterSprite};
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 
 /// Updates the character sprite's facing direction when CharacterDirection changes.
 ///
@@ -36,6 +37,10 @@ use bevy::prelude::*;
 /// - Only processes entities with changed direction (O(changed entities))
 /// - No allocations or heavy computations
 /// - Direct component access with no hierarchy traversal
+#[auto_add_system(
+    plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
+    schedule = Update
+)]
 pub fn update_character_facing_on_direction_change(
     mut query: Query<(&CharacterDirection, &mut CharacterSprite), Changed<CharacterDirection>>,
 ) {

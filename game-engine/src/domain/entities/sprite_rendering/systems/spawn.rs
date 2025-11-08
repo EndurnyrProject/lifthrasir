@@ -1,5 +1,6 @@
 use super::super::components::{RoSpriteLayer, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
 use super::super::events::SpawnSpriteEvent;
+use bevy_auto_plugin::prelude::*;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::{
     equipment::EquipmentSlot, CharacterAppearance,
@@ -136,7 +137,7 @@ fn spawn_pc_layers(
     entity: Entity,
     rendering: &mut RenderingResources,
 ) {
-    info!("🎭 Spawning PC layers for entity {:?}", entity);
+    debug!("Spawning PC layers for entity {:?}", entity);
 
     // Body layer (z=0.0)
     spawn_layer(
@@ -219,12 +220,13 @@ fn spawn_simple_entity_layers(
         shared_quad,
         materials,
     );
-
-    info!("🎭 Simple entity layers created for entity {:?}", entity);
 }
 
 /// System to spawn generic sprite hierarchies
-/// Phase 3: Full multi-layer support for PCs (body/head/equipment) and simple entities
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update
+)]
 pub fn spawn_sprite_hierarchy(
     mut commands: Commands,
     mut spawn_events: MessageReader<SpawnSpriteEvent>,
@@ -233,8 +235,8 @@ pub fn spawn_sprite_hierarchy(
     terrain: TerrainResources,
 ) {
     for event in spawn_events.read() {
-        info!(
-            "🎭 spawn_sprite_hierarchy: Received event for entity {:?} at {:?}, type: {:?}",
+        debug!(
+            "spawn_sprite_hierarchy: Received event for entity {:?} at {:?}, type: {:?}",
             event.entity, event.position, event.sprite_info.sprite_data
         );
 

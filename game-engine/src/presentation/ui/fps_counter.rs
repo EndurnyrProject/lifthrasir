@@ -1,5 +1,6 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 #[derive(Component)]
 pub struct FpsText;
@@ -7,17 +8,14 @@ pub struct FpsText;
 #[derive(Component)]
 pub struct FpsRoot;
 
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
 pub struct FpsCounterPlugin;
 
-impl Plugin for FpsCounterPlugin {
-    fn build(&self, app: &mut App) {
-        // Note: FrameTimeDiagnosticsPlugin should be added by the application setup
-        // to avoid duplicate plugin errors
-        app.add_systems(Startup, setup_fps_counter)
-            .add_systems(Update, update_fps_text);
-    }
-}
-
+#[auto_add_system(
+    plugin = crate::presentation::ui::fps_counter::FpsCounterPlugin,
+    schedule = Startup
+)]
 fn setup_fps_counter(mut commands: Commands) {
     commands
         .spawn((
@@ -44,6 +42,10 @@ fn setup_fps_counter(mut commands: Commands) {
         });
 }
 
+#[auto_add_system(
+    plugin = crate::presentation::ui::fps_counter::FpsCounterPlugin,
+    schedule = Update
+)]
 fn update_fps_text(
     diagnostics: Res<DiagnosticsStore>,
     mut query: Query<(&mut Text, &mut TextColor), With<FpsText>>,

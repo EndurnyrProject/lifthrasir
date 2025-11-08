@@ -58,7 +58,7 @@ impl Default for ServerConfiguration {
     fn default() -> Self {
         Self {
             login_server_address: "127.0.0.1:6900".to_string(),
-            client_version: 20180620, // Example RO client version
+            client_version: 1,
             default_port: 6900,
         }
     }

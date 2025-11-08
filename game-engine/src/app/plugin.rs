@@ -10,19 +10,11 @@ use crate::domain::camera::systems::{
 #[auto_plugin(impl_plugin_trait)]
 pub struct LifthrasirPlugin;
 
-// Extend the auto-generated Plugin implementation with camera systems
 impl LifthrasirPlugin {
     pub fn add_camera_systems(app: &mut App) {
-        // Initialize camera resources
         app.init_resource::<CameraSpawned>();
         app.init_resource::<CameraRotationDelta>();
-
-        // Add camera spawn system in PostUpdate
-        // Runs when player has Transform component
         app.add_systems(PostUpdate, spawn_camera_on_player_ready);
-
-        // Add camera follow systems in Update with proper ordering
-        // update_camera_target_cache MUST run before camera_follow_system
         app.add_systems(
             Update,
             (update_camera_target_cache, camera_follow_system).chain(),
@@ -35,6 +27,5 @@ impl LifthrasirPlugin {
     schedule = Startup
 )]
 fn initialize_app(_commands: Commands) {
-    // The authentication plugin will handle the state transition after loading config
     info!("Application initialized");
 }

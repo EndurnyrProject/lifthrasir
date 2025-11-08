@@ -1,8 +1,10 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 use super::types::ObjectType;
 
 #[derive(Resource)]
+#[auto_init_resource(plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin)]
 pub struct HoverConfig {
     pub radius: f32,
 }

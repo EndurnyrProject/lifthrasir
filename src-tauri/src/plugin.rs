@@ -404,26 +404,7 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
 
         // Add game engine plugins AFTER rendering plugins are available
         // This ensures all required asset types are initialized
-        app.add_plugins((
-            bevy_tokio_tasks::TokioTasksPlugin::default(),
-            game_engine::RoDiagnosticsPlugin,
-            game_engine::LifthrasirPlugin,
-            game_engine::AssetsPlugin,
-            game_engine::AudioPlugin,
-            game_engine::AssetCatalogPlugin,
-            game_engine::EntitySpawningPlugin,
-            game_engine::CharacterDomainPlugin,
-            game_engine::AuthenticationPlugin,
-            game_engine::WorldPlugin,
-            game_engine::BillboardPlugin,
-            game_engine::MovementPlugin,
-        ));
-
-        app.add_plugins((
-            game_engine::EntityHoverPlugin,
-            game_engine::InputPlugin,
-            game_engine::FpsCounterPlugin,
-        ));
+        app.add_plugins(game_engine::CoreGamePlugins);
 
         // Add camera systems separately
         game_engine::LifthrasirPlugin::add_camera_systems(&mut app);

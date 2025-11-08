@@ -8,8 +8,6 @@ use bevy_auto_plugin::modes::global::prelude::{auto_plugin, AutoPlugin};
 /// - Server selection
 /// - Event-driven state transitions
 ///
-/// All systems, events, and resources are auto-registered via bevy_auto_plugin attributes.
-/// See `domain/authentication/systems.rs` for system implementations.
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]
 pub struct AuthenticationPlugin;

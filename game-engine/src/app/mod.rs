@@ -1,7 +1,23 @@
+pub mod audio_plugin;
 pub mod authentication_plugin;
+pub mod character_domain_plugin;
+pub mod entity_hover_plugin;
+pub mod entity_spawning_plugin;
+pub mod input_plugin;
+pub mod map_domain_plugin;
 pub mod map_plugin;
+pub mod movement_plugin;
 pub mod plugin;
+pub mod sprite_rendering_domain_plugin;
 
+pub use audio_plugin::AudioPlugin;
 pub use authentication_plugin::*;
+pub use character_domain_plugin::CharacterDomainAutoPlugin;
+pub use entity_hover_plugin::EntityHoverDomainPlugin;
+pub use entity_spawning_plugin::EntitySpawningDomainPlugin;
+pub use input_plugin::InputPlugin;
+pub use map_domain_plugin::MapDomainPlugin;
 pub use map_plugin::MapPlugin;
+pub use movement_plugin::MovementDomainPlugin;
 pub use plugin::*;
+pub use sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin;

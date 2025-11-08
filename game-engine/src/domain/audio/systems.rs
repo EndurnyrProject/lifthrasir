@@ -4,10 +4,15 @@ use super::{
 };
 use crate::infrastructure::assets::BgmNameTableAsset;
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use bevy_kira_audio::{Audio, AudioControl, AudioInstance, AudioSource, AudioTween};
 
 /// System to handle BGM change requests with crossfading
 /// Listens for PlayBgmEvent and manages track transitions
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
 pub fn handle_bgm_change(
     mut events: MessageReader<PlayBgmEvent>,
     mut bgm_manager: ResMut<BgmManager>,
@@ -68,6 +73,10 @@ pub fn handle_bgm_change(
 
 /// System to handle BGM stop requests
 /// Fades out and stops the current track
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
 pub fn handle_bgm_stop(
     mut events: MessageReader<StopBgmEvent>,
     mut bgm_manager: ResMut<BgmManager>,
@@ -90,6 +99,10 @@ pub fn handle_bgm_stop(
 
 /// System to handle BGM volume changes
 /// Applies volume immediately to active and fading tracks
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
 pub fn handle_volume_change(
     mut events: MessageReader<SetBgmVolumeEvent>,
     mut audio_settings: ResMut<AudioSettings>,
@@ -122,6 +135,10 @@ pub fn handle_volume_change(
 
 /// System to handle BGM mute/unmute requests
 /// Instantly mutes or unmutes all BGM
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
 pub fn handle_mute_change(
     mut events: MessageReader<MuteBgmEvent>,
     mut audio_settings: ResMut<AudioSettings>,
@@ -152,6 +169,10 @@ pub fn handle_mute_change(
 
 /// System to cleanup stopped fading-out BGM instances
 /// Runs every frame to remove completed fade-outs
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
 pub fn cleanup_fading_bgm(
     mut bgm_manager: ResMut<BgmManager>,
     audio_instances: Res<Assets<AudioInstance>>,
@@ -167,6 +188,10 @@ pub fn cleanup_fading_bgm(
 
 /// System to load the BGM name table from mp3nametable.txt
 /// Runs once at startup to load the table asset
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Startup
+)]
 pub fn load_bgm_name_table(
     mut bgm_name_table: ResMut<BgmNameTable>,
     asset_server: Res<AssetServer>,
@@ -181,6 +206,10 @@ pub fn load_bgm_name_table(
 /// System to handle map BGM from BGM name table
 /// Reads map name from MapRequestLoader and looks up BGM path from mp3nametable.txt
 /// Runs every frame and checks if we need to start BGM
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
 pub fn handle_map_bgm(
     mut events: MessageWriter<PlayBgmEvent>,
     query: Query<(

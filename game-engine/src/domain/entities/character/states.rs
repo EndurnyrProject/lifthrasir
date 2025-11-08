@@ -3,6 +3,7 @@ use crate::domain::entities::sprite_rendering::{
     EffectType, SpriteAnimationChangeEvent, StatusEffectVisualEvent,
 };
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::{auto_add_event, auto_add_system};
 use seldom_state::prelude::*;
 
 // Animation states for character actions
@@ -57,6 +58,7 @@ pub enum ContextState {
 
 // Events for state changes
 #[derive(Message, Debug)]
+#[auto_add_event(plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin)]
 pub struct CharacterStateChangeEvent {
     pub entity: Entity,
     pub animation_state: Option<AnimationState>,
@@ -167,22 +169,16 @@ impl From<AnimationState> for ActionType {
 }
 
 // State machine setup function
+// Note: Systems and CharacterStateChangeEvent are now auto-registered via bevy_auto_plugin
 pub fn setup_character_state_machines(app: &mut App) {
-    app.add_plugins(StateMachinePlugin::default())
-        .add_message::<CharacterStateChangeEvent>()
-        // State change observer systems - these bridge state machine to visuals
-        .add_systems(
-            Update,
-            (
-                insert_animation_triggers_from_gameplay_changes,
-                observe_animation_state_changes,
-                observe_gameplay_state_changes,
-            )
-                .chain(),
-        );
+    app.add_plugins(StateMachinePlugin::default());
 }
 
 // Trigger insertion systems for automatic state transitions
+#[auto_add_system(
+    plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
+    schedule = Update
+)]
 pub fn insert_animation_triggers_from_gameplay_changes(
     mut commands: Commands,
     characters: CharactersWithChangedGameplayState,
@@ -231,6 +227,11 @@ type ChangedAnimationsQuery<'w, 's> = Query<
 >;
 
 /// Observes AnimationState changes and emits sprite animation events
+#[auto_add_system(
+    plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
+    schedule = Update,
+    config(after = insert_animation_triggers_from_gameplay_changes)
+)]
 pub fn observe_animation_state_changes(
     mut animation_events: MessageWriter<SpriteAnimationChangeEvent>,
     changed_animations: ChangedAnimationsQuery,
@@ -255,6 +256,11 @@ pub fn observe_animation_state_changes(
 }
 
 /// Observes GameplayState changes and emits status effect visual events
+#[auto_add_system(
+    plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
+    schedule = Update,
+    config(after = observe_animation_state_changes)
+)]
 pub fn observe_gameplay_state_changes(
     mut effect_events: MessageWriter<StatusEffectVisualEvent>,
     changed_gameplay: CharactersWithChangedGameplay,

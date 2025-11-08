@@ -1,5 +1,6 @@
 use crate::domain::input::ForwardedCursorPosition;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 use super::{
     components::NetworkEntity,
@@ -7,6 +8,10 @@ use super::{
     sprite_rendering::components::SpriteObjectTree,
 };
 
+#[auto_add_system(
+    plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
+    schedule = Update
+)]
 pub fn update_entity_bounds_system(
     mut commands: Commands,
     hover_config: Res<HoverConfig>,
@@ -47,6 +52,11 @@ pub fn update_entity_bounds_system(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
+    schedule = Update,
+    config(after = update_entity_bounds_system)
+)]
 pub fn entity_hover_detection_system(
     mut commands: Commands,
     cursor_pos: Res<ForwardedCursorPosition>,

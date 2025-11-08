@@ -4,6 +4,7 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
+use bevy_auto_plugin::prelude::*;
 
 use crate::{
     domain::{
@@ -44,6 +45,10 @@ pub struct WaterLoadingState {
     animation_speed: f32,
 }
 
+#[auto_add_system(
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    schedule = Update
+)]
 pub fn load_water_system(
     mut commands: Commands,
     world_assets: Res<Assets<RoWorldAsset>>,
@@ -139,6 +144,11 @@ const MIN_WAVE_PITCH: f32 = 0.5;
 const WATER_TILE_SUBDIVISIONS: usize = 8;
 
 /// System to finalize water loading once textures are ready
+#[auto_add_system(
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    schedule = Update,
+    config(after = load_water_system)
+)]
 pub fn finalize_water_loading_system(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -244,6 +254,11 @@ pub fn finalize_water_loading_system(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    schedule = Update,
+    config(after = finalize_water_loading_system)
+)]
 pub fn animate_water_system(
     time: Res<Time>,
     mut water_query: Query<(&WaterSurface, &mut WaterAnimation)>,

@@ -1,10 +1,17 @@
+use crate::core::GameState;
 use crate::domain::world::components::MapLoader;
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset, RoWorldAsset};
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = Update,
+    config(run_if = in_state(GameState::Loading))
+)]
 pub fn extract_map_from_unified_assets(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -58,6 +65,11 @@ pub fn extract_map_from_unified_assets(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = Update,
+    config(run_if = in_state(GameState::Loading))
+)]
 pub fn setup_unified_map_loading(
     mut commands: Commands,
     spawn_context: Option<Res<MapSpawnContext>>,
@@ -93,6 +105,14 @@ pub fn setup_unified_map_loading(
 
 /// Cleanup system to despawn stale MapRequestLoader entities
 /// Runs when exiting Loading or Connecting states to prevent stale entities from blocking future loads
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = OnExit(GameState::Loading)
+)]
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = OnExit(GameState::Connecting)
+)]
 pub fn cleanup_map_loading_state(
     mut commands: Commands,
     query: Query<Entity, (With<MapRequestLoader>, Without<MapData>)>,
@@ -111,6 +131,10 @@ pub fn cleanup_map_loading_state(
 
 /// State verification system - logs when Loading state is entered
 /// This helps diagnose if state transitions are working correctly
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = OnEnter(GameState::Loading)
+)]
 pub fn on_enter_loading_state(spawn_context: Option<Res<MapSpawnContext>>) {
     if let Some(context) = spawn_context {
         info!(
@@ -126,7 +150,11 @@ pub fn on_enter_loading_state(spawn_context: Option<Res<MapSpawnContext>>) {
 
 /// Monitors current GameState and logs when it changes
 /// This helps diagnose if state transitions are actually being applied
-pub fn monitor_game_state(current_state: Res<State<crate::core::GameState>>) {
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = Update
+)]
+pub fn monitor_game_state(current_state: Res<State<GameState>>) {
     if current_state.is_changed() {
         info!("🔄 GameState CHANGED to: {:?}", current_state.get());
     }
@@ -134,6 +162,11 @@ pub fn monitor_game_state(current_state: Res<State<crate::core::GameState>>) {
 
 /// System to detect asset loading failures and provide diagnostic information
 /// Reports loading progress and fails fast when assets are missing
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = Update,
+    config(run_if = in_state(GameState::Loading))
+)]
 pub fn detect_asset_load_failures(
     query: Query<(&MapLoader, &MapRequestLoader)>,
     asset_server: Res<AssetServer>,

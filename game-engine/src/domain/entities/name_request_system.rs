@@ -8,7 +8,9 @@ use crate::{
     },
 };
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
+#[auto_observer(plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin)]
 pub fn name_request_observer(
     trigger: On<EntityHoverEntered>,
     mut client: Option<ResMut<ZoneServerClient>>,
@@ -36,6 +38,11 @@ pub fn name_request_observer(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
+    schedule = Update,
+    config(after = crate::domain::entities::hover_system::entity_hover_detection_system)
+)]
 pub fn name_response_handler_system(
     mut commands: Commands,
     mut basic_name_events: MessageReader<EntityNameReceived>,

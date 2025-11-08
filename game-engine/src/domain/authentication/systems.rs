@@ -47,7 +47,6 @@ pub fn handle_login_attempts(
         info!("Login attempt for user: {}", username);
         debug!("Attempting login to server: {}", server_address);
 
-        // Connect to login server (non-blocking)
         if let Err(e) = login_client.connect(server_address) {
             error!(
                 "Failed to connect to login server {}: {:?}",
@@ -64,7 +63,6 @@ pub fn handle_login_attempts(
 
         debug!("Connected to login server, sending CA_LOGIN packet...");
 
-        // Send login packet (non-blocking)
         if let Err(e) = login_client.attempt_login(username, password, client_version) {
             error!("Failed to send login packet for {}: {:?}", username, e);
 
@@ -106,48 +104,36 @@ pub fn handle_login_accepted(
     mut commands: Commands,
 ) {
     for event in protocol_events.read() {
-        info!("✅ Login accepted for account_id: {}", event.account_id);
-        info!(
-            "📋 Server list contains {} servers",
-            event.server_list.len()
-        );
+        info!("Login accepted for account_id: {}", event.account_id);
+        info!("Server list contains {} servers", event.server_list.len());
 
-        // Create UserSession from LoginAccepted event data
-        // We need to reconstruct AcAcceptLoginPacket from the event fields
         let login_packet =
             crate::infrastructure::networking::protocol::login::AcAcceptLoginPacket {
                 account_id: event.account_id,
                 login_id1: event.login_id1,
                 login_id2: event.login_id2,
                 last_login_ip: event.last_login_ip,
-                last_login_time: [0u8; 26], // Not available in event, but not critical
+                last_login_time: [0u8; 26],
                 sex: event.sex,
                 server_list: event.server_list.clone(),
             };
 
         let session = crate::infrastructure::networking::session::UserSession::new(
-            event.username.clone(), // Use username from event
+            event.username.clone(),
             login_packet,
         );
 
         info!(
-            "💾 Inserting UserSession resource with {} server(s)",
+            "Inserting UserSession resource with {} server(s)",
             session.server_list.len()
         );
-        // Insert session as resource for other systems
-        commands.insert_resource(session.clone());
 
-        info!("📤 Emitting LoginSuccessEvent for UI notification");
-        // Emit domain event for UI feedback
+        commands.insert_resource(session.clone());
         domain_events.write(LoginSuccessEvent { session });
 
-        info!("🔌 Disconnecting from login server (no longer needed)");
-        // Disconnect from login server - we don't need it anymore
         login_client.disconnect();
         login_client.reset_context();
 
-        info!("🎯 Transitioning to GameState::ServerSelection");
-        // Transition to server selection
         next_state.set(GameState::ServerSelection);
     }
 }
@@ -173,22 +159,18 @@ pub fn handle_login_refused(
     for event in protocol_events.read() {
         warn!("Login refused with error code: {}", event.error_code);
 
-        // Convert error code to NetworkError
         let error = crate::infrastructure::networking::errors::NetworkError::AuthenticationFailed {
             reason: format!("Login refused by server (error code: {})", event.error_code),
         };
 
-        // Emit domain event for UI feedback
         domain_events.write(LoginFailureEvent {
             error,
             username: event.username.clone(),
         });
 
-        // Disconnect and reset for next attempt
         login_client.disconnect();
         login_client.reset_context();
 
-        // Return to login screen
         next_state.set(GameState::Login);
     }
 }
@@ -216,7 +198,6 @@ fn load_client_config(
     asset_server: Res<AssetServer>,
     config_handle: Option<Res<ClientConfigHandle>>,
 ) {
-    // Only load if handle doesn't exist (ConfigLoaded is auto-initialized)
     if config_handle.is_none() {
         let handle = asset_server.load::<ClientConfig>("config/clientinfo.client.toml");
         commands.insert_resource(ClientConfigHandle(handle));
@@ -239,13 +220,9 @@ fn check_client_config_loaded(
     mut auth_context: ResMut<AuthenticationContext>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
-    // ConfigLoaded is now auto-initialized, so it always exists
     if let Some(handle) = config_handle {
         if !config_loaded.0 {
             if let Some(config) = client_configs.get(&handle.0) {
-                info!("Applying client configuration from clientinfo.client.toml");
-
-                // Update authentication context with loaded configuration
                 auth_context.server_config = ServerConfiguration {
                     login_server_address: config.server.to_address(),
                     client_version: config.server.client_version,
@@ -261,7 +238,6 @@ fn check_client_config_loaded(
                 // Mark as loaded to prevent repeated execution
                 config_loaded.0 = true;
 
-                // Transition to Login state once config is loaded
                 next_state.set(GameState::Login);
             }
         }
@@ -294,7 +270,6 @@ pub fn handle_server_selection(
     session: Option<Res<UserSession>>,
     mut char_client: Option<ResMut<CharServerClient>>,
 ) {
-    // Only process if UserSession exists
     let Some(mut session) = session.map(|s| s.clone()) else {
         return;
     };
@@ -304,10 +279,8 @@ pub fn handle_server_selection(
 
         session.selected_server = Some(event.server.clone());
 
-        // Update the resource with the new session
         commands.insert_resource(session.clone());
 
-        // Build address string
         let ip_bytes = event.server.ip.to_be_bytes();
         let server_ip = format!(
             "{}.{}.{}.{}",
@@ -318,12 +291,10 @@ pub fn handle_server_selection(
         if let Some(ref mut client) = char_client {
             client.disconnect();
 
-            // Connect to the selected server
             if let Err(e) = client.connect(&address) {
                 error!("Failed to connect to character server: {:?}", e);
             } else {
                 info!("Connected to character server at {}", address);
-                // Send CH_ENTER packet immediately after connection
                 if let Err(e) = client.enter_server() {
                     error!("Failed to send CH_ENTER: {:?}", e);
                 }
@@ -340,7 +311,6 @@ pub fn handle_server_selection(
                 error!("Failed to connect to character server: {:?}", e);
             } else {
                 info!("Connected to character server at {}", address);
-                // Send CH_ENTER packet immediately after connection
                 if let Err(e) = client.enter_server() {
                     error!("Failed to send CH_ENTER: {:?}", e);
                 }

@@ -24,7 +24,6 @@ pub static HAIR_PALETTE: Lazy<Regex> = Lazy::new(|| {
 
 /// Normalize path separators for cross-platform compatibility
 /// Converts backslashes to forward slashes
-/// CRITICAL: Must be called before regex matching
 pub fn normalize_path(path: &str) -> String {
     path.replace('\\', "/")
 }

@@ -26,8 +26,17 @@ use crate::{
 };
 use bevy::ecs::query::{SpawnDetails, Spawned};
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 /// Spawn network entities from SpawnEntity events
+#[auto_add_system(
+    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    schedule = Update,
+    config(
+        after = check_pending_despawns_system,
+        before = crate::domain::entities::sprite_rendering::systems::update_sprite_transforms
+    )
+)]
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_network_entity_system(
     mut commands: Commands,
@@ -417,6 +426,7 @@ fn create_equipment_item(
 ///
 /// Handles DespawnEntity observer events and despawns the entity and its sprite hierarchy.
 /// This observer is triggered when an entity needs to be removed from the game world.
+#[auto_observer(plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin)]
 pub fn on_despawn_entity(
     trigger: On<DespawnEntity>,
     mut commands: Commands,
@@ -440,6 +450,14 @@ pub fn on_despawn_entity(
 }
 
 /// Cleanup system: Remove entities from registry when they despawn
+#[auto_add_system(
+    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    schedule = Update,
+    config(
+        after = spawn_network_entity_system,
+        before = crate::domain::entities::sprite_rendering::systems::update_sprite_transforms
+    )
+)]
 pub fn cleanup_despawned_entities_system(
     mut entity_registry: ResMut<EntityRegistry>,
     mut removed: RemovedComponents<NetworkEntity>,
@@ -457,6 +475,11 @@ pub fn cleanup_despawned_entities_system(
 /// This system reads RequestEntityVanish messages from the network layer,
 /// looks up the corresponding entity from EntityRegistry, and triggers
 /// EntityVanishRequested observer events.
+#[auto_add_system(
+    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    schedule = Update,
+    config(before = crate::domain::entities::sprite_rendering::systems::update_sprite_transforms)
+)]
 pub fn bridge_vanish_requests_system(
     mut commands: Commands,
     mut vanish_requests: MessageReader<RequestEntityVanish>,
@@ -485,6 +508,7 @@ pub fn bridge_vanish_requests_system(
 /// this observer checks if the entity is currently moving. If so, it marks the
 /// entity with PendingDespawn component to defer actual despawn until movement
 /// completes. This prevents entities from disappearing mid-movement.
+#[auto_observer(plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin)]
 pub fn on_entity_vanish_request(
     trigger: On<EntityVanishRequested>,
     mut commands: Commands,
@@ -534,6 +558,14 @@ pub fn on_entity_vanish_request(
 /// This system runs every frame to check entities marked with PendingDespawn.
 /// When an entity finishes moving (MovementState::Idle) or the timeout expires,
 /// it triggers a DespawnEntity observer to handle actual despawn.
+#[auto_add_system(
+    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    schedule = Update,
+    config(
+        after = bridge_vanish_requests_system,
+        before = crate::domain::entities::sprite_rendering::systems::update_sprite_transforms
+    )
+)]
 pub fn check_pending_despawns_system(
     mut commands: Commands,
     query: Query<(Entity, &PendingDespawn, &MovementState, &NetworkEntity)>,

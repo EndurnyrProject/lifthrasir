@@ -3,6 +3,8 @@ use crate::domain::character::catalog::{HeadStyleCatalog, HeadStyleEntry};
 use crate::domain::entities::character::components::Gender;
 use crate::infrastructure::assets::HierarchicalAssetManager;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use std::collections::HashMap;
 
 type StyleKey = (Gender, u16);
@@ -144,6 +146,10 @@ impl HeadStyleCatalogBuilder {
 }
 
 /// System to build catalog on startup
+#[auto_add_system(
+    plugin = crate::domain::character::catalog_builder::AssetCatalogPlugin,
+    schedule = Update
+)]
 fn build_catalog_on_startup(
     mut commands: Commands,
     asset_manager: Option<Res<HierarchicalAssetManager>>,
@@ -164,10 +170,6 @@ fn build_catalog_on_startup(
     *initialized = true;
 }
 
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
 pub struct AssetCatalogPlugin;
-
-impl Plugin for AssetCatalogPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, build_catalog_on_startup);
-    }
-}

@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 use std::collections::VecDeque;
 
 /// Number of seconds to keep in diagnostics history
@@ -6,6 +7,7 @@ const DIAGNOSTICS_HISTORY_SECONDS: usize = 60;
 
 /// Resource for tracking animation performance metrics
 #[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::infrastructure::diagnostics::RoDiagnosticsPlugin)]
 pub struct AnimationDiagnostics {
     /// Total number of palette conversions performed
     pub total_conversions: u64,
@@ -63,6 +65,10 @@ impl AnimationDiagnostics {
     }
 }
 
+#[auto_add_system(
+    plugin = crate::infrastructure::diagnostics::RoDiagnosticsPlugin,
+    schedule = Update
+)]
 pub fn update_animation_diagnostics(
     time: Res<Time>,
     mut diagnostics: ResMut<AnimationDiagnostics>,
@@ -81,6 +87,10 @@ pub fn update_animation_diagnostics(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::infrastructure::diagnostics::RoDiagnosticsPlugin,
+    schedule = Update
+)]
 pub fn log_animation_diagnostics(
     diagnostics: Res<AnimationDiagnostics>,
     frame_cache: Option<Res<crate::domain::entities::animation::RoFrameCache>>,

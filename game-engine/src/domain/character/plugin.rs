@@ -1,8 +1,8 @@
 use super::components::CharacterSelectionState;
-use super::events::*;
-use super::systems::*;
-use crate::core::state::GameState;
+use crate::app::character_domain_plugin::CharacterDomainAutoPlugin;
+use crate::domain::entities::character::states::setup_character_state_machines;
 use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
+use crate::domain::entities::sprite_rendering::plugin::GenericSpriteRenderingPlugin;
 use crate::infrastructure::networking::protocol::character::{
     BlockedCharactersReceived, CharacterCreated, CharacterCreationFailed, CharacterDeleted,
     CharacterDeletionFailed, CharacterInfoPageReceived, CharacterServerConnected,
@@ -14,19 +14,33 @@ use crate::infrastructure::networking::protocol::zone::{
 };
 use bevy::prelude::*;
 
-/// Minimal character domain plugin that registers events and systems
+/// Character Domain Plugin
+///
+/// Composes character functionality with proper dependency order:
+/// 1. Initialize resources (CharacterSelectionState)
+/// 2. Add sub-plugins in correct order:
+///    - StateMachinePlugin (via setup_character_state_machines) - state transitions
+///    - GenericSpriteRenderingPlugin - sprite hierarchy and rendering
+///    - UnifiedCharacterEntityPlugin - character entity management (auto-plugin)
+/// 3. Register protocol layer events (networking infrastructure)
+/// 4. Register infrastructure systems (char_server_update, zone_server_update, time_sync)
+/// 5. Add CharacterDomainAutoPlugin (all domain logic via auto_plugin)
 pub struct CharacterDomainPlugin;
 
 impl Plugin for CharacterDomainPlugin {
     fn build(&self, app: &mut App) {
-        // Initialize character selection state resource
+        // 1. Initialize character selection state resource
         app.insert_resource(CharacterSelectionState::default());
 
-        // Add unified character entity plugin (includes sprite hierarchy and state machines)
+        // 2. Add sub-plugins that UnifiedCharacterEntityPlugin depends on
+        // (must be added before the auto-plugin)
+        setup_character_state_machines(app);
+        app.add_plugins(GenericSpriteRenderingPlugin);
+
+        // Add unified character entity plugin (pure auto-plugin)
         app.add_plugins(UnifiedCharacterEntityPlugin);
 
-        // Register protocol layer events (from new networking architecture)
-        // Character protocol events
+        // 3. Register protocol layer events (from networking infrastructure)
         app.add_message::<CharacterServerConnected>()
             .add_message::<CharacterCreated>()
             .add_message::<CharacterCreationFailed>()
@@ -46,89 +60,20 @@ impl Plugin for CharacterDomainPlugin {
             .add_message::<EntityNameReceived>()
             .add_message::<EntityNameAllReceived>();
 
-        // Register all character-related domain events
-        app.add_message::<RequestCharacterListEvent>()
-            .add_message::<CharacterListReceivedEvent>()
-            .add_message::<SelectCharacterEvent>()
-            .add_message::<CharacterSelectedEvent>()
-            .add_message::<EnterGameRequestEvent>()
-            .add_message::<ZoneServerInfoReceivedEvent>()
-            .add_message::<CreateCharacterRequestEvent>()
-            .add_message::<CharacterCreatedEvent>()
-            .add_message::<CharacterCreationFailedEvent>()
-            .add_message::<DeleteCharacterRequestEvent>()
-            .add_message::<CharacterDeletedEvent>()
-            .add_message::<CharacterDeletionFailedEvent>()
-            .add_message::<CharacterHoverEvent>()
-            .add_message::<RefreshCharacterListEvent>()
-            .add_message::<ZoneServerConnected>()
-            .add_message::<ZoneServerConnectionFailed>()
-            .add_message::<ZoneAuthenticationSuccess>()
-            .add_message::<ZoneAuthenticationFailed>()
-            .add_message::<MapLoadingStarted>()
-            .add_message::<MapLoadCompleted>()
-            .add_message::<MapLoadingFailed>()
-            .add_message::<ActorInitSent>();
-
-        // Register character networking systems
-        // Split into smaller groups to avoid Rust tuple size limits
+        // 4. Register infrastructure systems (networking layer)
         app.add_systems(
             Update,
             (
-                // Character server systems
                 crate::infrastructure::networking::client::char_server_update_system,
-                update_char_client, // Keep-alive pings
-                (
-                    // Protocol event handlers - translate protocol events to domain events
-                    handle_character_server_connected,
-                    handle_character_created_protocol,
-                    handle_character_creation_failed_protocol,
-                    handle_character_deleted_protocol,
-                    handle_character_deletion_failed_protocol,
-                    handle_zone_server_info_protocol,
-                )
-                    .chain(),
-                (
-                    // Domain event handlers
-                    handle_request_character_list,
-                    handle_select_character,
-                    spawn_unified_character_from_selection,
-                    handle_create_character,
-                    handle_delete_character,
-                )
-                    .chain(),
-                (
-                    handle_zone_server_info,
-                    handle_character_created,
-                    handle_character_deleted,
-                    handle_refresh_character_list,
-                )
-                    .chain(),
-                (
-                    // Zone server systems (new modular architecture)
-                    crate::infrastructure::networking::client::zone_server_update_system,
-                    crate::infrastructure::networking::client::time_sync_system,
-                    handle_zone_server_connected_protocol,
-                    handle_zone_entry_refused_protocol,
-                    handle_account_id_received_protocol,
-                )
-                    .chain(),
-                (
-                    // Map loading systems
-                    start_map_loading_timer,
-                    detect_map_loading_timeout,
-                    detect_map_load_complete,
-                    handle_map_load_complete,
-                    handle_actor_init_sent,
-                )
-                    .chain(),
+                crate::infrastructure::networking::client::zone_server_update_system,
+                crate::infrastructure::networking::client::time_sync_system,
             )
                 .chain(),
         );
 
-        app.add_systems(
-            OnEnter(GameState::InGame),
-            spawn_character_sprite_on_game_start,
-        );
+        // 5. Add domain auto-plugin (all domain events and systems)
+        app.add_plugins(CharacterDomainAutoPlugin);
+
+        info!("CharacterDomainPlugin initialized");
     }
 }

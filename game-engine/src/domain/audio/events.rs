@@ -1,8 +1,10 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_event;
 
 /// Event to request playing a BGM track with crossfading
 #[derive(Message, Debug, Clone, Reflect)]
 #[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
 pub struct PlayBgmEvent {
     /// Path to the BGM file (e.g., "ro://data/bgm/01.mp3")
     pub path: String,
@@ -33,6 +35,7 @@ impl PlayBgmEvent {
 /// Event to request stopping the current BGM
 #[derive(Message, Debug, Clone, Copy, Reflect)]
 #[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
 pub struct StopBgmEvent {
     pub fade_out_duration: f32,
 }
@@ -48,6 +51,7 @@ impl Default for StopBgmEvent {
 /// Event to change the BGM volume
 #[derive(Message, Debug, Clone, Copy, Reflect)]
 #[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
 pub struct SetBgmVolumeEvent {
     /// Volume level (0.0 to 1.0)
     pub volume: f32,
@@ -56,6 +60,7 @@ pub struct SetBgmVolumeEvent {
 /// Event to mute or unmute the BGM
 #[derive(Message, Debug, Clone, Copy, Reflect)]
 #[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
 pub struct MuteBgmEvent {
     /// Whether to mute (true) or unmute (false)
     pub muted: bool,

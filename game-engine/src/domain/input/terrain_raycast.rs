@@ -4,16 +4,22 @@ use crate::{
     utils::coordinates::world_position_to_spawn_coords,
 };
 use bevy::{math::primitives::InfinitePlane3d, prelude::*};
+use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_init_resource};
 
 use super::ForwardedCursorPosition;
 
 #[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::app::input_plugin::InputPlugin)]
 pub struct TerrainRaycastCache {
     pub cell_coords: Option<(u16, u16)>,
     pub world_position: Option<Vec3>,
     pub is_walkable: bool,
 }
 
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = Update
+)]
 pub fn update_terrain_raycast_cache(
     mut cache: ResMut<TerrainRaycastCache>,
     cursor_pos: Res<ForwardedCursorPosition>,
