@@ -4,45 +4,31 @@ A modern, cross-platform Ragnarok Online client implementation built with Rust, 
 
 ## Overview
 
-Lifthrasir is a reimplementation of the classic Ragnarok Online MMORPG client using modern technologies. The project leverages the Bevy game engine for high-performance 3D rendering and game logic, with a React-based UI overlay powered by Tauri for a native desktop experience.
+I always wanted to build this stuff, and since i wanted to learn Rust, why not? Will this ever be fully playable? Probably not, 
+maybe, who knows? 
 
-## Technology Stack
+### Project Architecture
 
-- **Rust 2021 Edition** - Core game engine and backend
-- **Bevy 0.17.2** - ECS-based game engine
-- **Tauri v2** - Desktop application framework
-- **React 18.3.1** - Frontend UI
-- **TypeScript 5.9.3** - Type-safe UI development
-- **Vite 7.1.9** - Frontend build tooling
+The architecture is fairly simple, everything is build following the Entity Component System (ECS) paradigm using Bevy as the game engine.
+However, since Bevy still doesn't provide a good way of building UIs, i got the genially idiotic idea of using Tauri, which allows us to
+use React for building the UI, and communicate with the Bevy game engine using IPC. Which works, but boy its a pain in the ass.
 
 ## Prerequisites
 
-- **Rust** (latest stable) - [Install here](https://rustup.rs/)
-- **Node.js** (v18+) and npm - [Install here](https://nodejs.org/)
+- **Rust** (latest stable)
+- **Node.js** (v18+) and npm
 - **Ragnarok Online GRF Files** - You must provide your own legitimate GRF data files
 
 ### Required GRF Files
 
 This client requires Ragnarok Online data files, which are proprietary to Gravity Co., Ltd. and are **NOT included** in this repository.
 
-You must obtain these files legally from an official Ragnarok Online installation:
-- `data.grf` - Main game data archive
-- `rdata.grf` - Additional game resources (if applicable)
-
-**Where to place GRF files:**
-```
-lifthrasir/
-└── assets/
-    ├── data.grf
-    └── rdata.grf (optional)
-```
-
 ## Getting Started
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/lifthrasir.git
+git clone git@github.com:EndurnyrProject/lifthrasir.git
 cd lifthrasir
 ```
 
@@ -85,50 +71,6 @@ This will create platform-specific packages in `src-tauri/target/release/bundle/
 - **Windows**: `.exe` executable and `.msi` installer
 - **Linux**: `.AppImage`, `.deb`, and `.rpm` packages
 
-### First-Time Users
-
-Installers are unsigned in development builds. Users may see security warnings:
-- **macOS**: Right-click the app → "Open" to bypass Gatekeeper
-- **Windows**: Click "More info" → "Run anyway" on SmartScreen warning
-- **Linux**: Mark the AppImage as executable: `chmod +x Lifthrasir.AppImage`
-
-## Development Workflow
-
-### Project Structure
-
-```
-lifthrasir/
-├── game-engine/        # Core Bevy game engine (ECS systems, rendering, game logic)
-├── src-tauri/          # Tauri integration layer (IPC bridge, window management)
-├── web-ui/             # React frontend (UI components, authentication screens)
-├── grf-utils/          # GRF file format utilities
-└── assets/             # Game data files (user-provided GRF files go here)
-```
-
-### Common Commands
-
-```bash
-# Run tests
-cargo test
-
-# Format code
-cargo fmt
-
-# Lint with Clippy
-cargo clippy
-
-# Check without building
-cargo check
-
-# Build game engine only
-cd game-engine
-cargo build
-
-# Run UI in development
-cd web-ui
-npm run dev
-```
-
 ## Contributing
 
 Contributions are welcome! Please ensure:
@@ -137,11 +79,8 @@ Contributions are welcome! Please ensure:
 3. Clippy produces no warnings (`cargo clippy`)
 4. Commits follow conventional commit format
 
-## License
-
-This project is an independent client implementation. Ragnarok Online and its assets are property of Gravity Co., Ltd. This software is provided for educational and interoperability purposes only.
-
 ## Legal Notice
 
-This project is not affiliated with, endorsed by, or connected to Gravity Co., Ltd. or any official Ragnarok Online server. Users must provide their own legitimate game data files and comply with all applicable terms of service.
+This project is not affiliated with, endorsed by, or connected to Gravity Co., Ltd. or any official Ragnarok Online server. Users must provide their own legitimate game data files and comply with all applicable terms of service. 
+Gravity pls don't strike me :(
 

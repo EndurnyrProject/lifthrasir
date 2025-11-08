@@ -19,7 +19,7 @@
 
 ### Core Technologies
 - **Rust (Edition 2021)**: Primary programming language for game engine
-- **Bevy 0.16.1**: ECS-based game engine for rendering and game logic
+- **Bevy 0.17.1**: ECS-based game engine for rendering and game logic
 - **Tauri v2**: Desktop application framework for UI integration
 - **React 18.3.1**: Frontend UI framework
 - **TypeScript 5.6.2**: Type-safe JavaScript for UI code
@@ -67,8 +67,6 @@ cargo build --release
 cd src-tauri
 cargo tauri dev
 
-# Or from root
-cargo run
 ```
 
 ### Testing
