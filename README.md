@@ -1,3 +1,7 @@
+<p align="center">
+  <img width="300" height="300" src="https://iili.io/KbXkCeR.md.png">
+</p>
+
 # Lifthrasir
 
 A modern, cross-platform Ragnarok Online client implementation built with Rust, Bevy, and React.
