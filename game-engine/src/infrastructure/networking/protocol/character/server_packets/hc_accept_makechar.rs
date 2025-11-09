@@ -10,12 +10,11 @@ pub const HC_ACCEPT_MAKECHAR: u16 = 0x0B6F;
 /// Server confirms successful character creation and sends the new
 /// character's data.
 ///
-/// # Packet Structure (variable length)
+/// # Packet Structure (fixed length)
 /// - Packet ID: u16 (2 bytes)
-/// - Packet Length: u16 (2 bytes)
-/// - Character Data: CharacterInfo (155 bytes)
+/// - Character Data: CharacterInfo (175 bytes)
 ///
-/// Total: 159 bytes
+/// Total: 177 bytes
 ///
 /// # Direction
 /// Character Server → Client
@@ -28,15 +27,15 @@ impl ServerPacket for HcAcceptMakecharPacket {
     const PACKET_ID: u16 = HC_ACCEPT_MAKECHAR;
 
     fn parse(data: &[u8]) -> io::Result<Self> {
-        // Skip packet ID (2 bytes) and length (2 bytes)
-        if data.len() < 4 + CharacterInfo::SIZE_ACCEPT_ENTER {
+        // Skip packet ID (2 bytes)
+        if data.len() < 2 + CharacterInfo::SIZE_ACCEPT_ENTER {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "HC_ACCEPT_MAKECHAR packet too short",
             ));
         }
 
-        let char_data = &data[4..];
+        let char_data = &data[2..];
         let character = CharacterInfo::parse(char_data)?;
 
         Ok(Self { character })

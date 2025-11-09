@@ -87,10 +87,7 @@ impl Protocol for CharacterProtocol {
             },
             HC_NOTIFY_ZONESVR => PacketSize::Fixed(28),
             HC_CHARACTER_LIST => PacketSize::Fixed(29),
-            HC_ACCEPT_MAKECHAR => PacketSize::Variable {
-                length_offset: 2,
-                length_bytes: 2,
-            },
+            HC_ACCEPT_MAKECHAR => PacketSize::Fixed(177),
             HC_REFUSE_MAKECHAR => PacketSize::Fixed(3),
             HC_ACCEPT_DELETECHAR => PacketSize::Fixed(2),
             HC_REFUSE_DELETECHAR => PacketSize::Fixed(3),
