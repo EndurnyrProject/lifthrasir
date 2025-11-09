@@ -2,12 +2,12 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Lifthrasir",
   "version": "0.1.0",
-  "identifier": "com.lifthrasir.app",
+  "identifier": "com.lifthrasir.client",
   "build": {
     "beforeDevCommand": "cd web-ui && npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "cd web-ui && npm run build",
-    "frontendDist": "./web-ui/dist"
+    "frontendDist": "../web-ui/dist"
   },
   "app": {
     "windows": [
