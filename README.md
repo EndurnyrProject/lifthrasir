@@ -83,6 +83,14 @@ Contributions are welcome! Please ensure:
 3. Clippy produces no warnings (`cargo clippy`)
 4. Commits follow conventional commit format
 
+## Thank you
+
+I shamelessly took a lot of code and ideas from these amazing projects:
+
+[RagnarokRebuildTcp](https://github.com/Doddler/RagnarokRebuildTcp)  
+[BrowEdit3](https://github.com/Borf/BrowEdit3)  
+[GRFEditor](https://github.com/Tokeiburu/GRFEditor)  
+
 ## Legal Notice
 
 This project is not affiliated with, endorsed by, or connected to Gravity Co., Ltd. or any official Ragnarok Online server. Users must provide their own legitimate game data files and comply with all applicable terms of service. 
