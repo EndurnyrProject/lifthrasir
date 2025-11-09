@@ -135,10 +135,10 @@ pub fn load_water_system(
 }
 
 // Maximum water parameter values to prevent excessive movement in some maps
-const MAX_WAVE_HEIGHT: f32 = 0.5;
-const MAX_WAVE_SPEED: f32 = 1.5;
-const MAX_WAVE_PITCH: f32 = 2.0;
-const MIN_WAVE_PITCH: f32 = 0.5;
+const MAX_WAVE_HEIGHT: f32 = 10.0;
+const MAX_WAVE_SPEED: f32 = 10.0;
+const MAX_WAVE_PITCH: f32 = 100.0;
+const MIN_WAVE_PITCH: f32 = 0.1;
 
 // Water mesh subdivision (8x8 = 128 triangles per tile)
 const WATER_TILE_SUBDIVISIONS: usize = 8;
@@ -190,15 +190,21 @@ pub fn finalize_water_loading_system(
             // Calculate texture scale based on map size
             let texture_scale = 0.125;
 
+            // Pre-scale wave_height for Gerstner wave formula (a = amplitude / k)
+            // This makes the final amplitude match the wave_height parameter
+            let wave_pitch = loading_state
+                .wave_pitch
+                .clamp(MIN_WAVE_PITCH, MAX_WAVE_PITCH);
+            let k = 2.0 * std::f32::consts::PI / wave_pitch;
+            let scaled_wave_height = (loading_state.wave_height_param.min(MAX_WAVE_HEIGHT) * k).min(MAX_WAVE_HEIGHT);
+
             // Create a single material for all water with loaded texture
             let water_extension = WaterExtension {
                 water_data: crate::domain::assets::components::WaterData {
                     wave_params: Vec4::new(
-                        loading_state.wave_height_param.min(MAX_WAVE_HEIGHT),
+                        scaled_wave_height,
                         loading_state.wave_speed.min(MAX_WAVE_SPEED),
-                        loading_state
-                            .wave_pitch
-                            .clamp(MIN_WAVE_PITCH, MAX_WAVE_PITCH),
+                        wave_pitch,
                         0.0,
                     ),
                     animation_params: Vec4::ZERO,
@@ -210,7 +216,7 @@ pub fn finalize_water_loading_system(
 
             let water_material = WaterMaterial {
                 base: StandardMaterial {
-                    base_color: Color::srgba(1.0, 1.0, 1.0, 0.15),
+                    base_color: Color::srgba(1.0, 1.0, 1.0, 0.05),
                     alpha_mode: AlphaMode::Blend,
                     perceptual_roughness: 0.1,
                     metallic: 0.0,
@@ -293,6 +299,7 @@ fn create_water_tiles_mesh(water_tiles: &[(usize, usize)], water_y: f32) -> Mesh
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
+    let mut tangents = Vec::new();
     let mut indices = Vec::new();
 
     let subdivisions = WATER_TILE_SUBDIVISIONS;
@@ -319,6 +326,9 @@ fn create_water_tiles_mesh(water_tiles: &[(usize, usize)], water_y: f32) -> Mesh
                 let u = col as f32 / subdivisions as f32;
                 let v = row as f32 / subdivisions as f32;
                 uvs.push([u, v]);
+
+                // Tangent vector (X-axis aligned, w=1.0 for handedness)
+                tangents.push([1.0, 0.0, 0.0, 1.0]);
             }
         }
 
@@ -346,6 +356,7 @@ fn create_water_tiles_mesh(water_tiles: &[(usize, usize)], water_y: f32) -> Mesh
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tangents);
     mesh.insert_indices(Indices::U32(indices));
 
     mesh
