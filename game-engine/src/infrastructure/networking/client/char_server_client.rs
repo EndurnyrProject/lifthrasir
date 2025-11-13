@@ -1,20 +1,23 @@
-use crate::infrastructure::networking::{
-    client::NetworkClient,
-    errors::{NetworkError, NetworkResult},
-    protocol::{
-        character::{
-            AcceptDeletecharHandler, AcceptEnterHandler, AcceptMakecharHandler,
-            AckCharinfoPerPageHandler, BlockCharacterHandler, BlockedCharactersReceived,
-            ChDeleteCharPacket, ChEnterPacket, ChMakeCharPacket, ChPingPacket, ChSelectCharPacket,
-            CharacterClientPacket, CharacterContext, CharacterCreated, CharacterCreationFailed,
-            CharacterDeleted, CharacterDeletionFailed, CharacterInfo, CharacterInfoPageReceived,
-            CharacterListHandler, CharacterProtocol, CharacterServerConnected,
-            CharacterSlotInfoReceived, NotifyZonesvrHandler, PingHandler, PingReceived,
-            RefuseDeletecharHandler, RefuseMakecharHandler, SecondPasswdLoginHandler,
-            SecondPasswordRequested, ZoneServerInfo, ZoneServerInfoReceived,
+use crate::{
+    domain::entities::character::components::Gender,
+    infrastructure::networking::{
+        client::NetworkClient,
+        errors::{NetworkError, NetworkResult},
+        protocol::{
+            character::{
+                AcceptDeletecharHandler, AcceptEnterHandler, AcceptMakecharHandler,
+                AckCharinfoPerPageHandler, BlockCharacterHandler, BlockedCharactersReceived,
+                ChDeleteCharPacket, ChEnterPacket, ChMakeCharPacket, ChPingPacket, ChSelectCharPacket,
+                CharacterClientPacket, CharacterContext, CharacterCreated, CharacterCreationFailed,
+                CharacterDeleted, CharacterDeletionFailed, CharacterInfo, CharacterInfoPageReceived,
+                CharacterListHandler, CharacterProtocol, CharacterServerConnected,
+                CharacterSlotInfoReceived, NotifyZonesvrHandler, PingHandler, PingReceived,
+                RefuseDeletecharHandler, RefuseMakecharHandler, SecondPasswdLoginHandler,
+                SecondPasswordRequested, ZoneServerInfo, ZoneServerInfoReceived,
+            },
+            dispatcher::PacketDispatcher,
+            EventBuffer,
         },
-        dispatcher::PacketDispatcher,
-        EventBuffer,
     },
 };
 use bevy::ecs::system::SystemParam;
@@ -178,15 +181,15 @@ impl CharServerClient {
         hair_color: u16,
         hair_style: u16,
         starting_job: u16,
+        sex: Gender,
     ) -> NetworkResult<()> {
-        let sex = self.inner.context().sex;
         let packet = CharacterClientPacket::ChMakeChar(ChMakeCharPacket::new(
             name,
             slot,
             hair_color,
             hair_style,
             starting_job,
-            sex,
+            sex as u8,
         ));
         self.inner.send_packet(&packet)
     }

@@ -2,10 +2,30 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Gender enum - shared across the application
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
 pub enum Gender {
     Female = 0,
     Male = 1,
+}
+
+impl Serialize for Gender {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_u8(*self as u8)
+    }
+}
+
+impl<'de> Deserialize<'de> for Gender {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = u8::deserialize(deserializer)?;
+        Ok(Gender::from(value))
+    }
 }
 
 impl From<u8> for Gender {
@@ -172,7 +192,7 @@ pub struct CharacterInfo {
     pub slot: u8,
 
     // CharacterAppearance fields
-    pub gender: Gender,
+    pub sex: Gender,
     pub hair_style: u16,
     pub hair_color: u16,
     pub clothes_color: u16,
@@ -196,7 +216,7 @@ impl CharacterInfo {
                 slot: self.slot,
             },
             CharacterAppearance {
-                gender: self.gender,
+                gender: self.sex,
                 hair_style: self.hair_style,
                 hair_color: self.hair_color,
                 clothes_color: self.clothes_color,
@@ -231,7 +251,7 @@ impl From<crate::infrastructure::networking::protocol::character::CharacterInfo>
                 current_sp: net.sp as u32,
             },
             slot: net.char_num,
-            gender: Gender::from(net.sex),
+            sex: Gender::from(net.sex),
             hair_style: net.hair,
             hair_color: net.hair_color,
             clothes_color: net.clothes_color,
