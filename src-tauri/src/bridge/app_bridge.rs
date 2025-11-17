@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use game_engine::domain::character::events::CharacterInfoWithJobName;
 use game_engine::domain::entities::character::components::CharacterInfo;
 use game_engine::infrastructure::networking::protocol::login::types::ServerInfo;
 use secrecy::SecretString;
@@ -32,7 +33,7 @@ pub enum TauriIncomingEvent {
         response_tx: oneshot::Sender<Result<(), String>>,
     },
     GetCharacterList {
-        response_tx: oneshot::Sender<Result<Vec<CharacterInfo>, String>>,
+        response_tx: oneshot::Sender<Result<Vec<CharacterInfoWithJobName>, String>>,
     },
     SelectCharacter {
         slot: u8,
@@ -111,7 +112,9 @@ impl AppBridge {
         response_rx
     }
 
-    pub fn send_get_character_list(&self) -> oneshot::Receiver<Result<Vec<CharacterInfo>, String>> {
+    pub fn send_get_character_list(
+        &self,
+    ) -> oneshot::Receiver<Result<Vec<CharacterInfoWithJobName>, String>> {
         let (response_tx, response_rx) = oneshot::channel();
 
         let _ = self

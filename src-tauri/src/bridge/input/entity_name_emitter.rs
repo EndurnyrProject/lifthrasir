@@ -24,7 +24,12 @@ struct EmptyPayload {}
 type HoveredEntityQuery<'w, 's> = Query<
     'w,
     's,
-    (Entity, &'static NetworkEntity, &'static SpriteObjectTree, &'static EntityName),
+    (
+        Entity,
+        &'static NetworkEntity,
+        &'static SpriteObjectTree,
+        &'static EntityName,
+    ),
     (With<HoveredEntity>, Changed<EntityName>),
 >;
 

@@ -1,7 +1,20 @@
 use super::forms::CharacterCreationForm;
-use crate::domain::entities::character::components::CharacterInfo;
+use crate::domain::entities::character::components::CharacterInfo as DomainCharacterInfo;
+use crate::infrastructure::networking::protocol::character::CharacterInfo as ProtocolCharacterInfo;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterInfoWithJobName {
+    #[serde(flatten)]
+    pub base: ProtocolCharacterInfo,
+    pub job_name: String,
+    pub body_sprite_path: String,
+    pub hair_sprite_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hair_palette_path: Option<String>,
+}
 
 #[derive(Message, Debug)]
 #[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
@@ -10,7 +23,7 @@ pub struct RequestCharacterListEvent;
 #[derive(Message, Debug)]
 #[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
 pub struct CharacterListReceivedEvent {
-    pub characters: Vec<Option<CharacterInfo>>,
+    pub characters: Vec<Option<CharacterInfoWithJobName>>,
     pub max_slots: u8,
     pub available_slots: u8,
 }
@@ -24,7 +37,7 @@ pub struct SelectCharacterEvent {
 #[derive(Message, Debug)]
 #[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
 pub struct CharacterSelectedEvent {
-    pub character: CharacterInfo,
+    pub character: DomainCharacterInfo,
     pub slot: u8,
 }
 
@@ -55,7 +68,7 @@ pub struct CreateCharacterRequestEvent {
 #[derive(Message, Debug)]
 #[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
 pub struct CharacterCreatedEvent {
-    pub character: CharacterInfo,
+    pub character: DomainCharacterInfo,
     pub slot: u8,
 }
 

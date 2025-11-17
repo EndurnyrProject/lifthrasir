@@ -5,6 +5,7 @@ use crate::domain::entities::character::components::CharacterInfo;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::world::spawn_context::MapSpawnContext;
+use crate::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
 use crate::infrastructure::networking::client::CharServerClient;
 use crate::infrastructure::networking::protocol::character::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
@@ -25,17 +26,49 @@ use std::time::{Duration, Instant};
 pub fn handle_request_character_list(
     mut request_events: MessageReader<RequestCharacterListEvent>,
     char_client: Option<Res<CharServerClient>>,
+    job_registry: Option<Res<JobSpriteRegistry>>,
     mut list_events: MessageWriter<CharacterListReceivedEvent>,
 ) {
     for _event in request_events.read() {
         if let Some(client) = char_client.as_ref() {
-            let mut char_list = vec![None; 15]; // Support up to 15 slots
+            let mut char_list = vec![None; 15];
 
             for net_char in client.characters() {
-                let char_info = CharacterInfo::from(net_char.clone());
                 let slot = net_char.char_num as usize;
                 if slot < char_list.len() {
-                    char_list[slot] = Some(char_info);
+                    let job_name = job_registry
+                        .as_ref()
+                        .and_then(|reg| reg.get_display_name(net_char.class as u32))
+                        .unwrap_or("Unknown")
+                        .to_string();
+
+                    let body_sprite_path = job_registry
+                        .as_ref()
+                        .and_then(|reg| {
+                            reg.get_body_sprite_path(net_char.class as u32, net_char.sex)
+                        })
+                        .unwrap_or_else(|| {
+                            "data\\sprite\\인간족\\몸통\\남\\초보자_남.spr".to_string()
+                        });
+
+                    let hair_sprite_path = job_registry
+                        .as_ref()
+                        .map(|reg| reg.get_hair_sprite_path(net_char.hair, net_char.sex))
+                        .unwrap_or_else(|| {
+                            "data\\sprite\\인간족\\머리통\\남\\1_남.spr".to_string()
+                        });
+
+                    let hair_palette_path = job_registry.as_ref().and_then(|reg| {
+                        reg.get_hair_palette_path(net_char.hair, net_char.sex, net_char.hair_color)
+                    });
+
+                    char_list[slot] = Some(CharacterInfoWithJobName {
+                        base: net_char.clone(),
+                        job_name,
+                        body_sprite_path,
+                        hair_sprite_path,
+                        hair_palette_path,
+                    });
                 }
             }
 
@@ -59,6 +92,7 @@ pub fn handle_request_character_list(
 pub fn handle_character_server_connected(
     mut connected_events: MessageReader<CharacterServerConnected>,
     char_client: Option<Res<CharServerClient>>,
+    job_registry: Option<Res<JobSpriteRegistry>>,
     mut list_events: MessageWriter<CharacterListReceivedEvent>,
     mut next_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
@@ -68,7 +102,6 @@ pub fn handle_character_server_connected(
             continue;
         };
 
-        // Initialize ping timer for 15-second keep-alive pings
         commands.insert_resource(CharServerPingTimer(Timer::from_seconds(
             15.0,
             TimerMode::Repeating,
@@ -77,10 +110,35 @@ pub fn handle_character_server_connected(
         let mut char_list = vec![None; 15];
 
         for net_char in client.characters() {
-            let char_info = CharacterInfo::from(net_char.clone());
             let slot = net_char.char_num as usize;
             if slot < char_list.len() {
-                char_list[slot] = Some(char_info);
+                let job_name = job_registry
+                    .as_ref()
+                    .and_then(|reg| reg.get_display_name(net_char.class as u32))
+                    .unwrap_or("Unknown")
+                    .to_string();
+
+                let body_sprite_path = job_registry
+                    .as_ref()
+                    .and_then(|reg| reg.get_body_sprite_path(net_char.class as u32, net_char.sex))
+                    .unwrap_or_else(|| "data\\sprite\\인간족\\몸통\\남\\초보자_남.spr".to_string());
+
+                let hair_sprite_path = job_registry
+                    .as_ref()
+                    .map(|reg| reg.get_hair_sprite_path(net_char.hair, net_char.sex))
+                    .unwrap_or_else(|| "data\\sprite\\인간족\\머리통\\남\\1_남.spr".to_string());
+
+                let hair_palette_path = job_registry.as_ref().and_then(|reg| {
+                    reg.get_hair_palette_path(net_char.hair, net_char.sex, net_char.hair_color)
+                });
+
+                char_list[slot] = Some(CharacterInfoWithJobName {
+                    base: net_char.clone(),
+                    job_name,
+                    body_sprite_path,
+                    hair_sprite_path,
+                    hair_palette_path,
+                });
             }
         }
 
@@ -617,6 +675,7 @@ pub fn handle_character_deleted(
 pub fn handle_refresh_character_list(
     mut events: MessageReader<RefreshCharacterListEvent>,
     char_client: Option<Res<CharServerClient>>,
+    job_registry: Option<Res<JobSpriteRegistry>>,
     mut list_events: MessageWriter<CharacterListReceivedEvent>,
 ) {
     for _event in events.read() {
@@ -624,10 +683,41 @@ pub fn handle_refresh_character_list(
             let mut char_list = vec![None; 15];
 
             for net_char in client.characters() {
-                let char_info = CharacterInfo::from(net_char.clone());
                 let slot = net_char.char_num as usize;
                 if slot < char_list.len() {
-                    char_list[slot] = Some(char_info);
+                    let job_name = job_registry
+                        .as_ref()
+                        .and_then(|reg| reg.get_display_name(net_char.class as u32))
+                        .unwrap_or("Unknown")
+                        .to_string();
+
+                    let body_sprite_path = job_registry
+                        .as_ref()
+                        .and_then(|reg| {
+                            reg.get_body_sprite_path(net_char.class as u32, net_char.sex)
+                        })
+                        .unwrap_or_else(|| {
+                            "data\\sprite\\인간족\\몸통\\남\\초보자_남.spr".to_string()
+                        });
+
+                    let hair_sprite_path = job_registry
+                        .as_ref()
+                        .map(|reg| reg.get_hair_sprite_path(net_char.hair, net_char.sex))
+                        .unwrap_or_else(|| {
+                            "data\\sprite\\인간족\\머리통\\남\\1_남.spr".to_string()
+                        });
+
+                    let hair_palette_path = job_registry.as_ref().and_then(|reg| {
+                        reg.get_hair_palette_path(net_char.hair, net_char.sex, net_char.hair_color)
+                    });
+
+                    char_list[slot] = Some(CharacterInfoWithJobName {
+                        base: net_char.clone(),
+                        job_name,
+                        body_sprite_path,
+                        hair_sprite_path,
+                        hair_palette_path,
+                    });
                 }
             }
 

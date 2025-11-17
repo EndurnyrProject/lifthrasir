@@ -16,7 +16,10 @@ fn test_decompile_jobidentity() {
                 Ok(_) => println!("✓ Successfully executed in mlua"),
                 Err(e) => {
                     println!("✗ Execution error: {}", e);
-                    println!("\nFirst 1000 chars of source:\n{}", &source[..source.len().min(1000)]);
+                    println!(
+                        "\nFirst 1000 chars of source:\n{}",
+                        &source[..source.len().min(1000)]
+                    );
                 }
             }
         }
@@ -40,7 +43,10 @@ fn test_decompile_npcidentity() {
                 Ok(_) => println!("✓ Successfully executed in mlua"),
                 Err(e) => {
                     println!("✗ Execution error: {}", e);
-                    println!("\nFirst 1000 chars of source:\n{}", &source[..source.len().min(1000)]);
+                    println!(
+                        "\nFirst 1000 chars of source:\n{}",
+                        &source[..source.len().min(1000)]
+                    );
                 }
             }
         }
@@ -64,7 +70,10 @@ fn test_decompile_jobname() {
                 Ok(_) => println!("✓ Successfully executed in mlua"),
                 Err(e) => {
                     println!("✗ Execution error: {}", e);
-                    println!("\nFirst 1000 chars of source:\n{}", &source[..source.len().min(1000)]);
+                    println!(
+                        "\nFirst 1000 chars of source:\n{}",
+                        &source[..source.len().min(1000)]
+                    );
                 }
             }
         }

@@ -151,10 +151,7 @@ fn test_multiple_observers_same_event() {
 }
 
 #[derive(Message, Clone, Debug)]
-struct TestMessage {
-    entity: Entity,
-    value: i32,
-}
+struct TestMessage;
 
 #[test]
 fn test_message_vs_observer_equivalence() {
@@ -192,7 +189,7 @@ fn test_message_vs_observer_equivalence() {
         .trigger(TestEntityEvent { entity, value: 1 });
 
     let mut writer = app.world_mut().resource_mut::<Messages<TestMessage>>();
-    writer.write(TestMessage { entity, value: 1 });
+    writer.write(TestMessage);
 
     app.update();
 

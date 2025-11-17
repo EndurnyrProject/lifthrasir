@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState, useEffect } from 'react';
 import { SpriteImage } from '../components';
-import { Gender, getBodySpritePath, getHairSpritePath, getHairPalettePath } from '../lib/characterSprites';
+import { Gender } from '../lib/characterSprites';
 import { useAssets } from '../contexts/AssetsContext';
 import CharacterCreation from './CharacterCreation';
 import './CharacterSelection.css';
@@ -9,33 +9,14 @@ import './CharacterSelection.css';
 // Re-export Gender for backward compatibility
 export { Gender };
 
-// Job class enum matching Rust JobClass type
-enum JobClass {
-  Novice = 0,
-  Swordsman = 1,
-  Magician = 2,
-  Archer = 3,
-  Acolyte = 4,
-  Merchant = 5,
-  Thief = 6,
-  Knight = 7,
-  Priest = 8,
-  Wizard = 9,
-  Blacksmith = 10,
-  Hunter = 11,
-  Assassin = 12,
-  Crusader = 14,
-  Monk = 15,
-  Sage = 16,
-  Rogue = 17,
-  Alchemist = 18,
-  BardDancer = 19,
-}
-
 interface CharacterData {
   char_id: number;
   name: string;
-  class: JobClass;
+  class: number;
+  job_name: string;
+  body_sprite_path: string;
+  hair_sprite_path: string;
+  hair_palette_path?: string;
   base_level: number;
   job_level: number;
   base_exp: number;
@@ -51,7 +32,7 @@ interface CharacterData {
   int: number;
   dex: number;
   luk: number;
-  hair_style: number;
+  hair: number;
   hair_color: number;
   clothes_color: number;
   weapon: number;
@@ -164,31 +145,6 @@ export default function CharacterSelection({
     setScreen('list');
   };
 
-  const getJobClassName = (jobClass: JobClass): string => {
-    const names: Record<JobClass, string> = {
-      [JobClass.Novice]: 'Novice',
-      [JobClass.Swordsman]: 'Swordsman',
-      [JobClass.Magician]: 'Magician',
-      [JobClass.Archer]: 'Archer',
-      [JobClass.Acolyte]: 'Acolyte',
-      [JobClass.Merchant]: 'Merchant',
-      [JobClass.Thief]: 'Thief',
-      [JobClass.Knight]: 'Knight',
-      [JobClass.Priest]: 'Priest',
-      [JobClass.Wizard]: 'Wizard',
-      [JobClass.Blacksmith]: 'Blacksmith',
-      [JobClass.Hunter]: 'Hunter',
-      [JobClass.Assassin]: 'Assassin',
-      [JobClass.Crusader]: 'Crusader',
-      [JobClass.Monk]: 'Monk',
-      [JobClass.Sage]: 'Sage',
-      [JobClass.Rogue]: 'Rogue',
-      [JobClass.Alchemist]: 'Alchemist',
-      [JobClass.BardDancer]: 'Bard/Dancer',
-    };
-    return names[jobClass] || 'Unknown';
-  };
-
   const getSlotBackgroundImage = (character: CharacterData | null): string | undefined => {
     // For now, we don't have blocked slot info, so we just use two states:
     // - Character exists: use slot_with_char
@@ -258,7 +214,7 @@ export default function CharacterSelection({
                     <div className="character-sprite-container">
                       {/* Body sprite - no offset, this is the anchor */}
                       <SpriteImage
-                        spritePath={getBodySpritePath(character.class, character.sex)}
+                        spritePath={character.body_sprite_path}
                         actionIndex={0}
                         frameIndex={0}
                         scale={1.5}
@@ -269,14 +225,10 @@ export default function CharacterSelection({
 
                       {/* Hair sprite with palette */}
                       <SpriteImage
-                        spritePath={getHairSpritePath(character.hair_style, character.sex)}
+                        spritePath={character.hair_sprite_path}
                         actionIndex={0}
                         frameIndex={0}
-                        palettePath={getHairPalettePath(
-                          character.hair_style,
-                          character.sex,
-                          character.hair_color
-                        )}
+                        palettePath={character.hair_palette_path}
                         scale={1.5}
                         className="character-hair-sprite"
                         alt={`${character.name} hair`}
@@ -285,7 +237,7 @@ export default function CharacterSelection({
                     <div className="character-info">
                       <div className="character-name">{character.name}</div>
                       <div className="character-level">Lv. {character.base_level} / {character.job_level}</div>
-                      <div className="character-class">{getJobClassName(character.class)}</div>
+                      <div className="character-class">{character.job_name}</div>
                     </div>
                   </>
                 ) : (

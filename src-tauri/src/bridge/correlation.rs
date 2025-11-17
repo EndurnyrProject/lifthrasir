@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use game_engine::domain::character::events::CharacterInfoWithJobName;
 use game_engine::domain::entities::character::components::CharacterInfo;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -134,7 +135,7 @@ impl ServerCorrelation {
     }
 }
 
-type CharacterListSender = oneshot::Sender<Result<Vec<CharacterInfo>, String>>;
+type CharacterListSender = oneshot::Sender<Result<Vec<CharacterInfoWithJobName>, String>>;
 
 #[derive(Resource, Default)]
 pub struct PendingCharacterListSenders {

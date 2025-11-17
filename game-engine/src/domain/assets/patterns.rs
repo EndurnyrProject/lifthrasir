@@ -44,7 +44,7 @@ pub fn hair_sprite_path(gender: Gender, style_id: u16) -> String {
         Gender::Female => "여",
     };
     format!(
-        "data\\sprite\\인간족\\머리통\\{}\\{}_{}.spr",
+        "ro://data/sprite/인간족/머리통/{}/{}_{}.spr",
         sex, style_id, sex
     )
 }
@@ -56,7 +56,7 @@ pub fn hair_action_path(gender: Gender, style_id: u16) -> String {
         Gender::Female => "여",
     };
     format!(
-        "data\\sprite\\인간족\\머리통\\{}\\{}_{}.act",
+        "ro://data/sprite/인간족/머리통/{}/{}_{}.act",
         sex, style_id, sex
     )
 }

@@ -1,3 +1,4 @@
+use crate::domain::assets::patterns;
 use crate::domain::entities::character::components::core::Gender;
 use bevy::prelude::*;
 use mlua::prelude::*;
@@ -142,6 +143,26 @@ impl JobSpriteRegistry {
     }
 
     pub fn get_display_name_gendered(&self, jt_id: u32, _gender: Gender) -> Option<&str> {
+        // TODO: Implement gender-specific name lookups if required
         self.get_display_name(jt_id)
+    }
+
+    pub fn get_body_sprite_path(&self, jt_id: u32, gender: u8) -> Option<String> {
+        let sprite_name = self.get_sprite_name(jt_id)?;
+        let gender_enum = Gender::from(gender);
+        Some(patterns::body_sprite_path(gender_enum, sprite_name))
+    }
+
+    pub fn get_hair_sprite_path(&self, hair_id: u16, gender: u8) -> String {
+        let gender_enum = Gender::from(gender);
+        patterns::hair_sprite_path(gender_enum, hair_id)
+    }
+
+    pub fn get_hair_palette_path(&self, hair_id: u16, gender: u8, color: u16) -> Option<String> {
+        if color == 0 {
+            return None;
+        }
+        let gender_enum = Gender::from(gender);
+        Some(patterns::hair_palette_path(hair_id, gender_enum, color))
     }
 }

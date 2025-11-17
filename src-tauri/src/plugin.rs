@@ -117,22 +117,10 @@ impl Plugin for TauriIntegrationPlugin {
             game_engine::infrastructure::assets::ro_assets_plugin::RoAssetsPlugin::with_unified_source();
         app.add_plugins(ro_asset_source_plugin);
 
-        // Load asset configuration for sprite renderer
-        let config_path = "assets/loader.data.toml";
-        let config: game_engine::infrastructure::assets::AssetConfig = {
-            let config_content =
-                std::fs::read_to_string(config_path).expect("Failed to read asset config");
-            toml::from_str(&config_content).expect("Failed to parse asset config")
-        };
-
-        // Create HierarchicalAssetManager for sprite rendering
-        let asset_manager =
-            game_engine::infrastructure::assets::HierarchicalAssetManager::from_config(&config)
-                .expect("Failed to create HierarchicalAssetManager");
-
-        // Create SpriteRenderer
+        // Create SpriteRenderer integrated with Bevy's asset system
+        // This sets up a channel-based communication system between Tauri commands and Bevy's ECS
         let sprite_renderer =
-            Arc::new(game_engine::infrastructure::sprite_png::SpriteRenderer::new(asset_manager));
+            Arc::new(game_engine::infrastructure::sprite_png::SpriteRenderer::create_with_app(app));
 
         // Create SpritePngCache
         let sprite_png_cache = Arc::new(
