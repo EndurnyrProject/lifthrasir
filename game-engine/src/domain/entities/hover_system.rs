@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
 use super::{
-    components::NetworkEntity,
+    components::{NetworkEntity, PendingDespawn},
     hover::{EntityHoverEntered, EntityHoverExited, HoverConfig, Hoverable, HoveredEntity},
     sprite_rendering::components::SpriteObjectTree,
 };
@@ -16,7 +16,7 @@ pub fn update_entity_bounds_system(
     mut commands: Commands,
     hover_config: Res<HoverConfig>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    entity_query: Query<(Entity, &NetworkEntity, &SpriteObjectTree)>,
+    entity_query: Query<(Entity, &NetworkEntity, &SpriteObjectTree), Without<PendingDespawn>>,
     sprite_query: Query<&GlobalTransform>,
 ) {
     let Ok((camera, camera_transform)) = camera_query.single() else {
@@ -48,7 +48,7 @@ pub fn update_entity_bounds_system(
 
         commands
             .entity(entity)
-            .insert(Hoverable::new(screen_bounds));
+            .try_insert(Hoverable::new(screen_bounds));
     }
 }
 
@@ -65,7 +65,7 @@ pub fn entity_hover_detection_system(
 ) {
     let Some(cursor_position) = cursor_pos.position else {
         if let Some(prev_entity) = *previous_hovered {
-            commands.entity(prev_entity).remove::<HoveredEntity>();
+            commands.entity(prev_entity).try_remove::<HoveredEntity>();
             commands.trigger(EntityHoverExited {
                 entity: prev_entity,
             });
@@ -81,12 +81,12 @@ pub fn entity_hover_detection_system(
 
     match (current_hovered, *previous_hovered) {
         (Some((entity, network_entity)), Some(prev_entity)) if entity != prev_entity => {
-            commands.entity(prev_entity).remove::<HoveredEntity>();
+            commands.entity(prev_entity).try_remove::<HoveredEntity>();
             commands.trigger(EntityHoverExited {
                 entity: prev_entity,
             });
 
-            commands.entity(entity).insert(HoveredEntity);
+            commands.entity(entity).try_insert(HoveredEntity);
             commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,
@@ -96,7 +96,7 @@ pub fn entity_hover_detection_system(
             *previous_hovered = Some(entity);
         }
         (Some((entity, network_entity)), None) => {
-            commands.entity(entity).insert(HoveredEntity);
+            commands.entity(entity).try_insert(HoveredEntity);
             commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,
@@ -110,7 +110,7 @@ pub fn entity_hover_detection_system(
             *previous_hovered = Some(entity);
         }
         (None, Some(prev_entity)) => {
-            commands.entity(prev_entity).remove::<HoveredEntity>();
+            commands.entity(prev_entity).try_remove::<HoveredEntity>();
             commands.trigger(EntityHoverExited {
                 entity: prev_entity,
             });
