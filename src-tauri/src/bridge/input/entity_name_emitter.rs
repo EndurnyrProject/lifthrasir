@@ -21,6 +21,13 @@ struct EntityNameEvent {
 #[derive(Serialize, Clone)]
 struct EmptyPayload {}
 
+type HoveredEntityQuery<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static NetworkEntity, &'static SpriteObjectTree, &'static EntityName),
+    (With<HoveredEntity>, Changed<EntityName>),
+>;
+
 pub fn on_entity_name_added_to_hovered(
     trigger: On<Add, EntityName>,
     app_handle: NonSend<AppHandle>,
@@ -34,7 +41,10 @@ pub fn on_entity_name_added_to_hovered(
     info!("Observer fired: EntityName added to entity {:?}", entity);
 
     let Ok((network_entity, sprite_tree)) = entity_query.get(entity) else {
-        info!("Entity {:?} received EntityName but is not hovered (no HoveredEntity component)", entity);
+        info!(
+            "Entity {:?} received EntityName but is not hovered (no HoveredEntity component)",
+            entity
+        );
         return;
     };
 
@@ -73,7 +83,10 @@ pub fn on_entity_name_added_to_hovered(
         screen_y,
     };
 
-    info!("Emitting tooltip for entity {:?}, name: {}, AID: {}", entity, entity_name.name, network_entity.aid);
+    info!(
+        "Emitting tooltip for entity {:?}, name: {}, AID: {}",
+        entity, entity_name.name, network_entity.aid
+    );
 
     if let Err(e) = app_handle.emit("entity-name-show", event) {
         error!("Failed to emit entity-name-show event: {:?}", e);
@@ -105,10 +118,7 @@ pub fn emit_entity_unhover(
 pub fn emit_hovered_entity_name(
     app_handle: NonSend<AppHandle>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    entity_query: Query<
-        (Entity, &NetworkEntity, &SpriteObjectTree, &EntityName),
-        (With<HoveredEntity>, Changed<EntityName>)
-    >,
+    entity_query: HoveredEntityQuery,
     sprite_query: Query<&GlobalTransform>,
 ) {
     let Ok((camera, camera_transform)) = camera_query.single() else {

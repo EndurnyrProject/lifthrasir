@@ -1,9 +1,9 @@
 use super::super::components::{EffectType, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
 use super::super::kinds::{EffectLayer, SpriteLayer, SpriteRoot};
-use bevy_auto_plugin::prelude::*;
 use crate::domain::entities::billboard::SharedSpriteQuad;
 use crate::domain::entities::character::components::equipment::EquipmentSlot;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 use moonshine_object::prelude::*;
 
 use super::super::components::SpriteHierarchyConfig;

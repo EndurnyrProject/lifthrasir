@@ -37,7 +37,7 @@ pub fn forward_character_sprite_events(
             position: event.spawn_position,
             sprite_info: EntitySpriteInfo {
                 sprite_data: EntitySpriteData::Character {
-                    job_class: data.job_id,
+                    job_id: data.job_id,
                     gender: appearance.gender,
                     head: appearance.hair_style,
                 },

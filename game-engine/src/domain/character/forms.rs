@@ -1,4 +1,4 @@
-use crate::domain::entities::character::components::{Gender, JobClass};
+use crate::domain::entities::character::components::Gender;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -7,7 +7,7 @@ pub struct CharacterCreationForm {
     pub slot: u8,
     pub hair_style: u16,
     pub hair_color: u16,
-    pub starting_job: JobClass,
+    pub starting_job: u16,
     pub sex: Gender,
     pub str: u8,
     pub agi: u8,
@@ -24,7 +24,7 @@ impl Default for CharacterCreationForm {
             slot: 0,
             hair_style: 1,
             hair_color: 0,
-            starting_job: JobClass::Novice,
+            starting_job: 0,
             sex: Gender::Male,
             str: 1,
             agi: 1,

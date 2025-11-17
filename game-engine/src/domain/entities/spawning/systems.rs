@@ -17,11 +17,14 @@ use crate::{
             DespawnEntity, EntityVanishRequested, RequestEntityVanish, SpawnEntity,
         },
         sprite_rendering::{
-            components::{EntitySpriteData, EntitySpriteInfo, EntitySpriteNames},
+            components::{EntitySpriteData, EntitySpriteInfo},
             events::SpawnSpriteEvent,
         },
     },
-    infrastructure::networking::{protocol::zone::MovementConfirmedByServer, session::UserSession},
+    infrastructure::{
+        lua_scripts::job::JobSpriteRegistry,
+        networking::{protocol::zone::MovementConfirmedByServer, session::UserSession},
+    },
     utils::coordinates::spawn_coords_to_world_position,
 };
 use bevy::ecs::query::{SpawnDetails, Spawned};
@@ -44,7 +47,7 @@ pub fn spawn_network_entity_system(
     mut entity_registry: ResMut<EntityRegistry>,
     user_session: Option<Res<UserSession>>,
     mut sprite_spawn_generic: MessageWriter<SpawnSpriteEvent>,
-    entity_sprite_names: Res<EntitySpriteNames>,
+    job_registry: Option<Res<JobSpriteRegistry>>,
     mut movement_events: MessageWriter<MovementConfirmedByServer>,
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
 ) {
@@ -347,9 +350,8 @@ pub fn spawn_network_entity_system(
         // Route sprite spawning based on entity type
         match event.object_type {
             crate::domain::entities::types::ObjectType::Pc => {
-                // Phase 3: Use new generic system for PCs
                 let sprite_data = EntitySpriteData::Character {
-                    job_class: event.job,
+                    job_id: event.job,
                     gender: Gender::from(event.gender),
                     head: event.head,
                 };
@@ -365,19 +367,15 @@ pub fn spawn_network_entity_system(
             | crate::domain::entities::types::ObjectType::Homunculus
             | crate::domain::entities::types::ObjectType::Mercenary
             | crate::domain::entities::types::ObjectType::Elemental => {
-                // Use EntitySpriteNames to lookup sprite name
-                let sprite_name = entity_sprite_names
-                    .monsters
-                    .get(&event.job)
-                    .or_else(|| entity_sprite_names.npcs.get(&event.job))
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        warn!(
-                            "Unknown entity job ID: {} for {:?}, using fallback",
-                            event.job, event.object_type
-                        );
-                        format!("entity_{}", event.job)
-                    });
+                let sprite_name = if let Some(registry) = job_registry.as_ref() {
+                    registry
+                        .get_sprite_name(event.job as u32)
+                        .unwrap_or("초보자")
+                        .to_string()
+                } else {
+                    warn!("JobSpriteRegistry not loaded yet, using fallback");
+                    "초보자".to_string()
+                };
 
                 let sprite_data = match event.object_type {
                     crate::domain::entities::types::ObjectType::Mob

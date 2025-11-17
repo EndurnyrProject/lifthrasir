@@ -8,15 +8,21 @@ use crate::{
     infrastructure::assets::loaders::RoGroundAsset,
     utils::coordinates::world_position_to_spawn_coords,
 };
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 
 use super::{
-    events::CursorChangeRequest,
-    cursor::CursorType,
-    terrain_raycast::TerrainRaycastCache,
+    cursor::CursorType, events::CursorChangeRequest, terrain_raycast::TerrainRaycastCache,
     ForwardedMouseClick,
 };
+
+#[derive(SystemParam)]
+pub struct MapData<'w, 's> {
+    map_loader_query: Query<'w, 's, &'static MapLoader>,
+    ground_assets: Res<'w, Assets<RoGroundAsset>>,
+    pathfinding_grid: Option<Res<'w, CurrentMapPathfindingGrid>>,
+}
 
 /// Render terrain cursor gizmo at the world position under the mouse cursor
 /// Shows where the player is pointing on the terrain with corner markers
@@ -85,9 +91,7 @@ pub fn handle_terrain_click(
     mut commands: Commands,
     mut mouse_click: ResMut<ForwardedMouseClick>,
     cache: Res<TerrainRaycastCache>,
-    map_loader_query: Query<&MapLoader>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
-    pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
+    map_data: MapData,
     player_query: Query<(Entity, &SpriteObjectTree), With<LocalPlayer>>,
     sprite_transforms: Query<&Transform>,
 ) {
@@ -100,12 +104,12 @@ pub fn handle_terrain_click(
         return;
     };
 
-    let Ok(map_loader) = map_loader_query.single() else {
+    let Ok(map_loader) = map_data.map_loader_query.single() else {
         warn!("No map loaded, ignoring terrain click");
         return;
     };
 
-    let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
+    let Some(ground_asset) = map_data.ground_assets.get(&map_loader.ground) else {
         warn!("Ground asset not loaded, ignoring terrain click");
         return;
     };
@@ -127,7 +131,7 @@ pub fn handle_terrain_click(
         ground_asset.ground.height,
     );
 
-    let Some(grid) = pathfinding_grid else {
+    let Some(grid) = map_data.pathfinding_grid else {
         warn!("Pathfinding grid not yet loaded, ignoring terrain click");
         return;
     };

@@ -13,4 +13,4 @@ pub use events::*;
 pub use forms::*;
 pub use plugin::CharacterDomainPlugin;
 
-pub use crate::domain::entities::character::components::{Gender, JobClass};
+pub use crate::domain::entities::character::components::Gender;

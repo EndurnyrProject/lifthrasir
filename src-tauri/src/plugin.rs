@@ -296,7 +296,12 @@ impl Plugin for TauriIntegrationPlugin {
         // Add world emitter system (streaming status updates to frontend)
         app.add_systems(
             Update,
-            (emit_world_events, emit_cursor_changes, emit_entity_unhover, emit_hovered_entity_name),
+            (
+                emit_world_events,
+                emit_cursor_changes,
+                emit_entity_unhover,
+                emit_hovered_entity_name,
+            ),
         );
 
         // Observer triggers when EntityName component is added to hovered entities

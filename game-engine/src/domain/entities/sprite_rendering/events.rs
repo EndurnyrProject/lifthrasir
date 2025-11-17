@@ -1,6 +1,6 @@
 use super::components::EntitySpriteInfo;
-use bevy_auto_plugin::prelude::*;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 #[derive(Message)]
 #[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]

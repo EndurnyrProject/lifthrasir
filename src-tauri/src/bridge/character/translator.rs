@@ -3,7 +3,7 @@ use game_engine::domain::character::{
     CharacterCreationForm, CreateCharacterRequestEvent, DeleteCharacterRequestEvent,
     RequestCharacterListEvent, SelectCharacterEvent,
 };
-use game_engine::domain::entities::character::components::{Gender, JobClass};
+use game_engine::domain::entities::character::components::Gender;
 
 use crate::bridge::events::{
     CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent, GetCharacterListRequestedEvent,
@@ -50,7 +50,7 @@ pub fn handle_create_character_request(
             slot: event.slot,
             hair_style: event.hair_style,
             hair_color: event.hair_color,
-            starting_job: JobClass::Novice,
+            starting_job: 0, // JT_NOVICE
             sex: Gender::from(event.sex),
             str: 1,
             agi: 1,

@@ -30,7 +30,8 @@ fn test_observer_registration_and_triggering() {
 
     app.world_mut().flush();
 
-    app.world_mut().trigger(TestEntityEvent { entity, value: 5 });
+    app.world_mut()
+        .trigger(TestEntityEvent { entity, value: 5 });
 
     app.update();
 
@@ -94,7 +95,8 @@ fn test_observer_cleanup_on_despawn() {
 
     app.world_mut().flush();
 
-    app.world_mut().trigger(TestEntityEvent { entity, value: 5 });
+    app.world_mut()
+        .trigger(TestEntityEvent { entity, value: 5 });
 
     app.update();
 
@@ -121,11 +123,10 @@ fn test_multiple_observers_same_event() {
 
     let entity = app.world_mut().spawn(TestComponent { counter: 0 }).id();
 
-    app.world_mut().add_observer(
-        |_trigger: On<TestEntityEvent>, mut log: ResMut<EventLog>| {
+    app.world_mut()
+        .add_observer(|_trigger: On<TestEntityEvent>, mut log: ResMut<EventLog>| {
             log.count += 1;
-        },
-    );
+        });
 
     app.world_mut().add_observer(
         |trigger: On<TestEntityEvent>, mut query: Query<&mut TestComponent>| {
@@ -137,7 +138,8 @@ fn test_multiple_observers_same_event() {
 
     app.world_mut().flush();
 
-    app.world_mut().trigger(TestEntityEvent { entity, value: 3 });
+    app.world_mut()
+        .trigger(TestEntityEvent { entity, value: 3 });
 
     app.update();
 
@@ -170,10 +172,11 @@ fn test_message_vs_observer_equivalence() {
 
     let entity = app.world_mut().spawn(TestComponent { counter: 0 }).id();
 
-    app.world_mut()
-        .add_observer(|_trigger: On<TestEntityEvent>, mut log: ResMut<MessageLog>| {
+    app.world_mut().add_observer(
+        |_trigger: On<TestEntityEvent>, mut log: ResMut<MessageLog>| {
             log.observer_count += 1;
-        });
+        },
+    );
 
     fn message_system(mut reader: MessageReader<TestMessage>, mut log: ResMut<MessageLog>) {
         for _msg in reader.read() {
@@ -185,7 +188,8 @@ fn test_message_vs_observer_equivalence() {
 
     app.world_mut().flush();
 
-    app.world_mut().trigger(TestEntityEvent { entity, value: 1 });
+    app.world_mut()
+        .trigger(TestEntityEvent { entity, value: 1 });
 
     let mut writer = app.world_mut().resource_mut::<Messages<TestMessage>>();
     writer.write(TestMessage { entity, value: 1 });

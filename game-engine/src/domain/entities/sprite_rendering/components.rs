@@ -1,8 +1,7 @@
-use bevy_auto_plugin::prelude::*;
 use crate::domain::entities::character::components::{equipment::EquipmentSlot, Gender};
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
 use bevy::prelude::*;
-use std::collections::HashMap;
+use bevy_auto_plugin::prelude::*;
 
 #[derive(Component, Debug)]
 pub struct SpriteObjectTree {
@@ -46,7 +45,7 @@ pub enum EffectType {
 #[derive(Clone, Debug)]
 pub enum EntitySpriteData {
     Character {
-        job_class: u16,
+        job_id: u16,
         gender: Gender,
         head: u16,
     },
@@ -85,34 +84,6 @@ impl Default for SpriteHierarchyConfig {
             default_z_spacing: 0.01,
             effect_z_offset: 0.1,
             shadow_z_offset: -0.05,
-        }
-    }
-}
-
-#[derive(Resource)]
-#[auto_init_resource(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
-pub struct EntitySpriteNames {
-    pub monsters: HashMap<u16, String>,
-    pub npcs: HashMap<u16, String>,
-}
-
-impl Default for EntitySpriteNames {
-    fn default() -> Self {
-        let mut monsters = HashMap::new();
-        monsters.insert(1002, "poring".to_string());
-        monsters.insert(1113, "drops".to_string());
-        monsters.insert(1031, "poporing".to_string());
-        monsters.insert(1242, "marin".to_string());
-        monsters.insert(1062, "santa_poring".to_string());
-        monsters.insert(1419, "ghost_poring".to_string());
-        monsters.insert(1784, "stapo".to_string());
-        monsters.insert(1613, "metaling".to_string());
-        monsters.insert(1588, "spore".to_string());
-        monsters.insert(1011, "chonchon".to_string());
-
-        Self {
-            monsters,
-            npcs: HashMap::new(),
         }
     }
 }

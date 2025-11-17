@@ -1,7 +1,7 @@
 use super::animation_player::RoAnimationPlayer;
 use super::markers::Animated;
-use bevy_auto_plugin::prelude::*;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 /// Automatically add Animated marker to entities with RoAnimationPlayer
 /// This ensures animated entities are separated into their own archetype

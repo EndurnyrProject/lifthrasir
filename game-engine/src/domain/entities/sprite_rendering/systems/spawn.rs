@@ -1,6 +1,5 @@
 use super::super::components::{RoSpriteLayer, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
 use super::super::events::SpawnSpriteEvent;
-use bevy_auto_plugin::prelude::*;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::{
     equipment::EquipmentSlot, CharacterAppearance,
@@ -11,6 +10,7 @@ use crate::domain::world::components::MapLoader;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use bevy::ecs::hierarchy::ChildOf;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 /// SystemParam bundle for rendering resources
 #[derive(bevy::ecs::system::SystemParam)]

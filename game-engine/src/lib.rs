@@ -16,6 +16,7 @@ pub use domain::entities::hover_plugin::{EntityHoverPlugin, EntityHoverSystems};
 pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
+pub use infrastructure::lua_scripts::job::JobSystemPlugin;
 pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
 pub use presentation::ui::fps_counter::FpsCounterPlugin;
 
@@ -32,6 +33,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(RoDiagnosticsPlugin)
             .add(LifthrasirPlugin)
             .add(AssetsPlugin)
+            .add(JobSystemPlugin)
             .add(AudioPlugin)
             .add(AssetCatalogPlugin)
             .add(EntitySpawningPlugin)

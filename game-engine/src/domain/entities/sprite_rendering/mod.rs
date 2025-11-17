@@ -5,8 +5,8 @@ pub mod plugin;
 pub mod systems;
 
 pub use components::{
-    EffectType, EntitySpriteData, EntitySpriteInfo, EntitySpriteNames, RoSpriteLayer,
-    SpriteHierarchy, SpriteHierarchyConfig, SpriteLayerType, SpriteObjectTree,
+    EffectType, EntitySpriteData, EntitySpriteInfo, RoSpriteLayer, SpriteHierarchy,
+    SpriteHierarchyConfig, SpriteLayerType, SpriteObjectTree,
 };
 pub use events::SpawnSpriteEvent;
 pub use kinds::{EffectLayer, SpriteLayer, SpriteRoot};

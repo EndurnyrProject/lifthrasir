@@ -1,21 +1,21 @@
 use super::super::components::{RoSpriteLayer, SpriteHierarchy, SpriteLayerType};
-use bevy_auto_plugin::prelude::*;
 use crate::domain::assets::patterns::{
     body_action_path, body_sprite_path, head_action_path, head_sprite_path,
 };
-use crate::domain::character::JobClass;
 use crate::domain::entities::animation::frame_cache::{FrameCacheKey, RoFrameCache};
 use crate::domain::entities::components::RoAnimationController;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
 use crate::infrastructure::diagnostics::AnimationDiagnostics;
+use crate::infrastructure::lua_scripts::job::JobSpriteRegistry;
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 use bevy::prelude::*;
+use bevy::time::common_conditions::on_timer;
 use bevy::{
     asset::RenderAssetUsages,
     pbr::MeshMaterial3d,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
-use bevy::time::common_conditions::on_timer;
+use bevy_auto_plugin::prelude::*;
 use std::time::Duration;
 
 /// Query type for sprite layers that need asset population
@@ -412,6 +412,7 @@ pub fn populate_sprite_assets(
     asset_server: Res<AssetServer>,
     sprite_layers: SpriteLayersNeedingAssets,
     sprite_info_query: Query<&super::super::components::EntitySpriteInfo>,
+    job_registry: Option<Res<JobSpriteRegistry>>,
 ) {
     let layer_count = sprite_layers.iter().count();
 
@@ -432,16 +433,19 @@ pub fn populate_sprite_assets(
         // Determine asset paths based on EntitySpriteData and layer type
         let (sprite_path, act_path) = match &sprite_info.sprite_data {
             super::super::components::EntitySpriteData::Character {
-                job_class,
+                job_id,
                 gender,
                 head,
             } => {
                 // Character: Load different assets based on layer type
                 match &layer_info.layer_type {
                     SpriteLayerType::Body => {
-                        // Load body sprite
-                        let job = JobClass::from(*job_class);
-                        let job_name = job.to_sprite_name();
+                        let job_name = if let Some(registry) = job_registry.as_ref() {
+                            registry.get_sprite_name(*job_id as u32).unwrap_or("초보자")
+                        } else {
+                            warn!("JobSpriteRegistry not loaded yet, using fallback");
+                            "초보자"
+                        };
                         (
                             body_sprite_path(*gender, job_name),
                             body_action_path(*gender, job_name),

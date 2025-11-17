@@ -196,7 +196,8 @@ pub fn finalize_water_loading_system(
                 .wave_pitch
                 .clamp(MIN_WAVE_PITCH, MAX_WAVE_PITCH);
             let k = 2.0 * std::f32::consts::PI / wave_pitch;
-            let scaled_wave_height = (loading_state.wave_height_param.min(MAX_WAVE_HEIGHT) * k).min(MAX_WAVE_HEIGHT);
+            let scaled_wave_height =
+                (loading_state.wave_height_param.min(MAX_WAVE_HEIGHT) * k).min(MAX_WAVE_HEIGHT);
 
             // Create a single material for all water with loaded texture
             let water_extension = WaterExtension {

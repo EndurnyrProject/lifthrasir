@@ -296,7 +296,7 @@ pub fn handle_create_character(
                 event.form.slot,
                 event.form.hair_color,
                 event.form.hair_style,
-                event.form.starting_job as u16,
+                event.form.starting_job,
                 event.form.sex,
             ) {
                 error!("Failed to create character: {:?}", e);

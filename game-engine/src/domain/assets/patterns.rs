@@ -123,20 +123,20 @@ pub fn head_action_path(gender: Gender, style_id: u16) -> String {
 
 /// Generate mob sprite path
 pub fn mob_sprite_path(sprite_name: &str) -> String {
-    format!("ro://data/sprite/몬스터/{}.spr", sprite_name)
+    format!("ro://data/sprite/몬스터/{}.spr", sprite_name.to_lowercase())
 }
 
 /// Generate mob action path
 pub fn mob_action_path(sprite_name: &str) -> String {
-    format!("ro://data/sprite/몬스터/{}.act", sprite_name)
+    format!("ro://data/sprite/몬스터/{}.act", sprite_name.to_lowercase())
 }
 
 /// Generate NPC sprite path
 pub fn npc_sprite_path(sprite_name: &str) -> String {
-    format!("ro://data/sprite/npc/{}.spr", sprite_name)
+    format!("ro://data/sprite/npc/{}.spr", sprite_name.to_lowercase())
 }
 
 /// Generate NPC action path
 pub fn npc_action_path(sprite_name: &str) -> String {
-    format!("ro://data/sprite/npc/{}.act", sprite_name)
+    format!("ro://data/sprite/npc/{}.act", sprite_name.to_lowercase())
 }

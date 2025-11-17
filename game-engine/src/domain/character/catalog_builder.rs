@@ -3,8 +3,8 @@ use crate::domain::character::catalog::{HeadStyleCatalog, HeadStyleEntry};
 use crate::domain::entities::character::components::Gender;
 use crate::infrastructure::assets::HierarchicalAssetManager;
 use bevy::prelude::*;
-use bevy_auto_plugin::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::auto_add_system;
+use bevy_auto_plugin::prelude::*;
 use std::collections::HashMap;
 
 type StyleKey = (Gender, u16);
