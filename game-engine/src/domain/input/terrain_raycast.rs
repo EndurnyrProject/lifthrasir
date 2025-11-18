@@ -1,5 +1,5 @@
 use crate::{
-    domain::world::components::MapLoader,
+    domain::{system_sets::InputSystems, world::components::MapLoader},
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
     utils::coordinates::world_position_to_spawn_coords,
 };
@@ -18,7 +18,8 @@ pub struct TerrainRaycastCache {
 
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = InputSystems::Raycast)
 )]
 pub fn update_terrain_raycast_cache(
     mut cache: ResMut<TerrainRaycastCache>,

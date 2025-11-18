@@ -1,7 +1,10 @@
 use crate::{
     core::state::GameState,
-    domain::entities::{
-        components::EntityName, hover::EntityHoverEntered, registry::EntityRegistry,
+    domain::{
+        entities::{
+            components::EntityName, hover::EntityHoverEntered, registry::EntityRegistry,
+        },
+        system_sets::EntityInteractionSystems,
     },
     infrastructure::networking::{
         client::ZoneServerClient,
@@ -43,7 +46,7 @@ pub fn name_request_observer(
     plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
     schedule = Update,
     config(
-        after = crate::domain::entities::hover_system::entity_hover_detection_system,
+        in_set = EntityInteractionSystems::Naming,
         run_if = in_state(GameState::InGame)
     )
 )]

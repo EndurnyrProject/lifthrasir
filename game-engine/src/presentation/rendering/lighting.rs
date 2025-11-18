@@ -6,6 +6,7 @@ use std::f32::consts::PI;
 const MAX_LUX: f32 = 10_000.0; // Bright daylight
 
 use crate::{
+    domain::system_sets::MiscRenderingSystems,
     domain::world::components::MapLoader,
     infrastructure::assets::loaders::RoWorldAsset,
     infrastructure::ro_formats::{RswLight, RswLightObj, RswObject},
@@ -22,7 +23,8 @@ pub struct MapLight;
 /// System to setup enhanced map lighting based on RSW data
 #[auto_add_system(
     plugin = crate::presentation::rendering::lighting::EnhancedLightingPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = MiscRenderingSystems::LightingSetup)
 )]
 pub fn setup_enhanced_map_lighting(
     mut commands: Commands,
@@ -165,7 +167,8 @@ fn calculate_global_lux(light: &RswLight) -> f32 {
 /// System to cleanup map lights when switching maps
 #[auto_add_system(
     plugin = crate::presentation::rendering::lighting::EnhancedLightingPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = MiscRenderingSystems::LightingCleanup)
 )]
 pub fn cleanup_map_lights(
     _commands: Commands,

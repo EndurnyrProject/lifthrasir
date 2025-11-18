@@ -12,7 +12,7 @@ pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin};
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
 pub use domain::entities::billboard::BillboardPlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
-pub use domain::entities::hover_plugin::{EntityHoverPlugin, EntityHoverSystems};
+pub use domain::entities::hover_plugin::EntityHoverPlugin;
 pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;

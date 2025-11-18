@@ -5,4 +5,5 @@ pub mod camera;
 pub mod character;
 pub mod entities;
 pub mod input;
+pub mod system_sets;
 pub mod world;

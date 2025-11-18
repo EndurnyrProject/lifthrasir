@@ -1,6 +1,7 @@
 use crate::{
     domain::{
         entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid},
+        system_sets::WorldLoadingSystems,
         world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
     },
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
@@ -437,7 +438,7 @@ fn calculate_smooth_normals(
 #[auto_add_system(
     plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
     schedule = Update,
-    config(run_if = in_state(crate::core::GameState::Loading))
+    config(in_set = WorldLoadingSystems::TerrainMeshGeneration)
 )]
 pub fn generate_terrain_mesh(
     mut commands: Commands,
@@ -544,7 +545,7 @@ type TerrainLoadingQuery<'w, 's> = Query<
 #[auto_add_system(
     plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
     schedule = Update,
-    config(run_if = in_state(crate::core::GameState::Loading))
+    config(in_set = WorldLoadingSystems::TerrainTextureApplication)
 )]
 pub fn apply_loaded_terrain_textures(
     mut commands: Commands,

@@ -9,6 +9,7 @@ use bevy_auto_plugin::prelude::*;
 use crate::{
     domain::{
         assets::components::{WaterAnimation, WaterExtension, WaterMaterial, WaterSurface},
+        system_sets::WaterRenderingSystems,
         world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
     },
     infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
@@ -47,7 +48,8 @@ pub struct WaterLoadingState {
 
 #[auto_add_system(
     plugin = crate::app::map_domain_plugin::MapDomainPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = WaterRenderingSystems::WaterLoading)
 )]
 pub fn load_water_system(
     mut commands: Commands,
@@ -147,7 +149,7 @@ const WATER_TILE_SUBDIVISIONS: usize = 8;
 #[auto_add_system(
     plugin = crate::app::map_domain_plugin::MapDomainPlugin,
     schedule = Update,
-    config(after = load_water_system)
+    config(in_set = WaterRenderingSystems::WaterFinalization)
 )]
 pub fn finalize_water_loading_system(
     mut commands: Commands,
@@ -264,7 +266,7 @@ pub fn finalize_water_loading_system(
 #[auto_add_system(
     plugin = crate::app::map_domain_plugin::MapDomainPlugin,
     schedule = Update,
-    config(after = finalize_water_loading_system)
+    config(in_set = WaterRenderingSystems::WaterAnimation)
 )]
 pub fn animate_water_system(
     time: Res<Time>,

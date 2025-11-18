@@ -1,4 +1,5 @@
 use crate::core::GameState;
+use crate::domain::system_sets::WorldLoadingSystems;
 use crate::domain::world::components::MapLoader;
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
@@ -10,7 +11,7 @@ use bevy_auto_plugin::prelude::*;
 #[auto_add_system(
     plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
     schedule = Update,
-    config(run_if = in_state(GameState::Loading))
+    config(in_set = WorldLoadingSystems::AssetExtraction)
 )]
 pub fn extract_map_from_unified_assets(
     mut commands: Commands,
@@ -68,7 +69,7 @@ pub fn extract_map_from_unified_assets(
 #[auto_add_system(
     plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
     schedule = Update,
-    config(run_if = in_state(GameState::Loading))
+    config(in_set = WorldLoadingSystems::LoaderSetup)
 )]
 pub fn setup_unified_map_loading(
     mut commands: Commands,
@@ -152,7 +153,8 @@ pub fn on_enter_loading_state(spawn_context: Option<Res<MapSpawnContext>>) {
 /// This helps diagnose if state transitions are actually being applied
 #[auto_add_system(
     plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = WorldLoadingSystems::StateMonitoring)
 )]
 pub fn monitor_game_state(current_state: Res<State<GameState>>) {
     if current_state.is_changed() {
@@ -165,7 +167,7 @@ pub fn monitor_game_state(current_state: Res<State<GameState>>) {
 #[auto_add_system(
     plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
     schedule = Update,
-    config(run_if = in_state(GameState::Loading))
+    config(in_set = WorldLoadingSystems::AssetFailureDetection)
 )]
 pub fn detect_asset_load_failures(
     query: Query<(&MapLoader, &MapRequestLoader)>,

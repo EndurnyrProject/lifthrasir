@@ -1,26 +1,29 @@
 use crate::{
     core::state::GameState,
-    domain::entities::{
-        character::{
-            components::{
-                core::{CharacterAppearance, CharacterData, CharacterStats, Gender, Grounded},
-                equipment::EquipmentSet,
-                visual::{CharacterDirection, CharacterSprite, Direction},
+    domain::{
+        entities::{
+            character::{
+                components::{
+                    core::{CharacterAppearance, CharacterData, CharacterStats, Gender, Grounded},
+                    equipment::EquipmentSet,
+                    visual::{CharacterDirection, CharacterSprite, Direction},
+                },
+                states::{AnimationState, ContextState, GameplayState, StartWalking},
             },
-            states::{AnimationState, ContextState, GameplayState, StartWalking},
+            components::{NetworkEntity, PendingDespawn},
+            markers::*,
+            movement::components::{MovementSpeed, MovementState, MovementTarget},
+            pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
+            registry::EntityRegistry,
+            spawning::events::{
+                DespawnEntity, EntityVanishRequested, RequestEntityVanish, SpawnEntity,
+            },
+            sprite_rendering::{
+                components::{EntitySpriteData, EntitySpriteInfo},
+                events::SpawnSpriteEvent,
+            },
         },
-        components::{NetworkEntity, PendingDespawn},
-        markers::*,
-        movement::components::{MovementSpeed, MovementState, MovementTarget},
-        pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
-        registry::EntityRegistry,
-        spawning::events::{
-            DespawnEntity, EntityVanishRequested, RequestEntityVanish, SpawnEntity,
-        },
-        sprite_rendering::{
-            components::{EntitySpriteData, EntitySpriteInfo},
-            events::SpawnSpriteEvent,
-        },
+        system_sets::EntityLifecycleSystems,
     },
     infrastructure::{
         lua_scripts::job::JobSpriteRegistry,
@@ -37,8 +40,7 @@ use bevy_auto_plugin::prelude::*;
     plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
     schedule = Update,
     config(
-        after = check_pending_despawns_system,
-        before = crate::domain::entities::sprite_rendering::systems::update_sprite_transforms,
+        in_set = EntityLifecycleSystems::Spawning,
         run_if = in_state(GameState::InGame)
     )
 )]
@@ -443,10 +445,7 @@ pub fn on_despawn_entity(
 #[auto_add_system(
     plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
     schedule = Update,
-    config(
-        after = spawn_network_entity_system,
-        before = crate::domain::entities::sprite_rendering::systems::update_sprite_transforms
-    )
+    config(in_set = EntityLifecycleSystems::Despawning)
 )]
 pub fn cleanup_despawned_entities_system(
     mut entity_registry: ResMut<EntityRegistry>,
@@ -468,7 +467,7 @@ pub fn cleanup_despawned_entities_system(
 #[auto_add_system(
     plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
     schedule = Update,
-    config(before = crate::domain::entities::sprite_rendering::systems::update_sprite_transforms)
+    config(in_set = EntityLifecycleSystems::Vanishing)
 )]
 pub fn bridge_vanish_requests_system(
     mut commands: Commands,
@@ -551,10 +550,7 @@ pub fn on_entity_vanish_request(
 #[auto_add_system(
     plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
     schedule = Update,
-    config(
-        after = bridge_vanish_requests_system,
-        before = crate::domain::entities::sprite_rendering::systems::update_sprite_transforms
-    )
+    config(in_set = EntityLifecycleSystems::Spawning)
 )]
 pub fn check_pending_despawns_system(
     mut commands: Commands,

@@ -1,9 +1,6 @@
 use crate::app::entity_hover_plugin::EntityHoverDomainPlugin;
 use bevy::prelude::*;
 
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct EntityHoverSystems;
-
 /// Entity Hover Plugin (Wrapper)
 ///
 /// Adds the EntityHoverDomainPlugin (auto-plugin).

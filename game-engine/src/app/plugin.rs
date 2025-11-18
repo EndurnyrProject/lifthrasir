@@ -1,11 +1,9 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_plugin, AutoPlugin};
 
-use crate::core::state::GameState;
 use crate::domain::camera::resources::CameraRotationDelta;
-use crate::domain::camera::systems::{
-    camera_follow_system, spawn_camera_on_player_ready, update_camera_target_cache, CameraSpawned,
-};
+use crate::domain::camera::systems::{spawn_camera_on_player_ready, CameraSpawned};
+use crate::core::state::GameState;
 
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]
@@ -18,12 +16,6 @@ impl LifthrasirPlugin {
         app.add_systems(
             PostUpdate,
             spawn_camera_on_player_ready.run_if(in_state(GameState::InGame)),
-        );
-        app.add_systems(
-            Update,
-            (update_camera_target_cache, camera_follow_system)
-                .chain()
-                .run_if(in_state(GameState::InGame)),
         );
     }
 }

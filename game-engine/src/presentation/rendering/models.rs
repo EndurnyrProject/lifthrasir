@@ -1,6 +1,7 @@
 use crate::domain::entities::systems::{
     AnimatedTransform, AnimationType, RsmAnimationController, RsmNodeAnimation,
 };
+use crate::domain::system_sets::ModelRenderingSystems;
 use crate::domain::world::components::MapLoader;
 use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset, RsmAsset};
 use crate::infrastructure::ro_formats::{RsmFile, RswObject};
@@ -73,7 +74,8 @@ type ModelMeshUpdateQuery<'w, 's> = Query<
 
 #[auto_add_system(
     plugin = crate::app::map_domain_plugin::MapDomainPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = ModelRenderingSystems::ModelLoading)
 )]
 pub fn log_loaded_world_data(
     world_assets: Res<Assets<RoWorldAsset>>,
@@ -134,7 +136,8 @@ pub fn log_loaded_world_data(
 
 #[auto_add_system(
     plugin = crate::app::map_domain_plugin::MapDomainPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = ModelRenderingSystems::ModelLoading)
 )]
 pub fn spawn_map_models(
     mut commands: Commands,
@@ -237,7 +240,8 @@ pub fn spawn_map_models(
 
 #[auto_add_system(
     plugin = crate::app::map_domain_plugin::MapDomainPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = ModelRenderingSystems::ModelLoading)
 )]
 pub fn load_rsm_assets(
     mut commands: Commands,
@@ -261,7 +265,7 @@ pub fn load_rsm_assets(
 #[auto_add_system(
     plugin = crate::app::map_domain_plugin::MapDomainPlugin,
     schedule = Update,
-    config(after = load_rsm_assets)
+    config(in_set = ModelRenderingSystems::ModelMeshUpdate)
 )]
 pub fn update_model_meshes(
     mut commands: Commands,
@@ -393,7 +397,7 @@ pub fn update_model_meshes(
 #[auto_add_system(
     plugin = crate::app::map_domain_plugin::MapDomainPlugin,
     schedule = Update,
-    config(after = load_rsm_assets)
+    config(in_set = ModelRenderingSystems::ModelMaterialUpdate)
 )]
 pub fn create_model_materials_when_textures_ready(
     mut commands: Commands,
@@ -829,7 +833,8 @@ fn node_has_animation(node: &crate::infrastructure::ro_formats::rsm::Node) -> bo
 /// Update RSM animation components each frame
 #[auto_add_system(
     plugin = crate::app::map_domain_plugin::MapDomainPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = ModelRenderingSystems::ModelAnimation)
 )]
 pub fn update_rsm_animations(
     mut node_query: Query<(

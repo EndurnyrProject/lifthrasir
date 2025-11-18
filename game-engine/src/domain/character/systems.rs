@@ -2,6 +2,7 @@ use super::components::{CharServerPingTimer, CharacterSelectionState, MapLoading
 use super::events::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
+use crate::domain::system_sets::CharacterFlowSystems;
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
 use crate::infrastructure::networking::client::CharServerClient;
@@ -19,7 +20,7 @@ use std::time::{Duration, Instant};
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_zone_server_info_protocol)
+    config(in_set = CharacterFlowSystems::CharacterList)
 )]
 pub fn handle_request_character_list(
     mut request_events: MessageReader<RequestCharacterListEvent>,
@@ -85,7 +86,7 @@ pub fn handle_request_character_list(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = update_char_client)
+    config(in_set = CharacterFlowSystems::CharServerConnection)
 )]
 pub fn handle_character_server_connected(
     mut connected_events: MessageReader<CharacterServerConnected>,
@@ -154,7 +155,7 @@ pub fn handle_character_server_connected(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_character_server_connected)
+    config(in_set = CharacterFlowSystems::CharacterCreation)
 )]
 pub fn handle_character_created_protocol(
     mut protocol_events: MessageReader<CharacterCreated>,
@@ -173,7 +174,7 @@ pub fn handle_character_created_protocol(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_character_created_protocol)
+    config(in_set = CharacterFlowSystems::CharacterDeletion)
 )]
 pub fn handle_character_deleted_protocol(
     mut protocol_events: MessageReader<CharacterDeleted>,
@@ -188,7 +189,7 @@ pub fn handle_character_deleted_protocol(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_character_deleted_protocol)
+    config(in_set = CharacterFlowSystems::CharacterCreation)
 )]
 pub fn handle_character_creation_failed_protocol(
     mut protocol_events: MessageReader<CharacterCreationFailed>,
@@ -212,7 +213,7 @@ pub fn handle_character_creation_failed_protocol(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_character_creation_failed_protocol)
+    config(in_set = CharacterFlowSystems::CharacterDeletion)
 )]
 pub fn handle_character_deletion_failed_protocol(
     mut protocol_events: MessageReader<CharacterDeletionFailed>,
@@ -235,7 +236,7 @@ pub fn handle_character_deletion_failed_protocol(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_character_deletion_failed_protocol)
+    config(in_set = CharacterFlowSystems::ZoneServerInfo)
 )]
 pub fn handle_zone_server_info_protocol(
     mut protocol_events: MessageReader<ZoneServerInfoReceived>,
@@ -266,7 +267,7 @@ pub fn handle_zone_server_info_protocol(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_select_character)
+    config(in_set = CharacterFlowSystems::CharacterSelection)
 )]
 pub fn spawn_unified_character_from_selection(
     mut events: MessageReader<CharacterSelectedEvent>,
@@ -294,7 +295,7 @@ pub fn spawn_unified_character_from_selection(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_request_character_list)
+    config(in_set = CharacterFlowSystems::CharacterSelection)
 )]
 pub fn handle_select_character(
     mut events: MessageReader<SelectCharacterEvent>,
@@ -334,7 +335,7 @@ pub fn handle_select_character(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = spawn_unified_character_from_selection)
+    config(in_set = CharacterFlowSystems::CharacterCreation)
 )]
 pub fn handle_create_character(
     mut events: MessageReader<CreateCharacterRequestEvent>,
@@ -366,7 +367,7 @@ pub fn handle_create_character(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_create_character)
+    config(in_set = CharacterFlowSystems::CharacterDeletion)
 )]
 pub fn handle_delete_character(
     mut events: MessageReader<DeleteCharacterRequestEvent>,
@@ -396,7 +397,7 @@ pub struct ZoneSessionData {
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_delete_character)
+    config(in_set = CharacterFlowSystems::ZoneServerInfo)
 )]
 pub fn handle_zone_server_info(
     mut events: MessageReader<ZoneServerInfoReceivedEvent>,
@@ -455,7 +456,7 @@ pub fn handle_zone_server_info(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_refresh_character_list)
+    config(in_set = CharacterFlowSystems::ZoneConnection)
 )]
 pub fn handle_zone_server_connected_protocol(
     mut protocol_events: MessageReader<
@@ -508,7 +509,7 @@ pub fn handle_zone_server_connected_protocol(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_zone_server_connected_protocol)
+    config(in_set = CharacterFlowSystems::ZoneEntry)
 )]
 pub fn handle_zone_entry_refused_protocol(
     mut protocol_events: MessageReader<
@@ -549,7 +550,7 @@ pub fn handle_zone_entry_refused_protocol(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_zone_entry_refused_protocol)
+    config(in_set = CharacterFlowSystems::ZoneEntry)
 )]
 pub fn handle_account_id_received_protocol(
     mut protocol_events: MessageReader<
@@ -564,7 +565,7 @@ pub fn handle_account_id_received_protocol(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = detect_map_loading_timeout)
+    config(in_set = CharacterFlowSystems::MapLoadDetect)
 )]
 pub fn detect_map_load_complete(
     query: Query<
@@ -596,7 +597,7 @@ pub fn detect_map_load_complete(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = detect_map_load_complete)
+    config(in_set = CharacterFlowSystems::MapLoadComplete)
 )]
 pub fn handle_map_load_complete(
     mut events: MessageReader<MapLoadCompleted>,
@@ -622,7 +623,7 @@ pub fn handle_map_load_complete(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_map_load_complete)
+    config(in_set = CharacterFlowSystems::ActorInit)
 )]
 pub fn handle_actor_init_sent(
     mut events: MessageReader<ActorInitSent>,
@@ -637,7 +638,7 @@ pub fn handle_actor_init_sent(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_zone_server_info)
+    config(in_set = CharacterFlowSystems::CharacterCreation)
 )]
 pub fn handle_character_created(
     mut events: MessageReader<CharacterCreatedEvent>,
@@ -654,7 +655,7 @@ pub fn handle_character_created(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_character_created)
+    config(in_set = CharacterFlowSystems::CharacterDeletion)
 )]
 pub fn handle_character_deleted(
     mut events: MessageReader<CharacterDeletedEvent>,
@@ -668,7 +669,7 @@ pub fn handle_character_deleted(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_character_deleted)
+    config(in_set = CharacterFlowSystems::CharacterList)
 )]
 pub fn handle_refresh_character_list(
     mut events: MessageReader<RefreshCharacterListEvent>,
@@ -733,7 +734,7 @@ pub fn handle_refresh_character_list(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = crate::infrastructure::networking::client::char_server_update_system)
+    config(in_set = CharacterFlowSystems::CharServerPing)
 )]
 pub fn update_char_client(
     char_client: Option<ResMut<CharServerClient>>,
@@ -752,7 +753,7 @@ pub fn update_char_client(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = handle_account_id_received_protocol)
+    config(in_set = CharacterFlowSystems::MapLoadStart)
 )]
 pub fn start_map_loading_timer(
     mut events: MessageReader<MapLoadingStarted>,
@@ -772,7 +773,7 @@ pub fn start_map_loading_timer(
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(after = start_map_loading_timer)
+    config(in_set = CharacterFlowSystems::MapLoadTimeout)
 )]
 pub fn detect_map_loading_timeout(
     timer: Option<Res<MapLoadingTimer>>,

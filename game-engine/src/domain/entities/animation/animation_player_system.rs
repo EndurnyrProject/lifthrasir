@@ -1,6 +1,7 @@
 use super::animation_player::RoAnimationPlayer;
 use super::markers::Animated;
 use super::state::AnimationState;
+use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -26,7 +27,7 @@ type AnimatedEntitiesQuery<'w, 's> = Query<
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(after = crate::domain::entities::sprite_rendering::systems::update::update_sprite_transforms)
+    config(in_set = SpriteRenderingSystems::AnimationPlayback)
 )]
 pub fn ro_animation_player_system(
     time: Res<Time>,

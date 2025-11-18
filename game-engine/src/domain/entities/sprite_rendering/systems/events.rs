@@ -1,8 +1,8 @@
 use super::super::components::{EffectType, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
 use super::super::kinds::{EffectLayer, SpriteLayer, SpriteRoot};
-use crate::core::state::GameState;
 use crate::domain::entities::billboard::SharedSpriteQuad;
 use crate::domain::entities::character::components::equipment::EquipmentSlot;
+use crate::domain::system_sets::SpriteRenderingSystems;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use moonshine_object::prelude::*;
@@ -145,10 +145,7 @@ fn create_effect_bundle(
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(
-        after = crate::domain::entities::sprite_rendering::systems::update::populate_sprite_assets,
-        run_if = in_state(GameState::InGame)
-    )
+    config(in_set = SpriteRenderingSystems::AnimationEvents)
 )]
 pub fn handle_equipment_changes(
     mut commands: Commands,
@@ -228,10 +225,7 @@ fn spawn_equipment_layer(
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(
-        after = crate::domain::entities::sprite_rendering::systems::update::populate_sprite_assets,
-        run_if = in_state(GameState::InGame)
-    )
+    config(in_set = SpriteRenderingSystems::AnimationEvents)
 )]
 pub fn handle_status_effect_visuals(
     mut commands: Commands,
@@ -321,10 +315,7 @@ fn remove_status_effect(
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(
-        after = crate::domain::entities::sprite_rendering::systems::update::populate_sprite_assets,
-        run_if = in_state(GameState::InGame)
-    )
+    config(in_set = SpriteRenderingSystems::AnimationEvents)
 )]
 pub fn handle_sprite_animation_changes(
     mut animation_events: MessageReader<SpriteAnimationChangeEvent>,

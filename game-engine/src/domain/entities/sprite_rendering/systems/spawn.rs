@@ -1,12 +1,12 @@
 use super::super::components::{RoSpriteLayer, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
 use super::super::events::SpawnSpriteEvent;
-use crate::core::state::GameState;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::{
     equipment::EquipmentSlot, CharacterAppearance,
 };
 use crate::domain::entities::character::kinds::{CharacterRoot, SpriteLayer};
 use crate::domain::entities::sprite_rendering::components::SpriteHierarchyConfig;
+use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::domain::world::components::MapLoader;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use bevy::ecs::hierarchy::ChildOf;
@@ -227,7 +227,7 @@ fn spawn_simple_entity_layers(
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(run_if = in_state(GameState::InGame))
+    config(in_set = SpriteRenderingSystems::HierarchySpawn)
 )]
 pub fn spawn_sprite_hierarchy(
     mut commands: Commands,

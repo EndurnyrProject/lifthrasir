@@ -1,11 +1,13 @@
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
 
 use super::components::{CameraFollowSettings, CameraFollowTarget};
 use super::resources::CameraRotationDelta;
 use crate::domain::entities::character::kinds::CharacterRoot;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::entities::sprite_rendering::SpriteObjectTree;
+use crate::domain::system_sets::CameraSystems;
 
 /// Type alias for player query - matches local player with sprite tree
 type PlayerReadyQuery<'w, 's> =
@@ -118,7 +120,12 @@ pub fn spawn_camera_on_player_ready(
 /// - Handles missing target entities gracefully (warns once)
 ///
 /// # Ordering
-/// Must run BEFORE `camera_follow_system` via `.chain()` or explicit ordering
+/// Must run BEFORE `camera_follow_system` via SystemSet chain
+#[auto_add_system(
+    plugin = crate::LifthrasirPlugin,
+    schedule = Update,
+    config(in_set = CameraSystems::TargetUpdate)
+)]
 pub fn update_camera_target_cache(
     mut camera_query: Query<&mut CameraFollowTarget>,
     target_query: Query<&Transform, With<CharacterRoot>>,
@@ -164,6 +171,11 @@ pub fn update_camera_target_cache(
 ///
 /// # Ordering
 /// Must run AFTER `update_camera_target_cache` to use fresh player position
+#[auto_add_system(
+    plugin = crate::LifthrasirPlugin,
+    schedule = Update,
+    config(in_set = CameraSystems::Follow)
+)]
 pub fn camera_follow_system(
     time: Res<Time>,
     keyboard_input: Res<ButtonInput<KeyCode>>,

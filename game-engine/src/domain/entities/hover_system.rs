@@ -1,5 +1,6 @@
 use crate::core::state::GameState;
 use crate::domain::input::ForwardedCursorPosition;
+use crate::domain::system_sets::EntityInteractionSystems;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
@@ -12,7 +13,10 @@ use super::{
 #[auto_add_system(
     plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
     schedule = Update,
-    config(run_if = in_state(GameState::InGame))
+    config(
+        in_set = EntityInteractionSystems::Hover,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 pub fn update_entity_bounds_system(
     mut commands: Commands,
@@ -58,7 +62,7 @@ pub fn update_entity_bounds_system(
     plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
     schedule = Update,
     config(
-        after = update_entity_bounds_system,
+        in_set = EntityInteractionSystems::Hover,
         run_if = in_state(GameState::InGame)
     )
 )]

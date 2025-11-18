@@ -1,10 +1,10 @@
 use super::super::components::{RoSpriteLayer, SpriteHierarchy, SpriteLayerType};
-use crate::core::state::GameState;
 use crate::domain::assets::patterns::{
     body_action_path, body_sprite_path, head_action_path, head_sprite_path,
 };
 use crate::domain::entities::animation::frame_cache::{FrameCacheKey, RoFrameCache};
 use crate::domain::entities::components::RoAnimationController;
+use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
 use crate::infrastructure::diagnostics::AnimationDiagnostics;
 use crate::infrastructure::lua_scripts::job::JobSpriteRegistry;
@@ -128,10 +128,7 @@ fn calculate_head_sprite_index(action_index: usize) -> usize {
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(
-        after = advance_animations,
-        run_if = in_state(GameState::InGame)
-    )
+    config(in_set = SpriteRenderingSystems::TransformUpdate)
 )]
 pub fn update_sprite_transforms(
     mut sprite_layers: Query<(
@@ -272,10 +269,7 @@ pub fn update_sprite_transforms(
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(
-        after = crate::domain::entities::animation::marker_systems::remove_animated_marker,
-        run_if = in_state(GameState::InGame)
-    )
+    config(in_set = SpriteRenderingSystems::AnimationAdvance)
 )]
 pub fn advance_animations(
     time: Res<Time>,
@@ -340,10 +334,7 @@ pub fn advance_animations(
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(
-        after = crate::domain::entities::sprite_rendering::systems::events::handle_sprite_animation_changes,
-        run_if = in_state(GameState::InGame)
-    )
+    config(in_set = SpriteRenderingSystems::AnimationSync)
 )]
 pub fn sync_character_animations_to_controllers(
     characters: CharacterSpriteQuery,
@@ -379,10 +370,7 @@ pub fn sync_character_animations_to_controllers(
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(
-        after = crate::domain::entities::sprite_rendering::systems::events::handle_sprite_animation_changes,
-        run_if = in_state(GameState::InGame)
-    )
+    config(in_set = SpriteRenderingSystems::AnimationSync)
 )]
 pub fn update_generic_sprite_direction(
     changed_entities: ChangedDirectionQuery,
@@ -418,10 +406,7 @@ pub fn update_generic_sprite_direction(
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(
-        after = crate::domain::entities::sprite_rendering::systems::spawn::spawn_sprite_hierarchy,
-        run_if = in_state(GameState::InGame)
-    )
+    config(in_set = SpriteRenderingSystems::AssetPopulation)
 )]
 pub fn populate_sprite_assets(
     mut commands: Commands,
@@ -542,8 +527,8 @@ pub fn populate_sprite_assets(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(
-        run_if = on_timer(Duration::from_secs(5)).and(in_state(GameState::InGame)),
-        after = update_sprite_transforms
+        in_set = SpriteRenderingSystems::OrphanCleanup,
+        run_if = on_timer(Duration::from_secs(5))
     )
 )]
 pub fn cleanup_orphaned_sprites(

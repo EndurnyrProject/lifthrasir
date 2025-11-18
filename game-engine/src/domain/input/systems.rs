@@ -1,10 +1,15 @@
 use crate::{
     core::state::GameState,
-    domain::entities::markers::LocalPlayer,
-    domain::entities::movement::events::MovementRequested,
-    domain::entities::pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
-    domain::entities::sprite_rendering::SpriteObjectTree,
-    domain::world::components::MapLoader,
+    domain::{
+        entities::{
+            markers::LocalPlayer,
+            movement::events::MovementRequested,
+            pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
+            sprite_rendering::SpriteObjectTree,
+        },
+        system_sets::InputSystems,
+        world::components::MapLoader,
+    },
     infrastructure::assets::loaders::RoGroundAsset,
     utils::coordinates::world_position_to_spawn_coords,
 };
@@ -30,7 +35,7 @@ pub struct MapData<'w, 's> {
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = Update,
     config(
-        after = crate::domain::input::terrain_raycast::update_terrain_raycast_cache,
+        in_set = InputSystems::Cursor,
         run_if = in_state(GameState::InGame)
     )
 )]
@@ -89,7 +94,7 @@ pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = Update,
     config(
-        after = render_terrain_cursor,
+        in_set = InputSystems::Click,
         run_if = in_state(GameState::InGame)
     )
 )]
@@ -197,7 +202,7 @@ pub fn handle_terrain_click(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = Update,
     config(
-        after = handle_terrain_click,
+        in_set = InputSystems::Click,
         run_if = in_state(GameState::InGame)
     )
 )]

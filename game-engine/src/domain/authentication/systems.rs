@@ -5,6 +5,7 @@ use secrecy::ExposeSecret;
 use super::{events::*, models::*};
 use crate::{
     core::state::GameState,
+    domain::system_sets::AuthenticationSystems,
     infrastructure::{
         config::ClientConfig,
         networking::{
@@ -29,7 +30,8 @@ use crate::{
 /// to LoginAccepted and LoginRefused protocol events.
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = AuthenticationSystems::LoginAttempt)
 )]
 pub fn handle_login_attempts(
     mut login_attempts: MessageReader<LoginAttemptEvent>,
@@ -94,7 +96,8 @@ pub fn handle_login_attempts(
 /// 4. Disconnects from login server (no longer needed)
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = AuthenticationSystems::LoginResponse)
 )]
 pub fn handle_login_accepted(
     mut protocol_events: MessageReader<LoginAccepted>,
@@ -148,7 +151,8 @@ pub fn handle_login_accepted(
 /// 4. Returns to Login state
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = AuthenticationSystems::LoginResponse)
 )]
 pub fn handle_login_refused(
     mut protocol_events: MessageReader<LoginRefused>,
@@ -191,7 +195,8 @@ struct ConfigLoaded(bool);
 /// System to load client configuration (runs only once)
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = AuthenticationSystems::ConfigLoading)
 )]
 fn load_client_config(
     mut commands: Commands,
@@ -209,9 +214,7 @@ fn load_client_config(
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
     schedule = Update,
-    config(
-        after = load_client_config
-    )
+    config(in_set = AuthenticationSystems::ConfigLoading)
 )]
 fn check_client_config_loaded(
     config_handle: Option<Res<ClientConfigHandle>>,
@@ -247,7 +250,8 @@ fn check_client_config_loaded(
 /// Login client update system wrapper
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = AuthenticationSystems::LoginClientUpdate)
 )]
 fn run_login_client_update(client: Option<ResMut<LoginClient>>, events: LoginEventWriters) {
     login_client_update_system(client, events);
@@ -262,7 +266,8 @@ fn run_login_client_update(client: Option<ResMut<LoginClient>>, events: LoginEve
 /// Updates the session and connects to character server (UI flow handled by Tauri)
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
-    schedule = Update
+    schedule = Update,
+    config(in_set = AuthenticationSystems::ServerSelection)
 )]
 pub fn handle_server_selection(
     mut commands: Commands,

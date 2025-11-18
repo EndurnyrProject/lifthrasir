@@ -1,17 +1,28 @@
 use super::components::{MovementSpeed, MovementState, MovementTarget};
 use super::events::{MovementConfirmed, MovementRequested, MovementStopped, StopReason};
-use crate::core::state::GameState;
-use crate::domain::entities::character::components::core::Grounded;
-use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
-use crate::domain::entities::character::states::{StartWalking, StopWalking};
-use crate::domain::entities::pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath};
-use crate::domain::entities::sprite_rendering::components::SpriteObjectTree;
-use crate::domain::world::components::MapLoader;
-use crate::infrastructure::assets::loaders::RoAltitudeAsset;
-use crate::infrastructure::networking::client::ZoneServerClient;
-use crate::infrastructure::networking::protocol::zone::MovementConfirmedByServer;
-use crate::infrastructure::networking::protocol::zone::MovementStoppedByServer;
-use crate::utils::coordinates::spawn_coords_to_world_position;
+use crate::{
+    core::state::GameState,
+    domain::{
+        entities::{
+            character::{
+                components::{core::Grounded, visual::{CharacterDirection, Direction}},
+                states::{StartWalking, StopWalking},
+            },
+            pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
+            sprite_rendering::components::SpriteObjectTree,
+        },
+        system_sets::MovementSystems,
+        world::components::MapLoader,
+    },
+    infrastructure::{
+        assets::loaders::RoAltitudeAsset,
+        networking::{
+            client::ZoneServerClient,
+            protocol::zone::{MovementConfirmedByServer, MovementStoppedByServer},
+        },
+    },
+    utils::coordinates::spawn_coords_to_world_position,
+};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
@@ -64,7 +75,10 @@ pub fn send_movement_requests_observer(
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
-    config(run_if = in_state(GameState::InGame))
+    config(
+        in_set = MovementSystems::Confirm,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 #[allow(clippy::too_many_arguments)]
 pub fn handle_movement_confirmed_system(
@@ -263,7 +277,7 @@ pub fn handle_movement_confirmed_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
     config(
-        after = handle_movement_confirmed_system,
+        in_set = MovementSystems::Interpolate,
         run_if = in_state(GameState::InGame)
     )
 )]
@@ -328,7 +342,7 @@ pub fn interpolate_movement_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
     config(
-        after = interpolate_movement_system,
+        in_set = MovementSystems::Stop,
         run_if = in_state(GameState::InGame)
     )
 )]
@@ -424,13 +438,12 @@ pub fn handle_movement_stopped_observer(
 /// for the terrain height and updates the entity's Y position accordingly.
 ///
 /// # System Ordering
-/// - Must run AFTER interpolate_movement_system (to update after position changes)
-/// - Must run AFTER handle_server_stop_system (to update after server corrections)
+/// - Runs in MovementSystems::TerrainAlignment set (after Confirm, Interpolate, and Stop)
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
     config(
-        after = handle_server_stop_system,
+        in_set = MovementSystems::TerrainAlignment,
         run_if = in_state(GameState::InGame)
     )
 )]
