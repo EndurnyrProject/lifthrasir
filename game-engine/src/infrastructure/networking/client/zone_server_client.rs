@@ -11,7 +11,8 @@ use crate::{
                 CzRequestTime2Packet, EntityNameAllReceived, EntityNameReceived,
                 EquipitemListHandler, LongparChangeHandler, MoveStopHandler, MoveentryHandler,
                 MovementConfirmedByServer, MovementStoppedByServer, NewentryHandler,
-                NormalItemlistHandler, ParChangeHandler, PlayermoveHandler, RefuseEnterHandler,
+                NormalItemlistHandler, ParameterChanged, ParChangeHandler, PlayermoveHandler,
+                RefuseEnterHandler,
                 ReqnameHandler, ReqnameallHandler, SpawnData, StandentryHandler, TimeSyncHandler,
                 TimeSyncLegacyHandler, VanishHandler, ZoneClientPacket, ZoneContext,
                 ZoneEntryRefused, ZoneProtocol, ZoneServerConnected,
@@ -315,6 +316,7 @@ pub struct ZoneServerEventWriters<'w> {
     pub vanish_request: MessageWriter<'w, RequestEntityVanish>,
     pub entity_name_received: MessageWriter<'w, EntityNameReceived>,
     pub entity_name_all_received: MessageWriter<'w, EntityNameAllReceived>,
+    pub parameter_changed: MessageWriter<'w, ParameterChanged>,
 }
 
 /// Bevy system to update the zone server client
@@ -369,6 +371,7 @@ pub fn zone_server_update_system(
             (RequestEntityVanish, vanish_request),
             (EntityNameReceived, entity_name_received),
             (EntityNameAllReceived, entity_name_all_received),
+            (ParameterChanged, parameter_changed),
         ]
     );
 }

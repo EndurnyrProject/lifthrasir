@@ -9,9 +9,11 @@ use crate::infrastructure::networking::{
     },
 };
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_message;
 
 /// Event emitted when a character parameter changes
 #[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin)]
 pub struct ParameterChanged {
     pub var_id: u16,
     pub value: u32,
@@ -33,7 +35,7 @@ impl PacketHandler<ZoneProtocol> for ParChangeHandler {
         event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
         debug!(
-            "Character parameter changed: var_id=0x{:04X}, value={}",
+            "ZC_PAR_CHANGE received: var_id=0x{:04X}, value={}",
             packet.var_id, packet.value
         );
 
@@ -43,6 +45,7 @@ impl PacketHandler<ZoneProtocol> for ParChangeHandler {
         };
 
         event_writer.send_event(Box::new(event));
+        debug!("ParameterChanged event sent");
 
         Ok(())
     }
@@ -64,7 +67,7 @@ impl PacketHandler<ZoneProtocol> for LongparChangeHandler {
         event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
         debug!(
-            "Character parameter (long) changed: var_id=0x{:04X}, value={}",
+            "ZC_LONGPAR_CHANGE received: var_id=0x{:04X}, value={}",
             packet.var_id, packet.value
         );
 
@@ -74,6 +77,7 @@ impl PacketHandler<ZoneProtocol> for LongparChangeHandler {
         };
 
         event_writer.send_event(Box::new(event));
+        debug!("ParameterChanged event sent (long)");
 
         Ok(())
     }

@@ -2,8 +2,6 @@ use super::components::{CharServerPingTimer, CharacterSelectionState, MapLoading
 use super::events::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
-use crate::domain::entities::markers::LocalPlayer;
-use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
 use crate::infrastructure::networking::client::CharServerClient;
@@ -837,7 +835,7 @@ pub fn spawn_character_sprite_on_game_start(
     mut commands: Commands,
     mut spawn_events: MessageWriter<crate::domain::entities::character::SpawnCharacterSpriteEvent>,
     spawn_context: Res<MapSpawnContext>,
-    mut entity_registry: ResMut<EntityRegistry>,
+    mut entity_registry: ResMut<crate::domain::entities::registry::EntityRegistry>,
     user_session: Res<UserSession>,
     characters: Query<(
         Entity,
@@ -863,22 +861,26 @@ pub fn spawn_character_sprite_on_game_start(
         &mut commands.entity(character_entity),
     );
 
-    // Add LocalPlayer marker (for camera and unified entity system)
-    commands.entity(character_entity).insert(LocalPlayer);
-
-    debug!("Added LocalPlayer marker to entity {:?}", character_entity);
-
-    // Register in EntityRegistry
-    let account_id = user_session.tokens.account_id;
-    entity_registry.set_local_player(character_entity, account_id);
-
     // Add NetworkEntity component for hover system
+    let account_id = user_session.tokens.account_id;
     commands.entity(character_entity).insert(
         crate::domain::entities::components::NetworkEntity::new(
             account_id,
             spawn_context.character_id,
             crate::domain::entities::types::ObjectType::Pc,
         ),
+    );
+
+    // Add LocalPlayer marker and CharacterStatus
+    // Note: Server doesn't send STANDENTRY for local player, so we add these immediately
+    commands.entity(character_entity).insert((
+        crate::domain::entities::markers::LocalPlayer,
+        crate::domain::entities::character::components::status::CharacterStatus::default(),
+    ));
+    entity_registry.set_local_player(character_entity, account_id);
+    info!(
+        "Spawned LOCAL PLAYER entity {:?} (AID: {}) with LocalPlayer + CharacterStatus components",
+        character_entity, account_id
     );
 
     // Get map dimensions from loaded ground data

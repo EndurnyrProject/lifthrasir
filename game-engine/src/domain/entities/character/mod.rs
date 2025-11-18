@@ -2,6 +2,7 @@ pub mod components;
 pub mod events;
 pub mod kinds;
 pub mod states;
+pub mod systems;
 pub mod visual;
 
 use bevy::prelude::*;

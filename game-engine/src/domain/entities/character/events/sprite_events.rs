@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::{auto_add_event, auto_add_system};
 
-use super::components::{CharacterAppearance, CharacterData};
+use crate::domain::entities::character::components::{CharacterAppearance, CharacterData};
 use crate::domain::entities::sprite_rendering::{
     EntitySpriteData, EntitySpriteInfo, SpawnSpriteEvent,
 };
