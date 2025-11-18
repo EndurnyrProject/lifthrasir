@@ -1,5 +1,6 @@
 use super::components::{MovementSpeed, MovementState, MovementTarget};
 use super::events::{MovementConfirmed, MovementRequested, MovementStopped, StopReason};
+use crate::core::state::GameState;
 use crate::domain::entities::character::components::core::Grounded;
 use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
 use crate::domain::entities::character::states::{StartWalking, StopWalking};
@@ -62,7 +63,8 @@ pub fn send_movement_requests_observer(
 /// destination before moving to the new target.
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
-    schedule = Update
+    schedule = Update,
+    config(run_if = in_state(GameState::InGame))
 )]
 #[allow(clippy::too_many_arguments)]
 pub fn handle_movement_confirmed_system(
@@ -260,7 +262,10 @@ pub fn handle_movement_confirmed_system(
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
-    config(after = handle_movement_confirmed_system)
+    config(
+        after = handle_movement_confirmed_system,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 pub fn interpolate_movement_system(
     mut query: Query<(
@@ -322,7 +327,10 @@ pub fn interpolate_movement_system(
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
-    config(after = interpolate_movement_system)
+    config(
+        after = interpolate_movement_system,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 pub fn handle_server_stop_system(
     mut server_stop_events: MessageReader<MovementStoppedByServer>,
@@ -421,7 +429,10 @@ pub fn handle_movement_stopped_observer(
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
-    config(after = handle_server_stop_system)
+    config(
+        after = handle_server_stop_system,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 pub fn update_entity_altitude_system(
     map_loader_query: Query<&MapLoader>,

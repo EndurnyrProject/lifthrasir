@@ -1,5 +1,6 @@
 use super::super::components::{RoSpriteLayer, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
 use super::super::events::SpawnSpriteEvent;
+use crate::core::state::GameState;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::{
     equipment::EquipmentSlot, CharacterAppearance,
@@ -225,7 +226,8 @@ fn spawn_simple_entity_layers(
 /// System to spawn generic sprite hierarchies
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
-    schedule = Update
+    schedule = Update,
+    config(run_if = in_state(GameState::InGame))
 )]
 pub fn spawn_sprite_hierarchy(
     mut commands: Commands,

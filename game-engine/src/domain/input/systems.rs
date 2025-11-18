@@ -29,7 +29,10 @@ pub struct MapData<'w, 's> {
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = Update,
-    config(after = crate::domain::input::terrain_raycast::update_terrain_raycast_cache)
+    config(
+        after = crate::domain::input::terrain_raycast::update_terrain_raycast_cache,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>) {
     if !cache.is_walkable {
@@ -85,7 +88,10 @@ pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = Update,
-    config(after = render_terrain_cursor)
+    config(
+        after = render_terrain_cursor,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 pub fn handle_terrain_click(
     mut commands: Commands,

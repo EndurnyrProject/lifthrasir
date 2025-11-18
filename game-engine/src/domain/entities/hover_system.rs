@@ -1,3 +1,4 @@
+use crate::core::state::GameState;
 use crate::domain::input::ForwardedCursorPosition;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -10,7 +11,8 @@ use super::{
 
 #[auto_add_system(
     plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
-    schedule = Update
+    schedule = Update,
+    config(run_if = in_state(GameState::InGame))
 )]
 pub fn update_entity_bounds_system(
     mut commands: Commands,
@@ -55,7 +57,10 @@ pub fn update_entity_bounds_system(
 #[auto_add_system(
     plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
     schedule = Update,
-    config(after = update_entity_bounds_system)
+    config(
+        after = update_entity_bounds_system,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 pub fn entity_hover_detection_system(
     mut commands: Commands,

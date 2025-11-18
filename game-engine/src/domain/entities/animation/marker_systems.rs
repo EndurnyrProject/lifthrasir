@@ -1,5 +1,6 @@
 use super::animation_player::RoAnimationPlayer;
 use super::markers::Animated;
+use crate::core::state::GameState;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
@@ -9,7 +10,10 @@ use bevy_auto_plugin::prelude::*;
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(after = crate::domain::entities::sprite_rendering::systems::update::update_generic_sprite_direction)
+    config(
+        after = crate::domain::entities::sprite_rendering::systems::update::update_generic_sprite_direction,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 pub fn add_animated_marker(
     mut commands: Commands,
@@ -25,7 +29,10 @@ pub fn add_animated_marker(
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(after = add_animated_marker)
+    config(
+        after = add_animated_marker,
+        run_if = in_state(GameState::InGame)
+    )
 )]
 pub fn remove_animated_marker(
     mut commands: Commands,
