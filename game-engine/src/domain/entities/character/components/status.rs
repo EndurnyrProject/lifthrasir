@@ -594,18 +594,22 @@ mod tests {
 
     #[test]
     fn test_hp_percentage() {
-        let mut status = CharacterStatus::default();
-        status.hp = 50;
-        status.max_hp = 100;
+        let status = CharacterStatus {
+            hp: 50,
+            max_hp: 100,
+            ..Default::default()
+        };
 
         assert_eq!(status.hp_percentage(), 50.0);
     }
 
     #[test]
     fn test_weight_status() {
-        let mut status = CharacterStatus::default();
-        status.weight = 1000;
-        status.max_weight = 2000;
+        let mut status = CharacterStatus {
+            weight: 1000,
+            max_weight: 2000,
+            ..Default::default()
+        };
 
         assert_eq!(status.weight_percentage(), 50.0);
         assert!(status.is_overweight());
@@ -626,9 +630,11 @@ mod tests {
 
     #[test]
     fn test_total_stats() {
-        let mut status = CharacterStatus::default();
-        status.atk1 = 100;
-        status.atk2 = 50;
+        let status = CharacterStatus {
+            atk1: 100,
+            atk2: 50,
+            ..Default::default()
+        };
 
         assert_eq!(status.total_atk(), 150);
     }

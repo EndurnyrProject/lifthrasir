@@ -100,17 +100,20 @@
 
 .character-name {
   color: var(--energetic-green);
+  font-family: var(--font-fantasy);
   font-size: 15px;
   font-weight: bold;
 }
 
 .character-level {
   color: var(--ashen-white);
+  font-family: var(--font-serif-modern);
   font-size: 12px;
 }
 
 .character-class {
   color: #D4AF37;
+  font-family: var(--font-elegant);
   font-size: 12px;
 }
 
@@ -151,6 +154,7 @@
 
 .input-group label {
   color: var(--ashen-white);
+  font-family: var(--font-serif-modern);
   font-size: 14px;
   font-weight: 500;
 }
@@ -183,6 +187,7 @@
 
 .gender-selection label {
   color: var(--ashen-white);
+  font-family: var(--font-serif-modern);
   font-size: 14px;
   font-weight: 500;
 }
@@ -196,6 +201,7 @@
   flex: 1;
   background: rgba(68, 68, 68, 0.6); /* polished-steel with opacity */
   color: var(--ashen-white);
+  font-family: var(--font-fantasy);
   border: 2px solid rgba(68, 68, 68, 0.8); /* polished-steel with opacity */
   padding: 12px;
   border-radius: 6px;
@@ -224,6 +230,7 @@
   background: rgba(164, 66, 66, 0.2);
   border: 1px solid var(--worn-crimson);
   color: var(--worn-crimson);
+  font-family: var(--font-serif-modern);
   padding: 12px;
   border-radius: 6px;
   text-align: center;
@@ -242,6 +249,7 @@
   flex: 1;
   padding: 14px 24px;
   border-radius: 8px;
+  font-family: var(--font-fantasy);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;

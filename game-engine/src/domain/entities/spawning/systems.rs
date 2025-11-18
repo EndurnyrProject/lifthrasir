@@ -5,7 +5,6 @@ use crate::{
             components::{
                 core::{CharacterAppearance, CharacterData, CharacterStats, Gender, Grounded},
                 equipment::EquipmentSet,
-                status::CharacterStatus,
                 visual::{CharacterDirection, CharacterSprite, Direction},
             },
             states::{AnimationState, ContextState, GameplayState, StartWalking},
@@ -25,7 +24,7 @@ use crate::{
     },
     infrastructure::{
         lua_scripts::job::JobSpriteRegistry,
-        networking::{protocol::zone::MovementConfirmedByServer, session::UserSession},
+        networking::protocol::zone::MovementConfirmedByServer,
     },
     utils::coordinates::spawn_coords_to_world_position,
 };
@@ -48,35 +47,17 @@ pub fn spawn_network_entity_system(
     mut commands: Commands,
     mut spawn_events: MessageReader<SpawnEntity>,
     mut entity_registry: ResMut<EntityRegistry>,
-    user_session: Option<Res<UserSession>>,
     mut sprite_spawn_generic: MessageWriter<SpawnSpriteEvent>,
     job_registry: Option<Res<JobSpriteRegistry>>,
     mut movement_events: MessageWriter<MovementConfirmedByServer>,
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
 ) {
     for event in spawn_events.read() {
-        // Check if entity already exists (e.g., spawned from character selection)
+        // Check if entity already exists (e.g., spawned from character selection or re-entering view)
         if let Some(existing_entity) = entity_registry.get_entity(event.aid) {
             commands.entity(existing_entity).remove::<PendingDespawn>();
 
-            // Check if this is the local player entity that needs completion
-            let is_local_player = user_session
-                .as_ref()
-                .map(|session| event.aid == session.tokens.account_id)
-                .unwrap_or(false);
-
-            if is_local_player {
-                // Complete local player spawn by adding LocalPlayer marker and CharacterStatus
-                commands.entity(existing_entity).insert((
-                    LocalPlayer,
-                    CharacterStatus::default(),
-                ));
-                entity_registry.set_local_player(existing_entity, event.aid);
-                info!(
-                    "Completed LOCAL PLAYER spawn for entity {:?}: {} (AID: {}) with LocalPlayer + CharacterStatus components",
-                    existing_entity, event.name, event.aid
-                );
-            } else if let Some(destination) = event.destination {
+            if let Some(destination) = event.destination {
                 debug!(
                     "Entity AID {} re-entered view, canceling pending despawn and updating movement: ({}, {}) -> ({}, {})",
                     event.aid, event.position.0, event.position.1, destination.0, destination.1
@@ -164,11 +145,6 @@ pub fn spawn_network_entity_system(
 
         let world_pos = spawn_coords_to_world_position(event.position.0, event.position.1, 0, 0);
 
-        let is_local_player = user_session
-            .as_ref()
-            .map(|session| event.aid == session.tokens.account_id)
-            .unwrap_or(false);
-
         let mut entity_cmd = commands.spawn((
             NetworkEntity::new(event.aid, event.gid, event.object_type),
             Transform::from_translation(world_pos),
@@ -199,16 +175,8 @@ pub fn spawn_network_entity_system(
 
         match event.object_type {
             crate::domain::entities::types::ObjectType::Pc => {
-                if is_local_player {
-                    entity_cmd.insert((LocalPlayer, CharacterStatus::default()));
-                    info!(
-                        "Spawned LOCAL PLAYER: {} (AID: {}) with LocalPlayer + CharacterStatus components",
-                        event.name, event.aid
-                    );
-                } else {
-                    entity_cmd.insert(RemotePlayer);
-                    debug!("Spawned remote player: {} (AID: {})", event.name, event.aid);
-                }
+                entity_cmd.insert(RemotePlayer);
+                debug!("Spawned remote player: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Npc => {
                 entity_cmd.insert(Npc);

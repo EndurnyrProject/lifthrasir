@@ -840,14 +840,15 @@ pub fn spawn_character_sprite_on_game_start(
     characters: Query<(
         Entity,
         &crate::domain::entities::character::components::CharacterMeta,
+        &crate::domain::entities::character::components::CharacterData,
     )>,
     map_loader_query: Query<&crate::domain::world::components::MapLoader>,
     ground_assets: Res<Assets<crate::infrastructure::assets::loaders::RoGroundAsset>>,
 ) {
     // Find character entity matching spawn context
-    let Some((character_entity, _meta)) = characters
+    let Some((character_entity, _meta, char_data)) = characters
         .iter()
-        .find(|(_, meta)| meta.char_id == spawn_context.character_id)
+        .find(|(_, meta, _)| meta.char_id == spawn_context.character_id)
     else {
         error!(
             "Character entity not found for char_id: {}",
@@ -876,11 +877,12 @@ pub fn spawn_character_sprite_on_game_start(
     commands.entity(character_entity).insert((
         crate::domain::entities::markers::LocalPlayer,
         crate::domain::entities::character::components::status::CharacterStatus::default(),
+        crate::domain::entities::components::EntityName::new(char_data.name.clone()),
     ));
     entity_registry.set_local_player(character_entity, account_id);
     info!(
-        "Spawned LOCAL PLAYER entity {:?} (AID: {}) with LocalPlayer + CharacterStatus components",
-        character_entity, account_id
+        "Spawned LOCAL PLAYER entity {:?} (AID: {}) '{}' with LocalPlayer + CharacterStatus + EntityName components",
+        character_entity, account_id, char_data.name
     );
 
     // Get map dimensions from loaded ground data

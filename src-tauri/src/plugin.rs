@@ -17,19 +17,21 @@ use std::sync::Arc;
 use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindow};
 
 use super::bridge::{
-    cleanup_stale_correlations, demux_tauri_events, emit_cursor_changes, emit_entity_unhover,
-    emit_hovered_entity_name, emit_world_events, handle_camera_rotation,
-    handle_create_character_request, handle_delete_character_request,
+    cleanup_stale_correlations, demux_tauri_events, emit_character_status_system,
+    emit_cursor_changes, emit_entity_unhover, emit_hovered_entity_name, emit_world_events,
+    handle_camera_rotation, handle_create_character_request, handle_delete_character_request,
     handle_get_character_list_request, handle_get_hairstyles_request, handle_keyboard_input,
     handle_login_request, handle_mouse_click, handle_mouse_position,
     handle_select_character_request, handle_server_selection_request,
     on_entity_name_added_to_hovered, write_character_creation_response,
     write_character_deletion_response, write_character_list_response,
-    write_character_selection_response, write_login_failure_response, write_login_success_response,
-    write_server_selection_response, AppBridge, CameraRotationEvent, CharacterCorrelation,
-    CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent, GetCharacterListRequestedEvent,
-    GetHairstylesRequestedEvent, KeyboardInputEvent, LoginCorrelation, LoginRequestedEvent,
-    MouseClickEvent, MousePositionEvent, PendingCharacterListSenders, PendingHairstyleSenders,
+    write_character_selection_response, write_character_status_response,
+    write_login_failure_response, write_login_success_response, write_server_selection_response,
+    AppBridge, CameraRotationEvent, CharacterCorrelation, CreateCharacterRequestedEvent,
+    DeleteCharacterRequestedEvent, GetCharacterListRequestedEvent,
+    GetCharacterStatusRequestedEvent, GetHairstylesRequestedEvent, KeyboardInputEvent,
+    LoginCorrelation, LoginRequestedEvent, MouseClickEvent, MousePositionEvent,
+    PendingCharacterListSenders, PendingCharacterStatusSenders, PendingHairstyleSenders,
     SelectCharacterRequestedEvent, ServerCorrelation, ServerSelectionRequestedEvent,
     TauriEventReceiver, WorldEmitter,
 };
@@ -195,6 +197,7 @@ impl Plugin for TauriIntegrationPlugin {
         app.insert_resource(ServerCorrelation::default());
         app.insert_resource(PendingCharacterListSenders::default());
         app.insert_resource(PendingHairstyleSenders::default());
+        app.insert_resource(PendingCharacterStatusSenders::default());
 
         // Register typed Bevy events for Tauri bridge
         app.add_message::<LoginRequestedEvent>()
@@ -207,7 +210,8 @@ impl Plugin for TauriIntegrationPlugin {
             .add_message::<KeyboardInputEvent>()
             .add_message::<MousePositionEvent>()
             .add_message::<MouseClickEvent>()
-            .add_message::<CameraRotationEvent>();
+            .add_message::<CameraRotationEvent>()
+            .add_message::<GetCharacterStatusRequestedEvent>();
 
         // Add new event-driven system architecture
         // 1. demux_tauri_events: Reads from flume channel, emits typed events (runs first)
@@ -239,6 +243,8 @@ impl Plugin for TauriIntegrationPlugin {
                     write_character_selection_response,
                     write_character_creation_response,
                     write_character_deletion_response,
+                    write_character_status_response,
+                    emit_character_status_system,
                 ),
                 cleanup_stale_correlations,
             )
@@ -258,6 +264,7 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::character_selection::create_character,
                 commands::character_selection::delete_character,
                 commands::character_creation::get_hairstyles,
+                commands::character_status::get_character_status,
                 commands::sprite_png::get_sprite_png,
                 commands::sprite_png::preload_sprite_batch,
                 commands::sprite_png::clear_sprite_cache,

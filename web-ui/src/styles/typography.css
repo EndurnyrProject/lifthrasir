@@ -1,0 +1,141 @@
+/* Typography System - Theme-Based Font Classes */
+
+/* Theme-based font classes */
+.font-fantasy {
+  font-family: var(--font-fantasy);
+}
+
+.font-serif {
+  font-family: var(--font-serif-classic);
+}
+
+.font-serif-modern {
+  font-family: var(--font-serif-modern);
+}
+
+.font-elegant {
+  font-family: var(--font-serif-elegant);
+}
+
+.font-decorative {
+  font-family: var(--font-decorative);
+}
+
+.font-system {
+  font-family: var(--font-system);
+}
+
+/* Typography Hierarchy for Game UI */
+
+/* Headings - Use fantasy font for game aesthetic */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-fantasy);
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 0;
+}
+
+h1 {
+  font-size: 2.5rem;
+  letter-spacing: 0.05em;
+}
+
+h2 {
+  font-size: 2rem;
+  letter-spacing: 0.04em;
+}
+
+h3 {
+  font-size: 1.75rem;
+  letter-spacing: 0.03em;
+}
+
+h4 {
+  font-size: 1.5rem;
+  letter-spacing: 0.02em;
+}
+
+h5 {
+  font-size: 1.25rem;
+}
+
+h6 {
+  font-size: 1rem;
+}
+
+/* Game UI specific typography classes */
+.ui-title {
+  font-family: var(--font-fantasy);
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ui-label {
+  font-family: var(--font-serif-modern);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+}
+
+.ui-body {
+  font-family: var(--font-serif-classic);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.ui-caption {
+  font-family: var(--font-serif-elegant);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.ui-decorative {
+  font-family: var(--font-decorative);
+  font-style: italic;
+}
+
+/* Character/Entity names - Fantasy themed */
+.character-name,
+.entity-name {
+  font-family: var(--font-fantasy);
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+/* Dialog/Story text - Readable serif */
+.dialog-text,
+.story-text {
+  font-family: var(--font-serif-classic);
+  line-height: 1.7;
+}
+
+/* Stats and numbers - Clear and readable */
+.stat-label {
+  font-family: var(--font-serif-modern);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.stat-value {
+  font-family: var(--font-system);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Button text - Fantasy themed */
+button,
+.btn {
+  font-family: var(--font-fantasy);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Input fields - System font for better readability */
+input,
+textarea,
+select {
+  font-family: var(--font-system);
+}

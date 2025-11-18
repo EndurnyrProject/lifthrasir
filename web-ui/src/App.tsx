@@ -5,7 +5,7 @@ import Login from "./screens/Login";
 import ServerSelection from "./screens/ServerSelection";
 import CharacterSelection from "./screens/CharacterSelection";
 import { AssetsProvider, useAssets } from "./contexts";
-import { LoadingScreen, ScreenTransition, CursorManager, EntityTooltip } from "./components";
+import { LoadingScreen, ScreenTransition, CursorManager, EntityTooltip, CharacterInfoPanel } from "./components";
 import "./styles/theme.css";
 import "./App.css";
 
@@ -327,7 +327,9 @@ function AppContent() {
               message={zoneStatus}
               backgroundUrl={backgroundUrl}
             />
-          ) : null
+          ) : (
+            <CharacterInfoPanel />
+          )
         )}
       </ScreenTransition>
     </div>

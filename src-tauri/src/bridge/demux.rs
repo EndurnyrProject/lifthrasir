@@ -2,12 +2,13 @@ use bevy::prelude::*;
 
 use super::app_bridge::{TauriEventReceiver, TauriIncomingEvent};
 use super::correlation::{
-    CharacterCorrelation, LoginCorrelation, PendingCharacterListSenders, PendingHairstyleSenders,
-    ServerCorrelation,
+    CharacterCorrelation, LoginCorrelation, PendingCharacterListSenders,
+    PendingCharacterStatusSenders, PendingHairstyleSenders, ServerCorrelation,
 };
 use super::event_writers::TauriMessageWriters;
 use super::events::*;
 
+#[allow(clippy::too_many_arguments)]
 pub fn demux_tauri_events(
     receiver: Res<TauriEventReceiver>,
     mut login_correlation: ResMut<LoginCorrelation>,
@@ -15,6 +16,7 @@ pub fn demux_tauri_events(
     mut server_correlation: ResMut<ServerCorrelation>,
     mut char_list_senders: ResMut<PendingCharacterListSenders>,
     mut hairstyle_senders: ResMut<PendingHairstyleSenders>,
+    mut status_senders: ResMut<PendingCharacterStatusSenders>,
     mut writers: TauriMessageWriters,
 ) {
     for event in receiver.0.try_iter() {
@@ -96,6 +98,10 @@ pub fn demux_tauri_events(
                 writers
                     .camera_rotation
                     .write(CameraRotationEvent { delta_x, delta_y });
+            }
+            TauriIncomingEvent::GetCharacterStatus { response_tx } => {
+                status_senders.push(response_tx);
+                writers.char_status.write(GetCharacterStatusRequestedEvent);
             }
         }
     }

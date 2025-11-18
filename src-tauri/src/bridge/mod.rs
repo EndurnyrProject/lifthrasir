@@ -18,10 +18,12 @@ pub use authentication::{
 };
 
 pub use character::{
-    handle_create_character_request, handle_delete_character_request,
-    handle_get_character_list_request, handle_select_character_request,
-    write_character_creation_response, write_character_deletion_response,
-    write_character_list_response, write_character_selection_response,
+    emit_character_status_system, handle_create_character_request,
+    handle_delete_character_request, handle_get_character_list_request,
+    handle_select_character_request, write_character_creation_response,
+    write_character_deletion_response, write_character_list_response,
+    write_character_selection_response, write_character_status_response,
+    CharacterStatusPayload,
 };
 
 pub use customization::handle_get_hairstyles_request;
@@ -37,7 +39,8 @@ pub use world::{emit_world_events, WorldEmitter};
 pub use app_bridge::{AppBridge, SessionData, TauriEventReceiver};
 pub use correlation::{
     cleanup_stale_correlations, CharacterCorrelation, LoginCorrelation,
-    PendingCharacterListSenders, PendingHairstyleSenders, ServerCorrelation,
+    PendingCharacterListSenders, PendingCharacterStatusSenders, PendingHairstyleSenders,
+    ServerCorrelation,
 };
 pub use demux::demux_tauri_events;
 pub use events::*;

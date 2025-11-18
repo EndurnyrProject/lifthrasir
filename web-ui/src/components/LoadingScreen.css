@@ -37,6 +37,7 @@
 .loading-screen-message {
   margin: 0;
   color: var(--ashen-white);
+  font-family: var(--font-fantasy);
   font-size: 18px;
   font-weight: 500;
   text-align: center;

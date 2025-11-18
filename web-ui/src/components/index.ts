@@ -15,3 +15,4 @@ export { LoadingScreen } from './LoadingScreen';
 export { ScreenTransition } from './ScreenTransition';
 export { CursorManager } from './CursorManager';
 export { EntityTooltip } from './EntityTooltip';
+export { CharacterInfoPanel } from './CharacterInfoPanel';

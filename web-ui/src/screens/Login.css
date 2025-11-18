@@ -35,6 +35,7 @@
   display: block;
   text-align: left;
   margin-bottom: 8px;
+  font-family: var(--font-serif-modern);
   font-size: 1rem;
   color: var(--ashen-white);
 }
@@ -69,6 +70,7 @@
 .error-message {
   background-color: var(--worn-crimson);
   color: var(--ashen-white);
+  font-family: var(--font-serif-modern);
   padding: 0.75rem;
   border-radius: 4px;
   font-size: 0.875rem;
@@ -80,6 +82,7 @@
   padding: 15px 25px;
   background-color: var(--polished-steel);
   color: var(--ashen-white);
+  font-family: var(--font-fantasy);
   border: 1px solid var(--polished-steel);
   border-radius: 8px;
   font-size: 1.1rem;

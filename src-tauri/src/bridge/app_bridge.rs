@@ -22,6 +22,8 @@ pub struct HairstyleInfo {
     pub available_colors: Vec<u16>,
 }
 
+pub use super::character::status_emitter::CharacterStatusPayload;
+
 pub enum TauriIncomingEvent {
     Login {
         username: String,
@@ -70,6 +72,9 @@ pub enum TauriIncomingEvent {
     CameraRotation {
         delta_x: f32,
         delta_y: f32,
+    },
+    GetCharacterStatus {
+        response_tx: oneshot::Sender<Result<CharacterStatusPayload, String>>,
     },
 }
 
@@ -211,6 +216,18 @@ impl AppBridge {
             .ok();
 
         Ok(())
+    }
+
+    pub fn send_get_character_status(
+        &self,
+    ) -> oneshot::Receiver<Result<CharacterStatusPayload, String>> {
+        let (response_tx, response_rx) = oneshot::channel();
+
+        let _ = self
+            .tauri_tx
+            .send(TauriIncomingEvent::GetCharacterStatus { response_tx });
+
+        response_rx
     }
 }
 

@@ -62,3 +62,6 @@ pub struct CameraRotationEvent {
     pub delta_x: f32,
     pub delta_y: f32,
 }
+
+#[derive(Message)]
+pub struct GetCharacterStatusRequestedEvent;

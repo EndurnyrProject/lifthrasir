@@ -78,6 +78,7 @@
 
 .input-group label {
   color: #fff;
+  font-family: var(--font-serif-modern);
   font-weight: bold;
   font-size: 1.1rem;
 }
@@ -102,6 +103,7 @@
 }
 
 .input-hint {
+  font-family: var(--font-elegant);
   font-size: 0.85rem;
   color: #999;
 }
@@ -115,6 +117,7 @@
 
 .gender-selection label {
   color: #fff;
+  font-family: var(--font-serif-modern);
   font-weight: bold;
   font-size: 1.1rem;
 }
@@ -127,6 +130,7 @@
 .gender-buttons button {
   flex: 1;
   padding: 1rem;
+  font-family: var(--font-fantasy);
   font-size: 1rem;
   font-weight: bold;
   border: 2px solid #444;
@@ -162,6 +166,7 @@
 
 .hairstyle-selection label {
   color: #fff;
+  font-family: var(--font-serif-modern);
   font-weight: bold;
   font-size: 1.1rem;
 }
@@ -238,6 +243,7 @@
 
 .hair-color-selection label {
   color: #fff;
+  font-family: var(--font-serif-modern);
   font-weight: bold;
   font-size: 1.1rem;
 }
@@ -293,6 +299,7 @@
 .create-button {
   flex: 1;
   padding: 1rem;
+  font-family: var(--font-fantasy);
   font-size: 1.1rem;
   font-weight: bold;
   border: none;
@@ -332,6 +339,7 @@
   border: 1px solid rgba(255, 0, 0, 0.5);
   border-radius: 4px;
   color: #ff6b6b;
+  font-family: var(--font-serif-modern);
   text-align: center;
   font-weight: bold;
 }

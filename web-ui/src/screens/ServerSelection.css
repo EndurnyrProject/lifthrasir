@@ -18,6 +18,7 @@
 
 .server-selection-title {
   color: var(--ashen-white);
+  font-family: var(--font-fantasy);
   font-size: 32px;
   font-weight: 600;
   margin: 0 0 30px 0;
@@ -69,6 +70,7 @@
 
 .server-name {
   color: var(--ashen-white);
+  font-family: var(--font-serif-modern);
   font-size: 18px;
   font-weight: 500;
 }
@@ -86,6 +88,7 @@
 .maintenance-badge {
   background: var(--worn-crimson);
   color: var(--ashen-white);
+  font-family: var(--font-serif-modern);
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 12px;
@@ -95,6 +98,7 @@
 .error-message {
   background: rgba(164, 66, 66, 0.2);
   color: var(--ashen-white);
+  font-family: var(--font-serif-modern);
   padding: 12px;
   border-radius: 4px;
   margin-bottom: 20px;
@@ -113,6 +117,7 @@
   padding: 12px 24px;
   border: 2px solid var(--polished-steel);
   border-radius: 4px;
+  font-family: var(--font-fantasy);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;

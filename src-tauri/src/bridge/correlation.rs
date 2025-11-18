@@ -191,12 +191,41 @@ impl PendingHairstyleSenders {
     }
 }
 
+type CharacterStatusSender = oneshot::Sender<Result<super::app_bridge::CharacterStatusPayload, String>>;
+
+#[derive(Resource, Default)]
+pub struct PendingCharacterStatusSenders {
+    senders: Vec<(Instant, CharacterStatusSender)>,
+}
+
+impl PendingCharacterStatusSenders {
+    pub fn push(&mut self, sender: CharacterStatusSender) {
+        self.senders.push((Instant::now(), sender));
+    }
+
+    pub fn pop_oldest(&mut self) -> Option<CharacterStatusSender> {
+        if self.senders.is_empty() {
+            None
+        } else {
+            Some(self.senders.remove(0).1)
+        }
+    }
+
+    pub fn cleanup_stale(&mut self) -> usize {
+        let initial = self.senders.len();
+        self.senders
+            .retain(|(created, _)| created.elapsed() < CORRELATION_TIMEOUT);
+        initial - self.senders.len()
+    }
+}
+
 pub fn cleanup_stale_correlations(
     mut login: ResMut<LoginCorrelation>,
     mut character: ResMut<CharacterCorrelation>,
     mut server: ResMut<ServerCorrelation>,
     mut char_list: ResMut<PendingCharacterListSenders>,
     mut hairstyles: ResMut<PendingHairstyleSenders>,
+    mut char_status: ResMut<PendingCharacterStatusSenders>,
     mut last_cleanup: Local<Option<Instant>>,
 ) {
     let now = Instant::now();
@@ -210,7 +239,8 @@ pub fn cleanup_stale_correlations(
         + character.cleanup_stale()
         + server.cleanup_stale()
         + char_list.cleanup_stale()
-        + hairstyles.cleanup_stale();
+        + hairstyles.cleanup_stale()
+        + char_status.cleanup_stale();
     if total > 0 {
         warn!("Cleaned up {} stale correlation entries", total);
     }

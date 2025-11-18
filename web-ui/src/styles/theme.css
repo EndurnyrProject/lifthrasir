@@ -6,4 +6,9 @@
   --energetic-green: #00E57A;
   --ashen-white: #E1E1E1;
   --worn-crimson: #A44242;
+
+  /* Character Status Colors */
+  --health-red: #e74c3c;
+  --mana-blue: #3498db;
+  --gold-yellow: #f1c40f;
 }
