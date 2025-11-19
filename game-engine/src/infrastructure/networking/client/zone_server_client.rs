@@ -5,18 +5,18 @@ use crate::{
         errors::NetworkResult,
         protocol::{
             dispatcher::PacketDispatcher,
-            zone::{
-                AcceptEnterHandler, AccountIdReceived, AidHandler, CzEnter2Packet,
-                CzNotifyActorinitPacket, CzReqname2Packet, CzRequestMove2Packet,
-                CzRequestTime2Packet, EntityNameAllReceived, EntityNameReceived,
-                EquipitemListHandler, LongparChangeHandler, MoveStopHandler, MoveentryHandler,
-                MovementConfirmedByServer, MovementStoppedByServer, NewentryHandler,
-                NormalItemlistHandler, ParameterChanged, ParChangeHandler, PlayermoveHandler,
-                RefuseEnterHandler,
-                ReqnameHandler, ReqnameallHandler, SpawnData, StandentryHandler, TimeSyncHandler,
-                TimeSyncLegacyHandler, VanishHandler, ZoneClientPacket, ZoneContext,
-                ZoneEntryRefused, ZoneProtocol, ZoneServerConnected,
-            },
+                        zone::{
+                            AcceptEnterHandler, AccountIdReceived, AidHandler, ChatHandler, ChatReceived,
+                            CzEnter2Packet, CzNotifyActorinitPacket, CzReqname2Packet, CzRequestChatPacket,
+                            CzRequestMove2Packet, CzRequestTime2Packet, EntityNameAllReceived,
+                            EntityNameReceived, EquipitemListHandler, LongparChangeHandler, MoveStopHandler,
+                            MoveentryHandler, MovementConfirmedByServer, MovementStoppedByServer,
+                            NewentryHandler, NormalItemlistHandler, ParameterChanged, ParChangeHandler,
+                            PlayermoveHandler, RefuseEnterHandler, ReqnameHandler, ReqnameallHandler,
+                            SpawnData, StandentryHandler, TimeSyncHandler, TimeSyncLegacyHandler,
+                            VanishHandler, ZoneClientPacket, ZoneContext, ZoneEntryRefused, ZoneProtocol,
+                            ZoneServerConnected,
+                        },
             EventBuffer,
         },
     },
@@ -101,6 +101,7 @@ impl ZoneServerClient {
         dispatcher.register(TimeSyncLegacyHandler);
         dispatcher.register(ReqnameHandler);
         dispatcher.register(ReqnameallHandler);
+        dispatcher.register(ChatHandler);
 
         let client = NetworkClient::new(context).with_dispatcher(dispatcher);
 
@@ -235,6 +236,27 @@ impl ZoneServerClient {
         self.inner.send_packet(&packet)
     }
 
+    /// Send a chat message to the area (Normal Chat)
+    ///
+    /// Sends a CZ_REQUEST_CHAT packet with the formatted message "Name : Message".
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The message content
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if packet was sent, NetworkError otherwise
+    pub fn send_chat_message(&mut self, message: String) -> NetworkResult<()> {
+        // Message formatting is handled by the bridge layer (handle_chat_request)
+        // which formats the message as "CharacterName : Message" using ZoneSessionData.
+        // This function expects the message to already be properly formatted.
+        // Based on rAthena analysis, server expects "Name : Message" format.
+
+        let packet = ZoneClientPacket::CzRequestChat(CzRequestChatPacket::new(message));
+        self.inner.send_packet(&packet)
+    }
+
     /// Process incoming packets and emit Bevy events
     ///
     /// This should be called regularly (e.g., in a Bevy Update system) to:
@@ -317,6 +339,7 @@ pub struct ZoneServerEventWriters<'w> {
     pub entity_name_received: MessageWriter<'w, EntityNameReceived>,
     pub entity_name_all_received: MessageWriter<'w, EntityNameAllReceived>,
     pub parameter_changed: MessageWriter<'w, ParameterChanged>,
+    pub chat_received: MessageWriter<'w, ChatReceived>,
 }
 
 /// Bevy system to update the zone server client
@@ -372,6 +395,7 @@ pub fn zone_server_update_system(
             (EntityNameReceived, entity_name_received),
             (EntityNameAllReceived, entity_name_all_received),
             (ParameterChanged, parameter_changed),
+            (ChatReceived, chat_received),
         ]
     );
 }

@@ -103,6 +103,9 @@ pub fn demux_tauri_events(
                 status_senders.push(response_tx);
                 writers.char_status.write(GetCharacterStatusRequestedEvent);
             }
+            TauriIncomingEvent::ChatRequested { message } => {
+                writers.chat.write(ChatRequestedEvent { message });
+            }
         }
     }
 }

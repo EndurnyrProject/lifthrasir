@@ -3,6 +3,7 @@ pub mod character;
 pub mod customization;
 pub mod input;
 pub mod world;
+pub mod chat;
 
 pub mod app_bridge;
 pub mod correlation;
@@ -35,6 +36,8 @@ pub use input::{
 };
 
 pub use world::{emit_world_events, WorldEmitter};
+
+pub use chat::{emit_chat_events, handle_chat_request};
 
 pub use app_bridge::{AppBridge, SessionData, TauriEventReceiver};
 pub use correlation::{

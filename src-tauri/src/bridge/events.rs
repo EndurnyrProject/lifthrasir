@@ -65,3 +65,8 @@ pub struct CameraRotationEvent {
 
 #[derive(Message)]
 pub struct GetCharacterStatusRequestedEvent;
+
+#[derive(Message)]
+pub struct ChatRequestedEvent {
+    pub message: String,
+}

@@ -5,7 +5,7 @@ import Login from "./screens/Login";
 import ServerSelection from "./screens/ServerSelection";
 import CharacterSelection from "./screens/CharacterSelection";
 import { AssetsProvider, useAssets } from "./contexts";
-import { LoadingScreen, ScreenTransition, CursorManager, EntityTooltip, CharacterInfoPanel } from "./components";
+import { LoadingScreen, ScreenTransition, CursorManager, EntityTooltip, CharacterInfoPanel, ChatBox } from "./components";
 import "./styles/theme.css";
 import "./App.css";
 
@@ -328,7 +328,10 @@ function AppContent() {
               backgroundUrl={backgroundUrl}
             />
           ) : (
-            <CharacterInfoPanel />
+            <>
+              <CharacterInfoPanel />
+              <ChatBox />
+            </>
           )
         )}
       </ScreenTransition>

@@ -390,6 +390,7 @@ pub struct ZoneSessionData {
     pub map_name: String,
     pub character_id: u32,
     pub account_id: u32,
+    pub character_name: String,
 }
 
 /// System: Handle zone server info and connect to zone server
@@ -404,14 +405,28 @@ pub fn handle_zone_server_info(
     mut char_client: Option<ResMut<CharServerClient>>,
     mut game_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
+    characters: Query<(
+        &crate::domain::entities::character::components::CharacterMeta,
+        &crate::domain::entities::character::components::CharacterData,
+    )>,
 ) {
     for event in events.read() {
         info!("Connecting to zone server for map: {}", event.map_name);
+
+        let character_name = characters
+            .iter()
+            .find(|(meta, _)| meta.char_id == event.char_id)
+            .map(|(_, data)| data.name.clone())
+            .unwrap_or_else(|| {
+                warn!("Character name not found for char_id: {}", event.char_id);
+                "Unknown".to_string()
+            });
 
         commands.insert_resource(ZoneSessionData {
             map_name: event.map_name.clone(),
             character_id: event.char_id,
             account_id: event.account_id,
+            character_name,
         });
 
         if let Some(ref mut client) = char_client.as_deref_mut() {

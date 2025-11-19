@@ -14,5 +14,6 @@ crate::define_event_writers! {
         mouse_click: MouseClickEvent,
         camera_rotation: CameraRotationEvent,
         char_status: GetCharacterStatusRequestedEvent,
+        chat: ChatRequestedEvent,
     }
 }

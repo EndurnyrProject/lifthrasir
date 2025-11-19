@@ -16,3 +16,4 @@ export { ScreenTransition } from './ScreenTransition';
 export { CursorManager } from './CursorManager';
 export { EntityTooltip } from './EntityTooltip';
 export { CharacterInfoPanel } from './CharacterInfoPanel';
+export { ChatBox } from './ChatBox';

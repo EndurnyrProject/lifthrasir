@@ -9,8 +9,8 @@ use crate::infrastructure::networking::protocol::character::{
     CharacterSlotInfoReceived, PingReceived, SecondPasswordRequested, ZoneServerInfoReceived,
 };
 use crate::infrastructure::networking::protocol::zone::{
-    AccountIdReceived, EntityNameAllReceived, EntityNameReceived, ParameterChanged,
-    ZoneEntryRefused, ZoneServerConnected as ZoneServerConnectedProtocol,
+    AccountIdReceived, ChatReceived, EntityNameAllReceived, EntityNameReceived,
+    ParameterChanged, ZoneEntryRefused, ZoneServerConnected as ZoneServerConnectedProtocol,
 };
 use bevy::prelude::*;
 
@@ -59,7 +59,8 @@ impl Plugin for CharacterDomainPlugin {
             .add_message::<ZoneEntryRefused>()
             .add_message::<EntityNameReceived>()
             .add_message::<EntityNameAllReceived>()
-            .add_message::<ParameterChanged>();
+            .add_message::<ParameterChanged>()
+            .add_message::<ChatReceived>();
 
         // 4. Register infrastructure systems (networking layer)
         app.add_systems(

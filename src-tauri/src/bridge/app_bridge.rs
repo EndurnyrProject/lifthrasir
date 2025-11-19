@@ -76,6 +76,9 @@ pub enum TauriIncomingEvent {
     GetCharacterStatus {
         response_tx: oneshot::Sender<Result<CharacterStatusPayload, String>>,
     },
+    ChatRequested {
+        message: String,
+    },
 }
 
 #[derive(Resource, Clone)]
@@ -228,6 +231,14 @@ impl AppBridge {
             .send(TauriIncomingEvent::GetCharacterStatus { response_tx });
 
         response_rx
+    }
+
+    pub fn forward_chat_message(&self, message: String) -> Result<(), String> {
+        self.tauri_tx
+            .send(TauriIncomingEvent::ChatRequested { message })
+            .map_err(|e| format!("Failed to send chat request: {}", e))?;
+
+        Ok(())
     }
 }
 

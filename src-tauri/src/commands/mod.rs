@@ -8,3 +8,4 @@ pub mod input;
 pub mod server_selection;
 pub mod sprite_png;
 pub mod zone_status;
+pub mod chat;

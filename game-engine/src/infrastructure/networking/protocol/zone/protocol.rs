@@ -90,6 +90,10 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcEquipitemListPacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcEquipitemList(packet))
             }
+            ZC_NOTIFY_CHAT => {
+                let packet = ZcNotifyChatPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyChat(packet))
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unknown zone packet ID: 0x{:04X}", packet_id),
@@ -128,6 +132,10 @@ impl Protocol for ZoneProtocol {
                 length_bytes: 2,
             },
             ZC_EQUIPITEM_LIST => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            },
+            ZC_NOTIFY_CHAT => PacketSize::Variable {
                 length_offset: 2,
                 length_bytes: 2,
             },
@@ -259,6 +267,7 @@ pub enum ZoneClientPacket {
     CzReqname2(CzReqname2Packet),
     CzRequestMove2(CzRequestMove2Packet),
     CzRequestTime2(CzRequestTime2Packet),
+    CzRequestChat(CzRequestChatPacket),
 }
 
 impl ClientPacket for ZoneClientPacket {
@@ -271,6 +280,7 @@ impl ClientPacket for ZoneClientPacket {
             Self::CzReqname2(p) => p.serialize(),
             Self::CzRequestMove2(p) => p.serialize(),
             Self::CzRequestTime2(p) => p.serialize(),
+            Self::CzRequestChat(p) => p.serialize(),
         }
     }
 
@@ -281,6 +291,7 @@ impl ClientPacket for ZoneClientPacket {
             Self::CzReqname2(_) => CZ_REQNAME2,
             Self::CzRequestMove2(_) => CZ_REQUEST_MOVE2,
             Self::CzRequestTime2(_) => CZ_REQUEST_TIME2,
+            Self::CzRequestChat(_) => CZ_REQUEST_CHAT,
         }
     }
 }
@@ -305,6 +316,7 @@ pub enum ZoneServerPacket {
     ZcLongparChange(ZcLongparChangePacket),
     ZcNormalItemlist(ZcNormalItemlistPacket),
     ZcEquipitemList(ZcEquipitemListPacket),
+    ZcNotifyChat(ZcNotifyChatPacket),
 }
 
 impl ServerPacket for ZoneServerPacket {
@@ -333,6 +345,7 @@ impl ServerPacket for ZoneServerPacket {
             Self::ZcLongparChange(_) => ZC_LONGPAR_CHANGE,
             Self::ZcNormalItemlist(_) => ZC_NORMAL_ITEMLIST,
             Self::ZcEquipitemList(_) => ZC_EQUIPITEM_LIST,
+            Self::ZcNotifyChat(_) => ZC_NOTIFY_CHAT,
         }
     }
 }

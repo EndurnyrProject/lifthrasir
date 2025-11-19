@@ -7,6 +7,7 @@ pub mod movement_handlers;
 pub mod par_change_handlers;
 pub mod refuse_enter_handler;
 pub mod time_sync_handler;
+pub mod chat_handler;
 
 pub use accept_enter_handler::{AcceptEnterHandler, ZoneServerConnected};
 pub use aid_handler::{AccountIdReceived, AidHandler};
@@ -23,3 +24,4 @@ pub use movement_handlers::{
 pub use par_change_handlers::{LongparChangeHandler, ParChangeHandler, ParameterChanged};
 pub use refuse_enter_handler::{RefuseEnterHandler, ZoneEntryRefused};
 pub use time_sync_handler::{TimeSyncHandler, TimeSyncLegacyHandler};
+pub use chat_handler::{ChatHandler, ChatReceived};
