@@ -16,8 +16,10 @@
         "width": 1440,
         "height": 1080,
         "transparent": true,
-        "resizable": false,
-        "devtools": true
+        "resizable": true,
+        "devtools": true,
+        "visible": true,
+        "decorations": true
       }
     ],
     "security": {

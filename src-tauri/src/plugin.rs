@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindow};
 
 use super::bridge::{
-    cleanup_stale_correlations, demux_tauri_events, emit_character_status_system,
+    cleanup_stale_correlations, demux_tauri_events, emit_character_status_system, emit_chat_events,
     emit_cursor_changes, emit_entity_unhover, emit_hovered_entity_name, emit_world_events,
     handle_camera_rotation, handle_chat_request, handle_create_character_request,
     handle_delete_character_request, handle_get_character_list_request,
@@ -33,7 +33,7 @@ use super::bridge::{
     LoginCorrelation, LoginRequestedEvent, MouseClickEvent, MousePositionEvent,
     PendingCharacterListSenders, PendingCharacterStatusSenders, PendingHairstyleSenders,
     SelectCharacterRequestedEvent, ServerCorrelation, ServerSelectionRequestedEvent,
-    TauriEventReceiver, WorldEmitter, emit_chat_events,
+    TauriEventReceiver, WorldEmitter,
 };
 use super::commands;
 use game_engine::core::state::GameState;
@@ -286,6 +286,7 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::chat::send_chat_message,
                 commands::dev::open_devtools,
                 commands::dev::close_devtools,
+                commands::dev::refresh_window,
             ])
             .build(tauri::generate_context!())
             .expect("error while building tauri application");
@@ -419,6 +420,12 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
 
         // Add camera systems separately
         game_engine::LifthrasirPlugin::add_camera_systems(&mut app);
+
+        // WORKAROUND: macOS WebKit transparent window bug
+        // Toggling decorations forces a repaint that makes content visible
+        // See: https://github.com/tauri-apps/tauri/issues/8255
+        // #[cfg(target_os = "macos")]
+        // let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
         // Wait for all plugins to be ready
         while app.plugins_state() != PluginsState::Ready {
