@@ -150,25 +150,26 @@ function AppContent() {
     };
   }, [currentScreen, isGameLoading]);
 
-  // Forward mouse position to Bevy for debug visualization
+  // Forward mouse position to Bevy for terrain cursor visualization
   useEffect(() => {
     if (currentScreen !== "in_game" || isGameLoading) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      // Bevy's Camera::viewport_to_world expects top-left origin coordinates
-      // Subtract cursor hotspot offset (17, 17) to align raycast with visual cursor position
+      const dpr = window.devicePixelRatio || 1;
+      const x_offset = 34 * dpr;
+      const y_offset = 17 * dpr;
+
+      // Scale to physical pixels and apply cursor hotspot offset for gizmo alignment
       invoke('forward_mouse_position', {
-        x: e.clientX - 34,
-        y: e.clientY + 17
+        x: (e.clientX - x_offset) * dpr,
+        y: (e.clientY - y_offset) * dpr
       }).catch(console.error);
     };
 
-    console.log('🖱️ [FRONTEND] Setting up mouse position forwarding to Bevy');
-    console.log(`🖱️ [FRONTEND] Window dimensions: ${window.innerWidth}x${window.innerHeight}`);
     document.addEventListener('mousemove', handleMouseMove);
 
     return () => {
-      console.log('🖱️ [FRONTEND] Removing mouse position forwarding');
+      console.log('[FRONTEND] Removing mouse position forwarding');
       document.removeEventListener('mousemove', handleMouseMove);
     };
   }, [currentScreen, isGameLoading]);
@@ -178,20 +179,26 @@ function AppContent() {
     if (currentScreen !== "in_game" || isGameLoading) return;
 
     const handleMouseClick = (e: MouseEvent) => {
+
       // Only handle left clicks
       if (e.button === 0) {
+        const dpr = window.devicePixelRatio || 1;
+        const x_offset = 34 * dpr;
+        const y_offset = 17 * dpr;
+
+        // Scale to physical pixels and apply cursor hotspot offset
         invoke('forward_mouse_click', {
-          x: e.clientX - 34,
-          y: e.clientY + 17
+          x: (e.clientX - x_offset) * dpr,
+          y: (e.clientY - y_offset) * dpr
         }).catch(console.error);
       }
     };
 
-    console.log('🖱️ [FRONTEND] Setting up mouse click forwarding to Bevy');
+    console.log('[FRONTEND] Setting up mouse click forwarding to Bevy');
     document.addEventListener('click', handleMouseClick);
 
     return () => {
-      console.log('🖱️ [FRONTEND] Removing mouse click forwarding');
+      console.log('[FRONTEND] Removing mouse click forwarding');
       document.removeEventListener('click', handleMouseClick);
     };
   }, [currentScreen, isGameLoading]);
@@ -239,14 +246,14 @@ function AppContent() {
       }
     };
 
-    console.log('🎥 [FRONTEND] Setting up right-click camera rotation');
+    console.log('[FRONTEND] Setting up right-click camera rotation');
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      console.log('🎥 [FRONTEND] Removing right-click camera rotation');
+      console.log('[FRONTEND] Removing right-click camera rotation');
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mousemove', handleMouseMove);

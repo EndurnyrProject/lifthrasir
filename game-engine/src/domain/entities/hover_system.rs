@@ -40,9 +40,11 @@ pub fn update_entity_bounds_system(
             continue;
         };
 
-        let Some(viewport_size) = camera.logical_viewport_size() else {
+        // Use physical viewport size to match cursor coordinates (which are in physical pixels)
+        let Some(viewport_size) = camera.physical_viewport_size() else {
             continue;
         };
+        let viewport_size = viewport_size.as_vec2();
 
         let screen_x = (ndc.x + 1.0) * 0.5 * viewport_size.x;
         let screen_y = (1.0 - ndc.y) * 0.5 * viewport_size.y;

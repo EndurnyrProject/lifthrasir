@@ -16,7 +16,7 @@
         "width": 1440,
         "height": 1080,
         "transparent": true,
-        "resizable": true,
+        "resizable": false,
         "devtools": true,
         "visible": true,
         "decorations": true
