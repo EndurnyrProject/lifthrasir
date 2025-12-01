@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import Login from "./screens/Login";
@@ -150,16 +150,35 @@ function AppContent() {
     };
   }, [currentScreen, isGameLoading]);
 
+  // Track last known mouse position for immediate forwarding on game entry
+  const lastMousePosition = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const trackMouse = (e: MouseEvent) => {
+      lastMousePosition.current = { x: e.clientX, y: e.clientY };
+    };
+    document.addEventListener('mousemove', trackMouse);
+    return () => document.removeEventListener('mousemove', trackMouse);
+  }, []);
+
   // Forward mouse position to Bevy for terrain cursor visualization
   useEffect(() => {
-    if (currentScreen !== "in_game" || isGameLoading) return;
+    if (currentScreen !== "in_game") return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const x_offset = 34 * dpr;
+    const y_offset = 17 * dpr;
+
+    // Send initial position immediately so gizmo appears without waiting for mouse move
+    if (lastMousePosition.current) {
+      const { x, y } = lastMousePosition.current;
+      invoke('forward_mouse_position', {
+        x: (x - x_offset) * dpr,
+        y: (y - y_offset) * dpr
+      }).catch(console.error);
+    }
 
     const handleMouseMove = (e: MouseEvent) => {
-      const dpr = window.devicePixelRatio || 1;
-      const x_offset = 34 * dpr;
-      const y_offset = 17 * dpr;
-
-      // Scale to physical pixels and apply cursor hotspot offset for gizmo alignment
       invoke('forward_mouse_position', {
         x: (e.clientX - x_offset) * dpr,
         y: (e.clientY - y_offset) * dpr
@@ -167,45 +186,36 @@ function AppContent() {
     };
 
     document.addEventListener('mousemove', handleMouseMove);
-
-    return () => {
-      console.log('[FRONTEND] Removing mouse position forwarding');
-      document.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, [currentScreen, isGameLoading]);
+    return () => document.removeEventListener('mousemove', handleMouseMove);
+  }, [currentScreen]);
 
   // Forward mouse clicks to Bevy for terrain interaction
   useEffect(() => {
-    if (currentScreen !== "in_game" || isGameLoading) return;
+    if (currentScreen !== "in_game") return;
 
     const handleMouseClick = (e: MouseEvent) => {
+      if (e.button !== 0) return;
 
-      // Only handle left clicks
-      if (e.button === 0) {
-        const dpr = window.devicePixelRatio || 1;
-        const x_offset = 34 * dpr;
-        const y_offset = 17 * dpr;
+      const dpr = window.devicePixelRatio || 1;
+      const x_offset = 34 * dpr;
+      const y_offset = 17 * dpr;
 
-        // Scale to physical pixels and apply cursor hotspot offset
-        invoke('forward_mouse_click', {
-          x: (e.clientX - x_offset) * dpr,
-          y: (e.clientY - y_offset) * dpr
-        }).catch(console.error);
-      }
+      invoke('forward_mouse_click', {
+        x: (e.clientX - x_offset) * dpr,
+        y: (e.clientY - y_offset) * dpr
+      }).catch(console.error);
     };
 
-    console.log('[FRONTEND] Setting up mouse click forwarding to Bevy');
     document.addEventListener('click', handleMouseClick);
 
     return () => {
-      console.log('[FRONTEND] Removing mouse click forwarding');
       document.removeEventListener('click', handleMouseClick);
     };
-  }, [currentScreen, isGameLoading]);
+  }, [currentScreen]);
 
   // Forward right-click drag for camera rotation
   useEffect(() => {
-    if (currentScreen !== "in_game" || isGameLoading) return;
+    if (currentScreen !== "in_game") return;
 
     let isRightDragging = false;
     let lastMouseX = 0;
@@ -246,20 +256,18 @@ function AppContent() {
       }
     };
 
-    console.log('[FRONTEND] Setting up right-click camera rotation');
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
-      console.log('[FRONTEND] Removing right-click camera rotation');
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [currentScreen, isGameLoading]);
+  }, [currentScreen]);
 
   const handleLoginSuccess = (serverList: ServerInfo[]) => {
     setServers(serverList);

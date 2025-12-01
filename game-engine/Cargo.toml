@@ -5,7 +5,12 @@ edition.workspace = true
 
 [dependencies]
 # Bevy game engine
-bevy = { version = "0.17.2", features = ["jpeg", "trace", "trace_tracy"] }
+bevy = { version = "0.17.2", features = [
+  "jpeg",
+  "trace",
+  "trace_tracy",
+  "bevy_remote",
+] }
 bevy_auto_plugin = "0.8.0"
 bevy_common_assets = { version = "0.14", features = ["toml"] }
 bevy_asset_loader = "=0.24.0-rc.1"

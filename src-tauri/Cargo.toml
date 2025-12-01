@@ -7,7 +7,12 @@ edition.workspace = true
 game-engine = { path = "../game-engine" }
 
 # Bevy dependencies (needed for Tauri integration plugin)
-bevy = { version = "0.17.2", features = ["dynamic_linking", "jpeg", "bevy_dev_tools"] }
+bevy = { version = "0.17.2", features = [
+    "dynamic_linking",
+    "jpeg",
+    "bevy_dev_tools",
+    "bevy_remote",
+] }
 bevy-tokio-tasks = { git = "https://github.com/TBye101/bevy-tokio-tasks.git", branch = "master" }
 bevy_framepace = "0.20"
 

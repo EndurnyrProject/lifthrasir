@@ -3,6 +3,7 @@ use bevy::ecs::entity::Entity;
 use bevy::ecs::system::{Query, SystemState};
 use bevy::prelude::MessageWriter;
 use bevy::prelude::*;
+use bevy::remote::RemotePlugin;
 use bevy::render::renderer::initialize_renderer;
 use bevy::render::settings::{Backends, RenderCreation, WgpuSettings};
 use bevy::render::RenderPlugin;
@@ -411,6 +412,7 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
             app.add_plugins((
                 bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
                 bevy::dev_tools::fps_overlay::FpsOverlayPlugin::default(),
+                RemotePlugin::default(),
             ));
         }
 
