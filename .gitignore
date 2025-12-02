@@ -2,6 +2,39 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=zig,visualstudiocode,macos
 #
 
+### OCaml ###
+*.annot
+*.cmo
+*.cma
+*.cmi
+*.a
+*.o
+*.cmx
+*.cmxs
+*.cmxa
+
+web-ui/lib/
+
+# ocamlbuild working directory
+_build/
+
+# ocamlbuild targets
+*.byte
+*.native
+
+# oasis generated files
+setup.data
+setup.log
+
+# Merlin configuring file for Vim and Emacs
+.merlin
+
+# Dune generated files
+*.install
+
+# Local OPAM switch
+_opam/
+
 # GRF
 *.grf
 
@@ -251,5 +284,22 @@ dist
 # .pnp.*
 
 # End of https://www.toptal.com/developers/gitignore/api/zig,visualstudiocode,macos
+
+### ReScript ###
+# Compiled ReScript files
+*.bs.js
+*.bs.mjs
+
+# ReScript/OCaml compiler artifacts
+*.ast
+*.cmt
+*.cmti
+*.cmi
+*.cmj
+
+# ReScript build artifacts
+lib/bs/
+lib/ocaml/
+.bsb.lock
 
 

@@ -1,0 +1,27 @@
+{
+  "name": "lifthrasir-ui",
+  "sources": [
+    {
+      "dir": "src",
+      "subdirs": true
+    }
+  ],
+  "package-specs": [
+    {
+      "module": "es6",
+      "in-source": true
+    }
+  ],
+  "suffix": ".bs.js",
+  "dependencies": [
+    "@rescript/react",
+    "@rescript/core"
+  ],
+  "jsx": {
+    "version": 4,
+    "mode": "automatic"
+  },
+  "warnings": {
+    "error": "+101"
+  }
+}

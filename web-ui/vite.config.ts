@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import createReScriptPlugin from '@jihchi/vite-plugin-rescript';
 import react from "@vitejs/plugin-react";
 
 // @ts-expect-error process is a nodejs global
@@ -8,7 +9,7 @@ const port = process.env.PORT ? parseInt(process.env.PORT) : 1420;
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [react(), createReScriptPlugin()],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
