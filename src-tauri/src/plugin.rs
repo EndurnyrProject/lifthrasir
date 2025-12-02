@@ -40,6 +40,15 @@ use super::commands;
 use game_engine::core::state::GameState;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
 
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TauriSystems {
+    Demux,
+    Handlers,
+    ResponseWriters,
+    Emitters,
+    Cleanup,
+}
+
 /// Type alias for window resize event system state
 type WindowResizeSystemState = SystemState<(
     MessageWriter<'static, WindowResized>,
@@ -216,51 +225,70 @@ impl Plugin for TauriIntegrationPlugin {
             .add_message::<GetCharacterStatusRequestedEvent>()
             .add_message::<ChatRequestedEvent>();
 
-        // Add new event-driven system architecture
-        // 1. demux_tauri_events: Reads from flume channel, emits typed events (runs first)
-        // 2. Handler systems: Process typed events, emit game engine events (run after demux)
-        // 3. Response writer systems: Capture game engine response events, send to UI (run after handlers)
-        // 4. Cleanup system runs periodically to remove stale correlations
-        app.add_systems(
+        // Configure TauriSystems ordering: Demux -> Handlers -> ResponseWriters -> Emitters -> Cleanup
+        app.configure_sets(
             Update,
             (
-                demux_tauri_events,
-                (
-                    handle_login_request,
-                    handle_server_selection_request,
-                    handle_get_character_list_request,
-                    handle_select_character_request,
-                    handle_create_character_request,
-                    handle_delete_character_request,
-                    handle_get_hairstyles_request,
-                    handle_keyboard_input,
-                    handle_mouse_position,
-                    handle_mouse_click,
-                    handle_camera_rotation,
-                ),
-                (
-                    write_login_success_response,
-                    write_login_failure_response,
-                    write_server_selection_response,
-                    write_character_list_response,
-                    write_character_selection_response,
-                    write_character_creation_response,
-                    write_character_deletion_response,
-                    write_character_status_response,
-                    emit_character_status_system,
-                ),
-                cleanup_stale_correlations,
+                TauriSystems::Demux,
+                TauriSystems::Handlers,
+                TauriSystems::ResponseWriters,
+                TauriSystems::Emitters,
+                TauriSystems::Cleanup,
             )
                 .chain(),
         );
 
-        // Chat systems - only run when InGame
+        app.add_systems(Update, demux_tauri_events.in_set(TauriSystems::Demux));
+
         app.add_systems(
             Update,
-            (handle_chat_request, emit_chat_events)
-                .chain()
+            (
+                handle_login_request,
+                handle_server_selection_request,
+                handle_get_character_list_request,
+                handle_select_character_request,
+                handle_create_character_request,
+                handle_delete_character_request,
+                handle_get_hairstyles_request,
+                handle_keyboard_input,
+                handle_mouse_position,
+                handle_mouse_click,
+                handle_camera_rotation,
+            )
+                .in_set(TauriSystems::Handlers),
+        );
+
+        app.add_systems(
+            Update,
+            handle_chat_request
+                .in_set(TauriSystems::Handlers)
                 .run_if(in_state(GameState::InGame)),
         );
+
+        app.add_systems(
+            Update,
+            (
+                write_login_success_response,
+                write_login_failure_response,
+                write_server_selection_response,
+                write_character_list_response,
+                write_character_selection_response,
+                write_character_creation_response,
+                write_character_deletion_response,
+                write_character_status_response,
+                emit_character_status_system,
+            )
+                .in_set(TauriSystems::ResponseWriters),
+        );
+
+        app.add_systems(
+            Update,
+            emit_chat_events
+                .in_set(TauriSystems::Emitters)
+                .run_if(in_state(GameState::InGame)),
+        );
+
+        app.add_systems(Update, cleanup_stale_correlations.in_set(TauriSystems::Cleanup));
 
         // Set up Tauri app with custom runner
         let tauri_app = tauri::Builder::default()
@@ -301,7 +329,6 @@ impl Plugin for TauriIntegrationPlugin {
         let world_emitter = WorldEmitter::new(tauri_app.handle().clone());
         app.insert_resource(world_emitter);
 
-        // Add world emitter system (streaming status updates to frontend)
         app.add_systems(
             Update,
             (
@@ -309,7 +336,8 @@ impl Plugin for TauriIntegrationPlugin {
                 emit_cursor_changes,
                 emit_entity_unhover,
                 emit_hovered_entity_name,
-            ),
+            )
+                .in_set(TauriSystems::Emitters),
         );
 
         // Observer triggers when EntityName component is added to hovered entities
