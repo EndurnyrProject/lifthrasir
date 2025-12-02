@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_init_resource};
 use game_engine::domain::character::events::CharacterInfoWithJobName;
 use game_engine::domain::entities::character::components::CharacterInfo;
 use std::collections::HashMap;
@@ -6,6 +7,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
 
 use super::app_bridge::{HairstyleInfo, SessionData};
+use crate::plugin::TauriSystems;
 
 const CORRELATION_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -28,6 +30,7 @@ impl<T> CorrelationEntry<T> {
 }
 
 #[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::plugin::TauriIntegrationAutoPlugin)]
 pub struct LoginCorrelation {
     entries: HashMap<String, CorrelationEntry<Result<SessionData, String>>>,
 }
@@ -56,6 +59,7 @@ impl LoginCorrelation {
 }
 
 #[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::plugin::TauriIntegrationAutoPlugin)]
 pub struct CharacterCorrelation {
     selection_entries: HashMap<u8, CorrelationEntry<Result<(), String>>>,
     creation_entries: HashMap<u8, CorrelationEntry<Result<CharacterInfo, String>>>,
@@ -115,6 +119,7 @@ impl CharacterCorrelation {
 }
 
 #[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::plugin::TauriIntegrationAutoPlugin)]
 pub struct ServerCorrelation {
     entries: HashMap<usize, CorrelationEntry<Result<(), String>>>,
 }
@@ -138,6 +143,7 @@ impl ServerCorrelation {
 type CharacterListSender = oneshot::Sender<Result<Vec<CharacterInfoWithJobName>, String>>;
 
 #[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::plugin::TauriIntegrationAutoPlugin)]
 pub struct PendingCharacterListSenders {
     senders: Vec<(Instant, CharacterListSender)>,
 }
@@ -166,6 +172,7 @@ impl PendingCharacterListSenders {
 type HairstyleSender = oneshot::Sender<Result<Vec<HairstyleInfo>, String>>;
 
 #[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::plugin::TauriIntegrationAutoPlugin)]
 pub struct PendingHairstyleSenders {
     senders: Vec<(Instant, HairstyleSender)>,
 }
@@ -191,9 +198,10 @@ impl PendingHairstyleSenders {
     }
 }
 
-type CharacterStatusSender = oneshot::Sender<Result<super::app_bridge::CharacterStatusPayload, String>>;
+type CharacterStatusSender = oneshot::Sender<Result<super::character::CharacterStatusPayload, String>>;
 
 #[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::plugin::TauriIntegrationAutoPlugin)]
 pub struct PendingCharacterStatusSenders {
     senders: Vec<(Instant, CharacterStatusSender)>,
 }
@@ -219,6 +227,11 @@ impl PendingCharacterStatusSenders {
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Cleanup)
+)]
 pub fn cleanup_stale_correlations(
     mut login: ResMut<LoginCorrelation>,
     mut character: ResMut<CharacterCorrelation>,

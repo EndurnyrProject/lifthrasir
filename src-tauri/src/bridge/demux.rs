@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 
 use super::app_bridge::{TauriEventReceiver, TauriIncomingEvent};
 use super::correlation::{
@@ -7,7 +8,13 @@ use super::correlation::{
 };
 use super::event_writers::TauriMessageWriters;
 use super::events::*;
+use crate::plugin::TauriSystems;
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Demux)
+)]
 #[allow(clippy::too_many_arguments)]
 pub fn demux_tauri_events(
     receiver: Res<TauriEventReceiver>,

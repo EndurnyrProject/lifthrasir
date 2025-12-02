@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::domain::character::events::{
     ActorInitSent, MapLoadCompleted, MapLoadingFailed, MapLoadingStarted, ZoneAuthenticationFailed,
     ZoneAuthenticationSuccess, ZoneServerConnected, ZoneServerConnectionFailed,
@@ -6,6 +7,8 @@ use game_engine::domain::character::events::{
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+
+use crate::plugin::TauriSystems;
 
 /// Resource that allows world/zone systems to emit events to Tauri/React
 #[derive(Resource)]
@@ -112,7 +115,11 @@ impl WorldEmitter {
     }
 }
 
-/// System that listens to zone-related events and emits them to Tauri/React
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Emitters)
+)]
 #[allow(clippy::too_many_arguments)]
 pub fn emit_world_events(
     emitter: Res<WorldEmitter>,

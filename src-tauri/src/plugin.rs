@@ -12,32 +12,14 @@ use bevy::window::{
     RawHandleWrapper, RawHandleWrapperHolder, Window, WindowPlugin, WindowResized,
     WindowResolution, WindowScaleFactorChanged, WindowWrapper,
 };
+use bevy_auto_plugin::modes::global::prelude::{auto_plugin, AutoPlugin};
 use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
 use std::sync::Arc;
 use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindow};
 
-use super::bridge::{
-    cleanup_stale_correlations, demux_tauri_events, emit_character_status_system, emit_chat_events,
-    emit_cursor_changes, emit_entity_unhover, emit_hovered_entity_name, emit_world_events,
-    handle_camera_rotation, handle_chat_request, handle_create_character_request,
-    handle_delete_character_request, handle_get_character_list_request,
-    handle_get_hairstyles_request, handle_keyboard_input, handle_login_request, handle_mouse_click,
-    handle_mouse_position, handle_select_character_request, handle_server_selection_request,
-    on_entity_name_added_to_hovered, write_character_creation_response,
-    write_character_deletion_response, write_character_list_response,
-    write_character_selection_response, write_character_status_response,
-    write_login_failure_response, write_login_success_response, write_server_selection_response,
-    AppBridge, CameraRotationEvent, CharacterCorrelation, ChatRequestedEvent,
-    CreateCharacterRequestedEvent, DeleteCharacterRequestedEvent, GetCharacterListRequestedEvent,
-    GetCharacterStatusRequestedEvent, GetHairstylesRequestedEvent, KeyboardInputEvent,
-    LoginCorrelation, LoginRequestedEvent, MouseClickEvent, MousePositionEvent,
-    PendingCharacterListSenders, PendingCharacterStatusSenders, PendingHairstyleSenders,
-    SelectCharacterRequestedEvent, ServerCorrelation, ServerSelectionRequestedEvent,
-    TauriEventReceiver, WorldEmitter,
-};
+use super::bridge::{on_entity_name_added_to_hovered, AppBridge, TauriEventReceiver, WorldEmitter};
 use super::commands;
-use game_engine::core::state::GameState;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -48,6 +30,10 @@ pub enum TauriSystems {
     Emitters,
     Cleanup,
 }
+
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct TauriIntegrationAutoPlugin;
 
 /// Type alias for window resize event system state
 type WindowResizeSystemState = SystemState<(
@@ -198,32 +184,10 @@ impl Plugin for TauriIntegrationPlugin {
                 .disable::<bevy::anti_alias::AntiAliasPlugin>(), // Re-added later with render pipeline
         );
 
-        // Create AppBridge and event receiver
+        // Create AppBridge and event receiver (runtime values - must be manual)
         let (app_bridge, tauri_rx) = AppBridge::new();
-
         app.insert_resource(app_bridge.clone());
         app.insert_resource(TauriEventReceiver(tauri_rx));
-        app.insert_resource(LoginCorrelation::default());
-        app.insert_resource(CharacterCorrelation::default());
-        app.insert_resource(ServerCorrelation::default());
-        app.insert_resource(PendingCharacterListSenders::default());
-        app.insert_resource(PendingHairstyleSenders::default());
-        app.insert_resource(PendingCharacterStatusSenders::default());
-
-        // Register typed Bevy events for Tauri bridge
-        app.add_message::<LoginRequestedEvent>()
-            .add_message::<ServerSelectionRequestedEvent>()
-            .add_message::<GetCharacterListRequestedEvent>()
-            .add_message::<SelectCharacterRequestedEvent>()
-            .add_message::<CreateCharacterRequestedEvent>()
-            .add_message::<DeleteCharacterRequestedEvent>()
-            .add_message::<GetHairstylesRequestedEvent>()
-            .add_message::<KeyboardInputEvent>()
-            .add_message::<MousePositionEvent>()
-            .add_message::<MouseClickEvent>()
-            .add_message::<CameraRotationEvent>()
-            .add_message::<GetCharacterStatusRequestedEvent>()
-            .add_message::<ChatRequestedEvent>();
 
         // Configure TauriSystems ordering: Demux -> Handlers -> ResponseWriters -> Emitters -> Cleanup
         app.configure_sets(
@@ -238,57 +202,8 @@ impl Plugin for TauriIntegrationPlugin {
                 .chain(),
         );
 
-        app.add_systems(Update, demux_tauri_events.in_set(TauriSystems::Demux));
-
-        app.add_systems(
-            Update,
-            (
-                handle_login_request,
-                handle_server_selection_request,
-                handle_get_character_list_request,
-                handle_select_character_request,
-                handle_create_character_request,
-                handle_delete_character_request,
-                handle_get_hairstyles_request,
-                handle_keyboard_input,
-                handle_mouse_position,
-                handle_mouse_click,
-                handle_camera_rotation,
-            )
-                .in_set(TauriSystems::Handlers),
-        );
-
-        app.add_systems(
-            Update,
-            handle_chat_request
-                .in_set(TauriSystems::Handlers)
-                .run_if(in_state(GameState::InGame)),
-        );
-
-        app.add_systems(
-            Update,
-            (
-                write_login_success_response,
-                write_login_failure_response,
-                write_server_selection_response,
-                write_character_list_response,
-                write_character_selection_response,
-                write_character_creation_response,
-                write_character_deletion_response,
-                write_character_status_response,
-                emit_character_status_system,
-            )
-                .in_set(TauriSystems::ResponseWriters),
-        );
-
-        app.add_systems(
-            Update,
-            emit_chat_events
-                .in_set(TauriSystems::Emitters)
-                .run_if(in_state(GameState::InGame)),
-        );
-
-        app.add_systems(Update, cleanup_stale_correlations.in_set(TauriSystems::Cleanup));
+        // Add auto-plugin for events, resources, and systems
+        app.add_plugins(TauriIntegrationAutoPlugin);
 
         // Set up Tauri app with custom runner
         let tauri_app = tauri::Builder::default()
@@ -326,19 +241,9 @@ impl Plugin for TauriIntegrationPlugin {
         );
 
         // Create and insert world emitter (for streaming zone/map status updates)
+        // WorldEmitter requires runtime tauri AppHandle - must be manual
         let world_emitter = WorldEmitter::new(tauri_app.handle().clone());
         app.insert_resource(world_emitter);
-
-        app.add_systems(
-            Update,
-            (
-                emit_world_events,
-                emit_cursor_changes,
-                emit_entity_unhover,
-                emit_hovered_entity_name,
-            )
-                .in_set(TauriSystems::Emitters),
-        );
 
         // Observer triggers when EntityName component is added to hovered entities
         // This solves the race condition where names arrive from server after hover detection

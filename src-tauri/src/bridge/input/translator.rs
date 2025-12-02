@@ -1,11 +1,13 @@
 use bevy::input::ButtonInput;
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::domain::camera::CameraRotationDelta;
 use game_engine::domain::input::{ForwardedCursorPosition, ForwardedMouseClick};
 
 use crate::bridge::events::{
     CameraRotationEvent, KeyboardInputEvent, MouseClickEvent, MousePositionEvent,
 };
+use crate::plugin::TauriSystems;
 
 /// Convert JavaScript KeyboardEvent.code to Bevy KeyCode
 fn js_code_to_bevy_keycode(code: &str) -> Option<KeyCode> {
@@ -66,8 +68,11 @@ fn js_code_to_bevy_keycode(code: &str) -> Option<KeyCode> {
     }
 }
 
-/// System that handles KeyboardInputEvent
-/// Directly updates Bevy's ButtonInput<KeyCode> resource
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Handlers)
+)]
 pub fn handle_keyboard_input(
     mut events: MessageReader<KeyboardInputEvent>,
     mut keyboard_input: ResMut<ButtonInput<KeyCode>>,
@@ -83,8 +88,11 @@ pub fn handle_keyboard_input(
     }
 }
 
-/// System that handles MousePositionEvent
-/// Directly updates ForwardedCursorPosition resource
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Handlers)
+)]
 pub fn handle_mouse_position(
     mut events: MessageReader<MousePositionEvent>,
     mut cursor_position: ResMut<ForwardedCursorPosition>,
@@ -94,8 +102,11 @@ pub fn handle_mouse_position(
     }
 }
 
-/// System that handles MouseClickEvent
-/// Updates ForwardedMouseClick resource
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Handlers)
+)]
 pub fn handle_mouse_click(
     mut events: MessageReader<MouseClickEvent>,
     mut mouse_click: ResMut<ForwardedMouseClick>,
@@ -105,8 +116,11 @@ pub fn handle_mouse_click(
     }
 }
 
-/// System that handles CameraRotationEvent
-/// Updates CameraRotationDelta resource
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Handlers)
+)]
 pub fn handle_camera_rotation(
     mut events: MessageReader<CameraRotationEvent>,
     mut rotation_delta: ResMut<CameraRotationDelta>,

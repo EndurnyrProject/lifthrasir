@@ -13,6 +13,7 @@ bevy = { version = "0.17.3", features = [
 ] }
 bevy-tokio-tasks = { git = "https://github.com/TBye101/bevy-tokio-tasks.git", branch = "master" }
 bevy_framepace = "0.20"
+bevy_auto_plugin = "0.8.0"
 
 # Tauri dependencies
 tauri = { version = "2.9.4", features = ["macos-private-api"] }

@@ -1,17 +1,21 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::domain::input::CurrentCursorType;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+
+use crate::plugin::TauriSystems;
 
 #[derive(Serialize, Clone)]
 struct CursorChangePayload {
     cursor_type: String,
 }
 
-/// System that emits cursor changes to the Tauri frontend
-///
-/// Polls CurrentCursorType resource for changes and emits cursor-change
-/// events that the React frontend can consume to update the CSS cursor
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Emitters)
+)]
 pub fn emit_cursor_changes(app_handle: NonSend<AppHandle>, current_cursor: Res<CurrentCursorType>) {
     if !current_cursor.is_changed() {
         return;

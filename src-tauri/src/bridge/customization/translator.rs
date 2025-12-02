@@ -1,11 +1,18 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::domain::character::catalog::HeadStyleCatalog;
 use game_engine::domain::entities::character::components::Gender;
 
 use crate::bridge::app_bridge::HairstyleInfo;
 use crate::bridge::correlation::PendingHairstyleSenders;
 use crate::bridge::events::GetHairstylesRequestedEvent;
+use crate::plugin::TauriSystems;
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Handlers)
+)]
 pub fn handle_get_hairstyles_request(
     mut events: MessageReader<GetHairstylesRequestedEvent>,
     mut hairstyle_senders: ResMut<PendingHairstyleSenders>,

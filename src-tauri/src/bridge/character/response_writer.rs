@@ -1,10 +1,18 @@
-use crate::bridge::correlation::{CharacterCorrelation, PendingCharacterListSenders};
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::domain::character::events::{
     CharacterCreatedEvent, CharacterCreationFailedEvent, CharacterDeletedEvent,
     CharacterDeletionFailedEvent, CharacterListReceivedEvent, CharacterSelectedEvent,
 };
 
+use crate::bridge::correlation::{CharacterCorrelation, PendingCharacterListSenders};
+use crate::plugin::TauriSystems;
+
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::ResponseWriters)
+)]
 pub fn write_character_list_response(
     mut list_events: MessageReader<CharacterListReceivedEvent>,
     mut char_list_senders: ResMut<PendingCharacterListSenders>,
@@ -25,6 +33,11 @@ pub fn write_character_list_response(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::ResponseWriters)
+)]
 pub fn write_character_selection_response(
     mut select_events: MessageReader<CharacterSelectedEvent>,
     mut correlation: ResMut<CharacterCorrelation>,
@@ -47,6 +60,11 @@ pub fn write_character_selection_response(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::ResponseWriters)
+)]
 pub fn write_character_creation_response(
     mut create_events: MessageReader<CharacterCreatedEvent>,
     mut create_fail_events: MessageReader<CharacterCreationFailedEvent>,
@@ -87,6 +105,11 @@ pub fn write_character_creation_response(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::ResponseWriters)
+)]
 pub fn write_character_deletion_response(
     mut delete_events: MessageReader<CharacterDeletedEvent>,
     mut delete_fail_events: MessageReader<CharacterDeletionFailedEvent>,

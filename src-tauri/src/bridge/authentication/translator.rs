@@ -1,10 +1,17 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::{LoginAttemptEvent, ServerSelectedEvent};
 
 use crate::bridge::correlation::ServerCorrelation;
 use crate::bridge::events::{LoginRequestedEvent, ServerSelectionRequestedEvent};
+use crate::plugin::TauriSystems;
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Handlers)
+)]
 pub fn handle_login_request(
     mut events: MessageReader<LoginRequestedEvent>,
     mut login_events: MessageWriter<LoginAttemptEvent>,
@@ -22,6 +29,11 @@ pub fn handle_login_request(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Handlers)
+)]
 pub fn handle_server_selection_request(
     mut events: MessageReader<ServerSelectionRequestedEvent>,
     mut correlation: ResMut<ServerCorrelation>,

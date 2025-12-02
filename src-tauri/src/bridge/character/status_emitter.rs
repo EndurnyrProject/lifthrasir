@@ -1,6 +1,5 @@
-use crate::bridge::correlation::PendingCharacterStatusSenders;
-use crate::bridge::events::GetCharacterStatusRequestedEvent;
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::domain::entities::character::components::core::CharacterData;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::character::events::status_events::StatusParameterChanged;
@@ -9,6 +8,10 @@ use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+
+use crate::bridge::correlation::PendingCharacterStatusSenders;
+use crate::bridge::events::GetCharacterStatusRequestedEvent;
+use crate::plugin::TauriSystems;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct CharacterStatusPayload {
@@ -63,6 +66,11 @@ fn build_character_status_payload(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::ResponseWriters)
+)]
 pub fn write_character_status_response(
     mut request_events: MessageReader<GetCharacterStatusRequestedEvent>,
     mut status_senders: ResMut<PendingCharacterStatusSenders>,
@@ -94,6 +102,11 @@ pub fn write_character_status_response(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::ResponseWriters)
+)]
 pub fn emit_character_status_system(
     app_handle: NonSend<AppHandle>,
     mut status_events: MessageReader<StatusParameterChanged>,

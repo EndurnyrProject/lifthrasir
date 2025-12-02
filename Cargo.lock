@@ -5091,6 +5091,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy-tokio-tasks",
+ "bevy_auto_plugin",
  "bevy_framepace",
  "flume",
  "game-engine",

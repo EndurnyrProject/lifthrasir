@@ -1,11 +1,14 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::{
+    core::state::GameState,
     domain::character::systems::ZoneSessionData,
     infrastructure::networking::{client::ZoneServerClient, protocol::zone::ChatReceived},
 };
 use tauri::Emitter;
 
 use super::events::ChatRequestedEvent;
+use crate::plugin::TauriSystems;
 
 #[derive(Clone, serde::Serialize)]
 struct ChatPayload {
@@ -13,6 +16,11 @@ struct ChatPayload {
     message: String,
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Handlers, run_if = in_state(GameState::InGame))
+)]
 pub fn handle_chat_request(
     mut events: MessageReader<ChatRequestedEvent>,
     mut client: Option<ResMut<ZoneServerClient>>,
@@ -36,6 +44,11 @@ pub fn handle_chat_request(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Emitters, run_if = in_state(GameState::InGame))
+)]
 pub fn emit_chat_events(
     mut events: MessageReader<ChatReceived>,
     app_handle: NonSend<tauri::AppHandle>,

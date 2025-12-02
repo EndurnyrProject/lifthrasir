@@ -1,9 +1,17 @@
-use crate::bridge::correlation::{LoginCorrelation, ServerCorrelation};
-use crate::bridge::SessionData;
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::domain::authentication::events::{LoginFailureEvent, LoginSuccessEvent};
 use game_engine::presentation::ui::events::ServerSelectedEvent;
 
+use crate::bridge::correlation::{LoginCorrelation, ServerCorrelation};
+use crate::bridge::SessionData;
+use crate::plugin::TauriSystems;
+
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::ResponseWriters)
+)]
 pub fn write_login_success_response(
     mut success_events: MessageReader<LoginSuccessEvent>,
     mut correlation: ResMut<LoginCorrelation>,
@@ -39,6 +47,11 @@ pub fn write_login_success_response(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::ResponseWriters)
+)]
 pub fn write_login_failure_response(
     mut failure_events: MessageReader<LoginFailureEvent>,
     mut correlation: ResMut<LoginCorrelation>,
@@ -70,6 +83,11 @@ pub fn write_login_failure_response(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::ResponseWriters)
+)]
 pub fn write_server_selection_response(
     mut server_events: MessageReader<ServerSelectedEvent>,
     mut correlation: ResMut<ServerCorrelation>,

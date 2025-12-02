@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::domain::entities::{
     components::{EntityName, NetworkEntity},
     hover::HoveredEntity,
@@ -6,6 +7,8 @@ use game_engine::domain::entities::{
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+
+use crate::plugin::TauriSystems;
 
 #[derive(Serialize, Clone)]
 struct EntityNameEvent {
@@ -98,6 +101,11 @@ pub fn on_entity_name_added_to_hovered(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Emitters)
+)]
 pub fn emit_entity_unhover(
     app_handle: NonSend<AppHandle>,
     hovered_query: Query<Entity, With<HoveredEntity>>,
@@ -120,6 +128,11 @@ pub fn emit_entity_unhover(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::plugin::TauriIntegrationAutoPlugin,
+    schedule = Update,
+    config(in_set = TauriSystems::Emitters)
+)]
 pub fn emit_hovered_entity_name(
     app_handle: NonSend<AppHandle>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
