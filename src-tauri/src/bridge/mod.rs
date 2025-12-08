@@ -15,7 +15,7 @@ pub mod macros;
 
 pub use character::CharacterStatusPayload;
 
-pub use input::on_entity_name_added_to_hovered;
+pub use input::{on_entity_name_added_to_hovered, on_hover_started_with_name};
 
 pub use world::WorldEmitter;
 

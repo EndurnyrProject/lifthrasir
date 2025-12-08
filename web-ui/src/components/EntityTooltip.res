@@ -47,7 +47,7 @@ let make = () => {
       className="entity-tooltip"
       style={Styles.make({
         "left": `${Int.toString(data.screenX)}px`,
-        "top": `${Int.toString(data.screenY - 40)}px`,
+        "top": `${Int.toString(data.screenY + 20)}px`,
       })}>
       <div className="entity-tooltip-name"> {React.string(data.name)} </div>
       {switch data.partyName {

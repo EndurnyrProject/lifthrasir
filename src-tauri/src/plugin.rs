@@ -18,7 +18,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 use tauri::{async_runtime::block_on, Manager, RunEvent, WebviewWindow};
 
-use super::bridge::{on_entity_name_added_to_hovered, AppBridge, TauriEventReceiver, WorldEmitter};
+use super::bridge::{
+    on_entity_name_added_to_hovered, on_hover_started_with_name, AppBridge, TauriEventReceiver,
+    WorldEmitter,
+};
 use super::commands;
 use game_engine::infrastructure::assets::SharedCompositeAssetSource;
 
@@ -245,8 +248,9 @@ impl Plugin for TauriIntegrationPlugin {
         let world_emitter = WorldEmitter::new(tauri_app.handle().clone());
         app.insert_resource(world_emitter);
 
-        // Observer triggers when EntityName component is added to hovered entities
-        // This solves the race condition where names arrive from server after hover detection
+        // Observer triggers when hovering starts on entity that already has a cached name
+        app.add_observer(on_hover_started_with_name);
+        // Observer triggers when EntityName arrives while entity is still being hovered
         app.add_observer(on_entity_name_added_to_hovered);
 
         app.insert_non_send_resource(tauri_app.handle().clone());

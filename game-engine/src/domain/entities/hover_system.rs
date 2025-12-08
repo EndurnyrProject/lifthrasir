@@ -97,7 +97,7 @@ pub fn entity_hover_detection_system(
                 entity: prev_entity,
             });
 
-            commands.entity(entity).try_insert(HoveredEntity);
+            commands.entity(entity).insert(HoveredEntity);
             commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,
@@ -107,7 +107,7 @@ pub fn entity_hover_detection_system(
             *previous_hovered = Some(entity);
         }
         (Some((entity, network_entity)), None) => {
-            commands.entity(entity).try_insert(HoveredEntity);
+            commands.entity(entity).insert(HoveredEntity);
             commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,

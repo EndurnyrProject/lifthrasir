@@ -60,18 +60,10 @@ pub fn name_response_handler_system(
         let aid = event.char_id;
 
         let Some(entity) = entity_registry.get_entity(aid) else {
-            debug!(
-                "Received name for AID {} but entity no longer exists (may have despawned) - name: {}",
-                aid, event.name
-            );
             continue;
         };
 
         if commands.get_entity(entity).is_err() {
-            debug!(
-                "Received name for AID {} but entity {:?} was already despawned - name: {}",
-                aid, entity, event.name
-            );
             continue;
         }
 
@@ -80,22 +72,13 @@ pub fn name_response_handler_system(
     }
 
     for event in full_name_events.read() {
-        // Note: event.gid is misleadingly named - it contains AID
         let aid = event.gid;
 
         let Some(entity) = entity_registry.get_entity(aid) else {
-            debug!(
-                "Received full name for AID {} but entity no longer exists (may have despawned) - name: {}",
-                aid, event.name
-            );
             continue;
         };
 
         if commands.get_entity(entity).is_err() {
-            debug!(
-                "Received full name for AID {} but entity {:?} was already despawned - name: {}",
-                aid, entity, event.name
-            );
             continue;
         }
 
