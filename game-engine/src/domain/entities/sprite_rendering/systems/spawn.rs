@@ -1,5 +1,5 @@
 use super::super::components::{RoSpriteLayer, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
-use super::super::events::SpawnSpriteEvent;
+use super::super::events::{RequestSpriteSpawn, SpawnSpriteEvent};
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::{
     equipment::EquipmentSlot, CharacterAppearance,
@@ -280,4 +280,30 @@ pub fn spawn_sprite_hierarchy(
         // Insert immediately instead of queuing to ensure populate_sprite_assets can access it in the same frame
         commands.entity(entity).insert((object_tree, sprite_info));
     }
+}
+
+/// Observer for sprite spawn requests
+///
+/// This observer is triggered when an entity requests sprite spawning.
+/// It converts the entity-targeted observer event to a SpawnSpriteEvent message.
+/// Using an observer ensures the entity exists in the ECS world before the
+/// sprite spawn event is written, avoiding race conditions with buffered commands.
+#[auto_observer(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
+pub fn on_request_sprite_spawn(
+    trigger: On<RequestSpriteSpawn>,
+    mut sprite_spawn_writer: MessageWriter<SpawnSpriteEvent>,
+) {
+    let event = trigger.event();
+    let entity = trigger.entity;
+
+    debug!(
+        "RequestSpriteSpawn observer triggered for entity {:?}",
+        entity
+    );
+
+    sprite_spawn_writer.write(SpawnSpriteEvent {
+        entity,
+        position: event.position,
+        sprite_info: event.sprite_info.clone(),
+    });
 }

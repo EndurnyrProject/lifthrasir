@@ -9,3 +9,16 @@ pub struct SpawnSpriteEvent {
     pub position: Vec3,
     pub sprite_info: EntitySpriteInfo,
 }
+
+/// Observer event to request sprite spawning for an entity
+///
+/// This event is triggered via `commands.entity().trigger()` after entity creation.
+/// Using an observer ensures the entity exists in the ECS world before sprite spawn
+/// is attempted, avoiding race conditions with buffered commands.
+#[derive(EntityEvent, Debug, Clone)]
+pub struct RequestSpriteSpawn {
+    #[event_target]
+    pub entity: Entity,
+    pub position: Vec3,
+    pub sprite_info: EntitySpriteInfo,
+}

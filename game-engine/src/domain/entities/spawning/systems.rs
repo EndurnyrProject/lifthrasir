@@ -16,11 +16,12 @@ use crate::{
             pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
             registry::EntityRegistry,
             spawning::events::{
-                DespawnEntity, EntityVanishRequested, RequestEntityVanish, SpawnEntity,
+                DespawnEntity, EntityVanishRequested, PendingSpawnBuffer, RequestEntityVanish,
+                SpawnEntity,
             },
             sprite_rendering::{
                 components::{EntitySpriteData, EntitySpriteInfo},
-                events::SpawnSpriteEvent,
+                events::RequestSpriteSpawn,
             },
         },
         system_sets::EntityLifecycleSystems,
@@ -49,7 +50,6 @@ pub fn spawn_network_entity_system(
     mut commands: Commands,
     mut spawn_events: MessageReader<SpawnEntity>,
     mut entity_registry: ResMut<EntityRegistry>,
-    mut sprite_spawn_generic: MessageWriter<SpawnSpriteEvent>,
     job_registry: Option<Res<JobSpriteRegistry>>,
     mut movement_events: MessageWriter<MovementConfirmedByServer>,
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
@@ -350,10 +350,11 @@ pub fn spawn_network_entity_system(
                     head: event.head,
                 };
 
-                sprite_spawn_generic.write(SpawnSpriteEvent {
-                    entity: entity_id,
+                let sprite_info = EntitySpriteInfo { sprite_data };
+                commands.entity(entity_id).trigger(|entity| RequestSpriteSpawn {
+                    entity,
                     position: world_pos,
-                    sprite_info: EntitySpriteInfo { sprite_data },
+                    sprite_info,
                 });
             }
             crate::domain::entities::types::ObjectType::Mob
@@ -384,10 +385,11 @@ pub fn spawn_network_entity_system(
                     _ => unreachable!(),
                 };
 
-                sprite_spawn_generic.write(SpawnSpriteEvent {
-                    entity: entity_id,
+                let sprite_info = EntitySpriteInfo { sprite_data };
+                commands.entity(entity_id).trigger(|entity| RequestSpriteSpawn {
+                    entity,
                     position: world_pos,
-                    sprite_info: EntitySpriteInfo { sprite_data },
+                    sprite_info,
                 });
             }
         }
@@ -473,6 +475,7 @@ pub fn bridge_vanish_requests_system(
     mut commands: Commands,
     mut vanish_requests: MessageReader<RequestEntityVanish>,
     entity_registry: Res<EntityRegistry>,
+    entity_query: Query<Entity>,
 ) {
     for request in vanish_requests.read() {
         let Some(entity) = entity_registry.get_entity(request.aid) else {
@@ -482,6 +485,14 @@ pub fn bridge_vanish_requests_system(
             );
             continue;
         };
+
+        if entity_query.get(entity).is_err() {
+            debug!(
+                "Vanish request for AID {} but entity {:?} not in ECS yet (registry desync)",
+                request.aid, entity
+            );
+            continue;
+        }
 
         commands.trigger(EntityVanishRequested {
             entity,
@@ -603,5 +614,55 @@ pub fn debug_entity_spawn_timing_system(
             network_entity.object_type,
             spawn_details.spawn_tick()
         );
+    }
+}
+
+/// Capture spawn events when not in InGame state
+///
+/// This system runs during Connecting and Loading states to buffer spawn events
+/// that arrive before the game is ready to process them. The events are stored
+/// in PendingSpawnBuffer and replayed when entering InGame state.
+#[auto_add_system(
+    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    schedule = Update,
+    config(
+        run_if = not(in_state(GameState::InGame))
+    )
+)]
+pub fn buffer_spawn_events_system(
+    mut spawn_events: MessageReader<SpawnEntity>,
+    mut buffer: ResMut<PendingSpawnBuffer>,
+) {
+    for event in spawn_events.read() {
+        debug!(
+            "Buffering spawn event for {} (AID {}) - not in InGame state",
+            event.name, event.aid
+        );
+        buffer.events.push(event.clone());
+    }
+}
+
+/// Drain buffered spawn events when entering InGame state
+///
+/// This system runs once when the game transitions to InGame state.
+/// It replays all buffered spawn events so entities that appeared
+/// during Connecting/Loading states are properly spawned.
+#[auto_add_system(
+    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    schedule = OnEnter(GameState::InGame)
+)]
+pub fn drain_spawn_buffer_system(
+    mut buffer: ResMut<PendingSpawnBuffer>,
+    mut spawn_writer: MessageWriter<SpawnEntity>,
+) {
+    let count = buffer.events.len();
+    if count > 0 {
+        info!(
+            "Draining {} buffered spawn events on entering InGame",
+            count
+        );
+        for event in buffer.events.drain(..) {
+            spawn_writer.write(event);
+        }
     }
 }

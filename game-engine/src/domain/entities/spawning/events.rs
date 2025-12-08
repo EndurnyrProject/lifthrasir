@@ -1,6 +1,15 @@
 use crate::domain::entities::types::ObjectType;
 use bevy::prelude::*;
 
+/// Buffer for spawn events that arrive before GameState::InGame
+///
+/// Events are captured during Connecting/Loading states and replayed
+/// when the game enters InGame state.
+#[derive(Resource, Default)]
+pub struct PendingSpawnBuffer {
+    pub events: Vec<SpawnEntity>,
+}
+
 /// Event to spawn a network entity
 #[derive(Message, Debug, Clone)]
 pub struct SpawnEntity {
