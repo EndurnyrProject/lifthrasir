@@ -17,9 +17,7 @@
         "height": 1080,
         "transparent": true,
         "resizable": false,
-        "devtools": true,
-        "visible": true,
-        "decorations": true
+        "devtools": true
       }
     ],
     "security": {

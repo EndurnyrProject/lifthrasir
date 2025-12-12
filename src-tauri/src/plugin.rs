@@ -233,7 +233,6 @@ impl Plugin for TauriIntegrationPlugin {
                 commands::chat::send_chat_message,
                 commands::dev::open_devtools,
                 commands::dev::close_devtools,
-                commands::dev::refresh_window,
             ])
             .build(tauri::generate_context!())
             .expect("error while building tauri application");
@@ -359,12 +358,6 @@ fn handle_ready_event(app_handle: &tauri::AppHandle, mut app: RefMut<'_, BevyApp
 
         // Add camera systems separately
         game_engine::LifthrasirPlugin::add_camera_systems(&mut app);
-
-        // WORKAROUND: macOS WebKit transparent window bug
-        // Toggling decorations forces a repaint that makes content visible
-        // See: https://github.com/tauri-apps/tauri/issues/8255
-        // #[cfg(target_os = "macos")]
-        // let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
         // Wait for all plugins to be ready
         while app.plugins_state() != PluginsState::Ready {
