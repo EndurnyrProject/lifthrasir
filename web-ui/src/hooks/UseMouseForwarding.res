@@ -1,8 +1,3 @@
-let getOffsets = () => {
-  let dpr = DomBindings.devicePixelRatio
-  (34.0 *. dpr, 17.0 *. dpr, dpr)
-}
-
 let use = (~isActive: bool) => {
   let lastMousePosition = React.useRef(None)
 
@@ -21,25 +16,29 @@ let use = (~isActive: bool) => {
     if !isActive {
       None
     } else {
-      let (xOffset, yOffset, dpr) = getOffsets()
-
       switch lastMousePosition.current {
       | Some(pos) => {
           let x: float = pos["x"]
           let y: float = pos["y"]
-          let _ = Tauri.Core.invoke("forward_mouse_position", {
-            "x": (x -. xOffset) *. dpr,
-            "y": (y -. yOffset) *. dpr,
-          })
+          let _ = Tauri.Core.invoke(
+            "forward_mouse_position",
+            {
+              "x": x -. 36.0,
+              "y": y +. 20.0,
+            },
+          )
         }
       | None => ()
       }
 
       let handleMouseMove = (e: Dom.event) => {
-        let _ = Tauri.Core.invoke("forward_mouse_position", {
-          "x": (DomBindings.Event.clientX(e) -. xOffset) *. dpr,
-          "y": (DomBindings.Event.clientY(e) -. yOffset) *. dpr,
-        })
+        let _ = Tauri.Core.invoke(
+          "forward_mouse_position",
+          {
+            "x": DomBindings.Event.clientX(e) -. 36.0,
+            "y": DomBindings.Event.clientY(e) +. 20.0,
+          },
+        )
       }
 
       DomBindings.Document.addEventListener("mousemove", handleMouseMove)
@@ -53,11 +52,13 @@ let use = (~isActive: bool) => {
     } else {
       let handleMouseClick = (e: Dom.event) => {
         if DomBindings.Event.button(e) === 0 {
-          let (xOffset, yOffset, dpr) = getOffsets()
-          let _ = Tauri.Core.invoke("forward_mouse_click", {
-            "x": (DomBindings.Event.clientX(e) -. xOffset) *. dpr,
-            "y": (DomBindings.Event.clientY(e) -. yOffset) *. dpr,
-          })
+          let _ = Tauri.Core.invoke(
+            "forward_mouse_click",
+            {
+              "x": DomBindings.Event.clientX(e) -. 34.0,
+              "y": DomBindings.Event.clientY(e) -. 17.0,
+            },
+          )
         }
       }
 
