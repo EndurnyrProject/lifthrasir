@@ -5,6 +5,10 @@
   box-sizing: border-box;
 }
 
+html, body {
+  background: transparent;
+}
+
 body {
   font-family: var(--font-serif-classic);
   -webkit-font-smoothing: antialiased;
@@ -14,4 +18,5 @@ body {
 #root {
   width: 100%;
   height: 100vh;
+  background: transparent;
 }

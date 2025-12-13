@@ -3,12 +3,24 @@
 
 module Window = {
   @val external location: {..} = "window.location"
+  @val external innerWidth: int = "window.innerWidth"
+  @val external innerHeight: int = "window.innerHeight"
 }
 
 module Document = {
   @val external addEventListener: (string, Dom.event => unit) => unit = "document.addEventListener"
   @val external removeEventListener: (string, Dom.event => unit) => unit =
     "document.removeEventListener"
+  @val external dispatchEvent: Dom.event => bool = "document.dispatchEvent"
+}
+
+module MouseEvent = {
+  type mouseEventInit = {
+    bubbles: bool,
+    clientX: int,
+    clientY: int,
+  }
+  @new external make: (string, mouseEventInit) => Dom.event = "MouseEvent"
 }
 
 module Element = {

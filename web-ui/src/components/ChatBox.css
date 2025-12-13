@@ -12,7 +12,9 @@
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 12px;
     color: white;
-    pointer-events: auto; /* Ensure mouse events are captured */
+    pointer-events: auto;
+    transform: translateZ(0);
+    will-change: transform;
 }
 
 .chat-messages {

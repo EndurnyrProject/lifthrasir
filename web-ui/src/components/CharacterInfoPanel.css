@@ -13,6 +13,8 @@
   font-family: var(--font-serif-classic);
   color: #ecf0f1;
   z-index: 1000;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .character-info-panel.error {
@@ -144,6 +146,6 @@
 
 .character-info-panel:hover {
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
-  transform: translateY(-2px);
+  transform: translateZ(0) translateY(-2px);
   transition: all 0.3s ease;
 }

@@ -124,7 +124,7 @@ pub fn handle_movement_confirmed_system(
                 let current_world_pos = Vec3::new(current_pos.x, 0.0, current_pos.z);
 
                 debug!(
-                    "🔄 Movement interrupted: using current position ({}, {}) instead of server source ({}, {})",
+                    "Movement interrupted: using current position ({}, {}) instead of server source ({}, {})",
                     current_x, current_y, event.src_x, event.src_y
                 );
 
@@ -167,7 +167,11 @@ pub fn handle_movement_confirmed_system(
                         );
                         let walkable_path =
                             WalkablePath::new(waypoints, (event.dest_x, event.dest_y));
-                        commands.entity(entity).insert(walkable_path.clone());
+                        let Ok(mut entity_commands) = commands.get_entity(entity) else {
+                            debug!("Entity {:?} despawned before path could be applied", entity);
+                            continue;
+                        };
+                        entity_commands.insert(walkable_path.clone());
                         Some(walkable_path)
                     } else {
                         None
@@ -234,17 +238,20 @@ pub fn handle_movement_confirmed_system(
 
         let already_walking = matches!(movement_states.get(entity), Ok(MovementState::Moving));
 
+        let Ok(mut entity_commands) = commands.get_entity(entity) else {
+            debug!("Entity {:?} despawned before movement components could be applied", entity);
+            continue;
+        };
+
         if already_walking {
             debug!(
-                "🔄 Entity {:?} already walking - updating target without retriggering animation",
+                "Entity {:?} already walking - updating target without retriggering animation",
                 entity
             );
-            commands
-                .entity(entity)
-                .insert((target, CharacterDirection { facing: direction }));
+            entity_commands.insert((target, CharacterDirection { facing: direction }));
         } else {
-            debug!("🚶 INSERTING StartWalking trigger for entity {:?}", entity);
-            commands.entity(entity).remove::<StopWalking>().insert((
+            debug!("INSERTING StartWalking trigger for entity {:?}", entity);
+            entity_commands.remove::<StopWalking>().insert((
                 target,
                 MovementState::Moving,
                 CharacterDirection { facing: direction },
@@ -412,19 +419,23 @@ pub fn handle_movement_stopped_observer(
     if let Ok(movement_state) = movement_states.get(event.entity) {
         if matches!(movement_state, MovementState::Idle) {
             debug!(
-                "⏭️ Skipping StopWalking trigger for {:?}: already Idle",
+                "Skipping StopWalking trigger for {:?}: already Idle",
                 event.entity
             );
             return;
         }
     }
 
+    let Ok(mut entity_commands) = commands.get_entity(event.entity) else {
+        debug!("Entity {:?} already despawned, skipping movement cleanup", event.entity);
+        return;
+    };
+
     debug!(
-        "🛑 INSERTING StopWalking trigger for entity {:?}",
+        "INSERTING StopWalking trigger for entity {:?}",
         event.entity
     );
-    commands
-        .entity(event.entity)
+    entity_commands
         .remove::<MovementTarget>()
         .remove::<WalkablePath>()
         .remove::<StartWalking>()

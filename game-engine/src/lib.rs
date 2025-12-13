@@ -9,6 +9,7 @@ pub mod utils;
 
 // Re-export commonly used types
 pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin};
+pub use domain::camera::CameraPlugin;
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
 pub use domain::entities::billboard::BillboardPlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
@@ -32,6 +33,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(TokioTasksPlugin::default())
             .add(RoDiagnosticsPlugin)
             .add(LifthrasirPlugin)
+            .add(CameraPlugin)
             .add(AssetsPlugin)
             .add(JobSystemPlugin)
             .add(AudioPlugin)

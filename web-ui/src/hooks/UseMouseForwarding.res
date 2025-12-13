@@ -16,6 +16,7 @@ let use = (~isActive: bool) => {
     if !isActive {
       None
     } else {
+      let dpr = DomBindings.devicePixelRatio
       switch lastMousePosition.current {
       | Some(pos) => {
           let x: float = pos["x"]
@@ -23,8 +24,8 @@ let use = (~isActive: bool) => {
           let _ = Tauri.Core.invoke(
             "forward_mouse_position",
             {
-              "x": x -. 36.0,
-              "y": y +. 20.0,
+              "x": (x -. 36.0) *. dpr,
+              "y": (y +. 20.0) *. dpr,
             },
           )
         }
@@ -35,8 +36,8 @@ let use = (~isActive: bool) => {
         let _ = Tauri.Core.invoke(
           "forward_mouse_position",
           {
-            "x": DomBindings.Event.clientX(e) -. 36.0,
-            "y": DomBindings.Event.clientY(e) +. 20.0,
+            "x": (DomBindings.Event.clientX(e) -. 36.0) *. dpr,
+            "y": (DomBindings.Event.clientY(e) +. 20.0) *. dpr,
           },
         )
       }
@@ -52,11 +53,12 @@ let use = (~isActive: bool) => {
     } else {
       let handleMouseClick = (e: Dom.event) => {
         if DomBindings.Event.button(e) === 0 {
+          let dpr = DomBindings.devicePixelRatio
           let _ = Tauri.Core.invoke(
             "forward_mouse_click",
             {
-              "x": DomBindings.Event.clientX(e) -. 34.0,
-              "y": DomBindings.Event.clientY(e) -. 17.0,
+              "x": (DomBindings.Event.clientX(e) -. 34.0) *. dpr,
+              "y": (DomBindings.Event.clientY(e) -. 17.0) *. dpr,
             },
           )
         }

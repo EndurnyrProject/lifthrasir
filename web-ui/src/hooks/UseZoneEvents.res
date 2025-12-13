@@ -4,6 +4,16 @@ type zoneEventCallbacks = {
   onEnteringWorld: unit => unit,
 }
 
+let forceWebviewRepaint = async () => {
+  let window = Tauri.Window.getCurrentWindow()
+
+  await window->Tauri.Window.setDecorations(false)
+  await Promise.make((resolve, _reject) => {
+    let _ = setTimeout(() => resolve(), 200)
+  })
+  await window->Tauri.Window.setDecorations(true)
+}
+
 let use = (callbacks: zoneEventCallbacks) => {
   let (zoneStatus, setZoneStatus) = React.useState(() => "Connecting to zone server...")
 
@@ -28,8 +38,9 @@ let use = (callbacks: zoneEventCallbacks) => {
         let spawnX: int = event.payload["spawn_x"]->Option.getOr(0)
         let spawnY: int = event.payload["spawn_y"]->Option.getOr(0)
         Console.log2("[FRONTEND] Received 'zone-authenticated' event - spawn at", (spawnX, spawnY))
-        setZoneStatus(_ =>
-          `Authenticated! Loading map at (${Int.toString(spawnX)}, ${Int.toString(spawnY)})...`
+        setZoneStatus(
+          _ =>
+            `Authenticated! Loading map at (${Int.toString(spawnX)}, ${Int.toString(spawnY)})...`,
         )
       })
       let _ = Array.push(unlistenRefs, ref(u3))
@@ -52,6 +63,12 @@ let use = (callbacks: zoneEventCallbacks) => {
         Console.log("[FRONTEND] Received 'entering-world' event")
         setZoneStatus(_ => "Entering world...")
         callbacks.onEnteringWorld()
+        let _ = setTimeout(
+          () => {
+            forceWebviewRepaint()->ignore
+          },
+          50,
+        )
       })
       let _ = Array.push(unlistenRefs, ref(u6))
 
@@ -74,9 +91,11 @@ let use = (callbacks: zoneEventCallbacks) => {
 
     setup()->ignore
 
-    Some(() => {
-      unlistenRefs->Array.forEach(uRef => uRef.contents())
-    })
+    Some(
+      () => {
+        unlistenRefs->Array.forEach(uRef => uRef.contents())
+      },
+    )
   })
 
   zoneStatus

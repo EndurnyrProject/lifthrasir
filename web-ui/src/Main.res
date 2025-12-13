@@ -14,8 +14,6 @@ module ReactDOM = {
   external createRoot: Dom.element => Root.t = "createRoot"
 }
 
-let _ = Tauri.Core.invokeNoArgs("refresh_window")
-
 switch getElementById("root")->Nullable.toOption {
 | Some(root) => {
     let reactRoot = ReactDOM.createRoot(root)

@@ -13,11 +13,14 @@
     "windows": [
       {
         "title": "Lifthrasir - Ragnarok Online Client",
-        "width": 1440,
-        "height": 1080,
+        "width": 1024,
+        "height": 768,
         "transparent": true,
-        "resizable": false,
-        "devtools": true
+        "resizable": true,
+        "devtools": true,
+        "fullscreen": false,
+        "shadow": true,
+        "decorations": true
       }
     ],
     "security": {
@@ -40,7 +43,14 @@
             "core:app:default",
             "core:resources:default",
             "core:menu:default",
-            "core:tray:default"
+            "core:tray:default",
+            "core:window:allow-set-decorations",
+            "core:window:allow-set-position",
+            "core:window:allow-set-focus",
+            "core:window:allow-set-effects",
+            "core:window:allow-set-shadow",
+            "core:window:allow-set-size",
+            "core:window:allow-set-always-on-top"
           ]
         }
       ]

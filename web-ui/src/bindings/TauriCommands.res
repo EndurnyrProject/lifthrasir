@@ -167,14 +167,17 @@ module Assets = {
   }
 
   let getSpritePng = (request: spritePngRequest): promise<spritePngResponse> => {
-    Core.invoke("get_sprite_png", {
-      "spritePath": request.spritePath,
-      "actionIndex": request.actionIndex,
-      "frameIndex": request.frameIndex,
-      "actPath": request.actPath,
-      "palettePath": request.palettePath,
-      "scale": request.scale,
-    })
+    Core.invoke(
+      "get_sprite_png",
+      {
+        "spritePath": request.spritePath,
+        "actionIndex": request.actionIndex,
+        "frameIndex": request.frameIndex,
+        "actPath": request.actPath,
+        "palettePath": request.palettePath,
+        "scale": request.scale,
+      },
+    )
   }
 
   type batchRequest = {
@@ -196,10 +199,6 @@ module Assets = {
 }
 
 module Utility = {
-  let refreshWindow = (): promise<unit> => {
-    Core.invokeNoArgs("refresh_window")
-  }
-
   let openDevtools = (): promise<unit> => {
     Core.invokeNoArgs("open_devtools")
   }
