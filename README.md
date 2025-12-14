@@ -2,6 +2,9 @@
   <img width="300" height="300" src="https://iili.io/KbXkCeR.md.png">
 </p>
 
+[Discord Link](https://discord.gg/mcae5Gh6Wg)
+
+
 # Lifthrasir
 
 A modern, cross-platform Ragnarok Online client implementation built with Rust, Bevy, and React.
