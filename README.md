@@ -78,6 +78,10 @@ This will create platform-specific packages in `src-tauri/target/release/bundle/
 - **Windows**: `.exe` executable and `.msi` installer
 - **Linux**: `.AppImage`, `.deb`, and `.rpm` packages
 
+## Server
+
+For now, its working only with [Aesir](https://github.com/EndurnyrProject/aesir)
+
 ## Contributing
 
 Contributions are welcome! Please ensure:
