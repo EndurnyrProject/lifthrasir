@@ -77,19 +77,6 @@ impl SpritePngCache {
         Ok(response)
     }
 
-    /// Preload a batch of sprites into cache
-    ///
-    /// Useful for preloading commonly used sprites (e.g., all character customization options)
-    pub fn preload_batch(
-        &self,
-        requests: &[SpritePngRequest],
-    ) -> Result<Vec<SpritePngResponse>, SpritePngError> {
-        requests
-            .iter()
-            .map(|request| self.get_or_generate(request))
-            .collect()
-    }
-
     /// Clear all cached data (memory only)
     pub fn clear_all(&self) -> Result<(), SpritePngError> {
         if let Ok(mut memory_cache) = self.memory_cache.lock() {
@@ -98,22 +85,4 @@ impl SpritePngCache {
 
         Ok(())
     }
-
-    /// Get cache statistics
-    pub fn get_stats(&self) -> Result<CacheStats, SpritePngError> {
-        let memory_count = self
-            .memory_cache
-            .lock()
-            .map_err(|e| SpritePngError::CacheError(format!("Memory cache lock error: {}", e)))?
-            .len();
-
-        Ok(CacheStats { memory_count })
-    }
-}
-
-/// Cache statistics
-#[derive(Debug, Clone)]
-pub struct CacheStats {
-    /// Number of sprites in memory cache
-    pub memory_count: usize,
 }

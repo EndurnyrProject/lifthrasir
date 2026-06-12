@@ -11,17 +11,15 @@ bevy = { version = "0.17.3", features = [
     "bevy_dev_tools",
     "bevy_remote",
 ] }
-bevy-tokio-tasks = { git = "https://github.com/TBye101/bevy-tokio-tasks.git", branch = "master" }
 bevy_framepace = "0.20"
 bevy_auto_plugin = "0.8.0"
 
 # Tauri dependencies
 tauri = { version = "2.9.4", features = ["macos-private-api"] }
-tauri-plugin-opener = "2.5.2"
 
 # Additional Tauri integration dependencies
-parking_lot = "0.12"
-uuid = { version = "1.19", features = ["v4", "serde"] }
+# wgpu is pinned here (no direct `use`) to control wgpu feature unification for the
+# custom Tauri-Bevy renderer init in bevy_integration.rs — do not remove.
 wgpu = "26.0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -30,7 +28,7 @@ serde_json = "1.0"
 secrecy = { version = "0.10", features = ["serde"] }
 
 # Async dependencies (used in bridge)
-tokio = { version = "1.48", features = ["sync"] }
+tokio = { version = "1.48", features = ["sync", "time", "rt"] }
 flume = "0.11"
 
 # Configuration parsing

@@ -326,11 +326,6 @@ impl<P: Protocol> NetworkClient<P> {
         &mut self.context
     }
 
-    /// Get the current buffer size (for debugging/monitoring)
-    pub fn buffer_size(&self) -> usize {
-        self.transport.as_ref().map_or(0, |t| t.buffer_len())
-    }
-
     /// Get the number of registered packet handlers
     pub fn handler_count(&self) -> usize {
         self.dispatcher.handler_count()

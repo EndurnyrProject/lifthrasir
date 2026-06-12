@@ -306,11 +306,6 @@ impl CharServerClient {
         self.inner.context().get_selected_character()
     }
 
-    /// Check if the account acknowledgment was received
-    pub fn is_acknowledged(&self) -> bool {
-        self.inner.context().received_account_ack
-    }
-
     /// Reset the context for a new connection
     pub fn reset_context(&mut self) {
         self.inner.context_mut().reset();

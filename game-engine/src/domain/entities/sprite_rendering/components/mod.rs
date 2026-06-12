@@ -44,19 +44,6 @@ pub struct PlayerAppearance {
 }
 
 impl PlayerAppearance {
-    /// Iterate over all animation handles for rendering
-    pub fn iter_layers(
-        &self,
-    ) -> impl Iterator<Item = (&Handle<RoAnimationAsset>, Option<EquipmentSlot>)> {
-        std::iter::once((&self.body, None))
-            .chain(std::iter::once((&self.head, None)))
-            .chain(
-                self.equipment
-                    .iter()
-                    .map(|(slot, handle)| (handle, Some(*slot))),
-            )
-    }
-
     /// Set equipment for a slot
     pub fn set_equipment(&mut self, slot: EquipmentSlot, animation: Handle<RoAnimationAsset>) {
         self.equipment.insert(slot, animation);
@@ -65,11 +52,6 @@ impl PlayerAppearance {
     /// Remove equipment from a slot
     pub fn remove_equipment(&mut self, slot: EquipmentSlot) -> Option<Handle<RoAnimationAsset>> {
         self.equipment.remove(&slot)
-    }
-
-    /// Check if equipment is present in a slot
-    pub fn has_equipment(&self, slot: EquipmentSlot) -> bool {
-        self.equipment.contains_key(&slot)
     }
 }
 

@@ -27,8 +27,4 @@ impl GrfReader {
     pub fn get_file(&self, path: &str) -> Option<Vec<u8>> {
         self.grf.as_ref().and_then(|grf| grf.get_file(path))
     }
-
-    pub fn is_loaded(&self) -> bool {
-        self.grf.is_some()
-    }
 }

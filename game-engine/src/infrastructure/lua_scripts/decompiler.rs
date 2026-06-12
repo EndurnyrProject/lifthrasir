@@ -80,10 +80,6 @@ impl LuaDecompiler {
         self.cache.clear();
     }
 
-    pub fn cache_size(&self) -> usize {
-        self.cache.len()
-    }
-
     fn fix_decompiler_syntax(source: &str) -> String {
         static DOTTED_FIELD_REGEX: Lazy<Regex> =
             Lazy::new(|| Regex::new(r"(\s+)\.([A-Z_][A-Z0-9_]*)\s*=").unwrap());

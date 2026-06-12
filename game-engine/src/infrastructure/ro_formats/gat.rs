@@ -157,20 +157,6 @@ impl RoAltitude {
 
         Some(interpolated_height - 1.5)
     }
-
-    pub fn count_walkable_cells(&self) -> usize {
-        self.cells
-            .iter()
-            .filter(|cell| cell.cell_type.is_walkable())
-            .count()
-    }
-
-    pub fn count_water_cells(&self) -> usize {
-        self.cells
-            .iter()
-            .filter(|cell| cell.cell_type.is_water())
-            .count()
-    }
 }
 
 fn parse_header(input: &[u8]) -> IResult<&[u8], String> {

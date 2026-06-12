@@ -139,20 +139,7 @@ impl LoadingProgress {
         );
     }
 
-    pub fn add_error(&mut self, error: String) {
-        error!("Loading error: {}", error);
-        self.errors.push(error);
-    }
-
     pub fn is_complete(&self) -> bool {
         self.completed_steps >= self.total_steps
-    }
-
-    pub fn progress_percentage(&self) -> f32 {
-        if self.total_steps == 0 {
-            100.0
-        } else {
-            (self.completed_steps as f32 / self.total_steps as f32) * 100.0
-        }
     }
 }

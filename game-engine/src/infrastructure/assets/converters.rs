@@ -1,12 +1,6 @@
 use crate::infrastructure::assets::loaders::RoPaletteAsset;
 use crate::infrastructure::ro_formats::{sprite::SpriteFrame, Palette};
-use crate::utils::SPRITE_SCALE_SMALL;
-use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
-use bevy::{
-    asset::RenderAssetUsages,
-    prelude::*,
-    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
-};
+use bevy::prelude::*;
 use std::collections::HashSet;
 
 /// Convert indexed sprite data to RGBA using palette
@@ -124,33 +118,6 @@ pub fn convert_sprite_frame_to_rgba(
     }
 }
 
-/// Create a Bevy Image from sprite frame data
-pub fn create_bevy_image(width: u32, height: u32, mut rgba_data: Vec<u8>) -> Image {
-    // Apply magenta transparency to RGBA sprites
-    apply_magenta_transparency(&mut rgba_data);
-
-    Image::new(
-        Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        rgba_data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-}
-
-/// Calculate appropriate scale for sprite based on size
-pub fn calculate_sprite_scale(width: u32, height: u32) -> f32 {
-    if width < crate::utils::SPRITE_SIZE_THRESHOLD || height < crate::utils::SPRITE_SIZE_THRESHOLD {
-        SPRITE_SCALE_SMALL
-    } else {
-        1.0
-    }
-}
-
 /// Apply magenta transparency to RGBA image data
 /// In Ragnarok Online, magenta (255, 0, 255) is treated as transparent
 /// Uses tolerance to catch near-magenta colors from filtering/compression
@@ -177,62 +144,4 @@ pub fn apply_magenta_transparency(rgba_data: &mut [u8]) {
             pixel[3] = 0; // A
         }
     }
-}
-
-/// Decode image data from bytes based on file extension
-/// Supports BMP, TGA, JPG, and PNG formats commonly used in RO
-pub fn decode_image_from_bytes(
-    data: &[u8],
-    filename: &str,
-) -> Result<Image, Box<dyn std::error::Error>> {
-    use image::ImageFormat;
-
-    // Determine format from filename extension
-    let format = if filename.ends_with(".bmp") || filename.ends_with(".BMP") {
-        ImageFormat::Bmp
-    } else if filename.ends_with(".tga") || filename.ends_with(".TGA") {
-        ImageFormat::Tga
-    } else if filename.ends_with(".jpg")
-        || filename.ends_with(".JPG")
-        || filename.ends_with(".jpeg")
-        || filename.ends_with(".JPEG")
-    {
-        ImageFormat::Jpeg
-    } else if filename.ends_with(".png") || filename.ends_with(".PNG") {
-        ImageFormat::Png
-    } else {
-        ImageFormat::Bmp
-    };
-
-    let img = image::load_from_memory_with_format(data, format)?;
-    let rgba = img.to_rgba8();
-    let dimensions = rgba.dimensions();
-
-    let mut rgba_data = rgba.into_raw();
-    apply_magenta_transparency(&mut rgba_data);
-
-    let mut bevy_image = Image::new(
-        Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        rgba_data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::RENDER_WORLD,
-    );
-
-    // Set sampler to repeat for tiling textures like water
-    bevy_image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-        address_mode_u: ImageAddressMode::Repeat,
-        address_mode_v: ImageAddressMode::Repeat,
-        address_mode_w: ImageAddressMode::Repeat,
-        mag_filter: ImageFilterMode::Linear,
-        min_filter: ImageFilterMode::Linear,
-        mipmap_filter: ImageFilterMode::Linear,
-        ..Default::default()
-    });
-
-    Ok(bevy_image)
 }

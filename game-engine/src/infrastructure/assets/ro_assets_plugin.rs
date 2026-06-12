@@ -27,13 +27,6 @@ pub struct RoAssetsPlugin {
 }
 
 impl RoAssetsPlugin {
-    /// Create plugin with unified asset source enabled
-    pub fn with_unified_source() -> Self {
-        Self {
-            enable_unified_source: true,
-        }
-    }
-
     /// Load configuration from file during app setup
     fn load_config_from_file(&self) -> Result<AssetConfig, Box<dyn std::error::Error>> {
         use std::fs;
@@ -93,7 +86,3 @@ impl Plugin for RoAssetsPlugin {
         }
     }
 }
-
-/// Resource to track if unified asset source has been registered
-#[derive(Resource, Default)]
-pub struct UnifiedAssetSourceRegistered(pub bool);

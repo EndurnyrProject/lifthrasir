@@ -22,18 +22,6 @@ pub mod action_offsets {
     pub const CASTING: usize = 96; // 12 * 8
 }
 
-/// Action offsets in ACT files for Ragnarok Online mob/monster sprites.
-///
-/// Mobs have a simpler action layout than PCs (no sit/pickup actions).
-/// The formula to get the actual action index is: base_offset + direction
-pub mod mob_action_offsets {
-    pub const IDLE: usize = 0;
-    pub const WALK: usize = 8;
-    pub const ATTACK: usize = 16;
-    pub const HIT: usize = 24;
-    pub const DEAD: usize = 32;
-}
-
 /// Calculate the action index in the ACT file based on action type and direction.
 ///
 /// # Arguments
@@ -61,23 +49,6 @@ pub fn calculate_action_index(action_type: ActionType, direction: Direction) -> 
         ActionType::Dead => action_offsets::DEAD,
         ActionType::Cast => action_offsets::CASTING,
         ActionType::Special => action_offsets::PICKUP,
-    };
-
-    base_offset + (direction as usize)
-}
-
-/// Calculate the action index for mob/monster sprites.
-///
-/// Mobs have a different action layout than PCs with fewer action types.
-pub fn calculate_mob_action_index(action_type: ActionType, direction: Direction) -> usize {
-    let base_offset = match action_type {
-        ActionType::Idle => mob_action_offsets::IDLE,
-        ActionType::Walk => mob_action_offsets::WALK,
-        ActionType::Attack => mob_action_offsets::ATTACK,
-        ActionType::Hit => mob_action_offsets::HIT,
-        ActionType::Dead => mob_action_offsets::DEAD,
-        // Mobs don't have sit/cast/special - default to idle
-        ActionType::Sit | ActionType::Cast | ActionType::Special => mob_action_offsets::IDLE,
     };
 
     base_offset + (direction as usize)

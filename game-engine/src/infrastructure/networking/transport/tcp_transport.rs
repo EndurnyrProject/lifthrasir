@@ -154,14 +154,6 @@ impl TcpTransport {
         self.read_buffer.drain(..n);
     }
 
-    /// Clear the entire buffer
-    ///
-    /// This is useful for error recovery scenarios where the buffer may
-    /// contain corrupted data.
-    pub fn clear_buffer(&mut self) {
-        self.read_buffer.clear();
-    }
-
     /// Disconnect from the server
     ///
     /// Shuts down the TCP connection and clears the buffer. After calling

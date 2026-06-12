@@ -22,14 +22,6 @@ impl PlayBgmEvent {
             fade_out_duration: 2.0,
         }
     }
-
-    pub fn with_fade_durations(path: String, fade_in: f32, fade_out: f32) -> Self {
-        Self {
-            path,
-            fade_in_duration: fade_in,
-            fade_out_duration: fade_out,
-        }
-    }
 }
 
 /// Event to request stopping the current BGM

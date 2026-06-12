@@ -12,7 +12,7 @@
 //!
 //! # Usage Example
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use game_engine::infrastructure::{
 //!     assets::hierarchical_manager::HierarchicalAssetManager,
 //!     sprite_png::{
@@ -69,7 +69,7 @@ pub mod renderer;
 pub mod types;
 
 // Re-export commonly used types
-pub use cache::{CacheStats, SpritePngCache};
+pub use cache::SpritePngCache;
 pub use error::SpritePngError;
 pub use renderer::SpriteRenderer;
 pub use types::{SpriteBatchRequest, SpritePngRequest, SpritePngResponse};

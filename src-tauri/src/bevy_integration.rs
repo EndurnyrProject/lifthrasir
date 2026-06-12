@@ -1,6 +1,5 @@
 use bevy::asset::{io::AssetSourceBuilder, io::AssetSourceId, AssetApp};
 use bevy::prelude::*;
-use bevy::remote::RemotePlugin;
 use bevy::render::renderer::initialize_renderer;
 use bevy::render::settings::{Backends, RenderCreation, WgpuSettings};
 use bevy::render::RenderPlugin;

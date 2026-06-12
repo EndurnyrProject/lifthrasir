@@ -43,12 +43,6 @@ pub struct CharacterSelectedEvent {
 
 #[derive(Message, Debug)]
 #[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
-pub struct EnterGameRequestEvent {
-    pub character_id: u32,
-}
-
-#[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
 pub struct ZoneServerInfoReceivedEvent {
     pub char_id: u32,
     pub map_name: String,
@@ -96,12 +90,6 @@ pub struct CharacterDeletedEvent {
 pub struct CharacterDeletionFailedEvent {
     pub character_id: u32,
     pub error: String,
-}
-
-#[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
-pub struct CharacterHoverEvent {
-    pub slot: Option<u8>,
 }
 
 #[derive(Message, Debug)]

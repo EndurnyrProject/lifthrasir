@@ -27,37 +27,6 @@ pub struct AnimationDiagnostics {
 }
 
 impl AnimationDiagnostics {
-    #[inline]
-    pub fn record_conversion(&mut self) {
-        self.total_conversions += 1;
-        self.current_conversions += 1;
-    }
-
-    #[inline]
-    pub fn record_skip(&mut self) {
-        self.frames_skipped += 1;
-    }
-
-    #[inline]
-    pub fn record_cache_hit(&mut self) {
-        self.cache_hits += 1;
-    }
-
-    #[inline]
-    pub fn record_cache_miss(&mut self) {
-        self.cache_misses += 1;
-    }
-
-    /// Get cache hit ratio (0.0 to 1.0)
-    pub fn cache_hit_ratio(&self) -> f32 {
-        let total = self.cache_hits + self.cache_misses;
-        if total == 0 {
-            0.0
-        } else {
-            self.cache_hits as f32 / total as f32
-        }
-    }
-
     pub fn conversions_per_second(&self) -> f32 {
         if self.conversions_history.is_empty() {
             return 0.0;

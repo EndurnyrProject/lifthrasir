@@ -184,16 +184,6 @@ impl CharacterStats {
     pub fn total(&self) -> u16 {
         self.str + self.agi + self.vit + self.int + self.dex + self.luk
     }
-
-    pub fn is_valid_starting_stats(&self) -> bool {
-        self.total() == 30
-            && self.str >= 1
-            && self.agi >= 1
-            && self.vit >= 1
-            && self.int >= 1
-            && self.dex >= 1
-            && self.luk >= 1
-    }
 }
 
 /// Marker component for entities that should automatically follow terrain height.

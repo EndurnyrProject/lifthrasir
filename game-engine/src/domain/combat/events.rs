@@ -88,13 +88,6 @@ pub struct CombatActionReceived {
     pub damage2: i32,
 }
 
-/// Request to attack a target
-#[derive(Message, Debug, Clone)]
-pub struct AttackTargetRequested {
-    pub attacker_aid: u32,
-    pub target_aid: u32,
-}
-
 /// Entity HP information received from server (ZC_HP_INFO)
 /// Used for any entity type: players, monsters, NPCs, etc.
 #[derive(Message, Debug, Clone)]

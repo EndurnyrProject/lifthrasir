@@ -28,19 +28,6 @@ impl CompositeAssetSource {
         self.resolution_cache.clear(); // Clear cache when sources change
     }
 
-    pub fn add_sources(&mut self, sources: Vec<Box<dyn AssetSource>>) {
-        for source in sources {
-            debug!(
-                "Added asset source: {} (priority: {})",
-                source.name(),
-                source.priority()
-            );
-            self.sources.push(source);
-        }
-        self.sort_sources_by_priority();
-        self.resolution_cache.clear();
-    }
-
     fn sort_sources_by_priority(&mut self) {
         // Sort by priority (lower number = higher priority)
         self.sources.sort_by_key(|source| source.priority());

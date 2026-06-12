@@ -1,4 +1,3 @@
-pub mod events;
 pub mod observers;
 pub mod resources;
 pub mod state;

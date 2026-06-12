@@ -489,30 +489,6 @@ impl CharacterStatus {
         }
     }
 
-    pub fn sp_percentage(&self) -> f32 {
-        if self.max_sp == 0 {
-            0.0
-        } else {
-            (self.sp as f32 / self.max_sp as f32) * 100.0
-        }
-    }
-
-    pub fn base_exp_percentage(&self) -> f32 {
-        if self.next_base_exp == 0 {
-            0.0
-        } else {
-            (self.base_exp as f32 / self.next_base_exp as f32) * 100.0
-        }
-    }
-
-    pub fn job_exp_percentage(&self) -> f32 {
-        if self.next_job_exp == 0 {
-            0.0
-        } else {
-            (self.job_exp as f32 / self.next_job_exp as f32) * 100.0
-        }
-    }
-
     pub fn weight_percentage(&self) -> f32 {
         if self.max_weight == 0 {
             0.0
@@ -535,18 +511,6 @@ impl CharacterStatus {
 
     pub fn total_atk(&self) -> u32 {
         self.atk1 + self.atk2
-    }
-
-    pub fn total_matk(&self) -> u32 {
-        self.matk1 + self.matk2
-    }
-
-    pub fn total_def(&self) -> u32 {
-        self.def1 + self.def2
-    }
-
-    pub fn total_mdef(&self) -> u32 {
-        self.mdef1 + self.mdef2
     }
 }
 

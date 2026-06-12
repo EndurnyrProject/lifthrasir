@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 use moonshine_tag::Tag;
 
-use crate::domain::sprite::tags::LAYER_BODY;
-
 use super::animation_processor::RoAnimationProcessor;
 use super::loaders::{RoActAsset, RoSpriteAsset};
 use super::ro_animation_asset::RoAnimationAsset;
@@ -38,16 +36,6 @@ impl PendingAnimations {
             layer_tag,
             callback_entity,
         });
-    }
-
-    /// Request a body animation (convenience method).
-    pub fn request_body(
-        &mut self,
-        sprite_handle: Handle<RoSpriteAsset>,
-        action_handle: Handle<RoActAsset>,
-        callback_entity: Option<Entity>,
-    ) {
-        self.request(sprite_handle, action_handle, LAYER_BODY, callback_entity);
     }
 
     /// Take all completed animations for processing by other systems.

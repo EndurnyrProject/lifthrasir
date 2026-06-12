@@ -142,11 +142,6 @@ impl JobSpriteRegistry {
         display_name
     }
 
-    pub fn get_display_name_gendered(&self, jt_id: u32, _gender: Gender) -> Option<&str> {
-        // TODO: Implement gender-specific name lookups if required
-        self.get_display_name(jt_id)
-    }
-
     pub fn get_body_sprite_path(&self, jt_id: u32, gender: u8) -> Option<String> {
         let sprite_name = self.get_sprite_name(jt_id)?;
         let gender_enum = Gender::from(gender);

@@ -20,11 +20,3 @@ pub struct LoginFailureEvent {
     pub error: NetworkError,
     pub username: String,
 }
-
-#[derive(Message, Debug)]
-#[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
-pub struct LogoutEvent;
-
-#[derive(Message, Debug)]
-#[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
-pub struct SessionExpiredEvent;

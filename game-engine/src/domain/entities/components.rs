@@ -83,7 +83,3 @@ impl PendingDespawn {
         self.marked_at.elapsed().as_secs() >= 5
     }
 }
-
-/// Marker component for sprites that should keep their absolute position
-#[derive(Component)]
-pub struct KeepAbsolutePosition;

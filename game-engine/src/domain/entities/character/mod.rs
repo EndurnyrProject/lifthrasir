@@ -5,7 +5,6 @@ pub mod states;
 pub mod systems;
 pub mod visual;
 
-use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::{auto_plugin, AutoPlugin};
 
 use crate::domain::combat::components::Combatant;
@@ -13,13 +12,6 @@ use crate::domain::entities::character::states::{AnimationState, StatusEffects};
 use crate::domain::entities::movement;
 
 pub use events::SpawnCharacterSpriteEvent;
-
-// Type alias for querying unified character entities
-type UnifiedCharacterFilter = (
-    With<components::CharacterData>,
-    With<components::CharacterAppearance>,
-    With<components::EquipmentSet>,
-);
 
 /// Unified Character Entity Plugin
 ///
@@ -34,42 +26,6 @@ type UnifiedCharacterFilter = (
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]
 pub struct UnifiedCharacterEntityPlugin;
-
-// Helper function to create a unified character entity
-pub fn spawn_unified_character(
-    commands: &mut Commands,
-    character_data: components::CharacterData,
-    appearance: components::CharacterAppearance,
-    equipment: components::EquipmentSet,
-    position: Vec3,
-) -> Entity {
-    let character_entity = commands
-        .spawn((
-            // Core components
-            character_data,
-            appearance,
-            equipment,
-            // Visual components
-            components::visual::CharacterSprite::default(),
-            components::visual::CharacterDirection::default(),
-            // Animation state (moonshine-behavior)
-            AnimationState::Idle,
-            StatusEffects::default(),
-            // Combat component (required for attack animations)
-            Combatant::new(150),
-            // Transform components
-            Transform::from_translation(position),
-            GlobalTransform::default(),
-            Visibility::default(),
-            InheritedVisibility::default(),
-            ViewVisibility::default(),
-            // Name for debugging
-            Name::new("UnifiedCharacter"),
-        ))
-        .id();
-
-    character_entity
-}
 
 /// Add gameplay components to an existing character entity
 ///
@@ -98,12 +54,4 @@ pub fn add_gameplay_components_to_entity(commands: &mut bevy::ecs::system::Entit
         // Terrain following
         components::core::Grounded,
     ));
-}
-
-// Helper to check if an entity has the unified character components
-pub fn is_unified_character(
-    entity: Entity,
-    characters: &Query<(), UnifiedCharacterFilter>,
-) -> bool {
-    characters.get(entity).is_ok()
 }

@@ -10,11 +10,6 @@ impl Combatant {
     pub fn new(aspd: u16) -> Self {
         Self { aspd }
     }
-
-    pub fn speed_multiplier(&self) -> f32 {
-        let base_frames = (200.0 - self.aspd as f32 / 10.0).max(10.0);
-        50.0 / base_frames
-    }
 }
 
 /// Current attack target for an entity

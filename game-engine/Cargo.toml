@@ -14,7 +14,6 @@ bevy_auto_plugin = "0.8.0"
 bevy_common_assets = { version = "0.14", features = ["toml"] }
 bevy_asset_loader = "=0.24.0-rc.1"
 bevy_kira_audio = { version = "0.24", features = ["mp3", "wav", "ogg"] }
-bevy_framepace = "0.20"
 
 # Parsing and data processing
 nom = "8.0.0"
@@ -36,28 +35,17 @@ luadec = "0.2"
 gag = "1.0"
 
 # Networking dependencies
-tokio = { version = "1.48", features = [
-  "net",
-  "rt",
-  "time",
-  "macros",
-  "io-util",
-] }
-tokio-util = { version = "0.7", features = ["codec"] }
-futures = "0.3"
 bytes = "1.11"
 byteorder = "1.5"
 async-trait = "0.1"
 
 # Security dependencies
 secrecy = { version = "0.10", features = ["serde"] }
-zeroize = "1.8"
 
 # Async runtime integration
 bevy-tokio-tasks = { git = "https://github.com/TBye101/bevy-tokio-tasks.git", branch = "master" }
 
 # Character entity system dependencies
-moonshine-object = "0.3"
 moonshine-kind = "0.4"
 moonshine-tag = "0.4"
 moonshine-behavior = "0.4"

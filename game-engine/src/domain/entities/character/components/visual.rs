@@ -76,13 +76,6 @@ impl Default for CharacterDirection {
 }
 
 impl CharacterSprite {
-    pub fn has_effect_visual(&self, _effect_type: EffectType) -> bool {
-        // For now, we'll implement this simply
-        // In a full implementation, we'd check if any effect layer
-        // corresponds to the given effect type
-        false
-    }
-
     /// Play an action with the given direction.
     ///
     /// This method calculates the correct ACT action index using the action mapping system
@@ -178,19 +171,6 @@ pub enum ActionType {
 impl From<EffectType> for SpriteLayerType {
     fn from(effect_type: EffectType) -> Self {
         SpriteLayerType::Effect(effect_type)
-    }
-}
-
-impl SpriteLayerType {
-    pub fn from_name(name: &str) -> Self {
-        match name {
-            "Body" => SpriteLayerType::Body,
-            "Head" => SpriteLayerType::Head,
-            "Equipment/HeadBottom" => SpriteLayerType::Equipment(EquipmentSlot::HeadBottom),
-            "Equipment/HeadMid" => SpriteLayerType::Equipment(EquipmentSlot::HeadMid),
-            "Equipment/HeadTop" => SpriteLayerType::Equipment(EquipmentSlot::HeadTop),
-            _ => SpriteLayerType::Body, // Default fallback
-        }
     }
 }
 

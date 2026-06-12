@@ -33,11 +33,6 @@ pub enum Direction {
 }
 
 impl Direction {
-    /// Convert direction to sprite direction index (0-7)
-    pub fn to_sprite_direction(self) -> u8 {
-        self as u8
-    }
-
     /// Create a Direction from a u8 value (0-7)
     /// Values outside the range default to South
     pub fn from_u8(value: u8) -> Self {

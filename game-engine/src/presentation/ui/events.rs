@@ -20,22 +20,3 @@ pub struct ServerSelectedEvent {
     /// Optional server index for correlation with UI requests
     pub server_index: Option<usize>,
 }
-
-#[derive(Message)]
-pub struct CharacterSelectEvent {
-    pub character_id: u32,
-}
-
-#[derive(Message)]
-pub struct CreateCharacterEvent;
-
-#[derive(Message)]
-pub struct DeleteCharacterEvent {
-    pub character_id: u32,
-}
-
-#[derive(Message)]
-pub struct BackToLoginEvent;
-
-#[derive(Message)]
-pub struct BackToServerSelectionEvent;

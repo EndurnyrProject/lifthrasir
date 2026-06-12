@@ -58,14 +58,6 @@ impl ServerPacket for ZcNotifyVanishPacket {
         let gid = cursor.get_u32_le();
         let vanish_type = cursor.get_u8();
 
-        let vanish_reason = match vanish_type {
-            0 => "out of sight",
-            1 => "died",
-            2 => "logged out",
-            3 => "teleported",
-            _ => "unknown",
-        };
-
         Ok(Self { gid, vanish_type })
     }
 

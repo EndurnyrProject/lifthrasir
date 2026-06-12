@@ -169,14 +169,6 @@ impl HierarchicalAssetManager {
         }
     }
 
-    pub fn reload_from_config(
-        &self,
-        config: &AssetConfig,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Reloading hierarchical asset manager from config");
-        self.setup_sources_from_config(config)
-    }
-
     /// Get access to the internal composite source for migration purposes
     pub fn composite_source(&self) -> &Arc<RwLock<CompositeAssetSource>> {
         &self.composite_source

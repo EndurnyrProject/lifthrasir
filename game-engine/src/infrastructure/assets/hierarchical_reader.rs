@@ -29,11 +29,6 @@ impl HierarchicalAssetReader {
         Self { composite_source }
     }
 
-    /// Create from existing CompositeAssetSource (for migration compatibility)
-    pub fn from_composite_source(composite_source: Arc<RwLock<CompositeAssetSource>>) -> Self {
-        Self::new(composite_source)
-    }
-
     /// Helper to execute an operation with the composite source, handling lock acquisition
     /// and error conversion.
     async fn with_composite_read<F, R>(

@@ -119,31 +119,6 @@ pub fn setup_composite_source_from_config(
     Ok(composite)
 }
 
-/// Create RO asset source from existing HierarchicalAssetManager (migration helper)
-///
-/// This function helps during the transition period by allowing creation of
-/// the new asset source from an existing HierarchicalAssetManager instance.
-/// This preserves the existing configuration and sources.
-pub fn create_ro_asset_source_from_manager(
-    manager: &crate::infrastructure::assets::HierarchicalAssetManager,
-) -> AssetSource {
-    debug!("Creating RO asset source from existing HierarchicalAssetManager");
-
-    // Extract the composite source from the manager
-    // Note: This creates a new Arc pointing to the same CompositeAssetSource
-    let composite_source = manager.composite_source().clone();
-
-    let asset_source = AssetSourceBuilder::default()
-        .with_reader({
-            let composite_clone = composite_source.clone();
-            move || Box::new(HierarchicalAssetReader::new(composite_clone.clone()))
-        })
-        .build(AssetSourceId::Default, false, false);
-
-    debug!("RO asset source created from existing manager");
-    asset_source.unwrap()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

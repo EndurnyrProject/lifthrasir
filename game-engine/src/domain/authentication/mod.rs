@@ -1,4 +1,3 @@
-pub mod components;
 pub mod events;
 pub mod models;
 pub mod server_selection_handler;

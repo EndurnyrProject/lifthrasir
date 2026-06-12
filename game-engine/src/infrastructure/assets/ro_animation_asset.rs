@@ -141,29 +141,6 @@ impl RoSprite {
         self.get_frame_internal(animation, 0, true)
     }
 
-    /// Get the correct frame for head sprites during idle (no doridori animation).
-    ///
-    /// Head ACT files follow the same `base_action * 8 + direction` indexing as body:
-    /// - Action 0 = Idle South, Action 1 = Idle Southwest, ..., Action 7 = Idle Southeast
-    /// - Each action has 3 frames for doridori positions (headDir 0, 1, 2)
-    ///
-    /// For static display, we use action[direction] frame[0] (headDir 0 = looking forward).
-    pub fn get_head_idle_frame<'a>(
-        &self,
-        animation: &'a RoAnimationAsset,
-    ) -> Option<&'a FrameData> {
-        // For head idle, action_index = 0 * 8 + direction = direction
-        let action_index = self.direction as usize;
-        let action_data = animation.actions.get(action_index)?;
-
-        if action_data.frames.is_empty() {
-            return None;
-        }
-
-        // Use frame 0 (headDir 0 = normal position) to avoid doridori cycling
-        action_data.frames.first()
-    }
-
     fn get_frame_internal<'a>(
         &self,
         animation: &'a RoAnimationAsset,
@@ -199,29 +176,6 @@ impl RoSprite {
         };
 
         action_data.frames.get(frame_index)
-    }
-
-    /// Check if a non-looping animation has finished
-    pub fn is_finished(&self, animation: &RoAnimationAsset, game_time_ms: u32) -> bool {
-        if self.looping {
-            return false;
-        }
-
-        let action_index = self.actual_action_index();
-        let Some(action_data) = animation.actions.get(action_index) else {
-            return true;
-        };
-
-        let frame_count = action_data.frames.len();
-        if frame_count == 0 {
-            return true;
-        }
-
-        let elapsed = game_time_ms.wrapping_sub(self.start_time);
-        let delay = (action_data.delay_ms * self.speed_factor).max(1.0);
-        let total_duration = delay * frame_count as f32;
-
-        elapsed as f32 >= total_duration
     }
 
     /// Start a new action, resetting the animation timer

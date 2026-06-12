@@ -149,11 +149,6 @@ impl<P: Protocol> PacketDispatcher<P> {
     pub fn has_handler(&self, packet_id: u16) -> bool {
         self.handlers.contains_key(&packet_id)
     }
-
-    /// Get all registered packet IDs
-    pub fn registered_packets(&self) -> Vec<u16> {
-        self.handlers.keys().copied().collect()
-    }
 }
 
 impl<P: Protocol> Default for PacketDispatcher<P> {

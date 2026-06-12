@@ -18,9 +18,6 @@ impl Default for AnimationType {
     }
 }
 
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ModelInstanceId(pub Entity);
-
 #[derive(Component, Debug, Clone)]
 pub struct AnimatedTransform {
     /// Current translation in world space (following RO->Bevy coordinate convention)

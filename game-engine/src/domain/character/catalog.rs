@@ -40,19 +40,6 @@ impl HeadStyleCatalog {
         }
     }
 
-    /// Get all head style IDs for a gender (sorted)
-    pub fn get_all_ids(&self, gender: Gender) -> Vec<u16> {
-        match gender {
-            Gender::Male => self.male.keys().copied().collect(),
-            Gender::Female => self.female.keys().copied().collect(),
-        }
-    }
-
-    /// Get available hair colors for a specific style
-    pub fn get_colors(&self, gender: Gender, id: u16) -> Option<&Vec<u16>> {
-        self.get(gender, id).map(|entry| &entry.available_colors)
-    }
-
     /// Total number of styles (both genders)
     pub fn total_count(&self) -> usize {
         self.male.len() + self.female.len()

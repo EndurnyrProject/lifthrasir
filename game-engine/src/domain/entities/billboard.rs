@@ -9,13 +9,6 @@ use bevy_auto_plugin::prelude::*;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Billboard;
 
-/// Component linking a 3D sprite to its character entity
-#[derive(Component, Debug, Clone)]
-pub struct Character3dSprite {
-    pub character_entity: Entity,
-    pub sprite_size: Vec2,
-}
-
 /// Resource containing the shared quad mesh used by all character billboards
 #[derive(Resource, Debug, Clone)]
 pub struct SharedSpriteQuad {
