@@ -26,7 +26,10 @@ fn load_asset_config() -> AssetConfig {
         .unwrap_or_else(|e| panic!("Failed to parse config '{}': {}", config_path, e))
 }
 
-pub fn register_ro_asset_source(app: &mut App, composite_source: Arc<RwLock<CompositeAssetSource>>) {
+pub fn register_ro_asset_source(
+    app: &mut App,
+    composite_source: Arc<RwLock<CompositeAssetSource>>,
+) {
     app.register_asset_source(
         AssetSourceId::Name("ro".into()),
         AssetSourceBuilder::new({

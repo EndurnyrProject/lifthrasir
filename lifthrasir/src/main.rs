@@ -26,8 +26,11 @@ fn main() {
         .resource_mut::<bevy_framepace::FramepaceSettings>()
         .limiter = bevy_framepace::Limiter::from_framerate(FRAMERATE_LIMIT);
 
-    app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default());
-    app.add_plugins(bevy_brp_extras::BrpExtrasPlugin::default());
+    #[cfg(debug_assertions)]
+    app.add_plugins((
+        bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
+        bevy_brp_extras::BrpExtrasPlugin::default(),
+    ));
 
     app.add_plugins(game_engine::MapPlugin);
     app.add_plugins(game_engine::CoreGamePlugins);
