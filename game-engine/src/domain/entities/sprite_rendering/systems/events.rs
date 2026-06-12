@@ -1,13 +1,12 @@
-use super::super::components::{EffectType, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
-use super::super::kinds::{EffectLayer, SpriteLayer, SpriteRoot};
-use crate::domain::entities::billboard::SharedSpriteQuad;
+use super::super::components::{EffectType, PlayerAppearance, RenderLayer};
+use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::equipment::EquipmentSlot;
+use crate::domain::sprite::tags::{equipment_slot_to_tag, Z_OFFSET_PER_LAYER};
 use crate::domain::system_sets::SpriteRenderingSystems;
+use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
+use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
-use moonshine_object::prelude::*;
-
-use super::super::components::SpriteHierarchyConfig;
 
 #[derive(Message)]
 #[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
@@ -32,116 +31,7 @@ pub struct SpriteAnimationChangeEvent {
     pub action_type: crate::domain::entities::character::components::visual::ActionType,
 }
 
-#[derive(Bundle)]
-struct SpriteLayerBaseBundle {
-    name: Name,
-    mesh: Mesh3d,
-    material: MeshMaterial3d<StandardMaterial>,
-    transform: Transform,
-    global_transform: GlobalTransform,
-    visibility: Visibility,
-    inherited_visibility: InheritedVisibility,
-    view_visibility: ViewVisibility,
-    ro_sprite_layer: crate::domain::entities::sprite_rendering::components::RoSpriteLayer,
-    hierarchy: SpriteHierarchy,
-}
-
-impl SpriteLayerBaseBundle {
-    fn new(
-        name: String,
-        material: Handle<StandardMaterial>,
-        mesh: Handle<Mesh>,
-        layer_type: SpriteLayerType,
-        parent_entity: Entity,
-        z_offset: f32,
-    ) -> Self {
-        Self {
-            name: Name::new(name),
-            mesh: Mesh3d(mesh),
-            material: MeshMaterial3d(material),
-            transform: Transform::from_xyz(0.0, 0.0, z_offset),
-            global_transform: GlobalTransform::default(),
-            visibility: Visibility::default(),
-            inherited_visibility: InheritedVisibility::default(),
-            view_visibility: ViewVisibility::default(),
-            ro_sprite_layer: crate::domain::entities::sprite_rendering::components::RoSpriteLayer {
-                layer_type: layer_type.clone(),
-                z_offset,
-                sprite_handle: Handle::default(),
-                action_handle: Handle::default(),
-            },
-            hierarchy: SpriteHierarchy {
-                parent_entity,
-                layer_type,
-            },
-        }
-    }
-}
-
-struct RenderingContext<'a> {
-    config: &'a SpriteHierarchyConfig,
-    materials: &'a mut Assets<StandardMaterial>,
-    shared_quad: &'a SharedSpriteQuad,
-}
-
-fn create_sprite_material(materials: &mut Assets<StandardMaterial>) -> Handle<StandardMaterial> {
-    materials.add(StandardMaterial {
-        base_color_texture: None,
-        base_color: Color::WHITE,
-        alpha_mode: AlphaMode::Blend,
-        unlit: true,
-        cull_mode: None,
-        ..default()
-    })
-}
-
-fn equipment_layer_path(slot: EquipmentSlot) -> String {
-    format!("Equipment/{:?}", slot)
-}
-
-fn create_equipment_bundle(
-    slot: EquipmentSlot,
-    parent_entity: Entity,
-    material: Handle<StandardMaterial>,
-    mesh: Handle<Mesh>,
-    config: &SpriteHierarchyConfig,
-) -> (SpriteLayer, SpriteLayerBaseBundle) {
-    let z_offset = slot.z_order() * config.default_z_spacing;
-    let layer_type = SpriteLayerType::Equipment(slot);
-    (
-        SpriteLayer,
-        SpriteLayerBaseBundle::new(
-            format!("Equipment/{:?}", slot),
-            material,
-            mesh,
-            layer_type,
-            parent_entity,
-            z_offset,
-        ),
-    )
-}
-
-fn create_effect_bundle(
-    effect_type: EffectType,
-    parent_entity: Entity,
-    material: Handle<StandardMaterial>,
-    mesh: Handle<Mesh>,
-    z_offset: f32,
-) -> (EffectLayer, SpriteLayerBaseBundle) {
-    let layer_type = SpriteLayerType::Effect(effect_type);
-    (
-        EffectLayer,
-        SpriteLayerBaseBundle::new(
-            format!("{:?}", effect_type),
-            material,
-            mesh,
-            layer_type,
-            parent_entity,
-            z_offset,
-        ),
-    )
-}
-
+/// Handle equipment changes by updating PlayerAppearance and spawning/despawning render layers.
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
@@ -149,187 +39,214 @@ fn create_effect_bundle(
 )]
 pub fn handle_equipment_changes(
     mut commands: Commands,
-    entities: Query<&SpriteObjectTree>,
-    sprite_objects: Objects<SpriteRoot>,
     mut equipment_events: MessageReader<EquipmentChangeEvent>,
-    config: Res<SpriteHierarchyConfig>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    shared_quad: Res<SharedSpriteQuad>,
+    mut players: Query<(Entity, &mut PlayerAppearance, &Children)>,
+    render_layers: Query<(Entity, &RenderLayer)>,
+    asset_server: Res<AssetServer>,
+    mut pending_animations: ResMut<PendingAnimations>,
 ) {
     for event in equipment_events.read() {
-        let Ok(object_tree) = entities.get(event.character) else {
+        let Ok((entity, mut appearance, children)) = players.get_mut(event.character) else {
             warn!(
-                "Entity {:?} not found for equipment change",
+                "handle_equipment_changes: Entity {:?} not found or missing PlayerAppearance",
                 event.character
             );
             continue;
         };
 
-        let Ok(sprite_obj) = sprite_objects.get(object_tree.root) else {
-            warn!("Sprite object root {:?} not found", object_tree.root);
-            continue;
-        };
-
-        let equipment_path = equipment_layer_path(event.slot);
-
-        remove_old_equipment(&mut commands, &sprite_obj, &equipment_path);
-
-        if event.new_item_id.is_some() {
-            let mut rendering = RenderingContext {
-                config: &config,
-                materials: &mut materials,
-                shared_quad: &shared_quad,
+        for child in children.iter() {
+            let Ok((child_entity, render_layer)) = render_layers.get(child) else {
+                continue;
             };
-            spawn_equipment_layer(
-                &mut commands,
-                event.slot,
-                event.character,
-                object_tree.root,
-                &mut rendering,
+
+            if render_layer.equipment_slot == Some(event.slot) {
+                commands.entity(child_entity).despawn();
+                break;
+            }
+        }
+
+        appearance.remove_equipment(event.slot);
+
+        if let Some(item_id) = event.new_item_id {
+            let spr_path = format!("data/sprite/equipment/{}.spr", item_id);
+            let act_path = format!("data/sprite/equipment/{}.act", item_id);
+
+            let layer_tag = equipment_slot_to_tag(&event.slot);
+
+            let spr = asset_server.load(&spr_path);
+            let act = asset_server.load(&act_path);
+
+            pending_animations.request(spr, act, layer_tag, Some(entity));
+
+            debug!(
+                "handle_equipment_changes: Requested equipment animation for entity {:?}, slot {:?}, item {}",
+                entity, event.slot, item_id
+            );
+        } else {
+            debug!(
+                "handle_equipment_changes: Removed equipment from entity {:?}, slot {:?}",
+                entity, event.slot
             );
         }
     }
 }
 
-fn remove_old_equipment(
-    commands: &mut Commands,
-    sprite_obj: &Object<SpriteRoot>,
-    equipment_path: &str,
+/// Finalize equipment render layers when animations are loaded.
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::AnimationEvents, after = handle_equipment_changes)
+)]
+pub fn finalize_equipment_layers(
+    mut commands: Commands,
+    mut pending_animations: ResMut<PendingAnimations>,
+    animations: Res<Assets<RoAnimationAsset>>,
+    mut players: Query<(Entity, &mut PlayerAppearance)>,
+    shared_quad: Res<SharedSpriteQuad>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if let Some(old_equipment) = sprite_obj.find_by_path(equipment_path) {
-        commands.entity(old_equipment.entity()).despawn();
+    let completed = pending_animations.take_completed();
+    if completed.is_empty() {
+        return;
+    }
+
+    for (pending, animation_handle) in completed {
+        let Some(callback_entity) = pending.callback_entity else {
+            continue;
+        };
+
+        let Ok((entity, mut appearance)) = players.get_mut(callback_entity) else {
+            continue;
+        };
+
+        let Some(animation) = animations.get(&animation_handle) else {
+            continue;
+        };
+
+        let layer_tag = animation.layer;
+
+        let slot = tag_to_equipment_slot(layer_tag);
+        if let Some(slot) = slot {
+            appearance.set_equipment(slot, animation_handle.clone());
+
+            let z_offset =
+                crate::domain::sprite::tags::layer_order(layer_tag) as f32 * Z_OFFSET_PER_LAYER;
+
+            let first_texture = animation.textures.first().cloned().unwrap_or_default();
+
+            let material = materials.add(StandardMaterial {
+                base_color_texture: Some(first_texture),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                cull_mode: None,
+                ..default()
+            });
+
+            let child = commands
+                .spawn((
+                    Mesh3d(shared_quad.mesh.clone()),
+                    MeshMaterial3d(material),
+                    Billboard,
+                    RenderLayer::equipment(
+                        animation_handle,
+                        layer_tag,
+                        slot,
+                        animation.textures.clone(),
+                    ),
+                    Transform::from_translation(Vec3::new(0.0, 0.0, z_offset)),
+                    GlobalTransform::default(),
+                    Visibility::default(),
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                ))
+                .id();
+
+            commands.entity(entity).add_child(child);
+
+            debug!(
+                "finalize_equipment_layers: Spawned equipment layer for entity {:?}, slot {:?}",
+                entity, slot
+            );
+        }
     }
 }
 
-fn spawn_equipment_layer(
-    commands: &mut Commands,
-    slot: EquipmentSlot,
-    parent_entity: Entity,
-    root_entity: Entity,
-    rendering: &mut RenderingContext,
-) {
-    let material = create_sprite_material(rendering.materials);
-    let (marker, bundle) = create_equipment_bundle(
-        slot,
-        parent_entity,
-        material,
-        rendering.shared_quad.mesh.clone(),
-        rendering.config,
-    );
+fn tag_to_equipment_slot(tag: moonshine_tag::Tag) -> Option<EquipmentSlot> {
+    use crate::domain::sprite::tags::*;
 
-    commands
-        .spawn((marker, bundle))
-        .insert(ChildOf(root_entity));
+    if tag == LAYER_WEAPON {
+        Some(EquipmentSlot::Weapon)
+    } else if tag == LAYER_SHIELD {
+        Some(EquipmentSlot::Shield)
+    } else if tag == LAYER_GARMENT {
+        Some(EquipmentSlot::Garment)
+    } else if tag == LAYER_HEAD_TOP {
+        Some(EquipmentSlot::HeadTop)
+    } else if tag == LAYER_HEAD_MID {
+        Some(EquipmentSlot::HeadMid)
+    } else if tag == LAYER_HEAD_BOTTOM {
+        Some(EquipmentSlot::HeadBottom)
+    } else {
+        None
+    }
 }
 
+/// Placeholder for status effect visual handling.
+/// Effects are handled by a separate system (not sprite layers).
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationEvents)
 )]
-pub fn handle_status_effect_visuals(
-    mut commands: Commands,
-    entities: Query<&SpriteObjectTree>,
-    sprite_objects: Objects<SpriteRoot>,
-    mut effect_events: MessageReader<StatusEffectVisualEvent>,
-    config: Res<SpriteHierarchyConfig>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    shared_quad: Res<SharedSpriteQuad>,
-) {
+pub fn handle_status_effect_visuals(mut effect_events: MessageReader<StatusEffectVisualEvent>) {
     for event in effect_events.read() {
-        let Ok(object_tree) = entities.get(event.character) else {
-            continue;
-        };
-
-        let Ok(sprite_obj) = sprite_objects.get(object_tree.root) else {
-            warn!("Sprite object root {:?} not found", object_tree.root);
-            continue;
-        };
-
-        let effect_path = format!("Effects/{:?}", event.effect_type);
-
-        if event.add {
-            let mut rendering = RenderingContext {
-                config: &config,
-                materials: &mut materials,
-                shared_quad: &shared_quad,
-            };
-            add_status_effect(
-                &mut commands,
-                &sprite_obj,
-                &effect_path,
-                event.effect_type,
-                event.character,
-                &mut rendering,
-            );
-        } else {
-            remove_status_effect(&mut commands, &sprite_obj, &effect_path);
-        }
+        debug!(
+            "Status effect for {:?}: type={:?}, add={} (effects handled separately)",
+            event.character, event.effect_type, event.add
+        );
     }
 }
 
-fn add_status_effect(
-    commands: &mut Commands,
-    sprite_obj: &Object<SpriteRoot>,
-    effect_path: &str,
-    effect_type: EffectType,
-    parent_entity: Entity,
-    rendering: &mut RenderingContext,
-) {
-    if sprite_obj.find_by_path(effect_path).is_some() {
-        return;
-    }
-
-    let Some(effects_container) = sprite_obj.find_by_path("Effects") else {
-        warn!("Effects container not found");
-        return;
-    };
-
-    let effect_count = effects_container.children().count();
-    let z_offset = effect_count as f32 * rendering.config.default_z_spacing;
-
-    let material = create_sprite_material(rendering.materials);
-    let (marker, bundle) = create_effect_bundle(
-        effect_type,
-        parent_entity,
-        material,
-        rendering.shared_quad.mesh.clone(),
-        z_offset,
-    );
-
-    commands
-        .spawn((marker, bundle))
-        .insert(ChildOf(effects_container.entity()));
-}
-
-fn remove_status_effect(
-    commands: &mut Commands,
-    sprite_obj: &Object<SpriteRoot>,
-    effect_path: &str,
-) {
-    if let Some(effect_entity) = sprite_obj.find_by_path(effect_path) {
-        commands.entity(effect_entity.entity()).despawn();
-    }
-}
-
+/// Handle animation change events by updating RoSprite action directly.
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationEvents)
 )]
 pub fn handle_sprite_animation_changes(
+    time: Res<Time>,
     mut animation_events: MessageReader<SpriteAnimationChangeEvent>,
-    mut character_sprites: Query<
-        (
-            &mut crate::domain::entities::character::components::visual::CharacterSprite,
-            &crate::domain::entities::character::components::visual::CharacterDirection,
-        ),
-        With<crate::domain::entities::character::components::CharacterAppearance>,
-    >,
+    mut sprites: Query<&mut crate::infrastructure::assets::ro_animation_asset::RoSprite>,
 ) {
+    let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
+
     for event in animation_events.read() {
-        if let Ok((mut sprite, direction)) = character_sprites.get_mut(event.character_entity) {
-            sprite.play_action(event.action_type, direction.facing);
-        }
+        let Ok(mut ro_sprite) = sprites.get_mut(event.character_entity) else {
+            continue;
+        };
+
+        let action = action_type_to_index(event.action_type);
+        ro_sprite.set_action(action, game_time_ms);
+
+        debug!(
+            "handle_sprite_animation_changes: Set action {} for entity {:?}",
+            action, event.character_entity
+        );
+    }
+}
+
+fn action_type_to_index(
+    action_type: crate::domain::entities::character::components::visual::ActionType,
+) -> u8 {
+    use crate::domain::entities::character::components::visual::ActionType;
+    match action_type {
+        ActionType::Idle => 0,
+        ActionType::Walk => 1,
+        ActionType::Sit => 2,
+        ActionType::Attack => 3,
+        ActionType::Hit => 4,
+        ActionType::Dead => 5,
+        ActionType::Cast => 6,
+        ActionType::Special => 7,
     }
 }

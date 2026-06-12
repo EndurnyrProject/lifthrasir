@@ -5,11 +5,13 @@ use crate::{
     domain::{
         entities::{
             character::{
-                components::{core::Grounded, visual::{CharacterDirection, Direction}},
-                states::{StartWalking, StopWalking},
+                components::{
+                    core::Grounded,
+                    visual::{CharacterDirection, Direction},
+                },
+                states::AnimationState,
             },
             pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
-            sprite_rendering::components::SpriteObjectTree,
         },
         system_sets::MovementSystems,
         world::components::MapLoader,
@@ -25,11 +27,15 @@ use crate::{
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use moonshine_behavior::prelude::*;
 
-/// Observer for movement requests
-///
-/// Handles MovementRequested events and sends CZ_REQUEST_MOVE2 packets to the server.
-/// This is the first step in the client-server movement flow.
+// =============================================================================
+// PHASE 0.2: UPDATED TO USE FLAT ENTITY STRUCTURE
+// =============================================================================
+// Removed SpriteObjectTree dependency - queries entity Transform directly.
+// Entity now has Transform component directly (no child hierarchy).
+// =============================================================================
+
 #[auto_observer(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
 pub fn send_movement_requests_observer(
     trigger: On<MovementRequested>,
@@ -54,24 +60,6 @@ pub fn send_movement_requests_observer(
     }
 }
 
-/// Handle server-confirmed movement
-///
-/// Processes MovementConfirmedByServer events and initiates client-side interpolation.
-/// This system:
-/// 1. Looks up entity from AID via EntityRegistry
-/// 2. Creates MovementTarget component with multi-waypoint interpolation data
-/// 3. Updates character direction based on movement vector
-/// 4. Changes state to Moving (only if not already walking)
-/// 5. Inserts StartWalking trigger for animation state machine (only if not already walking)
-///
-/// **Multi-Waypoint Support:** If the entity has a WalkablePath component with waypoints,
-/// this system creates a MovementTarget that interpolates smoothly across all waypoints
-/// without stopping at intermediate cells. This eliminates the stuttering movement issue.
-///
-/// **Position Continuity:** When a new movement is confirmed during an existing movement,
-/// this system uses the character's current interpolated position as the source instead of
-/// the server's stale position. This prevents the character from snapping back to the old
-/// destination before moving to the new target.
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
@@ -85,13 +73,9 @@ pub fn handle_movement_confirmed_system(
     mut commands: Commands,
     mut server_events: MessageReader<MovementConfirmedByServer>,
     entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
-    query: Query<(
-        Option<&MovementTarget>,
-        &SpriteObjectTree,
-        Option<&WalkablePath>,
-    )>,
-    sprite_transforms: Query<&Transform>,
+    query: Query<(Option<&MovementTarget>, &Transform, Option<&WalkablePath>)>,
     movement_states: Query<&MovementState>,
+    mut behaviors: Query<BehaviorMut<AnimationState>>,
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
 ) {
     for event in server_events.read() {
@@ -103,7 +87,7 @@ pub fn handle_movement_confirmed_system(
             continue;
         };
 
-        let Ok((existing_target, object_tree, walkable_path)) = query.get(entity) else {
+        let Ok((existing_target, transform, walkable_path)) = query.get(entity) else {
             warn!(
                 "Entity {:?} missing required components for movement",
                 entity
@@ -117,22 +101,17 @@ pub fn handle_movement_confirmed_system(
         );
 
         let (actual_src_x, actual_src_y, src_world_pos) = if existing_target.is_some() {
-            if let Ok(transform) = sprite_transforms.get(object_tree.root) {
-                let current_pos = transform.translation;
-                let (current_x, current_y) =
-                    crate::utils::coordinates::world_position_to_spawn_coords(current_pos, 0, 0);
-                let current_world_pos = Vec3::new(current_pos.x, 0.0, current_pos.z);
+            let current_pos = transform.translation;
+            let (current_x, current_y) =
+                crate::utils::coordinates::world_position_to_spawn_coords(current_pos, 0, 0);
+            let current_world_pos = Vec3::new(current_pos.x, 0.0, current_pos.z);
 
-                debug!(
-                    "Movement interrupted: using current position ({}, {}) instead of server source ({}, {})",
-                    current_x, current_y, event.src_x, event.src_y
-                );
+            debug!(
+                "Movement interrupted: using current position ({}, {}) instead of server source ({}, {})",
+                current_x, current_y, event.src_x, event.src_y
+            );
 
-                (current_x, current_y, current_world_pos)
-            } else {
-                let pos = spawn_coords_to_world_position(event.src_x, event.src_y, 0, 0);
-                (event.src_x, event.src_y, pos)
-            }
+            (current_x, current_y, current_world_pos)
         } else {
             let pos = spawn_coords_to_world_position(event.src_x, event.src_y, 0, 0);
             (event.src_x, event.src_y, pos)
@@ -140,7 +119,6 @@ pub fn handle_movement_confirmed_system(
 
         let dest_world_pos = spawn_coords_to_world_position(event.dest_x, event.dest_y, 0, 0);
 
-        // Check if we can reuse existing path
         let path_to_use = walkable_path
             .filter(|path| {
                 let destination_matches = path.final_destination == (event.dest_x, event.dest_y);
@@ -151,7 +129,6 @@ pub fn handle_movement_confirmed_system(
             })
             .cloned();
 
-        // Generate new path only if needed
         let path_to_use = if path_to_use.is_none() {
             if let Some(grid) = pathfinding_grid.as_ref() {
                 if let Some(waypoints) = find_path(
@@ -201,7 +178,6 @@ pub fn handle_movement_confirmed_system(
                 .map(|(x, y)| spawn_coords_to_world_position(*x, *y, 0, 0))
                 .collect();
 
-            // Clone cell coordinates for duration calculation
             let waypoint_cell_coords = path.waypoints.clone();
 
             debug!(
@@ -234,12 +210,15 @@ pub fn handle_movement_confirmed_system(
 
         let dx = (event.dest_x as f32) - (actual_src_x as f32);
         let dy = (event.dest_y as f32) - (actual_src_y as f32);
-        let direction = Direction::from_movement_vector(-dx, dy);
+        let direction = Direction::from_movement_vector(dx, dy);
 
         let already_walking = matches!(movement_states.get(entity), Ok(MovementState::Moving));
 
         let Ok(mut entity_commands) = commands.get_entity(entity) else {
-            debug!("Entity {:?} despawned before movement components could be applied", entity);
+            debug!(
+                "Entity {:?} despawned before movement components could be applied",
+                entity
+            );
             continue;
         };
 
@@ -250,13 +229,19 @@ pub fn handle_movement_confirmed_system(
             );
             entity_commands.insert((target, CharacterDirection { facing: direction }));
         } else {
-            debug!("INSERTING StartWalking trigger for entity {:?}", entity);
-            entity_commands.remove::<StopWalking>().insert((
+            debug!("Starting Walking animation for entity {:?}", entity);
+            // Insert AnimationState::Walking directly to ensure immediate sync with RoSprite
+            // (moonshine_behavior transitions may be deferred)
+            entity_commands.insert((
                 target,
                 MovementState::Moving,
                 CharacterDirection { facing: direction },
-                StartWalking,
+                AnimationState::Walking,
             ));
+
+            if let Ok(mut behavior) = behaviors.get_mut(entity) {
+                behavior.start(AnimationState::Walking);
+            }
         }
 
         commands.trigger(MovementConfirmed {
@@ -270,16 +255,6 @@ pub fn handle_movement_confirmed_system(
     }
 }
 
-/// Interpolate character movement every frame
-///
-/// This is the core movement system that runs every frame to smoothly
-/// move characters through their entire path. For multi-waypoint paths,
-/// it interpolates continuously across all waypoints without stopping
-/// at intermediate cells.
-///
-/// The system also updates the character's facing direction dynamically
-/// as they traverse path segments, ensuring proper sprite orientation
-/// during turns.
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
@@ -294,21 +269,15 @@ pub fn interpolate_movement_system(
         &MovementTarget,
         &MovementSpeed,
         &MovementState,
-        &SpriteObjectTree,
+        &mut Transform,
         &mut CharacterDirection,
     )>,
-    mut sprite_transforms: Query<&mut Transform>,
     mut commands: Commands,
 ) {
-    for (entity, target, speed, state, object_tree, mut character_direction) in query.iter_mut() {
+    for (entity, target, speed, state, mut transform, mut character_direction) in query.iter_mut() {
         if *state != MovementState::Moving {
             continue;
         }
-
-        let Ok(mut transform) = sprite_transforms.get_mut(object_tree.root) else {
-            warn!("Sprite root transform not found for entity {:?}", entity);
-            continue;
-        };
 
         let progress = target.progress(speed.ms_per_cell);
 
@@ -340,11 +309,6 @@ pub fn interpolate_movement_system(
     }
 }
 
-/// Handle server-initiated movement stops
-///
-/// Converts MovementStoppedByServer network events into client MovementStopped events.
-/// Looks up the entity from AID via EntityRegistry and snaps its position to the
-/// server-provided coordinates.
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
@@ -357,18 +321,11 @@ pub fn handle_server_stop_system(
     mut server_stop_events: MessageReader<MovementStoppedByServer>,
     mut commands: Commands,
     entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
-    query: Query<&SpriteObjectTree>,
-    mut sprite_transforms: Query<&mut Transform>,
+    mut transforms: Query<&mut Transform>,
 ) {
     for server_event in server_stop_events.read() {
-        // Look up entity from AID
         let Some(entity) = entity_registry.get_entity(server_event.aid) else {
             warn!("Movement stop for unknown entity AID: {}", server_event.aid);
-            continue;
-        };
-
-        let Ok(object_tree) = query.get(entity) else {
-            warn!("Entity {:?} missing SpriteObjectTree", entity);
             continue;
         };
 
@@ -377,8 +334,7 @@ pub fn handle_server_stop_system(
             entity, server_event.x, server_event.y, server_event.server_tick
         );
 
-        // Snap to server position
-        if let Ok(mut transform) = sprite_transforms.get_mut(object_tree.root) {
+        if let Ok(mut transform) = transforms.get_mut(entity) {
             let final_pos = spawn_coords_to_world_position(server_event.x, server_event.y, 0, 0);
             transform.translation.x = final_pos.x;
             transform.translation.z = final_pos.z;
@@ -393,22 +349,12 @@ pub fn handle_server_stop_system(
     }
 }
 
-/// Observer for movement stopped events
-///
-/// Cleanup observer that runs when movement completes or is interrupted.
-/// - Removes MovementTarget component
-/// - Removes WalkablePath component (path is complete)
-/// - Updates state to Idle
-/// - Inserts StopWalking trigger for animation
-///
-/// With the new smooth multi-waypoint interpolation, movement only stops
-/// when the character reaches the final destination, so this always triggers
-/// the complete cleanup sequence.
 #[auto_observer(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
 pub fn handle_movement_stopped_observer(
     trigger: On<MovementStopped>,
     mut commands: Commands,
     movement_states: Query<&MovementState>,
+    mut behaviors: Query<BehaviorMut<AnimationState>>,
 ) {
     let event = trigger.event();
     debug!(
@@ -419,7 +365,7 @@ pub fn handle_movement_stopped_observer(
     if let Ok(movement_state) = movement_states.get(event.entity) {
         if matches!(movement_state, MovementState::Idle) {
             debug!(
-                "Skipping StopWalking trigger for {:?}: already Idle",
+                "Skipping Idle transition for {:?}: already Idle",
                 event.entity
             );
             return;
@@ -427,29 +373,28 @@ pub fn handle_movement_stopped_observer(
     }
 
     let Ok(mut entity_commands) = commands.get_entity(event.entity) else {
-        debug!("Entity {:?} already despawned, skipping movement cleanup", event.entity);
+        debug!(
+            "Entity {:?} already despawned, skipping movement cleanup",
+            event.entity
+        );
         return;
     };
 
     debug!(
-        "INSERTING StopWalking trigger for entity {:?}",
+        "Transitioning to Idle animation for entity {:?}",
         event.entity
     );
+    // Insert AnimationState::Idle directly to ensure immediate sync with RoSprite
     entity_commands
         .remove::<MovementTarget>()
         .remove::<WalkablePath>()
-        .remove::<StartWalking>()
-        .insert((MovementState::Idle, StopWalking));
+        .insert((MovementState::Idle, AnimationState::Idle));
+
+    if let Ok(mut behavior) = behaviors.get_mut(event.entity) {
+        behavior.start(AnimationState::Idle);
+    }
 }
 
-/// Update altitude for all grounded entities to follow terrain height
-///
-/// This system runs every frame to keep grounded entities (like characters) aligned
-/// with the terrain height at their current position. It queries the GAT altitude data
-/// for the terrain height and updates the entity's Y position accordingly.
-///
-/// # System Ordering
-/// - Runs in MovementSystems::TerrainAlignment set (after Confirm, Interpolate, and Stop)
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
@@ -461,8 +406,7 @@ pub fn handle_movement_stopped_observer(
 pub fn update_entity_altitude_system(
     map_loader_query: Query<&MapLoader>,
     altitude_assets: Option<Res<Assets<RoAltitudeAsset>>>,
-    grounded_entities: Query<&SpriteObjectTree, With<Grounded>>,
-    mut sprite_transforms: Query<&mut Transform>,
+    mut grounded_entities: Query<&mut Transform, With<Grounded>>,
 ) {
     let Some(altitude_assets) = altitude_assets else {
         return;
@@ -480,11 +424,7 @@ pub fn update_entity_altitude_system(
         return;
     };
 
-    for object_tree in grounded_entities.iter() {
-        let Ok(mut transform) = sprite_transforms.get_mut(object_tree.root) else {
-            continue;
-        };
-
+    for mut transform in grounded_entities.iter_mut() {
         if let Some(height) = altitude_asset
             .altitude
             .get_terrain_height_at_position(transform.translation)
@@ -494,63 +434,23 @@ pub fn update_entity_altitude_system(
     }
 }
 
-// DEPRECATED: This system is no longer used with smooth multi-waypoint interpolation.
-// The new MovementTarget::new_with_waypoints() creates a single movement that
-// interpolates smoothly across all waypoints without stopping at intermediate cells.
-// Keeping this code for reference but it's not registered in the plugin.
-//
-// pub fn advance_waypoint_system(
-//     mut commands: Commands,
-//     mut stop_events: MessageReader<MovementStopped>,
-//     mut movement_requests: MessageWriter<MovementRequested>,
-//     mut path_query: Query<(Entity, &mut WalkablePath)>,
-// ) {
-//     for event in stop_events.read() {
-//         if event.reason != StopReason::ReachedDestination {
-//             continue;
-//         }
-//
-//         let Ok((entity, mut path)) = path_query.get_mut(event.entity) else {
-//             continue;
-//         };
-//
-//         if path.advance() {
-//             if let Some((next_x, next_y)) = path.next_waypoint() {
-//                 debug!(
-//                     "Advancing to waypoint {}/{}: ({}, {})",
-//                     path.current_waypoint + 1,
-//                     path.waypoints.len(),
-//                     next_x,
-//                     next_y
-//                 );
-//
-//                 movement_requests.write(MovementRequested {
-//                     entity,
-//                     dest_x: next_x,
-//                     dest_y: next_y,
-//                     direction: 0,
-//                 });
-//             }
-//         } else {
-//             debug!("Path complete, removing WalkablePath component");
-//             commands.entity(entity).remove::<WalkablePath>();
-//         }
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_direction_from_movement() {
-        // West (positive X in atan2 = 0° = West in RO coords)
-        assert_eq!(Direction::from_movement_vector(1.0, 0.0), Direction::West);
-        // East (negative X in atan2 = 180° = East in RO coords)
-        assert_eq!(Direction::from_movement_vector(-1.0, 0.0), Direction::East);
-        // North (positive Z in atan2 = 90° = North in RO coords)
+        assert_eq!(Direction::from_movement_vector(1.0, 0.0), Direction::East);
+        assert_eq!(Direction::from_movement_vector(-1.0, 0.0), Direction::West);
         assert_eq!(Direction::from_movement_vector(0.0, 1.0), Direction::North);
-        // South (negative Z in atan2 = 270° = South in RO coords)
         assert_eq!(Direction::from_movement_vector(0.0, -1.0), Direction::South);
+        assert_eq!(
+            Direction::from_movement_vector(1.0, -1.0),
+            Direction::SouthEast
+        );
+        assert_eq!(
+            Direction::from_movement_vector(-1.0, 1.0),
+            Direction::NorthWest
+        );
     }
 }

@@ -1,6 +1,7 @@
 pub mod audio_plugin;
 pub mod authentication_plugin;
 pub mod character_domain_plugin;
+pub mod combat_plugin;
 pub mod entity_hover_plugin;
 pub mod entity_spawning_plugin;
 pub mod input_plugin;
@@ -13,6 +14,7 @@ pub mod sprite_rendering_domain_plugin;
 pub use audio_plugin::AudioPlugin;
 pub use authentication_plugin::*;
 pub use character_domain_plugin::CharacterDomainAutoPlugin;
+pub use combat_plugin::CombatDomainPlugin;
 pub use entity_hover_plugin::EntityHoverDomainPlugin;
 pub use entity_spawning_plugin::EntitySpawningDomainPlugin;
 pub use input_plugin::InputPlugin;

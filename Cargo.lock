@@ -843,6 +843,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_brp_extras"
+version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da7572182037da063421b1bc10ebbd6958c59e02fb21cc5e28f344699f93066f"
+dependencies = [
+ "bevy",
+ "serde",
+ "serde_json",
+ "strum",
+ "strum_macros",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "bevy_camera"
 version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3617,6 +3631,7 @@ dependencies = [
  "lru",
  "luadec",
  "mlua",
+ "moonshine-behavior",
  "moonshine-kind",
  "moonshine-object",
  "moonshine-tag",
@@ -3626,7 +3641,6 @@ dependencies = [
  "pathfinding",
  "regex",
  "secrecy",
- "seldom_state",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
@@ -5092,6 +5106,7 @@ dependencies = [
  "bevy",
  "bevy-tokio-tasks",
  "bevy_auto_plugin",
+ "bevy_brp_extras",
  "bevy_framepace",
  "flume",
  "game-engine",
@@ -5425,6 +5440,21 @@ dependencies = [
  "lua-src",
  "luajit-src",
  "pkg-config",
+]
+
+[[package]]
+name = "moonshine-behavior"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "874f25507807d246d37d048100ae972662cdad9671ab0123703dff4cac8112f8"
+dependencies = [
+ "bevy_app",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_log",
+ "bevy_reflect",
+ "moonshine-kind",
+ "moonshine-util",
 ]
 
 [[package]]
@@ -7518,22 +7548,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "seldom_state"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a0120152eb7bc1ae5fbc6e8bd37398dd3c8df64dca385fdd23e7ea791abd9dd"
-dependencies = [
- "bevy_app",
- "bevy_derive",
- "bevy_ecs",
- "bevy_log",
- "bevy_math",
- "bevy_utils",
- "either",
- "variadics_please",
-]
-
-[[package]]
 name = "selectors"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7642,6 +7656,7 @@ version = "1.0.145"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
 dependencies = [
+ "indexmap 2.12.0",
  "itoa",
  "memchr",
  "ryu",
@@ -8068,6 +8083,24 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
+name = "strum"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
+
+[[package]]
+name = "strum_macros"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.107",
+]
 
 [[package]]
 name = "svg_fmt"

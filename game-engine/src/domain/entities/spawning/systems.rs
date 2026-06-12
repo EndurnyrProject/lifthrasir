@@ -1,6 +1,7 @@
 use crate::{
     core::state::GameState,
     domain::{
+        combat::components::Combatant,
         entities::{
             character::{
                 components::{
@@ -8,7 +9,7 @@ use crate::{
                     equipment::EquipmentSet,
                     visual::{CharacterDirection, CharacterSprite, Direction},
                 },
-                states::{AnimationState, ContextState, GameplayState, StartWalking},
+                states::{AnimationState, StatusEffects},
             },
             components::{NetworkEntity, PendingDespawn},
             markers::*,
@@ -27,8 +28,7 @@ use crate::{
         system_sets::EntityLifecycleSystems,
     },
     infrastructure::{
-        lua_scripts::job::JobSpriteRegistry,
-        networking::protocol::zone::MovementConfirmedByServer,
+        lua_scripts::job::JobSpriteRegistry, networking::protocol::zone::MovementConfirmedByServer,
     },
     utils::coordinates::spawn_coords_to_world_position,
 };
@@ -150,7 +150,10 @@ pub fn spawn_network_entity_system(
         let mut entity_cmd = commands.spawn((
             NetworkEntity::new(event.aid, event.gid, event.object_type),
             Transform::from_translation(world_pos),
+            GlobalTransform::default(),
             Visibility::default(),
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
             Name::new(format!(
                 "{} ({:?}:{})",
                 event.name, event.object_type, event.aid
@@ -203,10 +206,9 @@ pub fn spawn_network_entity_system(
         }
 
         entity_cmd.insert((
-            crate::domain::entities::character::states::create_animation_state_machine(),
             AnimationState::Idle,
-            GameplayState::Normal,
-            ContextState::InGame,
+            StatusEffects::default(),
+            Combatant::new(150),
         ));
 
         if let Some(destination) = event.destination {
@@ -321,7 +323,7 @@ pub fn spawn_network_entity_system(
                 MovementState::Moving,
                 MovementSpeed::from_server_speed(event.speed),
                 Grounded,
-                StartWalking,
+                AnimationState::Walking,
             ));
 
             debug!(
@@ -351,8 +353,12 @@ pub fn spawn_network_entity_system(
                 };
 
                 let sprite_info = EntitySpriteInfo { sprite_data };
-                commands.entity(entity_id).trigger(|entity| RequestSpriteSpawn {
-                    entity,
+                info!(
+                    "Triggering RequestSpriteSpawn for PC entity {:?} (job={}, head={}) at position ({:.2}, {:.2}, {:.2})",
+                    entity_id, event.job, event.head, world_pos.x, world_pos.y, world_pos.z
+                );
+                commands.trigger(RequestSpriteSpawn {
+                    entity: entity_id,
                     position: world_pos,
                     sprite_info,
                 });
@@ -386,8 +392,12 @@ pub fn spawn_network_entity_system(
                 };
 
                 let sprite_info = EntitySpriteInfo { sprite_data };
-                commands.entity(entity_id).trigger(|entity| RequestSpriteSpawn {
-                    entity,
+                info!(
+                    "Triggering RequestSpriteSpawn for {:?} entity {:?} (job={}) at position ({:.2}, {:.2}, {:.2})",
+                    event.object_type, entity_id, event.job, world_pos.x, world_pos.y, world_pos.z
+                );
+                commands.trigger(RequestSpriteSpawn {
+                    entity: entity_id,
                     position: world_pos,
                     sprite_info,
                 });
@@ -418,23 +428,16 @@ fn create_equipment_item(
 
 /// Observer for entity despawn events
 ///
-/// Handles DespawnEntity observer events and despawns the entity and its sprite hierarchy.
+/// Handles DespawnEntity observer events and despawns the entity.
 /// This observer is triggered when an entity needs to be removed from the game world.
 #[auto_observer(plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin)]
 pub fn on_despawn_entity(
     trigger: On<DespawnEntity>,
     mut commands: Commands,
     mut entity_registry: ResMut<EntityRegistry>,
-    sprite_trees: Query<&crate::domain::entities::sprite_rendering::components::SpriteObjectTree>,
 ) {
     let event = trigger.event();
     let entity = trigger.entity;
-
-    // Despawn sprite hierarchy first to prevent race condition
-    // where update_sprite_transforms tries to access a despawned entity
-    if let Ok(object_tree) = sprite_trees.get(entity) {
-        commands.entity(object_tree.root).despawn();
-    }
 
     commands.entity(entity).despawn();
 

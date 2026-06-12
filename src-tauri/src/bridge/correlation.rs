@@ -198,7 +198,8 @@ impl PendingHairstyleSenders {
     }
 }
 
-type CharacterStatusSender = oneshot::Sender<Result<super::character::CharacterStatusPayload, String>>;
+type CharacterStatusSender =
+    oneshot::Sender<Result<super::character::CharacterStatusPayload, String>>;
 
 #[derive(Resource, Default)]
 #[auto_init_resource(plugin = crate::plugin::TauriIntegrationAutoPlugin)]

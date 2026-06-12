@@ -6,9 +6,17 @@ use bevy_auto_plugin::prelude::*;
 
 use super::{
     components::{NetworkEntity, PendingDespawn},
-    hover::{EntityHoverEntered, EntityHoverExited, HoverConfig, Hoverable, HoveredEntity},
-    sprite_rendering::components::SpriteObjectTree,
+    hover::{
+        CurrentlyHoveredEntity, EntityHoverEntered, EntityHoverExited, HoverConfig, Hoverable,
+        HoveredEntity,
+    },
 };
+
+// =============================================================================
+// PHASE 0.2: UPDATED TO USE FLAT ENTITY STRUCTURE
+// =============================================================================
+// Removed SpriteObjectTree dependency - queries entity GlobalTransform directly.
+// =============================================================================
 
 #[auto_add_system(
     plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
@@ -22,25 +30,19 @@ pub fn update_entity_bounds_system(
     mut commands: Commands,
     hover_config: Res<HoverConfig>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    entity_query: Query<(Entity, &NetworkEntity, &SpriteObjectTree), Without<PendingDespawn>>,
-    sprite_query: Query<&GlobalTransform>,
+    entity_query: Query<(Entity, &NetworkEntity, &GlobalTransform), Without<PendingDespawn>>,
 ) {
     let Ok((camera, camera_transform)) = camera_query.single() else {
         return;
     };
 
-    for (entity, _network_entity, sprite_tree) in entity_query.iter() {
-        let Ok(sprite_transform) = sprite_query.get(sprite_tree.root) else {
-            continue;
-        };
-
-        let world_pos = sprite_transform.translation();
+    for (entity, _network_entity, entity_transform) in entity_query.iter() {
+        let world_pos = entity_transform.translation();
 
         let Some(ndc) = camera.world_to_ndc(camera_transform, world_pos) else {
             continue;
         };
 
-        // Use physical viewport size to match cursor coordinates (which are in physical pixels)
         let Some(viewport_size) = camera.physical_viewport_size() else {
             continue;
         };
@@ -72,15 +74,15 @@ pub fn entity_hover_detection_system(
     mut commands: Commands,
     cursor_pos: Res<ForwardedCursorPosition>,
     hoverable_query: Query<(Entity, &NetworkEntity, &Hoverable)>,
-    mut previous_hovered: Local<Option<Entity>>,
+    mut currently_hovered: ResMut<CurrentlyHoveredEntity>,
 ) {
     let Some(cursor_position) = cursor_pos.position else {
-        if let Some(prev_entity) = *previous_hovered {
+        if let Some(prev_entity) = currently_hovered.entity {
             commands.entity(prev_entity).try_remove::<HoveredEntity>();
             commands.trigger(EntityHoverExited {
                 entity: prev_entity,
             });
-            *previous_hovered = None;
+            currently_hovered.entity = None;
         }
         return;
     };
@@ -90,7 +92,7 @@ pub fn entity_hover_detection_system(
         .find(|(_, _, hoverable)| hoverable.contains_point(cursor_position))
         .map(|(entity, network_entity, _)| (entity, network_entity));
 
-    match (current_hovered, *previous_hovered) {
+    match (current_hovered, currently_hovered.entity) {
         (Some((entity, network_entity)), Some(prev_entity)) if entity != prev_entity => {
             commands.entity(prev_entity).try_remove::<HoveredEntity>();
             commands.trigger(EntityHoverExited {
@@ -101,24 +103,22 @@ pub fn entity_hover_detection_system(
             commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,
-                object_type: network_entity.object_type,
             });
 
-            *previous_hovered = Some(entity);
+            currently_hovered.entity = Some(entity);
         }
         (Some((entity, network_entity)), None) => {
             commands.entity(entity).insert(HoveredEntity);
             commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,
-                object_type: network_entity.object_type,
             });
             debug!(
-                "🎯 Entity hover ENTERED: {:?} (AID: {})",
+                "Entity hover ENTERED: {:?} (AID: {})",
                 entity, network_entity.aid
             );
 
-            *previous_hovered = Some(entity);
+            currently_hovered.entity = Some(entity);
         }
         (None, Some(prev_entity)) => {
             commands.entity(prev_entity).try_remove::<HoveredEntity>();
@@ -126,7 +126,7 @@ pub fn entity_hover_detection_system(
                 entity: prev_entity,
             });
 
-            *previous_hovered = None;
+            currently_hovered.entity = None;
         }
         _ => {}
     }

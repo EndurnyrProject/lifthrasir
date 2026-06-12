@@ -1,18 +1,37 @@
 use super::visual::{ActionType, Direction};
 use bevy::prelude::*;
 
-/// Action offsets in ACT files for standard Ragnarok Online character sprites.
+/// Action offsets in ACT files for standard Ragnarok Online PC/humanoid sprites.
 ///
 /// Each action type has 8 directional variants (except special actions).
 /// The formula to get the actual action index is: base_offset + direction
+///
+/// PC sprites have a different layout than mobs:
+/// - Idle = 0, Walk = 8, Sit = 16, PickUp = 24, Standby = 32
+/// - Hit = 48, Freeze1 = 56, Dead = 64, Freeze2 = 72
+/// - Attack2 = 80, Attack1/Attack3 = 88, Casting = 96
 pub mod action_offsets {
+    pub const IDLE: usize = 0; // 0 * 8
+    pub const WALK: usize = 8; // 1 * 8
+    pub const SIT: usize = 16; // 2 * 8
+    pub const PICKUP: usize = 24; // 3 * 8
+    pub const STANDBY: usize = 32; // 4 * 8 (combat idle)
+    pub const HIT: usize = 48; // 6 * 8
+    pub const DEAD: usize = 64; // 8 * 8
+    pub const ATTACK: usize = 88; // 11 * 8 (Attack1/Attack3)
+    pub const CASTING: usize = 96; // 12 * 8
+}
+
+/// Action offsets in ACT files for Ragnarok Online mob/monster sprites.
+///
+/// Mobs have a simpler action layout than PCs (no sit/pickup actions).
+/// The formula to get the actual action index is: base_offset + direction
+pub mod mob_action_offsets {
     pub const IDLE: usize = 0;
     pub const WALK: usize = 8;
-    pub const SIT: usize = 16;
-    pub const PICKUP: usize = 24;
-    pub const ATTACK: usize = 32;
-    pub const HIT: usize = 40;
-    pub const DEAD: usize = 48;
+    pub const ATTACK: usize = 16;
+    pub const HIT: usize = 24;
+    pub const DEAD: usize = 32;
 }
 
 /// Calculate the action index in the ACT file based on action type and direction.
@@ -40,8 +59,25 @@ pub fn calculate_action_index(action_type: ActionType, direction: Direction) -> 
         ActionType::Attack => action_offsets::ATTACK,
         ActionType::Hit => action_offsets::HIT,
         ActionType::Dead => action_offsets::DEAD,
-        ActionType::Cast => action_offsets::PICKUP,
+        ActionType::Cast => action_offsets::CASTING,
         ActionType::Special => action_offsets::PICKUP,
+    };
+
+    base_offset + (direction as usize)
+}
+
+/// Calculate the action index for mob/monster sprites.
+///
+/// Mobs have a different action layout than PCs with fewer action types.
+pub fn calculate_mob_action_index(action_type: ActionType, direction: Direction) -> usize {
+    let base_offset = match action_type {
+        ActionType::Idle => mob_action_offsets::IDLE,
+        ActionType::Walk => mob_action_offsets::WALK,
+        ActionType::Attack => mob_action_offsets::ATTACK,
+        ActionType::Hit => mob_action_offsets::HIT,
+        ActionType::Dead => mob_action_offsets::DEAD,
+        // Mobs don't have sit/cast/special - default to idle
+        ActionType::Sit | ActionType::Cast | ActionType::Special => mob_action_offsets::IDLE,
     };
 
     base_offset + (direction as usize)
@@ -184,35 +220,35 @@ mod tests {
     fn test_attack_action_mapping() {
         assert_eq!(
             calculate_action_index(ActionType::Attack, Direction::South),
-            32
+            88
         );
         assert_eq!(
             calculate_action_index(ActionType::Attack, Direction::SouthWest),
-            33
+            89
         );
         assert_eq!(
             calculate_action_index(ActionType::Attack, Direction::West),
-            34
+            90
         );
         assert_eq!(
             calculate_action_index(ActionType::Attack, Direction::NorthWest),
-            35
+            91
         );
         assert_eq!(
             calculate_action_index(ActionType::Attack, Direction::North),
-            36
+            92
         );
         assert_eq!(
             calculate_action_index(ActionType::Attack, Direction::NorthEast),
-            37
+            93
         );
         assert_eq!(
             calculate_action_index(ActionType::Attack, Direction::East),
-            38
+            94
         );
         assert_eq!(
             calculate_action_index(ActionType::Attack, Direction::SouthEast),
-            39
+            95
         );
     }
 
@@ -220,29 +256,29 @@ mod tests {
     fn test_hit_action_mapping() {
         assert_eq!(
             calculate_action_index(ActionType::Hit, Direction::South),
-            40
+            48
         );
         assert_eq!(
             calculate_action_index(ActionType::Hit, Direction::SouthWest),
-            41
+            49
         );
-        assert_eq!(calculate_action_index(ActionType::Hit, Direction::West), 42);
+        assert_eq!(calculate_action_index(ActionType::Hit, Direction::West), 50);
         assert_eq!(
             calculate_action_index(ActionType::Hit, Direction::NorthWest),
-            43
+            51
         );
         assert_eq!(
             calculate_action_index(ActionType::Hit, Direction::North),
-            44
+            52
         );
         assert_eq!(
             calculate_action_index(ActionType::Hit, Direction::NorthEast),
-            45
+            53
         );
-        assert_eq!(calculate_action_index(ActionType::Hit, Direction::East), 46);
+        assert_eq!(calculate_action_index(ActionType::Hit, Direction::East), 54);
         assert_eq!(
             calculate_action_index(ActionType::Hit, Direction::SouthEast),
-            47
+            55
         );
     }
 
@@ -250,35 +286,35 @@ mod tests {
     fn test_dead_action_mapping() {
         assert_eq!(
             calculate_action_index(ActionType::Dead, Direction::South),
-            48
+            64
         );
         assert_eq!(
             calculate_action_index(ActionType::Dead, Direction::SouthWest),
-            49
+            65
         );
         assert_eq!(
             calculate_action_index(ActionType::Dead, Direction::West),
-            50
+            66
         );
         assert_eq!(
             calculate_action_index(ActionType::Dead, Direction::NorthWest),
-            51
+            67
         );
         assert_eq!(
             calculate_action_index(ActionType::Dead, Direction::North),
-            52
+            68
         );
         assert_eq!(
             calculate_action_index(ActionType::Dead, Direction::NorthEast),
-            53
+            69
         );
         assert_eq!(
             calculate_action_index(ActionType::Dead, Direction::East),
-            54
+            70
         );
         assert_eq!(
             calculate_action_index(ActionType::Dead, Direction::SouthEast),
-            55
+            71
         );
     }
 
@@ -286,11 +322,11 @@ mod tests {
     fn test_cast_action_mapping() {
         assert_eq!(
             calculate_action_index(ActionType::Cast, Direction::South),
-            24
+            96
         );
         assert_eq!(
             calculate_action_index(ActionType::Cast, Direction::NorthEast),
-            29
+            101
         );
     }
 

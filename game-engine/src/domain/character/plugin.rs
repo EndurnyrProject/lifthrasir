@@ -9,8 +9,8 @@ use crate::infrastructure::networking::protocol::character::{
     CharacterSlotInfoReceived, PingReceived, SecondPasswordRequested, ZoneServerInfoReceived,
 };
 use crate::infrastructure::networking::protocol::zone::{
-    AccountIdReceived, ChatReceived, EntityNameAllReceived, EntityNameReceived,
-    ParameterChanged, ZoneEntryRefused, ZoneServerConnected as ZoneServerConnectedProtocol,
+    AccountIdReceived, ChatReceived, EntityNameAllReceived, EntityNameReceived, ParameterChanged,
+    ZoneEntryRefused, ZoneServerConnected as ZoneServerConnectedProtocol,
 };
 use bevy::prelude::*;
 

@@ -2,15 +2,16 @@ use crate::{
     core::state::GameState,
     domain::{
         entities::{
-            markers::LocalPlayer,
+            components::NetworkEntity,
+            hover::CurrentlyHoveredEntity,
+            markers::{LocalPlayer, Mob},
             movement::events::MovementRequested,
             pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
-            sprite_rendering::SpriteObjectTree,
         },
         system_sets::InputSystems,
         world::components::MapLoader,
     },
-    infrastructure::assets::loaders::RoGroundAsset,
+    infrastructure::{assets::loaders::RoGroundAsset, networking::client::ZoneServerClient},
     utils::coordinates::world_position_to_spawn_coords,
 };
 use bevy::ecs::system::SystemParam;
@@ -22,6 +23,12 @@ use super::{
     ForwardedMouseClick,
 };
 
+// =============================================================================
+// PHASE 0.2: UPDATED TO USE FLAT ENTITY STRUCTURE
+// =============================================================================
+// Removed SpriteObjectTree dependency - queries entity Transform directly.
+// =============================================================================
+
 #[derive(SystemParam)]
 pub struct MapData<'w, 's> {
     map_loader_query: Query<'w, 's, &'static MapLoader>,
@@ -29,8 +36,6 @@ pub struct MapData<'w, 's> {
     pathfinding_grid: Option<Res<'w, CurrentMapPathfindingGrid>>,
 }
 
-/// Render terrain cursor gizmo at the world position under the mouse cursor
-/// Shows where the player is pointing on the terrain with corner markers
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = Update,
@@ -88,8 +93,49 @@ pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>
     }
 }
 
-/// Handle terrain clicks for player movement
-/// Reads ForwardedMouseClick and cached raycast data, emits MovementRequested
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = Update,
+    config(
+        in_set = InputSystems::Click,
+        run_if = in_state(GameState::InGame),
+        before = handle_terrain_click
+    )
+)]
+pub fn handle_entity_click(
+    mut mouse_click: ResMut<ForwardedMouseClick>,
+    currently_hovered: Res<CurrentlyHoveredEntity>,
+    mob_query: Query<&NetworkEntity, With<Mob>>,
+    mut client: Option<ResMut<ZoneServerClient>>,
+) {
+    if mouse_click.position.is_none() {
+        return;
+    }
+
+    let Some(hovered_entity) = currently_hovered.entity else {
+        return;
+    };
+
+    let Ok(network_entity) = mob_query.get(hovered_entity) else {
+        return;
+    };
+
+    let Some(ref mut zone_client) = client else {
+        warn!("No zone client available for attack request");
+        return;
+    };
+
+    let target_gid = network_entity.gid;
+    debug!("Attacking mob with GID: {}", target_gid);
+
+    if let Err(e) = zone_client.request_attack(target_gid) {
+        error!("Failed to send attack request: {:?}", e);
+        return;
+    }
+
+    mouse_click.position.take();
+}
+
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = Update,
@@ -103,8 +149,7 @@ pub fn handle_terrain_click(
     mut mouse_click: ResMut<ForwardedMouseClick>,
     cache: Res<TerrainRaycastCache>,
     map_data: MapData,
-    player_query: Query<(Entity, &SpriteObjectTree), With<LocalPlayer>>,
-    sprite_transforms: Query<&Transform>,
+    player_query: Query<(Entity, &Transform), With<LocalPlayer>>,
 ) {
     if mouse_click.position.take().is_none() {
         return;
@@ -125,13 +170,8 @@ pub fn handle_terrain_click(
         return;
     };
 
-    let Ok((player_entity, object_tree)) = player_query.single() else {
+    let Ok((player_entity, transform)) = player_query.single() else {
         warn!("No player character found for movement request");
-        return;
-    };
-
-    let Ok(transform) = sprite_transforms.get(object_tree.root) else {
-        warn!("Player sprite transform not found");
         return;
     };
 
@@ -193,11 +233,6 @@ pub fn handle_terrain_click(
     }
 }
 
-/// Update cursor based on terrain walkability
-///
-/// Reads cached raycast data and checks if cell is walkable.
-/// Emits CursorChangeRequest to update cursor to "default" for walkable terrain
-/// or "impossible" for blocked/unwalkable terrain
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = Update,
@@ -208,8 +243,13 @@ pub fn handle_terrain_click(
 )]
 pub fn update_cursor_for_terrain(
     cache: Res<TerrainRaycastCache>,
+    currently_hovered: Res<CurrentlyHoveredEntity>,
     mut cursor_messages: MessageWriter<CursorChangeRequest>,
 ) {
+    if currently_hovered.entity.is_some() {
+        return;
+    }
+
     let cursor_type = if cache.is_walkable {
         CursorType::Default
     } else {
@@ -219,7 +259,6 @@ pub fn update_cursor_for_terrain(
     cursor_messages.write(CursorChangeRequest::new(cursor_type));
 }
 
-/// System to set default cursor when entering Login state
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = OnEnter(GameState::Login)
@@ -228,7 +267,6 @@ pub fn set_default_cursor_for_login(mut cursor_messages: MessageWriter<CursorCha
     cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
 }
 
-/// System to set default cursor when entering ServerSelection state
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = OnEnter(GameState::ServerSelection)
@@ -239,7 +277,6 @@ pub fn set_default_cursor_for_server_selection(
     cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
 }
 
-/// System to set default cursor when entering CharacterSelection state
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = OnEnter(GameState::CharacterSelection)

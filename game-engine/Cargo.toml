@@ -57,10 +57,10 @@ zeroize = "1.8"
 bevy-tokio-tasks = { git = "https://github.com/TBye101/bevy-tokio-tasks.git", branch = "master" }
 
 # Character entity system dependencies
-seldom_state = "0.15"
 moonshine-object = "0.3"
 moonshine-kind = "0.4"
 moonshine-tag = "0.4"
+moonshine-behavior = "0.4"
 
 # Pathfinding
 pathfinding = "4.14"

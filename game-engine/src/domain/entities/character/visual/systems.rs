@@ -184,7 +184,7 @@ mod tests {
 
         let mut sprite = app.world_mut().get_mut::<CharacterSprite>(entity).unwrap();
         sprite.play_action(ActionType::Attack, Direction::South);
-        assert_eq!(sprite.current_action, 32);
+        assert_eq!(sprite.current_action, 88); // ATTACK (88) + South (0)
 
         let mut direction = app
             .world_mut()
@@ -195,7 +195,7 @@ mod tests {
         app.update();
 
         let sprite = app.world().get::<CharacterSprite>(entity).unwrap();
-        assert_eq!(sprite.current_action, 37);
+        assert_eq!(sprite.current_action, 93); // ATTACK (88) + NorthEast (5)
         assert_eq!(sprite.get_current_action_type(), ActionType::Attack);
     }
 }

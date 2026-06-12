@@ -7,7 +7,6 @@ pub struct AssetsPlugin;
 
 impl Plugin for AssetsPlugin {
     fn build(&self, app: &mut App) {
-        // Register all RO asset types and loaders (AssetServer is now available)
         app.init_asset::<ClientConfig>()
             .init_asset::<AssetConfig>()
             .init_asset::<RoSpriteAsset>()
@@ -33,6 +32,7 @@ impl Plugin for AssetsPlugin {
             .add_plugins((
                 TomlAssetPlugin::<AssetConfig>::new(&["data.toml"]),
                 TomlAssetPlugin::<ClientConfig>::new(&["client.toml"]),
+                AnimationProcessingPlugin,
             ));
     }
 }

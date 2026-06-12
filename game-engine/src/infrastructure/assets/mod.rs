@@ -1,3 +1,5 @@
+pub mod animation_processing_system;
+pub mod animation_processor;
 pub mod bgm_name_table_loader;
 pub mod bmp_loader;
 pub mod config;
@@ -11,6 +13,10 @@ pub mod ro_asset_source;
 pub mod ro_assets_plugin;
 pub mod sources;
 
+pub use animation_processing_system::{
+    AnimationProcessingPlugin, PendingAnimation, PendingAnimations,
+};
+pub use animation_processor::{calculate_attach_offset, RoAnimationProcessor};
 pub use config::*;
 pub use converters::*;
 pub use hierarchical_manager::*;
@@ -20,5 +26,5 @@ pub use loaders::{
     RoPaletteLoader, RoSpriteAsset, RoSpriteLoader, RoWorldAsset, RoWorldLoader, RsmAsset,
     RsmLoader,
 };
-pub use ro_animation_asset::RoAnimationAsset;
+pub use ro_animation_asset::{ActionData, FrameData, FramePart, RoAnimationAsset, RoSprite};
 pub use ro_assets_plugin::SharedCompositeAssetSource;

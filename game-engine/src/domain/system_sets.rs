@@ -1,6 +1,6 @@
+use crate::core::state::GameState;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
-use crate::core::state::GameState;
 
 // =============================================================================
 // INPUT PROCESSING SYSTEMS
@@ -94,6 +94,26 @@ pub enum SpriteRenderingSystems {
 pub enum EntityInteractionSystems {
     Hover,
     Naming,
+}
+
+// =============================================================================
+// COMBAT SYSTEMS
+// =============================================================================
+
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[auto_configure_system_set(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    chain,
+    config(run_if = in_state(GameState::InGame))
+)]
+pub enum CombatSystems {
+    ProcessActions,
+    HandleReactions,
+    UpdateTimers,
+    HandleDeath,
+    SpawnDamageIndicators,
+    AnimateDamageIndicators,
 }
 
 // =============================================================================

@@ -135,14 +135,18 @@ impl CharacterSprite {
     pub fn get_current_action_type(&self) -> ActionType {
         let index = self.current_action as usize;
 
-        if index >= super::action_mapping::action_offsets::DEAD {
+        if index >= super::action_mapping::action_offsets::CASTING {
+            ActionType::Cast
+        } else if index >= super::action_mapping::action_offsets::ATTACK {
+            ActionType::Attack
+        } else if index >= super::action_mapping::action_offsets::DEAD {
             ActionType::Dead
         } else if index >= super::action_mapping::action_offsets::HIT {
             ActionType::Hit
-        } else if index >= super::action_mapping::action_offsets::ATTACK {
-            ActionType::Attack
+        } else if index >= super::action_mapping::action_offsets::STANDBY {
+            ActionType::Idle // Standby is combat idle
         } else if index >= super::action_mapping::action_offsets::PICKUP {
-            ActionType::Cast
+            ActionType::Special
         } else if index >= super::action_mapping::action_offsets::SIT {
             ActionType::Sit
         } else if index >= super::action_mapping::action_offsets::WALK {
@@ -214,7 +218,7 @@ mod tests {
         assert_eq!(sprite.current_frame, 0);
 
         sprite.play_action(ActionType::Attack, Direction::East);
-        assert_eq!(sprite.current_action, 38);
+        assert_eq!(sprite.current_action, 94); // ATTACK (88) + East (6)
         assert_eq!(sprite.current_frame, 0);
     }
 

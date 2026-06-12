@@ -11,7 +11,7 @@ pub mod utils;
 pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin};
 pub use domain::camera::CameraPlugin;
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
-pub use domain::entities::billboard::BillboardPlugin;
+pub use domain::combat::CombatPlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
 pub use domain::entities::hover_plugin::EntityHoverPlugin;
 pub use domain::entities::movement::MovementPlugin;
@@ -42,9 +42,9 @@ impl PluginGroup for CoreGamePlugins {
             .add(CharacterDomainPlugin)
             .add(AuthenticationPlugin)
             .add(WorldPlugin)
-            .add(BillboardPlugin)
             .add(MovementPlugin)
             .add(EntityHoverPlugin)
+            .add(CombatPlugin)
             .add(InputPlugin)
             .add(FpsCounterPlugin)
     }

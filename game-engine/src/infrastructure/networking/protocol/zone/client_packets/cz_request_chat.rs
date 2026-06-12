@@ -37,7 +37,7 @@ impl ClientPacket for CzRequestChatPacket {
     fn serialize(&self) -> Bytes {
         let len = 4 + self.message.len();
         let mut buf = BytesMut::with_capacity(len);
-        
+
         buf.put_u16_le(Self::PACKET_ID);
         buf.put_u16_le(len as u16);
         buf.put_slice(self.message.as_bytes());
@@ -61,7 +61,7 @@ mod tests {
 
         let bytes = packet.serialize();
         let len = 4 + message.len();
-        
+
         assert_eq!(bytes.len(), len);
 
         // Verify packet ID

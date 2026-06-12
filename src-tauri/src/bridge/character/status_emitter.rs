@@ -127,12 +127,8 @@ pub fn emit_character_status_system(
         }
     };
 
-    let payload = build_character_status_payload(
-        status,
-        char_data,
-        maybe_name,
-        job_registry.as_deref(),
-    );
+    let payload =
+        build_character_status_payload(status, char_data, maybe_name, job_registry.as_deref());
 
     if let Err(e) = app_handle.emit("character-status-update", payload) {
         error!("Failed to emit character-status-update event: {:?}", e);

@@ -123,9 +123,9 @@ impl Direction {
             return Direction::South;
         }
 
-        // Calculate angle using atan2 (returns -PI to PI)
-        // atan2(z, x) gives angle from positive X axis
-        let angle = dz.atan2(dx);
+        // from_angle uses the RO angle convention where 0° is West, so the X
+        // axis is negated to map world +X movement to East.
+        let angle = dz.atan2(-dx);
 
         // Normalize to [0, 2π] range and use from_angle
         let normalized_angle = if angle < 0.0 {

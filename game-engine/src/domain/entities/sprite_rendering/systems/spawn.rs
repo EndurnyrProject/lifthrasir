@@ -1,229 +1,24 @@
-use super::super::components::{RoSpriteLayer, SpriteHierarchy, SpriteLayerType, SpriteObjectTree};
-use super::super::events::{RequestSpriteSpawn, SpawnSpriteEvent};
-use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
-use crate::domain::entities::character::components::{
-    equipment::EquipmentSlot, CharacterAppearance,
+use super::super::components::{
+    BodyAttachPoint, EntitySpriteData, HeadAttachment, HeadLayer, MobSprite, PendingRenderLayers,
+    PlayerAppearance, PlayerSprite, RenderLayer, SpriteHierarchyConfig,
 };
-use crate::domain::entities::character::kinds::{CharacterRoot, SpriteLayer};
-use crate::domain::entities::sprite_rendering::components::SpriteHierarchyConfig;
+use super::super::events::{RequestSpriteSpawn, SpawnSpriteEvent};
+use crate::domain::assets::patterns;
+use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
+use crate::domain::sprite::tags::{
+    layer_order, LAYER_BODY, LAYER_HEAD, LAYER_SHADOW, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER,
+};
 use crate::domain::system_sets::SpriteRenderingSystems;
-use crate::domain::world::components::MapLoader;
-use crate::infrastructure::assets::loaders::RoAltitudeAsset;
-use bevy::ecs::hierarchy::ChildOf;
+use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
+use crate::infrastructure::assets::ro_animation_asset::{RoAnimationAsset, RoSprite};
+use crate::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use moonshine_tag::Tag;
 
-/// SystemParam bundle for rendering resources
-#[derive(bevy::ecs::system::SystemParam)]
-pub struct RenderingResources<'w> {
-    materials: ResMut<'w, Assets<StandardMaterial>>,
-    shared_quad: Res<'w, SharedSpriteQuad>,
-    _config: Res<'w, SpriteHierarchyConfig>,
-}
-
-/// SystemParam bundle for terrain-related resources
-#[derive(bevy::ecs::system::SystemParam)]
-pub struct TerrainResources<'w, 's> {
-    map_loader_query: Query<'w, 's, &'static MapLoader>,
-    altitude_assets: Res<'w, Assets<RoAltitudeAsset>>,
-}
-
-/// Helper function to calculate terrain height at a given position
-/// Returns the adjusted position with terrain height applied (if available)
-fn calculate_terrain_height(position: Vec3, terrain: &TerrainResources) -> Vec3 {
-    let mut world_position = position;
-
-    if let Some(terrain_height) = terrain
-        .map_loader_query
-        .single()
-        .ok()
-        .and_then(|loader| loader.altitude.as_ref())
-        .and_then(|handle| terrain.altitude_assets.get(handle))
-        .and_then(|asset| {
-            asset
-                .altitude
-                .get_terrain_height_at_position(world_position)
-        })
-    {
-        world_position.y = terrain_height;
-    }
-
-    world_position
-}
-
-/// Helper function to create a material for a sprite layer
-fn create_sprite_material(materials: &mut Assets<StandardMaterial>) -> Handle<StandardMaterial> {
-    materials.add(StandardMaterial {
-        base_color_texture: None,
-        base_color: Color::WHITE,
-        alpha_mode: AlphaMode::Blend,
-        unlit: true,
-        cull_mode: None,
-        ..default()
-    })
-}
-
-/// Helper function to spawn a single layer
-#[allow(clippy::too_many_arguments)]
-fn spawn_layer(
-    commands: &mut Commands,
-    name: &str,
-    layer_type: SpriteLayerType,
-    root_entity: Entity,
-    parent_entity: Entity,
-    z_offset: f32,
-    shared_quad: &SharedSpriteQuad,
-    materials: &mut Assets<StandardMaterial>,
-) -> Entity {
-    let layer_material = create_sprite_material(materials);
-
-    commands
-        .spawn((
-            SpriteLayer,
-            Name::new(name.to_string()),
-            Mesh3d(shared_quad.mesh.clone()),
-            MeshMaterial3d(layer_material),
-            Transform::from_xyz(0.0, 0.0, z_offset),
-            GlobalTransform::default(),
-            Visibility::default(),
-            InheritedVisibility::default(),
-            ViewVisibility::default(),
-            RoSpriteLayer {
-                layer_type: layer_type.clone(),
-                z_offset,
-                sprite_handle: Handle::default(),
-                action_handle: Handle::default(),
-            },
-            SpriteHierarchy {
-                parent_entity,
-                layer_type,
-            },
-        ))
-        .insert(ChildOf(root_entity))
-        .id()
-}
-
-/// Helper function to spawn the sprite root entity
-fn spawn_sprite_root(
-    commands: &mut Commands,
-    entity: Entity,
-    world_position: Vec3,
-    mesh: Handle<Mesh>,
-    material: Handle<StandardMaterial>,
-) -> Entity {
-    commands
-        .spawn((
-            CharacterRoot,
-            Name::new("SpriteRoot"),
-            Mesh3d(mesh),
-            MeshMaterial3d(material),
-            Transform::from_translation(world_position),
-            GlobalTransform::default(),
-            Billboard,
-            Visibility::default(),
-            InheritedVisibility::default(),
-            ViewVisibility::default(),
-            SpriteHierarchy {
-                parent_entity: entity,
-                layer_type: SpriteLayerType::Body,
-            },
-        ))
-        .id()
-}
-
-/// Helper function to spawn PC layers (body, head, equipment, effects)
-fn spawn_pc_layers(
-    commands: &mut Commands,
-    root_entity: Entity,
-    entity: Entity,
-    rendering: &mut RenderingResources,
-) {
-    debug!("Spawning PC layers for entity {:?}", entity);
-
-    // Body layer (z=0.0)
-    spawn_layer(
-        commands,
-        "Body",
-        SpriteLayerType::Body,
-        root_entity,
-        entity,
-        0.0,
-        &rendering.shared_quad,
-        &mut rendering.materials,
-    );
-
-    // Head layer
-    spawn_layer(
-        commands,
-        "Head",
-        SpriteLayerType::Head,
-        root_entity,
-        entity,
-        rendering._config.default_z_spacing,
-        &rendering.shared_quad,
-        &mut rendering.materials,
-    );
-
-    // Equipment layers using dynamic z-offset calculation
-    let equipment_slots = [
-        EquipmentSlot::HeadBottom,
-        EquipmentSlot::HeadMid,
-        EquipmentSlot::HeadTop,
-        EquipmentSlot::Garment,
-        EquipmentSlot::Weapon,
-        EquipmentSlot::Shield,
-    ];
-
-    for slot in equipment_slots {
-        let z_offset = slot.z_order() * rendering._config.default_z_spacing;
-        spawn_layer(
-            commands,
-            &format!("Equipment/{:?}", slot),
-            SpriteLayerType::Equipment(slot),
-            root_entity,
-            entity,
-            z_offset,
-            &rendering.shared_quad,
-            &mut rendering.materials,
-        );
-    }
-
-    // Effects container
-    commands
-        .spawn((
-            Name::new("Effects"),
-            Transform::from_xyz(0.0, 0.0, rendering._config.effect_z_offset),
-            GlobalTransform::default(),
-            Visibility::default(),
-            InheritedVisibility::default(),
-            ViewVisibility::default(),
-        ))
-        .insert(ChildOf(root_entity));
-
-    info!("🎭 PC layers created for entity {:?}", entity);
-}
-
-/// Helper function to spawn simple entity layers (single body layer for mobs/NPCs)
-fn spawn_simple_entity_layers(
-    commands: &mut Commands,
-    root_entity: Entity,
-    entity: Entity,
-    shared_quad: &SharedSpriteQuad,
-    materials: &mut Assets<StandardMaterial>,
-) {
-    spawn_layer(
-        commands,
-        "Body",
-        SpriteLayerType::Body,
-        root_entity,
-        entity,
-        0.0,
-        shared_quad,
-        materials,
-    );
-}
-
-/// System to spawn generic sprite hierarchies
+/// Spawn system that handles sprite spawn events.
+/// Adds RoSprite and optional PlayerAppearance to entities,
+/// then requests animation asset loading.
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
@@ -232,62 +27,402 @@ fn spawn_simple_entity_layers(
 pub fn spawn_sprite_hierarchy(
     mut commands: Commands,
     mut spawn_events: MessageReader<SpawnSpriteEvent>,
-    entity_query: Query<(Entity, Option<&CharacterAppearance>)>,
-    mut rendering: RenderingResources,
-    terrain: TerrainResources,
+    _config: Res<SpriteHierarchyConfig>,
+    asset_server: Res<AssetServer>,
+    mut pending_animations: ResMut<PendingAnimations>,
+    job_registry: Option<Res<JobSpriteRegistry>>,
 ) {
     for event in spawn_events.read() {
-        debug!(
-            "spawn_sprite_hierarchy: Received event for entity {:?} at {:?}, type: {:?}",
-            event.entity, event.position, event.sprite_info.sprite_data
-        );
-
-        let Ok((entity, appearance_opt)) = entity_query.get(event.entity) else {
+        let entity = event.entity;
+        let Ok(mut entity_commands) = commands.get_entity(entity) else {
             warn!(
-                "Entity {:?} no longer exists, skipping sprite spawn",
-                event.entity
+                "spawn_sprite_hierarchy: Entity {:?} no longer exists",
+                entity
             );
             continue;
         };
 
-        let world_position = calculate_terrain_height(event.position, &terrain);
-        let root_material = create_sprite_material(&mut rendering.materials);
-
-        let root_entity = spawn_sprite_root(
-            &mut commands,
-            entity,
-            world_position,
-            rendering.shared_quad.mesh.clone(),
-            root_material,
-        );
-
-        // Check if this is a PC (has CharacterAppearance)
-        if appearance_opt.is_some() {
-            spawn_pc_layers(&mut commands, root_entity, entity, &mut rendering);
-        } else {
-            spawn_simple_entity_layers(
-                &mut commands,
-                root_entity,
-                entity,
-                &rendering.shared_quad,
-                &mut rendering.materials,
-            );
+        match &event.sprite_info.sprite_data {
+            EntitySpriteData::Character {
+                job_id,
+                gender,
+                head,
+            } => {
+                spawn_character_components(
+                    &mut entity_commands,
+                    *job_id,
+                    gender.clone(),
+                    *head,
+                    &asset_server,
+                    &mut pending_animations,
+                    job_registry.as_deref(),
+                );
+            }
+            EntitySpriteData::Mob { sprite_name } => {
+                spawn_mob_components(
+                    &mut entity_commands,
+                    sprite_name,
+                    &asset_server,
+                    &mut pending_animations,
+                );
+            }
+            EntitySpriteData::Npc { sprite_name } => {
+                spawn_npc_components(
+                    &mut entity_commands,
+                    sprite_name,
+                    &asset_server,
+                    &mut pending_animations,
+                );
+            }
         }
 
-        let object_tree = SpriteObjectTree { root: root_entity };
-        let sprite_info = event.sprite_info.clone();
+        info!(
+            "spawn_sprite_hierarchy: Processing SpawnSpriteEvent for entity {:?}",
+            entity
+        );
+    }
+}
 
-        // Insert immediately instead of queuing to ensure populate_sprite_assets can access it in the same frame
-        commands.entity(entity).insert((object_tree, sprite_info));
+fn spawn_character_components(
+    entity_commands: &mut EntityCommands,
+    job_id: u16,
+    gender: crate::domain::entities::character::components::Gender,
+    head_id: u16,
+    asset_server: &AssetServer,
+    pending_animations: &mut PendingAnimations,
+    job_registry: Option<&JobSpriteRegistry>,
+) {
+    let entity = entity_commands.id();
+    let gender_byte = match gender {
+        crate::domain::entities::character::components::Gender::Male => 1u8,
+        crate::domain::entities::character::components::Gender::Female => 0u8,
+    };
+
+    let Some(registry) = job_registry else {
+        warn!(
+            "spawn_character_components: JobSpriteRegistry not available for entity {:?}",
+            entity
+        );
+        return;
+    };
+
+    let Some(body_spr_path) = registry.get_body_sprite_path(job_id as u32, gender_byte) else {
+        warn!(
+            "spawn_character_components: Unknown job_id {} for entity {:?}",
+            job_id, entity
+        );
+        return;
+    };
+    let body_act_path = body_spr_path.replace(".spr", ".act");
+
+    let head_spr_path = patterns::head_sprite_path(gender, head_id);
+    let head_act_path = patterns::head_action_path(gender, head_id);
+
+    let body_spr = asset_server.load(&body_spr_path);
+    let body_act = asset_server.load(&body_act_path);
+    let head_spr = asset_server.load(&head_spr_path);
+    let head_act = asset_server.load(&head_act_path);
+
+    pending_animations.request(body_spr.clone(), body_act.clone(), LAYER_BODY, Some(entity));
+    pending_animations.request(head_spr.clone(), head_act.clone(), LAYER_HEAD, Some(entity));
+
+    entity_commands.insert((
+        RoSprite::default(),
+        PlayerSprite::default(),
+        PlayerAppearance::default(),
+        PendingRenderLayers,
+    ));
+
+    info!(
+        "spawn_character_components: Requested body ({}) and head animations for entity {:?}",
+        body_spr_path, entity
+    );
+}
+
+fn spawn_mob_components(
+    entity_commands: &mut EntityCommands,
+    sprite_name: &str,
+    asset_server: &AssetServer,
+    pending_animations: &mut PendingAnimations,
+) {
+    let entity = entity_commands.id();
+
+    let spr_path = patterns::mob_sprite_path(sprite_name);
+    let act_path = patterns::mob_action_path(sprite_name);
+
+    let spr = asset_server.load(&spr_path);
+    let act = asset_server.load(&act_path);
+
+    pending_animations.request(spr, act, LAYER_BODY, Some(entity));
+
+    entity_commands.insert((
+        RoSprite::default(),
+        MobSprite::default(),
+        PendingRenderLayers,
+    ));
+
+    info!(
+        "spawn_mob_components: Requested animation for entity {:?} ({})",
+        entity, sprite_name
+    );
+}
+
+fn spawn_npc_components(
+    entity_commands: &mut EntityCommands,
+    sprite_name: &str,
+    asset_server: &AssetServer,
+    pending_animations: &mut PendingAnimations,
+) {
+    let entity = entity_commands.id();
+
+    let spr_path = patterns::npc_sprite_path(sprite_name);
+    let act_path = patterns::npc_action_path(sprite_name);
+
+    let spr = asset_server.load(&spr_path);
+    let act = asset_server.load(&act_path);
+
+    pending_animations.request(spr, act, LAYER_BODY, Some(entity));
+
+    entity_commands.insert((RoSprite::default(), PendingRenderLayers));
+
+    info!(
+        "spawn_npc_components: Requested animation for entity {:?} ({})",
+        entity, sprite_name
+    );
+}
+
+/// System that finalizes render layers when animation assets are loaded.
+/// Spawns child entities with Mesh3d + MeshMaterial3d + RenderLayer components.
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::HierarchySpawn, after = crate::infrastructure::assets::animation_processing_system::process_pending_animations)
+)]
+pub fn finalize_render_layers(
+    mut commands: Commands,
+    mut pending_animations: ResMut<PendingAnimations>,
+    animations: Res<Assets<RoAnimationAsset>>,
+    mut pending_entities: Query<
+        (
+            Entity,
+            Option<&mut PlayerAppearance>,
+            Option<&mut PlayerSprite>,
+            Option<&mut MobSprite>,
+            &mut RoSprite,
+        ),
+        With<PendingRenderLayers>,
+    >,
+    config: Res<SpriteHierarchyConfig>,
+    shared_quad: Res<SharedSpriteQuad>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let completed = pending_animations.take_completed();
+    if completed.is_empty() {
+        return;
+    }
+
+    info!(
+        "finalize_render_layers: Processing {} completed animations",
+        completed.len()
+    );
+
+    for (pending, animation_handle) in completed {
+        let Some(callback_entity) = pending.callback_entity else {
+            info!("finalize_render_layers: No callback_entity for pending animation");
+            continue;
+        };
+
+        info!(
+            "finalize_render_layers: Trying to get entity {:?}",
+            callback_entity
+        );
+
+        let Ok((entity, maybe_appearance, maybe_player, maybe_mob, mut ro_sprite)) =
+            pending_entities.get_mut(callback_entity)
+        else {
+            warn!(
+                "finalize_render_layers: Entity {:?} not found in pending_entities query",
+                callback_entity
+            );
+            continue;
+        };
+
+        let Some(animation) = animations.get(&animation_handle) else {
+            warn!(
+                "finalize_render_layers: Animation asset not found for entity {:?}",
+                entity
+            );
+            continue;
+        };
+
+        if let Some(mut appearance) = maybe_appearance {
+            if pending.layer_tag == LAYER_BODY {
+                appearance.body = animation_handle.clone();
+                ro_sprite.animation = animation_handle.clone();
+                if let Some(mut player) = maybe_player {
+                    player.animation = animation_handle.clone();
+                }
+            } else if pending.layer_tag == LAYER_HEAD {
+                appearance.head = animation_handle.clone();
+            }
+        } else {
+            ro_sprite.animation = animation_handle.clone();
+            if let Some(mut mob) = maybe_mob {
+                mob.animation = animation_handle.clone();
+            }
+        }
+
+        let z_offset = layer_z_offset(pending.layer_tag, &config);
+
+        let first_texture = animation.textures.first().cloned();
+        if first_texture.is_none() {
+            warn!(
+                "finalize_render_layers: No textures available for entity {:?}, layer {:?}. Animation has {} textures.",
+                entity, pending.layer_tag, animation.textures.len()
+            );
+        }
+        let first_texture = first_texture.unwrap_or_default();
+
+        info!(
+            "finalize_render_layers: Using texture handle {:?} for entity {:?}, animation has {} textures, first in animation: {:?}",
+            first_texture, entity, animation.textures.len(), animation.textures.first()
+        );
+
+        let _layer_entity = spawn_render_layer_child(
+            &mut commands,
+            entity,
+            animation_handle,
+            pending.layer_tag,
+            z_offset,
+            first_texture,
+            animation.textures.clone(),
+            &shared_quad,
+            &mut materials,
+        );
+
+        info!(
+            "finalize_render_layers: Spawned render layer child for entity {:?}, layer {:?}",
+            entity, pending.layer_tag
+        );
+    }
+
+    for (entity, _, _, _, _) in pending_entities.iter() {
+        if !pending_animations.has_pending() {
+            commands.entity(entity).remove::<PendingRenderLayers>();
+        }
+    }
+}
+
+fn layer_z_offset(layer: Tag, config: &SpriteHierarchyConfig) -> f32 {
+    if layer == LAYER_SHADOW {
+        return config.shadow_z_offset;
+    }
+
+    let order = layer_order(layer) as f32;
+    order * Z_OFFSET_PER_LAYER
+}
+
+fn spawn_render_layer_child(
+    commands: &mut Commands,
+    parent: Entity,
+    animation: Handle<RoAnimationAsset>,
+    layer: Tag,
+    z_offset: f32,
+    initial_texture: Handle<Image>,
+    textures: Vec<Handle<Image>>,
+    shared_quad: &SharedSpriteQuad,
+    materials: &mut Assets<StandardMaterial>,
+) -> Entity {
+    let render_layer = RenderLayer::body(animation, layer, textures);
+    let is_head = layer == LAYER_HEAD;
+    let is_body = layer == LAYER_BODY;
+
+    let local_offset = Vec3::new(0.0, SPRITE_BASE_Y_OFFSET, z_offset);
+
+    info!(
+        "spawn_render_layer_child: Spawning with local offset {:?} for parent {:?}",
+        local_offset, parent
+    );
+
+    let sprite_transform = Transform::from_translation(local_offset);
+
+    let material = materials.add(StandardMaterial {
+        base_color_texture: Some(initial_texture),
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        cull_mode: None,
+        ..default()
+    });
+
+    let mut entity_commands = commands.spawn((
+        Mesh3d(shared_quad.mesh.clone()),
+        MeshMaterial3d(material),
+        Billboard,
+        sprite_transform,
+        GlobalTransform::default(),
+        Visibility::default(),
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
+        render_layer,
+        ChildOf(parent),
+    ));
+
+    if is_body {
+        entity_commands.insert(BodyAttachPoint::default());
+    }
+
+    if is_head {
+        entity_commands.insert(HeadLayer);
+    }
+
+    let sprite_entity = entity_commands.id();
+
+    info!(
+        "spawn_render_layer_child: Spawned sprite entity {:?} as child of {:?} with local offset {:?}",
+        sprite_entity, parent, local_offset
+    );
+
+    sprite_entity
+}
+
+/// System that links HeadLayer entities to their body siblings via HeadAttachment.
+/// Runs after render layers are spawned and finds unlinked heads.
+#[auto_add_system(
+    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::HierarchySpawn, after = finalize_render_layers)
+)]
+pub fn link_head_to_body(
+    mut commands: Commands,
+    unlinked_heads: Query<(Entity, &ChildOf), (With<HeadLayer>, Without<HeadAttachment>)>,
+    body_layers: Query<Entity, With<BodyAttachPoint>>,
+    children_query: Query<&Children>,
+) {
+    for (head_entity, child_of) in unlinked_heads.iter() {
+        let parent = child_of.parent();
+
+        let Ok(children) = children_query.get(parent) else {
+            continue;
+        };
+
+        let body_entity = children.iter().find(|child| body_layers.contains(*child));
+
+        let Some(body_entity) = body_entity else {
+            continue;
+        };
+
+        commands
+            .entity(head_entity)
+            .insert(HeadAttachment { body_entity });
+
+        info!(
+            "link_head_to_body: Linked head {:?} to body {:?}",
+            head_entity, body_entity
+        );
     }
 }
 
 /// Observer for sprite spawn requests
-///
-/// This observer is triggered when an entity requests sprite spawning.
-/// It converts the entity-targeted observer event to a SpawnSpriteEvent message.
-/// Using an observer ensures the entity exists in the ECS world before the
-/// sprite spawn event is written, avoiding race conditions with buffered commands.
 #[auto_observer(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
 pub fn on_request_sprite_spawn(
     trigger: On<RequestSpriteSpawn>,
@@ -296,9 +431,9 @@ pub fn on_request_sprite_spawn(
     let event = trigger.event();
     let entity = trigger.entity;
 
-    debug!(
-        "RequestSpriteSpawn observer triggered for entity {:?}",
-        entity
+    info!(
+        "RequestSpriteSpawn RECEIVED for entity {:?} at position ({:.2}, {:.2}, {:.2})",
+        entity, event.position.x, event.position.y, event.position.z
     );
 
     sprite_spawn_writer.write(SpawnSpriteEvent {

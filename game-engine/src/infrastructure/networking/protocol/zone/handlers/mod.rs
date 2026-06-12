@@ -1,5 +1,7 @@
 pub mod accept_enter_handler;
 pub mod aid_handler;
+pub mod chat_handler;
+pub mod combat_handlers;
 pub mod entity_name_handlers;
 pub mod entity_visibility_handlers;
 pub mod inventory_handlers;
@@ -7,10 +9,11 @@ pub mod movement_handlers;
 pub mod par_change_handlers;
 pub mod refuse_enter_handler;
 pub mod time_sync_handler;
-pub mod chat_handler;
 
 pub use accept_enter_handler::{AcceptEnterHandler, ZoneServerConnected};
 pub use aid_handler::{AccountIdReceived, AidHandler};
+pub use chat_handler::{ChatHandler, ChatReceived};
+pub use combat_handlers::{CombatActionHandler, HpInfoHandler};
 pub use entity_name_handlers::{
     EntityNameAllReceived, EntityNameReceived, ReqnameHandler, ReqnameallHandler,
 };
@@ -24,4 +27,3 @@ pub use movement_handlers::{
 pub use par_change_handlers::{LongparChangeHandler, ParChangeHandler, ParameterChanged};
 pub use refuse_enter_handler::{RefuseEnterHandler, ZoneEntryRefused};
 pub use time_sync_handler::{TimeSyncHandler, TimeSyncLegacyHandler};
-pub use chat_handler::{ChatHandler, ChatReceived};

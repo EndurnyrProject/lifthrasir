@@ -332,13 +332,13 @@ impl MovementTarget {
         let Some(waypoints) = &self.waypoints else {
             let dx = self.dest_world_pos.x - self.src_world_pos.x;
             let dz = self.dest_world_pos.z - self.src_world_pos.z;
-            return Direction::from_movement_vector(-dx, dz);
+            return Direction::from_movement_vector(dx, dz);
         };
 
         if waypoints.is_empty() {
             let dx = self.dest_world_pos.x - self.src_world_pos.x;
             let dz = self.dest_world_pos.z - self.src_world_pos.z;
-            return Direction::from_movement_vector(-dx, dz);
+            return Direction::from_movement_vector(dx, dz);
         }
 
         let target_distance = progress * self.total_path_length_world;
@@ -357,19 +357,19 @@ impl MovementTarget {
                     continue;
                 }
 
-                return Direction::from_movement_vector(-dx, dz);
+                return Direction::from_movement_vector(dx, dz);
             }
         }
 
         if let Some(last_waypoint) = waypoints.last() {
             let dx = self.dest_world_pos.x - last_waypoint.x;
             let dz = self.dest_world_pos.z - last_waypoint.z;
-            return Direction::from_movement_vector(-dx, dz);
+            return Direction::from_movement_vector(dx, dz);
         }
 
         let dx = self.dest_world_pos.x - self.src_world_pos.x;
         let dz = self.dest_world_pos.z - self.src_world_pos.z;
-        Direction::from_movement_vector(-dx, dz)
+        Direction::from_movement_vector(dx, dz)
     }
 }
 
@@ -460,7 +460,7 @@ mod tests {
         let speed = MovementSpeed::new(100.0);
         let direction = target.current_direction(speed.ms_per_cell);
 
-        assert_eq!(direction, Direction::West);
+        assert_eq!(direction, Direction::East);
     }
 
     #[test]
@@ -493,7 +493,7 @@ mod tests {
             .unwrap_or_else(std::time::Instant::now);
 
         let direction_at_start = target.current_direction(speed.ms_per_cell);
-        assert_eq!(direction_at_start, Direction::West);
+        assert_eq!(direction_at_start, Direction::East);
 
         target.start_time = std::time::Instant::now()
             .checked_sub(std::time::Duration::from_millis(1200))

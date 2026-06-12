@@ -3,7 +3,6 @@ use bevy_auto_plugin::modes::global::prelude::auto_add_system;
 use game_engine::domain::entities::{
     components::{EntityName, NetworkEntity},
     hover::HoveredEntity,
-    sprite_rendering::components::SpriteObjectTree,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -70,12 +69,11 @@ pub fn on_hover_started_with_name(
     trigger: On<Add, HoveredEntity>,
     app_handle: NonSend<AppHandle>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    entity_query: Query<(&NetworkEntity, &SpriteObjectTree, &EntityName)>,
-    sprite_query: Query<&GlobalTransform>,
+    entity_query: Query<(&NetworkEntity, &GlobalTransform, &EntityName)>,
 ) {
     let entity = trigger.entity;
 
-    let Ok((network_entity, sprite_tree, entity_name)) = entity_query.get(entity) else {
+    let Ok((network_entity, entity_transform, entity_name)) = entity_query.get(entity) else {
         return;
     };
 
@@ -83,36 +81,28 @@ pub fn on_hover_started_with_name(
         return;
     };
 
-    let Ok(sprite_transform) = sprite_query.get(sprite_tree.root) else {
-        return;
-    };
-
-    let Some((screen_x, screen_y)) =
-        calculate_screen_position(camera, camera_transform, sprite_transform.translation(), &app_handle)
-    else {
-        return;
-    };
-
-    emit_entity_tooltip(
+    let Some((screen_x, screen_y)) = calculate_screen_position(
+        camera,
+        camera_transform,
+        entity_transform.translation(),
         &app_handle,
-        network_entity,
-        entity_name,
-        screen_x,
-        screen_y,
-    );
+    ) else {
+        return;
+    };
+
+    emit_entity_tooltip(&app_handle, network_entity, entity_name, screen_x, screen_y);
 }
 
 pub fn on_entity_name_added_to_hovered(
     trigger: On<Insert, EntityName>,
     app_handle: NonSend<AppHandle>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    entity_query: Query<(&NetworkEntity, &SpriteObjectTree), With<HoveredEntity>>,
+    entity_query: Query<(&NetworkEntity, &GlobalTransform), With<HoveredEntity>>,
     name_query: Query<&EntityName>,
-    sprite_query: Query<&GlobalTransform>,
 ) {
     let entity = trigger.entity;
 
-    let Ok((network_entity, sprite_tree)) = entity_query.get(entity) else {
+    let Ok((network_entity, entity_transform)) = entity_query.get(entity) else {
         return;
     };
 
@@ -124,23 +114,16 @@ pub fn on_entity_name_added_to_hovered(
         return;
     };
 
-    let Ok(sprite_transform) = sprite_query.get(sprite_tree.root) else {
-        return;
-    };
-
-    let Some((screen_x, screen_y)) =
-        calculate_screen_position(camera, camera_transform, sprite_transform.translation(), &app_handle)
-    else {
-        return;
-    };
-
-    emit_entity_tooltip(
+    let Some((screen_x, screen_y)) = calculate_screen_position(
+        camera,
+        camera_transform,
+        entity_transform.translation(),
         &app_handle,
-        network_entity,
-        entity_name,
-        screen_x,
-        screen_y,
-    );
+    ) else {
+        return;
+    };
+
+    emit_entity_tooltip(&app_handle, network_entity, entity_name, screen_x, screen_y);
 }
 
 #[auto_add_system(

@@ -35,6 +35,7 @@ flume = "0.11"
 
 # Configuration parsing
 toml = "0.9"
+bevy_brp_extras = "0.17.3"
 
 [build-dependencies]
 tauri-build = { version = "2.5.3", features = [] }

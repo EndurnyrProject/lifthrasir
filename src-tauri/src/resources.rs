@@ -1,8 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use game_engine::infrastructure::assets::{
-    ro_asset_source::setup_composite_source_from_config, sources::CompositeAssetSource,
-    AssetConfig,
+    ro_asset_source::setup_composite_source_from_config, sources::CompositeAssetSource, AssetConfig,
 };
 
 use crate::bridge::app_bridge::TauriIncomingEvent;

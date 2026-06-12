@@ -1,22 +1,26 @@
 use crate::{
-    domain::entities::spawning::events::{RequestEntityVanish, SpawnEntity},
+    domain::{
+        combat::events::{CombatActionReceived, EntityHpReceived},
+        entities::spawning::events::{RequestEntityVanish, SpawnEntity},
+    },
     infrastructure::networking::{
         client::NetworkClient,
         errors::NetworkResult,
         protocol::{
             dispatcher::PacketDispatcher,
-                        zone::{
-                            AcceptEnterHandler, AccountIdReceived, AidHandler, ChatHandler, ChatReceived,
-                            CzEnter2Packet, CzNotifyActorinitPacket, CzReqname2Packet, CzRequestChatPacket,
-                            CzRequestMove2Packet, CzRequestTime2Packet, EntityNameAllReceived,
-                            EntityNameReceived, EquipitemListHandler, LongparChangeHandler, MoveStopHandler,
-                            MoveentryHandler, MovementConfirmedByServer, MovementStoppedByServer,
-                            NewentryHandler, NormalItemlistHandler, ParameterChanged, ParChangeHandler,
-                            PlayermoveHandler, RefuseEnterHandler, ReqnameHandler, ReqnameallHandler,
-                            SpawnData, StandentryHandler, TimeSyncHandler, TimeSyncLegacyHandler,
-                            VanishHandler, ZoneClientPacket, ZoneContext, ZoneEntryRefused, ZoneProtocol,
-                            ZoneServerConnected,
-                        },
+            zone::{
+                AcceptEnterHandler, AccountIdReceived, AidHandler, ChatHandler, ChatReceived,
+                CombatActionHandler, CzEnter2Packet, CzNotifyActorinitPacket, CzReqname2Packet,
+                CzRequestAct2Packet, CzRequestChatPacket, CzRequestMove2Packet,
+                CzRequestTime2Packet, EntityNameAllReceived, EntityNameReceived,
+                EquipitemListHandler, HpInfoHandler, LongparChangeHandler, MoveStopHandler,
+                MoveentryHandler, MovementConfirmedByServer, MovementStoppedByServer,
+                NewentryHandler, NormalItemlistHandler, ParChangeHandler, ParameterChanged,
+                PlayermoveHandler, RefuseEnterHandler, ReqnameHandler, ReqnameallHandler,
+                SpawnData, StandentryHandler, TimeSyncHandler, TimeSyncLegacyHandler,
+                VanishHandler, ZoneClientPacket, ZoneContext, ZoneEntryRefused, ZoneProtocol,
+                ZoneServerConnected,
+            },
             EventBuffer,
         },
     },
@@ -102,6 +106,8 @@ impl ZoneServerClient {
         dispatcher.register(ReqnameHandler);
         dispatcher.register(ReqnameallHandler);
         dispatcher.register(ChatHandler);
+        dispatcher.register(CombatActionHandler);
+        dispatcher.register(HpInfoHandler);
 
         let client = NetworkClient::new(context).with_dispatcher(dispatcher);
 
@@ -257,6 +263,25 @@ impl ZoneServerClient {
         self.inner.send_packet(&packet)
     }
 
+    /// Request to attack a target entity
+    ///
+    /// Sends a CZ_REQUEST_ACT2 packet to initiate an attack on the target.
+    /// The server will validate the action and handle pathfinding to the target
+    /// if needed. Once in range, the server responds with ZC_NOTIFY_ACT packets
+    /// for the combat actions.
+    ///
+    /// # Arguments
+    ///
+    /// * `target_gid` - Target entity GID (Account ID)
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if packet was sent, NetworkError otherwise
+    pub fn request_attack(&mut self, target_gid: u32) -> NetworkResult<()> {
+        let packet = ZoneClientPacket::CzRequestAct2(CzRequestAct2Packet::attack(target_gid));
+        self.inner.send_packet(&packet)
+    }
+
     /// Process incoming packets and emit Bevy events
     ///
     /// This should be called regularly (e.g., in a Bevy Update system) to:
@@ -340,6 +365,8 @@ pub struct ZoneServerEventWriters<'w> {
     pub entity_name_all_received: MessageWriter<'w, EntityNameAllReceived>,
     pub parameter_changed: MessageWriter<'w, ParameterChanged>,
     pub chat_received: MessageWriter<'w, ChatReceived>,
+    pub combat_action_received: MessageWriter<'w, CombatActionReceived>,
+    pub entity_hp_received: MessageWriter<'w, EntityHpReceived>,
 }
 
 /// Bevy system to update the zone server client
@@ -396,6 +423,8 @@ pub fn zone_server_update_system(
             (EntityNameAllReceived, entity_name_all_received),
             (ParameterChanged, parameter_changed),
             (ChatReceived, chat_received),
+            (CombatActionReceived, combat_action_received),
+            (EntityHpReceived, entity_hp_received),
         ]
     );
 }

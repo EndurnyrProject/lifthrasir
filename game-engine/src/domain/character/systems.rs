@@ -878,12 +878,14 @@ pub fn spawn_character_sprite_on_game_start(
         &mut commands.entity(character_entity),
     );
 
-    // Add NetworkEntity component for hover system
+    // Add NetworkEntity component for hover system and combat lookups
+    // Note: For player characters, GID == AID (account_id) in RO protocol
+    // The server uses account_id as the entity identifier in combat packets
     let account_id = user_session.tokens.account_id;
     commands.entity(character_entity).insert(
         crate::domain::entities::components::NetworkEntity::new(
             account_id,
-            spawn_context.character_id,
+            account_id, // GID should be account_id for combat packet lookups
             crate::domain::entities::types::ObjectType::Pc,
         ),
     );
@@ -919,6 +921,15 @@ pub fn spawn_character_sprite_on_game_start(
         map_width,
         map_height,
     );
+
+    // Add Transform to the character entity for positioning and camera tracking
+    commands.entity(character_entity).insert((
+        Transform::from_translation(world_pos),
+        GlobalTransform::default(),
+        Visibility::default(),
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
+    ));
 
     // Emit event to spawn sprite hierarchy
     spawn_events.write(

@@ -94,6 +94,14 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcNotifyChatPacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcNotifyChat(packet))
             }
+            ZC_NOTIFY_ACT => {
+                let packet = ZcNotifyActPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcNotifyAct(packet))
+            }
+            ZC_HP_INFO => {
+                let packet = ZcHpInfoPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcHpInfo(packet))
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unknown zone packet ID: 0x{:04X}", packet_id),
@@ -139,6 +147,8 @@ impl Protocol for ZoneProtocol {
                 length_offset: 2,
                 length_bytes: 2,
             },
+            ZC_NOTIFY_ACT => PacketSize::Fixed(34),
+            ZC_HP_INFO => PacketSize::Fixed(14),
             _ => PacketSize::Variable {
                 length_offset: 2,
                 length_bytes: 2,
@@ -265,6 +275,7 @@ pub enum ZoneClientPacket {
     CzEnter2(CzEnter2Packet),
     CzNotifyActorinit(CzNotifyActorinitPacket),
     CzReqname2(CzReqname2Packet),
+    CzRequestAct2(CzRequestAct2Packet),
     CzRequestMove2(CzRequestMove2Packet),
     CzRequestTime2(CzRequestTime2Packet),
     CzRequestChat(CzRequestChatPacket),
@@ -278,6 +289,7 @@ impl ClientPacket for ZoneClientPacket {
             Self::CzEnter2(p) => p.serialize(),
             Self::CzNotifyActorinit(p) => p.serialize(),
             Self::CzReqname2(p) => p.serialize(),
+            Self::CzRequestAct2(p) => p.serialize(),
             Self::CzRequestMove2(p) => p.serialize(),
             Self::CzRequestTime2(p) => p.serialize(),
             Self::CzRequestChat(p) => p.serialize(),
@@ -289,6 +301,7 @@ impl ClientPacket for ZoneClientPacket {
             Self::CzEnter2(_) => CZ_ENTER2,
             Self::CzNotifyActorinit(_) => CZ_NOTIFY_ACTORINIT,
             Self::CzReqname2(_) => CZ_REQNAME2,
+            Self::CzRequestAct2(_) => CZ_REQUEST_ACT2,
             Self::CzRequestMove2(_) => CZ_REQUEST_MOVE2,
             Self::CzRequestTime2(_) => CZ_REQUEST_TIME2,
             Self::CzRequestChat(_) => CZ_REQUEST_CHAT,
@@ -317,6 +330,8 @@ pub enum ZoneServerPacket {
     ZcNormalItemlist(ZcNormalItemlistPacket),
     ZcEquipitemList(ZcEquipitemListPacket),
     ZcNotifyChat(ZcNotifyChatPacket),
+    ZcNotifyAct(ZcNotifyActPacket),
+    ZcHpInfo(ZcHpInfoPacket),
 }
 
 impl ServerPacket for ZoneServerPacket {
@@ -346,6 +361,8 @@ impl ServerPacket for ZoneServerPacket {
             Self::ZcNormalItemlist(_) => ZC_NORMAL_ITEMLIST,
             Self::ZcEquipitemList(_) => ZC_EQUIPITEM_LIST,
             Self::ZcNotifyChat(_) => ZC_NOTIFY_CHAT,
+            Self::ZcNotifyAct(_) => ZC_NOTIFY_ACT,
+            Self::ZcHpInfo(_) => ZC_HP_INFO,
         }
     }
 }

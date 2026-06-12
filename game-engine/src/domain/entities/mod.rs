@@ -2,6 +2,7 @@ pub mod animation;
 pub mod billboard;
 pub mod character;
 pub mod components;
+pub mod cursor_interaction;
 pub mod hover;
 pub mod hover_plugin;
 pub mod hover_system;

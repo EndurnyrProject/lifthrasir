@@ -1,0 +1,380 @@
+use std::time::Duration;
+
+use super::{
+    components::{AttackTimer, DeadEntity, HasEndure, HitStun, PendingHitReaction},
+    events::{CombatActionReceived, CombatActionType, DamageDisplayType, DisplayDamageNumber},
+};
+use crate::domain::{
+    entities::{
+        character::{components::visual::CharacterDirection, states::AnimationState},
+        components::NetworkEntity,
+        spawning::events::RequestEntityVanish,
+    },
+    system_sets::CombatSystems,
+};
+use crate::utils::coordinates::Direction;
+use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
+use moonshine_behavior::prelude::*;
+
+// =============================================================================
+// PHASE 0.2: UPDATED TO USE FLAT ENTITY STRUCTURE
+// =============================================================================
+// Removed SpriteObjectTree dependency - queries entity Transform directly.
+// =============================================================================
+
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::ProcessActions)
+)]
+pub fn process_combat_actions(
+    mut commands: Commands,
+    mut combat_events: MessageReader<CombatActionReceived>,
+    mut damage_display: MessageWriter<DisplayDamageNumber>,
+    mut behaviors: Query<BehaviorMut<AnimationState>>,
+    network_entities: Query<(Entity, &NetworkEntity)>,
+    transforms: Query<&Transform>,
+) {
+    let events: Vec<_> = combat_events.read().collect();
+
+    for event in events.iter() {
+        // ZC_NOTIFY_ACT carries block ids (AID), never char ids (GID)
+        let src_entity = network_entities
+            .iter()
+            .find(|(_, ne)| ne.aid == event.src_id)
+            .map(|(e, _)| e);
+
+        let target_entity = network_entities
+            .iter()
+            .find(|(_, ne)| ne.aid == event.target_id)
+            .map(|(e, _)| e);
+
+        if event.action_type.is_damage() {
+            if let Some(src) = src_entity {
+                start_attack_animation(
+                    &mut commands,
+                    &mut behaviors,
+                    &transforms,
+                    src,
+                    target_entity,
+                    event.src_speed,
+                );
+            } else {
+                warn!("No entity found for src_id: {}", event.src_id);
+            }
+
+            if let Some(target) = target_entity {
+                // The reaction fires when the swing connects: src_speed is the
+                // attacker's attack motion (amotion), capped like the original
+                // client so slow weapons don't feel unresponsive. dmg_speed is
+                // the target's damage motion (dmotion) and sets the flinch length.
+                let delay_ms = event.src_speed.clamp(0, 450) as u64;
+
+                commands.spawn(PendingHitReaction {
+                    target,
+                    damage: event.damage,
+                    is_critical: event.action_type.is_critical(),
+                    flinches: event.action_type.target_flinches() && event.dmg_speed > 0,
+                    stun_secs: event.dmg_speed.max(0) as f32 / 1000.0,
+                    timer: Timer::new(Duration::from_millis(delay_ms), TimerMode::Once),
+                });
+            } else {
+                warn!("No entity found for target_id: {}", event.target_id);
+            }
+        } else if event.action_type == CombatActionType::LuckyDodge {
+            if let Some(target) = target_entity {
+                damage_display.write(DisplayDamageNumber {
+                    entity: target,
+                    amount: 0,
+                    damage_type: DamageDisplayType::Miss,
+                });
+            }
+        }
+    }
+}
+
+fn start_attack_animation(
+    commands: &mut Commands,
+    behaviors: &mut Query<BehaviorMut<AnimationState>>,
+    transforms: &Query<&Transform>,
+    src: Entity,
+    target_entity: Option<Entity>,
+    src_speed: i32,
+) {
+    // The server sends the attack motion duration (amotion) in ms.
+    let attack_duration_ms = if src_speed > 0 { src_speed as u32 } else { 500 };
+
+    if let Some(target) = target_entity {
+        let src_transform = transforms.get(src);
+        let target_transform = transforms.get(target);
+
+        if let (Ok(src_t), Ok(target_t)) = (src_transform, target_transform) {
+            let dx = target_t.translation.x - src_t.translation.x;
+            let dz = target_t.translation.z - src_t.translation.z;
+            let direction = Direction::from_movement_vector(dx, dz);
+
+            commands
+                .entity(src)
+                .insert(CharacterDirection { facing: direction });
+        }
+    }
+
+    // Insert AnimationState::Attacking directly to ensure immediate sync
+    commands.entity(src).insert((
+        AttackTimer::new(attack_duration_ms as f32 / 1000.0, 0),
+        AnimationState::Attacking,
+    ));
+
+    if let Ok(mut behavior) = behaviors.get_mut(src) {
+        behavior.start(AnimationState::Attacking);
+    }
+}
+
+/// Fires scheduled hit reactions once the attacker's swing connects:
+/// shows the damage number and plays the target's flinch with the
+/// server-provided damage motion duration.
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::HandleReactions)
+)]
+pub fn apply_pending_hit_reactions(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut damage_display: MessageWriter<DisplayDamageNumber>,
+    mut pending: Query<(Entity, &mut PendingHitReaction)>,
+    mut behaviors: Query<BehaviorMut<AnimationState>>,
+    targets: Query<(Has<HasEndure>, Has<AttackTimer>, Has<DeadEntity>)>,
+) {
+    for (entity, mut reaction) in pending.iter_mut() {
+        reaction.timer.tick(time.delta());
+
+        if !reaction.timer.just_finished() {
+            continue;
+        }
+
+        commands.entity(entity).despawn();
+
+        let Ok((has_endure, has_attack_timer, is_dead)) = targets.get(reaction.target) else {
+            continue;
+        };
+
+        let damage_type = match (reaction.damage > 0, reaction.is_critical) {
+            (false, _) => DamageDisplayType::Miss,
+            (true, true) => DamageDisplayType::Critical,
+            (true, false) => DamageDisplayType::Normal,
+        };
+
+        damage_display.write(DisplayDamageNumber {
+            entity: reaction.target,
+            amount: reaction.damage.max(0),
+            damage_type,
+        });
+
+        if is_dead || has_endure || reaction.damage <= 0 || !reaction.flinches {
+            continue;
+        }
+
+        // Insert AnimationState::Hit directly to ensure immediate sync
+        commands.entity(reaction.target).insert(AnimationState::Hit);
+        if let Ok(mut behavior) = behaviors.get_mut(reaction.target) {
+            behavior.start(AnimationState::Hit);
+        }
+
+        // Attackers keep swinging: their AttackTimer brings them back to idle.
+        // Re-inserting HitStun on an already stunned target restarts the flinch.
+        if !has_attack_timer {
+            commands
+                .entity(reaction.target)
+                .insert(HitStun::new(reaction.stun_secs));
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::HandleReactions)
+)]
+pub fn handle_hit_reactions(
+    mut commands: Commands,
+    hit_entities: Query<
+        Entity,
+        (
+            With<AnimationState>,
+            Without<HasEndure>,
+            Without<AttackTimer>,
+            Without<HitStun>,
+        ),
+    >,
+    animation_states: Query<&AnimationState>,
+) {
+    for entity in hit_entities.iter() {
+        if let Ok(state) = animation_states.get(entity) {
+            if *state == AnimationState::Hit {
+                commands.entity(entity).insert(HitStun::new(0.3));
+            }
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::UpdateTimers)
+)]
+pub fn update_attack_timers(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut attack_timers: Query<(Entity, &mut AttackTimer)>,
+    mut behaviors: Query<BehaviorMut<AnimationState>>,
+) {
+    for (entity, mut timer) in attack_timers.iter_mut() {
+        timer.timer.tick(time.delta());
+
+        if timer.timer.just_finished() {
+            // Insert AnimationState::Idle directly to ensure immediate sync
+            commands
+                .entity(entity)
+                .remove::<AttackTimer>()
+                .insert(AnimationState::Idle);
+
+            if let Ok(mut behavior) = behaviors.get_mut(entity) {
+                behavior.start(AnimationState::Idle);
+            }
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::UpdateTimers)
+)]
+pub fn update_hit_stun(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut hit_stun: Query<(Entity, &mut HitStun)>,
+    mut behaviors: Query<BehaviorMut<AnimationState>>,
+) {
+    for (entity, mut stun) in hit_stun.iter_mut() {
+        stun.timer.tick(time.delta());
+
+        if stun.timer.just_finished() {
+            // Insert AnimationState::Idle directly to ensure immediate sync
+            commands
+                .entity(entity)
+                .remove::<HitStun>()
+                .insert(AnimationState::Idle);
+
+            if let Ok(mut behavior) = behaviors.get_mut(entity) {
+                behavior.start(AnimationState::Idle);
+            }
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::HandleDeath)
+)]
+pub fn handle_death(
+    mut commands: Commands,
+    mut vanish_events: MessageReader<RequestEntityVanish>,
+    network_entities: Query<(Entity, &NetworkEntity)>,
+    mut behaviors: Query<BehaviorMut<AnimationState>>,
+) {
+    for event in vanish_events.read() {
+        if event.vanish_type != 1 {
+            continue;
+        }
+
+        let Some((entity, _)) = network_entities.iter().find(|(_, ne)| ne.aid == event.aid) else {
+            continue;
+        };
+
+        // Insert AnimationState::Dead directly to ensure immediate sync
+        commands
+            .entity(entity)
+            .insert((DeadEntity, AnimationState::Dead));
+
+        if let Ok(mut behavior) = behaviors.get_mut(entity) {
+            behavior.reset();
+            behavior.start(AnimationState::Dead);
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::SpawnDamageIndicators)
+)]
+pub fn spawn_damage_indicators(
+    mut commands: Commands,
+    mut damage_events: MessageReader<DisplayDamageNumber>,
+    entities: Query<&Transform>,
+) {
+    for event in damage_events.read() {
+        let Ok(transform) = entities.get(event.entity) else {
+            continue;
+        };
+
+        let color = match event.damage_type {
+            DamageDisplayType::Normal => Color::WHITE,
+            DamageDisplayType::Critical => Color::srgb(1.0, 0.5, 0.0),
+            DamageDisplayType::Miss => Color::srgb(0.7, 0.7, 0.7),
+        };
+
+        let text = if event.amount == 0 {
+            "Miss".to_string()
+        } else {
+            event.amount.to_string()
+        };
+
+        let spawn_pos = transform.translation + Vec3::new(0.0, 2.0, 0.0);
+        let velocity = Vec3::new(0.0, 1.0, 0.0);
+
+        commands.spawn((
+            Text2d::new(text),
+            TextColor(color),
+            TextFont {
+                font_size: 24.0,
+                ..default()
+            },
+            Transform::from_translation(spawn_pos),
+            super::components::DamageIndicator::new(velocity),
+        ));
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::AnimateDamageIndicators)
+)]
+pub fn animate_damage_indicators(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut indicators: Query<(
+        Entity,
+        &mut Transform,
+        &mut super::components::DamageIndicator,
+    )>,
+) {
+    for (entity, mut transform, mut indicator) in indicators.iter_mut() {
+        indicator.lifetime.tick(time.delta());
+
+        if indicator.lifetime.just_finished() {
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        transform.translation += indicator.velocity * time.delta_secs();
+
+        let _alpha = 1.0 - indicator.lifetime.fraction();
+        indicator.velocity.y -= 0.5 * time.delta_secs();
+    }
+}

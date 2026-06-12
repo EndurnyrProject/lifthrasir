@@ -56,17 +56,17 @@ impl ServerPacket for ZcNotifyChatPacket {
         }
 
         let gid = buf.get_u32_le();
-        
+
         // Message is the rest of the packet
         let message_len = packet_length as usize - 8;
         let mut message_bytes = vec![0u8; message_len];
         buf.copy_to_slice(&mut message_bytes);
-        
+
         // Remove potential null terminator if present (some servers send it)
         let message = if let Some(end) = message_bytes.iter().position(|&b| b == 0) {
-             String::from_utf8_lossy(&message_bytes[..end]).to_string()
+            String::from_utf8_lossy(&message_bytes[..end]).to_string()
         } else {
-             String::from_utf8_lossy(&message_bytes).to_string()
+            String::from_utf8_lossy(&message_bytes).to_string()
         };
 
         Ok(Self { gid, message })

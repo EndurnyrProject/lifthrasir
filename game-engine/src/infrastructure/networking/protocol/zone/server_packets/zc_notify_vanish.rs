@@ -66,11 +66,6 @@ impl ServerPacket for ZcNotifyVanishPacket {
             _ => "unknown",
         };
 
-        info!(
-            "[PARSE] ZC_NOTIFY_VANISH: GID {} ({}, type: {})",
-            gid, vanish_reason, vanish_type
-        );
-
         Ok(Self { gid, vanish_type })
     }
 

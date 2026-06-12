@@ -22,6 +22,8 @@ pub struct AnimationDiagnostics {
     time_accumulator: f32,
     /// Current conversions in this second
     current_conversions: u64,
+    /// Last logged head direction (for change detection)
+    pub last_head_direction: Option<usize>,
 }
 
 impl AnimationDiagnostics {
@@ -93,37 +95,18 @@ pub fn update_animation_diagnostics(
 )]
 pub fn log_animation_diagnostics(
     diagnostics: Res<AnimationDiagnostics>,
-    frame_cache: Option<Res<crate::domain::entities::animation::RoFrameCache>>,
     time: Res<Time>,
     mut timer: Local<f32>,
 ) {
     *timer += time.delta_secs();
 
     if *timer >= 5.0 {
-        let cache_ratio = diagnostics.cache_hit_ratio();
         let conversions_per_sec = diagnostics.conversions_per_second();
 
-        if let Some(frame_cache) = frame_cache {
-            debug!(
-                "Animation Stats: {:.0} conversions/sec, Cache: {:.1}% hit rate ({}/{}), {} cached frames (capacity: {}), Skipped: {} frames",
-                conversions_per_sec,
-                cache_ratio * 100.0,
-                diagnostics.cache_hits,
-                diagnostics.cache_hits + diagnostics.cache_misses,
-                frame_cache.len(),
-                frame_cache.capacity(),
-                diagnostics.frames_skipped
-            );
-        } else {
-            debug!(
-                "Animation Stats: {:.0} conversions/sec, Cache: {:.1}% hit rate ({}/{}), Skipped: {} frames",
-                conversions_per_sec,
-                cache_ratio * 100.0,
-                diagnostics.cache_hits,
-                diagnostics.cache_hits + diagnostics.cache_misses,
-                diagnostics.frames_skipped
-            );
-        }
+        debug!(
+            "Animation Stats: {:.0} conversions/sec, Skipped: {} frames",
+            conversions_per_sec, diagnostics.frames_skipped
+        );
 
         *timer = 0.0;
     }

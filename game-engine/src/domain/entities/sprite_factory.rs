@@ -1,12 +1,21 @@
-use super::components::RoAnimationController;
-use crate::infrastructure::assets::loaders::{RoActAsset, RoPaletteAsset, RoSpriteAsset};
+use crate::infrastructure::assets::ro_animation_asset::RoSprite;
+use crate::infrastructure::assets::RoAnimationAsset;
 use bevy::prelude::*;
+
+// =============================================================================
+// PHASE 0.2: SPRITE FACTORY UPDATED
+// =============================================================================
+// This factory now uses RoSprite + RoAnimationAsset instead of the old
+// RoAnimationController + raw asset handles.
+//
+// The new system loads pre-processed animation assets that contain
+// pre-computed textures and frame data.
+// =============================================================================
 
 /// Bundle for easily spawning animated RO sprites
 #[derive(Bundle)]
 pub struct AnimatedRoSpriteBundle {
-    pub controller: RoAnimationController,
-    pub sprite: Sprite,
+    pub sprite: RoSprite,
     pub transform: Transform,
     pub global_transform: GlobalTransform,
     pub visibility: Visibility,
@@ -18,8 +27,7 @@ pub struct AnimatedRoSpriteBundle {
 impl Default for AnimatedRoSpriteBundle {
     fn default() -> Self {
         Self {
-            controller: RoAnimationController::new(Handle::default(), Handle::default()),
-            sprite: Sprite::default(),
+            sprite: RoSprite::default(),
             transform: Transform::default(),
             global_transform: GlobalTransform::default(),
             visibility: Visibility::default(),
@@ -33,115 +41,65 @@ impl Default for AnimatedRoSpriteBundle {
 pub struct RoSpriteFactory;
 
 impl RoSpriteFactory {
-    /// Spawn a sprite from pre-loaded asset handles (immediate rendering)
-    /// Use this when you already have the asset handles loaded
-    pub fn spawn_from_handles(
+    /// Spawn a sprite from a pre-processed animation asset handle
+    pub fn spawn_from_animation(
         commands: &mut Commands,
-        sprite_handle: Handle<RoSpriteAsset>,
-        act_handle: Handle<RoActAsset>,
-        palette_handle: Option<Handle<RoPaletteAsset>>,
+        animation: Handle<RoAnimationAsset>,
         position: Vec3,
-        action_index: usize,
+        action: u8,
+        direction: u8,
     ) -> Entity {
-        let mut controller = RoAnimationController::new(sprite_handle, act_handle)
-            .with_action(action_index)
-            .looping(true);
-
-        if let Some(palette) = palette_handle {
-            controller = controller.with_palette(palette);
-        }
-
         commands
             .spawn(AnimatedRoSpriteBundle {
-                controller,
+                sprite: RoSprite {
+                    animation,
+                    base_action: action,
+                    direction,
+                    start_time: 0,
+                    speed_factor: 1.0,
+                    looping: true,
+                    paused: false,
+                },
                 transform: Transform::from_translation(position),
-                name: Name::new(format!("RoSprite_Action{}", action_index)),
+                name: Name::new(format!("RoSprite_Action{}", action)),
                 ..default()
             })
             .id()
-    }
-
-    /// Spawn a sprite from paths (triggers async asset loading via AssetServer)
-    /// Use this when you need to load sprites by file path
-    /// Paths should already include "ro://" prefix
-    /// Returns entity ID - sprite will render once assets are loaded
-    pub fn spawn_from_paths(
-        commands: &mut Commands,
-        asset_server: &AssetServer,
-        sprite_path: String,
-        act_path: String,
-        palette_path: Option<String>,
-        position: Vec3,
-        action_index: usize,
-    ) -> Entity {
-        let sprite_handle: Handle<RoSpriteAsset> = asset_server.load(&sprite_path);
-        let act_handle: Handle<RoActAsset> = asset_server.load(&act_path);
-        let palette_handle = palette_path
-            .as_ref()
-            .map(|path| asset_server.load::<RoPaletteAsset>(path));
-
-        let entity = commands
-            .spawn((
-                Transform::from_translation(position),
-                GlobalTransform::default(),
-                Visibility::default(),
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
-                Name::new(format!("RoSprite_Loading_{}", sprite_path)),
-                PendingSpriteLoad {
-                    sprite_handle: sprite_handle.clone(),
-                    act_handle: act_handle.clone(),
-                    palette_handle: palette_handle.clone(),
-                    action_index,
-                },
-            ))
-            .id();
-
-        entity
     }
 }
 
 /// Component to track sprites waiting for asset loading
 #[derive(Component)]
-pub struct PendingSpriteLoad {
-    pub sprite_handle: Handle<RoSpriteAsset>,
-    pub act_handle: Handle<RoActAsset>,
-    pub palette_handle: Option<Handle<RoPaletteAsset>>,
-    pub action_index: usize,
+pub struct PendingAnimationLoad {
+    pub animation_handle: Handle<RoAnimationAsset>,
+    pub action: u8,
+    pub direction: u8,
 }
 
 /// System to convert pending sprite loads into active sprites once assets are ready
-pub fn finalize_pending_sprite_loads(
+pub fn finalize_pending_animation_loads(
     mut commands: Commands,
-    pending_query: Query<(Entity, &PendingSpriteLoad)>,
-    sprites: Res<Assets<RoSpriteAsset>>,
-    actions: Res<Assets<RoActAsset>>,
+    pending_query: Query<(Entity, &PendingAnimationLoad)>,
+    animations: Res<Assets<RoAnimationAsset>>,
 ) {
     for (entity, pending) in pending_query.iter() {
-        let sprite_loaded = sprites.get(&pending.sprite_handle).is_some();
-        let act_loaded = actions.get(&pending.act_handle).is_some();
-
-        if sprite_loaded && act_loaded {
-            let mut controller = RoAnimationController::new(
-                pending.sprite_handle.clone(),
-                pending.act_handle.clone(),
-            )
-            .with_action(pending.action_index)
-            .looping(true);
-
-            if let Some(palette) = &pending.palette_handle {
-                controller = controller.with_palette(palette.clone());
-            }
-
+        if animations.get(&pending.animation_handle).is_some() {
             commands.entity(entity).insert((
-                controller,
-                Sprite::default(),
+                RoSprite {
+                    animation: pending.animation_handle.clone(),
+                    base_action: pending.action,
+                    direction: pending.direction,
+                    start_time: 0,
+                    speed_factor: 1.0,
+                    looping: true,
+                    paused: false,
+                },
                 Name::new("RoSprite_Active"),
             ));
 
-            commands.entity(entity).remove::<PendingSpriteLoad>();
+            commands.entity(entity).remove::<PendingAnimationLoad>();
 
-            info!("Finalized sprite load for entity: {:?}", entity);
+            info!("Finalized animation load for entity: {:?}", entity);
         }
     }
 }

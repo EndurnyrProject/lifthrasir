@@ -134,11 +134,6 @@ impl ServerPacket for ZcNotifyStandentryPacket {
         let name_end = name_bytes.iter().position(|&b| b == 0).unwrap_or(24);
         let name = String::from_utf8_lossy(&name_bytes[..name_end]).to_string();
 
-        info!(
-            "[PARSE] ZC_NOTIFY_STANDENTRY: {} (GID: {}, {:?}) at ({}, {}) dir: {}",
-            name, gid, object_type, x, y, dir
-        );
-
         Ok(Self {
             object_type,
             aid,

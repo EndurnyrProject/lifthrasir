@@ -7,6 +7,7 @@ use bevy::render::RenderPlugin;
 use bevy::window::{
     RawHandleWrapper, RawHandleWrapperHolder, Window, WindowPlugin, WindowResolution, WindowWrapper,
 };
+use bevy_brp_extras::BrpExtrasPlugin;
 use std::sync::{Arc, Mutex, RwLock};
 use tauri::{async_runtime::block_on, Manager, WebviewWindow};
 
@@ -133,7 +134,7 @@ fn add_debug_plugins(app: &mut App) {
     app.add_plugins((
         bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
         bevy::dev_tools::fps_overlay::FpsOverlayPlugin::default(),
-        RemotePlugin::default(),
+        BrpExtrasPlugin::default(),
     ));
 }
 

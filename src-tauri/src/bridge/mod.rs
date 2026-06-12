@@ -1,9 +1,9 @@
 pub mod authentication;
 pub mod character;
+pub mod chat;
 pub mod customization;
 pub mod input;
 pub mod world;
-pub mod chat;
 
 pub mod app_bridge;
 pub mod correlation;

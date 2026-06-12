@@ -1,9 +1,7 @@
 use crate::{
     core::state::GameState,
     domain::{
-        entities::{
-            components::EntityName, hover::EntityHoverEntered, registry::EntityRegistry,
-        },
+        entities::{components::EntityName, hover::EntityHoverEntered, registry::EntityRegistry},
         system_sets::EntityInteractionSystems,
     },
     infrastructure::networking::{
@@ -28,11 +26,6 @@ pub fn name_request_observer(
     };
 
     let event = trigger.event();
-
-    info!(
-        "Sending name request for entity ID {} (AID from event)",
-        event.entity_id
-    );
 
     if let Err(e) = client.request_entity_name(event.entity_id) {
         error!(

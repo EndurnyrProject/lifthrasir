@@ -1,8 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
-use super::types::ObjectType;
-
 #[derive(Resource)]
 #[auto_init_resource(plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin)]
 pub struct HoverConfig {
@@ -17,6 +15,12 @@ impl Default for HoverConfig {
 
 #[derive(Component, Reflect)]
 pub struct HoveredEntity;
+
+#[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin)]
+pub struct CurrentlyHoveredEntity {
+    pub entity: Option<Entity>,
+}
 
 #[derive(Component, Reflect)]
 pub struct Hoverable {
@@ -38,7 +42,6 @@ pub struct EntityHoverEntered {
     #[event_target]
     pub entity: Entity,
     pub entity_id: u32,
-    pub object_type: ObjectType,
 }
 
 #[derive(EntityEvent, Debug, Clone)]

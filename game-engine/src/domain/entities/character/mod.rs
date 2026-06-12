@@ -8,7 +8,8 @@ pub mod visual;
 use bevy::prelude::*;
 use bevy_auto_plugin::modes::global::prelude::{auto_plugin, AutoPlugin};
 
-use crate::domain::entities::character::states::{AnimationState, ContextState, GameplayState};
+use crate::domain::combat::components::Combatant;
+use crate::domain::entities::character::states::{AnimationState, StatusEffects};
 use crate::domain::entities::movement;
 
 pub use events::SpawnCharacterSpriteEvent;
@@ -28,7 +29,7 @@ type UnifiedCharacterFilter = (
 /// - Character sprite spawning and event forwarding
 /// - Visual updates (direction changes)
 ///
-/// Sub-plugins (StateMachinePlugin, GenericSpriteRenderingPlugin) are registered
+/// Sub-plugins (BehaviorPlugin, GenericSpriteRenderingPlugin) are registered
 /// by CharacterDomainPlugin before adding this plugin.
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]
@@ -51,12 +52,11 @@ pub fn spawn_unified_character(
             // Visual components
             components::visual::CharacterSprite::default(),
             components::visual::CharacterDirection::default(),
-            // Unified state machine component
-            states::create_animation_state_machine(),
-            // Initial state components (required by StateMachine)
+            // Animation state (moonshine-behavior)
             AnimationState::Idle,
-            GameplayState::Normal,
-            ContextState::CharacterSelection,
+            StatusEffects::default(),
+            // Combat component (required for attack animations)
+            Combatant::new(150),
             // Transform components
             Transform::from_translation(position),
             GlobalTransform::default(),
@@ -90,12 +90,11 @@ pub fn add_gameplay_components_to_entity(commands: &mut bevy::ecs::system::Entit
         // Movement components
         movement::components::MovementSpeed::default_walk(),
         movement::components::MovementState::Idle,
-        // State machine for animation transitions
-        states::create_animation_state_machine(),
-        // Initial states (required by StateMachine)
+        // Animation state (moonshine-behavior)
         AnimationState::Idle,
-        GameplayState::Normal,
-        ContextState::InGame,
+        StatusEffects::default(),
+        // Combat component (required for attack animations)
+        Combatant::new(150),
         // Terrain following
         components::core::Grounded,
     ));
