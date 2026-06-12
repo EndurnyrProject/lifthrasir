@@ -32,13 +32,14 @@
 ## Architecture
 
 ### Workspace Structure
-The project is organized as a Cargo workspace with three crates:
+The project is organized as a Cargo workspace:
 
 ```
 lifthrasir/
 ├── game-engine/        # Core game engine (Bevy ECS)
 ├── lifthrasir-ui/      # Native Bevy UI components
-└── lifthrasir/         # Binary entry point
+├── lifthrasir/         # Binary entry point
+└── grf-utils/          # GRF archive utilities
 ```
 
 

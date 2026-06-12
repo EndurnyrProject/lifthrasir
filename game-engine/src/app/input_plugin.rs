@@ -4,7 +4,7 @@ use bevy_auto_plugin::prelude::{auto_plugin, AutoPlugin};
 ///
 /// Handles all input including:
 /// - Cursor position
-/// - Mouse click forwarding
+/// - Mouse clicks
 /// - Terrain cursor visualization
 /// - Cursor state management (default, attack, impossible, etc.)
 /// - Terrain raycasting cache

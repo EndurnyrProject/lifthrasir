@@ -74,7 +74,6 @@ impl Plugin for RoAssetsPlugin {
                 }),
             );
 
-            // Insert SharedCompositeAssetSource as a resource
             app.insert_resource(SharedCompositeAssetSource(composite_arc.clone()));
 
             // Create and register HierarchicalAssetManager as a resource
