@@ -15,7 +15,7 @@ bevy_framepace = "0.21"
 bevy_auto_plugin = "0.10.0"
 
 # Tauri dependencies
-tauri = { version = "2.9.4", features = ["macos-private-api"] }
+tauri = { version = "2.11.2", features = ["macos-private-api"] }
 
 # Additional Tauri integration dependencies
 # wgpu is pinned here (no direct `use`) to control wgpu feature unification for the
