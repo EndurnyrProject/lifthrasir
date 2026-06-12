@@ -207,7 +207,7 @@ fn process_loaded_sprite_requests(
         let result =
             render_sprite_with_loaded_assets(&pending.request, sprite, act, custom_palette);
 
-        // Send response back to Tauri
+        // Send response to requester
         let _ = pending.response_tx.send(result);
 
         // Clean up the pending request entity

@@ -4,14 +4,14 @@
 
 ## Project Overview
 
-**Lifthrasir** is a Ragnarok Online client implementation written in Rust using the Bevy game engine with a React-based UI powered by Tauri. The project aims to recreate the classic MMORPG client while leveraging modern technologies for cross-platform compatibility, performance, and maintainability.
+**Lifthrasir** is a Ragnarok Online client implementation written in Rust using the Bevy game engine with a native Bevy UI. The project aims to recreate the classic MMORPG client while leveraging modern technologies for cross-platform compatibility, performance, and maintainability.
 
 ### Key Features
 - Full support for Ragnarok Online file formats (GRF, GND, GAT, RSW, RSM, SPR, ACT)
 - 3D terrain rendering with proper coordinate system translation
 - Character rendering with equipment and animation systems
 - Authentication and character management
-- Modern UI built with React overlaying the game world
+- Native UI built with Bevy
 
 ---
 
@@ -19,30 +19,26 @@
 
 ### Core Technologies
 - **Rust (Edition 2021)**: Primary programming language for game engine
-- **Bevy 0.17.1**: ECS-based game engine for rendering and game logic
-- **Tauri v2**: Desktop application framework for UI integration
-- **React 18.3.1**: Frontend UI framework
-- **TypeScript 5.6.2**: Type-safe JavaScript for UI code
-- **Vite 6.0.3**: Frontend build tool and dev server
+- **Bevy 0.18.1**: ECS-based game engine for rendering, game logic, and UI
 
 ### Key Paradigms
 - **Entity Component System (ECS)**: Bevy's core architecture pattern
 - **Clean Architecture**: Layered design with clear separation of concerns
 - **Domain-Driven Design (DDD)**: Business logic organized by domain concepts
-- **Event-Driven Architecture**: Communication via Bevy events and IPC
+- **Event-Driven Architecture**: Communication via Bevy events
 
 ---
 
 ## Architecture
 
 ### Workspace Structure
-The project is organized as a Cargo workspace with two main Rust crates and a React application:
+The project is organized as a Cargo workspace with three crates:
 
 ```
 lifthrasir/
 ├── game-engine/        # Core game engine (Bevy ECS)
-├── src-tauri/          # Tauri integration layer
-└── web-ui/             # React frontend UI
+├── lifthrasir-ui/      # Native Bevy UI components
+└── lifthrasir/         # Binary entry point
 ```
 
 
@@ -63,10 +59,7 @@ cargo build --release
 ### Running
 
 ```bash
-# Run Tauri app (includes UI + game engine)
-cd src-tauri
-cargo tauri dev
-
+cargo run -p lifthrasir
 ```
 
 ### Testing

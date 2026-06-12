@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "game-engine",
-    "src-tauri",
     "grf-utils",
     "lifthrasir-ui",
     "lifthrasir",

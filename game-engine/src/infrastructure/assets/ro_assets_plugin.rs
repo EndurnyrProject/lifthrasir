@@ -15,7 +15,7 @@ use bevy::{
 use std::sync::{Arc, RwLock};
 use toml;
 
-/// Shared CompositeAssetSource for access from both Bevy and Tauri
+/// Shared CompositeAssetSource for access across the engine
 #[derive(Resource, Clone)]
 pub struct SharedCompositeAssetSource(pub Arc<RwLock<CompositeAssetSource>>);
 
@@ -74,7 +74,7 @@ impl Plugin for RoAssetsPlugin {
                 }),
             );
 
-            // Insert SharedCompositeAssetSource as a resource for Tauri access
+            // Insert SharedCompositeAssetSource as a resource
             app.insert_resource(SharedCompositeAssetSource(composite_arc.clone()));
 
             // Create and register HierarchicalAssetManager as a resource
