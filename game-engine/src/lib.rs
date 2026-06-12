@@ -8,7 +8,7 @@ pub mod presentation;
 pub mod utils;
 
 // Re-export commonly used types
-pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin};
+pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin, NativeInputPlugin};
 pub use domain::camera::CameraPlugin;
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
 pub use domain::combat::CombatPlugin;
@@ -46,6 +46,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(EntityHoverPlugin)
             .add(CombatPlugin)
             .add(InputPlugin)
+            .add(NativeInputPlugin)
             .add(FpsCounterPlugin)
     }
 }
