@@ -5072,6 +5072,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lifthrasir-ui"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "game-engine",
+ "secrecy",
+]
+
+[[package]]
 name = "linebender_resource_handle"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

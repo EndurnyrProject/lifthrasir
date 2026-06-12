@@ -4,6 +4,7 @@ members = [
     "game-engine",
     "src-tauri",
     "grf-utils",
+    "lifthrasir-ui",
 ]
 
 [workspace.package]
