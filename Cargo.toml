@@ -11,6 +11,15 @@ members = [
 version = "0.1.0"
 edition = "2021"
 
+[workspace.dependencies]
+bevy = { version = "0.18.1", features = [
+    "jpeg",
+    "trace",
+    "trace_tracy",
+    "bevy_remote",
+] }
+secrecy = { version = "0.10", features = ["serde"] }
+
 [profile.dev.package."*"]
 opt-level = 3
 

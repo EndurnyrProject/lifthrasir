@@ -4,11 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-bevy = { version = "0.18.1", features = [
-  "jpeg",
-  "trace",
-  "trace_tracy",
-  "bevy_remote",
-] }
+bevy = { workspace = true }
 game-engine = { path = "../game-engine" }
-secrecy = { version = "0.10", features = ["serde"] }
+secrecy = { workspace = true }
