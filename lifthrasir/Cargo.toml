@@ -1,0 +1,12 @@
+[package]
+name = "lifthrasir"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+bevy_framepace = "0.21"
+bevy_brp_extras = "0.19.0"
+game-engine = { path = "../game-engine" }
+lifthrasir-ui = { path = "../lifthrasir-ui" }
+toml = "0.9"

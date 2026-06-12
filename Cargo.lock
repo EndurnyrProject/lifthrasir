@@ -5056,6 +5056,18 @@ name = "lifthrasir"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_brp_extras",
+ "bevy_framepace",
+ "game-engine",
+ "lifthrasir-ui",
+ "toml 0.9.8",
+]
+
+[[package]]
+name = "lifthrasir-tauri"
+version = "0.1.0"
+dependencies = [
+ "bevy",
  "bevy_auto_plugin",
  "bevy_brp_extras",
  "bevy_framepace",

@@ -1,5 +1,5 @@
 [package]
-name = "lifthrasir"
+name = "lifthrasir-tauri"
 version.workspace = true
 edition.workspace = true
 

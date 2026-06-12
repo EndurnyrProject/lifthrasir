@@ -5,6 +5,7 @@ members = [
     "src-tauri",
     "grf-utils",
     "lifthrasir-ui",
+    "lifthrasir",
 ]
 
 [workspace.package]
