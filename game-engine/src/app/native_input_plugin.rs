@@ -1,28 +1,23 @@
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::CursorMoved;
+use bevy_auto_plugin::prelude::{auto_add_system, AutoPlugin};
 
 use crate::domain::camera::CameraRotationDelta;
 use crate::domain::input::{ForwardedCursorPosition, ForwardedMouseClick};
+use crate::domain::system_sets::InputSystems;
 
-/// Feeds engine input resources from native winit events, replacing the
-/// removed Tauri IPC bridge.
+/// Feeds engine input resources from native window input.
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
 pub struct NativeInputPlugin;
 
-impl Plugin for NativeInputPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                forward_cursor_position,
-                forward_mouse_click,
-                forward_camera_rotation,
-            ),
-        );
-    }
-}
-
-pub fn forward_cursor_position(
+#[auto_add_system(
+    plugin = NativeInputPlugin,
+    schedule = Update,
+    config(before = InputSystems::Raycast)
+)]
+fn forward_cursor_position(
     mut moved: MessageReader<CursorMoved>,
     mut cursor: ResMut<ForwardedCursorPosition>,
 ) {
@@ -31,7 +26,12 @@ pub fn forward_cursor_position(
     }
 }
 
-pub fn forward_mouse_click(
+#[auto_add_system(
+    plugin = NativeInputPlugin,
+    schedule = Update,
+    config(before = InputSystems::Raycast)
+)]
+fn forward_mouse_click(
     buttons: Res<ButtonInput<MouseButton>>,
     cursor: Res<ForwardedCursorPosition>,
     mut click: ResMut<ForwardedMouseClick>,
@@ -42,7 +42,12 @@ pub fn forward_mouse_click(
     click.position = cursor.position;
 }
 
-pub fn forward_camera_rotation(
+#[auto_add_system(
+    plugin = NativeInputPlugin,
+    schedule = Update,
+    config(before = InputSystems::Raycast)
+)]
+fn forward_camera_rotation(
     buttons: Res<ButtonInput<MouseButton>>,
     motion: Res<AccumulatedMouseMotion>,
     mut rotation: ResMut<CameraRotationDelta>,
