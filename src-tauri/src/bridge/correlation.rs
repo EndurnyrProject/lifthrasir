@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_init_resource};
+use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 use game_engine::domain::character::events::CharacterInfoWithJobName;
 use game_engine::domain::entities::character::components::CharacterInfo;
 use std::collections::HashMap;

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_add_system;
+use bevy_auto_plugin::prelude::auto_add_system;
 use game_engine::domain::entities::character::components::core::CharacterData;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::character::events::status_events::StatusParameterChanged;

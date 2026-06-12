@@ -57,28 +57,28 @@ pub struct RoPaletteAsset {
     pub colors: Vec<[u8; 4]>, // RGBA
 }
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct RoSpriteLoader;
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct RoActLoader;
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct RoWorldLoader;
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct RoGroundLoader;
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct RoAltitudeLoader;
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct RsmLoader;
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct GrfLoader;
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct RoPaletteLoader;
 
 #[derive(Debug, Error)]
@@ -298,8 +298,7 @@ impl AssetLoader for GrfLoader {
         load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
         // Get the file path from the load context
-        let asset_path = load_context.asset_path();
-        let path = asset_path.path();
+        let path = load_context.path().path();
         info!("Loading GRF metadata from: {:?}", path);
 
         // Convert to absolute path by resolving against the assets directory

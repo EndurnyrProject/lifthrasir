@@ -119,7 +119,7 @@ fn create_render_plugin(window: &WebviewWindow) -> RenderPlugin {
 fn register_ro_asset_source(app: &mut App, composite_source: Arc<RwLock<CompositeAssetSource>>) {
     app.register_asset_source(
         AssetSourceId::Name("ro".into()),
-        AssetSourceBuilder::default().with_reader({
+        AssetSourceBuilder::new({
             let composite_clone = composite_source.clone();
             move || Box::new(HierarchicalAssetReader::new(composite_clone.clone()))
         }),

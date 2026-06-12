@@ -9,7 +9,7 @@ use crate::infrastructure::networking::{
     },
 };
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_add_message;
+use bevy_auto_plugin::prelude::auto_add_message;
 
 /// Event emitted when a character parameter changes
 #[derive(Message, Debug, Clone)]

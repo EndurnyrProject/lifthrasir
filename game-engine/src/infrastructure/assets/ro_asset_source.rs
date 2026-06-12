@@ -40,15 +40,14 @@ pub fn create_ro_asset_source(
     let composite_arc = Arc::new(RwLock::new(composite_source));
 
     // Create the asset source using our hierarchical reader
-    let asset_source = AssetSourceBuilder::default()
-        .with_reader({
-            let composite_clone = composite_arc.clone();
-            move || Box::new(HierarchicalAssetReader::new(composite_clone.clone()))
-        })
-        .build(AssetSourceId::Default, false, false);
+    let asset_source = AssetSourceBuilder::new({
+        let composite_clone = composite_arc.clone();
+        move || Box::new(HierarchicalAssetReader::new(composite_clone.clone()))
+    })
+    .build(AssetSourceId::Default, false, false);
 
     debug!("RO asset source created successfully");
-    Ok(asset_source.unwrap())
+    Ok(asset_source)
 }
 
 /// Sets up CompositeAssetSource from configuration, preserving the exact logic

@@ -12,7 +12,7 @@ use crate::infrastructure::networking::{
 };
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_init_resource;
+use bevy_auto_plugin::prelude::auto_init_resource;
 
 /// High-level client for the Login Protocol
 ///

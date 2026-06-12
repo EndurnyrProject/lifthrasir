@@ -9,6 +9,7 @@ pub struct LuaBytecode {
     pub source: String,
 }
 
+#[derive(TypePath)]
 pub struct LuaBytecodeLoader {
     decompiler: std::sync::Mutex<LuaDecompiler>,
 }

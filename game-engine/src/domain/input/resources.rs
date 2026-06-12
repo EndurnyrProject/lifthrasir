@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_init_resource;
+use bevy_auto_plugin::prelude::auto_init_resource;
 
 /// Resource to store cursor position forwarded from Tauri UI
 /// This allows the game to know where the mouse cursor is even though

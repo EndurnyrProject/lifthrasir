@@ -4,7 +4,7 @@ use crate::{
     utils::coordinates::world_position_to_spawn_coords,
 };
 use bevy::{math::primitives::InfinitePlane3d, prelude::*};
-use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_init_resource};
+use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 
 use super::ForwardedCursorPosition;
 

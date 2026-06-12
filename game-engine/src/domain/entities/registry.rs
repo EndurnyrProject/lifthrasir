@@ -41,7 +41,7 @@
 //! ```
 
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_init_resource;
+use bevy_auto_plugin::prelude::auto_init_resource;
 use std::collections::HashMap;
 
 /// Maps server Account IDs to client Entity IDs for multi-entity support

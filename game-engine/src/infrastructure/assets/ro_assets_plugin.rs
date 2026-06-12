@@ -68,7 +68,7 @@ impl Plugin for RoAssetsPlugin {
             // Register the "ro://" asset source
             app.register_asset_source(
                 AssetSourceId::Name("ro".into()),
-                AssetSourceBuilder::default().with_reader({
+                AssetSourceBuilder::new({
                     let composite_clone = composite_arc.clone();
                     move || Box::new(HierarchicalAssetReader::new(composite_clone.clone()))
                 }),

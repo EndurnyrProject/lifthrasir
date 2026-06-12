@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::{auto_add_system, auto_plugin, AutoPlugin};
+use bevy_auto_plugin::prelude::{auto_add_system, auto_plugin, AutoPlugin};
 
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]

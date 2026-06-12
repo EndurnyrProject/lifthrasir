@@ -1,6 +1,6 @@
 use crate::infrastructure::networking::protocol::login::types::ServerInfo;
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::{auto_add_event, auto_register_type};
+use bevy_auto_plugin::prelude::{auto_add_event, auto_register_type};
 use secrecy::SecretString;
 
 #[derive(Message, Clone, Reflect)]

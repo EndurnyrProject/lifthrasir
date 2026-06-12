@@ -2,7 +2,7 @@ use bevy::ecs::entity::Entity;
 use bevy::ecs::system::SystemState;
 use bevy::prelude::*;
 use bevy::window::{Window, WindowResized, WindowResolution, WindowScaleFactorChanged};
-use bevy_auto_plugin::modes::global::prelude::{auto_plugin, AutoPlugin};
+use bevy_auto_plugin::prelude::{auto_plugin, AutoPlugin};
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TauriSystems {

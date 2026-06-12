@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::{auto_init_state, auto_register_state_type};
+use bevy_auto_plugin::prelude::{auto_init_state, auto_register_state_type};
 
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default, Reflect)]
 #[auto_init_state(plugin = crate::app::plugin::LifthrasirPlugin)]

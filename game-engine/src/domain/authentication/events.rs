@@ -1,6 +1,6 @@
 use crate::infrastructure::networking::{errors::NetworkError, session::UserSession};
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_add_event;
+use bevy_auto_plugin::prelude::auto_add_event;
 
 #[derive(Message, Debug)]
 #[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]

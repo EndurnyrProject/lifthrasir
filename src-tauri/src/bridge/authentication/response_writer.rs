@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_add_system;
+use bevy_auto_plugin::prelude::auto_add_system;
 use game_engine::domain::authentication::events::{LoginFailureEvent, LoginSuccessEvent};
 use game_engine::presentation::ui::events::ServerSelectedEvent;
 

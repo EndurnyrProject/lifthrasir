@@ -17,7 +17,7 @@ pub struct BgmNameTableAsset {
 
 /// Asset loader for BGM name table files
 /// Parses the mp3nametable.txt format: `<map>.rsw#<bgm_path>#`
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct BgmNameTableLoader;
 
 /// Errors that can occur when loading BGM name table

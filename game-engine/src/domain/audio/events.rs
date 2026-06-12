@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_add_event;
+use bevy_auto_plugin::prelude::auto_add_event;
 
 /// Event to request playing a BGM track with crossfading
 #[derive(Message, Debug, Clone, Reflect)]

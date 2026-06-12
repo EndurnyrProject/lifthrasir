@@ -16,7 +16,7 @@ use crate::{
 };
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_add_system;
+use bevy_auto_plugin::prelude::auto_add_system;
 
 use super::{
     cursor::CursorType, events::CursorChangeRequest, terrain_raycast::TerrainRaycastCache,

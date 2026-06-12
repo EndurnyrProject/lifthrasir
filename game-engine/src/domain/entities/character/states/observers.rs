@@ -4,7 +4,7 @@ use crate::domain::entities::sprite_rendering::{
     EffectType, SpriteAnimationChangeEvent, StatusEffectVisualEvent,
 };
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_add_system;
+use bevy_auto_plugin::prelude::auto_add_system;
 use moonshine_behavior::prelude::*;
 
 type ChangedAnimationsQuery<'w, 's> = Query<

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_init_resource;
+use bevy_auto_plugin::prelude::auto_init_resource;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 

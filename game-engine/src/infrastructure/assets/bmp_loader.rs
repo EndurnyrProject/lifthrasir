@@ -6,7 +6,7 @@ use bevy::{
 };
 use thiserror::Error;
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct BmpLoader;
 
 #[derive(Debug, Error)]

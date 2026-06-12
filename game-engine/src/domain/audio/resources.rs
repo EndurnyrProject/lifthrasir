@@ -1,6 +1,6 @@
 use crate::infrastructure::assets::BgmNameTableAsset;
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_init_resource;
+use bevy_auto_plugin::prelude::auto_init_resource;
 use bevy_kira_audio::AudioInstance;
 
 /// Resource that manages the BGM playback state

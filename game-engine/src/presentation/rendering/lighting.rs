@@ -107,7 +107,7 @@ fn setup_ambient_light(commands: &mut Commands, rsw_light: &RswLight) {
         rsw_light.ambient[2],
     );
 
-    commands.insert_resource(AmbientLight {
+    commands.insert_resource(GlobalAmbientLight {
         color: ambient_color,
         brightness: 500.0, // Ensure minimum ambient light for softer shadows
         affects_lightmapped_meshes: false,

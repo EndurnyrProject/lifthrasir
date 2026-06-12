@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::modes::global::prelude::auto_add_system;
+use bevy_auto_plugin::prelude::auto_add_system;
 use game_engine::domain::character::{
     CharacterCreationForm, CreateCharacterRequestEvent, DeleteCharacterRequestEvent,
     RequestCharacterListEvent, SelectCharacterEvent,
