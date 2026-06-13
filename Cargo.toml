@@ -17,8 +17,10 @@ bevy = { version = "0.18.1", features = [
     "trace",
     "trace_tracy",
     "bevy_remote",
+    "file_watcher",
 ] }
 secrecy = { version = "0.10", features = ["serde"] }
+bevy_extended_ui = "1.6.0"
 
 [profile.dev.package."*"]
 opt-level = 3

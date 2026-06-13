@@ -2,6 +2,7 @@ mod assets;
 
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin, WindowResolution};
+use bevy_extended_ui::{ExtendedCam, ExtendedUiConfiguration, ExtendedUiPlugin};
 
 const FRAMERATE_LIMIT: f64 = 60.0;
 
@@ -26,6 +27,9 @@ fn main() {
         .resource_mut::<bevy_framepace::FramepaceSettings>()
         .limiter = bevy_framepace::Limiter::from_framerate(FRAMERATE_LIMIT);
 
+    app.add_plugins(ExtendedUiPlugin);
+    app.add_systems(Startup, configure_extended_ui);
+
     #[cfg(debug_assertions)]
     app.add_plugins((
         bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
@@ -38,4 +42,16 @@ fn main() {
     app.add_plugins(lifthrasir_ui::LifthrasirUiPlugin);
 
     app.run();
+}
+
+/// Reconciles bevy_extended_ui with the UI camera owned by `LifthrasirUiPlugin`.
+///
+/// `ExtendedCam::None` stops the crate from spawning its own UI camera, reusing the
+/// existing `Camera2d`/`IsDefaultUiCamera`. The crate spawns its widget tree on
+/// `render_layers[0]`; that camera has no `RenderLayers` (so it renders layer 0), so
+/// the render layer is pinned to 0 to keep the UI visible on it.
+fn configure_extended_ui(mut config: ResMut<ExtendedUiConfiguration>) {
+    config.camera = ExtendedCam::None;
+    config.render_layers = vec![0];
+    config.assets_path = "assets/ui/".into();
 }

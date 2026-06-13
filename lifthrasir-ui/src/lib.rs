@@ -19,6 +19,10 @@ impl Plugin for LifthrasirUiPlugin {
 
 /// Dedicated 2D camera that hosts all screen-space UI. It renders above the 3D
 /// world camera and never clears it, so menus and in-game overlays share the window.
+///
+/// Note: this camera has no `RenderLayers`, so it renders layer 0. `bevy_extended_ui`'s
+/// `render_layers` is pinned to `[0]` in `configure_extended_ui` to match — if this camera
+/// ever gains an explicit `RenderLayers`, update that config or the extended_ui screens vanish.
 fn spawn_ui_camera(mut commands: Commands) {
     commands.spawn((
         Camera2d,

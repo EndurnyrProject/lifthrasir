@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 bevy = { workspace = true }
+bevy_extended_ui = { workspace = true }
 bevy_framepace = "0.21"
 bevy_brp_extras = "0.19.0"
 game-engine = { path = "../game-engine" }
