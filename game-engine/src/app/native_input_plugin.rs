@@ -4,7 +4,7 @@ use bevy::window::CursorMoved;
 use bevy_auto_plugin::prelude::{auto_add_system, AutoPlugin};
 
 use crate::domain::camera::CameraRotationDelta;
-use crate::domain::input::{ForwardedCursorPosition, ForwardedMouseClick};
+use crate::domain::input::{ui_unfocused, ForwardedCursorPosition, ForwardedMouseClick};
 use crate::domain::system_sets::InputSystems;
 
 /// Feeds engine input resources from native window input.
@@ -15,7 +15,7 @@ pub struct NativeInputPlugin;
 #[auto_add_system(
     plugin = NativeInputPlugin,
     schedule = Update,
-    config(before = InputSystems::Raycast)
+    config(before = InputSystems::Raycast, run_if = ui_unfocused)
 )]
 fn forward_cursor_position(
     mut moved: MessageReader<CursorMoved>,
@@ -29,7 +29,7 @@ fn forward_cursor_position(
 #[auto_add_system(
     plugin = NativeInputPlugin,
     schedule = Update,
-    config(before = InputSystems::Raycast)
+    config(before = InputSystems::Raycast, run_if = ui_unfocused)
 )]
 fn forward_mouse_click(
     buttons: Res<ButtonInput<MouseButton>>,
@@ -45,7 +45,7 @@ fn forward_mouse_click(
 #[auto_add_system(
     plugin = NativeInputPlugin,
     schedule = Update,
-    config(before = InputSystems::Raycast)
+    config(before = InputSystems::Raycast, run_if = ui_unfocused)
 )]
 fn forward_camera_rotation(
     buttons: Res<ButtonInput<MouseButton>>,
@@ -63,6 +63,8 @@ fn forward_camera_rotation(
 mod tests {
     use super::*;
 
+    use crate::domain::input::UiFocus;
+
     fn test_app() -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
@@ -71,6 +73,7 @@ mod tests {
         app.init_resource::<CameraRotationDelta>();
         app.init_resource::<ButtonInput<MouseButton>>();
         app.init_resource::<AccumulatedMouseMotion>();
+        app.init_resource::<UiFocus>();
         app.add_message::<CursorMoved>();
         app.add_systems(
             Update,
@@ -78,7 +81,8 @@ mod tests {
                 forward_cursor_position,
                 forward_mouse_click,
                 forward_camera_rotation,
-            ),
+            )
+                .run_if(ui_unfocused),
         );
         app
     }
@@ -127,5 +131,21 @@ mod tests {
         let delta = app.world().resource::<CameraRotationDelta>();
         assert_eq!(delta.delta_x, 5.0);
         assert_eq!(delta.delta_y, -3.0);
+    }
+
+    #[test]
+    fn click_not_forwarded_while_ui_focused() {
+        let mut app = test_app();
+        app.world_mut().resource_mut::<UiFocus>().text_input_active = true;
+        app.world_mut()
+            .resource_mut::<ForwardedCursorPosition>()
+            .position = Some(Vec2::new(33.0, 44.0));
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        let click = app.world().resource::<ForwardedMouseClick>();
+        assert_eq!(click.position, None);
     }
 }
