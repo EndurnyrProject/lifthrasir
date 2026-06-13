@@ -4906,6 +4906,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_extended_ui",
+ "bevy_extended_ui_macros",
  "game-engine",
  "secrecy",
 ]

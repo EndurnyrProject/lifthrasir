@@ -6,5 +6,6 @@ edition.workspace = true
 [dependencies]
 bevy = { workspace = true }
 bevy_extended_ui = { workspace = true }
+bevy_extended_ui_macros = { workspace = true }
 game-engine = { path = "../game-engine" }
 secrecy = { workspace = true }
