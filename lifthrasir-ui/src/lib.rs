@@ -2,6 +2,7 @@ use bevy::camera::ClearColorConfig;
 use bevy::prelude::*;
 use bevy::ui::IsDefaultUiCamera;
 
+pub mod cursor;
 pub mod focus;
 pub mod screens;
 pub mod theme;
@@ -13,6 +14,7 @@ impl Plugin for LifthrasirUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_ui_camera);
         app.add_plugins((
+            cursor::NativeCursorPlugin,
             focus::UiFocusMirrorPlugin,
             screens::fade::FadeTransitionPlugin,
             screens::loading::LoadingScreenPlugin,
