@@ -17,6 +17,8 @@ impl Plugin for LifthrasirUiPlugin {
             screens::loading::LoadingScreenPlugin,
             screens::login::LoginScreenPlugin,
             screens::server_select::ServerSelectScreenPlugin,
+            screens::character_select::CharacterSelectScreenPlugin,
+            screens::character_preview::CharacterPreviewPlugin,
         ));
     }
 }

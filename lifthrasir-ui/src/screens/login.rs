@@ -27,7 +27,10 @@ impl Plugin for LoginScreenPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::Login), show_login_screen);
         app.add_systems(OnExit(GameState::Login), hide_login_screen);
-        app.add_systems(Update, surface_login_failure.run_if(in_state(GameState::Login)));
+        app.add_systems(
+            Update,
+            surface_login_failure.run_if(in_state(GameState::Login)),
+        );
     }
 }
 
@@ -121,6 +124,9 @@ mod tests {
     fn error_text_renders_login_refused() {
         let error = NetworkError::LoginRefused { code: 1 };
 
-        assert_eq!(login_error_text(&error), "Server refused login with code: 1");
+        assert_eq!(
+            login_error_text(&error),
+            "Server refused login with code: 1"
+        );
     }
 }

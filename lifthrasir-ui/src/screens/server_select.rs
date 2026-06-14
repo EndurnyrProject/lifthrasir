@@ -23,8 +23,14 @@ pub struct ServerSelectScreenPlugin;
 impl Plugin for ServerSelectScreenPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ServerListPopulated>();
-        app.add_systems(OnEnter(GameState::ServerSelection), show_server_select_screen);
-        app.add_systems(OnExit(GameState::ServerSelection), hide_server_select_screen);
+        app.add_systems(
+            OnEnter(GameState::ServerSelection),
+            show_server_select_screen,
+        );
+        app.add_systems(
+            OnExit(GameState::ServerSelection),
+            hide_server_select_screen,
+        );
         app.add_systems(
             Update,
             populate_server_list.run_if(in_state(GameState::ServerSelection)),
@@ -156,7 +162,10 @@ mod tests {
 
     #[test]
     fn label_handles_empty_server() {
-        assert_eq!(format_server_label(&server("Asgard", 0)), "Asgard (0 online)");
+        assert_eq!(
+            format_server_label(&server("Asgard", 0)),
+            "Asgard (0 online)"
+        );
     }
 
     #[test]
@@ -165,12 +174,18 @@ mod tests {
         app.add_plugins(MinimalPlugins);
         app.add_message::<ServerSelectedEvent>();
         app.init_resource::<ServerListPopulated>();
-        app.insert_resource(user_session(vec![server("Valhalla", 7), server("Asgard", 3)]));
+        app.insert_resource(user_session(vec![
+            server("Valhalla", 7),
+            server("Asgard", 3),
+        ]));
         app.add_systems(Update, populate_server_list);
 
         let container = app
             .world_mut()
-            .spawn((CssID(SERVER_LIST_CONTAINER_ID.to_string()), CssSource::default()))
+            .spawn((
+                CssID(SERVER_LIST_CONTAINER_ID.to_string()),
+                CssSource::default(),
+            ))
             .id();
 
         app.update();
@@ -187,7 +202,9 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].0, "Asgard (3 online)");
         assert_eq!(rows[1].0, "Valhalla (7 online)");
-        assert!(rows.iter().all(|(_, class)| class.contains(&SERVER_ROW_CLASS.to_string())));
+        assert!(rows
+            .iter()
+            .all(|(_, class)| class.contains(&SERVER_ROW_CLASS.to_string())));
         assert!(world.resource::<ServerListPopulated>().0);
     }
 
@@ -200,8 +217,10 @@ mod tests {
         app.insert_resource(user_session(vec![server("Valhalla", 7)]));
         app.add_systems(Update, populate_server_list);
 
-        app.world_mut()
-            .spawn((CssID(SERVER_LIST_CONTAINER_ID.to_string()), CssSource::default()));
+        app.world_mut().spawn((
+            CssID(SERVER_LIST_CONTAINER_ID.to_string()),
+            CssSource::default(),
+        ));
 
         app.update();
         app.update();

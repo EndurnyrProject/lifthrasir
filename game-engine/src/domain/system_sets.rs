@@ -2,6 +2,17 @@ use crate::core::state::GameState;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
+/// Run condition: true while in the 3D world (`InGame`) or while the character
+/// selection screen is showing animated sprite previews. The sprite rendering
+/// pipeline runs in both so character cards can render live SPR/ACT previews
+/// through the exact in-world billboard path.
+pub fn in_game_or_character_select(state: Res<State<GameState>>) -> bool {
+    matches!(
+        state.get(),
+        GameState::InGame | GameState::CharacterSelection
+    )
+}
+
 // =============================================================================
 // INPUT PROCESSING SYSTEMS
 // =============================================================================
@@ -66,7 +77,7 @@ pub enum MovementSystems {
     plugin = crate::domain::entities::sprite_rendering::GenericSpriteRenderingPlugin,
     schedule = Update,
     chain,
-    config(run_if = in_state(GameState::InGame))
+    config(run_if = in_game_or_character_select)
 )]
 pub enum SpriteRenderingSystems {
     HierarchySpawn,
