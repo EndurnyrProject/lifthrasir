@@ -14,6 +14,12 @@ use game_engine::presentation::ui::events::LoginAttemptEvent;
 use secrecy::SecretString;
 
 const LOGIN_UI: &str = "login";
+/// `id` of the empty `<div>` the logo image is mounted into, replacing the old title.
+const LOGO_CONTAINER_ID: &str = "login-logo";
+/// Logo loaded via the `ro://` source (joined onto `assets/data`, so a bare filename).
+const LOGO_IMAGE: &str = "ro://logo.png";
+const LOGO_WIDTH: f32 = 280.0;
+const LOGO_HEIGHT: f32 = 152.0;
 /// `AssetServer` path, relative to `assets/` (NOT to `ExtendedUiConfiguration.assets_path`).
 /// extended_ui resolves the `<link>` CSS hrefs inside the HTML relative to this file's own
 /// location, so the stylesheets are referenced by bare name (`theme.css`) in `login.html`.
@@ -23,21 +29,59 @@ const ERROR_ELEMENT_ID: &str = "login-error";
 
 pub struct LoginScreenPlugin;
 
+/// Tracks whether the logo image has been mounted into the (async-built) container
+/// this visit; reset on enter so re-entering the login screen re-mounts it.
+#[derive(Resource, Default)]
+struct LogoMounted(bool);
+
 impl Plugin for LoginScreenPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<LogoMounted>();
         app.add_systems(OnEnter(GameState::Login), show_login_screen);
         app.add_systems(OnExit(GameState::Login), hide_login_screen);
         app.add_systems(
             Update,
-            surface_login_failure.run_if(in_state(GameState::Login)),
+            (surface_login_failure, mount_login_logo).run_if(in_state(GameState::Login)),
         );
     }
 }
 
 #[allow(deprecated)]
-fn show_login_screen(mut registry: ResMut<UiRegistry>, asset_server: Res<AssetServer>) {
+fn show_login_screen(
+    mut registry: ResMut<UiRegistry>,
+    asset_server: Res<AssetServer>,
+    mut logo_mounted: ResMut<LogoMounted>,
+) {
+    logo_mounted.0 = false;
     let handle: Handle<HtmlAsset> = asset_server.load(LOGIN_HTML);
     registry.add_and_use(LOGIN_UI.into(), HtmlSource::from_handle(handle));
+}
+
+/// Mounts the logo image under the static container once the extended_ui tree has
+/// built it. The child is despawned with the screen tree on `registry.remove`.
+fn mount_login_logo(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut logo_mounted: ResMut<LogoMounted>,
+    containers: Query<(Entity, &CssID)>,
+) {
+    if logo_mounted.0 {
+        return;
+    }
+    let Some((container, _)) = containers.iter().find(|(_, id)| id.0 == LOGO_CONTAINER_ID) else {
+        return;
+    };
+    commands.spawn((
+        ImageNode::new(asset_server.load(LOGO_IMAGE)),
+        Node {
+            width: Val::Px(LOGO_WIDTH),
+            height: Val::Px(LOGO_HEIGHT),
+            ..default()
+        },
+        Pickable::IGNORE,
+        ChildOf(container),
+    ));
+    logo_mounted.0 = true;
 }
 
 #[allow(deprecated)]

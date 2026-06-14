@@ -18,6 +18,7 @@ impl Plugin for LifthrasirUiPlugin {
             cursor::NativeCursorPlugin,
             focus::UiFocusMirrorPlugin,
             screens::fade::FadeTransitionPlugin,
+            screens::menu_background::MenuBackgroundPlugin,
             screens::loading::LoadingScreenPlugin,
             screens::login::LoginScreenPlugin,
             screens::server_select::ServerSelectScreenPlugin,
