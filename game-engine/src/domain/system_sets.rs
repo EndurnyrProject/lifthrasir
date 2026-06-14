@@ -2,14 +2,14 @@ use crate::core::state::GameState;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
-/// Run condition: true while in the 3D world (`InGame`) or while the character
-/// selection screen is showing animated sprite previews. The sprite rendering
-/// pipeline runs in both so character cards can render live SPR/ACT previews
+/// Run condition: true while in the 3D world (`InGame`) or on the character
+/// selection / creation screens, both of which show animated sprite previews. The
+/// sprite rendering pipeline runs in all three so previews render live SPR/ACT
 /// through the exact in-world billboard path.
 pub fn in_game_or_character_select(state: Res<State<GameState>>) -> bool {
     matches!(
         state.get(),
-        GameState::InGame | GameState::CharacterSelection
+        GameState::InGame | GameState::CharacterSelection | GameState::CharacterCreation
     )
 }
 

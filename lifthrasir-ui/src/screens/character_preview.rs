@@ -89,7 +89,7 @@ fn column_spacing() -> f32 {
 }
 
 /// Builds an empty RGBA render-target image with the usage flags a camera needs.
-fn create_render_target(width: u32, height: u32) -> Image {
+pub fn create_render_target(width: u32, height: u32) -> Image {
     let size = Extent3d {
         width,
         height,

@@ -23,6 +23,7 @@ use game_engine::domain::character::events::{
     RequestCharacterListEvent, SelectCharacterEvent,
 };
 
+use crate::screens::character_create::CreationSlot;
 use crate::screens::character_preview::{CharacterDiorama, COLUMN_PX, ROW_PX};
 use crate::theme;
 
@@ -315,12 +316,15 @@ fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: 
         ChildOf(create),
     ));
 
-    commands
-        .entity(create)
-        .observe(move |mut click: On<Pointer<Click>>| {
+    commands.entity(create).observe(
+        move |mut click: On<Pointer<Click>>,
+              mut commands: Commands,
+              mut next: ResMut<NextState<GameState>>| {
             click.propagate(false);
-            info!("Create character requested for slot {slot} (creation screen pending)");
-        });
+            commands.insert_resource(CreationSlot(slot));
+            next.set(GameState::CharacterCreation);
+        },
+    );
 }
 
 /// Reflects the armed-for-deletion state in the Delete button labels.
