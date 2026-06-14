@@ -7,6 +7,7 @@ pub mod focus;
 pub mod screens;
 pub mod theme;
 pub mod widgets;
+pub mod worldspace;
 
 pub struct LifthrasirUiPlugin;
 
@@ -24,6 +25,7 @@ impl Plugin for LifthrasirUiPlugin {
             screens::character_create::CharacterCreateScreenPlugin,
             screens::character_preview::CharacterPreviewPlugin,
             widgets::InGameHudPlugin,
+            worldspace::WorldspaceUiPlugin,
         ));
     }
 }
