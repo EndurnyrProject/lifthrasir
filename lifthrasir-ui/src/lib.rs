@@ -5,6 +5,7 @@ use bevy::ui::IsDefaultUiCamera;
 pub mod focus;
 pub mod screens;
 pub mod theme;
+pub mod widgets;
 
 pub struct LifthrasirUiPlugin;
 
@@ -20,6 +21,7 @@ impl Plugin for LifthrasirUiPlugin {
             screens::character_select::CharacterSelectScreenPlugin,
             screens::character_create::CharacterCreateScreenPlugin,
             screens::character_preview::CharacterPreviewPlugin,
+            widgets::InGameHudPlugin,
         ));
     }
 }
