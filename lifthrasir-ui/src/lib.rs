@@ -16,6 +16,7 @@ impl Plugin for LifthrasirUiPlugin {
             screens::fade::FadeTransitionPlugin,
             screens::loading::LoadingScreenPlugin,
             screens::login::LoginScreenPlugin,
+            screens::server_select::ServerSelectScreenPlugin,
         ));
     }
 }
