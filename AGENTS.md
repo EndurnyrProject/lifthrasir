@@ -1,5 +1,11 @@
 # AGENTS.md - Lifthrasir Codebase Documentation
 
+## Skills to use
+
+- Load the bevy-cheatbook skill
+- When working with UI, load the bevy-enhanced-ui skill
+- Always Load the ponytail skill, it helps you to be more token efficient
+
 ---
 
 ## Project Overview
@@ -26,6 +32,7 @@
 - **Clean Architecture**: Layered design with clear separation of concerns
 - **Domain-Driven Design (DDD)**: Business logic organized by domain concepts
 - **Event-Driven Architecture**: Communication via Bevy events
+
 
 ---
 
