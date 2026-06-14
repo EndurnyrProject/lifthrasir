@@ -302,4 +302,6 @@ lib/bs/
 lib/ocaml/
 .bsb.lock
 
+docs/superpowers/
+
 
