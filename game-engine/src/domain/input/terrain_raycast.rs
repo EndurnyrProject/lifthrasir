@@ -3,12 +3,13 @@ use crate::{
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
     utils::coordinates::world_position_to_spawn_coords,
 };
-use bevy::{math::primitives::InfinitePlane3d, prelude::*};
+use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 
 use super::ForwardedCursorPosition;
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Reflect)]
+#[reflect(Resource, Default)]
 #[auto_init_resource(plugin = crate::app::input_plugin::InputPlugin)]
 pub struct TerrainRaycastCache {
     pub cell_coords: Option<(u16, u16)>,
@@ -24,7 +25,7 @@ pub struct TerrainRaycastCache {
 pub fn update_terrain_raycast_cache(
     mut cache: ResMut<TerrainRaycastCache>,
     cursor_pos: Res<ForwardedCursorPosition>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     map_loader_query: Query<&MapLoader>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
@@ -78,56 +79,74 @@ pub fn update_terrain_raycast_cache(
         return;
     };
 
-    let ground_plane = InfinitePlane3d::new(Vec3::Y);
-    let plane_normal = Vec3::Y;
-
-    let denominator = ray.direction.dot(plane_normal);
-    if denominator.abs() < 1e-6 {
+    if ray.direction.dot(Vec3::Y).abs() < 1e-6 {
         cache.cell_coords = None;
         cache.world_position = None;
         cache.is_walkable = false;
         return;
-    };
-
-    let Some(initial_distance) = ray.intersect_plane(Vec3::ZERO, ground_plane) else {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
-        return;
-    };
-
-    let mut world_pos = ray.origin + ray.direction * initial_distance;
-
-    const MAX_ITERATIONS: u32 = 5;
-    const CONVERGENCE_THRESHOLD: f32 = 0.1;
-
-    for _ in 0..MAX_ITERATIONS {
-        let Some(terrain_height) = altitude_asset
-            .altitude
-            .get_terrain_height_at_position(world_pos)
-        else {
-            cache.cell_coords = None;
-            cache.world_position = None;
-            cache.is_walkable = false;
-            return;
-        };
-
-        let height_diff = (world_pos.y - terrain_height).abs();
-        if height_diff < CONVERGENCE_THRESHOLD {
-            world_pos.y = terrain_height;
-            break;
-        }
-
-        let plane_point = Vec3::new(0.0, terrain_height, 0.0);
-        let distance = (plane_point - ray.origin).dot(plane_normal) / denominator;
-        world_pos = ray.origin + ray.direction * distance;
     }
 
-    let (cell_x, cell_y) = world_position_to_spawn_coords(
+    // March the ray against the terrain heightfield and bisect the surface crossing.
+    // A fixed-point plane refinement diverged for shallow (near-horizon) angles, so the
+    // gizmo lost the cursor near the top of the screen; marching is stable at any angle
+    // and stops cleanly at the map edge (height lookup returns None off-map).
+    const STEP: f32 = 2.0;
+    const MAX_STEPS: u32 = 4096;
+    const BISECT_STEPS: u32 = 8;
+
+    let signed_gap = |p: Vec3| {
+        altitude_asset
+            .altitude
+            .get_terrain_height_at_position(p)
+            .map(|height| p.y - height)
+    };
+
+    let mut above = ray.origin;
+    let mut above_gap = signed_gap(above);
+    let mut crossing = None;
+    for step in 1..=MAX_STEPS {
+        let current = ray.origin + ray.direction * (step as f32 * STEP);
+        let current_gap = signed_gap(current);
+        if let (Some(prev), Some(cur)) = (above_gap, current_gap) {
+            if prev <= 0.0 && cur >= 0.0 {
+                crossing = Some((above, current));
+                break;
+            }
+        }
+        above = current;
+        above_gap = current_gap;
+    }
+
+    let Some((mut lo, mut hi)) = crossing else {
+        cache.cell_coords = None;
+        cache.world_position = None;
+        cache.is_walkable = false;
+        return;
+    };
+
+    for _ in 0..BISECT_STEPS {
+        let mid = (lo + hi) * 0.5;
+        match signed_gap(mid) {
+            Some(gap) if gap < 0.0 => lo = mid,
+            Some(_) => hi = mid,
+            None => break,
+        }
+    }
+    let world_pos = (lo + hi) * 0.5;
+
+    let (raw_x, raw_y) = world_position_to_spawn_coords(
         world_pos,
         ground_asset.ground.width,
         ground_asset.ground.height,
     );
+
+    // The raycast resolves one grid cell off from the cursor's true cell (-1 X, +1 Y).
+    // Correct at this single source so the gizmo, walkability, and click-to-move agree.
+    // No upper clamp: cells are in GAT space, while ground.{width,height} are GND-resolution
+    // (half), so clamping against them froze the gizmo mid-map. is_walkable bounds-checks
+    // internally and the ray-march already returns None past the true map edge.
+    let cell_x = raw_x.saturating_sub(1);
+    let cell_y = raw_y + 1;
 
     let is_walkable = altitude_asset
         .altitude
