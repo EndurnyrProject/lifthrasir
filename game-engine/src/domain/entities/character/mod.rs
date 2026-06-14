@@ -5,7 +5,7 @@ pub mod states;
 pub mod systems;
 pub mod visual;
 
-use bevy_auto_plugin::prelude::{auto_plugin, AutoPlugin};
+use bevy_auto_plugin::prelude::AutoPlugin;
 
 use crate::domain::combat::components::Combatant;
 use crate::domain::entities::character::states::{AnimationState, StatusEffects};

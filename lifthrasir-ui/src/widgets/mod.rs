@@ -25,10 +25,7 @@ impl Plugin for InGameHudPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::InGame), show_hud);
         app.add_systems(OnExit(GameState::InGame), hide_hud);
-        app.add_plugins((
-            character_info::CharacterInfoPlugin,
-            chat_box::ChatBoxPlugin,
-        ));
+        app.add_plugins((character_info::CharacterInfoPlugin, chat_box::ChatBoxPlugin));
     }
 }
 

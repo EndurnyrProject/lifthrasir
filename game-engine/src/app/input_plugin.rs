@@ -1,4 +1,4 @@
-use bevy_auto_plugin::prelude::{auto_plugin, AutoPlugin};
+use bevy_auto_plugin::prelude::AutoPlugin;
 
 /// Input Plugin
 ///

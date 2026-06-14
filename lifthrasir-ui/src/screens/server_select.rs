@@ -93,7 +93,7 @@ fn populate_server_list(
 
     let css_source = css_source.clone();
     commands.entity(container).with_children(|parent| {
-        for (index, server) in session.server_list.iter().enumerate() {
+        for server in session.server_list.iter() {
             let server = server.clone();
             parent
                 .spawn((
@@ -108,7 +108,6 @@ fn populate_server_list(
                     move |_: On<Pointer<Click>>, mut writer: MessageWriter<ServerSelectedEvent>| {
                         writer.write(ServerSelectedEvent {
                             server: server.clone(),
-                            server_index: Some(index),
                         });
                     },
                 );

@@ -56,9 +56,7 @@ fn append_incoming_chat(
     mut received: MessageReader<ChatReceived>,
     mut history: Query<(&mut Paragraph, &CssID)>,
 ) {
-    let Some((mut paragraph, _)) = history
-        .iter_mut()
-        .find(|(_, id)| id.0 == CHAT_HISTORY_ID)
+    let Some((mut paragraph, _)) = history.iter_mut().find(|(_, id)| id.0 == CHAT_HISTORY_ID)
     else {
         return;
     };
@@ -106,6 +104,9 @@ mod tests {
         let lines: Vec<&str> = history.split('\n').collect();
         assert_eq!(lines.len(), MAX_CHAT_LINES);
         assert_eq!(lines[0], "line5");
-        assert_eq!(*lines.last().unwrap(), format!("line{}", MAX_CHAT_LINES + 4));
+        assert_eq!(
+            *lines.last().unwrap(),
+            format!("line{}", MAX_CHAT_LINES + 4)
+        );
     }
 }

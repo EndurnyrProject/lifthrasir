@@ -195,7 +195,8 @@ mod tests {
             .next();
         assert_eq!(label.as_deref(), Some("Poring"));
 
-        app.world_mut().trigger(EntityHoverExited { entity: target });
+        app.world_mut()
+            .trigger(EntityHoverExited { entity: target });
         app.world_mut().flush();
 
         let world = app.world_mut();

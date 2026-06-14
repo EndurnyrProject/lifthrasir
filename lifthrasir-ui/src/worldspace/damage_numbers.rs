@@ -87,8 +87,7 @@ fn spawn_damage_numbers(
         let Ok(target_transform) = targets.get(event.entity) else {
             continue;
         };
-        let Ok(screen) =
-            camera.world_to_viewport(camera_transform, target_transform.translation())
+        let Ok(screen) = camera.world_to_viewport(camera_transform, target_transform.translation())
         else {
             continue;
         };
@@ -166,7 +165,10 @@ mod tests {
     fn text_and_color_vary_by_type() {
         assert_eq!(damage_text(120, DamageDisplayType::Normal), "120");
         assert_eq!(damage_text(0, DamageDisplayType::Miss), "Miss");
-        assert_eq!(damage_color(DamageDisplayType::Critical), theme::GOLD_YELLOW);
+        assert_eq!(
+            damage_color(DamageDisplayType::Critical),
+            theme::GOLD_YELLOW
+        );
         assert_eq!(font_size(DamageDisplayType::Critical), CRIT_FONT_SIZE);
         assert_eq!(font_size(DamageDisplayType::Normal), FONT_SIZE);
     }
