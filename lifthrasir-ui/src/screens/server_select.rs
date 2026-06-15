@@ -9,6 +9,41 @@ use game_engine::infrastructure::networking::protocol::login::types::ServerInfo;
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::ServerSelectedEvent;
 
+/// Online-population bucket for a server row's status pill.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ServerStatus {
+    Online,
+    High,
+    Full,
+}
+
+// ponytail: ServerInfo has no capacity field, only `users`. Assume a soft cap for
+// the population bar/status. Replace with a real capacity if the protocol gains one.
+const POP_SOFT_CAP: u16 = 6000;
+
+fn fill_ratio(users: u16) -> f32 {
+    (users as f32 / POP_SOFT_CAP as f32).clamp(0.0, 1.0)
+}
+
+fn server_status(ratio: f32) -> ServerStatus {
+    if ratio >= 0.9 {
+        ServerStatus::Full
+    } else if ratio >= 0.6 {
+        ServerStatus::High
+    } else {
+        ServerStatus::Online
+    }
+}
+
+/// CSS class for a status pill.
+fn status_class(status: ServerStatus) -> &'static str {
+    match status {
+        ServerStatus::Online => "st-online",
+        ServerStatus::High => "st-high",
+        ServerStatus::Full => "st-full",
+    }
+}
+
 const SERVER_SELECT_UI: &str = "server_select";
 /// `AssetServer` path, relative to `assets/`. CSS `<link>` hrefs inside the HTML
 /// resolve relative to this file's location (so `theme.css` -> `ui/theme.css`).
@@ -122,6 +157,27 @@ mod tests {
     use super::*;
     use game_engine::infrastructure::networking::protocol::login::types::ServerType;
     use game_engine::infrastructure::networking::session::SessionTokens;
+
+    #[test]
+    fn status_buckets_by_fill_ratio() {
+        assert_eq!(server_status(0.10), ServerStatus::Online);
+        assert_eq!(server_status(0.60), ServerStatus::High);
+        assert_eq!(server_status(0.95), ServerStatus::Full);
+    }
+
+    #[test]
+    fn fill_ratio_clamps_to_unit_range() {
+        assert_eq!(fill_ratio(0), 0.0);
+        assert!((fill_ratio(POP_SOFT_CAP) - 1.0).abs() < f32::EPSILON);
+        assert_eq!(fill_ratio(u16::MAX), 1.0); // clamped
+    }
+
+    #[test]
+    fn status_class_maps_each_variant() {
+        assert_eq!(status_class(ServerStatus::Online), "st-online");
+        assert_eq!(status_class(ServerStatus::High), "st-high");
+        assert_eq!(status_class(ServerStatus::Full), "st-full");
+    }
 
     fn server(name: &str, users: u16) -> ServerInfo {
         ServerInfo {
