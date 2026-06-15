@@ -1,7 +1,7 @@
 //! Off-screen 3D "diorama" that renders animated character previews for the
 //! character-selection cards.
 //!
-//! extended_ui cannot render live SPR/ACT sprites, and the old PNG round-trip
+//! `bevy_ui` cannot render live SPR/ACT sprites directly, and the old PNG round-trip
 //! (`sprite_png`) only existed for the deleted Tauri webview. Instead, the real
 //! in-world billboard pipeline renders every occupied slot's character — laid out
 //! in a single row — into ONE off-screen render-target `Image` via a single
@@ -67,6 +67,9 @@ pub struct CharacterDiorama {
     pub target: Option<Handle<Image>>,
     /// Occupied character slot -> its crop rectangle (pixels) within `target`.
     pub columns: HashMap<u8, Rect>,
+    /// `(slot, char_id)` of the currently-rendered roster, so repeated identical
+    /// `CharacterListReceivedEvent`s don't trigger a needless rebuild.
+    signature: Option<Vec<(u8, u32)>>,
 }
 
 pub struct CharacterPreviewPlugin;
@@ -129,6 +132,26 @@ fn rebuild_diorama(
         return;
     };
 
+    let occupied: Vec<(u8, &CharacterInfoWithJobName)> = event
+        .characters
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, info)| info.as_ref().map(|info| (slot as u8, info)))
+        .collect();
+
+    // The engine emits `CharacterListReceivedEvent` more than once per visit (char-
+    // server connect, then the screen's own list request). Rebuilding on each one
+    // despawns the preview characters before their sprites finalize, so they'd never
+    // render — skip when the roster is unchanged.
+    let signature: Vec<(u8, u32)> = occupied
+        .iter()
+        .map(|(slot, info)| (*slot, info.base.char_id))
+        .collect();
+    if diorama.signature.as_deref() == Some(signature.as_slice()) {
+        return;
+    }
+    diorama.signature = Some(signature);
+
     for entity in &previews {
         commands.entity(entity).despawn();
     }
@@ -137,13 +160,6 @@ fn rebuild_diorama(
     }
     diorama.columns.clear();
     diorama.target = None;
-
-    let occupied: Vec<(u8, &CharacterInfoWithJobName)> = event
-        .characters
-        .iter()
-        .enumerate()
-        .filter_map(|(slot, info)| info.as_ref().map(|info| (slot as u8, info)))
-        .collect();
 
     if occupied.is_empty() {
         return;
@@ -219,6 +235,7 @@ fn cleanup_diorama(
     }
     diorama.columns.clear();
     diorama.target = None;
+    diorama.signature = None;
 }
 
 #[cfg(test)]

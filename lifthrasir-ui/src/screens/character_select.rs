@@ -1,16 +1,11 @@
 //! Character selection screen.
 //!
-//! The static shell (`assets/ui/character_select.html`) is an extended_ui screen
-//! with `#hero-panel` and `#character-grid` containers. The hero panel features
-//! the selected character with a live diorama crop, name, job/level, and action
-//! buttons. The roster grid shows compact slot cards; clicking a card updates
-//! the selected slot and the hero panel rebuilds.
+//! A raw `bevy_ui` stage with a hero-panel and a character-grid container. The hero
+//! panel features the selected character with a live diorama crop, name, job/level,
+//! and action buttons. The roster grid shows compact slot cards; clicking a card
+//! updates the selected slot and the hero panel rebuilds.
 
 use bevy::prelude::*;
-use bevy_extended_ui::html::HtmlSource;
-use bevy_extended_ui::io::HtmlAsset;
-use bevy_extended_ui::old::registry::UiRegistry;
-use bevy_extended_ui::styles::CssID;
 use game_engine::core::state::GameState;
 use game_engine::domain::character::events::{
     CharacterInfoWithJobName, CharacterListReceivedEvent, DeleteCharacterRequestEvent,
@@ -20,11 +15,6 @@ use game_engine::domain::character::events::{
 use crate::screens::character_create::CreationSlot;
 use crate::screens::character_preview::{CharacterDiorama, COLUMN_PX, ROW_PX};
 use crate::theme;
-
-const CHARACTER_SELECT_UI: &str = "character_select";
-const CHARACTER_SELECT_HTML: &str = "ui/character_select.html";
-const GRID_CONTAINER_ID: &str = "character-grid";
-const HERO_PANEL_ID: &str = "hero-panel";
 
 pub struct CharacterSelectScreenPlugin;
 
@@ -39,16 +29,13 @@ impl Plugin for CharacterSelectScreenPlugin {
             show_character_select_screen,
         );
         app.add_systems(
-            OnExit(GameState::CharacterSelection),
-            hide_character_select_screen,
-        );
-        app.add_systems(
             Update,
             (
                 receive_character_list,
                 build_cards,
                 rebuild_hero_panel,
                 update_delete_labels,
+                highlight_selected_cards,
             )
                 .chain()
                 .run_if(in_state(GameState::CharacterSelection)),
@@ -79,6 +66,10 @@ struct SelectedSlot(usize);
 #[derive(Component)]
 struct CharacterCard;
 
+/// The roster slot a card represents, so the selected card can be highlighted.
+#[derive(Component)]
+struct CardSlot(u8);
+
 /// A card's Delete button, carrying the character it would delete.
 #[derive(Component)]
 struct DeleteButton {
@@ -89,9 +80,16 @@ struct DeleteButton {
 #[derive(Component)]
 struct HeroContent;
 
-#[allow(deprecated)]
+/// Marks the hero panel container (left column of the stage).
+#[derive(Component)]
+struct HeroPanel;
+
+/// Marks the roster grid container that holds the slot cards.
+#[derive(Component)]
+struct CharacterGrid;
+
 fn show_character_select_screen(
-    mut registry: ResMut<UiRegistry>,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut built: ResMut<CardsBuilt>,
     mut pending: ResMut<PendingDeletion>,
@@ -101,14 +99,93 @@ fn show_character_select_screen(
     built.0 = false;
     pending.0 = None;
     selected.0 = 0;
-    let handle: Handle<HtmlAsset> = asset_server.load(CHARACTER_SELECT_HTML);
-    registry.add_and_use(CHARACTER_SELECT_UI.into(), HtmlSource::from_handle(handle));
-    requests.write(RequestCharacterListEvent);
-}
 
-#[allow(deprecated)]
-fn hide_character_select_screen(mut registry: ResMut<UiRegistry>) {
-    registry.remove(CHARACTER_SELECT_UI);
+    let font_body = asset_server.load(theme::FONT_BODY);
+    let font_title = asset_server.load(theme::FONT_TITLE);
+
+    let root = commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            DespawnOnExit(GameState::CharacterSelection),
+        ))
+        .id();
+
+    let head = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(60.0),
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ChildOf(root),
+        ))
+        .id();
+    commands.spawn((
+        label("Endurnir", font_body, 11.0, theme::GOLD.with_alpha(0.55)),
+        ChildOf(head),
+    ));
+    commands.spawn((
+        Text::new("Select Character"),
+        TextFont {
+            font: font_title,
+            font_size: 27.0,
+            ..default()
+        },
+        TextColor(theme::DISPLAY_GOLD),
+        Node {
+            margin: UiRect::top(Val::Px(3.0)),
+            ..default()
+        },
+        ChildOf(head),
+    ));
+
+    let stage = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                bottom: Val::Px(0.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                padding: UiRect::new(Val::Px(64.0), Val::Px(64.0), Val::Px(130.0), Val::Px(38.0)),
+                ..default()
+            },
+            ChildOf(root),
+        ))
+        .id();
+
+    commands.spawn((
+        HeroPanel,
+        Node {
+            width: Val::Px(392.0),
+            margin: UiRect::right(Val::Px(26.0)),
+            ..default()
+        },
+        ChildOf(stage),
+    ));
+    commands.spawn((
+        CharacterGrid,
+        Node {
+            width: Val::Px(700.0),
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            align_content: AlignContent::FlexStart,
+            ..default()
+        },
+        ChildOf(stage),
+    ));
+
+    requests.write(RequestCharacterListEvent);
 }
 
 /// Stores the latest character list and arms a card rebuild.
@@ -135,7 +212,7 @@ fn build_cards(
     data: Res<CharacterSelectionData>,
     diorama: Res<CharacterDiorama>,
     mut built: ResMut<CardsBuilt>,
-    containers: Query<(Entity, &CssID)>,
+    container: Query<Entity, With<CharacterGrid>>,
     existing_cards: Query<Entity, With<CharacterCard>>,
 ) {
     if built.0 || data.characters.is_empty() {
@@ -148,7 +225,7 @@ fn build_cards(
         return;
     }
 
-    let Some((container, _)) = containers.iter().find(|(_, id)| id.0 == GRID_CONTAINER_ID) else {
+    let Ok(container) = container.single() else {
         return;
     };
 
@@ -185,20 +262,21 @@ fn spawn_occupied_card(
     font_bold: Handle<Font>,
     font_body: Handle<Font>,
 ) {
-    let detail = format!("Lv {}", info.base.base_level);
+    let level = format!("Lv {}", info.base.base_level);
     let glyph = info.base.name.chars().next().unwrap_or('?').to_string();
 
     let card = commands
         .spawn((
             CharacterCard,
+            CardSlot(slot),
             Pickable::default(),
             Node {
                 width: Val::Px(214.0),
-                height: Val::Px(64.0),
+                height: Val::Px(66.0),
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 column_gap: Val::Px(13.0),
-                padding: UiRect::all(Val::Px(12.0)),
+                padding: UiRect::all(Val::Px(13.0)),
                 margin: UiRect::all(Val::Px(7.0)),
                 border: UiRect::all(Val::Px(1.0)),
                 border_radius: BorderRadius::all(Val::Px(11.0)),
@@ -210,6 +288,28 @@ fn spawn_occupied_card(
         ))
         .id();
 
+    // Level badge, pinned to the top-right corner of the card.
+    let badge = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(9.0),
+                right: Val::Px(9.0),
+                padding: UiRect::axes(Val::Px(7.0), Val::Px(2.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(5.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.3)),
+            BorderColor::all(theme::STROKE),
+            ChildOf(card),
+        ))
+        .id();
+    commands.spawn((
+        label(level, font_body.clone(), 10.5, theme::TEXT_DIM),
+        ChildOf(badge),
+    ));
+
     // Glyph lives as a child so the avatar's flex centering actually centers it
     // (a node's own Text isn't affected by align/justify).
     let avatar = commands
@@ -219,6 +319,7 @@ fn spawn_occupied_card(
                 height: Val::Px(46.0),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(1.0)),
                 border_radius: BorderRadius::all(Val::Px(9.0)),
                 ..default()
             },
@@ -247,7 +348,7 @@ fn spawn_occupied_card(
         ChildOf(col),
     ));
     commands.spawn((
-        label(detail, font_body, 11.5, theme::TEXT_FAINT),
+        label(info.job_name.clone(), font_body, 11.5, theme::TEXT_FAINT),
         ChildOf(col),
     ));
 
@@ -263,12 +364,15 @@ fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: 
     let card = commands
         .spawn((
             CharacterCard,
+            CardSlot(slot),
             Pickable::default(),
             Node {
                 width: Val::Px(214.0),
-                height: Val::Px(64.0),
+                height: Val::Px(66.0),
+                flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
+                row_gap: Val::Px(7.0),
                 margin: UiRect::all(Val::Px(7.0)),
                 border: UiRect::all(Val::Px(1.0)),
                 border_radius: BorderRadius::all(Val::Px(11.0)),
@@ -279,8 +383,29 @@ fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: 
             ChildOf(container),
         ))
         .id();
+    // ponytail: bevy_ui borders can't be dashed; the plus-ring + dimmer fill carry
+    // the "empty" read instead of the mockup's dashed outline.
+    let ring = commands
+        .spawn((
+            Node {
+                width: Val::Px(32.0),
+                height: Val::Px(32.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(1.5)),
+                border_radius: BorderRadius::all(Val::Px(16.0)),
+                ..default()
+            },
+            BorderColor::all(theme::STROKE_STRONG),
+            ChildOf(card),
+        ))
+        .id();
     commands.spawn((
-        label("+ Create", font, 12.0, theme::TEXT_FAINT),
+        label("+", font.clone(), 19.0, theme::TEXT_FAINT),
+        ChildOf(ring),
+    ));
+    commands.spawn((
+        label("Create", font, 12.0, theme::TEXT_FAINT),
         ChildOf(card),
     ));
 
@@ -292,6 +417,26 @@ fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: 
     );
 }
 
+/// Highlights the selected slot card with an emerald border (mirrors the mockup's
+/// selected state). Runs after a rebuild and whenever the selection changes.
+fn highlight_selected_cards(
+    selected: Res<SelectedSlot>,
+    built: Res<CardsBuilt>,
+    mut cards: Query<(&CardSlot, &mut BorderColor)>,
+) {
+    if !selected.is_changed() && !built.is_changed() {
+        return;
+    }
+    for (slot, mut border) in &mut cards {
+        let color = if slot.0 as usize == selected.0 {
+            theme::EMERALD
+        } else {
+            theme::STROKE
+        };
+        *border = BorderColor::all(color);
+    }
+}
+
 /// Despawns and rebuilds the hero panel content when selection or roster changes.
 #[allow(clippy::too_many_arguments)]
 fn rebuild_hero_panel(
@@ -301,7 +446,7 @@ fn rebuild_hero_panel(
     diorama: Res<CharacterDiorama>,
     selected: Res<SelectedSlot>,
     built: Res<CardsBuilt>,
-    containers: Query<(Entity, &CssID)>,
+    panel: Query<Entity, With<HeroPanel>>,
     existing: Query<Entity, With<HeroContent>>,
 ) {
     if !built.0 {
@@ -310,7 +455,7 @@ fn rebuild_hero_panel(
     if !selected.is_changed() && !built.is_changed() {
         return;
     }
-    let Some((panel, _)) = containers.iter().find(|(_, id)| id.0 == HERO_PANEL_ID) else {
+    let Ok(panel) = panel.single() else {
         return;
     };
     for e in &existing {
@@ -647,16 +792,14 @@ mod tests {
         app.init_resource::<SelectedSlot>();
         app.insert_resource(data);
         app.insert_resource(diorama);
-        app.world_mut().spawn(CssID(GRID_CONTAINER_ID.to_string()));
+        app.world_mut().spawn(CharacterGrid);
         app.add_systems(Update, build_cards);
         app
     }
 
     fn occupied_diorama() -> CharacterDiorama {
-        let mut diorama = CharacterDiorama {
-            target: Some(Handle::default()),
-            ..default()
-        };
+        let mut diorama = CharacterDiorama::default();
+        diorama.target = Some(Handle::default());
         diorama.columns.insert(0, Rect::new(0.0, 0.0, 144.0, 224.0));
         diorama
             .columns
@@ -697,9 +840,16 @@ mod tests {
         let texts = all_texts(&mut app);
         assert!(texts.iter().any(|t| t == "Hero"));
         assert!(texts.iter().any(|t| t == "Mage"));
-        assert!(texts.iter().any(|t| t == "Lv 50"));
         assert!(
-            texts.iter().any(|t| t == "+ Create"),
+            texts.iter().any(|t| t == "Swordman"),
+            "occupied card shows the class name"
+        );
+        assert!(
+            texts.iter().any(|t| t == "Lv 50"),
+            "occupied card shows the level badge"
+        );
+        assert!(
+            texts.iter().any(|t| t == "Create"),
             "empty slot shows create"
         );
         assert!(app.world().resource::<CardsBuilt>().0);

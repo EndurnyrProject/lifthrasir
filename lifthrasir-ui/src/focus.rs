@@ -1,12 +1,17 @@
+use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
-use bevy_extended_ui::widgets::{InputField, UIWidgetState};
+use bevy_ui_text_input::TextInputNode;
 use game_engine::domain::input::UiFocus;
 
-/// Mirrors extended_ui's focused text-input state into the engine's `UiFocus`
-/// so gameplay input is gated while the player is typing in any screen.
+use crate::screens::login::TextField;
+
+/// Mirrors text-input focus into the engine's `UiFocus` so gameplay input is gated
+/// while the player is typing in any screen.
 ///
-/// Shared across every screen that hosts text inputs (login, char-create, chat),
-/// so it is registered once here rather than per-screen.
+/// Two sources: `bevy_ui_text_input` fields track focus through Bevy's `InputFocus`
+/// resource (char-create name, in-game chat), and the login screen's hand-rolled
+/// `TextField`s track it themselves. Registered once here since text inputs live on
+/// several screens.
 pub struct UiFocusMirrorPlugin;
 
 impl Plugin for UiFocusMirrorPlugin {
@@ -17,7 +22,11 @@ impl Plugin for UiFocusMirrorPlugin {
 
 fn mirror_text_input_focus(
     mut focus: ResMut<UiFocus>,
-    inputs: Query<&UIWidgetState, With<InputField>>,
+    input_focus: Res<InputFocus>,
+    crate_inputs: Query<(), With<TextInputNode>>,
+    login_fields: Query<&TextField>,
 ) {
-    focus.text_input_active = inputs.iter().any(|state| state.focused);
+    let crate_active = input_focus.0.is_some_and(|e| crate_inputs.contains(e));
+    let login_active = login_fields.iter().any(|field| field.focused);
+    focus.text_input_active = crate_active || login_active;
 }

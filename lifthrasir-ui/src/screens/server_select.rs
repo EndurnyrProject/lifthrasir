@@ -1,18 +1,12 @@
 //! Server selection screen.
 //!
-//! The static shell (`assets/ui/server_select.html`) is an extended_ui screen with a
-//! `#server-list` container. The rows are too rich for extended_ui's templating, so
-//! they are spawned at runtime as raw `bevy_ui` nodes parented under that container
-//! (one bevy_ui tree — they nest and render fine), styled from [`theme`]. Each row
-//! shows a flag badge, name + server type, online count, a status dot, and a
-//! population bar. Clicking a row writes `ServerSelectedEvent`; the engine connects to
-//! the char server and drives the transition.
+//! A raw `bevy_ui` panel with a server-list container; the rows are spawned at runtime
+//! under it, styled from [`theme`]. Each row shows a flag badge, name + server type,
+//! online count, a status dot, and a population bar. Clicking a row writes
+//! `ServerSelectedEvent`; the engine connects to the char server and drives the
+//! transition.
 
 use bevy::prelude::*;
-use bevy_extended_ui::html::HtmlSource;
-use bevy_extended_ui::io::HtmlAsset;
-use bevy_extended_ui::old::registry::UiRegistry;
-use bevy_extended_ui::styles::CssID;
 use game_engine::core::state::GameState;
 use game_engine::infrastructure::networking::protocol::login::types::ServerInfo;
 use game_engine::infrastructure::networking::session::UserSession;
@@ -75,13 +69,6 @@ fn pop_word(ratio: f32) -> &'static str {
     }
 }
 
-const SERVER_SELECT_UI: &str = "server_select";
-/// `AssetServer` path, relative to `assets/`. CSS `<link>` hrefs inside the HTML
-/// resolve relative to this file's location (so `theme.css` -> `ui/theme.css`).
-const SERVER_SELECT_HTML: &str = "ui/server_select.html";
-/// `id` of the `<div>` that holds the runtime-spawned server rows.
-const SERVER_LIST_CONTAINER_ID: &str = "server-list";
-
 pub struct ServerSelectScreenPlugin;
 
 impl Plugin for ServerSelectScreenPlugin {
@@ -90,10 +77,6 @@ impl Plugin for ServerSelectScreenPlugin {
         app.add_systems(
             OnEnter(GameState::ServerSelection),
             show_server_select_screen,
-        );
-        app.add_systems(
-            OnExit(GameState::ServerSelection),
-            hide_server_select_screen,
         );
         app.add_systems(
             Update,
@@ -111,20 +94,75 @@ struct ServerListPopulated(bool);
 #[derive(Component)]
 struct ServerRow;
 
-#[allow(deprecated)]
+/// Marks the container that holds the runtime-spawned server rows.
+#[derive(Component)]
+struct ServerList;
+
 fn show_server_select_screen(
-    mut registry: ResMut<UiRegistry>,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut populated: ResMut<ServerListPopulated>,
 ) {
     populated.0 = false;
-    let handle: Handle<HtmlAsset> = asset_server.load(SERVER_SELECT_HTML);
-    registry.add_and_use(SERVER_SELECT_UI.into(), HtmlSource::from_handle(handle));
-}
 
-#[allow(deprecated)]
-fn hide_server_select_screen(mut registry: ResMut<UiRegistry>) {
-    registry.remove(SERVER_SELECT_UI);
+    let font_title = asset_server.load(theme::FONT_TITLE);
+
+    let root = commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            DespawnOnExit(GameState::ServerSelection),
+        ))
+        .id();
+
+    let panel = commands
+        .spawn((
+            Node {
+                width: Val::Px(480.0),
+                padding: UiRect::new(Val::ZERO, Val::ZERO, Val::Px(12.0), Val::Px(30.0)),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(16.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS),
+            BorderColor::all(theme::GOLD_FAINT),
+            ChildOf(root),
+        ))
+        .id();
+
+    commands.spawn((
+        Text::new("Select Server"),
+        TextFont {
+            font: font_title,
+            font_size: 25.0,
+            ..default()
+        },
+        TextColor(theme::DISPLAY_GOLD),
+        Node {
+            margin: UiRect::bottom(Val::Px(16.0)),
+            ..default()
+        },
+        Pickable::IGNORE,
+        ChildOf(panel),
+    ));
+
+    commands.spawn((
+        ServerList,
+        Node {
+            width: Val::Px(416.0),
+            flex_direction: FlexDirection::Column,
+            ..default()
+        },
+        ChildOf(panel),
+    ));
 }
 
 fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
@@ -142,14 +180,14 @@ fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -
     )
 }
 
-/// Spawns one rich, clickable server row under `#server-list` once the container
-/// exists. Rows are raw `bevy_ui` (full layout control for the population bar and
-/// alignment), parented under the extended_ui container.
+/// Spawns one rich, clickable server row per server under the list container once the
+/// session's server list is available. Rows are raw `bevy_ui` for full layout control
+/// over the population bar and alignment.
 fn populate_server_list(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut populated: ResMut<ServerListPopulated>,
-    containers: Query<(Entity, &CssID)>,
+    container: Query<Entity, With<ServerList>>,
     session: Option<Res<UserSession>>,
 ) {
     if populated.0 {
@@ -158,10 +196,7 @@ fn populate_server_list(
     let Some(session) = session else {
         return;
     };
-    let Some((container, _)) = containers
-        .iter()
-        .find(|(_, id)| id.0 == SERVER_LIST_CONTAINER_ID)
-    else {
+    let Ok(container) = container.single() else {
         return;
     };
 
@@ -497,8 +532,7 @@ mod tests {
         app.add_message::<ServerSelectedEvent>();
         app.init_resource::<ServerListPopulated>();
         app.insert_resource(session);
-        app.world_mut()
-            .spawn(CssID(SERVER_LIST_CONTAINER_ID.to_string()));
+        app.world_mut().spawn(ServerList);
         app.add_systems(Update, populate_server_list);
         app
     }

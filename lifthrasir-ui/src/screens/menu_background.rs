@@ -14,8 +14,8 @@ impl Plugin for MenuBackgroundPlugin {
     }
 }
 
-/// Full-screen image behind the extended_ui menu screens. The menu roots are
-/// transparent (see the `ui/*.css` screen selectors) so this shows through.
+/// Full-screen image behind the menu screens. The menu roots have transparent
+/// backgrounds so this shows through.
 #[derive(Component)]
 struct MenuBackground;
 

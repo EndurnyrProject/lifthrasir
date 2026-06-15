@@ -43,6 +43,13 @@ impl PendingAnimations {
         std::mem::take(&mut self.completed)
     }
 
+    /// Re-queue completions whose target entity wasn't ready this frame (its
+    /// `PendingRenderLayers` hadn't flushed yet), so they're retried next frame
+    /// instead of being lost.
+    pub fn defer_completed(&mut self, items: Vec<(PendingAnimation, Handle<RoAnimationAsset>)>) {
+        self.completed.extend(items);
+    }
+
     /// Check if there are pending requests.
     pub fn has_pending(&self) -> bool {
         !self.pending.is_empty()

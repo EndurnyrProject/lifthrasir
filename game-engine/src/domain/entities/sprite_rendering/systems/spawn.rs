@@ -212,6 +212,7 @@ pub fn finalize_render_layers(
         ),
         With<PendingRenderLayers>,
     >,
+    alive: Query<Entity>,
     config: Res<SpriteHierarchyConfig>,
     shared_quad: Res<SharedSpriteQuad>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -225,6 +226,12 @@ pub fn finalize_render_layers(
         "finalize_render_layers: Processing {} completed animations",
         completed.len()
     );
+
+    // Completions whose target entity is alive but hasn't had `PendingRenderLayers`
+    // flushed onto it yet (cached-asset case: the animation completes the same frame
+    // the layer is requested, before that deferred component lands). Re-queued for the
+    // next frame rather than dropped — otherwise the sprite would never build.
+    let mut deferred = Vec::new();
 
     for (pending, animation_handle) in completed {
         let Some(callback_entity) = pending.callback_entity else {
@@ -240,10 +247,16 @@ pub fn finalize_render_layers(
         let Ok((entity, maybe_appearance, maybe_player, maybe_mob, mut ro_sprite)) =
             pending_entities.get_mut(callback_entity)
         else {
-            warn!(
-                "finalize_render_layers: Entity {:?} not found in pending_entities query",
-                callback_entity
-            );
+            // Alive but no `PendingRenderLayers` yet -> its components haven't flushed;
+            // retry next frame. Gone (e.g. a rebuilt diorama preview) -> drop.
+            if alive.contains(callback_entity) {
+                deferred.push((pending, animation_handle));
+            } else {
+                warn!(
+                    "finalize_render_layers: Entity {:?} no longer exists, dropping completion",
+                    callback_entity
+                );
+            }
             continue;
         };
 
@@ -306,8 +319,14 @@ pub fn finalize_render_layers(
         );
     }
 
-    for (entity, _, _, _, _) in pending_entities.iter() {
-        if !pending_animations.has_pending() {
+    // Retry next frame for entities that weren't flushed yet.
+    let has_deferred = !deferred.is_empty();
+    pending_animations.defer_completed(deferred);
+
+    // Only clear the pending marker once there's no outstanding work, so an entity
+    // with a re-queued completion keeps `PendingRenderLayers` until it's finalized.
+    if !pending_animations.has_pending() && !has_deferred {
+        for (entity, _, _, _, _) in pending_entities.iter() {
             commands.entity(entity).remove::<PendingRenderLayers>();
         }
     }

@@ -2,12 +2,11 @@
 //!
 //! Reached from an empty slot's "Create" button on the selection screen (which
 //! stashes the chosen [`CreationSlot`] and switches to [`GameState::CharacterCreation`]).
-//! The static shell (`assets/ui/character_create.html`) is an extended_ui screen:
-//! a name `<input>`, prev/next cyclers for hair style and color, a sex toggle, and
-//! Create/Cancel buttons. The cyclers/toggle drive a [`CreationForm`] resource via
-//! `#[html_fn]` handlers; a single live SPR/ACT preview rebuilds from that form
-//! through the in-world billboard path (mirroring [`character_preview`], but for the
-//! character being created rather than the existing roster).
+//! A raw `bevy_ui` form: a name field (`bevy_ui_text_input`), prev/next cyclers for
+//! hair style and color, a sex toggle, and Create/Cancel buttons. The cyclers/toggle
+//! drive a [`CreationForm`] resource through pointer observers; a single live SPR/ACT
+//! preview rebuilds from that form through the in-world billboard path (mirroring
+//! [`character_preview`], but for the character being created).
 //!
 //! Engine ownership: Create writes `CreateCharacterRequestEvent`; on
 //! `CharacterCreatedEvent` the engine refreshes the list and the UI returns to
@@ -17,12 +16,7 @@ use bevy::camera::{
     ClearColorConfig, OrthographicProjection, Projection, RenderTarget, ScalingMode,
 };
 use bevy::prelude::*;
-use bevy_extended_ui::html::{HtmlClick, HtmlSource, HtmlSubmit};
-use bevy_extended_ui::io::HtmlAsset;
-use bevy_extended_ui::old::registry::UiRegistry;
-use bevy_extended_ui::styles::CssID;
-use bevy_extended_ui::widgets::Paragraph;
-use bevy_extended_ui_macros::html_fn;
+use bevy_ui_text_input::{TextInputBuffer, TextInputMode, TextInputNode, TextInputPrompt};
 use game_engine::core::state::GameState;
 use game_engine::domain::character::events::{
     CharacterCreatedEvent, CharacterCreationFailedEvent, CreateCharacterRequestEvent,
@@ -38,10 +32,9 @@ use game_engine::domain::entities::character::events::forward_character_sprite_e
 use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
 
 use crate::screens::character_preview::{create_render_target, COLUMN_PX, ROW_PX};
+use crate::theme;
 
-const CHARACTER_CREATE_UI: &str = "character_create";
-const CHARACTER_CREATE_HTML: &str = "ui/character_create.html";
-const PREVIEW_CONTAINER_ID: &str = "char-preview";
+const NAME_MAX: usize = 16;
 
 // ponytail: hardcoded client hair ranges — the old `GetHairstylesRequestedEvent`
 // source no longer exists in the engine. Widen here if a data-driven range appears.
@@ -66,14 +59,10 @@ impl Plugin for CharacterCreateScreenPlugin {
             OnEnter(GameState::CharacterCreation),
             show_character_create_screen,
         );
-        app.add_systems(
-            OnExit(GameState::CharacterCreation),
-            hide_character_create_screen,
-        );
+        app.add_systems(OnExit(GameState::CharacterCreation), teardown_preview);
         app.add_systems(
             Update,
             (
-                mount_preview_image,
                 reflect_form_values,
                 surface_creation_failure,
                 return_to_character_select,
@@ -103,11 +92,10 @@ pub struct CreationSlot(pub u8);
 #[derive(Resource, Default)]
 struct CreationForm(CharacterCreationForm);
 
-/// The live preview's render target plus one-shot mount/teardown bookkeeping.
+/// The live preview's render target.
 #[derive(Resource, Default)]
 struct CreatePreview {
     target: Option<Handle<Image>>,
-    image_mounted: bool,
 }
 
 /// The single preview character entity (despawned/respawned on every form change).
@@ -118,10 +106,24 @@ struct CreatePreviewCharacter;
 #[derive(Component)]
 struct CreatePreviewCamera;
 
-#[allow(deprecated)]
+/// The name text input.
+#[derive(Component)]
+struct NameField;
+
+/// The `<p>` that surfaces creation failures / validation errors.
+#[derive(Component)]
+struct CreateError;
+
+/// Tags a value text so [`reflect_form_values`] can mirror the matching form field.
+#[derive(Component, Clone, Copy)]
+enum FormValue {
+    HairStyle,
+    HairColor,
+    Sex,
+}
+
 fn show_character_create_screen(
     mut commands: Commands,
-    mut registry: ResMut<UiRegistry>,
     asset_server: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
     mut form: ResMut<CreationForm>,
@@ -129,30 +131,422 @@ fn show_character_create_screen(
 ) {
     *form = CreationForm::default();
 
-    let handle: Handle<HtmlAsset> = asset_server.load(CHARACTER_CREATE_HTML);
-    registry.add_and_use(CHARACTER_CREATE_UI.into(), HtmlSource::from_handle(handle));
-
     let target = images.add(create_render_target(COLUMN_PX, ROW_PX));
     spawn_preview_camera(&mut commands, target.clone());
+
+    let font_body = asset_server.load(theme::FONT_BODY);
+    let font_title = asset_server.load(theme::FONT_TITLE);
+
+    let root = commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            DespawnOnExit(GameState::CharacterCreation),
+        ))
+        .id();
+
+    let head = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(60.0),
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ChildOf(root),
+        ))
+        .id();
+    commands.spawn((
+        label(
+            "Endurnir",
+            font_body.clone(),
+            11.0,
+            theme::GOLD.with_alpha(0.55),
+        ),
+        ChildOf(head),
+    ));
+    commands.spawn((
+        Text::new("Create Character"),
+        TextFont {
+            font: font_title,
+            font_size: 27.0,
+            ..default()
+        },
+        TextColor(theme::DISPLAY_GOLD),
+        Node {
+            margin: UiRect::top(Val::Px(3.0)),
+            ..default()
+        },
+        Pickable::IGNORE,
+        ChildOf(head),
+    ));
+
+    let stage = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                bottom: Val::Px(0.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                padding: UiRect::new(Val::Px(64.0), Val::Px(64.0), Val::Px(128.0), Val::Px(40.0)),
+                ..default()
+            },
+            ChildOf(root),
+        ))
+        .id();
+
+    let preview_panel = commands
+        .spawn((
+            Node {
+                width: Val::Px(384.0),
+                padding: UiRect::all(Val::Px(22.0)),
+                margin: UiRect::right(Val::Px(28.0)),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(16.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS),
+            BorderColor::all(theme::GOLD_FAINT),
+            ChildOf(stage),
+        ))
+        .id();
+    commands.spawn((
+        ImageNode::new(target.clone()),
+        Node {
+            width: Val::Px(COLUMN_PX as f32),
+            height: Val::Px(ROW_PX as f32),
+            ..default()
+        },
+        Pickable::IGNORE,
+        ChildOf(preview_panel),
+    ));
+
+    let form_panel = commands
+        .spawn((
+            Node {
+                width: Val::Px(468.0),
+                padding: UiRect::axes(Val::Px(28.0), Val::Px(26.0)),
+                flex_direction: FlexDirection::Column,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(16.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS),
+            BorderColor::all(theme::STROKE),
+            ChildOf(stage),
+        ))
+        .id();
+
+    commands.spawn((cc_label("NAME", font_body.clone()), ChildOf(form_panel)));
+    let name_box = commands
+        .spawn((
+            Node {
+                height: Val::Px(50.0),
+                align_items: AlignItems::Center,
+                padding: UiRect::horizontal(Val::Px(15.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::STROKE),
+            ChildOf(form_panel),
+        ))
+        .id();
+    commands.spawn((
+        TextInputNode {
+            mode: TextInputMode::SingleLine,
+            max_chars: Some(NAME_MAX),
+            clear_on_submit: false,
+            ..default()
+        },
+        TextInputPrompt::new("Name your hero"),
+        TextFont {
+            font: font_body.clone(),
+            font_size: 15.0,
+            ..default()
+        },
+        TextColor(theme::TEXT),
+        NameField,
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Px(24.0),
+            ..default()
+        },
+        ChildOf(name_box),
+    ));
+
+    spawn_segmented_sex(&mut commands, form_panel, form.0.sex, font_body.clone());
+    spawn_stepper(
+        &mut commands,
+        form_panel,
+        "HAIR STYLE",
+        FormValue::HairStyle,
+        form.0.hair_style,
+        font_body.clone(),
+    );
+    spawn_stepper(
+        &mut commands,
+        form_panel,
+        "HAIR COLOR",
+        FormValue::HairColor,
+        form.0.hair_color,
+        font_body.clone(),
+    );
+
+    commands.spawn((
+        Text::new(""),
+        TextFont {
+            font: font_body.clone(),
+            font_size: 13.0,
+            ..default()
+        },
+        TextColor(theme::BAD),
+        Node {
+            min_height: Val::Px(18.0),
+            margin: UiRect::top(Val::Px(16.0)),
+            ..default()
+        },
+        CreateError,
+        Pickable::IGNORE,
+        ChildOf(form_panel),
+    ));
+
+    let actions = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(12.0),
+                margin: UiRect::top(Val::Px(22.0)),
+                ..default()
+            },
+            ChildOf(form_panel),
+        ))
+        .id();
+    let cancel = commands
+        .spawn((
+            Pickable::default(),
+            Node {
+                height: Val::Px(46.0),
+                flex_basis: Val::Percent(38.0),
+                flex_grow: 0.0,
+                flex_shrink: 0.0,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.03)),
+            BorderColor::all(theme::STROKE),
+            ChildOf(actions),
+        ))
+        .id();
+    commands.spawn((
+        label("Cancel", font_body.clone(), 14.0, theme::TEXT_DIM),
+        ChildOf(cancel),
+    ));
+    commands.entity(cancel).observe(
+        |_: On<Pointer<Click>>, mut next: ResMut<NextState<GameState>>| {
+            next.set(GameState::CharacterSelection);
+        },
+    );
+
+    let create = commands
+        .spawn((
+            Pickable::default(),
+            Node {
+                height: Val::Px(50.0),
+                flex_grow: 1.0,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                ..default()
+            },
+            BackgroundColor(theme::EMERALD),
+            ChildOf(actions),
+        ))
+        .id();
+    commands.spawn((
+        label("Create Hero", font_body, 15.0, theme::EMERALD_INK),
+        ChildOf(create),
+    ));
+    commands.entity(create).observe(create_character);
+
     *preview = CreatePreview {
         target: Some(target),
-        image_mounted: false,
     };
 }
 
-#[allow(deprecated)]
-fn hide_character_create_screen(
-    mut commands: Commands,
-    mut registry: ResMut<UiRegistry>,
-    mut preview: ResMut<CreatePreview>,
-    characters: Query<Entity, With<CreatePreviewCharacter>>,
-    cameras: Query<Entity, With<CreatePreviewCamera>>,
+fn cc_label(text: &str, font: Handle<Font>) -> impl Bundle {
+    (
+        Text::new(text),
+        TextFont {
+            font,
+            font_size: 11.0,
+            ..default()
+        },
+        TextColor(theme::TEXT_DIM),
+        Node {
+            margin: UiRect::new(Val::ZERO, Val::ZERO, Val::Px(18.0), Val::Px(8.0)),
+            ..default()
+        },
+        Pickable::IGNORE,
+    )
+}
+
+fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(text),
+        TextFont {
+            font,
+            font_size: size,
+            ..default()
+        },
+        TextColor(color),
+        Pickable::IGNORE,
+    )
+}
+
+/// The emerald "Sex" toggle: one button whose label cycles Male/Female on click.
+fn spawn_segmented_sex(commands: &mut Commands, parent: Entity, sex: Gender, font: Handle<Font>) {
+    commands.spawn((cc_label("SEX", font.clone()), ChildOf(parent)));
+    let button = commands
+        .spawn((
+            Pickable::default(),
+            Node {
+                height: Val::Px(50.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                ..default()
+            },
+            BackgroundColor(theme::EMERALD),
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((
+        Text::new(sex_label(sex)),
+        TextFont {
+            font,
+            font_size: 15.0,
+            ..default()
+        },
+        TextColor(theme::EMERALD_INK),
+        FormValue::Sex,
+        Pickable::IGNORE,
+        ChildOf(button),
+    ));
+    commands
+        .entity(button)
+        .observe(|_: On<Pointer<Click>>, mut form: ResMut<CreationForm>| {
+            form.0.sex = match form.0.sex {
+                Gender::Male => Gender::Female,
+                Gender::Female => Gender::Male,
+            };
+        });
+}
+
+/// A `‹ value ›` stepper bound to one [`FormValue`] field; prev/next cycle it.
+fn spawn_stepper(
+    commands: &mut Commands,
+    parent: Entity,
+    label_text: &str,
+    kind: FormValue,
+    initial: u16,
+    font: Handle<Font>,
 ) {
-    registry.remove(CHARACTER_CREATE_UI);
-    for entity in characters.iter().chain(&cameras) {
-        commands.entity(entity).despawn();
-    }
-    *preview = CreatePreview::default();
+    commands.spawn((cc_label(label_text, font.clone()), ChildOf(parent)));
+    let stepper = commands
+        .spawn((
+            Node {
+                height: Val::Px(50.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                overflow: Overflow::clip(),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::STROKE),
+            ChildOf(parent),
+        ))
+        .id();
+
+    let prev = spawn_step_button(commands, stepper, "\u{2039}", font.clone());
+    let cell = commands
+        .spawn((
+            Node {
+                flex_grow: 1.0,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(stepper),
+        ))
+        .id();
+    commands.spawn((
+        Text::new(initial.to_string()),
+        TextFont {
+            font: font.clone(),
+            font_size: 16.0,
+            ..default()
+        },
+        TextColor(theme::TEXT),
+        kind,
+        Pickable::IGNORE,
+        ChildOf(cell),
+    ));
+    let next = spawn_step_button(commands, stepper, "\u{203a}", font);
+
+    commands.entity(prev).observe(
+        move |_: On<Pointer<Click>>, mut form: ResMut<CreationForm>| {
+            apply_cycle(&mut form.0, kind, -1);
+        },
+    );
+    commands.entity(next).observe(
+        move |_: On<Pointer<Click>>, mut form: ResMut<CreationForm>| {
+            apply_cycle(&mut form.0, kind, 1);
+        },
+    );
+}
+
+fn spawn_step_button(
+    commands: &mut Commands,
+    parent: Entity,
+    glyph: &str,
+    font: Handle<Font>,
+) -> Entity {
+    let button = commands
+        .spawn((
+            Pickable::default(),
+            Node {
+                width: Val::Px(52.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.025)),
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((label(glyph, font, 17.0, theme::TEXT_DIM), ChildOf(button)));
+    button
 }
 
 fn spawn_preview_camera(commands: &mut Commands, target: Handle<Image>) {
@@ -177,35 +571,18 @@ fn spawn_preview_camera(commands: &mut Commands, target: Handle<Image>) {
     ));
 }
 
-/// Spawns the preview image node under the static container once both the render
-/// target and the (async-built) container entity exist.
-fn mount_preview_image(
+/// Despawns the off-screen preview entity/camera on exit. The UI tree is cleaned up
+/// by its `DespawnOnExit`.
+fn teardown_preview(
     mut commands: Commands,
     mut preview: ResMut<CreatePreview>,
-    containers: Query<(Entity, &CssID)>,
+    characters: Query<Entity, With<CreatePreviewCharacter>>,
+    cameras: Query<Entity, With<CreatePreviewCamera>>,
 ) {
-    if preview.image_mounted {
-        return;
+    for entity in characters.iter().chain(&cameras) {
+        commands.entity(entity).despawn();
     }
-    let Some(target) = preview.target.clone() else {
-        return;
-    };
-    let Some((container, _)) = containers
-        .iter()
-        .find(|(_, id)| id.0 == PREVIEW_CONTAINER_ID)
-    else {
-        return;
-    };
-    commands.spawn((
-        ImageNode::new(target),
-        Node {
-            width: Val::Px(COLUMN_PX as f32),
-            height: Val::Px(ROW_PX as f32),
-            ..default()
-        },
-        ChildOf(container),
-    ));
-    preview.image_mounted = true;
+    *preview = CreatePreview::default();
 }
 
 /// Rebuilds the preview character from the current form whenever it changes (and on
@@ -263,25 +640,24 @@ fn preview_components(form: &CharacterCreationForm) -> (CharacterData, Character
     )
 }
 
-/// Mirrors the form's current values into the cycler value paragraphs.
-fn reflect_form_values(form: Res<CreationForm>, mut values: Query<(&mut Paragraph, &CssID)>) {
+/// Mirrors the form's current values into the stepper/segment value texts.
+fn reflect_form_values(form: Res<CreationForm>, mut values: Query<(&mut Text, &FormValue)>) {
     if !form.is_changed() {
         return;
     }
-    for (mut paragraph, id) in &mut values {
-        let text = match id.0.as_str() {
-            "hair-style-value" => form.0.hair_style.to_string(),
-            "hair-color-value" => form.0.hair_color.to_string(),
-            "sex-value" => sex_label(form.0.sex).to_string(),
-            _ => continue,
+    for (mut text, kind) in &mut values {
+        let value = match kind {
+            FormValue::HairStyle => form.0.hair_style.to_string(),
+            FormValue::HairColor => form.0.hair_color.to_string(),
+            FormValue::Sex => sex_label(form.0.sex).to_string(),
         };
-        paragraph.text = text;
+        *text = Text::new(value);
     }
 }
 
 fn surface_creation_failure(
     mut failures: MessageReader<CharacterCreationFailedEvent>,
-    mut errors: Query<(&mut Paragraph, &CssID)>,
+    mut errors: Query<&mut Text, With<CreateError>>,
 ) {
     let Some(failure) = failures.read().last() else {
         return;
@@ -295,6 +671,33 @@ fn return_to_character_select(
 ) {
     if events.read().next().is_some() {
         next.set(GameState::CharacterSelection);
+    }
+}
+
+fn create_character(
+    _click: On<Pointer<Click>>,
+    form: Res<CreationForm>,
+    slot: Res<CreationSlot>,
+    names: Query<&TextInputBuffer, With<NameField>>,
+    mut writer: MessageWriter<CreateCharacterRequestEvent>,
+    mut errors: Query<&mut Text, With<CreateError>>,
+) {
+    let Ok(buffer) = names.single() else {
+        return;
+    };
+    let submitted = submitted_form(&form.0, buffer.get_text(), slot.0);
+    match submitted.validate() {
+        Ok(()) => {
+            set_error(&mut errors, "");
+            writer.write(CreateCharacterRequestEvent { form: submitted });
+        }
+        Err(error) => set_error(&mut errors, &error.to_string()),
+    }
+}
+
+fn set_error(errors: &mut Query<&mut Text, With<CreateError>>, text: &str) {
+    for mut error in errors.iter_mut() {
+        *error = Text::new(text);
     }
 }
 
@@ -312,6 +715,18 @@ fn cycle(value: u16, delta: i32, min: u16, max: u16) -> u16 {
     (min as i32 + pos) as u16
 }
 
+fn apply_cycle(form: &mut CharacterCreationForm, kind: FormValue, delta: i32) {
+    match kind {
+        FormValue::HairStyle => {
+            form.hair_style = cycle(form.hair_style, delta, HAIR_STYLE_MIN, HAIR_STYLE_MAX)
+        }
+        FormValue::HairColor => {
+            form.hair_color = cycle(form.hair_color, delta, HAIR_COLOR_MIN, HAIR_COLOR_MAX)
+        }
+        FormValue::Sex => {}
+    }
+}
+
 /// Builds the submitted form from the in-progress appearance, the name field, and slot.
 fn submitted_form(base: &CharacterCreationForm, name: String, slot: u8) -> CharacterCreationForm {
     CharacterCreationForm {
@@ -319,66 +734,6 @@ fn submitted_form(base: &CharacterCreationForm, name: String, slot: u8) -> Chara
         slot,
         ..base.clone()
     }
-}
-
-fn set_error(errors: &mut Query<(&mut Paragraph, &CssID)>, text: &str) {
-    for (mut paragraph, id) in errors.iter_mut() {
-        if id.0 == "create-error" {
-            paragraph.text = text.to_string();
-        }
-    }
-}
-
-#[html_fn("create_character")]
-fn create_character(
-    In(event): In<HtmlSubmit>,
-    form: Res<CreationForm>,
-    slot: Res<CreationSlot>,
-    mut writer: MessageWriter<CreateCharacterRequestEvent>,
-    mut errors: Query<(&mut Paragraph, &CssID)>,
-) {
-    let name = event.data.get("name").cloned().unwrap_or_default();
-    let form = submitted_form(&form.0, name, slot.0);
-    match form.validate() {
-        Ok(()) => {
-            set_error(&mut errors, "");
-            writer.write(CreateCharacterRequestEvent { form });
-        }
-        Err(error) => set_error(&mut errors, &error.to_string()),
-    }
-}
-
-#[html_fn("cancel_creation")]
-fn cancel_creation(In(_event): In<HtmlClick>, mut next: ResMut<NextState<GameState>>) {
-    next.set(GameState::CharacterSelection);
-}
-
-#[html_fn("hair_style_prev")]
-fn hair_style_prev(In(_event): In<HtmlClick>, mut form: ResMut<CreationForm>) {
-    form.0.hair_style = cycle(form.0.hair_style, -1, HAIR_STYLE_MIN, HAIR_STYLE_MAX);
-}
-
-#[html_fn("hair_style_next")]
-fn hair_style_next(In(_event): In<HtmlClick>, mut form: ResMut<CreationForm>) {
-    form.0.hair_style = cycle(form.0.hair_style, 1, HAIR_STYLE_MIN, HAIR_STYLE_MAX);
-}
-
-#[html_fn("hair_color_prev")]
-fn hair_color_prev(In(_event): In<HtmlClick>, mut form: ResMut<CreationForm>) {
-    form.0.hair_color = cycle(form.0.hair_color, -1, HAIR_COLOR_MIN, HAIR_COLOR_MAX);
-}
-
-#[html_fn("hair_color_next")]
-fn hair_color_next(In(_event): In<HtmlClick>, mut form: ResMut<CreationForm>) {
-    form.0.hair_color = cycle(form.0.hair_color, 1, HAIR_COLOR_MIN, HAIR_COLOR_MAX);
-}
-
-#[html_fn("toggle_sex")]
-fn toggle_sex(In(_event): In<HtmlClick>, mut form: ResMut<CreationForm>) {
-    form.0.sex = match form.0.sex {
-        Gender::Male => Gender::Female,
-        Gender::Female => Gender::Male,
-    };
 }
 
 #[cfg(test)]
@@ -401,6 +756,21 @@ mod tests {
             cycle(HAIR_COLOR_MIN, -1, HAIR_COLOR_MIN, HAIR_COLOR_MAX),
             HAIR_COLOR_MAX
         );
+    }
+
+    #[test]
+    fn apply_cycle_only_moves_the_named_field() {
+        let mut form = CharacterCreationForm {
+            hair_style: 3,
+            hair_color: 2,
+            ..default()
+        };
+        apply_cycle(&mut form, FormValue::HairStyle, 1);
+        assert_eq!(form.hair_style, 4);
+        assert_eq!(form.hair_color, 2);
+        apply_cycle(&mut form, FormValue::HairColor, -1);
+        assert_eq!(form.hair_color, 1);
+        assert_eq!(form.hair_style, 4);
     }
 
     #[test]

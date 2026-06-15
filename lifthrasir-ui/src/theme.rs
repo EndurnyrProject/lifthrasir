@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-// Endurnir palette — mirror of assets/ui/theme.css :root. Keep both in sync.
+// Endurnir palette — the single source of truth for UI colors (raw bevy_ui).
 pub const GLASS: Color = Color::srgba(0.063, 0.086, 0.078, 0.80);
 pub const GLASS_2: Color = Color::srgba(0.086, 0.118, 0.106, 0.72);
 pub const FIELD: Color = Color::srgba(0.031, 0.047, 0.043, 0.66);
@@ -45,8 +45,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn emerald_matches_css_hex() {
-        // #2fd27a — must equal assets/ui/theme.css --emerald.
+    fn emerald_is_brand_hex() {
+        // #2fd27a — the Endurnir emerald.
         assert_eq!(EMERALD, Color::srgb_u8(0x2f, 0xd2, 0x7a));
     }
 

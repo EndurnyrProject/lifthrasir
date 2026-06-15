@@ -1,11 +1,10 @@
 //! Character-info panel: name, job, base/job level, and HP/SP bars for the local
-//! player. Reflects the `LocalPlayer`'s `CharacterStatus`/`CharacterData` into the
-//! HUD elements by `CssID`, writing only when a value actually changed so we don't
-//! churn `Changed<Paragraph>`/`Changed<ProgressBar>` every frame.
+//! player. Built as raw `bevy_ui` by [`spawn_status_frame`] (called from the HUD
+//! root); [`update_character_info`] reflects the `LocalPlayer`'s status into the
+//! marked elements, writing only when a value actually changed so it doesn't churn
+//! change detection every frame.
 
 use bevy::prelude::*;
-use bevy_extended_ui::styles::CssID;
-use bevy_extended_ui::widgets::{Paragraph, ProgressBar};
 use game_engine::core::state::GameState;
 use game_engine::domain::entities::character::components::core::CharacterData;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
@@ -13,13 +12,24 @@ use game_engine::domain::entities::components::EntityName;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
 
-const NAME_ID: &str = "char-name";
-const JOB_ID: &str = "char-job";
-const LEVEL_ID: &str = "char-level";
-const HP_TEXT_ID: &str = "hp-text";
-const SP_TEXT_ID: &str = "sp-text";
-const HP_BAR_ID: &str = "hp-bar";
-const SP_BAR_ID: &str = "sp-bar";
+use crate::theme;
+
+/// Tags a text element so [`update_character_info`] can write the matching value.
+#[derive(Component, Clone, Copy)]
+enum HudText {
+    Name,
+    Job,
+    Level,
+    Hp,
+    Sp,
+}
+
+/// Tags a bar fill node so its width tracks the matching ratio.
+#[derive(Component, Clone, Copy)]
+enum HudBar {
+    Hp,
+    Sp,
+}
 
 pub struct CharacterInfoPlugin;
 
@@ -32,7 +42,201 @@ impl Plugin for CharacterInfoPlugin {
     }
 }
 
-/// `current/max` as a 0..=100 percentage (extended_ui `ProgressBar` range).
+/// Builds the status frame under `parent`. Pickable-ignored throughout so clicks
+/// pass through to the world behind it.
+pub fn spawn_status_frame(commands: &mut Commands, parent: Entity, asset_server: &AssetServer) {
+    let font_title = asset_server.load(theme::FONT_TITLE);
+    let font_body = asset_server.load(theme::FONT_BODY);
+
+    let frame = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(16.0),
+                left: Val::Px(16.0),
+                width: Val::Px(286.0),
+                padding: UiRect::axes(Val::Px(14.0), Val::Px(13.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(12.0),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(13.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.043, 0.067, 0.059, 0.93)),
+            BorderColor::all(theme::GOLD_FAINT),
+            Pickable::IGNORE,
+            ChildOf(parent),
+        ))
+        .id();
+
+    let top = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(frame),
+        ))
+        .id();
+    commands.spawn((
+        Text::new(""),
+        TextFont {
+            font: font_title,
+            font_size: 18.0,
+            ..default()
+        },
+        TextColor(theme::EMERALD_BRI),
+        HudText::Name,
+        Pickable::IGNORE,
+        ChildOf(top),
+    ));
+    let id_row = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(8.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(top),
+        ))
+        .id();
+    commands.spawn((
+        text(font_body.clone(), 11.5, theme::GOLD),
+        HudText::Job,
+        ChildOf(id_row),
+    ));
+    commands.spawn((
+        text(font_body.clone(), 10.5, theme::TEXT_FAINT),
+        HudText::Level,
+        ChildOf(id_row),
+    ));
+
+    let bars = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(7.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(frame),
+        ))
+        .id();
+    spawn_bar(
+        commands,
+        bars,
+        "HP",
+        HudBar::Hp,
+        theme::EMERALD_BRI,
+        font_body.clone(),
+    );
+    spawn_bar(
+        commands,
+        bars,
+        "SP",
+        HudBar::Sp,
+        theme::MANA_BLUE,
+        font_body,
+    );
+}
+
+fn spawn_bar(
+    commands: &mut Commands,
+    parent: Entity,
+    tag: &str,
+    kind: HudBar,
+    fill_color: Color,
+    font: Handle<Font>,
+) {
+    let bar = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(9.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((
+        Text::new(tag),
+        TextFont {
+            font: font.clone(),
+            font_size: 9.5,
+            ..default()
+        },
+        TextColor(theme::TEXT_FAINT),
+        Node {
+            width: Val::Px(24.0),
+            ..default()
+        },
+        Pickable::IGNORE,
+        ChildOf(bar),
+    ));
+    let track = commands
+        .spawn((
+            Node {
+                flex_grow: 1.0,
+                height: Val::Px(11.0),
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                overflow: Overflow::clip(),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.07)),
+            Pickable::IGNORE,
+            ChildOf(bar),
+        ))
+        .id();
+    commands.spawn((
+        Node {
+            width: Val::Percent(0.0),
+            height: Val::Percent(100.0),
+            border_radius: BorderRadius::all(Val::Px(6.0)),
+            ..default()
+        },
+        BackgroundColor(fill_color),
+        kind,
+        Pickable::IGNORE,
+        ChildOf(track),
+    ));
+    commands.spawn((
+        text(font, 11.0, theme::TEXT_DIM),
+        HudText::matching(kind),
+        Node {
+            min_width: Val::Px(56.0),
+            ..default()
+        },
+        ChildOf(bar),
+    ));
+}
+
+impl HudText {
+    fn matching(bar: HudBar) -> Self {
+        match bar {
+            HudBar::Hp => HudText::Hp,
+            HudBar::Sp => HudText::Sp,
+        }
+    }
+}
+
+fn text(font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(""),
+        TextFont {
+            font,
+            font_size: size,
+            ..default()
+        },
+        TextColor(color),
+        Pickable::IGNORE,
+    )
+}
+
+/// `current/max` as a 0..=100 percentage for the fill node's width.
 fn percentage(current: u32, max: u32) -> f32 {
     if max == 0 {
         0.0
@@ -41,27 +245,11 @@ fn percentage(current: u32, max: u32) -> f32 {
     }
 }
 
-fn set_text(texts: &mut Query<(&mut Paragraph, &CssID)>, id: &str, value: &str) {
-    for (mut paragraph, css_id) in texts.iter_mut() {
-        if css_id.0 == id && paragraph.text != value {
-            paragraph.text = value.to_string();
-        }
-    }
-}
-
-fn set_bar(bars: &mut Query<(&mut ProgressBar, &CssID)>, id: &str, value: f32) {
-    for (mut bar, css_id) in bars.iter_mut() {
-        if css_id.0 == id && (bar.value - value).abs() > f32::EPSILON {
-            bar.value = value;
-        }
-    }
-}
-
 fn update_character_info(
     player: Query<(&CharacterStatus, &CharacterData, Option<&EntityName>), With<LocalPlayer>>,
     job_registry: Option<Res<JobSpriteRegistry>>,
-    mut texts: Query<(&mut Paragraph, &CssID)>,
-    mut bars: Query<(&mut ProgressBar, &CssID)>,
+    mut texts: Query<(&mut Text, &HudText)>,
+    mut bars: Query<(&mut Node, &HudBar)>,
 ) {
     let Ok((status, data, entity_name)) = player.single() else {
         return;
@@ -75,28 +263,31 @@ fn update_character_info(
         .and_then(|registry| registry.get_display_name(data.job_id as u32))
         .unwrap_or("Unknown");
 
-    set_text(&mut texts, NAME_ID, &name);
-    set_text(&mut texts, JOB_ID, job_name);
-    set_text(
-        &mut texts,
-        LEVEL_ID,
-        &format!(
-            "Base Lv. {} / Job Lv. {}",
-            status.base_level, status.job_level
-        ),
-    );
-    set_text(
-        &mut texts,
-        HP_TEXT_ID,
-        &format!("HP {} / {}", status.hp, status.max_hp),
-    );
-    set_text(
-        &mut texts,
-        SP_TEXT_ID,
-        &format!("SP {} / {}", status.sp, status.max_sp),
-    );
-    set_bar(&mut bars, HP_BAR_ID, percentage(status.hp, status.max_hp));
-    set_bar(&mut bars, SP_BAR_ID, percentage(status.sp, status.max_sp));
+    for (mut text, kind) in &mut texts {
+        let value = match kind {
+            HudText::Name => name.clone(),
+            HudText::Job => job_name.to_string(),
+            HudText::Level => format!(
+                "Base Lv. {} / Job Lv. {}",
+                status.base_level, status.job_level
+            ),
+            HudText::Hp => format!("HP {} / {}", status.hp, status.max_hp),
+            HudText::Sp => format!("SP {} / {}", status.sp, status.max_sp),
+        };
+        if text.0 != value {
+            *text = Text::new(value);
+        }
+    }
+
+    for (mut node, kind) in &mut bars {
+        let width = match kind {
+            HudBar::Hp => Val::Percent(percentage(status.hp, status.max_hp)),
+            HudBar::Sp => Val::Percent(percentage(status.sp, status.max_sp)),
+        };
+        if node.width != width {
+            node.width = width;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -116,10 +307,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
 
-        let bar = app
-            .world_mut()
-            .spawn((ProgressBar::default(), CssID(HP_BAR_ID.to_string())))
-            .id();
+        let fill = app.world_mut().spawn((Node::default(), HudBar::Hp)).id();
 
         app.world_mut().spawn((
             CharacterStatus {
@@ -141,7 +329,7 @@ mod tests {
         app.add_systems(Update, update_character_info);
         app.update();
 
-        let value = app.world().get::<ProgressBar>(bar).unwrap().value;
-        assert_eq!(value, 50.0);
+        let width = app.world().get::<Node>(fill).unwrap().width;
+        assert_eq!(width, Val::Percent(50.0));
     }
 }
