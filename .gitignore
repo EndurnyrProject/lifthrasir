@@ -36,7 +36,8 @@ setup.log
 _opam/
 
 # GRF
-*.grf
+en.grf
+data.grf
 
 # Reference
 robrowser-src
