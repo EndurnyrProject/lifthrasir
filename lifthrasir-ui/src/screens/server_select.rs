@@ -3,9 +3,8 @@ use bevy_extended_ui::html::HtmlSource;
 use bevy_extended_ui::io::HtmlAsset;
 use bevy_extended_ui::old::registry::UiRegistry;
 use bevy_extended_ui::styles::{CssClass, CssID, CssSource};
-use bevy_extended_ui::widgets::Button;
+use bevy_extended_ui::widgets::{Div, Paragraph};
 use game_engine::core::state::GameState;
-use game_engine::infrastructure::networking::protocol::login::types::ServerInfo;
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::ServerSelectedEvent;
 
@@ -44,13 +43,22 @@ fn status_class(status: ServerStatus) -> &'static str {
     }
 }
 
+/// Display label for a server status pill.
+fn status_label(status: ServerStatus) -> &'static str {
+    match status {
+        ServerStatus::Online => "Online",
+        ServerStatus::High => "Busy",
+        ServerStatus::Full => "Full",
+    }
+}
+
 const SERVER_SELECT_UI: &str = "server_select";
 /// `AssetServer` path, relative to `assets/`. CSS `<link>` hrefs inside the HTML
 /// resolve relative to this file's location (so `theme.css` -> `ui/theme.css`).
 const SERVER_SELECT_HTML: &str = "ui/server_select.html";
 /// `id` of the `<div>` that holds the runtime-spawned server rows.
 const SERVER_LIST_CONTAINER_ID: &str = "server-list";
-/// CSS class applied to each spawned server-row button.
+/// CSS class applied to each spawned server-row div.
 const SERVER_ROW_CLASS: &str = "server-row";
 
 pub struct ServerSelectScreenPlugin;
@@ -75,7 +83,7 @@ impl Plugin for ServerSelectScreenPlugin {
 
 /// Guards the one-shot server-row spawn. extended_ui's list widgets build their
 /// option children once and never rebuild, so the dynamic server list is built by
-/// spawning `Button` entities under the template's container instead. Reset on
+/// spawning `Div` entities under the template's container instead. Reset on
 /// every screen entry so re-entering `ServerSelection` repopulates a fresh tree.
 #[derive(Resource, Default)]
 struct ServerListPopulated(bool);
@@ -96,17 +104,14 @@ fn hide_server_select_screen(mut registry: ResMut<UiRegistry>) {
     registry.remove(SERVER_SELECT_UI);
 }
 
-/// Display label for a server row: name plus its current population.
-fn format_server_label(server: &ServerInfo) -> String {
-    format!("{} ({} online)", server.name, server.users)
-}
-
-/// Spawns one clickable `Button` per server under the template's `#server-list`
-/// container, once the container exists. The container's `CssSource` is cloned onto
-/// each button so the stylesheet (`.server-row`) applies via `css_service`. Each
-/// button carries a Bevy click observer that emits the engine's `ServerSelectedEvent`
-/// for its server; the engine connects to the char server and drives the state
-/// transition, so no UI-side transition is needed here.
+/// Spawns one clickable `Div` row per server under the template's `#server-list`
+/// container, once the container exists. Each row holds three `Paragraph` children
+/// (name, population, status). Because Paragraph's click observer stops propagation,
+/// the `ServerSelectedEvent` observer is attached to every child so clicks on any
+/// part of the row fire it.
+///
+/// `Div` is used instead of `Button` because `Button` spawns its own internal text
+/// child and its click observer stops propagation before our observer can run.
 fn populate_server_list(
     mut commands: Commands,
     mut populated: ResMut<ServerListPopulated>,
@@ -130,22 +135,52 @@ fn populate_server_list(
     commands.entity(container).with_children(|parent| {
         for server in session.server_list.iter() {
             let server = server.clone();
-            parent
-                .spawn((
-                    Button {
-                        text: format_server_label(&server),
-                        ..default()
-                    },
-                    CssClass(vec![SERVER_ROW_CLASS.to_string()]),
+            let ratio = fill_ratio(server.users);
+            let status = server_status(ratio);
+            let pop_label = format!("{} online", server.users);
+
+            let mut row = parent.spawn((
+                Div::default(),
+                CssClass(vec![SERVER_ROW_CLASS.to_string()]),
+                css_source.clone(),
+            ));
+            row.with_children(|r| {
+                let s = server.clone();
+                r.spawn((
+                    Paragraph { text: server.name.clone(), ..default() },
+                    CssClass(vec!["row-name".to_string()]),
                     css_source.clone(),
                 ))
                 .observe(
                     move |_: On<Pointer<Click>>, mut writer: MessageWriter<ServerSelectedEvent>| {
-                        writer.write(ServerSelectedEvent {
-                            server: server.clone(),
-                        });
+                        writer.write(ServerSelectedEvent { server: s.clone() });
                     },
                 );
+
+                let s = server.clone();
+                r.spawn((
+                    Paragraph { text: pop_label.clone(), ..default() },
+                    CssClass(vec!["row-pop".to_string()]),
+                    css_source.clone(),
+                ))
+                .observe(
+                    move |_: On<Pointer<Click>>, mut writer: MessageWriter<ServerSelectedEvent>| {
+                        writer.write(ServerSelectedEvent { server: s.clone() });
+                    },
+                );
+
+                let s = server.clone();
+                r.spawn((
+                    Paragraph { text: status_label(status).to_string(), ..default() },
+                    CssClass(vec!["row-status".to_string(), status_class(status).to_string()]),
+                    css_source.clone(),
+                ))
+                .observe(
+                    move |_: On<Pointer<Click>>, mut writer: MessageWriter<ServerSelectedEvent>| {
+                        writer.write(ServerSelectedEvent { server: s.clone() });
+                    },
+                );
+            });
         }
     });
 
@@ -155,7 +190,7 @@ fn populate_server_list(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::infrastructure::networking::protocol::login::types::ServerType;
+    use game_engine::infrastructure::networking::protocol::login::types::{ServerInfo, ServerType};
     use game_engine::infrastructure::networking::session::SessionTokens;
 
     #[test]
@@ -177,6 +212,13 @@ mod tests {
         assert_eq!(status_class(ServerStatus::Online), "st-online");
         assert_eq!(status_class(ServerStatus::High), "st-high");
         assert_eq!(status_class(ServerStatus::Full), "st-full");
+    }
+
+    #[test]
+    fn status_label_maps_each_variant() {
+        assert_eq!(status_label(ServerStatus::Online), "Online");
+        assert_eq!(status_label(ServerStatus::High), "Busy");
+        assert_eq!(status_label(ServerStatus::Full), "Full");
     }
 
     fn server(name: &str, users: u16) -> ServerInfo {
@@ -208,58 +250,37 @@ mod tests {
     }
 
     #[test]
-    fn label_includes_name_and_population() {
-        assert_eq!(
-            format_server_label(&server("Valhalla", 1234)),
-            "Valhalla (1234 online)"
-        );
-    }
-
-    #[test]
-    fn label_handles_empty_server() {
-        assert_eq!(
-            format_server_label(&server("Asgard", 0)),
-            "Asgard (0 online)"
-        );
-    }
-
-    #[test]
-    fn populate_spawns_one_styled_button_per_server() {
+    fn populate_spawns_one_row_per_server() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.add_message::<ServerSelectedEvent>();
         app.init_resource::<ServerListPopulated>();
-        app.insert_resource(user_session(vec![
-            server("Valhalla", 7),
-            server("Asgard", 3),
-        ]));
+        app.insert_resource(user_session(vec![server("Valhalla", 7), server("Asgard", 3)]));
         app.add_systems(Update, populate_server_list);
 
         let container = app
             .world_mut()
-            .spawn((
-                CssID(SERVER_LIST_CONTAINER_ID.to_string()),
-                CssSource::default(),
-            ))
+            .spawn((CssID(SERVER_LIST_CONTAINER_ID.to_string()), CssSource::default()))
             .id();
 
         app.update();
 
         let world = app.world_mut();
-        let mut rows: Vec<(String, Vec<String>)> = world
-            .query::<(&Button, &ChildOf, &CssClass)>()
+        let row_count = world
+            .query::<(&Div, &ChildOf)>()
             .iter(world)
-            .filter(|(_, parent, _)| parent.parent() == container)
-            .map(|(button, _, class)| (button.text.clone(), class.0.clone()))
-            .collect();
-        rows.sort();
+            .filter(|(_, parent)| parent.parent() == container)
+            .count();
+        assert_eq!(row_count, 2);
 
-        assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].0, "Asgard (3 online)");
-        assert_eq!(rows[1].0, "Valhalla (7 online)");
-        assert!(rows
-            .iter()
-            .all(|(_, class)| class.contains(&SERVER_ROW_CLASS.to_string())));
+        let names: Vec<String> = world
+            .query::<(&Paragraph, &CssClass)>()
+            .iter(world)
+            .filter(|(_, class)| class.0.contains(&"row-name".to_string()))
+            .map(|(p, _)| p.text.clone())
+            .collect();
+        assert!(names.iter().any(|n| n == "Valhalla"));
+        assert!(names.iter().any(|n| n == "Asgard"));
         assert!(world.resource::<ServerListPopulated>().0);
     }
 
@@ -282,7 +303,7 @@ mod tests {
         app.update();
 
         let world = app.world_mut();
-        let count = world.query::<&Button>().iter(world).count();
+        let count = world.query::<&Div>().iter(world).count();
         assert_eq!(count, 1);
     }
 }
