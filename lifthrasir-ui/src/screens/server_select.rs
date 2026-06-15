@@ -136,6 +136,9 @@ fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -
             ..default()
         },
         TextColor(color),
+        // Children don't participate in picking so the whole row is one clean hover
+        // target (no flicker moving between children, no blocking the row).
+        Pickable::IGNORE,
     )
 }
 
@@ -226,6 +229,24 @@ fn spawn_server_row(
             });
         },
     );
+    // Green border on hover (children are Pickable::IGNORE, so the row is the single
+    // hover target — Over/Out fire once for the whole row).
+    commands
+        .entity(row)
+        .observe(
+            move |_: On<Pointer<Over>>, mut borders: Query<&mut BorderColor>| {
+                if let Ok(mut border) = borders.get_mut(row) {
+                    *border = BorderColor::all(theme::EMERALD);
+                }
+            },
+        )
+        .observe(
+            move |_: On<Pointer<Out>>, mut borders: Query<&mut BorderColor>| {
+                if let Ok(mut border) = borders.get_mut(row) {
+                    *border = BorderColor::all(theme::STROKE);
+                }
+            },
+        );
 
     // ---- top sub-row: id (left) + meta (right) ----
     let top = commands
@@ -237,6 +258,7 @@ fn spawn_server_row(
                 align_items: AlignItems::Center,
                 ..default()
             },
+            Pickable::IGNORE,
             ChildOf(row),
         ))
         .id();
@@ -249,6 +271,7 @@ fn spawn_server_row(
                 column_gap: Val::Px(11.0),
                 ..default()
             },
+            Pickable::IGNORE,
             ChildOf(top),
         ))
         .id();
@@ -265,6 +288,7 @@ fn spawn_server_row(
             },
             BackgroundColor(theme::GLASS),
             BorderColor::all(theme::GOLD_FAINT),
+            Pickable::IGNORE,
             ChildOf(id_group),
         ))
         .id();
@@ -280,6 +304,7 @@ fn spawn_server_row(
                 row_gap: Val::Px(2.0),
                 ..default()
             },
+            Pickable::IGNORE,
             ChildOf(id_group),
         ))
         .id();
@@ -300,6 +325,7 @@ fn spawn_server_row(
                 column_gap: Val::Px(16.0),
                 ..default()
             },
+            Pickable::IGNORE,
             ChildOf(top),
         ))
         .id();
@@ -311,6 +337,7 @@ fn spawn_server_row(
                 row_gap: Val::Px(2.0),
                 ..default()
             },
+            Pickable::IGNORE,
             ChildOf(meta),
         ))
         .id();
@@ -336,6 +363,7 @@ fn spawn_server_row(
                 column_gap: Val::Px(7.0),
                 ..default()
             },
+            Pickable::IGNORE,
             ChildOf(meta),
         ))
         .id();
@@ -347,6 +375,7 @@ fn spawn_server_row(
             ..default()
         },
         BackgroundColor(color),
+        Pickable::IGNORE,
         ChildOf(status_group),
     ));
     commands.spawn((
@@ -364,6 +393,7 @@ fn spawn_server_row(
                 column_gap: Val::Px(10.0),
                 ..default()
             },
+            Pickable::IGNORE,
             ChildOf(row),
         ))
         .id();
@@ -377,6 +407,7 @@ fn spawn_server_row(
                 ..default()
             },
             BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.07)),
+            Pickable::IGNORE,
             ChildOf(bar),
         ))
         .id();
@@ -388,6 +419,7 @@ fn spawn_server_row(
             ..default()
         },
         BackgroundColor(color),
+        Pickable::IGNORE,
         ChildOf(track),
     ));
     commands.spawn((
