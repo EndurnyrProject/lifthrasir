@@ -19,6 +19,11 @@ use crate::theme;
 const MAX_CHAT_LINES: usize = 100;
 const CHAT_MAX_CHARS: usize = 255;
 
+const TAB_ACTIVE_BG: Color = Color::srgba(1.0, 1.0, 1.0, 0.05);
+const PILL_BG: Color = Color::srgba(0.184, 0.824, 0.478, 0.14);
+const PILL_BORDER: Color = Color::srgba(0.184, 0.824, 0.478, 0.30);
+const INPUT_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.34);
+
 /// The chat history text element.
 #[derive(Component)]
 struct ChatHistory;
@@ -53,6 +58,7 @@ pub fn spawn_chat_box(commands: &mut Commands, parent: Entity, asset_server: &As
                 flex_direction: FlexDirection::Column,
                 border: UiRect::all(Val::Px(1.0)),
                 border_radius: BorderRadius::all(Val::Px(13.0)),
+                overflow: Overflow::clip(),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.043, 0.067, 0.059, 0.93)),
@@ -62,17 +68,28 @@ pub fn spawn_chat_box(commands: &mut Commands, parent: Entity, asset_server: &As
         ))
         .id();
 
+    spawn_tabs(commands, chat_box, font.clone());
+
     // Column pinned to the bottom + clipped overflow keeps the newest lines visible
-    // (older ones scroll off the top) without a scrollbar widget.
+    // (older ones scroll off the top) without a scrollbar widget. The top hairline
+    // separates the log from the tab strip.
     let scroll = commands
         .spawn((
             Node {
                 height: Val::Px(140.0),
+                margin: UiRect::horizontal(Val::Px(6.0)),
                 padding: UiRect::axes(Val::Px(13.0), Val::Px(10.0)),
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::FlexEnd,
+                border: UiRect::top(Val::Px(1.0)),
                 overflow: Overflow::clip(),
                 ..default()
+            },
+            BorderColor {
+                top: theme::STROKE,
+                right: Color::NONE,
+                bottom: Color::NONE,
+                left: Color::NONE,
             },
             Pickable::IGNORE,
             ChildOf(chat_box),
@@ -91,16 +108,170 @@ pub fn spawn_chat_box(commands: &mut Commands, parent: Entity, asset_server: &As
         ChildOf(scroll),
     ));
 
-    let form = commands
+    spawn_input(commands, chat_box, font);
+}
+
+/// Static channel tabs (visual only — switching is not wired up yet). The first
+/// tab is the active one; "Party" carries a gold ping dot.
+fn spawn_tabs(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
+    let tabs = commands
         .spawn((
             Node {
-                padding: UiRect::all(Val::Px(8.0)),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(2.0),
+                padding: UiRect {
+                    top: Val::Px(7.0),
+                    left: Val::Px(8.0),
+                    right: Val::Px(8.0),
+                    bottom: Val::Px(0.0),
+                },
                 ..default()
             },
             Pickable::IGNORE,
             ChildOf(chat_box),
         ))
         .id();
+    chat_tab(commands, tabs, "All", true, false, font.clone());
+    chat_tab(commands, tabs, "Party", false, true, font.clone());
+    chat_tab(commands, tabs, "Guild", false, false, font.clone());
+    chat_tab(commands, tabs, "Trade", false, false, font);
+}
+
+fn chat_tab(
+    commands: &mut Commands,
+    parent: Entity,
+    label: &str,
+    active: bool,
+    ping: bool,
+    font: Handle<Font>,
+) {
+    let tab = commands
+        .spawn((
+            Node {
+                padding: UiRect::axes(Val::Px(13.0), Val::Px(6.0)),
+                border_radius: BorderRadius {
+                    top_left: Val::Px(8.0),
+                    top_right: Val::Px(8.0),
+                    bottom_left: Val::Px(0.0),
+                    bottom_right: Val::Px(0.0),
+                },
+                ..default()
+            },
+            BackgroundColor(if active { TAB_ACTIVE_BG } else { Color::NONE }),
+            Pickable::IGNORE,
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((
+        Text::new(label),
+        TextFont {
+            font,
+            font_size: 11.5,
+            ..default()
+        },
+        TextColor(if active {
+            theme::TEXT
+        } else {
+            theme::TEXT_FAINT
+        }),
+        Pickable::IGNORE,
+        ChildOf(tab),
+    ));
+    if active {
+        commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(0.0),
+                left: Val::Px(11.0),
+                right: Val::Px(11.0),
+                height: Val::Px(2.0),
+                border_radius: BorderRadius::all(Val::Px(2.0)),
+                ..default()
+            },
+            BackgroundColor(theme::EMERALD),
+            Pickable::IGNORE,
+            ChildOf(tab),
+        ));
+    }
+    if ping {
+        commands.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(3.0),
+                right: Val::Px(4.0),
+                width: Val::Px(5.0),
+                height: Val::Px(5.0),
+                border_radius: BorderRadius::all(Val::Percent(50.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GOLD),
+            Pickable::IGNORE,
+            ChildOf(tab),
+        ));
+    }
+}
+
+/// The input bar: channel pill + borderless text field + send button, all inside a
+/// single rounded container. Enter still submits (the send button is decorative).
+fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
+    let bar = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                height: Val::Px(40.0),
+                column_gap: Val::Px(9.0),
+                margin: UiRect {
+                    top: Val::Px(4.0),
+                    left: Val::Px(8.0),
+                    right: Val::Px(8.0),
+                    bottom: Val::Px(8.0),
+                },
+                padding: UiRect {
+                    left: Val::Px(10.0),
+                    right: Val::Px(9.0),
+                    top: Val::Px(0.0),
+                    bottom: Val::Px(0.0),
+                },
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(9.0)),
+                ..default()
+            },
+            BackgroundColor(INPUT_BG),
+            BorderColor::all(theme::STROKE),
+            Pickable::IGNORE,
+            ChildOf(chat_box),
+        ))
+        .id();
+
+    let pill = commands
+        .spawn((
+            Node {
+                flex_shrink: 0.0,
+                padding: UiRect::axes(Val::Px(9.0), Val::Px(3.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                ..default()
+            },
+            BackgroundColor(PILL_BG),
+            BorderColor::all(PILL_BORDER),
+            Pickable::IGNORE,
+            ChildOf(bar),
+        ))
+        .id();
+    commands.spawn((
+        Text::new("All"),
+        TextFont {
+            font: font.clone(),
+            font_size: 10.5,
+            ..default()
+        },
+        TextColor(theme::EMERALD_BRI),
+        Pickable::IGNORE,
+        ChildOf(pill),
+    ));
+
     commands.spawn((
         TextInputNode {
             mode: TextInputMode::SingleLine,
@@ -108,24 +279,50 @@ pub fn spawn_chat_box(commands: &mut Commands, parent: Entity, asset_server: &As
             clear_on_submit: true,
             ..default()
         },
-        TextInputPrompt::new("Enter to chat"),
+        TextInputPrompt::new("Press Enter to chat…"),
         TextFont {
-            font,
+            font: font.clone(),
             font_size: 13.0,
             ..default()
         },
         TextColor(theme::TEXT),
         ChatInput,
         Node {
-            width: Val::Percent(100.0),
-            height: Val::Px(40.0),
-            border: UiRect::all(Val::Px(1.0)),
-            border_radius: BorderRadius::all(Val::Px(9.0)),
+            flex_grow: 1.0,
+            height: Val::Px(26.0),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.34)),
-        BorderColor::all(theme::STROKE),
-        ChildOf(form),
+        ChildOf(bar),
+    ));
+
+    let send = commands
+        .spawn((
+            Node {
+                flex_shrink: 0.0,
+                width: Val::Px(26.0),
+                height: Val::Px(26.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(7.0)),
+                ..default()
+            },
+            BackgroundColor(TAB_ACTIVE_BG),
+            BorderColor::all(theme::STROKE),
+            Pickable::IGNORE,
+            ChildOf(bar),
+        ))
+        .id();
+    commands.spawn((
+        Text::new("\u{21B5}"),
+        TextFont {
+            font,
+            font_size: 13.0,
+            ..default()
+        },
+        TextColor(theme::TEXT_DIM),
+        Pickable::IGNORE,
+        ChildOf(send),
     ));
 }
 
