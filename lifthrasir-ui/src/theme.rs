@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 // Endurnir palette — the single source of truth for UI colors (raw bevy_ui).
-pub const GLASS: Color = Color::srgba(0.063, 0.086, 0.078, 0.80);
-pub const GLASS_2: Color = Color::srgba(0.086, 0.118, 0.106, 0.72);
+pub const GLASS: Color = Color::srgba(0.063, 0.086, 0.078, 0.97);
+pub const GLASS_2: Color = Color::srgba(0.086, 0.118, 0.106, 0.97);
 pub const FIELD: Color = Color::srgba(0.031, 0.047, 0.043, 0.66);
 pub const EMERALD: Color = Color::srgb_u8(0x2f, 0xd2, 0x7a);
 pub const EMERALD_BRI: Color = Color::srgb_u8(0x46, 0xe0, 0x8c);
