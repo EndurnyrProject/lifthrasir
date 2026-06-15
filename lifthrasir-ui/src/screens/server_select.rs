@@ -147,7 +147,10 @@ fn populate_server_list(
             row.with_children(|r| {
                 let s = server.clone();
                 r.spawn((
-                    Paragraph { text: server.name.clone(), ..default() },
+                    Paragraph {
+                        text: server.name.clone(),
+                        ..default()
+                    },
                     CssClass(vec!["row-name".to_string()]),
                     css_source.clone(),
                 ))
@@ -159,7 +162,10 @@ fn populate_server_list(
 
                 let s = server.clone();
                 r.spawn((
-                    Paragraph { text: pop_label.clone(), ..default() },
+                    Paragraph {
+                        text: pop_label.clone(),
+                        ..default()
+                    },
                     CssClass(vec!["row-pop".to_string()]),
                     css_source.clone(),
                 ))
@@ -171,8 +177,14 @@ fn populate_server_list(
 
                 let s = server.clone();
                 r.spawn((
-                    Paragraph { text: status_label(status).to_string(), ..default() },
-                    CssClass(vec!["row-status".to_string(), status_class(status).to_string()]),
+                    Paragraph {
+                        text: status_label(status).to_string(),
+                        ..default()
+                    },
+                    CssClass(vec![
+                        "row-status".to_string(),
+                        status_class(status).to_string(),
+                    ]),
                     css_source.clone(),
                 ))
                 .observe(
@@ -255,12 +267,18 @@ mod tests {
         app.add_plugins(MinimalPlugins);
         app.add_message::<ServerSelectedEvent>();
         app.init_resource::<ServerListPopulated>();
-        app.insert_resource(user_session(vec![server("Valhalla", 7), server("Asgard", 3)]));
+        app.insert_resource(user_session(vec![
+            server("Valhalla", 7),
+            server("Asgard", 3),
+        ]));
         app.add_systems(Update, populate_server_list);
 
         let container = app
             .world_mut()
-            .spawn((CssID(SERVER_LIST_CONTAINER_ID.to_string()), CssSource::default()))
+            .spawn((
+                CssID(SERVER_LIST_CONTAINER_ID.to_string()),
+                CssSource::default(),
+            ))
             .id();
 
         app.update();

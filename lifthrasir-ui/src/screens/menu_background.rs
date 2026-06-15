@@ -49,7 +49,11 @@ fn toggle_on_transition(
     mut transitions: MessageReader<StateTransitionEvent<GameState>>,
     mut background: Single<&mut Visibility, With<MenuBackground>>,
 ) {
-    let Some(entered) = transitions.read().last().and_then(|event| event.entered.as_ref()) else {
+    let Some(entered) = transitions
+        .read()
+        .last()
+        .and_then(|event| event.entered.as_ref())
+    else {
         return;
     };
     **background = if is_menu_state(entered) {

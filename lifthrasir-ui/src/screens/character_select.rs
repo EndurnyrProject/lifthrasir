@@ -44,7 +44,12 @@ impl Plugin for CharacterSelectScreenPlugin {
         );
         app.add_systems(
             Update,
-            (receive_character_list, build_cards, rebuild_hero_panel, update_delete_labels)
+            (
+                receive_character_list,
+                build_cards,
+                rebuild_hero_panel,
+                update_delete_labels,
+            )
                 .chain()
                 .run_if(in_state(GameState::CharacterSelection)),
         );
@@ -222,12 +227,22 @@ fn spawn_occupied_card(
 
     let col = commands
         .spawn((
-            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), ..default() },
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(3.0),
+                ..default()
+            },
             ChildOf(card),
         ))
         .id();
-    commands.spawn((label(info.base.name.clone(), font_bold, 15.0, theme::TEXT), ChildOf(col)));
-    commands.spawn((label(detail, font_body, 11.5, theme::TEXT_FAINT), ChildOf(col)));
+    commands.spawn((
+        label(info.base.name.clone(), font_bold, 15.0, theme::TEXT),
+        ChildOf(col),
+    ));
+    commands.spawn((
+        label(detail, font_body, 11.5, theme::TEXT_FAINT),
+        ChildOf(col),
+    ));
 
     let selected_slot = slot as usize;
     commands.entity(card).observe(
@@ -257,7 +272,10 @@ fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: 
             ChildOf(container),
         ))
         .id();
-    commands.spawn((label("+ Create", font, 12.0, theme::TEXT_FAINT), ChildOf(card)));
+    commands.spawn((
+        label("+ Create", font, 12.0, theme::TEXT_FAINT),
+        ChildOf(card),
+    ));
 
     let selected_slot = slot as usize;
     commands.entity(card).observe(
@@ -332,7 +350,12 @@ fn rebuild_hero_panel(
                 ChildOf(frame),
             ));
             commands.spawn((
-                label(info.base.name.clone(), font_title, 25.0, theme::DISPLAY_GOLD),
+                label(
+                    info.base.name.clone(),
+                    font_title,
+                    25.0,
+                    theme::DISPLAY_GOLD,
+                ),
                 ChildOf(frame),
             ));
             commands.spawn((
@@ -363,7 +386,12 @@ fn rebuild_hero_panel(
                 ChildOf(frame),
             ));
             commands.spawn((
-                label("Forge a new hero.", font_body.clone(), 13.0, theme::TEXT_FAINT),
+                label(
+                    "Forge a new hero.",
+                    font_body.clone(),
+                    13.0,
+                    theme::TEXT_FAINT,
+                ),
                 ChildOf(frame),
             ));
             spawn_create_button(&mut commands, frame, selected.0 as u8, font_body);
@@ -386,7 +414,10 @@ fn spawn_enter_button(commands: &mut Commands, parent: Entity, slot: u8, font: H
             ChildOf(parent),
         ))
         .id();
-    commands.spawn((label("Enter Game", font, 15.0, theme::EMERALD_INK), ChildOf(btn)));
+    commands.spawn((
+        label("Enter Game", font, 15.0, theme::EMERALD_INK),
+        ChildOf(btn),
+    ));
     commands.entity(btn).observe(
         move |mut click: On<Pointer<Click>>, mut writer: MessageWriter<SelectCharacterEvent>| {
             click.propagate(false);
@@ -410,7 +441,10 @@ fn spawn_create_button(commands: &mut Commands, parent: Entity, slot: u8, font: 
             ChildOf(parent),
         ))
         .id();
-    commands.spawn((label("Create Character", font, 15.0, theme::EMERALD_INK), ChildOf(btn)));
+    commands.spawn((
+        label("Create Character", font, 15.0, theme::EMERALD_INK),
+        ChildOf(btn),
+    ));
     commands.entity(btn).observe(
         move |mut click: On<Pointer<Click>>,
               mut commands: Commands,
@@ -424,7 +458,12 @@ fn spawn_create_button(commands: &mut Commands, parent: Entity, slot: u8, font: 
 
 /// Delete button: first click arms, second click within the armed state confirms.
 /// Label flips Delete<->Confirm? via `update_delete_labels`.
-fn spawn_delete_button(commands: &mut Commands, parent: Entity, character_id: u32, font: Handle<Font>) {
+fn spawn_delete_button(
+    commands: &mut Commands,
+    parent: Entity,
+    character_id: u32,
+    font: Handle<Font>,
+) {
     let btn = commands
         .spawn((
             DeleteButton { character_id },
@@ -611,7 +650,9 @@ mod tests {
             ..default()
         };
         diorama.columns.insert(0, Rect::new(0.0, 0.0, 144.0, 224.0));
-        diorama.columns.insert(2, Rect::new(144.0, 0.0, 288.0, 224.0));
+        diorama
+            .columns
+            .insert(2, Rect::new(144.0, 0.0, 288.0, 224.0));
         diorama
     }
 
@@ -649,7 +690,10 @@ mod tests {
         assert!(texts.iter().any(|t| t == "Hero"));
         assert!(texts.iter().any(|t| t == "Mage"));
         assert!(texts.iter().any(|t| t == "Lv 50"));
-        assert!(texts.iter().any(|t| t == "+ Create"), "empty slot shows create");
+        assert!(
+            texts.iter().any(|t| t == "+ Create"),
+            "empty slot shows create"
+        );
         assert!(app.world().resource::<CardsBuilt>().0);
     }
 
