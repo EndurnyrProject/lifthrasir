@@ -5,12 +5,12 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    background: var(--forge-soot);
+    background: #0c1411;
 }
 
 #loading-title {
-    font-family: "fonts/ringbearer-medium.ttf";
+    font-family: "fonts/cinzel.ttf";
     font-size: 48px;
-    color: var(--energetic-green);
+    color: var(--emerald);
     margin: 0;
 }
