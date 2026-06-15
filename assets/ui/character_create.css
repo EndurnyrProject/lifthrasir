@@ -1,90 +1,50 @@
-#character-create-screen {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    background: rgba(0, 0, 0, 0);
+#cc-screen { width: 100%; height: 100%; background: rgba(0,0,0,0); position: relative; }
+#cc-stage {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center; padding: 128px 64px 40px;
 }
-
-#character-create-form {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+.cs-head {
+    position: absolute; top: 60px; left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center;
 }
-
-#character-create-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 360px;
-    padding: 32px;
-    background: var(--slate-gray);
-    border: 1px var(--polished-steel);
-    border-radius: 8px;
+.panel-kicker {
+    font-family: "fonts/manrope.ttf"; font-size: 11px; letter-spacing: 0.28em;
+    text-transform: uppercase; color: var(--gold-soft); margin: 0;
 }
-
-#character-create-title {
-    font-family: "fonts/ringbearer-medium.ttf";
-    font-size: 32px;
-    color: var(--energetic-green);
-    margin: 0 0 16px 0;
+.panel-title {
+    font-family: "fonts/cinzel.ttf"; font-size: 27px; color: var(--headline); margin: 3px 0 0 0;
 }
-
-/* Live SPR/ACT preview; the textured node is spawned as a bevy_ui child in Rust. */
-#char-preview {
-    width: 144px;
-    height: 224px;
-    margin: 0 0 16px 0;
+#cc-preview {
+    width: 384px; margin: 0 28px 0 0; padding: 22px;
+    background: var(--glass); border: 1px var(--gold-faint); border-radius: var(--r-lg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
-
-#char-name {
-    width: 100%;
-    margin: 0 0 16px 0;
+#char-preview { width: 144px; height: 224px; }
+#cc-panel {
+    width: 468px; padding: 26px 28px;
+    background: var(--glass); border: 1px var(--stroke); border-radius: var(--r-lg);
+    display: flex; flex-direction: column;
 }
-
-.cycler {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    margin: 0 0 4px 0;
+.cc-label {
+    font-family: "fonts/manrope.ttf"; font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--text-dim); margin: 18px 0 8px 0;
 }
-
-.cycler-value {
-    font-family: "fonts/palatino-linotype-regular.ttf";
-    font-size: 16px;
-    color: var(--ashen-white);
-    width: 120px;
-    margin: 0 12px 0 12px;
-}
-
-.cycler-label {
-    font-family: "fonts/palatino-linotype-regular.ttf";
-    font-size: 12px;
-    color: var(--polished-steel);
-    margin: 0 0 12px 0;
-}
-
-#create-error {
-    font-family: "fonts/palatino-linotype-regular.ttf";
-    font-size: 14px;
-    color: var(--worn-crimson);
-    min-height: 18px;
-    margin: 8px 0 12px 0;
-}
-
-#create-actions {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-}
-
-#create-cancel {
-    margin: 0 12px 0 0;
-}
-
-#create-confirm {
-    color: var(--forge-soot);
-}
+.field-box { display: flex; align-items: center; gap: 11px; height: 50px; padding: 0 15px;
+    background: var(--field); border: 1px var(--stroke); border-radius: var(--r-md); }
+.field-ico { width: 16px; height: 16px; }
+#cc-name { width: 100%; background: rgba(0,0,0,0); border: 0; }
+.input-text { font-family: "fonts/manrope.ttf"; font-size: 15px; color: var(--text); }
+.opt-row { display: flex; flex-direction: column; }
+.stepper { display: flex; align-items: center; height: 50px;
+    background: var(--field); border: 1px var(--stroke); border-radius: var(--r-md); }
+.step-btn { width: 52px; height: 100%; background: rgba(255,255,255,0.025); border: 0; }
+.step-btn img { width: 17px; height: 17px; }
+.step-val { flex: 1 1 auto; text-align: center;
+    font-family: "fonts/manrope.ttf"; font-size: 16px; color: var(--text); margin: 0; }
+.seg-btn { height: 50px; background: var(--emerald); border-radius: var(--r-md); border: 0; }
+.seg-text { font-family: "fonts/manrope.ttf"; color: var(--emerald-ink); margin: 0; }
+#create-error { font-family: "fonts/manrope.ttf"; font-size: 13px; color: var(--bad); min-height: 18px; margin: 16px 0 0 0; }
+.cc-actions { display: flex; gap: 12px; margin: 22px 0 0 0; }
+.btn-ghost { height: 46px; flex: 0 0 38%; background: rgba(255,255,255,0.03);
+    border: 1px var(--stroke); border-radius: var(--r-md); }
+.btn-primary { height: 50px; flex: 1 1 auto; background: var(--emerald); border-radius: var(--r-md); border: 0; }
