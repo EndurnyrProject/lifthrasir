@@ -210,20 +210,24 @@ fn spawn_occupied_card(
         ))
         .id();
 
-    commands.spawn((
-        label(glyph, font_bold.clone(), 19.0, theme::GOLD),
-        Node {
-            width: Val::Px(46.0),
-            height: Val::Px(46.0),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::all(Val::Px(9.0)),
-            ..default()
-        },
-        BackgroundColor(theme::GLASS),
-        BorderColor::all(theme::GOLD_FAINT),
-        ChildOf(card),
-    ));
+    // Glyph lives as a child so the avatar's flex centering actually centers it
+    // (a node's own Text isn't affected by align/justify).
+    let avatar = commands
+        .spawn((
+            Node {
+                width: Val::Px(46.0),
+                height: Val::Px(46.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border_radius: BorderRadius::all(Val::Px(9.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS),
+            BorderColor::all(theme::GOLD_FAINT),
+            ChildOf(card),
+        ))
+        .id();
+    commands.spawn((label(glyph, font_bold.clone(), 19.0, theme::GOLD), ChildOf(avatar)));
 
     let col = commands
         .spawn((
