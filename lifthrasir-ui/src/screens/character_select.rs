@@ -227,7 +227,10 @@ fn spawn_occupied_card(
             ChildOf(card),
         ))
         .id();
-    commands.spawn((label(glyph, font_bold.clone(), 19.0, theme::GOLD), ChildOf(avatar)));
+    commands.spawn((
+        label(glyph, font_bold.clone(), 19.0, theme::GOLD),
+        ChildOf(avatar),
+    ));
 
     let col = commands
         .spawn((
