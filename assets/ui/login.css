@@ -1,63 +1,47 @@
 #login-screen {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
     background: rgba(0, 0, 0, 0);
 }
-
-#login-form {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-}
-
+#login-form { display: flex; flex-direction: column; align-items: center; }
 #login-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 360px;
-    padding: 32px;
-    background: var(--slate-gray);
-    border: 1px var(--polished-steel);
-    border-radius: 8px;
+    position: relative;
+    display: flex; flex-direction: column; align-items: stretch;
+    width: 432px; padding: 40px;
+    background: var(--glass);
+    border: 1px var(--gold-faint);
+    border-radius: var(--r-lg);
 }
-
-/* Logo image is mounted as a raw bevy_ui ImageNode child in `screens/login.rs`
- * (loaded via `ro://logo.png`); this only sizes/positions the slot. */
-#login-logo {
-    width: 280px;
-    height: 152px;
-    margin: 0 0 24px 0;
-}
-
+#login-logo { width: 280px; height: 152px; margin: 0 0 18px 0; align-self: center; }
+.rule-gold { height: 1px; margin: 0 0 22px 0; background: var(--gold-faint); }
 .field-label {
-    font-family: "fonts/palatino-linotype-bold.ttf";
-    font-size: 14px;
-    color: var(--ashen-white);
-    width: 100%;
-    margin: 0 0 4px 0;
+    font-family: "fonts/manrope.ttf";
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-dim); margin: 0 0 7px 0;
 }
-
-#login-username,
-#login-password {
-    width: 100%;
-    margin: 0 0 16px 0;
+.field-box {
+    display: flex; align-items: center; gap: 10px;
+    height: 46px; padding: 0 14px; margin: 0 0 16px 0;
+    background: var(--field);
+    border: 1px var(--stroke);
+    border-radius: var(--r-md);
 }
-
+.field-ico { width: 16px; height: 16px; }
+#login-username, #login-password { width: 100%; background: rgba(0,0,0,0); border: 0; }
+.input-text { font-family: "fonts/manrope.ttf"; font-size: 15px; color: var(--text); }
 #login-error {
-    font-family: "fonts/palatino-linotype-regular.ttf";
-    font-size: 14px;
-    color: var(--worn-crimson);
-    min-height: 18px;
-    margin: 0 0 12px 0;
+    font-family: "fonts/manrope.ttf"; font-size: 13px;
+    color: var(--bad); min-height: 18px; margin: 0 0 12px 0;
 }
-
 #login-connect {
-    font-family: "fonts/palatino-linotype-bold.ttf";
-    width: 100%;
-    color: var(--forge-soot);
+    width: 100%; height: 50px;
+    background: var(--emerald);
+    border-radius: var(--r-md);
 }
+.btn-foot {
+    font-family: "fonts/manrope.ttf"; font-size: 12.5px;
+    color: var(--text-faint); text-align: center; margin: 16px 0 0 0;
+}
+.link { color: var(--text-dim); }
+.link:hover { color: var(--emerald-bri); }

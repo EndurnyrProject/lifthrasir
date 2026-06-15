@@ -8,26 +8,20 @@
     <form id="login-form" action="submit_login" validate="Send">
       <div id="login-panel">
         <div id="login-logo"></div>
+        <div class="rule-gold"></div>
         <p class="field-label">Username</p>
-        <input
-          id="login-username"
-          name="username"
-          type="text"
-          placeholder="Username"
-          maxlength="24"
-          required
-        />
+        <div class="field-box">
+          <img class="field-ico" src="icons/user.svg" />
+          <input id="login-username" name="username" type="text" placeholder="Enter your name" maxlength="24" required />
+        </div>
         <p class="field-label">Password</p>
-        <input
-          id="login-password"
-          name="password"
-          type="password"
-          placeholder="Password"
-          maxlength="32"
-          required
-        />
+        <div class="field-box">
+          <img class="field-ico" src="icons/lock.svg" />
+          <input id="login-password" name="password" type="password" placeholder="••••••••" maxlength="32" required />
+        </div>
         <p id="login-error"></p>
-        <button id="login-connect" type="submit">Connect</button>
+        <button id="login-connect" type="submit">Enter Realm</button>
+        <p class="btn-foot">New to the realm? <span class="link">Create account</span></p>
       </div>
     </form>
   </body>
