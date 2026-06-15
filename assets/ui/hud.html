@@ -5,27 +5,33 @@
     <link rel="stylesheet" href="hud.css" />
   </head>
   <body id="hud-root">
-    <div id="char-info">
-      <p id="char-name" class="hud-name"></p>
-      <p id="char-job" class="hud-text"></p>
-      <p id="char-level" class="hud-text"></p>
-      <p id="hp-text" class="hud-text"></p>
-      <progressbar id="hp-bar" class="hud-bar"></progressbar>
-      <p id="sp-text" class="hud-text"></p>
-      <progressbar id="sp-bar" class="hud-bar"></progressbar>
+    <div id="status-frame">
+      <div class="sf-top">
+        <p id="char-name" class="sf-name"></p>
+        <div class="sf-id">
+          <p id="char-job" class="sf-job"></p>
+          <p id="char-level" class="sf-lv"></p>
+        </div>
+      </div>
+      <div class="sf-bars">
+        <div class="bar">
+          <p class="bar-tag">HP</p>
+          <progressbar id="hp-bar" class="hud-bar hp"></progressbar>
+          <p id="hp-text" class="bar-val"></p>
+        </div>
+        <div class="bar">
+          <p class="bar-tag">SP</p>
+          <progressbar id="sp-bar" class="hud-bar sp"></progressbar>
+          <p id="sp-text" class="bar-val"></p>
+        </div>
+      </div>
     </div>
     <div id="chat-box">
       <scroll id="chat-scroll">
         <p id="chat-history" class="hud-text"></p>
       </scroll>
       <form id="chat-form" action="send_chat">
-        <input
-          id="chat-input"
-          name="chat"
-          type="text"
-          placeholder="Enter to chat"
-          maxlength="255"
-        />
+        <input id="chat-input" name="chat" type="text" placeholder="Enter to chat" maxlength="255" />
       </form>
     </div>
   </body>
