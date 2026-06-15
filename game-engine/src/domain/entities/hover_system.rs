@@ -29,7 +29,10 @@ use super::{
 pub fn update_entity_bounds_system(
     mut commands: Commands,
     hover_config: Res<HoverConfig>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    // With<Camera3d>: a 2D UI camera also exists, so an unfiltered single() matches
+    // two cameras, fails, and the system silently inserts no bounds. Same filter the
+    // nameplate's follow_targets uses to pick the game camera.
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     entity_query: Query<(Entity, &NetworkEntity, &GlobalTransform), Without<PendingDespawn>>,
 ) {
     let Ok((camera, camera_transform)) = camera_query.single() else {
@@ -39,22 +42,16 @@ pub fn update_entity_bounds_system(
     for (entity, _network_entity, entity_transform) in entity_query.iter() {
         let world_pos = entity_transform.translation();
 
-        let Some(ndc) = camera.world_to_ndc(camera_transform, world_pos) else {
+        // Logical viewport pixels to match ForwardedCursorPosition (CursorMoved is
+        // logical). The old world_to_ndc * physical_viewport_size produced physical
+        // pixels, mismatching the cursor by the window scale factor (2x on Retina) so
+        // hover never registered. Same projection the nameplate uses to follow targets.
+        let Ok(screen_pos) = camera.world_to_viewport(camera_transform, world_pos) else {
             continue;
         };
 
-        let Some(viewport_size) = camera.physical_viewport_size() else {
-            continue;
-        };
-        let viewport_size = viewport_size.as_vec2();
-
-        let screen_x = (ndc.x + 1.0) * 0.5 * viewport_size.x;
-        let screen_y = (1.0 - ndc.y) * 0.5 * viewport_size.y;
-
-        let screen_bounds = Rect::from_center_size(
-            Vec2::new(screen_x, screen_y),
-            Vec2::splat(hover_config.radius * 2.0),
-        );
+        let screen_bounds =
+            Rect::from_center_size(screen_pos, Vec2::splat(hover_config.radius * 2.0));
 
         commands
             .entity(entity)
@@ -99,7 +96,7 @@ pub fn entity_hover_detection_system(
                 entity: prev_entity,
             });
 
-            commands.entity(entity).insert(HoveredEntity);
+            commands.entity(entity).try_insert(HoveredEntity);
             commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,
@@ -108,7 +105,7 @@ pub fn entity_hover_detection_system(
             currently_hovered.entity = Some(entity);
         }
         (Some((entity, network_entity)), None) => {
-            commands.entity(entity).insert(HoveredEntity);
+            commands.entity(entity).try_insert(HoveredEntity);
             commands.trigger(EntityHoverEntered {
                 entity,
                 entity_id: network_entity.aid,

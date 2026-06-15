@@ -1,12 +1,12 @@
-//! Hover nameplates: a screen-space label above any hovered entity with an
-//! `EntityName`, plus a persistent one for the local player. Spawned on
-//! `EntityHoverEntered`, despawned on `EntityHoverExited` (persistent ones survive
-//! hover-out); positioned each frame by projecting the target's world position.
+//! Hover nameplates: a screen-space label above the currently hovered entity (any
+//! entity with an `EntityName`, including the local player). Driven each frame by the
+//! `HoveredEntity` marker so it picks up names that arrive asynchronously after the
+//! on-hover server name request; positioned by projecting the target's world position.
 
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::entities::components::EntityName;
-use game_engine::domain::entities::hover::{EntityHoverEntered, EntityHoverExited};
+use game_engine::domain::entities::hover::HoveredEntity;
 use game_engine::domain::entities::markers::LocalPlayer;
 
 use crate::theme;
@@ -24,11 +24,9 @@ pub struct NameplatePlugin;
 
 impl Plugin for NameplatePlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(on_hover_entered);
-        app.add_observer(on_hover_exited);
         app.add_systems(
             Update,
-            (ensure_local_player_nameplate, follow_targets).run_if(in_state(GameState::InGame)),
+            (sync_nameplates, follow_targets).run_if(in_state(GameState::InGame)),
         );
         app.add_systems(OnExit(GameState::InGame), despawn_all_nameplates);
     }
@@ -37,8 +35,6 @@ impl Plugin for NameplatePlugin {
 #[derive(Component)]
 struct Nameplate {
     target: Entity,
-    /// Persistent nameplates (the local player) survive hover-out.
-    persistent: bool,
 }
 
 fn has_nameplate(nameplates: &Query<&Nameplate>, target: Entity) -> bool {
@@ -50,13 +46,9 @@ fn spawn_nameplate(
     font: &WorldspaceFont,
     target: Entity,
     name: &str,
-    persistent: bool,
+    is_self: bool,
 ) {
-    let color = if persistent {
-        theme::EMERALD
-    } else {
-        theme::TEXT
-    };
+    let color = if is_self { theme::EMERALD } else { theme::TEXT };
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -67,7 +59,7 @@ fn spawn_nameplate(
         GlobalZIndex(NAMEPLATE_Z),
         Visibility::Hidden,
         Pickable::IGNORE,
-        Nameplate { target, persistent },
+        Nameplate { target },
         children![(
             Text::new(name),
             TextFont {
@@ -81,49 +73,30 @@ fn spawn_nameplate(
     ));
 }
 
-fn on_hover_entered(
-    trigger: On<EntityHoverEntered>,
+/// Keep one nameplate per hovered, named entity. Runs every frame so it catches
+/// `EntityName`s that arrive after the on-hover server name request resolves.
+fn sync_nameplates(
     mut commands: Commands,
-    names: Query<&EntityName>,
+    hovered: Query<(Entity, &EntityName), With<HoveredEntity>>,
+    local_player: Query<(), With<LocalPlayer>>,
     nameplates: Query<&Nameplate>,
+    stale: Query<(Entity, &Nameplate)>,
+    still_hovered: Query<(), With<HoveredEntity>>,
     font: Res<WorldspaceFont>,
 ) {
-    let target = trigger.entity;
-    let Ok(name) = names.get(target) else {
-        return;
-    };
-    if has_nameplate(&nameplates, target) {
-        return;
+    for (target, name) in &hovered {
+        if has_nameplate(&nameplates, target) {
+            continue;
+        }
+        let is_self = local_player.get(target).is_ok();
+        spawn_nameplate(&mut commands, &font, target, &name.name, is_self);
     }
-    spawn_nameplate(&mut commands, &font, target, &name.name, false);
-}
 
-fn on_hover_exited(
-    trigger: On<EntityHoverExited>,
-    mut commands: Commands,
-    nameplates: Query<(Entity, &Nameplate)>,
-) {
-    let target = trigger.entity;
-    for (entity, plate) in &nameplates {
-        if plate.target == target && !plate.persistent {
+    for (entity, plate) in &stale {
+        if still_hovered.get(plate.target).is_err() {
             commands.entity(entity).despawn();
         }
     }
-}
-
-fn ensure_local_player_nameplate(
-    mut commands: Commands,
-    players: Query<(Entity, &EntityName), With<LocalPlayer>>,
-    nameplates: Query<&Nameplate>,
-    font: Res<WorldspaceFont>,
-) {
-    let Ok((entity, name)) = players.single() else {
-        return;
-    };
-    if has_nameplate(&nameplates, entity) {
-        return;
-    }
-    spawn_nameplate(&mut commands, &font, entity, &name.name, true);
 }
 
 fn follow_targets(
@@ -165,24 +138,24 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.insert_resource(WorldspaceFont(Handle::default()));
-        app.add_observer(on_hover_entered);
-        app.add_observer(on_hover_exited);
+        app.add_systems(Update, sync_nameplates);
         app
     }
 
+    fn plate_count(app: &mut App) -> usize {
+        let world = app.world_mut();
+        world.query::<&Nameplate>().iter(world).count()
+    }
+
     #[test]
-    fn hover_enter_spawns_named_plate_then_exit_despawns_it() {
+    fn hovered_named_entity_gets_plate_then_loses_it_on_unhover() {
         let mut app = test_app();
         let target = app
             .world_mut()
-            .spawn(EntityName::new("Poring".to_string()))
+            .spawn((EntityName::new("Poring".to_string()), HoveredEntity))
             .id();
 
-        app.world_mut().trigger(EntityHoverEntered {
-            entity: target,
-            entity_id: 1,
-        });
-        app.world_mut().flush();
+        app.update();
 
         let world = app.world_mut();
         let plates: Vec<&Nameplate> = world.query::<&Nameplate>().iter(world).collect();
@@ -196,25 +169,36 @@ mod tests {
         assert_eq!(label.as_deref(), Some("Poring"));
 
         app.world_mut()
-            .trigger(EntityHoverExited { entity: target });
-        app.world_mut().flush();
+            .entity_mut(target)
+            .remove::<HoveredEntity>();
+        app.update();
 
-        let world = app.world_mut();
-        assert_eq!(world.query::<&Nameplate>().iter(world).count(), 0);
+        assert_eq!(plate_count(&mut app), 0);
     }
 
     #[test]
-    fn hover_on_unnamed_entity_spawns_nothing() {
+    fn hovered_unnamed_entity_spawns_nothing() {
         let mut app = test_app();
-        let target = app.world_mut().spawn_empty().id();
+        app.world_mut().spawn(HoveredEntity);
 
-        app.world_mut().trigger(EntityHoverEntered {
-            entity: target,
-            entity_id: 2,
-        });
-        app.world_mut().flush();
+        app.update();
 
-        let world = app.world_mut();
-        assert_eq!(world.query::<&Nameplate>().iter(world).count(), 0);
+        assert_eq!(plate_count(&mut app), 0);
+    }
+
+    #[test]
+    fn plate_appears_once_name_arrives_while_still_hovered() {
+        let mut app = test_app();
+        let target = app.world_mut().spawn(HoveredEntity).id();
+
+        app.update();
+        assert_eq!(plate_count(&mut app), 0);
+
+        app.world_mut()
+            .entity_mut(target)
+            .insert(EntityName::new("Poring".to_string()));
+        app.update();
+
+        assert_eq!(plate_count(&mut app), 1);
     }
 }
