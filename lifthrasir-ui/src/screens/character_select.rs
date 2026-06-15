@@ -350,6 +350,15 @@ fn update_delete_labels(
     }
 }
 
+/// The character to feature in the hero panel for the selected slot, or `None`
+/// if the slot is empty or out of range.
+fn featured(
+    characters: &[Option<CharacterInfoWithJobName>],
+    selected: usize,
+) -> Option<&CharacterInfoWithJobName> {
+    characters.get(selected).and_then(Option::as_ref)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,6 +369,25 @@ mod tests {
         let job = "Swordman";
         let level: u16 = 42;
         assert_eq!(format!("{job}  Lv.{level}"), "Swordman  Lv.42");
+    }
+
+    #[test]
+    fn featured_returns_occupied_slot() {
+        let chars = vec![Some(with_job("Hero", 1, 0, 50, "Swordman")), None];
+        assert!(featured(&chars, 0).is_some());
+        assert_eq!(featured(&chars, 0).unwrap().base.name, "Hero");
+    }
+
+    #[test]
+    fn featured_empty_slot_is_none() {
+        let chars = vec![Some(with_job("Hero", 1, 0, 50, "Swordman")), None];
+        assert!(featured(&chars, 1).is_none());
+    }
+
+    #[test]
+    fn featured_out_of_range_is_none() {
+        let chars = vec![Some(with_job("Hero", 1, 0, 50, "Swordman"))];
+        assert!(featured(&chars, 9).is_none());
     }
 
     fn protocol_char(name: &str, char_id: u32, slot: u8, base_level: u16) -> ProtocolCharacterInfo {
