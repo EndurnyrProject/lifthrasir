@@ -1,8 +1,9 @@
-//! Character-info panel: name, job, base/job level, and HP/SP bars for the local
-//! player. Built as raw `bevy_ui` by [`spawn_status_frame`] (called from the HUD
-//! root); [`update_character_info`] reflects the `LocalPlayer`'s status into the
-//! marked elements, writing only when a value actually changed so it doesn't churn
-//! change detection every frame.
+//! Character-info status frame (top-left HUD): avatar, name, job/level sub-row,
+//! HP/SP bars and Base/Job EXP slivers for the local player. Built as raw
+//! `bevy_ui` by [`spawn_status_frame`] (called from the HUD root);
+//! [`update_character_info`] reflects the `LocalPlayer`'s status into the marked
+//! elements, writing only when a value actually changed so it doesn't churn
+//! change detection every frame. Mirrors the Endurnir `.status-frame` design.
 
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
@@ -14,14 +15,23 @@ use game_engine::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
 
 use crate::theme;
 
+const AVATAR_BG: Color = Color::srgb_u8(0x1f, 0x2b, 0x25);
+const AVATAR_RING: Color = Color::srgba(0.184, 0.824, 0.478, 0.35);
+const BAR_TRACK: Color = Color::srgba(0.0, 0.0, 0.0, 0.42);
+const EXP_TRACK: Color = Color::srgba(0.0, 0.0, 0.0, 0.40);
+
 /// Tags a text element so [`update_character_info`] can write the matching value.
 #[derive(Component, Clone, Copy)]
 enum HudText {
+    Avatar,
     Name,
     Job,
-    Level,
+    BaseLevel,
+    JobLevel,
     Hp,
     Sp,
+    BaseExp,
+    JobExp,
 }
 
 /// Tags a bar fill node so its width tracks the matching ratio.
@@ -29,6 +39,8 @@ enum HudText {
 enum HudBar {
     Hp,
     Sp,
+    BaseExp,
+    JobExp,
 }
 
 pub struct CharacterInfoPlugin;
@@ -57,26 +69,126 @@ pub fn spawn_status_frame(commands: &mut Commands, parent: Entity, asset_server:
                 width: Val::Px(286.0),
                 padding: UiRect::axes(Val::Px(14.0), Val::Px(13.0)),
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(12.0),
-                border: UiRect::all(Val::Px(1.0)),
+                row_gap: Val::Px(11.0),
+                border: UiRect {
+                    left: Val::Px(2.0),
+                    top: Val::Px(1.0),
+                    right: Val::Px(1.0),
+                    bottom: Val::Px(1.0),
+                },
                 border_radius: BorderRadius::all(Val::Px(13.0)),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.043, 0.067, 0.059, 0.93)),
-            BorderColor::all(theme::GOLD_FAINT),
+            BorderColor {
+                left: theme::EMERALD_DEEP,
+                top: theme::GOLD_FAINT,
+                right: theme::GOLD_FAINT,
+                bottom: theme::GOLD_FAINT,
+            },
             Pickable::IGNORE,
             ChildOf(parent),
         ))
         .id();
 
+    spawn_top(commands, frame, font_title, font_body.clone());
+    spawn_bars(commands, frame, font_body.clone());
+    spawn_exp(
+        commands,
+        frame,
+        "BASE EXP",
+        HudBar::BaseExp,
+        HudText::BaseExp,
+        theme::GOLD,
+        font_body.clone(),
+    );
+    spawn_exp(
+        commands,
+        frame,
+        "JOB EXP",
+        HudBar::JobExp,
+        HudText::JobExp,
+        theme::EMERALD_BRI,
+        font_body,
+    );
+}
+
+/// Avatar + name + job/level sub-row.
+fn spawn_top(
+    commands: &mut Commands,
+    frame: Entity,
+    font_title: Handle<Font>,
+    font_body: Handle<Font>,
+) {
     let top = commands
         .spawn((
             Node {
-                flex_direction: FlexDirection::Column,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(11.0),
                 ..default()
             },
             Pickable::IGNORE,
             ChildOf(frame),
+        ))
+        .id();
+
+    let avatar = commands
+        .spawn((
+            Node {
+                width: Val::Px(44.0),
+                height: Val::Px(44.0),
+                flex_shrink: 0.0,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(10.0)),
+                ..default()
+            },
+            BackgroundColor(AVATAR_BG),
+            BorderColor::all(theme::GOLD_FAINT),
+            Pickable::IGNORE,
+            ChildOf(top),
+        ))
+        .id();
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(-3.0),
+            left: Val::Px(-3.0),
+            right: Val::Px(-3.0),
+            bottom: Val::Px(-3.0),
+            border: UiRect::all(Val::Px(1.0)),
+            border_radius: BorderRadius::all(Val::Px(12.0)),
+            ..default()
+        },
+        BorderColor::all(AVATAR_RING),
+        Pickable::IGNORE,
+        ChildOf(avatar),
+    ));
+    commands.spawn((
+        Text::new(""),
+        TextFont {
+            font: font_title.clone(),
+            font_size: 19.0,
+            ..default()
+        },
+        TextColor(theme::GOLD),
+        HudText::Avatar,
+        Pickable::IGNORE,
+        ChildOf(avatar),
+    ));
+
+    let id_col = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(3.0),
+                min_width: Val::Px(0.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(top),
         ))
         .id();
     commands.spawn((
@@ -89,35 +201,82 @@ pub fn spawn_status_frame(commands: &mut Commands, parent: Entity, asset_server:
         TextColor(theme::EMERALD_BRI),
         HudText::Name,
         Pickable::IGNORE,
-        ChildOf(top),
+        ChildOf(id_col),
     ));
-    let id_row = commands
+
+    let sub = commands
         .spawn((
             Node {
                 flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
                 column_gap: Val::Px(8.0),
                 ..default()
             },
             Pickable::IGNORE,
-            ChildOf(top),
+            ChildOf(id_col),
         ))
         .id();
     commands.spawn((
         text(font_body.clone(), 11.5, theme::GOLD),
         HudText::Job,
-        ChildOf(id_row),
+        ChildOf(sub),
     ));
     commands.spawn((
-        text(font_body.clone(), 10.5, theme::TEXT_FAINT),
-        HudText::Level,
-        ChildOf(id_row),
+        Node {
+            width: Val::Px(3.0),
+            height: Val::Px(3.0),
+            border_radius: BorderRadius::all(Val::Percent(50.0)),
+            ..default()
+        },
+        BackgroundColor(theme::TEXT_FAINT),
+        Pickable::IGNORE,
+        ChildOf(sub),
     ));
+    lv_chip(commands, sub, "Base", HudText::BaseLevel, font_body.clone());
+    lv_chip(commands, sub, "Job", HudText::JobLevel, font_body);
+}
 
+/// A "Base 1" / "Job 1" pair: faint label + bright number.
+fn lv_chip(
+    commands: &mut Commands,
+    parent: Entity,
+    label: &str,
+    kind: HudText,
+    font: Handle<Font>,
+) {
+    let row = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(4.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((
+        Text::new(label),
+        TextFont {
+            font: font.clone(),
+            font_size: 10.5,
+            ..default()
+        },
+        TextColor(theme::TEXT_FAINT),
+        Pickable::IGNORE,
+        ChildOf(row),
+    ));
+    commands.spawn((text(font, 10.5, theme::TEXT), kind, ChildOf(row)));
+}
+
+fn spawn_bars(commands: &mut Commands, frame: Entity, font_body: Handle<Font>) {
     let bars = commands
         .spawn((
             Node {
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(7.0),
+                margin: UiRect::top(Val::Px(1.0)),
                 ..default()
             },
             Pickable::IGNORE,
@@ -170,6 +329,7 @@ fn spawn_bar(
             ..default()
         },
         TextColor(theme::TEXT_FAINT),
+        TextLayout::new_with_justify(Justify::Center),
         Node {
             width: Val::Px(24.0),
             ..default()
@@ -182,11 +342,13 @@ fn spawn_bar(
             Node {
                 flex_grow: 1.0,
                 height: Val::Px(11.0),
+                border: UiRect::all(Val::Px(1.0)),
                 border_radius: BorderRadius::all(Val::Px(6.0)),
                 overflow: Overflow::clip(),
                 ..default()
             },
-            BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.07)),
+            BackgroundColor(BAR_TRACK),
+            BorderColor::all(theme::STROKE),
             Pickable::IGNORE,
             ChildOf(bar),
         ))
@@ -195,7 +357,7 @@ fn spawn_bar(
         Node {
             width: Val::Percent(0.0),
             height: Val::Percent(100.0),
-            border_radius: BorderRadius::all(Val::Px(6.0)),
+            border_radius: BorderRadius::all(Val::Px(5.0)),
             ..default()
         },
         BackgroundColor(fill_color),
@@ -205,6 +367,7 @@ fn spawn_bar(
     ));
     commands.spawn((
         text(font, 11.0, theme::TEXT_DIM),
+        TextLayout::new_with_justify(Justify::Right),
         HudText::matching(kind),
         Node {
             min_width: Val::Px(56.0),
@@ -214,11 +377,85 @@ fn spawn_bar(
     ));
 }
 
+/// A thin EXP sliver: track + fill, with a `LABEL ... 12.4%` row beneath.
+fn spawn_exp(
+    commands: &mut Commands,
+    frame: Entity,
+    label: &str,
+    bar_kind: HudBar,
+    text_kind: HudText,
+    fill_color: Color,
+    font: Handle<Font>,
+) {
+    let col = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(5.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(frame),
+        ))
+        .id();
+    let track = commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(4.0),
+                border_radius: BorderRadius::all(Val::Px(3.0)),
+                overflow: Overflow::clip(),
+                ..default()
+            },
+            BackgroundColor(EXP_TRACK),
+            Pickable::IGNORE,
+            ChildOf(col),
+        ))
+        .id();
+    commands.spawn((
+        Node {
+            width: Val::Percent(0.0),
+            height: Val::Percent(100.0),
+            border_radius: BorderRadius::all(Val::Px(3.0)),
+            ..default()
+        },
+        BackgroundColor(fill_color),
+        bar_kind,
+        Pickable::IGNORE,
+        ChildOf(track),
+    ));
+    let lbl = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(col),
+        ))
+        .id();
+    commands.spawn((
+        Text::new(label),
+        TextFont {
+            font: font.clone(),
+            font_size: 9.0,
+            ..default()
+        },
+        TextColor(theme::TEXT_FAINT),
+        Pickable::IGNORE,
+        ChildOf(lbl),
+    ));
+    commands.spawn((text(font, 9.0, fill_color), text_kind, ChildOf(lbl)));
+}
+
 impl HudText {
     fn matching(bar: HudBar) -> Self {
         match bar {
             HudBar::Hp => HudText::Hp,
             HudBar::Sp => HudText::Sp,
+            HudBar::BaseExp => HudText::BaseExp,
+            HudBar::JobExp => HudText::JobExp,
         }
     }
 }
@@ -236,7 +473,7 @@ fn text(font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
     )
 }
 
-/// `current/max` as a 0..=100 percentage for the fill node's width.
+/// `current/max` as a 0..=100 percentage for a fill node's width.
 fn percentage(current: u32, max: u32) -> f32 {
     if max == 0 {
         0.0
@@ -262,17 +499,25 @@ fn update_character_info(
         .as_deref()
         .and_then(|registry| registry.get_display_name(data.job_id as u32))
         .unwrap_or("Unknown");
+    let base_exp_pct = percentage(status.base_exp, status.next_base_exp);
+    let job_exp_pct = percentage(status.job_exp, status.next_job_exp);
 
     for (mut text, kind) in &mut texts {
         let value = match kind {
+            HudText::Avatar => job_name
+                .chars()
+                .next()
+                .unwrap_or('?')
+                .to_uppercase()
+                .to_string(),
             HudText::Name => name.clone(),
             HudText::Job => job_name.to_string(),
-            HudText::Level => format!(
-                "Base Lv. {} / Job Lv. {}",
-                status.base_level, status.job_level
-            ),
-            HudText::Hp => format!("HP {} / {}", status.hp, status.max_hp),
-            HudText::Sp => format!("SP {} / {}", status.sp, status.max_sp),
+            HudText::BaseLevel => status.base_level.to_string(),
+            HudText::JobLevel => status.job_level.to_string(),
+            HudText::Hp => format!("{} / {}", status.hp, status.max_hp),
+            HudText::Sp => format!("{} / {}", status.sp, status.max_sp),
+            HudText::BaseExp => format!("{base_exp_pct:.1}%"),
+            HudText::JobExp => format!("{job_exp_pct:.1}%"),
         };
         if text.0 != value {
             *text = Text::new(value);
@@ -283,6 +528,8 @@ fn update_character_info(
         let width = match kind {
             HudBar::Hp => Val::Percent(percentage(status.hp, status.max_hp)),
             HudBar::Sp => Val::Percent(percentage(status.sp, status.max_sp)),
+            HudBar::BaseExp => Val::Percent(base_exp_pct),
+            HudBar::JobExp => Val::Percent(job_exp_pct),
         };
         if node.width != width {
             node.width = width;
