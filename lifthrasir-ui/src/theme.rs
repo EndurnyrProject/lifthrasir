@@ -19,6 +19,7 @@ pub const DISPLAY_GOLD: Color = Color::srgb_u8(0xf1, 0xea, 0xd9);
 pub const HEALTH_RED: Color = Color::srgb_u8(0xe7, 0x4c, 0x3c);
 pub const MANA_BLUE: Color = Color::srgb_u8(0x4f, 0xb6, 0xe6);
 pub const BAD: Color = Color::srgb_u8(0xe0, 0x62, 0x5e);
+pub const WARN: Color = Color::srgb_u8(0xe6, 0xb5, 0x52);
 
 pub const FONT_TITLE: &str = "fonts/cinzel.ttf";
 pub const FONT_BODY: &str = "fonts/manrope.ttf";

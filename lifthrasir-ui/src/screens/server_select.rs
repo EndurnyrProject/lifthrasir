@@ -1,12 +1,24 @@
+//! Server selection screen.
+//!
+//! The static shell (`assets/ui/server_select.html`) is an extended_ui screen with a
+//! `#server-list` container. The rows are too rich for extended_ui's templating, so
+//! they are spawned at runtime as raw `bevy_ui` nodes parented under that container
+//! (one bevy_ui tree — they nest and render fine), styled from [`theme`]. Each row
+//! shows a flag badge, name + server type, online count, a status dot, and a
+//! population bar. Clicking a row writes `ServerSelectedEvent`; the engine connects to
+//! the char server and drives the transition.
+
 use bevy::prelude::*;
 use bevy_extended_ui::html::HtmlSource;
 use bevy_extended_ui::io::HtmlAsset;
 use bevy_extended_ui::old::registry::UiRegistry;
-use bevy_extended_ui::styles::{CssClass, CssID, CssSource};
-use bevy_extended_ui::widgets::{Div, Paragraph};
+use bevy_extended_ui::styles::CssID;
 use game_engine::core::state::GameState;
+use game_engine::infrastructure::networking::protocol::login::types::ServerInfo;
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::ServerSelectedEvent;
+
+use crate::theme;
 
 /// Online-population bucket for a server row's status pill.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -34,15 +46,6 @@ fn server_status(ratio: f32) -> ServerStatus {
     }
 }
 
-/// CSS class for a status pill.
-fn status_class(status: ServerStatus) -> &'static str {
-    match status {
-        ServerStatus::Online => "st-online",
-        ServerStatus::High => "st-high",
-        ServerStatus::Full => "st-full",
-    }
-}
-
 /// Display label for a server status pill.
 fn status_label(status: ServerStatus) -> &'static str {
     match status {
@@ -52,14 +55,32 @@ fn status_label(status: ServerStatus) -> &'static str {
     }
 }
 
+/// Accent color for a status (dot, label, and population fill).
+fn status_color(status: ServerStatus) -> Color {
+    match status {
+        ServerStatus::Online => theme::EMERALD,
+        ServerStatus::High => theme::WARN,
+        ServerStatus::Full => theme::BAD,
+    }
+}
+
+/// Coarse population word shown beside the bar.
+fn pop_word(ratio: f32) -> &'static str {
+    if ratio >= 0.6 {
+        "High pop."
+    } else if ratio >= 0.3 {
+        "Healthy pop."
+    } else {
+        "Low pop."
+    }
+}
+
 const SERVER_SELECT_UI: &str = "server_select";
 /// `AssetServer` path, relative to `assets/`. CSS `<link>` hrefs inside the HTML
 /// resolve relative to this file's location (so `theme.css` -> `ui/theme.css`).
 const SERVER_SELECT_HTML: &str = "ui/server_select.html";
 /// `id` of the `<div>` that holds the runtime-spawned server rows.
 const SERVER_LIST_CONTAINER_ID: &str = "server-list";
-/// CSS class applied to each spawned server-row div.
-const SERVER_ROW_CLASS: &str = "server-row";
 
 pub struct ServerSelectScreenPlugin;
 
@@ -81,12 +102,14 @@ impl Plugin for ServerSelectScreenPlugin {
     }
 }
 
-/// Guards the one-shot server-row spawn. extended_ui's list widgets build their
-/// option children once and never rebuild, so the dynamic server list is built by
-/// spawning `Div` entities under the template's container instead. Reset on
-/// every screen entry so re-entering `ServerSelection` repopulates a fresh tree.
+/// Guards the one-shot server-row spawn. Reset on every screen entry so re-entering
+/// `ServerSelection` repopulates a fresh tree.
 #[derive(Resource, Default)]
 struct ServerListPopulated(bool);
+
+/// Marks a runtime-spawned server row so they can be counted / cleared.
+#[derive(Component)]
+struct ServerRow;
 
 #[allow(deprecated)]
 fn show_server_select_screen(
@@ -104,18 +127,26 @@ fn hide_server_select_screen(mut registry: ResMut<UiRegistry>) {
     registry.remove(SERVER_SELECT_UI);
 }
 
-/// Spawns one clickable `Div` row per server under the template's `#server-list`
-/// container, once the container exists. Each row holds three `Paragraph` children
-/// (name, population, status). Because Paragraph's click observer stops propagation,
-/// the `ServerSelectedEvent` observer is attached to every child so clicks on any
-/// part of the row fire it.
-///
-/// `Div` is used instead of `Button` because `Button` spawns its own internal text
-/// child and its click observer stops propagation before our observer can run.
+fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(text),
+        TextFont {
+            font,
+            font_size: size,
+            ..default()
+        },
+        TextColor(color),
+    )
+}
+
+/// Spawns one rich, clickable server row under `#server-list` once the container
+/// exists. Rows are raw `bevy_ui` (full layout control for the population bar and
+/// alignment), parented under the extended_ui container.
 fn populate_server_list(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut populated: ResMut<ServerListPopulated>,
-    containers: Query<(Entity, &CssSource, &CssID)>,
+    containers: Query<(Entity, &CssID)>,
     session: Option<Res<UserSession>>,
 ) {
     if populated.0 {
@@ -124,79 +155,245 @@ fn populate_server_list(
     let Some(session) = session else {
         return;
     };
-    let Some((container, css_source, _)) = containers
+    let Some((container, _)) = containers
         .iter()
-        .find(|(_, _, id)| id.0 == SERVER_LIST_CONTAINER_ID)
+        .find(|(_, id)| id.0 == SERVER_LIST_CONTAINER_ID)
     else {
         return;
     };
 
-    let css_source = css_source.clone();
-    commands.entity(container).with_children(|parent| {
-        for server in session.server_list.iter() {
-            let server = server.clone();
-            let ratio = fill_ratio(server.users);
-            let status = server_status(ratio);
-            let pop_label = format!("{} online", server.users);
+    let font_body = asset_server.load(theme::FONT_BODY);
+    let font_bold = asset_server.load(theme::FONT_BODY_BOLD);
 
-            let mut row = parent.spawn((
-                Div::default(),
-                CssClass(vec![SERVER_ROW_CLASS.to_string()]),
-                css_source.clone(),
-            ));
-            row.with_children(|r| {
-                let s = server.clone();
-                r.spawn((
-                    Paragraph {
-                        text: server.name.clone(),
-                        ..default()
-                    },
-                    CssClass(vec!["row-name".to_string()]),
-                    css_source.clone(),
-                ))
-                .observe(
-                    move |_: On<Pointer<Click>>, mut writer: MessageWriter<ServerSelectedEvent>| {
-                        writer.write(ServerSelectedEvent { server: s.clone() });
-                    },
-                );
-
-                let s = server.clone();
-                r.spawn((
-                    Paragraph {
-                        text: pop_label.clone(),
-                        ..default()
-                    },
-                    CssClass(vec!["row-pop".to_string()]),
-                    css_source.clone(),
-                ))
-                .observe(
-                    move |_: On<Pointer<Click>>, mut writer: MessageWriter<ServerSelectedEvent>| {
-                        writer.write(ServerSelectedEvent { server: s.clone() });
-                    },
-                );
-
-                let s = server.clone();
-                r.spawn((
-                    Paragraph {
-                        text: status_label(status).to_string(),
-                        ..default()
-                    },
-                    CssClass(vec![
-                        "row-status".to_string(),
-                        status_class(status).to_string(),
-                    ]),
-                    css_source.clone(),
-                ))
-                .observe(
-                    move |_: On<Pointer<Click>>, mut writer: MessageWriter<ServerSelectedEvent>| {
-                        writer.write(ServerSelectedEvent { server: s.clone() });
-                    },
-                );
-            });
-        }
-    });
+    for server in session.server_list.iter() {
+        spawn_server_row(
+            &mut commands,
+            container,
+            server,
+            font_body.clone(),
+            font_bold.clone(),
+        );
+    }
 
     populated.0 = true;
+}
+
+/// Builds one server row matching the mockup: flag badge + name/type on the left,
+/// online count + status dot on the right, and a population bar spanning the bottom.
+fn spawn_server_row(
+    commands: &mut Commands,
+    container: Entity,
+    server: &ServerInfo,
+    font_body: Handle<Font>,
+    font_bold: Handle<Font>,
+) {
+    let ratio = fill_ratio(server.users);
+    let status = server_status(ratio);
+    let color = status_color(status);
+    let glyph = server
+        .name
+        .chars()
+        .next()
+        .unwrap_or('?')
+        .to_uppercase()
+        .to_string();
+    let subtitle = format!("{:?}", server.server_type).to_uppercase();
+    let server_clone = server.clone();
+
+    let row = commands
+        .spawn((
+            ServerRow,
+            Pickable::default(),
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(10.0),
+                padding: UiRect::axes(Val::Px(16.0), Val::Px(14.0)),
+                margin: UiRect::bottom(Val::Px(10.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS_2),
+            BorderColor::all(theme::STROKE),
+            ChildOf(container),
+        ))
+        .id();
+    commands.entity(row).observe(
+        move |_: On<Pointer<Click>>, mut writer: MessageWriter<ServerSelectedEvent>| {
+            writer.write(ServerSelectedEvent {
+                server: server_clone.clone(),
+            });
+        },
+    );
+
+    // ---- top sub-row: id (left) + meta (right) ----
+    let top = commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ChildOf(row),
+        ))
+        .id();
+
+    let id_group = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(11.0),
+                ..default()
+            },
+            ChildOf(top),
+        ))
+        .id();
+    let flag = commands
+        .spawn((
+            Node {
+                width: Val::Px(30.0),
+                height: Val::Px(30.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(7.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS),
+            BorderColor::all(theme::GOLD_FAINT),
+            ChildOf(id_group),
+        ))
+        .id();
+    commands.spawn((
+        label(glyph, font_bold.clone(), 14.0, theme::GOLD),
+        ChildOf(flag),
+    ));
+
+    let name_block = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                ..default()
+            },
+            ChildOf(id_group),
+        ))
+        .id();
+    commands.spawn((
+        label(server.name.clone(), font_bold.clone(), 15.5, theme::TEXT),
+        ChildOf(name_block),
+    ));
+    commands.spawn((
+        label(subtitle, font_body.clone(), 10.0, theme::TEXT_FAINT),
+        ChildOf(name_block),
+    ));
+
+    let meta = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(16.0),
+                ..default()
+            },
+            ChildOf(top),
+        ))
+        .id();
+    let stat = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FlexEnd,
+                row_gap: Val::Px(2.0),
+                ..default()
+            },
+            ChildOf(meta),
+        ))
+        .id();
+    commands.spawn((
+        label(
+            server.users.to_string(),
+            font_body.clone(),
+            13.0,
+            theme::TEXT,
+        ),
+        ChildOf(stat),
+    ));
+    commands.spawn((
+        label("ONLINE", font_body.clone(), 8.5, theme::TEXT_FAINT),
+        ChildOf(stat),
+    ));
+
+    let status_group = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(7.0),
+                ..default()
+            },
+            ChildOf(meta),
+        ))
+        .id();
+    commands.spawn((
+        Node {
+            width: Val::Px(7.0),
+            height: Val::Px(7.0),
+            border_radius: BorderRadius::all(Val::Px(4.0)),
+            ..default()
+        },
+        BackgroundColor(color),
+        ChildOf(status_group),
+    ));
+    commands.spawn((
+        label(status_label(status), font_body.clone(), 11.5, color),
+        ChildOf(status_group),
+    ));
+
+    // ---- population bar ----
+    let bar = commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(10.0),
+                ..default()
+            },
+            ChildOf(row),
+        ))
+        .id();
+    let track = commands
+        .spawn((
+            Node {
+                flex_grow: 1.0,
+                height: Val::Px(5.0),
+                border_radius: BorderRadius::all(Val::Px(3.0)),
+                overflow: Overflow::clip(),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.07)),
+            ChildOf(bar),
+        ))
+        .id();
+    commands.spawn((
+        Node {
+            width: Val::Percent(ratio * 100.0),
+            height: Val::Percent(100.0),
+            border_radius: BorderRadius::all(Val::Px(3.0)),
+            ..default()
+        },
+        BackgroundColor(color),
+        ChildOf(track),
+    ));
+    commands.spawn((
+        label(pop_word(ratio), font_body, 10.5, theme::TEXT_FAINT),
+        ChildOf(bar),
+    ));
 }
 
 #[cfg(test)]
@@ -220,17 +417,17 @@ mod tests {
     }
 
     #[test]
-    fn status_class_maps_each_variant() {
-        assert_eq!(status_class(ServerStatus::Online), "st-online");
-        assert_eq!(status_class(ServerStatus::High), "st-high");
-        assert_eq!(status_class(ServerStatus::Full), "st-full");
-    }
-
-    #[test]
     fn status_label_maps_each_variant() {
         assert_eq!(status_label(ServerStatus::Online), "Online");
         assert_eq!(status_label(ServerStatus::High), "Busy");
         assert_eq!(status_label(ServerStatus::Full), "Full");
+    }
+
+    #[test]
+    fn pop_word_buckets() {
+        assert_eq!(pop_word(0.0), "Low pop.");
+        assert_eq!(pop_word(0.4), "Healthy pop.");
+        assert_eq!(pop_word(0.7), "High pop.");
     }
 
     fn server(name: &str, users: u16) -> ServerInfo {
@@ -261,67 +458,56 @@ mod tests {
         }
     }
 
-    #[test]
-    fn populate_spawns_one_row_per_server() {
+    fn server_app(session: UserSession) -> App {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.init_asset::<Font>();
         app.add_message::<ServerSelectedEvent>();
         app.init_resource::<ServerListPopulated>();
-        app.insert_resource(user_session(vec![
+        app.insert_resource(session);
+        app.world_mut()
+            .spawn(CssID(SERVER_LIST_CONTAINER_ID.to_string()));
+        app.add_systems(Update, populate_server_list);
+        app
+    }
+
+    fn row_count(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<Entity, With<ServerRow>>()
+            .iter(app.world())
+            .count()
+    }
+
+    #[test]
+    fn populate_spawns_one_row_per_server() {
+        let mut app = server_app(user_session(vec![
             server("Valhalla", 7),
             server("Asgard", 3),
         ]));
-        app.add_systems(Update, populate_server_list);
-
-        let container = app
-            .world_mut()
-            .spawn((
-                CssID(SERVER_LIST_CONTAINER_ID.to_string()),
-                CssSource::default(),
-            ))
-            .id();
 
         app.update();
 
-        let world = app.world_mut();
-        let row_count = world
-            .query::<(&Div, &ChildOf)>()
-            .iter(world)
-            .filter(|(_, parent)| parent.parent() == container)
-            .count();
-        assert_eq!(row_count, 2);
+        assert_eq!(row_count(&mut app), 2);
 
-        let names: Vec<String> = world
-            .query::<(&Paragraph, &CssClass)>()
-            .iter(world)
-            .filter(|(_, class)| class.0.contains(&"row-name".to_string()))
-            .map(|(p, _)| p.text.clone())
+        let names: Vec<String> = app
+            .world_mut()
+            .query::<&Text>()
+            .iter(app.world())
+            .map(|t| t.0.clone())
             .collect();
         assert!(names.iter().any(|n| n == "Valhalla"));
         assert!(names.iter().any(|n| n == "Asgard"));
-        assert!(world.resource::<ServerListPopulated>().0);
+        assert!(app.world().resource::<ServerListPopulated>().0);
     }
 
     #[test]
     fn populate_is_idempotent_across_frames() {
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.add_message::<ServerSelectedEvent>();
-        app.init_resource::<ServerListPopulated>();
-        app.insert_resource(user_session(vec![server("Valhalla", 7)]));
-        app.add_systems(Update, populate_server_list);
-
-        app.world_mut().spawn((
-            CssID(SERVER_LIST_CONTAINER_ID.to_string()),
-            CssSource::default(),
-        ));
+        let mut app = server_app(user_session(vec![server("Valhalla", 7)]));
 
         app.update();
         app.update();
         app.update();
 
-        let world = app.world_mut();
-        let count = world.query::<&Div>().iter(world).count();
-        assert_eq!(count, 1);
+        assert_eq!(row_count(&mut app), 1);
     }
 }
