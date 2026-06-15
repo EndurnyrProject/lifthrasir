@@ -53,9 +53,9 @@ fn spawn_nameplate(
     persistent: bool,
 ) {
     let color = if persistent {
-        theme::ENERGETIC_GREEN
+        theme::EMERALD
     } else {
-        theme::ASHEN_WHITE
+        theme::TEXT
     };
     commands.spawn((
         Node {

@@ -53,9 +53,9 @@ fn damage_text(amount: i32, damage_type: DamageDisplayType) -> String {
 
 fn damage_color(damage_type: DamageDisplayType) -> Color {
     match damage_type {
-        DamageDisplayType::Critical => theme::GOLD_YELLOW,
-        DamageDisplayType::Miss => theme::POLISHED_STEEL,
-        DamageDisplayType::Normal => theme::ASHEN_WHITE,
+        DamageDisplayType::Critical => theme::GOLD,
+        DamageDisplayType::Miss => theme::TEXT_DIM,
+        DamageDisplayType::Normal => theme::TEXT,
     }
 }
 
@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(damage_text(0, DamageDisplayType::Miss), "Miss");
         assert_eq!(
             damage_color(DamageDisplayType::Critical),
-            theme::GOLD_YELLOW
+            theme::GOLD
         );
         assert_eq!(font_size(DamageDisplayType::Critical), CRIT_FONT_SIZE);
         assert_eq!(font_size(DamageDisplayType::Normal), FONT_SIZE);

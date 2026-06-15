@@ -29,7 +29,7 @@ fn spawn_fade_overlay(mut commands: Commands) {
             height: Val::Percent(100.0),
             ..default()
         },
-        BackgroundColor(theme::FORGE_SOOT.with_alpha(0.0)),
+        BackgroundColor(theme::EMERALD_INK.with_alpha(0.0)),
         GlobalZIndex(i32::MAX - 1),
         Pickable::IGNORE,
         ScreenFade {

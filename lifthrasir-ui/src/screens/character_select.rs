@@ -188,8 +188,8 @@ fn card_frame() -> impl Bundle {
             row_gap: Val::Px(6.0),
             ..default()
         },
-        BackgroundColor(theme::SLATE_GRAY),
-        BorderColor::all(theme::POLISHED_STEEL),
+        BackgroundColor(theme::GLASS_2),
+        BorderColor::all(theme::TEXT_DIM),
     )
 }
 
@@ -237,11 +237,11 @@ fn spawn_occupied_card(
         ChildOf(card),
     ));
     commands.spawn((
-        label(info.base.name.clone(), font_bold, 16.0, theme::ASHEN_WHITE),
+        label(info.base.name.clone(), font_bold, 16.0, theme::TEXT),
         ChildOf(card),
     ));
     commands.spawn((
-        label(detail, font_body.clone(), 13.0, theme::POLISHED_STEEL),
+        label(detail, font_body.clone(), 13.0, theme::TEXT_DIM),
         ChildOf(card),
     ));
 
@@ -253,12 +253,12 @@ fn spawn_occupied_card(
                 padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
                 ..default()
             },
-            BackgroundColor(theme::WORN_CRIMSON),
+            BackgroundColor(theme::BAD),
             ChildOf(card),
         ))
         .id();
     commands.spawn((
-        label("Delete", font_body, 12.0, theme::ASHEN_WHITE),
+        label("Delete", font_body, 12.0, theme::TEXT),
         ChildOf(delete),
     ));
 
@@ -297,7 +297,7 @@ fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: 
             ..default()
         },
         ChildOf(card),
-        children![label("Empty", font.clone(), 14.0, theme::POLISHED_STEEL)],
+        children![label("Empty", font.clone(), 14.0, theme::TEXT_DIM)],
     ));
 
     let create = commands
@@ -307,12 +307,12 @@ fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: 
                 padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
                 ..default()
             },
-            BackgroundColor(theme::ENERGETIC_GREEN),
+            BackgroundColor(theme::EMERALD),
             ChildOf(card),
         ))
         .id();
     commands.spawn((
-        label("Create", font, 12.0, theme::FORGE_SOOT),
+        label("Create", font, 12.0, theme::EMERALD_INK),
         ChildOf(create),
     ));
 
