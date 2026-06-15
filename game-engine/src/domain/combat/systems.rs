@@ -231,7 +231,7 @@ pub fn handle_hit_reactions(
 pub fn update_attack_timers(
     mut commands: Commands,
     time: Res<Time>,
-    mut attack_timers: Query<(Entity, &mut AttackTimer)>,
+    mut attack_timers: Query<(Entity, &mut AttackTimer), Without<DeadEntity>>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
 ) {
     for (entity, mut timer) in attack_timers.iter_mut() {
@@ -259,7 +259,7 @@ pub fn update_attack_timers(
 pub fn update_hit_stun(
     mut commands: Commands,
     time: Res<Time>,
-    mut hit_stun: Query<(Entity, &mut HitStun)>,
+    mut hit_stun: Query<(Entity, &mut HitStun), Without<DeadEntity>>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
 ) {
     for (entity, mut stun) in hit_stun.iter_mut() {

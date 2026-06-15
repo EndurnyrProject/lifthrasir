@@ -527,20 +527,22 @@ pub fn on_entity_vanish_request(
         _ => "unknown",
     };
 
-    // Check if entity is moving
-    if let Ok(movement_state) = movement_query.get(entity) {
-        if matches!(movement_state, MovementState::Moving) {
-            // Entity is moving - defer despawn until movement completes
-            debug!(
-                "Entity {:?} (AID {}) is moving, deferring despawn ({})",
-                entity, event.aid, vanish_reason
-            );
+    let is_moving = movement_query
+        .get(entity)
+        .is_ok_and(|state| matches!(state, MovementState::Moving));
 
-            commands
-                .entity(entity)
-                .insert(PendingDespawn::new(event.vanish_type));
-            return;
-        }
+    // Death (vanish_type 1) plays its animation via combat::handle_death, and moving
+    // entities finish their move first - both defer despawn instead of removing now.
+    if event.vanish_type == 1 || is_moving {
+        debug!(
+            "Entity {:?} (AID {}) deferring despawn ({})",
+            entity, event.aid, vanish_reason
+        );
+
+        commands
+            .entity(entity)
+            .insert(PendingDespawn::new(event.vanish_type));
+        return;
     }
 
     // Entity is idle or missing MovementState - despawn immediately
@@ -570,8 +572,13 @@ pub fn check_pending_despawns_system(
     query: Query<(Entity, &PendingDespawn, &MovementState, &NetworkEntity)>,
 ) {
     for (entity, pending, movement_state, network_entity) in query.iter() {
-        let should_despawn =
-            matches!(movement_state, MovementState::Idle) || pending.has_timed_out();
+        // Dead entities are idle while their death animation plays, so they despawn
+        // only on timeout; others despawn as soon as movement completes.
+        let should_despawn = if pending.vanish_type == 1 {
+            pending.has_timed_out()
+        } else {
+            matches!(movement_state, MovementState::Idle) || pending.has_timed_out()
+        };
 
         if should_despawn {
             let reason = if pending.has_timed_out() {
