@@ -1,0 +1,12 @@
+# Client Configuration File
+# This file contains network and client settings for connecting to the Ragnarok Online server
+
+[server]
+# Login server connection settings
+ip = "127.0.0.1"
+port = 6900
+
+# Client version (format: YYYYMMDD)
+# This should match the client version expected by your server
+client_version = 20180620
+

@@ -1,0 +1,44 @@
+:root {
+    --primary: #00E57A;
+    --primary-hover: #00C46A;
+    --primary-disabled: #2D3038;
+    --primary-transparent-layer: rgba(0, 229, 122, 0.35);
+    --headline: #E1E1E1;
+    --headline-sec: #E1E1E1;
+    --text-color: #E1E1E1;
+    --text-color-dark: #444444;
+    --disabled-text: #444444;
+    --disabled-text-darker: #2D3038;
+    --gray-background: #2D3038;
+    --gray-background-disabled: #1A1A1A;
+
+    --forge-soot: #1A1A1A;
+    --slate-gray: #2D3038;
+    --polished-steel: #444444;
+    --energetic-green: #00E57A;
+    --ashen-white: #E1E1E1;
+    --worn-crimson: #A44242;
+    --health-red: #E74C3C;
+    --mana-blue: #3498DB;
+    --gold-yellow: #F1C40F;
+}
+
+/*
+ * extended_ui's font-family INHERITANCE is broken for `.ttf` paths: an inherited
+ * value is treated as a folder and mangled into "<family>/<basename>-<weight>.ttf"
+ * (-> "Not a directory" -> no font -> invisible text). Only a font-family set on the
+ * text-bearing element's OWN selector loads correctly. So widget label/text children
+ * (which inherit otherwise) must be given a font here, on their own classes, or they
+ * render nothing. Shared defaults below cover buttons and inputs for every screen.
+ */
+.button-text {
+    font-family: "fonts/palatino-linotype-bold.ttf";
+    font-size: 16px;
+    color: var(--forge-soot);
+}
+
+.input-text,
+.input-label {
+    font-family: "fonts/palatino-linotype-regular.ttf";
+    color: var(--ashen-white);
+}

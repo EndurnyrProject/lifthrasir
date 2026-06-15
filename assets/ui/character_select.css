@@ -1,0 +1,39 @@
+#character-select-screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0);
+}
+
+/* Transparent on purpose: this panel stretches to fill the whole screen once the
+ * card grid is populated, so an opaque background would hide the menu background.
+ * The cards carry their own slate-gray panels. */
+#character-select-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px;
+    background: rgba(0, 0, 0, 0);
+}
+
+#character-select-title {
+    font-family: "fonts/ringbearer-medium.ttf";
+    font-size: 32px;
+    color: var(--energetic-green);
+    margin: 0 0 24px 0;
+}
+
+/*
+ * The slot cards are spawned at runtime as raw bevy_ui nodes (rich, nested, and
+ * data-driven — beyond what extended_ui can author/style), so this container only
+ * lays them out. Card visuals live in `screens/character_select.rs` via `theme`.
+ */
+#character-grid {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+}

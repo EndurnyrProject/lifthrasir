@@ -1,0 +1,90 @@
+#character-create-screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0);
+}
+
+#character-create-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#character-create-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 360px;
+    padding: 32px;
+    background: var(--slate-gray);
+    border: 1px var(--polished-steel);
+    border-radius: 8px;
+}
+
+#character-create-title {
+    font-family: "fonts/ringbearer-medium.ttf";
+    font-size: 32px;
+    color: var(--energetic-green);
+    margin: 0 0 16px 0;
+}
+
+/* Live SPR/ACT preview; the textured node is spawned as a bevy_ui child in Rust. */
+#char-preview {
+    width: 144px;
+    height: 224px;
+    margin: 0 0 16px 0;
+}
+
+#char-name {
+    width: 100%;
+    margin: 0 0 16px 0;
+}
+
+.cycler {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0 4px 0;
+}
+
+.cycler-value {
+    font-family: "fonts/palatino-linotype-regular.ttf";
+    font-size: 16px;
+    color: var(--ashen-white);
+    width: 120px;
+    margin: 0 12px 0 12px;
+}
+
+.cycler-label {
+    font-family: "fonts/palatino-linotype-regular.ttf";
+    font-size: 12px;
+    color: var(--polished-steel);
+    margin: 0 0 12px 0;
+}
+
+#create-error {
+    font-family: "fonts/palatino-linotype-regular.ttf";
+    font-size: 14px;
+    color: var(--worn-crimson);
+    min-height: 18px;
+    margin: 8px 0 12px 0;
+}
+
+#create-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+#create-cancel {
+    margin: 0 12px 0 0;
+}
+
+#create-confirm {
+    color: var(--forge-soot);
+}

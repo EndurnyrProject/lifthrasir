@@ -1,0 +1,34 @@
+<html lang="en">
+  <head>
+    <meta name="login" />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="login.css" />
+  </head>
+  <body id="login-screen">
+    <form id="login-form" action="submit_login" validate="Send">
+      <div id="login-panel">
+        <div id="login-logo"></div>
+        <p class="field-label">Username</p>
+        <input
+          id="login-username"
+          name="username"
+          type="text"
+          placeholder="Username"
+          maxlength="24"
+          required
+        />
+        <p class="field-label">Password</p>
+        <input
+          id="login-password"
+          name="password"
+          type="password"
+          placeholder="Password"
+          maxlength="32"
+          required
+        />
+        <p id="login-error"></p>
+        <button id="login-connect" type="submit">Connect</button>
+      </div>
+    </form>
+  </body>
+</html>

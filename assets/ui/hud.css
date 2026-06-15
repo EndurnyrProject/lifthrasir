@@ -1,0 +1,86 @@
+/*
+ * In-game HUD: a transparent full-screen root that pins the character-info panel
+ * to the top-left and the chat box to the bottom-left via flex space-between
+ * (extended_ui's absolute positioning is unproven; flexbox is). World clicks reach
+ * the engine through native input, not Bevy picking, so the transparent root does
+ * not block gameplay.
+ *
+ * Per extended_ui's broken font-family inheritance, every text-bearing element sets
+ * its own font-family (a parent's would be mangled into a folder path -> no font).
+ */
+#hud-root {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0);
+}
+
+#char-info {
+    display: flex;
+    flex-direction: column;
+    width: 240px;
+    padding: 12px;
+    background: rgba(45, 48, 56, 0.85);
+    border: 1px var(--polished-steel);
+    border-radius: 6px;
+}
+
+.hud-name {
+    font-family: "fonts/palatino-linotype-bold.ttf";
+    font-size: 18px;
+    color: var(--energetic-green);
+    margin: 0 0 4px 0;
+}
+
+.hud-text {
+    font-family: "fonts/palatino-linotype-regular.ttf";
+    font-size: 13px;
+    color: var(--ashen-white);
+    margin: 0;
+}
+
+.hud-bar {
+    width: 100%;
+    height: 12px;
+    margin: 2px 0 6px 0;
+}
+
+#hp-bar {
+    color: var(--health-red);
+}
+
+#sp-bar {
+    color: var(--mana-blue);
+}
+
+#chat-box {
+    display: flex;
+    flex-direction: column;
+    width: 380px;
+    height: 160px;
+    padding: 8px;
+    background: rgba(26, 26, 26, 0.7);
+    border: 1px var(--polished-steel);
+    border-radius: 6px;
+}
+
+#chat-scroll {
+    width: 100%;
+    height: 118px;
+}
+
+#chat-history {
+    font-family: "fonts/palatino-linotype-regular.ttf";
+    font-size: 13px;
+    color: var(--ashen-white);
+    margin: 0;
+}
+
+#chat-input {
+    width: 100%;
+    margin: 6px 0 0 0;
+}

@@ -1,0 +1,49 @@
+<html lang="en">
+  <head>
+    <meta name="character_create" />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="character_create.css" />
+  </head>
+  <body id="character-create-screen">
+    <form id="character-create-form" action="create_character" validate="Create">
+      <div id="character-create-panel">
+        <h1 id="character-create-title">Create Character</h1>
+        <div id="char-preview"></div>
+        <input
+          id="char-name"
+          name="name"
+          type="text"
+          placeholder="Name"
+          maxlength="23"
+          required
+        />
+
+        <div class="cycler">
+          <button class="cycler-btn" type="button" onclick="hair_style_prev">&lt;</button>
+          <p id="hair-style-value" class="cycler-value">1</p>
+          <button class="cycler-btn" type="button" onclick="hair_style_next">&gt;</button>
+        </div>
+        <p class="cycler-label">Hair Style</p>
+
+        <div class="cycler">
+          <button class="cycler-btn" type="button" onclick="hair_color_prev">&lt;</button>
+          <p id="hair-color-value" class="cycler-value">0</p>
+          <button class="cycler-btn" type="button" onclick="hair_color_next">&gt;</button>
+        </div>
+        <p class="cycler-label">Hair Color</p>
+
+        <div class="cycler">
+          <button class="cycler-btn" type="button" onclick="toggle_sex">Sex</button>
+          <p id="sex-value" class="cycler-value">Male</p>
+        </div>
+
+        <p id="create-error"></p>
+
+        <div id="create-actions">
+          <button id="create-cancel" type="button" onclick="cancel_creation">Cancel</button>
+          <button id="create-confirm" type="submit">Create</button>
+        </div>
+      </div>
+    </form>
+  </body>
+</html>

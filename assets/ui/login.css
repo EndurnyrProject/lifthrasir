@@ -1,0 +1,63 @@
+#login-screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0);
+}
+
+#login-form {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#login-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 360px;
+    padding: 32px;
+    background: var(--slate-gray);
+    border: 1px var(--polished-steel);
+    border-radius: 8px;
+}
+
+/* Logo image is mounted as a raw bevy_ui ImageNode child in `screens/login.rs`
+ * (loaded via `ro://logo.png`); this only sizes/positions the slot. */
+#login-logo {
+    width: 280px;
+    height: 152px;
+    margin: 0 0 24px 0;
+}
+
+.field-label {
+    font-family: "fonts/palatino-linotype-bold.ttf";
+    font-size: 14px;
+    color: var(--ashen-white);
+    width: 100%;
+    margin: 0 0 4px 0;
+}
+
+#login-username,
+#login-password {
+    width: 100%;
+    margin: 0 0 16px 0;
+}
+
+#login-error {
+    font-family: "fonts/palatino-linotype-regular.ttf";
+    font-size: 14px;
+    color: var(--worn-crimson);
+    min-height: 18px;
+    margin: 0 0 12px 0;
+}
+
+#login-connect {
+    font-family: "fonts/palatino-linotype-bold.ttf";
+    width: 100%;
+    color: var(--forge-soot);
+}

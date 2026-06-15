@@ -51,7 +51,6 @@ reference.xml
 # Debug dump files
 *.dot
 *.svg
-*.png
 
 ### macOS ###
 # General
@@ -304,5 +303,6 @@ lib/ocaml/
 .bsb.lock
 
 docs/superpowers/
+designs/
 
 
