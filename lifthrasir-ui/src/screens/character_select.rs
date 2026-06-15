@@ -286,6 +286,7 @@ fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: 
 }
 
 /// Despawns and rebuilds the hero panel content when selection or roster changes.
+#[allow(clippy::too_many_arguments)]
 fn rebuild_hero_panel(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
