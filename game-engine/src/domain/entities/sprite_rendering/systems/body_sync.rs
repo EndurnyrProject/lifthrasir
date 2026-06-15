@@ -10,21 +10,25 @@ use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 
+type BodyLayerQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static RenderLayer,
+        &'static ChildOf,
+        &'static MeshMaterial3d<StandardMaterial>,
+        &'static mut Transform,
+        &'static mut BodyAttachPoint,
+    ),
+    Without<HeadLayer>,
+>;
+
 fn sync_body_layer_impl<T: ActionLayout>(
     game_time_ms: u32,
     animations: &Res<Assets<RoAnimationAsset>>,
     materials: &mut Assets<StandardMaterial>,
     parent_query: &Query<&RoSpriteGeneric<T>>,
-    layer_query: &mut Query<
-        (
-            &RenderLayer,
-            &ChildOf,
-            &MeshMaterial3d<StandardMaterial>,
-            &mut Transform,
-            &mut BodyAttachPoint,
-        ),
-        Without<HeadLayer>,
-    >,
+    layer_query: &mut BodyLayerQuery,
 ) {
     for (layer, child_of, material_handle, mut transform, mut attach_point) in
         layer_query.iter_mut()
@@ -85,16 +89,7 @@ pub fn sync_player_body_layer(
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     parent_query: Query<&PlayerSprite>,
-    mut layer_query: Query<
-        (
-            &RenderLayer,
-            &ChildOf,
-            &MeshMaterial3d<StandardMaterial>,
-            &mut Transform,
-            &mut BodyAttachPoint,
-        ),
-        Without<HeadLayer>,
-    >,
+    mut layer_query: BodyLayerQuery,
 ) {
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
     sync_body_layer_impl(
@@ -116,16 +111,7 @@ pub fn sync_mob_body_layer(
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     parent_query: Query<&MobSprite>,
-    mut layer_query: Query<
-        (
-            &RenderLayer,
-            &ChildOf,
-            &MeshMaterial3d<StandardMaterial>,
-            &mut Transform,
-            &mut BodyAttachPoint,
-        ),
-        Without<HeadLayer>,
-    >,
+    mut layer_query: BodyLayerQuery,
 ) {
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
     sync_body_layer_impl(

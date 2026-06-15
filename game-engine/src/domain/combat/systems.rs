@@ -192,6 +192,18 @@ pub fn apply_pending_hit_reactions(
     }
 }
 
+type HitReactionQuery<'w, 's> = Query<
+    'w,
+    's,
+    Entity,
+    (
+        With<AnimationState>,
+        Without<HasEndure>,
+        Without<AttackTimer>,
+        Without<HitStun>,
+    ),
+>;
+
 #[auto_add_system(
     plugin = crate::app::combat_plugin::CombatDomainPlugin,
     schedule = Update,
@@ -199,15 +211,7 @@ pub fn apply_pending_hit_reactions(
 )]
 pub fn handle_hit_reactions(
     mut commands: Commands,
-    hit_entities: Query<
-        Entity,
-        (
-            With<AnimationState>,
-            Without<HasEndure>,
-            Without<AttackTimer>,
-            Without<HitStun>,
-        ),
-    >,
+    hit_entities: HitReactionQuery,
     animation_states: Query<&AnimationState>,
 ) {
     for entity in hit_entities.iter() {

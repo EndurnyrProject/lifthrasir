@@ -11,6 +11,19 @@ use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 
+type HeadLayerQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static HeadAttachment,
+        &'static RenderLayer,
+        &'static ChildOf,
+        &'static MeshMaterial3d<StandardMaterial>,
+        &'static mut Transform,
+    ),
+    With<HeadLayer>,
+>;
+
 /// Head offset relative to the entity origin in RO screen space, matching the
 /// original client: the head layer position is corrected by the difference
 /// between the body and head attach points so the necks align.
@@ -61,16 +74,7 @@ pub fn sync_player_head_layer(
     camera_query: Query<&Transform, (With<Camera3d>, Without<HeadLayer>)>,
     parent_query: Query<&PlayerSprite>,
     body_query: Query<(&BodyAttachPoint, &RenderLayer, &Transform), Without<HeadLayer>>,
-    mut head_query: Query<
-        (
-            &HeadAttachment,
-            &RenderLayer,
-            &ChildOf,
-            &MeshMaterial3d<StandardMaterial>,
-            &mut Transform,
-        ),
-        With<HeadLayer>,
-    >,
+    mut head_query: HeadLayerQuery,
 ) {
     let Ok(camera_transform) = camera_query.single() else {
         return;

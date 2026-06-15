@@ -7,19 +7,23 @@ use crate::domain::entities::character::states::AnimationState;
 use crate::domain::entities::sprite_rendering::components::{
     MobSprite, PlayerSprite, RoSpriteGeneric,
 };
-use crate::domain::entities::sprite_rendering::layout::ActionLayout;
+use crate::domain::entities::sprite_rendering::layout::{ActionLayout, MobLayout, PlayerLayout};
 use crate::domain::system_sets::SpriteRenderingSystems;
+
+type SpriteActionQuery<'w, 's, T> = Query<
+    'w,
+    's,
+    (
+        &'static AnimationState,
+        Option<&'static AttackTimer>,
+        &'static mut RoSpriteGeneric<T>,
+    ),
+    Or<(Changed<AnimationState>, Added<RoSpriteGeneric<T>>)>,
+>;
 
 fn sync_sprite_action_impl<T: ActionLayout>(
     time: &Res<Time>,
-    query: &mut Query<
-        (
-            &AnimationState,
-            Option<&AttackTimer>,
-            &mut RoSpriteGeneric<T>,
-        ),
-        Or<(Changed<AnimationState>, Added<RoSpriteGeneric<T>>)>,
-    >,
+    query: &mut SpriteActionQuery<T>,
 ) {
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
 
@@ -47,10 +51,7 @@ fn sync_sprite_direction_impl<T: ActionLayout>(
 )]
 pub fn sync_player_sprite_action(
     time: Res<Time>,
-    mut query: Query<
-        (&AnimationState, Option<&AttackTimer>, &mut PlayerSprite),
-        Or<(Changed<AnimationState>, Added<PlayerSprite>)>,
-    >,
+    mut query: SpriteActionQuery<PlayerLayout>,
 ) {
     sync_sprite_action_impl(&time, &mut query);
 }
@@ -73,10 +74,7 @@ pub fn sync_player_sprite_direction(
 )]
 pub fn sync_mob_sprite_action(
     time: Res<Time>,
-    mut query: Query<
-        (&AnimationState, Option<&AttackTimer>, &mut MobSprite),
-        Or<(Changed<AnimationState>, Added<MobSprite>)>,
-    >,
+    mut query: SpriteActionQuery<MobLayout>,
 ) {
     sync_sprite_action_impl(&time, &mut query);
 }

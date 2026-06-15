@@ -191,6 +191,19 @@ fn spawn_npc_components(
     );
 }
 
+type PendingRenderLayerQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        Option<&'static mut PlayerAppearance>,
+        Option<&'static mut PlayerSprite>,
+        Option<&'static mut MobSprite>,
+        &'static mut RoSprite,
+    ),
+    With<PendingRenderLayers>,
+>;
+
 /// System that finalizes render layers when animation assets are loaded.
 /// Spawns child entities with Mesh3d + MeshMaterial3d + RenderLayer components.
 #[auto_add_system(
@@ -198,20 +211,12 @@ fn spawn_npc_components(
     schedule = Update,
     config(in_set = SpriteRenderingSystems::HierarchySpawn, after = crate::infrastructure::assets::animation_processing_system::process_pending_animations)
 )]
+#[allow(clippy::too_many_arguments)]
 pub fn finalize_render_layers(
     mut commands: Commands,
     mut pending_animations: ResMut<PendingAnimations>,
     animations: Res<Assets<RoAnimationAsset>>,
-    mut pending_entities: Query<
-        (
-            Entity,
-            Option<&mut PlayerAppearance>,
-            Option<&mut PlayerSprite>,
-            Option<&mut MobSprite>,
-            &mut RoSprite,
-        ),
-        With<PendingRenderLayers>,
-    >,
+    mut pending_entities: PendingRenderLayerQuery,
     alive: Query<Entity>,
     config: Res<SpriteHierarchyConfig>,
     shared_quad: Res<SharedSpriteQuad>,
@@ -341,6 +346,7 @@ fn layer_z_offset(layer: Tag, config: &SpriteHierarchyConfig) -> f32 {
     order * Z_OFFSET_PER_LAYER
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_render_layer_child(
     commands: &mut Commands,
     parent: Entity,
@@ -404,6 +410,9 @@ fn spawn_render_layer_child(
     sprite_entity
 }
 
+type UnlinkedHeadQuery<'w, 's> =
+    Query<'w, 's, (Entity, &'static ChildOf), (With<HeadLayer>, Without<HeadAttachment>)>;
+
 /// System that links HeadLayer entities to their body siblings via HeadAttachment.
 /// Runs after render layers are spawned and finds unlinked heads.
 #[auto_add_system(
@@ -413,7 +422,7 @@ fn spawn_render_layer_child(
 )]
 pub fn link_head_to_body(
     mut commands: Commands,
-    unlinked_heads: Query<(Entity, &ChildOf), (With<HeadLayer>, Without<HeadAttachment>)>,
+    unlinked_heads: UnlinkedHeadQuery,
     body_layers: Query<Entity, With<BodyAttachPoint>>,
     children_query: Query<&Children>,
 ) {
