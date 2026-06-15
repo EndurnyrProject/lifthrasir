@@ -120,11 +120,9 @@ fn start_attack_animation(
         }
     }
 
-    // Insert AnimationState::Attacking directly to ensure immediate sync
-    commands.entity(src).insert((
-        AttackTimer::new(attack_duration_ms as f32 / 1000.0, 0),
-        AnimationState::Attacking,
-    ));
+    commands
+        .entity(src)
+        .insert(AttackTimer::new(attack_duration_ms as f32 / 1000.0, 0));
 
     if let Ok(mut behavior) = behaviors.get_mut(src) {
         behavior.start(AnimationState::Attacking);
@@ -176,8 +174,6 @@ pub fn apply_pending_hit_reactions(
             continue;
         }
 
-        // Insert AnimationState::Hit directly to ensure immediate sync
-        commands.entity(reaction.target).insert(AnimationState::Hit);
         if let Ok(mut behavior) = behaviors.get_mut(reaction.target) {
             behavior.start(AnimationState::Hit);
         }
@@ -238,11 +234,7 @@ pub fn update_attack_timers(
         timer.timer.tick(time.delta());
 
         if timer.timer.just_finished() {
-            // Insert AnimationState::Idle directly to ensure immediate sync
-            commands
-                .entity(entity)
-                .remove::<AttackTimer>()
-                .insert(AnimationState::Idle);
+            commands.entity(entity).remove::<AttackTimer>();
 
             if let Ok(mut behavior) = behaviors.get_mut(entity) {
                 behavior.start(AnimationState::Idle);
@@ -266,11 +258,7 @@ pub fn update_hit_stun(
         stun.timer.tick(time.delta());
 
         if stun.timer.just_finished() {
-            // Insert AnimationState::Idle directly to ensure immediate sync
-            commands
-                .entity(entity)
-                .remove::<HitStun>()
-                .insert(AnimationState::Idle);
+            commands.entity(entity).remove::<HitStun>();
 
             if let Ok(mut behavior) = behaviors.get_mut(entity) {
                 behavior.start(AnimationState::Idle);
@@ -299,10 +287,7 @@ pub fn handle_death(
             continue;
         };
 
-        // Insert AnimationState::Dead directly to ensure immediate sync
-        commands
-            .entity(entity)
-            .insert((DeadEntity, AnimationState::Dead));
+        commands.entity(entity).insert(DeadEntity);
 
         if let Ok(mut behavior) = behaviors.get_mut(entity) {
             behavior.reset();

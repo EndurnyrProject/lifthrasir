@@ -230,13 +230,10 @@ pub fn handle_movement_confirmed_system(
             entity_commands.insert((target, CharacterDirection { facing: direction }));
         } else {
             debug!("Starting Walking animation for entity {:?}", entity);
-            // Insert AnimationState::Walking directly to ensure immediate sync with RoSprite
-            // (moonshine_behavior transitions may be deferred)
             entity_commands.insert((
                 target,
                 MovementState::Moving,
                 CharacterDirection { facing: direction },
-                AnimationState::Walking,
             ));
 
             if let Ok(mut behavior) = behaviors.get_mut(entity) {
@@ -384,11 +381,10 @@ pub fn handle_movement_stopped_observer(
         "Transitioning to Idle animation for entity {:?}",
         event.entity
     );
-    // Insert AnimationState::Idle directly to ensure immediate sync with RoSprite
     entity_commands
         .remove::<MovementTarget>()
         .remove::<WalkablePath>()
-        .insert((MovementState::Idle, AnimationState::Idle));
+        .insert(MovementState::Idle);
 
     if let Ok(mut behavior) = behaviors.get_mut(event.entity) {
         behavior.start(AnimationState::Idle);

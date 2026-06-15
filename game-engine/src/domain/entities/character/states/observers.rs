@@ -99,7 +99,6 @@ type CharactersWithChangedStatusEffects<'w, 's> =
     schedule = Update
 )]
 pub fn handle_status_effect_state_changes(
-    mut commands: Commands,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     characters: CharactersWithChangedStatusEffects,
 ) {
@@ -111,8 +110,6 @@ pub fn handle_status_effect_state_changes(
         let current_state = *behavior.current();
 
         if status.dead && current_state != AnimationState::Dead {
-            // Insert AnimationState::Dead directly to ensure immediate sync
-            commands.entity(entity).insert(AnimationState::Dead);
             behavior.reset();
             behavior.start(AnimationState::Dead);
             continue;
@@ -121,15 +118,11 @@ pub fn handle_status_effect_state_changes(
         if (status.stunned || status.frozen || status.petrified)
             && current_state != AnimationState::Hit
         {
-            // Insert AnimationState::Hit directly to ensure immediate sync
-            commands.entity(entity).insert(AnimationState::Hit);
             behavior.start(AnimationState::Hit);
             continue;
         }
 
         if status.sleeping && current_state != AnimationState::Idle {
-            // Insert AnimationState::Idle directly to ensure immediate sync
-            commands.entity(entity).insert(AnimationState::Idle);
             behavior.start(AnimationState::Idle);
         }
     }
