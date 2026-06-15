@@ -8,6 +8,7 @@ pub mod input_plugin;
 pub mod map_domain_plugin;
 pub mod map_plugin;
 pub mod movement_plugin;
+pub mod native_input_plugin;
 pub mod plugin;
 pub mod sprite_rendering_domain_plugin;
 
@@ -21,5 +22,6 @@ pub use input_plugin::InputPlugin;
 pub use map_domain_plugin::MapDomainPlugin;
 pub use map_plugin::MapPlugin;
 pub use movement_plugin::MovementDomainPlugin;
+pub use native_input_plugin::NativeInputPlugin;
 pub use plugin::*;
 pub use sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin;

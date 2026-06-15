@@ -11,6 +11,7 @@ pub enum GameState {
     Connecting,
     ServerSelection,
     CharacterSelection,
+    CharacterCreation,
     InGame,
     Paused,
 }

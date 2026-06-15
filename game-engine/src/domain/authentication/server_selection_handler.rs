@@ -5,7 +5,7 @@ use crate::{
 use bevy::prelude::*;
 
 /// System that handles server selection events
-/// Updates the session and connects to character server (UI flow handled by Tauri)
+/// Updates the session and connects to character server
 pub fn handle_server_selection(
     mut commands: Commands,
     mut server_events: MessageReader<ServerSelectedEvent>,

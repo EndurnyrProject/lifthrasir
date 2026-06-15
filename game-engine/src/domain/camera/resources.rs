@@ -8,7 +8,7 @@ use bevy::prelude::*;
 /// - Cleared after processing to prevent accumulation
 ///
 /// # Usage
-/// Frontend sends deltas via Tauri bridge -> accumulates here -> camera system applies
+/// Input events send deltas -> accumulates here -> camera system applies
 #[derive(Resource, Debug, Default)]
 pub struct CameraRotationDelta {
     /// Horizontal mouse delta (positive = rotate right)

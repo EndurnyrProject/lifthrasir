@@ -59,8 +59,8 @@ pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>
 
     const RO_UNITS_PER_CELL: f32 = 5.0;
     const HALF_RO_CELL: f32 = RO_UNITS_PER_CELL / 2.0;
-    let cell_center_x = cell_x as f32 * RO_UNITS_PER_CELL + HALF_RO_CELL;
-    let cell_center_z = cell_y as f32 * RO_UNITS_PER_CELL + HALF_RO_CELL;
+    let cell_center_x = cell_x as f32 * RO_UNITS_PER_CELL;
+    let cell_center_z = cell_y as f32 * RO_UNITS_PER_CELL;
 
     const MARKER_SIZE: f32 = 0.4;
     let color = Srgba::hex("00FF00").unwrap().with_alpha(0.4);

@@ -51,7 +51,7 @@ pub fn spawn_sprite_hierarchy(
                 spawn_character_components(
                     &mut entity_commands,
                     *job_id,
-                    gender.clone(),
+                    *gender,
                     *head,
                     &asset_server,
                     &mut pending_animations,

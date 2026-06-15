@@ -107,10 +107,8 @@ impl JobSpriteRegistry {
                         names.insert(id as u32, name);
                     }
                 }
-                LuaValue::Number(id) => {
-                    if (0.0..=(MAX_VALID_JOB_ID as f64)).contains(&id) {
-                        names.insert(id as u32, name);
-                    }
+                LuaValue::Number(id) if (0.0..=(MAX_VALID_JOB_ID as f64)).contains(&id) => {
+                    names.insert(id as u32, name);
                 }
                 _ => {}
             }

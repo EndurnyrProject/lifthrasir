@@ -3,19 +3,15 @@ use bevy::prelude::*;
 /// Movement state component indicating whether the character is moving
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 #[reflect(Component)]
+#[derive(Default)]
 pub enum MovementState {
     /// Character is idle, not moving
+    #[default]
     Idle,
     /// Character is currently moving towards a destination
     Moving,
     /// Movement is blocked (collision, stun, etc.)
     Blocked,
-}
-
-impl Default for MovementState {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 /// Movement target with timing and distance caching

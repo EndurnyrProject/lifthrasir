@@ -1,5 +1,6 @@
 pub mod catalog;
 pub mod catalog_builder;
+pub mod chat;
 pub mod components;
 pub mod events;
 pub mod forms;

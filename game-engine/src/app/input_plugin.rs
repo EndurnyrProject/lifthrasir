@@ -1,10 +1,10 @@
-use bevy_auto_plugin::prelude::{auto_plugin, AutoPlugin};
+use bevy_auto_plugin::prelude::AutoPlugin;
 
 /// Input Plugin
 ///
-/// Handles all input from Tauri UI including:
-/// - Cursor position forwarding
-/// - Mouse click forwarding
+/// Handles all input including:
+/// - Cursor position
+/// - Mouse clicks
 /// - Terrain cursor visualization
 /// - Cursor state management (default, attack, impossible, etc.)
 /// - Terrain raycasting cache

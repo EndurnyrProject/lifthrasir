@@ -5,6 +5,7 @@ use bevy_auto_plugin::prelude::*;
 use super::components::{CameraFollowSettings, CameraFollowTarget};
 use super::resources::CameraRotationDelta;
 use crate::domain::entities::markers::LocalPlayer;
+use crate::domain::input::UiFocus;
 use crate::domain::system_sets::CameraSystems;
 
 // =============================================================================
@@ -106,6 +107,7 @@ pub fn update_camera_target_cache(
 pub fn camera_follow_system(
     time: Res<Time>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
+    ui_focus: Res<UiFocus>,
     mut mouse_wheel_events: MessageReader<MouseWheel>,
     mut rotation_delta: ResMut<CameraRotationDelta>,
     mut camera_query: Query<
@@ -186,7 +188,7 @@ pub fn camera_follow_system(
         }
 
         // Reset zoom and rotation (R key)
-        if keyboard_input.just_pressed(KeyCode::KeyR) {
+        if !ui_focus.text_input_active && keyboard_input.just_pressed(KeyCode::KeyR) {
             let defaults = CameraFollowSettings::default();
             settings.offset = defaults.offset;
             settings.yaw = defaults.yaw;

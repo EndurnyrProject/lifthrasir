@@ -1,6 +1,6 @@
 use bevy::{
     asset::{io::Reader, Asset, AssetLoader, LoadContext},
-    log::{error, info},
+    log::info,
     prelude::*,
     reflect::TypePath,
 };

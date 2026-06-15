@@ -2,13 +2,25 @@
 resolver = "2"
 members = [
     "game-engine",
-    "src-tauri",
     "grf-utils",
+    "lifthrasir-ui",
+    "lifthrasir",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+
+[workspace.dependencies]
+bevy = { version = "0.18.1", features = [
+    "jpeg",
+    "trace",
+    "trace_tracy",
+    "bevy_remote",
+] }
+secrecy = { version = "0.10", features = ["serde"] }
+bevy_extended_ui = "1.6.0"
+bevy_extended_ui_macros = "1.6.0"
 
 [profile.dev.package."*"]
 opt-level = 3

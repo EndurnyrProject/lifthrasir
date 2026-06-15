@@ -263,7 +263,7 @@ fn run_login_client_update(client: Option<ResMut<LoginClient>>, events: LoginEve
 
 /// System that handles server selection events
 ///
-/// Updates the session and connects to character server (UI flow handled by Tauri)
+/// Updates the session and connects to character server
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
     schedule = Update,

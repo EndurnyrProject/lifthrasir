@@ -4,12 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-bevy = { version = "0.18.1", features = [
-  "jpeg",
-  "trace",
-  "trace_tracy",
-  "bevy_remote",
-] }
+bevy = { workspace = true }
 bevy_auto_plugin = "0.10.0"
 bevy_common_assets = { version = "0.15", features = ["toml"] }
 bevy_asset_loader = "0.26"
@@ -40,7 +35,7 @@ byteorder = "1.5"
 async-trait = "0.1"
 
 # Security dependencies
-secrecy = { version = "0.10", features = ["serde"] }
+secrecy = { workspace = true }
 
 # Async runtime integration
 bevy-tokio-tasks = { version = "0.18" }

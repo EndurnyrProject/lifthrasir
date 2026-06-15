@@ -2,20 +2,15 @@ use crate::infrastructure::ro_formats::{PosKeyframe, RotKeyframe};
 use bevy::prelude::*;
 
 /// Animation type for RSM models
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AnimationType {
     /// No animation playing
+    #[default]
     None,
     /// Loop animation indefinitely
     Loop,
     /// Play animation once
     Once,
-}
-
-impl Default for AnimationType {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 #[derive(Component, Debug, Clone)]
