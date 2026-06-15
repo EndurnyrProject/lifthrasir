@@ -12,7 +12,7 @@ use game_engine::infrastructure::networking::protocol::login::types::ServerInfo;
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::ServerSelectedEvent;
 
-use crate::theme;
+use crate::theme::{self, label};
 
 /// Online-population bucket for a server row's status pill.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -163,21 +163,6 @@ fn show_server_select_screen(
         },
         ChildOf(panel),
     ));
-}
-
-fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
-    (
-        Text::new(text),
-        TextFont {
-            font,
-            font_size: size,
-            ..default()
-        },
-        TextColor(color),
-        // Children don't participate in picking so the whole row is one clean hover
-        // target (no flicker moving between children, no blocking the row).
-        Pickable::IGNORE,
-    )
 }
 
 /// Spawns one rich, clickable server row per server under the list container once the

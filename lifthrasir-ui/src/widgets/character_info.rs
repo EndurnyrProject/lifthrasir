@@ -217,7 +217,7 @@ fn spawn_top(
         ))
         .id();
     commands.spawn((
-        text(font_body.clone(), 11.5, theme::GOLD),
+        theme::label("", font_body.clone(), 11.5, theme::GOLD),
         HudText::Job,
         ChildOf(sub),
     ));
@@ -267,7 +267,11 @@ fn lv_chip(
         Pickable::IGNORE,
         ChildOf(row),
     ));
-    commands.spawn((text(font, 10.5, theme::TEXT), kind, ChildOf(row)));
+    commands.spawn((
+        theme::label("", font, 10.5, theme::TEXT),
+        kind,
+        ChildOf(row),
+    ));
 }
 
 fn spawn_bars(commands: &mut Commands, frame: Entity, font_body: Handle<Font>) {
@@ -366,7 +370,7 @@ fn spawn_bar(
         ChildOf(track),
     ));
     commands.spawn((
-        text(font, 11.0, theme::TEXT_DIM),
+        theme::label("", font, 11.0, theme::TEXT_DIM),
         TextLayout::new_with_justify(Justify::Right),
         HudText::matching(kind),
         Node {
@@ -446,7 +450,11 @@ fn spawn_exp(
         Pickable::IGNORE,
         ChildOf(lbl),
     ));
-    commands.spawn((text(font, 9.0, fill_color), text_kind, ChildOf(lbl)));
+    commands.spawn((
+        theme::label("", font, 9.0, fill_color),
+        text_kind,
+        ChildOf(lbl),
+    ));
 }
 
 impl HudText {
@@ -458,19 +466,6 @@ impl HudText {
             HudBar::JobExp => HudText::JobExp,
         }
     }
-}
-
-fn text(font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
-    (
-        Text::new(""),
-        TextFont {
-            font,
-            font_size: size,
-            ..default()
-        },
-        TextColor(color),
-        Pickable::IGNORE,
-    )
 }
 
 /// `current/max` as a 0..=100 percentage for a fill node's width.

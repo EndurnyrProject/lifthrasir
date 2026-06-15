@@ -32,7 +32,7 @@ use game_engine::domain::entities::character::events::forward_character_sprite_e
 use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
 
 use crate::screens::character_preview::{create_render_target, COLUMN_PX, ROW_PX};
-use crate::theme;
+use crate::theme::{self, label};
 
 const NAME_MAX: usize = 16;
 
@@ -403,19 +403,6 @@ fn cc_label(text: &str, font: Handle<Font>) -> impl Bundle {
             margin: UiRect::new(Val::ZERO, Val::ZERO, Val::Px(18.0), Val::Px(8.0)),
             ..default()
         },
-        Pickable::IGNORE,
-    )
-}
-
-fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
-    (
-        Text::new(text),
-        TextFont {
-            font,
-            font_size: size,
-            ..default()
-        },
-        TextColor(color),
         Pickable::IGNORE,
     )
 }

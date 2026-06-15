@@ -40,6 +40,21 @@ pub fn glass_panel() -> impl Bundle {
     )
 }
 
+/// A plain text label. `Pickable::IGNORE` keeps it from blocking hover/clicks on the
+/// row that hosts it. Pass `""` for labels whose text is filled in by a later system.
+pub fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(text),
+        TextFont {
+            font,
+            font_size: size,
+            ..default()
+        },
+        TextColor(color),
+        Pickable::IGNORE,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

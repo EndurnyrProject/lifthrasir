@@ -14,7 +14,7 @@ use game_engine::domain::character::events::{
 
 use crate::screens::character_create::CreationSlot;
 use crate::screens::character_preview::{CharacterDiorama, COLUMN_PX, ROW_PX};
-use crate::theme;
+use crate::theme::{self, label};
 
 pub struct CharacterSelectScreenPlugin;
 
@@ -669,18 +669,6 @@ fn update_delete_labels(
             }
         }
     }
-}
-
-fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
-    (
-        Text::new(text),
-        TextFont {
-            font,
-            font_size: size,
-            ..default()
-        },
-        TextColor(color),
-    )
 }
 
 /// The character to feature in the hero panel for the selected slot, or `None`
