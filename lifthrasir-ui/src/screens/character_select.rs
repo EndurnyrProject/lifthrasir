@@ -1,16 +1,10 @@
 //! Character selection screen.
 //!
 //! The static shell (`assets/ui/character_select.html`) is an extended_ui screen
-//! with an empty `#character-grid` container. The slot cards are too rich and
-//! data-driven for extended_ui's templating, so they are spawned at runtime as raw
-//! `bevy_ui` nodes parented under that container (one bevy_ui tree — they nest and
-//! render fine), styled from [`theme`]. Each occupied card shows a live animated
-//! sprite preview by cropping the shared diorama render target
-//! ([`CharacterDiorama`]) to the character's column via `ImageNode.rect`.
-//!
-//! Engine ownership of transitions is preserved: clicking a card writes
-//! `SelectCharacterEvent` and the engine drives the connect + `InGame` transition;
-//! deleting writes `DeleteCharacterRequestEvent` and the engine refreshes the list.
+//! with `#hero-panel` and `#character-grid` containers. The hero panel features
+//! the selected character with a live diorama crop, name, job/level, and action
+//! buttons. The roster grid shows compact slot cards; clicking a card updates
+//! the selected slot and the hero panel rebuilds.
 
 use bevy::prelude::*;
 use bevy_extended_ui::html::HtmlSource;
@@ -28,11 +22,9 @@ use crate::screens::character_preview::{CharacterDiorama, COLUMN_PX, ROW_PX};
 use crate::theme;
 
 const CHARACTER_SELECT_UI: &str = "character_select";
-/// `AssetServer` path relative to `assets/`. The `<link>` CSS hrefs inside resolve
-/// relative to this file, so `theme.css` -> `ui/theme.css`.
 const CHARACTER_SELECT_HTML: &str = "ui/character_select.html";
-/// `id` of the `<div>` that holds the runtime-spawned slot cards.
 const GRID_CONTAINER_ID: &str = "character-grid";
+const HERO_PANEL_ID: &str = "hero-panel";
 
 pub struct CharacterSelectScreenPlugin;
 
@@ -41,6 +33,7 @@ impl Plugin for CharacterSelectScreenPlugin {
         app.init_resource::<CharacterSelectionData>();
         app.init_resource::<CardsBuilt>();
         app.init_resource::<PendingDeletion>();
+        app.init_resource::<SelectedSlot>();
         app.add_systems(
             OnEnter(GameState::CharacterSelection),
             show_character_select_screen,
@@ -51,7 +44,7 @@ impl Plugin for CharacterSelectScreenPlugin {
         );
         app.add_systems(
             Update,
-            (receive_character_list, build_cards, update_delete_labels)
+            (receive_character_list, build_cards, rebuild_hero_panel, update_delete_labels)
                 .chain()
                 .run_if(in_state(GameState::CharacterSelection)),
         );
@@ -65,15 +58,17 @@ struct CharacterSelectionData {
     max_slots: u8,
 }
 
-/// Guards the one-shot card spawn; reset whenever a fresh list arrives (initial
-/// load, or a refresh after deletion) so the grid rebuilds.
+/// Guards the one-shot card spawn; reset whenever a fresh list arrives so the grid rebuilds.
 #[derive(Resource, Default)]
 struct CardsBuilt(bool);
 
-/// `char_id` currently armed for deletion (first Delete click arms, second
-/// confirms). `None` = nothing armed.
+/// `char_id` currently armed for deletion (first Delete click arms, second confirms).
 #[derive(Resource, Default)]
 struct PendingDeletion(Option<u32>);
+
+/// Roster slot currently featured in the hero panel.
+#[derive(Resource, Default)]
+struct SelectedSlot(usize);
 
 /// Marks a runtime-spawned slot card so the grid can be cleared on rebuild.
 #[derive(Component)]
@@ -85,16 +80,22 @@ struct DeleteButton {
     character_id: u32,
 }
 
+/// Marks the spawned hero-panel content for clean rebuild.
+#[derive(Component)]
+struct HeroContent;
+
 #[allow(deprecated)]
 fn show_character_select_screen(
     mut registry: ResMut<UiRegistry>,
     asset_server: Res<AssetServer>,
     mut built: ResMut<CardsBuilt>,
     mut pending: ResMut<PendingDeletion>,
+    mut selected: ResMut<SelectedSlot>,
     mut requests: MessageWriter<RequestCharacterListEvent>,
 ) {
     built.0 = false;
     pending.0 = None;
+    selected.0 = 0;
     let handle: Handle<HtmlAsset> = asset_server.load(CHARACTER_SELECT_HTML);
     registry.add_and_use(CHARACTER_SELECT_UI.into(), HtmlSource::from_handle(handle));
     requests.write(RequestCharacterListEvent);
@@ -121,8 +122,8 @@ fn receive_character_list(
     pending.0 = None;
 }
 
-/// Builds (or rebuilds) the slot cards under the grid container once the list and
-/// — for occupied slots — the diorama render target are both ready.
+/// Builds (or rebuilds) the compact slot cards under the grid container.
+/// Waits for the diorama target when occupied slots exist (hero panel needs it).
 fn build_cards(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -161,7 +162,6 @@ fn build_cards(
                 container,
                 slot,
                 info,
-                &diorama,
                 font_bold.clone(),
                 font_body.clone(),
             ),
@@ -172,97 +172,276 @@ fn build_cards(
     built.0 = true;
 }
 
-/// Shared card frame: dark slate panel with a steel border, laid out as a column.
-fn card_frame() -> impl Bundle {
-    (
-        CharacterCard,
-        Pickable::default(),
-        Node {
-            width: Val::Px(COLUMN_PX as f32 + 24.0),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::SpaceBetween,
-            padding: UiRect::all(Val::Px(8.0)),
-            margin: UiRect::all(Val::Px(6.0)),
-            border: UiRect::all(Val::Px(1.0)),
-            row_gap: Val::Px(6.0),
-            ..default()
-        },
-        BackgroundColor(theme::GLASS_2),
-        BorderColor::all(theme::TEXT_DIM),
-    )
-}
-
-fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
-    (
-        Text::new(text),
-        TextFont {
-            font,
-            font_size: size,
-            ..default()
-        },
-        TextColor(color),
-    )
-}
-
-/// Occupied slot: animated preview (cropped from the shared target), name,
-/// job + level, and a two-step Delete button. The whole card selects on click.
 fn spawn_occupied_card(
     commands: &mut Commands,
     container: Entity,
     slot: u8,
     info: &CharacterInfoWithJobName,
-    diorama: &CharacterDiorama,
     font_bold: Handle<Font>,
     font_body: Handle<Font>,
 ) {
-    let character_id = info.base.char_id;
-    let detail = format!("{}  Lv.{}", info.job_name, info.base.base_level);
+    let detail = format!("Lv {}", info.base.base_level);
+    let glyph = info.base.name.chars().next().unwrap_or('?').to_string();
 
-    let mut preview = ImageNode::default();
-    if let Some(target) = &diorama.target {
-        preview.image = target.clone();
-        preview.rect = diorama.columns.get(&slot).copied();
-    }
-
-    let card = commands.spawn((card_frame(), ChildOf(container))).id();
+    let card = commands
+        .spawn((
+            CharacterCard,
+            Pickable::default(),
+            Node {
+                width: Val::Px(214.0),
+                height: Val::Px(64.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(13.0),
+                padding: UiRect::all(Val::Px(12.0)),
+                margin: UiRect::all(Val::Px(7.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS_2),
+            BorderColor::all(theme::STROKE),
+            ChildOf(container),
+        ))
+        .id();
 
     commands.spawn((
-        preview,
+        label(glyph, font_bold.clone(), 19.0, theme::GOLD),
         Node {
-            width: Val::Px(COLUMN_PX as f32),
-            height: Val::Px(ROW_PX as f32),
+            width: Val::Px(46.0),
+            height: Val::Px(46.0),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border_radius: BorderRadius::all(Val::Px(9.0)),
             ..default()
         },
-        ChildOf(card),
-    ));
-    commands.spawn((
-        label(info.base.name.clone(), font_bold, 16.0, theme::TEXT),
-        ChildOf(card),
-    ));
-    commands.spawn((
-        label(detail, font_body.clone(), 13.0, theme::TEXT_DIM),
+        BackgroundColor(theme::GLASS),
+        BorderColor::all(theme::GOLD_FAINT),
         ChildOf(card),
     ));
 
-    let delete = commands
+    let col = commands
+        .spawn((
+            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), ..default() },
+            ChildOf(card),
+        ))
+        .id();
+    commands.spawn((label(info.base.name.clone(), font_bold, 15.0, theme::TEXT), ChildOf(col)));
+    commands.spawn((label(detail, font_body, 11.5, theme::TEXT_FAINT), ChildOf(col)));
+
+    let selected_slot = slot as usize;
+    commands.entity(card).observe(
+        move |_: On<Pointer<Click>>, mut sel: ResMut<SelectedSlot>| {
+            sel.0 = selected_slot;
+        },
+    );
+}
+
+fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: Handle<Font>) {
+    let card = commands
+        .spawn((
+            CharacterCard,
+            Pickable::default(),
+            Node {
+                width: Val::Px(214.0),
+                height: Val::Px(64.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                margin: UiRect::all(Val::Px(7.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::STROKE),
+            ChildOf(container),
+        ))
+        .id();
+    commands.spawn((label("+ Create", font, 12.0, theme::TEXT_FAINT), ChildOf(card)));
+
+    let selected_slot = slot as usize;
+    commands.entity(card).observe(
+        move |_: On<Pointer<Click>>, mut sel: ResMut<SelectedSlot>| {
+            sel.0 = selected_slot;
+        },
+    );
+}
+
+/// Despawns and rebuilds the hero panel content when selection or roster changes.
+fn rebuild_hero_panel(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    data: Res<CharacterSelectionData>,
+    diorama: Res<CharacterDiorama>,
+    selected: Res<SelectedSlot>,
+    built: Res<CardsBuilt>,
+    containers: Query<(Entity, &CssID)>,
+    existing: Query<Entity, With<HeroContent>>,
+) {
+    if !built.0 {
+        return;
+    }
+    if !selected.is_changed() && !built.is_changed() {
+        return;
+    }
+    let Some((panel, _)) = containers.iter().find(|(_, id)| id.0 == HERO_PANEL_ID) else {
+        return;
+    };
+    for e in &existing {
+        commands.entity(e).despawn();
+    }
+
+    let font_title = asset_server.load(theme::FONT_TITLE);
+    let font_body = asset_server.load(theme::FONT_BODY);
+
+    let frame = commands
+        .spawn((
+            HeroContent,
+            Node {
+                width: Val::Px(392.0),
+                height: Val::Px(440.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(14.0),
+                padding: UiRect::all(Val::Px(26.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(16.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS),
+            BorderColor::all(theme::GOLD_FAINT),
+            ChildOf(panel),
+        ))
+        .id();
+
+    match featured(&data.characters, selected.0) {
+        Some(info) => {
+            let slot = selected.0 as u8;
+            let mut preview = ImageNode::default();
+            if let Some(target) = &diorama.target {
+                preview.image = target.clone();
+                preview.rect = diorama.columns.get(&slot).copied();
+            }
+            commands.spawn((
+                preview,
+                Node {
+                    width: Val::Px(COLUMN_PX as f32),
+                    height: Val::Px(ROW_PX as f32),
+                    ..default()
+                },
+                ChildOf(frame),
+            ));
+            commands.spawn((
+                label(info.base.name.clone(), font_title, 25.0, theme::DISPLAY_GOLD),
+                ChildOf(frame),
+            ));
+            commands.spawn((
+                label(
+                    format!("{}   Lv. {}", info.job_name, info.base.base_level),
+                    font_body.clone(),
+                    13.0,
+                    theme::TEXT_DIM,
+                ),
+                ChildOf(frame),
+            ));
+            let actions = commands
+                .spawn((
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(10.0),
+                        ..default()
+                    },
+                    ChildOf(frame),
+                ))
+                .id();
+            spawn_enter_button(&mut commands, actions, slot, font_body.clone());
+            spawn_delete_button(&mut commands, actions, info.base.char_id, font_body);
+        }
+        None => {
+            commands.spawn((
+                label("Empty Slot", font_title, 20.0, theme::DISPLAY_GOLD),
+                ChildOf(frame),
+            ));
+            commands.spawn((
+                label("Forge a new hero.", font_body.clone(), 13.0, theme::TEXT_FAINT),
+                ChildOf(frame),
+            ));
+            spawn_create_button(&mut commands, frame, selected.0 as u8, font_body);
+        }
+    }
+}
+
+fn spawn_enter_button(commands: &mut Commands, parent: Entity, slot: u8, font: Handle<Font>) {
+    let btn = commands
+        .spawn((
+            Pickable::default(),
+            Node {
+                padding: UiRect::axes(Val::Px(18.0), Val::Px(12.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                ..default()
+            },
+            BackgroundColor(theme::EMERALD),
+            BorderColor::all(theme::GOLD_FAINT),
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((label("Enter Game", font, 15.0, theme::EMERALD_INK), ChildOf(btn)));
+    commands.entity(btn).observe(
+        move |mut click: On<Pointer<Click>>, mut writer: MessageWriter<SelectCharacterEvent>| {
+            click.propagate(false);
+            writer.write(SelectCharacterEvent { slot });
+        },
+    );
+}
+
+fn spawn_create_button(commands: &mut Commands, parent: Entity, slot: u8, font: Handle<Font>) {
+    let btn = commands
+        .spawn((
+            Pickable::default(),
+            Node {
+                padding: UiRect::axes(Val::Px(18.0), Val::Px(12.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(11.0)),
+                ..default()
+            },
+            BackgroundColor(theme::EMERALD),
+            BorderColor::all(theme::GOLD_FAINT),
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((label("Create Character", font, 15.0, theme::EMERALD_INK), ChildOf(btn)));
+    commands.entity(btn).observe(
+        move |mut click: On<Pointer<Click>>,
+              mut commands: Commands,
+              mut next: ResMut<NextState<GameState>>| {
+            click.propagate(false);
+            commands.insert_resource(CreationSlot(slot));
+            next.set(GameState::CharacterCreation);
+        },
+    );
+}
+
+/// Delete button: first click arms, second click within the armed state confirms.
+/// Label flips Delete<->Confirm? via `update_delete_labels`.
+fn spawn_delete_button(commands: &mut Commands, parent: Entity, character_id: u32, font: Handle<Font>) {
+    let btn = commands
         .spawn((
             DeleteButton { character_id },
             Pickable::default(),
             Node {
-                padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
+                padding: UiRect::axes(Val::Px(16.0), Val::Px(12.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(11.0)),
                 ..default()
             },
-            BackgroundColor(theme::BAD),
-            ChildOf(card),
+            BackgroundColor(Color::srgba(0.878, 0.384, 0.369, 0.12)),
+            BorderColor::all(theme::BAD),
+            ChildOf(parent),
         ))
         .id();
-    commands.spawn((
-        label("Delete", font_body, 12.0, theme::TEXT),
-        ChildOf(delete),
-    ));
-
-    commands.entity(delete).observe(
+    commands.spawn((label("Delete", font, 14.0, theme::BAD), ChildOf(btn)));
+    commands.entity(btn).observe(
         move |mut click: On<Pointer<Click>>,
               mut pending: ResMut<PendingDeletion>,
               mut writer: MessageWriter<DeleteCharacterRequestEvent>| {
@@ -273,56 +452,6 @@ fn spawn_occupied_card(
             } else {
                 pending.0 = Some(character_id);
             }
-        },
-    );
-
-    commands.entity(card).observe(
-        move |_: On<Pointer<Click>>, mut writer: MessageWriter<SelectCharacterEvent>| {
-            writer.write(SelectCharacterEvent { slot });
-        },
-    );
-}
-
-/// Empty slot: a single Create button. Its transition lands in Task 10 (the
-/// `CharacterCreation` state); for now it is a visible placeholder.
-fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: Handle<Font>) {
-    let card = commands.spawn((card_frame(), ChildOf(container))).id();
-
-    commands.spawn((
-        Node {
-            width: Val::Px(COLUMN_PX as f32),
-            height: Val::Px(ROW_PX as f32),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        ChildOf(card),
-        children![label("Empty", font.clone(), 14.0, theme::TEXT_DIM)],
-    ));
-
-    let create = commands
-        .spawn((
-            Pickable::default(),
-            Node {
-                padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
-                ..default()
-            },
-            BackgroundColor(theme::EMERALD),
-            ChildOf(card),
-        ))
-        .id();
-    commands.spawn((
-        label("Create", font, 12.0, theme::EMERALD_INK),
-        ChildOf(create),
-    ));
-
-    commands.entity(create).observe(
-        move |mut click: On<Pointer<Click>>,
-              mut commands: Commands,
-              mut next: ResMut<NextState<GameState>>| {
-            click.propagate(false);
-            commands.insert_resource(CreationSlot(slot));
-            next.set(GameState::CharacterCreation);
         },
     );
 }
@@ -337,17 +466,29 @@ fn update_delete_labels(
         return;
     }
     for (button, children) in &buttons {
-        let label = if pending.0 == Some(button.character_id) {
+        let text = if pending.0 == Some(button.character_id) {
             "Confirm?"
         } else {
             "Delete"
         };
         for child in children.iter() {
-            if let Ok(mut text) = texts.get_mut(child) {
-                *text = Text::new(label);
+            if let Ok(mut t) = texts.get_mut(child) {
+                *t = Text::new(text);
             }
         }
     }
+}
+
+fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(text),
+        TextFont {
+            font,
+            font_size: size,
+            ..default()
+        },
+        TextColor(color),
+    )
 }
 
 /// The character to feature in the hero panel for the selected slot, or `None`
@@ -363,13 +504,6 @@ fn featured(
 mod tests {
     use super::*;
     use game_engine::infrastructure::networking::protocol::character::CharacterInfo as ProtocolCharacterInfo;
-
-    #[test]
-    fn detail_line_shows_job_and_level() {
-        let job = "Swordman";
-        let level: u16 = 42;
-        assert_eq!(format!("{job}  Lv.{level}"), "Swordman  Lv.42");
-    }
 
     #[test]
     fn featured_returns_occupied_slot() {
@@ -463,6 +597,7 @@ mod tests {
         app.add_message::<DeleteCharacterRequestEvent>();
         app.init_resource::<CardsBuilt>();
         app.init_resource::<PendingDeletion>();
+        app.init_resource::<SelectedSlot>();
         app.insert_resource(data);
         app.insert_resource(diorama);
         app.world_mut().spawn(CssID(GRID_CONTAINER_ID.to_string()));
@@ -476,9 +611,7 @@ mod tests {
             ..default()
         };
         diorama.columns.insert(0, Rect::new(0.0, 0.0, 144.0, 224.0));
-        diorama
-            .columns
-            .insert(2, Rect::new(144.0, 0.0, 288.0, 224.0));
+        diorama.columns.insert(2, Rect::new(144.0, 0.0, 288.0, 224.0));
         diorama
     }
 
@@ -515,11 +648,8 @@ mod tests {
         let texts = all_texts(&mut app);
         assert!(texts.iter().any(|t| t == "Hero"));
         assert!(texts.iter().any(|t| t == "Mage"));
-        assert!(texts.iter().any(|t| t == "Swordman  Lv.50"));
-        assert!(
-            texts.iter().any(|t| t == "Create"),
-            "empty slot shows Create"
-        );
+        assert!(texts.iter().any(|t| t == "Lv 50"));
+        assert!(texts.iter().any(|t| t == "+ Create"), "empty slot shows create");
         assert!(app.world().resource::<CardsBuilt>().0);
     }
 
@@ -544,7 +674,6 @@ mod tests {
             characters: vec![Some(with_job("Hero", 1, 0, 50, "Swordman"))],
             max_slots: 1,
         };
-        // No render target yet -> occupied cards must not build.
         let mut app = card_app(data, CharacterDiorama::default());
 
         app.update();

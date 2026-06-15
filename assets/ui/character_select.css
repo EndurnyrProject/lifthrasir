@@ -1,39 +1,22 @@
-#character-select-screen {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    background: rgba(0, 0, 0, 0);
+#cs-screen { width: 100%; height: 100%; background: rgba(0,0,0,0); position: relative; }
+.cs-head {
+    position: absolute; top: 60px; left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center;
 }
-
-/* Transparent on purpose: this panel stretches to fill the whole screen once the
- * card grid is populated, so an opaque background would hide the menu background.
- * The cards carry their own slate-gray panels. */
-#character-select-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 32px;
-    background: rgba(0, 0, 0, 0);
+.panel-kicker {
+    font-family: "fonts/manrope.ttf"; font-size: 11px; letter-spacing: 0.28em;
+    text-transform: uppercase; color: var(--gold-soft); margin: 0;
 }
-
-#character-select-title {
-    font-family: "fonts/ringbearer-medium.ttf";
-    font-size: 32px;
-    color: var(--energetic-green);
-    margin: 0 0 24px 0;
+.panel-title {
+    font-family: "fonts/cinzel.ttf"; font-size: 27px; color: var(--headline); margin: 3px 0 0 0;
 }
-
-/*
- * The slot cards are spawned at runtime as raw bevy_ui nodes (rich, nested, and
- * data-driven — beyond what extended_ui can author/style), so this container only
- * lays them out. Card visuals live in `screens/character_select.rs` via `theme`.
- */
+#cs-stage {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 130px 64px 38px;
+}
+#hero-panel { width: 392px; margin: 0 26px 0 0; }
 #character-grid {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
+    width: 700px;
+    display: flex; flex-direction: row; flex-wrap: wrap; align-content: flex-start;
 }
