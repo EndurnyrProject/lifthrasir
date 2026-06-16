@@ -62,9 +62,9 @@ pub struct AudioSettings {
     pub bgm_volume: f32,
     /// Whether BGM is muted
     pub bgm_muted: bool,
-    /// SFX volume (0.0 to 1.0) - for future use
+    /// SFX volume (0.0 to 1.0)
     pub sfx_volume: f32,
-    /// Whether SFX is muted - for future use
+    /// Whether SFX is muted
     pub sfx_muted: bool,
 }
 
@@ -88,7 +88,19 @@ impl AudioSettings {
             self.bgm_volume
         }
     }
+
+    pub fn effective_sfx_volume(&self) -> f32 {
+        if self.sfx_muted {
+            0.0
+        } else {
+            self.sfx_volume
+        }
+    }
 }
+
+/// Marker type for the dedicated sound-effects audio channel.
+#[derive(Resource)]
+pub struct SfxChannel;
 
 /// Resource that holds the BGM name table asset handle
 /// This table maps map names to BGM file paths from mp3nametable.txt

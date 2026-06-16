@@ -18,6 +18,9 @@ pub struct RoAnimationAsset {
 
     /// Layer type this asset represents (for render ordering)
     pub layer: Tag,
+
+    /// Sound filenames from the ACT file. `FrameData.sound_id` indexes this.
+    pub sounds: Vec<String>,
 }
 
 /// Data for a single action+direction (e.g., idle facing south, walk facing east)
@@ -198,6 +201,7 @@ impl Default for RoAnimationAsset {
             textures: Vec::new(),
             actions: Vec::new(),
             layer: LAYER_BODY,
+            sounds: Vec::new(),
         }
     }
 }

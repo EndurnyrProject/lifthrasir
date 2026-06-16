@@ -1,5 +1,6 @@
 use super::components::{CharServerPingTimer, CharacterSelectionState, MapLoadingTimer};
 use super::events::*;
+use bevy_kira_audio::prelude::SpatialAudioReceiver;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
 use crate::domain::system_sets::CharacterFlowSystems;
@@ -896,6 +897,7 @@ pub fn spawn_character_sprite_on_game_start(
         crate::domain::entities::markers::LocalPlayer,
         crate::domain::entities::character::components::status::CharacterStatus::default(),
         crate::domain::entities::components::EntityName::new(char_data.name.clone()),
+        SpatialAudioReceiver,
     ));
     entity_registry.set_local_player(character_entity, account_id);
     info!(

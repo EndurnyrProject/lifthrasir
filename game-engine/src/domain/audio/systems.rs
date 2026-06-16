@@ -1,11 +1,15 @@
 use super::{
-    events::{MuteBgmEvent, PlayBgmEvent, SetBgmVolumeEvent, StopBgmEvent},
-    resources::{AudioSettings, BgmManager, BgmNameTable},
+    events::{
+        MuteBgmEvent, MuteSfxEvent, PlayBgmEvent, PlayMobSfx, SetBgmVolumeEvent, SetSfxVolumeEvent,
+        StopBgmEvent,
+    },
+    resources::{AudioSettings, BgmManager, BgmNameTable, SfxChannel},
 };
 use crate::infrastructure::assets::BgmNameTableAsset;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
-use bevy_kira_audio::{Audio, AudioControl, AudioInstance, AudioSource, AudioTween};
+use bevy_kira_audio::prelude::{AudioControl, SpatialAudioEmitter};
+use bevy_kira_audio::{Audio, AudioChannel, AudioInstance, AudioSource, AudioTween};
 
 /// System to handle BGM change requests with crossfading
 /// Listens for PlayBgmEvent and manages track transitions
@@ -261,5 +265,104 @@ pub fn handle_map_bgm(
                 map_name
             );
         }
+    }
+}
+
+pub(super) fn mob_sfx_path(name: &str) -> String {
+    format!("ro://data/wav/{}", name.replace('\\', "/"))
+}
+
+/// Convert a 0.0..=1.0 linear amplitude to decibels, since kira's volume API
+/// expects Decibels (0 dB = unity, not silence) — passing amplitude directly
+/// would make 0.0 mean full volume.
+pub(super) fn amplitude_to_decibels(amplitude: f32) -> f32 {
+    if amplitude <= 0.0 {
+        -80.0
+    } else {
+        20.0 * amplitude.log10()
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
+pub fn play_mob_sfx(
+    mut events: MessageReader<PlayMobSfx>,
+    asset_server: Res<AssetServer>,
+    sfx_channel: Res<AudioChannel<SfxChannel>>,
+    mut emitters: Query<&mut SpatialAudioEmitter>,
+) {
+    for event in events.read() {
+        let Ok(mut emitter) = emitters.get_mut(event.emitter) else {
+            continue;
+        };
+
+        let path = mob_sfx_path(&event.sound);
+        let source: Handle<AudioSource> = asset_server.load(&path);
+        let handle = sfx_channel.play(source).handle();
+        emitter.instances.push(handle);
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Startup
+)]
+pub fn apply_initial_sfx_volume(
+    audio_settings: Res<AudioSettings>,
+    sfx_channel: Res<AudioChannel<SfxChannel>>,
+) {
+    sfx_channel.set_volume(amplitude_to_decibels(audio_settings.effective_sfx_volume()));
+}
+
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
+pub fn handle_sfx_volume_change(
+    mut events: MessageReader<SetSfxVolumeEvent>,
+    mut audio_settings: ResMut<AudioSettings>,
+    sfx_channel: Res<AudioChannel<SfxChannel>>,
+) {
+    for event in events.read() {
+        audio_settings.sfx_volume = event.volume.clamp(0.0, 1.0);
+        sfx_channel.set_volume(amplitude_to_decibels(audio_settings.effective_sfx_volume()));
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
+pub fn handle_sfx_mute_change(
+    mut events: MessageReader<MuteSfxEvent>,
+    mut audio_settings: ResMut<AudioSettings>,
+    sfx_channel: Res<AudioChannel<SfxChannel>>,
+) {
+    for event in events.read() {
+        audio_settings.sfx_muted = event.muted;
+        sfx_channel.set_volume(amplitude_to_decibels(audio_settings.effective_sfx_volume()));
+    }
+}
+
+#[cfg(test)]
+mod sfx_tests {
+    use super::{amplitude_to_decibels, mob_sfx_path};
+
+    #[test]
+    fn mob_sfx_path_normalizes_backslashes_and_prefixes() {
+        assert_eq!(mob_sfx_path("poring.wav"), "ro://data/wav/poring.wav");
+        assert_eq!(
+            mob_sfx_path("monster\\poring.wav"),
+            "ro://data/wav/monster/poring.wav"
+        );
+    }
+
+    #[test]
+    fn amplitude_to_decibels_maps_unity_and_silence() {
+        assert_eq!(amplitude_to_decibels(1.0), 0.0);
+        assert!(amplitude_to_decibels(0.0) <= -80.0);
+        assert!((amplitude_to_decibels(0.5) - (-6.0206)).abs() < 0.01);
     }
 }

@@ -6,6 +6,8 @@ use nom::{
 };
 use thiserror::Error;
 
+use crate::utils::string_utils::parse_korean_string;
+
 #[derive(Debug, Clone)]
 pub struct RoAction {
     pub version: f32,
@@ -205,10 +207,7 @@ fn parse_sounds(input: &[u8]) -> IResult<&[u8], Vec<String>, NomError<&[u8]>> {
     let mut remaining = input;
     let mut sounds = Vec::new();
     for _ in 0..sound_count {
-        let (new_remaining, sound_bytes) = take(40usize)(remaining)?;
-        let sound_name = String::from_utf8_lossy(sound_bytes)
-            .trim_end_matches('\0')
-            .to_string();
+        let (new_remaining, sound_name) = parse_korean_string(remaining, 40)?;
         sounds.push(sound_name);
         remaining = new_remaining;
     }
@@ -264,4 +263,24 @@ pub fn parse_act(data: &[u8]) -> Result<RoAction, ActError> {
         actions,
         sounds,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use encoding_rs::EUC_KR;
+
+    #[test]
+    fn parse_sounds_decodes_euc_kr() {
+        let name = "포링.wav";
+        let (encoded, _, _) = EUC_KR.encode(name);
+
+        let mut data = 1u32.to_le_bytes().to_vec();
+        let mut field = encoded.into_owned();
+        field.resize(40, 0);
+        data.extend_from_slice(&field);
+
+        let (_, sounds) = parse_sounds(&data).expect("parse sounds");
+        assert_eq!(sounds, vec![name.to_string()]);
+    }
 }

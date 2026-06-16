@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
+use crate::domain::audio::events::PlayMobSfx;
 use crate::domain::entities::sprite_rendering::components::{
     BodyAttachPoint, HeadLayer, MobSprite, PlayerSprite, RenderLayer, RoSpriteGeneric,
 };
@@ -29,6 +30,7 @@ fn sync_body_layer_impl<T: ActionLayout>(
     materials: &mut Assets<StandardMaterial>,
     parent_query: &Query<&RoSpriteGeneric<T>>,
     layer_query: &mut BodyLayerQuery,
+    mut sfx: Option<&mut MessageWriter<PlayMobSfx>>,
 ) {
     for (layer, child_of, material_handle, mut transform, mut attach_point) in
         layer_query.iter_mut()
@@ -45,6 +47,23 @@ fn sync_body_layer_impl<T: ActionLayout>(
         let Some(frame) = ro_sprite.get_frame(animation, game_time_ms) else {
             continue;
         };
+
+        // Fire once when crossing into a new frame that carries a sound id.
+        // `as_mut()` reborrows the Option each iteration (MessageWriter is not DerefMut).
+        if let Some(writer) = sfx.as_mut() {
+            if frame_index != attach_point.frame_index {
+                if let Some(name) = frame
+                    .sound_id
+                    .and_then(|id| animation.sounds.get(id as usize))
+                    .filter(|name| !name.is_empty())
+                {
+                    writer.write(PlayMobSfx {
+                        emitter: child_of.parent(),
+                        sound: name.clone(),
+                    });
+                }
+            }
+        }
 
         if let Some(part) = frame.parts.first() {
             if let Some(texture) = animation.textures.get(part.texture_index) {
@@ -98,6 +117,7 @@ pub fn sync_player_body_layer(
         &mut materials,
         &parent_query,
         &mut layer_query,
+        None,
     );
 }
 
@@ -112,6 +132,7 @@ pub fn sync_mob_body_layer(
     mut materials: ResMut<Assets<StandardMaterial>>,
     parent_query: Query<&MobSprite>,
     mut layer_query: BodyLayerQuery,
+    mut sfx_writer: MessageWriter<PlayMobSfx>,
 ) {
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
     sync_body_layer_impl(
@@ -120,5 +141,6 @@ pub fn sync_mob_body_layer(
         &mut materials,
         &parent_query,
         &mut layer_query,
+        Some(&mut sfx_writer),
     );
 }

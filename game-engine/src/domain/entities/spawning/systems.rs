@@ -34,6 +34,7 @@ use crate::{
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use bevy_kira_audio::prelude::SpatialAudioEmitter;
 
 /// Spawn network entities from SpawnEntity events
 #[auto_add_system(
@@ -187,7 +188,7 @@ pub fn spawn_network_entity_system(
                 debug!("Spawned NPC: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Mob => {
-                entity_cmd.insert(Mob);
+                entity_cmd.insert((Mob, SpatialAudioEmitter::default()));
                 debug!("Spawned mob: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Homunculus => {

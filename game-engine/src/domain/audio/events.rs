@@ -57,3 +57,31 @@ pub struct MuteBgmEvent {
     /// Whether to mute (true) or unmute (false)
     pub muted: bool,
 }
+
+/// Event requesting a mob sound effect be played, anchored to a spatial emitter entity.
+#[derive(Message, Debug, Clone, Reflect)]
+#[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
+pub struct PlayMobSfx {
+    /// Entity carrying the `SpatialAudioEmitter` (the mob root).
+    pub emitter: Entity,
+    /// Raw decoded sound filename from the ACT (e.g. "포링.wav" or "monster\\xxx.wav").
+    pub sound: String,
+}
+
+/// Event to change the SFX volume.
+#[derive(Message, Debug, Clone, Copy, Reflect)]
+#[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
+pub struct SetSfxVolumeEvent {
+    /// Volume level (0.0 to 1.0)
+    pub volume: f32,
+}
+
+/// Event to mute or unmute SFX.
+#[derive(Message, Debug, Clone, Copy, Reflect)]
+#[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
+pub struct MuteSfxEvent {
+    pub muted: bool,
+}

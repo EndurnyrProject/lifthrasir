@@ -25,7 +25,12 @@ fn dump(label: &str, act: &game_engine::infrastructure::ro_formats::act::RoActio
             .first()
             .map(|p| format!("attach=({}, {})", p.x, p.y))
             .unwrap_or_else(|| "no attach".to_string());
-        println!("  frame {i}: {layer} | {attach}");
+        let sound = if anim.sound_id >= 0 {
+            format!("sound_id={}", anim.sound_id)
+        } else {
+            "no sound".to_string()
+        };
+        println!("  frame {i}: {layer} | {attach} | {sound}");
     }
 }
 
@@ -42,6 +47,11 @@ fn main() {
         body.actions.len(),
         head.actions.len()
     );
+
+    println!("body sounds ({}):", body.sounds.len());
+    for (i, s) in body.sounds.iter().enumerate() {
+        println!("  [{i}] {s:?}");
+    }
 
     for action in [0, 2, 8, 10, 88, 90] {
         dump("BODY", &body, action);

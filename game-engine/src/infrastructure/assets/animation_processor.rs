@@ -27,6 +27,7 @@ impl RoAnimationProcessor {
             textures,
             actions,
             layer: layer_tag,
+            sounds: action.sounds.clone(),
         }
     }
 
