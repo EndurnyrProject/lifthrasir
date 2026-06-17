@@ -4,7 +4,7 @@ use crate::infrastructure::networking::{
         traits::{EventWriter, PacketHandler},
         zone::{
             protocol::{ZoneContext, ZoneProtocol},
-            server_packets::{ZcLongparChangePacket, ZcParChangePacket},
+            server_packets::{ZcLongparChangePacket, ZcParChangePacket, ZcStatusChangeAckPacket},
         },
     },
 };
@@ -78,6 +78,38 @@ impl PacketHandler<ZoneProtocol> for LongparChangeHandler {
 
         event_writer.send_event(Box::new(event));
         debug!("ParameterChanged event sent (long)");
+
+        Ok(())
+    }
+}
+
+/// Handler for ZC_STATUS_CHANGE_ACK packet
+///
+/// Acknowledges a stat-raise request. The authoritative new stat value is also
+/// delivered through ZC_PAR_CHANGE, so this handler only reports the
+/// success/failure result; a failed raise (`ok == 0`) leaves the stat unchanged.
+pub struct StatusChangeAckHandler;
+
+impl PacketHandler<ZoneProtocol> for StatusChangeAckHandler {
+    type Packet = ZcStatusChangeAckPacket;
+
+    fn handle(
+        &self,
+        packet: Self::Packet,
+        _context: &mut ZoneContext,
+        _event_writer: &mut dyn EventWriter,
+    ) -> Result<(), NetworkError> {
+        if packet.ok == 1 {
+            debug!(
+                "ZC_STATUS_CHANGE_ACK: stat 0x{:04X} raised to {}",
+                packet.sp, packet.value
+            );
+        } else {
+            warn!(
+                "ZC_STATUS_CHANGE_ACK: stat 0x{:04X} raise rejected (value stays {})",
+                packet.sp, packet.value
+            );
+        }
 
         Ok(())
     }

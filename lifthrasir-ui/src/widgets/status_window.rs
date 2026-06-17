@@ -358,8 +358,24 @@ fn spawn_commit_row(commands: &mut Commands, body: Entity, font: &Handle<Font>) 
             ChildOf(body),
         ))
         .id();
-    spawn_commit_button(commands, row, "Reset", theme::FIELD, theme::TEXT_DIM, font, on_reset);
-    spawn_commit_button(commands, row, "Save", theme::EMERALD, theme::EMERALD_INK, font, on_save);
+    spawn_commit_button(
+        commands,
+        row,
+        "Reset",
+        theme::FIELD,
+        theme::TEXT_DIM,
+        font,
+        on_reset,
+    );
+    spawn_commit_button(
+        commands,
+        row,
+        "Save",
+        theme::EMERALD,
+        theme::EMERALD_INK,
+        font,
+        on_save,
+    );
 }
 
 fn spawn_commit_button<M>(
@@ -879,10 +895,7 @@ mod tests {
 
     #[test]
     fn save_emits_one_message_per_modified_stat() {
-        let bases = HashMap::from([
-            (StatusParameter::Str, 10),
-            (StatusParameter::Dex, 10),
-        ]);
+        let bases = HashMap::from([(StatusParameter::Str, 10), (StatusParameter::Dex, 10)]);
         let mut staging = StatStaging::default();
         staging.raise(StatusParameter::Str, 100, &bases);
         staging.raise(StatusParameter::Str, 100, &bases);
@@ -917,10 +930,7 @@ mod tests {
             .world_mut()
             .spawn((Text::new(""), StatValue(StatusParameter::Str)))
             .id();
-        let atk = app
-            .world_mut()
-            .spawn((Text::new(""), CombatCell::Atk))
-            .id();
+        let atk = app.world_mut().spawn((Text::new(""), CombatCell::Atk)).id();
         let bank = app.world_mut().spawn((Text::new(""), PointBank)).id();
 
         app.world_mut().spawn((
@@ -934,9 +944,11 @@ mod tests {
             LocalPlayer,
         ));
 
-        app.world_mut()
-            .resource_mut::<StatStaging>()
-            .raise(StatusParameter::Str, 100, &HashMap::from([(StatusParameter::Str, 10)]));
+        app.world_mut().resource_mut::<StatStaging>().raise(
+            StatusParameter::Str,
+            100,
+            &HashMap::from([(StatusParameter::Str, 10)]),
+        );
 
         app.add_systems(Update, update_status_window);
         app.update();

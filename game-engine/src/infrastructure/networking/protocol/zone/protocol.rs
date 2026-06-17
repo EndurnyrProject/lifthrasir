@@ -102,6 +102,10 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcHpInfoPacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcHpInfo(packet))
             }
+            ZC_STATUS_CHANGE_ACK => {
+                let packet = ZcStatusChangeAckPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcStatusChangeAck(packet))
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unknown zone packet ID: 0x{:04X}", packet_id),
@@ -149,6 +153,7 @@ impl Protocol for ZoneProtocol {
             },
             ZC_NOTIFY_ACT => PacketSize::Fixed(34),
             ZC_HP_INFO => PacketSize::Fixed(14),
+            ZC_STATUS_CHANGE_ACK => PacketSize::Fixed(6),
             _ => PacketSize::Variable {
                 length_offset: 2,
                 length_bytes: 2,
@@ -335,6 +340,7 @@ pub enum ZoneServerPacket {
     ZcNotifyChat(ZcNotifyChatPacket),
     ZcNotifyAct(ZcNotifyActPacket),
     ZcHpInfo(ZcHpInfoPacket),
+    ZcStatusChangeAck(ZcStatusChangeAckPacket),
 }
 
 impl ServerPacket for ZoneServerPacket {
@@ -366,6 +372,7 @@ impl ServerPacket for ZoneServerPacket {
             Self::ZcNotifyChat(_) => ZC_NOTIFY_CHAT,
             Self::ZcNotifyAct(_) => ZC_NOTIFY_ACT,
             Self::ZcHpInfo(_) => ZC_HP_INFO,
+            Self::ZcStatusChangeAck(_) => ZC_STATUS_CHANGE_ACK,
         }
     }
 }

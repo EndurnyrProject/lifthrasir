@@ -168,9 +168,7 @@ mod tests {
             .next();
         assert_eq!(label.as_deref(), Some("Poring"));
 
-        app.world_mut()
-            .entity_mut(target)
-            .remove::<HoveredEntity>();
+        app.world_mut().entity_mut(target).remove::<HoveredEntity>();
         app.update();
 
         assert_eq!(plate_count(&mut app), 0);

@@ -25,11 +25,7 @@ pub fn make_draggable(commands: &mut Commands, titlebar: Entity, window_root: En
         .observe(on_drag);
 }
 
-fn on_drag(
-    drag: On<Pointer<Drag>>,
-    handles: Query<&DraggableWindow>,
-    mut nodes: Query<&mut Node>,
-) {
+fn on_drag(drag: On<Pointer<Drag>>, handles: Query<&DraggableWindow>, mut nodes: Query<&mut Node>) {
     let Ok(handle) = handles.get(drag.entity) else {
         return;
     };

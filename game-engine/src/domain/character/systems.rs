@@ -1,6 +1,5 @@
 use super::components::{CharServerPingTimer, CharacterSelectionState, MapLoadingTimer};
 use super::events::*;
-use bevy_kira_audio::prelude::SpatialAudioReceiver;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
 use crate::domain::system_sets::CharacterFlowSystems;
@@ -14,6 +13,7 @@ use crate::infrastructure::networking::protocol::character::{
 use crate::infrastructure::networking::session::UserSession;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use bevy_kira_audio::prelude::SpatialAudioReceiver;
 use std::time::{Duration, Instant};
 
 /// System to handle explicit character list requests

@@ -21,6 +21,7 @@ pub mod zc_notify_time2;
 pub mod zc_notify_vanish;
 pub mod zc_par_change;
 pub mod zc_refuse_enter;
+pub mod zc_status_change;
 
 pub use zc_accept_enter::{ZcAcceptEnterPacket, ZC_ACCEPT_ENTER};
 pub use zc_ack_reqname::{ZcAckReqnamePacket, ZC_ACK_REQNAME};
@@ -42,3 +43,4 @@ pub use zc_notify_time2::{ZcNotifyTime2Packet, ZC_NOTIFY_TIME2};
 pub use zc_notify_vanish::{ZcNotifyVanishPacket, ZC_NOTIFY_VANISH};
 pub use zc_par_change::{ZcParChangePacket, ZC_PAR_CHANGE};
 pub use zc_refuse_enter::{ZcRefuseEnterPacket, ZC_REFUSE_ENTER};
+pub use zc_status_change::{ZcStatusChangeAckPacket, ZC_STATUS_CHANGE_ACK};

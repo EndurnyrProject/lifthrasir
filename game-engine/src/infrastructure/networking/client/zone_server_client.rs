@@ -13,14 +13,13 @@ use crate::{
                 CombatActionHandler, CzEnter2Packet, CzNotifyActorinitPacket, CzReqname2Packet,
                 CzRequestAct2Packet, CzRequestChatPacket, CzRequestMove2Packet,
                 CzRequestTime2Packet, CzStatusChangePacket, EntityNameAllReceived,
-                EntityNameReceived,
-                EquipitemListHandler, HpInfoHandler, LongparChangeHandler, MoveStopHandler,
-                MoveentryHandler, MovementConfirmedByServer, MovementStoppedByServer,
-                NewentryHandler, NormalItemlistHandler, ParChangeHandler, ParameterChanged,
-                PlayermoveHandler, RefuseEnterHandler, ReqnameHandler, ReqnameallHandler,
-                SpawnData, StandentryHandler, TimeSyncHandler, TimeSyncLegacyHandler,
-                VanishHandler, ZoneClientPacket, ZoneContext, ZoneEntryRefused, ZoneProtocol,
-                ZoneServerConnected,
+                EntityNameReceived, EquipitemListHandler, HpInfoHandler, LongparChangeHandler,
+                MoveStopHandler, MoveentryHandler, MovementConfirmedByServer,
+                MovementStoppedByServer, NewentryHandler, NormalItemlistHandler, ParChangeHandler,
+                ParameterChanged, PlayermoveHandler, RefuseEnterHandler, ReqnameHandler,
+                ReqnameallHandler, SpawnData, StandentryHandler, StatusChangeAckHandler,
+                TimeSyncHandler, TimeSyncLegacyHandler, VanishHandler, ZoneClientPacket,
+                ZoneContext, ZoneEntryRefused, ZoneProtocol, ZoneServerConnected,
             },
             EventBuffer,
         },
@@ -109,6 +108,7 @@ impl ZoneServerClient {
         dispatcher.register(ChatHandler);
         dispatcher.register(CombatActionHandler);
         dispatcher.register(HpInfoHandler);
+        dispatcher.register(StatusChangeAckHandler);
 
         let client = NetworkClient::new(context).with_dispatcher(dispatcher);
 

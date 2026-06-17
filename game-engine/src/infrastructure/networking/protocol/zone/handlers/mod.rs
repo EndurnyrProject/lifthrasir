@@ -24,6 +24,8 @@ pub use inventory_handlers::{EquipitemListHandler, NormalItemlistHandler};
 pub use movement_handlers::{
     MoveStopHandler, MovementConfirmedByServer, MovementStoppedByServer, PlayermoveHandler,
 };
-pub use par_change_handlers::{LongparChangeHandler, ParChangeHandler, ParameterChanged};
+pub use par_change_handlers::{
+    LongparChangeHandler, ParChangeHandler, ParameterChanged, StatusChangeAckHandler,
+};
 pub use refuse_enter_handler::{RefuseEnterHandler, ZoneEntryRefused};
 pub use time_sync_handler::{TimeSyncHandler, TimeSyncLegacyHandler};

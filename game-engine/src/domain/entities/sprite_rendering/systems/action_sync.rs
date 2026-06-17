@@ -21,10 +21,7 @@ type SpriteActionQuery<'w, 's, T> = Query<
     Or<(Changed<AnimationState>, Added<RoSpriteGeneric<T>>)>,
 >;
 
-fn sync_sprite_action_impl<T: ActionLayout>(
-    time: &Res<Time>,
-    query: &mut SpriteActionQuery<T>,
-) {
+fn sync_sprite_action_impl<T: ActionLayout>(time: &Res<Time>, query: &mut SpriteActionQuery<T>) {
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
 
     for (state, attack_timer, mut ro_sprite) in query.iter_mut() {
@@ -49,10 +46,7 @@ fn sync_sprite_direction_impl<T: ActionLayout>(
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationSync)
 )]
-pub fn sync_player_sprite_action(
-    time: Res<Time>,
-    mut query: SpriteActionQuery<PlayerLayout>,
-) {
+pub fn sync_player_sprite_action(time: Res<Time>, mut query: SpriteActionQuery<PlayerLayout>) {
     sync_sprite_action_impl(&time, &mut query);
 }
 
@@ -72,10 +66,7 @@ pub fn sync_player_sprite_direction(
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationSync)
 )]
-pub fn sync_mob_sprite_action(
-    time: Res<Time>,
-    mut query: SpriteActionQuery<MobLayout>,
-) {
+pub fn sync_mob_sprite_action(time: Res<Time>, mut query: SpriteActionQuery<MobLayout>) {
     sync_sprite_action_impl(&time, &mut query);
 }
 

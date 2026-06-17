@@ -18,8 +18,8 @@ pub use handlers::{
     HpInfoHandler, LongparChangeHandler, MoveStopHandler, MoveentryHandler,
     MovementConfirmedByServer, MovementStoppedByServer, NewentryHandler, NormalItemlistHandler,
     ParChangeHandler, ParameterChanged, PlayermoveHandler, RefuseEnterHandler, ReqnameHandler,
-    ReqnameallHandler, StandentryHandler, TimeSyncHandler, TimeSyncLegacyHandler, VanishHandler,
-    ZoneEntryRefused, ZoneServerConnected,
+    ReqnameallHandler, StandentryHandler, StatusChangeAckHandler, TimeSyncHandler,
+    TimeSyncLegacyHandler, VanishHandler, ZoneEntryRefused, ZoneServerConnected,
 };
 
 pub use protocol::{ZoneClientPacket, ZoneContext, ZoneProtocol, ZoneServerPacket};
