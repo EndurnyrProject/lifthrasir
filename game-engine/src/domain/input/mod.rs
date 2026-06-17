@@ -1,3 +1,4 @@
+pub mod actions;
 pub mod cursor;
 pub mod events;
 pub mod resources;
@@ -5,6 +6,7 @@ pub mod systems;
 pub mod terrain_raycast;
 pub mod ui_focus;
 
+pub use actions::PlayerAction;
 pub use cursor::{CurrentCursorType, CursorType};
 pub use events::CursorChangeRequest;
 pub use resources::{ForwardedCursorPosition, ForwardedMouseClick};

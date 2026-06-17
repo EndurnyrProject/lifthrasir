@@ -17,10 +17,13 @@ use crate::{
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
+use leafwing_input_manager::prelude::ActionState;
+
+use crate::domain::entities::character::states::AnimationState;
 
 use super::{
     cursor::CursorType, events::CursorChangeRequest, terrain_raycast::TerrainRaycastCache,
-    ForwardedMouseClick,
+    ui_focus::ui_unfocused, ForwardedMouseClick, PlayerAction,
 };
 
 // =============================================================================
@@ -257,6 +260,42 @@ pub fn update_cursor_for_terrain(
     };
 
     cursor_messages.write(CursorChangeRequest::new(cursor_type));
+}
+
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
+    schedule = Update,
+    config(
+        in_set = InputSystems::Click,
+        run_if = in_state(GameState::InGame).and(ui_unfocused)
+    )
+)]
+pub fn handle_sit_toggle(
+    player: Query<(&ActionState<PlayerAction>, &AnimationState), With<LocalPlayer>>,
+    mut client: Option<ResMut<ZoneServerClient>>,
+) {
+    let Ok((actions, anim)) = player.single() else {
+        return;
+    };
+
+    if !actions.just_pressed(&PlayerAction::Sit) {
+        return;
+    }
+
+    let Some(ref mut zone_client) = client else {
+        warn!("No zone client available for sit/stand request");
+        return;
+    };
+
+    let result = if *anim == AnimationState::Sitting {
+        zone_client.request_stand()
+    } else {
+        zone_client.request_sit()
+    };
+
+    if let Err(e) = result {
+        error!("Failed to send sit/stand request: {:?}", e);
+    }
 }
 
 #[auto_add_system(

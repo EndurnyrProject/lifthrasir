@@ -90,6 +90,28 @@ pub fn process_combat_actions(
                     damage_type: DamageDisplayType::Miss,
                 });
             }
+        } else if matches!(
+            event.action_type,
+            CombatActionType::SitDown | CombatActionType::StandUp
+        ) {
+            // The server broadcasts sit/stand (incl. back to the actor itself),
+            // so this drives both the local player and remote players.
+            let Some(src) = src_entity else {
+                warn!("No entity found for src_id: {}", event.src_id);
+                continue;
+            };
+
+            let next = if event.action_type == CombatActionType::SitDown {
+                AnimationState::Sitting
+            } else {
+                AnimationState::Idle
+            };
+
+            if let Ok(mut behavior) = behaviors.get_mut(src) {
+                if *behavior.current() != next {
+                    behavior.start(next);
+                }
+            }
         }
     }
 }

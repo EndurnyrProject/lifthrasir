@@ -282,6 +282,16 @@ impl ZoneServerClient {
         self.inner.send_packet(&packet)
     }
 
+    pub fn request_sit(&mut self) -> NetworkResult<()> {
+        let packet = ZoneClientPacket::CzRequestAct2(CzRequestAct2Packet::sit());
+        self.inner.send_packet(&packet)
+    }
+
+    pub fn request_stand(&mut self) -> NetworkResult<()> {
+        let packet = ZoneClientPacket::CzRequestAct2(CzRequestAct2Packet::stand());
+        self.inner.send_packet(&packet)
+    }
+
     /// Process incoming packets and emit Bevy events
     ///
     /// This should be called regularly (e.g., in a Bevy Update system) to:

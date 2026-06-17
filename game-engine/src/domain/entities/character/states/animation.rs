@@ -10,6 +10,7 @@ pub enum AnimationState {
     Walking,
     Attacking,
     Hit,
+    Sitting,
     Dead,
 }
 
@@ -20,13 +21,15 @@ impl Behavior for AnimationState {
             // Dead is terminal - no transitions out
             (Dead, _) => false,
             // Idle can transition to any state
-            (Idle, Walking | Attacking | Hit | Dead) => true,
+            (Idle, Walking | Attacking | Hit | Sitting | Dead) => true,
             // Walking can transition to any state
-            (Walking, Idle | Attacking | Hit | Dead) => true,
+            (Walking, Idle | Attacking | Hit | Sitting | Dead) => true,
             // Attacking can go back to idle, or be interrupted
-            (Attacking, Idle | Hit | Dead) => true,
+            (Attacking, Idle | Hit | Sitting | Dead) => true,
             // Hit can recover to idle or die
             (Hit, Idle | Dead) => true,
+            // Sitting can stand, be interrupted, or die
+            (Sitting, Idle | Walking | Attacking | Hit | Dead) => true,
             // Same state is always valid (no-op)
             (a, b) if a == b => true,
             // All other transitions are invalid
@@ -42,6 +45,7 @@ impl From<AnimationState> for ActionType {
             AnimationState::Walking => ActionType::Walk,
             AnimationState::Attacking => ActionType::Attack,
             AnimationState::Hit => ActionType::Hit,
+            AnimationState::Sitting => ActionType::Sit,
             AnimationState::Dead => ActionType::Dead,
         }
     }

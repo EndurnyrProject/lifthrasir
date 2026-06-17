@@ -9,6 +9,7 @@ bevy_auto_plugin = "0.10.0"
 bevy_common_assets = { version = "0.15", features = ["toml"] }
 bevy_asset_loader = "0.26"
 bevy_kira_audio = { version = "0.25", features = ["mp3", "wav", "ogg"] }
+leafwing-input-manager = { workspace = true }
 
 # Parsing and data processing
 nom = "8.0.0"

@@ -898,6 +898,7 @@ pub fn spawn_character_sprite_on_game_start(
         crate::domain::entities::character::components::status::CharacterStatus::default(),
         crate::domain::entities::components::EntityName::new(char_data.name.clone()),
         SpatialAudioReceiver,
+        crate::domain::input::PlayerAction::default_input_map(),
     ));
     entity_registry.set_local_player(character_entity, account_id);
     info!(
