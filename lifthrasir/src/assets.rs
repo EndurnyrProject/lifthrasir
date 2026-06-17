@@ -18,7 +18,7 @@ pub fn load_composite_source() -> Arc<RwLock<CompositeAssetSource>> {
 }
 
 fn load_asset_config() -> AssetConfig {
-    let config_path = "assets/loader.data.toml";
+    let config_path = "assets/loader.toml";
     let content = std::fs::read_to_string(config_path)
         .unwrap_or_else(|e| panic!("Failed to read config '{}': {}", config_path, e));
 

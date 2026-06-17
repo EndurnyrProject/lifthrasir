@@ -14,7 +14,7 @@ pub enum AssetLoadingState {
 
 #[derive(AssetCollection, Resource)]
 pub struct ConfigAssets {
-    #[asset(path = "loader.data.toml")]
+    #[asset(path = "loader.toml")]
     pub config: Handle<AssetConfig>,
 }
 
@@ -91,10 +91,10 @@ fn monitor_loading_progress(
 pub fn ensure_default_config() -> std::io::Result<()> {
     use std::path::Path;
 
-    let config_path = Path::new("assets/loader.data.toml");
+    let config_path = Path::new("assets/loader.toml");
 
     if !config_path.exists() {
-        info!("loader.data.toml not found, creating default configuration");
+        info!("loader.toml not found, creating default configuration");
 
         // Ensure assets directory exists
         if let Some(parent) = config_path.parent() {

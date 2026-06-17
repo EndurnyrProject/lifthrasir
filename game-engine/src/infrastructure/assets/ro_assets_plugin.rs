@@ -31,7 +31,7 @@ impl RoAssetsPlugin {
     fn load_config_from_file(&self) -> Result<AssetConfig, Box<dyn std::error::Error>> {
         use std::fs;
 
-        let config_path = "assets/loader.data.toml";
+        let config_path = "assets/loader.toml";
         info!("Loading asset configuration from: {}", config_path);
 
         let config_content = fs::read_to_string(config_path)

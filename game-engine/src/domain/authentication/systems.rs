@@ -204,9 +204,9 @@ fn load_client_config(
     config_handle: Option<Res<ClientConfigHandle>>,
 ) {
     if config_handle.is_none() {
-        let handle = asset_server.load::<ClientConfig>("config/clientinfo.client.toml");
+        let handle = asset_server.load::<ClientConfig>("config/clientinfo.toml");
         commands.insert_resource(ClientConfigHandle(handle));
-        info!("Loading client configuration from config/clientinfo.client.toml");
+        info!("Loading client configuration from config/clientinfo.toml");
     }
 }
 
