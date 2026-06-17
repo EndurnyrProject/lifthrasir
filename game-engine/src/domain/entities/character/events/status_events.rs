@@ -11,3 +11,10 @@ pub struct StatusParameterChanged {
     pub new_value: u32,
     pub old_value: Option<u32>,
 }
+
+#[derive(Message, Debug, Clone)]
+#[auto_add_event(plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin)]
+pub struct StatIncreaseRequested {
+    pub status_id: u16,
+    pub amount: u8,
+}

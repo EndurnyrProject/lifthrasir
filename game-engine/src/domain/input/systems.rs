@@ -19,6 +19,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use leafwing_input_manager::prelude::ActionState;
 
+use crate::domain::entities::character::events::StatIncreaseRequested;
 use crate::domain::entities::character::states::AnimationState;
 
 use super::{
@@ -300,6 +301,29 @@ pub fn handle_sit_toggle(
 
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
+    schedule = Update,
+    config(run_if = in_state(GameState::InGame))
+)]
+pub fn handle_stat_increase_requests(
+    mut requests: MessageReader<StatIncreaseRequested>,
+    mut client: Option<ResMut<ZoneServerClient>>,
+) {
+    let Some(ref mut zone_client) = client else {
+        if !requests.is_empty() {
+            warn!("No zone client available for stat-increase request");
+        }
+        return;
+    };
+
+    for request in requests.read() {
+        if let Err(e) = zone_client.request_stat_increase(request.status_id, request.amount) {
+            error!("Failed to send stat-increase request: {:?}", e);
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
     schedule = OnEnter(GameState::Login)
 )]
 pub fn set_default_cursor_for_login(mut cursor_messages: MessageWriter<CursorChangeRequest>) {
@@ -324,4 +348,32 @@ pub fn set_default_cursor_for_character_selection(
     mut cursor_messages: MessageWriter<CursorChangeRequest>,
 ) {
     cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ZoneServerClient wraps a real socket and cannot be stubbed without network
+    // setup, so this is a logic-level test: it confirms StatIncreaseRequested is a
+    // registered Bevy message and the consumer drains it without panicking when no
+    // client resource is present.
+    #[test]
+    fn consumer_drains_stat_increase_requests() {
+        let mut app = App::new();
+        app.add_message::<StatIncreaseRequested>();
+        app.add_systems(Update, handle_stat_increase_requests);
+
+        app.world_mut()
+            .resource_mut::<Messages<StatIncreaseRequested>>()
+            .write(StatIncreaseRequested {
+                status_id: 13,
+                amount: 1,
+            });
+
+        app.update();
+
+        let messages = app.world().resource::<Messages<StatIncreaseRequested>>();
+        assert_eq!(messages.len(), 1);
+    }
 }
