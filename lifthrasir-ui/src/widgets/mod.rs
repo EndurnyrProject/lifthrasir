@@ -9,6 +9,7 @@ use game_engine::core::state::GameState;
 
 pub mod character_info;
 pub mod chat_box;
+pub mod status_window;
 
 pub struct InGameHudPlugin;
 
