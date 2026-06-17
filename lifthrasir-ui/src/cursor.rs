@@ -48,14 +48,14 @@ impl CursorTextures {
 #[derive(Resource, Default)]
 struct AppliedCursor(Option<CursorType>);
 
-/// Click point within each cursor image, in pixels (from the original RO cursors).
-fn hotspot(cursor: CursorType) -> (u16, u16) {
-    match cursor {
-        CursorType::Attack => (10, 5),
-        CursorType::Default | CursorType::Add | CursorType::Impossible | CursorType::Talk => {
-            (17, 17)
-        }
-    }
+/// Click point within the cursor image, in image pixels. Every RO cursor here is
+/// the same gold arrowhead whose pointing tip sits in the top-left corner (the
+/// crosshair/plus badges are decoration), so the hotspot is the tip for all of
+/// them. Aligning it with the tip is what makes clicks land where the cursor
+/// points; a centered hotspot offsets every click by ~16px and makes small
+/// targets (window buttons) unclickable.
+fn hotspot(_cursor: CursorType) -> (u16, u16) {
+    (1, 1)
 }
 
 fn load_cursor_textures(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -109,11 +109,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn attack_hotspot_differs_from_centered_cursors() {
-        assert_eq!(hotspot(CursorType::Attack), (10, 5));
-        assert_eq!(hotspot(CursorType::Default), (17, 17));
-        assert_eq!(hotspot(CursorType::Add), (17, 17));
-        assert_eq!(hotspot(CursorType::Impossible), (17, 17));
-        assert_eq!(hotspot(CursorType::Talk), (17, 17));
+    fn hotspot_is_the_arrow_tip_for_every_cursor() {
+        for cursor in [
+            CursorType::Default,
+            CursorType::Add,
+            CursorType::Attack,
+            CursorType::Impossible,
+            CursorType::Talk,
+        ] {
+            assert_eq!(hotspot(cursor), (1, 1));
+        }
     }
 }
