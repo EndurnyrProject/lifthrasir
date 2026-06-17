@@ -4,11 +4,13 @@
 //! UX estimate (`stat_point_cost`); the server stays authoritative and reconciles
 //! on Save. Combat-stat formulas are deliberately not replicated.
 
+use bevy::ecs::system::IntoObserverSystem;
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::entities::character::components::status::{
     CharacterStatus, StatusParameter,
 };
+use game_engine::domain::entities::character::events::StatIncreaseRequested;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
 use leafwing_input_manager::prelude::ActionState;
@@ -118,6 +120,21 @@ pub fn can_raise(base: u32, staged: u32, points_left: u32) -> bool {
     current < STAT_CAP && stat_point_cost(current) <= points_left
 }
 
+/// Maps the current staging to one `StatIncreaseRequested` per modified primary
+/// stat (`status_id` = the `StatusParameter` repr, `amount` = staged count).
+fn save_messages(staging: &StatStaging) -> Vec<StatIncreaseRequested> {
+    PRIMARY_STATS
+        .iter()
+        .filter_map(|&stat| {
+            let staged = staging.staged_value(stat);
+            (staged > 0).then(|| StatIncreaseRequested {
+                status_id: stat as u16,
+                amount: staged as u8,
+            })
+        })
+        .collect()
+}
+
 /// Builds the `{ stat -> base value }` map for all six primary stats from the
 /// server status. The staging helpers require every primary present (a missing
 /// entry would read as base 0 and underflow `stat_point_cost(0)`).
@@ -177,6 +194,10 @@ enum CombatCell {
 /// Marks the collapsible advanced container, toggled by its header button.
 #[derive(Component)]
 struct AdvancedSection;
+
+/// Marks the Save / Reset commit buttons so their dim-state tracks staging.
+#[derive(Component)]
+struct CommitButton;
 
 /// Builds the status-window shell under `parent`: a 468px glass panel with a
 /// titlebar (rune + "Status" + close) and an empty body, hidden by default and
@@ -320,6 +341,72 @@ fn spawn_body(
     spawn_rail(commands, ledger, font_body);
     spawn_combat(commands, ledger, font_body);
     spawn_advanced(commands, body, font_title, font_body);
+    spawn_commit_row(commands, body, font_body);
+}
+
+/// Save / Reset buttons. Save commits staged points to the server; Reset
+/// discards them. Both dim when nothing is staged (see `update_status_window`).
+fn spawn_commit_row(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
+    let row = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(8.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(body),
+        ))
+        .id();
+    spawn_commit_button(commands, row, "Reset", theme::FIELD, theme::TEXT_DIM, font, on_reset);
+    spawn_commit_button(commands, row, "Save", theme::EMERALD, theme::EMERALD_INK, font, on_save);
+}
+
+fn spawn_commit_button<M>(
+    commands: &mut Commands,
+    row: Entity,
+    text: &str,
+    bg: Color,
+    fg: Color,
+    font: &Handle<Font>,
+    observer: impl IntoObserverSystem<Pointer<Click>, (), M>,
+) {
+    let button = commands
+        .spawn((
+            Node {
+                flex_grow: 1.0,
+                height: Val::Px(32.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border_radius: BorderRadius::all(Val::Px(7.0)),
+                ..default()
+            },
+            BackgroundColor(bg),
+            CommitButton,
+            Pickable::default(),
+            ChildOf(row),
+        ))
+        .id();
+    commands.spawn((theme::label(text, font.clone(), 13.0, fg), ChildOf(button)));
+    commands.entity(button).observe(observer);
+}
+
+/// Save: emit one `StatIncreaseRequested` per modified stat, then clear staging.
+/// No-op when nothing is staged (`save_messages` returns empty).
+fn on_save(
+    _: On<Pointer<Click>>,
+    mut staging: ResMut<StatStaging>,
+    mut writer: MessageWriter<StatIncreaseRequested>,
+) {
+    for message in save_messages(&staging) {
+        writer.write(message);
+    }
+    staging.clear();
+}
+
+/// Reset: discard all staged points without contacting the server.
+fn on_reset(_: On<Pointer<Click>>, mut staging: ResMut<StatStaging>) {
+    staging.clear();
 }
 
 /// Left rail: STR–LUK rows with steppers + cost, then the status-point bank.
@@ -624,6 +711,7 @@ fn update_status_window(
         (Without<StatValue>, Without<CostLabel>, Without<PointBank>),
     >,
     mut steppers: Query<(&mut BackgroundColor, &Stepper)>,
+    mut commit: Query<&mut BackgroundColor, (With<CommitButton>, Without<Stepper>)>,
 ) {
     let Ok(status) = player.single() else {
         return;
@@ -685,6 +773,13 @@ fn update_status_window(
         };
         if bg.0 != color {
             bg.0 = color;
+        }
+    }
+
+    let alpha = if staging.is_empty() { 0.3 } else { 1.0 };
+    for mut bg in &mut commit {
+        if bg.0.alpha() != alpha {
+            bg.0.set_alpha(alpha);
         }
     }
 }
@@ -780,6 +875,32 @@ mod tests {
         staging.lower(StatusParameter::Str);
         staging.lower(StatusParameter::Str);
         assert_eq!(staging.staged_value(StatusParameter::Str), 0);
+    }
+
+    #[test]
+    fn save_emits_one_message_per_modified_stat() {
+        let bases = HashMap::from([
+            (StatusParameter::Str, 10),
+            (StatusParameter::Dex, 10),
+        ]);
+        let mut staging = StatStaging::default();
+        staging.raise(StatusParameter::Str, 100, &bases);
+        staging.raise(StatusParameter::Str, 100, &bases);
+        staging.raise(StatusParameter::Dex, 100, &bases);
+
+        let mut messages = save_messages(&staging);
+        messages.sort_by_key(|m| m.status_id);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].status_id, StatusParameter::Str as u16);
+        assert_eq!(messages[0].amount, 2);
+        assert_eq!(messages[1].status_id, StatusParameter::Dex as u16);
+        assert_eq!(messages[1].amount, 1);
+    }
+
+    #[test]
+    fn save_emits_nothing_when_empty() {
+        assert!(save_messages(&StatStaging::default()).is_empty());
     }
 
     fn text_of(app: &App, e: Entity) -> String {
