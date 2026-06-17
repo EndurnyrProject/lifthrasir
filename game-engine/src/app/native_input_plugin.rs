@@ -1,4 +1,6 @@
 use bevy::input::mouse::AccumulatedMouseMotion;
+use bevy::picking::hover::HoverMap;
+use bevy::picking::pointer::PointerId;
 use bevy::prelude::*;
 use bevy::window::CursorMoved;
 use bevy_auto_plugin::prelude::{auto_add_system, AutoPlugin};
@@ -34,12 +36,26 @@ fn forward_cursor_position(
 fn forward_mouse_click(
     buttons: Res<ButtonInput<MouseButton>>,
     cursor: Res<ForwardedCursorPosition>,
+    hover_map: Res<HoverMap>,
+    ui_nodes: Query<(), With<Node>>,
     mut click: ResMut<ForwardedMouseClick>,
 ) {
     if !buttons.just_pressed(MouseButton::Left) {
         return;
     }
+    if pointer_over_ui(&hover_map, &ui_nodes) {
+        return;
+    }
     click.position = cursor.position;
+}
+
+/// Whether the mouse pointer is over a pickable UI node. `Pickable::IGNORE`
+/// elements (the always-on HUD) never enter the hover map, so only windows that
+/// opt into picking (e.g. the status window) suppress the world click.
+fn pointer_over_ui(hover_map: &HoverMap, ui_nodes: &Query<(), With<Node>>) -> bool {
+    hover_map
+        .get(&PointerId::Mouse)
+        .is_some_and(|hits| hits.keys().any(|entity| ui_nodes.contains(*entity)))
 }
 
 #[auto_add_system(
@@ -74,6 +90,7 @@ mod tests {
         app.init_resource::<ButtonInput<MouseButton>>();
         app.init_resource::<AccumulatedMouseMotion>();
         app.init_resource::<UiFocus>();
+        app.init_resource::<HoverMap>();
         app.add_message::<CursorMoved>();
         app.add_systems(
             Update,
@@ -137,6 +154,30 @@ mod tests {
     fn click_not_forwarded_while_ui_focused() {
         let mut app = test_app();
         app.world_mut().resource_mut::<UiFocus>().text_input_active = true;
+        app.world_mut()
+            .resource_mut::<ForwardedCursorPosition>()
+            .position = Some(Vec2::new(33.0, 44.0));
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        let click = app.world().resource::<ForwardedMouseClick>();
+        assert_eq!(click.position, None);
+    }
+
+    #[test]
+    fn click_not_forwarded_while_pointer_over_ui() {
+        use bevy::picking::backend::HitData;
+        use bevy::platform::collections::HashMap;
+
+        let mut app = test_app();
+        let ui_node = app.world_mut().spawn(Node::default()).id();
+        let mut hits = HashMap::new();
+        hits.insert(ui_node, HitData::new(Entity::PLACEHOLDER, 0.0, None, None));
+        app.world_mut()
+            .resource_mut::<HoverMap>()
+            .insert(PointerId::Mouse, hits);
         app.world_mut()
             .resource_mut::<ForwardedCursorPosition>()
             .position = Some(Vec2::new(33.0, 44.0));
