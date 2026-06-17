@@ -7,6 +7,8 @@ pub mod rsm;
 pub mod rsw;
 pub mod sprite;
 
+mod string_utils;
+
 pub use act::*;
 pub use gat::*;
 pub use gnd::*;
@@ -14,3 +16,6 @@ pub use grf::*;
 pub use rsm::*;
 pub use rsw::*;
 pub use sprite::*;
+
+/// World units per GAT/GND cell. Intrinsic to the format's cell-to-world scale.
+pub const CELL_SIZE: f32 = 10.0;

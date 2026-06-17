@@ -5,6 +5,7 @@ members = [
     "grf-utils",
     "lifthrasir-ui",
     "lifthrasir",
+    "ro-formats",
 ]
 
 [workspace.package]

@@ -3254,6 +3254,7 @@ dependencies = [
  "once_cell",
  "pathfinding",
  "regex",
+ "ro-formats",
  "secrecy",
  "serde",
  "serde_json",
@@ -3535,8 +3536,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "game-engine",
  "indicatif",
+ "ro-formats",
 ]
 
 [[package]]
@@ -5730,6 +5731,19 @@ name = "rgb"
 version = "0.8.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c6a884d2998352bb4daf0183589aec883f16a6da1f4dde84d8e2e9a5409a1ce"
+
+[[package]]
+name = "ro-formats"
+version = "0.1.0"
+dependencies = [
+ "encoding_rs",
+ "flate2",
+ "glam 0.30.8",
+ "nalgebra",
+ "nom 8.0.0",
+ "thiserror 2.0.17",
+ "tracing",
+]
 
 [[package]]
 name = "rodio"

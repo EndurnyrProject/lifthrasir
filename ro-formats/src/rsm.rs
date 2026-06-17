@@ -1,4 +1,4 @@
-use crate::utils::string_utils::parse_korean_string;
+use crate::string_utils::parse_korean_string;
 use nalgebra::{Matrix4, Vector3, Vector4};
 use nom::{
     bytes::complete::{tag, take},

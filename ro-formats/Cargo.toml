@@ -1,0 +1,13 @@
+[package]
+name = "ro-formats"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+nom = "8.0.0"
+flate2 = "1.1"
+encoding_rs = "0.8.35"
+nalgebra = "0.35"
+thiserror = "2.0"
+glam = "0.30"
+tracing = "0.1"

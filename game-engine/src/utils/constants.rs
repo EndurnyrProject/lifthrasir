@@ -16,4 +16,4 @@ pub const DEFAULT_ANIMATION_DELAY: f32 = 150.0;
 pub const MAX_DISPLAYED_ACTIONS: usize = 8;
 
 /// Map and terrain constants
-pub const CELL_SIZE: f32 = 10.0;
+pub use ro_formats::CELL_SIZE;

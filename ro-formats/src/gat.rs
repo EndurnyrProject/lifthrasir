@@ -1,11 +1,12 @@
-use crate::utils::constants::CELL_SIZE;
-use bevy::{log::info, prelude::Vec3};
+use crate::CELL_SIZE;
+use glam::Vec3;
 use nom::{
     bytes::complete::tag,
     number::complete::{le_f32, le_u32, le_u8},
     IResult,
 };
 use thiserror::Error;
+use tracing::info;
 
 #[derive(Debug, Error)]
 pub enum GatError {

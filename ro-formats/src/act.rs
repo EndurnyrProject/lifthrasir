@@ -6,7 +6,7 @@ use nom::{
 };
 use thiserror::Error;
 
-use crate::utils::string_utils::parse_korean_string;
+use crate::string_utils::parse_korean_string;
 
 #[derive(Debug, Clone)]
 pub struct RoAction {

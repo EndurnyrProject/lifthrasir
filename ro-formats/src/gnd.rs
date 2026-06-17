@@ -1,14 +1,12 @@
-use crate::utils::{constants::CELL_SIZE, string_utils::parse_korean_string};
-use bevy::{
-    log::{error, info},
-    prelude::Vec3,
-};
+use crate::{string_utils::parse_korean_string, CELL_SIZE};
+use glam::Vec3;
 use nom::{
     bytes::complete::{tag, take},
     number::complete::{le_f32, le_i32, le_u16, le_u32, le_u8},
     IResult, Parser,
 };
 use thiserror::Error;
+use tracing::{error, info};
 
 #[derive(Debug, Error)]
 pub enum GndError {
