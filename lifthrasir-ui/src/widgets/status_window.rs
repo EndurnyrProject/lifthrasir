@@ -6,7 +6,9 @@
 
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
-use game_engine::domain::entities::character::components::status::StatusParameter;
+use game_engine::domain::entities::character::components::status::{
+    CharacterStatus, StatusParameter,
+};
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
 use leafwing_input_manager::prelude::ActionState;
@@ -27,6 +29,10 @@ impl Plugin for StatusWindowPlugin {
         app.add_systems(
             Update,
             toggle_status_window.run_if(in_state(GameState::InGame).and(ui_unfocused)),
+        );
+        app.add_systems(
+            Update,
+            update_status_window.run_if(in_state(GameState::InGame)),
         );
     }
 }
@@ -112,6 +118,66 @@ pub fn can_raise(base: u32, staged: u32, points_left: u32) -> bool {
     current < STAT_CAP && stat_point_cost(current) <= points_left
 }
 
+/// Builds the `{ stat -> base value }` map for all six primary stats from the
+/// server status. The staging helpers require every primary present (a missing
+/// entry would read as base 0 and underflow `stat_point_cost(0)`).
+fn primary_bases(status: &CharacterStatus) -> HashMap<StatusParameter, u32> {
+    PRIMARY_STATS
+        .iter()
+        .map(|&stat| (stat, status.get_param(stat)))
+        .collect()
+}
+
+/// The `SP_U*` cost parameter that pairs with a primary stat.
+fn cost_param(stat: StatusParameter) -> StatusParameter {
+    match stat {
+        StatusParameter::Str => StatusParameter::UStr,
+        StatusParameter::Agi => StatusParameter::UAgi,
+        StatusParameter::Vit => StatusParameter::UVit,
+        StatusParameter::Int => StatusParameter::UInt,
+        StatusParameter::Dex => StatusParameter::UDex,
+        _ => StatusParameter::ULuk,
+    }
+}
+
+const TRAITS: [&str; 6] = ["Pow", "Sta", "Wis", "Spl", "Con", "Crt"];
+
+/// Marks a primary stat row's value text (base + staged).
+#[derive(Component, Clone, Copy)]
+struct StatValue(StatusParameter);
+
+/// Marks a primary stat row's next-point cost text.
+#[derive(Component, Clone, Copy)]
+struct CostLabel(StatusParameter);
+
+/// Marks the "Status Point" bank value text.
+#[derive(Component)]
+struct PointBank;
+
+/// Marks a stepper button so its observer and dim-state are keyed to a stat.
+#[derive(Component, Clone, Copy)]
+struct Stepper {
+    stat: StatusParameter,
+    raise: bool,
+}
+
+/// Marks a combat-readout cell value text.
+#[derive(Component, Clone, Copy)]
+enum CombatCell {
+    Atk,
+    Matk,
+    Def,
+    Mdef,
+    Hit,
+    Flee,
+    Crit,
+    Aspd,
+}
+
+/// Marks the collapsible advanced container, toggled by its header button.
+#[derive(Component)]
+struct AdvancedSection;
+
 /// Builds the status-window shell under `parent`: a 468px glass panel with a
 /// titlebar (rune + "Status" + close) and an empty body, hidden by default and
 /// draggable by its titlebar. Body content is filled in by a later task.
@@ -165,7 +231,7 @@ pub fn spawn_status_window(commands: &mut Commands, parent: Entity, asset_server
         ChildOf(titlebar),
     ));
     commands.spawn((
-        theme::label("Status", font_title, 15.0, theme::TEXT),
+        theme::label("Status", font_title.clone(), 15.0, theme::TEXT),
         Node {
             flex_grow: 1.0,
             ..default()
@@ -200,18 +266,433 @@ pub fn spawn_status_window(commands: &mut Commands, parent: Entity, asset_server
         },
     );
 
-    commands.spawn((
-        Node {
-            flex_direction: FlexDirection::Column,
-            padding: UiRect::all(Val::Px(14.0)),
-            min_height: Val::Px(60.0),
-            ..default()
-        },
-        Pickable::IGNORE,
-        ChildOf(root),
-    ));
+    let body = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(14.0)),
+                row_gap: Val::Px(12.0),
+                min_height: Val::Px(60.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(root),
+        ))
+        .id();
+
+    spawn_body(commands, body, &font_title, &font_body);
 
     make_draggable(commands, titlebar, root);
+}
+
+/// Section header: a faint uppercase caption.
+fn spawn_head(commands: &mut Commands, parent: Entity, text: &str, font: &Handle<Font>) {
+    commands.spawn((
+        theme::label(text, font.clone(), 11.0, theme::GOLD),
+        Node {
+            margin: UiRect::bottom(Val::Px(4.0)),
+            ..default()
+        },
+        ChildOf(parent),
+    ));
+}
+
+/// Fills the window body: two-pane ledger (attributes rail + combat readout) and
+/// the collapsible read-only Advanced/Traits section.
+fn spawn_body(
+    commands: &mut Commands,
+    body: Entity,
+    font_title: &Handle<Font>,
+    font_body: &Handle<Font>,
+) {
+    let ledger = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(16.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(body),
+        ))
+        .id();
+
+    spawn_rail(commands, ledger, font_body);
+    spawn_combat(commands, ledger, font_body);
+    spawn_advanced(commands, body, font_title, font_body);
+}
+
+/// Left rail: STR–LUK rows with steppers + cost, then the status-point bank.
+fn spawn_rail(commands: &mut Commands, ledger: Entity, font: &Handle<Font>) {
+    let rail = commands
+        .spawn((
+            Node {
+                flex_grow: 1.0,
+                flex_basis: Val::Px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(6.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(ledger),
+        ))
+        .id();
+
+    spawn_head(commands, rail, "ATTRIBUTES", font);
+    for stat in PRIMARY_STATS {
+        spawn_stat_row(commands, rail, stat, font);
+    }
+
+    let bank = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                margin: UiRect::top(Val::Px(4.0)),
+                padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)),
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            Pickable::IGNORE,
+            ChildOf(rail),
+        ))
+        .id();
+    commands.spawn((
+        theme::label("Status Point", font.clone(), 11.0, theme::TEXT_DIM),
+        ChildOf(bank),
+    ));
+    commands.spawn((
+        theme::label("0", font.clone(), 13.0, theme::GOLD),
+        PointBank,
+        ChildOf(bank),
+    ));
+}
+
+/// A single STR–LUK row: key, value, `−`/`+` steppers, next-point cost.
+fn spawn_stat_row(
+    commands: &mut Commands,
+    rail: Entity,
+    stat: StatusParameter,
+    font: &Handle<Font>,
+) {
+    let row = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(6.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(rail),
+        ))
+        .id();
+    commands.spawn((
+        theme::label(stat.name(), font.clone(), 11.5, theme::TEXT_DIM),
+        Node {
+            width: Val::Px(34.0),
+            ..default()
+        },
+        ChildOf(row),
+    ));
+    commands.spawn((
+        theme::label("0", font.clone(), 13.0, theme::TEXT),
+        StatValue(stat),
+        Node {
+            flex_grow: 1.0,
+            ..default()
+        },
+        ChildOf(row),
+    ));
+    spawn_stepper(commands, row, stat, false, font);
+    spawn_stepper(commands, row, stat, true, font);
+    commands.spawn((
+        theme::label("", font.clone(), 10.5, theme::TEXT_FAINT),
+        CostLabel(stat),
+        Node {
+            width: Val::Px(34.0),
+            ..default()
+        },
+        ChildOf(row),
+    ));
+}
+
+fn spawn_stepper(
+    commands: &mut Commands,
+    row: Entity,
+    stat: StatusParameter,
+    raise: bool,
+    font: &Handle<Font>,
+) {
+    let glyph = if raise { "+" } else { "\u{2212}" };
+    let button = commands
+        .spawn((
+            Node {
+                width: Val::Px(20.0),
+                height: Val::Px(20.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border_radius: BorderRadius::all(Val::Px(5.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            Stepper { stat, raise },
+            Pickable::default(),
+            ChildOf(row),
+        ))
+        .id();
+    commands.spawn((
+        theme::label(glyph, font.clone(), 13.0, theme::TEXT),
+        ChildOf(button),
+    ));
+    commands.entity(button).observe(on_stepper);
+}
+
+/// Right pane: read-only combat readout, straight from `CharacterStatus`.
+fn spawn_combat(commands: &mut Commands, ledger: Entity, font: &Handle<Font>) {
+    let pane = commands
+        .spawn((
+            Node {
+                flex_grow: 1.0,
+                flex_basis: Val::Px(0.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(6.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(ledger),
+        ))
+        .id();
+
+    spawn_head(commands, pane, "COMBAT", font);
+    let cells = [
+        ("Atk", CombatCell::Atk),
+        ("Matk", CombatCell::Matk),
+        ("Def", CombatCell::Def),
+        ("Mdef", CombatCell::Mdef),
+        ("Hit", CombatCell::Hit),
+        ("Flee", CombatCell::Flee),
+        ("Crit", CombatCell::Crit),
+        ("Aspd", CombatCell::Aspd),
+    ];
+    for (label, cell) in cells {
+        spawn_combat_cell(commands, pane, label, cell, font);
+    }
+}
+
+fn spawn_combat_cell(
+    commands: &mut Commands,
+    pane: Entity,
+    label: &str,
+    cell: CombatCell,
+    font: &Handle<Font>,
+) {
+    let row = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(pane),
+        ))
+        .id();
+    commands.spawn((
+        theme::label(label, font.clone(), 11.5, theme::TEXT_DIM),
+        ChildOf(row),
+    ));
+    commands.spawn((
+        theme::label("0", font.clone(), 12.0, theme::TEXT),
+        cell,
+        ChildOf(row),
+    ));
+}
+
+/// Collapsible Advanced section: a header toggle over a read-only Traits rail.
+fn spawn_advanced(
+    commands: &mut Commands,
+    body: Entity,
+    font_title: &Handle<Font>,
+    font_body: &Handle<Font>,
+) {
+    let header = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(6.0),
+                padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS_2),
+            BorderColor::all(theme::GOLD_FAINT),
+            Pickable::default(),
+            ChildOf(body),
+        ))
+        .id();
+    commands.spawn((
+        theme::label("Advanced Status", font_title.clone(), 11.0, theme::GOLD),
+        ChildOf(header),
+    ));
+
+    let advanced = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(6.0),
+                ..default()
+            },
+            AdvancedSection,
+            Visibility::Hidden,
+            Pickable::IGNORE,
+            ChildOf(body),
+        ))
+        .id();
+
+    spawn_head(commands, advanced, "TRAITS", font_body);
+    for name in TRAITS {
+        let row = commands
+            .spawn((
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    ..default()
+                },
+                Pickable::IGNORE,
+                ChildOf(advanced),
+            ))
+            .id();
+        commands.spawn((
+            theme::label(name, font_body.clone(), 11.5, theme::TEXT_DIM),
+            ChildOf(row),
+        ));
+        commands.spawn((
+            theme::label("0", font_body.clone(), 12.0, theme::TEXT),
+            ChildOf(row),
+        ));
+    }
+
+    commands.entity(header).observe(
+        |_: On<Pointer<Click>>, mut section: Query<&mut Visibility, With<AdvancedSection>>| {
+            if let Ok(mut visibility) = section.single_mut() {
+                *visibility = match *visibility {
+                    Visibility::Hidden => Visibility::Visible,
+                    _ => Visibility::Hidden,
+                };
+            }
+        },
+    );
+}
+
+/// `+`/`−` observer: mutates `StatStaging` via the staging helpers. Reads every
+/// primary base from `CharacterStatus` so no stat is ever missing from the bases.
+fn on_stepper(
+    click: On<Pointer<Click>>,
+    steppers: Query<&Stepper>,
+    player: Query<&CharacterStatus, With<LocalPlayer>>,
+    mut staging: ResMut<StatStaging>,
+) {
+    let Ok(stepper) = steppers.get(click.entity) else {
+        return;
+    };
+    let Ok(status) = player.single() else {
+        return;
+    };
+    if stepper.raise {
+        let bases = primary_bases(status);
+        staging.raise(stepper.stat, status.status_point, &bases);
+    } else {
+        staging.lower(stepper.stat);
+    }
+}
+
+/// Reflects `CharacterStatus` + `StatStaging` into the marked elements, writing
+/// only on change. Combat is server-truth (no staged preview).
+fn update_status_window(
+    player: Query<&CharacterStatus, With<LocalPlayer>>,
+    staging: Res<StatStaging>,
+    mut values: Query<(&mut Text, &StatValue)>,
+    mut costs: Query<(&mut Text, &CostLabel), Without<StatValue>>,
+    mut bank: Query<&mut Text, (With<PointBank>, Without<StatValue>, Without<CostLabel>)>,
+    mut combat: Query<
+        (&mut Text, &CombatCell),
+        (Without<StatValue>, Without<CostLabel>, Without<PointBank>),
+    >,
+    mut steppers: Query<(&mut BackgroundColor, &Stepper)>,
+) {
+    let Ok(status) = player.single() else {
+        return;
+    };
+    let bases = primary_bases(status);
+    let points_left = staging.points_left(status.status_point, &bases);
+
+    for (mut text, StatValue(stat)) in &mut values {
+        let value = (status.get_param(*stat) + staging.staged_value(*stat)).to_string();
+        set_text(&mut text, value);
+    }
+
+    for (mut text, CostLabel(stat)) in &mut costs {
+        let base = status.get_param(*stat);
+        let staged = staging.staged_value(*stat);
+        let value = if base + staged >= STAT_CAP {
+            "max".to_string()
+        } else {
+            let cost = if staged == 0 {
+                status.get_param(cost_param(*stat))
+            } else {
+                stat_point_cost(base + staged)
+            };
+            format!("-{cost}")
+        };
+        set_text(&mut text, value);
+    }
+
+    if let Ok(mut text) = bank.single_mut() {
+        set_text(&mut text, points_left.to_string());
+    }
+
+    for (mut text, cell) in &mut combat {
+        let value = match cell {
+            CombatCell::Atk => status.atk1 + status.atk2,
+            CombatCell::Matk => status.matk1 + status.matk2,
+            CombatCell::Def => status.def1 + status.def2,
+            CombatCell::Mdef => status.mdef1 + status.mdef2,
+            CombatCell::Hit => status.hit,
+            CombatCell::Flee => status.flee1 + status.flee2,
+            CombatCell::Crit => status.critical,
+            CombatCell::Aspd => status.aspd,
+        };
+        set_text(&mut text, value.to_string());
+    }
+
+    for (mut bg, stepper) in &mut steppers {
+        let base = status.get_param(stepper.stat);
+        let staged = staging.staged_value(stepper.stat);
+        let enabled = if stepper.raise {
+            can_raise(base, staged, points_left)
+        } else {
+            staged > 0
+        };
+        let color = if enabled {
+            theme::FIELD
+        } else {
+            theme::FIELD.with_alpha(0.3)
+        };
+        if bg.0 != color {
+            bg.0 = color;
+        }
+    }
+}
+
+fn set_text(text: &mut Text, value: String) {
+    if text.0 != value {
+        *text = Text::new(value);
+    }
 }
 
 /// Alt+A toggles the status window between hidden and visible.
@@ -299,5 +780,49 @@ mod tests {
         staging.lower(StatusParameter::Str);
         staging.lower(StatusParameter::Str);
         assert_eq!(staging.staged_value(StatusParameter::Str), 0);
+    }
+
+    fn text_of(app: &App, e: Entity) -> String {
+        app.world().get::<Text>(e).unwrap().0.clone()
+    }
+
+    #[test]
+    fn update_reflects_base_plus_staged_without_touching_combat() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<StatStaging>();
+
+        let str_value = app
+            .world_mut()
+            .spawn((Text::new(""), StatValue(StatusParameter::Str)))
+            .id();
+        let atk = app
+            .world_mut()
+            .spawn((Text::new(""), CombatCell::Atk))
+            .id();
+        let bank = app.world_mut().spawn((Text::new(""), PointBank)).id();
+
+        app.world_mut().spawn((
+            CharacterStatus {
+                str: 10,
+                atk1: 30,
+                atk2: 12,
+                status_point: 100,
+                ..default()
+            },
+            LocalPlayer,
+        ));
+
+        app.world_mut()
+            .resource_mut::<StatStaging>()
+            .raise(StatusParameter::Str, 100, &HashMap::from([(StatusParameter::Str, 10)]));
+
+        app.add_systems(Update, update_status_window);
+        app.update();
+
+        assert_eq!(text_of(&app, str_value), "11");
+        assert_eq!(text_of(&app, atk), "42");
+        // cost(10) = 2, so one staged point spent from 100.
+        assert_eq!(text_of(&app, bank), "98");
     }
 }
