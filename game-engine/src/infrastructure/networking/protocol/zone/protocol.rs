@@ -279,6 +279,7 @@ pub enum ZoneClientPacket {
     CzRequestMove2(CzRequestMove2Packet),
     CzRequestTime2(CzRequestTime2Packet),
     CzRequestChat(CzRequestChatPacket),
+    CzStatusChange(CzStatusChangePacket),
 }
 
 impl ClientPacket for ZoneClientPacket {
@@ -293,6 +294,7 @@ impl ClientPacket for ZoneClientPacket {
             Self::CzRequestMove2(p) => p.serialize(),
             Self::CzRequestTime2(p) => p.serialize(),
             Self::CzRequestChat(p) => p.serialize(),
+            Self::CzStatusChange(p) => p.serialize(),
         }
     }
 
@@ -305,6 +307,7 @@ impl ClientPacket for ZoneClientPacket {
             Self::CzRequestMove2(_) => CZ_REQUEST_MOVE2,
             Self::CzRequestTime2(_) => CZ_REQUEST_TIME2,
             Self::CzRequestChat(_) => CZ_REQUEST_CHAT,
+            Self::CzStatusChange(_) => CZ_STATUS_CHANGE,
         }
     }
 }

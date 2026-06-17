@@ -12,7 +12,8 @@ use crate::{
                 AcceptEnterHandler, AccountIdReceived, AidHandler, ChatHandler, ChatReceived,
                 CombatActionHandler, CzEnter2Packet, CzNotifyActorinitPacket, CzReqname2Packet,
                 CzRequestAct2Packet, CzRequestChatPacket, CzRequestMove2Packet,
-                CzRequestTime2Packet, EntityNameAllReceived, EntityNameReceived,
+                CzRequestTime2Packet, CzStatusChangePacket, EntityNameAllReceived,
+                EntityNameReceived,
                 EquipitemListHandler, HpInfoHandler, LongparChangeHandler, MoveStopHandler,
                 MoveentryHandler, MovementConfirmedByServer, MovementStoppedByServer,
                 NewentryHandler, NormalItemlistHandler, ParChangeHandler, ParameterChanged,
@@ -289,6 +290,11 @@ impl ZoneServerClient {
 
     pub fn request_stand(&mut self) -> NetworkResult<()> {
         let packet = ZoneClientPacket::CzRequestAct2(CzRequestAct2Packet::stand());
+        self.inner.send_packet(&packet)
+    }
+
+    pub fn request_stat_increase(&mut self, status_id: u16, amount: u8) -> NetworkResult<()> {
+        let packet = ZoneClientPacket::CzStatusChange(CzStatusChangePacket { status_id, amount });
         self.inner.send_packet(&packet)
     }
 

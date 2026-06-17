@@ -7,9 +7,9 @@ pub mod types;
 // Re-export commonly used types
 pub use client_packets::{
     CzEnter2Packet, CzNotifyActorinitPacket, CzReqname2Packet, CzRequestAct2Packet,
-    CzRequestChatPacket, CzRequestMove2Packet, CzRequestTime2Packet, CZ_ENTER2,
-    CZ_NOTIFY_ACTORINIT, CZ_REQNAME2, CZ_REQUEST_ACT2, CZ_REQUEST_CHAT, CZ_REQUEST_MOVE2,
-    CZ_REQUEST_TIME2,
+    CzRequestChatPacket, CzRequestMove2Packet, CzRequestTime2Packet, CzStatusChangePacket,
+    CZ_ENTER2, CZ_NOTIFY_ACTORINIT, CZ_REQNAME2, CZ_REQUEST_ACT2, CZ_REQUEST_CHAT,
+    CZ_REQUEST_MOVE2, CZ_REQUEST_TIME2, CZ_STATUS_CHANGE,
 };
 
 pub use handlers::{
