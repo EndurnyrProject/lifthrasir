@@ -5,8 +5,31 @@
 //! on Save. Combat-stat formulas are deliberately not replicated.
 
 use bevy::prelude::*;
+use game_engine::core::state::GameState;
 use game_engine::domain::entities::character::components::status::StatusParameter;
+use game_engine::domain::entities::markers::LocalPlayer;
+use game_engine::domain::input::{ui_unfocused, PlayerAction};
+use leafwing_input_manager::prelude::ActionState;
 use std::collections::HashMap;
+
+use crate::theme;
+use crate::widgets::draggable::make_draggable;
+
+/// Marks the status-window root so the toggle/close systems can flip its visibility.
+#[derive(Component)]
+pub struct StatusWindowRoot;
+
+pub struct StatusWindowPlugin;
+
+impl Plugin for StatusWindowPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<StatStaging>();
+        app.add_systems(
+            Update,
+            toggle_status_window.run_if(in_state(GameState::InGame).and(ui_unfocused)),
+        );
+    }
+}
 
 pub const PRIMARY_STATS: [StatusParameter; 6] = [
     StatusParameter::Str,
@@ -87,6 +110,128 @@ impl StatStaging {
 pub fn can_raise(base: u32, staged: u32, points_left: u32) -> bool {
     let current = base + staged;
     current < STAT_CAP && stat_point_cost(current) <= points_left
+}
+
+/// Builds the status-window shell under `parent`: a 468px glass panel with a
+/// titlebar (rune + "Status" + close) and an empty body, hidden by default and
+/// draggable by its titlebar. Body content is filled in by a later task.
+pub fn spawn_status_window(commands: &mut Commands, parent: Entity, asset_server: &AssetServer) {
+    let font_title = asset_server.load(theme::FONT_TITLE);
+    let font_body = asset_server.load(theme::FONT_BODY);
+
+    let root = commands
+        .spawn((
+            StatusWindowRoot,
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(220.0),
+                top: Val::Px(90.0),
+                width: Val::Px(468.0),
+                flex_direction: FlexDirection::Column,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(13.0)),
+                ..default()
+            },
+            BackgroundColor(theme::GLASS),
+            BorderColor::all(theme::GOLD_FAINT),
+            Visibility::Hidden,
+            Pickable::default(),
+            ChildOf(parent),
+        ))
+        .id();
+
+    let titlebar = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(8.0),
+                padding: UiRect::axes(Val::Px(14.0), Val::Px(11.0)),
+                border: UiRect {
+                    bottom: Val::Px(1.0),
+                    ..default()
+                },
+                ..default()
+            },
+            BackgroundColor(theme::GLASS_2),
+            BorderColor::all(theme::GOLD_FAINT),
+            Pickable::default(),
+            ChildOf(root),
+        ))
+        .id();
+
+    commands.spawn((
+        theme::label("\u{2756}", font_title.clone(), 14.0, theme::GOLD),
+        ChildOf(titlebar),
+    ));
+    commands.spawn((
+        theme::label("Status", font_title, 15.0, theme::TEXT),
+        Node {
+            flex_grow: 1.0,
+            ..default()
+        },
+        ChildOf(titlebar),
+    ));
+
+    let close = commands
+        .spawn((
+            Node {
+                width: Val::Px(22.0),
+                height: Val::Px(22.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            Pickable::default(),
+            ChildOf(titlebar),
+        ))
+        .id();
+    commands.spawn((
+        theme::label("\u{2715}", font_body.clone(), 13.0, theme::TEXT_DIM),
+        ChildOf(close),
+    ));
+    commands.entity(close).observe(
+        |_: On<Pointer<Click>>, mut window: Query<&mut Visibility, With<StatusWindowRoot>>| {
+            if let Ok(mut visibility) = window.single_mut() {
+                *visibility = Visibility::Hidden;
+            }
+        },
+    );
+
+    commands.spawn((
+        Node {
+            flex_direction: FlexDirection::Column,
+            padding: UiRect::all(Val::Px(14.0)),
+            min_height: Val::Px(60.0),
+            ..default()
+        },
+        Pickable::IGNORE,
+        ChildOf(root),
+    ));
+
+    make_draggable(commands, titlebar, root);
+}
+
+/// Alt+A toggles the status window between hidden and visible.
+fn toggle_status_window(
+    player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,
+    mut window: Query<&mut Visibility, With<StatusWindowRoot>>,
+) {
+    let Ok(actions) = player.single() else {
+        return;
+    };
+    if !actions.just_pressed(&PlayerAction::Status) {
+        return;
+    }
+    let Ok(mut visibility) = window.single_mut() else {
+        return;
+    };
+    *visibility = match *visibility {
+        Visibility::Hidden => Visibility::Visible,
+        _ => Visibility::Hidden,
+    };
 }
 
 #[cfg(test)]

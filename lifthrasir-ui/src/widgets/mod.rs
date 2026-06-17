@@ -17,7 +17,11 @@ pub struct InGameHudPlugin;
 impl Plugin for InGameHudPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::InGame), show_hud);
-        app.add_plugins((character_info::CharacterInfoPlugin, chat_box::ChatBoxPlugin));
+        app.add_plugins((
+            character_info::CharacterInfoPlugin,
+            chat_box::ChatBoxPlugin,
+            status_window::StatusWindowPlugin,
+        ));
     }
 }
 
@@ -36,4 +40,5 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     character_info::spawn_status_frame(&mut commands, root, &asset_server);
     chat_box::spawn_chat_box(&mut commands, root, &asset_server);
+    status_window::spawn_status_window(&mut commands, root, &asset_server);
 }

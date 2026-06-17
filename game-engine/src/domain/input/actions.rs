@@ -10,6 +10,8 @@ use leafwing_input_manager::prelude::*;
 pub enum PlayerAction {
     /// Toggle sit/stand.
     Sit,
+    /// Toggle the status window.
+    Status,
 }
 
 impl PlayerAction {
@@ -17,7 +19,11 @@ impl PlayerAction {
     ///
     /// `Insert` is the classic RO binding; `Help` occupies Insert's physical
     /// slot on full-size Apple keyboards (MacBooks lack an Insert key entirely).
+    /// `Status` is the classic RO Alt+A chord.
     pub fn default_input_map() -> InputMap<Self> {
-        InputMap::new([(Self::Sit, KeyCode::Insert), (Self::Sit, KeyCode::Help)])
+        InputMap::new([(Self::Sit, KeyCode::Insert), (Self::Sit, KeyCode::Help)]).with(
+            Self::Status,
+            ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyA),
+        )
     }
 }

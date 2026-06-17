@@ -7,4 +7,5 @@ edition.workspace = true
 bevy = { workspace = true }
 bevy_ui_text_input = { workspace = true }
 game-engine = { path = "../game-engine" }
+leafwing-input-manager = { workspace = true }
 secrecy = { workspace = true }

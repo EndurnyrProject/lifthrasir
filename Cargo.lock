@@ -4124,6 +4124,7 @@ dependencies = [
  "bevy",
  "bevy_ui_text_input",
  "game-engine",
+ "leafwing-input-manager",
  "secrecy",
 ]
 
