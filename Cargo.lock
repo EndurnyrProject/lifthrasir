@@ -3241,13 +3241,10 @@ dependencies = [
  "encoding_rs",
  "flate2",
  "futures-lite",
- "gag",
  "image",
  "leafwing-input-manager",
  "lifthrasir-data",
  "lru",
- "luadec",
- "mlua",
  "moonshine-behavior",
  "moonshine-kind",
  "moonshine-tag",
@@ -4373,14 +4370,11 @@ checksum = "9be1c2bfc684b8a228fbaebf954af7a47a98ec27721986654a4cc2c40a20cc7e"
 dependencies = [
  "bstr",
  "either",
- "erased-serde",
  "mlua-sys",
  "num-traits 0.2.19",
  "parking_lot",
  "rustc-hash 2.1.1",
  "rustversion",
- "serde",
- "serde-value",
 ]
 
 [[package]]
@@ -5109,15 +5103,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba0b26cec2e24f08ed8bb31519a9333140a6599b867dac464bb150bdb796fd43"
 dependencies = [
  "libredox",
-]
-
-[[package]]
-name = "ordered-float"
-version = "2.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68f19d67e5a2795c94e73e0bb1cc1a7edeb2e28efd39e2e1c9b7a40c1108b11c"
-dependencies = [
- "num-traits 0.2.19",
 ]
 
 [[package]]
@@ -5988,16 +5973,6 @@ checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
 dependencies = [
  "serde_core",
  "serde_derive",
-]
-
-[[package]]
-name = "serde-value"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
-dependencies = [
- "ordered-float 2.10.1",
- "serde",
 ]
 
 [[package]]
@@ -7363,7 +7338,7 @@ dependencies = [
  "ndk-sys 0.6.0+11769913",
  "objc",
  "once_cell",
- "ordered-float 5.0.0",
+ "ordered-float",
  "parking_lot",
  "portable-atomic",
  "portable-atomic-util",
