@@ -18,8 +18,7 @@ pub fn decompile(bytecode: &[u8]) -> anyhow::Result<Vec<u8>> {
 
 fn fix_decompiler_syntax(bytes: &[u8]) -> Vec<u8> {
     let dotted = Regex::new(r"(\s+)\.([A-Za-z_][A-Za-z0-9_]*)\s*=").unwrap();
-    let string_index =
-        Regex::new(r#"(JOBID|jobtbl)\["([A-Z_][A-Z0-9_]*)"\]"#).unwrap();
+    let string_index = Regex::new(r#"(JOBID|jobtbl)\["([A-Z_][A-Z0-9_]*)"\]"#).unwrap();
 
     let after_dots = dotted.replace_all(bytes, &b"$1$2 ="[..]);
     string_index

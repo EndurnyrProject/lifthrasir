@@ -1,5 +1,7 @@
 mod config;
+mod converters;
 mod decompile;
+mod encoding;
 mod grf_vfs;
 mod lua;
 
@@ -28,12 +30,11 @@ enum Command {
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Convert { loader, out, only: _ } => {
+        Command::Convert { loader, out, only } => {
             let config = config::LoaderConfig::from_path(&loader)?;
-            for grf in config.grfs_by_priority() {
-                println!("grf: {} (priority {})", grf.path, grf.priority);
-            }
-            println!("out: {}", out.display());
+            let grfs = config.grfs_by_priority();
+            let vfs = grf_vfs::GrfVfs::open(&grfs)?;
+            converters::run(only.as_deref(), &vfs, &out)?;
         }
     }
     Ok(())
