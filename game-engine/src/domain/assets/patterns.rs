@@ -116,3 +116,21 @@ pub fn npc_sprite_path(sprite_name: &str) -> String {
 pub fn npc_action_path(sprite_name: &str) -> String {
     format!("ro://data/sprite/npc/{}.act", sprite_name.to_lowercase())
 }
+
+/// Generate the inventory icon BMP path for an item resource name.
+pub fn item_icon_path(resource_name: &str) -> String {
+    format!("ro://data/texture/유저인터페이스/item/{resource_name}.bmp")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn item_icon_path_builds_correct_url() {
+        assert_eq!(
+            item_icon_path("apple"),
+            "ro://data/texture/유저인터페이스/item/apple.bmp"
+        );
+    }
+}
