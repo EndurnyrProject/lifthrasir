@@ -1,6 +1,7 @@
 mod config;
 mod decompile;
 mod grf_vfs;
+mod lua;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
