@@ -1,14 +1,9 @@
 use crate::domain::assets::patterns;
 use crate::domain::entities::character::components::core::Gender;
 use bevy::prelude::*;
-use mlua::prelude::*;
-use mlua::Error as LuaError;
 use std::collections::HashMap;
 
 use super::player_jobs::{get_player_job_sprite_mapping, is_player_job};
-
-const UNKNOWN_JOB_SENTINEL: i32 = -999_999;
-const MAX_VALID_JOB_ID: i64 = 999_998;
 
 #[derive(Resource)]
 pub struct JobSpriteRegistry {
@@ -18,103 +13,12 @@ pub struct JobSpriteRegistry {
 }
 
 impl JobSpriteRegistry {
-    pub fn from_lua_sources(
-        job_identity_src: &str,
-        npc_identity_src: &str,
-        job_name_src: &str,
-        pc_job_name_src: &str,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let lua = Lua::new();
-
-        lua.set_hook(
-            mlua::HookTriggers::new().every_nth_instruction(200_000),
-            |_lua, _debug| {
-                Err(LuaError::RuntimeError(
-                    "Lua script execution budget exceeded (200k instructions)".into(),
-                ))
-            },
-        )?;
-
-        lua.load(job_identity_src).exec()?;
-
-        lua.load("JOBID = JTtbl").exec()?;
-        lua.load("pcJobTbl = JTtbl").exec()?;
-
-        lua.load(format!(
-            r#"
-            setmetatable(JOBID, {{
-                __index = function(t, k)
-                    return {}
-                end
-            }})
-        "#,
-            UNKNOWN_JOB_SENTINEL
-        ))
-        .exec()?;
-
-        lua.load(npc_identity_src).exec()?;
-        lua.load(job_name_src).exec()?;
-        lua.load(pc_job_name_src).set_name("pcjobname").exec()?;
-
-        let player_jobs = get_player_job_sprite_mapping();
-        let npc_sprites = Self::extract_job_name_table(&lua)?;
-        let display_names = Self::extract_pc_job_name_table(&lua)?;
-
-        info!("Loaded {} player job mappings", player_jobs.len());
-        info!("Loaded {} NPC sprite mappings", npc_sprites.len());
-        info!("Loaded {} display names", display_names.len());
-
-        Ok(Self {
-            player_jobs,
-            npc_sprites,
-            display_names,
-        })
-    }
-
-    fn extract_job_name_table(lua: &Lua) -> LuaResult<HashMap<u32, String>> {
-        let globals = lua.globals();
-        let job_name_table: LuaTable = globals.get("JobNameTable")?;
-
-        let mut sprites = HashMap::new();
-
-        for pair in job_name_table.pairs::<LuaValue, String>() {
-            let (key, name) = pair?;
-
-            match key {
-                LuaValue::Integer(id) => {
-                    sprites.insert(id as u32, name);
-                }
-                LuaValue::Number(id) => {
-                    sprites.insert(id as u32, name);
-                }
-                _ => {}
-            }
+    pub fn from_job_data(data: lifthrasir_data::JobData) -> Self {
+        Self {
+            player_jobs: get_player_job_sprite_mapping(),
+            npc_sprites: data.npc_sprites.into_iter().collect(),
+            display_names: data.display_names.into_iter().collect(),
         }
-
-        Ok(sprites)
-    }
-
-    fn extract_pc_job_name_table(lua: &Lua) -> LuaResult<HashMap<u32, String>> {
-        let globals = lua.globals();
-        let pc_job_name_table: LuaTable = globals.get("PCJobNameTable")?;
-
-        let mut names = HashMap::new();
-        for pair in pc_job_name_table.pairs::<LuaValue, String>() {
-            let (key, name) = pair?;
-            match key {
-                LuaValue::Integer(id) => {
-                    if (0..=MAX_VALID_JOB_ID).contains(&id) {
-                        names.insert(id as u32, name);
-                    }
-                }
-                LuaValue::Number(id) if (0.0..=(MAX_VALID_JOB_ID as f64)).contains(&id) => {
-                    names.insert(id as u32, name);
-                }
-                _ => {}
-            }
-        }
-
-        Ok(names)
     }
 
     pub fn get_sprite_name(&self, jt_id: u32) -> Option<&str> {
@@ -157,5 +61,28 @@ impl JobSpriteRegistry {
         }
         let gender_enum = Gender::from(gender);
         Some(patterns::hair_palette_path(hair_id, gender_enum, color))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lifthrasir_data::JobData;
+
+    fn fixture() -> JobData {
+        let mut data = JobData::default();
+        data.npc_sprites.insert(45, "1_ETC_01".to_string());
+        data.display_names.insert(0, "Novice".to_string());
+        data
+    }
+
+    #[test]
+    fn from_job_data_wires_npc_player_and_display_lookups() {
+        let registry = JobSpriteRegistry::from_job_data(fixture());
+
+        assert_eq!(registry.get_sprite_name(45), Some("1_ETC_01"));
+        assert!(is_player_job(1));
+        assert_eq!(registry.get_sprite_name(1), Some("검사"));
+        assert_eq!(registry.get_display_name(0), Some("Novice"));
     }
 }

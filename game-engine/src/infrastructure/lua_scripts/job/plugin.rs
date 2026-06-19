@@ -1,86 +1,48 @@
+use super::asset::JobDataAsset;
 use super::registry::JobSpriteRegistry;
-use crate::infrastructure::lua_scripts::loader::{LuaBytecode, LuaBytecodeLoader};
+use bevy::asset::LoadState;
 use bevy::prelude::*;
 
 #[derive(Resource)]
-struct LuaFileHandles {
-    job_identity: Handle<LuaBytecode>,
-    npc_identity: Handle<LuaBytecode>,
-    job_name: Handle<LuaBytecode>,
-    pc_job_name: Handle<LuaBytecode>,
-}
+struct JobDataHandle(Handle<JobDataAsset>);
 
 pub struct JobSystemPlugin;
 
 impl Plugin for JobSystemPlugin {
     fn build(&self, app: &mut App) {
-        app.init_asset::<LuaBytecode>()
-            .init_asset_loader::<LuaBytecodeLoader>()
-            .add_systems(Startup, start_loading_lua_files)
-            .add_systems(Update, process_loaded_lua_files);
+        app.add_systems(Startup, start_loading_job_data)
+            .add_systems(Update, process_loaded_job_data);
     }
 }
 
-fn start_loading_lua_files(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let handles = LuaFileHandles {
-        job_identity: asset_server.load("ro://data/luafiles514/lua files/datainfo/jobidentity.lub"),
-        npc_identity: asset_server.load("ro://data/luafiles514/lua files/datainfo/npcidentity.lub"),
-        job_name: asset_server.load("ro://data/luafiles514/lua files/datainfo/jobname.lub"),
-        pc_job_name: asset_server.load("ro://data/luafiles514/lua files/datainfo/pcjobname.lub"),
-    };
-
-    commands.insert_resource(handles);
-    info!("Loading Lua job system files");
+fn start_loading_job_data(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let handle = asset_server.load("data/ron/job_data.ron");
+    commands.insert_resource(JobDataHandle(handle));
+    info!("Loading job data RON");
 }
 
-fn process_loaded_lua_files(
+fn process_loaded_job_data(
     mut commands: Commands,
-    handles: Option<Res<LuaFileHandles>>,
-    lua_assets: Res<Assets<LuaBytecode>>,
-    mut attempts: Local<u8>,
+    handle: Option<Res<JobDataHandle>>,
+    job_data_assets: Res<Assets<JobDataAsset>>,
+    asset_server: Res<AssetServer>,
 ) {
-    let Some(handles) = handles else { return };
+    let Some(handle) = handle else { return };
 
-    let Some(job_identity) = lua_assets.get(&handles.job_identity) else {
+    if let LoadState::Failed(err) = asset_server.load_state(&handle.0) {
+        error!(
+            "Failed to load data/ron/job_data.ron: {:?}. Run `cargo run -p ro-to-lifthrasir-cli -- convert` to regenerate it.",
+            err
+        );
+        commands.remove_resource::<JobDataHandle>();
         return;
-    };
-    let Some(npc_identity) = lua_assets.get(&handles.npc_identity) else {
-        return;
-    };
-    let Some(job_name) = lua_assets.get(&handles.job_name) else {
-        return;
-    };
-    let Some(pc_job_name) = lua_assets.get(&handles.pc_job_name) else {
-        return;
-    };
-
-    let job_identity_src = &job_identity.source;
-    let npc_identity_src = &npc_identity.source;
-    let job_name_src = &job_name.source;
-    let pc_job_name_src = &pc_job_name.source;
-
-    match JobSpriteRegistry::from_lua_sources(
-        job_identity_src,
-        npc_identity_src,
-        job_name_src,
-        pc_job_name_src,
-    ) {
-        Ok(registry) => {
-            commands.insert_resource(registry);
-            commands.remove_resource::<LuaFileHandles>();
-            info!("Lua Job Sprite registry created successfully");
-        }
-        Err(e) => {
-            *attempts = attempts.saturating_add(1);
-            if *attempts == 1 {
-                error!("Failed to create job sprite registry: {}", e);
-            } else if *attempts >= 5 {
-                error!(
-                    "Stopping attempts to create JobSpriteRegistry after {} failures",
-                    *attempts
-                );
-                commands.remove_resource::<LuaFileHandles>();
-            }
-        }
     }
+
+    let Some(asset) = job_data_assets.get(&handle.0) else {
+        return;
+    };
+
+    commands.insert_resource(JobSpriteRegistry::from_job_data(asset.0.clone()));
+    commands.remove_resource::<JobDataHandle>();
+    info!("Job sprite registry created from RON");
 }
