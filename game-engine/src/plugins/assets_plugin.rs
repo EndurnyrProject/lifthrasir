@@ -1,5 +1,6 @@
 use crate::infrastructure::assets::{bmp_loader::BmpLoader, *};
 use crate::infrastructure::config::ClientConfig;
+use crate::infrastructure::item::ItemDataAsset;
 use crate::infrastructure::job::JobDataAsset;
 use bevy::prelude::*;
 use bevy_common_assets::ron::RonAssetPlugin;
@@ -35,6 +36,7 @@ impl Plugin for AssetsPlugin {
                 TomlAssetPlugin::<AssetConfig>::new(&["data.toml"]),
                 TomlAssetPlugin::<ClientConfig>::new(&["client.toml"]),
                 RonAssetPlugin::<JobDataAsset>::new(&["ron"]),
+                RonAssetPlugin::<ItemDataAsset>::new(&["ron"]),
                 AnimationProcessingPlugin,
             ));
     }
