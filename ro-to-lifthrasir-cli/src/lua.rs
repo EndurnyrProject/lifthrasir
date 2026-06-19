@@ -15,6 +15,12 @@ pub fn new_vm() -> mlua::Result<Lua> {
     Ok(lua)
 }
 
+/// A VM with no instruction-budget hook. The iteminfo `tbl` literal has tens of
+/// thousands of entries, far exceeding `new_vm`'s 200k-instruction budget.
+pub fn new_vm_unbounded() -> mlua::Result<Lua> {
+    Ok(Lua::new())
+}
+
 pub fn install_job_metatables(lua: &Lua) -> mlua::Result<()> {
     lua.load("JOBID = JTtbl\npcJobTbl = JTtbl").exec()?;
     lua.load(format!(
