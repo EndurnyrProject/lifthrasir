@@ -5,16 +5,16 @@ use crate::{
         errors::{NetworkError, NetworkResult},
         protocol::{
             character::{
-                AcceptDeletecharHandler, AcceptEnterHandler, AcceptMakecharHandler,
-                AckCharinfoPerPageHandler, BlockCharacterHandler, BlockedCharactersReceived,
-                ChDeleteCharPacket, ChEnterPacket, ChMakeCharPacket, ChPingPacket,
-                ChSelectCharPacket, CharacterClientPacket, CharacterContext, CharacterCreated,
-                CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed, CharacterInfo,
-                CharacterInfoPageReceived, CharacterListHandler, CharacterProtocol,
-                CharacterServerConnected, CharacterSlotInfoReceived, NotifyZonesvrHandler,
-                PingHandler, PingReceived, RefuseDeletecharHandler, RefuseMakecharHandler,
-                SecondPasswdLoginHandler, SecondPasswordRequested, ZoneServerInfo,
-                ZoneServerInfoReceived,
+                AcceptEnterHandler, AcceptMakecharHandler, AckCharinfoPerPageHandler,
+                BlockCharacterHandler, BlockedCharactersReceived, ChCharlistReqPacket,
+                ChEnterPacket, ChMakeCharPacket, ChPingPacket, ChReqCharDelete2Packet,
+                ChSelectCharPacket, CharDelete2AckHandler, CharacterClientPacket, CharacterContext,
+                CharacterCreated, CharacterCreationFailed, CharacterDeleted,
+                CharacterDeletionFailed, CharacterInfo, CharacterInfoPageReceived,
+                CharacterListHandler, CharacterProtocol, CharacterServerConnected,
+                CharacterSlotInfoReceived, CharlistNotifyHandler, NotifyZonesvrHandler,
+                PingHandler, PingReceived, RefuseMakecharHandler, SecondPasswdLoginHandler,
+                SecondPasswordRequested, ZoneServerInfo, ZoneServerInfoReceived,
             },
             dispatcher::PacketDispatcher,
             EventBuffer,
@@ -81,10 +81,10 @@ impl CharServerClient {
         dispatcher.register(AcceptEnterHandler);
         dispatcher.register(NotifyZonesvrHandler);
         dispatcher.register(CharacterListHandler);
+        dispatcher.register(CharlistNotifyHandler);
         dispatcher.register(AcceptMakecharHandler);
         dispatcher.register(RefuseMakecharHandler);
-        dispatcher.register(AcceptDeletecharHandler);
-        dispatcher.register(RefuseDeletecharHandler);
+        dispatcher.register(CharDelete2AckHandler);
         dispatcher.register(PingHandler);
         dispatcher.register(BlockCharacterHandler);
         dispatcher.register(SecondPasswdLoginHandler);
@@ -197,16 +197,33 @@ impl CharServerClient {
 
     /// Delete a character
     ///
+    /// Sends a CH_REQ_CHAR_DELETE2 (0x0827) request. The server marks the
+    /// character for deletion and replies with HC_CHAR_DELETE2_ACK (0x0828).
+    ///
     /// # Arguments
     ///
     /// * `char_id` - Character ID to delete
-    /// * `email` - Email address for confirmation (optional, empty string if not used)
     ///
     /// # Returns
     ///
     /// Ok(()) if packet was sent, NetworkError otherwise
-    pub fn delete_character(&mut self, char_id: u32, email: &str) -> NetworkResult<()> {
-        let packet = CharacterClientPacket::ChDeleteChar(ChDeleteCharPacket::new(char_id, email));
+    pub fn delete_character(&mut self, char_id: u32) -> NetworkResult<()> {
+        let packet = CharacterClientPacket::ChReqCharDelete2(ChReqCharDelete2Packet::new(char_id));
+        self.inner.send_packet(&packet)
+    }
+
+    /// Request a fresh character list from the server
+    ///
+    /// Sends CH_CHARLIST_REQ (0x09A1). The server replies with the full list in
+    /// HC_ACK_CHARINFO_PER_PAGE (0x0B72), which replaces the cached list. Used to
+    /// refresh after a deletion rather than trusting stale local state.
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if packet was sent, NetworkError otherwise
+    pub fn request_character_list(&mut self) -> NetworkResult<()> {
+        self.inner.context_mut().awaiting_charlist = true;
+        let packet = CharacterClientPacket::ChCharlistReq(ChCharlistReqPacket::new());
         self.inner.send_packet(&packet)
     }
 
@@ -294,6 +311,12 @@ impl CharServerClient {
     /// Get the list of characters on this account
     pub fn characters(&self) -> &[CharacterInfo] {
         &self.inner.context().characters
+    }
+
+    /// Number of character-select display pages (3 slots per page), from
+    /// HC_CHARLIST_NOTIFY. Defaults to 1 until the notify arrives.
+    pub fn list_page_count(&self) -> u32 {
+        self.inner.context().list_page_count.max(1)
     }
 
     /// Get zone server info (available after character selection)

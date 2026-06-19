@@ -24,6 +24,7 @@ impl Plugin for CharacterSelectScreenPlugin {
         app.init_resource::<CardsBuilt>();
         app.init_resource::<PendingDeletion>();
         app.init_resource::<SelectedSlot>();
+        app.init_resource::<RosterPage>();
         app.add_systems(
             OnEnter(GameState::CharacterSelection),
             show_character_select_screen,
@@ -48,7 +49,26 @@ impl Plugin for CharacterSelectScreenPlugin {
 struct CharacterSelectionData {
     characters: Vec<Option<CharacterInfoWithJobName>>,
     max_slots: u8,
+    /// Display pages (3 slots each), from HC_CHARLIST_NOTIFY.
+    display_pages: u8,
 }
+
+/// Character-select roster page currently shown (0-based). The roster is laid
+/// out in pages of 3 slots, matching the RO client when more than one page
+/// exists.
+#[derive(Resource, Default)]
+struct RosterPage(usize);
+
+/// Slots per roster page (RO shows 3 character slots per page).
+const ROSTER_PAGE_SIZE: usize = 3;
+
+/// Marks the page-navigation bar so it is rebuilt alongside the slot cards.
+#[derive(Component)]
+struct RosterNav;
+
+/// Direction a page-nav button moves the roster page (-1 = prev, +1 = next).
+#[derive(Component, Clone, Copy)]
+struct PageNavStep(isize);
 
 /// Guards the one-shot card spawn; reset whenever a fresh list arrives so the grid rebuilds.
 #[derive(Resource, Default)]
@@ -94,11 +114,13 @@ fn show_character_select_screen(
     mut built: ResMut<CardsBuilt>,
     mut pending: ResMut<PendingDeletion>,
     mut selected: ResMut<SelectedSlot>,
+    mut roster_page: ResMut<RosterPage>,
     mut requests: MessageWriter<RequestCharacterListEvent>,
 ) {
     built.0 = false;
     pending.0 = None;
     selected.0 = 0;
+    roster_page.0 = 0;
 
     let font_body = asset_server.load(theme::FONT_BODY);
     let font_title = asset_server.load(theme::FONT_TITLE);
@@ -194,14 +216,17 @@ fn receive_character_list(
     mut data: ResMut<CharacterSelectionData>,
     mut built: ResMut<CardsBuilt>,
     mut pending: ResMut<PendingDeletion>,
+    mut roster_page: ResMut<RosterPage>,
 ) {
     let Some(event) = events.read().last() else {
         return;
     };
     data.characters = event.characters.clone();
     data.max_slots = event.max_slots;
+    data.display_pages = event.display_pages.max(1);
     built.0 = false;
     pending.0 = None;
+    roster_page.0 = 0;
 }
 
 /// Builds (or rebuilds) the compact slot cards under the grid container.
@@ -211,9 +236,11 @@ fn build_cards(
     asset_server: Res<AssetServer>,
     data: Res<CharacterSelectionData>,
     diorama: Res<CharacterDiorama>,
+    page: Res<RosterPage>,
     mut built: ResMut<CardsBuilt>,
     container: Query<Entity, With<CharacterGrid>>,
     existing_cards: Query<Entity, With<CharacterCard>>,
+    existing_nav: Query<Entity, With<RosterNav>>,
 ) {
     if built.0 || data.characters.is_empty() {
         return;
@@ -232,12 +259,27 @@ fn build_cards(
     for card in &existing_cards {
         commands.entity(card).despawn();
     }
+    for nav in &existing_nav {
+        commands.entity(nav).despawn();
+    }
+
+    // Lay the roster out in pages of 3 slots (RO style) when the server
+    // advertised more than one page; otherwise show every slot at once.
+    let total_pages = (data.display_pages as usize).max(1);
+    let page_size = if total_pages > 1 {
+        ROSTER_PAGE_SIZE
+    } else {
+        slots
+    };
+    let page = page.0.min(total_pages.saturating_sub(1));
+    let start = (page * page_size).min(slots);
+    let end = (start + page_size).min(slots);
 
     let font_bold = asset_server.load(theme::FONT_BODY_BOLD);
     let font_body = asset_server.load(theme::FONT_BODY);
 
-    for (slot, entry) in data.characters[..slots].iter().enumerate() {
-        let slot = slot as u8;
+    for (offset, entry) in data.characters[start..end].iter().enumerate() {
+        let slot = (start + offset) as u8;
         match entry {
             Some(info) => spawn_occupied_card(
                 &mut commands,
@@ -251,7 +293,97 @@ fn build_cards(
         }
     }
 
+    if total_pages > 1 {
+        spawn_page_nav(&mut commands, container, page, total_pages, font_body);
+    }
+
     built.0 = true;
+}
+
+/// Spawns the prev/next page bar under the slot cards. Marked `RosterNav` so it
+/// is cleared and rebuilt on every grid rebuild (including page changes).
+fn spawn_page_nav(
+    commands: &mut Commands,
+    container: Entity,
+    page: usize,
+    total_pages: usize,
+    font: Handle<Font>,
+) {
+    let bar = commands
+        .spawn((
+            RosterNav,
+            Node {
+                width: Val::Px(700.0),
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(16.0),
+                margin: UiRect::top(Val::Px(14.0)),
+                ..default()
+            },
+            ChildOf(container),
+        ))
+        .id();
+
+    if page > 0 {
+        spawn_nav_button(commands, bar, "Prev", PageNavStep(-1), font.clone());
+    }
+
+    commands.spawn((
+        label(
+            format!("Page {} / {}", page + 1, total_pages),
+            font.clone(),
+            13.0,
+            theme::TEXT_FAINT,
+        ),
+        ChildOf(bar),
+    ));
+
+    if page + 1 < total_pages {
+        spawn_nav_button(commands, bar, "Next", PageNavStep(1), font);
+    }
+}
+
+fn spawn_nav_button(
+    commands: &mut Commands,
+    parent: Entity,
+    text: &str,
+    step: PageNavStep,
+    font: Handle<Font>,
+) {
+    let btn = commands
+        .spawn((
+            step,
+            Pickable::default(),
+            Node {
+                padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(9.0)),
+                ..default()
+            },
+            BackgroundColor(theme::EMERALD),
+            BorderColor::all(theme::GOLD_FAINT),
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((
+        label(text.to_string(), font, 13.0, theme::EMERALD_INK),
+        ChildOf(btn),
+    ));
+    commands.entity(btn).observe(
+        move |mut click: On<Pointer<Click>>,
+              data: Res<CharacterSelectionData>,
+              mut page: ResMut<RosterPage>,
+              mut built: ResMut<CardsBuilt>| {
+            click.propagate(false);
+            let total_pages = (data.display_pages as usize).max(1);
+            let next = (page.0 as isize + step.0).clamp(0, total_pages as isize - 1) as usize;
+            if next != page.0 {
+                page.0 = next;
+                built.0 = false;
+            }
+        },
+    );
 }
 
 fn spawn_occupied_card(
@@ -778,6 +910,7 @@ mod tests {
         app.init_resource::<CardsBuilt>();
         app.init_resource::<PendingDeletion>();
         app.init_resource::<SelectedSlot>();
+        app.init_resource::<RosterPage>();
         app.insert_resource(data);
         app.insert_resource(diorama);
         app.world_mut().spawn(CharacterGrid);
@@ -819,6 +952,7 @@ mod tests {
                 Some(with_job("Mage", 2, 2, 33, "Magician")),
             ],
             max_slots: 3,
+            display_pages: 1,
         };
         let mut app = card_app(data, occupied_diorama());
 
@@ -848,6 +982,7 @@ mod tests {
         let data = CharacterSelectionData {
             characters: vec![Some(with_job("Hero", 1, 0, 50, "Swordman")), None],
             max_slots: 2,
+            display_pages: 1,
         };
         let mut app = card_app(data, occupied_diorama());
 
@@ -859,10 +994,41 @@ mod tests {
     }
 
     #[test]
+    fn pages_roster_into_threes_with_nav() {
+        let characters = (0..9)
+            .map(|i| Some(with_job("Hero", i as u32 + 1, i as u8, 50, "Swordman")))
+            .collect();
+        let data = CharacterSelectionData {
+            characters,
+            max_slots: 9,
+            display_pages: 3,
+        };
+        let mut app = card_app(data, occupied_diorama());
+
+        app.update();
+
+        assert_eq!(card_count(&mut app), 3, "only one page of 3 slots is shown");
+        let texts = all_texts(&mut app);
+        assert!(
+            texts.iter().any(|t| t == "Page 1 / 3"),
+            "shows the page indicator"
+        );
+        assert!(
+            texts.iter().any(|t| t == "Next"),
+            "shows Next on the first page"
+        );
+        assert!(
+            !texts.iter().any(|t| t == "Prev"),
+            "no Prev on the first page"
+        );
+    }
+
+    #[test]
     fn waits_for_diorama_before_building_occupied_cards() {
         let data = CharacterSelectionData {
             characters: vec![Some(with_job("Hero", 1, 0, 50, "Swordman"))],
             max_slots: 1,
+            display_pages: 1,
         };
         let mut app = card_app(data, CharacterDiorama::default());
 

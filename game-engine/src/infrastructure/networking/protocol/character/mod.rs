@@ -6,18 +6,18 @@ pub mod types;
 
 // Re-export commonly used types
 pub use client_packets::{
-    ChCharlistReqPacket, ChDeleteCharPacket, ChEnterPacket, ChMakeCharPacket, ChPingPacket,
-    ChSelectCharPacket, CH_CHARLIST_REQ, CH_DELETE_CHAR, CH_ENTER, CH_MAKE_CHAR, CH_PING,
+    ChCharlistReqPacket, ChEnterPacket, ChMakeCharPacket, ChPingPacket, ChReqCharDelete2Packet,
+    ChSelectCharPacket, CH_CHARLIST_REQ, CH_ENTER, CH_MAKE_CHAR, CH_PING, CH_REQ_CHAR_DELETE2,
     CH_SELECT_CHAR,
 };
 
 pub use handlers::{
-    AcceptDeletecharHandler, AcceptEnterHandler, AcceptMakecharHandler, AckCharinfoPerPageHandler,
-    BlockCharacterHandler, BlockedCharactersReceived, CharacterCreated, CharacterCreationFailed,
+    AcceptEnterHandler, AcceptMakecharHandler, AckCharinfoPerPageHandler, BlockCharacterHandler,
+    BlockedCharactersReceived, CharDelete2AckHandler, CharacterCreated, CharacterCreationFailed,
     CharacterDeleted, CharacterDeletionFailed, CharacterInfoPageReceived, CharacterListHandler,
-    CharacterServerConnected, CharacterSlotInfoReceived, NotifyZonesvrHandler, PingHandler,
-    PingReceived, RefuseDeletecharHandler, RefuseMakecharHandler, SecondPasswdLoginHandler,
-    SecondPasswordRequested, ZoneServerInfoReceived,
+    CharacterServerConnected, CharacterSlotInfoReceived, CharlistNotifyHandler,
+    NotifyZonesvrHandler, PingHandler, PingReceived, RefuseMakecharHandler,
+    SecondPasswdLoginHandler, SecondPasswordRequested, ZoneServerInfoReceived,
 };
 
 pub use protocol::{
@@ -25,12 +25,12 @@ pub use protocol::{
 };
 
 pub use server_packets::{
-    HcAcceptDeletecharPacket, HcAcceptEnterPacket, HcAcceptMakecharPacket,
-    HcAckCharinfoPerPagePacket, HcBlockCharacterPacket, HcCharacterListPacket,
-    HcNotifyZonesvrPacket, HcPingPacket, HcRefuseDeletecharPacket, HcRefuseMakecharPacket,
-    HcSecondPasswdLoginPacket, HC_ACCEPT_DELETECHAR, HC_ACCEPT_ENTER, HC_ACCEPT_MAKECHAR,
-    HC_ACK_CHARINFO_PER_PAGE, HC_BLOCK_CHARACTER, HC_CHARACTER_LIST, HC_NOTIFY_ZONESVR, HC_PING,
-    HC_REFUSE_DELETECHAR, HC_REFUSE_MAKECHAR, HC_SECOND_PASSWD_LOGIN,
+    HcAcceptEnterPacket, HcAcceptMakecharPacket, HcAckCharinfoPerPagePacket,
+    HcBlockCharacterPacket, HcCharDelete2AckPacket, HcCharacterListPacket, HcCharlistNotifyPacket,
+    HcNotifyZonesvrPacket, HcPingPacket, HcRefuseMakecharPacket, HcSecondPasswdLoginPacket,
+    HC_ACCEPT_ENTER, HC_ACCEPT_MAKECHAR, HC_ACK_CHARINFO_PER_PAGE, HC_BLOCK_CHARACTER,
+    HC_CHARACTER_LIST, HC_CHARLIST_NOTIFY, HC_CHAR_DELETE2_ACK, HC_NOTIFY_ZONESVR, HC_PING,
+    HC_REFUSE_MAKECHAR, HC_SECOND_PASSWD_LOGIN,
 };
 
 pub use types::{

@@ -4,10 +4,10 @@ use crate::infrastructure::networking::protocol::{
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{self, Cursor, Read};
 
-pub const HC_NOTIFY_ZONESVR: u16 = 0x0071;
-const PACKET_SIZE: usize = 28;
+pub const HC_NOTIFY_ZONESVR: u16 = 0x0AC5;
+const PACKET_SIZE: usize = 156;
 
-/// HC_NOTIFY_ZONESVR (0x0071) - Zone server connection info
+/// HC_NOTIFY_ZONESVR (0x0AC5) - Zone server connection info (PACKETVER >= 20170315)
 ///
 /// Provides connection information for the zone (map) server after
 /// character selection.
@@ -18,8 +18,9 @@ const PACKET_SIZE: usize = 28;
 /// - Map Name: [u8; 16] (null-terminated)
 /// - IP Address: [u8; 4] (4 bytes)
 /// - Port: u16 (2 bytes)
+/// - Domain: [u8; 128] (always zeroes, ignored)
 ///
-/// Total: 28 bytes
+/// Total: 156 bytes
 ///
 /// # Direction
 /// Character Server → Client
@@ -76,6 +77,7 @@ mod tests {
 
     #[test]
     fn test_hc_notify_zonesvr_parse() {
+        // 156-byte packet: header + 128-byte zero domain trailer.
         let mut data = vec![0u8; PACKET_SIZE];
         data[0..2].copy_from_slice(&HC_NOTIFY_ZONESVR.to_le_bytes());
         data[2..6].copy_from_slice(&150000u32.to_le_bytes());

@@ -40,6 +40,10 @@ impl Protocol for CharacterProtocol {
                 let packet = HcCharacterListPacket::parse(data)?;
                 Ok(CharacterServerPacket::HcCharacterList(packet))
             }
+            HC_CHARLIST_NOTIFY => {
+                let packet = HcCharlistNotifyPacket::parse(data)?;
+                Ok(CharacterServerPacket::HcCharlistNotify(packet))
+            }
             HC_ACCEPT_MAKECHAR => {
                 let packet = HcAcceptMakecharPacket::parse(data)?;
                 Ok(CharacterServerPacket::HcAcceptMakechar(packet))
@@ -48,13 +52,9 @@ impl Protocol for CharacterProtocol {
                 let packet = HcRefuseMakecharPacket::parse(data)?;
                 Ok(CharacterServerPacket::HcRefuseMakechar(packet))
             }
-            HC_ACCEPT_DELETECHAR => {
-                let packet = HcAcceptDeletecharPacket::parse(data)?;
-                Ok(CharacterServerPacket::HcAcceptDeletechar(packet))
-            }
-            HC_REFUSE_DELETECHAR => {
-                let packet = HcRefuseDeletecharPacket::parse(data)?;
-                Ok(CharacterServerPacket::HcRefuseDeletechar(packet))
+            HC_CHAR_DELETE2_ACK => {
+                let packet = HcCharDelete2AckPacket::parse(data)?;
+                Ok(CharacterServerPacket::HcCharDelete2Ack(packet))
             }
             HC_PING => {
                 let packet = HcPingPacket::parse(data)?;
@@ -85,12 +85,12 @@ impl Protocol for CharacterProtocol {
                 length_offset: 2,
                 length_bytes: 2,
             },
-            HC_NOTIFY_ZONESVR => PacketSize::Fixed(28),
+            HC_NOTIFY_ZONESVR => PacketSize::Fixed(156),
             HC_CHARACTER_LIST => PacketSize::Fixed(29),
+            HC_CHARLIST_NOTIFY => PacketSize::Fixed(6),
             HC_ACCEPT_MAKECHAR => PacketSize::Fixed(177),
             HC_REFUSE_MAKECHAR => PacketSize::Fixed(3),
-            HC_ACCEPT_DELETECHAR => PacketSize::Fixed(2),
-            HC_REFUSE_DELETECHAR => PacketSize::Fixed(3),
+            HC_CHAR_DELETE2_ACK => PacketSize::Fixed(14),
             HC_PING => PacketSize::Fixed(2),
             HC_BLOCK_CHARACTER => PacketSize::Variable {
                 length_offset: 2,
@@ -136,6 +136,15 @@ pub struct CharacterContext {
 
     /// Selected character ID
     pub selected_character_id: Option<u32>,
+
+    /// Set while awaiting an HC_ACK_CHARINFO_PER_PAGE response to a
+    /// CH_CHARLIST_REQ refresh. Only the first response is authoritative; the
+    /// trailing empty packet (Gravity's count==3 finalization quirk) is ignored.
+    pub awaiting_charlist: bool,
+
+    /// Number of character-select display pages (3 slots per page), taken from
+    /// HC_CHARLIST_NOTIFY (`char_slots / 3`).
+    pub list_page_count: u32,
 }
 
 /// Enum of all client packets for character protocol
@@ -144,7 +153,7 @@ pub enum CharacterClientPacket {
     ChEnter(ChEnterPacket),
     ChSelectChar(ChSelectCharPacket),
     ChMakeChar(ChMakeCharPacket),
-    ChDeleteChar(ChDeleteCharPacket),
+    ChReqCharDelete2(ChReqCharDelete2Packet),
     ChPing(ChPingPacket),
     ChCharlistReq(ChCharlistReqPacket),
 }
@@ -157,7 +166,7 @@ impl ClientPacket for CharacterClientPacket {
             Self::ChEnter(p) => p.serialize(),
             Self::ChSelectChar(p) => p.serialize(),
             Self::ChMakeChar(p) => p.serialize(),
-            Self::ChDeleteChar(p) => p.serialize(),
+            Self::ChReqCharDelete2(p) => p.serialize(),
             Self::ChPing(p) => p.serialize(),
             Self::ChCharlistReq(p) => p.serialize(),
         }
@@ -168,7 +177,7 @@ impl ClientPacket for CharacterClientPacket {
             Self::ChEnter(_) => CH_ENTER,
             Self::ChSelectChar(_) => CH_SELECT_CHAR,
             Self::ChMakeChar(_) => CH_MAKE_CHAR,
-            Self::ChDeleteChar(_) => CH_DELETE_CHAR,
+            Self::ChReqCharDelete2(_) => CH_REQ_CHAR_DELETE2,
             Self::ChPing(_) => CH_PING,
             Self::ChCharlistReq(_) => CH_CHARLIST_REQ,
         }
@@ -181,10 +190,10 @@ pub enum CharacterServerPacket {
     HcAcceptEnter(HcAcceptEnterPacket),
     HcNotifyZonesvr(HcNotifyZonesvrPacket),
     HcCharacterList(HcCharacterListPacket),
+    HcCharlistNotify(HcCharlistNotifyPacket),
     HcAcceptMakechar(HcAcceptMakecharPacket),
     HcRefuseMakechar(HcRefuseMakecharPacket),
-    HcAcceptDeletechar(HcAcceptDeletecharPacket),
-    HcRefuseDeletechar(HcRefuseDeletecharPacket),
+    HcCharDelete2Ack(HcCharDelete2AckPacket),
     HcPing(HcPingPacket),
     HcBlockCharacter(HcBlockCharacterPacket),
     HcSecondPasswdLogin(HcSecondPasswdLoginPacket),
@@ -203,10 +212,10 @@ impl ServerPacket for CharacterServerPacket {
             Self::HcAcceptEnter(_) => HC_ACCEPT_ENTER,
             Self::HcNotifyZonesvr(_) => HC_NOTIFY_ZONESVR,
             Self::HcCharacterList(_) => HC_CHARACTER_LIST,
+            Self::HcCharlistNotify(_) => HC_CHARLIST_NOTIFY,
             Self::HcAcceptMakechar(_) => HC_ACCEPT_MAKECHAR,
             Self::HcRefuseMakechar(_) => HC_REFUSE_MAKECHAR,
-            Self::HcAcceptDeletechar(_) => HC_ACCEPT_DELETECHAR,
-            Self::HcRefuseDeletechar(_) => HC_REFUSE_DELETECHAR,
+            Self::HcCharDelete2Ack(_) => HC_CHAR_DELETE2_ACK,
             Self::HcPing(_) => HC_PING,
             Self::HcBlockCharacter(_) => HC_BLOCK_CHARACTER,
             Self::HcSecondPasswdLogin(_) => HC_SECOND_PASSWD_LOGIN,
@@ -259,11 +268,18 @@ impl CharacterContext {
         self.characters.iter().find(|c| c.char_id == char_id)
     }
 
+    /// Replace the character list with a fresh set (used by the per-page refresh)
+    pub fn set_characters(&mut self, chars: Vec<CharacterInfo>) {
+        self.characters = chars;
+    }
+
     /// Reset context for new connection
     pub fn reset(&mut self) {
         self.characters.clear();
         self.received_account_ack = false;
         self.zone_server_info = None;
         self.selected_character_id = None;
+        self.awaiting_charlist = false;
+        self.list_page_count = 0;
     }
 }

@@ -293,11 +293,16 @@ pub fn handle_server_selection(
         );
         let address = format!("{}:{}", server_ip, event.server.port);
 
+        info!("Connecting to character server at {}", address);
+
         if let Some(ref mut client) = char_client {
             client.disconnect();
 
             if let Err(e) = client.connect(&address) {
-                error!("Failed to connect to character server: {:?}", e);
+                error!(
+                    "Failed to connect to character server at {}: {:?}",
+                    address, e
+                );
             } else {
                 info!("Connected to character server at {}", address);
                 if let Err(e) = client.enter_server() {
@@ -313,7 +318,10 @@ pub fn handle_server_selection(
             );
 
             if let Err(e) = client.connect(&address) {
-                error!("Failed to connect to character server: {:?}", e);
+                error!(
+                    "Failed to connect to character server at {}: {:?}",
+                    address, e
+                );
             } else {
                 info!("Connected to character server at {}", address);
                 if let Err(e) = client.enter_server() {

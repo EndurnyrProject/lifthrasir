@@ -31,6 +31,7 @@ use game_engine::domain::entities::character::components::visual::{
     CharacterDirection, CharacterSprite,
 };
 use game_engine::domain::entities::character::components::CharacterInfo;
+use game_engine::domain::entities::character::events::forward_character_sprite_events;
 use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
 
 /// Pixel width of one character column in the shared render target. Also the
@@ -77,9 +78,18 @@ pub struct CharacterPreviewPlugin;
 impl Plugin for CharacterPreviewPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CharacterDiorama>();
+        // `rebuild_diorama` spawns the preview entities (deferred) and writes their
+        // `SpawnCharacterSpriteEvent` in one frame. Ordering it AFTER the engine's
+        // `forward_character_sprite_events` means that event is only read the NEXT
+        // frame — after the entity's components have flushed — so the lookup succeeds
+        // and the sprite actually builds (otherwise the event is consumed against a
+        // not-yet-existing entity and the preview never gets a sprite). Mirrors the
+        // character-create screen's preview ordering.
         app.add_systems(
             Update,
-            rebuild_diorama.run_if(in_state(GameState::CharacterSelection)),
+            rebuild_diorama
+                .after(forward_character_sprite_events)
+                .run_if(in_state(GameState::CharacterSelection)),
         );
         app.add_systems(OnExit(GameState::CharacterSelection), cleanup_diorama);
     }

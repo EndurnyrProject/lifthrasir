@@ -26,6 +26,8 @@ pub struct CharacterListReceivedEvent {
     pub characters: Vec<Option<CharacterInfoWithJobName>>,
     pub max_slots: u8,
     pub available_slots: u8,
+    /// Character-select display pages (3 slots per page), from HC_CHARLIST_NOTIFY.
+    pub display_pages: u8,
 }
 
 #[derive(Message, Debug)]

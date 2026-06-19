@@ -2,6 +2,7 @@ pub mod accept_enter_handler;
 pub mod ack_charinfo_per_page_handler;
 pub mod block_character_handler;
 pub mod character_list_handler;
+pub mod charlist_notify_handler;
 pub mod deletechar_handlers;
 pub mod makechar_handlers;
 pub mod notify_zonesvr_handler;
@@ -13,9 +14,8 @@ pub use accept_enter_handler::{AcceptEnterHandler, CharacterServerConnected};
 pub use ack_charinfo_per_page_handler::{AckCharinfoPerPageHandler, CharacterInfoPageReceived};
 pub use block_character_handler::{BlockCharacterHandler, BlockedCharactersReceived};
 pub use character_list_handler::{CharacterListHandler, CharacterSlotInfoReceived};
-pub use deletechar_handlers::{
-    AcceptDeletecharHandler, CharacterDeleted, CharacterDeletionFailed, RefuseDeletecharHandler,
-};
+pub use charlist_notify_handler::CharlistNotifyHandler;
+pub use deletechar_handlers::{CharDelete2AckHandler, CharacterDeleted, CharacterDeletionFailed};
 pub use makechar_handlers::{
     AcceptMakecharHandler, CharacterCreated, CharacterCreationFailed, RefuseMakecharHandler,
 };

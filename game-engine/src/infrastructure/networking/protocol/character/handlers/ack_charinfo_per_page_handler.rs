@@ -29,13 +29,25 @@ impl PacketHandler<CharacterProtocol> for AckCharinfoPerPageHandler {
         context: &mut CharacterContext,
         event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
+        // The server answers a CH_CHARLIST_REQ refresh with the full list in a
+        // single packet. When the list is exactly 3 characters it appends a
+        // trailing empty packet (Gravity's finalization quirk); only the first
+        // response is authoritative, so ignore anything we didn't ask for.
+        if !context.awaiting_charlist {
+            debug!(
+                "Ignoring unrequested/trailing HC_ACK_CHARINFO_PER_PAGE ({} character(s))",
+                packet.characters.len()
+            );
+            return Ok(());
+        }
+
         debug!(
-            "Character info page received with {} character(s)",
+            "Character list refreshed with {} character(s)",
             packet.characters.len()
         );
 
-        // Add characters to context
-        context.add_characters(packet.characters.clone());
+        context.awaiting_charlist = false;
+        context.set_characters(packet.characters.clone());
 
         let event = CharacterInfoPageReceived {
             characters: packet.characters,

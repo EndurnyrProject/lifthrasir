@@ -4,12 +4,12 @@ use crate::infrastructure::networking::protocol::{
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{self, Cursor};
 
-pub const HC_ACK_CHARINFO_PER_PAGE: u16 = 0x099D;
+pub const HC_ACK_CHARINFO_PER_PAGE: u16 = 0x0B72;
 
-/// HC_ACK_CHARINFO_PER_PAGE (0x099D) - Character info per page
+/// HC_ACK_CHARINFO_PER_PAGE (0x0B72) - Character info per page
 ///
-/// Server sends character information page by page. Uses a different
-/// character structure size (175 bytes) compared to HC_ACCEPT_ENTER.
+/// Server sends character information page by page. Each entry is the same
+/// 175-byte CharacterInfo block used by HC_ACCEPT_ENTER.
 ///
 /// # Packet Structure (variable length)
 /// - Packet ID: u16 (2 bytes)
@@ -70,14 +70,10 @@ impl ServerPacket for HcAckCharinfoPerPagePacket {
                 ));
             }
 
-            // Note: This packet uses a 175-byte structure, but we're using the 155-byte
-            // parser. The extra 20 bytes are typically unknown/padding fields at the end.
-            // For now, we parse what we can and skip the rest.
-            let char_data = &data[position..position + CharacterInfo::SIZE_ACCEPT_ENTER];
+            let char_data = &data[position..position + CharacterInfo::SIZE_CHARINFO_PER_PAGE];
             match CharacterInfo::parse(char_data) {
                 Ok(char_info) => {
                     characters.push(char_info);
-                    // Skip the full 175 bytes
                     cursor.set_position((position + CharacterInfo::SIZE_CHARINFO_PER_PAGE) as u64);
                 }
                 Err(e) => {

@@ -341,20 +341,41 @@ impl From<u8> for CharCreationError {
     }
 }
 
-/// Character deletion error codes
+/// Character deletion error codes (HC_CHAR_DELETE2_ACK result codes)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CharDeletionError {
-    /// Not eligible to delete
-    NotEligible,
+    /// Database error
+    DatabaseError,
+    /// Character doesn't belong to account
+    NotFound,
+    /// Character already marked for deletion
+    AlreadyDeleting,
+    /// Cannot delete character (guild member, has items, etc.)
+    CannotDelete,
     /// Other error
-    Unknown(u8),
+    Unknown(u32),
 }
 
-impl From<u8> for CharDeletionError {
-    fn from(value: u8) -> Self {
+impl From<u32> for CharDeletionError {
+    fn from(value: u32) -> Self {
         match value {
-            0x00 => CharDeletionError::NotEligible,
+            1 => CharDeletionError::DatabaseError,
+            2 => CharDeletionError::NotFound,
+            3 => CharDeletionError::AlreadyDeleting,
+            4 => CharDeletionError::CannotDelete,
             other => CharDeletionError::Unknown(other),
+        }
+    }
+}
+
+impl CharDeletionError {
+    pub fn description(&self) -> &'static str {
+        match self {
+            CharDeletionError::DatabaseError => "Database error",
+            CharDeletionError::NotFound => "Character not found",
+            CharDeletionError::AlreadyDeleting => "Character already marked for deletion",
+            CharDeletionError::CannotDelete => "Cannot delete character",
+            CharDeletionError::Unknown(_) => "Unknown error",
         }
     }
 }

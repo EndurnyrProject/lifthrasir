@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use ro_formats::GrfFile;
 use indicatif::{ProgressBar, ProgressStyle};
+use ro_formats::GrfFile;
 use std::fs;
 use std::path::{Path, PathBuf};
 

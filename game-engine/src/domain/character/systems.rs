@@ -8,13 +8,62 @@ use crate::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
 use crate::infrastructure::networking::client::CharServerClient;
 use crate::infrastructure::networking::protocol::character::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
-    CharacterServerConnected, ZoneServerInfoReceived,
+    CharacterInfoPageReceived, CharacterServerConnected, ZoneServerInfoReceived,
 };
 use crate::infrastructure::networking::session::UserSession;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioReceiver;
 use std::time::{Duration, Instant};
+
+/// Builds the slot-keyed character list event from the client's cached
+/// characters, resolving job names and sprite paths. Shared by the login,
+/// manual-request, and per-page-refresh paths so the mapping lives in one place.
+fn build_character_list_event(
+    client: &CharServerClient,
+    job_registry: Option<&JobSpriteRegistry>,
+) -> CharacterListReceivedEvent {
+    let mut char_list = vec![None; 15];
+
+    for net_char in client.characters() {
+        let slot = net_char.char_num as usize;
+        if slot >= char_list.len() {
+            continue;
+        }
+
+        let job_name = job_registry
+            .and_then(|reg| reg.get_display_name(net_char.class as u32))
+            .unwrap_or("Unknown")
+            .to_string();
+
+        let body_sprite_path = job_registry
+            .and_then(|reg| reg.get_body_sprite_path(net_char.class as u32, net_char.sex))
+            .unwrap_or_else(|| "data\\sprite\\인간족\\몸통\\남\\초보자_남.spr".to_string());
+
+        let hair_sprite_path = job_registry
+            .map(|reg| reg.get_hair_sprite_path(net_char.hair, net_char.sex))
+            .unwrap_or_else(|| "data\\sprite\\인간족\\머리통\\남\\1_남.spr".to_string());
+
+        let hair_palette_path = job_registry.and_then(|reg| {
+            reg.get_hair_palette_path(net_char.hair, net_char.sex, net_char.hair_color)
+        });
+
+        char_list[slot] = Some(CharacterInfoWithJobName {
+            base: net_char.clone(),
+            job_name,
+            body_sprite_path,
+            hair_sprite_path,
+            hair_palette_path,
+        });
+    }
+
+    CharacterListReceivedEvent {
+        characters: char_list,
+        max_slots: 9,
+        available_slots: 9,
+        display_pages: client.list_page_count().min(u8::MAX as u32) as u8,
+    }
+}
 
 /// System to handle explicit character list requests
 /// The character list is cached in CharServerClient after connection
@@ -31,52 +80,7 @@ pub fn handle_request_character_list(
 ) {
     for _event in request_events.read() {
         if let Some(client) = char_client.as_ref() {
-            let mut char_list = vec![None; 15];
-
-            for net_char in client.characters() {
-                let slot = net_char.char_num as usize;
-                if slot < char_list.len() {
-                    let job_name = job_registry
-                        .as_ref()
-                        .and_then(|reg| reg.get_display_name(net_char.class as u32))
-                        .unwrap_or("Unknown")
-                        .to_string();
-
-                    let body_sprite_path = job_registry
-                        .as_ref()
-                        .and_then(|reg| {
-                            reg.get_body_sprite_path(net_char.class as u32, net_char.sex)
-                        })
-                        .unwrap_or_else(|| {
-                            "data\\sprite\\인간족\\몸통\\남\\초보자_남.spr".to_string()
-                        });
-
-                    let hair_sprite_path = job_registry
-                        .as_ref()
-                        .map(|reg| reg.get_hair_sprite_path(net_char.hair, net_char.sex))
-                        .unwrap_or_else(|| {
-                            "data\\sprite\\인간족\\머리통\\남\\1_남.spr".to_string()
-                        });
-
-                    let hair_palette_path = job_registry.as_ref().and_then(|reg| {
-                        reg.get_hair_palette_path(net_char.hair, net_char.sex, net_char.hair_color)
-                    });
-
-                    char_list[slot] = Some(CharacterInfoWithJobName {
-                        base: net_char.clone(),
-                        job_name,
-                        body_sprite_path,
-                        hair_sprite_path,
-                        hair_palette_path,
-                    });
-                }
-            }
-
-            list_events.write(CharacterListReceivedEvent {
-                characters: char_list,
-                max_slots: 9,
-                available_slots: 9,
-            });
+            list_events.write(build_character_list_event(client, job_registry.as_deref()));
         } else {
             warn!("RequestCharacterListEvent received but CharServerClient not initialized");
         }
@@ -107,46 +111,7 @@ pub fn handle_character_server_connected(
             TimerMode::Repeating,
         )));
 
-        let mut char_list = vec![None; 15];
-
-        for net_char in client.characters() {
-            let slot = net_char.char_num as usize;
-            if slot < char_list.len() {
-                let job_name = job_registry
-                    .as_ref()
-                    .and_then(|reg| reg.get_display_name(net_char.class as u32))
-                    .unwrap_or("Unknown")
-                    .to_string();
-
-                let body_sprite_path = job_registry
-                    .as_ref()
-                    .and_then(|reg| reg.get_body_sprite_path(net_char.class as u32, net_char.sex))
-                    .unwrap_or_else(|| "data\\sprite\\인간족\\몸통\\남\\초보자_남.spr".to_string());
-
-                let hair_sprite_path = job_registry
-                    .as_ref()
-                    .map(|reg| reg.get_hair_sprite_path(net_char.hair, net_char.sex))
-                    .unwrap_or_else(|| "data\\sprite\\인간족\\머리통\\남\\1_남.spr".to_string());
-
-                let hair_palette_path = job_registry.as_ref().and_then(|reg| {
-                    reg.get_hair_palette_path(net_char.hair, net_char.sex, net_char.hair_color)
-                });
-
-                char_list[slot] = Some(CharacterInfoWithJobName {
-                    base: net_char.clone(),
-                    job_name,
-                    body_sprite_path,
-                    hair_sprite_path,
-                    hair_palette_path,
-                });
-            }
-        }
-
-        list_events.write(CharacterListReceivedEvent {
-            characters: char_list,
-            max_slots: 9,
-            available_slots: 9,
-        });
+        list_events.write(build_character_list_event(client, job_registry.as_deref()));
 
         next_state.set(GameState::CharacterSelection);
     }
@@ -181,8 +146,10 @@ pub fn handle_character_deleted_protocol(
     mut protocol_events: MessageReader<CharacterDeleted>,
     mut domain_events: MessageWriter<CharacterDeletedEvent>,
 ) {
-    for _event in protocol_events.read() {
-        domain_events.write(CharacterDeletedEvent { character_id: 0 });
+    for event in protocol_events.read() {
+        domain_events.write(CharacterDeletedEvent {
+            character_id: event.char_id,
+        });
     }
 }
 
@@ -221,14 +188,9 @@ pub fn handle_character_deletion_failed_protocol(
     mut domain_events: MessageWriter<CharacterDeletionFailedEvent>,
 ) {
     for event in protocol_events.read() {
-        use crate::infrastructure::networking::protocol::character::CharDeletionError;
-        let error_msg = match event.error {
-            CharDeletionError::NotEligible => "Not eligible to delete",
-            CharDeletionError::Unknown(_) => "Unknown error",
-        };
         domain_events.write(CharacterDeletionFailedEvent {
-            character_id: 0,
-            error: error_msg.to_string(),
+            character_id: event.char_id,
+            error: event.error.description().to_string(),
         });
     }
 }
@@ -376,7 +338,7 @@ pub fn handle_delete_character(
 ) {
     for event in events.read() {
         if let Some(client) = char_client.as_deref_mut() {
-            if let Err(e) = client.delete_character(event.character_id, "") {
+            if let Err(e) = client.delete_character(event.character_id) {
                 error!("Failed to delete character: {:?}", e);
             }
         } else {
@@ -689,59 +651,42 @@ pub fn handle_character_deleted(
 )]
 pub fn handle_refresh_character_list(
     mut events: MessageReader<RefreshCharacterListEvent>,
+    char_client: Option<ResMut<CharServerClient>>,
+) {
+    if events.read().count() == 0 {
+        return;
+    }
+
+    let Some(mut client) = char_client else {
+        warn!("RefreshCharacterListEvent received but CharServerClient not initialized");
+        return;
+    };
+
+    if let Err(e) = client.request_character_list() {
+        error!("Failed to request character list refresh: {:?}", e);
+    }
+}
+
+/// Rebuilds the character-select list once the server answers a refresh
+/// (CH_CHARLIST_REQ) with HC_ACK_CHARINFO_PER_PAGE. The cached list has already
+/// been replaced by the packet handler, so this just re-emits the UI event.
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(in_set = CharacterFlowSystems::CharacterList)
+)]
+pub fn handle_character_info_page_received(
+    mut events: MessageReader<CharacterInfoPageReceived>,
     char_client: Option<Res<CharServerClient>>,
     job_registry: Option<Res<JobSpriteRegistry>>,
     mut list_events: MessageWriter<CharacterListReceivedEvent>,
 ) {
-    for _event in events.read() {
-        if let Some(client) = char_client.as_ref() {
-            let mut char_list = vec![None; 15];
+    if events.read().count() == 0 {
+        return;
+    }
 
-            for net_char in client.characters() {
-                let slot = net_char.char_num as usize;
-                if slot < char_list.len() {
-                    let job_name = job_registry
-                        .as_ref()
-                        .and_then(|reg| reg.get_display_name(net_char.class as u32))
-                        .unwrap_or("Unknown")
-                        .to_string();
-
-                    let body_sprite_path = job_registry
-                        .as_ref()
-                        .and_then(|reg| {
-                            reg.get_body_sprite_path(net_char.class as u32, net_char.sex)
-                        })
-                        .unwrap_or_else(|| {
-                            "data\\sprite\\인간족\\몸통\\남\\초보자_남.spr".to_string()
-                        });
-
-                    let hair_sprite_path = job_registry
-                        .as_ref()
-                        .map(|reg| reg.get_hair_sprite_path(net_char.hair, net_char.sex))
-                        .unwrap_or_else(|| {
-                            "data\\sprite\\인간족\\머리통\\남\\1_남.spr".to_string()
-                        });
-
-                    let hair_palette_path = job_registry.as_ref().and_then(|reg| {
-                        reg.get_hair_palette_path(net_char.hair, net_char.sex, net_char.hair_color)
-                    });
-
-                    char_list[slot] = Some(CharacterInfoWithJobName {
-                        base: net_char.clone(),
-                        job_name,
-                        body_sprite_path,
-                        hair_sprite_path,
-                        hair_palette_path,
-                    });
-                }
-            }
-
-            list_events.write(CharacterListReceivedEvent {
-                characters: char_list,
-                max_slots: 9,
-                available_slots: 9,
-            });
-        }
+    if let Some(client) = char_client.as_ref() {
+        list_events.write(build_character_list_event(client, job_registry.as_deref()));
     }
 }
 

@@ -67,10 +67,10 @@ mod character_protocol_tests {
             PacketSize::Variable { .. }
         ));
 
-        // HC_NOTIFY_ZONESVR is fixed 28 bytes
+        // HC_NOTIFY_ZONESVR (0x0AC5) is fixed 156 bytes
         assert_eq!(
             CharacterProtocol::packet_size(HC_NOTIFY_ZONESVR),
-            PacketSize::Fixed(28)
+            PacketSize::Fixed(156)
         );
     }
 
