@@ -18,6 +18,7 @@ pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
 pub use domain::inventory::InventoryPlugin;
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
+pub use infrastructure::item::{ItemDb, ItemDbPlugin};
 pub use infrastructure::job::JobSystemPlugin;
 pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
 pub use presentation::ui::fps_counter::FpsCounterPlugin;
@@ -37,6 +38,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(CameraPlugin)
             .add(AssetsPlugin)
             .add(JobSystemPlugin)
+            .add(ItemDbPlugin)
             .add(AudioPlugin)
             .add(AssetCatalogPlugin)
             .add(EntitySpawningPlugin)
