@@ -28,7 +28,7 @@ use crate::{
         system_sets::EntityLifecycleSystems,
     },
     infrastructure::{
-        lua_scripts::job::JobSpriteRegistry, networking::protocol::zone::MovementConfirmedByServer,
+        job::JobSpriteRegistry, networking::protocol::zone::MovementConfirmedByServer,
     },
     utils::coordinates::spawn_coords_to_world_position,
 };

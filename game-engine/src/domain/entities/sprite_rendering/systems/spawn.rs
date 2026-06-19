@@ -11,7 +11,7 @@ use crate::domain::sprite::tags::{
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
 use crate::infrastructure::assets::ro_animation_asset::{RoAnimationAsset, RoSprite};
-use crate::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
+use crate::infrastructure::job::registry::JobSpriteRegistry;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use moonshine_tag::Tag;

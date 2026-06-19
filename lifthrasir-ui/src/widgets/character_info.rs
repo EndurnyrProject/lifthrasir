@@ -11,7 +11,7 @@ use game_engine::domain::entities::character::components::core::CharacterData;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::components::EntityName;
 use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
+use game_engine::infrastructure::job::registry::JobSpriteRegistry;
 
 use crate::theme;
 

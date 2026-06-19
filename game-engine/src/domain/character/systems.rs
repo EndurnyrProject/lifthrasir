@@ -4,7 +4,7 @@ use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
 use crate::domain::system_sets::CharacterFlowSystems;
 use crate::domain::world::spawn_context::MapSpawnContext;
-use crate::infrastructure::lua_scripts::job::registry::JobSpriteRegistry;
+use crate::infrastructure::job::registry::JobSpriteRegistry;
 use crate::infrastructure::networking::client::CharServerClient;
 use crate::infrastructure::networking::protocol::character::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
