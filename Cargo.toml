@@ -7,6 +7,7 @@ members = [
     "lifthrasir-ui",
     "lifthrasir",
     "ro-formats",
+    "ro-to-lifthrasir-cli",
 ]
 
 [workspace.package]

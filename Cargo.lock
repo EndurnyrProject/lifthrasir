@@ -5754,6 +5754,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ro-to-lifthrasir-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "encoding_rs",
+ "gag",
+ "lifthrasir-data",
+ "luadec",
+ "mlua",
+ "regex",
+ "ro-formats",
+ "ron",
+ "serde",
+ "toml 0.8.2",
+]
+
+[[package]]
 name = "rodio"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

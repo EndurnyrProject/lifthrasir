@@ -1,0 +1,22 @@
+[package]
+name = "ro-to-lifthrasir-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "ro-to-lifthrasir-cli"
+path = "src/main.rs"
+
+[dependencies]
+ro-formats = { path = "../ro-formats" }
+lifthrasir-data = { path = "../lifthrasir-data" }
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+serde = { version = "1", features = ["derive"] }
+ron = "0.12"
+toml = "0.8"
+regex = "1.12"
+encoding_rs = "0.8.35"
+mlua = { version = "0.11", features = ["lua51", "vendored"] }
+luadec = "0.2"
+gag = "1.0"
