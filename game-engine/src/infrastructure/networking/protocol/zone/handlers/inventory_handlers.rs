@@ -1,3 +1,6 @@
+use crate::domain::inventory::{
+    InventoryDumpCompleted, InventoryDumpStarted, InventoryItemsReceived, Item,
+};
 use crate::infrastructure::networking::{
     errors::NetworkError,
     protocol::{
@@ -5,127 +8,97 @@ use crate::infrastructure::networking::{
         zone::{
             protocol::ZoneContext,
             protocol::ZoneProtocol,
-            server_packets::{ZcEquipitemListPacket, ZcNormalItemlistPacket},
+            server_packets::{
+                ZcInventoryEndPacket, ZcInventoryItemlistEquipPacket,
+                ZcInventoryItemlistNormalPacket, ZcInventoryStartPacket,
+            },
         },
     },
 };
 use bevy::prelude::*;
 
-/// Handler for ZC_NORMAL_ITEMLIST packet
+/// Handler for ZC_INVENTORY_START (0x0B08)
 ///
-/// Processes the player's normal (non-equipped) inventory items received from the server.
-/// This packet is typically sent after entering the zone/map.
-///
-/// Currently logs the received items for debugging purposes.
-/// Future implementation will populate inventory UI and game state.
-pub struct NormalItemlistHandler;
+/// Begin-transaction marker for an inventory dump. Emits `InventoryDumpStarted`
+/// so the domain system can clear the resource before items arrive.
+pub struct InventoryStartHandler;
 
-impl PacketHandler<ZoneProtocol> for NormalItemlistHandler {
-    type Packet = ZcNormalItemlistPacket;
+impl PacketHandler<ZoneProtocol> for InventoryStartHandler {
+    type Packet = ZcInventoryStartPacket;
 
     fn handle(
         &self,
         packet: Self::Packet,
         _context: &mut ZoneContext,
-        _event_writer: &mut dyn EventWriter,
+        event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
-        debug!(
-            "Received normal item list with {} items",
-            packet.items.len()
-        );
-
-        for (i, item) in packet.items.iter().enumerate() {
-            debug!(
-                "  Item {}: nameid={}, amount={}, type={}, identify={}, refine={}, cards=[{},{},{},{}]",
-                i,
-                item.nameid,
-                item.amount,
-                item.item_type,
-                item.identify,
-                item.refine,
-                item.card0,
-                item.card1,
-                item.card2,
-                item.card3
-            );
-
-            if item.expire_time > 0 {
-                debug!("    Expires at: {}", item.expire_time);
-            }
-
-            if item.favorite != 0 {
-                debug!("    Marked as favorite");
-            }
-
-            if item.bound != 0 {
-                debug!("    Bound type: {}", item.bound);
-            }
-        }
-
+        debug!("Inventory dump started for '{}'", packet.name);
+        event_writer.send_event(Box::new(InventoryDumpStarted));
         Ok(())
     }
 }
 
-/// Handler for ZC_EQUIPITEM_LIST packet
+/// Handler for ZC_INVENTORY_ITEMLIST_NORMAL (0x0B09)
 ///
-/// Processes the player's equipped items received from the server.
-/// This packet is typically sent after the normal itemlist during login sequence.
-///
-/// Currently logs the received equipped items for debugging purposes.
-/// Future implementation will populate equipment UI and game state.
-pub struct EquipitemListHandler;
+/// Stackable (non-equipped) items. Maps each wire item into the domain `Item`
+/// and emits `InventoryItemsReceived`.
+pub struct InventoryItemlistNormalHandler;
 
-impl PacketHandler<ZoneProtocol> for EquipitemListHandler {
-    type Packet = ZcEquipitemListPacket;
+impl PacketHandler<ZoneProtocol> for InventoryItemlistNormalHandler {
+    type Packet = ZcInventoryItemlistNormalPacket;
 
     fn handle(
         &self,
         packet: Self::Packet,
         _context: &mut ZoneContext,
-        _event_writer: &mut dyn EventWriter,
+        event_writer: &mut dyn EventWriter,
     ) -> Result<(), NetworkError> {
-        debug!(
-            "Received equipped item list with {} items",
-            packet.items.len()
-        );
+        debug!("Received {} normal inventory items", packet.items.len());
+        let items = packet.items.iter().map(Item::from).collect();
+        event_writer.send_event(Box::new(InventoryItemsReceived { items }));
+        Ok(())
+    }
+}
 
-        for (i, item) in packet.items.iter().enumerate() {
-            debug!(
-                "  Equipped Item {}: nameid={}, type={}, identify={}, refine={}, cards=[{},{},{},{}]",
-                i,
-                item.nameid,
-                item.item_type,
-                item.identify,
-                item.refine,
-                item.card0,
-                item.card1,
-                item.card2,
-                item.card3
-            );
+/// Handler for ZC_INVENTORY_ITEMLIST_EQUIP (0x0B0A)
+///
+/// Equippable items. Maps each wire item into the domain `Item` and emits
+/// `InventoryItemsReceived`.
+pub struct InventoryItemlistEquipHandler;
 
-            debug!("    Equipment slot: 0x{:04X}", item.location);
+impl PacketHandler<ZoneProtocol> for InventoryItemlistEquipHandler {
+    type Packet = ZcInventoryItemlistEquipPacket;
 
-            if item.location2 != 0 {
-                debug!("    Switch slot: 0x{:04X}", item.location2);
-            }
+    fn handle(
+        &self,
+        packet: Self::Packet,
+        _context: &mut ZoneContext,
+        event_writer: &mut dyn EventWriter,
+    ) -> Result<(), NetworkError> {
+        debug!("Received {} equip inventory items", packet.items.len());
+        let items = packet.items.iter().map(Item::from).collect();
+        event_writer.send_event(Box::new(InventoryItemsReceived { items }));
+        Ok(())
+    }
+}
 
-            if item.wlv > 0 {
-                debug!("    Weapon level: {}", item.wlv);
-            }
+/// Handler for ZC_INVENTORY_END (0x0B0B)
+///
+/// End-of-transaction marker. Emits `InventoryDumpCompleted` so the domain
+/// system can mark the resource ready.
+pub struct InventoryEndHandler;
 
-            if item.expire_time > 0 {
-                debug!("    Expires at: {}", item.expire_time);
-            }
+impl PacketHandler<ZoneProtocol> for InventoryEndHandler {
+    type Packet = ZcInventoryEndPacket;
 
-            if item.favorite != 0 {
-                debug!("    Marked as favorite");
-            }
-
-            if item.bound != 0 {
-                debug!("    Bound type: {}", item.bound);
-            }
-        }
-
+    fn handle(
+        &self,
+        packet: Self::Packet,
+        _context: &mut ZoneContext,
+        event_writer: &mut dyn EventWriter,
+    ) -> Result<(), NetworkError> {
+        debug!("Inventory dump completed (flag {})", packet.flag);
+        event_writer.send_event(Box::new(InventoryDumpCompleted));
         Ok(())
     }
 }

@@ -2,6 +2,7 @@ use crate::{
     domain::{
         combat::events::{CombatActionReceived, EntityHpReceived},
         entities::spawning::events::{RequestEntityVanish, SpawnEntity},
+        inventory::{InventoryDumpCompleted, InventoryDumpStarted, InventoryItemsReceived},
     },
     infrastructure::networking::{
         client::NetworkClient,
@@ -13,13 +14,14 @@ use crate::{
                 CombatActionHandler, CzEnter2Packet, CzNotifyActorinitPacket, CzReqname2Packet,
                 CzRequestAct2Packet, CzRequestChatPacket, CzRequestMove2Packet,
                 CzRequestTime2Packet, CzStatusChangePacket, EntityNameAllReceived,
-                EntityNameReceived, EquipitemListHandler, HpInfoHandler, LongparChangeHandler,
-                MoveStopHandler, MoveentryHandler, MovementConfirmedByServer,
-                MovementStoppedByServer, NewentryHandler, NormalItemlistHandler, ParChangeHandler,
-                ParameterChanged, PlayermoveHandler, RefuseEnterHandler, ReqnameHandler,
-                ReqnameallHandler, SpawnData, StandentryHandler, StatusChangeAckHandler,
-                TimeSyncHandler, TimeSyncLegacyHandler, VanishHandler, ZoneClientPacket,
-                ZoneContext, ZoneEntryRefused, ZoneProtocol, ZoneServerConnected,
+                EntityNameReceived, HpInfoHandler, InventoryEndHandler,
+                InventoryItemlistEquipHandler, InventoryItemlistNormalHandler,
+                InventoryStartHandler, LongparChangeHandler, MoveStopHandler, MoveentryHandler,
+                MovementConfirmedByServer, MovementStoppedByServer, NewentryHandler,
+                ParChangeHandler, ParameterChanged, PlayermoveHandler, RefuseEnterHandler,
+                ReqnameHandler, ReqnameallHandler, SpawnData, StandentryHandler,
+                StatusChangeAckHandler, TimeSyncHandler, TimeSyncLegacyHandler, VanishHandler,
+                ZoneClientPacket, ZoneContext, ZoneEntryRefused, ZoneProtocol, ZoneServerConnected,
             },
             EventBuffer,
         },
@@ -99,8 +101,10 @@ impl ZoneServerClient {
         dispatcher.register(VanishHandler);
         dispatcher.register(ParChangeHandler);
         dispatcher.register(LongparChangeHandler);
-        dispatcher.register(NormalItemlistHandler);
-        dispatcher.register(EquipitemListHandler);
+        dispatcher.register(InventoryStartHandler);
+        dispatcher.register(InventoryItemlistNormalHandler);
+        dispatcher.register(InventoryItemlistEquipHandler);
+        dispatcher.register(InventoryEndHandler);
         dispatcher.register(TimeSyncHandler);
         dispatcher.register(TimeSyncLegacyHandler);
         dispatcher.register(ReqnameHandler);
@@ -383,6 +387,9 @@ pub struct ZoneServerEventWriters<'w> {
     pub chat_received: MessageWriter<'w, ChatReceived>,
     pub combat_action_received: MessageWriter<'w, CombatActionReceived>,
     pub entity_hp_received: MessageWriter<'w, EntityHpReceived>,
+    pub inventory_dump_started: MessageWriter<'w, InventoryDumpStarted>,
+    pub inventory_items_received: MessageWriter<'w, InventoryItemsReceived>,
+    pub inventory_dump_completed: MessageWriter<'w, InventoryDumpCompleted>,
 }
 
 /// Bevy system to update the zone server client
@@ -441,6 +448,9 @@ pub fn zone_server_update_system(
             (ChatReceived, chat_received),
             (CombatActionReceived, combat_action_received),
             (EntityHpReceived, entity_hp_received),
+            (InventoryDumpStarted, inventory_dump_started),
+            (InventoryItemsReceived, inventory_items_received),
+            (InventoryDumpCompleted, inventory_dump_completed),
         ]
     );
 }

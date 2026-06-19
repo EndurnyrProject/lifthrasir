@@ -14,22 +14,22 @@ pub use client_packets::{
 
 pub use handlers::{
     AcceptEnterHandler, AccountIdReceived, AidHandler, ChatHandler, ChatReceived,
-    CombatActionHandler, EntityNameAllReceived, EntityNameReceived, EquipitemListHandler,
-    HpInfoHandler, LongparChangeHandler, MoveStopHandler, MoveentryHandler,
-    MovementConfirmedByServer, MovementStoppedByServer, NewentryHandler, NormalItemlistHandler,
-    ParChangeHandler, ParameterChanged, PlayermoveHandler, RefuseEnterHandler, ReqnameHandler,
-    ReqnameallHandler, StandentryHandler, StatusChangeAckHandler, TimeSyncHandler,
-    TimeSyncLegacyHandler, VanishHandler, ZoneEntryRefused, ZoneServerConnected,
+    CombatActionHandler, EntityNameAllReceived, EntityNameReceived, HpInfoHandler,
+    InventoryEndHandler, InventoryItemlistEquipHandler, InventoryItemlistNormalHandler,
+    InventoryStartHandler, LongparChangeHandler, MoveStopHandler, MoveentryHandler,
+    MovementConfirmedByServer, MovementStoppedByServer, NewentryHandler, ParChangeHandler,
+    ParameterChanged, PlayermoveHandler, RefuseEnterHandler, ReqnameHandler, ReqnameallHandler,
+    StandentryHandler, StatusChangeAckHandler, TimeSyncHandler, TimeSyncLegacyHandler,
+    VanishHandler, ZoneEntryRefused, ZoneServerConnected,
 };
 
 pub use protocol::{ZoneClientPacket, ZoneContext, ZoneProtocol, ZoneServerPacket};
 
 pub use server_packets::{
     ZcAcceptEnterPacket, ZcAckReqnamePacket, ZcAckReqnameallPacket, ZcAidPacket,
-    ZcEquipitemListPacket, ZcLongparChangePacket, ZcNormalItemlistPacket, ZcNotifyActPacket,
-    ZcNotifyChatPacket, ZcNotifyMoveStopPacket, ZcNotifyPlayermovePacket, ZcNotifyVanishPacket,
-    ZcParChangePacket, ZcRefuseEnterPacket, ZC_ACCEPT_ENTER, ZC_ACK_REQNAME, ZC_ACK_REQNAMEALL,
-    ZC_AID, ZC_EQUIPITEM_LIST, ZC_LONGPAR_CHANGE, ZC_NORMAL_ITEMLIST, ZC_NOTIFY_ACT,
+    ZcLongparChangePacket, ZcNotifyActPacket, ZcNotifyChatPacket, ZcNotifyMoveStopPacket,
+    ZcNotifyPlayermovePacket, ZcNotifyVanishPacket, ZcParChangePacket, ZcRefuseEnterPacket,
+    ZC_ACCEPT_ENTER, ZC_ACK_REQNAME, ZC_ACK_REQNAMEALL, ZC_AID, ZC_LONGPAR_CHANGE, ZC_NOTIFY_ACT,
     ZC_NOTIFY_CHAT, ZC_NOTIFY_MOVE_STOP, ZC_NOTIFY_PLAYERMOVE, ZC_NOTIFY_VANISH, ZC_PAR_CHANGE,
     ZC_REFUSE_ENTER,
 };

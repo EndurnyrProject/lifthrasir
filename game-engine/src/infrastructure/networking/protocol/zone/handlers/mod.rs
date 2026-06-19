@@ -20,7 +20,10 @@ pub use entity_name_handlers::{
 pub use entity_visibility_handlers::{
     MoveentryHandler, NewentryHandler, StandentryHandler, VanishHandler,
 };
-pub use inventory_handlers::{EquipitemListHandler, NormalItemlistHandler};
+pub use inventory_handlers::{
+    InventoryEndHandler, InventoryItemlistEquipHandler, InventoryItemlistNormalHandler,
+    InventoryStartHandler,
+};
 pub use movement_handlers::{
     MoveStopHandler, MovementConfirmedByServer, MovementStoppedByServer, PlayermoveHandler,
 };

@@ -82,13 +82,21 @@ impl Protocol for ZoneProtocol {
                 let packet = ZcLongparChangePacket::parse(data)?;
                 Ok(ZoneServerPacket::ZcLongparChange(packet))
             }
-            ZC_NORMAL_ITEMLIST => {
-                let packet = ZcNormalItemlistPacket::parse(data)?;
-                Ok(ZoneServerPacket::ZcNormalItemlist(packet))
+            ZC_INVENTORY_START => {
+                let packet = ZcInventoryStartPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcInventoryStart(packet))
             }
-            ZC_EQUIPITEM_LIST => {
-                let packet = ZcEquipitemListPacket::parse(data)?;
-                Ok(ZoneServerPacket::ZcEquipitemList(packet))
+            ZC_INVENTORY_ITEMLIST_NORMAL => {
+                let packet = ZcInventoryItemlistNormalPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcInventoryItemlistNormal(packet))
+            }
+            ZC_INVENTORY_ITEMLIST_EQUIP => {
+                let packet = ZcInventoryItemlistEquipPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcInventoryItemlistEquip(packet))
+            }
+            ZC_INVENTORY_END => {
+                let packet = ZcInventoryEndPacket::parse(data)?;
+                Ok(ZoneServerPacket::ZcInventoryEnd(packet))
             }
             ZC_NOTIFY_CHAT => {
                 let packet = ZcNotifyChatPacket::parse(data)?;
@@ -139,14 +147,19 @@ impl Protocol for ZoneProtocol {
             ZC_NOTIFY_TIME2 => PacketSize::Fixed(6),
             ZC_PAR_CHANGE => PacketSize::Fixed(8),
             ZC_LONGPAR_CHANGE => PacketSize::Fixed(8),
-            ZC_NORMAL_ITEMLIST => PacketSize::Variable {
+            ZC_INVENTORY_START => PacketSize::Variable {
                 length_offset: 2,
                 length_bytes: 2,
             },
-            ZC_EQUIPITEM_LIST => PacketSize::Variable {
+            ZC_INVENTORY_ITEMLIST_NORMAL => PacketSize::Variable {
                 length_offset: 2,
                 length_bytes: 2,
             },
+            ZC_INVENTORY_ITEMLIST_EQUIP => PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            },
+            ZC_INVENTORY_END => PacketSize::Fixed(4),
             ZC_NOTIFY_CHAT => PacketSize::Variable {
                 length_offset: 2,
                 length_bytes: 2,
@@ -335,8 +348,10 @@ pub enum ZoneServerPacket {
     ZcNotifyTime2(ZcNotifyTime2Packet),
     ZcParChange(ZcParChangePacket),
     ZcLongparChange(ZcLongparChangePacket),
-    ZcNormalItemlist(ZcNormalItemlistPacket),
-    ZcEquipitemList(ZcEquipitemListPacket),
+    ZcInventoryStart(ZcInventoryStartPacket),
+    ZcInventoryItemlistNormal(ZcInventoryItemlistNormalPacket),
+    ZcInventoryItemlistEquip(ZcInventoryItemlistEquipPacket),
+    ZcInventoryEnd(ZcInventoryEndPacket),
     ZcNotifyChat(ZcNotifyChatPacket),
     ZcNotifyAct(ZcNotifyActPacket),
     ZcHpInfo(ZcHpInfoPacket),
@@ -367,8 +382,10 @@ impl ServerPacket for ZoneServerPacket {
             Self::ZcNotifyTime2(_) => ZC_NOTIFY_TIME2,
             Self::ZcParChange(_) => ZC_PAR_CHANGE,
             Self::ZcLongparChange(_) => ZC_LONGPAR_CHANGE,
-            Self::ZcNormalItemlist(_) => ZC_NORMAL_ITEMLIST,
-            Self::ZcEquipitemList(_) => ZC_EQUIPITEM_LIST,
+            Self::ZcInventoryStart(_) => ZC_INVENTORY_START,
+            Self::ZcInventoryItemlistNormal(_) => ZC_INVENTORY_ITEMLIST_NORMAL,
+            Self::ZcInventoryItemlistEquip(_) => ZC_INVENTORY_ITEMLIST_EQUIP,
+            Self::ZcInventoryEnd(_) => ZC_INVENTORY_END,
             Self::ZcNotifyChat(_) => ZC_NOTIFY_CHAT,
             Self::ZcNotifyAct(_) => ZC_NOTIFY_ACT,
             Self::ZcHpInfo(_) => ZC_HP_INFO,
@@ -419,5 +436,78 @@ mod tests {
         // Acknowledge AID
         context.acknowledge_aid(12345);
         assert!(context.is_ready()); // Now ready
+    }
+
+    fn variable_packet(id: u16, body: &[u8]) -> Vec<u8> {
+        let len = (4 + body.len()) as u16;
+        let mut data = id.to_le_bytes().to_vec();
+        data.extend_from_slice(&len.to_le_bytes());
+        data.extend_from_slice(body);
+        data
+    }
+
+    #[test]
+    fn parses_inventory_start() {
+        let data = variable_packet(ZC_INVENTORY_START, &[0, b'P', b'C', 0]);
+        let packet = ZoneProtocol::parse_server_packet(ZC_INVENTORY_START, &data).expect("parse");
+        match packet {
+            ZoneServerPacket::ZcInventoryStart(p) => assert_eq!(p.name, "PC"),
+            other => panic!("wrong variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parses_inventory_itemlist_normal() {
+        let item = [0u8; 34];
+        let data = variable_packet(ZC_INVENTORY_ITEMLIST_NORMAL, &[&[0u8][..], &item].concat());
+        let packet =
+            ZoneProtocol::parse_server_packet(ZC_INVENTORY_ITEMLIST_NORMAL, &data).expect("parse");
+        match packet {
+            ZoneServerPacket::ZcInventoryItemlistNormal(p) => assert_eq!(p.items.len(), 1),
+            other => panic!("wrong variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parses_inventory_itemlist_equip() {
+        let item = [0u8; 67];
+        let data = variable_packet(ZC_INVENTORY_ITEMLIST_EQUIP, &[&[0u8][..], &item].concat());
+        let packet =
+            ZoneProtocol::parse_server_packet(ZC_INVENTORY_ITEMLIST_EQUIP, &data).expect("parse");
+        match packet {
+            ZoneServerPacket::ZcInventoryItemlistEquip(p) => assert_eq!(p.items.len(), 1),
+            other => panic!("wrong variant: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parses_inventory_end() {
+        let data = [0x0B, 0x0B, 0x00, 0x00];
+        let packet = ZoneProtocol::parse_server_packet(ZC_INVENTORY_END, &data).expect("parse");
+        match packet {
+            ZoneServerPacket::ZcInventoryEnd(p) => assert_eq!(p.flag, 0),
+            other => panic!("wrong variant: {:?}", other),
+        }
+    }
+
+    fn assert_variable(id: u16) {
+        match ZoneProtocol::packet_size(id) {
+            PacketSize::Variable {
+                length_offset: 2,
+                length_bytes: 2,
+            } => {}
+            other => panic!("expected variable size for 0x{:04X}, got {:?}", id, other),
+        }
+    }
+
+    #[test]
+    fn inventory_packet_sizes() {
+        assert_variable(ZC_INVENTORY_START);
+        assert_variable(ZC_INVENTORY_ITEMLIST_NORMAL);
+        assert_variable(ZC_INVENTORY_ITEMLIST_EQUIP);
+        match ZoneProtocol::packet_size(ZC_INVENTORY_END) {
+            PacketSize::Fixed(4) => {}
+            other => panic!("expected Fixed(4) for END, got {:?}", other),
+        }
     }
 }
