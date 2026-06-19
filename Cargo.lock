@@ -4119,6 +4119,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lifthrasir-data"
+version = "0.1.0"
+dependencies = [
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "lifthrasir-ui"
 version = "0.1.0"
 dependencies = [

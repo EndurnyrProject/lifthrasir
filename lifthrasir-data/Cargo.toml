@@ -1,0 +1,10 @@
+[package]
+name = "lifthrasir-data"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+ron = "0.12"
