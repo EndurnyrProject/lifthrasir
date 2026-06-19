@@ -1,4 +1,5 @@
 mod config;
+mod grf_vfs;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
