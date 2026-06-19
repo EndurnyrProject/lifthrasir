@@ -1,4 +1,5 @@
 mod config;
+mod decompile;
 mod grf_vfs;
 
 use clap::{Parser, Subcommand};
