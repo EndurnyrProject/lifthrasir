@@ -4,6 +4,10 @@ pub mod zc_ack_reqnameall;
 pub mod zc_aid;
 pub mod zc_equipitem_list;
 pub mod zc_hp_info;
+pub mod zc_inventory_end;
+pub mod zc_inventory_itemlist_equip;
+pub mod zc_inventory_itemlist_normal;
+pub mod zc_inventory_start;
 pub mod zc_longpar_change;
 pub mod zc_normal_itemlist;
 pub mod zc_notify_act;
@@ -29,6 +33,14 @@ pub use zc_ack_reqnameall::{ZcAckReqnameallPacket, ZC_ACK_REQNAMEALL};
 pub use zc_aid::{ZcAidPacket, ZC_AID};
 pub use zc_equipitem_list::{ZcEquipitemListPacket, ZC_EQUIPITEM_LIST};
 pub use zc_hp_info::{ZcHpInfoPacket, ZC_HP_INFO};
+pub use zc_inventory_end::{ZcInventoryEndPacket, ZC_INVENTORY_END};
+pub use zc_inventory_itemlist_equip::{
+    EquipItem, ZcInventoryItemlistEquipPacket, ZC_INVENTORY_ITEMLIST_EQUIP,
+};
+pub use zc_inventory_itemlist_normal::{
+    NormalItem, ZcInventoryItemlistNormalPacket, ZC_INVENTORY_ITEMLIST_NORMAL,
+};
+pub use zc_inventory_start::{ZcInventoryStartPacket, ZC_INVENTORY_START};
 pub use zc_longpar_change::{ZcLongparChangePacket, ZC_LONGPAR_CHANGE};
 pub use zc_normal_itemlist::{ZcNormalItemlistPacket, ZC_NORMAL_ITEMLIST};
 pub use zc_notify_act::{ZcNotifyActPacket, ZC_NOTIFY_ACT};
