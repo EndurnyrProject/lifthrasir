@@ -16,6 +16,7 @@ pub use domain::entities::character::UnifiedCharacterEntityPlugin;
 pub use domain::entities::hover_plugin::EntityHoverPlugin;
 pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
+pub use domain::inventory::InventoryPlugin;
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
 pub use infrastructure::lua_scripts::job::JobSystemPlugin;
 pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
@@ -45,6 +46,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(MovementPlugin)
             .add(EntityHoverPlugin)
             .add(CombatPlugin)
+            .add(InventoryPlugin)
             .add(InputPlugin)
             .add(NativeInputPlugin)
             .add(FpsCounterPlugin)
