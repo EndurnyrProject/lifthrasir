@@ -39,6 +39,9 @@ _opam/
 en.grf
 data.grf
 
+# Generated assets
+assets/data/ron/
+
 # Reference
 robrowser-src
 grf-editor-src

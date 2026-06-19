@@ -23,6 +23,12 @@ Its not mandatory though, since jj is backed by Git, you can keep using Git if y
    cargo build
    ```
 
+4. **Generate derived assets**: After placing your GRF files (`data.grf`, `en.grf`) under `assets/`, run the converter once before the first launch:
+   ```bash
+   cargo run -p ro-to-lifthrasir-cli -- convert
+   ```
+   This generates `assets/data/ron/job_data.ron`, which the client loads for job and sprite data. Re-run it whenever the source `.lub` files in your GRFs change.
+
 ### Feature Development Workflow
 
 #### 1. Starting a New Feature

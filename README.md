@@ -47,7 +47,13 @@ cargo build
 
 Place your Ragnarok Online GRF files in the `assets/` directory as described above.
 
-### 4. Run
+### 4. Generate Derived Assets
+
+```bash
+cargo run -p ro-to-lifthrasir-cli -- convert
+```
+
+### 5. Run
 
 ```bash
 cargo run -p lifthrasir
