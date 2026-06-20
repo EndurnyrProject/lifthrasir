@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
+use bevy_quinnet::client::QuinnetClient;
 use secrecy::ExposeSecret;
 
 use super::{events::*, models::*};
@@ -9,10 +10,10 @@ use crate::{
     infrastructure::{
         config::ClientConfig,
         networking::{
-            client::{
-                login_client_update_system, CharServerClient, LoginClient, LoginEventWriters,
-            },
+            client::CharServerClient,
+            errors::NetworkError,
             messages::{LoginAccepted, LoginRefused},
+            quic::login::{self, Pending, QuicLoginState},
             session::UserSession,
         },
     },
@@ -22,8 +23,8 @@ use crate::{
 /// System to handle login attempts from the UI
 ///
 /// When a user submits login credentials via the UI, this system:
-/// 1. Connects to the login server
-/// 2. Sends the login packet
+/// 1. Opens a QUIC connection to the login server
+/// 2. Arms the login state machine with the credentials
 /// 3. Emits a LoginAttemptStartedEvent for UI feedback
 ///
 /// The response (success/failure) is handled by other systems that listen
@@ -37,7 +38,8 @@ pub fn handle_login_attempts(
     mut login_attempts: MessageReader<LoginAttemptEvent>,
     mut login_started_events: MessageWriter<LoginAttemptStartedEvent>,
     mut login_failure_events: MessageWriter<LoginFailureEvent>,
-    mut login_client: ResMut<LoginClient>,
+    mut quinnet: ResMut<QuinnetClient>,
+    mut quic_state: ResMut<QuicLoginState>,
     auth_context: Res<AuthenticationContext>,
 ) {
     for attempt in login_attempts.read() {
@@ -47,39 +49,29 @@ pub fn handle_login_attempts(
         let password = attempt.password.expose_secret();
 
         info!("Login attempt for user: {}", username);
-        debug!("Attempting login to server: {}", server_address);
+        debug!("Attempting QUIC login to server: {}", server_address);
 
-        if let Err(e) = login_client.connect(server_address) {
+        if let Err(e) = login::connect(&mut quinnet, server_address) {
             error!(
                 "Failed to connect to login server {}: {:?}",
                 server_address, e
             );
 
             login_failure_events.write(LoginFailureEvent {
-                error: e,
+                error: NetworkError::ConnectionFailed(e.to_string()),
                 username: username.clone(),
             });
 
             continue;
         }
 
-        debug!("Connected to login server, sending CA_LOGIN packet...");
+        quic_state.start_connecting(Pending {
+            username: username.clone(),
+            password: password.to_string(),
+            client_version,
+            build: "lifthrasir".to_string(),
+        });
 
-        if let Err(e) = login_client.attempt_login(username, password, client_version) {
-            error!("Failed to send login packet for {}: {:?}", username, e);
-
-            login_failure_events.write(LoginFailureEvent {
-                error: e,
-                username: username.clone(),
-            });
-
-            login_client.disconnect();
-            continue;
-        }
-
-        debug!("CA_LOGIN packet sent for username: '{}'", username);
-
-        // Emit event for UI feedback
         login_started_events.write(LoginAttemptStartedEvent {
             username: username.clone(),
         });
@@ -88,12 +80,11 @@ pub fn handle_login_attempts(
 
 /// System to handle successful login from protocol layer
 ///
-/// When the login server accepts the login (AC_ACCEPT_LOGIN packet),
-/// the LoginClient emits a LoginAccepted event. This system:
+/// When the login server accepts the login (LoginResponse proto),
+/// the QUIC drain system emits a LoginAccepted event. This system:
 /// 1. Creates a UserSession with the login tokens
 /// 2. Inserts it as a resource
 /// 3. Transitions to ServerSelection state
-/// 4. Disconnects from login server (no longer needed)
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
     schedule = Update,
@@ -102,7 +93,6 @@ pub fn handle_login_attempts(
 pub fn handle_login_accepted(
     mut protocol_events: MessageReader<LoginAccepted>,
     mut domain_events: MessageWriter<LoginSuccessEvent>,
-    mut login_client: ResMut<LoginClient>,
     mut next_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
 ) {
@@ -120,21 +110,17 @@ pub fn handle_login_accepted(
         commands.insert_resource(session.clone());
         domain_events.write(LoginSuccessEvent { session });
 
-        login_client.disconnect();
-        login_client.reset_context();
-
         next_state.set(GameState::ServerSelection);
     }
 }
 
 /// System to handle failed login from protocol layer
 ///
-/// When the login server refuses the login (AC_REFUSE_LOGIN packet),
-/// the LoginClient emits a LoginRefused event. This system:
+/// When the login server refuses the login (LoginFailed proto),
+/// the QUIC drain system emits a LoginRefused event. This system:
 /// 1. Logs the error
 /// 2. Emits a LoginFailureEvent for UI feedback
-/// 3. Disconnects and resets the client
-/// 4. Returns to Login state
+/// 3. Returns to Login state
 #[auto_add_system(
     plugin = crate::app::authentication_plugin::AuthenticationPlugin,
     schedule = Update,
@@ -143,23 +129,17 @@ pub fn handle_login_accepted(
 pub fn handle_login_refused(
     mut protocol_events: MessageReader<LoginRefused>,
     mut domain_events: MessageWriter<LoginFailureEvent>,
-    mut login_client: ResMut<LoginClient>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     for event in protocol_events.read() {
         warn!("Login refused with error code: {}", event.error_code);
 
-        let error = crate::infrastructure::networking::errors::NetworkError::AuthenticationFailed {
-            reason: format!("Login refused by server (error code: {})", event.error_code),
-        };
-
         domain_events.write(LoginFailureEvent {
-            error,
+            error: NetworkError::AuthenticationFailed {
+                reason: format!("Login refused by server (error code: {})", event.error_code),
+            },
             username: event.username.clone(),
         });
-
-        login_client.disconnect();
-        login_client.reset_context();
 
         next_state.set(GameState::Login);
     }
@@ -231,16 +211,6 @@ fn check_client_config_loaded(
             }
         }
     }
-}
-
-/// Login client update system wrapper
-#[auto_add_system(
-    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
-    schedule = Update,
-    config(in_set = AuthenticationSystems::LoginClientUpdate)
-)]
-fn run_login_client_update(client: Option<ResMut<LoginClient>>, events: LoginEventWriters) {
-    login_client_update_system(client, events);
 }
 
 // ============================================================================

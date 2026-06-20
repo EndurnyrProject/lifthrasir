@@ -206,7 +206,6 @@ pub enum AuthenticationSystems {
     ConfigLoading,
     LoginAttempt,
     LoginResponse,
-    LoginClientUpdate,
     ServerSelection,
 }
 
