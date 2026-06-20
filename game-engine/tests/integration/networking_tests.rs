@@ -4,56 +4,14 @@ use game_engine::infrastructure::networking::{
             CharacterClientPacket, CharacterInfo, CharacterProtocol, ChEnterPacket,
             ChSelectCharPacket, HC_ACCEPT_ENTER, HC_NOTIFY_ZONESVR,
         },
-        login::{
-            CaLoginPacket, LoginClientPacket, LoginProtocol, AC_ACCEPT_LOGIN, AC_REFUSE_LOGIN,
-        },
         zone::{
             CzEnter2Packet, CzNotifyActorinitPacket, ZoneClientPacket, ZoneProtocol,
             ZC_ACCEPT_ENTER, ZC_AID, ZC_REFUSE_ENTER,
         },
         ClientPacket, PacketSize, Protocol,
     },
-    CharServerClient, LoginClient, ZoneServerClient,
+    CharServerClient, ZoneServerClient,
 };
-
-#[cfg(test)]
-mod login_protocol_tests {
-    use super::*;
-
-    #[test]
-    fn test_login_packet_sizes() {
-        // AC_ACCEPT_LOGIN is variable length
-        assert!(matches!(
-            LoginProtocol::packet_size(AC_ACCEPT_LOGIN),
-            PacketSize::Variable { .. }
-        ));
-
-        // AC_REFUSE_LOGIN is fixed 23 bytes
-        assert_eq!(
-            LoginProtocol::packet_size(AC_REFUSE_LOGIN),
-            PacketSize::Fixed(23)
-        );
-    }
-
-    #[test]
-    fn test_ca_login_serialization() {
-        let packet = CaLoginPacket::new("testuser", "testpass", 55);
-        let bytes = packet.serialize();
-
-        // Verify packet structure
-        assert_eq!(bytes.len(), 56); // Fixed size
-        assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), 0x0064); // CA_LOGIN
-    }
-
-    #[test]
-    fn test_login_client_packet_enum() {
-        let packet = LoginClientPacket::CaLogin(CaLoginPacket::new("test", "pass", 55));
-        assert_eq!(packet.packet_id(), 0x0064); // CA_LOGIN
-
-        let bytes = packet.serialize();
-        assert_eq!(bytes.len(), 56);
-    }
-}
 
 #[cfg(test)]
 mod character_protocol_tests {
@@ -167,22 +125,8 @@ mod zone_protocol_tests {
 mod client_wrapper_tests {
     use super::*;
     use game_engine::infrastructure::networking::protocol::{
-        character::CharacterContext, login::LoginContext, zone::ZoneContext,
+        character::CharacterContext, zone::ZoneContext,
     };
-
-    #[test]
-    fn test_login_client_creation() {
-        let client = LoginClient::new();
-        assert!(!client.is_connected());
-        assert_eq!(client.attempt_count(), 0);
-        assert_eq!(client.last_error(), None);
-    }
-
-    #[test]
-    fn test_login_client_default() {
-        let client = LoginClient::default();
-        assert!(!client.is_connected());
-    }
 
     #[test]
     fn test_char_server_client_creation() {
@@ -221,11 +165,6 @@ mod protocol_consistency_tests {
     use super::*;
 
     #[test]
-    fn test_login_protocol_name() {
-        assert_eq!(LoginProtocol::NAME, "Login");
-    }
-
-    #[test]
     fn test_character_protocol_name() {
         assert_eq!(CharacterProtocol::NAME, "Character");
     }
@@ -237,9 +176,6 @@ mod protocol_consistency_tests {
 
     #[test]
     fn test_packet_id_consistency() {
-        // Login packets
-        assert_eq!(CaLoginPacket::PACKET_ID, 0x0064);
-
         // Character packets
         assert_eq!(ChEnterPacket::PACKET_ID, 0x0065);
         assert_eq!(ChSelectCharPacket::PACKET_ID, 0x0066);
@@ -253,19 +189,6 @@ mod protocol_consistency_tests {
 #[cfg(test)]
 mod serialization_roundtrip_tests {
     use super::*;
-
-    #[test]
-    fn test_login_packet_roundtrip() {
-        let original = CaLoginPacket::new("user123", "pass456", 55);
-        let bytes = original.serialize();
-
-        // Verify we can extract the packet ID
-        let packet_id = u16::from_le_bytes([bytes[0], bytes[1]]);
-        assert_eq!(packet_id, CaLoginPacket::PACKET_ID);
-
-        // Verify length
-        assert_eq!(bytes.len(), 56);
-    }
 
     #[test]
     fn test_character_packet_roundtrip() {

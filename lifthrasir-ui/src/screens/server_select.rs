@@ -8,7 +8,7 @@
 
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
-use game_engine::infrastructure::networking::protocol::login::types::ServerInfo;
+use game_engine::infrastructure::networking::server_info::ServerInfo;
 use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::ServerSelectedEvent;
 
@@ -451,7 +451,7 @@ fn spawn_server_row(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::infrastructure::networking::protocol::login::types::{ServerInfo, ServerType};
+    use game_engine::infrastructure::networking::server_info::{ServerInfo, ServerType};
     use game_engine::infrastructure::networking::session::SessionTokens;
 
     #[test]
@@ -507,6 +507,7 @@ mod tests {
             sex: 0,
             server_list: servers,
             selected_server: None,
+            auth_token: String::new(),
         }
     }
 

@@ -37,11 +37,10 @@ const MIN_PACKET_SIZE: usize = 2;
 /// let dispatcher = PacketDispatcher::new();
 /// // Register handlers...
 ///
-/// let context = LoginContext::new();
 /// let mut client = NetworkClient::new(context).with_dispatcher(dispatcher);
 ///
-/// client.connect("127.0.0.1:6900")?;
-/// client.send_packet(&login_packet)?;
+/// client.connect("127.0.0.1:6902")?;
+/// client.send_packet(&packet)?;
 ///
 /// // In your update loop:
 /// client.update(&mut event_writer)?;

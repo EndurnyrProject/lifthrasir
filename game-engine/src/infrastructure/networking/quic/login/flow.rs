@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
-use bevy_quinnet::client::connection::{ConnectionEvent, ConnectionFailedEvent, ConnectionLostEvent};
+use bevy_quinnet::client::connection::{
+    ConnectionEvent, ConnectionFailedEvent, ConnectionLostEvent,
+};
 use bevy_quinnet::client::QuinnetClient;
 
 use super::mapping::{login_failed_to_refused, login_response_to_accepted};

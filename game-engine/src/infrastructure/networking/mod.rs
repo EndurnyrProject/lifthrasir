@@ -1,16 +1,16 @@
 pub mod client;
-pub mod quic;
 pub mod errors;
 pub mod macros;
 pub mod messages;
 pub mod protocol;
+pub mod quic;
 pub mod server_info;
 pub mod session;
 pub mod transport;
 
 pub use client::{
-    char_server_update_system, login_client_update_system, zone_server_update_system,
-    CharServerClient, LoginClient, NetworkClient, ZoneServerClient,
+    char_server_update_system, zone_server_update_system, CharServerClient, NetworkClient,
+    ZoneServerClient,
 };
 pub use errors::{NetworkError, NetworkResult};
 pub use messages::{LoginAccepted, LoginRefused};

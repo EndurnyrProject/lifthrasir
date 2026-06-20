@@ -67,9 +67,8 @@ where
 /// # Example
 ///
 /// ```ignore
-/// let mut dispatcher = PacketDispatcher::<LoginProtocol>::new();
-/// dispatcher.register(AcceptLoginHandler);
-/// dispatcher.register(RefuseLoginHandler);
+/// let mut dispatcher = PacketDispatcher::<CharacterProtocol>::new();
+/// dispatcher.register(CharacterListHandler);
 ///
 /// // Later, when processing packets:
 /// dispatcher.dispatch(packet, &mut context, &mut event_writer)?;
