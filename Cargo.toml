@@ -24,6 +24,8 @@ bevy = { version = "0.18.1", features = [
 secrecy = { version = "0.10", features = ["serde"] }
 bevy_ui_text_input = "0.7.0"
 leafwing-input-manager = "0.20"
+bevy_quinnet = "0.20"
+prost = "0.13"
 
 [profile.dev.package."*"]
 opt-level = 3

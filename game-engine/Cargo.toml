@@ -39,6 +39,8 @@ secrecy = { workspace = true }
 
 # Async runtime integration
 bevy-tokio-tasks = { version = "0.18" }
+bevy_quinnet = { workspace = true }
+prost = { workspace = true }
 
 # Character entity system dependencies
 moonshine-kind = "0.4"
