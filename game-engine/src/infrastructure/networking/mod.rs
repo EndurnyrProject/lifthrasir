@@ -1,4 +1,5 @@
 pub mod client;
+pub mod quic;
 pub mod errors;
 pub mod macros;
 pub mod messages;
