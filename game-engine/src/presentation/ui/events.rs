@@ -1,4 +1,4 @@
-use crate::infrastructure::networking::protocol::login::types::ServerInfo;
+use crate::infrastructure::networking::server_info::ServerInfo;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_event, auto_register_type};
 use secrecy::SecretString;

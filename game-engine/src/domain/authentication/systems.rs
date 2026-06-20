@@ -12,7 +12,7 @@ use crate::{
             client::{
                 login_client_update_system, CharServerClient, LoginClient, LoginEventWriters,
             },
-            protocol::login::{LoginAccepted, LoginRefused},
+            messages::{LoginAccepted, LoginRefused},
             session::UserSession,
         },
     },
@@ -110,21 +110,7 @@ pub fn handle_login_accepted(
         info!("Login accepted for account_id: {}", event.account_id);
         info!("Server list contains {} servers", event.server_list.len());
 
-        let login_packet =
-            crate::infrastructure::networking::protocol::login::AcAcceptLoginPacket {
-                account_id: event.account_id,
-                login_id1: event.login_id1,
-                login_id2: event.login_id2,
-                last_login_ip: event.last_login_ip,
-                last_login_time: [0u8; 26],
-                sex: event.sex,
-                server_list: event.server_list.clone(),
-            };
-
-        let session = crate::infrastructure::networking::session::UserSession::new(
-            event.username.clone(),
-            login_packet,
-        );
+        let session = UserSession::from(event);
 
         info!(
             "Inserting UserSession resource with {} server(s)",

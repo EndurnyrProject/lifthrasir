@@ -1,7 +1,9 @@
 pub mod client;
 pub mod errors;
 pub mod macros;
+pub mod messages;
 pub mod protocol;
+pub mod server_info;
 pub mod session;
 pub mod transport;
 
@@ -10,10 +12,12 @@ pub use client::{
     CharServerClient, LoginClient, NetworkClient, ZoneServerClient,
 };
 pub use errors::{NetworkError, NetworkResult};
+pub use messages::{LoginAccepted, LoginRefused};
 pub use protocol::{
     ClientPacket, EventBuffer, EventWriter, PacketDispatcher, PacketHandler, PacketSize, Protocol,
     ServerPacket,
 };
+pub use server_info::{ServerInfo, ServerType};
 pub use session::UserSession;
 pub use transport::TcpTransport;
 
@@ -23,6 +27,5 @@ pub use protocol::{
         CharacterDeletionFailed, CharacterInfoPageReceived, CharacterServerConnected,
         CharacterSlotInfoReceived, PingReceived, SecondPasswordRequested, ZoneServerInfoReceived,
     },
-    login::{LoginAccepted, LoginRefused},
     zone::{AccountIdReceived, ZoneEntryRefused, ZoneServerConnected as ZoneServerConnectedEvent},
 };

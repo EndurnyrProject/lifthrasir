@@ -1,5 +1,6 @@
 use crate::infrastructure::networking::{
     errors::NetworkError,
+    messages::LoginRefused,
     protocol::{
         login::{
             protocol::{LoginContext, LoginProtocol},
@@ -9,17 +10,6 @@ use crate::infrastructure::networking::{
     },
 };
 use bevy::prelude::*;
-use bevy_auto_plugin::prelude::auto_add_event;
-
-/// Event emitted when login is refused
-#[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
-pub struct LoginRefused {
-    pub username: String,
-    pub error_code: u8,
-    pub error_message: String,
-    pub block_date: Option<String>,
-}
 
 /// Handler for AC_REFUSE_LOGIN packet
 ///
