@@ -5,6 +5,7 @@ mod encoding;
 mod escape;
 mod grf_vfs;
 mod lua;
+mod proto_gen;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -26,6 +27,12 @@ enum Command {
         #[arg(long)]
         only: Option<String>,
     },
+    GenProto {
+        #[arg(long)]
+        src: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -36,6 +43,9 @@ fn main() -> anyhow::Result<()> {
             let grfs = config.grfs_by_priority();
             let vfs = grf_vfs::GrfVfs::open(&grfs)?;
             converters::run(only.as_deref(), &vfs, &out)?;
+        }
+        Command::GenProto { src, out } => {
+            proto_gen::run(&src, &out)?;
         }
     }
     Ok(())

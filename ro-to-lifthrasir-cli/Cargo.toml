@@ -21,3 +21,6 @@ encoding_rs = "0.8.35"
 mlua = { version = "0.11", features = ["lua51", "vendored"] }
 luadec = "0.2"
 gag = "1.0"
+protox = "0.7"
+prost-build = "0.13"
+tempfile = "3"
