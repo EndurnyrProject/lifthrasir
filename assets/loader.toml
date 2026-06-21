@@ -3,11 +3,11 @@ data_folder = "assets/data"
 
 [[assets.grf]]
 path = "data.grf"
-priority = 0
+priority = 1
 
 [[assets.grf]]
 path = "en.grf"
-priority = 1
+priority = 0
 
 # Example additional GRF files:
 #
