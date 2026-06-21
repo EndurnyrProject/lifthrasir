@@ -10,10 +10,12 @@ use crate::{
     infrastructure::{
         config::ClientConfig,
         networking::{
-            client::CharServerClient,
             errors::NetworkError,
             messages::{LoginAccepted, LoginRefused},
-            quic::login::{self, Pending, QuicLoginState},
+            quic::{
+                character::{self, PendingAuth, QuicCharState},
+                login::{self, Pending, QuicLoginState},
+            },
             session::UserSession,
         },
     },
@@ -229,7 +231,8 @@ pub fn handle_server_selection(
     mut commands: Commands,
     mut server_events: MessageReader<ServerSelectedEvent>,
     session: Option<Res<UserSession>>,
-    mut char_client: Option<ResMut<CharServerClient>>,
+    mut quinnet: ResMut<QuinnetClient>,
+    mut char_state: ResMut<QuicCharState>,
 ) {
     let Some(mut session) = session.map(|s| s.clone()) else {
         return;
@@ -251,41 +254,19 @@ pub fn handle_server_selection(
 
         info!("Connecting to character server at {}", address);
 
-        if let Some(ref mut client) = char_client {
-            client.disconnect();
-
-            if let Err(e) = client.connect(&address) {
-                error!(
-                    "Failed to connect to character server at {}: {:?}",
-                    address, e
-                );
-            } else {
-                info!("Connected to character server at {}", address);
-                if let Err(e) = client.enter_server() {
-                    error!("Failed to send CH_ENTER: {:?}", e);
-                }
-            }
-        } else {
-            let mut client = CharServerClient::with_session(
-                session.tokens.account_id,
-                session.tokens.login_id1,
-                session.tokens.login_id2,
-                session.sex,
+        if let Err(e) = character::connect(&mut quinnet, &address) {
+            error!(
+                "Failed to connect to character server at {}: {:?}",
+                address, e
             );
-
-            if let Err(e) = client.connect(&address) {
-                error!(
-                    "Failed to connect to character server at {}: {:?}",
-                    address, e
-                );
-            } else {
-                info!("Connected to character server at {}", address);
-                if let Err(e) = client.enter_server() {
-                    error!("Failed to send CH_ENTER: {:?}", e);
-                }
-            }
-
-            commands.insert_resource(client);
+            continue;
         }
+
+        char_state.start_connecting(PendingAuth {
+            account_id: session.tokens.account_id,
+            login_id1: session.tokens.login_id1,
+            login_id2: session.tokens.login_id2,
+            sex: session.sex as u32,
+        });
     }
 }

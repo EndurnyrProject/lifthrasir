@@ -7,14 +7,17 @@
 pub struct Envelope {
     #[prost(uint32, tag = "1")]
     pub seq: u32,
-    #[prost(oneof = "envelope::Body", tags = "16, 17, 18, 19, 20")]
+    #[prost(
+        oneof = "envelope::Body",
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71"
+    )]
     pub body: ::core::option::Option<envelope::Body>,
 }
 /// Nested message and enum types in `Envelope`.
 pub mod envelope {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Body {
-        /// 16-31: control
+        /// 16-20: account control
         #[prost(message, tag = "16")]
         Hello(super::Hello),
         #[prost(message, tag = "17")]
@@ -25,6 +28,111 @@ pub mod envelope {
         LoginResponse(super::LoginResponse),
         #[prost(message, tag = "20")]
         LoginFailed(super::LoginFailed),
+        /// 21-31: char control
+        #[prost(message, tag = "21")]
+        SessionAuth(super::SessionAuth),
+        #[prost(message, tag = "22")]
+        CharList(super::CharList),
+        #[prost(message, tag = "23")]
+        CharAuthFailed(super::CharAuthFailed),
+        #[prost(message, tag = "24")]
+        SelectChar(super::SelectChar),
+        #[prost(message, tag = "25")]
+        ZoneServerInfo(super::ZoneServerInfo),
+        #[prost(message, tag = "26")]
+        CreateChar(super::CreateChar),
+        #[prost(message, tag = "27")]
+        CharCreated(super::CharCreated),
+        #[prost(message, tag = "28")]
+        CharCreateFailed(super::CharCreateFailed),
+        #[prost(message, tag = "29")]
+        DeleteCharRequest(super::DeleteCharRequest),
+        #[prost(message, tag = "30")]
+        DeleteCharAck(super::DeleteCharAck),
+        #[prost(message, tag = "31")]
+        CharListRefresh(super::CharListRefresh),
+        /// 32+: zone
+        #[prost(message, tag = "32")]
+        MapLoaded(super::MapLoaded),
+        #[prost(message, tag = "33")]
+        TimeSync(super::TimeSync),
+        #[prost(message, tag = "34")]
+        TimeSyncAck(super::TimeSyncAck),
+        #[prost(message, tag = "35")]
+        EnterAck(super::EnterAck),
+        #[prost(message, tag = "36")]
+        MoveRequest(super::MoveRequest),
+        #[prost(message, tag = "37")]
+        SelfMove(super::SelfMove),
+        #[prost(message, tag = "38")]
+        MoveStop(super::MoveStop),
+        #[prost(message, tag = "39")]
+        UnitSpawn(super::UnitSpawn),
+        #[prost(message, tag = "40")]
+        UnitDespawn(super::UnitDespawn),
+        #[prost(message, tag = "41")]
+        NameRequest(super::NameRequest),
+        #[prost(message, tag = "42")]
+        NameResponse(super::NameResponse),
+        #[prost(message, tag = "43")]
+        ChatRequest(super::ChatRequest),
+        #[prost(message, tag = "44")]
+        ChatMessage(super::ChatMessage),
+        #[prost(message, tag = "45")]
+        Snapshot(super::Snapshot),
+        /// 46-71: zone combat / skill / item / stat
+        #[prost(message, tag = "46")]
+        ActionRequest(super::ActionRequest),
+        #[prost(message, tag = "47")]
+        DamageDealt(super::DamageDealt),
+        #[prost(message, tag = "48")]
+        Knockback(super::Knockback),
+        #[prost(message, tag = "49")]
+        SkillCast(super::SkillCast),
+        #[prost(message, tag = "50")]
+        GroundSkillCast(super::GroundSkillCast),
+        #[prost(message, tag = "51")]
+        SkillList(super::SkillList),
+        #[prost(message, tag = "52")]
+        SkillDamage(super::SkillDamage),
+        #[prost(message, tag = "53")]
+        SkillEffect(super::SkillEffect),
+        #[prost(message, tag = "54")]
+        SkillCasting(super::SkillCasting),
+        #[prost(message, tag = "55")]
+        CastCancel(super::CastCancel),
+        #[prost(message, tag = "56")]
+        SkillCooldown(super::SkillCooldown),
+        #[prost(message, tag = "57")]
+        GroundSkill(super::GroundSkill),
+        #[prost(message, tag = "58")]
+        EquipItem(super::EquipItem),
+        #[prost(message, tag = "59")]
+        UnequipItem(super::UnequipItem),
+        #[prost(message, tag = "60")]
+        EquipResult(super::EquipResult),
+        #[prost(message, tag = "61")]
+        UnequipResult(super::UnequipResult),
+        #[prost(message, tag = "62")]
+        InventoryList(super::InventoryList),
+        #[prost(message, tag = "63")]
+        ItemAdded(super::ItemAdded),
+        #[prost(message, tag = "64")]
+        ItemRemoved(super::ItemRemoved),
+        #[prost(message, tag = "65")]
+        StatUp(super::StatUp),
+        #[prost(message, tag = "66")]
+        StatUpResult(super::StatUpResult),
+        #[prost(message, tag = "67")]
+        ParamChange(super::ParamChange),
+        #[prost(message, tag = "68")]
+        UnitHp(super::UnitHp),
+        #[prost(message, tag = "69")]
+        SpriteChange(super::SpriteChange),
+        #[prost(message, tag = "70")]
+        Resurrect(super::Resurrect),
+        #[prost(message, tag = "71")]
+        Respawn(super::Respawn),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -92,4 +200,740 @@ pub struct LoginFailed {
     pub reason_code: u32,
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
+}
+/// Client -> server, authenticate an existing Horde session on char/zone entry.
+/// `char_id` is unused by the char server but reserved for zone reuse.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SessionAuth {
+    #[prost(uint32, tag = "1")]
+    pub account_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub login_id1: u32,
+    #[prost(uint32, tag = "3")]
+    pub login_id2: u32,
+    #[prost(uint32, tag = "4")]
+    pub sex: u32,
+    #[prost(uint32, tag = "5")]
+    pub char_id: u32,
+}
+/// A single character's full state (protobuf analogue of the legacy 175-byte CharacterInfo).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Character {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub class: u32,
+    #[prost(uint32, tag = "4")]
+    pub base_level: u32,
+    #[prost(uint32, tag = "5")]
+    pub job_level: u32,
+    #[prost(uint64, tag = "6")]
+    pub base_exp: u64,
+    #[prost(uint64, tag = "7")]
+    pub job_exp: u64,
+    #[prost(uint32, tag = "8")]
+    pub zeny: u32,
+    #[prost(uint64, tag = "9")]
+    pub hp: u64,
+    #[prost(uint64, tag = "10")]
+    pub max_hp: u64,
+    #[prost(uint64, tag = "11")]
+    pub sp: u64,
+    #[prost(uint64, tag = "12")]
+    pub max_sp: u64,
+    #[prost(uint32, tag = "13")]
+    pub str: u32,
+    #[prost(uint32, tag = "14")]
+    pub agi: u32,
+    #[prost(uint32, tag = "15")]
+    pub vit: u32,
+    #[prost(uint32, tag = "16")]
+    pub int: u32,
+    #[prost(uint32, tag = "17")]
+    pub dex: u32,
+    #[prost(uint32, tag = "18")]
+    pub luk: u32,
+    #[prost(uint32, tag = "19")]
+    pub status_point: u32,
+    #[prost(uint32, tag = "20")]
+    pub skill_point: u32,
+    #[prost(uint32, tag = "21")]
+    pub hair: u32,
+    #[prost(uint32, tag = "22")]
+    pub hair_color: u32,
+    #[prost(uint32, tag = "23")]
+    pub clothes_color: u32,
+    #[prost(uint32, tag = "24")]
+    pub weapon: u32,
+    #[prost(uint32, tag = "25")]
+    pub shield: u32,
+    #[prost(uint32, tag = "26")]
+    pub head_top: u32,
+    #[prost(uint32, tag = "27")]
+    pub head_mid: u32,
+    #[prost(uint32, tag = "28")]
+    pub head_bottom: u32,
+    #[prost(uint32, tag = "29")]
+    pub robe: u32,
+    #[prost(uint32, tag = "30")]
+    pub char_num: u32,
+    #[prost(string, tag = "31")]
+    pub last_map: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "32")]
+    pub sex: u32,
+    #[prost(uint32, tag = "33")]
+    pub option: u32,
+    #[prost(uint32, tag = "34")]
+    pub karma: u32,
+    #[prost(uint32, tag = "35")]
+    pub manner: u32,
+    #[prost(uint32, tag = "36")]
+    pub rename: u32,
+    #[prost(uint64, tag = "37")]
+    pub delete_date: u64,
+}
+/// Server -> client, full character list response (replaces the legacy multi-packet char-list).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CharList {
+    #[prost(uint32, tag = "1")]
+    pub account_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub normal_slots: u32,
+    #[prost(uint32, tag = "3")]
+    pub premium_slots: u32,
+    #[prost(uint32, tag = "4")]
+    pub billing_slots: u32,
+    #[prost(uint32, tag = "5")]
+    pub producible_slots: u32,
+    #[prost(uint32, tag = "6")]
+    pub valid_slots: u32,
+    #[prost(message, repeated, tag = "7")]
+    pub characters: ::prost::alloc::vec::Vec<Character>,
+    #[prost(uint32, tag = "8")]
+    pub page_count: u32,
+    #[prost(bool, tag = "9")]
+    pub pincode_enabled: bool,
+}
+/// Server -> client, rejected session authentication on the char server.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct CharAuthFailed {
+    #[prost(uint32, tag = "1")]
+    pub reason: u32,
+}
+/// Client -> server, select a character by slot (replaces RO CH_SELECT_CHAR).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SelectChar {
+    #[prost(uint32, tag = "1")]
+    pub slot: u32,
+}
+/// Server -> client, zone server to connect to after selecting a character.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ZoneServerInfo {
+    #[prost(uint32, tag = "1")]
+    pub char_id: u32,
+    #[prost(string, tag = "2")]
+    pub map_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub ip: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "4")]
+    pub port: u32,
+}
+/// Client -> server, create a new character (replaces RO CH_MAKE_CHAR_V2).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateChar {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub slot: u32,
+    #[prost(uint32, tag = "3")]
+    pub hair_color: u32,
+    #[prost(uint32, tag = "4")]
+    pub hair_style: u32,
+    #[prost(uint32, tag = "5")]
+    pub starting_job: u32,
+    #[prost(uint32, tag = "6")]
+    pub sex: u32,
+}
+/// Server -> client, newly created character data.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CharCreated {
+    #[prost(message, optional, tag = "1")]
+    pub character: ::core::option::Option<Character>,
+}
+/// Server -> client, character creation failed.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct CharCreateFailed {
+    #[prost(uint32, tag = "1")]
+    pub reason_code: u32,
+}
+/// Client -> server, request character deletion (replaces RO CH_REQ_CHAR_DELETE2).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct DeleteCharRequest {
+    #[prost(uint32, tag = "1")]
+    pub char_id: u32,
+}
+/// Server -> client, acknowledgement of a deletion request.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct DeleteCharAck {
+    #[prost(uint32, tag = "1")]
+    pub char_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub result: u32,
+    #[prost(uint64, tag = "3")]
+    pub delete_date: u64,
+}
+/// Client -> server, request a fresh character list (replaces RO CH_CHARLIST_REQ).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct CharListRefresh {}
+/// Client -> server, the map finished loading; spawn me (replaces RO CZ_NOTIFY_ACTORINIT 0x007D).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct MapLoaded {}
+/// Client -> server, client clock for time sync (replaces RO CZ_REQUEST_TIME/TIME2).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct TimeSync {
+    #[prost(uint32, tag = "1")]
+    pub client_tick: u32,
+}
+/// Server -> client, authoritative clock reply (replaces RO ZC_NOTIFY_TIME/TIME2).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct TimeSyncAck {
+    #[prost(uint32, tag = "1")]
+    pub server_tick: u32,
+}
+/// Server -> client, accept zone entry (replaces RO ZC_ACCEPT_ENTER 0x02EB + ZC_AID 0x0283).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct EnterAck {
+    #[prost(uint32, tag = "1")]
+    pub account_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub x: u32,
+    #[prost(uint32, tag = "3")]
+    pub y: u32,
+    #[prost(uint32, tag = "4")]
+    pub dir: u32,
+    #[prost(uint64, tag = "5")]
+    pub start_time: u64,
+    #[prost(uint32, tag = "6")]
+    pub font: u32,
+}
+/// Client -> server, request to move to a destination cell (replaces RO CZ_REQUEST_MOVE2 0x035F).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct MoveRequest {
+    #[prost(uint32, tag = "1")]
+    pub dest_x: u32,
+    #[prost(uint32, tag = "2")]
+    pub dest_y: u32,
+}
+/// Server -> client, own-character authoritative movement (replaces RO ZC_NOTIFY_PLAYERMOVE 0x0087).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SelfMove {
+    #[prost(uint32, tag = "1")]
+    pub src_x: u32,
+    #[prost(uint32, tag = "2")]
+    pub src_y: u32,
+    #[prost(uint32, tag = "3")]
+    pub dst_x: u32,
+    #[prost(uint32, tag = "4")]
+    pub dst_y: u32,
+    #[prost(uint64, tag = "5")]
+    pub start_time: u64,
+}
+/// Server -> client, an entity stopped moving (replaces RO ZC_NOTIFY_MOVE_STOP 0x0088).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct MoveStop {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    #[prost(uint32, tag = "2")]
+    pub x: u32,
+    #[prost(uint32, tag = "3")]
+    pub y: u32,
+}
+/// Server -> client, an entity entered view (collapses RO ZC_NOTIFY_NEWENTRY 0x09FE,
+/// ZC_NOTIFY_STANDENTRY 0x09FF and ZC_NOTIFY_MOVEENTRY 0x09FD). The `moving`, `dst_*` and
+/// `move_start_time` fields carry the moveentry case.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UnitSpawn {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    #[prost(uint32, tag = "2")]
+    pub aid: u32,
+    #[prost(uint32, tag = "3")]
+    pub object_type: u32,
+    #[prost(uint32, tag = "4")]
+    pub job: u32,
+    #[prost(uint32, tag = "5")]
+    pub x: u32,
+    #[prost(uint32, tag = "6")]
+    pub y: u32,
+    #[prost(uint32, tag = "7")]
+    pub dir: u32,
+    #[prost(uint32, tag = "8")]
+    pub speed: u32,
+    #[prost(uint32, tag = "9")]
+    pub hp: u32,
+    #[prost(uint32, tag = "10")]
+    pub max_hp: u32,
+    #[prost(uint32, tag = "11")]
+    pub clevel: u32,
+    #[prost(uint32, tag = "12")]
+    pub body_state: u32,
+    #[prost(uint32, tag = "13")]
+    pub health_state: u32,
+    #[prost(uint32, tag = "14")]
+    pub effect_state: u32,
+    #[prost(uint32, tag = "15")]
+    pub head: u32,
+    #[prost(uint32, tag = "16")]
+    pub weapon: u32,
+    #[prost(uint32, tag = "17")]
+    pub shield: u32,
+    #[prost(uint32, tag = "18")]
+    pub accessory: u32,
+    #[prost(uint32, tag = "19")]
+    pub accessory2: u32,
+    #[prost(uint32, tag = "20")]
+    pub accessory3: u32,
+    #[prost(uint32, tag = "21")]
+    pub head_palette: u32,
+    #[prost(uint32, tag = "22")]
+    pub body_palette: u32,
+    #[prost(uint32, tag = "23")]
+    pub head_dir: u32,
+    #[prost(uint32, tag = "24")]
+    pub robe: u32,
+    #[prost(uint32, tag = "25")]
+    pub guild_id: u32,
+    #[prost(uint32, tag = "26")]
+    pub sex: u32,
+    #[prost(bool, tag = "27")]
+    pub is_boss: bool,
+    #[prost(string, tag = "28")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(bool, tag = "29")]
+    pub moving: bool,
+    #[prost(uint32, tag = "30")]
+    pub dst_x: u32,
+    #[prost(uint32, tag = "31")]
+    pub dst_y: u32,
+    #[prost(uint64, tag = "32")]
+    pub move_start_time: u64,
+}
+/// Server -> client, an entity left view (replaces RO ZC_NOTIFY_VANISH 0x0080).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct UnitDespawn {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    #[prost(uint32, tag = "2")]
+    pub reason: u32,
+}
+/// Client -> server, request an entity's name (replaces RO CZ_REQNAME2 0x0368).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct NameRequest {
+    #[prost(uint32, tag = "1")]
+    pub entity_id: u32,
+}
+/// Server -> client, an entity's name (replaces RO ZC_ACK_REQNAME 0x0095 + ZC_ACK_REQNAMEALL 0x0195).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NameResponse {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub party_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub guild_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub position_name: ::prost::alloc::string::String,
+}
+/// Client -> server, public chat message (replaces RO CZ_REQUEST_CHAT 0x008C).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChatRequest {
+    #[prost(string, tag = "1")]
+    pub message: ::prost::alloc::string::String,
+}
+/// Server -> client, an entity's chat message (replaces RO ZC_NOTIFY_CHAT 0x008D).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChatMessage {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
+/// One entity's position/state within a Snapshot.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SnapshotEntity {
+    #[prost(uint32, tag = "1")]
+    pub id: u32,
+    #[prost(uint32, tag = "2")]
+    pub x: u32,
+    #[prost(uint32, tag = "3")]
+    pub y: u32,
+    #[prost(uint32, tag = "4")]
+    pub dir: u32,
+    #[prost(uint32, tag = "5")]
+    pub move_state: u32,
+    #[prost(uint32, tag = "6")]
+    pub hp_pct: u32,
+}
+/// Server -> client, full-state AoI snapshot (rides ChannelId 4 / Unreliable; design Part 5).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Snapshot {
+    #[prost(uint64, tag = "1")]
+    pub server_tick: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub entities: ::prost::alloc::vec::Vec<SnapshotEntity>,
+}
+/// Client -> server, request a basic action against a target (replaces RO CZ_REQUEST_ACT 0x0437).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct ActionRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub action: u32,
+}
+/// Server -> client, basic-attack damage result (replaces RO ZC_NOTIFY_ACT 0x08C8).
+/// `damage`/`damage2` are signed so negative (heal-as-damage) values survive.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct DamageDealt {
+    #[prost(uint32, tag = "1")]
+    pub src_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub target_id: u32,
+    #[prost(uint64, tag = "3")]
+    pub server_tick: u64,
+    #[prost(uint32, tag = "4")]
+    pub src_speed: u32,
+    #[prost(uint32, tag = "5")]
+    pub dmg_speed: u32,
+    #[prost(sint32, tag = "6")]
+    pub damage: i32,
+    #[prost(uint32, tag = "7")]
+    pub div: u32,
+    #[prost(uint32, tag = "8")]
+    pub r#type: u32,
+    #[prost(sint32, tag = "9")]
+    pub damage2: i32,
+    #[prost(bool, tag = "10")]
+    pub is_sp_damage: bool,
+}
+/// Server -> client, an entity was knocked back (replaces RO ZC_BLOWNBACK 0x01B1).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct Knockback {
+    #[prost(uint32, tag = "1")]
+    pub unit_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub dst_x: u32,
+    #[prost(uint32, tag = "3")]
+    pub dst_y: u32,
+}
+/// Client -> server, cast a skill at a target (replaces RO CZ_USE_SKILL 0x0113).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SkillCast {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+    #[prost(uint32, tag = "3")]
+    pub target_id: u32,
+}
+/// Client -> server, cast a ground-targeted skill (replaces RO CZ_USE_SKILL_TOGROUND 0x0AF4).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct GroundSkillCast {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+    #[prost(uint32, tag = "3")]
+    pub x: u32,
+    #[prost(uint32, tag = "4")]
+    pub y: u32,
+}
+/// One learned skill within a SkillList.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SkillInfo {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "3")]
+    pub level: u32,
+    #[prost(uint32, tag = "4")]
+    pub sp: u32,
+    #[prost(uint32, tag = "5")]
+    pub range: u32,
+    #[prost(string, tag = "6")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(bool, tag = "7")]
+    pub upgradable: bool,
+}
+/// Server -> client, the full learned-skill list (replaces RO ZC_SKILLINFO_LIST 0x010F).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SkillList {
+    #[prost(message, repeated, tag = "1")]
+    pub skills: ::prost::alloc::vec::Vec<SkillInfo>,
+}
+/// Server -> client, skill damage result (replaces RO ZC_NOTIFY_SKILL 0x01DE).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SkillDamage {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+    #[prost(uint32, tag = "3")]
+    pub src_id: u32,
+    #[prost(uint32, tag = "4")]
+    pub target_id: u32,
+    #[prost(uint64, tag = "5")]
+    pub server_tick: u64,
+    #[prost(sint32, tag = "6")]
+    pub damage: i32,
+    #[prost(uint32, tag = "7")]
+    pub div: u32,
+    #[prost(uint32, tag = "8")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "9")]
+    pub src_delay: u32,
+    #[prost(uint32, tag = "10")]
+    pub dst_delay: u32,
+}
+/// Server -> client, no-damage skill effect (replaces RO ZC_USE_SKILL 0x011A).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SkillEffect {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+    #[prost(uint32, tag = "3")]
+    pub src_id: u32,
+    #[prost(uint32, tag = "4")]
+    pub target_id: u32,
+    #[prost(uint32, tag = "5")]
+    pub result: u32,
+}
+/// Server -> client, a skill cast bar started (replaces RO ZC_USE_SKILL2 0x0B1A).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SkillCasting {
+    #[prost(uint32, tag = "1")]
+    pub src_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub target_id: u32,
+    #[prost(uint32, tag = "3")]
+    pub x: u32,
+    #[prost(uint32, tag = "4")]
+    pub y: u32,
+    #[prost(uint32, tag = "5")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "6")]
+    pub property: u32,
+    #[prost(uint32, tag = "7")]
+    pub cast_time: u32,
+}
+/// Server -> client, a skill cast was cancelled (replaces RO ZC_NOTIFY_CAST_CANCEL 0x01B9).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct CastCancel {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+}
+/// Server -> client, a skill went on cooldown (replaces RO ZC_SKILL_POSTDELAY 0x043D).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SkillCooldown {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub tick: u32,
+}
+/// Server -> client, a ground-targeted skill landed (replaces RO ZC_NOTIFY_GROUNDSKILL 0x0117).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct GroundSkill {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub src_id: u32,
+    #[prost(uint32, tag = "3")]
+    pub level: u32,
+    #[prost(uint32, tag = "4")]
+    pub x: u32,
+    #[prost(uint32, tag = "5")]
+    pub y: u32,
+    #[prost(uint64, tag = "6")]
+    pub server_tick: u64,
+}
+/// Client -> server, equip an inventory item (replaces RO CZ_REQ_WEAR_EQUIP 0x0998).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct EquipItem {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub position: u32,
+}
+/// Client -> server, take off an equipped item (replaces RO CZ_REQ_TAKEOFF_EQUIP 0x00AB).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct UnequipItem {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+}
+/// Server -> client, result of an equip request (replaces RO ZC_ACK_WEAR_EQUIP 0x0999).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct EquipResult {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub wear_location: u32,
+    #[prost(uint32, tag = "3")]
+    pub view_id: u32,
+    #[prost(uint32, tag = "4")]
+    pub result: u32,
+}
+/// Server -> client, result of an unequip request (replaces RO ZC_ACK_TAKEOFF_EQUIP 0x099A).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct UnequipResult {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub wear_location: u32,
+    #[prost(uint32, tag = "3")]
+    pub result: u32,
+}
+/// One inventory slot within an InventoryList.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InventoryItem {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub nameid: u32,
+    #[prost(uint32, tag = "3")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "4")]
+    pub amount: u32,
+    #[prost(uint32, tag = "5")]
+    pub location: u32,
+    #[prost(bool, tag = "6")]
+    pub identified: bool,
+    #[prost(uint32, tag = "7")]
+    pub attribute: u32,
+    #[prost(uint32, tag = "8")]
+    pub refine: u32,
+    #[prost(uint32, repeated, tag = "9")]
+    pub cards: ::prost::alloc::vec::Vec<u32>,
+    #[prost(uint64, tag = "10")]
+    pub expire_time: u64,
+    #[prost(uint32, tag = "11")]
+    pub bind_on_equip: u32,
+    #[prost(bool, tag = "12")]
+    pub favorite: bool,
+    #[prost(uint32, tag = "13")]
+    pub look: u32,
+}
+/// Server -> client, the full inventory dump (collapses RO ZC_INVENTORY_START/
+/// ITEMLIST_NORMAL/ITEMLIST_EQUIP/END 0x0B08-0x0B0B).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InventoryList {
+    #[prost(message, repeated, tag = "1")]
+    pub normal: ::prost::alloc::vec::Vec<InventoryItem>,
+    #[prost(message, repeated, tag = "2")]
+    pub equip: ::prost::alloc::vec::Vec<InventoryItem>,
+}
+/// Server -> client, an item was added to the inventory (replaces RO ZC_ITEM_PICKUP_ACK 0x0A37).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ItemAdded {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+    #[prost(uint32, tag = "3")]
+    pub nameid: u32,
+    #[prost(bool, tag = "4")]
+    pub identified: bool,
+    #[prost(uint32, tag = "5")]
+    pub attribute: u32,
+    #[prost(uint32, tag = "6")]
+    pub refine: u32,
+    #[prost(uint32, repeated, tag = "7")]
+    pub cards: ::prost::alloc::vec::Vec<u32>,
+    #[prost(uint32, tag = "8")]
+    pub location: u32,
+    #[prost(uint32, tag = "9")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "10")]
+    pub result: u32,
+    #[prost(uint64, tag = "11")]
+    pub expire_time: u64,
+    #[prost(uint32, tag = "12")]
+    pub look: u32,
+}
+/// Server -> client, an item was removed from the inventory (replaces RO ZC_DELETE_ITEM_FROM_BODY 0x07FA).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct ItemRemoved {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+    #[prost(uint32, tag = "3")]
+    pub reason: u32,
+}
+/// Client -> server, allocate a status point to a stat (replaces RO CZ_STATUS_CHANGE 0x00BB).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct StatUp {
+    #[prost(uint32, tag = "1")]
+    pub stat_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+}
+/// Server -> client, result of a stat allocation (replaces RO ZC_STATUS_CHANGE 0x00BC).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct StatUpResult {
+    #[prost(uint32, tag = "1")]
+    pub stat_id: u32,
+    #[prost(bool, tag = "2")]
+    pub ok: bool,
+    #[prost(uint32, tag = "3")]
+    pub value: u32,
+}
+/// Server -> client, a parameter changed (collapses RO ZC_PAR_CHANGE 0x00B0 +
+/// ZC_LONGPAR_CHANGE 0x00B1; uint64 covers both 32- and 64-bit params).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct ParamChange {
+    #[prost(uint32, tag = "1")]
+    pub var_id: u32,
+    #[prost(uint64, tag = "2")]
+    pub value: u64,
+}
+/// Server -> client, an entity's HP changed (replaces RO ZC_HP_INFO 0x0977).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct UnitHp {
+    #[prost(uint32, tag = "1")]
+    pub id: u32,
+    #[prost(uint32, tag = "2")]
+    pub hp: u32,
+    #[prost(uint32, tag = "3")]
+    pub max_hp: u32,
+}
+/// Server -> client, an entity's sprite changed (replaces RO ZC_SPRITE_CHANGE 0x01D7).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SpriteChange {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    #[prost(uint32, tag = "2")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "3")]
+    pub val: u32,
+    #[prost(uint32, tag = "4")]
+    pub val2: u32,
+}
+/// Server -> client, an entity was resurrected (replaces RO ZC_RESURRECTION 0x0148).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct Resurrect {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    #[prost(uint32, tag = "2")]
+    pub r#type: u32,
+}
+/// Client -> server, respawn or return to char select after death (replaces RO CZ_RESTART 0x00B2).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct Respawn {
+    #[prost(uint32, tag = "1")]
+    pub r#type: u32,
 }

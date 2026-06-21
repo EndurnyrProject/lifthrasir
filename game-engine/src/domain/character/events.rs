@@ -1,6 +1,6 @@
 use super::forms::CharacterCreationForm;
 use crate::domain::entities::character::components::CharacterInfo as DomainCharacterInfo;
-use crate::infrastructure::networking::protocol::character::CharacterInfo as ProtocolCharacterInfo;
+use crate::infrastructure::networking::char_types::CharacterInfo as ProtocolCharacterInfo;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use serde::{Deserialize, Serialize};

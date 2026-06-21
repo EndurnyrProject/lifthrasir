@@ -10,7 +10,7 @@ use super::mapping::{login_failed_to_refused, login_response_to_accepted};
 use super::{LoginPhase, QuicLoginState};
 use crate::infrastructure::networking::messages::{LoginAccepted, LoginRefused};
 use crate::infrastructure::networking::quic::channels::CONTROL;
-use crate::infrastructure::networking::quic::connection::QuicConnection;
+use crate::infrastructure::networking::quic::dispatch::IncomingMessage;
 use crate::infrastructure::networking::quic::envelope::Body;
 use crate::infrastructure::networking::quic::proto::aesir::net::{Hello, LoginRequest};
 
@@ -48,16 +48,17 @@ pub fn quic_send_hello(
     config(run_if = client_connected)
 )]
 pub fn quic_drain_control(
+    mut incoming: MessageReader<IncomingMessage>,
     mut client: ResMut<QuinnetClient>,
     mut state: ResMut<QuicLoginState>,
     mut accepted: MessageWriter<LoginAccepted>,
     mut refused: MessageWriter<LoginRefused>,
 ) {
-    for (channel, body) in QuicConnection::drain(client.connection_mut()) {
-        if channel != CONTROL {
+    for msg in incoming.read() {
+        if msg.channel != CONTROL {
             continue;
         }
-        match body {
+        match msg.body.clone() {
             Body::HelloAck(ack) => {
                 if state.phase != LoginPhase::HelloSent {
                     continue;

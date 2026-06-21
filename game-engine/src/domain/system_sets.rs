@@ -148,7 +148,7 @@ pub enum CameraSystems {
 // =============================================================================
 
 /// Character flow systems (login → character selection → zone entry)
-/// This is a long chain of 14 systems that handle the entire character flow
+/// This is a long chain of 13 systems that handle the entire character flow
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[auto_configure_system_set(
     plugin = crate::CharacterDomainPlugin,
@@ -156,7 +156,6 @@ pub enum CameraSystems {
     chain
 )]
 pub enum CharacterFlowSystems {
-    CharServerPing,
     CharServerConnection,
     CharacterList,
     CharacterSelection,

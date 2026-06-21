@@ -3,10 +3,9 @@ use crate::app::character_domain_plugin::CharacterDomainAutoPlugin;
 use crate::domain::entities::character::states::setup_character_state_machines;
 use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
 use crate::domain::entities::sprite_rendering::plugin::GenericSpriteRenderingPlugin;
-use crate::infrastructure::networking::protocol::character::{
-    BlockedCharactersReceived, CharacterCreated, CharacterCreationFailed, CharacterDeleted,
-    CharacterDeletionFailed, CharacterInfoPageReceived, CharacterServerConnected,
-    CharacterSlotInfoReceived, PingReceived, SecondPasswordRequested, ZoneServerInfoReceived,
+use crate::infrastructure::networking::char_messages::{
+    CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
+    CharacterServerConnected, CharacterSlotInfoReceived, ZoneServerInfoReceived,
 };
 use crate::infrastructure::networking::protocol::zone::{
     AccountIdReceived, ChatReceived, EntityNameAllReceived, EntityNameReceived, ParameterChanged,
@@ -23,7 +22,7 @@ use bevy::prelude::*;
 ///    - GenericSpriteRenderingPlugin - sprite hierarchy and rendering
 ///    - UnifiedCharacterEntityPlugin - character entity management (auto-plugin)
 /// 3. Register protocol layer events (networking infrastructure)
-/// 4. Register infrastructure systems (char_server_update, zone_server_update, time_sync)
+/// 4. Register infrastructure systems (zone_server_update, time_sync)
 /// 5. Add CharacterDomainAutoPlugin (all domain logic via auto_plugin)
 pub struct CharacterDomainPlugin;
 
@@ -47,11 +46,7 @@ impl Plugin for CharacterDomainPlugin {
             .add_message::<CharacterDeleted>()
             .add_message::<CharacterDeletionFailed>()
             .add_message::<ZoneServerInfoReceived>()
-            .add_message::<PingReceived>()
-            .add_message::<SecondPasswordRequested>()
-            .add_message::<CharacterInfoPageReceived>()
-            .add_message::<CharacterSlotInfoReceived>()
-            .add_message::<BlockedCharactersReceived>();
+            .add_message::<CharacterSlotInfoReceived>();
 
         // Zone protocol events (new modular architecture)
         app.add_message::<ZoneServerConnectedProtocol>()
@@ -66,7 +61,6 @@ impl Plugin for CharacterDomainPlugin {
         app.add_systems(
             Update,
             (
-                crate::infrastructure::networking::client::char_server_update_system,
                 crate::infrastructure::networking::client::zone_server_update_system,
                 crate::infrastructure::networking::client::time_sync_system,
             )

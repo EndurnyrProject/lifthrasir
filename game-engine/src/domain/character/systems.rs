@@ -1,31 +1,32 @@
-use super::components::{CharServerPingTimer, CharacterSelectionState, MapLoadingTimer};
+use super::components::{CharacterSelectionState, MapLoadingTimer};
 use super::events::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
 use crate::domain::system_sets::CharacterFlowSystems;
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::infrastructure::job::registry::JobSpriteRegistry;
-use crate::infrastructure::networking::client::CharServerClient;
-use crate::infrastructure::networking::protocol::character::{
+use crate::infrastructure::networking::char_messages::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
-    CharacterInfoPageReceived, CharacterServerConnected, ZoneServerInfoReceived,
+    CharacterServerConnected, ZoneServerInfoReceived,
 };
+use crate::infrastructure::networking::quic::character::CharacterRoster;
 use crate::infrastructure::networking::session::UserSession;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioReceiver;
+use bevy_quinnet::client::QuinnetClient;
 use std::time::{Duration, Instant};
 
-/// Builds the slot-keyed character list event from the client's cached
-/// characters, resolving job names and sprite paths. Shared by the login,
-/// manual-request, and per-page-refresh paths so the mapping lives in one place.
+/// Builds the slot-keyed character list event from the QUIC roster, resolving
+/// job names and sprite paths. Shared by the roster-change and manual-request
+/// paths so the mapping lives in one place.
 fn build_character_list_event(
-    client: &CharServerClient,
+    roster: &CharacterRoster,
     job_registry: Option<&JobSpriteRegistry>,
 ) -> CharacterListReceivedEvent {
     let mut char_list = vec![None; 15];
 
-    for net_char in client.characters() {
+    for net_char in &roster.characters {
         let slot = net_char.char_num as usize;
         if slot >= char_list.len() {
             continue;
@@ -61,12 +62,12 @@ fn build_character_list_event(
         characters: char_list,
         max_slots: 9,
         available_slots: 9,
-        display_pages: client.list_page_count().min(u8::MAX as u32) as u8,
+        display_pages: roster.page_count.min(u8::MAX as u32) as u8,
     }
 }
 
 /// System to handle explicit character list requests
-/// The character list is cached in CharServerClient after connection
+/// The character list is cached in `CharacterRoster` by the QUIC drain.
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
@@ -74,20 +75,16 @@ fn build_character_list_event(
 )]
 pub fn handle_request_character_list(
     mut request_events: MessageReader<RequestCharacterListEvent>,
-    char_client: Option<Res<CharServerClient>>,
+    roster: Res<CharacterRoster>,
     job_registry: Option<Res<JobSpriteRegistry>>,
     mut list_events: MessageWriter<CharacterListReceivedEvent>,
 ) {
     for _event in request_events.read() {
-        if let Some(client) = char_client.as_ref() {
-            list_events.write(build_character_list_event(client, job_registry.as_deref()));
-        } else {
-            warn!("RequestCharacterListEvent received but CharServerClient not initialized");
-        }
+        list_events.write(build_character_list_event(&roster, job_registry.as_deref()));
     }
 }
 
-/// System: Handle character server connection and emit character list
+/// System: Handle character server connection and transition to selection
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
@@ -95,25 +92,32 @@ pub fn handle_request_character_list(
 )]
 pub fn handle_character_server_connected(
     mut connected_events: MessageReader<CharacterServerConnected>,
-    char_client: Option<Res<CharServerClient>>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    for _ in connected_events.read() {
+        next_state.set(GameState::CharacterSelection);
+    }
+}
+
+/// System: Re-emit the UI character list whenever the roster mutates.
+///
+/// The `!roster.is_added()` guard skips the startup default-insert frame so we
+/// don't emit an empty list; the first real list arrives when the QUIC drain
+/// mutates the roster (is_changed, not is_added). Not gated on the selection
+/// state, since the first `CharList` is processed the same frame the state
+/// transition is queued.
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(in_set = CharacterFlowSystems::CharacterList)
+)]
+pub fn handle_character_roster_changed(
+    roster: Res<CharacterRoster>,
     job_registry: Option<Res<JobSpriteRegistry>>,
     mut list_events: MessageWriter<CharacterListReceivedEvent>,
-    mut next_state: ResMut<NextState<GameState>>,
-    mut commands: Commands,
 ) {
-    for _event in connected_events.read() {
-        let Some(client) = char_client.as_ref() else {
-            continue;
-        };
-
-        commands.insert_resource(CharServerPingTimer(Timer::from_seconds(
-            15.0,
-            TimerMode::Repeating,
-        )));
-
-        list_events.write(build_character_list_event(client, job_registry.as_deref()));
-
-        next_state.set(GameState::CharacterSelection);
+    if roster.is_changed() && !roster.is_added() {
+        list_events.write(build_character_list_event(&roster, job_registry.as_deref()));
     }
 }
 
@@ -164,7 +168,7 @@ pub fn handle_character_creation_failed_protocol(
     mut domain_events: MessageWriter<CharacterCreationFailedEvent>,
 ) {
     for event in protocol_events.read() {
-        use crate::infrastructure::networking::protocol::character::CharCreationError;
+        use crate::infrastructure::networking::char_types::CharCreationError;
         let error_msg = match event.error {
             CharCreationError::NameExists => "Character name already exists",
             CharCreationError::InvalidName => "Invalid character name",
@@ -262,88 +266,27 @@ pub fn spawn_unified_character_from_selection(
 )]
 pub fn handle_select_character(
     mut events: MessageReader<SelectCharacterEvent>,
-    mut char_client: Option<ResMut<CharServerClient>>,
+    roster: Res<CharacterRoster>,
     mut state: ResMut<CharacterSelectionState>,
     mut selected_events: MessageWriter<CharacterSelectedEvent>,
 ) {
     for event in events.read() {
         state.selected_slot = Some(event.slot);
 
-        if let Some(client) = char_client.as_deref_mut() {
-            // Find the character data for this slot
-            let character = client
-                .characters()
-                .iter()
-                .find(|c| c.char_num == event.slot)
-                .cloned();
-
-            if let Some(net_char) = character {
-                if let Err(e) = client.select_character(event.slot) {
-                    error!("Failed to select character: {:?}", e);
-                } else {
-                    selected_events.write(CharacterSelectedEvent {
-                        character: CharacterInfo::from(net_char),
-                        slot: event.slot,
-                    });
-                }
-            } else {
-                error!("Character not found in slot {}", event.slot);
-            }
-        } else {
-            error!("CharServerClient not initialized - cannot select character");
-        }
-    }
-}
-
-#[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
-    schedule = Update,
-    config(in_set = CharacterFlowSystems::CharacterCreation)
-)]
-pub fn handle_create_character(
-    mut events: MessageReader<CreateCharacterRequestEvent>,
-    mut char_client: Option<ResMut<CharServerClient>>,
-) {
-    for event in events.read() {
-        if let Err(e) = event.form.validate() {
-            error!("Character creation validation failed: {:?}", e);
+        let Some(net_char) = roster
+            .characters
+            .iter()
+            .find(|c| c.char_num == event.slot)
+            .cloned()
+        else {
+            error!("Character not found in slot {}", event.slot);
             continue;
-        }
+        };
 
-        if let Some(client) = char_client.as_deref_mut() {
-            if let Err(e) = client.create_character(
-                &event.form.name,
-                event.form.slot,
-                event.form.hair_color,
-                event.form.hair_style,
-                event.form.starting_job,
-                event.form.sex,
-            ) {
-                error!("Failed to create character: {:?}", e);
-            }
-        } else {
-            error!("CharServerClient not initialized - cannot create character");
-        }
-    }
-}
-
-#[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
-    schedule = Update,
-    config(in_set = CharacterFlowSystems::CharacterDeletion)
-)]
-pub fn handle_delete_character(
-    mut events: MessageReader<DeleteCharacterRequestEvent>,
-    mut char_client: Option<ResMut<CharServerClient>>,
-) {
-    for event in events.read() {
-        if let Some(client) = char_client.as_deref_mut() {
-            if let Err(e) = client.delete_character(event.character_id) {
-                error!("Failed to delete character: {:?}", e);
-            }
-        } else {
-            error!("CharServerClient not initialized - cannot delete character");
-        }
+        selected_events.write(CharacterSelectedEvent {
+            character: CharacterInfo::from(net_char),
+            slot: event.slot,
+        });
     }
 }
 
@@ -365,7 +308,7 @@ pub struct ZoneSessionData {
 )]
 pub fn handle_zone_server_info(
     mut events: MessageReader<ZoneServerInfoReceivedEvent>,
-    mut char_client: Option<ResMut<CharServerClient>>,
+    mut quinnet: ResMut<QuinnetClient>,
     mut game_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
     characters: Query<(
@@ -392,10 +335,8 @@ pub fn handle_zone_server_info(
             character_name,
         });
 
-        if let Some(ref mut client) = char_client.as_deref_mut() {
-            info!("Disconnecting from character server");
-            client.disconnect();
-        }
+        info!("Closing QUIC character connection before zone handoff");
+        quinnet.close_all_connections();
 
         let mut zone_client_instance =
             crate::infrastructure::networking::client::ZoneServerClient::with_session(
@@ -644,72 +585,6 @@ pub fn handle_character_deleted(
     }
 }
 
-#[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
-    schedule = Update,
-    config(in_set = CharacterFlowSystems::CharacterList)
-)]
-pub fn handle_refresh_character_list(
-    mut events: MessageReader<RefreshCharacterListEvent>,
-    char_client: Option<ResMut<CharServerClient>>,
-) {
-    if events.read().count() == 0 {
-        return;
-    }
-
-    let Some(mut client) = char_client else {
-        warn!("RefreshCharacterListEvent received but CharServerClient not initialized");
-        return;
-    };
-
-    if let Err(e) = client.request_character_list() {
-        error!("Failed to request character list refresh: {:?}", e);
-    }
-}
-
-/// Rebuilds the character-select list once the server answers a refresh
-/// (CH_CHARLIST_REQ) with HC_ACK_CHARINFO_PER_PAGE. The cached list has already
-/// been replaced by the packet handler, so this just re-emits the UI event.
-#[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
-    schedule = Update,
-    config(in_set = CharacterFlowSystems::CharacterList)
-)]
-pub fn handle_character_info_page_received(
-    mut events: MessageReader<CharacterInfoPageReceived>,
-    char_client: Option<Res<CharServerClient>>,
-    job_registry: Option<Res<JobSpriteRegistry>>,
-    mut list_events: MessageWriter<CharacterListReceivedEvent>,
-) {
-    if events.read().count() == 0 {
-        return;
-    }
-
-    if let Some(client) = char_client.as_ref() {
-        list_events.write(build_character_list_event(client, job_registry.as_deref()));
-    }
-}
-
-/// System that sends periodic pings to keep the connection alive
-/// Throttled to every 15 seconds using CharServerPingTimer
-#[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
-    schedule = Update,
-    config(in_set = CharacterFlowSystems::CharServerPing)
-)]
-pub fn update_char_client(
-    char_client: Option<ResMut<CharServerClient>>,
-    time: Res<Time>,
-    ping_timer: Option<ResMut<CharServerPingTimer>>,
-) {
-    if let (Some(mut client), Some(mut timer)) = (char_client, ping_timer) {
-        timer.0.tick(time.delta());
-        if timer.0.just_finished() {
-            let _ = client.send_ping();
-        }
-    }
-}
-
 /// System to start map loading timer when map loading begins
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
@@ -888,4 +763,78 @@ pub fn spawn_character_sprite_on_game_start(
     );
 
     debug!("Spawning character sprite at {:?}", world_pos);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::networking::quic::proto::aesir::net;
+
+    fn char_list_with_one(char_num: u32, name: &str) -> net::CharList {
+        net::CharList {
+            account_id: 2000001,
+            normal_slots: 9,
+            premium_slots: 0,
+            billing_slots: 0,
+            producible_slots: 9,
+            valid_slots: 9,
+            characters: vec![net::Character {
+                gid: 150001,
+                name: name.into(),
+                class: 7,
+                base_level: 42,
+                job_level: 10,
+                base_exp: 0,
+                job_exp: 0,
+                zeny: 0,
+                hp: 0,
+                max_hp: 0,
+                sp: 0,
+                max_sp: 0,
+                str: 0,
+                agi: 0,
+                vit: 0,
+                int: 0,
+                dex: 0,
+                luk: 0,
+                status_point: 0,
+                skill_point: 0,
+                hair: 0,
+                hair_color: 0,
+                clothes_color: 0,
+                weapon: 0,
+                shield: 0,
+                head_top: 0,
+                head_mid: 0,
+                head_bottom: 0,
+                robe: 0,
+                char_num,
+                last_map: "prontera".into(),
+                sex: 0,
+                option: 0,
+                karma: 0,
+                manner: 0,
+                rename: 0,
+                delete_date: 0,
+            }],
+            page_count: 3,
+            pincode_enabled: false,
+        }
+    }
+
+    #[test]
+    fn build_character_list_event_places_character_at_its_slot() {
+        let mut roster = CharacterRoster::default();
+        roster.update_from_char_list(&char_list_with_one(2, "Vidar"));
+
+        let event = build_character_list_event(&roster, None);
+
+        assert_eq!(event.display_pages, roster.page_count as u8);
+        assert!(event.characters[0].is_none());
+        let placed = event.characters[2]
+            .as_ref()
+            .expect("character should land in slot 2");
+        assert_eq!(placed.base.name, "Vidar");
+        assert_eq!(placed.base.char_num, 2);
+    }
 }

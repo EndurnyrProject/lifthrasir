@@ -1,72 +1,13 @@
 use game_engine::infrastructure::networking::{
     protocol::{
-        character::{
-            CharacterClientPacket, CharacterInfo, CharacterProtocol, ChEnterPacket,
-            ChSelectCharPacket, HC_ACCEPT_ENTER, HC_NOTIFY_ZONESVR,
-        },
         zone::{
             CzEnter2Packet, CzNotifyActorinitPacket, ZoneClientPacket, ZoneProtocol,
             ZC_ACCEPT_ENTER, ZC_AID, ZC_REFUSE_ENTER,
         },
         ClientPacket, PacketSize, Protocol,
     },
-    CharServerClient, ZoneServerClient,
+    ZoneServerClient,
 };
-
-#[cfg(test)]
-mod character_protocol_tests {
-    use super::*;
-
-    #[test]
-    fn test_character_packet_sizes() {
-        // HC_ACCEPT_ENTER is variable length
-        assert!(matches!(
-            CharacterProtocol::packet_size(HC_ACCEPT_ENTER),
-            PacketSize::Variable { .. }
-        ));
-
-        // HC_NOTIFY_ZONESVR (0x0AC5) is fixed 156 bytes
-        assert_eq!(
-            CharacterProtocol::packet_size(HC_NOTIFY_ZONESVR),
-            PacketSize::Fixed(156)
-        );
-    }
-
-    #[test]
-    fn test_ch_enter_serialization() {
-        let packet = ChEnterPacket::new(12345, 67890, 11111);
-        let bytes = packet.serialize();
-
-        // Verify packet structure
-        assert_eq!(bytes.len(), 15); // Fixed size
-        assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), 0x0065); // CH_ENTER
-
-        // Verify account ID
-        assert_eq!(
-            u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]),
-            12345
-        );
-    }
-
-    #[test]
-    fn test_ch_select_char_serialization() {
-        let packet = ChSelectCharPacket::new(2);
-        let bytes = packet.serialize();
-
-        assert_eq!(bytes.len(), 3); // Fixed size
-        assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), 0x0066); // CH_SELECT_CHAR
-        assert_eq!(bytes[2], 2); // Slot
-    }
-
-    #[test]
-    fn test_character_client_packet_enum() {
-        let packet = CharacterClientPacket::ChEnter(ChEnterPacket::new(12345, 67890, 11111));
-        assert_eq!(packet.packet_id(), 0x0065); // CH_ENTER
-
-        let bytes = packet.serialize();
-        assert_eq!(bytes.len(), 15);
-    }
-}
 
 #[cfg(test)]
 mod zone_protocol_tests {
@@ -124,24 +65,7 @@ mod zone_protocol_tests {
 #[cfg(test)]
 mod client_wrapper_tests {
     use super::*;
-    use game_engine::infrastructure::networking::protocol::{
-        character::CharacterContext, zone::ZoneContext,
-    };
-
-    #[test]
-    fn test_char_server_client_creation() {
-        let client = CharServerClient::with_session(12345, 67890, 11111);
-        assert!(!client.is_connected());
-        assert_eq!(client.characters().len(), 0);
-        assert!(client.zone_server_info().is_none());
-    }
-
-    #[test]
-    fn test_char_server_client_with_context() {
-        let context = CharacterContext::with_session(12345, 67890, 11111);
-        let client = CharServerClient::new(context);
-        assert!(!client.is_connected());
-    }
+    use game_engine::infrastructure::networking::protocol::zone::ZoneContext;
 
     #[test]
     fn test_zone_server_client_creation() {
@@ -165,22 +89,12 @@ mod protocol_consistency_tests {
     use super::*;
 
     #[test]
-    fn test_character_protocol_name() {
-        assert_eq!(CharacterProtocol::NAME, "Character");
-    }
-
-    #[test]
     fn test_zone_protocol_name() {
         assert_eq!(ZoneProtocol::NAME, "Zone");
     }
 
     #[test]
     fn test_packet_id_consistency() {
-        // Character packets
-        assert_eq!(ChEnterPacket::PACKET_ID, 0x0065);
-        assert_eq!(ChSelectCharPacket::PACKET_ID, 0x0066);
-
-        // Zone packets
         assert_eq!(CzEnter2Packet::PACKET_ID, 0x0363);
         assert_eq!(CzNotifyActorinitPacket::PACKET_ID, 0x007D);
     }
@@ -189,16 +103,6 @@ mod protocol_consistency_tests {
 #[cfg(test)]
 mod serialization_roundtrip_tests {
     use super::*;
-
-    #[test]
-    fn test_character_packet_roundtrip() {
-        let original = ChEnterPacket::new(12345, 67890, 11111);
-        let bytes = original.serialize();
-
-        let packet_id = u16::from_le_bytes([bytes[0], bytes[1]]);
-        assert_eq!(packet_id, ChEnterPacket::PACKET_ID);
-        assert_eq!(bytes.len(), 15);
-    }
 
     #[test]
     fn test_zone_packet_roundtrip() {

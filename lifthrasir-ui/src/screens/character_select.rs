@@ -815,7 +815,7 @@ fn featured(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::infrastructure::networking::protocol::character::CharacterInfo as ProtocolCharacterInfo;
+    use game_engine::infrastructure::networking::char_types::CharacterInfo as ProtocolCharacterInfo;
 
     #[test]
     fn featured_returns_occupied_slot() {

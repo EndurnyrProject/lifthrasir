@@ -2,7 +2,6 @@ pub mod dispatcher;
 pub mod traits;
 
 // Protocol implementations
-pub mod character;
 pub mod zone;
 
 // Re-export commonly used types
