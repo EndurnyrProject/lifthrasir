@@ -26,7 +26,7 @@ use crate::{
     },
     infrastructure::{
         job::JobSpriteRegistry,
-        networking::zone_messages::{UnitEntered, UnitLeft},
+        networking::zone_messages::{UnitEntered, UnitLeft, UnitMoved},
     },
     utils::coordinates::spawn_coords_to_world_position,
 };
@@ -118,6 +118,7 @@ pub fn spawn_network_entity_system(
     mut commands: Commands,
     mut spawn_events: MessageReader<UnitEntered>,
     mut entity_registry: ResMut<EntityRegistry>,
+    mut unit_moved: MessageWriter<UnitMoved>,
     job_registry: Option<Res<JobSpriteRegistry>>,
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
 ) {
@@ -128,13 +129,16 @@ pub fn spawn_network_entity_system(
         if let Some(existing_entity) = entity_registry.get_entity(event.gid) {
             commands.entity(existing_entity).remove::<PendingDespawn>();
 
-            // NOTE: a moving entity re-entering view keeps its existing interpolated
-            // movement; the remote-position refresh that rode the legacy movement event
-            // is now owned by the periodic Snapshot path (Approach B, deferred).
-            debug!(
-                "Entity GID {} re-entered view, canceling pending despawn",
-                event.gid
-            );
+            // aesir re-sends a moving UnitSpawn per step; forward the destination to
+            // the movement domain so the entity keeps walking instead of freezing.
+            if let Some((dst_x, dst_y)) = event.destination {
+                unit_moved.write(UnitMoved {
+                    gid: event.gid,
+                    dst_x: dst_x as u32,
+                    dst_y: dst_y as u32,
+                    speed: event.speed as u32,
+                });
+            }
             continue;
         }
 

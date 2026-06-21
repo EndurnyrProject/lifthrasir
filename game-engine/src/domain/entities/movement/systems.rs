@@ -25,7 +25,7 @@ use crate::{
                 proto::aesir::net::MoveRequest,
                 zone::{QuicZoneState, ZonePhase},
             },
-            zone_messages::{SelfMoved, UnitMoveStopped},
+            zone_messages::{SelfMoved, UnitMoveStopped, UnitMoved},
         },
     },
     utils::coordinates::spawn_coords_to_world_position,
@@ -271,6 +271,72 @@ pub fn handle_movement_confirmed_system(
             dest_y: event.dest_y,
             server_tick: event.server_tick,
         });
+    }
+}
+
+/// Drives remote entities (mobs, other players) walking cell-by-cell from aesir's
+/// per-step moving UnitSpawn. Unlike `SelfMoved`, these carry only a destination, so
+/// the source is the entity's current rendered cell — robust to latency and to the
+/// server reporting the post-step cell. Reuses the same interpolation + stop->idle path.
+#[auto_add_system(
+    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    schedule = Update,
+    config(
+        in_set = MovementSystems::Confirm,
+        run_if = in_state(GameState::InGame)
+    )
+)]
+pub fn handle_remote_movement_system(
+    mut commands: Commands,
+    mut events: MessageReader<UnitMoved>,
+    entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
+    query: Query<(&Transform, &MovementState)>,
+    mut behaviors: Query<BehaviorMut<AnimationState>>,
+) {
+    for moved in events.read() {
+        let Some(entity) = entity_registry.get_entity(moved.gid) else {
+            continue;
+        };
+        if entity_registry.is_local_player(entity) {
+            continue;
+        }
+        let Ok((transform, state)) = query.get(entity) else {
+            continue;
+        };
+
+        let dest_x = moved.dst_x as u16;
+        let dest_y = moved.dst_y as u16;
+        let (src_x, src_y) =
+            crate::utils::coordinates::world_position_to_spawn_coords(transform.translation, 0, 0);
+
+        if (src_x, src_y) == (dest_x, dest_y) {
+            continue;
+        }
+
+        let src_world_pos = Vec3::new(transform.translation.x, 0.0, transform.translation.z);
+        let dest_world_pos = spawn_coords_to_world_position(dest_x, dest_y, 0, 0);
+        let target =
+            MovementTarget::new(src_x, src_y, dest_x, dest_y, src_world_pos, dest_world_pos, 0);
+
+        let direction =
+            Direction::from_movement_vector(dest_x as f32 - src_x as f32, dest_y as f32 - src_y as f32);
+        let already_moving = matches!(state, MovementState::Moving);
+
+        let Ok(mut entity_commands) = commands.get_entity(entity) else {
+            continue;
+        };
+        entity_commands.insert((
+            target,
+            MovementState::Moving,
+            MovementSpeed::from_server_speed(moved.speed as u16),
+            CharacterDirection { facing: direction },
+        ));
+
+        if !already_moving {
+            if let Ok(mut behavior) = behaviors.get_mut(entity) {
+                behavior.start(AnimationState::Walking);
+            }
+        }
     }
 }
 
