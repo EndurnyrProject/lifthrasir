@@ -1,4 +1,4 @@
-//! Chat box: appends incoming `ChatReceived` lines to the history text and sends the
+//! Chat box: appends incoming `ChatHeard` lines to the history text and sends the
 //! input on submit via the engine's `ChatSendRequested` event.
 //!
 //! Built as raw `bevy_ui` by [`spawn_chat_box`] (called from the HUD root). The input
@@ -11,7 +11,7 @@ use bevy::prelude::*;
 use bevy_ui_text_input::{SubmitText, TextInputMode, TextInputNode, TextInputPrompt};
 use game_engine::core::state::GameState;
 use game_engine::domain::character::chat::ChatSendRequested;
-use game_engine::infrastructure::networking::protocol::zone::ChatReceived;
+use game_engine::infrastructure::networking::zone_messages::ChatHeard;
 
 use crate::theme;
 
@@ -343,7 +343,7 @@ fn append_line(history: &mut String, line: &str) {
 }
 
 fn append_incoming_chat(
-    mut received: MessageReader<ChatReceived>,
+    mut received: MessageReader<ChatHeard>,
     mut history: Query<&mut Text, With<ChatHistory>>,
 ) {
     let Ok(mut text) = history.single_mut() else {

@@ -8,7 +8,7 @@ use crate::{
         markers::LocalPlayer,
         registry::EntityRegistry,
     },
-    infrastructure::networking::protocol::zone::handlers::ParameterChanged,
+    infrastructure::networking::zone_messages::ParamChanged,
 };
 
 #[auto_add_system(
@@ -17,7 +17,7 @@ use crate::{
     config(after = crate::domain::entities::spawning::systems::spawn_network_entity_system)
 )]
 pub fn update_character_status_system(
-    mut param_events: MessageReader<ParameterChanged>,
+    mut param_events: MessageReader<ParamChanged>,
     mut status_changed_events: MessageWriter<StatusParameterChanged>,
     entity_registry: Res<EntityRegistry>,
     mut query: Query<&mut CharacterStatus, With<LocalPlayer>>,
@@ -33,10 +33,13 @@ pub fn update_character_status_system(
     }
 
     for event in events {
-        let Some(param) = StatusParameter::from_var_id(event.var_id) else {
+        let var_id = event.var as u16;
+        let value = event.value as u32;
+
+        let Some(param) = StatusParameter::from_var_id(var_id) else {
             warn!(
                 "Unknown status parameter ID: 0x{:04X} (value: {})",
-                event.var_id, event.value
+                var_id, value
             );
             continue;
         };
@@ -50,13 +53,13 @@ pub fn update_character_status_system(
         };
 
         let old_value = status.get_param(param);
-        status.update_param(param, event.value);
+        status.update_param(param, value);
 
         debug!(
             "Status parameter updated: {:?} ({}) = {} (was: {})",
             param,
             param.name(),
-            event.value,
+            value,
             old_value
         );
 
@@ -64,7 +67,7 @@ pub fn update_character_status_system(
             status_changed_events.write(StatusParameterChanged {
                 entity,
                 parameter: param,
-                new_value: event.value,
+                new_value: value,
                 old_value: Some(old_value),
             });
         }

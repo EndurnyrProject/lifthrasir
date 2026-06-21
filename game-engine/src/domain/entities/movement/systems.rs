@@ -20,7 +20,7 @@ use crate::{
         assets::loaders::RoAltitudeAsset,
         networking::{
             client::ZoneServerClient,
-            protocol::zone::{MovementConfirmedByServer, MovementStoppedByServer},
+            zone_messages::{SelfMoved, UnitMoveStopped},
         },
     },
     utils::coordinates::spawn_coords_to_world_position,
@@ -60,6 +60,16 @@ pub fn send_movement_requests_observer(
     }
 }
 
+/// Local-player-space view of a `SelfMoved`, casting proto u32 coords back to the
+/// u16 cell space the interpolation path uses.
+struct MovementConfirmedFields {
+    src_x: u16,
+    src_y: u16,
+    dest_x: u16,
+    dest_y: u16,
+    server_tick: u32,
+}
+
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
@@ -71,19 +81,25 @@ pub fn send_movement_requests_observer(
 #[allow(clippy::too_many_arguments)]
 pub fn handle_movement_confirmed_system(
     mut commands: Commands,
-    mut server_events: MessageReader<MovementConfirmedByServer>,
+    mut server_events: MessageReader<SelfMoved>,
     entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
     query: Query<(Option<&MovementTarget>, &Transform, Option<&WalkablePath>)>,
     movement_states: Query<&MovementState>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
 ) {
-    for event in server_events.read() {
-        let Some(entity) = entity_registry.get_entity(event.aid) else {
-            warn!(
-                "Movement confirmed for unknown entity AID: {} - may not be spawned yet",
-                event.aid
-            );
+    for moved in server_events.read() {
+        // SelfMove targets the local player (the proto carries no entity id).
+        let event = MovementConfirmedFields {
+            src_x: moved.src_x as u16,
+            src_y: moved.src_y as u16,
+            dest_x: moved.dst_x as u16,
+            dest_y: moved.dst_y as u16,
+            server_tick: moved.start_time as u32,
+        };
+
+        let Some(entity) = entity_registry.local_player_entity() else {
+            warn!("Self move received but local player entity not spawned yet");
             continue;
         };
 
@@ -315,32 +331,35 @@ pub fn interpolate_movement_system(
     )
 )]
 pub fn handle_server_stop_system(
-    mut server_stop_events: MessageReader<MovementStoppedByServer>,
+    mut server_stop_events: MessageReader<UnitMoveStopped>,
     mut commands: Commands,
     entity_registry: Res<crate::domain::entities::registry::EntityRegistry>,
     mut transforms: Query<&mut Transform>,
 ) {
     for server_event in server_stop_events.read() {
-        let Some(entity) = entity_registry.get_entity(server_event.aid) else {
-            warn!("Movement stop for unknown entity AID: {}", server_event.aid);
+        let Some(entity) = entity_registry.get_entity(server_event.gid) else {
+            warn!("Movement stop for unknown entity GID: {}", server_event.gid);
             continue;
         };
 
+        let stop_x = server_event.x as u16;
+        let stop_y = server_event.y as u16;
+
         debug!(
-            "Movement stopped by server for entity {:?} at ({}, {}) tick {}",
-            entity, server_event.x, server_event.y, server_event.server_tick
+            "Movement stopped by server for entity {:?} at ({}, {})",
+            entity, stop_x, stop_y
         );
 
         if let Ok(mut transform) = transforms.get_mut(entity) {
-            let final_pos = spawn_coords_to_world_position(server_event.x, server_event.y, 0, 0);
+            let final_pos = spawn_coords_to_world_position(stop_x, stop_y, 0, 0);
             transform.translation.x = final_pos.x;
             transform.translation.z = final_pos.z;
         }
 
         commands.trigger(MovementStopped {
             entity,
-            x: server_event.x,
-            y: server_event.y,
+            x: stop_x,
+            y: stop_y,
             reason: StopReason::ServerInterrupted,
         });
     }

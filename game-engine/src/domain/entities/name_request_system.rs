@@ -4,10 +4,7 @@ use crate::{
         entities::{components::EntityName, hover::EntityHoverEntered, registry::EntityRegistry},
         system_sets::EntityInteractionSystems,
     },
-    infrastructure::networking::{
-        client::ZoneServerClient,
-        protocol::zone::{EntityNameAllReceived, EntityNameReceived},
-    },
+    infrastructure::networking::{client::ZoneServerClient, zone_messages::EntityNamed},
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -45,29 +42,11 @@ pub fn name_request_observer(
 )]
 pub fn name_response_handler_system(
     mut commands: Commands,
-    mut basic_name_events: MessageReader<EntityNameReceived>,
-    mut full_name_events: MessageReader<EntityNameAllReceived>,
+    mut name_events: MessageReader<EntityNamed>,
     entity_registry: Res<EntityRegistry>,
 ) {
-    for event in basic_name_events.read() {
-        let aid = event.char_id;
-
-        let Some(entity) = entity_registry.get_entity(aid) else {
-            continue;
-        };
-
-        if commands.get_entity(entity).is_err() {
-            continue;
-        }
-
-        let entity_name = EntityName::new(event.name.clone());
-        commands.entity(entity).insert(entity_name);
-    }
-
-    for event in full_name_events.read() {
-        let aid = event.gid;
-
-        let Some(entity) = entity_registry.get_entity(aid) else {
+    for event in name_events.read() {
+        let Some(entity) = entity_registry.get_entity(event.gid) else {
             continue;
         };
 

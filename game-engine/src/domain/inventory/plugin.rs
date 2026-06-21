@@ -20,21 +20,14 @@ impl Plugin for InventoryPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::infrastructure::networking::zone_messages::InventoryReceived;
 
     #[test]
-    fn plugin_registers_messages_and_resource() {
+    fn plugin_registers_resource() {
         let mut app = App::new();
+        app.add_message::<InventoryReceived>();
         app.add_plugins(InventoryPlugin);
 
         assert!(app.world().contains_resource::<Inventory>());
-        assert!(app
-            .world()
-            .contains_resource::<Messages<InventoryItemsReceived>>());
-        assert!(app
-            .world()
-            .contains_resource::<Messages<InventoryDumpStarted>>());
-        assert!(app
-            .world()
-            .contains_resource::<Messages<InventoryDumpCompleted>>());
     }
 }

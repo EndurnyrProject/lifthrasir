@@ -17,8 +17,7 @@ use crate::{
             pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
             registry::EntityRegistry,
             spawning::events::{
-                DespawnEntity, EntityVanishRequested, PendingSpawnBuffer, RequestEntityVanish,
-                SpawnEntity,
+                DespawnEntity, EntityVanishRequested, PendingSpawnBuffer,
             },
             sprite_rendering::{
                 components::{EntitySpriteData, EntitySpriteInfo},
@@ -28,7 +27,8 @@ use crate::{
         system_sets::EntityLifecycleSystems,
     },
     infrastructure::{
-        job::JobSpriteRegistry, networking::protocol::zone::MovementConfirmedByServer,
+        job::JobSpriteRegistry,
+        networking::zone_messages::{UnitEntered, UnitLeft},
     },
     utils::coordinates::spawn_coords_to_world_position,
 };
@@ -36,7 +36,77 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioEmitter;
 
-/// Spawn network entities from SpawnEntity events
+/// Legacy-shaped view of a `UnitEntered`, so the spawn body keeps its original
+/// field names/types after the move/stand/new-entry collapse onto one event.
+struct SpawnFields {
+    aid: u32,
+    gid: u32,
+    object_type: crate::domain::entities::types::ObjectType,
+    name: String,
+    position: (u16, u16),
+    direction: u8,
+    destination: Option<(u16, u16)>,
+    move_start_time: Option<u32>,
+    current_server_tick: u32,
+    job: u16,
+    head: u16,
+    gender: u8,
+    head_palette: u16,
+    body_palette: u16,
+    weapon: u32,
+    shield: u32,
+    head_bottom: u16,
+    head_mid: u16,
+    head_top: u16,
+    robe: u16,
+    hp: u32,
+    max_hp: u32,
+    speed: u16,
+    level: u16,
+}
+
+impl From<&UnitEntered> for SpawnFields {
+    fn from(e: &UnitEntered) -> Self {
+        // NOTE: `UnitEntered` collapses STAND/NEW/MOVE-entry; `moving` selects the walking
+        // branch and the `dst_*`/`move_start_time` fields carry the move.
+        let destination = if e.moving {
+            Some((e.dst_x as u16, e.dst_y as u16))
+        } else {
+            None
+        };
+        // NOTE: the proto sends no per-spawn server "now"; with only move_start_time,
+        // elapsed = now - start collapses to 0 (entity walks from its source cell).
+        // Upgrade path: derive a current tick from the time-sync clock (Approach B).
+        SpawnFields {
+            aid: e.aid,
+            gid: e.gid,
+            object_type: crate::domain::entities::types::ObjectType::from(e.object_type as u8),
+            name: e.name.clone(),
+            position: (e.x as u16, e.y as u16),
+            direction: e.dir as u8,
+            destination,
+            move_start_time: e.moving.then_some(e.move_start_time as u32),
+            current_server_tick: e.move_start_time as u32,
+            job: e.job as u16,
+            head: e.head as u16,
+            gender: e.sex as u8,
+            head_palette: e.head_palette as u16,
+            body_palette: e.body_palette as u16,
+            weapon: e.weapon,
+            shield: e.shield,
+            head_bottom: e.accessory as u16,
+            head_mid: e.accessory2 as u16,
+            head_top: e.accessory3 as u16,
+            robe: e.robe as u16,
+            hp: e.hp,
+            max_hp: e.max_hp,
+            speed: e.speed as u16,
+            level: e.clevel as u16,
+        }
+    }
+}
+
+/// Spawn network entities from UnitEntered events
 #[auto_add_system(
     plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
     schedule = Update,
@@ -48,37 +118,25 @@ use bevy_kira_audio::prelude::SpatialAudioEmitter;
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_network_entity_system(
     mut commands: Commands,
-    mut spawn_events: MessageReader<SpawnEntity>,
+    mut spawn_events: MessageReader<UnitEntered>,
     mut entity_registry: ResMut<EntityRegistry>,
     job_registry: Option<Res<JobSpriteRegistry>>,
-    mut movement_events: MessageWriter<MovementConfirmedByServer>,
     pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
 ) {
-    for event in spawn_events.read() {
+    for unit in spawn_events.read() {
+        let event = SpawnFields::from(unit);
+
         // Check if entity already exists (e.g., spawned from character selection or re-entering view)
         if let Some(existing_entity) = entity_registry.get_entity(event.aid) {
             commands.entity(existing_entity).remove::<PendingDespawn>();
 
-            if let Some(destination) = event.destination {
-                debug!(
-                    "Entity AID {} re-entered view, canceling pending despawn and updating movement: ({}, {}) -> ({}, {})",
-                    event.aid, event.position.0, event.position.1, destination.0, destination.1
-                );
-
-                movement_events.write(MovementConfirmedByServer {
-                    aid: event.aid,
-                    src_x: event.position.0,
-                    src_y: event.position.1,
-                    dest_x: destination.0,
-                    dest_y: destination.1,
-                    server_tick: event.move_start_time.unwrap_or(0),
-                });
-            } else {
-                debug!(
-                    "Entity AID {} re-entered view, canceling pending despawn",
-                    event.aid
-                );
-            }
+            // NOTE: a moving entity re-entering view keeps its existing interpolated
+            // movement; the remote-position refresh that rode the legacy movement event
+            // is now owned by the periodic Snapshot path (Approach B, deferred).
+            debug!(
+                "Entity AID {} re-entered view, canceling pending despawn",
+                event.aid
+            );
             continue;
         }
 
@@ -476,31 +534,31 @@ pub fn cleanup_despawned_entities_system(
 )]
 pub fn bridge_vanish_requests_system(
     mut commands: Commands,
-    mut vanish_requests: MessageReader<RequestEntityVanish>,
+    mut vanish_requests: MessageReader<UnitLeft>,
     entity_registry: Res<EntityRegistry>,
     entity_query: Query<Entity>,
 ) {
     for request in vanish_requests.read() {
-        let Some(entity) = entity_registry.get_entity(request.aid) else {
+        let Some(entity) = entity_registry.get_entity(request.gid) else {
             warn!(
-                "Vanish request for unknown entity AID: {} (may already be despawned)",
-                request.aid
+                "Vanish request for unknown entity GID: {} (may already be despawned)",
+                request.gid
             );
             continue;
         };
 
         if entity_query.get(entity).is_err() {
             debug!(
-                "Vanish request for AID {} but entity {:?} not in ECS yet (registry desync)",
-                request.aid, entity
+                "Vanish request for GID {} but entity {:?} not in ECS yet (registry desync)",
+                request.gid, entity
             );
             continue;
         }
 
         commands.trigger(EntityVanishRequested {
             entity,
-            aid: request.aid,
-            vanish_type: request.vanish_type,
+            aid: request.gid,
+            vanish_type: request.reason as u8,
         });
     }
 }
@@ -617,7 +675,7 @@ pub fn check_pending_despawns_system(
     )
 )]
 pub fn buffer_spawn_events_system(
-    mut spawn_events: MessageReader<SpawnEntity>,
+    mut spawn_events: MessageReader<UnitEntered>,
     mut buffer: ResMut<PendingSpawnBuffer>,
 ) {
     for event in spawn_events.read() {
@@ -640,7 +698,7 @@ pub fn buffer_spawn_events_system(
 )]
 pub fn drain_spawn_buffer_system(
     mut buffer: ResMut<PendingSpawnBuffer>,
-    mut spawn_writer: MessageWriter<SpawnEntity>,
+    mut spawn_writer: MessageWriter<UnitEntered>,
 ) {
     let count = buffer.events.len();
     if count > 0 {

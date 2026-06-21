@@ -1,26 +1,44 @@
-use super::events::{InventoryDumpCompleted, InventoryDumpStarted, InventoryItemsReceived};
+use super::item::Item;
 use super::resource::Inventory;
+use crate::infrastructure::networking::zone_messages::{InventoryReceived, ZoneInventoryItem};
 use bevy::prelude::*;
 
-pub fn apply_inventory_messages(
-    mut started: MessageReader<InventoryDumpStarted>,
-    mut received: MessageReader<InventoryItemsReceived>,
-    mut completed: MessageReader<InventoryDumpCompleted>,
-    mut inventory: ResMut<Inventory>,
-) {
-    if started.is_empty() && received.is_empty() && completed.is_empty() {
-        return;
+/// Maps a proto-shaped inventory slot onto the domain `Item`.
+///
+/// NOTE: the proto carries `location` (allowed equip slots) but no worn bitmask;
+/// `wear_state` (and thus `is_equipped()`) defaults to 0 until equip results wire it.
+fn to_item(slot: &ZoneInventoryItem) -> Item {
+    let mut cards = [0u32; 4];
+    for (dst, src) in cards.iter_mut().zip(slot.cards.iter()) {
+        *dst = *src;
     }
 
-    for _ in started.read() {
+    Item {
+        index: slot.index as u16,
+        item_id: slot.nameid,
+        item_type: slot.type_ as u8,
+        amount: slot.amount as u16,
+        location: slot.location,
+        wear_state: 0,
+        refine: slot.refine as u8,
+        cards,
+        options: vec![],
+        expire_time: slot.expire_time as u32,
+        view_sprite: slot.look as u16,
+        identified: slot.identified,
+        damaged: slot.attribute != 0,
+    }
+}
+
+pub fn apply_inventory_messages(
+    mut received: MessageReader<InventoryReceived>,
+    mut inventory: ResMut<Inventory>,
+) {
+    for dump in received.read() {
         inventory.begin();
-    }
-    for batch in received.read() {
-        for item in &batch.items {
-            inventory.upsert(item.clone());
+        for slot in &dump.items {
+            inventory.upsert(to_item(slot));
         }
-    }
-    for _ in completed.read() {
         inventory.finish();
     }
 }
@@ -32,86 +50,67 @@ pub fn reset_inventory(mut inventory: ResMut<Inventory>) {
 #[cfg(test)]
 mod tests {
     use crate::core::state::GameState;
-    use crate::domain::inventory::{
-        Inventory, InventoryDumpCompleted, InventoryDumpStarted, InventoryItemsReceived,
-        InventoryPlugin, Item,
-    };
+    use crate::domain::inventory::{Inventory, InventoryPlugin};
+    use crate::infrastructure::networking::zone_messages::{InventoryReceived, ZoneInventoryItem};
     use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
 
-    fn equip(index: u16) -> Item {
-        Item {
+    fn slot(index: u32, amount: u32) -> ZoneInventoryItem {
+        ZoneInventoryItem {
             index,
-            wear_state: 1,
-            amount: 1,
-            ..Default::default()
-        }
-    }
-
-    fn stackable(index: u16, amount: u16) -> Item {
-        Item {
-            index,
-            wear_state: 0,
+            nameid: 0,
+            type_: 0,
             amount,
-            ..Default::default()
+            location: 0,
+            identified: true,
+            attribute: 0,
+            refine: 0,
+            cards: vec![],
+            expire_time: 0,
+            bind_on_equip: 0,
+            favorite: false,
+            look: 0,
         }
     }
 
-    fn write<M: Message>(app: &mut App, message: M) {
-        app.world_mut().write_message(message);
+    fn app_with_inventory() -> App {
+        let mut app = App::new();
+        app.add_message::<InventoryReceived>();
+        app.add_plugins(InventoryPlugin);
+        app
+    }
+
+    fn dump(items: Vec<ZoneInventoryItem>) -> InventoryReceived {
+        InventoryReceived { items }
     }
 
     #[test]
     fn dump_populates_inventory_resource() {
-        let mut app = App::new();
-        app.add_plugins(InventoryPlugin);
+        let mut app = app_with_inventory();
 
-        write(&mut app, InventoryDumpStarted);
-        write(
-            &mut app,
-            InventoryItemsReceived {
-                items: vec![stackable(2, 5), stackable(3, 9), equip(4)],
-            },
-        );
-        write(&mut app, InventoryDumpCompleted);
-
+        app.world_mut()
+            .write_message(dump(vec![slot(2, 5), slot(3, 9), slot(4, 1)]));
         app.update();
 
         let inventory = app.world().resource::<Inventory>();
         assert_eq!(inventory.len(), 3);
-        assert_eq!(inventory.equipped().count(), 1);
         assert!(inventory.is_ready());
     }
 
     #[test]
     fn new_dump_clears_prior_items() {
-        let mut app = App::new();
-        app.add_plugins(InventoryPlugin);
+        let mut app = app_with_inventory();
 
-        write(&mut app, InventoryDumpStarted);
-        write(
-            &mut app,
-            InventoryItemsReceived {
-                items: vec![stackable(2, 5), stackable(3, 9)],
-            },
-        );
-        write(&mut app, InventoryDumpCompleted);
+        app.world_mut()
+            .write_message(dump(vec![slot(2, 5), slot(3, 9)]));
         app.update();
         assert_eq!(app.world().resource::<Inventory>().len(), 2);
 
-        write(&mut app, InventoryDumpStarted);
-        write(
-            &mut app,
-            InventoryItemsReceived {
-                items: vec![equip(4)],
-            },
-        );
-        write(&mut app, InventoryDumpCompleted);
+        app.world_mut().write_message(dump(vec![slot(4, 1)]));
         app.update();
 
         let inventory = app.world().resource::<Inventory>();
         assert_eq!(inventory.len(), 1);
-        assert_eq!(inventory.equipped().count(), 1);
         assert!(inventory.is_ready());
     }
 
@@ -120,16 +119,10 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(StatesPlugin);
         app.init_state::<GameState>();
+        app.add_message::<InventoryReceived>();
         app.add_plugins(InventoryPlugin);
 
-        write(&mut app, InventoryDumpStarted);
-        write(
-            &mut app,
-            InventoryItemsReceived {
-                items: vec![stackable(2, 5)],
-            },
-        );
-        write(&mut app, InventoryDumpCompleted);
+        app.world_mut().write_message(dump(vec![slot(2, 5)]));
 
         app.world_mut()
             .resource_mut::<NextState<GameState>>()
@@ -150,8 +143,7 @@ mod tests {
 
     #[test]
     fn no_messages_leaves_inventory_unchanged() {
-        let mut app = App::new();
-        app.add_plugins(InventoryPlugin);
+        let mut app = app_with_inventory();
 
         app.update();
         let before = app

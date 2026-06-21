@@ -1,4 +1,5 @@
 use crate::domain::entities::types::ObjectType;
+use crate::infrastructure::networking::zone_messages::UnitEntered;
 use bevy::prelude::*;
 
 /// Buffer for spawn events that arrive before GameState::InGame
@@ -7,7 +8,7 @@ use bevy::prelude::*;
 /// when the game enters InGame state.
 #[derive(Resource, Default)]
 pub struct PendingSpawnBuffer {
-    pub events: Vec<SpawnEntity>,
+    pub events: Vec<UnitEntered>,
 }
 
 /// Event to spawn a network entity

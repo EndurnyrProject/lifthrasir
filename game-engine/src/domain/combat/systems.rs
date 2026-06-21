@@ -2,16 +2,16 @@ use std::time::Duration;
 
 use super::{
     components::{AttackTimer, DeadEntity, HasEndure, HitStun, PendingHitReaction},
-    events::{CombatActionReceived, CombatActionType, DamageDisplayType, DisplayDamageNumber},
+    events::{CombatActionType, DamageDisplayType, DisplayDamageNumber},
 };
 use crate::domain::{
     entities::{
         character::{components::visual::CharacterDirection, states::AnimationState},
         components::NetworkEntity,
-        spawning::events::RequestEntityVanish,
     },
     system_sets::CombatSystems,
 };
+use crate::infrastructure::networking::zone_messages::{DamageReceived, UnitLeft};
 use crate::utils::coordinates::Direction;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -30,7 +30,7 @@ use moonshine_behavior::prelude::*;
 )]
 pub fn process_combat_actions(
     mut commands: Commands,
-    mut combat_events: MessageReader<CombatActionReceived>,
+    mut combat_events: MessageReader<DamageReceived>,
     mut damage_display: MessageWriter<DisplayDamageNumber>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     network_entities: Query<(Entity, &NetworkEntity)>,
@@ -39,6 +39,10 @@ pub fn process_combat_actions(
     let events: Vec<_> = combat_events.read().collect();
 
     for event in events.iter() {
+        let action_type = CombatActionType::from(event.type_ as u8);
+        let src_speed = event.src_speed as i32;
+        let dmg_speed = event.dmg_speed as i32;
+
         // ZC_NOTIFY_ACT carries block ids (AID), never char ids (GID)
         let src_entity = network_entities
             .iter()
@@ -50,7 +54,7 @@ pub fn process_combat_actions(
             .find(|(_, ne)| ne.aid == event.target_id)
             .map(|(e, _)| e);
 
-        if event.action_type.is_damage() {
+        if action_type.is_damage() {
             if let Some(src) = src_entity {
                 start_attack_animation(
                     &mut commands,
@@ -58,7 +62,7 @@ pub fn process_combat_actions(
                     &transforms,
                     src,
                     target_entity,
-                    event.src_speed,
+                    src_speed,
                 );
             } else {
                 warn!("No entity found for src_id: {}", event.src_id);
@@ -69,20 +73,20 @@ pub fn process_combat_actions(
                 // attacker's attack motion (amotion), capped like the original
                 // client so slow weapons don't feel unresponsive. dmg_speed is
                 // the target's damage motion (dmotion) and sets the flinch length.
-                let delay_ms = event.src_speed.clamp(0, 450) as u64;
+                let delay_ms = src_speed.clamp(0, 450) as u64;
 
                 commands.spawn(PendingHitReaction {
                     target,
                     damage: event.damage,
-                    is_critical: event.action_type.is_critical(),
-                    flinches: event.action_type.target_flinches() && event.dmg_speed > 0,
-                    stun_secs: event.dmg_speed.max(0) as f32 / 1000.0,
+                    is_critical: action_type.is_critical(),
+                    flinches: action_type.target_flinches() && dmg_speed > 0,
+                    stun_secs: dmg_speed.max(0) as f32 / 1000.0,
                     timer: Timer::new(Duration::from_millis(delay_ms), TimerMode::Once),
                 });
             } else {
                 warn!("No entity found for target_id: {}", event.target_id);
             }
-        } else if event.action_type == CombatActionType::LuckyDodge {
+        } else if action_type == CombatActionType::LuckyDodge {
             if let Some(target) = target_entity {
                 damage_display.write(DisplayDamageNumber {
                     entity: target,
@@ -91,7 +95,7 @@ pub fn process_combat_actions(
                 });
             }
         } else if matches!(
-            event.action_type,
+            action_type,
             CombatActionType::SitDown | CombatActionType::StandUp
         ) {
             // The server broadcasts sit/stand (incl. back to the actor itself),
@@ -101,7 +105,7 @@ pub fn process_combat_actions(
                 continue;
             };
 
-            let next = if event.action_type == CombatActionType::SitDown {
+            let next = if action_type == CombatActionType::SitDown {
                 AnimationState::Sitting
             } else {
                 AnimationState::Idle
@@ -296,16 +300,16 @@ pub fn update_hit_stun(
 )]
 pub fn handle_death(
     mut commands: Commands,
-    mut vanish_events: MessageReader<RequestEntityVanish>,
+    mut vanish_events: MessageReader<UnitLeft>,
     network_entities: Query<(Entity, &NetworkEntity)>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
 ) {
     for event in vanish_events.read() {
-        if event.vanish_type != 1 {
+        if event.reason != 1 {
             continue;
         }
 
-        let Some((entity, _)) = network_entities.iter().find(|(_, ne)| ne.aid == event.aid) else {
+        let Some((entity, _)) = network_entities.iter().find(|(_, ne)| ne.aid == event.gid) else {
             continue;
         };
 
