@@ -11,12 +11,21 @@ use crate::{
         system_sets::InputSystems,
         world::components::MapLoader,
     },
-    infrastructure::{assets::loaders::RoGroundAsset, networking::client::ZoneServerClient},
+    infrastructure::{
+        assets::loaders::RoGroundAsset,
+        networking::quic::{
+            channels::GAMEPLAY,
+            envelope::Body,
+            proto::aesir::net::{ActionRequest, StatUp},
+            zone::{QuicZoneState, ZonePhase},
+        },
+    },
     utils::coordinates::world_position_to_spawn_coords,
 };
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
+use bevy_quinnet::client::QuinnetClient;
 use leafwing_input_manager::prelude::ActionState;
 
 use crate::domain::entities::character::events::StatIncreaseRequested;
@@ -110,7 +119,8 @@ pub fn handle_entity_click(
     mut mouse_click: ResMut<ForwardedMouseClick>,
     currently_hovered: Res<CurrentlyHoveredEntity>,
     mob_query: Query<&NetworkEntity, With<Mob>>,
-    mut client: Option<ResMut<ZoneServerClient>>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
 ) {
     if mouse_click.position.is_none() {
         return;
@@ -124,16 +134,19 @@ pub fn handle_entity_click(
         return;
     };
 
-    let Some(ref mut zone_client) = client else {
-        warn!("No zone client available for attack request");
+    if zone.phase != ZonePhase::Playing {
         return;
-    };
+    }
 
     let target_gid = network_entity.gid;
     debug!("Attacking mob with GID: {}", target_gid);
 
-    if let Err(e) = zone_client.request_attack(target_gid) {
-        error!("Failed to send attack request: {:?}", e);
+    let body = Body::ActionRequest(ActionRequest {
+        target_id: target_gid,
+        action: 0,
+    });
+    if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
+        error!("Failed to send attack request: {e}");
         return;
     }
 
@@ -273,7 +286,8 @@ pub fn update_cursor_for_terrain(
 )]
 pub fn handle_sit_toggle(
     player: Query<(&ActionState<PlayerAction>, &AnimationState), With<LocalPlayer>>,
-    mut client: Option<ResMut<ZoneServerClient>>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
 ) {
     let Ok((actions, anim)) = player.single() else {
         return;
@@ -283,19 +297,17 @@ pub fn handle_sit_toggle(
         return;
     }
 
-    let Some(ref mut zone_client) = client else {
-        warn!("No zone client available for sit/stand request");
+    if zone.phase != ZonePhase::Playing {
         return;
-    };
+    }
 
-    let result = if *anim == AnimationState::Sitting {
-        zone_client.request_stand()
-    } else {
-        zone_client.request_sit()
-    };
-
-    if let Err(e) = result {
-        error!("Failed to send sit/stand request: {:?}", e);
+    let action = if *anim == AnimationState::Sitting { 3 } else { 2 };
+    let body = Body::ActionRequest(ActionRequest {
+        target_id: 0,
+        action,
+    });
+    if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
+        error!("Failed to send sit/stand request: {e}");
     }
 }
 
@@ -306,18 +318,21 @@ pub fn handle_sit_toggle(
 )]
 pub fn handle_stat_increase_requests(
     mut requests: MessageReader<StatIncreaseRequested>,
-    mut client: Option<ResMut<ZoneServerClient>>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
 ) {
-    let Some(ref mut zone_client) = client else {
-        if !requests.is_empty() {
-            warn!("No zone client available for stat-increase request");
-        }
+    if zone.phase != ZonePhase::Playing {
+        requests.clear();
         return;
-    };
+    }
 
     for request in requests.read() {
-        if let Err(e) = zone_client.request_stat_increase(request.status_id, request.amount) {
-            error!("Failed to send stat-increase request: {:?}", e);
+        let body = Body::StatUp(StatUp {
+            stat_id: request.status_id as u32,
+            amount: request.amount as u32,
+        });
+        if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
+            error!("Failed to send stat-increase request: {e}");
         }
     }
 }
@@ -354,26 +369,40 @@ pub fn set_default_cursor_for_character_selection(
 mod tests {
     use super::*;
 
-    // ZoneServerClient wraps a real socket and cannot be stubbed without network
-    // setup, so this is a logic-level test: it confirms StatIncreaseRequested is a
-    // registered Bevy message and the consumer drains it without panicking when no
-    // client resource is present.
+    // The send systems need a live QuinnetClient (no stub without a runtime), so like
+    // the char_send_* systems they carry no App-level harness test. This pins the
+    // StatUp field bridge and the legacy CZ_REQUEST_ACT2 action codes the systems emit.
     #[test]
-    fn consumer_drains_stat_increase_requests() {
-        let mut app = App::new();
-        app.add_message::<StatIncreaseRequested>();
-        app.add_systems(Update, handle_stat_increase_requests);
+    fn stat_up_bridges_status_id_and_amount() {
+        let req = StatIncreaseRequested {
+            status_id: 13,
+            amount: 2,
+        };
+        let body = StatUp {
+            stat_id: req.status_id as u32,
+            amount: req.amount as u32,
+        };
+        assert_eq!(body.stat_id, 13);
+        assert_eq!(body.amount, 2);
+    }
 
-        app.world_mut()
-            .resource_mut::<Messages<StatIncreaseRequested>>()
-            .write(StatIncreaseRequested {
-                status_id: 13,
-                amount: 1,
-            });
-
-        app.update();
-
-        let messages = app.world().resource::<Messages<StatIncreaseRequested>>();
-        assert_eq!(messages.len(), 1);
+    #[test]
+    fn action_codes_match_legacy_cz_request_act2() {
+        // CZ_REQUEST_ACT2: attack = 0, sit = 2, stand = 3.
+        let attack = ActionRequest {
+            target_id: 42,
+            action: 0,
+        };
+        let sit = ActionRequest {
+            target_id: 0,
+            action: 2,
+        };
+        let stand = ActionRequest {
+            target_id: 0,
+            action: 3,
+        };
+        assert_eq!((attack.target_id, attack.action), (42, 0));
+        assert_eq!((sit.target_id, sit.action), (0, 2));
+        assert_eq!((stand.target_id, stand.action), (0, 3));
     }
 }

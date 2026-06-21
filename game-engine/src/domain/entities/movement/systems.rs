@@ -19,7 +19,12 @@ use crate::{
     infrastructure::{
         assets::loaders::RoAltitudeAsset,
         networking::{
-            client::ZoneServerClient,
+            quic::{
+                channels::GAMEPLAY,
+                envelope::Body,
+                proto::aesir::net::MoveRequest,
+                zone::{QuicZoneState, ZonePhase},
+            },
             zone_messages::{SelfMoved, UnitMoveStopped},
         },
     },
@@ -39,13 +44,10 @@ use moonshine_behavior::prelude::*;
 #[auto_observer(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
 pub fn send_movement_requests_observer(
     trigger: On<MovementRequested>,
-    client: Option<ResMut<ZoneServerClient>>,
+    mut client: ResMut<bevy_quinnet::client::QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
 ) {
-    let Some(mut client) = client else {
-        return;
-    };
-
-    if !client.is_connected() {
+    if zone.phase != ZonePhase::Playing {
         return;
     }
 
@@ -55,8 +57,12 @@ pub fn send_movement_requests_observer(
         event.entity, event.dest_x, event.dest_y, event.direction
     );
 
-    if let Err(e) = client.request_move(event.dest_x, event.dest_y, event.direction) {
-        error!("Failed to send movement request: {:?}", e);
+    let body = Body::MoveRequest(MoveRequest {
+        dest_x: event.dest_x as u32,
+        dest_y: event.dest_y as u32,
+    });
+    if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
+        error!("Failed to send movement request: {e}");
     }
 }
 

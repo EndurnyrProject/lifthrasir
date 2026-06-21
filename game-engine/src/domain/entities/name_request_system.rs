@@ -4,30 +4,39 @@ use crate::{
         entities::{components::EntityName, hover::EntityHoverEntered, registry::EntityRegistry},
         system_sets::EntityInteractionSystems,
     },
-    infrastructure::networking::{client::ZoneServerClient, zone_messages::EntityNamed},
+    infrastructure::networking::{
+        quic::{
+            channels::GAMEPLAY,
+            envelope::Body,
+            proto::aesir::net::NameRequest,
+            zone::{QuicZoneState, ZonePhase},
+        },
+        zone_messages::EntityNamed,
+    },
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use bevy_quinnet::client::QuinnetClient;
 
 #[auto_observer(plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin)]
 pub fn name_request_observer(
     trigger: On<EntityHoverEntered>,
-    mut client: Option<ResMut<ZoneServerClient>>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
 ) {
-    let Some(ref mut client) = client else {
+    if zone.phase != ZonePhase::Playing {
         return;
-    };
-
-    if !client.is_connected() {
-        return;
-    };
+    }
 
     let event = trigger.event();
 
-    if let Err(e) = client.request_entity_name(event.entity_id) {
+    let body = Body::NameRequest(NameRequest {
+        entity_id: event.entity_id,
+    });
+    if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
         error!(
-            "❌ Failed to send name request for entity {}: {:?}",
-            event.entity_id, e
+            "Failed to send name request for entity {}: {e}",
+            event.entity_id
         );
     }
 }
