@@ -301,7 +301,11 @@ pub fn handle_sit_toggle(
         return;
     }
 
-    let action = if *anim == AnimationState::Sitting { 3 } else { 2 };
+    let action = if *anim == AnimationState::Sitting {
+        3
+    } else {
+        2
+    };
     let body = Body::ActionRequest(ActionRequest {
         target_id: 0,
         action,

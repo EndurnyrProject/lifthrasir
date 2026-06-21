@@ -73,30 +73,6 @@ impl From<u8> for CombatActionType {
     }
 }
 
-/// Event received from server for combat actions
-#[derive(Message, Debug, Clone)]
-pub struct CombatActionReceived {
-    pub src_id: u32,
-    pub target_id: u32,
-    pub server_tick: u32,
-    pub src_speed: i32,
-    pub dmg_speed: i32,
-    pub damage: i32,
-    pub is_sp_damage: bool,
-    pub div: u16,
-    pub action_type: CombatActionType,
-    pub damage2: i32,
-}
-
-/// Entity HP information received from server (ZC_HP_INFO)
-/// Used for any entity type: players, monsters, NPCs, etc.
-#[derive(Message, Debug, Clone)]
-pub struct EntityHpReceived {
-    pub entity_id: u32,
-    pub hp: u32,
-    pub max_hp: u32,
-}
-
 /// Display damage number on screen
 #[derive(Message, Debug, Clone)]
 pub struct DisplayDamageNumber {

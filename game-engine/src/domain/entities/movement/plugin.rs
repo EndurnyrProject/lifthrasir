@@ -1,7 +1,4 @@
 use crate::app::movement_plugin::MovementDomainPlugin;
-use crate::infrastructure::networking::protocol::zone::handlers::movement_handlers::{
-    MovementConfirmedByServer, MovementStoppedByServer,
-};
 use bevy::prelude::*;
 
 /// Movement Plugin (Wrapper)
@@ -28,10 +25,6 @@ pub struct MovementPlugin;
 
 impl Plugin for MovementPlugin {
     fn build(&self, app: &mut App) {
-        // Register network protocol messages (infrastructure-level)
-        app.add_message::<MovementConfirmedByServer>()
-            .add_message::<MovementStoppedByServer>();
-
         // Add movement domain plugin (auto-plugin with observers and systems)
         app.add_plugins(MovementDomainPlugin);
 

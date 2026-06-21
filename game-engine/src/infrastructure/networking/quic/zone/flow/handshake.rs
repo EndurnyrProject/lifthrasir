@@ -231,7 +231,10 @@ mod tests {
 
     #[test]
     fn enter_ack_in_auth_sent_advances_to_entering() {
-        assert_eq!(enter_ack_next(ZonePhase::AuthSent), Some(ZonePhase::Entering));
+        assert_eq!(
+            enter_ack_next(ZonePhase::AuthSent),
+            Some(ZonePhase::Entering)
+        );
     }
 
     #[test]

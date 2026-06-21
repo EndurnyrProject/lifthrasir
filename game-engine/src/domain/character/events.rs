@@ -102,31 +102,6 @@ pub struct RefreshCharacterListEvent;
 
 #[derive(Message, Debug)]
 #[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
-pub struct ZoneServerConnected;
-
-#[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
-pub struct ZoneServerConnectionFailed {
-    pub reason: String,
-}
-
-#[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
-pub struct ZoneAuthenticationSuccess {
-    pub spawn_x: u16,
-    pub spawn_y: u16,
-    pub spawn_dir: u8,
-    pub server_tick: u32,
-}
-
-#[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
-pub struct ZoneAuthenticationFailed {
-    pub error_code: u8,
-}
-
-#[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
 pub struct MapLoadingStarted {
     pub map_name: String,
 }

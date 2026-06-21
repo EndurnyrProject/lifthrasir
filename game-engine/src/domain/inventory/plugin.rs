@@ -1,4 +1,3 @@
-use super::events::{InventoryDumpCompleted, InventoryDumpStarted, InventoryItemsReceived};
 use super::resource::Inventory;
 use super::systems;
 use crate::core::state::GameState;
@@ -9,9 +8,6 @@ pub struct InventoryPlugin;
 impl Plugin for InventoryPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Inventory>()
-            .add_message::<InventoryDumpStarted>()
-            .add_message::<InventoryItemsReceived>()
-            .add_message::<InventoryDumpCompleted>()
             .add_systems(Update, systems::apply_inventory_messages)
             .add_systems(OnExit(GameState::InGame), systems::reset_inventory);
     }

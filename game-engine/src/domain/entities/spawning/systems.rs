@@ -16,9 +16,7 @@ use crate::{
             movement::components::{MovementSpeed, MovementState, MovementTarget},
             pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
             registry::EntityRegistry,
-            spawning::events::{
-                DespawnEntity, EntityVanishRequested, PendingSpawnBuffer,
-            },
+            spawning::events::{DespawnEntity, EntityVanishRequested, PendingSpawnBuffer},
             sprite_rendering::{
                 components::{EntitySpriteData, EntitySpriteInfo},
                 events::RequestSpriteSpawn,

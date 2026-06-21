@@ -1,4 +1,3 @@
-use super::events::CombatActionReceived;
 use crate::app::combat_plugin::CombatDomainPlugin;
 use bevy::prelude::*;
 
@@ -31,9 +30,7 @@ pub struct CombatPlugin;
 impl Plugin for CombatPlugin {
     fn build(&self, app: &mut App) {
         // Register network protocol messages
-        app.add_message::<CombatActionReceived>()
-            .add_message::<super::events::EntityHpReceived>()
-            .add_message::<super::events::DisplayDamageNumber>();
+        app.add_message::<super::events::DisplayDamageNumber>();
 
         // Add combat domain plugin (auto-plugin with systems)
         app.add_plugins(CombatDomainPlugin);

@@ -34,10 +34,7 @@ pub struct IncomingMessage {
     schedule = PreUpdate,
     config(run_if = client_connected)
 )]
-pub fn drain_incoming(
-    mut client: ResMut<QuinnetClient>,
-    mut out: MessageWriter<IncomingMessage>,
-) {
+pub fn drain_incoming(mut client: ResMut<QuinnetClient>, mut out: MessageWriter<IncomingMessage>) {
     for (channel, body) in QuicConnection::drain(client.connection_mut()) {
         out.write(IncomingMessage { channel, body });
     }

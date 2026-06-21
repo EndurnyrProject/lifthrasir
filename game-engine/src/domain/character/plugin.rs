@@ -8,10 +8,6 @@ use crate::infrastructure::networking::char_messages::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
     CharacterServerConnected, CharacterSlotInfoReceived, ZoneServerInfoReceived,
 };
-use crate::infrastructure::networking::protocol::zone::{
-    AccountIdReceived, ChatReceived, EntityNameAllReceived, EntityNameReceived, ParameterChanged,
-    ZoneEntryRefused, ZoneServerConnected as ZoneServerConnectedProtocol,
-};
 use bevy::prelude::*;
 
 /// Character Domain Plugin
@@ -23,8 +19,7 @@ use bevy::prelude::*;
 ///    - GenericSpriteRenderingPlugin - sprite hierarchy and rendering
 ///    - UnifiedCharacterEntityPlugin - character entity management (auto-plugin)
 /// 3. Register protocol layer events (networking infrastructure)
-/// 4. Register infrastructure systems (zone_server_update, time_sync)
-/// 5. Add CharacterDomainAutoPlugin (all domain logic via auto_plugin)
+/// 4. Add CharacterDomainAutoPlugin (all domain logic via auto_plugin)
 pub struct CharacterDomainPlugin;
 
 impl Plugin for CharacterDomainPlugin {
@@ -49,26 +44,7 @@ impl Plugin for CharacterDomainPlugin {
             .add_message::<ZoneServerInfoReceived>()
             .add_message::<CharacterSlotInfoReceived>();
 
-        // Zone protocol events (new modular architecture)
-        app.add_message::<ZoneServerConnectedProtocol>()
-            .add_message::<AccountIdReceived>()
-            .add_message::<ZoneEntryRefused>()
-            .add_message::<EntityNameReceived>()
-            .add_message::<EntityNameAllReceived>()
-            .add_message::<ParameterChanged>()
-            .add_message::<ChatReceived>();
-
-        // 4. Register infrastructure systems (networking layer)
-        app.add_systems(
-            Update,
-            (
-                crate::infrastructure::networking::client::zone_server_update_system,
-                crate::infrastructure::networking::client::time_sync_system,
-            )
-                .chain(),
-        );
-
-        // 5. Add domain auto-plugins (all domain events and systems)
+        // 4. Add domain auto-plugins (all domain events and systems)
         app.add_plugins(CharacterDomainAutoPlugin);
         app.add_plugins(ZoneDomainAutoPlugin);
 

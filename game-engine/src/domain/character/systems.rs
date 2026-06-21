@@ -390,7 +390,6 @@ pub fn handle_zone_entered(
         crate::infrastructure::networking::zone_messages::ZoneEntered,
     >,
     zone_state: Res<QuicZoneState>,
-    mut domain_events: MessageWriter<ZoneAuthenticationSuccess>,
     mut commands: Commands,
     mut map_loading_events: MessageWriter<MapLoadingStarted>,
     mut game_state: ResMut<NextState<GameState>>,
@@ -411,70 +410,11 @@ pub fn handle_zone_entered(
             character_id,
         ));
 
-        domain_events.write(ZoneAuthenticationSuccess {
-            spawn_x: event.x as u16,
-            spawn_y: event.y as u16,
-            spawn_dir: event.dir as u8,
-            server_tick: event.start_time as u32,
-        });
-
         map_loading_events.write(MapLoadingStarted {
             map_name: map_name.clone(),
         });
 
         game_state.set(GameState::Loading);
-    }
-}
-
-/// System: Handle zone entry refused
-#[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
-    schedule = Update,
-    config(in_set = CharacterFlowSystems::ZoneEntry)
-)]
-pub fn handle_zone_entry_refused_protocol(
-    mut protocol_events: MessageReader<
-        crate::infrastructure::networking::protocol::zone::ZoneEntryRefused,
-    >,
-    mut domain_events: MessageWriter<ZoneAuthenticationFailed>,
-    mut game_state: ResMut<NextState<GameState>>,
-) {
-    for event in protocol_events.read() {
-        warn!(
-            "Zone entry refused: {:?} - {}",
-            event.error, event.error_description
-        );
-
-        // Convert ZoneEntryError to a simple error code for the domain event
-        let error_code = match event.error {
-            crate::infrastructure::networking::protocol::zone::ZoneEntryError::Normal => 0,
-            crate::infrastructure::networking::protocol::zone::ZoneEntryError::ServerClosed => 1,
-            crate::infrastructure::networking::protocol::zone::ZoneEntryError::AlreadyLoggedIn => 2,
-            crate::infrastructure::networking::protocol::zone::ZoneEntryError::AlreadyLoggedInAlt => 3,
-            crate::infrastructure::networking::protocol::zone::ZoneEntryError::EnvironmentError => 4,
-            crate::infrastructure::networking::protocol::zone::ZoneEntryError::PreviousConnectionActive => 8,
-            crate::infrastructure::networking::protocol::zone::ZoneEntryError::Unknown(code) => code,
-        };
-
-        domain_events.write(ZoneAuthenticationFailed { error_code });
-
-        game_state.set(GameState::CharacterSelection);
-    }
-}
-
-/// System: Handle account ID received (ZC_AID packet)
-#[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
-    schedule = Update,
-    config(in_set = CharacterFlowSystems::ZoneEntry)
-)]
-pub fn handle_account_id_received_protocol(
-    mut protocol_events: MessageReader<
-        crate::infrastructure::networking::protocol::zone::AccountIdReceived,
-    >,
-) {
-    for event in protocol_events.read() {
-        debug!("Account ID confirmed by zone server: {}", event.account_id);
     }
 }
 
