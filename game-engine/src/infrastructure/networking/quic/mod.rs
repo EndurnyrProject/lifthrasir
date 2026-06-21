@@ -5,3 +5,4 @@ pub mod dispatch;
 pub mod envelope;
 pub mod login;
 pub mod proto;
+pub mod zone;
