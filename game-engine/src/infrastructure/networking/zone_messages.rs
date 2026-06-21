@@ -337,3 +337,22 @@ pub struct SelfRespawned {
 pub struct ZoneDisconnected {
     pub reason: String,
 }
+
+/// One entity's authoritative position/state within a snapshot.
+#[derive(Debug, Clone, Copy)]
+pub struct ZoneSnapshotEntity {
+    pub id: u32,
+    pub x: u32,
+    pub y: u32,
+    pub dir: u32,
+    pub move_state: u32,
+    pub hp_pct: u32,
+}
+
+/// A periodic full-state position snapshot (unreliable channel).
+#[derive(Message, Debug, Clone)]
+#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+pub struct SnapshotReceived {
+    pub server_tick: u64,
+    pub entities: Vec<ZoneSnapshotEntity>,
+}
