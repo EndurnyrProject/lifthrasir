@@ -10,6 +10,7 @@ use crate::infrastructure::networking::char_messages::{
     CharacterServerConnected, ZoneServerInfoReceived,
 };
 use crate::infrastructure::networking::quic::character::CharacterRoster;
+use crate::infrastructure::networking::quic::zone::QuicZoneState;
 use crate::infrastructure::networking::session::UserSession;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -299,8 +300,13 @@ pub struct ZoneSessionData {
     pub character_name: String,
 }
 
-/// System: Handle zone server info and connect to zone server
-/// Uses the new ZoneServerClient architecture
+/// System: Handle zone server info and open the QUIC zone connection.
+///
+/// Closes the char connection, opens the QUIC zone connection, and arms
+/// `QuicZoneState` with the session credentials (sourced from the live
+/// `UserSession` for `login_id2`, which the handoff event does not carry) and
+/// the target map. The handshake (`Hello`/`SessionAuth`/`EnterAck`) is driven
+/// from there by `quic::zone::flow::handshake`.
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
@@ -309,6 +315,8 @@ pub struct ZoneSessionData {
 pub fn handle_zone_server_info(
     mut events: MessageReader<ZoneServerInfoReceivedEvent>,
     mut quinnet: ResMut<QuinnetClient>,
+    mut zone_state: ResMut<QuicZoneState>,
+    user_session: Res<UserSession>,
     mut game_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
     characters: Query<(
@@ -336,88 +344,82 @@ pub fn handle_zone_server_info(
         });
 
         info!("Closing QUIC character connection before zone handoff");
-        quinnet.close_all_connections();
-
-        let mut zone_client_instance =
-            crate::infrastructure::networking::client::ZoneServerClient::with_session(
-                event.account_id,
-                event.char_id,
-            );
 
         let server_address = format!("{}:{}", event.server_ip, event.server_port);
 
-        match zone_client_instance.connect(&server_address) {
-            Ok(()) => {
-                info!("Connected to zone server at {}", server_address);
-
-                if let Err(e) = zone_client_instance.enter_world(
-                    event.account_id,
-                    event.char_id,
-                    event.login_id1,
-                    0, // client_time (can be 0)
-                    event.sex,
-                ) {
-                    error!("Failed to send zone entry packet: {:?}", e);
-                } else {
-                    game_state.set(GameState::Connecting);
-                }
-            }
-            Err(e) => {
-                error!("Failed to connect to zone server: {:?}", e);
-            }
+        if let Err(e) =
+            crate::infrastructure::networking::quic::zone::connect(&mut quinnet, &server_address)
+        {
+            error!(
+                "Failed to connect to zone server at {}: {:?}",
+                server_address, e
+            );
+            continue;
         }
 
-        commands.insert_resource(zone_client_instance);
+        info!("Opened QUIC zone connection to {}", server_address);
+
+        zone_state.start_connecting(
+            crate::infrastructure::networking::quic::zone::ZoneAuth {
+                account_id: event.account_id,
+                login_id1: event.login_id1,
+                login_id2: user_session.tokens.login_id2,
+                sex: event.sex as u32,
+                char_id: event.char_id,
+            },
+            event.map_name.clone(),
+        );
+
+        game_state.set(GameState::Connecting);
     }
 }
 
-/// System: Handle successful zone connection from protocol events
+/// System: Handle zone entry accepted (QUIC `ZoneEntered` from the handshake).
+///
+/// The QUIC handshake emits `ZoneEntered` on `EnterAck` with the spawn cell;
+/// the map name and char id come from the armed `QuicZoneState`. This feeds the
+/// existing map-load machinery (`MapSpawnContext` + `MapLoadingStarted`) and
+/// transitions to `Loading`.
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::ZoneConnection)
 )]
-pub fn handle_zone_server_connected_protocol(
-    mut protocol_events: MessageReader<
-        crate::infrastructure::networking::protocol::zone::ZoneServerConnected,
+pub fn handle_zone_entered(
+    mut entered_events: MessageReader<
+        crate::infrastructure::networking::zone_messages::ZoneEntered,
     >,
-    zone_session: Option<Res<ZoneSessionData>>,
+    zone_state: Res<QuicZoneState>,
     mut domain_events: MessageWriter<ZoneAuthenticationSuccess>,
     mut commands: Commands,
     mut map_loading_events: MessageWriter<MapLoadingStarted>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
-    for event in protocol_events.read() {
+    for event in entered_events.read() {
         info!(
             "Zone server accepted entry! Spawning at ({}, {}) facing {}",
-            event.spawn_data.position.x, event.spawn_data.position.y, event.spawn_data.position.dir
+            event.x, event.y, event.dir
         );
 
-        // Get session data from resource
-        let Some(session) = zone_session.as_ref() else {
-            error!("ZoneSessionData not available - cannot proceed with spawn");
-            continue;
-        };
+        let map_name = zone_state.map_name.clone();
+        let character_id = zone_state.auth.char_id;
 
-        // Store spawn context
         commands.insert_resource(MapSpawnContext::new(
-            session.map_name.clone(),
-            event.spawn_data.position.x,
-            event.spawn_data.position.y,
-            session.character_id,
+            map_name.clone(),
+            event.x as u16,
+            event.y as u16,
+            character_id,
         ));
 
-        // Emit domain event for compatibility
         domain_events.write(ZoneAuthenticationSuccess {
-            spawn_x: event.spawn_data.position.x,
-            spawn_y: event.spawn_data.position.y,
-            spawn_dir: event.spawn_data.position.dir,
-            server_tick: event.spawn_data.server_tick,
+            spawn_x: event.x as u16,
+            spawn_y: event.y as u16,
+            spawn_dir: event.dir as u8,
+            server_tick: event.start_time as u32,
         });
 
-        // Emit map loading started
         map_loading_events.write(MapLoadingStarted {
-            map_name: session.map_name.clone(),
+            map_name: map_name.clone(),
         });
 
         game_state.set(GameState::Loading);
@@ -434,7 +436,6 @@ pub fn handle_zone_entry_refused_protocol(
     mut protocol_events: MessageReader<
         crate::infrastructure::networking::protocol::zone::ZoneEntryRefused,
     >,
-    mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
     mut domain_events: MessageWriter<ZoneAuthenticationFailed>,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
@@ -456,10 +457,6 @@ pub fn handle_zone_entry_refused_protocol(
         };
 
         domain_events.write(ZoneAuthenticationFailed { error_code });
-
-        if let Some(ref mut client) = zone_client.as_deref_mut() {
-            client.disconnect();
-        }
 
         game_state.set(GameState::CharacterSelection);
     }
@@ -520,22 +517,14 @@ pub fn detect_map_load_complete(
 )]
 pub fn handle_map_load_complete(
     mut events: MessageReader<MapLoadCompleted>,
-    mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
     mut actor_init_events: MessageWriter<ActorInitSent>,
 ) {
     for event in events.read() {
         debug!(
-            "Map '{}' loaded, sending CZ_NOTIFY_ACTORINIT",
+            "Map '{}' loaded; MapLoaded already sent by zone_send_map_loaded",
             event.map_name
         );
-
-        if let Some(client) = zone_client.as_deref_mut() {
-            if let Err(e) = client.notify_ready() {
-                error!("Failed to send actor init: {:?}", e);
-            } else {
-                actor_init_events.write(ActorInitSent);
-            }
-        }
+        actor_init_events.write(ActorInitSent);
     }
 }
 
@@ -614,7 +603,6 @@ pub fn start_map_loading_timer(
 pub fn detect_map_loading_timeout(
     timer: Option<Res<MapLoadingTimer>>,
     map_data_query: Query<&crate::domain::world::map::MapData>,
-    mut zone_client: Option<ResMut<crate::infrastructure::networking::client::ZoneServerClient>>,
     mut failed_events: MessageWriter<MapLoadingFailed>,
     mut commands: Commands,
     mut game_state: ResMut<NextState<GameState>>,
@@ -649,11 +637,6 @@ pub fn detect_map_loading_timeout(
                 map_name
             ),
         });
-
-        if let Some(client) = zone_client.as_deref_mut() {
-            debug!("Disconnecting from zone server due to timeout");
-            client.disconnect();
-        }
 
         commands.remove_resource::<MapLoadingTimer>();
 
