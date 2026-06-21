@@ -653,14 +653,15 @@ pub fn spawn_character_sprite_on_game_start(
         &mut commands.entity(character_entity),
     );
 
-    // Add NetworkEntity component for hover system and combat lookups
-    // Note: For player characters, GID == AID (account_id) in RO protocol
-    // The server uses account_id as the entity identifier in combat packets
+    // Add NetworkEntity component for hover system and combat lookups.
+    // aesir identifies every in-game unit by char_id (the gid field); account_id
+    // is only carried for reference, so the local player must register under char_id.
     let account_id = user_session.tokens.account_id;
+    let char_id = spawn_context.character_id;
     commands.entity(character_entity).insert(
         crate::domain::entities::components::NetworkEntity::new(
             account_id,
-            account_id, // GID should be account_id for combat packet lookups
+            char_id,
             crate::domain::entities::types::ObjectType::Pc,
         ),
     );
@@ -674,10 +675,10 @@ pub fn spawn_character_sprite_on_game_start(
         SpatialAudioReceiver,
         crate::domain::input::PlayerAction::default_input_map(),
     ));
-    entity_registry.set_local_player(character_entity, account_id);
+    entity_registry.set_local_player(character_entity, char_id);
     info!(
-        "Spawned LOCAL PLAYER entity {:?} (AID: {}) '{}' with LocalPlayer + CharacterStatus + EntityName components",
-        character_entity, account_id, char_data.name
+        "Spawned LOCAL PLAYER entity {:?} (char_id: {}, AID: {}) '{}' with LocalPlayer + CharacterStatus + EntityName components",
+        character_entity, char_id, account_id, char_data.name
     );
 
     // Get map dimensions from loaded ground data

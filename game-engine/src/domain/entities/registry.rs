@@ -53,19 +53,22 @@ use std::collections::HashMap;
 /// - **Local Player**: Tracked separately for quick access (most queries are for local player)
 /// - **Cleanup**: When entities despawn, they must be unregistered to prevent stale references
 /// - **Validation**: Consider adding debug assertions to catch double-registration bugs
+/// Maps the server unit id to client entities. aesir keys every in-game packet on
+/// char_id (the `NetworkEntity::gid` field), so despite the historical `account_id`
+/// naming below, the id stored here is the char_id.
 #[derive(Resource, Default)]
 #[auto_init_resource(plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin)]
 pub struct EntityRegistry {
-    /// Maps server Account IDs to client Entity IDs
+    /// Maps server unit ids (char_id) to client Entity IDs
     account_to_entity: HashMap<u32, Entity>,
 
-    /// Maps client Entity IDs back to Account IDs (for cleanup)
+    /// Maps client Entity IDs back to unit ids (for cleanup)
     entity_to_account: HashMap<Entity, u32>,
 
     /// The local player's entity (cached for fast access)
     local_player_entity: Option<Entity>,
 
-    /// The local player's account ID
+    /// The local player's unit id (char_id)
     local_player_account_id: Option<u32>,
 }
 

@@ -125,15 +125,15 @@ pub fn spawn_network_entity_system(
         let event = SpawnFields::from(unit);
 
         // Check if entity already exists (e.g., spawned from character selection or re-entering view)
-        if let Some(existing_entity) = entity_registry.get_entity(event.aid) {
+        if let Some(existing_entity) = entity_registry.get_entity(event.gid) {
             commands.entity(existing_entity).remove::<PendingDespawn>();
 
             // NOTE: a moving entity re-entering view keeps its existing interpolated
             // movement; the remote-position refresh that rode the legacy movement event
             // is now owned by the periodic Snapshot path (Approach B, deferred).
             debug!(
-                "Entity AID {} re-entered view, canceling pending despawn",
-                event.aid
+                "Entity GID {} re-entered view, canceling pending despawn",
+                event.gid
             );
             continue;
         }
@@ -397,7 +397,7 @@ pub fn spawn_network_entity_system(
 
         let entity_id = entity_cmd.id();
 
-        entity_registry.register_entity(event.aid, entity_id);
+        entity_registry.register_entity(event.gid, entity_id);
 
         // Route sprite spawning based on entity type
         match event.object_type {
@@ -651,7 +651,7 @@ pub fn check_pending_despawns_system(
 
             commands.trigger(DespawnEntity {
                 entity,
-                aid: network_entity.aid,
+                aid: network_entity.gid,
             });
 
             // Remove PendingDespawn component (entity will be despawned by observer)

@@ -15,7 +15,10 @@ use super::types::ObjectType;
 /// Network entity identifier component
 #[derive(Component, Debug, Clone, Copy)]
 pub struct NetworkEntity {
+    /// Account id. Informational only; aesir no longer keys in-game packets on it.
     pub aid: u32,
+    /// char_id, the unit id aesir uses in every in-game packet (combat, move, name,
+    /// despawn). This is the key the `EntityRegistry` and combat lookups resolve on.
     pub gid: u32,
     pub object_type: ObjectType,
 }

@@ -43,15 +43,16 @@ pub fn process_combat_actions(
         let src_speed = event.src_speed as i32;
         let dmg_speed = event.dmg_speed as i32;
 
-        // ZC_NOTIFY_ACT carries block ids (AID), never char ids (GID)
+        // aesir identifies every in-game unit by char_id (the gid field), so
+        // combat src/target ids resolve against NetworkEntity::gid, not aid.
         let src_entity = network_entities
             .iter()
-            .find(|(_, ne)| ne.aid == event.src_id)
+            .find(|(_, ne)| ne.gid == event.src_id)
             .map(|(e, _)| e);
 
         let target_entity = network_entities
             .iter()
-            .find(|(_, ne)| ne.aid == event.target_id)
+            .find(|(_, ne)| ne.gid == event.target_id)
             .map(|(e, _)| e);
 
         if action_type.is_damage() {
@@ -309,7 +310,7 @@ pub fn handle_death(
             continue;
         }
 
-        let Some((entity, _)) = network_entities.iter().find(|(_, ne)| ne.aid == event.gid) else {
+        let Some((entity, _)) = network_entities.iter().find(|(_, ne)| ne.gid == event.gid) else {
             continue;
         };
 

@@ -26,8 +26,8 @@ impl Behavior for AnimationState {
             (Walking, Idle | Attacking | Hit | Sitting | Dead) => true,
             // Attacking can go back to idle, or be interrupted
             (Attacking, Idle | Hit | Sitting | Dead) => true,
-            // Hit can recover to idle or die
-            (Hit, Idle | Dead) => true,
+            // Hit can recover to idle, swing back (flinch is interruptible by an attack) or die
+            (Hit, Idle | Attacking | Dead) => true,
             // Sitting can stand, be interrupted, or die
             (Sitting, Idle | Walking | Attacking | Hit | Dead) => true,
             // Same state is always valid (no-op)
