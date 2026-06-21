@@ -12,6 +12,7 @@ use crate::infrastructure::networking::char_messages::{
 use crate::infrastructure::networking::quic::character::CharacterRoster;
 use crate::infrastructure::networking::quic::zone::QuicZoneState;
 use crate::infrastructure::networking::session::UserSession;
+use crate::infrastructure::networking::zone_messages::ZoneDisconnected;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioReceiver;
@@ -415,6 +416,31 @@ pub fn handle_zone_entered(
         });
 
         game_state.set(GameState::Loading);
+    }
+}
+
+/// System: Route a lost/failed QUIC zone connection back to character selection.
+///
+/// The handshake emits `ZoneDisconnected` on quinnet `ConnectionLost`/`Failed`
+/// (`zone_handle_connection_lost`). Without this consumer the user is stranded
+/// on the connecting/loading screen, so map the disconnect onto a return to
+/// `CharacterSelection`, restoring the legacy TCP entry-refusal behaviour.
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(in_set = CharacterFlowSystems::ZoneEntry)
+)]
+pub fn handle_zone_disconnected(
+    mut events: MessageReader<ZoneDisconnected>,
+    state: Res<State<GameState>>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
+    for event in events.read() {
+        warn!("Zone disconnected: {} - returning to character selection", event.reason);
+        if *state.get() == GameState::CharacterSelection {
+            continue;
+        }
+        game_state.set(GameState::CharacterSelection);
     }
 }
 
