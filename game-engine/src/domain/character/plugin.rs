@@ -1,5 +1,6 @@
 use super::components::CharacterSelectionState;
 use crate::app::character_domain_plugin::CharacterDomainAutoPlugin;
+use crate::app::zone_domain_plugin::ZoneDomainAutoPlugin;
 use crate::domain::entities::character::states::setup_character_state_machines;
 use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
 use crate::domain::entities::sprite_rendering::plugin::GenericSpriteRenderingPlugin;
@@ -67,8 +68,9 @@ impl Plugin for CharacterDomainPlugin {
                 .chain(),
         );
 
-        // 5. Add domain auto-plugin (all domain events and systems)
+        // 5. Add domain auto-plugins (all domain events and systems)
         app.add_plugins(CharacterDomainAutoPlugin);
+        app.add_plugins(ZoneDomainAutoPlugin);
 
         info!("CharacterDomainPlugin initialized");
     }

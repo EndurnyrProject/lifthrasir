@@ -9,6 +9,7 @@ pub mod quic;
 pub mod server_info;
 pub mod session;
 pub mod transport;
+pub mod zone_messages;
 
 pub use client::{zone_server_update_system, NetworkClient, ZoneServerClient};
 pub use errors::{NetworkError, NetworkResult};
