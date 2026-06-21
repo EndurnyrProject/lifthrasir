@@ -2,6 +2,38 @@
 
 Thank you for your interest in contributing to Lifthrasir! This document outlines the development workflow using Jujutsu (jj) version control system, coding standards, and best practices.
 
+## Using AI Tools
+
+AI assistants (Copilot, Claude, ChatGPT, Cursor, and similar) are welcome here. They are not a shortcut around the bar every contribution has to clear, though. If you use one, **you** are the author and you are fully responsible for what you submit. The rules below are heavily inspired by [curl's stance on AI use](https://curl.se/dev/contribute.html#on-ai-use-in-curl).
+
+### You own the contribution
+
+- Understand every line you submit. You must be able to explain and defend it in review as if you had written it by hand.
+- Do not paste raw AI output. AI tends to be verbose, adds comments that explain the obvious, and invents details. Trim it down to match our style: early returns over nested `if`s, no superfluous comments, critical paths that fail loudly rather than papering over errors.
+- If a reviewer can tell a change was AI-generated and that you do not fully grasp it, you have more work to do before it is ready.
+
+### Same quality bar
+
+AI-assisted code must meet the exact same requirements as everything else:
+
+- `cargo fmt` clean, `cargo clippy` with no warnings, `cargo check` passing.
+- The full test suite passes (`cargo test`), with tests added for new domain logic.
+- It follows the architecture and idioms already in the codebase.
+
+### Licensing and provenance (read this one carefully)
+
+This is the part that matters most for a Ragnarok Online client.
+
+- Lifthrasir is **MIT licensed**. Only contribute code you actually have the right to license under MIT.
+- Language models routinely reproduce code memorized from other RO clients and servers, many of them GPL or proprietary (rAthena, Hercules, OpenKore, Korangar, and others). Do not let an AI launder incompatibly-licensed code into this project.
+- If you cannot establish where AI-suggested code came from or under what license, do not submit it.
+
+### Issues, bug and security reports
+
+- If you used an AI tool to find a problem, say so in the report.
+- Reproduce and verify a finding yourself before filing it. AI tools frequently generate inaccurate or fabricated results.
+- Unverified "AI slop" reports waste maintainer time and will be closed. Deliberately fabricated reports will get you banned.
+
 ## Development Workflow with Jujutsu
 
 Lifthrasir uses [Jujutsu](https://jj-vcs.github.io/jj/latest/) (jj) backed by Git for version control. Jujutsu provides a more intuitive and powerful version control experience compared to traditional Git workflows.
