@@ -437,6 +437,39 @@ pub fn handle_server_stop_system(
     }
 }
 
+/// Attacks root you in place. The server only fires an attack once the unit is
+/// in range, so the unit is already where it should be - it just needs to stop
+/// sliding. Without this the client keeps interpolating its in-flight move
+/// through the swing. We drop the move and freeze at the current position rather
+/// than snapping to the target cell: that target may be a stale ground-walk
+/// destination (clicking a mob already in range mid-walk), and snapping to it
+/// would teleport the unit. If the server sends an authoritative stop,
+/// `handle_server_stop_system` corrects the exact cell.
+#[auto_add_system(
+    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    schedule = Update,
+    config(
+        in_set = MovementSystems::Stop,
+        run_if = in_state(GameState::InGame)
+    )
+)]
+pub fn cancel_movement_on_attack(
+    mut commands: Commands,
+    query: Query<(Entity, &AnimationState), With<MovementTarget>>,
+) {
+    for (entity, state) in query.iter() {
+        if *state != AnimationState::Attacking {
+            continue;
+        }
+
+        commands
+            .entity(entity)
+            .remove::<MovementTarget>()
+            .remove::<WalkablePath>()
+            .insert(MovementState::Idle);
+    }
+}
+
 #[auto_observer(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
 pub fn handle_movement_stopped_observer(
     trigger: On<MovementStopped>,
@@ -477,8 +510,12 @@ pub fn handle_movement_stopped_observer(
         .remove::<WalkablePath>()
         .insert(MovementState::Idle);
 
+    // Only walking returns to idle here. A trailing move-stop must not clobber a
+    // busy animation (attacking, hit, sitting, dead) that took over the entity.
     if let Ok(mut behavior) = behaviors.get_mut(event.entity) {
-        behavior.start(AnimationState::Idle);
+        if *behavior.current() == AnimationState::Walking {
+            behavior.start(AnimationState::Idle);
+        }
     }
 }
 

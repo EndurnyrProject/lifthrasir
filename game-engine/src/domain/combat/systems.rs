@@ -129,8 +129,14 @@ fn start_attack_animation(
     target_entity: Option<Entity>,
     src_speed: i32,
 ) {
-    // The server sends the attack motion duration (amotion) in ms.
-    let attack_duration_ms = if src_speed > 0 { src_speed as u32 } else { 500 };
+    // The server sends the attack motion duration (amotion) in ms; floor it so
+    // high-ASPD swings stay readable instead of collapsing to a single frame.
+    const MIN_ATTACK_ANIM_MS: u32 = 150;
+    let attack_duration_ms = if src_speed > 0 {
+        (src_speed as u32).max(MIN_ATTACK_ANIM_MS)
+    } else {
+        500
+    };
 
     if let Some(target) = target_entity {
         let src_transform = transforms.get(src);
