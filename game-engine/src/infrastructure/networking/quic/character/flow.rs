@@ -95,6 +95,12 @@ pub fn char_drain_control(
     mut deleted: MessageWriter<CharacterDeleted>,
     mut deletion_failed: MessageWriter<CharacterDeletionFailed>,
 ) {
+    // The connection is reused for the zone hop, so this drainer keeps seeing
+    // control traffic it doesn't own once char selection is done. Bail to avoid
+    // warning on the zone server's control messages.
+    if matches!(state.phase, CharPhase::Done | CharPhase::Failed) {
+        return;
+    }
     for msg in incoming.read() {
         if msg.channel != CONTROL {
             continue;

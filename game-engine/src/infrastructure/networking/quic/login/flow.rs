@@ -54,6 +54,12 @@ pub fn quic_drain_control(
     mut accepted: MessageWriter<LoginAccepted>,
     mut refused: MessageWriter<LoginRefused>,
 ) {
+    // The login connection is reused for the char and zone hops, so this drainer
+    // keeps seeing control traffic it doesn't own once login is finished. Bail to
+    // avoid warning on the char/zone server's control messages.
+    if matches!(state.phase, LoginPhase::Done | LoginPhase::Failed) {
+        return;
+    }
     for msg in incoming.read() {
         if msg.channel != CONTROL {
             continue;

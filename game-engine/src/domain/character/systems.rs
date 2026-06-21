@@ -317,7 +317,7 @@ pub fn handle_zone_server_info(
     mut events: MessageReader<ZoneServerInfoReceivedEvent>,
     mut quinnet: ResMut<QuinnetClient>,
     mut zone_state: ResMut<QuicZoneState>,
-    user_session: Res<UserSession>,
+    user_session: Option<Res<UserSession>>,
     mut game_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
     characters: Query<(
@@ -327,6 +327,11 @@ pub fn handle_zone_server_info(
 ) {
     for event in events.read() {
         info!("Connecting to zone server for map: {}", event.map_name);
+
+        let Some(user_session) = &user_session else {
+            error!("ZoneServerInfo received but UserSession not available - cannot authenticate zone");
+            continue;
+        };
 
         let character_name = characters
             .iter()
