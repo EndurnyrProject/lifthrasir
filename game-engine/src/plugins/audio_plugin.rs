@@ -1,5 +1,5 @@
 use crate::app::AudioPlugin as AudioDomainPlugin;
-use crate::domain::audio::resources::SfxChannel;
+use crate::domain::audio::resources::{AmbienceChannel, SfxChannel};
 use bevy::prelude::*;
 use bevy_kira_audio::prelude::{AudioApp, SpatialAudioPlugin};
 use bevy_kira_audio::{AudioPlugin as KiraAudioPlugin, DefaultSpatialRadius};
@@ -19,6 +19,7 @@ impl Plugin for AudioPlugin {
         app.add_plugins(KiraAudioPlugin)
             .add_plugins(SpatialAudioPlugin)
             .add_audio_channel::<SfxChannel>()
+            .add_audio_channel::<AmbienceChannel>()
             .insert_resource(DefaultSpatialRadius {
                 radius: SFX_SPATIAL_RADIUS_WORLD,
             })

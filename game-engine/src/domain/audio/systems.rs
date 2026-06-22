@@ -1,9 +1,9 @@
 use super::{
     events::{
-        MuteBgmEvent, MuteSfxEvent, PlayBgmEvent, PlayMobSfx, SetBgmVolumeEvent, SetSfxVolumeEvent,
-        StopBgmEvent,
+        MuteAmbienceEvent, MuteBgmEvent, MuteSfxEvent, PlayBgmEvent, PlayMobSfx,
+        SetAmbienceVolumeEvent, SetBgmVolumeEvent, SetSfxVolumeEvent, StopBgmEvent,
     },
-    resources::{AudioSettings, BgmManager, BgmNameTable, SfxChannel},
+    resources::{AmbienceChannel, AudioSettings, BgmManager, BgmNameTable, SfxChannel},
 };
 use crate::infrastructure::assets::BgmNameTableAsset;
 use bevy::prelude::*;
@@ -343,6 +343,40 @@ pub fn handle_sfx_mute_change(
     for event in events.read() {
         audio_settings.sfx_muted = event.muted;
         sfx_channel.set_volume(amplitude_to_decibels(audio_settings.effective_sfx_volume()));
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
+pub fn handle_ambience_volume_change(
+    mut events: MessageReader<SetAmbienceVolumeEvent>,
+    mut audio_settings: ResMut<AudioSettings>,
+    ambience_channel: Res<AudioChannel<AmbienceChannel>>,
+) {
+    for event in events.read() {
+        audio_settings.ambience_volume = event.volume.clamp(0.0, 1.0);
+        ambience_channel.set_volume(amplitude_to_decibels(
+            audio_settings.effective_ambience_volume(),
+        ));
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
+pub fn handle_ambience_mute_change(
+    mut events: MessageReader<MuteAmbienceEvent>,
+    mut audio_settings: ResMut<AudioSettings>,
+    ambience_channel: Res<AudioChannel<AmbienceChannel>>,
+) {
+    for event in events.read() {
+        audio_settings.ambience_muted = event.muted;
+        ambience_channel.set_volume(amplitude_to_decibels(
+            audio_settings.effective_ambience_volume(),
+        ));
     }
 }
 

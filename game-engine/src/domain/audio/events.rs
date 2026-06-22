@@ -85,3 +85,20 @@ pub struct SetSfxVolumeEvent {
 pub struct MuteSfxEvent {
     pub muted: bool,
 }
+
+/// Event to change the ambience volume.
+#[derive(Message, Debug, Clone, Copy, Reflect)]
+#[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
+pub struct SetAmbienceVolumeEvent {
+    /// Volume level (0.0 to 1.0)
+    pub volume: f32,
+}
+
+/// Event to mute or unmute ambience.
+#[derive(Message, Debug, Clone, Copy, Reflect)]
+#[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
+pub struct MuteAmbienceEvent {
+    pub muted: bool,
+}

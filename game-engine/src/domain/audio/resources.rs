@@ -66,6 +66,10 @@ pub struct AudioSettings {
     pub sfx_volume: f32,
     /// Whether SFX is muted
     pub sfx_muted: bool,
+    /// Ambience volume (0.0 to 1.0)
+    pub ambience_volume: f32,
+    /// Whether ambience is muted
+    pub ambience_muted: bool,
 }
 
 impl Default for AudioSettings {
@@ -75,6 +79,8 @@ impl Default for AudioSettings {
             bgm_muted: false,
             sfx_volume: 0.8,
             sfx_muted: false,
+            ambience_volume: 0.8,
+            ambience_muted: false,
         }
     }
 }
@@ -96,11 +102,23 @@ impl AudioSettings {
             self.sfx_volume
         }
     }
+
+    pub fn effective_ambience_volume(&self) -> f32 {
+        if self.ambience_muted {
+            0.0
+        } else {
+            self.ambience_volume
+        }
+    }
 }
 
 /// Marker type for the dedicated sound-effects audio channel.
 #[derive(Resource)]
 pub struct SfxChannel;
+
+/// Marker type for the dedicated ambient-sounds audio channel.
+#[derive(Resource)]
+pub struct AmbienceChannel;
 
 /// Resource that holds the BGM name table asset handle
 /// This table maps map names to BGM file paths from mp3nametable.txt
@@ -108,4 +126,29 @@ pub struct SfxChannel;
 #[auto_init_resource(plugin = crate::app::audio_plugin::AudioPlugin)]
 pub struct BgmNameTable {
     pub table_handle: Option<Handle<BgmNameTableAsset>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effective_ambience_volume_returns_zero_when_muted() {
+        let settings = AudioSettings {
+            ambience_volume: 0.6,
+            ambience_muted: true,
+            ..Default::default()
+        };
+        assert_eq!(settings.effective_ambience_volume(), 0.0);
+    }
+
+    #[test]
+    fn effective_ambience_volume_returns_volume_when_unmuted() {
+        let settings = AudioSettings {
+            ambience_volume: 0.6,
+            ambience_muted: false,
+            ..Default::default()
+        };
+        assert_eq!(settings.effective_ambience_volume(), 0.6);
+    }
 }

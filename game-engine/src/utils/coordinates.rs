@@ -133,12 +133,19 @@ impl Direction {
     }
 }
 
+/// Translate an RSW object position to Bevy world space, applying the same
+/// half-terrain offset (`map_width * 5.0` on x, `map_height * 5.0` on z) used by
+/// `rsw_to_bevy_transform`.
+pub fn rsw_position_to_bevy(position: [f32; 3], map_width: f32, map_height: f32) -> Vec3 {
+    Vec3::new(
+        position[0] + (map_width * 5.0),
+        position[1],
+        position[2] + (map_height * 5.0),
+    )
+}
+
 pub fn rsw_to_bevy_transform(model: &RswModel, map_width: f32, map_height: f32) -> Transform {
-    let position = Vec3::new(
-        model.position[0] + (map_width * 5.0), // Add half of terrain width
-        model.position[1],
-        model.position[2] + (map_height * 5.0), // Add half of terrain height
-    );
+    let position = rsw_position_to_bevy(model.position, map_width, map_height);
 
     // mat4.rotateZ, then mat4.rotateX, then mat4.rotateY
     let quat_z = Quat::from_rotation_z(model.rotation[2].to_radians());
@@ -282,4 +289,15 @@ pub fn decode_move_data(data: [u8; 6]) -> (u16, u16, u16, u16) {
     let dst_y = (((data[3] as u16) & 0x03) << 8) | (data[4] as u16);
 
     (src_x, src_y, dst_x, dst_y)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rsw_position_to_bevy_applies_half_terrain_offset() {
+        let pos = rsw_position_to_bevy([10.0, 5.0, 20.0], 40.0, 60.0);
+        assert_eq!(pos, Vec3::new(10.0 + 200.0, 5.0, 20.0 + 300.0));
+    }
 }
