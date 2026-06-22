@@ -1,6 +1,6 @@
-//! Hover nameplates: a screen-space label above the currently hovered entity (any
-//! entity with an `EntityName`, including the local player). Driven each frame by the
-//! `HoveredEntity` marker so it picks up names that arrive asynchronously after the
+//! Hover nameplates: a screen-space label at the feet of the currently hovered entity
+//! (any entity with an `EntityName`, including the local player). Driven each frame by
+//! the `HoveredEntity` marker so it picks up names that arrive asynchronously after the
 //! on-hover server name request; positioned by projecting the target's world position.
 
 use bevy::prelude::*;
@@ -13,10 +13,11 @@ use crate::theme;
 use crate::worldspace::WorldspaceFont;
 
 const NAMEPLATE_WIDTH: f32 = 220.0;
-const NAMEPLATE_FONT_SIZE: f32 = 14.0;
-/// Pixels above the entity's projected origin. ponytail: fixed screen offset, not
-/// zoom-scaled — tune live via BRP if it drifts off the sprite's head.
-const NAMEPLATE_SCREEN_OFFSET_Y: f32 = 44.0;
+const NAMEPLATE_FONT_SIZE: f32 = 13.0;
+/// Pixels below the entity's projected origin (the feet). Classic RO shows the name at
+/// the character's feet. ponytail: fixed screen offset, not zoom-scaled — tune live via
+/// BRP if it drifts off the sprite's feet.
+const NAMEPLATE_FOOT_GAP: f32 = 6.0;
 /// Above the world camera, below the fade overlay (`i32::MAX - 1`) and cursor.
 const NAMEPLATE_Z: i32 = 100;
 
@@ -48,8 +49,10 @@ fn spawn_nameplate(
     name: &str,
     is_self: bool,
 ) {
-    let color = if is_self { theme::EMERALD } else { theme::TEXT };
+    let name_color = if is_self { theme::EMERALD_BRI } else { theme::TEXT };
     commands.spawn((
+        // Transparent positioning wrapper: a fixed width centered on the entity keeps
+        // the content-sized pill horizontally centered regardless of name length.
         Node {
             position_type: PositionType::Absolute,
             width: Val::Px(NAMEPLATE_WIDTH),
@@ -61,14 +64,26 @@ fn spawn_nameplate(
         Pickable::IGNORE,
         Nameplate { target },
         children![(
-            Text::new(name),
-            TextFont {
-                font: font.0.clone(),
-                font_size: NAMEPLATE_FONT_SIZE,
+            // Endurnir glass pill: translucent dark fill, gold-faint hairline, rounded.
+            Node {
+                padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(9.0)),
                 ..default()
             },
-            TextColor(color),
+            BackgroundColor(theme::GLASS),
+            BorderColor::all(theme::GOLD_FAINT),
             Pickable::IGNORE,
+            children![(
+                Text::new(name),
+                TextFont {
+                    font: font.0.clone(),
+                    font_size: NAMEPLATE_FONT_SIZE,
+                    ..default()
+                },
+                TextColor(name_color),
+                Pickable::IGNORE,
+            )],
         )],
     ));
 }
@@ -116,7 +131,7 @@ fn follow_targets(
         match camera.world_to_viewport(camera_transform, target_transform.translation()) {
             Ok(screen) => {
                 node.left = Val::Px(screen.x - NAMEPLATE_WIDTH / 2.0);
-                node.top = Val::Px(screen.y - NAMEPLATE_SCREEN_OFFSET_Y);
+                node.top = Val::Px(screen.y + NAMEPLATE_FOOT_GAP);
                 *visibility = Visibility::Visible;
             }
             Err(_) => *visibility = Visibility::Hidden,
