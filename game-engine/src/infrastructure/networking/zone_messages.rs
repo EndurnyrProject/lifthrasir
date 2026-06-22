@@ -25,6 +25,15 @@ pub struct SelfMoved {
     pub start_time: u64,
 }
 
+/// Server commanded a map change (warp); the client unloads, loads `map_name`, and re-places at (x, y).
+#[derive(Message, Debug, Clone)]
+#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+pub struct MapChangeRequested {
+    pub map_name: String,
+    pub x: u32,
+    pub y: u32,
+}
+
 /// An entity stopped moving.
 #[derive(Message, Debug, Clone)]
 #[auto_add_event(plugin = ZoneDomainAutoPlugin)]
