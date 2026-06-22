@@ -640,7 +640,15 @@ pub fn spawn_character_sprite_on_game_start(
     )>,
     map_loader_query: Query<&crate::domain::world::components::MapLoader>,
     ground_assets: Res<Assets<crate::infrastructure::assets::loaders::RoGroundAsset>>,
+    existing_player: Query<(), With<crate::domain::entities::markers::LocalPlayer>>,
 ) {
+    // On a warp the LocalPlayer persists (it is not MapScoped), so skip the full
+    // first-entry spawn to avoid a duplicate sprite hierarchy and a
+    // CharacterStatus::default() reset. reposition_local_player handles the warp.
+    if !existing_player.is_empty() {
+        return;
+    }
+
     // Find character entity matching spawn context
     let Some((character_entity, _meta, char_data)) = characters
         .iter()
