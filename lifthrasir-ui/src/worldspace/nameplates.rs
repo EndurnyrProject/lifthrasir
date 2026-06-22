@@ -49,7 +49,11 @@ fn spawn_nameplate(
     name: &str,
     is_self: bool,
 ) {
-    let name_color = if is_self { theme::EMERALD_BRI } else { theme::TEXT };
+    let name_color = if is_self {
+        theme::EMERALD_BRI
+    } else {
+        theme::TEXT
+    };
     commands.spawn((
         // Transparent positioning wrapper: a fixed width centered on the entity keeps
         // the content-sized pill horizontally centered regardless of name length.

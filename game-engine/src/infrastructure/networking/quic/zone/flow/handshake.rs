@@ -166,10 +166,7 @@ pub fn zone_send_map_loaded(
     plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
-pub fn zone_enter_playing(
-    player: Query<(), With<LocalPlayer>>,
-    mut state: ResMut<QuicZoneState>,
-) {
+pub fn zone_enter_playing(player: Query<(), With<LocalPlayer>>, mut state: ResMut<QuicZoneState>) {
     if player.is_empty() {
         return;
     }

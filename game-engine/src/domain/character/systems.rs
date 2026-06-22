@@ -329,7 +329,9 @@ pub fn handle_zone_server_info(
         info!("Connecting to zone server for map: {}", event.map_name);
 
         let Some(user_session) = &user_session else {
-            error!("ZoneServerInfo received but UserSession not available - cannot authenticate zone");
+            error!(
+                "ZoneServerInfo received but UserSession not available - cannot authenticate zone"
+            );
             continue;
         };
 
@@ -441,7 +443,10 @@ pub fn handle_zone_disconnected(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     for event in events.read() {
-        warn!("Zone disconnected: {} - returning to character selection", event.reason);
+        warn!(
+            "Zone disconnected: {} - returning to character selection",
+            event.reason
+        );
         if *state.get() == GameState::CharacterSelection {
             continue;
         }
