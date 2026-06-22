@@ -2,7 +2,10 @@ use crate::{
     domain::{
         entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid},
         system_sets::WorldLoadingSystems,
-        world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
+        world::{
+            components::MapLoader, map::MapData, map_loader::MapRequestLoader,
+            map_scoped::MapScoped,
+        },
     },
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
     utils::constants::CELL_SIZE,
@@ -692,6 +695,7 @@ pub fn apply_loaded_terrain_textures(
                 Mesh3d(mesh_handle),
                 MeshMaterial3d(material),
                 Transform::from_xyz(0.0, 0.0, 0.0),
+                MapScoped,
             ));
 
             mesh_count += 1;

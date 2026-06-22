@@ -8,6 +8,7 @@ const MAX_LUX: f32 = 10_000.0; // Bright daylight
 use crate::{
     domain::system_sets::MiscRenderingSystems,
     domain::world::components::MapLoader,
+    domain::world::map_scoped::MapScoped,
     infrastructure::assets::loaders::RoWorldAsset,
     infrastructure::ro_formats::{RswLight, RswLightObj, RswObject},
 };
@@ -96,6 +97,7 @@ fn setup_directional_light(commands: &mut Commands, rsw_light: &RswLight) {
         }
         .build(),
         MapLight,
+        MapScoped,
     ));
 }
 
@@ -155,6 +157,7 @@ fn spawn_point_light(commands: &mut Commands, light_obj: &RswLightObj) {
         },
         Transform::from_translation(position),
         MapLight,
+        MapScoped,
     ));
 }
 

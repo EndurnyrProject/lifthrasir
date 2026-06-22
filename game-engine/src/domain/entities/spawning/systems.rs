@@ -22,6 +22,7 @@ use crate::{
             },
         },
         system_sets::EntityLifecycleSystems,
+        world::map_scoped::MapScoped,
     },
     infrastructure::{
         job::JobSpriteRegistry,
@@ -196,6 +197,7 @@ pub fn spawn_network_entity_system(
             CharacterDirection {
                 facing: Direction::from_u8(event.direction),
             },
+            MapScoped,
         ));
 
         // Add character-specific components only for PCs

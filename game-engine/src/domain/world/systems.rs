@@ -3,6 +3,7 @@ use crate::domain::system_sets::WorldLoadingSystems;
 use crate::domain::world::components::MapLoader;
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
+use crate::domain::world::map_scoped::MapScoped;
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset, RoWorldAsset};
 use bevy::prelude::*;
@@ -97,7 +98,7 @@ pub fn setup_unified_map_loading(
         context.map_name, context.spawn_x, context.spawn_y
     );
 
-    commands.spawn(MapRequestLoader::new(context.map_name.clone()));
+    commands.spawn((MapRequestLoader::new(context.map_name.clone()), MapScoped));
     info!(
         "Spawned MapRequestLoader entity for map '{}'",
         context.map_name

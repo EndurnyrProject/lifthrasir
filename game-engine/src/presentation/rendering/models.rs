@@ -3,6 +3,7 @@ use crate::domain::entities::systems::{
 };
 use crate::domain::system_sets::ModelRenderingSystems;
 use crate::domain::world::components::MapLoader;
+use crate::domain::world::map_scoped::MapScoped;
 use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset, RsmAsset};
 use crate::infrastructure::ro_formats::{RsmFile, RswObject};
 use crate::utils::{get_map_dimensions_from_ground, rsw_to_bevy_transform};
@@ -221,6 +222,7 @@ pub fn spawn_map_models(
                             filename: filename.clone(),
                             node_name: node_name.clone(),
                         },
+                        MapScoped,
                     ))
                     .id();
 

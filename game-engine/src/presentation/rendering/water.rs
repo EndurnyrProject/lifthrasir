@@ -10,7 +10,10 @@ use crate::{
     domain::{
         assets::components::{WaterAnimation, WaterExtension, WaterMaterial, WaterSurface},
         system_sets::WaterRenderingSystems,
-        world::{components::MapLoader, map::MapData, map_loader::MapRequestLoader},
+        world::{
+            components::MapLoader, map::MapData, map_loader::MapRequestLoader,
+            map_scoped::MapScoped,
+        },
     },
     infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
     utils::constants::CELL_SIZE,
@@ -236,6 +239,7 @@ pub fn finalize_water_loading_system(
                 Mesh3d(mesh_handle.clone()),
                 MeshMaterial3d(material_handle.clone()),
                 Transform::IDENTITY,
+                MapScoped,
             ));
 
             // Add water surface component to the main entity and remove loading state
