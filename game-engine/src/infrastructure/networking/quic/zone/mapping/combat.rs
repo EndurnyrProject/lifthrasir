@@ -252,6 +252,10 @@ mod tests {
                     range: 5,
                     name: "Bash".into(),
                     upgradable: true,
+                    max_level: 0,
+                    requires: vec![],
+                    req_base_level: 0,
+                    req_job_level: 0,
                 },
                 net::SkillInfo {
                     skill_id: 6,
@@ -261,6 +265,10 @@ mod tests {
                     range: 10,
                     name: "Provoke".into(),
                     upgradable: false,
+                    max_level: 0,
+                    requires: vec![],
+                    req_base_level: 0,
+                    req_job_level: 0,
                 },
             ],
         });
