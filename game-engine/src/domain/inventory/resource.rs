@@ -34,6 +34,10 @@ impl Inventory {
         self.items.values().filter(|item| !item.is_equipped())
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &Item> {
+        self.items.values()
+    }
+
     pub fn len(&self) -> usize {
         self.items.len()
     }
@@ -116,5 +120,17 @@ mod tests {
 
         assert_eq!(equipped, vec![2, 4]);
         assert_eq!(stackables, vec![3]);
+    }
+
+    #[test]
+    fn iter_yields_all_items_regardless_of_wear_state() {
+        let mut inv = Inventory::default();
+        inv.upsert(equip(2));
+        inv.upsert(stackable(3, 1));
+        inv.upsert(equip(4));
+
+        let all: Vec<u16> = inv.iter().map(|i| i.index).collect();
+
+        assert_eq!(all, vec![2, 3, 4]);
     }
 }

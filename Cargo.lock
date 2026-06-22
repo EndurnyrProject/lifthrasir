@@ -4230,6 +4230,7 @@ dependencies = [
  "bevy_ui_text_input",
  "game-engine",
  "leafwing-input-manager",
+ "lifthrasir-data",
  "secrecy",
 ]
 

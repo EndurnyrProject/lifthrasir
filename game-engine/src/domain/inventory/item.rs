@@ -30,8 +30,81 @@ pub struct ItemOption {
     pub param: u8,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ItemCategory {
+    #[default]
+    Use,
+    Etc,
+    Equip,
+}
+
 impl Item {
     pub fn is_equipped(&self) -> bool {
         self.wear_state != 0
+    }
+
+    pub fn category(&self) -> ItemCategory {
+        match self.item_type {
+            0 | 2 | 11 | 18 => ItemCategory::Use,
+            4 | 5 | 8 | 12 => ItemCategory::Equip,
+            _ => ItemCategory::Etc,
+        }
+    }
+
+    pub fn type_label(&self) -> &'static str {
+        match self.category() {
+            ItemCategory::Use => "Usable",
+            ItemCategory::Equip => "Equipment",
+            ItemCategory::Etc => "Etc",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item_with_type(item_type: u8) -> Item {
+        Item {
+            item_type,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn category_use_types() {
+        for t in [0u8, 2, 11, 18] {
+            assert!(
+                matches!(item_with_type(t).category(), ItemCategory::Use),
+                "item_type {t}"
+            );
+        }
+    }
+
+    #[test]
+    fn category_equip_types() {
+        for t in [4u8, 5, 8, 12] {
+            assert!(
+                matches!(item_with_type(t).category(), ItemCategory::Equip),
+                "item_type {t}"
+            );
+        }
+    }
+
+    #[test]
+    fn category_etc_types() {
+        for t in [3u8, 6, 7, 10, 99] {
+            assert!(
+                matches!(item_with_type(t).category(), ItemCategory::Etc),
+                "item_type {t}"
+            );
+        }
+    }
+
+    #[test]
+    fn type_label_non_empty() {
+        for t in [0u8, 4, 3, 99] {
+            assert!(!item_with_type(t).type_label().is_empty(), "item_type {t}");
+        }
     }
 }
