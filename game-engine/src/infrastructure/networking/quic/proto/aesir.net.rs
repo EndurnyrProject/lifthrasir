@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -133,6 +133,12 @@ pub mod envelope {
         Resurrect(super::Resurrect),
         #[prost(message, tag = "71")]
         Respawn(super::Respawn),
+        #[prost(message, tag = "72")]
+        LearnSkill(super::LearnSkill),
+        #[prost(message, tag = "73")]
+        LearnSkillResult(super::LearnSkillResult),
+        #[prost(message, tag = "74")]
+        MapMove(super::MapMove),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -418,6 +424,18 @@ pub struct EnterAck {
     #[prost(uint32, tag = "6")]
     pub font: u32,
 }
+/// Server -> client, load a different map and reposition there (replaces RO
+/// ZC_NPCACK_MAPMOVE 0x0091). The client unloads the current map, loads
+/// `map_name`, places the character at (x, y), and re-sends MapLoaded.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MapMove {
+    #[prost(string, tag = "1")]
+    pub map_name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub x: u32,
+    #[prost(uint32, tag = "3")]
+    pub y: u32,
+}
 /// Client -> server, request to move to a destination cell (replaces RO CZ_REQUEST_MOVE2 0x035F).
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct MoveRequest {
@@ -651,7 +669,15 @@ pub struct GroundSkillCast {
     #[prost(uint32, tag = "4")]
     pub y: u32,
 }
-/// One learned skill within a SkillList.
+/// A prerequisite skill + level needed to learn a SkillInfo entry.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SkillRequirement {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+}
+/// One skill within a SkillList; carries the full available-tree view.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SkillInfo {
     #[prost(uint32, tag = "1")]
@@ -668,6 +694,30 @@ pub struct SkillInfo {
     pub name: ::prost::alloc::string::String,
     #[prost(bool, tag = "7")]
     pub upgradable: bool,
+    #[prost(uint32, tag = "8")]
+    pub max_level: u32,
+    #[prost(message, repeated, tag = "9")]
+    pub requires: ::prost::alloc::vec::Vec<SkillRequirement>,
+    #[prost(uint32, tag = "10")]
+    pub req_base_level: u32,
+    #[prost(uint32, tag = "11")]
+    pub req_job_level: u32,
+}
+/// Client -> server, spend one skill point to learn/raise a skill (replaces RO CZ_UPGRADE_SKILLLEVEL 0x0112).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct LearnSkill {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+}
+/// Server -> client, result of a learn attempt; reason 0 = ok, else the SkillTree reject-reason code.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct LearnSkillResult {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(bool, tag = "2")]
+    pub ok: bool,
+    #[prost(uint32, tag = "3")]
+    pub reason: u32,
 }
 /// Server -> client, the full learned-skill list (replaces RO ZC_SKILLINFO_LIST 0x010F).
 #[derive(Clone, PartialEq, ::prost::Message)]
