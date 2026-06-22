@@ -15,7 +15,7 @@ use bevy_auto_plugin::prelude::*;
 
 use moonshine_behavior::prelude::*;
 
-use super::components::MovementState;
+use super::components::{MovementSpeed, MovementState};
 use super::snapshot::{ServerClock, SnapshotBuffer, SnapshotSample};
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
@@ -26,6 +26,13 @@ use crate::domain::system_sets::MovementSystems;
 /// How far in the past we render remote entities, in milliseconds. Larger = smoother
 /// under jitter/packet loss but more visibly behind; one snapshot interval is typical.
 const INTERP_DELAY_MS: i64 = 100;
+
+/// World units per RO cell (mirrors `spawn_coords_to_world_position`'s `cell * 5` mapping).
+const RO_UNITS_PER_CELL: f32 = 5.0;
+
+/// Gap, in cells, beyond which we snap the visual position instead of gliding to it.
+/// Anything larger is a spawn/teleport/large correction, not a walk step.
+const SNAP_DISTANCE_CELLS: f32 = 3.0;
 
 /// Resolved interpolation result for one entity at a given render time.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -111,6 +118,7 @@ pub fn interpolate_remote_entities_system(
     mut query: Query<(
         Entity,
         &SnapshotBuffer,
+        Option<&MovementSpeed>,
         &mut Transform,
         &mut CharacterDirection,
         &mut MovementState,
@@ -118,11 +126,14 @@ pub fn interpolate_remote_entities_system(
 ) {
     let client_now_ms = time.elapsed().as_millis() as i64;
     let render_ms = clock.server_now_ms(client_now_ms) - INTERP_DELAY_MS;
+    let dt_ms = time.delta().as_secs_f32() * 1000.0;
 
     let mut with_buffer = 0;
     let mut moving = 0;
 
-    for (entity, buffer, mut transform, mut direction, mut state) in query.iter_mut() {
+    for (entity, buffer, movement_speed, mut transform, mut direction, mut state) in
+        query.iter_mut()
+    {
         if registry.is_local_player(entity) {
             continue;
         }
@@ -135,11 +146,17 @@ pub fn interpolate_remote_entities_system(
             moving += 1;
         }
 
-        // spawn_coords_to_world_position is linear in (x, y); replicate its mapping for the
-        // fractional cell so motion is smooth between integer cells.
-        let world = world_from_cell(output.x, output.y);
-        transform.translation.x = world.x;
-        transform.translation.z = world.z;
+        // The server reports integer cells stepped one at a time at the unit's walk speed, so
+        // the bracket-lerp target jumps a whole cell within a single 100ms snapshot interval for
+        // slow units (a poring walks ~400ms/cell). Snapping onto it produces stop-and-go
+        // "teleporting". Chasing it at the unit's own ms-per-cell pace spreads each step across
+        // its real duration, yielding continuous motion that still follows the cell path.
+        let ms_per_cell = movement_speed.map_or(150.0, |s| s.ms_per_cell);
+        let target = world_from_cell(output.x, output.y);
+        let current = Vec3::new(transform.translation.x, target.y, transform.translation.z);
+        let smoothed = follow_toward(current, target, ms_per_cell, dt_ms);
+        transform.translation.x = smoothed.x;
+        transform.translation.z = smoothed.z;
 
         let facing = Direction::from_u8(output.dir);
         if direction.facing != facing {
@@ -179,8 +196,25 @@ pub fn interpolate_remote_entities_system(
 /// World position for a fractional cell. `spawn_coords_to_world_position` only takes
 /// integer cells, so we replicate its linear `cell * 5.0` mapping for the fractional case.
 fn world_from_cell(x: f32, y: f32) -> Vec3 {
-    const RO_UNITS_PER_CELL: f32 = 5.0;
     Vec3::new(x * RO_UNITS_PER_CELL, 0.0, y * RO_UNITS_PER_CELL)
+}
+
+/// Move `current` toward `target` at the unit's walk pace (one straight cell per `ms_per_cell`),
+/// capped to this frame's `dt_ms`. Using Euclidean distance makes diagonal steps take ~√2 longer,
+/// which matches aesir's diagonal movement cost. Gaps beyond [`SNAP_DISTANCE_CELLS`] snap outright
+/// (spawn/teleport/large correction) rather than crawling across the map.
+fn follow_toward(current: Vec3, target: Vec3, ms_per_cell: f32, dt_ms: f32) -> Vec3 {
+    let delta = target - current;
+    let dist = delta.length();
+    if dist <= f32::EPSILON || dist > SNAP_DISTANCE_CELLS * RO_UNITS_PER_CELL {
+        return target;
+    }
+    let max_step = RO_UNITS_PER_CELL / ms_per_cell.max(1.0) * dt_ms;
+    if max_step >= dist {
+        target
+    } else {
+        current + delta / dist * max_step
+    }
 }
 
 /// Mirrors the local player's walk-animation transitions (see
@@ -275,6 +309,36 @@ mod tests {
             out.moving,
             "single sample with move_state=1 holds as moving"
         );
+    }
+
+    #[test]
+    fn follow_toward_caps_step_to_walk_pace() {
+        // 100ms/cell, 50ms frame => half a cell (2.5 world units) toward a 1-cell-east target.
+        let out = follow_toward(Vec3::ZERO, Vec3::new(5.0, 0.0, 0.0), 100.0, 50.0);
+        assert!((out.x - 2.5).abs() < 1e-3, "x = {}", out.x);
+        assert_eq!(out.z, 0.0);
+    }
+
+    #[test]
+    fn follow_toward_reaches_target_when_step_exceeds_gap() {
+        // A long frame covers the whole remaining cell without overshooting.
+        let target = Vec3::new(5.0, 0.0, 0.0);
+        let out = follow_toward(Vec3::ZERO, target, 100.0, 500.0);
+        assert_eq!(out, target);
+    }
+
+    #[test]
+    fn follow_toward_snaps_on_large_gap() {
+        // Beyond SNAP_DISTANCE_CELLS (3 cells = 15 units) => teleport, not a crawl.
+        let target = Vec3::new(40.0, 0.0, 0.0);
+        let out = follow_toward(Vec3::ZERO, target, 100.0, 16.0);
+        assert_eq!(out, target);
+    }
+
+    #[test]
+    fn follow_toward_is_noop_at_target() {
+        let target = Vec3::new(5.0, 0.0, 7.0);
+        assert_eq!(follow_toward(target, target, 100.0, 16.0), target);
     }
 
     #[test]

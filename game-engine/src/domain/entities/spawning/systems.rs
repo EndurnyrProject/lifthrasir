@@ -42,6 +42,8 @@ struct SpawnFields {
     name: String,
     position: (u16, u16),
     direction: u8,
+    /// Server movement speed in ms per cell (lower = faster). Drives walk-animation cadence.
+    speed: u16,
     job: u16,
     head: u16,
     gender: u8,
@@ -69,6 +71,7 @@ impl From<&UnitEntered> for SpawnFields {
             name: e.name.clone(),
             position: (e.x as u16, e.y as u16),
             direction: e.dir as u8,
+            speed: e.speed as u16,
             job: e.job as u16,
             head: e.head as u16,
             gender: e.sex as u8,
@@ -245,7 +248,11 @@ pub fn spawn_network_entity_system(
 
         // Remote entities are placed standing; their position is driven by snapshot
         // interpolation via `interpolate_remote_entities_system`.
-        entity_cmd.insert((MovementState::Idle, MovementSpeed::default_walk(), Grounded));
+        entity_cmd.insert((
+            MovementState::Idle,
+            MovementSpeed::from_server_speed(event.speed),
+            Grounded,
+        ));
 
         debug!(
             "Entity {} spawned IDLE at ({}, {})",
