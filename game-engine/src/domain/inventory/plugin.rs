@@ -9,7 +9,10 @@ impl Plugin for InventoryPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Inventory>()
             .add_systems(Update, systems::apply_inventory_messages)
-            .add_systems(OnExit(GameState::InGame), systems::reset_inventory);
+            .add_systems(
+                OnEnter(GameState::CharacterSelection),
+                systems::reset_inventory,
+            );
     }
 }
 
