@@ -183,6 +183,25 @@ impl EntityRegistry {
         self.account_to_entity.len()
     }
 
+    /// Clear remote registrations while preserving the local player.
+    ///
+    /// Used on map exit/warp: every remote entity (mobs/NPCs/players) is despawned
+    /// by `despawn_map_scoped`, so their stale `char_id -> Entity` entries must be
+    /// dropped. The local player survives the warp, so its registration is kept.
+    pub fn clear_non_local(&mut self) {
+        self.account_to_entity.clear();
+        self.entity_to_account.clear();
+
+        if let (Some(entity), Some(account_id)) =
+            (self.local_player_entity, self.local_player_account_id)
+        {
+            self.account_to_entity.insert(account_id, entity);
+            self.entity_to_account.insert(entity, account_id);
+        }
+
+        info!("Cleared remote entity registrations, kept local player");
+    }
+
     /// Clear all registrations (useful for map changes or disconnection)
     pub fn clear(&mut self) {
         self.account_to_entity.clear();
@@ -266,6 +285,41 @@ mod tests {
         assert_eq!(registry.entity_count(), 2);
 
         registry.clear();
+
+        assert_eq!(registry.entity_count(), 0);
+        assert_eq!(registry.local_player_entity(), None);
+    }
+
+    #[test]
+    fn test_clear_non_local() {
+        let mut registry = EntityRegistry::default();
+        let player = Entity::from_bits(1);
+        let remote1 = Entity::from_bits(2);
+        let remote2 = Entity::from_bits(3);
+
+        registry.set_local_player(player, 100);
+        registry.register_entity(200, remote1);
+        registry.register_entity(300, remote2);
+
+        assert_eq!(registry.entity_count(), 3);
+
+        registry.clear_non_local();
+
+        assert_eq!(registry.get_entity(200), None);
+        assert_eq!(registry.get_entity(300), None);
+        assert_eq!(registry.local_player_entity(), Some(player));
+        assert_eq!(registry.local_player_account_id(), Some(100));
+        assert!(registry.is_local_player(player));
+        assert_eq!(registry.get_entity(100), Some(player));
+        assert_eq!(registry.entity_count(), 1);
+    }
+
+    #[test]
+    fn test_clear_non_local_without_local_player() {
+        let mut registry = EntityRegistry::default();
+        registry.register_entity(200, Entity::from_bits(2));
+
+        registry.clear_non_local();
 
         assert_eq!(registry.entity_count(), 0);
         assert_eq!(registry.local_player_entity(), None);
