@@ -115,7 +115,7 @@ mod tests {
     }
 
     #[test]
-    fn leaving_ingame_empties_inventory() {
+    fn entering_character_selection_empties_inventory() {
         let mut app = App::new();
         app.add_plugins(StatesPlugin);
         app.init_state::<GameState>();
@@ -133,7 +133,7 @@ mod tests {
 
         app.world_mut()
             .resource_mut::<NextState<GameState>>()
-            .set(GameState::Loading);
+            .set(GameState::CharacterSelection);
         app.update();
 
         let inventory = app.world().resource::<Inventory>();
