@@ -359,7 +359,7 @@ pub fn on_despawn_entity(
     let event = trigger.event();
     let entity = trigger.entity;
 
-    commands.entity(entity).despawn();
+    commands.entity(entity).try_despawn();
 
     entity_registry.unregister_entity_by_aid(event.aid);
 
@@ -428,15 +428,10 @@ pub fn bridge_vanish_requests_system(
 /// Observer for entity vanish requests
 ///
 /// When an entity vanishes (moves out of range, dies, logs out, or teleports),
-/// this observer checks if the entity is currently moving. If so, it marks the
-/// entity with PendingDespawn component to defer actual despawn until movement
-/// completes. This prevents entities from disappearing mid-movement.
+/// death (vanish_type 1) is deferred via PendingDespawn so combat::handle_death can
+/// play the death animation; every other vanish despawns immediately.
 #[auto_observer(plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin)]
-pub fn on_entity_vanish_request(
-    trigger: On<EntityVanishRequested>,
-    mut commands: Commands,
-    movement_query: Query<&MovementState>,
-) {
+pub fn on_entity_vanish_request(trigger: On<EntityVanishRequested>, mut commands: Commands) {
     let event = trigger.event();
     let entity = trigger.entity;
 
@@ -448,13 +443,10 @@ pub fn on_entity_vanish_request(
         _ => "unknown",
     };
 
-    let is_moving = movement_query
-        .get(entity)
-        .is_ok_and(|state| matches!(state, MovementState::Moving));
-
-    // Death (vanish_type 1) plays its animation via combat::handle_death, and moving
-    // entities finish their move first - both defer despawn instead of removing now.
-    if event.vanish_type == 1 || is_moving {
+    // Only death defers. Remote entities are snapshot-interpolated, so a vanished unit
+    // receives no further updates to "finish" a move with - deferring on a stale Moving
+    // state (its last snapshot was mid-walk) leaves it frozen on screen until the timeout.
+    if event.vanish_type == 1 {
         debug!(
             "Entity {:?} (AID {}) deferring despawn ({})",
             entity, event.aid, vanish_reason
@@ -466,9 +458,8 @@ pub fn on_entity_vanish_request(
         return;
     }
 
-    // Entity is idle or missing MovementState - despawn immediately
     debug!(
-        "Entity {:?} (AID {}) is idle, despawning immediately ({})",
+        "Entity {:?} (AID {}) despawning immediately ({})",
         entity, event.aid, vanish_reason
     );
 
@@ -478,11 +469,11 @@ pub fn on_entity_vanish_request(
     });
 }
 
-/// Check pending despawns and despawn entities when movement completes
+/// Despawn death entities once their deferral timeout expires.
 ///
-/// This system runs every frame to check entities marked with PendingDespawn.
-/// When an entity finishes moving (MovementState::Idle) or the timeout expires,
-/// it triggers a DespawnEntity observer to handle actual despawn.
+/// Only death (vanish_type 1) entities carry PendingDespawn (see on_entity_vanish_request);
+/// they stay on screen for their death animation and despawn when the timeout elapses. The
+/// DespawnEntity observer despawns the whole entity, so there is no component to remove here.
 #[auto_add_system(
     plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
     schedule = Update,
@@ -490,37 +481,22 @@ pub fn on_entity_vanish_request(
 )]
 pub fn check_pending_despawns_system(
     mut commands: Commands,
-    query: Query<(Entity, &PendingDespawn, &MovementState, &NetworkEntity)>,
+    query: Query<(Entity, &PendingDespawn, &NetworkEntity)>,
 ) {
-    for (entity, pending, movement_state, network_entity) in query.iter() {
-        // Dead entities are idle while their death animation plays, so they despawn
-        // only on timeout; others despawn as soon as movement completes.
-        let should_despawn = if pending.vanish_type == 1 {
-            pending.has_timed_out()
-        } else {
-            matches!(movement_state, MovementState::Idle) || pending.has_timed_out()
-        };
-
-        if should_despawn {
-            let reason = if pending.has_timed_out() {
-                "timeout"
-            } else {
-                "movement complete"
-            };
-
-            debug!(
-                "Pending despawn completed for entity {:?} (AID {}, reason: {})",
-                entity, network_entity.aid, reason
-            );
-
-            commands.trigger(DespawnEntity {
-                entity,
-                aid: network_entity.gid,
-            });
-
-            // Remove PendingDespawn component (entity will be despawned by observer)
-            commands.entity(entity).remove::<PendingDespawn>();
+    for (entity, pending, network_entity) in query.iter() {
+        if !pending.has_timed_out() {
+            continue;
         }
+
+        debug!(
+            "Pending despawn timed out for entity {:?} (AID {})",
+            entity, network_entity.aid
+        );
+
+        commands.trigger(DespawnEntity {
+            entity,
+            aid: network_entity.gid,
+        });
     }
 }
 
