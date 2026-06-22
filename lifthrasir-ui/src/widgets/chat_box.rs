@@ -7,6 +7,7 @@
 //! a text input holds focus), so typing in chat stops WASD/hotkeys without extra
 //! wiring here.
 
+use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy_ui_text_input::{SubmitText, TextInputMode, TextInputNode, TextInputPrompt};
 use game_engine::core::state::GameState;
@@ -38,7 +39,8 @@ impl Plugin for ChatBoxPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (append_incoming_chat, send_chat).run_if(in_state(GameState::InGame)),
+            (append_incoming_chat, send_chat, chat_focus_control)
+                .run_if(in_state(GameState::InGame)),
         );
     }
 }
@@ -277,6 +279,10 @@ fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
             mode: TextInputMode::SingleLine,
             max_chars: Some(CHAT_MAX_CHARS),
             clear_on_submit: true,
+            // Focus is driven by Enter/Escape (see `chat_focus_control`), not by
+            // clicking — otherwise a click would trap the cursor with no way out
+            // (`unfocus_on_submit` is a no-op in bevy_ui_text_input 0.7).
+            focus_on_pointer_down: false,
             ..default()
         },
         TextInputPrompt::new("Press Enter to chat…"),
@@ -289,7 +295,10 @@ fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
         ChatInput,
         Node {
             flex_grow: 1.0,
-            height: Val::Px(26.0),
+            // ~one line tall (default line height = 1.2 * font) so the bar's
+            // center alignment vertically centers the text instead of pinning it
+            // to the top of a taller box.
+            height: Val::Px(16.0),
             ..default()
         },
         ChildOf(bar),
@@ -358,6 +367,7 @@ fn send_chat(
     mut submits: MessageReader<SubmitText>,
     inputs: Query<(), With<ChatInput>>,
     mut writer: MessageWriter<ChatSendRequested>,
+    mut input_focus: ResMut<InputFocus>,
 ) {
     for event in submits.read() {
         if !inputs.contains(event.entity) {
@@ -370,6 +380,31 @@ fn send_chat(
         writer.write(ChatSendRequested {
             message: message.to_string(),
         });
+        // Submitting returns control to gameplay (the crate's `unfocus_on_submit`
+        // does nothing in 0.7). Only non-empty sends unfocus, so the Enter that
+        // opened the chat (an empty submit) leaves it focused for typing.
+        input_focus.clear();
+    }
+}
+
+/// RO-style focus toggle: Enter opens the chat input (gating gameplay input while
+/// typing), Escape releases it without sending. Submitting also releases it (see
+/// [`send_chat`]). The input has `focus_on_pointer_down: false`, so this is the only
+/// way it gains focus — clicking can't strand the cursor in the field.
+fn chat_focus_control(
+    keys: Res<ButtonInput<KeyCode>>,
+    chat_input: Query<Entity, With<ChatInput>>,
+    mut input_focus: ResMut<InputFocus>,
+) {
+    let Ok(entity) = chat_input.single() else {
+        return;
+    };
+    let focused = input_focus.get() == Some(entity);
+    let enter = keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::NumpadEnter);
+    if !focused && enter {
+        input_focus.set(entity);
+    } else if focused && keys.just_pressed(KeyCode::Escape) {
+        input_focus.clear();
     }
 }
 
@@ -383,6 +418,30 @@ mod tests {
         append_line(&mut history, "a");
         append_line(&mut history, "b");
         assert_eq!(history, "a\nb");
+    }
+
+    #[test]
+    fn enter_focuses_chat_and_escape_releases_it() {
+        let mut app = App::new();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<InputFocus>();
+        app.add_systems(Update, chat_focus_control);
+        let chat = app.world_mut().spawn(ChatInput).id();
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.update();
+        assert_eq!(app.world().resource::<InputFocus>().get(), Some(chat));
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .clear();
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Escape);
+        app.update();
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
     }
 
     #[test]
