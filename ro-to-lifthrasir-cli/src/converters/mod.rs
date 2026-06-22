@@ -2,7 +2,18 @@ pub mod item;
 pub mod job;
 
 use crate::grf_vfs::GrfVfs;
+use anyhow::Context;
 use std::path::Path;
+
+/// English item/job names live in the on-disk SystemEN translation project
+/// (zackdreaver/llchrisll), not the GRF. These are plaintext Lua, so no
+/// decompile step is needed.
+const SYSTEM_EN_DIR: &str = "assets/SystemEN";
+
+pub(crate) fn read_system_en(rel: &str) -> anyhow::Result<Vec<u8>> {
+    let path = Path::new(SYSTEM_EN_DIR).join(rel);
+    std::fs::read(&path).with_context(|| format!("reading SystemEN file: {}", path.display()))
+}
 
 type ConverterFn = fn(&GrfVfs, &Path) -> anyhow::Result<()>;
 

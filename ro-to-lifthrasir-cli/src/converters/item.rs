@@ -1,20 +1,15 @@
-use crate::decompile::decompile;
+use crate::converters::read_system_en;
 use crate::encoding::decode_euckr;
-use crate::escape::escape_string_constants;
 use crate::grf_vfs::GrfVfs;
 use crate::lua;
 use anyhow::Context;
 use lifthrasir_data::{ItemData, ItemInfo};
 use std::path::Path;
 
-const ITEMINFO_PATH: &str = "data/luafiles514/lua files/datainfo/iteminfo.lub";
+const ITEMINFO_PATH: &str = "LuaFiles514/itemInfo.lua";
 
-pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
-    let bytes = vfs
-        .read(ITEMINFO_PATH)
-        .with_context(|| format!("iteminfo lub not found in GRFs: {ITEMINFO_PATH}"))?;
-    let src = decompile(&bytes).context("decompiling iteminfo.lub")?;
-    let src = escape_string_constants(src, &bytes).context("escaping iteminfo string constants")?;
+pub fn run(_vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
+    let src = read_system_en(ITEMINFO_PATH)?;
 
     let lua = lua::new_vm_unbounded().map_err(lua_err)?;
     lua::exec_chunk(&lua, &src).map_err(lua_err)?;

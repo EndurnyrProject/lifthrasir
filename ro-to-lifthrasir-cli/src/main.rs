@@ -2,7 +2,6 @@ mod config;
 mod converters;
 mod decompile;
 mod encoding;
-mod escape;
 mod grf_vfs;
 mod lua;
 mod proto_gen;

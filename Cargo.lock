@@ -6134,7 +6134,6 @@ dependencies = [
 name = "ro-to-lifthrasir-cli"
 version = "0.1.0"
 dependencies = [
- "aho-corasick",
  "anyhow",
  "clap",
  "encoding_rs",
