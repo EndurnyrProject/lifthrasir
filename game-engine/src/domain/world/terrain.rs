@@ -45,15 +45,20 @@ struct MeshData {
     indices: Vec<u32>,
 }
 
-/// Convert ARGB color format to normalized RGBA values
-/// GND files use ARGB format (alpha in index 0), we need RGBA for rendering
+/// Convert a GND tile color to normalized RGBA values.
+///
+/// GND stores the per-tile color as BGRA: bytes are blue, green, red, alpha.
+/// The alpha byte (index 3) is the real opacity and is effectively always 255.
+/// The previous code mistook the blue byte (index 0) for alpha, so every tile
+/// whose blue value was below the terrain `AlphaMode::Mask` threshold (0.5) got
+/// its fragments discarded - punching invisible holes into the ground.
 #[inline]
-fn argb_to_rgba_normalized(argb: &[u8; 4]) -> [f32; 4] {
+fn gnd_tile_color_to_rgba(bgra: &[u8; 4]) -> [f32; 4] {
     [
-        argb[1] as f32 / 255.0, // R
-        argb[2] as f32 / 255.0, // G
-        argb[3] as f32 / 255.0, // B
-        argb[0] as f32 / 255.0, // A
+        bgra[2] as f32 / 255.0, // R
+        bgra[1] as f32 / 255.0, // G
+        bgra[0] as f32 / 255.0, // B
+        bgra[3] as f32 / 255.0, // A
     ]
 }
 
@@ -282,7 +287,7 @@ fn generate_wall(
     }
 
     // Use tile color for artistic variation (GND uses ARGB format)
-    let tile_color = argb_to_rgba_normalized(&tile.color);
+    let tile_color = gnd_tile_color_to_rgba(&tile.color);
     for _ in 0..4 {
         mesh_data.colors.push(tile_color);
     }
@@ -797,7 +802,7 @@ fn create_terrain_meshes(
             mesh_data.normals.push(normals[0]); // UL (x+0,y+0) - repeated
 
             // Use tile color for artistic variation (GND uses ARGB format)
-            let tile_color = argb_to_rgba_normalized(&tile.color);
+            let tile_color = gnd_tile_color_to_rgba(&tile.color);
             for _ in 0..6 {
                 mesh_data.colors.push(tile_color);
             }

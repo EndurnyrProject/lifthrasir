@@ -97,12 +97,8 @@ pub fn load_water_system(
             for x in 0..width {
                 let surface = &ground.surfaces[y * width + x];
 
-                // Skip if no tile exists (TileUp == -1)
-                if surface.tile_up == -1 {
-                    continue;
-                }
-
-                // Check if any corner height is above wave_height (GRF Editor logic)
+                // Water covers any cell below the wave height, including deep cells
+                // with no ground tile (tile_up == -1) which the terrain mesh skips.
                 let heights = &surface.height;
                 let has_water = heights[0] > wave_height
                     || heights[1] > wave_height
