@@ -13,8 +13,7 @@ use crate::{
             },
             components::{NetworkEntity, PendingDespawn},
             markers::*,
-            movement::components::{MovementSpeed, MovementState, MovementTarget},
-            pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
+            movement::components::{MovementSpeed, MovementState},
             registry::EntityRegistry,
             spawning::events::{DespawnEntity, EntityVanishRequested, PendingSpawnBuffer},
             sprite_rendering::{
@@ -26,7 +25,7 @@ use crate::{
     },
     infrastructure::{
         job::JobSpriteRegistry,
-        networking::zone_messages::{UnitEntered, UnitLeft, UnitMoved},
+        networking::zone_messages::{UnitEntered, UnitLeft},
     },
     utils::coordinates::spawn_coords_to_world_position,
 };
@@ -43,9 +42,6 @@ struct SpawnFields {
     name: String,
     position: (u16, u16),
     direction: u8,
-    destination: Option<(u16, u16)>,
-    move_start_time: Option<u32>,
-    current_server_tick: u32,
     job: u16,
     head: u16,
     gender: u8,
@@ -59,22 +55,13 @@ struct SpawnFields {
     robe: u16,
     hp: u32,
     max_hp: u32,
-    speed: u16,
     level: u16,
 }
 
 impl From<&UnitEntered> for SpawnFields {
     fn from(e: &UnitEntered) -> Self {
-        // NOTE: `UnitEntered` collapses STAND/NEW/MOVE-entry; `moving` selects the walking
-        // branch and the `dst_*`/`move_start_time` fields carry the move.
-        let destination = if e.moving {
-            Some((e.dst_x as u16, e.dst_y as u16))
-        } else {
-            None
-        };
-        // NOTE: the proto sends no per-spawn server "now"; with only move_start_time,
-        // elapsed = now - start collapses to 0 (entity walks from its source cell).
-        // Upgrade path: derive a current tick from the time-sync clock (Approach B).
+        // NOTE: remote movement is driven by snapshot interpolation, so the spawn path
+        // always sets up a standing entity; `UnitEntered`'s move fields are ignored here.
         SpawnFields {
             aid: e.aid,
             gid: e.gid,
@@ -82,9 +69,6 @@ impl From<&UnitEntered> for SpawnFields {
             name: e.name.clone(),
             position: (e.x as u16, e.y as u16),
             direction: e.dir as u8,
-            destination,
-            move_start_time: e.moving.then_some(e.move_start_time as u32),
-            current_server_tick: e.move_start_time as u32,
             job: e.job as u16,
             head: e.head as u16,
             gender: e.sex as u8,
@@ -98,7 +82,6 @@ impl From<&UnitEntered> for SpawnFields {
             robe: e.robe as u16,
             hp: e.hp,
             max_hp: e.max_hp,
-            speed: e.speed as u16,
             level: e.clevel as u16,
         }
     }
@@ -118,27 +101,16 @@ pub fn spawn_network_entity_system(
     mut commands: Commands,
     mut spawn_events: MessageReader<UnitEntered>,
     mut entity_registry: ResMut<EntityRegistry>,
-    mut unit_moved: MessageWriter<UnitMoved>,
     job_registry: Option<Res<JobSpriteRegistry>>,
-    pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
 ) {
     for unit in spawn_events.read() {
         let event = SpawnFields::from(unit);
 
         // Check if entity already exists (e.g., spawned from character selection or re-entering view)
         if let Some(existing_entity) = entity_registry.get_entity(event.gid) {
+            // Re-entering view: de-queue any pending despawn. Remote movement is now driven
+            // by snapshot interpolation, so we no longer forward a per-step destination here.
             commands.entity(existing_entity).remove::<PendingDespawn>();
-
-            // aesir re-sends a moving UnitSpawn per step; forward the destination to
-            // the movement domain so the entity keeps walking instead of freezing.
-            if let Some((dst_x, dst_y)) = event.destination {
-                unit_moved.write(UnitMoved {
-                    gid: event.gid,
-                    dst_x: dst_x as u32,
-                    dst_y: dst_y as u32,
-                    speed: event.speed as u32,
-                });
-            }
             continue;
         }
 
@@ -271,133 +243,14 @@ pub fn spawn_network_entity_system(
             Combatant::new(150),
         ));
 
-        if let Some(destination) = event.destination {
-            let dest_world_pos = spawn_coords_to_world_position(destination.0, destination.1, 0, 0);
+        // Remote entities are placed standing; their position is driven by snapshot
+        // interpolation via `interpolate_remote_entities_system`.
+        entity_cmd.insert((MovementState::Idle, MovementSpeed::default_walk(), Grounded));
 
-            // Calculate elapsed time since movement started
-            let elapsed_ms = event
-                .current_server_tick
-                .saturating_sub(event.move_start_time.unwrap_or(0));
-
-            // Calculate movement progress to determine spawn position
-            let speed_ms_per_cell = event.speed as f32;
-            let dx = (destination.0 as f32) - (event.position.0 as f32);
-            let dy = (destination.1 as f32) - (event.position.1 as f32);
-            let total_distance = (dx * dx + dy * dy).sqrt();
-
-            let progress = if total_distance > 0.0 && speed_ms_per_cell > 0.0 {
-                (elapsed_ms as f32 / (total_distance * speed_ms_per_cell)).min(1.0)
-            } else {
-                0.0
-            };
-
-            // Interpolate spawn position - entity appears mid-movement
-            let spawn_x = event.position.0 as f32 + dx * progress;
-            let spawn_y = event.position.1 as f32 + dy * progress;
-            let interpolated_world_pos =
-                spawn_coords_to_world_position(spawn_x as u16, spawn_y as u16, 0, 0);
-
-            debug!(
-                "Entity {} spawning mid-movement: progress={:.2}% ({:.1}, {:.1}) -> ({}, {}), elapsed={}ms",
-                event.name,
-                progress * 100.0,
-                spawn_x,
-                spawn_y,
-                destination.0,
-                destination.1,
-                elapsed_ms
-            );
-
-            // Generate pathfinding waypoints for smooth movement
-            let waypoints = if let Some(grid) = pathfinding_grid.as_ref() {
-                if let Some(waypoints) = find_path(
-                    &grid.0,
-                    (event.position.0, event.position.1),
-                    (destination.0, destination.1),
-                ) {
-                    if waypoints.len() > 1 {
-                        debug!(
-                            "Generated path for spawning entity {} with {} waypoints",
-                            event.name,
-                            waypoints.len()
-                        );
-                        entity_cmd.insert(WalkablePath::new(
-                            waypoints.clone(),
-                            (destination.0, destination.1),
-                        ));
-                        Some(waypoints)
-                    } else {
-                        None
-                    }
-                } else {
-                    warn!(
-                        "Could not find path for entity {} from ({}, {}) to ({}, {}) - will use direct movement",
-                        event.name, event.position.0, event.position.1, destination.0, destination.1
-                    );
-                    None
-                }
-            } else {
-                warn!(
-                    "Pathfinding grid not available for entity {} spawn - will use direct movement",
-                    event.name
-                );
-                None
-            };
-
-            let target = if let Some(waypoints) = waypoints {
-                let waypoint_world_positions: Vec<Vec3> = waypoints
-                    .iter()
-                    .map(|(x, y)| spawn_coords_to_world_position(*x, *y, 0, 0))
-                    .collect();
-
-                MovementTarget::new_with_waypoints_and_elapsed(
-                    event.position.0,
-                    event.position.1,
-                    destination.0,
-                    destination.1,
-                    world_pos,
-                    dest_world_pos,
-                    event.move_start_time.unwrap_or(0),
-                    elapsed_ms,
-                    waypoint_world_positions,
-                    waypoints,
-                )
-            } else {
-                MovementTarget::new_with_elapsed(
-                    event.position.0,
-                    event.position.1,
-                    destination.0,
-                    destination.1,
-                    world_pos,
-                    dest_world_pos,
-                    event.move_start_time.unwrap_or(0),
-                    elapsed_ms,
-                )
-            };
-
-            // Update entity transform to spawn at interpolated position
-            entity_cmd.insert(Transform::from_translation(interpolated_world_pos));
-
-            entity_cmd.insert((
-                target,
-                MovementState::Moving,
-                MovementSpeed::from_server_speed(event.speed),
-                Grounded,
-                AnimationState::Walking,
-            ));
-
-            debug!(
-                "Entity {} spawned MOVING at ({:.1}, {:.1}) heading to ({}, {})",
-                event.name, spawn_x, spawn_y, destination.0, destination.1
-            );
-        } else {
-            entity_cmd.insert((MovementState::Idle, MovementSpeed::default_walk(), Grounded));
-
-            debug!(
-                "Entity {} spawned IDLE at ({}, {})",
-                event.name, event.position.0, event.position.1
-            );
-        }
+        debug!(
+            "Entity {} spawned IDLE at ({}, {})",
+            event.name, event.position.0, event.position.1
+        );
 
         let entity_id = entity_cmd.id();
 

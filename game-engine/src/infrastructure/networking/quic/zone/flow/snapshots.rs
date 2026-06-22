@@ -23,6 +23,11 @@ pub fn zone_drain_snapshots(
             continue;
         }
         if let Body::Snapshot(s) = msg.body.clone() {
+            debug!(
+                "[snapshot] received from server: tick={} entities={}",
+                s.server_tick,
+                s.entities.len()
+            );
             received.write(snapshot(s));
         }
     }

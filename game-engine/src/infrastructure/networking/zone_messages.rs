@@ -34,19 +34,6 @@ pub struct UnitMoveStopped {
     pub y: u32,
 }
 
-/// An already-spawned remote entity took another step. aesir re-sends a moving
-/// `UnitSpawn` (per-cell MOVEENTRY) for each step; the spawn flow drops the spawn
-/// (entity exists) and forwards just the destination here. The local player is
-/// excluded — its movement is authoritative via `SelfMoved`.
-#[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
-pub struct UnitMoved {
-    pub gid: u32,
-    pub dst_x: u32,
-    pub dst_y: u32,
-    pub speed: u32,
-}
-
 /// An entity entered view (collapses new/stand/move-entry; move fields carry the moving case).
 #[derive(Message, Debug, Clone)]
 #[auto_add_event(plugin = ZoneDomainAutoPlugin)]
