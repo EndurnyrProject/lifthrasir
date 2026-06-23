@@ -3,14 +3,15 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use std::f32::consts::PI;
 
-const MAX_LUX: f32 = 10_000.0; // Bright daylight
+const MAX_LUX: f32 = 3_000.0; // Sun illuminance; kept low so point lights read against it (camera Exposure compensates overall brightness)
 
 use crate::{
     domain::system_sets::MiscRenderingSystems,
     domain::world::components::MapLoader,
     domain::world::map_scoped::MapScoped,
-    infrastructure::assets::loaders::RoWorldAsset,
+    infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
     infrastructure::ro_formats::{RswLight, RswLightObj, RswObject},
+    utils::{get_map_dimensions_from_ground, rsw_position_to_bevy},
 };
 
 /// Enhanced Lighting Plugin that creates realistic lighting from RSW data
@@ -30,20 +31,28 @@ pub struct MapLight;
 pub fn setup_enhanced_map_lighting(
     mut commands: Commands,
     world_assets: Res<Assets<RoWorldAsset>>,
+    ground_assets: Res<Assets<RoGroundAsset>>,
     query: Query<(Entity, &MapLoader), Without<MapLight>>,
 ) {
     for (entity, map_loader) in query.iter() {
-        if let Some(world_handle) = &map_loader.world {
-            if let Some(world_asset) = world_assets.get(world_handle) {
-                let world = &world_asset.world;
+        let Some(world_handle) = &map_loader.world else {
+            continue;
+        };
+        let Some(world_asset) = world_assets.get(world_handle) else {
+            continue;
+        };
+        let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
+            continue;
+        };
 
-                setup_directional_light(&mut commands, &world.light);
-                setup_ambient_light(&mut commands, &world.light);
-                spawn_enhanced_point_lights(&mut commands, &world.objects);
+        let world = &world_asset.world;
+        let (map_width, map_height) = get_map_dimensions_from_ground(&ground_asset.ground);
 
-                commands.entity(entity).insert(MapLight);
-            }
-        }
+        setup_directional_light(&mut commands, &world.light);
+        setup_ambient_light(&mut commands, &world.light);
+        spawn_enhanced_point_lights(&mut commands, &world.objects, map_width, map_height);
+
+        commands.entity(entity).insert(MapLight);
     }
 }
 
@@ -111,18 +120,23 @@ fn setup_ambient_light(commands: &mut Commands, rsw_light: &RswLight) {
 
     commands.insert_resource(GlobalAmbientLight {
         color: ambient_color,
-        brightness: 500.0, // Ensure minimum ambient light for softer shadows
+        brightness: 100.0, // Low fill so the sun and point lights keep contrast (Exposure restores overall brightness)
         affects_lightmapped_meshes: false,
     });
 }
 
 /// Spawn enhanced point lights from RSW light objects
-fn spawn_enhanced_point_lights(commands: &mut Commands, rsw_objects: &[RswObject]) {
+fn spawn_enhanced_point_lights(
+    commands: &mut Commands,
+    rsw_objects: &[RswObject],
+    map_width: f32,
+    map_height: f32,
+) {
     let mut point_light_count = 0;
 
     for obj in rsw_objects.iter() {
         if let RswObject::Light(light_obj) = obj {
-            spawn_point_light(commands, light_obj);
+            spawn_point_light(commands, light_obj, map_width, map_height);
             point_light_count += 1;
         }
     }
@@ -131,28 +145,30 @@ fn spawn_enhanced_point_lights(commands: &mut Commands, rsw_objects: &[RswObject
 }
 
 /// Spawn individual point light from RSW light object
-fn spawn_point_light(commands: &mut Commands, light_obj: &RswLightObj) {
-    let position = Vec3::new(
-        light_obj.position[0],
-        light_obj.position[1],
-        light_obj.position[2],
-    );
+fn spawn_point_light(
+    commands: &mut Commands,
+    light_obj: &RswLightObj,
+    map_width: f32,
+    map_height: f32,
+) {
+    let position = rsw_position_to_bevy(light_obj.position, map_width, map_height);
 
     let light_color = Color::srgb(light_obj.color[0], light_obj.color[1], light_obj.color[2]);
 
-    let base_intensity = 1000.0;
-    let color_brightness = (light_obj.color[0] + light_obj.color[1] + light_obj.color[2]) / 3.0;
-    let final_intensity = base_intensity * color_brightness;
+    // Tuned against the lowered sun/ambient baseline and the camera Exposure/Bloom.
+    // The RSW color already scales emitted radiance, so dim torches stay dim without a
+    // separate brightness multiplier.
+    let intensity = 3_000_000.0;
 
     let radius = 0.3;
 
     commands.spawn((
         PointLight {
-            intensity: final_intensity,
+            intensity,
             color: light_color,
             range: light_obj.range,
             radius,
-            shadows_enabled: true,
+            shadows_enabled: false,
             ..default()
         },
         Transform::from_translation(position),

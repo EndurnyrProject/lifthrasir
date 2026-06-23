@@ -1,5 +1,6 @@
 use bevy::camera::ClearColorConfig;
 use bevy::prelude::*;
+use bevy::render::view::Hdr;
 use bevy::ui::IsDefaultUiCamera;
 use bevy_ui_text_input::TextInputPlugin;
 
@@ -43,6 +44,9 @@ fn spawn_ui_camera(mut commands: Commands) {
             clear_color: ClearColorConfig::None,
             ..default()
         },
+        // Must match the 3D world camera's HDR setting: cameras sharing the window
+        // target have to agree on HDR, otherwise the 3D pass blows out to white.
+        Hdr,
         IsDefaultUiCamera,
         Name::new("UiCamera"),
     ));
