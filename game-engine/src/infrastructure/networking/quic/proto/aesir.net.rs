@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -139,6 +139,10 @@ pub mod envelope {
         LearnSkillResult(super::LearnSkillResult),
         #[prost(message, tag = "74")]
         MapMove(super::MapMove),
+        #[prost(message, tag = "75")]
+        UseItem(super::UseItem),
+        #[prost(message, tag = "76")]
+        ItemUseResult(super::ItemUseResult),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -986,4 +990,20 @@ pub struct Resurrect {
 pub struct Respawn {
     #[prost(uint32, tag = "1")]
     pub r#type: u32,
+}
+/// Client -> server, use a consumable item by inventory slot index (replaces RO CZ_USE_ITEM 0x00A7).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct UseItem {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+}
+/// Server -> client, result of a use-item attempt; reason 0 = ok, else the rejection code.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct ItemUseResult {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(bool, tag = "2")]
+    pub ok: bool,
+    #[prost(uint32, tag = "3")]
+    pub reason: u32,
 }
