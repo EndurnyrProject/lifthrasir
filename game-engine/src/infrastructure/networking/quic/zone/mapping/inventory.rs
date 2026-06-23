@@ -1,6 +1,7 @@
 use crate::infrastructure::networking::quic::proto::aesir::net;
 use crate::infrastructure::networking::zone_messages::{
-    InventoryReceived, ItemAdded, ItemEquipped, ItemRemoved, ItemUnequipped, ZoneInventoryItem,
+    InventoryReceived, ItemAdded, ItemEquipped, ItemRemoved, ItemUnequipped, ItemUseFailed,
+    ZoneInventoryItem,
 };
 
 pub fn inventory_list(l: net::InventoryList) -> InventoryReceived {
@@ -71,6 +72,13 @@ pub fn unequip_result(u: net::UnequipResult) -> ItemUnequipped {
         index: u.index,
         wear_location: u.wear_location,
         result: u.result,
+    }
+}
+
+pub fn item_use_result(r: net::ItemUseResult) -> ItemUseFailed {
+    ItemUseFailed {
+        index: r.index,
+        reason: r.reason,
     }
 }
 
@@ -188,5 +196,17 @@ mod tests {
         assert_eq!(unequipped.index, 3);
         assert_eq!(unequipped.wear_location, 16);
         assert_eq!(unequipped.result, 1);
+    }
+
+    #[test]
+    fn item_use_result_maps_index_and_reason() {
+        let failed = item_use_result(net::ItemUseResult {
+            index: 5,
+            ok: false,
+            reason: 2,
+        });
+
+        assert_eq!(failed.index, 5);
+        assert_eq!(failed.reason, 2);
     }
 }

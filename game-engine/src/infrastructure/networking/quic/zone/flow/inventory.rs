@@ -3,12 +3,12 @@ use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
 
 use super::super::mapping::inventory::{
-    equip_result, inventory_list, item_added, item_removed, unequip_result,
+    equip_result, inventory_list, item_added, item_removed, item_use_result, unequip_result,
 };
 use crate::infrastructure::networking::quic::dispatch::IncomingMessage;
 use crate::infrastructure::networking::quic::envelope::Body;
 use crate::infrastructure::networking::zone_messages::{
-    InventoryReceived, ItemAdded, ItemEquipped, ItemRemoved, ItemUnequipped,
+    InventoryReceived, ItemAdded, ItemEquipped, ItemRemoved, ItemUnequipped, ItemUseFailed,
 };
 
 /// Drains inventory bodies. The dump rides the bulk channel and the deltas ride
@@ -25,6 +25,7 @@ pub fn zone_drain_inventory(
     mut removed: MessageWriter<ItemRemoved>,
     mut equipped: MessageWriter<ItemEquipped>,
     mut unequipped: MessageWriter<ItemUnequipped>,
+    mut use_failed: MessageWriter<ItemUseFailed>,
 ) {
     for msg in incoming.read() {
         match msg.body.clone() {
@@ -42,6 +43,11 @@ pub fn zone_drain_inventory(
             }
             Body::UnequipResult(u) => {
                 unequipped.write(unequip_result(u));
+            }
+            Body::ItemUseResult(r) => {
+                if !r.ok {
+                    use_failed.write(item_use_result(r));
+                }
             }
             _ => {}
         }
@@ -62,6 +68,7 @@ mod tests {
             .add_message::<ItemRemoved>()
             .add_message::<ItemEquipped>()
             .add_message::<ItemUnequipped>()
+            .add_message::<ItemUseFailed>()
             .add_systems(Update, zone_drain_inventory);
 
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
@@ -99,5 +106,38 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].index, 3);
         assert_eq!(events[0].amount, 5);
+    }
+
+    #[test]
+    fn item_use_result_failure_produces_one_item_use_failed() {
+        let app = drain(vec![(
+            GAMEPLAY,
+            Body::ItemUseResult(net::ItemUseResult {
+                index: 3,
+                ok: false,
+                reason: 2,
+            }),
+        )]);
+
+        let failed = app.world().resource::<Messages<ItemUseFailed>>();
+        let events: Vec<_> = failed.iter_current_update_messages().collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].index, 3);
+        assert_eq!(events[0].reason, 2);
+    }
+
+    #[test]
+    fn item_use_result_success_produces_no_item_use_failed() {
+        let app = drain(vec![(
+            GAMEPLAY,
+            Body::ItemUseResult(net::ItemUseResult {
+                index: 3,
+                ok: true,
+                reason: 0,
+            }),
+        )]);
+
+        let failed = app.world().resource::<Messages<ItemUseFailed>>();
+        assert_eq!(failed.iter_current_update_messages().count(), 0);
     }
 }

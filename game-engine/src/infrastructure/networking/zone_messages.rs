@@ -306,6 +306,14 @@ pub struct ItemUnequipped {
     pub result: u32,
 }
 
+/// A use-item attempt was rejected; carries the server reason code.
+#[derive(Message, Debug, Clone)]
+#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+pub struct ItemUseFailed {
+    pub index: u32,
+    pub reason: u32,
+}
+
 /// Result of a stat allocation.
 #[derive(Message, Debug, Clone)]
 #[auto_add_event(plugin = ZoneDomainAutoPlugin)]
