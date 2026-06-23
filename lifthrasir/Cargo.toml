@@ -3,10 +3,21 @@ name = "lifthrasir"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = ["dev"]
+# Profiling and live-inspection tooling. On by default for local development,
+# disabled for distribution builds via `--no-default-features`.
+dev = [
+    "bevy/trace",
+    "bevy/trace_tracy",
+    "bevy/bevy_remote",
+    "dep:bevy_brp_extras",
+]
+
 [dependencies]
 bevy = { workspace = true }
 bevy_framepace = "0.21"
-bevy_brp_extras = "0.19.0"
+bevy_brp_extras = { version = "0.19.0", optional = true }
 game-engine = { path = "../game-engine" }
 lifthrasir-ui = { path = "../lifthrasir-ui" }
 toml = "0.9"

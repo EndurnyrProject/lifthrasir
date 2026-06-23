@@ -11,16 +11,11 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
 [workspace.dependencies]
-bevy = { version = "0.18.1", features = [
-    "jpeg",
-    "trace",
-    "trace_tracy",
-    "bevy_remote",
-] }
+bevy = { version = "0.18.1", features = ["jpeg", "wayland"] }
 secrecy = { version = "0.10", features = ["serde"] }
 bevy_ui_text_input = "0.7.0"
 leafwing-input-manager = "0.20"
@@ -32,3 +27,11 @@ opt-level = 3
 
 [profile.dev]
 opt-level = 1
+
+[profile.dist]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
