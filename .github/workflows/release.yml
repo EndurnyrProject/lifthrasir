@@ -32,6 +32,7 @@ jobs:
   build:
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -47,12 +48,6 @@ jobs:
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/create-github-app-token@v2
-        id: app-token
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_KEY }}
-
       - uses: actions/checkout@v4
 
       - name: Install Linux system dependencies
@@ -115,8 +110,30 @@ jobs:
           Compress-Archive -Path $staging -DestinationPath "$staging.zip"
           "ASSET=$staging.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+
+  upload:
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_KEY }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
       - name: Upload to release
-        shell: bash
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" "$ASSET" --clobber
+        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" artifacts/* --clobber
