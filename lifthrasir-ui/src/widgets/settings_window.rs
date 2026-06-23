@@ -154,6 +154,10 @@ fn spawn_settings_root(mut commands: Commands, asset_server: Res<AssetServer>) {
             BackgroundColor(theme::GLASS),
             BorderColor::all(theme::GOLD_FAINT),
             Visibility::Hidden,
+            // Float above every other UI root (login panel, in-game HUD) so the
+            // window owns picking — otherwise a full-screen screen root spawned
+            // later in the stack swallows its clicks and drags.
+            GlobalZIndex(1000),
             Pickable::default(),
         ))
         .id();
@@ -359,20 +363,24 @@ fn spawn_tab_body(commands: &mut Commands, content: Entity, tab: SettingsTab, fo
         SettingsTab::Sound => "SOUND",
         SettingsTab::Input => "INPUT",
     };
-    let visibility = if tab == SettingsTab::default() {
-        Visibility::Inherited
+    // Toggle `display`, not `Visibility`: a hidden node still reserves its
+    // layout slot, which would stack the tabs at different heights (Sound mid,
+    // Input at the bottom). `Display::None` removes the slot so the active tab
+    // always sits at the top of the content pane.
+    let display = if tab == SettingsTab::default() {
+        Display::Flex
     } else {
-        Visibility::Hidden
+        Display::None
     };
     let body = commands
         .spawn((
             TabBody(tab),
             Node {
+                display,
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(10.0),
                 ..default()
             },
-            visibility,
             Pickable::IGNORE,
             ChildOf(content),
         ))
@@ -512,15 +520,18 @@ fn on_reset(_: On<Pointer<Click>>, mut ui: ResMut<SettingsUi>) {
 /// Shows the active tab's body and highlights its rail button.
 fn refresh_tabs(
     ui: Res<SettingsUi>,
-    mut bodies: Query<(&mut Visibility, &TabBody)>,
+    mut bodies: Query<(&mut Node, &TabBody)>,
     mut buttons: Query<(&mut BackgroundColor, &TabButton)>,
 ) {
-    for (mut visibility, body) in &mut bodies {
-        *visibility = if body.0 == ui.tab {
-            Visibility::Inherited
+    for (mut node, body) in &mut bodies {
+        let display = if body.0 == ui.tab {
+            Display::Flex
         } else {
-            Visibility::Hidden
+            Display::None
         };
+        if node.display != display {
+            node.display = display;
+        }
     }
     for (mut bg, button) in &mut buttons {
         let color = if button.0 == ui.tab {
