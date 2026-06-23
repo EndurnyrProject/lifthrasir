@@ -13,6 +13,7 @@ use crate::infrastructure::networking::quic::character::CharacterRoster;
 use crate::infrastructure::networking::quic::zone::QuicZoneState;
 use crate::infrastructure::networking::session::UserSession;
 use crate::infrastructure::networking::zone_messages::ZoneDisconnected;
+use crate::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioReceiver;
@@ -426,12 +427,20 @@ pub fn handle_zone_entered(
     }
 }
 
-/// System: Route a lost/failed QUIC zone connection back to character selection.
+/// User-facing copy for a zone disconnect. Pure seam for unit testing.
+fn disconnect_message(reason: &str) -> String {
+    format!(
+        "You have been disconnected from the realm. Please check your connection and try again.\n\n{reason}"
+    )
+}
+
+/// System: Surface a lost/failed QUIC zone connection as a modal notice.
 ///
 /// The handshake emits `ZoneDisconnected` on quinnet `ConnectionLost`/`Failed`
-/// (`zone_handle_connection_lost`). Without this consumer the user is stranded
-/// on the connecting/loading screen, so map the disconnect onto a return to
-/// `CharacterSelection`, restoring the legacy TCP entry-refusal behaviour.
+/// (`zone_handle_connection_lost`). Rather than silently bouncing the player, this
+/// summons the system dialog; its OK button returns to `Login`. The dialog widget
+/// itself dedupes (one at a time), so the duplicate lost/failed events quinnet can
+/// emit on a single drop collapse into one popup.
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
@@ -439,18 +448,22 @@ pub fn handle_zone_entered(
 )]
 pub fn handle_zone_disconnected(
     mut events: MessageReader<ZoneDisconnected>,
-    state: Res<State<GameState>>,
-    mut game_state: ResMut<NextState<GameState>>,
+    mut dialogs: MessageWriter<ShowSystemDialog>,
 ) {
     for event in events.read() {
         warn!(
-            "Zone disconnected: {} - returning to character selection",
+            "Zone disconnected: {} - showing disconnect notice",
             event.reason
         );
-        if *state.get() == GameState::CharacterSelection {
-            continue;
-        }
-        game_state.set(GameState::CharacterSelection);
+        dialogs.write(ShowSystemDialog {
+            severity: DialogSeverity::Error,
+            kicker: "Connection".into(),
+            title: "Disconnected".into(),
+            message: disconnect_message(&event.reason),
+            code: String::new(),
+            button_label: "OK".into(),
+            confirm_state: Some(GameState::Login),
+        });
     }
 }
 
@@ -737,6 +750,13 @@ pub fn spawn_character_sprite_on_game_start(
 mod tests {
     use super::*;
     use crate::infrastructure::networking::quic::proto::aesir::net;
+
+    #[test]
+    fn disconnect_message_includes_reason() {
+        let text = disconnect_message("connection lost");
+        assert!(text.contains("disconnected from the realm"));
+        assert!(text.ends_with("connection lost"));
+    }
 
     fn char_list_with_one(char_num: u32, name: &str) -> net::CharList {
         net::CharList {

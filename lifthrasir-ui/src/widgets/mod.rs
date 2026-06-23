@@ -12,6 +12,7 @@ pub mod chat_box;
 pub mod draggable;
 pub mod inventory_window;
 pub mod status_window;
+pub mod system_dialog;
 
 pub struct InGameHudPlugin;
 
