@@ -27,6 +27,16 @@ use crate::domain::system_sets::MovementSystems;
 /// under jitter/packet loss but more visibly behind; one snapshot interval is typical.
 const INTERP_DELAY_MS: i64 = 100;
 
+/// Query data for remote entities eligible for interpolation.
+type RemoteEntityQuery = (
+    Entity,
+    &'static SnapshotBuffer,
+    Option<&'static MovementSpeed>,
+    &'static mut Transform,
+    &'static mut CharacterDirection,
+    &'static mut MovementState,
+);
+
 /// World units per RO cell (mirrors `spawn_coords_to_world_position`'s `cell * 5` mapping).
 const RO_UNITS_PER_CELL: f32 = 5.0;
 
@@ -115,14 +125,7 @@ pub fn interpolate_remote_entities_system(
     time: Res<Time<Real>>,
     registry: Res<EntityRegistry>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
-    mut query: Query<(
-        Entity,
-        &SnapshotBuffer,
-        Option<&MovementSpeed>,
-        &mut Transform,
-        &mut CharacterDirection,
-        &mut MovementState,
-    )>,
+    mut query: Query<RemoteEntityQuery>,
 ) {
     let client_now_ms = time.elapsed().as_millis() as i64;
     let render_ms = clock.server_now_ms(client_now_ms) - INTERP_DELAY_MS;
