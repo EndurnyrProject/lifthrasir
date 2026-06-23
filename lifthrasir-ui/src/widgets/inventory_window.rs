@@ -5,12 +5,14 @@
 //! refine badges and is clickable to select. The info panel is filled by a later
 //! task; `InventoryUi` holds the active tab and selection.
 
+use std::time::Duration;
+
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::assets::item_icon_path;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
-use game_engine::domain::inventory::{Inventory, Item, ItemCategory};
+use game_engine::domain::inventory::{Inventory, Item, ItemCategory, UseItemRequested};
 use game_engine::infrastructure::item::ItemDb;
 use leafwing_input_manager::prelude::ActionState;
 
@@ -57,6 +59,24 @@ pub struct InventoryCell {
 }
 
 const CELL_SIZE: f32 = 32.0;
+const DOUBLE_CLICK: Duration = Duration::from_millis(300);
+
+#[derive(Resource, Default)]
+struct LastCellClick {
+    index: u16,
+    at: Duration,
+}
+
+fn is_use_double_click(
+    last: &LastCellClick,
+    index: u16,
+    now: Duration,
+    category: ItemCategory,
+) -> bool {
+    category == ItemCategory::Use
+        && last.index == index
+        && now.saturating_sub(last.at) <= DOUBLE_CLICK
+}
 
 const TABS: [(ItemCategory, &str, &str); 3] = [
     (ItemCategory::Use, "Use", "flask"),
@@ -76,6 +96,7 @@ pub struct InventoryWindowPlugin;
 impl Plugin for InventoryWindowPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<InventoryUi>();
+        app.init_resource::<LastCellClick>();
         app.add_systems(
             Update,
             toggle_inventory_window.run_if(in_state(GameState::InGame).and(ui_unfocused)),
@@ -478,16 +499,32 @@ fn spawn_cell(
     commands.entity(cell).observe(on_cell_click);
 }
 
-/// Cell click: set the selected item index, which rebuilds the grid (highlight).
+/// Cell click: select the item; double-click on a Use item emits `UseItemRequested`.
 fn on_cell_click(
     click: On<Pointer<Click>>,
     cells: Query<&InventoryCell>,
     mut ui: ResMut<InventoryUi>,
+    time: Res<Time>,
+    mut last: ResMut<LastCellClick>,
+    inventory: Res<Inventory>,
+    mut use_writer: MessageWriter<UseItemRequested>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
         return;
     };
     ui.selected = Some(cell.index);
+    let now = time.elapsed();
+    if let Some(category) = inventory.get(cell.index).map(Item::category) {
+        if is_use_double_click(&last, cell.index, now, category) {
+            use_writer.write(UseItemRequested {
+                index: cell.index as u32,
+            });
+        }
+    }
+    *last = LastCellClick {
+        index: cell.index,
+        at: now,
+    };
 }
 
 /// Writes each tab's item count into its count label on inventory change.
@@ -706,6 +743,87 @@ mod tests {
         inv.upsert(item(4, 5));
         inv.upsert(item(5, 3));
         inv
+    }
+
+    #[test]
+    fn double_click_same_use_cell_within_window_is_true() {
+        let last = LastCellClick {
+            index: 5,
+            at: Duration::from_millis(100),
+        };
+        assert!(is_use_double_click(
+            &last,
+            5,
+            Duration::from_millis(350),
+            ItemCategory::Use,
+        ));
+    }
+
+    #[test]
+    fn single_click_different_index_is_false() {
+        let last = LastCellClick {
+            index: 5,
+            at: Duration::from_millis(100),
+        };
+        assert!(!is_use_double_click(
+            &last,
+            6,
+            Duration::from_millis(200),
+            ItemCategory::Use,
+        ));
+    }
+
+    #[test]
+    fn first_click_no_prior_state_is_false() {
+        let last = LastCellClick::default();
+        assert!(!is_use_double_click(
+            &last,
+            3,
+            Duration::from_millis(5000),
+            ItemCategory::Use,
+        ));
+    }
+
+    #[test]
+    fn double_click_too_far_apart_is_false() {
+        let last = LastCellClick {
+            index: 2,
+            at: Duration::from_millis(100),
+        };
+        assert!(!is_use_double_click(
+            &last,
+            2,
+            Duration::from_millis(500),
+            ItemCategory::Use,
+        ));
+    }
+
+    #[test]
+    fn double_click_equip_category_is_false() {
+        let last = LastCellClick {
+            index: 2,
+            at: Duration::from_millis(100),
+        };
+        assert!(!is_use_double_click(
+            &last,
+            2,
+            Duration::from_millis(200),
+            ItemCategory::Equip,
+        ));
+    }
+
+    #[test]
+    fn double_click_etc_category_is_false() {
+        let last = LastCellClick {
+            index: 2,
+            at: Duration::from_millis(100),
+        };
+        assert!(!is_use_double_click(
+            &last,
+            2,
+            Duration::from_millis(200),
+            ItemCategory::Etc,
+        ));
     }
 
     #[test]
