@@ -1627,7 +1627,6 @@ fn spawn_keycap(
         .id();
     commands.spawn((
         theme::label("", font.clone(), 12.0, theme::TEXT_DIM),
-        Pickable::IGNORE,
         ChildOf(cap),
     ));
     commands.entity(cap).observe(on_keycap_click);
@@ -1713,8 +1712,31 @@ fn refresh_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::asset::AssetPlugin;
     use bevy_persistent::prelude::StorageFormat;
     use game_engine::domain::settings::{AntiAliasing, FpsCap, Keybinds};
+
+    /// Spawns the entire window tree (titlebar + all three tab bodies) so a
+    /// malformed bundle — e.g. a duplicate `Pickable` — panics here at
+    /// command-buffer apply instead of only at runtime. Guards the class of
+    /// bug the draft-logic tests can't see because they never build the UI.
+    #[test]
+    fn spawn_settings_root_builds_the_full_tree_without_duplicate_components() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.add_systems(Startup, spawn_settings_root);
+
+        app.update();
+
+        let roots = app
+            .world_mut()
+            .query_filtered::<(), With<SettingsWindowRoot>>()
+            .iter(app.world())
+            .count();
+        assert_eq!(roots, 1);
+    }
 
     fn persistent_settings(slug: &str, settings: Settings) -> Persistent<Settings> {
         let path = std::env::temp_dir().join(format!(
