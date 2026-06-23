@@ -17,6 +17,7 @@ pub use domain::entities::hover_plugin::EntityHoverPlugin;
 pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
 pub use domain::inventory::InventoryPlugin;
+pub use domain::settings::SettingsPlugin;
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
 pub use infrastructure::item::{ItemDb, ItemDbPlugin};
 pub use infrastructure::job::JobSystemPlugin;
@@ -35,6 +36,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(TokioTasksPlugin::default())
             .add(RoDiagnosticsPlugin)
             .add(LifthrasirPlugin)
+            .add(SettingsPlugin)
             .add(CameraPlugin)
             .add(AssetsPlugin)
             .add(JobSystemPlugin)

@@ -1,0 +1,267 @@
+use bevy::prelude::*;
+use bevy::window::{MonitorSelection, VideoModeSelection, WindowMode};
+use bevy_auto_plugin::prelude::auto_register_type;
+use bevy_framepace::Limiter;
+use serde::{Deserialize, Serialize};
+
+/// Resolution presets offered in the settings UI.
+pub const RESOLUTIONS: [(u32, u32); 5] = [
+    (1280, 720),
+    (1600, 900),
+    (1920, 1080),
+    (2560, 1440),
+    (3840, 2160),
+];
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+pub enum DisplayMode {
+    Windowed,
+    BorderlessFullscreen,
+    Fullscreen,
+}
+
+impl DisplayMode {
+    /// Pure mapping to the Bevy window mode (Task 2 applies it to the window).
+    pub fn to_window_mode(self) -> WindowMode {
+        match self {
+            DisplayMode::Windowed => WindowMode::Windowed,
+            DisplayMode::BorderlessFullscreen => {
+                WindowMode::BorderlessFullscreen(MonitorSelection::Current)
+            }
+            DisplayMode::Fullscreen => {
+                WindowMode::Fullscreen(MonitorSelection::Current, VideoModeSelection::Current)
+            }
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+pub enum AntiAliasing {
+    Off,
+    Fxaa,
+    MsaaX2,
+    MsaaX4,
+}
+
+impl AntiAliasing {
+    /// Maps to `(Msaa, has_fxaa)`; Task 2 inserts the `Msaa` and adds/removes
+    /// `Fxaa` on the world camera accordingly.
+    pub fn to_msaa_fxaa(self) -> (Msaa, bool) {
+        match self {
+            AntiAliasing::Off => (Msaa::Off, false),
+            AntiAliasing::Fxaa => (Msaa::Off, true),
+            AntiAliasing::MsaaX2 => (Msaa::Sample2, false),
+            AntiAliasing::MsaaX4 => (Msaa::Sample4, false),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+pub enum FpsCap {
+    F30,
+    F60,
+    F120,
+    F144,
+    Unlimited,
+}
+
+impl FpsCap {
+    /// Maps to the framepace limiter; `Unlimited` disables limiting.
+    pub fn to_limiter(self) -> Limiter {
+        match self {
+            FpsCap::F30 => Limiter::from_framerate(30.0),
+            FpsCap::F60 => Limiter::from_framerate(60.0),
+            FpsCap::F120 => Limiter::from_framerate(120.0),
+            FpsCap::F144 => Limiter::from_framerate(144.0),
+            FpsCap::Unlimited => Limiter::Off,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+pub struct GraphicsSettings {
+    pub display_mode: DisplayMode,
+    pub resolution: (u32, u32),
+    pub antialiasing: AntiAliasing,
+    pub vsync: bool,
+    pub fps_cap: FpsCap,
+}
+
+impl Default for GraphicsSettings {
+    fn default() -> Self {
+        Self {
+            display_mode: DisplayMode::BorderlessFullscreen,
+            resolution: (1920, 1080),
+            antialiasing: AntiAliasing::Fxaa,
+            vsync: true,
+            fps_cap: FpsCap::F60,
+        }
+    }
+}
+
+/// Persisted mirror of the runtime `AudioSettings` fields.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Reflect, Debug)]
+pub struct AudioConfig {
+    pub bgm_volume: f32,
+    pub bgm_muted: bool,
+    pub sfx_volume: f32,
+    pub sfx_muted: bool,
+    pub ambient_volume: f32,
+    pub ambient_muted: bool,
+}
+
+impl Default for AudioConfig {
+    fn default() -> Self {
+        Self {
+            bgm_volume: 0.70,
+            bgm_muted: false,
+            sfx_volume: 0.85,
+            sfx_muted: false,
+            ambient_volume: 0.55,
+            ambient_muted: false,
+        }
+    }
+}
+
+/// A held modifier in a key chord. Serde-only mirror of leafwing's `ModifierKey`;
+/// Task 4 owns the conversion.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+pub enum Modifier {
+    Alt,
+    Control,
+    Shift,
+    Super,
+}
+
+/// A single bound key, optionally modified. `key` is a `KeyCode` name
+/// (e.g. "Insert", "KeyA"); Task 4 parses it back into a `KeyCode`.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug)]
+pub struct KeyBind {
+    pub key: String,
+    pub modifier: Option<Modifier>,
+}
+
+impl KeyBind {
+    pub fn new(key: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            modifier: None,
+        }
+    }
+
+    pub fn modified(modifier: Modifier, key: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            modifier: Some(modifier),
+        }
+    }
+}
+
+/// Primary + secondary slot for one action.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug, Default)]
+pub struct ActionBinds {
+    pub primary: Option<KeyBind>,
+    pub secondary: Option<KeyBind>,
+}
+
+/// Serde-only keybinds for the existing `PlayerAction`s. No leafwing coupling
+/// here; Task 4 adds `to_input_map` / `from_input_map`.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug)]
+pub struct Keybinds {
+    pub sit: ActionBinds,
+    pub status: ActionBinds,
+    pub inventory: ActionBinds,
+}
+
+impl Default for Keybinds {
+    /// Mirrors `PlayerAction::default_input_map()`:
+    /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E.
+    fn default() -> Self {
+        Self {
+            sit: ActionBinds {
+                primary: Some(KeyBind::new("Insert")),
+                secondary: Some(KeyBind::new("Help")),
+            },
+            status: ActionBinds {
+                primary: Some(KeyBind::modified(Modifier::Alt, "KeyA")),
+                secondary: None,
+            },
+            inventory: ActionBinds {
+                primary: Some(KeyBind::modified(Modifier::Alt, "KeyE")),
+                secondary: None,
+            },
+        }
+    }
+}
+
+#[derive(Resource, Serialize, Deserialize, Clone, PartialEq, Reflect, Debug, Default)]
+#[reflect(Resource)]
+#[auto_register_type(plugin = super::SettingsPlugin)]
+pub struct Settings {
+    pub graphics: GraphicsSettings,
+    pub audio: AudioConfig,
+    pub keybinds: Keybinds,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_settings_round_trips_through_ron() {
+        let settings = Settings::default();
+        let encoded = ron::to_string(&settings).expect("serialize");
+        let decoded: Settings = ron::from_str(&encoded).expect("deserialize");
+        assert_eq!(settings, decoded);
+    }
+
+    #[test]
+    fn default_settings_match_the_mockup() {
+        let s = Settings::default();
+        assert_eq!(s.graphics.display_mode, DisplayMode::BorderlessFullscreen);
+        assert_eq!(s.graphics.resolution, (1920, 1080));
+        assert_eq!(s.graphics.antialiasing, AntiAliasing::Fxaa);
+        assert!(s.graphics.vsync);
+        assert_eq!(s.graphics.fps_cap, FpsCap::F60);
+        assert_eq!(s.audio.bgm_volume, 0.70);
+        assert_eq!(s.audio.sfx_volume, 0.85);
+        assert_eq!(s.audio.ambient_volume, 0.55);
+        assert!(!s.audio.bgm_muted);
+        assert!(!s.audio.sfx_muted);
+        assert!(!s.audio.ambient_muted);
+    }
+
+    #[test]
+    fn display_mode_maps_to_window_mode() {
+        assert!(matches!(
+            DisplayMode::Windowed.to_window_mode(),
+            WindowMode::Windowed
+        ));
+        assert!(matches!(
+            DisplayMode::BorderlessFullscreen.to_window_mode(),
+            WindowMode::BorderlessFullscreen(MonitorSelection::Current)
+        ));
+        assert!(matches!(
+            DisplayMode::Fullscreen.to_window_mode(),
+            WindowMode::Fullscreen(MonitorSelection::Current, VideoModeSelection::Current)
+        ));
+    }
+
+    #[test]
+    fn antialiasing_maps_to_msaa_and_fxaa() {
+        assert_eq!(AntiAliasing::Off.to_msaa_fxaa(), (Msaa::Off, false));
+        assert_eq!(AntiAliasing::Fxaa.to_msaa_fxaa(), (Msaa::Off, true));
+        assert_eq!(AntiAliasing::MsaaX2.to_msaa_fxaa(), (Msaa::Sample2, false));
+        assert_eq!(AntiAliasing::MsaaX4.to_msaa_fxaa(), (Msaa::Sample4, false));
+    }
+
+    #[test]
+    fn fps_cap_maps_to_limiter() {
+        assert!(matches!(FpsCap::Unlimited.to_limiter(), Limiter::Off));
+        assert!(matches!(FpsCap::F60.to_limiter(), Limiter::Manual(_)));
+        let Limiter::Manual(d) = FpsCap::F30.to_limiter() else {
+            panic!("expected manual limiter");
+        };
+        assert!((d.as_secs_f64() - 1.0 / 30.0).abs() < 1e-9);
+    }
+}

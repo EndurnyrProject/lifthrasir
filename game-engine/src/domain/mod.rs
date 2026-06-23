@@ -7,6 +7,7 @@ pub mod combat;
 pub mod entities;
 pub mod input;
 pub mod inventory;
+pub mod settings;
 pub mod sprite;
 pub mod system_sets;
 pub mod world;
