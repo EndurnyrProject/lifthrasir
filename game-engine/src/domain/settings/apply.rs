@@ -10,6 +10,10 @@ use bevy_persistent::prelude::Persistent;
 
 use super::events::ApplySettings;
 use super::resources::{DisplayMode, Settings};
+use crate::domain::audio::{
+    AudioSettings, MuteAmbienceEvent, MuteBgmEvent, MuteSfxEvent, SetAmbienceVolumeEvent,
+    SetBgmVolumeEvent, SetSfxVolumeEvent,
+};
 use crate::domain::camera::components::CameraFollowTarget;
 
 /// Index of the candidate nearest (squared pixel distance) to `target`, or
@@ -78,6 +82,55 @@ pub fn apply_graphics(
     }
 }
 
+/// Mirrors the persisted `Settings.audio` into the live `AudioSettings` resource
+/// and emits the existing volume/mute events so kira updates playback live.
+/// `ambient` (config) maps to `ambience` (runtime); `sfx` maps straight across.
+#[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
+#[allow(clippy::too_many_arguments)]
+pub fn apply_audio(
+    mut messages: MessageReader<ApplySettings>,
+    settings: Res<Persistent<Settings>>,
+    mut audio: ResMut<AudioSettings>,
+    mut set_bgm: MessageWriter<SetBgmVolumeEvent>,
+    mut set_sfx: MessageWriter<SetSfxVolumeEvent>,
+    mut set_ambience: MessageWriter<SetAmbienceVolumeEvent>,
+    mut mute_bgm: MessageWriter<MuteBgmEvent>,
+    mut mute_sfx: MessageWriter<MuteSfxEvent>,
+    mut mute_ambience: MessageWriter<MuteAmbienceEvent>,
+) {
+    if messages.read().count() == 0 {
+        return;
+    }
+
+    let config = settings.audio;
+
+    audio.bgm_volume = config.bgm_volume;
+    audio.bgm_muted = config.bgm_muted;
+    audio.sfx_volume = config.sfx_volume;
+    audio.sfx_muted = config.sfx_muted;
+    audio.ambience_volume = config.ambient_volume;
+    audio.ambience_muted = config.ambient_muted;
+
+    set_bgm.write(SetBgmVolumeEvent {
+        volume: config.bgm_volume,
+    });
+    set_sfx.write(SetSfxVolumeEvent {
+        volume: config.sfx_volume,
+    });
+    set_ambience.write(SetAmbienceVolumeEvent {
+        volume: config.ambient_volume,
+    });
+    mute_bgm.write(MuteBgmEvent {
+        muted: config.bgm_muted,
+    });
+    mute_sfx.write(MuteSfxEvent {
+        muted: config.sfx_muted,
+    });
+    mute_ambience.write(MuteAmbienceEvent {
+        muted: config.ambient_muted,
+    });
+}
+
 /// Applies the current AA settings to a freshly-spawned world camera, since the
 /// startup `ApplySettings` fires before the camera (which only spawns on
 /// entering InGame) exists.
@@ -105,7 +158,95 @@ fn apply_camera_aa(commands: &mut Commands, camera: Entity, settings: &Settings)
 
 #[cfg(test)]
 mod tests {
+    use super::super::resources::AudioConfig;
     use super::*;
+    use bevy_persistent::prelude::StorageFormat;
+
+    fn persistent_settings(slug: &str, settings: Settings) -> Persistent<Settings> {
+        let path = std::env::temp_dir().join(format!(
+            "lifthrasir-apply-audio-{}-{slug}.ron",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        Persistent::<Settings>::builder()
+            .name("settings")
+            .format(StorageFormat::Ron)
+            .path(path)
+            .default(settings)
+            .build()
+            .expect("build persistent settings")
+    }
+
+    fn audio_test_app(slug: &str, settings: Settings) -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AudioSettings>();
+        app.insert_resource(persistent_settings(slug, settings));
+        app.add_message::<ApplySettings>();
+        app.add_message::<SetBgmVolumeEvent>();
+        app.add_message::<SetSfxVolumeEvent>();
+        app.add_message::<SetAmbienceVolumeEvent>();
+        app.add_message::<MuteBgmEvent>();
+        app.add_message::<MuteSfxEvent>();
+        app.add_message::<MuteAmbienceEvent>();
+        app.add_systems(Update, apply_audio);
+        app
+    }
+
+    #[test]
+    fn apply_audio_syncs_settings_into_runtime_resource() {
+        let settings = Settings {
+            audio: AudioConfig {
+                bgm_volume: 0.1,
+                bgm_muted: true,
+                sfx_volume: 0.2,
+                sfx_muted: false,
+                ambient_volume: 0.3,
+                ambient_muted: true,
+            },
+            ..Default::default()
+        };
+        let mut app = audio_test_app("sync", settings);
+        app.world_mut().write_message(ApplySettings);
+        app.update();
+
+        let config = app.world().resource::<Persistent<Settings>>().audio;
+        let audio = app.world().resource::<AudioSettings>();
+        assert_eq!(audio.bgm_volume, config.bgm_volume);
+        assert_eq!(audio.bgm_muted, config.bgm_muted);
+        assert_eq!(audio.sfx_volume, config.sfx_volume);
+        assert_eq!(audio.sfx_muted, config.sfx_muted);
+        assert_eq!(audio.ambience_volume, config.ambient_volume);
+        assert_eq!(audio.ambience_muted, config.ambient_muted);
+    }
+
+    #[test]
+    fn apply_audio_emits_the_six_audio_messages() {
+        let mut app = audio_test_app("messages", Settings::default());
+        app.world_mut().write_message(ApplySettings);
+        app.update();
+
+        assert_eq!(
+            app.world().resource::<Messages<SetBgmVolumeEvent>>().len(),
+            1
+        );
+        assert_eq!(
+            app.world().resource::<Messages<SetSfxVolumeEvent>>().len(),
+            1
+        );
+        assert_eq!(
+            app.world()
+                .resource::<Messages<SetAmbienceVolumeEvent>>()
+                .len(),
+            1
+        );
+        assert_eq!(app.world().resource::<Messages<MuteBgmEvent>>().len(), 1);
+        assert_eq!(app.world().resource::<Messages<MuteSfxEvent>>().len(), 1);
+        assert_eq!(
+            app.world().resource::<Messages<MuteAmbienceEvent>>().len(),
+            1
+        );
+    }
 
     #[test]
     fn nearest_picks_exact_match() {
