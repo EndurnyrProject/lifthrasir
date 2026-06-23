@@ -7,8 +7,6 @@ use bevy::window::{Window, WindowPlugin, WindowResolution};
 /// `git describe` for local builds).
 pub const VERSION: &str = env!("LIFTHRASIR_VERSION");
 
-const FRAMERATE_LIMIT: f64 = 60.0;
-
 fn main() {
     let composite_source = assets::load_composite_source();
 
@@ -28,9 +26,6 @@ fn main() {
     info!("Lifthrasir {VERSION}");
 
     app.add_plugins(bevy_framepace::FramepacePlugin);
-    app.world_mut()
-        .resource_mut::<bevy_framepace::FramepaceSettings>()
-        .limiter = bevy_framepace::Limiter::from_framerate(FRAMERATE_LIMIT);
 
     #[cfg(feature = "dev")]
     app.add_plugins((
