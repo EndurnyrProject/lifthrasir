@@ -16,6 +16,7 @@ use game_engine::presentation::ui::events::LoginAttemptEvent;
 use secrecy::SecretString;
 
 use crate::theme;
+use crate::widgets::settings_window::SettingsWindowRoot;
 
 const LOGO_IMAGE: &str = "ro://logo.png";
 const USERNAME_MAX: usize = 24;
@@ -209,6 +210,32 @@ fn show_login_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
         Pickable::IGNORE,
         ChildOf(panel),
     ));
+
+    let gear = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(16.0),
+                right: Val::Px(16.0),
+                width: Val::Px(36.0),
+                height: Val::Px(36.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(9.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::GOLD_FAINT),
+            Pickable::default(),
+            ChildOf(root),
+        ))
+        .id();
+    commands.spawn((
+        theme::icon(&asset_server, "gear", 18.0, theme::GOLD),
+        ChildOf(gear),
+    ));
+    commands.entity(gear).observe(open_settings);
 }
 
 fn spawn_field_label(commands: &mut Commands, parent: Entity, text: &str, font: Handle<Font>) {
@@ -329,6 +356,15 @@ fn submit_button(
 ) {
     let (username, password) = credentials(fields.iter());
     writer.write(login_attempt(&username, &password));
+}
+
+fn open_settings(
+    _: On<Pointer<Click>>,
+    mut window: Query<&mut Visibility, With<SettingsWindowRoot>>,
+) {
+    if let Ok(mut visibility) = window.single_mut() {
+        *visibility = Visibility::Visible;
+    }
 }
 
 /// Routes keystrokes to the focused field: type/backspace edit it, Tab moves focus,
