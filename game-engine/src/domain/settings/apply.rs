@@ -8,6 +8,8 @@ use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_framepace::FramepaceSettings;
 use bevy_persistent::prelude::Persistent;
 
+use leafwing_input_manager::prelude::InputMap;
+
 use super::events::ApplySettings;
 use super::resources::{DisplayMode, Settings};
 use crate::domain::audio::{
@@ -15,6 +17,8 @@ use crate::domain::audio::{
     SetBgmVolumeEvent, SetSfxVolumeEvent,
 };
 use crate::domain::camera::components::CameraFollowTarget;
+use crate::domain::entities::markers::LocalPlayer;
+use crate::domain::input::PlayerAction;
 
 /// Index of the candidate nearest (squared pixel distance) to `target`, or
 /// `None` when there are no candidates. An exact match wins outright.
@@ -129,6 +133,24 @@ pub fn apply_audio(
     mute_ambience.write(MuteAmbienceEvent {
         muted: config.ambient_muted,
     });
+}
+
+/// Rebuilds the local player's `InputMap<PlayerAction>` from the persisted
+/// keybinds on `ApplySettings`. No-op when the player has not spawned yet (the
+/// spawn site already seeds the map from settings).
+#[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
+pub fn apply_input(
+    mut messages: MessageReader<ApplySettings>,
+    settings: Res<Persistent<Settings>>,
+    mut player: Query<&mut InputMap<PlayerAction>, With<LocalPlayer>>,
+) {
+    if messages.read().count() == 0 {
+        return;
+    }
+    let Ok(mut input_map) = player.single_mut() else {
+        return;
+    };
+    *input_map = settings.keybinds.to_input_map();
 }
 
 /// Applies the current AA settings to a freshly-spawned world camera, since the

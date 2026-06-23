@@ -1,8 +1,12 @@
 use bevy::prelude::*;
+use bevy::reflect::{DynamicEnum, TypeInfo, Typed};
 use bevy::window::{MonitorSelection, VideoModeSelection, WindowMode};
 use bevy_auto_plugin::prelude::auto_register_type;
 use bevy_framepace::Limiter;
+use leafwing_input_manager::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use crate::domain::input::PlayerAction;
 
 /// Resolution presets offered in the settings UI.
 pub const RESOLUTIONS: [(u32, u32); 5] = [
@@ -133,6 +137,30 @@ pub enum Modifier {
     Super,
 }
 
+impl Modifier {
+    fn to_modifier_key(self) -> ModifierKey {
+        match self {
+            Modifier::Alt => ModifierKey::Alt,
+            Modifier::Control => ModifierKey::Control,
+            Modifier::Shift => ModifierKey::Shift,
+            Modifier::Super => ModifierKey::Super,
+        }
+    }
+}
+
+/// Resolves a `KeyCode` variant name (e.g. "Insert", "KeyA") into the value via
+/// reflection. Returns `None` for unknown names (every meaningful `KeyCode` is a
+/// unit variant; only `Unidentified` is not, and it is never a real keybind).
+fn key_code_from_name(name: &str) -> Option<KeyCode> {
+    let TypeInfo::Enum(info) = KeyCode::type_info() else {
+        return None;
+    };
+    if !info.contains_variant(name) {
+        return None;
+    }
+    KeyCode::from_reflect(&DynamicEnum::new(name, ()))
+}
+
 /// A single bound key, optionally modified. `key` is a `KeyCode` name
 /// (e.g. "Insert", "KeyA"); Task 4 parses it back into a `KeyCode`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug)]
@@ -155,6 +183,27 @@ impl KeyBind {
             modifier: Some(modifier),
         }
     }
+
+    /// Inserts this binding into `map` for `action`. A bare `KeyCode` when
+    /// unmodified, a `ButtonlikeChord::modified` when a modifier is set.
+    /// Skips with a `warn!` if the key name is unparseable.
+    fn insert_into(&self, map: &mut InputMap<PlayerAction>, action: PlayerAction) {
+        let Some(key) = key_code_from_name(&self.key) else {
+            warn!("unknown key code '{}' in keybinds, skipping", self.key);
+            return;
+        };
+        match self.modifier {
+            Some(modifier) => {
+                map.insert(
+                    action,
+                    ButtonlikeChord::modified(modifier.to_modifier_key(), key),
+                );
+            }
+            None => {
+                map.insert(action, key);
+            }
+        }
+    }
 }
 
 /// Primary + secondary slot for one action.
@@ -162,6 +211,17 @@ impl KeyBind {
 pub struct ActionBinds {
     pub primary: Option<KeyBind>,
     pub secondary: Option<KeyBind>,
+}
+
+impl ActionBinds {
+    fn insert_into(&self, map: &mut InputMap<PlayerAction>, action: PlayerAction) {
+        if let Some(bind) = &self.primary {
+            bind.insert_into(map, action);
+        }
+        if let Some(bind) = &self.secondary {
+            bind.insert_into(map, action);
+        }
+    }
 }
 
 /// Serde-only keybinds for the existing `PlayerAction`s. No leafwing coupling
@@ -191,6 +251,19 @@ impl Default for Keybinds {
                 secondary: None,
             },
         }
+    }
+}
+
+impl Keybinds {
+    /// Builds a leafwing `InputMap` from the stored bindings. Unparseable key
+    /// names are skipped (with a `warn!`) rather than panicking.
+    pub fn to_input_map(&self) -> InputMap<PlayerAction> {
+        let mut map = InputMap::default();
+        self.sit.insert_into(&mut map, PlayerAction::Sit);
+        self.status.insert_into(&mut map, PlayerAction::Status);
+        self.inventory
+            .insert_into(&mut map, PlayerAction::Inventory);
+        map
     }
 }
 
@@ -263,5 +336,30 @@ mod tests {
             panic!("expected manual limiter");
         };
         assert!((d.as_secs_f64() - 1.0 / 30.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn default_keybinds_match_the_default_input_map() {
+        assert_eq!(
+            Keybinds::default().to_input_map(),
+            PlayerAction::default_input_map()
+        );
+    }
+
+    #[test]
+    fn unknown_key_name_is_skipped() {
+        assert!(key_code_from_name("NotAKey").is_none());
+
+        let binds = Keybinds {
+            sit: ActionBinds {
+                primary: Some(KeyBind::new("NotAKey")),
+                secondary: Some(KeyBind::new("Insert")),
+            },
+            status: ActionBinds::default(),
+            inventory: ActionBinds::default(),
+        };
+        let map = binds.to_input_map();
+        let sit = map.get(&PlayerAction::Sit).expect("sit binding");
+        assert_eq!(sit.len(), 1);
     }
 }

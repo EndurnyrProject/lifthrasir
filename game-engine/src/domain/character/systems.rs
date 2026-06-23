@@ -654,6 +654,7 @@ pub fn spawn_character_sprite_on_game_start(
     map_loader_query: Query<&crate::domain::world::components::MapLoader>,
     ground_assets: Res<Assets<crate::infrastructure::assets::loaders::RoGroundAsset>>,
     existing_player: Query<(), With<crate::domain::entities::markers::LocalPlayer>>,
+    settings: Res<bevy_persistent::prelude::Persistent<crate::domain::settings::Settings>>,
 ) {
     // On a warp the LocalPlayer persists (it is not MapScoped), so skip the full
     // first-entry spawn to avoid a duplicate sprite hierarchy and a
@@ -699,7 +700,7 @@ pub fn spawn_character_sprite_on_game_start(
         crate::domain::entities::character::components::status::CharacterStatus::default(),
         crate::domain::entities::components::EntityName::new(char_data.name.clone()),
         SpatialAudioReceiver,
-        crate::domain::input::PlayerAction::default_input_map(),
+        settings.keybinds.to_input_map(),
     ));
     entity_registry.set_local_player(character_entity, char_id);
     info!(
