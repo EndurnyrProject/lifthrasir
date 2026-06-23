@@ -58,10 +58,10 @@ pub struct InventoryCell {
 
 const CELL_SIZE: f32 = 32.0;
 
-const TABS: [(ItemCategory, &str); 3] = [
-    (ItemCategory::Use, "Use"),
-    (ItemCategory::Etc, "Etc"),
-    (ItemCategory::Equip, "Equip"),
+const TABS: [(ItemCategory, &str, &str); 3] = [
+    (ItemCategory::Use, "Use", "flask"),
+    (ItemCategory::Etc, "Etc", "cube"),
+    (ItemCategory::Equip, "Equip", "shield"),
 ];
 
 /// Active tab + selected item index. Default tab `Use`, no selection.
@@ -123,16 +123,16 @@ pub fn spawn_inventory_window(commands: &mut Commands, parent: Entity, asset_ser
         ))
         .id();
 
-    spawn_titlebar(commands, root, &font_title, &font_body);
-    spawn_tab_strip(commands, root, &font_body);
+    spawn_titlebar(commands, asset_server, root, &font_title);
+    spawn_tab_strip(commands, asset_server, root, &font_body);
     spawn_body(commands, root, &font_body);
 }
 
 fn spawn_titlebar(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     root: Entity,
     font_title: &Handle<Font>,
-    font_body: &Handle<Font>,
 ) {
     let titlebar = commands
         .spawn((
@@ -155,7 +155,7 @@ fn spawn_titlebar(
         .id();
 
     commands.spawn((
-        theme::label("\u{2756}", font_title.clone(), 14.0, theme::GOLD),
+        theme::icon(asset_server, "bag", 16.0, theme::GOLD),
         ChildOf(titlebar),
     ));
     commands.spawn((
@@ -183,7 +183,7 @@ fn spawn_titlebar(
         ))
         .id();
     commands.spawn((
-        theme::label("\u{2715}", font_body.clone(), 13.0, theme::TEXT_DIM),
+        theme::icon(asset_server, "close", 13.0, theme::TEXT_DIM),
         ChildOf(close),
     ));
     commands.entity(close).observe(
@@ -198,7 +198,12 @@ fn spawn_titlebar(
 }
 
 /// Use / Etc / Equip tab buttons, each with a label and an (empty) count text.
-fn spawn_tab_strip(commands: &mut Commands, root: Entity, font: &Handle<Font>) {
+fn spawn_tab_strip(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    root: Entity,
+    font: &Handle<Font>,
+) {
     let strip = commands
         .spawn((
             Node {
@@ -212,16 +217,19 @@ fn spawn_tab_strip(commands: &mut Commands, root: Entity, font: &Handle<Font>) {
         ))
         .id();
 
-    for (category, label) in TABS {
-        spawn_tab(commands, strip, category, label, font);
+    for (category, label, icon) in TABS {
+        spawn_tab(commands, asset_server, strip, category, label, icon, font);
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_tab(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     strip: Entity,
     category: ItemCategory,
     label: &str,
+    icon: &str,
     font: &Handle<Font>,
 ) {
     let tab = commands
@@ -243,6 +251,10 @@ fn spawn_tab(
             ChildOf(strip),
         ))
         .id();
+    commands.spawn((
+        theme::icon(asset_server, icon, 14.0, theme::TEXT_DIM),
+        ChildOf(tab),
+    ));
     commands.spawn((
         theme::label(label, font.clone(), 12.0, theme::TEXT_DIM),
         ChildOf(tab),

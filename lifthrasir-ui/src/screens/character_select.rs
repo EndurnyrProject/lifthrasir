@@ -231,6 +231,7 @@ fn receive_character_list(
 
 /// Builds (or rebuilds) the compact slot cards under the grid container.
 /// Waits for the diorama target when occupied slots exist (hero panel needs it).
+#[allow(clippy::too_many_arguments)]
 fn build_cards(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -289,12 +290,25 @@ fn build_cards(
                 font_bold.clone(),
                 font_body.clone(),
             ),
-            None => spawn_empty_card(&mut commands, container, slot, font_body.clone()),
+            None => spawn_empty_card(
+                &mut commands,
+                &asset_server,
+                container,
+                slot,
+                font_body.clone(),
+            ),
         }
     }
 
     if total_pages > 1 {
-        spawn_page_nav(&mut commands, container, page, total_pages, font_body);
+        spawn_page_nav(
+            &mut commands,
+            &asset_server,
+            container,
+            page,
+            total_pages,
+            font_body,
+        );
     }
 
     built.0 = true;
@@ -304,6 +318,7 @@ fn build_cards(
 /// is cleared and rebuilt on every grid rebuild (including page changes).
 fn spawn_page_nav(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     container: Entity,
     page: usize,
     total_pages: usize,
@@ -326,7 +341,15 @@ fn spawn_page_nav(
         .id();
 
     if page > 0 {
-        spawn_nav_button(commands, bar, "Prev", PageNavStep(-1), font.clone());
+        spawn_nav_button(
+            commands,
+            asset_server,
+            bar,
+            "Prev",
+            "chevron-left",
+            PageNavStep(-1),
+            font.clone(),
+        );
     }
 
     commands.spawn((
@@ -340,14 +363,25 @@ fn spawn_page_nav(
     ));
 
     if page + 1 < total_pages {
-        spawn_nav_button(commands, bar, "Next", PageNavStep(1), font);
+        spawn_nav_button(
+            commands,
+            asset_server,
+            bar,
+            "Next",
+            "chevron-right",
+            PageNavStep(1),
+            font,
+        );
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_nav_button(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     parent: Entity,
     text: &str,
+    icon: &str,
     step: PageNavStep,
     font: Handle<Font>,
 ) {
@@ -357,6 +391,8 @@ fn spawn_nav_button(
             Pickable::default(),
             Node {
                 padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
+                column_gap: Val::Px(6.0),
+                align_items: AlignItems::Center,
                 border: UiRect::all(Val::Px(1.0)),
                 border_radius: BorderRadius::all(Val::Px(9.0)),
                 ..default()
@@ -366,6 +402,10 @@ fn spawn_nav_button(
             ChildOf(parent),
         ))
         .id();
+    commands.spawn((
+        theme::icon(asset_server, icon, 14.0, theme::EMERALD_INK),
+        ChildOf(btn),
+    ));
     commands.spawn((
         label(text.to_string(), font, 13.0, theme::EMERALD_INK),
         ChildOf(btn),
@@ -492,7 +532,13 @@ fn spawn_occupied_card(
     );
 }
 
-fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: Handle<Font>) {
+fn spawn_empty_card(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    container: Entity,
+    slot: u8,
+    font: Handle<Font>,
+) {
     let card = commands
         .spawn((
             CharacterCard,
@@ -533,7 +579,7 @@ fn spawn_empty_card(commands: &mut Commands, container: Entity, slot: u8, font: 
         ))
         .id();
     commands.spawn((
-        label("+", font.clone(), 19.0, theme::TEXT_FAINT),
+        theme::icon(asset_server, "plus", 18.0, theme::TEXT_FAINT),
         ChildOf(ring),
     ));
     commands.spawn((
@@ -662,8 +708,20 @@ fn rebuild_hero_panel(
                     ChildOf(frame),
                 ))
                 .id();
-            spawn_enter_button(&mut commands, actions, slot, font_body.clone());
-            spawn_delete_button(&mut commands, actions, info.base.char_id, font_body);
+            spawn_enter_button(
+                &mut commands,
+                &asset_server,
+                actions,
+                slot,
+                font_body.clone(),
+            );
+            spawn_delete_button(
+                &mut commands,
+                &asset_server,
+                actions,
+                info.base.char_id,
+                font_body,
+            );
         }
         None => {
             commands.spawn((
@@ -679,17 +737,31 @@ fn rebuild_hero_panel(
                 ),
                 ChildOf(frame),
             ));
-            spawn_create_button(&mut commands, frame, selected.0 as u8, font_body);
+            spawn_create_button(
+                &mut commands,
+                &asset_server,
+                frame,
+                selected.0 as u8,
+                font_body,
+            );
         }
     }
 }
 
-fn spawn_enter_button(commands: &mut Commands, parent: Entity, slot: u8, font: Handle<Font>) {
+fn spawn_enter_button(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    parent: Entity,
+    slot: u8,
+    font: Handle<Font>,
+) {
     let btn = commands
         .spawn((
             Pickable::default(),
             Node {
                 padding: UiRect::axes(Val::Px(18.0), Val::Px(12.0)),
+                column_gap: Val::Px(8.0),
+                align_items: AlignItems::Center,
                 border: UiRect::all(Val::Px(1.0)),
                 border_radius: BorderRadius::all(Val::Px(11.0)),
                 ..default()
@@ -699,6 +771,10 @@ fn spawn_enter_button(commands: &mut Commands, parent: Entity, slot: u8, font: H
             ChildOf(parent),
         ))
         .id();
+    commands.spawn((
+        theme::icon(asset_server, "play", 15.0, theme::EMERALD_INK),
+        ChildOf(btn),
+    ));
     commands.spawn((
         label("Enter Game", font, 15.0, theme::EMERALD_INK),
         ChildOf(btn),
@@ -711,12 +787,20 @@ fn spawn_enter_button(commands: &mut Commands, parent: Entity, slot: u8, font: H
     );
 }
 
-fn spawn_create_button(commands: &mut Commands, parent: Entity, slot: u8, font: Handle<Font>) {
+fn spawn_create_button(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    parent: Entity,
+    slot: u8,
+    font: Handle<Font>,
+) {
     let btn = commands
         .spawn((
             Pickable::default(),
             Node {
                 padding: UiRect::axes(Val::Px(18.0), Val::Px(12.0)),
+                column_gap: Val::Px(8.0),
+                align_items: AlignItems::Center,
                 border: UiRect::all(Val::Px(1.0)),
                 border_radius: BorderRadius::all(Val::Px(11.0)),
                 ..default()
@@ -726,6 +810,10 @@ fn spawn_create_button(commands: &mut Commands, parent: Entity, slot: u8, font: 
             ChildOf(parent),
         ))
         .id();
+    commands.spawn((
+        theme::icon(asset_server, "plus", 16.0, theme::EMERALD_INK),
+        ChildOf(btn),
+    ));
     commands.spawn((
         label("Create Character", font, 15.0, theme::EMERALD_INK),
         ChildOf(btn),
@@ -745,6 +833,7 @@ fn spawn_create_button(commands: &mut Commands, parent: Entity, slot: u8, font: 
 /// Label flips Delete<->Confirm? via `update_delete_labels`.
 fn spawn_delete_button(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     parent: Entity,
     character_id: u32,
     font: Handle<Font>,
@@ -755,6 +844,8 @@ fn spawn_delete_button(
             Pickable::default(),
             Node {
                 padding: UiRect::axes(Val::Px(16.0), Val::Px(12.0)),
+                column_gap: Val::Px(8.0),
+                align_items: AlignItems::Center,
                 border: UiRect::all(Val::Px(1.0)),
                 border_radius: BorderRadius::all(Val::Px(11.0)),
                 ..default()
@@ -764,6 +855,10 @@ fn spawn_delete_button(
             ChildOf(parent),
         ))
         .id();
+    commands.spawn((
+        theme::icon(asset_server, "trash", 15.0, theme::BAD),
+        ChildOf(btn),
+    ));
     commands.spawn((label("Delete", font, 14.0, theme::BAD), ChildOf(btn)));
     commands.entity(btn).observe(
         move |mut click: On<Pointer<Click>>,
@@ -905,6 +1000,9 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, AssetPlugin::default()));
         app.init_asset::<Font>();
+        // The cards spawn `theme::icon` handles; register Image so the load doesn't panic
+        // on an unregistered asset type (no SvgLoader here — the handle just stays unloaded).
+        app.init_asset::<Image>();
         app.add_message::<SelectCharacterEvent>();
         app.add_message::<DeleteCharacterRequestEvent>();
         app.init_resource::<CardsBuilt>();

@@ -25,6 +25,28 @@ pub const FONT_TITLE: &str = "fonts/cinzel.ttf";
 pub const FONT_BODY: &str = "fonts/manrope.ttf";
 pub const FONT_BODY_BOLD: &str = "fonts/manrope.ttf";
 
+/// Asset directory for the SVG glyph icons extracted from the Endurnir mockups.
+pub const ICON_DIR: &str = "ui/icons/";
+
+/// A square UI icon loaded from `assets/ui/icons/<name>.svg`. The icons ship as white
+/// glyphs, so `color` is what sets their final tint (emerald play, crimson trash, …).
+/// `Pickable::IGNORE` keeps the glyph from swallowing clicks on its host button.
+pub fn icon(assets: &AssetServer, name: &str, size: f32, color: Color) -> impl Bundle {
+    (
+        ImageNode {
+            image: assets.load(format!("{ICON_DIR}{name}.svg")),
+            color,
+            ..default()
+        },
+        Node {
+            width: Val::Px(size),
+            height: Val::Px(size),
+            ..default()
+        },
+        Pickable::IGNORE,
+    )
+}
+
 /// Glass panel: translucent dark fill, gold-faint hairline border, rounded.
 pub fn glass_panel() -> impl Bundle {
     (

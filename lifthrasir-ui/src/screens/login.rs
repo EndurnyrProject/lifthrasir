@@ -123,7 +123,9 @@ fn show_login_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
     spawn_field(
         &mut commands,
         panel,
+        &asset_server,
         LoginField::Username,
+        "user",
         "Enter your name",
         false,
         USERNAME_MAX,
@@ -135,7 +137,9 @@ fn show_login_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
     spawn_field(
         &mut commands,
         panel,
+        &asset_server,
         LoginField::Password,
+        "lock",
         "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}",
         true,
         PASSWORD_MAX,
@@ -229,7 +233,9 @@ fn spawn_field_label(commands: &mut Commands, parent: Entity, text: &str, font: 
 fn spawn_field(
     commands: &mut Commands,
     parent: Entity,
+    asset_server: &AssetServer,
     kind: LoginField,
+    icon: &str,
     placeholder: &str,
     mask: bool,
     max: usize,
@@ -251,6 +257,7 @@ fn spawn_field(
                 width: Val::Percent(100.0),
                 height: Val::Px(46.0),
                 align_items: AlignItems::Center,
+                column_gap: Val::Px(10.0),
                 padding: UiRect::horizontal(Val::Px(14.0)),
                 margin: UiRect::bottom(Val::Px(16.0)),
                 border: UiRect::all(Val::Px(1.0)),
@@ -263,6 +270,10 @@ fn spawn_field(
             ChildOf(parent),
         ))
         .id();
+    commands.spawn((
+        theme::icon(asset_server, icon, 17.0, theme::TEXT_FAINT),
+        ChildOf(field),
+    ));
     commands.spawn((
         Text::new(placeholder),
         TextFont {

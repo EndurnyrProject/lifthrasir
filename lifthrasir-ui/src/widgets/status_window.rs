@@ -127,7 +127,7 @@ fn save_messages(staging: &StatStaging) -> Vec<StatIncreaseRequested> {
         .iter()
         .filter_map(|&stat| {
             let staged = staging.staged_value(stat);
-            (staged > 0).then(|| StatIncreaseRequested {
+            (staged > 0).then_some(StatIncreaseRequested {
                 status_id: stat as u16,
                 amount: staged as u8,
             })
@@ -248,7 +248,7 @@ pub fn spawn_status_window(commands: &mut Commands, parent: Entity, asset_server
         .id();
 
     commands.spawn((
-        theme::label("\u{2756}", font_title.clone(), 14.0, theme::GOLD),
+        theme::icon(asset_server, "user", 16.0, theme::GOLD),
         ChildOf(titlebar),
     ));
     commands.spawn((
@@ -276,7 +276,7 @@ pub fn spawn_status_window(commands: &mut Commands, parent: Entity, asset_server
         ))
         .id();
     commands.spawn((
-        theme::label("\u{2715}", font_body.clone(), 13.0, theme::TEXT_DIM),
+        theme::icon(asset_server, "close", 13.0, theme::TEXT_DIM),
         ChildOf(close),
     ));
     commands.entity(close).observe(
@@ -714,18 +714,28 @@ fn on_stepper(
     }
 }
 
+/// Point-bank text, kept disjoint from the stat-value and cost-label text queries.
+type PointBankText<'w, 's> =
+    Query<'w, 's, &'static mut Text, (With<PointBank>, Without<StatValue>, Without<CostLabel>)>;
+
+/// Combat-cell text, kept disjoint from every other mutable `Text` query above.
+type CombatCellText<'w, 's> = Query<
+    'w,
+    's,
+    (&'static mut Text, &'static CombatCell),
+    (Without<StatValue>, Without<CostLabel>, Without<PointBank>),
+>;
+
 /// Reflects `CharacterStatus` + `StatStaging` into the marked elements, writing
 /// only on change. Combat is server-truth (no staged preview).
+#[allow(clippy::too_many_arguments)]
 fn update_status_window(
     player: Query<&CharacterStatus, With<LocalPlayer>>,
     staging: Res<StatStaging>,
     mut values: Query<(&mut Text, &StatValue)>,
     mut costs: Query<(&mut Text, &CostLabel), Without<StatValue>>,
-    mut bank: Query<&mut Text, (With<PointBank>, Without<StatValue>, Without<CostLabel>)>,
-    mut combat: Query<
-        (&mut Text, &CombatCell),
-        (Without<StatValue>, Without<CostLabel>, Without<PointBank>),
-    >,
+    mut bank: PointBankText,
+    mut combat: CombatCellText,
     mut steppers: Query<(&mut BackgroundColor, &Stepper)>,
     mut commit: Query<&mut BackgroundColor, (With<CommitButton>, Without<Stepper>)>,
 ) {

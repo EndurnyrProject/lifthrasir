@@ -122,6 +122,10 @@ enum FormValue {
     Sex,
 }
 
+/// The male/female glyph on the sex toggle; its image swaps with the current sex.
+#[derive(Component)]
+struct SexIcon;
+
 fn show_character_create_screen(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -288,9 +292,16 @@ fn show_character_create_screen(
         ChildOf(name_box),
     ));
 
-    spawn_segmented_sex(&mut commands, form_panel, form.0.sex, font_body.clone());
+    spawn_segmented_sex(
+        &mut commands,
+        &asset_server,
+        form_panel,
+        form.0.sex,
+        font_body.clone(),
+    );
     spawn_stepper(
         &mut commands,
+        &asset_server,
         form_panel,
         "HAIR STYLE",
         FormValue::HairStyle,
@@ -299,6 +310,7 @@ fn show_character_create_screen(
     );
     spawn_stepper(
         &mut commands,
+        &asset_server,
         form_panel,
         "HAIR COLOR",
         FormValue::HairColor,
@@ -343,6 +355,7 @@ fn show_character_create_screen(
                 flex_basis: Val::Percent(38.0),
                 flex_grow: 0.0,
                 flex_shrink: 0.0,
+                column_gap: Val::Px(8.0),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 border: UiRect::all(Val::Px(1.0)),
@@ -354,6 +367,10 @@ fn show_character_create_screen(
             ChildOf(actions),
         ))
         .id();
+    commands.spawn((
+        theme::icon(&asset_server, "back", 16.0, theme::TEXT_DIM),
+        ChildOf(cancel),
+    ));
     commands.spawn((
         label("Cancel", font_body.clone(), 14.0, theme::TEXT_DIM),
         ChildOf(cancel),
@@ -370,6 +387,7 @@ fn show_character_create_screen(
             Node {
                 height: Val::Px(50.0),
                 flex_grow: 1.0,
+                column_gap: Val::Px(8.0),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 border_radius: BorderRadius::all(Val::Px(11.0)),
@@ -379,6 +397,10 @@ fn show_character_create_screen(
             ChildOf(actions),
         ))
         .id();
+    commands.spawn((
+        theme::icon(&asset_server, "check", 18.0, theme::EMERALD_INK),
+        ChildOf(create),
+    ));
     commands.spawn((
         label("Create Hero", font_body, 15.0, theme::EMERALD_INK),
         ChildOf(create),
@@ -408,13 +430,20 @@ fn cc_label(text: &str, font: Handle<Font>) -> impl Bundle {
 }
 
 /// The emerald "Sex" toggle: one button whose label cycles Male/Female on click.
-fn spawn_segmented_sex(commands: &mut Commands, parent: Entity, sex: Gender, font: Handle<Font>) {
+fn spawn_segmented_sex(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    parent: Entity,
+    sex: Gender,
+    font: Handle<Font>,
+) {
     commands.spawn((cc_label("SEX", font.clone()), ChildOf(parent)));
     let button = commands
         .spawn((
             Pickable::default(),
             Node {
                 height: Val::Px(50.0),
+                column_gap: Val::Px(9.0),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 border_radius: BorderRadius::all(Val::Px(11.0)),
@@ -424,6 +453,11 @@ fn spawn_segmented_sex(commands: &mut Commands, parent: Entity, sex: Gender, fon
             ChildOf(parent),
         ))
         .id();
+    commands.spawn((
+        theme::icon(asset_server, sex_icon(sex), 18.0, theme::EMERALD_INK),
+        SexIcon,
+        ChildOf(button),
+    ));
     commands.spawn((
         Text::new(sex_label(sex)),
         TextFont {
@@ -449,6 +483,7 @@ fn spawn_segmented_sex(commands: &mut Commands, parent: Entity, sex: Gender, fon
 /// A `‹ value ›` stepper bound to one [`FormValue`] field; prev/next cycle it.
 fn spawn_stepper(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     parent: Entity,
     label_text: &str,
     kind: FormValue,
@@ -473,7 +508,7 @@ fn spawn_stepper(
         ))
         .id();
 
-    let prev = spawn_step_button(commands, stepper, "\u{2039}", font.clone());
+    let prev = spawn_step_button(commands, asset_server, stepper, "chevron-left");
     let cell = commands
         .spawn((
             Node {
@@ -498,7 +533,7 @@ fn spawn_stepper(
         Pickable::IGNORE,
         ChildOf(cell),
     ));
-    let next = spawn_step_button(commands, stepper, "\u{203a}", font);
+    let next = spawn_step_button(commands, asset_server, stepper, "chevron-right");
 
     commands.entity(prev).observe(
         move |_: On<Pointer<Click>>, mut form: ResMut<CreationForm>| {
@@ -514,9 +549,9 @@ fn spawn_stepper(
 
 fn spawn_step_button(
     commands: &mut Commands,
+    asset_server: &AssetServer,
     parent: Entity,
-    glyph: &str,
-    font: Handle<Font>,
+    icon: &str,
 ) -> Entity {
     let button = commands
         .spawn((
@@ -532,7 +567,10 @@ fn spawn_step_button(
             ChildOf(parent),
         ))
         .id();
-    commands.spawn((label(glyph, font, 17.0, theme::TEXT_DIM), ChildOf(button)));
+    commands.spawn((
+        theme::icon(asset_server, icon, 15.0, theme::TEXT_DIM),
+        ChildOf(button),
+    ));
     button
 }
 
@@ -627,8 +665,14 @@ fn preview_components(form: &CharacterCreationForm) -> (CharacterData, Character
     )
 }
 
-/// Mirrors the form's current values into the stepper/segment value texts.
-fn reflect_form_values(form: Res<CreationForm>, mut values: Query<(&mut Text, &FormValue)>) {
+/// Mirrors the form's current values into the stepper/segment value texts and swaps
+/// the sex toggle's glyph to match the chosen gender.
+fn reflect_form_values(
+    form: Res<CreationForm>,
+    asset_server: Res<AssetServer>,
+    mut values: Query<(&mut Text, &FormValue)>,
+    mut sex_icons: Query<&mut ImageNode, With<SexIcon>>,
+) {
     if !form.is_changed() {
         return;
     }
@@ -639,6 +683,10 @@ fn reflect_form_values(form: Res<CreationForm>, mut values: Query<(&mut Text, &F
             FormValue::Sex => sex_label(form.0.sex).to_string(),
         };
         *text = Text::new(value);
+    }
+    let icon = format!("{}{}.svg", theme::ICON_DIR, sex_icon(form.0.sex));
+    for mut node in &mut sex_icons {
+        node.image = asset_server.load(&icon);
     }
 }
 
@@ -692,6 +740,13 @@ fn sex_label(sex: Gender) -> &'static str {
     match sex {
         Gender::Male => "Male",
         Gender::Female => "Female",
+    }
+}
+
+fn sex_icon(sex: Gender) -> &'static str {
+    match sex {
+        Gender::Male => "male",
+        Gender::Female => "female",
     }
 }
 

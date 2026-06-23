@@ -1,4 +1,4 @@
-use crate::infrastructure::assets::{bmp_loader::BmpLoader, *};
+use crate::infrastructure::assets::{bmp_loader::BmpLoader, svg_loader::SvgLoader, *};
 use crate::infrastructure::config::ClientConfig;
 use crate::infrastructure::item::ItemDataAsset;
 use crate::infrastructure::job::JobDataAsset;
@@ -32,6 +32,7 @@ impl Plugin for AssetsPlugin {
             .init_asset::<BgmNameTableAsset>()
             .init_asset_loader::<BgmNameTableLoader>()
             .init_asset_loader::<BmpLoader>()
+            .init_asset_loader::<SvgLoader>()
             .add_plugins((
                 TomlAssetPlugin::<AssetConfig>::new(&["data.toml"]),
                 TomlAssetPlugin::<ClientConfig>::new(&["client.toml"]),

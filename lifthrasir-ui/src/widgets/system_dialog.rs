@@ -10,8 +10,8 @@
 //! Only one dialog lives at a time: a second request while one is open is ignored,
 //! which absorbs the duplicate lost/failed events quinnet can emit on a drop.
 //!
-//! The mockup's per-preset SVG icons collapse to a single severity glyph rendered as
-//! text, since raw `bevy_ui` has no inline SVG (PNG icon assets are a later upgrade).
+//! The severity badge renders the mockup's per-preset line icon as an SVG glyph
+//! (via [`theme::icon`]), tinted with the severity accent.
 
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
@@ -48,12 +48,13 @@ pub fn severity_accent(severity: DialogSeverity) -> Color {
     }
 }
 
-/// Single text glyph standing in for the mockup's per-severity line icon.
-fn severity_glyph(severity: DialogSeverity) -> &'static str {
+/// The line-icon name (in `assets/ui/icons/`) for a severity.
+fn severity_icon(severity: DialogSeverity) -> &'static str {
     match severity {
-        DialogSeverity::Error | DialogSeverity::Warn => "!",
-        DialogSeverity::Info => "i",
-        DialogSeverity::Ok => "\u{2713}",
+        DialogSeverity::Error => "bang",
+        DialogSeverity::Warn => "triangle",
+        DialogSeverity::Info => "info",
+        DialogSeverity::Ok => "ok",
     }
 }
 
@@ -129,9 +130,9 @@ fn spawn_dialog(commands: &mut Commands, asset_server: &AssetServer, request: &S
             BorderColor::all(accent.with_alpha(0.4)),
             ChildOf(card),
         ))
-        .with_child(theme::label(
-            severity_glyph(request.severity),
-            title_font.clone(),
+        .with_child(theme::icon(
+            asset_server,
+            severity_icon(request.severity),
             30.0,
             accent,
         ));
@@ -289,9 +290,10 @@ mod tests {
     }
 
     #[test]
-    fn severity_glyph_distinguishes_tone() {
-        assert_eq!(severity_glyph(DialogSeverity::Error), "!");
-        assert_eq!(severity_glyph(DialogSeverity::Info), "i");
-        assert_eq!(severity_glyph(DialogSeverity::Ok), "\u{2713}");
+    fn severity_icon_distinguishes_tone() {
+        assert_eq!(severity_icon(DialogSeverity::Error), "bang");
+        assert_eq!(severity_icon(DialogSeverity::Warn), "triangle");
+        assert_eq!(severity_icon(DialogSeverity::Info), "info");
+        assert_eq!(severity_icon(DialogSeverity::Ok), "ok");
     }
 }
