@@ -1,5 +1,6 @@
 use bevy::anti_alias::fxaa::Fxaa;
 use bevy::prelude::*;
+use bevy::ui::IsDefaultUiCamera;
 use bevy::window::{
     Monitor, MonitorSelection, PresentMode, PrimaryWindow, VideoMode, VideoModeSelection,
     WindowMode, WindowResolution,
@@ -43,6 +44,7 @@ fn nearest_video_mode(modes: &[VideoMode], target: (u32, u32)) -> Option<VideoMo
 }
 
 #[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
+#[allow(clippy::too_many_arguments)]
 pub fn apply_graphics(
     mut messages: MessageReader<ApplySettings>,
     settings: Res<Persistent<Settings>>,
@@ -50,6 +52,7 @@ pub fn apply_graphics(
     monitors: Query<&Monitor>,
     mut framepace: ResMut<FramepaceSettings>,
     cameras: Query<Entity, With<CameraFollowTarget>>,
+    ui_cameras: Query<Entity, With<IsDefaultUiCamera>>,
     mut commands: Commands,
 ) {
     if messages.read().count() == 0 {
@@ -83,6 +86,14 @@ pub fn apply_graphics(
 
     for camera in &cameras {
         apply_camera_aa(&mut commands, camera, &settings);
+    }
+
+    // The UI camera shares the window target with the world camera, so their
+    // MSAA sample counts must match or the world pass fails to composite (the
+    // same rule HDR follows here). FXAA stays world-only.
+    let (ui_msaa, _) = graphics.antialiasing.to_msaa_fxaa();
+    for ui_camera in &ui_cameras {
+        commands.entity(ui_camera).insert(ui_msaa);
     }
 }
 
