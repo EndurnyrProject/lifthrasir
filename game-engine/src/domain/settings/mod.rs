@@ -9,8 +9,8 @@ use bevy_auto_plugin::prelude::{auto_add_system, AutoPlugin};
 pub use events::ApplySettings;
 pub use persistence::settings_path;
 pub use resources::{
-    ActionBinds, AntiAliasing, AudioConfig, DisplayMode, FpsCap, GraphicsSettings, KeyBind,
-    Keybinds, Modifier, Settings, RESOLUTIONS,
+    resolution_label, resolution_next, resolution_prev, ActionBinds, AntiAliasing, AudioConfig,
+    DisplayMode, FpsCap, GraphicsSettings, KeyBind, Keybinds, Modifier, Settings, RESOLUTIONS,
 };
 
 /// Owns the persisted `Settings` resource: loads `settings.ron` (or writes

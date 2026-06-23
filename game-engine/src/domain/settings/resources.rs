@@ -17,6 +17,44 @@ pub const RESOLUTIONS: [(u32, u32); 5] = [
     (3840, 2160),
 ];
 
+/// Stepper label for a resolution preset (e.g. `1920 x 1080`).
+pub fn resolution_label((w, h): (u32, u32)) -> String {
+    format!("{w} x {h}")
+}
+
+/// Index of `resolution` within `RESOLUTIONS`; falls back to the default preset
+/// (1920x1080) when an off-preset value somehow lands in the draft.
+pub fn resolution_index(resolution: (u32, u32)) -> usize {
+    RESOLUTIONS
+        .iter()
+        .position(|&preset| preset == resolution)
+        .unwrap_or(2)
+}
+
+/// Next preset after `resolution`, clamped at the last.
+pub fn resolution_next(resolution: (u32, u32)) -> (u32, u32) {
+    let i = resolution_index(resolution);
+    RESOLUTIONS[(i + 1).min(RESOLUTIONS.len() - 1)]
+}
+
+/// Previous preset before `resolution`, clamped at the first.
+pub fn resolution_prev(resolution: (u32, u32)) -> (u32, u32) {
+    let i = resolution_index(resolution);
+    RESOLUTIONS[i.saturating_sub(1)]
+}
+
+/// Next variant after `value` in `all`, clamped at the last element.
+fn cycle_next<T: Copy + PartialEq>(all: &[T], value: T) -> T {
+    let i = all.iter().position(|&v| v == value).unwrap_or(0);
+    all[(i + 1).min(all.len() - 1)]
+}
+
+/// Previous variant before `value` in `all`, clamped at the first element.
+fn cycle_prev<T: Copy + PartialEq>(all: &[T], value: T) -> T {
+    let i = all.iter().position(|&v| v == value).unwrap_or(0);
+    all[i.saturating_sub(1)]
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum DisplayMode {
     Windowed,
@@ -25,6 +63,22 @@ pub enum DisplayMode {
 }
 
 impl DisplayMode {
+    /// The variants in segmented-control order (Windowed / Borderless / Fullscreen).
+    pub const ALL: [DisplayMode; 3] = [
+        DisplayMode::Windowed,
+        DisplayMode::BorderlessFullscreen,
+        DisplayMode::Fullscreen,
+    ];
+
+    /// Short button label for the segmented control.
+    pub fn label(self) -> &'static str {
+        match self {
+            DisplayMode::Windowed => "Windowed",
+            DisplayMode::BorderlessFullscreen => "Borderless",
+            DisplayMode::Fullscreen => "Fullscreen",
+        }
+    }
+
     /// Pure mapping to the Bevy window mode (Task 2 applies it to the window).
     pub fn to_window_mode(self) -> WindowMode {
         match self {
@@ -48,6 +102,34 @@ pub enum AntiAliasing {
 }
 
 impl AntiAliasing {
+    /// The variants in stepper order.
+    pub const ALL: [AntiAliasing; 4] = [
+        AntiAliasing::Off,
+        AntiAliasing::Fxaa,
+        AntiAliasing::MsaaX2,
+        AntiAliasing::MsaaX4,
+    ];
+
+    /// Display label for the stepper value.
+    pub fn label(self) -> &'static str {
+        match self {
+            AntiAliasing::Off => "Off",
+            AntiAliasing::Fxaa => "FXAA",
+            AntiAliasing::MsaaX2 => "MSAA x2",
+            AntiAliasing::MsaaX4 => "MSAA x4",
+        }
+    }
+
+    /// Next variant, clamped at the last (matches the stepper's disabled arrow).
+    pub fn next(self) -> AntiAliasing {
+        cycle_next(&AntiAliasing::ALL, self)
+    }
+
+    /// Previous variant, clamped at the first.
+    pub fn prev(self) -> AntiAliasing {
+        cycle_prev(&AntiAliasing::ALL, self)
+    }
+
     /// Maps to `(Msaa, has_fxaa)`; Task 2 inserts the `Msaa` and adds/removes
     /// `Fxaa` on the world camera accordingly.
     pub fn to_msaa_fxaa(self) -> (Msaa, bool) {
@@ -70,6 +152,36 @@ pub enum FpsCap {
 }
 
 impl FpsCap {
+    /// The variants in stepper order.
+    pub const ALL: [FpsCap; 5] = [
+        FpsCap::F30,
+        FpsCap::F60,
+        FpsCap::F120,
+        FpsCap::F144,
+        FpsCap::Unlimited,
+    ];
+
+    /// Display label for the stepper value.
+    pub fn label(self) -> &'static str {
+        match self {
+            FpsCap::F30 => "30",
+            FpsCap::F60 => "60",
+            FpsCap::F120 => "120",
+            FpsCap::F144 => "144",
+            FpsCap::Unlimited => "Unlimited",
+        }
+    }
+
+    /// Next variant, clamped at the last.
+    pub fn next(self) -> FpsCap {
+        cycle_next(&FpsCap::ALL, self)
+    }
+
+    /// Previous variant, clamped at the first.
+    pub fn prev(self) -> FpsCap {
+        cycle_prev(&FpsCap::ALL, self)
+    }
+
     /// Maps to the framepace limiter; `Unlimited` disables limiting.
     pub fn to_limiter(self) -> Limiter {
         match self {
@@ -344,6 +456,45 @@ mod tests {
             Keybinds::default().to_input_map(),
             PlayerAction::default_input_map()
         );
+    }
+
+    #[test]
+    fn antialiasing_cycles_and_clamps() {
+        assert_eq!(AntiAliasing::Off.next(), AntiAliasing::Fxaa);
+        assert_eq!(AntiAliasing::MsaaX4.next(), AntiAliasing::MsaaX4);
+        assert_eq!(AntiAliasing::Fxaa.prev(), AntiAliasing::Off);
+        assert_eq!(AntiAliasing::Off.prev(), AntiAliasing::Off);
+        assert_eq!(AntiAliasing::Off.label(), "Off");
+        assert_eq!(AntiAliasing::MsaaX2.label(), "MSAA x2");
+    }
+
+    #[test]
+    fn fps_cap_cycles_and_clamps() {
+        assert_eq!(FpsCap::F30.next(), FpsCap::F60);
+        assert_eq!(FpsCap::Unlimited.next(), FpsCap::Unlimited);
+        assert_eq!(FpsCap::F60.prev(), FpsCap::F30);
+        assert_eq!(FpsCap::F30.prev(), FpsCap::F30);
+        assert_eq!(FpsCap::F144.label(), "144");
+        assert_eq!(FpsCap::Unlimited.label(), "Unlimited");
+    }
+
+    #[test]
+    fn display_mode_labels_in_order() {
+        assert_eq!(DisplayMode::ALL[0], DisplayMode::Windowed);
+        assert_eq!(DisplayMode::Windowed.label(), "Windowed");
+        assert_eq!(DisplayMode::BorderlessFullscreen.label(), "Borderless");
+        assert_eq!(DisplayMode::Fullscreen.label(), "Fullscreen");
+    }
+
+    #[test]
+    fn resolution_steps_and_clamps_over_presets() {
+        assert_eq!(resolution_index((1920, 1080)), 2);
+        assert_eq!(resolution_index((1, 1)), 2);
+        assert_eq!(resolution_next((1280, 720)), (1600, 900));
+        assert_eq!(resolution_next((3840, 2160)), (3840, 2160));
+        assert_eq!(resolution_prev((1600, 900)), (1280, 720));
+        assert_eq!(resolution_prev((1280, 720)), (1280, 720));
+        assert_eq!(resolution_label((1920, 1080)), "1920 x 1080");
     }
 
     #[test]

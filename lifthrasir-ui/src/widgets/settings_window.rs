@@ -9,7 +9,10 @@
 use bevy::prelude::*;
 use bevy_persistent::prelude::Persistent;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
-use game_engine::domain::settings::{ApplySettings, Settings};
+use game_engine::domain::settings::{
+    resolution_label, resolution_next, resolution_prev, ApplySettings, DisplayMode,
+    GraphicsSettings, Settings,
+};
 
 use crate::theme;
 use crate::widgets::draggable::make_draggable;
@@ -111,6 +114,7 @@ impl Plugin for SettingsWindowPlugin {
                 toggle_settings.run_if(ui_unfocused),
                 refresh_tabs.run_if(resource_changed::<SettingsUi>),
                 refresh_footer.run_if(resource_changed::<SettingsUi>),
+                refresh_graphics.run_if(resource_changed::<SettingsUi>),
             ),
         );
     }
@@ -370,6 +374,10 @@ fn spawn_tab_body(commands: &mut Commands, content: Entity, tab: SettingsTab, fo
         theme::label(title, font.clone(), 11.0, theme::GOLD),
         ChildOf(body),
     ));
+
+    if tab == SettingsTab::Graphics {
+        spawn_graphics_rows(commands, body, font);
+    }
 }
 
 /// Footer: Reset to Defaults · unsaved-changes dot · Cancel · Apply.
@@ -551,6 +559,467 @@ fn toggle_settings(
         Visibility::Hidden => Visibility::Visible,
         _ => Visibility::Hidden,
     };
+}
+
+// ── Graphics tab ──────────────────────────────────────────────────────────
+
+/// Which `draft.graphics` field a control edits. Drives both interaction
+/// (steppers/switch/segmented mutate the matching field) and the displayed
+/// value refresh.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+enum GraphicsField {
+    DisplayMode,
+    Resolution,
+    Antialiasing,
+    Vsync,
+    FpsCap,
+}
+
+/// Direction a stepper arrow moves the value.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum StepDir {
+    Prev,
+    Next,
+}
+
+/// A segmented-control button: edits `field` to the variant at `index` in
+/// `DisplayMode::ALL`.
+#[derive(Component, Clone, Copy)]
+struct SegButton {
+    field: GraphicsField,
+    index: usize,
+}
+
+/// A stepper arrow: steps `field` one preset in `dir`.
+#[derive(Component, Clone, Copy)]
+struct StepperArrow {
+    field: GraphicsField,
+    dir: StepDir,
+}
+
+/// The value text inside a stepper; `refresh_graphics` rewrites it.
+#[derive(Component, Clone, Copy)]
+struct StepperValue(GraphicsField);
+
+/// The clickable switch pill; flips `field`'s bool.
+#[derive(Component, Clone, Copy)]
+struct SwitchPill(GraphicsField);
+
+/// The sliding knob inside a switch; `refresh_graphics` repositions it.
+#[derive(Component, Clone, Copy)]
+struct SwitchKnob(GraphicsField);
+
+/// Reads a field's current stepper/switch display value off the draft.
+fn field_label(graphics: &GraphicsSettings, field: GraphicsField) -> String {
+    match field {
+        GraphicsField::Resolution => resolution_label(graphics.resolution),
+        GraphicsField::Antialiasing => graphics.antialiasing.label().to_string(),
+        GraphicsField::FpsCap => graphics.fps_cap.label().to_string(),
+        GraphicsField::DisplayMode | GraphicsField::Vsync => String::new(),
+    }
+}
+
+/// Steps a field's value one preset in `dir` on the draft.
+fn step_field(graphics: &mut GraphicsSettings, field: GraphicsField, dir: StepDir) {
+    match (field, dir) {
+        (GraphicsField::Resolution, StepDir::Next) => {
+            graphics.resolution = resolution_next(graphics.resolution)
+        }
+        (GraphicsField::Resolution, StepDir::Prev) => {
+            graphics.resolution = resolution_prev(graphics.resolution)
+        }
+        (GraphicsField::Antialiasing, StepDir::Next) => {
+            graphics.antialiasing = graphics.antialiasing.next()
+        }
+        (GraphicsField::Antialiasing, StepDir::Prev) => {
+            graphics.antialiasing = graphics.antialiasing.prev()
+        }
+        (GraphicsField::FpsCap, StepDir::Next) => graphics.fps_cap = graphics.fps_cap.next(),
+        (GraphicsField::FpsCap, StepDir::Prev) => graphics.fps_cap = graphics.fps_cap.prev(),
+        _ => {}
+    }
+}
+
+/// Builds the five Graphics rows under `body`.
+fn spawn_graphics_rows(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
+    spawn_section(commands, body, "Display", font);
+
+    let ctrl = spawn_row(
+        commands,
+        body,
+        "Display Mode",
+        "How the game fills your screen",
+        font,
+    );
+    spawn_segmented(commands, ctrl, GraphicsField::DisplayMode, font);
+
+    let ctrl = spawn_row(commands, body, "Resolution", "Screen size in pixels", font);
+    spawn_stepper(commands, ctrl, GraphicsField::Resolution, font);
+
+    spawn_section(commands, body, "Quality", font);
+
+    let ctrl = spawn_row(commands, body, "Antialiasing", "Smooths jagged edges", font);
+    spawn_stepper(commands, ctrl, GraphicsField::Antialiasing, font);
+
+    let ctrl = spawn_row(
+        commands,
+        body,
+        "VSync",
+        "Sync frames to display refresh",
+        font,
+    );
+    spawn_switch(commands, ctrl, GraphicsField::Vsync);
+
+    let ctrl = spawn_row(
+        commands,
+        body,
+        "Frame Rate Cap",
+        "Maximum frames per second",
+        font,
+    );
+    spawn_stepper(commands, ctrl, GraphicsField::FpsCap, font);
+}
+
+/// A gold uppercase section caption with a trailing hairline.
+fn spawn_section(commands: &mut Commands, body: Entity, text: &str, font: &Handle<Font>) {
+    let row = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(10.0),
+                margin: UiRect::top(Val::Px(4.0)),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(body),
+        ))
+        .id();
+    commands.spawn((
+        theme::label(text, font.clone(), 10.0, theme::GOLD),
+        ChildOf(row),
+    ));
+    commands.spawn((
+        Node {
+            flex_grow: 1.0,
+            height: Val::Px(1.0),
+            ..default()
+        },
+        BackgroundColor(theme::GOLD_FAINT),
+        Pickable::IGNORE,
+        ChildOf(row),
+    ));
+}
+
+/// A setting row: a label column (title + sublabel) and a right-aligned control
+/// column. Returns the control column entity to attach the control to.
+fn spawn_row(
+    commands: &mut Commands,
+    body: Entity,
+    label: &str,
+    sublabel: &str,
+    font: &Handle<Font>,
+) -> Entity {
+    let row = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                column_gap: Val::Px(18.0),
+                min_height: Val::Px(46.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(body),
+        ))
+        .id();
+
+    let labels = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(3.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(row),
+        ))
+        .id();
+    commands.spawn((
+        theme::label(label, font.clone(), 13.0, theme::TEXT),
+        ChildOf(labels),
+    ));
+    commands.spawn((
+        theme::label(sublabel, font.clone(), 11.0, theme::TEXT_FAINT),
+        ChildOf(labels),
+    ));
+
+    commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(row),
+        ))
+        .id()
+}
+
+/// Segmented control for `DisplayMode`: one button per variant, active one
+/// highlighted by `refresh_graphics`.
+fn spawn_segmented(
+    commands: &mut Commands,
+    ctrl: Entity,
+    field: GraphicsField,
+    font: &Handle<Font>,
+) {
+    let group = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(4.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(9.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::STROKE),
+            Pickable::IGNORE,
+            ChildOf(ctrl),
+        ))
+        .id();
+
+    for (index, mode) in DisplayMode::ALL.into_iter().enumerate() {
+        let button = commands
+            .spawn((
+                SegButton { field, index },
+                Node {
+                    height: Val::Px(30.0),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    padding: UiRect::horizontal(Val::Px(13.0)),
+                    border_radius: BorderRadius::all(Val::Px(6.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::NONE),
+                Pickable::default(),
+                ChildOf(group),
+            ))
+            .id();
+        commands.spawn((
+            theme::label(mode.label(), font.clone(), 12.0, theme::TEXT_DIM),
+            ChildOf(button),
+        ));
+        commands.entity(button).observe(on_segment_click);
+    }
+}
+
+/// Clicking a segment sets the segmented field to the clicked variant.
+fn on_segment_click(
+    click: On<Pointer<Click>>,
+    buttons: Query<&SegButton>,
+    mut ui: ResMut<SettingsUi>,
+) {
+    let Ok(button) = buttons.get(click.entity) else {
+        return;
+    };
+    if button.field == GraphicsField::DisplayMode {
+        ui.draft.graphics.display_mode = DisplayMode::ALL[button.index];
+    }
+}
+
+/// Stepper control: ◀ value ▶ over a field's presets.
+fn spawn_stepper(commands: &mut Commands, ctrl: Entity, field: GraphicsField, font: &Handle<Font>) {
+    let stepper = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                min_width: Val::Px(188.0),
+                height: Val::Px(38.0),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(9.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::STROKE),
+            Pickable::IGNORE,
+            ChildOf(ctrl),
+        ))
+        .id();
+
+    spawn_stepper_arrow(commands, stepper, field, StepDir::Prev, font);
+
+    commands.spawn((
+        StepperValue(field),
+        theme::label("", font.clone(), 13.0, theme::TEXT),
+        Node {
+            flex_grow: 1.0,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        TextLayout::new_with_justify(Justify::Center),
+        ChildOf(stepper),
+    ));
+
+    spawn_stepper_arrow(commands, stepper, field, StepDir::Next, font);
+}
+
+fn spawn_stepper_arrow(
+    commands: &mut Commands,
+    stepper: Entity,
+    field: GraphicsField,
+    dir: StepDir,
+    font: &Handle<Font>,
+) {
+    let arrow = commands
+        .spawn((
+            StepperArrow { field, dir },
+            Node {
+                width: Val::Px(38.0),
+                height: Val::Percent(100.0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            Pickable::default(),
+            ChildOf(stepper),
+        ))
+        .id();
+    commands.spawn((
+        Text::new(if dir == StepDir::Prev { "<" } else { ">" }),
+        TextFont {
+            font: font.clone(),
+            font_size: 14.0,
+            ..default()
+        },
+        TextColor(theme::TEXT_DIM),
+        Pickable::IGNORE,
+        ChildOf(arrow),
+    ));
+    commands.entity(arrow).observe(on_stepper_click);
+}
+
+/// Clicking a stepper arrow steps its field one preset.
+fn on_stepper_click(
+    click: On<Pointer<Click>>,
+    arrows: Query<&StepperArrow>,
+    mut ui: ResMut<SettingsUi>,
+) {
+    let Ok(arrow) = arrows.get(click.entity) else {
+        return;
+    };
+    step_field(&mut ui.draft.graphics, arrow.field, arrow.dir);
+}
+
+/// Toggle switch (VSync): a pill with a sliding knob.
+fn spawn_switch(commands: &mut Commands, ctrl: Entity, field: GraphicsField) {
+    let pill = commands
+        .spawn((
+            SwitchPill(field),
+            Node {
+                width: Val::Px(50.0),
+                height: Val::Px(28.0),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(16.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::STROKE),
+            Pickable::default(),
+            ChildOf(ctrl),
+        ))
+        .id();
+    commands.spawn((
+        SwitchKnob(field),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(3.0),
+            left: Val::Px(3.0),
+            width: Val::Px(20.0),
+            height: Val::Px(20.0),
+            border_radius: BorderRadius::all(Val::Px(10.0)),
+            ..default()
+        },
+        BackgroundColor(theme::TEXT_DIM),
+        Pickable::IGNORE,
+        ChildOf(pill),
+    ));
+    commands.entity(pill).observe(on_switch_click);
+}
+
+/// Clicking the switch flips its bool field.
+fn on_switch_click(
+    click: On<Pointer<Click>>,
+    pills: Query<&SwitchPill>,
+    mut ui: ResMut<SettingsUi>,
+) {
+    let Ok(pill) = pills.get(click.entity) else {
+        return;
+    };
+    if pill.0 == GraphicsField::Vsync {
+        ui.draft.graphics.vsync = !ui.draft.graphics.vsync;
+    }
+}
+
+/// Reflects the current `draft.graphics` onto every graphics control: segmented
+/// highlight, stepper value text, switch colour + knob position. Runs whenever
+/// `SettingsUi` changes, so Cancel/Reset (which rewrite the draft) update the UI.
+fn refresh_graphics(
+    ui: Res<SettingsUi>,
+    mut segments: Query<(&SegButton, &mut BackgroundColor, &Children)>,
+    mut texts: Query<&mut TextColor>,
+    mut values: Query<(&StepperValue, &mut Text)>,
+    mut switches: Query<(&SwitchPill, &mut BackgroundColor), Without<SegButton>>,
+    mut knobs: Query<(&SwitchKnob, &mut Node)>,
+) {
+    let graphics = &ui.draft.graphics;
+
+    for (button, mut bg, children) in &mut segments {
+        let active = button.field == GraphicsField::DisplayMode
+            && DisplayMode::ALL[button.index] == graphics.display_mode;
+        bg.0 = if active { theme::EMERALD } else { Color::NONE };
+        for child in children.iter() {
+            if let Ok(mut color) = texts.get_mut(child) {
+                color.0 = if active {
+                    theme::EMERALD_INK
+                } else {
+                    theme::TEXT_DIM
+                };
+            }
+        }
+    }
+
+    for (value, mut text) in &mut values {
+        let label = field_label(graphics, value.0);
+        if text.0 != label {
+            text.0 = label;
+        }
+    }
+
+    for (pill, mut bg) in &mut switches {
+        if pill.0 == GraphicsField::Vsync {
+            bg.0 = if graphics.vsync {
+                theme::EMERALD
+            } else {
+                theme::FIELD
+            };
+        }
+    }
+
+    for (knob, mut node) in &mut knobs {
+        if knob.0 == GraphicsField::Vsync {
+            node.left = if graphics.vsync {
+                Val::Px(27.0)
+            } else {
+                Val::Px(3.0)
+            };
+        }
+    }
 }
 
 #[cfg(test)]
