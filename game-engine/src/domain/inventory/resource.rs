@@ -49,6 +49,16 @@ impl Inventory {
     pub fn get(&self, index: u16) -> Option<&Item> {
         self.items.get(&index)
     }
+
+    pub fn remove_amount(&mut self, index: u16, amount: u16) {
+        let Some(item) = self.items.get_mut(&index) else {
+            return;
+        };
+        item.amount = item.amount.saturating_sub(amount);
+        if item.amount == 0 {
+            self.items.remove(&index);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -120,6 +130,47 @@ mod tests {
 
         assert_eq!(equipped, vec![2, 4]);
         assert_eq!(stackables, vec![3]);
+    }
+
+    #[test]
+    fn remove_amount_decrements_leaving_positive_remainder() {
+        let mut inv = Inventory::default();
+        inv.upsert(stackable(5, 10));
+
+        inv.remove_amount(5, 3);
+
+        assert_eq!(inv.get(5).unwrap().amount, 7);
+        assert_eq!(inv.len(), 1);
+    }
+
+    #[test]
+    fn remove_amount_drops_slot_when_reaching_zero() {
+        let mut inv = Inventory::default();
+        inv.upsert(stackable(5, 3));
+
+        inv.remove_amount(5, 3);
+
+        assert!(inv.get(5).is_none());
+        assert_eq!(inv.len(), 0);
+    }
+
+    #[test]
+    fn remove_amount_drops_slot_when_exceeding_stock() {
+        let mut inv = Inventory::default();
+        inv.upsert(stackable(5, 2));
+
+        inv.remove_amount(5, 99);
+
+        assert!(inv.get(5).is_none());
+    }
+
+    #[test]
+    fn remove_amount_missing_index_is_noop() {
+        let mut inv = Inventory::default();
+
+        inv.remove_amount(99, 1);
+
+        assert_eq!(inv.len(), 0);
     }
 
     #[test]
