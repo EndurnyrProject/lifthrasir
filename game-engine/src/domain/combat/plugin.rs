@@ -35,6 +35,6 @@ impl Plugin for CombatPlugin {
         // Add combat domain plugin (auto-plugin with systems)
         app.add_plugins(CombatDomainPlugin);
 
-        info!("CombatPlugin initialized");
+        debug!("CombatPlugin initialized");
     }
 }

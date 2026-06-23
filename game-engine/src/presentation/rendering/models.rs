@@ -111,26 +111,26 @@ pub fn log_loaded_world_data(
                     .filter(|o| matches!(o, RswObject::Effect(_)))
                     .count();
 
-                info!("World data loaded:");
-                info!("  Version: {}", world_asset.world.version);
-                info!("  GND file: {}", world_asset.world.gnd_file);
-                info!("  GAT file: {}", world_asset.world.gat_file);
-                info!("  Water level: {}", world_asset.world.water.level);
-                info!("  Total objects: {}", world_asset.world.objects.len());
-                info!("    Models: {}", model_count);
-                info!("    Lights: {}", light_count);
-                info!("    Sounds: {}", sound_count);
-                info!("    Effects: {}", effect_count);
+                debug!("World data loaded:");
+                debug!("  Version: {}", world_asset.world.version);
+                debug!("  GND file: {}", world_asset.world.gnd_file);
+                debug!("  GAT file: {}", world_asset.world.gat_file);
+                debug!("  Water level: {}", world_asset.world.water.level);
+                debug!("  Total objects: {}", world_asset.world.objects.len());
+                debug!("    Models: {}", model_count);
+                debug!("    Lights: {}", light_count);
+                debug!("    Sounds: {}", sound_count);
+                debug!("    Effects: {}", effect_count);
             }
         }
 
         if let Some(ground_asset) = ground_assets.get(&map_loader.ground) {
-            info!("Ground data loaded:");
-            info!(
+            debug!("Ground data loaded:");
+            debug!(
                 "  Size: {}x{}",
                 ground_asset.ground.width, ground_asset.ground.height
             );
-            info!("  Textures: {}", ground_asset.ground.textures.len());
+            debug!("  Textures: {}", ground_asset.ground.textures.len());
         }
     }
 }

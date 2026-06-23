@@ -155,7 +155,7 @@ impl EntityRegistry {
         self.local_player_entity = Some(entity);
         self.local_player_account_id = Some(account_id);
 
-        info!(
+        debug!(
             "Set local player: entity={:?}, account_id={}",
             entity, account_id
         );
@@ -199,7 +199,7 @@ impl EntityRegistry {
             self.entity_to_account.insert(entity, account_id);
         }
 
-        info!("Cleared remote entity registrations, kept local player");
+        debug!("Cleared remote entity registrations, kept local player");
     }
 
     /// Clear all registrations (useful for map changes or disconnection)
@@ -209,7 +209,7 @@ impl EntityRegistry {
         self.local_player_entity = None;
         self.local_player_account_id = None;
 
-        info!("Cleared all entity registrations");
+        debug!("Cleared all entity registrations");
     }
 }
 

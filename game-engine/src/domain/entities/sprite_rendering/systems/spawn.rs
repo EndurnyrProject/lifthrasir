@@ -76,7 +76,7 @@ pub fn spawn_sprite_hierarchy(
             }
         }
 
-        info!(
+        debug!(
             "spawn_sprite_hierarchy: Processing SpawnSpriteEvent for entity {:?}",
             entity
         );
@@ -133,7 +133,7 @@ fn spawn_character_components(
         PendingRenderLayers,
     ));
 
-    info!(
+    debug!(
         "spawn_character_components: Requested body ({}) and head animations for entity {:?}",
         body_spr_path, entity
     );
@@ -161,7 +161,7 @@ fn spawn_mob_components(
         PendingRenderLayers,
     ));
 
-    info!(
+    debug!(
         "spawn_mob_components: Requested animation for entity {:?} ({})",
         entity, sprite_name
     );
@@ -185,7 +185,7 @@ fn spawn_npc_components(
 
     entity_commands.insert((RoSprite::default(), PendingRenderLayers));
 
-    info!(
+    debug!(
         "spawn_npc_components: Requested animation for entity {:?} ({})",
         entity, sprite_name
     );
@@ -227,7 +227,7 @@ pub fn finalize_render_layers(
         return;
     }
 
-    info!(
+    debug!(
         "finalize_render_layers: Processing {} completed animations",
         completed.len()
     );
@@ -240,11 +240,11 @@ pub fn finalize_render_layers(
 
     for (pending, animation_handle) in completed {
         let Some(callback_entity) = pending.callback_entity else {
-            info!("finalize_render_layers: No callback_entity for pending animation");
+            debug!("finalize_render_layers: No callback_entity for pending animation");
             continue;
         };
 
-        info!(
+        debug!(
             "finalize_render_layers: Trying to get entity {:?}",
             callback_entity
         );
@@ -301,7 +301,7 @@ pub fn finalize_render_layers(
         }
         let first_texture = first_texture.unwrap_or_default();
 
-        info!(
+        debug!(
             "finalize_render_layers: Using texture handle {:?} for entity {:?}, animation has {} textures, first in animation: {:?}",
             first_texture, entity, animation.textures.len(), animation.textures.first()
         );
@@ -318,7 +318,7 @@ pub fn finalize_render_layers(
             &mut materials,
         );
 
-        info!(
+        debug!(
             "finalize_render_layers: Spawned render layer child for entity {:?}, layer {:?}",
             entity, pending.layer_tag
         );
@@ -364,7 +364,7 @@ fn spawn_render_layer_child(
 
     let local_offset = Vec3::new(0.0, SPRITE_BASE_Y_OFFSET, z_offset);
 
-    info!(
+    debug!(
         "spawn_render_layer_child: Spawning with local offset {:?} for parent {:?}",
         local_offset, parent
     );
@@ -402,7 +402,7 @@ fn spawn_render_layer_child(
 
     let sprite_entity = entity_commands.id();
 
-    info!(
+    debug!(
         "spawn_render_layer_child: Spawned sprite entity {:?} as child of {:?} with local offset {:?}",
         sprite_entity, parent, local_offset
     );
@@ -443,7 +443,7 @@ pub fn link_head_to_body(
             .entity(head_entity)
             .insert(HeadAttachment { body_entity });
 
-        info!(
+        debug!(
             "link_head_to_body: Linked head {:?} to body {:?}",
             head_entity, body_entity
         );
@@ -459,7 +459,7 @@ pub fn on_request_sprite_spawn(
     let event = trigger.event();
     let entity = trigger.entity;
 
-    info!(
+    debug!(
         "RequestSpriteSpawn RECEIVED for entity {:?} at position ({:.2}, {:.2}, {:.2})",
         entity, event.position.x, event.position.y, event.position.z
     );

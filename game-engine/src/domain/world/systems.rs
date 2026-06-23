@@ -48,7 +48,7 @@ pub fn extract_map_from_unified_assets(
         let altitude_handle: Handle<RoAltitudeAsset> = asset_server.load(gat_path);
         let world_handle: Handle<RoWorldAsset> = asset_server.load(rsw_path);
 
-        info!(
+        debug!(
             "Loaded map assets for '{}' through unified asset source",
             map_name
         );
@@ -99,7 +99,7 @@ pub fn setup_unified_map_loading(
     );
 
     commands.spawn((MapRequestLoader::new(context.map_name.clone()), MapScoped));
-    info!(
+    debug!(
         "Spawned MapRequestLoader entity for map '{}'",
         context.map_name
     );
@@ -121,7 +121,7 @@ pub fn cleanup_map_loading_state(
 ) {
     let count = query.iter().count();
     if count > 0 {
-        info!(
+        debug!(
             "cleanup_map_loading_state: Despawning {} stale MapRequestLoader entities (excluding successful loads with MapData)",
             count
         );
@@ -139,7 +139,7 @@ pub fn cleanup_map_loading_state(
 )]
 pub fn on_enter_loading_state(spawn_context: Option<Res<MapSpawnContext>>) {
     if let Some(context) = spawn_context {
-        info!(
+        debug!(
             "🎯 ENTERED GameState::Loading - MapSpawnContext found for map '{}'",
             context.map_name
         );
@@ -159,7 +159,7 @@ pub fn on_enter_loading_state(spawn_context: Option<Res<MapSpawnContext>>) {
 )]
 pub fn monitor_game_state(current_state: Res<State<GameState>>) {
     if current_state.is_changed() {
-        info!("🔄 GameState CHANGED to: {:?}", current_state.get());
+        debug!("🔄 GameState CHANGED to: {:?}", current_state.get());
     }
 }
 

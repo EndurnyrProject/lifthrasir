@@ -34,7 +34,7 @@ pub fn spawn_camera_on_player_ready(
 ) {
     if !camera_query.is_empty() {
         if !camera_spawned.0 {
-            info!("Camera already exists, marking as spawned");
+            debug!("Camera already exists, marking as spawned");
             camera_spawned.0 = true;
         }
         return;
@@ -61,7 +61,7 @@ pub fn spawn_camera_on_player_ready(
 
     let camera_position = player_position + settings.offset;
 
-    info!(
+    debug!(
         "Spawning character-follow camera at {:?}, following player at {:?}",
         camera_position, player_position
     );
@@ -82,7 +82,7 @@ pub fn spawn_camera_on_player_ready(
 
     camera_spawned.0 = true;
 
-    info!("Character-follow camera spawned successfully");
+    debug!("Character-follow camera spawned successfully");
 }
 
 /// System that updates the cached position of the follow target each frame.
@@ -202,7 +202,7 @@ pub fn camera_follow_system(
             settings.offset = defaults.offset;
             settings.yaw = defaults.yaw;
             settings.pitch = defaults.pitch;
-            info!(
+            debug!(
                 "Camera reset to default: yaw={:.2}deg, pitch={:.2}deg, distance={:.1}",
                 settings.yaw.to_degrees(),
                 settings.pitch.to_degrees(),

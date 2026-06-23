@@ -1,6 +1,5 @@
 use bevy::{
     asset::{io::Reader, Asset, AssetLoader, LoadContext},
-    log::info,
     prelude::*,
     reflect::TypePath,
 };
@@ -68,7 +67,7 @@ impl AssetLoader for BgmNameTableLoader {
                 table.insert(entry.map_name, entry.bgm_path);
                 parsed_count += 1;
             } else {
-                info!(
+                debug!(
                     "BGM name table: Failed to parse line {}: '{}'",
                     line_num + 1,
                     trimmed
@@ -77,7 +76,7 @@ impl AssetLoader for BgmNameTableLoader {
             }
         }
 
-        info!(
+        debug!(
             "BGM name table loaded: {} entries parsed, {} lines skipped",
             parsed_count, skipped_count
         );

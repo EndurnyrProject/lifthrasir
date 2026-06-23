@@ -25,6 +25,6 @@ impl Plugin for AudioPlugin {
             })
             .add_plugins(AudioDomainPlugin);
 
-        info!("AudioPlugin initialized with BGM + spatial SFX");
+        debug!("AudioPlugin initialized with BGM + spatial SFX");
     }
 }

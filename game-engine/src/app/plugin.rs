@@ -10,5 +10,5 @@ pub struct LifthrasirPlugin;
     schedule = Startup
 )]
 fn initialize_app(_commands: Commands) {
-    info!("Application initialized");
+    debug!("Application initialized");
 }

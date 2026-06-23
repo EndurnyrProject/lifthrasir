@@ -6,7 +6,7 @@ use nom::{
     IResult,
 };
 use thiserror::Error;
-use tracing::info;
+use tracing::debug;
 
 #[derive(Debug, Error)]
 pub enum GatError {
@@ -47,7 +47,7 @@ impl From<u32> for GatCellType {
             5 => Self::SNIPABLE.0,
             6 => Self::WALKABLE.0 | Self::SNIPABLE.0,
             _ => {
-                info!(
+                debug!(
                     "Unknown GAT cell type: {}, treating as non-walkable",
                     raw_type
                 );
@@ -145,7 +145,7 @@ impl RoAltitude {
         let fx = (world_pos.x / CELL_SIZE * 2.0).fract().abs();
         let fz = (world_pos.z / CELL_SIZE * 2.0).fract().abs();
 
-        // info!("GAT: fx={}, fz={}", fx, fz);
+        // debug!("GAT: fx={}, fz={}", fx, fz);
 
         // Bilinear interpolation based on corner heights
         // GAT height layout: height[0]=bottom-left, height[1]=bottom-right,
@@ -223,16 +223,16 @@ fn parse_cells(input: &[u8], width: u32, height: u32) -> IResult<&[u8], Vec<GatC
             count - 1,     // Last cell
         ];
 
-        info!("GAT Parse Statistics:");
-        info!("  Total cells: {}", count);
-        info!("  Min height: {}, Max height: {}", min_height, max_height);
-        info!(
+        debug!("GAT Parse Statistics:");
+        debug!("  Total cells: {}", count);
+        debug!("  Min height: {}, Max height: {}", min_height, max_height);
+        debug!(
             "  Unique height combinations: {}",
             unique_combinations.len()
         );
         for &idx in &sample_indices {
             let cell = &cells[idx];
-            info!(
+            debug!(
                 "  Cell[{}]: heights=[{}, {}, {}, {}]",
                 idx, cell.height[0], cell.height[1], cell.height[2], cell.height[3]
             );
@@ -248,7 +248,7 @@ fn parse_gat(input: &[u8]) -> IResult<&[u8], RoAltitude> {
     let (input, height) = le_u32(input)?;
     let (input, cells) = parse_cells(input, width, height)?;
 
-    info!(
+    debug!(
         "Parsed GAT: version={}, width={}, height={}, cells={}",
         version,
         width,

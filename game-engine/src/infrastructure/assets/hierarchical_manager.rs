@@ -40,10 +40,10 @@ impl HierarchicalAssetManager {
         let data_folder_path = config.data_folder_path();
         if data_folder_path.exists() {
             let data_source = DataFolderSource::new(data_folder_path.clone());
-            info!("Adding data folder source: {}", data_folder_path.display());
+            debug!("Adding data folder source: {}", data_folder_path.display());
             composite.add_source(Box::new(data_source));
         } else {
-            info!(
+            debug!(
                 "Data folder not found, skipping: {}",
                 data_folder_path.display()
             );
@@ -91,8 +91,8 @@ impl HierarchicalAssetManager {
             }
         }
 
-        info!("Hierarchical asset manager setup complete");
-        info!("{}", composite.get_debug_info());
+        debug!("Hierarchical asset manager setup complete");
+        debug!("{}", composite.get_debug_info());
 
         Ok(())
     }

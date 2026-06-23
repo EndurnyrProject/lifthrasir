@@ -32,6 +32,6 @@ impl Plugin for EntitySpawningPlugin {
         // Add entity spawning domain plugin (auto-plugin with observers and systems)
         app.add_plugins(EntitySpawningDomainPlugin);
 
-        info!("EntitySpawningPlugin initialized");
+        debug!("EntitySpawningPlugin initialized");
     }
 }

@@ -52,7 +52,7 @@ impl Plugin for RoAssetsPlugin {
     fn build(&self, app: &mut App) {
         // Register unified asset source if enabled
         if self.enable_unified_source {
-            info!("Registering unified RO asset source as 'ro://'");
+            debug!("Registering unified RO asset source as 'ro://'");
 
             // Load the configuration from file during app setup
             let config = self.load_config_from_file().expect(
@@ -81,7 +81,7 @@ impl Plugin for RoAssetsPlugin {
                 .expect("Failed to create HierarchicalAssetManager from config");
             app.insert_resource(manager);
 
-            info!("Successfully registered 'ro://' asset source, SharedCompositeAssetSource, and HierarchicalAssetManager");
+            debug!("Successfully registered 'ro://' asset source, SharedCompositeAssetSource, and HierarchicalAssetManager");
         }
     }
 }

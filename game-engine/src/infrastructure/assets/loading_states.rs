@@ -49,11 +49,11 @@ fn setup_hierarchical_manager(
     mut next_state: ResMut<NextState<AssetLoadingState>>,
 ) {
     if let Some(config) = configs.get(&config_assets.config) {
-        info!("Setting up hierarchical asset manager from config");
+        debug!("Setting up hierarchical asset manager from config");
 
         match HierarchicalAssetManager::from_config(config) {
             Ok(manager) => {
-                info!("Hierarchical asset manager setup successful");
+                debug!("Hierarchical asset manager setup successful");
                 commands.insert_resource(manager);
                 next_state.set(AssetLoadingState::LoadingAssets);
             }
@@ -72,7 +72,7 @@ fn check_manager_setup(
     mut next_state: ResMut<NextState<AssetLoadingState>>,
 ) {
     if manager.is_some() {
-        info!("Hierarchical asset manager ready, proceeding to asset loading");
+        debug!("Hierarchical asset manager ready, proceeding to asset loading");
         next_state.set(AssetLoadingState::LoadingAssets);
     }
 }
@@ -133,7 +133,7 @@ impl LoadingProgress {
     pub fn advance(&mut self, step_description: &str) {
         self.completed_steps += 1;
         self.current_step = step_description.to_string();
-        info!(
+        debug!(
             "Loading progress: {}/{} - {}",
             self.completed_steps, self.total_steps, step_description
         );

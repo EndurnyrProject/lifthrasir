@@ -25,6 +25,6 @@ impl Plugin for EntityHoverPlugin {
         // Add entity hover domain plugin (auto-plugin with resource, observer, and systems)
         app.add_plugins(EntityHoverDomainPlugin);
 
-        info!("EntityHoverPlugin initialized");
+        debug!("EntityHoverPlugin initialized");
     }
 }

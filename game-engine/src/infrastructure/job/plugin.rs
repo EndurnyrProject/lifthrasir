@@ -18,7 +18,7 @@ impl Plugin for JobSystemPlugin {
 fn start_loading_job_data(mut commands: Commands, asset_server: Res<AssetServer>) {
     let handle = asset_server.load("data/ron/job_data.ron");
     commands.insert_resource(JobDataHandle(handle));
-    info!("Loading job data RON");
+    debug!("Loading job data RON");
 }
 
 fn process_loaded_job_data(
@@ -44,5 +44,5 @@ fn process_loaded_job_data(
 
     commands.insert_resource(JobSpriteRegistry::from_job_data(asset.0.clone()));
     commands.remove_resource::<JobDataHandle>();
-    info!("Job sprite registry created from RON");
+    debug!("Job sprite registry created from RON");
 }

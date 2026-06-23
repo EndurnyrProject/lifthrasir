@@ -48,6 +48,6 @@ impl Plugin for CharacterDomainPlugin {
         app.add_plugins(CharacterDomainAutoPlugin);
         app.add_plugins(ZoneDomainAutoPlugin);
 
-        info!("CharacterDomainPlugin initialized");
+        debug!("CharacterDomainPlugin initialized");
     }
 }

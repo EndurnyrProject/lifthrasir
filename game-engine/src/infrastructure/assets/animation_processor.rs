@@ -42,7 +42,7 @@ impl RoAnimationProcessor {
             })
             .collect();
         if let Some(first) = handles.first() {
-            bevy::log::info!(
+            bevy::log::debug!(
                 "create_textures: Created {} textures, first handle: {:?}",
                 handles.len(),
                 first

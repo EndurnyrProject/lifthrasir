@@ -69,7 +69,7 @@ fn setup_shared_sprite_quad(mut commands: Commands, mut meshes: ResMut<Assets<Me
 
     commands.insert_resource(SharedSpriteQuad { mesh: mesh_handle });
 
-    info!("Initialized shared sprite quad mesh for 3D billboards");
+    debug!("Initialized shared sprite quad mesh for 3D billboards");
 }
 
 /// System that makes billboard entities always face the camera

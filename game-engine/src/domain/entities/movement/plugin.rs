@@ -28,7 +28,7 @@ impl Plugin for MovementPlugin {
         // Add movement domain plugin (auto-plugin with observers and systems)
         app.add_plugins(MovementDomainPlugin);
 
-        info!("MovementPlugin initialized");
+        debug!("MovementPlugin initialized");
     }
 }
 

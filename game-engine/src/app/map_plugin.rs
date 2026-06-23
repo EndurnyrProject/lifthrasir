@@ -20,6 +20,6 @@ impl Plugin for MapPlugin {
             MapDomainPlugin,
         ));
 
-        info!("MapPlugin initialized");
+        debug!("MapPlugin initialized");
     }
 }

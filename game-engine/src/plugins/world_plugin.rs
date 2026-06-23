@@ -12,6 +12,6 @@ impl Plugin for WorldPlugin {
         app.init_state::<MapState>();
         app.add_plugins(WorldDomainPlugin);
 
-        info!("WorldPlugin initialized");
+        debug!("WorldPlugin initialized");
     }
 }

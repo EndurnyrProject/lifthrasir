@@ -13,6 +13,6 @@ pub struct GenericSpriteRenderingPlugin;
 impl Plugin for GenericSpriteRenderingPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((SpriteRenderingDomainPlugin, BillboardPlugin));
-        info!("GenericSpriteRenderingPlugin initialized with Billboard system");
+        debug!("GenericSpriteRenderingPlugin initialized with Billboard system");
     }
 }

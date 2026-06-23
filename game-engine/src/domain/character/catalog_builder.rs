@@ -71,7 +71,7 @@ impl HeadStyleCatalogBuilder {
     pub fn build_from_asset_manager(manager: &HierarchicalAssetManager) -> HeadStyleCatalog {
         let mut catalog = HeadStyleCatalog::new();
 
-        info!("Starting head style catalog discovery from asset manager...");
+        debug!("Starting head style catalog discovery from asset manager...");
 
         let all_files = manager.list_files();
         let sprite_prefix = "data/sprite/인간족/머리통";
@@ -134,7 +134,7 @@ impl HeadStyleCatalogBuilder {
             catalog.add(entry);
         }
 
-        info!(
+        debug!(
             "Head style catalog built: {} male styles, {} female styles, {} total",
             catalog.male_count(),
             catalog.female_count(),

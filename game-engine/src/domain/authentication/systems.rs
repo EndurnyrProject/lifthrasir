@@ -100,11 +100,11 @@ pub fn handle_login_accepted(
 ) {
     for event in protocol_events.read() {
         info!("Login accepted for account_id: {}", event.account_id);
-        info!("Server list contains {} servers", event.server_list.len());
+        debug!("Server list contains {} servers", event.server_list.len());
 
         let session = UserSession::from(event);
 
-        info!(
+        debug!(
             "Inserting UserSession resource with {} server(s)",
             session.server_list.len()
         );
@@ -174,7 +174,7 @@ fn load_client_config(
     if config_handle.is_none() {
         let handle = asset_server.load::<ClientConfig>("config/clientinfo.toml");
         commands.insert_resource(ClientConfigHandle(handle));
-        info!("Loading client configuration from config/clientinfo.toml");
+        debug!("Loading client configuration from config/clientinfo.toml");
     }
 }
 

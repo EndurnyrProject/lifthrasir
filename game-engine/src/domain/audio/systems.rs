@@ -201,7 +201,7 @@ pub fn load_bgm_name_table(
     asset_server: Res<AssetServer>,
 ) {
     if bgm_name_table.table_handle.is_none() {
-        info!("Loading BGM name table from ro://data/mp3nametable.txt");
+        debug!("Loading BGM name table from ro://data/mp3nametable.txt");
         let handle: Handle<BgmNameTableAsset> = asset_server.load("ro://data/mp3nametable.txt");
         bgm_name_table.table_handle = Some(handle);
     }

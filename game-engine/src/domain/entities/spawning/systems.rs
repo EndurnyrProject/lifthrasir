@@ -275,7 +275,7 @@ pub fn spawn_network_entity_system(
                 };
 
                 let sprite_info = EntitySpriteInfo { sprite_data };
-                info!(
+                debug!(
                     "Triggering RequestSpriteSpawn for PC entity {:?} (job={}, head={}) at position ({:.2}, {:.2}, {:.2})",
                     entity_id, event.job, event.head, world_pos.x, world_pos.y, world_pos.z
                 );
@@ -314,7 +314,7 @@ pub fn spawn_network_entity_system(
                 };
 
                 let sprite_info = EntitySpriteInfo { sprite_data };
-                info!(
+                debug!(
                     "Triggering RequestSpriteSpawn for {:?} entity {:?} (job={}) at position ({:.2}, {:.2}, {:.2})",
                     event.object_type, entity_id, event.job, world_pos.x, world_pos.y, world_pos.z
                 );
@@ -542,7 +542,7 @@ pub fn drain_spawn_buffer_system(
 ) {
     let count = buffer.events.len();
     if count > 0 {
-        info!(
+        debug!(
             "Draining {} buffered spawn events on entering InGame",
             count
         );

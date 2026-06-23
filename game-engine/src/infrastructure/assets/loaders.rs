@@ -1,6 +1,5 @@
 use bevy::{
     asset::{io::Reader, Asset, AssetLoader, LoadContext},
-    log::info,
     prelude::*,
     reflect::TypePath,
 };
@@ -224,9 +223,9 @@ impl AssetLoader for RoGroundLoader {
     ) -> Result<Self::Asset, Self::Error> {
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
-        info!("GND file loaded, size: {} bytes", bytes.len());
+        debug!("GND file loaded, size: {} bytes", bytes.len());
         let ground = RoGround::from_bytes(&bytes)?;
-        info!(
+        debug!(
             "📐 GND Dimensions: width={}, height={}",
             ground.width, ground.height
         );
@@ -252,7 +251,7 @@ impl AssetLoader for RoAltitudeLoader {
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
         let altitude = RoAltitude::from_bytes(&bytes)?;
-        info!(
+        debug!(
             "📐 GAT Dimensions: width={}, height={}",
             altitude.width, altitude.height
         );
@@ -299,7 +298,7 @@ impl AssetLoader for GrfLoader {
     ) -> Result<Self::Asset, Self::Error> {
         // Get the file path from the load context
         let path = load_context.path().path();
-        info!("Loading GRF metadata from: {:?}", path);
+        debug!("Loading GRF metadata from: {:?}", path);
 
         // Convert to absolute path by resolving against the assets directory
         let assets_dir = std::env::current_dir().unwrap().join("assets");
@@ -307,7 +306,7 @@ impl AssetLoader for GrfLoader {
 
         // Use the new path-based approach for lazy loading
         let grf = GrfFile::from_path(full_path)?;
-        info!(
+        debug!(
             "GRF metadata loaded successfully: {} files",
             grf.entries.len()
         );

@@ -29,7 +29,7 @@ pub fn update_character_status_system(
 
     let events: Vec<_> = param_events.read().collect();
     if !events.is_empty() {
-        info!("Processing {} parameter change events", events.len());
+        debug!("Processing {} parameter change events", events.len());
     }
 
     for event in events {

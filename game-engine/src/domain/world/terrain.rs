@@ -113,7 +113,7 @@ fn create_terrain_materials_from_loaded_textures(
         {
             match asset_server.load_state(&texture_handles[i]) {
                 LoadState::Loaded => {
-                    info!("Using loaded texture #{}: {}", i, texture_name);
+                    debug!("Using loaded texture #{}: {}", i, texture_name);
                     materials.add(StandardMaterial {
                         base_color_texture: Some(texture_handles[i].clone()),
                         base_color: Color::WHITE,
@@ -514,7 +514,7 @@ pub fn generate_terrain_mesh(
                 let handle: Handle<Image> = asset_server.load(&texture_path);
                 texture_handles.push(handle);
                 texture_names.push(texture_name.clone());
-                info!("Started loading terrain texture: {}", texture_path);
+                debug!("Started loading terrain texture: {}", texture_path);
             } else {
                 // For empty texture names, push a default handle (will use colored fallback)
                 texture_handles.push(Handle::default());
@@ -530,7 +530,7 @@ pub fn generate_terrain_mesh(
             altitude_handle: map_loader.altitude.clone(),
         });
 
-        info!(
+        debug!(
             "generate_terrain_mesh: Started loading {} textures for map '{}'",
             ground.ground.textures.len(),
             map_request.map_name
@@ -624,7 +624,7 @@ pub fn apply_loaded_terrain_textures(
             continue;
         }
 
-        info!(
+        debug!(
             "All textures ready for map '{}': {} loaded, {} failed",
             map_request.map_name, loaded_count, failed_count
         );
@@ -643,7 +643,7 @@ pub fn apply_loaded_terrain_textures(
         if let Some(altitude_data) = altitude {
             let pathfinding_grid = PathfindingGrid::from_gat(altitude_data);
             commands.insert_resource(CurrentMapPathfindingGrid(pathfinding_grid));
-            info!(
+            debug!(
                 "Created and cached pathfinding grid for map '{}' ({}x{})",
                 map_request.map_name, altitude_data.width, altitude_data.height
             );
@@ -706,7 +706,7 @@ pub fn apply_loaded_terrain_textures(
             mesh_count += 1;
         }
 
-        info!(
+        debug!(
             "generate_terrain_mesh: Spawned {} terrain mesh entities total for map '{}'",
             mesh_count, map_request.map_name
         );
@@ -720,7 +720,7 @@ pub fn apply_loaded_terrain_textures(
             })
             .remove::<TerrainTexturesLoading>();
 
-        info!(
+        debug!(
             "apply_loaded_terrain_textures: Successfully generated terrain mesh and inserted MapData for map '{}'",
             map_request.map_name
         );

@@ -6,7 +6,7 @@ use nom::{
     IResult, Parser,
 };
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::{debug, error};
 
 #[derive(Debug, Error)]
 pub enum GndError {
@@ -51,7 +51,7 @@ impl RoGround {
     pub fn from_bytes(input: &[u8]) -> Result<Self, GndError> {
         match parse_gnd(input) {
             Ok((_, gnd)) => {
-                info!(
+                debug!(
                     "Parsed GND: version={}, width={}, height={}, surfaces={}",
                     gnd.version,
                     gnd.width,

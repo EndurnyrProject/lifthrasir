@@ -18,7 +18,7 @@ impl Plugin for ItemDbPlugin {
 fn start_loading_item_data(mut commands: Commands, asset_server: Res<AssetServer>) {
     let handle = asset_server.load("data/ron/item_data.ron");
     commands.insert_resource(ItemDataHandle(handle));
-    info!("Loading item data RON");
+    debug!("Loading item data RON");
 }
 
 fn process_loaded_item_data(
@@ -44,5 +44,5 @@ fn process_loaded_item_data(
 
     commands.insert_resource(ItemDb::from_item_data(asset.0.clone()));
     commands.remove_resource::<ItemDataHandle>();
-    info!("ItemDb created from RON");
+    debug!("ItemDb created from RON");
 }
