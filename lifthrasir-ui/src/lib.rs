@@ -6,6 +6,7 @@ use bevy_ui_text_input::TextInputPlugin;
 
 pub mod cursor;
 pub mod focus;
+pub mod rich_text;
 pub mod screens;
 pub mod theme;
 pub mod widgets;

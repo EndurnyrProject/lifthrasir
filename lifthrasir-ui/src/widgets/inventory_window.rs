@@ -14,6 +14,7 @@ use game_engine::domain::inventory::{Inventory, Item, ItemCategory};
 use game_engine::infrastructure::item::ItemDb;
 use leafwing_input_manager::prelude::ActionState;
 
+use crate::rich_text::spawn_colored_text;
 use crate::theme;
 use crate::widgets::draggable::make_draggable;
 
@@ -574,10 +575,7 @@ fn spawn_info_content(
 
     if let Some(lines) = item_db.and_then(|db| db.description(item.item_id, item.identified)) {
         for line in lines {
-            commands.spawn((
-                theme::label(line.clone(), font.clone(), 11.0, theme::TEXT_DIM),
-                ChildOf(panel),
-            ));
+            spawn_colored_text(commands, panel, line, font.clone(), 11.0, theme::TEXT_DIM);
         }
     }
 }
