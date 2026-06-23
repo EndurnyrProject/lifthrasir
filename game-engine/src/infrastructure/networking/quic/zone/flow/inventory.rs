@@ -44,10 +44,8 @@ pub fn zone_drain_inventory(
             Body::UnequipResult(u) => {
                 unequipped.write(unequip_result(u));
             }
-            Body::ItemUseResult(r) => {
-                if !r.ok {
-                    use_failed.write(item_use_result(r));
-                }
+            Body::ItemUseResult(r) if !r.ok => {
+                use_failed.write(item_use_result(r));
             }
             _ => {}
         }

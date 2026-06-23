@@ -11,6 +11,7 @@ pub mod character_info;
 pub mod chat_box;
 pub mod draggable;
 pub mod inventory_window;
+pub mod settings_window;
 pub mod status_window;
 pub mod system_dialog;
 
@@ -23,6 +24,7 @@ impl Plugin for InGameHudPlugin {
             character_info::CharacterInfoPlugin,
             chat_box::ChatBoxPlugin,
             inventory_window::InventoryWindowPlugin,
+            settings_window::SettingsWindowPlugin,
             status_window::StatusWindowPlugin,
         ));
     }
