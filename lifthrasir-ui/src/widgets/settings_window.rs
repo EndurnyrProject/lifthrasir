@@ -7,6 +7,7 @@
 //! survives state changes and is reachable from the title screen and in-game.
 
 use bevy::prelude::*;
+use bevy::ui::RelativeCursorPosition;
 use bevy_persistent::prelude::Persistent;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
 use game_engine::domain::settings::{
@@ -115,6 +116,7 @@ impl Plugin for SettingsWindowPlugin {
                 refresh_tabs.run_if(resource_changed::<SettingsUi>),
                 refresh_footer.run_if(resource_changed::<SettingsUi>),
                 refresh_graphics.run_if(resource_changed::<SettingsUi>),
+                refresh_sound.run_if(resource_changed::<SettingsUi>),
             ),
         );
     }
@@ -377,6 +379,9 @@ fn spawn_tab_body(commands: &mut Commands, content: Entity, tab: SettingsTab, fo
 
     if tab == SettingsTab::Graphics {
         spawn_graphics_rows(commands, body, font);
+    }
+    if tab == SettingsTab::Sound {
+        spawn_sound_rows(commands, body, font);
     }
 }
 
@@ -1022,6 +1027,334 @@ fn refresh_graphics(
     }
 }
 
+// ── Sound tab ─────────────────────────────────────────────────────────────
+
+/// The three audio channels, each a `draft.audio` volume + mute pair.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+enum AudioChannel {
+    Bgm,
+    Sfx,
+    Ambient,
+}
+
+impl AudioChannel {
+    /// Reads the channel's `(volume, muted)` off the draft audio config.
+    fn read(self, audio: &game_engine::domain::settings::AudioConfig) -> (f32, bool) {
+        match self {
+            AudioChannel::Bgm => (audio.bgm_volume, audio.bgm_muted),
+            AudioChannel::Sfx => (audio.sfx_volume, audio.sfx_muted),
+            AudioChannel::Ambient => (audio.ambient_volume, audio.ambient_muted),
+        }
+    }
+
+    /// Sets the channel's volume on the draft audio config.
+    fn set_volume(self, audio: &mut game_engine::domain::settings::AudioConfig, volume: f32) {
+        match self {
+            AudioChannel::Bgm => audio.bgm_volume = volume,
+            AudioChannel::Sfx => audio.sfx_volume = volume,
+            AudioChannel::Ambient => audio.ambient_volume = volume,
+        }
+    }
+
+    /// Flips the channel's mute on the draft audio config.
+    fn toggle_muted(self, audio: &mut game_engine::domain::settings::AudioConfig) {
+        match self {
+            AudioChannel::Bgm => audio.bgm_muted = !audio.bgm_muted,
+            AudioChannel::Sfx => audio.sfx_muted = !audio.sfx_muted,
+            AudioChannel::Ambient => audio.ambient_muted = !audio.ambient_muted,
+        }
+    }
+}
+
+/// Maps a slider rail cursor fraction (0.0..=1.0, possibly slightly out of range
+/// near the edges) to a stored volume, clamped to the valid 0.0..=1.0 range.
+fn fraction_to_volume(fraction: f32) -> f32 {
+    fraction.clamp(0.0, 1.0)
+}
+
+/// The slider's readout: `"Muted"` when muted, else the volume as a whole
+/// percent (0.55 → `"55%"`).
+fn percent_label(volume: f32, muted: bool) -> String {
+    if muted {
+        return "Muted".to_string();
+    }
+    format!("{}%", (volume.clamp(0.0, 1.0) * 100.0).round() as i32)
+}
+
+/// Fill/knob position as a percentage; collapses to 0 when muted.
+fn slider_percent(volume: f32, muted: bool) -> f32 {
+    if muted {
+        return 0.0;
+    }
+    volume.clamp(0.0, 1.0) * 100.0
+}
+
+/// The clickable mute button; toggles its channel's `*_muted`.
+#[derive(Component, Clone, Copy)]
+struct MuteButton(AudioChannel);
+
+/// The draggable slider rail; carries `RelativeCursorPosition` so pointer events
+/// map straight to a 0..1 fraction without manual geometry.
+#[derive(Component, Clone, Copy)]
+struct SliderRail(AudioChannel);
+
+/// The fill bar inside a rail; `refresh_sound` sets its width.
+#[derive(Component, Clone, Copy)]
+struct SliderFill(AudioChannel);
+
+/// The knob inside a rail; `refresh_sound` sets its left offset.
+#[derive(Component, Clone, Copy)]
+struct SliderKnob(AudioChannel);
+
+/// The percent (or "Muted") readout; `refresh_sound` rewrites its text.
+#[derive(Component, Clone, Copy)]
+struct SliderPercent(AudioChannel);
+
+const SOUND_CHANNELS: [(AudioChannel, &str, &str); 3] = [
+    (
+        AudioChannel::Bgm,
+        "Background Music",
+        "Ambient score & themes",
+    ),
+    (AudioChannel::Sfx, "Sound Effects", "Hits, skills & impacts"),
+    (
+        AudioChannel::Ambient,
+        "Ambient",
+        "World, weather & footsteps",
+    ),
+];
+
+/// Builds the three Sound rows under `body`.
+fn spawn_sound_rows(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
+    spawn_section(commands, body, "Volume Mix", font);
+
+    for (channel, label, sublabel) in SOUND_CHANNELS {
+        let ctrl = spawn_row(commands, body, label, sublabel, font);
+        spawn_mute_button(commands, ctrl, channel, font);
+        spawn_slider(commands, ctrl, channel, font);
+    }
+}
+
+/// A small square button that flips the channel's mute. `refresh_sound` tints it.
+fn spawn_mute_button(
+    commands: &mut Commands,
+    ctrl: Entity,
+    channel: AudioChannel,
+    font: &Handle<Font>,
+) {
+    let button = commands
+        .spawn((
+            MuteButton(channel),
+            Node {
+                width: Val::Px(30.0),
+                height: Val::Px(30.0),
+                margin: UiRect::right(Val::Px(12.0)),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(7.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::STROKE),
+            Pickable::default(),
+            ChildOf(ctrl),
+        ))
+        .id();
+    commands.spawn((
+        theme::label("M", font.clone(), 11.0, theme::TEXT_FAINT),
+        ChildOf(button),
+    ));
+    commands.entity(button).observe(on_mute_click);
+}
+
+/// Clicking a mute button flips its channel's mute on the draft.
+fn on_mute_click(
+    click: On<Pointer<Click>>,
+    buttons: Query<&MuteButton>,
+    mut ui: ResMut<SettingsUi>,
+) {
+    let Ok(button) = buttons.get(click.entity) else {
+        return;
+    };
+    button.0.toggle_muted(&mut ui.draft.audio);
+}
+
+/// A volume slider: a rail (track + fill + knob) and a percent readout. Click and
+/// drag on the rail map the cursor's `RelativeCursorPosition` to the volume.
+fn spawn_slider(commands: &mut Commands, ctrl: Entity, channel: AudioChannel, font: &Handle<Font>) {
+    let rail = commands
+        .spawn((
+            SliderRail(channel),
+            Node {
+                width: Val::Px(200.0),
+                height: Val::Px(22.0),
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            RelativeCursorPosition::default(),
+            Pickable::default(),
+            ChildOf(ctrl),
+        ))
+        .id();
+
+    let track = commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(6.0),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::STROKE),
+            Pickable::IGNORE,
+            ChildOf(rail),
+        ))
+        .id();
+
+    commands.spawn((
+        SliderFill(channel),
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            bottom: Val::Px(0.0),
+            width: Val::Percent(0.0),
+            border_radius: BorderRadius::all(Val::Px(4.0)),
+            ..default()
+        },
+        BackgroundColor(theme::EMERALD),
+        Pickable::IGNORE,
+        ChildOf(track),
+    ));
+
+    commands.spawn((
+        SliderKnob(channel),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(3.0),
+            left: Val::Percent(0.0),
+            margin: UiRect::left(Val::Px(-7.0)),
+            width: Val::Px(15.0),
+            height: Val::Px(15.0),
+            border: UiRect::all(Val::Px(1.0)),
+            border_radius: BorderRadius::all(Val::Px(8.0)),
+            ..default()
+        },
+        BackgroundColor(theme::DISPLAY_GOLD),
+        BorderColor::all(theme::EMERALD_DEEP),
+        Pickable::IGNORE,
+        ChildOf(rail),
+    ));
+
+    commands.spawn((
+        SliderPercent(channel),
+        theme::label("", font.clone(), 13.0, theme::TEXT_DIM),
+        Node {
+            width: Val::Px(44.0),
+            margin: UiRect::left(Val::Px(14.0)),
+            ..default()
+        },
+        TextLayout::new_with_justify(Justify::Right),
+        ChildOf(ctrl),
+    ));
+
+    commands
+        .entity(rail)
+        .observe(on_slider_press)
+        .observe(on_slider_drag);
+}
+
+/// Reads a rail's cursor fraction and writes it as the channel's volume.
+/// Pressing a muted channel's rail unmutes it (matching the mockup's set-on-grab).
+fn set_slider_from_cursor(
+    rail: Entity,
+    rails: &Query<(&SliderRail, &RelativeCursorPosition)>,
+    ui: &mut SettingsUi,
+) {
+    let Ok((rail, cursor)) = rails.get(rail) else {
+        return;
+    };
+    let Some(normalized) = cursor.normalized else {
+        return;
+    };
+    rail.0
+        .set_volume(&mut ui.draft.audio, fraction_to_volume(normalized.x));
+}
+
+/// Pressing the rail jumps the volume to the cursor position (click-to-set).
+fn on_slider_press(
+    press: On<Pointer<Press>>,
+    rails: Query<(&SliderRail, &RelativeCursorPosition)>,
+    mut ui: ResMut<SettingsUi>,
+) {
+    set_slider_from_cursor(press.entity, &rails, &mut ui);
+}
+
+/// Dragging on the rail tracks the cursor (drag-to-set).
+fn on_slider_drag(
+    drag: On<Pointer<Drag>>,
+    rails: Query<(&SliderRail, &RelativeCursorPosition)>,
+    mut ui: ResMut<SettingsUi>,
+) {
+    set_slider_from_cursor(drag.entity, &rails, &mut ui);
+}
+
+/// Reflects `draft.audio` onto every sound control: mute-button tint, slider
+/// fill width, knob position, and percent text. Runs whenever `SettingsUi`
+/// changes, so Cancel/Reset re-sync the controls.
+///
+/// Query disjointness: `mutes` and `fills`/`knobs` mutate different component
+/// types or are split by mutually-exclusive markers. `BackgroundColor` is touched
+/// by `mutes` (`With<MuteButton>`) and `fills` (`With<SliderFill>`), which can
+/// never co-occur on one entity, so the two `&mut BackgroundColor` queries are
+/// disjoint. `Node` is mutated only by `fills` (`With<SliderFill>`) and `knobs`
+/// (`With<SliderKnob>`), again disjoint markers.
+fn refresh_sound(
+    ui: Res<SettingsUi>,
+    mut mutes: Query<(&MuteButton, &mut BackgroundColor, &mut BorderColor), With<MuteButton>>,
+    mut fills: Query<(&SliderFill, &mut Node, &mut BackgroundColor), Without<MuteButton>>,
+    mut knobs: Query<(&SliderKnob, &mut Node), Without<SliderFill>>,
+    mut percents: Query<(&SliderPercent, &mut Text)>,
+) {
+    let audio = &ui.draft.audio;
+
+    for (button, mut bg, mut border) in &mut mutes {
+        let (_, muted) = button.0.read(audio);
+        bg.0 = if muted { theme::BAD } else { theme::FIELD };
+        *border = if muted {
+            BorderColor::all(theme::BAD)
+        } else {
+            BorderColor::all(theme::STROKE)
+        };
+    }
+
+    for (fill, mut node, mut bg) in &mut fills {
+        let (volume, muted) = fill.0.read(audio);
+        node.width = Val::Percent(slider_percent(volume, muted));
+        bg.0 = if muted {
+            theme::STROKE_STRONG
+        } else {
+            theme::EMERALD
+        };
+    }
+
+    for (knob, mut node) in &mut knobs {
+        let (volume, muted) = knob.0.read(audio);
+        node.left = Val::Percent(slider_percent(volume, muted));
+    }
+
+    for (percent, mut text) in &mut percents {
+        let (volume, muted) = percent.0.read(audio);
+        let label = percent_label(volume, muted);
+        if text.0 != label {
+            text.0 = label;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1105,5 +1438,42 @@ mod tests {
 
         assert!(!apply_draft(&mut ui, &mut persistent));
         assert_eq!(persistent.graphics.fps_cap, FpsCap::F60);
+    }
+
+    #[test]
+    fn cursor_fraction_maps_to_clamped_volume() {
+        assert_eq!(fraction_to_volume(0.0), 0.0);
+        assert_eq!(fraction_to_volume(0.55), 0.55);
+        assert_eq!(fraction_to_volume(1.0), 1.0);
+        assert_eq!(fraction_to_volume(-0.2), 0.0);
+        assert_eq!(fraction_to_volume(1.4), 1.0);
+    }
+
+    #[test]
+    fn percent_label_rounds_and_reports_muted() {
+        assert_eq!(percent_label(0.55, false), "55%");
+        assert_eq!(percent_label(0.0, false), "0%");
+        assert_eq!(percent_label(1.0, false), "100%");
+        assert_eq!(percent_label(0.854, false), "85%");
+        assert_eq!(percent_label(0.7, true), "Muted");
+    }
+
+    #[test]
+    fn slider_percent_collapses_to_zero_when_muted() {
+        assert_eq!(slider_percent(0.55, false), 55.0);
+        assert_eq!(slider_percent(0.55, true), 0.0);
+        assert_eq!(slider_percent(1.0, false), 100.0);
+    }
+
+    #[test]
+    fn audio_channel_reads_and_edits_the_matching_fields() {
+        let mut ui = SettingsUi::default();
+
+        AudioChannel::Sfx.set_volume(&mut ui.draft.audio, 0.25);
+        assert_eq!(AudioChannel::Sfx.read(&ui.draft.audio), (0.25, false));
+
+        AudioChannel::Sfx.toggle_muted(&mut ui.draft.audio);
+        assert_eq!(AudioChannel::Sfx.read(&ui.draft.audio), (0.25, true));
+        assert!(ui.dirty());
     }
 }
