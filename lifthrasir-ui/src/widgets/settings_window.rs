@@ -11,15 +11,14 @@ use bevy::ui::RelativeCursorPosition;
 use bevy_persistent::prelude::Persistent;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
 use game_engine::domain::settings::{
-    resolution_label, resolution_next, resolution_prev, ApplySettings, DisplayMode,
-    GraphicsSettings, Settings,
+    resolution_label, resolution_next, resolution_prev, ActionBinds, ApplySettings, DisplayMode,
+    GraphicsSettings, KeyBind, Modifier, Settings,
 };
 
 use crate::theme;
 use crate::widgets::draggable::make_draggable;
 
-/// Which slot of an action's bindings a rebind capture targets. Declared here
-/// for the `listening` state; the capture flow itself is Task 8.
+/// Which slot of an action's bindings a rebind capture targets.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BindSlot {
     Primary,
@@ -112,11 +111,17 @@ impl Plugin for SettingsWindowPlugin {
             Update,
             (
                 seed_from_persistent.run_if(resource_added::<Persistent<Settings>>),
-                toggle_settings.run_if(ui_unfocused),
+                // Capture runs before the Escape toggle and consumes the press, so
+                // Escape-while-listening cancels the capture instead of closing.
+                capture_rebind
+                    .run_if(listening_active)
+                    .before(toggle_settings),
+                toggle_settings.run_if(ui_unfocused.and(listening_inactive)),
                 refresh_tabs.run_if(resource_changed::<SettingsUi>),
                 refresh_footer.run_if(resource_changed::<SettingsUi>),
                 refresh_graphics.run_if(resource_changed::<SettingsUi>),
                 refresh_sound.run_if(resource_changed::<SettingsUi>),
+                refresh_input.run_if(resource_changed::<SettingsUi>),
             ),
         );
     }
@@ -382,6 +387,9 @@ fn spawn_tab_body(commands: &mut Commands, content: Entity, tab: SettingsTab, fo
     }
     if tab == SettingsTab::Sound {
         spawn_sound_rows(commands, body, font);
+    }
+    if tab == SettingsTab::Input {
+        spawn_input_rows(commands, body, font);
     }
 }
 
@@ -1355,11 +1363,358 @@ fn refresh_sound(
     }
 }
 
+// ── Input tab ─────────────────────────────────────────────────────────────
+
+/// The three rebindable actions in display order.
+const ACTIONS: [(PlayerAction, &str); 3] = [
+    (PlayerAction::Sit, "Sit / Stand"),
+    (PlayerAction::Status, "Status Window"),
+    (PlayerAction::Inventory, "Inventory"),
+];
+
+/// Borrows the stored binds for an action off the draft keybinds.
+fn action_binds(
+    keybinds: &game_engine::domain::settings::Keybinds,
+    action: PlayerAction,
+) -> &ActionBinds {
+    match action {
+        PlayerAction::Sit => &keybinds.sit,
+        PlayerAction::Status => &keybinds.status,
+        PlayerAction::Inventory => &keybinds.inventory,
+    }
+}
+
+/// Mutably borrows the stored binds for an action off the draft keybinds.
+fn action_binds_mut(
+    keybinds: &mut game_engine::domain::settings::Keybinds,
+    action: PlayerAction,
+) -> &mut ActionBinds {
+    match action {
+        PlayerAction::Sit => &mut keybinds.sit,
+        PlayerAction::Status => &mut keybinds.status,
+        PlayerAction::Inventory => &mut keybinds.inventory,
+    }
+}
+
+/// The slot of an `ActionBinds` a `BindSlot` selects.
+fn slot_mut(binds: &mut ActionBinds, slot: BindSlot) -> &mut Option<KeyBind> {
+    match slot {
+        BindSlot::Primary => &mut binds.primary,
+        BindSlot::Secondary => &mut binds.secondary,
+    }
+}
+
+fn slot_ref(binds: &ActionBinds, slot: BindSlot) -> &Option<KeyBind> {
+    match slot {
+        BindSlot::Primary => &binds.primary,
+        BindSlot::Secondary => &binds.secondary,
+    }
+}
+
+/// The held modifier (Alt/Ctrl/Shift/Super) to fold into a captured chord, or
+/// `None` when no modifier is down. First match wins; chords carry one modifier.
+fn held_modifier(keys: &ButtonInput<KeyCode>) -> Option<Modifier> {
+    let pressed = |a, b| keys.pressed(a) || keys.pressed(b);
+    if pressed(KeyCode::AltLeft, KeyCode::AltRight) {
+        Some(Modifier::Alt)
+    } else if pressed(KeyCode::ControlLeft, KeyCode::ControlRight) {
+        Some(Modifier::Control)
+    } else if pressed(KeyCode::ShiftLeft, KeyCode::ShiftRight) {
+        Some(Modifier::Shift)
+    } else if pressed(KeyCode::SuperLeft, KeyCode::SuperRight) {
+        Some(Modifier::Super)
+    } else {
+        None
+    }
+}
+
+/// Whether a freshly-pressed key is itself only a modifier (so we wait for the
+/// real key rather than binding "Alt" alone).
+fn is_modifier_key(key: KeyCode) -> bool {
+    matches!(
+        key,
+        KeyCode::AltLeft
+            | KeyCode::AltRight
+            | KeyCode::ControlLeft
+            | KeyCode::ControlRight
+            | KeyCode::ShiftLeft
+            | KeyCode::ShiftRight
+            | KeyCode::SuperLeft
+            | KeyCode::SuperRight
+    )
+}
+
+/// Builds a `KeyBind` from a captured key + held modifier. The key is stored as
+/// its `KeyCode` reflect name (`format!("{:?}", key)`, e.g. "KeyA"/"Insert") —
+/// the exact format `key_code_from_name` parses back when the bind is applied.
+fn keybind_from_capture(modifier: Option<Modifier>, key: KeyCode) -> KeyBind {
+    let name = format!("{key:?}");
+    match modifier {
+        Some(modifier) => KeyBind::modified(modifier, name),
+        None => KeyBind::new(name),
+    }
+}
+
+/// Human-readable name for a stored key. Strips the `Key`/`Digit` prefixes the
+/// `KeyCode` reflect names carry ("KeyA" → "A", "Digit1" → "1"); other names
+/// pass through ("Insert", "Space", "F5").
+fn key_display(name: &str) -> &str {
+    name.strip_prefix("Key")
+        .or_else(|| name.strip_prefix("Digit"))
+        .unwrap_or(name)
+}
+
+/// The keycap label for a slot: the bound key (with modifier prefix, e.g.
+/// "Alt + A"), or "—" when the slot is empty.
+fn keycap_label(bind: &Option<KeyBind>) -> String {
+    let Some(bind) = bind else {
+        return "—".to_string();
+    };
+    let key = key_display(&bind.key);
+    match bind.modifier {
+        Some(modifier) => format!("{} + {key}", modifier_label(modifier)),
+        None => key.to_string(),
+    }
+}
+
+/// Short label for a modifier in a chord display.
+fn modifier_label(modifier: Modifier) -> &'static str {
+    match modifier {
+        Modifier::Alt => "Alt",
+        Modifier::Control => "Ctrl",
+        Modifier::Shift => "Shift",
+        Modifier::Super => "Super",
+    }
+}
+
+/// Whether a rebind capture is in progress (gates `capture_rebind`).
+fn listening_active(ui: Res<SettingsUi>) -> bool {
+    ui.listening.is_some()
+}
+
+/// Whether no rebind capture is in progress (gates `toggle_settings` so Escape
+/// cancels the capture instead of closing the window).
+fn listening_inactive(ui: Res<SettingsUi>) -> bool {
+    ui.listening.is_none()
+}
+
+/// A clickable keycap cell; clicking it starts listening for `(action, slot)`.
+#[derive(Component, Clone, Copy)]
+struct Keycap {
+    action: PlayerAction,
+    slot: BindSlot,
+}
+
+/// Builds the three Input rows under `body`: a header, then one row per action
+/// with a Primary and Secondary keycap.
+fn spawn_input_rows(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
+    spawn_section(commands, body, "Key Bindings", font);
+    spawn_bind_header(commands, body, font);
+
+    for (action, label) in ACTIONS {
+        spawn_bind_row(commands, body, action, label, font);
+    }
+}
+
+/// The "Action / Primary / Secondary" column header.
+fn spawn_bind_header(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
+    let row = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(body),
+        ))
+        .id();
+    spawn_header_cell(commands, row, "Action", 1.0, font);
+    spawn_header_cell(commands, row, "Primary", 0.0, font);
+    spawn_header_cell(commands, row, "Secondary", 0.0, font);
+}
+
+fn spawn_header_cell(
+    commands: &mut Commands,
+    row: Entity,
+    text: &str,
+    grow: f32,
+    font: &Handle<Font>,
+) {
+    let cell = commands
+        .spawn((
+            Node {
+                width: if grow == 0.0 {
+                    Val::Px(112.0)
+                } else {
+                    Val::Auto
+                },
+                flex_grow: grow,
+                margin: UiRect::left(Val::Px(if grow == 0.0 { 8.0 } else { 0.0 })),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(row),
+        ))
+        .id();
+    commands.spawn((
+        theme::label(text, font.clone(), 10.0, theme::TEXT_FAINT),
+        ChildOf(cell),
+    ));
+}
+
+/// One action row: action name + two keycaps.
+fn spawn_bind_row(
+    commands: &mut Commands,
+    body: Entity,
+    action: PlayerAction,
+    label: &str,
+    font: &Handle<Font>,
+) {
+    let row = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                min_height: Val::Px(38.0),
+                ..default()
+            },
+            Pickable::IGNORE,
+            ChildOf(body),
+        ))
+        .id();
+
+    commands.spawn((
+        theme::label(label, font.clone(), 13.0, theme::TEXT),
+        Node {
+            flex_grow: 1.0,
+            ..default()
+        },
+        ChildOf(row),
+    ));
+
+    spawn_keycap(commands, row, action, BindSlot::Primary, font);
+    spawn_keycap(commands, row, action, BindSlot::Secondary, font);
+}
+
+/// A clickable keycap cell. `refresh_input` rewrites its label; clicking it
+/// starts a rebind capture for this `(action, slot)`.
+fn spawn_keycap(
+    commands: &mut Commands,
+    row: Entity,
+    action: PlayerAction,
+    slot: BindSlot,
+    font: &Handle<Font>,
+) {
+    let cap = commands
+        .spawn((
+            Keycap { action, slot },
+            Node {
+                width: Val::Px(104.0),
+                height: Val::Px(30.0),
+                margin: UiRect::left(Val::Px(8.0)),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(7.0)),
+                ..default()
+            },
+            BackgroundColor(theme::FIELD),
+            BorderColor::all(theme::STROKE),
+            Pickable::default(),
+            ChildOf(row),
+        ))
+        .id();
+    commands.spawn((
+        theme::label("", font.clone(), 12.0, theme::TEXT_DIM),
+        Pickable::IGNORE,
+        ChildOf(cap),
+    ));
+    commands.entity(cap).observe(on_keycap_click);
+}
+
+/// Clicking a keycap arms a rebind capture for its slot.
+fn on_keycap_click(click: On<Pointer<Click>>, caps: Query<&Keycap>, mut ui: ResMut<SettingsUi>) {
+    let Ok(cap) = caps.get(click.entity) else {
+        return;
+    };
+    ui.listening = Some((cap.action, cap.slot));
+}
+
+/// While listening, captures the next just-pressed key. `Escape` cancels;
+/// modifier-only presses are ignored (wait for the real key); any other key is
+/// folded with the held modifier into a `KeyBind` written to the draft slot.
+///
+/// Consumes the pressed key with `clear_just_pressed` so it neither leaks into
+/// gameplay/other UI nor (for `Escape`) reaches `toggle_settings` and closes the
+/// window — `listening` acts like a focus state for input.
+fn capture_rebind(mut keys: ResMut<ButtonInput<KeyCode>>, mut ui: ResMut<SettingsUi>) {
+    let Some((action, slot)) = ui.listening else {
+        return;
+    };
+
+    if keys.just_pressed(KeyCode::Escape) {
+        keys.clear_just_pressed(KeyCode::Escape);
+        ui.listening = None;
+        return;
+    }
+
+    let Some(key) = keys
+        .get_just_pressed()
+        .copied()
+        .find(|&key| !is_modifier_key(key))
+    else {
+        return;
+    };
+
+    let modifier = held_modifier(&keys);
+    keys.clear_just_pressed(key);
+    *slot_mut(action_binds_mut(&mut ui.draft.keybinds, action), slot) =
+        Some(keybind_from_capture(modifier, key));
+    ui.listening = None;
+}
+
+/// Re-renders each keycap from the draft keybinds, showing "Press a key…" on the
+/// cell currently being listened to. Runs whenever `SettingsUi` changes, so a
+/// completed capture, Cancel, and Reset all re-sync the cells.
+fn refresh_input(
+    ui: Res<SettingsUi>,
+    caps: Query<(&Keycap, &Children)>,
+    mut texts: Query<(&mut Text, &mut TextColor)>,
+) {
+    for (cap, children) in &caps {
+        let listening = ui.listening == Some((cap.action, cap.slot));
+        let label = if listening {
+            "Press a key…".to_string()
+        } else {
+            keycap_label(slot_ref(
+                action_binds(&ui.draft.keybinds, cap.action),
+                cap.slot,
+            ))
+        };
+        let color = if listening {
+            theme::EMERALD
+        } else {
+            theme::TEXT_DIM
+        };
+        for child in children.iter() {
+            if let Ok((mut text, mut text_color)) = texts.get_mut(child) {
+                if text.0 != label {
+                    text.0 = label.clone();
+                }
+                if text_color.0 != color {
+                    text_color.0 = color;
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use bevy_persistent::prelude::StorageFormat;
-    use game_engine::domain::settings::{AntiAliasing, FpsCap};
+    use game_engine::domain::settings::{AntiAliasing, FpsCap, Keybinds};
 
     fn persistent_settings(slug: &str, settings: Settings) -> Persistent<Settings> {
         let path = std::env::temp_dir().join(format!(
@@ -1475,5 +1830,85 @@ mod tests {
         AudioChannel::Sfx.toggle_muted(&mut ui.draft.audio);
         assert_eq!(AudioChannel::Sfx.read(&ui.draft.audio), (0.25, true));
         assert!(ui.dirty());
+    }
+
+    /// A plain captured key, once stored and built into an `InputMap` (which
+    /// parses the stored name back via the Task-4 `key_code_from_name`), maps to
+    /// the same `KeyCode` a directly-built map produces. Guards the round-trip.
+    #[test]
+    fn plain_capture_round_trips_through_the_input_map() {
+        let binds = Keybinds {
+            sit: ActionBinds {
+                primary: Some(keybind_from_capture(None, KeyCode::Insert)),
+                secondary: None,
+            },
+            status: ActionBinds::default(),
+            inventory: ActionBinds::default(),
+        };
+        let expected = {
+            let mut map = leafwing_input_manager::prelude::InputMap::default();
+            map.insert(PlayerAction::Sit, KeyCode::Insert);
+            map
+        };
+        assert_eq!(binds.to_input_map(), expected);
+    }
+
+    /// A modified chord capture round-trips to the same `ButtonlikeChord` a
+    /// directly-built map produces.
+    #[test]
+    fn modified_capture_round_trips_through_the_input_map() {
+        let binds = Keybinds {
+            sit: ActionBinds::default(),
+            status: ActionBinds {
+                primary: Some(keybind_from_capture(Some(Modifier::Alt), KeyCode::KeyA)),
+                secondary: None,
+            },
+            inventory: ActionBinds::default(),
+        };
+        let expected = {
+            use leafwing_input_manager::prelude::*;
+            let mut map = InputMap::default();
+            map.insert(
+                PlayerAction::Status,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyA),
+            );
+            map
+        };
+        assert_eq!(binds.to_input_map(), expected);
+    }
+
+    #[test]
+    fn keybind_from_capture_stores_the_reflect_name() {
+        assert_eq!(keybind_from_capture(None, KeyCode::KeyA).key, "KeyA");
+        assert_eq!(keybind_from_capture(None, KeyCode::Insert).key, "Insert");
+        let chord = keybind_from_capture(Some(Modifier::Alt), KeyCode::KeyE);
+        assert_eq!(chord.key, "KeyE");
+        assert_eq!(chord.modifier, Some(Modifier::Alt));
+    }
+
+    #[test]
+    fn keycap_label_renders_keys_chords_and_empty() {
+        assert_eq!(keycap_label(&Some(KeyBind::new("Insert"))), "Insert");
+        assert_eq!(keycap_label(&Some(KeyBind::new("KeyA"))), "A");
+        assert_eq!(keycap_label(&Some(KeyBind::new("Digit1"))), "1");
+        assert_eq!(
+            keycap_label(&Some(KeyBind::modified(Modifier::Alt, "KeyA"))),
+            "Alt + A"
+        );
+        assert_eq!(
+            keycap_label(&Some(KeyBind::modified(Modifier::Control, "KeyE"))),
+            "Ctrl + E"
+        );
+        assert_eq!(keycap_label(&None), "—");
+    }
+
+    #[test]
+    fn default_keybinds_render_the_expected_labels() {
+        let binds = Keybinds::default();
+        assert_eq!(keycap_label(&binds.sit.primary), "Insert");
+        assert_eq!(keycap_label(&binds.sit.secondary), "Help");
+        assert_eq!(keycap_label(&binds.status.primary), "Alt + A");
+        assert_eq!(keycap_label(&binds.status.secondary), "—");
+        assert_eq!(keycap_label(&binds.inventory.primary), "Alt + E");
     }
 }
