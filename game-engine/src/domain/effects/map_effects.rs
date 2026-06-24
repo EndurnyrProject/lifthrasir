@@ -5,11 +5,11 @@
 //! namespace aesir's `SpecialEffect` packet keys on. Only the subset of effects
 //! that map to an STR file is playable here; the classic ambient ones (torch,
 //! smoke, firefly, …) are hardcoded particle systems in the original client and
-//! have no STR, so they stay unmapped. Unmapped `effect_type`s are logged so we
-//! can discover which ones real maps actually use and grow `map_effects.ron`.
+//! have no STR, so they stay unmapped. Unmapped `effect_type`s are `warn!`-ed so
+//! we can discover which ones real maps actually use and grow `map_effects.ron`.
 //!
-//! Like every effect path this is non-critical: a missing catalog, asset, or
-//! mapping early-returns with a `debug!`, never panicking.
+//! Like every effect path this is non-critical: a missing catalog or asset
+//! early-returns and an unmapped effect skips, never panicking.
 
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -63,7 +63,7 @@ pub fn spawn_map_effects(
             };
 
             let Some(descriptor) = catalog.get(effect.effect_type) else {
-                debug!(
+                warn!(
                     "No map effect mapping for effect_type {} (name='{}'); skipping",
                     effect.effect_type, effect.name
                 );
