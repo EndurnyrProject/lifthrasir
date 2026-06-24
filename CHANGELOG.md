@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.2.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.1.0...v0.2.0) (2026-06-24)
+
+
+### Features
+
+* **inventory:** apply item add/remove deltas to the inventory ([0b4bcc3](https://github.com/EndurnyrProject/lifthrasir/commit/0b4bcc3d255073b8da252626b35ab22a2ee498bc))
+* **inventory:** report item-use failures in chat ([03f5d73](https://github.com/EndurnyrProject/lifthrasir/commit/03f5d735a8271881ca93f199bde01d3ede23df3f))
+* **inventory:** send UseItem on a use-item request ([c25ae4c](https://github.com/EndurnyrProject/lifthrasir/commit/c25ae4c20a82ddb8f350a97dc369a480b99e6243))
+* **settings:** apply audio settings to the live mixer ([fae5028](https://github.com/EndurnyrProject/lifthrasir/commit/fae5028e54a5a4b56bbbc69211eca3c8fe4f4b61))
+* **settings:** apply graphics settings to window, camera, framerate ([9c5ff4e](https://github.com/EndurnyrProject/lifthrasir/commit/9c5ff4eb729f288a0a1ae8c682e35e7bc5a9d9cb))
+* **settings:** apply key bindings to the player input map ([013b2c0](https://github.com/EndurnyrProject/lifthrasir/commit/013b2c012d4a84a5d81f496172ca5b0ba76ad601))
+* **settings:** persisted Settings resource and plugin skeleton ([6880b74](https://github.com/EndurnyrProject/lifthrasir/commit/6880b7489694e0386ebcc89194aeccbf47570193))
+* **ui:** double-click inventory item to use it ([8407689](https://github.com/EndurnyrProject/lifthrasir/commit/840768972f7895606afccd6a0aff0ed932e12279))
+* **ui:** graphics tab controls ([9cfa234](https://github.com/EndurnyrProject/lifthrasir/commit/9cfa2348fac2ae2bad87f6bfc16159abd919cc0c))
+* **ui:** input tab key rebinding ([42c00c3](https://github.com/EndurnyrProject/lifthrasir/commit/42c00c3ae1954813ce0d1edb8ffdd4e98a8f0dd5))
+* **ui:** open settings from the login screen ([eae9667](https://github.com/EndurnyrProject/lifthrasir/commit/eae9667d9f593de834fb967ad428360445eaf01c))
+* **ui:** sound tab volume controls ([a1192cf](https://github.com/EndurnyrProject/lifthrasir/commit/a1192cf03ef9d6c4e4527a8c4647bed1ca22526e))
+
+
+### Bug Fixes
+
+* Fixed despawn of map sounds ([0ac61fd](https://github.com/EndurnyrProject/lifthrasir/commit/0ac61fd6722be963c461529ad00b05a0630dce39))
+* **graphics:** match UI camera MSAA to the world camera ([7c1bf95](https://github.com/EndurnyrProject/lifthrasir/commit/7c1bf95d378d0dca0bdf3f9a545c25e0f04b2f85))
+* **sprites:** make sprite direction camera-relative ([e5f6018](https://github.com/EndurnyrProject/lifthrasir/commit/e5f60185acf4dbb4bb3446e79249d48f6931eb66))
+* **sprites:** render NPC/warp sprites and drop vestigial RoSprite ([e634330](https://github.com/EndurnyrProject/lifthrasir/commit/e6343301bc7d83896b4bb9c46051afae0fb991e5))
+* **ui:** drop duplicate Pickable on settings keycap label ([fa721f4](https://github.com/EndurnyrProject/lifthrasir/commit/fa721f4bd863aeee6af72cf7de36a0e951df13ea))
+* **ui:** Fixed nameplate positioning ([d8b10ef](https://github.com/EndurnyrProject/lifthrasir/commit/d8b10ef453344358af9533455fcced6d1141195a))
+* **ui:** settings window picking z-order and tab body layout ([fd23f8b](https://github.com/EndurnyrProject/lifthrasir/commit/fd23f8badf41a3710f360ae7129e09798b3975e1))
+* **warp:** Fixed movement transition on warp ([3f36ac6](https://github.com/EndurnyrProject/lifthrasir/commit/3f36ac6d39a3cc0873e7827c77bd6bc100d81b90))
+
 ## [0.1.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.0.1...v0.1.0) (2026-06-23)
 
 
