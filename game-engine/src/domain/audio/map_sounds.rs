@@ -251,12 +251,19 @@ pub fn update_map_sound_volume(
     }
 }
 
+/// Despawn the map's sound-source entities on map exit.
+///
+/// The `MapSound` sources are intentionally not `MapScoped`, so they need this
+/// dedicated despawn. The `MapSoundsSpawned` spawn-once marker lives on the
+/// `MapLoader` entity, which *is* `MapScoped` and gets despawned by
+/// `despawn_map_scoped` in this same schedule — so the marker dies with it and
+/// the next map's fresh loader respawns sounds. Removing it here would just race
+/// that despawn and panic on a recycled entity.
 #[auto_add_system(plugin = crate::app::audio_plugin::AudioPlugin, schedule = OnExit(GameState::InGame))]
 pub fn teardown_map_sounds(
     mut commands: Commands,
     sources: Query<(Entity, &MapSoundSource), With<MapSound>>,
     mut audio_instances: ResMut<Assets<AudioInstance>>,
-    loaders: Query<Entity, With<MapSoundsSpawned>>,
 ) {
     let tween = AudioTween::linear(Duration::from_secs_f32(0.1));
 
@@ -267,10 +274,6 @@ pub fn teardown_map_sounds(
             }
         }
         commands.entity(entity).despawn();
-    }
-
-    for loader in loaders.iter() {
-        commands.entity(loader).remove::<MapSoundsSpawned>();
     }
 }
 

@@ -83,6 +83,7 @@ mod tests {
             dst_x: 0,
             dst_y: 0,
             move_start_time: 0,
+            virtue: 0,
         }
     }
 
