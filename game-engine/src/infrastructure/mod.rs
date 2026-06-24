@@ -1,6 +1,7 @@
 pub mod assets;
 pub mod config;
 pub mod diagnostics;
+pub mod effect;
 pub mod item;
 pub mod job;
 pub mod networking;

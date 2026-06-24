@@ -1,5 +1,6 @@
 use crate::infrastructure::assets::{bmp_loader::BmpLoader, svg_loader::SvgLoader, *};
 use crate::infrastructure::config::ClientConfig;
+use crate::infrastructure::effect::{LoadedEffectAsset, StrEffectLoader};
 use crate::infrastructure::item::ItemDataAsset;
 use crate::infrastructure::job::JobDataAsset;
 use crate::infrastructure::skill::SkillDataAsset;
@@ -30,6 +31,8 @@ impl Plugin for AssetsPlugin {
             .init_asset_loader::<GrfLoader>()
             .init_asset::<RoPaletteAsset>()
             .init_asset_loader::<RoPaletteLoader>()
+            .init_asset::<LoadedEffectAsset>()
+            .init_asset_loader::<StrEffectLoader>()
             .init_asset::<BgmNameTableAsset>()
             .init_asset_loader::<BgmNameTableLoader>()
             .init_asset_loader::<BmpLoader>()
