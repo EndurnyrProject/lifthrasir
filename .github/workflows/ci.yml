@@ -84,8 +84,5 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Build
-        run: cargo build --workspace --locked
-
-      - name: Test
+      - name: Build & Test
         run: cargo test --workspace --locked
