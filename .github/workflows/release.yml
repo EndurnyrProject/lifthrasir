@@ -136,7 +136,7 @@ jobs:
       - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" artifacts/* --clobber
+        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" artifacts/* --clobber --repo ${{ github.repository }}
 
   notify-discord:
     needs: [release-please, upload]
