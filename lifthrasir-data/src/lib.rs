@@ -54,6 +54,38 @@ pub struct SkillData {
     pub skills: BTreeMap<u32, SkillMeta>,
 }
 
+/// Where a skill effect anchors when played.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EffectPlacement {
+    Caster,
+    #[default]
+    Target,
+    Ground,
+}
+
+/// Hand-authored skill -> effect mapping entry.
+/// `color` is `[f32; 4]` (RGBA) to keep this crate Bevy-free; the runtime
+/// converts it to `Color` at its boundary.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct EffectDescriptor {
+    /// STR effect filename, e.g. "heal.str".
+    pub str: String,
+    /// Optional sound path relative to `data/wav`, e.g. "effect/_heal_effect.wav".
+    pub sound: Option<String>,
+    pub placement: EffectPlacement,
+    /// RGBA tint multiplied onto the STR's per-frame color.
+    pub color: [f32; 4],
+    /// One-shot vs persistent (ground) effect.
+    pub repeating: bool,
+}
+
+/// Skill effect catalog: skill id -> effect descriptor.
+/// Keyed by `BTreeMap` for stable, key-ordered RON diffs.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SkillEffectData {
+    pub effects: BTreeMap<u32, EffectDescriptor>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,5 +177,56 @@ mod tests {
         let deserialized: SkillData = ron::from_str(&serialized).expect("deserialize");
 
         assert_eq!(original.skills, deserialized.skills);
+    }
+
+    #[test]
+    fn skill_effect_data_round_trip() {
+        let mut original = SkillEffectData::default();
+        original.effects.insert(
+            28,
+            EffectDescriptor {
+                str: "heal.str".to_string(),
+                sound: Some("effect/_heal_effect.wav".to_string()),
+                placement: EffectPlacement::Target,
+                color: [1.0, 1.0, 1.0, 1.0],
+                repeating: false,
+            },
+        );
+        original.effects.insert(
+            89,
+            EffectDescriptor {
+                str: "stormgust.str".to_string(),
+                sound: None,
+                placement: EffectPlacement::Ground,
+                color: [0.6, 0.7, 1.0, 1.0],
+                repeating: true,
+            },
+        );
+
+        let serialized = ron::to_string(&original).expect("serialize");
+        let deserialized: SkillEffectData = ron::from_str(&serialized).expect("deserialize");
+
+        assert_eq!(original.effects, deserialized.effects);
+    }
+
+    #[test]
+    fn skill_effects_ron_seed_deserializes() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../assets/data/ron/skill_effects.ron"
+        );
+        let contents = std::fs::read_to_string(path).expect("read skill_effects.ron");
+        let data: SkillEffectData = ron::from_str(&contents).expect("deserialize seed");
+
+        let heal = data.effects.get(&28).expect("AL_HEAL entry");
+        assert_eq!(heal.placement, EffectPlacement::Target);
+        assert_eq!(heal.str, "heal.str");
+        assert_eq!(heal.sound.as_deref(), Some("effect/_heal_effect.wav"));
+        assert!(!heal.repeating);
+
+        let stormgust = data.effects.get(&89).expect("WZ_STORMGUST entry");
+        assert_eq!(stormgust.placement, EffectPlacement::Ground);
+        assert_eq!(stormgust.str, "stormgust.str");
+        assert!(stormgust.repeating);
     }
 }

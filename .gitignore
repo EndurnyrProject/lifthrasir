@@ -40,7 +40,8 @@ en.grf
 data.grf
 
 # Generated assets
-assets/data/ron/
+assets/data/ron/*
+!assets/data/ron/skill_effects.ron
 
 # Reference
 robrowser-src

@@ -1,0 +1,25 @@
+(
+    effects: {
+        18: ( // PR_MAGNUS / consecration-style caster effect
+            str: "magnus.str",
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        28: ( // AL_HEAL
+            str: "heal.str",
+            sound: Some("effect/_heal_effect.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        89: ( // WZ_STORMGUST
+            str: "stormgust.str",
+            sound: Some("effect/stormgust.wav"),
+            placement: Ground,
+            color: (0.6, 0.7, 1.0, 1.0),
+            repeating: true,
+        ),
+    },
+)
