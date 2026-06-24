@@ -19,6 +19,7 @@ pub use domain::entities::spawning::EntitySpawningPlugin;
 pub use domain::inventory::InventoryPlugin;
 pub use domain::settings::SettingsPlugin;
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
+pub use infrastructure::effect::EffectsPlugin;
 pub use infrastructure::item::{ItemDb, ItemDbPlugin};
 pub use infrastructure::job::JobSystemPlugin;
 pub use infrastructure::skill::SkillSystemPlugin;
@@ -42,6 +43,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(AssetsPlugin)
             .add(JobSystemPlugin)
             .add(SkillSystemPlugin)
+            .add(EffectsPlugin)
             .add(ItemDbPlugin)
             .add(AudioPlugin)
             .add(AssetCatalogPlugin)
