@@ -24,13 +24,6 @@ pub struct StatusEffectVisualEvent {
     pub add: bool,
 }
 
-#[derive(Message)]
-#[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
-pub struct SpriteAnimationChangeEvent {
-    pub character_entity: Entity,
-    pub action_type: crate::domain::entities::character::components::visual::ActionType,
-}
-
 /// Handle equipment changes by updating PlayerAppearance and spawning/despawning render layers.
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
@@ -204,49 +197,5 @@ pub fn handle_status_effect_visuals(mut effect_events: MessageReader<StatusEffec
             "Status effect for {:?}: type={:?}, add={} (effects handled separately)",
             event.character, event.effect_type, event.add
         );
-    }
-}
-
-/// Handle animation change events by updating RoSprite action directly.
-#[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
-    schedule = Update,
-    config(in_set = SpriteRenderingSystems::AnimationEvents)
-)]
-pub fn handle_sprite_animation_changes(
-    time: Res<Time>,
-    mut animation_events: MessageReader<SpriteAnimationChangeEvent>,
-    mut sprites: Query<&mut crate::infrastructure::assets::ro_animation_asset::RoSprite>,
-) {
-    let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
-
-    for event in animation_events.read() {
-        let Ok(mut ro_sprite) = sprites.get_mut(event.character_entity) else {
-            continue;
-        };
-
-        let action = action_type_to_index(event.action_type);
-        ro_sprite.set_action(action, game_time_ms);
-
-        debug!(
-            "handle_sprite_animation_changes: Set action {} for entity {:?}",
-            action, event.character_entity
-        );
-    }
-}
-
-fn action_type_to_index(
-    action_type: crate::domain::entities::character::components::visual::ActionType,
-) -> u8 {
-    use crate::domain::entities::character::components::visual::ActionType;
-    match action_type {
-        ActionType::Idle => 0,
-        ActionType::Walk => 1,
-        ActionType::Sit => 2,
-        ActionType::Attack => 3,
-        ActionType::Hit => 4,
-        ActionType::Dead => 5,
-        ActionType::Cast => 6,
-        ActionType::Special => 7,
     }
 }

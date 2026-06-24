@@ -57,7 +57,7 @@ impl PlayerAppearance {
 
 /// Marker component for child entities that render a sprite layer.
 /// Child entities have Mesh3d + MeshMaterial3d + Billboard components.
-/// The parent entity holds RoSprite for animation state.
+/// The parent entity holds PlayerSprite/MobSprite for animation state.
 #[derive(Component, Clone, Debug)]
 pub struct RenderLayer {
     /// The layer tag for z-ordering (LAYER_BODY, LAYER_HEAD, etc.)

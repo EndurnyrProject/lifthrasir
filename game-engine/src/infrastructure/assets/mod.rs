@@ -27,5 +27,5 @@ pub use loaders::{
     RoPaletteLoader, RoSpriteAsset, RoSpriteLoader, RoWorldAsset, RoWorldLoader, RsmAsset,
     RsmLoader,
 };
-pub use ro_animation_asset::{ActionData, FrameData, FramePart, RoAnimationAsset, RoSprite};
+pub use ro_animation_asset::{ActionData, FrameData, FramePart, RoAnimationAsset};
 pub use ro_assets_plugin::SharedCompositeAssetSource;

@@ -6,7 +6,7 @@ use super::types::ObjectType;
 // PHASE 0.2: RoAnimationController REMOVED
 // =============================================================================
 // RoAnimationController has been replaced by:
-// - RoSprite (infrastructure/assets/ro_animation_asset.rs) - lightweight animation state
+// - PlayerSprite/MobSprite (sprite_rendering/components/ro_sprite.rs) - lightweight animation state
 // - RoAnimationAsset - pre-computed textures and frame data
 //
 // The new system uses O(1) frame lookup instead of runtime texture creation.

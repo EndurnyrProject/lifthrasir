@@ -1,3 +1,3 @@
 // Old animation system removed - replaced by:
-// - RoSprite component in infrastructure/assets/ro_animation_asset.rs
+// - PlayerSprite/MobSprite (RoSpriteGeneric) in sprite_rendering/components/ro_sprite.rs
 // - AnimationState (moonshine-behavior) in domain/entities/character/states/animation.rs

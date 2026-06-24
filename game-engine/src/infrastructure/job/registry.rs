@@ -5,6 +5,11 @@ use std::collections::HashMap;
 
 use super::player_jobs::{get_player_job_sprite_mapping, is_player_job};
 
+/// JT_WARPNPC. The official jobname.lub maps this to a placeholder ("1_ETC_01");
+/// the real client special-cases it to the animated portal sprite instead.
+const WARP_JOB_ID: u32 = 45;
+const WARP_SPRITE_NAME: &str = "portal";
+
 #[derive(Resource)]
 pub struct JobSpriteRegistry {
     player_jobs: HashMap<u32, &'static str>,
@@ -22,6 +27,10 @@ impl JobSpriteRegistry {
     }
 
     pub fn get_sprite_name(&self, jt_id: u32) -> Option<&str> {
+        if jt_id == WARP_JOB_ID {
+            return Some(WARP_SPRITE_NAME);
+        }
+
         if is_player_job(jt_id) {
             if let Some(sprite) = self.player_jobs.get(&jt_id) {
                 return Some(sprite);
@@ -71,7 +80,7 @@ mod tests {
 
     fn fixture() -> JobData {
         let mut data = JobData::default();
-        data.npc_sprites.insert(45, "1_ETC_01".to_string());
+        data.npc_sprites.insert(46, "1_ETC_01".to_string());
         data.display_names.insert(0, "Novice".to_string());
         data
     }
@@ -80,9 +89,18 @@ mod tests {
     fn from_job_data_wires_npc_player_and_display_lookups() {
         let registry = JobSpriteRegistry::from_job_data(fixture());
 
-        assert_eq!(registry.get_sprite_name(45), Some("1_ETC_01"));
+        assert_eq!(registry.get_sprite_name(46), Some("1_ETC_01"));
         assert!(is_player_job(1));
         assert_eq!(registry.get_sprite_name(1), Some("검사"));
         assert_eq!(registry.get_display_name(0), Some("Novice"));
+    }
+
+    #[test]
+    fn warp_job_overrides_placeholder_with_portal_sprite() {
+        let mut data = JobData::default();
+        data.npc_sprites.insert(WARP_JOB_ID, "1_ETC_01".to_string());
+        let registry = JobSpriteRegistry::from_job_data(data);
+
+        assert_eq!(registry.get_sprite_name(WARP_JOB_ID), Some("portal"));
     }
 }

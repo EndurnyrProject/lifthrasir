@@ -13,4 +13,4 @@ pub use events::SpawnSpriteEvent;
 pub use kinds::{EffectLayer, SpriteLayer, SpriteRoot};
 pub use layout::{ActionLayout, MobLayout, PlayerLayout};
 pub use plugin::GenericSpriteRenderingPlugin;
-pub use systems::{EquipmentChangeEvent, SpriteAnimationChangeEvent, StatusEffectVisualEvent};
+pub use systems::{EquipmentChangeEvent, StatusEffectVisualEvent};

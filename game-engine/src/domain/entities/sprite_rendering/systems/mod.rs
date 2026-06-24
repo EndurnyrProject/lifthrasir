@@ -11,8 +11,8 @@ pub use action_sync::{
 };
 pub use body_sync::{sync_mob_body_layer, sync_player_body_layer};
 pub use events::{
-    handle_equipment_changes, handle_sprite_animation_changes, handle_status_effect_visuals,
-    EquipmentChangeEvent, SpriteAnimationChangeEvent, StatusEffectVisualEvent,
+    handle_equipment_changes, handle_status_effect_visuals, EquipmentChangeEvent,
+    StatusEffectVisualEvent,
 };
 pub use head_sync::sync_player_head_layer;
 pub use spawn::spawn_sprite_hierarchy;

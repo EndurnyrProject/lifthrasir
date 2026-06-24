@@ -1,41 +1,9 @@
 use super::animation::AnimationState;
 use super::status_effects::StatusEffects;
-use crate::domain::entities::sprite_rendering::{
-    EffectType, SpriteAnimationChangeEvent, StatusEffectVisualEvent,
-};
+use crate::domain::entities::sprite_rendering::{EffectType, StatusEffectVisualEvent};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use moonshine_behavior::prelude::*;
-
-type ChangedAnimationsQuery<'w, 's> = Query<
-    'w,
-    's,
-    (
-        Entity,
-        &'static AnimationState,
-        Option<&'static crate::domain::entities::character::components::visual::CharacterDirection>,
-    ),
-    Changed<AnimationState>,
->;
-
-#[auto_add_system(
-    plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
-    schedule = Update,
-    config(after = handle_status_effect_state_changes)
-)]
-pub fn observe_animation_state_changes(
-    mut animation_events: MessageWriter<SpriteAnimationChangeEvent>,
-    changed_animations: ChangedAnimationsQuery,
-) {
-    for (entity, animation_state, _direction) in changed_animations.iter() {
-        let action_type = (*animation_state).into();
-
-        animation_events.write(SpriteAnimationChangeEvent {
-            character_entity: entity,
-            action_type,
-        });
-    }
-}
 
 type CharactersWithChangedStatus<'w, 's> =
     Query<'w, 's, (Entity, &'static StatusEffects), Changed<StatusEffects>>;
@@ -43,7 +11,7 @@ type CharactersWithChangedStatus<'w, 's> =
 #[auto_add_system(
     plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
     schedule = Update,
-    config(after = observe_animation_state_changes)
+    config(after = handle_status_effect_state_changes)
 )]
 pub fn observe_status_effects_changes(
     mut effect_events: MessageWriter<StatusEffectVisualEvent>,

@@ -10,14 +10,14 @@ use crate::domain::sprite::tags::{
 };
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
-use crate::infrastructure::assets::ro_animation_asset::{RoAnimationAsset, RoSprite};
+use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::infrastructure::job::registry::JobSpriteRegistry;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use moonshine_tag::Tag;
 
 /// Spawn system that handles sprite spawn events.
-/// Adds RoSprite and optional PlayerAppearance to entities,
+/// Adds PlayerSprite/MobSprite and optional PlayerAppearance to entities,
 /// then requests animation asset loading.
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
@@ -127,7 +127,6 @@ fn spawn_character_components(
     pending_animations.request(head_spr.clone(), head_act.clone(), LAYER_HEAD, Some(entity));
 
     entity_commands.insert((
-        RoSprite::default(),
         PlayerSprite::default(),
         PlayerAppearance::default(),
         PendingRenderLayers,
@@ -155,11 +154,7 @@ fn spawn_mob_components(
 
     pending_animations.request(spr, act, LAYER_BODY, Some(entity));
 
-    entity_commands.insert((
-        RoSprite::default(),
-        MobSprite::default(),
-        PendingRenderLayers,
-    ));
+    entity_commands.insert((MobSprite::default(), PendingRenderLayers));
 
     debug!(
         "spawn_mob_components: Requested animation for entity {:?} ({})",
@@ -183,7 +178,10 @@ fn spawn_npc_components(
 
     pending_animations.request(spr, act, LAYER_BODY, Some(entity));
 
-    entity_commands.insert((RoSprite::default(), PendingRenderLayers));
+    // NPCs are act-driven 8-direction sprites, identical in format to mobs, so they
+    // ride the mob render path (`sync_mob_body_layer`). Without a `MobSprite` no
+    // sync system would ever advance the layer past the raw first texture.
+    entity_commands.insert((MobSprite::default(), PendingRenderLayers));
 
     debug!(
         "spawn_npc_components: Requested animation for entity {:?} ({})",
@@ -199,7 +197,6 @@ type PendingRenderLayerQuery<'w, 's> = Query<
         Option<&'static mut PlayerAppearance>,
         Option<&'static mut PlayerSprite>,
         Option<&'static mut MobSprite>,
-        &'static mut RoSprite,
     ),
     With<PendingRenderLayers>,
 >;
@@ -249,7 +246,7 @@ pub fn finalize_render_layers(
             callback_entity
         );
 
-        let Ok((entity, maybe_appearance, maybe_player, maybe_mob, mut ro_sprite)) =
+        let Ok((entity, maybe_appearance, maybe_player, maybe_mob)) =
             pending_entities.get_mut(callback_entity)
         else {
             // Alive but no `PendingRenderLayers` yet -> its components haven't flushed;
@@ -276,18 +273,14 @@ pub fn finalize_render_layers(
         if let Some(mut appearance) = maybe_appearance {
             if pending.layer_tag == LAYER_BODY {
                 appearance.body = animation_handle.clone();
-                ro_sprite.animation = animation_handle.clone();
                 if let Some(mut player) = maybe_player {
                     player.animation = animation_handle.clone();
                 }
             } else if pending.layer_tag == LAYER_HEAD {
                 appearance.head = animation_handle.clone();
             }
-        } else {
-            ro_sprite.animation = animation_handle.clone();
-            if let Some(mut mob) = maybe_mob {
-                mob.animation = animation_handle.clone();
-            }
+        } else if let Some(mut mob) = maybe_mob {
+            mob.animation = animation_handle.clone();
         }
 
         let z_offset = layer_z_offset(pending.layer_tag, &config);
@@ -331,7 +324,7 @@ pub fn finalize_render_layers(
     // Only clear the pending marker once there's no outstanding work, so an entity
     // with a re-queued completion keeps `PendingRenderLayers` until it's finalized.
     if !pending_animations.has_pending() && !has_deferred {
-        for (entity, _, _, _, _) in pending_entities.iter() {
+        for (entity, _, _, _) in pending_entities.iter() {
             commands.entity(entity).remove::<PendingRenderLayers>();
         }
     }
