@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -143,6 +143,12 @@ pub mod envelope {
         UseItem(super::UseItem),
         #[prost(message, tag = "76")]
         ItemUseResult(super::ItemUseResult),
+        #[prost(message, tag = "77")]
+        StatusChange(super::StatusChange),
+        #[prost(message, tag = "78")]
+        UnitStateChange(super::UnitStateChange),
+        #[prost(message, tag = "79")]
+        SpecialEffect(super::SpecialEffect),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -541,6 +547,8 @@ pub struct UnitSpawn {
     pub dst_y: u32,
     #[prost(uint64, tag = "32")]
     pub move_start_time: u64,
+    #[prost(uint32, tag = "33")]
+    pub virtue: u32,
 }
 /// Server -> client, an entity left view (replaces RO ZC_NOTIFY_VANISH 0x0080).
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
@@ -549,6 +557,57 @@ pub struct UnitDespawn {
     pub gid: u32,
     #[prost(uint32, tag = "2")]
     pub reason: u32,
+}
+/// EFST icon bar — apply (on=true) / remove (on=false).
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct StatusChange {
+    /// target AID/GID
+    #[prost(uint32, tag = "1")]
+    pub unit_id: u32,
+    /// rAthena EFST id
+    #[prost(uint32, tag = "2")]
+    pub efst: u32,
+    #[prost(bool, tag = "3")]
+    pub on: bool,
+    /// 0 = infinite
+    #[prost(uint32, tag = "4")]
+    pub total_ms: u32,
+    /// 0 = infinite
+    #[prost(uint32, tag = "5")]
+    pub remain_ms: u32,
+    #[prost(int32, tag = "6")]
+    pub val1: i32,
+    #[prost(int32, tag = "7")]
+    pub val2: i32,
+    #[prost(int32, tag = "8")]
+    pub val3: i32,
+}
+/// Sprite ailment state — the unit's aggregate opt fields.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct UnitStateChange {
+    #[prost(uint32, tag = "1")]
+    pub unit_id: u32,
+    /// opt1  (single-valued)
+    #[prost(uint32, tag = "2")]
+    pub body_state: u32,
+    /// opt2  (bitmask)
+    #[prost(uint32, tag = "3")]
+    pub health_state: u32,
+    /// option (bitmask)
+    #[prost(uint32, tag = "4")]
+    pub effect_state: u32,
+    /// opt3  (bitmask)
+    #[prost(uint32, tag = "5")]
+    pub virtue: u32,
+}
+/// One-shot effect — fire and forget.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct SpecialEffect {
+    #[prost(uint32, tag = "1")]
+    pub source_id: u32,
+    /// rAthena EF_* id
+    #[prost(uint32, tag = "2")]
+    pub effect_id: u32,
 }
 /// Client -> server, request an entity's name (replaces RO CZ_REQNAME2 0x0368).
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
