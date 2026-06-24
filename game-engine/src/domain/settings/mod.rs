@@ -10,7 +10,8 @@ pub use events::ApplySettings;
 pub use persistence::settings_path;
 pub use resources::{
     resolution_label, resolution_next, resolution_prev, ActionBinds, AntiAliasing, AudioConfig,
-    DisplayMode, FpsCap, GraphicsSettings, KeyBind, Keybinds, Modifier, Settings, RESOLUTIONS,
+    DisplayMode, FpsCap, GraphicsSettings, KeyBind, Keybinds, Modifier, Settings, UiScaling,
+    RESOLUTIONS,
 };
 
 /// Owns the persisted `Settings` resource: loads `settings.ron` (or writes

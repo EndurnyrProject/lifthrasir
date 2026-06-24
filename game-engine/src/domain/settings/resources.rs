@@ -194,6 +194,63 @@ impl FpsCap {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
+pub enum UiScaling {
+    P80,
+    #[default]
+    P100,
+    P125,
+    P150,
+    P175,
+    P200,
+}
+
+impl UiScaling {
+    /// The variants in stepper order.
+    pub const ALL: [UiScaling; 6] = [
+        UiScaling::P80,
+        UiScaling::P100,
+        UiScaling::P125,
+        UiScaling::P150,
+        UiScaling::P175,
+        UiScaling::P200,
+    ];
+
+    /// Display label for the stepper value.
+    pub fn label(self) -> &'static str {
+        match self {
+            UiScaling::P80 => "80%",
+            UiScaling::P100 => "100%",
+            UiScaling::P125 => "125%",
+            UiScaling::P150 => "150%",
+            UiScaling::P175 => "175%",
+            UiScaling::P200 => "200%",
+        }
+    }
+
+    /// Next variant, clamped at the last.
+    pub fn next(self) -> UiScaling {
+        cycle_next(&UiScaling::ALL, self)
+    }
+
+    /// Previous variant, clamped at the first.
+    pub fn prev(self) -> UiScaling {
+        cycle_prev(&UiScaling::ALL, self)
+    }
+
+    /// Maps to the `bevy::ui::UiScale` factor Task 2 inserts as a resource.
+    pub fn to_scale_factor(self) -> f32 {
+        match self {
+            UiScaling::P80 => 0.8,
+            UiScaling::P100 => 1.0,
+            UiScaling::P125 => 1.25,
+            UiScaling::P150 => 1.5,
+            UiScaling::P175 => 1.75,
+            UiScaling::P200 => 2.0,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub struct GraphicsSettings {
     pub display_mode: DisplayMode,
@@ -201,6 +258,8 @@ pub struct GraphicsSettings {
     pub antialiasing: AntiAliasing,
     pub vsync: bool,
     pub fps_cap: FpsCap,
+    #[serde(default)]
+    pub ui_scaling: UiScaling,
 }
 
 impl Default for GraphicsSettings {
@@ -211,6 +270,7 @@ impl Default for GraphicsSettings {
             antialiasing: AntiAliasing::Fxaa,
             vsync: true,
             fps_cap: FpsCap::F60,
+            ui_scaling: UiScaling::P100,
         }
     }
 }
@@ -408,6 +468,7 @@ mod tests {
         assert_eq!(s.graphics.antialiasing, AntiAliasing::Fxaa);
         assert!(s.graphics.vsync);
         assert_eq!(s.graphics.fps_cap, FpsCap::F60);
+        assert_eq!(s.graphics.ui_scaling, UiScaling::P100);
         assert_eq!(s.audio.bgm_volume, 0.70);
         assert_eq!(s.audio.sfx_volume, 0.85);
         assert_eq!(s.audio.ambient_volume, 0.55);
@@ -476,6 +537,30 @@ mod tests {
         assert_eq!(FpsCap::F30.prev(), FpsCap::F30);
         assert_eq!(FpsCap::F144.label(), "144");
         assert_eq!(FpsCap::Unlimited.label(), "Unlimited");
+    }
+
+    #[test]
+    fn graphics_without_ui_scaling_defaults_to_100() {
+        let legacy = "(display_mode:Fullscreen,resolution:(1280,720),antialiasing:Off,vsync:false,fps_cap:F120)";
+        let decoded: GraphicsSettings = ron::from_str(legacy).expect("deserialize legacy graphics");
+        assert_eq!(decoded.ui_scaling, UiScaling::P100);
+    }
+
+    #[test]
+    fn ui_scaling_cycles_and_clamps() {
+        assert_eq!(UiScaling::P80.next(), UiScaling::P100);
+        assert_eq!(UiScaling::P200.next(), UiScaling::P200);
+        assert_eq!(UiScaling::P100.prev(), UiScaling::P80);
+        assert_eq!(UiScaling::P80.prev(), UiScaling::P80);
+        assert_eq!(UiScaling::P125.label(), "125%");
+        assert_eq!(UiScaling::P200.label(), "200%");
+    }
+
+    #[test]
+    fn ui_scaling_maps_to_scale_factor() {
+        assert_eq!(UiScaling::P80.to_scale_factor(), 0.8);
+        assert_eq!(UiScaling::P100.to_scale_factor(), 1.0);
+        assert_eq!(UiScaling::P200.to_scale_factor(), 2.0);
     }
 
     #[test]

@@ -10,7 +10,7 @@ use game_engine::domain::entities::hover::HoveredEntity;
 use game_engine::domain::entities::markers::LocalPlayer;
 
 use crate::theme;
-use crate::worldspace::WorldspaceFont;
+use crate::worldspace::{viewport_to_ui, WorldspaceFont};
 
 const NAMEPLATE_WIDTH: f32 = 220.0;
 const NAMEPLATE_FONT_SIZE: f32 = 13.0;
@@ -121,6 +121,7 @@ fn sync_nameplates(
 fn follow_targets(
     camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     targets: Query<&GlobalTransform>,
+    ui_scale: Res<UiScale>,
     mut nameplates: Query<(Entity, &Nameplate, &mut Node, &mut Visibility)>,
     mut commands: Commands,
 ) {
@@ -134,8 +135,9 @@ fn follow_targets(
         };
         match camera.world_to_viewport(camera_transform, target_transform.translation()) {
             Ok(screen) => {
-                node.left = Val::Px(screen.x - NAMEPLATE_WIDTH / 2.0);
-                node.top = Val::Px(screen.y + NAMEPLATE_FOOT_GAP);
+                let pos = viewport_to_ui(screen, &ui_scale);
+                node.left = Val::Px(pos.x - NAMEPLATE_WIDTH / 2.0);
+                node.top = Val::Px(pos.y + NAMEPLATE_FOOT_GAP);
                 *visibility = Visibility::Visible;
             }
             Err(_) => *visibility = Visibility::Hidden,

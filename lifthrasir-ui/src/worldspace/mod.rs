@@ -18,6 +18,15 @@ pub mod nameplates;
 #[derive(Resource)]
 pub struct WorldspaceFont(pub Handle<Font>);
 
+/// Maps a `Camera::world_to_viewport` result (logical viewport pixels) into the
+/// `bevy_ui` layout space. The UI lays out at `window.scale_factor() * UiScale`,
+/// so its `Val::Px` coordinates are the logical viewport divided by the UI
+/// scale; without this, projected overlays drift off their sprites at any
+/// scale other than 100%.
+pub fn viewport_to_ui(viewport: Vec2, ui_scale: &UiScale) -> Vec2 {
+    viewport / ui_scale.0
+}
+
 pub struct WorldspaceUiPlugin;
 
 impl Plugin for WorldspaceUiPlugin {

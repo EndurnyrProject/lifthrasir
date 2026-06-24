@@ -95,6 +95,8 @@ pub fn apply_graphics(
     for ui_camera in &ui_cameras {
         commands.entity(ui_camera).insert(ui_msaa);
     }
+
+    commands.insert_resource(UiScale(graphics.ui_scaling.to_scale_factor()));
 }
 
 /// Mirrors the persisted `Settings.audio` into the live `AudioSettings` resource

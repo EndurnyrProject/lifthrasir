@@ -597,6 +597,7 @@ enum GraphicsField {
     Antialiasing,
     Vsync,
     FpsCap,
+    UiScaling,
 }
 
 /// Direction a stepper arrow moves the value.
@@ -639,6 +640,7 @@ fn field_label(graphics: &GraphicsSettings, field: GraphicsField) -> String {
         GraphicsField::Resolution => resolution_label(graphics.resolution),
         GraphicsField::Antialiasing => graphics.antialiasing.label().to_string(),
         GraphicsField::FpsCap => graphics.fps_cap.label().to_string(),
+        GraphicsField::UiScaling => graphics.ui_scaling.label().to_string(),
         GraphicsField::DisplayMode | GraphicsField::Vsync => String::new(),
     }
 }
@@ -660,11 +662,17 @@ fn step_field(graphics: &mut GraphicsSettings, field: GraphicsField, dir: StepDi
         }
         (GraphicsField::FpsCap, StepDir::Next) => graphics.fps_cap = graphics.fps_cap.next(),
         (GraphicsField::FpsCap, StepDir::Prev) => graphics.fps_cap = graphics.fps_cap.prev(),
+        (GraphicsField::UiScaling, StepDir::Next) => {
+            graphics.ui_scaling = graphics.ui_scaling.next()
+        }
+        (GraphicsField::UiScaling, StepDir::Prev) => {
+            graphics.ui_scaling = graphics.ui_scaling.prev()
+        }
         _ => {}
     }
 }
 
-/// Builds the five Graphics rows under `body`.
+/// Builds the Graphics rows under `body`.
 fn spawn_graphics_rows(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
     spawn_section(commands, body, "Display", font);
 
@@ -702,6 +710,17 @@ fn spawn_graphics_rows(commands: &mut Commands, body: Entity, font: &Handle<Font
         font,
     );
     spawn_stepper(commands, ctrl, GraphicsField::FpsCap, font);
+
+    spawn_section(commands, body, "Interface", font);
+
+    let ctrl = spawn_row(
+        commands,
+        body,
+        "UI Scaling",
+        "Scales the interface for high resolutions",
+        font,
+    );
+    spawn_stepper(commands, ctrl, GraphicsField::UiScaling, font);
 }
 
 /// A gold uppercase section caption with a trailing hairline.

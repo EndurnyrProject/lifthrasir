@@ -9,7 +9,7 @@ use game_engine::core::state::GameState;
 use game_engine::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
 
 use crate::theme;
-use crate::worldspace::WorldspaceFont;
+use crate::worldspace::{viewport_to_ui, WorldspaceFont};
 
 const LIFETIME_SECS: f32 = 0.9;
 const RISE_SPEED_PX: f32 = 60.0;
@@ -77,6 +77,7 @@ fn spawn_damage_numbers(
     mut commands: Commands,
     camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     targets: Query<&GlobalTransform>,
+    ui_scale: Res<UiScale>,
     font: Res<WorldspaceFont>,
     mut counter: ResMut<DamageSpawnCounter>,
 ) {
@@ -91,9 +92,10 @@ fn spawn_damage_numbers(
         else {
             continue;
         };
+        let pos = viewport_to_ui(screen, &ui_scale);
 
-        let left = screen.x + horizontal_jitter(counter.0);
-        let top = screen.y - SPAWN_OFFSET_Y;
+        let left = pos.x + horizontal_jitter(counter.0);
+        let top = pos.y - SPAWN_OFFSET_Y;
         counter.0 = counter.0.wrapping_add(1);
 
         commands.spawn((
