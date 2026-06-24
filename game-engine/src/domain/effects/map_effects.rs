@@ -11,6 +11,8 @@
 //! Like every effect path this is non-critical: a missing catalog or asset
 //! early-returns and an unmapped effect skips, never panicking.
 
+use std::collections::BTreeMap;
+
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
@@ -57,16 +59,17 @@ pub fn spawn_map_effects(
 
         let (map_width, map_height) = get_map_dimensions_from_ground(&ground_asset.ground);
 
+        // Count unmapped effect_types so we warn once per distinct id, not once
+        // per object (a map can carry dozens of the same emitter).
+        let mut unmapped: BTreeMap<u32, usize> = BTreeMap::new();
+
         for obj in &world_asset.world.objects {
             let RswObject::Effect(effect) = obj else {
                 continue;
             };
 
             let Some(descriptor) = catalog.get(effect.effect_type) else {
-                warn!(
-                    "No map effect mapping for effect_type {} (name='{}'); skipping",
-                    effect.effect_type, effect.name
-                );
+                *unmapped.entry(effect.effect_type).or_default() += 1;
                 continue;
             };
 
@@ -81,6 +84,12 @@ pub fn spawn_map_effects(
                 None,
             );
             commands.entity(spawned).insert(MapScoped);
+        }
+
+        for (effect_type, count) in unmapped {
+            warn!(
+                "No map effect mapping for effect_type {effect_type} ({count} objects); skipping"
+            );
         }
 
         commands.entity(entity).insert(MapEffectsSpawned);
