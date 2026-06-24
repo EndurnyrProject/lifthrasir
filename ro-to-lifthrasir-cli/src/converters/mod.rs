@@ -1,5 +1,6 @@
 pub mod item;
 pub mod job;
+pub mod skill;
 
 use crate::grf_vfs::GrfVfs;
 use anyhow::Context;
@@ -17,7 +18,11 @@ pub(crate) fn read_system_en(rel: &str) -> anyhow::Result<Vec<u8>> {
 
 type ConverterFn = fn(&GrfVfs, &Path) -> anyhow::Result<()>;
 
-const CONVERTERS: &[(&str, ConverterFn)] = &[("job", job::run), ("item", item::run)];
+const CONVERTERS: &[(&str, ConverterFn)] = &[
+    ("job", job::run),
+    ("item", item::run),
+    ("skill", skill::run),
+];
 
 pub fn run(only: Option<&str>, vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
     if let Some(name) = only {
