@@ -1,5 +1,6 @@
 use crate::core::GameState;
 use crate::domain::entities::markers::LocalPlayer;
+use crate::domain::entities::movement::events::{MovementStopped, StopReason};
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::infrastructure::networking::quic::zone::{QuicZoneState, ZonePhase};
 use crate::infrastructure::networking::zone_messages::MapChangeRequested;
@@ -49,6 +50,13 @@ pub fn handle_map_change(
 /// the existing player to the destination cell, then clears the `Warping` flag. It is
 /// a no-op on first entry (no `Warping` present). `spawn_coords_to_world_position`
 /// ignores the map-dim args, so `0, 0` is correct.
+///
+/// Warps fire OnTouch, so the player is usually mid-walk when warped. The surviving
+/// `LocalPlayer` keeps its `MovementTarget`/`WalkablePath` aimed at the *source* map's
+/// destination cell; left in place, `interpolate_movement_system` would yank the player
+/// off the warp cell toward that stale target on the new map. We trigger `MovementStopped`
+/// to reuse the standard stop cleanup (drops the target/path, resets to Idle) — a no-op
+/// when the player wasn't moving.
 #[auto_add_system(
     plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
     schedule = OnEnter(GameState::InGame)
@@ -57,15 +65,21 @@ pub fn reposition_local_player(
     mut commands: Commands,
     warping: Option<Res<Warping>>,
     ctx: Res<MapSpawnContext>,
-    mut players: Query<&mut Transform, With<LocalPlayer>>,
+    mut players: Query<(Entity, &mut Transform), With<LocalPlayer>>,
 ) {
     if warping.is_none() {
         return;
     }
 
     match players.single_mut() {
-        Ok(mut transform) => {
+        Ok((entity, mut transform)) => {
             transform.translation = spawn_coords_to_world_position(ctx.spawn_x, ctx.spawn_y, 0, 0);
+            commands.trigger(MovementStopped {
+                entity,
+                x: ctx.spawn_x,
+                y: ctx.spawn_y,
+                reason: StopReason::ClientInterrupted,
+            });
         }
         Err(_) => warn!("reposition_local_player: warping but no LocalPlayer entity found"),
     }
@@ -146,6 +160,37 @@ mod tests {
             expected
         );
         assert!(app.world().get_resource::<Warping>().is_none());
+    }
+
+    #[test]
+    fn reposition_emits_movement_stopped_for_warped_player() {
+        #[derive(Resource, Default)]
+        struct StoppedFor(Option<Entity>);
+
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.init_state::<GameState>();
+        app.insert_resource(MapSpawnContext::new("geffen".into(), 50, 60, 42));
+        app.insert_resource(Warping);
+        app.init_resource::<StoppedFor>();
+        app.add_observer(
+            |trigger: On<MovementStopped>, mut stopped: ResMut<StoppedFor>| {
+                stopped.0 = Some(trigger.event().entity);
+            },
+        );
+        app.add_systems(OnEnter(GameState::InGame), reposition_local_player);
+
+        let player = app
+            .world_mut()
+            .spawn((LocalPlayer, Transform::from_xyz(1.0, 2.0, 3.0)))
+            .id();
+
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::InGame);
+        app.update();
+
+        assert_eq!(app.world().resource::<StoppedFor>().0, Some(player));
     }
 
     #[test]
