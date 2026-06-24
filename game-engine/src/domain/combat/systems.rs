@@ -121,7 +121,7 @@ pub fn process_combat_actions(
     }
 }
 
-fn start_attack_animation(
+pub(crate) fn start_attack_animation(
     commands: &mut Commands,
     behaviors: &mut Query<BehaviorMut<AnimationState>>,
     transforms: &Query<&Transform>,

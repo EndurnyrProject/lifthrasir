@@ -4,7 +4,7 @@ pub mod resources;
 pub mod systems;
 
 pub use events::{
-    MuteAmbienceEvent, MuteBgmEvent, MuteSfxEvent, PlayBgmEvent, PlayMobSfx,
+    MuteAmbienceEvent, MuteBgmEvent, MuteSfxEvent, PlayBgmEvent, PlayMobSfx, PlaySkillSfx,
     SetAmbienceVolumeEvent, SetBgmVolumeEvent, SetSfxVolumeEvent, StopBgmEvent,
 };
 pub use map_sounds::{map_sound_path, MapSound, MapSoundSource, MapSoundState, MapSoundsSpawned};

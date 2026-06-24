@@ -1,6 +1,6 @@
 use super::{
     events::{
-        MuteAmbienceEvent, MuteBgmEvent, MuteSfxEvent, PlayBgmEvent, PlayMobSfx,
+        MuteAmbienceEvent, MuteBgmEvent, MuteSfxEvent, PlayBgmEvent, PlayMobSfx, PlaySkillSfx,
         SetAmbienceVolumeEvent, SetBgmVolumeEvent, SetSfxVolumeEvent, StopBgmEvent,
     },
     resources::{AmbienceChannel, AudioSettings, BgmManager, BgmNameTable, SfxChannel},
@@ -302,6 +302,37 @@ pub fn play_mob_sfx(
         let source: Handle<AudioSource> = asset_server.load(&path);
         let handle = sfx_channel.play(source).handle();
         emitter.instances.push(handle);
+    }
+}
+
+/// Play skill sounds on the same `SfxChannel` as mob SFX. Mirrors
+/// [`play_mob_sfx`] but inserts a `SpatialAudioEmitter` on the emitter if it
+/// lacks one, since effect anchors (the spawned effect entity, or a player
+/// caster) are not guaranteed to carry one.
+#[auto_add_system(
+    plugin = crate::app::audio_plugin::AudioPlugin,
+    schedule = Update
+)]
+pub fn play_skill_sfx(
+    mut commands: Commands,
+    mut events: MessageReader<PlaySkillSfx>,
+    asset_server: Res<AssetServer>,
+    sfx_channel: Res<AudioChannel<SfxChannel>>,
+    mut emitters: Query<&mut SpatialAudioEmitter>,
+) {
+    for event in events.read() {
+        let path = mob_sfx_path(&event.sound);
+        let source: Handle<AudioSource> = asset_server.load(&path);
+        let handle = sfx_channel.play(source).handle();
+
+        match emitters.get_mut(event.emitter) {
+            Ok(mut emitter) => emitter.instances.push(handle),
+            Err(_) => {
+                commands.entity(event.emitter).insert(SpatialAudioEmitter {
+                    instances: vec![handle],
+                });
+            }
+        }
     }
 }
 

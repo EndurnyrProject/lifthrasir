@@ -69,6 +69,20 @@ pub struct PlayMobSfx {
     pub sound: String,
 }
 
+/// Event requesting a skill sound effect, anchored to a spatial emitter entity.
+/// Unlike [`PlayMobSfx`], the player handler attaches a `SpatialAudioEmitter` to
+/// the emitter if it lacks one (skill effect entities and player casters are not
+/// guaranteed to carry one), so it works for any anchor entity.
+#[derive(Message, Debug, Clone, Reflect)]
+#[reflect(Debug)]
+#[auto_add_event(plugin = crate::app::audio_plugin::AudioPlugin)]
+pub struct PlaySkillSfx {
+    /// Entity the sound is anchored to (the effect's anchor unit or cell entity).
+    pub emitter: Entity,
+    /// Sound path relative to `data/wav/` (e.g. "effect/_heal_effect.wav").
+    pub sound: String,
+}
+
 /// Event to change the SFX volume.
 #[derive(Message, Debug, Clone, Copy, Reflect)]
 #[reflect(Debug)]
