@@ -137,3 +137,36 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: gh release upload "${{ needs.release-please.outputs.tag_name }}" artifacts/* --clobber
+
+  notify-discord:
+    needs: [release-please, upload]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release notes
+        id: release_notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(gh release view "${{ needs.release-please.outputs.tag_name }}" \
+            --repo ${{ github.repository }} \
+            --json body -q .body)
+          # Truncate to 4000 chars to stay within Discord embed limits
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${BODY:0:4000}" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Post to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+        run: |
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "embeds": [{
+                "title": "🚀 Lifthrasir ${{ needs.release-please.outputs.tag_name }} released",
+                "description": ${{ toJSON(steps.release_notes.outputs.body) }},
+                "color": 5814783,
+                "url": "https://github.com/${{ github.repository }}/releases/tag/${{ needs.release-please.outputs.tag_name }}",
+                "footer": { "text": "GitHub Actions" }
+              }]
+            }'
