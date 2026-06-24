@@ -4,6 +4,7 @@ pub mod authentication;
 pub mod camera;
 pub mod character;
 pub mod combat;
+pub mod effects;
 pub mod entities;
 pub mod input;
 pub mod inventory;
