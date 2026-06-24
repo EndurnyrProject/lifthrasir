@@ -1,0 +1,37 @@
+// RSW map effects: effect_type -> STR effect descriptor.
+//
+// The key is the RSW `EFFECT` object's `effect_type`, which is the rAthena
+// `e_special_effects` (EF_*) id -- the same id space aesir's `SpecialEffect`
+// packet uses (see aesir `Aesir.ZoneServer.Mmo.EffectId`). `spawn_map_effects`
+// looks each one up and plays it as a persistent, position-anchored STR effect.
+//
+// Caveats:
+//   - Only effects backed by an STR file can play here. Many classic ambient
+//     effects (smoke=44, firefly=45, sandwind=46, torch=47, ...) are hardcoded
+//     particle systems in the original client with no STR -- leave them
+//     unmapped; they need bespoke emitters, not this path.
+//   - `placement` is ignored for map effects (they always anchor at the RSW
+//     position); only `str`, `sound`, `color`, and `repeating` matter.
+//   - Unmapped `effect_type`s are logged by `spawn_map_effects`; use those logs
+//     to discover which ids real maps actually reference, then add them here.
+//
+// The entries below are working examples that reuse STR assets already shipped
+// for skills; replace/extend them as real map effect_types are observed.
+(
+    effects: {
+        89: ( // EF_STORMGUST
+            str: "stormgust.str",
+            sound: None,
+            placement: Ground,
+            color: (0.6, 0.7, 1.0, 1.0),
+            repeating: true,
+        ),
+        113: ( // EF_MAGNUS
+            str: "magnus.str",
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+    },
+)

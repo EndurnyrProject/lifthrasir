@@ -1,4 +1,7 @@
-use super::catalog::{process_loaded_skill_effect_data, start_loading_skill_effect_data};
+use super::catalog::{
+    process_loaded_map_effect_data, process_loaded_skill_effect_data,
+    start_loading_map_effect_data, start_loading_skill_effect_data,
+};
 use crate::domain::effects::{
     advance_effect_timers, despawn_finished_effects, follow_effect_anchor,
     initialize_effect_layers, on_ground_skill, on_skill_damage, on_skill_effect,
@@ -15,11 +18,18 @@ pub struct EffectsPlugin;
 impl Plugin for EffectsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<EffectMaterial>::default())
-            .add_systems(Startup, start_loading_skill_effect_data)
+            .add_systems(
+                Startup,
+                (
+                    start_loading_skill_effect_data,
+                    start_loading_map_effect_data,
+                ),
+            )
             .add_systems(
                 Update,
                 (
                     process_loaded_skill_effect_data,
+                    process_loaded_map_effect_data,
                     // The three skill-event consumers spawn the effect instances.
                     (on_skill_effect, on_skill_damage, on_ground_skill),
                     follow_effect_anchor,

@@ -38,13 +38,13 @@ fn resolve_gid(network_entities: &Query<(Entity, &NetworkEntity)>, gid: u32) -> 
 }
 
 /// The descriptor's RGBA tint as a Bevy `Color` (the data crate stays Bevy-free).
-fn descriptor_tint(descriptor: &EffectDescriptor) -> Color {
+pub(crate) fn descriptor_tint(descriptor: &EffectDescriptor) -> Color {
     let [r, g, b, a] = descriptor.color;
     Color::srgba(r, g, b, a)
 }
 
 /// Load the descriptor's STR effect through the registered `.str` loader.
-fn load_effect(
+pub(crate) fn load_effect(
     asset_server: &AssetServer,
     descriptor: &EffectDescriptor,
 ) -> Handle<LoadedEffectAsset> {
