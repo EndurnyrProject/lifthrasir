@@ -29,6 +29,31 @@ pub struct ItemData {
     pub items: BTreeMap<u32, ItemInfo>,
 }
 
+/// Per-skill presentation metadata decoded from `skillinfolist.lub` and `skilldescript.lub`.
+/// All strings are valid UTF-8 (EUC-KR decoded by the CLI converter).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkillMeta {
+    /// SKID constant, e.g. "SM_BASH". Base for the icon filename.
+    pub name: String,
+    /// Display name, e.g. "Bash".
+    pub display_name: String,
+    /// Raw tooltip lines (color codes like ^RRGGBB kept; UI strips at render).
+    pub description: Vec<String>,
+    /// skillinfolist MaxLv.
+    pub max_level: u8,
+    /// skillinfolist SpAmount, per level (index 0 = level 1). Empty for passives / absent.
+    pub sp_cost: Vec<u16>,
+    /// skillinfolist AttackRange, per level (index 0 = level 1). Empty when absent.
+    pub attack_range: Vec<u8>,
+}
+
+/// Full skill catalog: skill id -> presentation metadata.
+/// Keyed by `BTreeMap` for stable, key-ordered RON diffs.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SkillData {
+    pub skills: BTreeMap<u32, SkillMeta>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,5 +110,40 @@ mod tests {
         let deserialized: ItemData = ron::from_str(&serialized).expect("deserialize");
 
         assert_eq!(original.items, deserialized.items);
+    }
+
+    #[test]
+    fn skill_data_round_trip() {
+        let mut original = SkillData::default();
+        original.skills.insert(
+            5,
+            SkillMeta {
+                name: "SM_BASH".to_string(),
+                display_name: "Bash".to_string(),
+                description: vec![
+                    "Strike an enemy with your weapon.".to_string(),
+                    "ATK +300% at level 10.".to_string(),
+                ],
+                max_level: 10,
+                sp_cost: vec![8, 8, 8, 8, 8, 15, 15, 15, 15, 15],
+                attack_range: vec![1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            },
+        );
+        original.skills.insert(
+            8,
+            SkillMeta {
+                name: "SM_ENDURE".to_string(),
+                display_name: "Endure".to_string(),
+                description: vec!["Ignore MDEF interruptions.".to_string()],
+                max_level: 10,
+                sp_cost: vec![],
+                attack_range: vec![],
+            },
+        );
+
+        let serialized = ron::to_string(&original).expect("serialize");
+        let deserialized: SkillData = ron::from_str(&serialized).expect("deserialize");
+
+        assert_eq!(original.skills, deserialized.skills);
     }
 }
