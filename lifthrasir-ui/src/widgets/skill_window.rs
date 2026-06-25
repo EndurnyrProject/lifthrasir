@@ -24,6 +24,7 @@ use game_engine::infrastructure::skill::SkillCatalog;
 use leafwing_input_manager::prelude::ActionState;
 use std::collections::HashMap;
 
+use crate::rich_text::spawn_colored_text;
 use crate::theme;
 use crate::widgets::draggable::make_draggable;
 
@@ -436,8 +437,8 @@ fn spawn_body(commands: &mut Commands, root: Entity) {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
             row_gap: Val::Px(2.0),
-            width: Val::Px(34.0),
-            padding: UiRect::axes(Val::ZERO, Val::Px(8.0)),
+            width: Val::Px(86.0),
+            padding: UiRect::axes(Val::Px(4.0), Val::Px(8.0)),
             border: UiRect {
                 right: Val::Px(1.0),
                 ..default()
@@ -973,7 +974,6 @@ fn spawn_stepper_arrow(
         .id();
     commands.spawn((
         theme::label(glyph, font.clone(), 9.0, color),
-        Pickable::IGNORE,
         ChildOf(button),
     ));
     commands.entity(button).observe(on_stepper);
@@ -1232,10 +1232,7 @@ fn spawn_info_content(
 
     if let Some(meta) = catalog.and_then(|c| c.get(skill_id)) {
         for line in &meta.description {
-            commands.spawn((
-                theme::label(line.clone(), font.clone(), 10.0, theme::TEXT_DIM),
-                ChildOf(panel),
-            ));
+            spawn_colored_text(commands, panel, line, font.clone(), 10.0, theme::TEXT_DIM);
         }
     }
 }
