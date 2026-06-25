@@ -26,8 +26,9 @@ impl GrfSource {
     }
 
     fn normalize_path(&self, path: &str) -> String {
-        // GRF files use backslashes as separators
-        path.replace('/', "\\")
+        // GRF files use backslashes as separators, and lookups are
+        // case-insensitive (the entry map is ASCII-lowercased on load).
+        path.replace('/', "\\").to_ascii_lowercase()
     }
 }
 

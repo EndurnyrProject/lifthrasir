@@ -128,10 +128,12 @@ impl GrfFile {
             header.file_count.saturating_sub(header.skip + 7),
         )?;
 
-        // Create filename -> index mapping for fast lookups
+        // Create filename -> index mapping for fast lookups. Keys are
+        // ASCII-lowercased so lookups are case-insensitive: GND/RSW/RSM assets
+        // often declare paths in a different case than the GRF stores them.
         let mut entry_map = HashMap::new();
         for (index, entry) in entries.iter().enumerate() {
-            entry_map.insert(entry.filename.clone(), index);
+            entry_map.insert(entry.filename.to_ascii_lowercase(), index);
         }
 
         Ok(GrfFile {
@@ -246,13 +248,7 @@ impl GrfFile {
     }
 
     pub fn get_file(&self, filename: &str) -> Option<Vec<u8>> {
-        let entry_index = if let Some(&index) = self.entry_map.get(filename) {
-            index
-        } else {
-            self.entries
-                .iter()
-                .position(|entry| entry.filename.eq_ignore_ascii_case(filename))?
-        };
+        let entry_index = *self.entry_map.get(&filename.to_ascii_lowercase())?;
         let entry = &self.entries[entry_index];
 
         // Check if it's actually a file (not a directory)
