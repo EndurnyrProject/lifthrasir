@@ -1,6 +1,4 @@
 pub mod components;
-#[cfg(debug_assertions)]
-pub mod debug;
 pub mod map_effects;
 pub mod systems;
 pub mod triggers;

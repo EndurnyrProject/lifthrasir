@@ -45,11 +45,5 @@ impl Plugin for EffectsPlugin {
                         .chain(),
                 ),
             );
-
-        #[cfg(debug_assertions)]
-        app.add_systems(
-            Update,
-            crate::domain::effects::debug::debug_trigger_effect_on_keypress,
-        );
     }
 }
