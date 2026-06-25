@@ -74,6 +74,7 @@ impl AssetLoader for StrEffectLoader {
                     .into_iter()
                     .map(|frame| LoadedFrame {
                         frame_index: frame.frame_index.max(0) as usize,
+                        offset: Vec2::new(frame.offset.x, frame.offset.y),
                         xy: frame.xy,
                         uv: frame.uv,
                         texture_index: frame.texture_index.max(0.0) as usize,

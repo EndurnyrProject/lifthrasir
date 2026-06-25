@@ -1,6 +1,10 @@
 use crate::infrastructure::effect::EffectBlend;
+use bevy::mesh::MeshVertexBufferLayoutRef;
+use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
-use bevy::render::render_resource::AsBindGroup;
+use bevy::render::render_resource::{
+    AsBindGroup, RenderPipelineDescriptor, SpecializedMeshPipelineError,
+};
 use bevy::shader::ShaderRef;
 
 /// Minimal unlit material for STR skill-effect billboards. The fragment shader
@@ -22,6 +26,21 @@ impl Material for EffectMaterial {
 
     fn alpha_mode(&self) -> AlphaMode {
         self.alpha_mode
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        // Effect billboards are 2D quads seen from either side, and both the
+        // per-frame Y-flip and the STR layer rotation flip triangle winding.
+        // Disable back-face culling (as the sprite material does) so the whole
+        // quad always renders; otherwise the back-facing half of each effect
+        // sprite is culled — e.g. the magnus angel's head.
+        descriptor.primitive.cull_mode = None;
+        Ok(())
     }
 }
 

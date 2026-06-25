@@ -14,11 +14,11 @@ pub enum EffectBlend {
     Multiply,
 }
 
-// D3D / wgpu blend factor ints as they appear in STR frame data, see
-// `parse_blend_factor` in korangar's effect loader (repo-root reference.xml).
+// D3D / wgpu blend factor ints as they appear in STR frame data
 const BLEND_ONE: i32 = 2;
 const BLEND_SRC_ALPHA: i32 = 5;
 const BLEND_ONE_MINUS_SRC_ALPHA: i32 = 6;
+const BLEND_DEST_ALPHA: i32 = 7;
 const BLEND_ZERO: i32 = 1;
 const BLEND_DST: i32 = 9;
 const BLEND_SRC: i32 = 3;
@@ -26,6 +26,11 @@ const BLEND_SRC: i32 = 3;
 /// Decode a raw STR `(src, dst)` blend factor pair into an `EffectBlend`.
 ///
 /// - `SrcAlpha -> One` (the common additive case) -> `Add`.
+/// - `SrcAlpha -> DestAlpha` -> `Add`. This is the dominant pair in real STR
+///   effects (e.g. magnus has it on ~88% of frames). The RO client renders to a
+///   backbuffer whose alpha is 1, so `dst * DestAlpha == dst * 1`, making it
+///   additive in practice; decoding it as alpha-blend leaves every layer's
+///   opaque black-background BMP visible.
 /// - `SrcAlpha -> OneMinusSrcAlpha` (standard alpha) -> `Blend`.
 /// - anything that multiplies source by a destination colour term -> `Multiply`.
 ///
@@ -33,7 +38,7 @@ const BLEND_SRC: i32 = 3;
 /// fallback (effects are non-critical and degrade rather than panic, per D6).
 pub fn decode_blend(src: i32, dst: i32) -> EffectBlend {
     match (src, dst) {
-        (BLEND_SRC_ALPHA, BLEND_ONE) => EffectBlend::Add,
+        (BLEND_SRC_ALPHA, BLEND_ONE) | (BLEND_SRC_ALPHA, BLEND_DEST_ALPHA) => EffectBlend::Add,
         (BLEND_SRC_ALPHA, BLEND_ONE_MINUS_SRC_ALPHA) => EffectBlend::Blend,
         // Multiply family: destination colour is scaled by the source (or the
         // source is zeroed and scaled by a destination colour term).
@@ -46,6 +51,10 @@ pub fn decode_blend(src: i32, dst: i32) -> EffectBlend {
 #[derive(Debug, Clone)]
 pub struct LoadedFrame {
     pub frame_index: usize,
+    /// Per-frame screen-space position of this layer relative to the STR
+    /// authoring origin (`EFFECT_ORIGIN`). Unlike `xy`, which is centred on
+    /// zero, this is what scatters a multi-layer effect across its area.
+    pub offset: Vec2,
     pub xy: [f32; 8],
     pub uv: [f32; 8],
     pub texture_index: usize,
@@ -77,9 +86,6 @@ pub struct LoadedEffectAsset {
 /// Expand a layer's sparse `frame_index`es into a dense `max_key`-length map,
 /// where each key slot holds the index (into the layer `frames` slice) of the
 /// frame active at that key, or `None` if no frame is active.
-///
-/// Ported verbatim from korangar's effect loader (reference.xml) so the runtime
-/// frame interpolation (Task 6) stays consistent with the same index semantics.
 pub fn build_frame_index_map(frames: &[StrFrame], max_key: usize) -> Vec<Option<usize>> {
     let mut map: Vec<Option<usize>> = Vec::with_capacity(max_key);
 
@@ -114,6 +120,13 @@ mod tests {
     fn decode_blend_additive_is_add() {
         // SrcAlpha (5) -> One (2)
         assert_eq!(decode_blend(5, 2), EffectBlend::Add);
+    }
+
+    #[test]
+    fn decode_blend_src_alpha_to_dest_alpha_is_add() {
+        // SrcAlpha (5) -> DestAlpha (7): the dominant real-STR pair, additive
+        // against an alpha-1 backbuffer.
+        assert_eq!(decode_blend(5, 7), EffectBlend::Add);
     }
 
     #[test]

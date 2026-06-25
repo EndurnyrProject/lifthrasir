@@ -5,7 +5,7 @@ use super::catalog::{
 use crate::domain::effects::{
     advance_effect_timers, despawn_finished_effects, follow_effect_anchor,
     initialize_effect_layers, on_ground_skill, on_skill_damage, on_skill_effect,
-    rebuild_effect_layers,
+    order_effect_layers_by_depth, rebuild_effect_layers,
 };
 use crate::presentation::rendering::effect_material::EffectMaterial;
 use bevy::prelude::*;
@@ -39,10 +39,17 @@ impl Plugin for EffectsPlugin {
                         advance_effect_timers,
                         initialize_effect_layers,
                         rebuild_effect_layers,
+                        order_effect_layers_by_depth,
                         despawn_finished_effects,
                     )
                         .chain(),
                 ),
             );
+
+        #[cfg(debug_assertions)]
+        app.add_systems(
+            Update,
+            crate::domain::effects::debug::debug_trigger_effect_on_keypress,
+        );
     }
 }

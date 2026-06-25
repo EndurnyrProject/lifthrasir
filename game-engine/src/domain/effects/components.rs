@@ -32,6 +32,10 @@ pub enum EffectAnchor {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct EffectLayer {
     pub layer_index: usize,
+    /// True for additive (glow) layers. Solid (alpha-blended / multiply) layers
+    /// are depth-biased in front of additive ones so a figure's face is not
+    /// washed out by overlapping glows (additive brightens regardless of order).
+    pub additive: bool,
 }
 
 /// Despawn timer for repeating (ground) effects: aesir sends no removal packet,
@@ -39,7 +43,7 @@ pub struct EffectLayer {
 #[derive(Component, Debug)]
 pub struct EffectLifetime(pub Timer);
 
-/// Per-frame clock for an STR effect. Mirrors korangar's `FrameTimer`: ticks
+/// Per-frame clock for an STR effect. ticks
 /// elapsed time, derives `current_frame` from `fps`, and wraps at `max_key`.
 #[derive(Debug, Clone)]
 pub struct EffectFrameTimer {

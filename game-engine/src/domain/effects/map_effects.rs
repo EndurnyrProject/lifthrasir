@@ -7,9 +7,6 @@
 //! smoke, firefly, …) are hardcoded particle systems in the original client and
 //! have no STR, so they stay unmapped. Unmapped `effect_type`s are `warn!`-ed so
 //! we can discover which ones real maps actually use and grow `map_effects.ron`.
-//!
-//! Like every effect path this is non-critical: a missing catalog or asset
-//! early-returns and an unmapped effect skips, never panicking.
 
 use std::collections::BTreeMap;
 
