@@ -18,11 +18,14 @@ use game_engine::domain::entities::character::components::status::CharacterStatu
 use game_engine::domain::entities::character::events::SkillLearnRequested;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
-use game_engine::domain::skill::{form, layout, target, Form, Placement, SkillTreeState};
+use game_engine::domain::skill::{
+    form, layout, target, Form, Placement, SkillCastRequested, SkillTreeState,
+};
 use game_engine::infrastructure::job::registry::JobSpriteRegistry;
 use game_engine::infrastructure::skill::SkillCatalog;
 use leafwing_input_manager::prelude::ActionState;
 use std::collections::HashMap;
+use std::time::Duration;
 
 use crate::rich_text::spawn_colored_text;
 use crate::theme;
@@ -66,6 +69,18 @@ struct SkillTab(u32);
 /// Marks a grid cell with the `skill_id` it shows so clicks can select it.
 #[derive(Component, Clone, Copy)]
 struct SkillCell(u32);
+
+const DOUBLE_CLICK: Duration = Duration::from_millis(300);
+
+#[derive(Resource, Default)]
+struct LastSkillClick {
+    skill_id: u32,
+    at: Duration,
+}
+
+fn is_cast_double_click(last: &LastSkillClick, skill_id: u32, now: Duration) -> bool {
+    last.skill_id == skill_id && now.saturating_sub(last.at) <= DOUBLE_CLICK
+}
 
 /// Marks a `◄`/`►` stepper button with the skill it adjusts and its direction.
 #[derive(Component, Clone, Copy)]
@@ -222,6 +237,7 @@ impl Plugin for SkillWindowPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SkillUi>();
         app.init_resource::<SkillStaging>();
+        app.init_resource::<LastSkillClick>();
         app.add_systems(
             Update,
             toggle_skill_window.run_if(in_state(GameState::InGame).and(ui_unfocused)),
@@ -1018,11 +1034,26 @@ fn skill_name(skill_id: u32, catalog: Option<&SkillCatalog>) -> String {
         .unwrap_or_else(|| format!("#{skill_id}"))
 }
 
-fn on_cell_click(click: On<Pointer<Click>>, cells: Query<&SkillCell>, mut ui: ResMut<SkillUi>) {
+fn on_cell_click(
+    click: On<Pointer<Click>>,
+    cells: Query<&SkillCell>,
+    mut ui: ResMut<SkillUi>,
+    time: Res<Time>,
+    mut last: ResMut<LastSkillClick>,
+    mut cast_writer: MessageWriter<SkillCastRequested>,
+) {
     let Ok(cell) = cells.get(click.entity) else {
         return;
     };
     ui.selected = Some(cell.0);
+    let now = time.elapsed();
+    if is_cast_double_click(&last, cell.0, now) {
+        cast_writer.write(SkillCastRequested { skill_id: cell.0 });
+    }
+    *last = LastSkillClick {
+        skill_id: cell.0,
+        at: now,
+    };
 }
 
 /// Rebuilds the connector overlay: one orthogonal `Node` segment per in-tab
@@ -1470,6 +1501,39 @@ mod tests {
             job_level,
             ..default()
         }
+    }
+
+    #[test]
+    fn double_click_same_skill_within_window_is_true() {
+        let last = LastSkillClick {
+            skill_id: 5,
+            at: Duration::from_millis(100),
+        };
+        assert!(is_cast_double_click(&last, 5, Duration::from_millis(350)));
+    }
+
+    #[test]
+    fn click_different_skill_is_false() {
+        let last = LastSkillClick {
+            skill_id: 5,
+            at: Duration::from_millis(100),
+        };
+        assert!(!is_cast_double_click(&last, 6, Duration::from_millis(200)));
+    }
+
+    #[test]
+    fn double_click_too_far_apart_is_false() {
+        let last = LastSkillClick {
+            skill_id: 2,
+            at: Duration::from_millis(100),
+        };
+        assert!(!is_cast_double_click(&last, 2, Duration::from_millis(500)));
+    }
+
+    #[test]
+    fn first_click_no_prior_state_is_false() {
+        let last = LastSkillClick::default();
+        assert!(!is_cast_double_click(&last, 3, Duration::from_millis(5000)));
     }
 
     #[test]
