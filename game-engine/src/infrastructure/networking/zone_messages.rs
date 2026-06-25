@@ -245,6 +245,15 @@ pub struct SkillListReceived {
     pub skills: Vec<ZoneSkillInfo>,
 }
 
+/// The result of a learn attempt.
+#[derive(Message, Debug, Clone)]
+#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+pub struct LearnSkillResultReceived {
+    pub skill_id: u32,
+    pub ok: bool,
+    pub reason: u32,
+}
+
 /// A ground-targeted skill landed.
 #[derive(Message, Debug, Clone)]
 #[auto_add_event(plugin = ZoneDomainAutoPlugin)]

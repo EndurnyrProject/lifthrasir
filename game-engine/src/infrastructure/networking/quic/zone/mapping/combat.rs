@@ -1,7 +1,8 @@
 use crate::infrastructure::networking::quic::proto::aesir::net;
 use crate::infrastructure::networking::zone_messages::{
-    CastCancelled, DamageReceived, GroundSkillPlaced, KnockedBack, SkillCastStarted,
-    SkillCooldownSet, SkillDamageReceived, SkillEffectShown, SkillListReceived, ZoneSkillInfo,
+    CastCancelled, DamageReceived, GroundSkillPlaced, KnockedBack, LearnSkillResultReceived,
+    SkillCastStarted, SkillCooldownSet, SkillDamageReceived, SkillEffectShown, SkillListReceived,
+    ZoneSkillInfo,
 };
 
 pub fn damage_dealt(d: net::DamageDealt) -> DamageReceived {
@@ -109,6 +110,14 @@ fn skill_info(s: net::SkillInfo) -> ZoneSkillInfo {
         req_base_level: s.req_base_level,
         req_job_level: s.req_job_level,
         job_id: s.job_id,
+    }
+}
+
+pub fn learn_skill_result(r: net::LearnSkillResult) -> LearnSkillResultReceived {
+    LearnSkillResultReceived {
+        skill_id: r.skill_id,
+        ok: r.ok,
+        reason: r.reason,
     }
 }
 
@@ -299,5 +308,26 @@ mod tests {
         assert_eq!(received.skills[0].job_id, 4002);
         assert_eq!(received.skills[1].skill_id, 6);
         assert!(!received.skills[1].upgradable);
+    }
+
+    #[test]
+    fn learn_skill_result_maps_ok_and_reject() {
+        let ok = learn_skill_result(net::LearnSkillResult {
+            skill_id: 5,
+            ok: true,
+            reason: 0,
+        });
+        assert_eq!(ok.skill_id, 5);
+        assert!(ok.ok);
+        assert_eq!(ok.reason, 0);
+
+        let reject = learn_skill_result(net::LearnSkillResult {
+            skill_id: 7,
+            ok: false,
+            reason: 3,
+        });
+        assert_eq!(reject.skill_id, 7);
+        assert!(!reject.ok);
+        assert_eq!(reject.reason, 3);
     }
 }

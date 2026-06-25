@@ -3,14 +3,14 @@ use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
 
 use super::super::mapping::combat::{
-    cast_cancel, damage_dealt, ground_skill, knockback, skill_casting, skill_cooldown,
-    skill_damage, skill_effect, skill_list,
+    cast_cancel, damage_dealt, ground_skill, knockback, learn_skill_result, skill_casting,
+    skill_cooldown, skill_damage, skill_effect, skill_list,
 };
 use crate::infrastructure::networking::quic::dispatch::IncomingMessage;
 use crate::infrastructure::networking::quic::envelope::Body;
 use crate::infrastructure::networking::zone_messages::{
-    CastCancelled, DamageReceived, GroundSkillPlaced, KnockedBack, SkillCastStarted,
-    SkillCooldownSet, SkillDamageReceived, SkillEffectShown, SkillListReceived,
+    CastCancelled, DamageReceived, GroundSkillPlaced, KnockedBack, LearnSkillResultReceived,
+    SkillCastStarted, SkillCooldownSet, SkillDamageReceived, SkillEffectShown, SkillListReceived,
 };
 
 /// Drains combat and skill bodies. These span the gameplay, world, and bulk
@@ -32,6 +32,7 @@ pub fn zone_drain_combat(
     mut cooldown: MessageWriter<SkillCooldownSet>,
     mut ground: MessageWriter<GroundSkillPlaced>,
     mut skills: MessageWriter<SkillListReceived>,
+    mut learn_result: MessageWriter<LearnSkillResultReceived>,
 ) {
     for msg in incoming.read() {
         match msg.body.clone() {
@@ -62,6 +63,9 @@ pub fn zone_drain_combat(
             Body::SkillList(l) => {
                 skills.write(skill_list(l));
             }
+            Body::LearnSkillResult(r) => {
+                learn_result.write(learn_skill_result(r));
+            }
             _ => {}
         }
     }
@@ -85,6 +89,7 @@ mod tests {
             .add_message::<SkillCooldownSet>()
             .add_message::<GroundSkillPlaced>()
             .add_message::<SkillListReceived>()
+            .add_message::<LearnSkillResultReceived>()
             .add_systems(Update, zone_drain_combat);
 
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
