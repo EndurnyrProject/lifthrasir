@@ -16,7 +16,7 @@ use crate::{
         networking::quic::{
             channels::GAMEPLAY,
             envelope::Body,
-            proto::aesir::net::{ActionRequest, StatUp},
+            proto::aesir::net::{ActionRequest, LearnSkill, StatUp},
             zone::{QuicZoneState, ZonePhase},
         },
     },
@@ -28,7 +28,7 @@ use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::QuinnetClient;
 use leafwing_input_manager::prelude::ActionState;
 
-use crate::domain::entities::character::events::StatIncreaseRequested;
+use crate::domain::entities::character::events::{SkillLearnRequested, StatIncreaseRequested};
 use crate::domain::entities::character::states::AnimationState;
 
 use super::{
@@ -343,6 +343,31 @@ pub fn handle_stat_increase_requests(
 
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
+    schedule = Update,
+    config(run_if = in_state(GameState::InGame))
+)]
+pub fn handle_learn_skill_requests(
+    mut requests: MessageReader<SkillLearnRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        requests.clear();
+        return;
+    }
+
+    for request in requests.read() {
+        let body = Body::LearnSkill(LearnSkill {
+            skill_id: request.skill_id,
+        });
+        if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
+            error!("Failed to send learn-skill request: {e}");
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::input_plugin::InputPlugin,
     schedule = OnEnter(GameState::Login)
 )]
 pub fn set_default_cursor_for_login(mut cursor_messages: MessageWriter<CursorChangeRequest>) {
@@ -388,6 +413,15 @@ mod tests {
         };
         assert_eq!(body.stat_id, 13);
         assert_eq!(body.amount, 2);
+    }
+
+    #[test]
+    fn learn_skill_bridges_skill_id() {
+        let req = SkillLearnRequested { skill_id: 28 };
+        let body = LearnSkill {
+            skill_id: req.skill_id,
+        };
+        assert_eq!(body.skill_id, 28);
     }
 
     #[test]

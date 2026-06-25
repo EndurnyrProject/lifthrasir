@@ -18,3 +18,9 @@ pub struct StatIncreaseRequested {
     pub status_id: u16,
     pub amount: u8,
 }
+
+#[derive(Message, Debug, Clone)]
+#[auto_add_event(plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin)]
+pub struct SkillLearnRequested {
+    pub skill_id: u32,
+}
