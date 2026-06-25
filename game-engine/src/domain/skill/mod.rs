@@ -1,3 +1,4 @@
+pub mod feedback;
 pub mod inf;
 pub mod layout;
 pub mod state;
