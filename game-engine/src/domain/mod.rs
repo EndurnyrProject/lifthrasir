@@ -9,6 +9,7 @@ pub mod entities;
 pub mod input;
 pub mod inventory;
 pub mod settings;
+pub mod skill;
 pub mod sprite;
 pub mod system_sets;
 pub mod world;
