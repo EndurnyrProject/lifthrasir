@@ -1,8 +1,6 @@
 use bevy::camera::Exposure;
 use bevy::input::mouse::MouseWheel;
-use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
-use bevy::render::view::Hdr;
 use bevy_auto_plugin::prelude::*;
 
 use super::components::{CameraFollowSettings, CameraFollowTarget};
@@ -68,12 +66,11 @@ pub fn spawn_camera_on_player_ready(
 
     commands.spawn((
         Camera3d::default(),
-        // HDR + manual exposure decouple final image brightness from absolute light
-        // values; bloom makes bright lights read as glowing. See lighting.rs for the
+        // Manual exposure decouples final image brightness from absolute light
+        // values. HDR + bloom are inserted by the settings layer
+        // (apply_camera_effects) per the graphics settings; see lighting.rs for the
         // matching sun/ambient/point-light scale.
-        Hdr,
         Exposure { ev100: 8.0 },
-        Bloom::NATURAL,
         Transform::from_translation(camera_position).looking_at(player_position, Vec3::NEG_Y),
         CameraFollowTarget::new(player_entity, player_position),
         settings,

@@ -486,6 +486,8 @@ pub fn handle_zone_disconnected(
 /// map-scoped content a half-load left behind), and clearing the entity registry leaves
 /// the next login starting clean. A harmless no-op on the initial `Loading -> Login`
 /// boot transition, where no session exists yet.
+type ZoneSessionEntities = Or<(With<LocalPlayer>, With<MapScoped>)>;
+
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = OnEnter(GameState::Login)
@@ -494,7 +496,7 @@ pub fn teardown_zone_session_on_login(
     mut commands: Commands,
     mut zone_state: ResMut<QuicZoneState>,
     mut registry: ResMut<EntityRegistry>,
-    world_entities: Query<Entity, Or<(With<LocalPlayer>, With<MapScoped>)>>,
+    world_entities: Query<Entity, ZoneSessionEntities>,
 ) {
     zone_state.phase = ZonePhase::Disconnected;
     commands.remove_resource::<MapSpawnContext>();

@@ -596,6 +596,8 @@ enum GraphicsField {
     Resolution,
     Antialiasing,
     Vsync,
+    Bloom,
+    Shadows,
     FpsCap,
     UiScaling,
 }
@@ -641,7 +643,31 @@ fn field_label(graphics: &GraphicsSettings, field: GraphicsField) -> String {
         GraphicsField::Antialiasing => graphics.antialiasing.label().to_string(),
         GraphicsField::FpsCap => graphics.fps_cap.label().to_string(),
         GraphicsField::UiScaling => graphics.ui_scaling.label().to_string(),
-        GraphicsField::DisplayMode | GraphicsField::Vsync => String::new(),
+        GraphicsField::DisplayMode
+        | GraphicsField::Vsync
+        | GraphicsField::Bloom
+        | GraphicsField::Shadows => String::new(),
+    }
+}
+
+/// Reads a bool (switch) graphics field off the draft, or `None` for non-switch
+/// fields. Drives both the switch click toggle and the refresh display.
+fn switch_value(graphics: &GraphicsSettings, field: GraphicsField) -> Option<bool> {
+    match field {
+        GraphicsField::Vsync => Some(graphics.vsync),
+        GraphicsField::Bloom => Some(graphics.bloom),
+        GraphicsField::Shadows => Some(graphics.shadows),
+        _ => None,
+    }
+}
+
+/// Flips a bool (switch) graphics field on the draft.
+fn toggle_switch(graphics: &mut GraphicsSettings, field: GraphicsField) {
+    match field {
+        GraphicsField::Vsync => graphics.vsync = !graphics.vsync,
+        GraphicsField::Bloom => graphics.bloom = !graphics.bloom,
+        GraphicsField::Shadows => graphics.shadows = !graphics.shadows,
+        _ => {}
     }
 }
 
@@ -692,6 +718,18 @@ fn spawn_graphics_rows(commands: &mut Commands, body: Entity, font: &Handle<Font
 
     let ctrl = spawn_row(commands, body, "Antialiasing", "Smooths jagged edges", font);
     spawn_stepper(commands, ctrl, GraphicsField::Antialiasing, font);
+
+    let ctrl = spawn_row(commands, body, "Bloom", "Glow around bright lights", font);
+    spawn_switch(commands, ctrl, GraphicsField::Bloom);
+
+    let ctrl = spawn_row(
+        commands,
+        body,
+        "Shadows",
+        "Sun shadow casting",
+        font,
+    );
+    spawn_switch(commands, ctrl, GraphicsField::Shadows);
 
     let ctrl = spawn_row(
         commands,
@@ -1004,9 +1042,7 @@ fn on_switch_click(
     let Ok(pill) = pills.get(click.entity) else {
         return;
     };
-    if pill.0 == GraphicsField::Vsync {
-        ui.draft.graphics.vsync = !ui.draft.graphics.vsync;
-    }
+    toggle_switch(&mut ui.draft.graphics, pill.0);
 }
 
 /// Reflects the current `draft.graphics` onto every graphics control: segmented
@@ -1045,22 +1081,14 @@ fn refresh_graphics(
     }
 
     for (pill, mut bg) in &mut switches {
-        if pill.0 == GraphicsField::Vsync {
-            bg.0 = if graphics.vsync {
-                theme::EMERALD
-            } else {
-                theme::FIELD
-            };
+        if let Some(on) = switch_value(graphics, pill.0) {
+            bg.0 = if on { theme::EMERALD } else { theme::FIELD };
         }
     }
 
     for (knob, mut node) in &mut knobs {
-        if knob.0 == GraphicsField::Vsync {
-            node.left = if graphics.vsync {
-                Val::Px(27.0)
-            } else {
-                Val::Px(3.0)
-            };
+        if let Some(on) = switch_value(graphics, knob.0) {
+            node.left = if on { Val::Px(27.0) } else { Val::Px(3.0) };
         }
     }
 }

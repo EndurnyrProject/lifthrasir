@@ -4,9 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-default = ["dev"]
-# Profiling and live-inspection tooling. On by default for local development,
-# disabled for distribution builds via `--no-default-features`.
+default = []
+# Profiling and live-inspection tooling. Opt-in via `--features dev`; normal
+# builds (and distribution) stay clean of Tracy/remote-inspection overhead.
 dev = [
     "bevy/trace",
     "bevy/trace_tracy",

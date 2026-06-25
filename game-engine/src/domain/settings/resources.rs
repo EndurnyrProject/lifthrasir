@@ -260,6 +260,10 @@ pub struct GraphicsSettings {
     pub vsync: bool,
     pub fps_cap: FpsCap,
     pub ui_scaling: UiScaling,
+    /// HDR bloom on the world camera. Off drops the HDR pipeline entirely.
+    pub bloom: bool,
+    /// Directional-light (sun) shadow casting.
+    pub shadows: bool,
 }
 
 impl Default for GraphicsSettings {
@@ -271,6 +275,8 @@ impl Default for GraphicsSettings {
             vsync: true,
             fps_cap: FpsCap::F60,
             ui_scaling: UiScaling::P100,
+            bloom: true,
+            shadows: true,
         }
     }
 }
@@ -500,6 +506,8 @@ mod tests {
         assert!(s.graphics.vsync);
         assert_eq!(s.graphics.fps_cap, FpsCap::F60);
         assert_eq!(s.graphics.ui_scaling, UiScaling::P100);
+        assert!(s.graphics.bloom);
+        assert!(s.graphics.shadows);
         assert_eq!(s.audio.bgm_volume, 0.70);
         assert_eq!(s.audio.sfx_volume, 0.85);
         assert_eq!(s.audio.ambient_volume, 0.55);

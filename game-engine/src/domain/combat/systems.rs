@@ -7,7 +7,7 @@ use super::{
 use crate::domain::{
     entities::{
         character::{components::visual::CharacterDirection, states::AnimationState},
-        components::NetworkEntity,
+        registry::EntityRegistry,
     },
     system_sets::CombatSystems,
 };
@@ -33,7 +33,7 @@ pub fn process_combat_actions(
     mut combat_events: MessageReader<DamageReceived>,
     mut damage_display: MessageWriter<DisplayDamageNumber>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
-    network_entities: Query<(Entity, &NetworkEntity)>,
+    registry: Res<EntityRegistry>,
     transforms: Query<&Transform>,
 ) {
     let events: Vec<_> = combat_events.read().collect();
@@ -44,16 +44,9 @@ pub fn process_combat_actions(
         let dmg_speed = event.dmg_speed as i32;
 
         // aesir identifies every in-game unit by char_id (the gid field), so
-        // combat src/target ids resolve against NetworkEntity::gid, not aid.
-        let src_entity = network_entities
-            .iter()
-            .find(|(_, ne)| ne.gid == event.src_id)
-            .map(|(e, _)| e);
-
-        let target_entity = network_entities
-            .iter()
-            .find(|(_, ne)| ne.gid == event.target_id)
-            .map(|(e, _)| e);
+        // combat src/target ids resolve against the registry's char_id key.
+        let src_entity = registry.get_entity(event.src_id);
+        let target_entity = registry.get_entity(event.target_id);
 
         if action_type.is_damage() {
             if let Some(src) = src_entity {
@@ -308,7 +301,7 @@ pub fn update_hit_stun(
 pub fn handle_death(
     mut commands: Commands,
     mut vanish_events: MessageReader<UnitLeft>,
-    network_entities: Query<(Entity, &NetworkEntity)>,
+    registry: Res<EntityRegistry>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
 ) {
     for event in vanish_events.read() {
@@ -316,7 +309,7 @@ pub fn handle_death(
             continue;
         }
 
-        let Some((entity, _)) = network_entities.iter().find(|(_, ne)| ne.gid == event.gid) else {
+        let Some(entity) = registry.get_entity(event.gid) else {
             continue;
         };
 

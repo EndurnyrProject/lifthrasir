@@ -1,5 +1,7 @@
 use bevy::anti_alias::fxaa::Fxaa;
+use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
+use bevy::render::view::Hdr;
 use bevy::ui::IsDefaultUiCamera;
 use bevy::window::{
     Monitor, MonitorSelection, PresentMode, PrimaryWindow, VideoMode, VideoModeSelection,
@@ -53,6 +55,7 @@ pub fn apply_graphics(
     mut framepace: ResMut<FramepaceSettings>,
     cameras: Query<Entity, With<CameraFollowTarget>>,
     ui_cameras: Query<Entity, With<IsDefaultUiCamera>>,
+    mut lights: Query<&mut DirectionalLight>,
     mut commands: Commands,
 ) {
     if messages.read().count() == 0 {
@@ -60,6 +63,12 @@ pub fn apply_graphics(
     }
 
     let graphics = settings.graphics;
+
+    for mut light in &mut lights {
+        if light.shadows_enabled != graphics.shadows {
+            light.shadows_enabled = graphics.shadows;
+        }
+    }
 
     window.present_mode = if graphics.vsync {
         PresentMode::AutoVsync
@@ -85,7 +94,7 @@ pub fn apply_graphics(
     framepace.limiter = graphics.fps_cap.to_limiter();
 
     for camera in &cameras {
-        apply_camera_aa(&mut commands, camera, &settings);
+        apply_camera_effects(&mut commands, camera, &settings);
     }
 
     // The UI camera shares the window target with the world camera, so their
@@ -166,21 +175,37 @@ pub fn apply_input(
     *input_map = settings.keybinds.to_input_map();
 }
 
-/// Applies the current AA settings to a freshly-spawned world camera, since the
-/// startup `ApplySettings` fires before the camera (which only spawns on
+/// Applies the current graphics settings to a freshly-spawned world camera, since
+/// the startup `ApplySettings` fires before the camera (which only spawns on
 /// entering InGame) exists.
 #[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
-pub fn apply_camera_aa_on_spawn(
+pub fn apply_camera_effects_on_spawn(
     settings: Res<Persistent<Settings>>,
     cameras: Query<Entity, Added<CameraFollowTarget>>,
     mut commands: Commands,
 ) {
     for camera in &cameras {
-        apply_camera_aa(&mut commands, camera, &settings);
+        apply_camera_effects(&mut commands, camera, &settings);
     }
 }
 
-fn apply_camera_aa(commands: &mut Commands, camera: Entity, settings: &Settings) {
+/// Applies the shadow setting to a freshly-spawned directional light, since the
+/// map's sun is spawned (with shadows on) per map load, after the last
+/// `ApplySettings`.
+#[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
+pub fn apply_shadows_on_spawn(
+    settings: Res<Persistent<Settings>>,
+    mut lights: Query<&mut DirectionalLight, Added<DirectionalLight>>,
+) {
+    let shadows = settings.graphics.shadows;
+    for mut light in &mut lights {
+        if light.shadows_enabled != shadows {
+            light.shadows_enabled = shadows;
+        }
+    }
+}
+
+fn apply_camera_effects(commands: &mut Commands, camera: Entity, settings: &Settings) {
     let (msaa, has_fxaa) = settings.graphics.antialiasing.to_msaa_fxaa();
     let mut entity = commands.entity(camera);
     entity.insert(msaa);
@@ -188,6 +213,13 @@ fn apply_camera_aa(commands: &mut Commands, camera: Entity, settings: &Settings)
         entity.insert(Fxaa::default());
     } else {
         entity.remove::<Fxaa>();
+    }
+    // Bloom needs the HDR pipeline, so toggle them together: disabling bloom drops
+    // the extra HDR render target instead of leaving it allocated and idle.
+    if settings.graphics.bloom {
+        entity.insert((Hdr, Bloom::NATURAL));
+    } else {
+        entity.remove::<(Hdr, Bloom)>();
     }
 }
 

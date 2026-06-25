@@ -49,9 +49,33 @@ impl Plugin for CharacterInfoPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            update_character_info.run_if(in_state(GameState::InGame)),
+            update_character_info
+                .run_if(in_state(GameState::InGame).and(character_info_changed)),
         );
     }
+}
+
+type ChangedCharacterInfo = (
+    With<LocalPlayer>,
+    Or<(
+        Changed<CharacterStatus>,
+        Changed<CharacterData>,
+        Changed<EntityName>,
+    )>,
+);
+
+/// Gates `update_character_info`: run only when the local player's status, data,
+/// or name change, when the job registry loads (so "Unknown" resolves to a real
+/// job name), or when the HUD elements are freshly spawned. Skips the per-frame
+/// string formatting otherwise.
+fn character_info_changed(
+    player: Query<(), ChangedCharacterInfo>,
+    job_registry: Option<Res<JobSpriteRegistry>>,
+    added: Query<(), Added<HudText>>,
+) -> bool {
+    !player.is_empty()
+        || job_registry.is_some_and(|registry| registry.is_changed())
+        || !added.is_empty()
 }
 
 /// Builds the status frame under `parent`. Pickable-ignored throughout so clicks

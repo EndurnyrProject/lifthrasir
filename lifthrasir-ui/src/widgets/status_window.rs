@@ -34,9 +34,21 @@ impl Plugin for StatusWindowPlugin {
         );
         app.add_systems(
             Update,
-            update_status_window.run_if(in_state(GameState::InGame)),
+            update_status_window
+                .run_if(in_state(GameState::InGame).and(status_inputs_changed)),
         );
     }
+}
+
+/// Gates `update_status_window`: run only when the local player's stats or the
+/// staging draft change, or when the window's value elements are freshly spawned
+/// (so the first open populates them). Skips the per-frame formatting otherwise.
+fn status_inputs_changed(
+    player: Query<(), (With<LocalPlayer>, Changed<CharacterStatus>)>,
+    staging: Res<StatStaging>,
+    added: Query<(), Added<StatValue>>,
+) -> bool {
+    !player.is_empty() || staging.is_changed() || !added.is_empty()
 }
 
 pub const PRIMARY_STATS: [StatusParameter; 6] = [

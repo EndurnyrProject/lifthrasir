@@ -81,9 +81,10 @@ Contributions are welcome! Please ensure:
 
 I shamelessly took a lot of code and ideas from these amazing projects:
 
-[RagnarokRebuildTcp](https://github.com/Doddler/RagnarokRebuildTcp)
-[BrowEdit3](https://github.com/Borf/BrowEdit3)
-[GRFEditor](https://github.com/Tokeiburu/GRFEditor)
+- [RagnarokRebuildTcp](https://github.com/Doddler/RagnarokRebuildTcp)  
+- [BrowEdit3](https://github.com/Borf/BrowEdit3)  
+- [GRFEditor](https://github.com/Tokeiburu/GRFEditor)  
+- [Korangar](https://github.com/vE5li/korangar)  
 
 ## Legal Notice
 
