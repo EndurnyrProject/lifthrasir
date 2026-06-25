@@ -1,6 +1,7 @@
 use crate::{
     domain::{
         entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid},
+        settings::{ApplySettings, Settings},
         system_sets::WorldLoadingSystems,
         world::{
             components::MapLoader, map::MapData, map_loader::MapRequestLoader,
@@ -8,7 +9,10 @@ use crate::{
         },
     },
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
-    utils::constants::CELL_SIZE,
+    utils::{
+        constants::CELL_SIZE,
+        mipmap::{apply_anisotropic_sampler, generate_mipmaps_with_anisotropy},
+    },
 };
 use bevy::{
     asset::{AssetEvent, RenderAssetUsages},
@@ -16,6 +20,7 @@ use bevy::{
     prelude::*,
 };
 use bevy_auto_plugin::prelude::*;
+use bevy_persistent::prelude::Persistent;
 use std::collections::{HashMap, HashSet};
 
 /// Type alias for mesh data grouped by texture index.
@@ -34,6 +39,13 @@ type TerrainGenerationQuery<'w, 's> = Query<
 const TERRAIN_ROUGHNESS: f32 = 0.8;
 const TERRAIN_METALLIC: f32 = 0.0;
 const TERRAIN_ALPHA_THRESHOLD: f32 = 0.5;
+
+/// Asset ids of every terrain ground texture that has had mipmaps generated, so
+/// the anisotropy setting can be re-applied to them live without reloading the
+/// map. Stores ids (not strong handles) to avoid pinning textures in memory.
+#[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin)]
+struct TerrainTextureIds(HashSet<AssetId<Image>>);
 
 /// Mesh data grouped by texture index for terrain generation
 #[derive(Debug, Default)]
@@ -95,6 +107,51 @@ pub struct TerrainTexturesLoading {
     texture_names: Vec<String>,
     ground_handle: Handle<RoGroundAsset>,
     altitude_handle: Option<Handle<RoAltitudeAsset>>,
+}
+
+/// Generate mipmaps and enable anisotropic filtering on every loaded terrain
+/// texture, recording each id so the level can be retuned later. Runs once per
+/// texture (the generator is idempotent), so re-used textures across maps are
+/// only processed the first time.
+fn apply_terrain_texture_filtering(
+    handles: &[Handle<Image>],
+    images: &mut Assets<Image>,
+    anisotropy: u16,
+    texture_ids: &mut TerrainTextureIds,
+) {
+    for handle in handles {
+        if handle.id() == AssetId::default() {
+            continue;
+        }
+        if let Some(image) = images.get_mut(handle) {
+            generate_mipmaps_with_anisotropy(image, anisotropy);
+            texture_ids.0.insert(handle.id());
+        }
+    }
+}
+
+/// Re-apply the anisotropy setting to every already-loaded terrain texture when
+/// settings are applied. Only touches the sampler, so the mip chain is reused.
+#[auto_add_system(
+    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    schedule = Update
+)]
+pub fn reapply_terrain_anisotropy(
+    mut messages: MessageReader<ApplySettings>,
+    settings: Res<Persistent<Settings>>,
+    mut images: ResMut<Assets<Image>>,
+    texture_ids: Res<TerrainTextureIds>,
+) {
+    if messages.read().count() == 0 {
+        return;
+    }
+
+    let anisotropy = settings.graphics.anisotropy.to_clamp();
+    for id in &texture_ids.0 {
+        if let Some(image) = images.get_mut(*id) {
+            apply_anisotropic_sampler(image, anisotropy);
+        }
+    }
 }
 
 /// Create materials from loaded texture handles
@@ -559,6 +616,9 @@ pub fn apply_loaded_terrain_textures(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    mut texture_ids: ResMut<TerrainTextureIds>,
+    settings: Res<Persistent<Settings>>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
     asset_server: Res<AssetServer>,
@@ -648,6 +708,13 @@ pub fn apply_loaded_terrain_textures(
                 map_request.map_name, altitude_data.width, altitude_data.height
             );
         }
+
+        apply_terrain_texture_filtering(
+            &textures_loading.texture_handles,
+            &mut images,
+            settings.graphics.anisotropy.to_clamp(),
+            &mut texture_ids,
+        );
 
         let texture_materials = create_terrain_materials_from_loaded_textures(
             &ground.ground,

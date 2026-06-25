@@ -143,6 +143,58 @@ impl AntiAliasing {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+pub enum Anisotropy {
+    Off,
+    X2,
+    X4,
+    X8,
+    X16,
+}
+
+impl Anisotropy {
+    /// The variants in stepper order.
+    pub const ALL: [Anisotropy; 5] = [
+        Anisotropy::Off,
+        Anisotropy::X2,
+        Anisotropy::X4,
+        Anisotropy::X8,
+        Anisotropy::X16,
+    ];
+
+    /// Display label for the stepper value.
+    pub fn label(self) -> &'static str {
+        match self {
+            Anisotropy::Off => "Off",
+            Anisotropy::X2 => "2x",
+            Anisotropy::X4 => "4x",
+            Anisotropy::X8 => "8x",
+            Anisotropy::X16 => "16x",
+        }
+    }
+
+    /// Next variant, clamped at the last.
+    pub fn next(self) -> Anisotropy {
+        cycle_next(&Anisotropy::ALL, self)
+    }
+
+    /// Previous variant, clamped at the first.
+    pub fn prev(self) -> Anisotropy {
+        cycle_prev(&Anisotropy::ALL, self)
+    }
+
+    /// wgpu `anisotropy_clamp` tap count; `Off` is `1` (plain trilinear).
+    pub fn to_clamp(self) -> u16 {
+        match self {
+            Anisotropy::Off => 1,
+            Anisotropy::X2 => 2,
+            Anisotropy::X4 => 4,
+            Anisotropy::X8 => 8,
+            Anisotropy::X16 => 16,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum FpsCap {
     F30,
     F60,
@@ -257,6 +309,8 @@ pub struct GraphicsSettings {
     pub display_mode: DisplayMode,
     pub resolution: (u32, u32),
     pub antialiasing: AntiAliasing,
+    /// Anisotropic texture filtering for ground terrain viewed at grazing angles.
+    pub anisotropy: Anisotropy,
     pub vsync: bool,
     pub fps_cap: FpsCap,
     pub ui_scaling: UiScaling,
@@ -272,6 +326,7 @@ impl Default for GraphicsSettings {
             display_mode: DisplayMode::BorderlessFullscreen,
             resolution: (1920, 1080),
             antialiasing: AntiAliasing::Fxaa,
+            anisotropy: Anisotropy::X8,
             vsync: true,
             fps_cap: FpsCap::F60,
             ui_scaling: UiScaling::P100,
