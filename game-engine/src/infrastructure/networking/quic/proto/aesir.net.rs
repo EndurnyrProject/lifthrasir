@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -149,6 +149,12 @@ pub mod envelope {
         UnitStateChange(super::UnitStateChange),
         #[prost(message, tag = "79")]
         SpecialEffect(super::SpecialEffect),
+        #[prost(message, tag = "80")]
+        NpcTalk(super::NpcTalk),
+        #[prost(message, tag = "81")]
+        NpcDialog(super::NpcDialog),
+        #[prost(message, tag = "82")]
+        NpcInteract(super::NpcInteract),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -765,6 +771,8 @@ pub struct SkillInfo {
     pub req_base_level: u32,
     #[prost(uint32, tag = "11")]
     pub req_job_level: u32,
+    #[prost(uint32, tag = "12")]
+    pub job_id: u32,
 }
 /// Client -> server, spend one skill point to learn/raise a skill (replaces RO CZ_UPGRADE_SKILLLEVEL 0x0112).
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
@@ -1065,4 +1073,97 @@ pub struct ItemUseResult {
     pub ok: bool,
     #[prost(uint32, tag = "3")]
     pub reason: u32,
+}
+/// Client -> server, the player clicked an NPC unit (replaces RO CZ_CONTACTNPC 0x0090).
+/// npc_id is the NPC's unit/entity id on the map.
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct NpcTalk {
+    #[prost(uint32, tag = "1")]
+    pub npc_id: u32,
+}
+/// Server -> client, one frame per dialog suspension point; the mes text accumulated
+/// since the last suspension rides with it. `expect` names the input the client must
+/// now collect; `options` is populated for MENU only.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NpcDialog {
+    #[prost(uint32, tag = "1")]
+    pub npc_id: u32,
+    #[prost(string, tag = "2")]
+    pub text: ::prost::alloc::string::String,
+    #[prost(enumeration = "npc_dialog::Expect", tag = "3")]
+    pub expect: i32,
+    #[prost(string, repeated, tag = "4")]
+    pub options: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// Nested message and enum types in `NpcDialog`.
+pub mod npc_dialog {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum Expect {
+        Next = 0,
+        Menu = 1,
+        InputInt = 2,
+        InputStr = 3,
+        Close = 4,
+    }
+    impl Expect {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Next => "NEXT",
+                Self::Menu => "MENU",
+                Self::InputInt => "INPUT_INT",
+                Self::InputStr => "INPUT_STR",
+                Self::Close => "CLOSE",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "NEXT" => Some(Self::Next),
+                "MENU" => Some(Self::Menu),
+                "INPUT_INT" => Some(Self::InputInt),
+                "INPUT_STR" => Some(Self::InputStr),
+                "CLOSE" => Some(Self::Close),
+                _ => None,
+            }
+        }
+    }
+}
+/// Client -> server, the player's response to the pending NpcDialog.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NpcInteract {
+    #[prost(uint32, tag = "1")]
+    pub npc_id: u32,
+    #[prost(oneof = "npc_interact::Response", tags = "2, 3, 4, 5, 6")]
+    pub response: ::core::option::Option<npc_interact::Response>,
+}
+/// Nested message and enum types in `NpcInteract`.
+pub mod npc_interact {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Response {
+        #[prost(bool, tag = "2")]
+        Continue(bool),
+        #[prost(uint32, tag = "3")]
+        Choice(u32),
+        #[prost(sint64, tag = "4")]
+        Number(i64),
+        #[prost(string, tag = "5")]
+        Input(::prost::alloc::string::String),
+        #[prost(bool, tag = "6")]
+        Cancel(bool),
+    }
 }
