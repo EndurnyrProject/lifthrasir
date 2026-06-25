@@ -53,6 +53,12 @@ impl JobSpriteRegistry {
         display_name
     }
 
+    /// Display name lookup without the missing-id `warn!`, for callers that have
+    /// their own fallback and run often enough that a warning would spam the log.
+    pub fn try_display_name(&self, jt_id: u32) -> Option<&str> {
+        self.display_names.get(&jt_id).map(|s| s.as_str())
+    }
+
     pub fn get_body_sprite_path(&self, jt_id: u32, gender: u8) -> Option<String> {
         let sprite_name = self.get_sprite_name(jt_id)?;
         let gender_enum = Gender::from(gender);

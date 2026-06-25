@@ -403,11 +403,12 @@ pub struct Keybinds {
     pub sit: ActionBinds,
     pub status: ActionBinds,
     pub inventory: ActionBinds,
+    pub skills: ActionBinds,
 }
 
 impl Default for Keybinds {
     /// Mirrors `PlayerAction::default_input_map()`:
-    /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E.
+    /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S.
     fn default() -> Self {
         Self {
             sit: ActionBinds {
@@ -420,6 +421,10 @@ impl Default for Keybinds {
             },
             inventory: ActionBinds {
                 primary: Some(KeyBind::modified(Modifier::Alt, "KeyE")),
+                secondary: None,
+            },
+            skills: ActionBinds {
+                primary: Some(KeyBind::modified(Modifier::Alt, "KeyS")),
                 secondary: None,
             },
         }
@@ -435,6 +440,7 @@ impl Keybinds {
         self.status.insert_into(&mut map, PlayerAction::Status);
         self.inventory
             .insert_into(&mut map, PlayerAction::Inventory);
+        self.skills.insert_into(&mut map, PlayerAction::Skills);
         map
     }
 }
@@ -593,6 +599,7 @@ mod tests {
             },
             status: ActionBinds::default(),
             inventory: ActionBinds::default(),
+            skills: ActionBinds::default(),
         };
         let map = binds.to_input_map();
         let sit = map.get(&PlayerAction::Sit).expect("sit binding");

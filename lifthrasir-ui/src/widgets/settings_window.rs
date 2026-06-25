@@ -1395,11 +1395,12 @@ fn refresh_sound(
 
 // ── Input tab ─────────────────────────────────────────────────────────────
 
-/// The three rebindable actions in display order.
-const ACTIONS: [(PlayerAction, &str); 3] = [
+/// The rebindable actions in display order.
+const ACTIONS: [(PlayerAction, &str); 4] = [
     (PlayerAction::Sit, "Sit / Stand"),
     (PlayerAction::Status, "Status Window"),
     (PlayerAction::Inventory, "Inventory"),
+    (PlayerAction::Skills, "Skills Window"),
 ];
 
 /// Borrows the stored binds for an action off the draft keybinds.
@@ -1411,6 +1412,7 @@ fn action_binds(
         PlayerAction::Sit => &keybinds.sit,
         PlayerAction::Status => &keybinds.status,
         PlayerAction::Inventory => &keybinds.inventory,
+        PlayerAction::Skills => &keybinds.skills,
     }
 }
 
@@ -1423,6 +1425,7 @@ fn action_binds_mut(
         PlayerAction::Sit => &mut keybinds.sit,
         PlayerAction::Status => &mut keybinds.status,
         PlayerAction::Inventory => &mut keybinds.inventory,
+        PlayerAction::Skills => &mut keybinds.skills,
     }
 }
 
@@ -1896,6 +1899,7 @@ mod tests {
             },
             status: ActionBinds::default(),
             inventory: ActionBinds::default(),
+            skills: ActionBinds::default(),
         };
         let expected = {
             let mut map = leafwing_input_manager::prelude::InputMap::default();
@@ -1916,6 +1920,7 @@ mod tests {
                 secondary: None,
             },
             inventory: ActionBinds::default(),
+            skills: ActionBinds::default(),
         };
         let expected = {
             use leafwing_input_manager::prelude::*;
