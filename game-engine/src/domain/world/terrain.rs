@@ -136,7 +136,7 @@ fn apply_terrain_texture_filtering(
     plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
     schedule = Update
 )]
-pub fn reapply_terrain_anisotropy(
+fn reapply_terrain_anisotropy(
     mut messages: MessageReader<ApplySettings>,
     settings: Res<Persistent<Settings>>,
     mut images: ResMut<Assets<Image>>,
@@ -612,7 +612,7 @@ type TerrainLoadingQuery<'w, 's> = Query<
     schedule = Update,
     config(in_set = WorldLoadingSystems::TerrainTextureApplication)
 )]
-pub fn apply_loaded_terrain_textures(
+fn apply_loaded_terrain_textures(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
