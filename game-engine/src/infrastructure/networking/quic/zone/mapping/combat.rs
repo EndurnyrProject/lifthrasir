@@ -100,6 +100,15 @@ fn skill_info(s: net::SkillInfo) -> ZoneSkillInfo {
         range: s.range,
         name: s.name,
         upgradable: s.upgradable,
+        max_level: s.max_level,
+        requires: s
+            .requires
+            .into_iter()
+            .map(|r| (r.skill_id, r.level))
+            .collect(),
+        req_base_level: s.req_base_level,
+        req_job_level: s.req_job_level,
+        job_id: s.job_id,
     }
 }
 
@@ -252,10 +261,14 @@ mod tests {
                     range: 5,
                     name: "Bash".into(),
                     upgradable: true,
-                    max_level: 0,
-                    requires: vec![],
-                    req_base_level: 0,
-                    req_job_level: 0,
+                    max_level: 10,
+                    requires: vec![net::SkillRequirement {
+                        skill_id: 6,
+                        level: 5,
+                    }],
+                    req_base_level: 12,
+                    req_job_level: 8,
+                    job_id: 4002,
                 },
                 net::SkillInfo {
                     skill_id: 6,
@@ -269,6 +282,7 @@ mod tests {
                     requires: vec![],
                     req_base_level: 0,
                     req_job_level: 0,
+                    job_id: 0,
                 },
             ],
         });
@@ -278,6 +292,11 @@ mod tests {
         assert_eq!(received.skills[0].type_, 2);
         assert_eq!(received.skills[0].name, "Bash");
         assert!(received.skills[0].upgradable);
+        assert_eq!(received.skills[0].max_level, 10);
+        assert_eq!(received.skills[0].requires, vec![(6, 5)]);
+        assert_eq!(received.skills[0].req_base_level, 12);
+        assert_eq!(received.skills[0].req_job_level, 8);
+        assert_eq!(received.skills[0].job_id, 4002);
         assert_eq!(received.skills[1].skill_id, 6);
         assert!(!received.skills[1].upgradable);
     }

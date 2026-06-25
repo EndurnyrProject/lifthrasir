@@ -230,6 +230,12 @@ pub struct ZoneSkillInfo {
     pub range: u32,
     pub name: String,
     pub upgradable: bool,
+    pub max_level: u32,
+    /// Prerequisite skills as `(skill_id, level)` pairs.
+    pub requires: Vec<(u32, u32)>,
+    pub req_base_level: u32,
+    pub req_job_level: u32,
+    pub job_id: u32,
 }
 
 /// The full learned-skill list.
