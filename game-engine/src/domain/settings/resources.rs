@@ -252,13 +252,13 @@ impl UiScaling {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+#[serde(default)]
 pub struct GraphicsSettings {
     pub display_mode: DisplayMode,
     pub resolution: (u32, u32),
     pub antialiasing: AntiAliasing,
     pub vsync: bool,
     pub fps_cap: FpsCap,
-    #[serde(default)]
     pub ui_scaling: UiScaling,
 }
 
@@ -277,6 +277,7 @@ impl Default for GraphicsSettings {
 
 /// Persisted mirror of the runtime `AudioSettings` fields.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Reflect, Debug)]
+#[serde(default)]
 pub struct AudioConfig {
     pub bgm_volume: f32,
     pub bgm_muted: bool,
@@ -399,6 +400,7 @@ impl ActionBinds {
 /// Serde-only keybinds for the existing `PlayerAction`s. No leafwing coupling
 /// here; Task 4 adds `to_input_map` / `from_input_map`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug)]
+#[serde(default)]
 pub struct Keybinds {
     pub sit: ActionBinds,
     pub status: ActionBinds,
@@ -446,6 +448,7 @@ impl Keybinds {
 }
 
 #[derive(Resource, Serialize, Deserialize, Clone, PartialEq, Reflect, Debug, Default)]
+#[serde(default)]
 #[reflect(Resource)]
 #[auto_register_type(plugin = super::SettingsPlugin)]
 pub struct Settings {
@@ -464,6 +467,28 @@ mod tests {
         let encoded = ron::to_string(&settings).expect("serialize");
         let decoded: Settings = ron::from_str(&encoded).expect("deserialize");
         assert_eq!(settings, decoded);
+    }
+
+    #[test]
+    fn settings_load_with_missing_fields_filled_from_defaults() {
+        // A settings.ron written before `keybinds.skills` (and before the
+        // graphics/audio sections) existed. `#[serde(default)]` must fill every
+        // gap from Default rather than failing to deserialize.
+        let partial = r#"(
+            keybinds: (
+                sit: (primary: Some((key: "Insert", modifier: None)), secondary: Some((key: "Help", modifier: None))),
+                status: (primary: Some((key: "KeyA", modifier: Some(Alt))), secondary: None),
+                inventory: (primary: Some((key: "KeyE", modifier: Some(Alt))), secondary: None),
+            ),
+        )"#;
+
+        let decoded: Settings = ron::from_str(partial).expect("partial settings should load");
+        let defaults = Settings::default();
+
+        assert_eq!(decoded.keybinds.skills, defaults.keybinds.skills);
+        assert_eq!(decoded.graphics, defaults.graphics);
+        assert_eq!(decoded.audio, defaults.audio);
+        assert_eq!(decoded.keybinds.sit.primary, Some(KeyBind::new("Insert")));
     }
 
     #[test]
