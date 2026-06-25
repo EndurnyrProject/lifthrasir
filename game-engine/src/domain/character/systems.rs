@@ -2,15 +2,19 @@ use super::components::{CharacterSelectionState, MapLoadingTimer};
 use super::events::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::CharacterInfo;
+use crate::domain::entities::markers::LocalPlayer;
+use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::system_sets::CharacterFlowSystems;
 use crate::domain::world::spawn_context::MapSpawnContext;
+use crate::domain::world::warp::Warping;
+use crate::domain::world::MapScoped;
 use crate::infrastructure::job::registry::JobSpriteRegistry;
 use crate::infrastructure::networking::char_messages::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
     CharacterServerConnected, ZoneServerInfoReceived,
 };
 use crate::infrastructure::networking::quic::character::CharacterRoster;
-use crate::infrastructure::networking::quic::zone::QuicZoneState;
+use crate::infrastructure::networking::quic::zone::{QuicZoneState, ZonePhase};
 use crate::infrastructure::networking::session::UserSession;
 use crate::infrastructure::networking::zone_messages::ZoneDisconnected;
 use crate::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
@@ -467,6 +471,43 @@ pub fn handle_zone_disconnected(
     }
 }
 
+/// Abandon the zone session when returning to the login screen.
+///
+/// A server disconnect routes the player back to `Login` via the disconnect dialog
+/// (`handle_zone_disconnected`). Without a teardown the session leftovers immediately
+/// drag the player back in: `MapSpawnContext` survives, so a stray `Added<MapData>`
+/// flows `detect_map_load_complete` -> `MapLoadCompleted` -> `ActorInitSent` ->
+/// `GameState::InGame`, bouncing into a dead zone; a half-loaded map keeps its
+/// `MapLoadingTimer`, which after 30s yanks the state to `CharacterSelection`; and the
+/// surviving `LocalPlayer` makes the next real entry skip its sprite spawn
+/// (`spawn_character_sprite_on_game_start` early-returns when one already exists).
+///
+/// Dropping the session resources, despawning the world entities (local player + any
+/// map-scoped content a half-load left behind), and clearing the entity registry leaves
+/// the next login starting clean. A harmless no-op on the initial `Loading -> Login`
+/// boot transition, where no session exists yet.
+#[auto_add_system(
+    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    schedule = OnEnter(GameState::Login)
+)]
+pub fn teardown_zone_session_on_login(
+    mut commands: Commands,
+    mut zone_state: ResMut<QuicZoneState>,
+    mut registry: ResMut<EntityRegistry>,
+    world_entities: Query<Entity, Or<(With<LocalPlayer>, With<MapScoped>)>>,
+) {
+    zone_state.phase = ZonePhase::Disconnected;
+    commands.remove_resource::<MapSpawnContext>();
+    commands.remove_resource::<ZoneSessionData>();
+    commands.remove_resource::<MapLoadingTimer>();
+    commands.remove_resource::<Warping>();
+
+    for entity in world_entities.iter() {
+        commands.entity(entity).despawn();
+    }
+    registry.clear();
+}
+
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
@@ -757,6 +798,59 @@ mod tests {
         let text = disconnect_message("connection lost");
         assert!(text.contains("disconnected from the realm"));
         assert!(text.ends_with("connection lost"));
+    }
+
+    #[test]
+    fn teardown_on_login_clears_session_and_world_entities() {
+        let mut app = App::new();
+        app.add_plugins(bevy::state::app::StatesPlugin);
+        app.init_state::<GameState>();
+        app.init_resource::<QuicZoneState>();
+        app.init_resource::<EntityRegistry>();
+        app.insert_resource(MapSpawnContext::new("prontera".into(), 100, 100, 42));
+        app.insert_resource(ZoneSessionData {
+            map_name: "prontera".into(),
+            character_id: 42,
+            account_id: 1,
+            character_name: "Vidar".into(),
+        });
+        app.insert_resource(MapLoadingTimer {
+            started: Instant::now(),
+            map_name: "prontera".into(),
+        });
+        app.add_systems(OnEnter(GameState::Login), teardown_zone_session_on_login);
+
+        let player = app.world_mut().spawn(LocalPlayer).id();
+        let terrain = app.world_mut().spawn(MapScoped).id();
+        {
+            let mut entity_registry = app.world_mut().resource_mut::<EntityRegistry>();
+            entity_registry.set_local_player(player, 42);
+            let mut zone = app.world_mut().resource_mut::<QuicZoneState>();
+            zone.phase = ZonePhase::Playing;
+        }
+
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::Login);
+        app.update();
+
+        // Session resources gone: without MapSpawnContext, detect_map_load_complete can
+        // no longer re-drive ActorInitSent -> InGame, so the player stays at Login.
+        assert!(app.world().get_resource::<MapSpawnContext>().is_none());
+        assert!(app.world().get_resource::<ZoneSessionData>().is_none());
+        assert!(app.world().get_resource::<MapLoadingTimer>().is_none());
+        // World entities reaped so the next login spawns a fresh local player.
+        assert!(app.world().get_entity(player).is_err());
+        assert!(app.world().get_entity(terrain).is_err());
+        assert_eq!(
+            app.world().resource::<QuicZoneState>().phase,
+            ZonePhase::Disconnected
+        );
+        assert!(app
+            .world()
+            .resource::<EntityRegistry>()
+            .local_player_entity()
+            .is_none());
     }
 
     fn char_list_with_one(char_num: u32, name: &str) -> net::CharList {
