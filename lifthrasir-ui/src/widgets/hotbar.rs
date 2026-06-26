@@ -26,6 +26,7 @@ use game_engine::infrastructure::item::ItemDb;
 use game_engine::infrastructure::skill::SkillCatalog;
 
 use crate::theme;
+use crate::worldspace::viewport_to_ui;
 
 const SLOTS: usize = 12;
 const SLOT_SIZE: f32 = 37.0;
@@ -539,6 +540,7 @@ fn update_drag_ghost(
     mut commands: Commands,
     drag: Res<HotbarDrag>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    ui_scale: Res<UiScale>,
     inventory: Res<Inventory>,
     catalog: Option<Res<SkillCatalog>>,
     item_db: Option<Res<ItemDb>>,
@@ -558,6 +560,7 @@ fn update_drag_ghost(
         return;
     };
 
+    let cursor = viewport_to_ui(cursor, &ui_scale);
     let left = Val::Px(cursor.x - GHOST_SIZE / 2.0);
     let top = Val::Px(cursor.y - GHOST_SIZE / 2.0);
     match ghost {
