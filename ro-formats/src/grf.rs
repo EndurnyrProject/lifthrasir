@@ -1,7 +1,7 @@
 use crate::des;
 use crate::string_utils::parse_korean_string;
 use flate2::read::ZlibDecoder;
-use nom::{bytes::complete::take, number::complete::le_u32, IResult, Parser};
+use nom::{number::complete::le_u32, IResult, Parser};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -15,7 +15,7 @@ pub enum GrfError {
     #[error("Unsupported GRF version: 0x{version:x}")]
     UnsupportedVersion { version: u32 },
     #[error("File table offset out of bounds: {offset}")]
-    InvalidTableOffset { offset: u32 },
+    InvalidTableOffset { offset: u64 },
     #[error("Decompression failed: {0}")]
     DecompressionError(String),
     #[error("Parse error: {0}")]
@@ -26,11 +26,26 @@ pub enum GrfError {
     IoErrorStd(#[from] std::io::Error),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GrfVersion {
+    V200,
+    V300,
+}
+
+impl GrfVersion {
+    fn from_raw(version: u32) -> Result<Self, GrfError> {
+        match version {
+            0x200 => Ok(GrfVersion::V200),
+            0x300 => Ok(GrfVersion::V300),
+            _ => Err(GrfError::UnsupportedVersion { version }),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct GrfHeader {
     pub signature: [u8; 15],
-    // pub key: [u8; 15],
-    pub file_table_offset: u32,
+    pub file_table_offset: u64,
     pub skip: u32,
     pub file_count: u32,
     pub version: u32,
@@ -49,7 +64,7 @@ pub struct GrfEntry {
     pub length_aligned: u32,
     pub real_size: u32,
     pub file_type: u8,
-    pub offset: u32,
+    pub offset: u64,
 }
 
 #[derive(Debug)]
@@ -65,33 +80,37 @@ const FILELIST_TYPE_ENCRYPT_MIXED: u8 = 0x02;
 const FILELIST_TYPE_ENCRYPT_HEADER: u8 = 0x04;
 
 // GRF constants
-const GRF_SIGNATURE: &str = "Master of Magic";
-const SUPPORTED_VERSION: u32 = 0x200;
+const GRF_SIGNATURES: [&str; 2] = ["Master of Magic", "Event Horizon"];
 const HEADER_SIZE: u64 = 46;
 
 impl GrfFile {
     fn validate_header(header: &GrfHeader, data_len: usize) -> Result<(), GrfError> {
-        // Validate signature
+        // The version is validated while parsing the header. Branded clients ship
+        // GRFs with a custom magic (e.g. "Event Horizon"), so the signature is
+        // matched against a known allowlist by prefix.
         let signature_str = String::from_utf8_lossy(&header.signature);
-        if signature_str.trim_end_matches('\0') != GRF_SIGNATURE {
+        let signature = signature_str.trim_end_matches('\0');
+        if !GRF_SIGNATURES
+            .iter()
+            .any(|known| signature.starts_with(known))
+        {
             return Err(GrfError::InvalidSignature(signature_str.to_string()));
         }
 
-        // Validate version
-        if header.version != SUPPORTED_VERSION {
-            return Err(GrfError::UnsupportedVersion {
-                version: header.version,
-            });
-        }
-
-        // Validate file table offset
-        if header.file_table_offset as usize + HEADER_SIZE as usize > data_len {
+        if header.file_table_offset + HEADER_SIZE > data_len as u64 {
             return Err(GrfError::InvalidTableOffset {
                 offset: header.file_table_offset,
             });
         }
 
         Ok(())
+    }
+
+    fn real_file_count(header: &GrfHeader, version: GrfVersion) -> u32 {
+        match version {
+            GrfVersion::V300 => header.file_count,
+            GrfVersion::V200 => header.file_count.saturating_sub(header.skip + 7),
+        }
     }
 
     pub fn from_path(path: PathBuf) -> Result<Self, GrfError> {
@@ -101,31 +120,32 @@ impl GrfFile {
         file.read_exact(&mut header_bytes)
             .map_err(|e| GrfError::IoError(e.to_string()))?;
 
-        let header = Self::parse_header(&header_bytes)?;
+        let (header, version) = Self::parse_header(&header_bytes)?;
 
         let metadata = std::fs::metadata(&path).map_err(|e| GrfError::IoError(e.to_string()))?;
         Self::validate_header(&header, metadata.len() as usize)?;
 
         use std::io::Seek;
         file.seek(std::io::SeekFrom::Start(
-            header.file_table_offset as u64 + HEADER_SIZE,
+            header.file_table_offset + HEADER_SIZE,
         ))
         .map_err(|e| GrfError::IoError(e.to_string()))?;
 
         // Calculate file table size (rest of the file after header)
-        let file_table_size = metadata.len() - (header.file_table_offset as u64 + HEADER_SIZE);
+        let file_table_size = metadata.len() - (header.file_table_offset + HEADER_SIZE);
 
         let mut file_table_data = vec![0u8; file_table_size as usize];
         file.read_exact(&mut file_table_data)
             .map_err(|e| GrfError::IoError(e.to_string()))?;
 
         // Decompress the file table first
-        let decompressed_table = Self::decompress_file_table(&file_table_data)?;
+        let decompressed_table = Self::decompress_file_table(&file_table_data, version)?;
 
         // Parse file table and entries
         let entries = Self::parse_entries(
             &decompressed_table,
-            header.file_count.saturating_sub(header.skip + 7),
+            Self::real_file_count(&header, version),
+            version,
         )?;
 
         // Create filename -> index mapping for fast lookups. Keys are
@@ -143,20 +163,55 @@ impl GrfFile {
         })
     }
 
-    fn parse_header(data: &[u8]) -> Result<GrfHeader, GrfError> {
+    fn parse_header(data: &[u8]) -> Result<(GrfHeader, GrfVersion), GrfError> {
         if data.len() < 46 {
             return Err(GrfError::ParseError(
                 "File too small to contain valid GRF header".to_string(),
             ));
         }
 
-        let (_, header) = parse_grf_header(data)
-            .map_err(|e| GrfError::ParseError(format!("Header parsing failed: {e:?}")))?;
+        let raw_version = u32::from_le_bytes([data[42], data[43], data[44], data[45]]);
+        let version = GrfVersion::from_raw(raw_version)?;
 
-        Ok(header)
+        let mut signature = [0u8; 15];
+        signature.copy_from_slice(&data[0..15]);
+
+        // v0x300 widens the file table offset to a little-endian i64 spanning the
+        // old offset and seed fields (bytes 30..38); the seed concept is dropped.
+        let (file_table_offset, skip) = match version {
+            GrfVersion::V300 => (u64::from_le_bytes(data[30..38].try_into().unwrap()), 0),
+            GrfVersion::V200 => (
+                u32::from_le_bytes(data[30..34].try_into().unwrap()) as u64,
+                u32::from_le_bytes(data[34..38].try_into().unwrap()),
+            ),
+        };
+
+        let file_count = u32::from_le_bytes(data[38..42].try_into().unwrap());
+
+        let header = GrfHeader {
+            signature,
+            file_table_offset,
+            skip,
+            file_count,
+            version: raw_version,
+        };
+
+        Ok((header, version))
     }
 
-    fn decompress_file_table(file_table_data: &[u8]) -> Result<Vec<u8>, GrfError> {
+    fn decompress_file_table(
+        file_table_data: &[u8],
+        version: GrfVersion,
+    ) -> Result<Vec<u8>, GrfError> {
+        // v0x300 prefixes the size pair with a 4-byte field (always 0).
+        let preamble = if version == GrfVersion::V300 { 4 } else { 0 };
+        if file_table_data.len() < preamble {
+            return Err(GrfError::ParseError(
+                "File table truncated before size header".to_string(),
+            ));
+        }
+        let file_table_data = &file_table_data[preamble..];
+
         // Parse table info (8 bytes: pack_size + real_size)
         let (remaining, table) = parse_grf_table(file_table_data)
             .map_err(|e| GrfError::ParseError(format!("Table parsing failed: {e:?}")))?;
@@ -189,7 +244,18 @@ impl GrfFile {
         Ok(decompressed)
     }
 
-    fn parse_entries(data: &[u8], count: u32) -> Result<Vec<GrfEntry>, GrfError> {
+    fn parse_entries(
+        data: &[u8],
+        count: u32,
+        version: GrfVersion,
+    ) -> Result<Vec<GrfEntry>, GrfError> {
+        // v0x300 widens the per-entry offset to an i64, growing the fixed tail
+        // from 17 to 21 bytes.
+        let entry_tail = match version {
+            GrfVersion::V300 => 21,
+            GrfVersion::V200 => 17,
+        };
+
         let mut entries = Vec::with_capacity(count as usize);
         let mut pos = 0;
 
@@ -213,8 +279,7 @@ impl GrfFile {
             }
             pos += 1;
 
-            // Ensure we have enough bytes for the entry data (17 bytes)
-            if pos + 17 > data.len() {
+            if pos + entry_tail > data.len() {
                 break;
             }
 
@@ -226,13 +291,18 @@ impl GrfFile {
             let real_size =
                 u32::from_le_bytes([data[pos + 8], data[pos + 9], data[pos + 10], data[pos + 11]]);
             let file_type = data[pos + 12];
-            let offset = u32::from_le_bytes([
-                data[pos + 13],
-                data[pos + 14],
-                data[pos + 15],
-                data[pos + 16],
-            ]);
-            pos += 17;
+            let offset = match version {
+                GrfVersion::V300 => {
+                    u64::from_le_bytes(data[pos + 13..pos + 21].try_into().unwrap())
+                }
+                GrfVersion::V200 => u32::from_le_bytes([
+                    data[pos + 13],
+                    data[pos + 14],
+                    data[pos + 15],
+                    data[pos + 16],
+                ]) as u64,
+            };
+            pos += entry_tail;
 
             entries.push(GrfEntry {
                 filename,
@@ -260,7 +330,7 @@ impl GrfFile {
         let mut file = File::open(&self.file_path).ok()?;
 
         // Calculate absolute offset in the GRF file
-        let absolute_offset = entry.offset as u64 + HEADER_SIZE;
+        let absolute_offset = entry.offset + HEADER_SIZE;
 
         // Seek to the file location
         use std::io::Seek;
@@ -296,35 +366,6 @@ impl GrfFile {
     }
 }
 
-fn parse_grf_header(input: &[u8]) -> IResult<&[u8], GrfHeader> {
-    let (input, (signature, key, file_table_offset, skip, file_count, version)) = (
-        take(15usize), // signature
-        take(15usize), // key
-        le_u32,        // file_table_offset
-        le_u32,        // skip
-        le_u32,        // file_count
-        le_u32,        // version
-    )
-        .parse(input)?;
-
-    let mut sig_array = [0u8; 15];
-    let mut key_array = [0u8; 15];
-    sig_array.copy_from_slice(signature);
-    key_array.copy_from_slice(key);
-
-    Ok((
-        input,
-        GrfHeader {
-            signature: sig_array,
-            // key: key_array,
-            file_table_offset,
-            skip,
-            file_count,
-            version,
-        },
-    ))
-}
-
 fn parse_grf_table(input: &[u8]) -> IResult<&[u8], GrfTable> {
     let (input, (pack_size, real_size)) = (le_u32, le_u32).parse(input)?;
 
@@ -335,4 +376,119 @@ fn parse_grf_table(input: &[u8]) -> IResult<&[u8], GrfTable> {
             real_size,
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flate2::write::ZlibEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+
+    fn zlib(data: &[u8]) -> Vec<u8> {
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(data).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    /// Builds a minimal, single-entry v0x300 GRF in memory: 46-byte header,
+    /// the zlib payload right after the header, then the table section
+    /// (4-byte skip + compressed/real sizes + zlib'd 21-byte entry).
+    fn build_v300_grf(magic: &str, filename: &str, content: &[u8]) -> Vec<u8> {
+        let payload = zlib(content);
+
+        let mut entry = Vec::new();
+        entry.extend_from_slice(filename.as_bytes());
+        entry.push(0);
+        entry.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        entry.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        entry.extend_from_slice(&(content.len() as u32).to_le_bytes());
+        entry.push(FILELIST_TYPE_FILE);
+        // payload sits at byte 46, so the stored offset (relative to the header) is 0.
+        entry.extend_from_slice(&0i64.to_le_bytes());
+        let table_comp = zlib(&entry);
+
+        let mut buf = vec![0u8; HEADER_SIZE as usize];
+        buf[0..magic.len()].copy_from_slice(magic.as_bytes());
+        for i in 0..14 {
+            buf[15 + i] = (i + 1) as u8;
+        }
+        buf.extend_from_slice(&payload);
+
+        let file_table_offset = buf.len() as u64 - HEADER_SIZE;
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.extend_from_slice(&(table_comp.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&(entry.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&table_comp);
+
+        buf[30..38].copy_from_slice(&file_table_offset.to_le_bytes());
+        buf[38..42].copy_from_slice(&1u32.to_le_bytes());
+        buf[42..46].copy_from_slice(&0x300u32.to_le_bytes());
+        buf
+    }
+
+    fn roundtrip(magic: &str, name: &str, filename: &str, content: &[u8]) {
+        let bytes = build_v300_grf(magic, filename, content);
+        let path = std::env::temp_dir().join(name);
+        std::fs::write(&path, &bytes).unwrap();
+
+        let grf = GrfFile::from_path(path.clone()).unwrap();
+        assert_eq!(grf.entries.len(), 1);
+        assert_eq!(grf.entries[0].filename, filename);
+        assert_eq!(grf.get_file(filename).as_deref(), Some(content));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn v300_roundtrip() {
+        let content = b"hello v0x300 world, repeated content compresses well. ".repeat(16);
+        roundtrip(
+            "Master of Magic",
+            "lifthrasir_grf_v300_roundtrip.grf",
+            "data\\test.txt",
+            &content,
+        );
+    }
+
+    #[test]
+    fn v300_accepts_branded_magic() {
+        let content = b"branded private-server payload ".repeat(8);
+        roundtrip(
+            "Event Horizon",
+            "lifthrasir_grf_v300_branded.grf",
+            "data\\brand.txt",
+            &content,
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_version() {
+        let mut bytes = build_v300_grf("Master of Magic", "x.txt", b"data");
+        bytes[42..46].copy_from_slice(&0x999u32.to_le_bytes());
+        let path = std::env::temp_dir().join("lifthrasir_grf_bad_version.grf");
+        std::fs::write(&path, &bytes).unwrap();
+
+        assert!(matches!(
+            GrfFile::from_path(path.clone()),
+            Err(GrfError::UnsupportedVersion { version: 0x999 })
+        ));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn rejects_unknown_magic() {
+        let mut bytes = build_v300_grf("Master of Magic", "x.txt", b"data");
+        bytes[0..15].copy_from_slice(b"Not A Real GRF!");
+        let path = std::env::temp_dir().join("lifthrasir_grf_bad_magic.grf");
+        std::fs::write(&path, &bytes).unwrap();
+
+        assert!(matches!(
+            GrfFile::from_path(path.clone()),
+            Err(GrfError::InvalidSignature(_))
+        ));
+
+        std::fs::remove_file(&path).ok();
+    }
 }
