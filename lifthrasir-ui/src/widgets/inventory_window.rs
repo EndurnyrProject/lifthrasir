@@ -11,8 +11,11 @@ use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::assets::item_icon_path;
 use game_engine::domain::entities::markers::LocalPlayer;
+use game_engine::domain::hotbar::HotbarSlot;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
 use game_engine::domain::inventory::{Inventory, Item, ItemCategory, UseItemRequested};
+
+use crate::widgets::hotbar::HotbarDrag;
 use game_engine::infrastructure::item::ItemDb;
 use leafwing_input_manager::prelude::ActionState;
 
@@ -497,6 +500,30 @@ fn spawn_cell(
     }
 
     commands.entity(cell).observe(on_cell_click);
+    commands.entity(cell).observe(on_cell_drag_start);
+}
+
+/// Resolves a cell's inventory index to the stable `item_id` the hotbar stores.
+fn inventory_item_id(inventory: &Inventory, index: u16) -> Option<u32> {
+    inventory.get(index).map(|item| item.item_id)
+}
+
+/// Dragging an inventory cell arms the hotbar with that item's stable `item_id`
+/// so a slot drop assigns it. A plain click still goes through `on_cell_click`
+/// since `bevy_picking` only emits `DragStart` after a press-and-move.
+fn on_cell_drag_start(
+    drag: On<Pointer<DragStart>>,
+    cells: Query<&InventoryCell>,
+    inventory: Res<Inventory>,
+    mut hotbar_drag: ResMut<HotbarDrag>,
+) {
+    let Ok(cell) = cells.get(drag.entity) else {
+        return;
+    };
+    let Some(item_id) = inventory_item_id(&inventory, cell.index) else {
+        return;
+    };
+    hotbar_drag.payload = Some(HotbarSlot::Item(item_id));
 }
 
 /// Cell click: select the item; double-click on a Use item emits `UseItemRequested`.
@@ -1005,5 +1032,19 @@ mod tests {
         app.update();
 
         assert_eq!(child_count(&app, panel), 1);
+    }
+
+    #[test]
+    fn inventory_item_id_resolves_present_and_absent() {
+        let mut inv = Inventory::default();
+        inv.upsert(Item {
+            index: 7,
+            item_id: 501,
+            amount: 3,
+            ..Default::default()
+        });
+        assert_eq!(inventory_item_id(&inv, 7), Some(501));
+        assert_eq!(inventory_item_id(&inv, 99), None);
+        assert_eq!(inventory_item_id(&Inventory::default(), 7), None);
     }
 }

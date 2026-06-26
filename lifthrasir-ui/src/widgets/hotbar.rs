@@ -3,7 +3,13 @@
 //! Renders the `Hotbar` resource every frame (skill/item/empty styling, icon,
 //! stack count, and a cooldown overlay + seconds for skills) and activates a
 //! filled slot on click by writing `HotbarSlotActivated` — the same seam the
-//! F1..F12 keys use (Task 4). Drag-drop assignment is a later task.
+//! F1..F12 keys use (Task 4).
+//!
+//! Slots are also `bevy_picking` drag targets: dropping a `SkillCell` /
+//! `InventoryCell` assigns it, dropping another slot swaps the two, and a
+//! right-click clears. The dragged payload (a skill/item) is carried in the
+//! `HotbarDrag` resource, set by the source cells on `DragStart` and reset on
+//! `DragEnd`; a slot↔slot swap is detected from the `DragDrop` dragged entity.
 //!
 //! `SkillCooldownTracker` only exposes the remaining seconds (not the original
 //! duration), so the cooldown render is a darkening overlay plus the rounded-up
@@ -53,11 +59,45 @@ struct HotbarCooldownText(usize);
 #[derive(Component)]
 struct HotbarStackText(usize);
 
+/// The skill/item currently being dragged onto the bar. Set by the source cells
+/// (skill window, inventory, or a filled slot) on `DragStart`, consumed by a
+/// slot's `DragDrop`, and reset on `DragEnd`.
+#[derive(Resource, Default)]
+pub struct HotbarDrag {
+    pub payload: Option<HotbarSlot>,
+}
+
 pub struct HotbarWidgetPlugin;
 
 impl Plugin for HotbarWidgetPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<HotbarDrag>();
+        app.add_observer(reset_drag);
         app.add_systems(Update, update_hotbar.run_if(in_state(GameState::InGame)));
+    }
+}
+
+/// A resolved drop: either swap with another slot or place a fresh payload.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum DropSource {
+    Swap(usize),
+    Place(HotbarSlot),
+}
+
+/// Classifies a drop: a dragged slot index means swap, otherwise place the
+/// carried payload (if any).
+fn drop_source(dragged_slot: Option<usize>, payload: Option<HotbarSlot>) -> Option<DropSource> {
+    match dragged_slot {
+        Some(from) => Some(DropSource::Swap(from)),
+        None => payload.map(DropSource::Place),
+    }
+}
+
+/// Applies a resolved drop onto `target`. All `Hotbar` helpers are bounds-safe.
+fn apply_drop(hotbar: &mut Hotbar, target: usize, dropped: DropSource) {
+    match dropped {
+        DropSource::Swap(from) => hotbar.swap(from, target),
+        DropSource::Place(slot) => hotbar.assign(target, slot),
     }
 }
 
@@ -279,6 +319,8 @@ fn spawn_slot(commands: &mut Commands, bar: Entity, i: usize, font: &Handle<Font
     ));
 
     commands.entity(cell).observe(on_slot_click);
+    commands.entity(cell).observe(on_slot_drag_start);
+    commands.entity(cell).observe(on_slot_drag_drop);
 }
 
 /// Reflects the bar state into every cell, writing each node only on change so a
@@ -388,11 +430,12 @@ fn set_text(text: &mut Text, value: String) {
     }
 }
 
-/// Click activates a filled slot through the shared seam; empty slots do nothing.
+/// Primary-click activates a filled slot through the shared seam; secondary-click
+/// clears it. Empty slots do nothing.
 fn on_slot_click(
     click: On<Pointer<Click>>,
     cells: Query<&HotbarSlotUi>,
-    hotbar: Res<Hotbar>,
+    mut hotbar: ResMut<Hotbar>,
     mut activated: MessageWriter<HotbarSlotActivated>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
@@ -401,7 +444,52 @@ fn on_slot_click(
     if hotbar.get(cell.0).is_none() {
         return;
     }
-    activated.write(HotbarSlotActivated { index: cell.0 });
+    match click.button {
+        PointerButton::Secondary => hotbar.clear(cell.0),
+        PointerButton::Primary => {
+            activated.write(HotbarSlotActivated { index: cell.0 });
+        }
+        _ => {}
+    }
+}
+
+/// A filled slot is a drag source for swapping: its payload is its current slot.
+fn on_slot_drag_start(
+    drag: On<Pointer<DragStart>>,
+    cells: Query<&HotbarSlotUi>,
+    hotbar: Res<Hotbar>,
+    mut state: ResMut<HotbarDrag>,
+) {
+    let Ok(cell) = cells.get(drag.entity) else {
+        return;
+    };
+    if let Some(slot) = hotbar.get(cell.0) {
+        state.payload = Some(slot);
+    }
+}
+
+/// Drop target: a dropped slot swaps, anything else places the carried payload.
+// NOTE: drag-hover highlight deferred — `update_hotbar` repaints the border
+// every frame, so a `.drag` hover tint would need it to read picking hover state.
+fn on_slot_drag_drop(
+    drop: On<Pointer<DragDrop>>,
+    cells: Query<&HotbarSlotUi>,
+    state: Res<HotbarDrag>,
+    mut hotbar: ResMut<Hotbar>,
+) {
+    let Ok(target) = cells.get(drop.entity) else {
+        return;
+    };
+    let dragged_slot = cells.get(drop.dropped).ok().map(|c| c.0);
+    let Some(dropped) = drop_source(dragged_slot, state.payload) else {
+        return;
+    };
+    apply_drop(&mut hotbar, target.0, dropped);
+}
+
+/// Clears the carried payload once any drag finishes.
+fn reset_drag(_: On<Pointer<DragEnd>>, mut state: ResMut<HotbarDrag>) {
+    state.payload = None;
 }
 
 #[cfg(test)]
@@ -588,7 +676,7 @@ mod tests {
         );
     }
 
-    fn click_event(target: Entity, window: Entity) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
@@ -602,7 +690,7 @@ mod tests {
                 position: Vec2::ZERO,
             },
             Click {
-                button: PointerButton::Primary,
+                button,
                 hit: HitData::new(target, 0.0, None, None),
                 duration: std::time::Duration::ZERO,
             },
@@ -632,7 +720,8 @@ mod tests {
         app.world_mut().entity_mut(cell).observe(on_slot_click);
         let window = app.world_mut().spawn_empty().id();
 
-        app.world_mut().trigger(click_event(cell, window));
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
         app.update();
 
         assert_eq!(activations(&app), vec![4]);
@@ -649,9 +738,96 @@ mod tests {
         app.world_mut().entity_mut(cell).observe(on_slot_click);
         let window = app.world_mut().spawn_empty().id();
 
-        app.world_mut().trigger(click_event(cell, window));
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
         app.update();
 
         assert!(activations(&app).is_empty());
+    }
+
+    #[test]
+    fn right_click_clears_filled_slot() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_message::<HotbarSlotActivated>();
+
+        let mut hotbar = Hotbar::default();
+        hotbar.assign(4, HotbarSlot::Skill(10));
+        app.insert_resource(hotbar);
+
+        let cell = app.world_mut().spawn(HotbarSlotUi(4)).id();
+        app.world_mut().entity_mut(cell).observe(on_slot_click);
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+        app.update();
+
+        assert_eq!(app.world().resource::<Hotbar>().get(4), None);
+        assert!(activations(&app).is_empty());
+    }
+
+    #[test]
+    fn drop_source_classifies_swap_and_place() {
+        assert_eq!(drop_source(Some(3), None), Some(DropSource::Swap(3)));
+        assert_eq!(
+            drop_source(None, Some(HotbarSlot::Skill(7))),
+            Some(DropSource::Place(HotbarSlot::Skill(7)))
+        );
+        assert_eq!(drop_source(None, None), None);
+        assert_eq!(
+            drop_source(Some(3), Some(HotbarSlot::Item(1))),
+            Some(DropSource::Swap(3))
+        );
+    }
+
+    #[test]
+    fn apply_drop_place_into_empty_assigns() {
+        let mut bar = Hotbar::default();
+        apply_drop(&mut bar, 2, DropSource::Place(HotbarSlot::Item(501)));
+        assert_eq!(bar.get(2), Some(HotbarSlot::Item(501)));
+    }
+
+    #[test]
+    fn apply_drop_place_over_filled_overwrites() {
+        let mut bar = Hotbar::default();
+        bar.assign(2, HotbarSlot::Skill(1));
+        apply_drop(&mut bar, 2, DropSource::Place(HotbarSlot::Item(501)));
+        assert_eq!(bar.get(2), Some(HotbarSlot::Item(501)));
+    }
+
+    #[test]
+    fn apply_drop_swap_exchanges_slots() {
+        let mut bar = Hotbar::default();
+        bar.assign(0, HotbarSlot::Skill(1));
+        bar.assign(1, HotbarSlot::Item(2));
+        apply_drop(&mut bar, 1, DropSource::Swap(0));
+        assert_eq!(bar.get(0), Some(HotbarSlot::Item(2)));
+        assert_eq!(bar.get(1), Some(HotbarSlot::Skill(1)));
+    }
+
+    #[test]
+    fn apply_drop_swap_with_empty_target_moves() {
+        let mut bar = Hotbar::default();
+        bar.assign(0, HotbarSlot::Skill(1));
+        apply_drop(&mut bar, 5, DropSource::Swap(0));
+        assert_eq!(bar.get(0), None);
+        assert_eq!(bar.get(5), Some(HotbarSlot::Skill(1)));
+    }
+
+    #[test]
+    fn apply_drop_out_of_range_is_safe() {
+        let mut bar = Hotbar::default();
+        apply_drop(&mut bar, 99, DropSource::Place(HotbarSlot::Skill(1)));
+        apply_drop(&mut bar, 99, DropSource::Swap(0));
+        assert!(bar.slots.iter().all(|s| s.is_none()));
+    }
+
+    #[test]
+    fn hotbar_drag_resource_is_registered() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_plugins(HotbarWidgetPlugin);
+        assert!(app.world().contains_resource::<HotbarDrag>());
     }
 }

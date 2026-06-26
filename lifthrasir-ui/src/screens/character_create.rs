@@ -36,7 +36,7 @@ use crate::theme::{self, label};
 
 const NAME_MAX: usize = 16;
 
-// ponytail: hardcoded client hair ranges — the old `GetHairstylesRequestedEvent`
+// NOTE: hardcoded client hair ranges — the old `GetHairstylesRequestedEvent`
 // source no longer exists in the engine. Widen here if a data-driven range appears.
 const HAIR_STYLE_MIN: u16 = 1;
 const HAIR_STYLE_MAX: u16 = 25;

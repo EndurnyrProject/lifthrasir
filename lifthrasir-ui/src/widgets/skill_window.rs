@@ -17,7 +17,10 @@ use game_engine::core::state::GameState;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::character::events::SkillLearnRequested;
 use game_engine::domain::entities::markers::LocalPlayer;
+use game_engine::domain::hotbar::HotbarSlot;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
+
+use crate::widgets::hotbar::HotbarDrag;
 use game_engine::domain::skill::{
     form, layout, target, Form, Placement, SkillCastRequested, SkillTreeState,
 };
@@ -858,6 +861,7 @@ fn spawn_cell(
     );
 
     commands.entity(cell).observe(on_cell_click);
+    commands.entity(cell).observe(on_cell_drag_start);
 }
 
 /// Icon tile: the skill icon (when the catalog resolves it) plus a level badge.
@@ -1054,6 +1058,20 @@ fn on_cell_click(
         skill_id: cell.0,
         at: now,
     };
+}
+
+/// Dragging a skill cell arms the hotbar with that skill so a slot drop assigns
+/// it. `bevy_picking` only emits `DragStart` after a press-and-move, so a plain
+/// click still goes through `on_cell_click`.
+fn on_cell_drag_start(
+    drag: On<Pointer<DragStart>>,
+    cells: Query<&SkillCell>,
+    mut hotbar_drag: ResMut<HotbarDrag>,
+) {
+    let Ok(cell) = cells.get(drag.entity) else {
+        return;
+    };
+    hotbar_drag.payload = Some(HotbarSlot::Skill(cell.0));
 }
 
 /// Rebuilds the connector overlay: one orthogonal `Node` segment per in-tab

@@ -22,7 +22,7 @@ pub enum ServerStatus {
     Full,
 }
 
-// ponytail: ServerInfo has no capacity field, only `users`. Assume a soft cap for
+// NOTE: ServerInfo has no capacity field, only `users`. Assume a soft cap for
 // the population bar/status. Replace with a real capacity if the protocol gains one.
 const POP_SOFT_CAP: u16 = 6000;
 

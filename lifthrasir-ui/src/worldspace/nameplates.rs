@@ -15,7 +15,7 @@ use crate::worldspace::{viewport_to_ui, WorldspaceFont};
 const NAMEPLATE_WIDTH: f32 = 220.0;
 const NAMEPLATE_FONT_SIZE: f32 = 13.0;
 /// Pixels below the entity's projected origin (the feet). Classic RO shows the name at
-/// the character's feet. ponytail: fixed screen offset, not zoom-scaled — tune live via
+/// the character's feet. NOTE: fixed screen offset, not zoom-scaled — tune live via
 /// BRP if it drifts off the sprite's feet.
 const NAMEPLATE_FOOT_GAP: f32 = 6.0;
 /// Above the world camera, below the fade overlay (`i32::MAX - 1`) and cursor.
