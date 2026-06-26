@@ -34,8 +34,7 @@ impl Plugin for StatusWindowPlugin {
         );
         app.add_systems(
             Update,
-            update_status_window
-                .run_if(in_state(GameState::InGame).and(status_inputs_changed)),
+            update_status_window.run_if(in_state(GameState::InGame).and(status_inputs_changed)),
         );
     }
 }

@@ -739,13 +739,7 @@ fn spawn_graphics_rows(commands: &mut Commands, body: Entity, font: &Handle<Font
     let ctrl = spawn_row(commands, body, "Bloom", "Glow around bright lights", font);
     spawn_switch(commands, ctrl, GraphicsField::Bloom);
 
-    let ctrl = spawn_row(
-        commands,
-        body,
-        "Shadows",
-        "Sun shadow casting",
-        font,
-    );
+    let ctrl = spawn_row(commands, body, "Shadows", "Sun shadow casting", font);
     spawn_switch(commands, ctrl, GraphicsField::Shadows);
 
     let ctrl = spawn_row(

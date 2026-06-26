@@ -49,8 +49,7 @@ impl Plugin for CharacterInfoPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            update_character_info
-                .run_if(in_state(GameState::InGame).and(character_info_changed)),
+            update_character_info.run_if(in_state(GameState::InGame).and(character_info_changed)),
         );
     }
 }
