@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/EndurnyrProject/lifthrasir/compare/v0.3.0...v0.3.1) (2026-06-26)
+
+
+### Bug Fixes
+
+* **skill:** drive Play Dead pose from trickdead status and recover on cancel ([f97671f](https://github.com/EndurnyrProject/lifthrasir/commit/f97671fe09f55a7332ef10957f48527e8f1ac525))
+
 ## [0.3.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.2.0...v0.3.0) (2026-06-26)
 
 
