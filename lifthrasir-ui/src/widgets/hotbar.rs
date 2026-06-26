@@ -16,6 +16,7 @@
 //! seconds rather than a proportional sweep (design D7's accepted fallback).
 
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use game_engine::core::state::GameState;
 use game_engine::domain::assets::item_icon_path;
 use game_engine::domain::hotbar::{Hotbar, HotbarSlot, HotbarSlotActivated};
@@ -30,6 +31,13 @@ const SLOTS: usize = 12;
 const SLOT_SIZE: f32 = 37.0;
 const ICON_SIZE: f32 = 21.0;
 const ICON_INSET: f32 = (SLOT_SIZE - ICON_SIZE) / 2.0;
+
+/// The cursor-following drag ghost: a translucent icon shown while a skill/item is
+/// being dragged. Sits above every window (`GHOST_Z`) and is `Pickable::IGNORE` so
+/// it never steals the drop target's hit.
+const GHOST_SIZE: f32 = 30.0;
+const GHOST_Z: i32 = 2000;
+const GHOST_ALPHA: f32 = 0.85;
 
 const BAR_BG: Color = Color::srgba(0.043, 0.067, 0.059, 0.78);
 const SLOT_EMPTY_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.28);
@@ -67,13 +75,20 @@ pub struct HotbarDrag {
     pub payload: Option<HotbarSlot>,
 }
 
+/// The single cursor-following ghost icon spawned while a drag is in flight.
+#[derive(Component)]
+struct HotbarDragGhost;
+
 pub struct HotbarWidgetPlugin;
 
 impl Plugin for HotbarWidgetPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HotbarDrag>();
         app.add_observer(reset_drag);
-        app.add_systems(Update, update_hotbar.run_if(in_state(GameState::InGame)));
+        app.add_systems(
+            Update,
+            (update_hotbar, update_drag_ghost).run_if(in_state(GameState::InGame)),
+        );
     }
 }
 
@@ -492,6 +507,96 @@ fn reset_drag(_: On<Pointer<DragEnd>>, mut state: ResMut<HotbarDrag>) {
     state.payload = None;
 }
 
+/// The icon a dragged payload should show on the cursor ghost: the skill catalog
+/// icon for a skill, or the inventory item's icon for an item (falling back to the
+/// identified art when the source item is no longer held).
+fn ghost_icon(
+    payload: HotbarSlot,
+    inventory: &Inventory,
+    catalog: Option<&SkillCatalog>,
+    item_db: Option<&ItemDb>,
+) -> Option<String> {
+    match payload {
+        HotbarSlot::Skill(id) => catalog.and_then(|c| c.icon_path(id)),
+        HotbarSlot::Item(item_id) => {
+            let identified = inventory
+                .iter()
+                .find(|it| it.item_id == item_id)
+                .map(|it| it.identified)
+                .unwrap_or(true);
+            item_db
+                .and_then(|db| db.icon_resource(item_id, identified))
+                .map(item_icon_path)
+        }
+    }
+}
+
+/// Drives the cursor-following drag ghost: spawns it on the first frame a drag
+/// carries a resolvable icon, tracks the cursor while the drag is live, and
+/// despawns it once the payload clears (or its icon can no longer be resolved).
+#[allow(clippy::too_many_arguments)]
+fn update_drag_ghost(
+    mut commands: Commands,
+    drag: Res<HotbarDrag>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    inventory: Res<Inventory>,
+    catalog: Option<Res<SkillCatalog>>,
+    item_db: Option<Res<ItemDb>>,
+    asset_server: Res<AssetServer>,
+    mut ghosts: Query<(Entity, &mut Node), With<HotbarDragGhost>>,
+) {
+    let ghost = ghosts.single_mut().ok();
+    let cursor = windows.single().ok().and_then(Window::cursor_position);
+    let icon = drag
+        .payload
+        .and_then(|p| ghost_icon(p, &inventory, catalog.as_deref(), item_db.as_deref()));
+
+    let (Some(cursor), Some(icon)) = (cursor, icon) else {
+        if let Some((entity, _)) = ghost {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+
+    let left = Val::Px(cursor.x - GHOST_SIZE / 2.0);
+    let top = Val::Px(cursor.y - GHOST_SIZE / 2.0);
+    match ghost {
+        Some((_, mut node)) => {
+            node.left = left;
+            node.top = top;
+        }
+        None => spawn_ghost(&mut commands, &asset_server, icon, left, top),
+    }
+}
+
+fn spawn_ghost(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    icon: String,
+    left: Val,
+    top: Val,
+) {
+    commands.spawn((
+        HotbarDragGhost,
+        ImageNode {
+            image: asset_server.load(icon),
+            color: Color::WHITE.with_alpha(GHOST_ALPHA),
+            ..default()
+        },
+        Node {
+            position_type: PositionType::Absolute,
+            left,
+            top,
+            width: Val::Px(GHOST_SIZE),
+            height: Val::Px(GHOST_SIZE),
+            ..default()
+        },
+        GlobalZIndex(GHOST_Z),
+        Pickable::IGNORE,
+        DespawnOnExit(GameState::InGame),
+    ));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -829,5 +934,46 @@ mod tests {
         app.add_plugins(MinimalPlugins);
         app.add_plugins(HotbarWidgetPlugin);
         assert!(app.world().contains_resource::<HotbarDrag>());
+    }
+
+    fn ghost_db() -> ItemDb {
+        use lifthrasir_data::{ItemData, ItemInfo};
+        let mut data = ItemData::default();
+        data.items.insert(
+            501,
+            ItemInfo {
+                identified_name: "Red Potion".to_string(),
+                identified_resource: "RED_POTION".to_string(),
+                ..Default::default()
+            },
+        );
+        ItemDb::from_item_data(data)
+    }
+
+    #[test]
+    fn ghost_icon_skill_without_catalog_is_none() {
+        let icon = ghost_icon(HotbarSlot::Skill(42), &Inventory::default(), None, None);
+        assert_eq!(icon, None);
+    }
+
+    #[test]
+    fn ghost_icon_item_without_db_is_none() {
+        let icon = ghost_icon(HotbarSlot::Item(501), &inventory_with(501, 3), None, None);
+        assert_eq!(icon, None);
+    }
+
+    #[test]
+    fn ghost_icon_item_resolves_from_db() {
+        let db = ghost_db();
+        let icon = ghost_icon(
+            HotbarSlot::Item(501),
+            &inventory_with(501, 3),
+            None,
+            Some(&db),
+        );
+        assert!(
+            icon.is_some_and(|path| path.ends_with("RED_POTION.bmp")),
+            "item ghost should resolve to the identified icon path"
+        );
     }
 }
