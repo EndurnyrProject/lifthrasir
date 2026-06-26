@@ -1,5 +1,6 @@
 use super::animation::AnimationState;
 use super::status_effects::StatusEffects;
+use crate::domain::combat::components::DeadEntity;
 use crate::domain::entities::sprite_rendering::{EffectType, StatusEffectVisualEvent};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
@@ -60,7 +61,7 @@ fn emit_effect(
 }
 
 type CharactersWithChangedStatusEffects<'w, 's> =
-    Query<'w, 's, (Entity, &'static StatusEffects), Changed<StatusEffects>>;
+    Query<'w, 's, (Entity, &'static StatusEffects), (Changed<StatusEffects>, Without<DeadEntity>)>;
 
 #[auto_add_system(
     plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
@@ -77,9 +78,18 @@ pub fn handle_status_effect_state_changes(
 
         let current_state = *behavior.current();
 
-        if status.dead && current_state != AnimationState::Dead {
+        if status.dead {
+            if current_state != AnimationState::Dead {
+                behavior.reset();
+                behavior.start(AnimationState::Dead);
+            }
+            continue;
+        }
+
+        // Play Dead cleared: stand back up. reset() bypasses the Dead terminal
+        // filter; real corpses carry DeadEntity and are excluded by the query.
+        if current_state == AnimationState::Dead {
             behavior.reset();
-            behavior.start(AnimationState::Dead);
             continue;
         }
 

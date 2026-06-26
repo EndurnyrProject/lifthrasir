@@ -132,6 +132,15 @@ pub struct UnitHpChanged {
     pub max_hp: u32,
 }
 
+/// A status effect (EFST icon) was applied (`on = true`) or removed on a unit.
+#[derive(Message, Debug, Clone)]
+#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+pub struct StatusEffectChanged {
+    pub unit_id: u32,
+    pub efst: u32,
+    pub on: bool,
+}
+
 /// A parameter changed (collapses ZC_PAR_CHANGE u16 + ZC_LONGPAR_CHANGE u32).
 #[derive(Message, Debug, Clone)]
 #[auto_add_event(plugin = ZoneDomainAutoPlugin)]
