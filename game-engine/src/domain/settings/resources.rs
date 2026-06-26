@@ -6,7 +6,7 @@ use bevy_framepace::Limiter;
 use leafwing_input_manager::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::input::PlayerAction;
+use crate::domain::input::{PlayerAction, HOTBAR_ACTIONS};
 
 /// Resolution presets offered in the settings UI.
 pub const RESOLUTIONS: [(u32, u32); 5] = [
@@ -458,6 +458,16 @@ impl ActionBinds {
     }
 }
 
+/// Default binds for the twelve hotbar slots: F1..F12, unmodified. Used both as
+/// `Keybinds::default().hotbar` and as the `serde(default)` for the field, so an
+/// old `settings.ron` lacking `hotbar` loads the working F-keys, not empty binds.
+fn default_hotbar_binds() -> [ActionBinds; 12] {
+    std::array::from_fn(|i| ActionBinds {
+        primary: Some(KeyBind::new(format!("F{}", i + 1))),
+        secondary: None,
+    })
+}
+
 /// Serde-only keybinds for the existing `PlayerAction`s. No leafwing coupling
 /// here; Task 4 adds `to_input_map` / `from_input_map`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug)]
@@ -467,6 +477,8 @@ pub struct Keybinds {
     pub status: ActionBinds,
     pub inventory: ActionBinds,
     pub skills: ActionBinds,
+    #[serde(default = "default_hotbar_binds")]
+    pub hotbar: [ActionBinds; 12],
 }
 
 impl Default for Keybinds {
@@ -490,6 +502,7 @@ impl Default for Keybinds {
                 primary: Some(KeyBind::modified(Modifier::Alt, "KeyS")),
                 secondary: None,
             },
+            hotbar: default_hotbar_binds(),
         }
     }
 }
@@ -504,6 +517,9 @@ impl Keybinds {
         self.inventory
             .insert_into(&mut map, PlayerAction::Inventory);
         self.skills.insert_into(&mut map, PlayerAction::Skills);
+        for (binds, action) in self.hotbar.iter().zip(HOTBAR_ACTIONS) {
+            binds.insert_into(&mut map, action);
+        }
         map
     }
 }
@@ -614,6 +630,39 @@ mod tests {
     }
 
     #[test]
+    fn default_to_input_map_carries_every_hotbar_slot() {
+        let from_keybinds = Keybinds::default().to_input_map();
+        let from_actions = PlayerAction::default_input_map();
+        for action in HOTBAR_ACTIONS {
+            assert!(
+                from_keybinds.get(&action).is_some(),
+                "missing hotbar binding for {action:?}"
+            );
+            assert_eq!(from_keybinds.get(&action), from_actions.get(&action));
+        }
+    }
+
+    #[test]
+    fn keybinds_without_hotbar_field_fill_f_key_defaults() {
+        let legacy = r#"(
+            sit: (primary: Some((key: "Insert", modifier: None)), secondary: Some((key: "Help", modifier: None))),
+            status: (primary: Some((key: "KeyA", modifier: Some(Alt))), secondary: None),
+            inventory: (primary: Some((key: "KeyE", modifier: Some(Alt))), secondary: None),
+            skills: (primary: Some((key: "KeyS", modifier: Some(Alt))), secondary: None),
+        )"#;
+
+        let decoded: Keybinds = ron::from_str(legacy).expect("legacy keybinds should load");
+        assert_eq!(decoded.hotbar, Keybinds::default().hotbar);
+        assert_eq!(
+            decoded.hotbar[0].primary,
+            Some(KeyBind::new("F1")),
+            "hotbar must default to F-keys, not empty binds"
+        );
+        assert_eq!(decoded.hotbar[11].primary, Some(KeyBind::new("F12")));
+        assert!(decoded.hotbar.iter().all(|b| b.primary.is_some()));
+    }
+
+    #[test]
     fn antialiasing_cycles_and_clamps() {
         assert_eq!(AntiAliasing::Off.next(), AntiAliasing::Fxaa);
         assert_eq!(AntiAliasing::MsaaX4.next(), AntiAliasing::MsaaX4);
@@ -688,6 +737,7 @@ mod tests {
             status: ActionBinds::default(),
             inventory: ActionBinds::default(),
             skills: ActionBinds::default(),
+            ..Default::default()
         };
         let map = binds.to_input_map();
         let sit = map.get(&PlayerAction::Sit).expect("sit binding");

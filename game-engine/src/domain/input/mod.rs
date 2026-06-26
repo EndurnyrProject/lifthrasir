@@ -7,7 +7,7 @@ pub mod targeting;
 pub mod terrain_raycast;
 pub mod ui_focus;
 
-pub use actions::PlayerAction;
+pub use actions::{PlayerAction, HOTBAR_ACTIONS};
 pub use cursor::{CurrentCursorType, CursorType};
 pub use events::CursorChangeRequest;
 pub use resources::{ForwardedCursorPosition, ForwardedMouseClick};

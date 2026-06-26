@@ -9,7 +9,7 @@
 use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
 use bevy_persistent::prelude::Persistent;
-use game_engine::domain::input::{ui_unfocused, PlayerAction};
+use game_engine::domain::input::{ui_unfocused, PlayerAction, HOTBAR_ACTIONS};
 use game_engine::domain::settings::{
     resolution_label, resolution_next, resolution_prev, ActionBinds, ApplySettings, DisplayMode,
     GraphicsSettings, KeyBind, Modifier, Settings,
@@ -1434,7 +1434,8 @@ fn refresh_sound(
 
 // ── Input tab ─────────────────────────────────────────────────────────────
 
-/// The rebindable actions in display order.
+/// The rebindable non-hotbar actions in display order. The twelve hotbar slots
+/// follow these rows (see `spawn_input_rows`), labelled `Hotbar F1`..`Hotbar F12`.
 const ACTIONS: [(PlayerAction, &str); 4] = [
     (PlayerAction::Sit, "Sit / Stand"),
     (PlayerAction::Status, "Status Window"),
@@ -1452,6 +1453,7 @@ fn action_binds(
         PlayerAction::Status => &keybinds.status,
         PlayerAction::Inventory => &keybinds.inventory,
         PlayerAction::Skills => &keybinds.skills,
+        slot => &keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
 
@@ -1465,6 +1467,7 @@ fn action_binds_mut(
         PlayerAction::Status => &mut keybinds.status,
         PlayerAction::Inventory => &mut keybinds.inventory,
         PlayerAction::Skills => &mut keybinds.skills,
+        slot => &mut keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
 
@@ -1585,6 +1588,9 @@ fn spawn_input_rows(commands: &mut Commands, body: Entity, font: &Handle<Font>) 
 
     for (action, label) in ACTIONS {
         spawn_bind_row(commands, body, action, label, font);
+    }
+    for (i, action) in HOTBAR_ACTIONS.into_iter().enumerate() {
+        spawn_bind_row(commands, body, action, &format!("Hotbar F{}", i + 1), font);
     }
 }
 
@@ -1939,6 +1945,7 @@ mod tests {
             status: ActionBinds::default(),
             inventory: ActionBinds::default(),
             skills: ActionBinds::default(),
+            hotbar: Default::default(),
         };
         let expected = {
             let mut map = leafwing_input_manager::prelude::InputMap::default();
@@ -1960,6 +1967,7 @@ mod tests {
             },
             inventory: ActionBinds::default(),
             skills: ActionBinds::default(),
+            hotbar: Default::default(),
         };
         let expected = {
             use leafwing_input_manager::prelude::*;
