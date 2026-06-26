@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.3.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.2.0...v0.3.0) (2026-06-26)
+
+
+### Features
+
+* Adding anisotropic control to the settings ui ([ffc4857](https://github.com/EndurnyrProject/lifthrasir/commit/ffc48570eb9b4634ccb8a9973fed2b084096d88c))
+* **auth:** Implemented handshake token ([bc21b5d](https://github.com/EndurnyrProject/lifthrasir/commit/bc21b5d7e3efe6029f7e4285d5cfa68468a117db))
+* **cli:** add skill catalog converter ([2cd2f25](https://github.com/EndurnyrProject/lifthrasir/commit/2cd2f25253a6daaa09f51015e6b13137fe8ab370))
+* **data:** add skill catalog structs ([1382051](https://github.com/EndurnyrProject/lifthrasir/commit/1382051ba6812601ef9f702f6d15a554db45cdc4))
+* **effect:** add effect runtime components and animation systems ([0280637](https://github.com/EndurnyrProject/lifthrasir/commit/0280637278d227e5d6058f0d92f0a45635a5d557))
+* **effect:** add EffectCatalog loaded from skill_effects.ron ([70dc6ee](https://github.com/EndurnyrProject/lifthrasir/commit/70dc6eea642e9a18633101e6ded14357427b33b4))
+* **effect:** add EffectsPlugin and wire into CoreGamePlugins ([89f1d01](https://github.com/EndurnyrProject/lifthrasir/commit/89f1d014be45c8945f2372b14fe6b28b163a324a))
+* **effect:** add LoadedEffectAsset and .str asset loader ([260c608](https://github.com/EndurnyrProject/lifthrasir/commit/260c6087800a0caec5df809fd997bf986372d6dd))
+* **effect:** spawn RSW map effects via effect runtime ([ab87309](https://github.com/EndurnyrProject/lifthrasir/commit/ab873091e2841c180585ca365149acbe867ee5be))
+* **effect:** wire skill events to effect playback ([3173ca7](https://github.com/EndurnyrProject/lifthrasir/commit/3173ca77c344f3d58d25b9cc24138d16e992a240))
+* **grf:** Added support to GRF v3 ([848eeda](https://github.com/EndurnyrProject/lifthrasir/commit/848eedacb6853e58cc0b8cffaaea191e1410a659))
+* **hotbar-ui:** drag-drop assignment with swap and clear ([b52682e](https://github.com/EndurnyrProject/lifthrasir/commit/b52682e71a7bc9f256848e56282310fa8d44abf5))
+* **hotbar-ui:** render the bar and activate slots on click ([e84822f](https://github.com/EndurnyrProject/lifthrasir/commit/e84822feb3ed675ccdcfcdd71a50b442dd0b239d))
+* **hotbar:** activate slots via keys into cast/use seam ([7bd2828](https://github.com/EndurnyrProject/lifthrasir/commit/7bd28283ed083a277eba161e10e4a545a1910f93))
+* **hotbar:** add Hotbar model and slot resource ([d2c3593](https://github.com/EndurnyrProject/lifthrasir/commit/d2c3593f95eb206a7b3ce07f66a6524bfcd84855))
+* **hotbar:** persist the bar per character as RON ([c6df371](https://github.com/EndurnyrProject/lifthrasir/commit/c6df37187029c0e1a3ec971a1d510a9fe7bc550a))
+* **input:** add press-then-click skill targeting mode ([368f0c0](https://github.com/EndurnyrProject/lifthrasir/commit/368f0c08e29bd7a64119024418329a3e556f785f))
+* **input:** add rebindable Slot1..Slot12 hotbar actions ([8adae4d](https://github.com/EndurnyrProject/lifthrasir/commit/8adae4dee983bbe944e15606236b431ac5d3be67))
+* **lifthrasir-data:** add EffectDescriptor and SkillEffectData ([2c19c33](https://github.com/EndurnyrProject/lifthrasir/commit/2c19c330e2bd052711c3eb6bbdaa060e0b8e5f4f))
+* **net:** carry full skill tree in SkillList mapping ([8027bdc](https://github.com/EndurnyrProject/lifthrasir/commit/8027bdc6ab926c7831a47d50009a00eb4eb6b509))
+* **net:** decode LearnSkillResult into a domain event ([fa2ee2d](https://github.com/EndurnyrProject/lifthrasir/commit/fa2ee2d41366870f22de6f68c3aa8536654474a3))
+* **render:** add EffectMaterial for STR billboards ([95a6691](https://github.com/EndurnyrProject/lifthrasir/commit/95a66919e134a2f4c3fad958e9ff500c9dbc378c))
+* **ro-formats:** add STR effect parser ([4e542c3](https://github.com/EndurnyrProject/lifthrasir/commit/4e542c3e2e938f6c765a8f1c20727be167977111))
+* **skill-ui:** cast skills by double-clicking the skill tree ([3e22f06](https://github.com/EndurnyrProject/lifthrasir/commit/3e22f0675991246fd5acd706b31d6459da19735b))
+* **skill:** add cast events and SkillCast/GroundSkillCast send seam ([17bbd52](https://github.com/EndurnyrProject/lifthrasir/commit/17bbd52bddcc101ccd59d060d203bcfab40eba3f))
+* **skill:** add skill catalog asset and registry ([1971c98](https://github.com/EndurnyrProject/lifthrasir/commit/1971c98d58bad3a5ed74f8ad56985cc6ca5fca0f))
+* **skill:** add SkillTreeState resource and layout helpers ([2bcfcc8](https://github.com/EndurnyrProject/lifthrasir/commit/2bcfcc8a0c63e41d1f045c11d2d54f2175bf8ea9))
+* **skill:** load skill catalog at startup ([894fa63](https://github.com/EndurnyrProject/lifthrasir/commit/894fa63d0429ebcab4c92844b50585a031b16a10))
+* **skill:** resolve skill casts and arm targeting mode ([38b4de9](https://github.com/EndurnyrProject/lifthrasir/commit/38b4de970e9b0ba4fecb6aaa43b9fead116d5f7a))
+* **skill:** send LearnSkill on SkillLearnRequested ([7e89650](https://github.com/EndurnyrProject/lifthrasir/commit/7e896503cbaf329b3957eac02695ec1e4ce0fbff))
+* **skill:** surface learn-reject feedback in chat ([4d5bb6b](https://github.com/EndurnyrProject/lifthrasir/commit/4d5bb6b684e2781c6c24fd13272d3af9295dd6ca))
+* **skill:** track skill cooldowns from SkillCooldownSet ([deca4a6](https://github.com/EndurnyrProject/lifthrasir/commit/deca4a6eaa878f98021e7c180e7a342097d84acd))
+* **ui:** add read-only skills window on Alt+S ([147bcd2](https://github.com/EndurnyrProject/lifthrasir/commit/147bcd2f4b9eabd2b42e6fd7800baf693d221435))
+* **ui:** stage and learn skills via Reset/Apply ([fe5913f](https://github.com/EndurnyrProject/lifthrasir/commit/fe5913f0e8885c6c32c81dc34be85f3e0075b9a5))
+
+
+### Bug Fixes
+
+* **disconnect:** Fixed broken disconnect flow ([649b075](https://github.com/EndurnyrProject/lifthrasir/commit/649b075494fe46f0aed5e65734a3c56b5e8af821))
+* **effects:** Fixed the god forsaken effects rendering ([353a0b0](https://github.com/EndurnyrProject/lifthrasir/commit/353a0b0e4de685b5544447537cb11b703de2cfc0))
+* Exporting some settings to the settings screen ([6a1b4f3](https://github.com/EndurnyrProject/lifthrasir/commit/6a1b4f38c0920691788339756194925edecae850))
+* **grf:** Fixed texture loading, lowercasing it ([f3f3438](https://github.com/EndurnyrProject/lifthrasir/commit/f3f34381aafb924342f0c5504a3bfc8d2b30b957))
+* **hotbar-ui:** Adde Ghost icon when dragging it ([3aa144a](https://github.com/EndurnyrProject/lifthrasir/commit/3aa144af2116ecc9c530670fc695526e7ac93d92))
+* **hotbar-ui:** align drag ghost to cursor under UiScale ([63a628d](https://github.com/EndurnyrProject/lifthrasir/commit/63a628dc0e55df40331afae07b57bc406df50f1c))
+* **settings:** tolerate missing fields in settings.ron, reset on parse failure ([0ad46cf](https://github.com/EndurnyrProject/lifthrasir/commit/0ad46cf22029369daf80ccec4e36dd61fe8db276))
+* **skill-ui:** Improved spacing for the tabs and added the rich-text parsing ([df8fc5c](https://github.com/EndurnyrProject/lifthrasir/commit/df8fc5cfaf1646ebed6e36c29537b713077a7db6))
+* **terrain:** make private resource systems non-pub to silence lint ([747fb02](https://github.com/EndurnyrProject/lifthrasir/commit/747fb02712ded34c713f63ca19a06f7391652f39))
+
 ## [0.2.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.1.0...v0.2.0) (2026-06-24)
 
 
