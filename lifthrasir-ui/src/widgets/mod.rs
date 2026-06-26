@@ -10,6 +10,7 @@ use game_engine::core::state::GameState;
 pub mod character_info;
 pub mod chat_box;
 pub mod draggable;
+pub mod hotbar;
 pub mod inventory_window;
 pub mod settings_window;
 pub mod skill_window;
@@ -24,6 +25,7 @@ impl Plugin for InGameHudPlugin {
         app.add_plugins((
             character_info::CharacterInfoPlugin,
             chat_box::ChatBoxPlugin,
+            hotbar::HotbarWidgetPlugin,
             inventory_window::InventoryWindowPlugin,
             settings_window::SettingsWindowPlugin,
             skill_window::SkillWindowPlugin,
@@ -47,6 +49,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     character_info::spawn_status_frame(&mut commands, root, &asset_server);
     chat_box::spawn_chat_box(&mut commands, root, &asset_server);
+    hotbar::spawn_hotbar(&mut commands, root, &asset_server);
     inventory_window::spawn_inventory_window(&mut commands, root, &asset_server);
     skill_window::spawn_skill_window(&mut commands, root, &asset_server);
     status_window::spawn_status_window(&mut commands, root, &asset_server);
