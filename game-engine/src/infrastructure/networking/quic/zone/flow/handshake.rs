@@ -110,6 +110,7 @@ pub fn zone_drain_control(
                     login_id2: state.auth.login_id2,
                     sex: state.auth.sex,
                     char_id: state.auth.char_id,
+                    zone_auth_token: state.auth.zone_auth_token.clone(),
                 });
                 if let Err(e) = state.send(&mut client, CONTROL, auth) {
                     error!("failed to send zone SessionAuth: {e}");

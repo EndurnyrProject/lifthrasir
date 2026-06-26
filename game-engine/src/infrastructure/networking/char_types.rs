@@ -59,6 +59,8 @@ pub struct ZoneServerInfo {
     pub map_name: String,
     pub ip: [u8; 4],
     pub port: u16,
+    /// Single-use handoff token to echo back in zone `SessionAuth.zone_auth_token`.
+    pub auth_token: Vec<u8>,
 }
 
 impl ZoneServerInfo {

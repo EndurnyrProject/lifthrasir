@@ -232,6 +232,7 @@ pub fn handle_zone_server_info_protocol(
             account_id: session.tokens.account_id,
             login_id1: session.tokens.login_id1,
             sex: session.sex,
+            zone_auth_token: event.zone_server_info.auth_token.clone(),
         });
     }
 }
@@ -379,6 +380,7 @@ pub fn handle_zone_server_info(
                 login_id2: user_session.tokens.login_id2,
                 sex: event.sex as u32,
                 char_id: event.char_id,
+                zone_auth_token: event.zone_auth_token.clone(),
             },
             event.map_name.clone(),
         );

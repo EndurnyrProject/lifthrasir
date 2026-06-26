@@ -93,6 +93,7 @@ pub fn zone_server_info_to_event(z: net::ZoneServerInfo) -> ZoneServerInfoReceiv
             map_name: z.map_name,
             ip,
             port: z.port as u16,
+            auth_token: z.auth_token,
         },
     }
 }
@@ -249,6 +250,7 @@ mod tests {
             map_name: "prontera".into(),
             ip: "127.0.0.1".into(),
             port: 5121,
+            auth_token: vec![1, 2, 3, 4],
         };
 
         let event = zone_server_info_to_event(z);
@@ -256,6 +258,7 @@ mod tests {
         assert_eq!(event.zone_server_info.map_name, "prontera");
         assert_eq!(event.zone_server_info.ip_string(), "127.0.0.1");
         assert_eq!(event.zone_server_info.port, 5121);
+        assert_eq!(event.zone_server_info.auth_token, vec![1, 2, 3, 4]);
     }
 
     #[test]
@@ -265,6 +268,7 @@ mod tests {
             map_name: "prontera".into(),
             ip: "not-an-ip".into(),
             port: 5121,
+            auth_token: vec![],
         };
 
         let event = zone_server_info_to_event(z);

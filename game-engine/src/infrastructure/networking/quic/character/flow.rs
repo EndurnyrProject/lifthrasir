@@ -121,6 +121,8 @@ pub fn char_drain_control(
                     login_id2: state.auth.login_id2,
                     sex: state.auth.sex,
                     char_id: 0,
+                    // Unused on the char-server entry path (see proto comment).
+                    zone_auth_token: Vec::new(),
                 });
                 if let Err(e) = state.conn.send(client.connection_mut(), CONTROL, auth) {
                     error!("failed to send SessionAuth: {e}");

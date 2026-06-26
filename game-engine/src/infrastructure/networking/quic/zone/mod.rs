@@ -31,13 +31,15 @@ pub enum ZonePhase {
 }
 
 /// Session credentials carried from login/char, sent in zone `SessionAuth`.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ZoneAuth {
     pub account_id: u32,
     pub login_id1: u32,
     pub login_id2: u32,
     pub sex: u32,
     pub char_id: u32,
+    /// Single-use handoff token from `ZoneServerInfo`, echoed in `SessionAuth.zone_auth_token`.
+    pub zone_auth_token: Vec<u8>,
 }
 
 /// The spawn cell carried by `EnterAck`, stored for the local-player spawn.
@@ -140,6 +142,7 @@ mod tests {
                 login_id2: 3,
                 sex: 1,
                 char_id: 4,
+                zone_auth_token: vec![9, 9, 9],
             },
             "prontera".into(),
         );

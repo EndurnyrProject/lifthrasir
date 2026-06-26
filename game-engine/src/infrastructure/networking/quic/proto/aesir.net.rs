@@ -225,7 +225,7 @@ pub struct LoginFailed {
 }
 /// Client -> server, authenticate an existing Horde session on char/zone entry.
 /// `char_id` is unused by the char server but reserved for zone reuse.
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SessionAuth {
     #[prost(uint32, tag = "1")]
     pub account_id: u32,
@@ -237,6 +237,11 @@ pub struct SessionAuth {
     pub sex: u32,
     #[prost(uint32, tag = "5")]
     pub char_id: u32,
+    /// Single-use handoff token issued by the char server in ZoneServerInfo.auth_token.
+    /// Required by the zone server to prove the client passed character selection;
+    /// unused on the char-server entry path.
+    #[prost(bytes = "vec", tag = "6")]
+    pub zone_auth_token: ::prost::alloc::vec::Vec<u8>,
 }
 /// A single character's full state (protobuf analogue of the legacy 175-byte CharacterInfo).
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -361,6 +366,10 @@ pub struct ZoneServerInfo {
     pub ip: ::prost::alloc::string::String,
     #[prost(uint32, tag = "4")]
     pub port: u32,
+    /// Single-use token the client must echo back in SessionAuth.zone_auth_token
+    /// when connecting to this zone server.
+    #[prost(bytes = "vec", tag = "5")]
+    pub auth_token: ::prost::alloc::vec::Vec<u8>,
 }
 /// Client -> server, create a new character (replaces RO CH_MAKE_CHAR_V2).
 #[derive(Clone, PartialEq, ::prost::Message)]

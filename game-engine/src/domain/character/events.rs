@@ -53,6 +53,8 @@ pub struct ZoneServerInfoReceivedEvent {
     pub account_id: u32,
     pub login_id1: u32,
     pub sex: u8,
+    /// Single-use token to echo back in zone `SessionAuth.zone_auth_token`.
+    pub zone_auth_token: Vec<u8>,
 }
 
 #[derive(Message, Debug)]
