@@ -1,9 +1,7 @@
 use super::VfxSystems;
 use crate::domain::entities::markers::WarpPortal;
 use crate::utils::constants::CELL_SIZE;
-use bevy::image::{
-    ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor,
-};
+use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
@@ -171,4 +169,3 @@ fn portal_material(color: Color, noise: Handle<Image>) -> PortalMaterial {
         noise,
     }
 }
-
