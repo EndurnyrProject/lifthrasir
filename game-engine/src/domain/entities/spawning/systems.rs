@@ -25,7 +25,7 @@ use crate::{
         world::map_scoped::MapScoped,
     },
     infrastructure::{
-        job::JobSpriteRegistry,
+        job::{registry::WARP_JOB_ID, JobSpriteRegistry},
         networking::zone_messages::{UnitEntered, UnitLeft},
     },
     utils::coordinates::spawn_coords_to_world_position,
@@ -117,6 +117,11 @@ pub fn spawn_network_entity_system(
             commands.entity(existing_entity).remove::<PendingDespawn>();
             continue;
         }
+
+        let is_warp = matches!(
+            event.object_type,
+            crate::domain::entities::types::ObjectType::Npc
+        ) && event.job as u32 == WARP_JOB_ID;
 
         let char_data = CharacterData {
             name: event.name.clone(),
@@ -222,6 +227,9 @@ pub fn spawn_network_entity_system(
             }
             crate::domain::entities::types::ObjectType::Npc => {
                 entity_cmd.insert(Npc);
+                if is_warp {
+                    entity_cmd.insert(WarpPortal);
+                }
                 debug!("Spawned NPC: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Mob => {
@@ -264,6 +272,11 @@ pub fn spawn_network_entity_system(
         let entity_id = entity_cmd.id();
 
         entity_registry.register_entity(event.gid, entity_id);
+
+        // Warp portals render as a 3D VFX (WarpPortal -> PortalVfx), not a sprite.
+        if is_warp {
+            continue;
+        }
 
         // Route sprite spawning based on entity type
         match event.object_type {

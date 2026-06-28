@@ -24,6 +24,7 @@ pub use infrastructure::item::{ItemDb, ItemDbPlugin};
 pub use infrastructure::job::JobSystemPlugin;
 pub use infrastructure::skill::SkillSystemPlugin;
 pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
+pub use presentation::rendering::VfxPlugin;
 pub use presentation::ui::fps_counter::FpsCounterPlugin;
 
 use bevy::app::PluginGroupBuilder;
@@ -44,6 +45,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(JobSystemPlugin)
             .add(SkillSystemPlugin)
             .add(EffectsPlugin)
+            .add(VfxPlugin)
             .add(ItemDbPlugin)
             .add(AudioPlugin)
             .add(AssetCatalogPlugin)

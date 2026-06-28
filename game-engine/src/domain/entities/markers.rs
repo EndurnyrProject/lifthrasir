@@ -15,6 +15,11 @@ pub struct RemotePlayer;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Npc;
 
+/// Marker for warp-portal NPCs (job 45). The presentation layer reacts to this
+/// to attach the portal VFX in place of the classic sprite.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct WarpPortal;
+
 /// Marker for Monster/mob entities
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Mob;

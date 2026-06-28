@@ -12,6 +12,7 @@ bevy_common_assets = { version = "0.15", features = ["toml", "ron"] }
 bevy_asset_loader = "0.26"
 bevy_kira_audio = { version = "0.25", features = ["mp3", "wav", "ogg"] }
 bevy_framepace = "0.21"
+bevy_hanabi = "0.18"
 bevy-persistent = { version = "0.10", features = ["ron"] }
 dirs = "6"
 leafwing-input-manager = { workspace = true }

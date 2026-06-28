@@ -7,7 +7,7 @@ use super::player_jobs::{get_player_job_sprite_mapping, is_player_job};
 
 /// JT_WARPNPC. The official jobname.lub maps this to a placeholder ("1_ETC_01");
 /// the real client special-cases it to the animated portal sprite instead.
-const WARP_JOB_ID: u32 = 45;
+pub const WARP_JOB_ID: u32 = 45;
 const WARP_SPRITE_NAME: &str = "portal";
 
 #[derive(Resource)]
