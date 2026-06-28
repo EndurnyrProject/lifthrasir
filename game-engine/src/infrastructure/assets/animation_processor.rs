@@ -3,11 +3,13 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use moonshine_tag::Tag;
 
+use crate::domain::settings::resources::Upscaling;
 use crate::infrastructure::ro_formats::act::{Layer, RoAction};
 use crate::infrastructure::ro_formats::sprite::{Palette, RoSprite, SpriteFrame};
 
 use super::converters::{apply_magenta_transparency, convert_sprite_frame_to_rgba};
 use super::ro_animation_asset::{ActionData, FrameData, FramePart, RoAnimationAsset};
+use super::upscale;
 
 pub struct RoAnimationProcessor;
 
@@ -19,8 +21,9 @@ impl RoAnimationProcessor {
         action: &RoAction,
         layer_tag: Tag,
         images: &mut Assets<Image>,
+        upscaling: Upscaling,
     ) -> RoAnimationAsset {
-        let textures = Self::create_textures(sprite, images);
+        let textures = Self::create_textures(sprite, images, upscaling);
         let actions = Self::create_actions(action, sprite);
 
         RoAnimationAsset {
@@ -32,12 +35,16 @@ impl RoAnimationProcessor {
     }
 
     /// Convert all sprite frames to GPU textures once during loading.
-    fn create_textures(sprite: &RoSprite, images: &mut Assets<Image>) -> Vec<Handle<Image>> {
+    fn create_textures(
+        sprite: &RoSprite,
+        images: &mut Assets<Image>,
+        upscaling: Upscaling,
+    ) -> Vec<Handle<Image>> {
         let handles: Vec<_> = sprite
             .frames
             .iter()
             .map(|frame| {
-                let image = Self::frame_to_image(frame, sprite.palette.as_ref());
+                let image = Self::frame_to_image(frame, sprite.palette.as_ref(), upscaling);
                 images.add(image)
             })
             .collect();
@@ -52,14 +59,25 @@ impl RoAnimationProcessor {
     }
 
     /// Convert a sprite frame to a Bevy Image.
-    fn frame_to_image(frame: &SpriteFrame, palette: Option<&Palette>) -> Image {
+    fn frame_to_image(
+        frame: &SpriteFrame,
+        palette: Option<&Palette>,
+        upscaling: Upscaling,
+    ) -> Image {
         let mut rgba_data = convert_sprite_frame_to_rgba(frame, palette, None);
         apply_magenta_transparency(&mut rgba_data);
 
+        let (rgba_data, width, height) = upscale::scale(
+            &rgba_data,
+            frame.width as u32,
+            frame.height as u32,
+            upscaling,
+        );
+
         Image::new(
             Extent3d {
-                width: frame.width as u32,
-                height: frame.height as u32,
+                width,
+                height,
                 depth_or_array_layers: 1,
             },
             TextureDimension::D2,
@@ -253,5 +271,31 @@ mod tests {
             calculate_attach_offset(Some(Vec2::new(10.0, 20.0)), None),
             Vec2::ZERO
         );
+    }
+
+    fn rgba_frame(width: u16, height: u16) -> SpriteFrame {
+        SpriteFrame {
+            width,
+            height,
+            data: vec![0x10; width as usize * height as usize * 4],
+            is_rgba: true,
+        }
+    }
+
+    #[test]
+    fn frame_to_image_keeps_extent_when_off() {
+        let frame = rgba_frame(2, 2);
+        let image = RoAnimationProcessor::frame_to_image(&frame, None, Upscaling::Off);
+        assert_eq!(image.texture_descriptor.size.width, 2);
+        assert_eq!(image.texture_descriptor.size.height, 2);
+    }
+
+    #[test]
+    fn frame_to_image_scales_pixels_but_not_logical_size() {
+        let frame = rgba_frame(2, 2);
+        let image = RoAnimationProcessor::frame_to_image(&frame, None, Upscaling::X2);
+        assert_eq!(image.texture_descriptor.size.width, 4);
+        assert_eq!(image.texture_descriptor.size.height, 4);
+        assert_eq!((frame.width, frame.height), (2, 2));
     }
 }
