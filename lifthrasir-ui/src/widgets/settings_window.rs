@@ -596,6 +596,7 @@ enum GraphicsField {
     Resolution,
     Antialiasing,
     Anisotropy,
+    Upscaling,
     Vsync,
     Bloom,
     Shadows,
@@ -643,6 +644,7 @@ fn field_label(graphics: &GraphicsSettings, field: GraphicsField) -> String {
         GraphicsField::Resolution => resolution_label(graphics.resolution),
         GraphicsField::Antialiasing => graphics.antialiasing.label().to_string(),
         GraphicsField::Anisotropy => graphics.anisotropy.label().to_string(),
+        GraphicsField::Upscaling => graphics.upscaling.label().to_string(),
         GraphicsField::FpsCap => graphics.fps_cap.label().to_string(),
         GraphicsField::UiScaling => graphics.ui_scaling.label().to_string(),
         GraphicsField::DisplayMode
@@ -694,6 +696,8 @@ fn step_field(graphics: &mut GraphicsSettings, field: GraphicsField, dir: StepDi
         (GraphicsField::Anisotropy, StepDir::Prev) => {
             graphics.anisotropy = graphics.anisotropy.prev()
         }
+        (GraphicsField::Upscaling, StepDir::Next) => graphics.upscaling = graphics.upscaling.next(),
+        (GraphicsField::Upscaling, StepDir::Prev) => graphics.upscaling = graphics.upscaling.prev(),
         (GraphicsField::FpsCap, StepDir::Next) => graphics.fps_cap = graphics.fps_cap.next(),
         (GraphicsField::FpsCap, StepDir::Prev) => graphics.fps_cap = graphics.fps_cap.prev(),
         (GraphicsField::UiScaling, StepDir::Next) => {
@@ -735,6 +739,15 @@ fn spawn_graphics_rows(commands: &mut Commands, body: Entity, font: &Handle<Font
         font,
     );
     spawn_stepper(commands, ctrl, GraphicsField::Anisotropy, font);
+
+    let ctrl = spawn_row(
+        commands,
+        body,
+        "Upscaling",
+        "xBRZ sprite & texture upscaling (applies on map reload)",
+        font,
+    );
+    spawn_stepper(commands, ctrl, GraphicsField::Upscaling, font);
 
     let ctrl = spawn_row(commands, body, "Bloom", "Glow around bright lights", font);
     spawn_switch(commands, ctrl, GraphicsField::Bloom);
