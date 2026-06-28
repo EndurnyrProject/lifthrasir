@@ -13,6 +13,7 @@ pub mod ro_asset_source;
 pub mod ro_assets_plugin;
 pub mod sources;
 pub mod svg_loader;
+pub mod upscale;
 
 pub use animation_processing_system::{
     AnimationProcessingPlugin, PendingAnimation, PendingAnimations,

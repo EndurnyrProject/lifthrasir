@@ -21,6 +21,7 @@ leafwing-input-manager = { workspace = true }
 nom = "8.0.0"
 thiserror = "2.0"
 image = "0.25.8"
+xbrz-rs = "0.1"
 resvg = "0.45"
 futures-lite = "2.6.1"
 flate2 = "1.1"
