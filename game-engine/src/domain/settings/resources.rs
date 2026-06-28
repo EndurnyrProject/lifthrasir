@@ -195,6 +195,49 @@ impl Anisotropy {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+pub enum Upscaling {
+    Off,
+    X2,
+    X3,
+    X4,
+}
+
+impl Upscaling {
+    /// The variants in stepper order.
+    pub const ALL: [Upscaling; 4] = [Upscaling::Off, Upscaling::X2, Upscaling::X3, Upscaling::X4];
+
+    /// Display label for the stepper value.
+    pub fn label(self) -> &'static str {
+        match self {
+            Upscaling::Off => "Off",
+            Upscaling::X2 => "2x",
+            Upscaling::X3 => "3x",
+            Upscaling::X4 => "4x",
+        }
+    }
+
+    /// Next variant, clamped at the last.
+    pub fn next(self) -> Upscaling {
+        cycle_next(&Upscaling::ALL, self)
+    }
+
+    /// Previous variant, clamped at the first.
+    pub fn prev(self) -> Upscaling {
+        cycle_prev(&Upscaling::ALL, self)
+    }
+
+    /// xBRZ scale factor; `Off` performs no upscaling.
+    pub fn factor(self) -> Option<u8> {
+        match self {
+            Upscaling::Off => None,
+            Upscaling::X2 => Some(2),
+            Upscaling::X3 => Some(3),
+            Upscaling::X4 => Some(4),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum FpsCap {
     F30,
     F60,
@@ -311,6 +354,8 @@ pub struct GraphicsSettings {
     pub antialiasing: AntiAliasing,
     /// Anisotropic texture filtering for ground terrain viewed at grazing angles.
     pub anisotropy: Anisotropy,
+    /// xBRZ pixel-art upscaling baked into sprite/terrain/model textures at load.
+    pub upscaling: Upscaling,
     pub vsync: bool,
     pub fps_cap: FpsCap,
     pub ui_scaling: UiScaling,
@@ -327,6 +372,7 @@ impl Default for GraphicsSettings {
             resolution: (1920, 1080),
             antialiasing: AntiAliasing::Fxaa,
             anisotropy: Anisotropy::X8,
+            upscaling: Upscaling::Off,
             vsync: true,
             fps_cap: FpsCap::F60,
             ui_scaling: UiScaling::P100,
@@ -723,6 +769,40 @@ mod tests {
         assert_eq!(resolution_prev((1600, 900)), (1280, 720));
         assert_eq!(resolution_prev((1280, 720)), (1280, 720));
         assert_eq!(resolution_label((1920, 1080)), "1920 x 1080");
+    }
+
+    #[test]
+    fn upscaling_default_is_off() {
+        assert_eq!(GraphicsSettings::default().upscaling, Upscaling::Off);
+    }
+
+    #[test]
+    fn upscaling_serde_round_trips_every_variant() {
+        for variant in Upscaling::ALL {
+            let encoded = ron::to_string(&variant).expect("serialize");
+            let decoded: Upscaling = ron::from_str(&encoded).expect("deserialize");
+            assert_eq!(variant, decoded);
+        }
+    }
+
+    #[test]
+    fn upscaling_factor_mapping() {
+        assert_eq!(Upscaling::Off.factor(), None);
+        assert_eq!(Upscaling::X2.factor(), Some(2));
+        assert_eq!(Upscaling::X3.factor(), Some(3));
+        assert_eq!(Upscaling::X4.factor(), Some(4));
+    }
+
+    #[test]
+    fn upscaling_cycles_and_clamps() {
+        assert_eq!(Upscaling::Off.next(), Upscaling::X2);
+        assert_eq!(Upscaling::X4.next(), Upscaling::X4);
+        assert_eq!(Upscaling::X2.prev(), Upscaling::Off);
+        assert_eq!(Upscaling::Off.prev(), Upscaling::Off);
+        assert_eq!(Upscaling::Off.label(), "Off");
+        assert_eq!(Upscaling::X2.label(), "2x");
+        assert_eq!(Upscaling::X3.label(), "3x");
+        assert_eq!(Upscaling::X4.label(), "4x");
     }
 
     #[test]
