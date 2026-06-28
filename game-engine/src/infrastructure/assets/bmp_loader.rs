@@ -1,13 +1,20 @@
-use crate::infrastructure::assets::converters::apply_magenta_transparency;
+use crate::domain::settings::resources::Upscaling;
+use crate::infrastructure::assets::{converters::apply_magenta_transparency, upscale};
 use bevy::{
     asset::{io::Reader, AssetLoader, LoadContext, RenderAssetUsages},
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Default, TypePath)]
 pub struct BmpLoader;
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct BmpLoaderSettings {
+    pub upscale: Upscaling,
+}
 
 #[derive(Debug, Error)]
 pub enum BmpLoaderError {
@@ -19,13 +26,13 @@ pub enum BmpLoaderError {
 
 impl AssetLoader for BmpLoader {
     type Asset = Image;
-    type Settings = ();
+    type Settings = BmpLoaderSettings;
     type Error = BmpLoaderError;
 
     async fn load(
         &self,
         reader: &mut dyn Reader,
-        _settings: &Self::Settings,
+        settings: &Self::Settings,
         _load_context: &mut LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
         let mut bytes = Vec::new();
@@ -137,6 +144,9 @@ impl AssetLoader for BmpLoader {
         // Apply magenta transparency (RGB 255, 0, 255 becomes transparent)
         apply_magenta_transparency(&mut rgba_data);
 
+        let (rgba_data, width, height) =
+            upscale::scale(&rgba_data, width, height, settings.upscale);
+
         Ok(Image::new(
             Extent3d {
                 width,
@@ -152,5 +162,24 @@ impl AssetLoader for BmpLoader {
 
     fn extensions(&self) -> &[&str] {
         &["bmp", "BMP"]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_default_is_off() {
+        assert_eq!(BmpLoaderSettings::default().upscale, Upscaling::Off);
+    }
+
+    #[test]
+    fn settings_serde_round_trips() {
+        for upscale in Upscaling::ALL {
+            let encoded = ron::to_string(&BmpLoaderSettings { upscale }).expect("serialize");
+            let decoded: BmpLoaderSettings = ron::from_str(&encoded).expect("deserialize");
+            assert_eq!(decoded.upscale, upscale);
+        }
     }
 }

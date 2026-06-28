@@ -194,8 +194,9 @@ impl Anisotropy {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
 pub enum Upscaling {
+    #[default]
     Off,
     X2,
     X3,

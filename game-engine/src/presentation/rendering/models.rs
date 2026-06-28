@@ -1,9 +1,11 @@
 use crate::domain::entities::systems::{
     AnimatedTransform, AnimationType, RsmAnimationController, RsmNodeAnimation,
 };
+use crate::domain::settings::Settings;
 use crate::domain::system_sets::ModelRenderingSystems;
 use crate::domain::world::components::MapLoader;
 use crate::domain::world::map_scoped::MapScoped;
+use crate::infrastructure::assets::bmp_loader::BmpLoaderSettings;
 use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset, RsmAsset};
 use crate::infrastructure::ro_formats::{RsmFile, RswObject};
 use crate::utils::{get_map_dimensions_from_ground, rsw_to_bevy_transform};
@@ -12,6 +14,7 @@ use bevy::math::{Mat4, Vec4};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use bevy_persistent::prelude::Persistent;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -274,7 +277,9 @@ pub fn update_model_meshes(
     model_query: ModelMeshUpdateQuery,
     asset_server: Res<AssetServer>,
     rsm_assets: Res<Assets<RsmAsset>>,
+    settings: Res<Persistent<Settings>>,
 ) {
+    let factor = settings.graphics.upscaling;
     for (entity, map_model, rsm_loading, anim_type, anim_speed) in model_query.iter() {
         if map_model.filename.is_empty() {
             continue;
@@ -372,7 +377,10 @@ pub fn update_model_meshes(
         for texture_name in rsm.textures.iter() {
             if !texture_name.is_empty() {
                 let texture_path = format!("ro://data\\texture\\{}", texture_name);
-                let handle: Handle<Image> = asset_server.load(&texture_path);
+                let handle: Handle<Image> = asset_server
+                    .load_with_settings(&texture_path, move |s: &mut BmpLoaderSettings| {
+                        s.upscale = factor
+                    });
                 texture_handles.push(handle);
                 texture_names.push(texture_name.clone());
             } else {

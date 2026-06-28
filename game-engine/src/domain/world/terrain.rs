@@ -8,7 +8,10 @@ use crate::{
             map_scoped::MapScoped,
         },
     },
-    infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
+    infrastructure::assets::{
+        bmp_loader::BmpLoaderSettings,
+        loaders::{RoAltitudeAsset, RoGroundAsset},
+    },
     utils::{
         constants::CELL_SIZE,
         mipmap::{apply_anisotropic_sampler, generate_mipmaps_with_anisotropy},
@@ -509,8 +512,10 @@ pub fn generate_terrain_mesh(
     mut commands: Commands,
     ground_assets: Res<Assets<RoGroundAsset>>,
     asset_server: Res<AssetServer>,
+    settings: Res<Persistent<Settings>>,
     query: TerrainGenerationQuery,
 ) {
+    let factor = settings.graphics.upscaling;
     for (entity, map_loader, map_request) in query.iter() {
         debug!(
             "generate_terrain_mesh: Processing MapLoader for map '{}'",
@@ -568,7 +573,10 @@ pub fn generate_terrain_mesh(
         for texture_name in ground.ground.textures.iter() {
             if !texture_name.is_empty() {
                 let texture_path = format!("ro://data\\texture\\{}", texture_name.to_lowercase());
-                let handle: Handle<Image> = asset_server.load(&texture_path);
+                let handle: Handle<Image> = asset_server
+                    .load_with_settings(&texture_path, move |s: &mut BmpLoaderSettings| {
+                        s.upscale = factor
+                    });
                 texture_handles.push(handle);
                 texture_names.push(texture_name.clone());
                 debug!("Started loading terrain texture: {}", texture_path);
