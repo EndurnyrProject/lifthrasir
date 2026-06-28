@@ -70,6 +70,29 @@ cargo build --release
 cargo run -p lifthrasir
 ```
 
+### DLSS Super Resolution (optional, NVIDIA / Windows / Linux)
+
+DLSS is an **opt-in, off-by-default** Cargo feature. It is absent from default builds and **cannot compile on macOS** (it requires the Vulkan backend and an NVIDIA RTX GPU). Build and run it only on Windows or Linux with an RTX card:
+
+```bash
+DLSS_SDK=/path/to/dlss-sdk VULKAN_SDK=/path/to/vulkan \
+  cargo run -p lifthrasir --features dlss
+```
+
+Prerequisites on the target machine:
+- **NVIDIA DLSS Super Resolution SDK v310.5.3** — download separately (it is not redistributable) and point `DLSS_SDK` at its absolute path.
+- **Vulkan SDK** — with `VULKAN_SDK` set.
+- **Clang** — required by `bindgen` when building the SDK wrapper.
+
+At runtime DLSS degrades gracefully: if the GPU/driver does not support it, the `DlssSuperResolutionSupported` resource is absent and the setting stays `Off` (logged once). The setting lives in the Graphics menu as `Off / DLAA / Quality / Balanced / Performance / Ultra Performance` and is orthogonal to the xBRZ "Upscaling" setting (DLSS scales render resolution; xBRZ bakes textures).
+
+**Licensing / distribution (settle before any public release):**
+- The DLSS SDK license text (DLSS Programming Guide §9.5) must ship alongside any distributed binary.
+- The proprietary `nvngx_dlss` runtime libraries must be packaged next to the binary.
+- The binary is already GPL-3.0 (via the xBRZ `xbrz-rs` crate); GPL plus the proprietary DLSS blob loaded at runtime is a known gray area — resolve it before distributing publicly.
+
+Manual verification checklist: `specs/2026-06-28-dlss/design.md` → "Testing".
+
 ### Generating network protobuf types
 
 The client talks to the aesir account server over QUIC using protobuf (`bevy_quinnet` + `prost`). The Rust types are generated from aesir's canonical `aesir.proto` and committed at `game-engine/src/infrastructure/networking/quic/proto/aesir.net.rs`. Re-run this whenever that schema changes:
