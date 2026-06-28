@@ -23,6 +23,15 @@ use crate::domain::camera::components::CameraFollowTarget;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::input::PlayerAction;
 
+#[cfg(feature = "dlss")]
+use super::resources::DlssMode;
+#[cfg(feature = "dlss")]
+use bevy::anti_alias::dlss::{Dlss, DlssSuperResolutionSupported};
+#[cfg(feature = "dlss")]
+use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass};
+#[cfg(feature = "dlss")]
+use bevy::render::camera::{MipBias, TemporalJitter};
+
 /// Index of the candidate nearest (squared pixel distance) to `target`, or
 /// `None` when there are no candidates. An exact match wins outright.
 fn nearest_mode_index(candidates: &[(u32, u32)], target: (u32, u32)) -> Option<usize> {
@@ -57,12 +66,22 @@ pub fn apply_graphics(
     ui_cameras: Query<Entity, With<IsDefaultUiCamera>>,
     mut lights: Query<&mut DirectionalLight>,
     mut commands: Commands,
+    #[cfg(feature = "dlss")] dlss_supported: Option<Res<DlssSuperResolutionSupported>>,
 ) {
     if messages.read().count() == 0 {
         return;
     }
 
     let graphics = settings.graphics;
+
+    #[cfg(feature = "dlss")]
+    let dlss_active = dlss_supported.is_some() && graphics.dlss != DlssMode::Off;
+    #[cfg(not(feature = "dlss"))]
+    let dlss_active = false;
+    #[cfg(feature = "dlss")]
+    if graphics.dlss != DlssMode::Off && dlss_supported.is_none() {
+        info!("DLSS requested but not supported on this system; leaving it off");
+    }
 
     for mut light in &mut lights {
         if light.shadows_enabled != graphics.shadows {
@@ -94,13 +113,17 @@ pub fn apply_graphics(
     framepace.limiter = graphics.fps_cap.to_limiter();
 
     for camera in &cameras {
-        apply_camera_effects(&mut commands, camera, &settings);
+        apply_camera_effects(&mut commands, camera, &settings, dlss_active);
     }
 
     // The UI camera shares the window target with the world camera, so their
     // MSAA sample counts must match or the world pass fails to composite (the
     // same rule HDR follows here). FXAA stays world-only.
-    let (ui_msaa, _) = graphics.antialiasing.to_msaa_fxaa();
+    let ui_msaa = if dlss_active {
+        Msaa::Off
+    } else {
+        graphics.antialiasing.to_msaa_fxaa().0
+    };
     for ui_camera in &ui_cameras {
         commands.entity(ui_camera).insert(ui_msaa);
     }
@@ -183,9 +206,14 @@ pub fn apply_camera_effects_on_spawn(
     settings: Res<Persistent<Settings>>,
     cameras: Query<Entity, Added<CameraFollowTarget>>,
     mut commands: Commands,
+    #[cfg(feature = "dlss")] dlss_supported: Option<Res<DlssSuperResolutionSupported>>,
 ) {
+    #[cfg(feature = "dlss")]
+    let dlss_active = dlss_supported.is_some() && settings.graphics.dlss != DlssMode::Off;
+    #[cfg(not(feature = "dlss"))]
+    let dlss_active = false;
     for camera in &cameras {
-        apply_camera_effects(&mut commands, camera, &settings);
+        apply_camera_effects(&mut commands, camera, &settings, dlss_active);
     }
 }
 
@@ -205,8 +233,21 @@ pub fn apply_shadows_on_spawn(
     }
 }
 
-fn apply_camera_effects(commands: &mut Commands, camera: Entity, settings: &Settings) {
-    let (msaa, has_fxaa) = settings.graphics.antialiasing.to_msaa_fxaa();
+fn apply_camera_effects(
+    commands: &mut Commands,
+    camera: Entity,
+    settings: &Settings,
+    dlss_active: bool,
+) {
+    // DLSS is the antialiaser when active: force single-sample, no FXAA.
+    let (msaa, has_fxaa) = if dlss_active {
+        (Msaa::Off, false)
+    } else {
+        settings.graphics.antialiasing.to_msaa_fxaa()
+    };
+    // DLSS needs the HDR pipeline; keep it even when bloom is off.
+    let needs_hdr = settings.graphics.bloom || dlss_active;
+
     let mut entity = commands.entity(camera);
     entity.insert(msaa);
     if has_fxaa {
@@ -214,12 +255,34 @@ fn apply_camera_effects(commands: &mut Commands, camera: Entity, settings: &Sett
     } else {
         entity.remove::<Fxaa>();
     }
-    // Bloom needs the HDR pipeline, so toggle them together: disabling bloom drops
-    // the extra HDR render target instead of leaving it allocated and idle.
-    if settings.graphics.bloom {
-        entity.insert((Hdr, Bloom::NATURAL));
+
+    #[cfg(feature = "dlss")]
+    if dlss_active {
+        if let Some(perf_quality_mode) = settings.graphics.dlss.to_perf_quality_mode() {
+            entity.insert(Dlss {
+                perf_quality_mode,
+                ..default()
+            });
+        }
     } else {
-        entity.remove::<(Hdr, Bloom)>();
+        entity.remove::<(
+            Dlss,
+            TemporalJitter,
+            MipBias,
+            DepthPrepass,
+            MotionVectorPrepass,
+        )>();
+    }
+
+    if needs_hdr {
+        entity.insert(Hdr);
+    } else {
+        entity.remove::<Hdr>();
+    }
+    if settings.graphics.bloom {
+        entity.insert(Bloom::NATURAL);
+    } else {
+        entity.remove::<Bloom>();
     }
 }
 
