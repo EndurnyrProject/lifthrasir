@@ -11,5 +11,8 @@ game-engine = { path = "../game-engine" }
 leafwing-input-manager = { workspace = true }
 secrecy = { workspace = true }
 
+[features]
+dlss = ["bevy/dlss"]
+
 [dev-dependencies]
 lifthrasir-data = { path = "../lifthrasir-data" }

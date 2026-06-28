@@ -14,6 +14,12 @@ fn main() {
 
     assets::register_ro_asset_source(&mut app, composite_source);
 
+    // Required by Bevy's DlssInitPlugin (inside DefaultPlugins) to identify this application.
+    #[cfg(feature = "dlss")]
+    app.insert_resource(bevy::anti_alias::dlss::DlssProjectId(
+        bevy::asset::uuid::uuid!("45e9d9b0-1a0d-4da9-83d1-cf5f8af1ff17"),
+    ));
+
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: format!("Lifthrasir {VERSION}"),

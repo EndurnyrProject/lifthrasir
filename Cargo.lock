@@ -666,7 +666,9 @@ dependencies = [
  "bevy_render",
  "bevy_shader",
  "bevy_utils",
+ "dlss_wgpu",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1344,6 +1346,7 @@ dependencies = [
  "bevy_render",
  "bevy_scene",
  "bevy_shader",
+ "bevy_solari",
  "bevy_sprite",
  "bevy_sprite_render",
  "bevy_state",
@@ -1792,6 +1795,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_solari"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "304f48da01c8f245da7ff73c404fd30883831788c958ea6531881cf0e72ec97e"
+dependencies = [
+ "bevy_anti_alias",
+ "bevy_app",
+ "bevy_asset",
+ "bevy_camera",
+ "bevy_color",
+ "bevy_core_pipeline",
+ "bevy_derive",
+ "bevy_diagnostic",
+ "bevy_ecs",
+ "bevy_image",
+ "bevy_math",
+ "bevy_mesh",
+ "bevy_pbr",
+ "bevy_platform",
+ "bevy_reflect",
+ "bevy_render",
+ "bevy_shader",
+ "bevy_transform",
+ "bevy_utils",
+ "bytemuck",
+ "derive_more",
+ "tracing",
+]
+
+[[package]]
 name = "bevy_sprite"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2131,6 +2164,8 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "itertools 0.13.0",
+ "log",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -2937,6 +2972,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
  "libloading",
+]
+
+[[package]]
+name = "dlss_wgpu"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a48466b369c931f926a628b516669404ee82a91e6788fca948de4bfea89db7a"
+dependencies = [
+ "ash",
+ "bindgen",
+ "bitflags 2.13.0",
+ "cc",
+ "glam 0.30.10",
+ "thiserror 2.0.18",
+ "uuid",
+ "wgpu",
 ]
 
 [[package]]

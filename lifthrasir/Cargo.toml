@@ -13,6 +13,7 @@ dev = [
     "bevy/bevy_remote",
     "dep:bevy_brp_extras",
 ]
+dlss = ["bevy/dlss", "game-engine/dlss", "lifthrasir-ui/dlss"]
 
 [dependencies]
 bevy = { workspace = true }
