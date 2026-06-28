@@ -238,6 +238,64 @@ impl Upscaling {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
+pub enum DlssMode {
+    #[default]
+    Off,
+    Dlaa,
+    Quality,
+    Balanced,
+    Performance,
+    UltraPerformance,
+}
+
+impl DlssMode {
+    /// The variants in stepper order (quality-descending).
+    pub const ALL: [DlssMode; 6] = [
+        DlssMode::Off,
+        DlssMode::Dlaa,
+        DlssMode::Quality,
+        DlssMode::Balanced,
+        DlssMode::Performance,
+        DlssMode::UltraPerformance,
+    ];
+
+    /// Display label for the stepper value.
+    pub fn label(self) -> &'static str {
+        match self {
+            DlssMode::Off => "Off",
+            DlssMode::Dlaa => "DLAA",
+            DlssMode::Quality => "Quality",
+            DlssMode::Balanced => "Balanced",
+            DlssMode::Performance => "Performance",
+            DlssMode::UltraPerformance => "Ultra Performance",
+        }
+    }
+
+    /// Next variant, clamped at the last.
+    pub fn next(self) -> DlssMode {
+        cycle_next(&DlssMode::ALL, self)
+    }
+
+    /// Previous variant, clamped at the first.
+    pub fn prev(self) -> DlssMode {
+        cycle_prev(&DlssMode::ALL, self)
+    }
+
+    #[cfg(feature = "dlss")]
+    pub fn to_perf_quality_mode(self) -> Option<bevy::anti_alias::dlss::DlssPerfQualityMode> {
+        use bevy::anti_alias::dlss::DlssPerfQualityMode;
+        match self {
+            DlssMode::Off => None,
+            DlssMode::Dlaa => Some(DlssPerfQualityMode::Dlaa),
+            DlssMode::Quality => Some(DlssPerfQualityMode::Quality),
+            DlssMode::Balanced => Some(DlssPerfQualityMode::Balanced),
+            DlssMode::Performance => Some(DlssPerfQualityMode::Performance),
+            DlssMode::UltraPerformance => Some(DlssPerfQualityMode::UltraPerformance),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum FpsCap {
     F30,
@@ -364,6 +422,9 @@ pub struct GraphicsSettings {
     pub bloom: bool,
     /// Directional-light (sun) shadow casting.
     pub shadows: bool,
+    /// DLSS Super Resolution render-scaling mode (NVIDIA RTX only). Orthogonal to
+    /// `upscaling` (xBRZ texture baking): DLSS scales render resolution, xBRZ bakes textures.
+    pub dlss: DlssMode,
 }
 
 impl Default for GraphicsSettings {
@@ -379,6 +440,7 @@ impl Default for GraphicsSettings {
             ui_scaling: UiScaling::P100,
             bloom: true,
             shadows: true,
+            dlss: DlssMode::Off,
         }
     }
 }
@@ -804,6 +866,69 @@ mod tests {
         assert_eq!(Upscaling::X2.label(), "2x");
         assert_eq!(Upscaling::X3.label(), "3x");
         assert_eq!(Upscaling::X4.label(), "4x");
+    }
+
+    #[test]
+    fn dlss_mode_default_is_off() {
+        assert_eq!(DlssMode::default(), DlssMode::Off);
+        assert_eq!(GraphicsSettings::default().dlss, DlssMode::Off);
+    }
+
+    #[test]
+    fn dlss_mode_serde_round_trips_every_variant() {
+        for variant in DlssMode::ALL {
+            let encoded = ron::to_string(&variant).expect("serialize");
+            let decoded: DlssMode = ron::from_str(&encoded).expect("deserialize");
+            assert_eq!(variant, decoded);
+        }
+    }
+
+    #[test]
+    fn dlss_mode_cycles_and_clamps() {
+        assert_eq!(DlssMode::Off.next(), DlssMode::Dlaa);
+        assert_eq!(
+            DlssMode::UltraPerformance.next(),
+            DlssMode::UltraPerformance
+        );
+        assert_eq!(DlssMode::Dlaa.prev(), DlssMode::Off);
+        assert_eq!(DlssMode::Off.prev(), DlssMode::Off);
+        assert_eq!(DlssMode::Off.label(), "Off");
+        assert_eq!(DlssMode::Dlaa.label(), "DLAA");
+        assert_eq!(DlssMode::UltraPerformance.label(), "Ultra Performance");
+    }
+
+    #[test]
+    fn graphics_without_dlss_field_defaults_to_off() {
+        let legacy = "(display_mode:Fullscreen,resolution:(1280,720),antialiasing:Off,vsync:false,fps_cap:F120)";
+        let decoded: GraphicsSettings = ron::from_str(legacy).expect("deserialize legacy graphics");
+        assert_eq!(decoded.dlss, DlssMode::Off);
+    }
+
+    #[cfg(feature = "dlss")]
+    #[test]
+    fn dlss_mode_maps_to_perf_quality_mode() {
+        use bevy::anti_alias::dlss::DlssPerfQualityMode;
+        assert_eq!(DlssMode::Off.to_perf_quality_mode(), None);
+        assert_eq!(
+            DlssMode::Dlaa.to_perf_quality_mode(),
+            Some(DlssPerfQualityMode::Dlaa)
+        );
+        assert_eq!(
+            DlssMode::Quality.to_perf_quality_mode(),
+            Some(DlssPerfQualityMode::Quality)
+        );
+        assert_eq!(
+            DlssMode::Balanced.to_perf_quality_mode(),
+            Some(DlssPerfQualityMode::Balanced)
+        );
+        assert_eq!(
+            DlssMode::Performance.to_perf_quality_mode(),
+            Some(DlssPerfQualityMode::Performance)
+        );
+        assert_eq!(
+            DlssMode::UltraPerformance.to_perf_quality_mode(),
+            Some(DlssPerfQualityMode::UltraPerformance)
+        );
     }
 
     #[test]
