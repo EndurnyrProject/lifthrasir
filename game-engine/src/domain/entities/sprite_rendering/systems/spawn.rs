@@ -130,6 +130,7 @@ fn spawn_character_components(
         PlayerSprite::default(),
         PlayerAppearance::default(),
         PendingRenderLayers,
+        gender,
     ));
 
     debug!(
