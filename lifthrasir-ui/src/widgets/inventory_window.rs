@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::assets::item_icon_path;
 use game_engine::domain::entities::markers::LocalPlayer;
+use game_engine::domain::equipment::{EquipItemRequested, UnequipItemRequested};
 use game_engine::domain::hotbar::HotbarSlot;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
 use game_engine::domain::inventory::{Inventory, Item, ItemCategory, UseItemRequested};
@@ -70,15 +71,26 @@ struct LastCellClick {
     at: Duration,
 }
 
+fn is_double_click(last: &LastCellClick, index: u16, now: Duration) -> bool {
+    last.index == index && now.saturating_sub(last.at) <= DOUBLE_CLICK
+}
+
 fn is_use_double_click(
     last: &LastCellClick,
     index: u16,
     now: Duration,
     category: ItemCategory,
 ) -> bool {
-    category == ItemCategory::Use
-        && last.index == index
-        && now.saturating_sub(last.at) <= DOUBLE_CLICK
+    category == ItemCategory::Use && is_double_click(last, index, now)
+}
+
+fn is_equip_double_click(
+    last: &LastCellClick,
+    index: u16,
+    now: Duration,
+    category: ItemCategory,
+) -> bool {
+    category == ItemCategory::Equip && is_double_click(last, index, now)
 }
 
 const TABS: [(ItemCategory, &str, &str); 3] = [
@@ -526,7 +538,10 @@ fn on_cell_drag_start(
     hotbar_drag.payload = Some(HotbarSlot::Item(item_id));
 }
 
-/// Cell click: select the item; double-click on a Use item emits `UseItemRequested`.
+/// Cell click: select the item; double-click on a Use item emits `UseItemRequested`,
+/// double-click on an Equip item emits `EquipItemRequested`/`UnequipItemRequested`
+/// depending on whether it is currently worn.
+#[allow(clippy::too_many_arguments)]
 fn on_cell_click(
     click: On<Pointer<Click>>,
     cells: Query<&InventoryCell>,
@@ -535,17 +550,25 @@ fn on_cell_click(
     mut last: ResMut<LastCellClick>,
     inventory: Res<Inventory>,
     mut use_writer: MessageWriter<UseItemRequested>,
+    mut equip_writer: MessageWriter<EquipItemRequested>,
+    mut unequip_writer: MessageWriter<UnequipItemRequested>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
         return;
     };
     ui.selected = Some(cell.index);
     let now = time.elapsed();
-    if let Some(category) = inventory.get(cell.index).map(Item::category) {
+    if let Some(item) = inventory.get(cell.index) {
+        let category = item.category();
+        let equip_dc = is_equip_double_click(&last, cell.index, now, category);
         if is_use_double_click(&last, cell.index, now, category) {
             use_writer.write(UseItemRequested {
                 index: cell.index as u32,
             });
+        } else if equip_dc && item.is_equipped() {
+            unequip_writer.write(UnequipItemRequested { index: cell.index });
+        } else if equip_dc {
+            equip_writer.write(EquipItemRequested { index: cell.index });
         }
     }
     *last = LastCellClick {
@@ -836,6 +859,34 @@ mod tests {
             2,
             Duration::from_millis(200),
             ItemCategory::Equip,
+        ));
+    }
+
+    #[test]
+    fn double_click_same_equip_cell_within_window_is_true() {
+        let last = LastCellClick {
+            index: 5,
+            at: Duration::from_millis(100),
+        };
+        assert!(is_equip_double_click(
+            &last,
+            5,
+            Duration::from_millis(350),
+            ItemCategory::Equip,
+        ));
+    }
+
+    #[test]
+    fn equip_double_click_use_category_is_false() {
+        let last = LastCellClick {
+            index: 2,
+            at: Duration::from_millis(100),
+        };
+        assert!(!is_equip_double_click(
+            &last,
+            2,
+            Duration::from_millis(200),
+            ItemCategory::Use,
         ));
     }
 
