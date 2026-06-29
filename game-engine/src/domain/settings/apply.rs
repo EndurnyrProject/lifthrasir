@@ -14,7 +14,7 @@ use bevy_persistent::prelude::Persistent;
 use leafwing_input_manager::prelude::InputMap;
 
 use super::events::ApplySettings;
-use super::resources::{DisplayMode, Settings};
+use super::resources::{AntiAliasing, DisplayMode, Settings, Ssao};
 use crate::domain::audio::{
     AudioSettings, MuteAmbienceEvent, MuteBgmEvent, MuteSfxEvent, SetAmbienceVolumeEvent,
     SetBgmVolumeEvent, SetSfxVolumeEvent,
@@ -23,14 +23,15 @@ use crate::domain::camera::components::CameraFollowTarget;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::input::PlayerAction;
 
+use bevy::anti_alias::taa::TemporalAntiAliasing;
+use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
+use bevy::pbr::ScreenSpaceAmbientOcclusion;
+use bevy::render::camera::{MipBias, TemporalJitter};
+
 #[cfg(feature = "dlss")]
 use super::resources::DlssMode;
 #[cfg(feature = "dlss")]
 use bevy::anti_alias::dlss::{Dlss, DlssSuperResolutionSupported};
-#[cfg(feature = "dlss")]
-use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass};
-#[cfg(feature = "dlss")]
-use bevy::render::camera::{MipBias, TemporalJitter};
 
 /// Index of the candidate nearest (squared pixel distance) to `target`, or
 /// `None` when there are no candidates. An exact match wins outright.
@@ -119,11 +120,7 @@ pub fn apply_graphics(
     // The UI camera shares the window target with the world camera, so their
     // MSAA sample counts must match or the world pass fails to composite (the
     // same rule HDR follows here). FXAA stays world-only.
-    let ui_msaa = if dlss_active {
-        Msaa::Off
-    } else {
-        graphics.antialiasing.to_msaa_fxaa().0
-    };
+    let ui_msaa = effective_msaa(&settings, dlss_active);
     for ui_camera in &ui_cameras {
         commands.entity(ui_camera).insert(ui_msaa);
     }
@@ -233,20 +230,37 @@ pub fn apply_shadows_on_spawn(
     }
 }
 
+/// The world camera's effective MSAA. DLSS, TAA, and SSAO each rely on the
+/// depth/normal prepass, which is incompatible with MSAA, so any of them forces
+/// it off. The UI camera must match (it shares the window render target).
+fn effective_msaa(settings: &Settings, dlss_active: bool) -> Msaa {
+    let graphics = &settings.graphics;
+    if dlss_active || graphics.antialiasing == AntiAliasing::Taa || graphics.ssao != Ssao::Off {
+        Msaa::Off
+    } else {
+        graphics.antialiasing.to_msaa_fxaa().0
+    }
+}
+
 fn apply_camera_effects(
     commands: &mut Commands,
     camera: Entity,
     settings: &Settings,
     dlss_active: bool,
 ) {
-    // DLSS is the antialiaser when active: force single-sample, no FXAA.
-    let (msaa, has_fxaa) = if dlss_active {
-        (Msaa::Off, false)
-    } else {
-        settings.graphics.antialiasing.to_msaa_fxaa()
-    };
+    let graphics = &settings.graphics;
+    let wants_taa = !dlss_active && graphics.antialiasing == AntiAliasing::Taa;
+    let ssao_level = graphics.ssao.to_quality_level();
+    let ssao_on = graphics.ssao != Ssao::Off;
+    // DLSS and TAA are both temporal antialiasers sharing the same prepass set.
+    let temporal = dlss_active || wants_taa;
+
+    let msaa = effective_msaa(settings, dlss_active);
+    // FXAA is post-process (no prepass), so it coexists with SSAO; DLSS and TAA
+    // are themselves the antialiaser and suppress it.
+    let has_fxaa = !temporal && graphics.antialiasing == AntiAliasing::Fxaa;
     // DLSS needs the HDR pipeline; keep it even when bloom is off.
-    let needs_hdr = settings.graphics.bloom || dlss_active;
+    let needs_hdr = graphics.bloom || dlss_active;
 
     let mut entity = commands.entity(camera);
     entity.insert(msaa);
@@ -258,20 +272,41 @@ fn apply_camera_effects(
 
     #[cfg(feature = "dlss")]
     if dlss_active {
-        if let Some(perf_quality_mode) = settings.graphics.dlss.to_perf_quality_mode() {
+        if let Some(perf_quality_mode) = graphics.dlss.to_perf_quality_mode() {
             entity.insert(Dlss {
                 perf_quality_mode,
                 ..default()
             });
         }
     } else {
-        entity.remove::<(
-            Dlss,
-            TemporalJitter,
-            MipBias,
-            DepthPrepass,
-            MotionVectorPrepass,
-        )>();
+        entity.remove::<Dlss>();
+    }
+
+    if wants_taa {
+        entity.insert(TemporalAntiAliasing::default());
+    } else {
+        entity.remove::<TemporalAntiAliasing>();
+    }
+
+    if let Some(quality_level) = ssao_level {
+        entity.insert(ScreenSpaceAmbientOcclusion {
+            quality_level,
+            ..default()
+        });
+    } else {
+        entity.remove::<ScreenSpaceAmbientOcclusion>();
+    }
+
+    // DLSS, TAA, and SSAO each pull these prepass/temporal components in via their
+    // required components; strip them only when no remaining consumer needs them.
+    if !temporal && !ssao_on {
+        entity.remove::<DepthPrepass>();
+    }
+    if !temporal {
+        entity.remove::<(MotionVectorPrepass, TemporalJitter, MipBias)>();
+    }
+    if !ssao_on {
+        entity.remove::<NormalPrepass>();
     }
 
     if needs_hdr {
@@ -279,7 +314,7 @@ fn apply_camera_effects(
     } else {
         entity.remove::<Hdr>();
     }
-    if settings.graphics.bloom {
+    if graphics.bloom {
         entity.insert(Bloom::NATURAL);
     } else {
         entity.remove::<Bloom>();

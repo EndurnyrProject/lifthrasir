@@ -1,3 +1,4 @@
+use bevy::pbr::ScreenSpaceAmbientOcclusionQualityLevel;
 use bevy::prelude::*;
 use bevy::reflect::{DynamicEnum, TypeInfo, Typed};
 use bevy::window::{MonitorSelection, VideoModeSelection, WindowMode};
@@ -97,15 +98,17 @@ impl DisplayMode {
 pub enum AntiAliasing {
     Off,
     Fxaa,
+    Taa,
     MsaaX2,
     MsaaX4,
 }
 
 impl AntiAliasing {
     /// The variants in stepper order.
-    pub const ALL: [AntiAliasing; 4] = [
+    pub const ALL: [AntiAliasing; 5] = [
         AntiAliasing::Off,
         AntiAliasing::Fxaa,
+        AntiAliasing::Taa,
         AntiAliasing::MsaaX2,
         AntiAliasing::MsaaX4,
     ];
@@ -115,6 +118,7 @@ impl AntiAliasing {
         match self {
             AntiAliasing::Off => "Off",
             AntiAliasing::Fxaa => "FXAA",
+            AntiAliasing::Taa => "TAA",
             AntiAliasing::MsaaX2 => "MSAA x2",
             AntiAliasing::MsaaX4 => "MSAA x4",
         }
@@ -136,6 +140,7 @@ impl AntiAliasing {
         match self {
             AntiAliasing::Off => (Msaa::Off, false),
             AntiAliasing::Fxaa => (Msaa::Off, true),
+            AntiAliasing::Taa => (Msaa::Off, false),
             AntiAliasing::MsaaX2 => (Msaa::Sample2, false),
             AntiAliasing::MsaaX4 => (Msaa::Sample4, false),
         }
@@ -296,6 +301,55 @@ impl DlssMode {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
+pub enum Ssao {
+    #[default]
+    Off,
+    Low,
+    Medium,
+    High,
+    Ultra,
+}
+
+impl Ssao {
+    /// The variants in stepper order (quality-ascending).
+    pub const ALL: [Ssao; 5] = [Ssao::Off, Ssao::Low, Ssao::Medium, Ssao::High, Ssao::Ultra];
+
+    /// Display label for the stepper value.
+    pub fn label(self) -> &'static str {
+        match self {
+            Ssao::Off => "Off",
+            Ssao::Low => "Low",
+            Ssao::Medium => "Medium",
+            Ssao::High => "High",
+            Ssao::Ultra => "Ultra",
+        }
+    }
+
+    /// Next variant, clamped at the last.
+    pub fn next(self) -> Ssao {
+        cycle_next(&Ssao::ALL, self)
+    }
+
+    /// Previous variant, clamped at the first.
+    pub fn prev(self) -> Ssao {
+        cycle_prev(&Ssao::ALL, self)
+    }
+
+    /// Maps to the GTAO quality level; `Off` means no `ScreenSpaceAmbientOcclusion`
+    /// component on the camera.
+    pub fn to_quality_level(self) -> Option<ScreenSpaceAmbientOcclusionQualityLevel> {
+        use ScreenSpaceAmbientOcclusionQualityLevel as Q;
+        match self {
+            Ssao::Off => None,
+            Ssao::Low => Some(Q::Low),
+            Ssao::Medium => Some(Q::Medium),
+            Ssao::High => Some(Q::High),
+            Ssao::Ultra => Some(Q::Ultra),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum FpsCap {
     F30,
@@ -425,6 +479,10 @@ pub struct GraphicsSettings {
     /// DLSS Super Resolution render-scaling mode (NVIDIA RTX only). Orthogonal to
     /// `upscaling` (xBRZ texture baking): DLSS scales render resolution, xBRZ bakes textures.
     pub dlss: DlssMode,
+    /// Screen-space ambient occlusion (GTAO) quality. Adds contact darkening in
+    /// terrain/model crevices; forces MSAA off (needs the depth/normal prepass).
+    /// Runs on all native backends including macOS Metal.
+    pub ssao: Ssao,
 }
 
 impl Default for GraphicsSettings {
@@ -441,6 +499,7 @@ impl Default for GraphicsSettings {
             bloom: true,
             shadows: true,
             dlss: DlssMode::Off,
+            ssao: Ssao::Off,
         }
     }
 }
@@ -895,6 +954,57 @@ mod tests {
         assert_eq!(DlssMode::Off.label(), "Off");
         assert_eq!(DlssMode::Dlaa.label(), "DLAA");
         assert_eq!(DlssMode::UltraPerformance.label(), "Ultra Performance");
+    }
+
+    #[test]
+    fn ssao_default_is_off() {
+        assert_eq!(Ssao::default(), Ssao::Off);
+        assert_eq!(GraphicsSettings::default().ssao, Ssao::Off);
+    }
+
+    #[test]
+    fn ssao_cycles_and_clamps() {
+        assert_eq!(Ssao::Off.next(), Ssao::Low);
+        assert_eq!(Ssao::Ultra.next(), Ssao::Ultra);
+        assert_eq!(Ssao::Low.prev(), Ssao::Off);
+        assert_eq!(Ssao::Off.prev(), Ssao::Off);
+        assert_eq!(Ssao::Off.label(), "Off");
+        assert_eq!(Ssao::Medium.label(), "Medium");
+    }
+
+    #[test]
+    fn ssao_maps_to_quality_level() {
+        use bevy::pbr::ScreenSpaceAmbientOcclusionQualityLevel as Q;
+        assert!(Ssao::Off.to_quality_level().is_none());
+        assert!(matches!(Ssao::Low.to_quality_level(), Some(Q::Low)));
+        assert!(matches!(Ssao::Medium.to_quality_level(), Some(Q::Medium)));
+        assert!(matches!(Ssao::High.to_quality_level(), Some(Q::High)));
+        assert!(matches!(Ssao::Ultra.to_quality_level(), Some(Q::Ultra)));
+    }
+
+    #[test]
+    fn ssao_serde_round_trips_every_variant() {
+        for variant in Ssao::ALL {
+            let encoded = ron::to_string(&variant).expect("serialize");
+            let decoded: Ssao = ron::from_str(&encoded).expect("deserialize");
+            assert_eq!(variant, decoded);
+        }
+    }
+
+    #[test]
+    fn graphics_without_ssao_field_defaults_to_off() {
+        let legacy = "(display_mode:Fullscreen,resolution:(1280,720),antialiasing:Off,vsync:false,fps_cap:F120)";
+        let decoded: GraphicsSettings = ron::from_str(legacy).expect("deserialize legacy graphics");
+        assert_eq!(decoded.ssao, Ssao::Off);
+    }
+
+    #[test]
+    fn antialiasing_taa_maps_to_no_msaa_no_fxaa() {
+        assert_eq!(AntiAliasing::Taa.to_msaa_fxaa(), (Msaa::Off, false));
+        assert_eq!(AntiAliasing::Taa.label(), "TAA");
+        assert_eq!(AntiAliasing::Fxaa.next(), AntiAliasing::Taa);
+        assert_eq!(AntiAliasing::Taa.next(), AntiAliasing::MsaaX2);
+        assert_eq!(AntiAliasing::Taa.prev(), AntiAliasing::Fxaa);
     }
 
     #[test]

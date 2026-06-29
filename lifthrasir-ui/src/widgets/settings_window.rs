@@ -599,6 +599,7 @@ enum GraphicsField {
     Upscaling,
     #[cfg_attr(not(feature = "dlss"), allow(dead_code))]
     Dlss,
+    Ssao,
     Vsync,
     Bloom,
     Shadows,
@@ -648,6 +649,7 @@ fn field_label(graphics: &GraphicsSettings, field: GraphicsField) -> String {
         GraphicsField::Anisotropy => graphics.anisotropy.label().to_string(),
         GraphicsField::Upscaling => graphics.upscaling.label().to_string(),
         GraphicsField::Dlss => graphics.dlss.label().to_string(),
+        GraphicsField::Ssao => graphics.ssao.label().to_string(),
         GraphicsField::FpsCap => graphics.fps_cap.label().to_string(),
         GraphicsField::UiScaling => graphics.ui_scaling.label().to_string(),
         GraphicsField::DisplayMode
@@ -703,6 +705,8 @@ fn step_field(graphics: &mut GraphicsSettings, field: GraphicsField, dir: StepDi
         (GraphicsField::Upscaling, StepDir::Prev) => graphics.upscaling = graphics.upscaling.prev(),
         (GraphicsField::Dlss, StepDir::Next) => graphics.dlss = graphics.dlss.next(),
         (GraphicsField::Dlss, StepDir::Prev) => graphics.dlss = graphics.dlss.prev(),
+        (GraphicsField::Ssao, StepDir::Next) => graphics.ssao = graphics.ssao.next(),
+        (GraphicsField::Ssao, StepDir::Prev) => graphics.ssao = graphics.ssao.prev(),
         (GraphicsField::FpsCap, StepDir::Next) => graphics.fps_cap = graphics.fps_cap.next(),
         (GraphicsField::FpsCap, StepDir::Prev) => graphics.fps_cap = graphics.fps_cap.prev(),
         (GraphicsField::UiScaling, StepDir::Next) => {
@@ -765,6 +769,15 @@ fn spawn_graphics_rows(commands: &mut Commands, body: Entity, font: &Handle<Font
         );
         spawn_stepper(commands, ctrl, GraphicsField::Dlss, font);
     }
+
+    let ctrl = spawn_row(
+        commands,
+        body,
+        "Ambient Occlusion",
+        "Contact shadows in crevices (SSAO); forces MSAA off",
+        font,
+    );
+    spawn_stepper(commands, ctrl, GraphicsField::Ssao, font);
 
     let ctrl = spawn_row(commands, body, "Bloom", "Glow around bright lights", font);
     spawn_switch(commands, ctrl, GraphicsField::Bloom);
