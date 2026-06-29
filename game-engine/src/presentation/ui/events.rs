@@ -1,13 +1,13 @@
 use crate::core::state::GameState;
 use crate::infrastructure::networking::server_info::ServerInfo;
 use bevy::prelude::*;
-use bevy_auto_plugin::prelude::{auto_add_event, auto_register_type};
+use bevy_auto_plugin::prelude::{auto_add_message, auto_register_type};
 use secrecy::SecretString;
 
 #[derive(Message, Clone, Reflect)]
 #[reflect(opaque)]
 #[auto_register_type(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
-#[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct LoginAttemptEvent {
     pub username: String,
     #[reflect(ignore)]
@@ -15,7 +15,7 @@ pub struct LoginAttemptEvent {
 }
 
 #[derive(Message, Clone)]
-#[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct ServerSelectedEvent {
     pub server: ServerInfo,
 }
@@ -33,7 +33,7 @@ pub enum DialogSeverity {
 /// `code` empty hides the error-code chip; `confirm_state` is the screen the OK
 /// button navigates to (`None` simply dismisses).
 #[derive(Message, Clone)]
-#[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct ShowSystemDialog {
     pub severity: DialogSeverity,
     pub kicker: String,

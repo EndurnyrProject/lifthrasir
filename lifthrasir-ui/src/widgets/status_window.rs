@@ -30,11 +30,11 @@ impl Plugin for StatusWindowPlugin {
         app.init_resource::<StatStaging>();
         app.add_systems(
             Update,
-            toggle_status_window.run_if(in_state(GameState::InGame).and(ui_unfocused)),
+            toggle_status_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
         );
         app.add_systems(
             Update,
-            update_status_window.run_if(in_state(GameState::InGame).and(status_inputs_changed)),
+            update_status_window.run_if(in_state(GameState::InGame).and_then(status_inputs_changed)),
         );
     }
 }

@@ -243,7 +243,7 @@ impl Plugin for SkillWindowPlugin {
         app.init_resource::<LastSkillClick>();
         app.add_systems(
             Update,
-            toggle_skill_window.run_if(in_state(GameState::InGame).and(ui_unfocused)),
+            toggle_skill_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
         );
         app.add_systems(
             Update,
@@ -1742,6 +1742,7 @@ mod tests {
                 button: PointerButton::Primary,
                 hit: HitData::new(target, 0.0, None, None),
                 duration: std::time::Duration::ZERO,
+                count: 1,
             },
             target,
         )

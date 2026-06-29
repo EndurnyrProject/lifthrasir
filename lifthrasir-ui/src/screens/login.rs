@@ -1,8 +1,8 @@
 //! Login screen.
 //!
 //! Built as raw `bevy_ui`. The username/password fields are a small hand-rolled
-//! masked input ([`TextField`]) rather than `bevy_ui_text_input`, because that crate
-//! has no password-masking mode at 0.7.0 — here the password renders as bullets.
+//! masked input ([`TextField`]) rather than the core `EditableText` widget, because
+//! that widget has no password-masking mode — here the password renders as bullets.
 //! Login owns both its fields, so focus is tracked on the field itself
 //! ([`TextField::focused`]) with no cross-widget coordination; [`crate::focus`] reads
 //! that flag to gate gameplay input while typing.
@@ -151,8 +151,8 @@ fn show_login_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Text::new(""),
         TextFont {
-            font: font.clone(),
-            font_size: 13.0,
+            font: font.clone().into(),
+            font_size: 13.0.into(),
             ..default()
         },
         TextColor(theme::BAD),
@@ -184,8 +184,8 @@ fn show_login_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Text::new("Enter Realm"),
         TextFont {
-            font: font.clone(),
-            font_size: 15.0,
+            font: font.clone().into(),
+            font_size: 15.0.into(),
             ..default()
         },
         TextColor(theme::EMERALD_INK),
@@ -197,8 +197,8 @@ fn show_login_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Text::new("New to the realm? Create account"),
         TextFont {
-            font,
-            font_size: 12.5,
+            font: font.into(),
+            font_size: 12.5.into(),
             ..default()
         },
         TextColor(theme::TEXT_FAINT),
@@ -242,8 +242,8 @@ fn spawn_field_label(commands: &mut Commands, parent: Entity, text: &str, font: 
     commands.spawn((
         Text::new(text),
         TextFont {
-            font,
-            font_size: 11.0,
+            font: font.into(),
+            font_size: 11.0.into(),
             ..default()
         },
         TextColor(theme::TEXT_DIM),
@@ -304,8 +304,8 @@ fn spawn_field(
     commands.spawn((
         Text::new(placeholder),
         TextFont {
-            font,
-            font_size: 15.0,
+            font: font.into(),
+            font_size: 15.0.into(),
             ..default()
         },
         TextColor(theme::TEXT_FAINT),

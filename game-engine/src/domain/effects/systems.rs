@@ -308,12 +308,12 @@ pub fn rebuild_effect_layers(
             continue;
         };
 
-        let Some(mesh) = meshes.get_mut(&mesh3d.0) else {
+        let Some(mut mesh) = meshes.get_mut(&mesh3d.0) else {
             continue;
         };
-        write_frame_to_mesh(mesh, &frame, effect.tint);
+        write_frame_to_mesh(&mut mesh, &frame, effect.tint);
 
-        if let Some(material) = materials.get_mut(&material3d.0) {
+        if let Some(mut material) = materials.get_mut(&material3d.0) {
             // Blend is layer-constant and specialized when the material is created
             // (initialize_effect_layers); only the per-frame texture changes here.
             material.base_color_texture = loaded_layer

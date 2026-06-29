@@ -356,7 +356,7 @@ pub fn spawn_damage_indicators(
             Text2d::new(text),
             TextColor(color),
             TextFont {
-                font_size: 24.0,
+                font_size: 24.0.into(),
                 ..default()
             },
             Transform::from_translation(spawn_pos),

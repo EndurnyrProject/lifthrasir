@@ -102,7 +102,7 @@ impl Plugin for InventoryWindowPlugin {
         app.init_resource::<LastCellClick>();
         app.add_systems(
             Update,
-            toggle_inventory_window.run_if(in_state(GameState::InGame).and(ui_unfocused)),
+            toggle_inventory_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
         );
         app.add_systems(
             Update,

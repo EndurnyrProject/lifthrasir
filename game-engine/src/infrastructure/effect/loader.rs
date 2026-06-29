@@ -1,5 +1,5 @@
 use bevy::{
-    asset::{io::Reader, AssetLoader, LoadContext},
+    asset::{io::Reader, AssetLoader, AssetPath, LoadContext},
     prelude::*,
     reflect::TypePath,
 };
@@ -48,18 +48,15 @@ impl AssetLoader for StrEffectLoader {
             .map(|layer| {
                 let frame_index_map = build_frame_index_map(&layer.frames, effect.max_key as usize);
 
-                // Push a placeholder on resolve failure rather than dropping the
-                // entry, so `textures.len()` stays aligned with the per-frame
-                // `texture_index` that indexes into it.
+                // `resolve_embed` is infallible, so every name yields a handle and
+                // `textures.len()` stays aligned with the per-frame `texture_index`
+                // that indexes into it.
                 let textures = layer
                     .texture_names
                     .iter()
-                    .map(|name| match base.resolve_embed(name) {
-                        Ok(path) => load_context.load(path),
-                        Err(err) => {
-                            error!("Invalid effect texture path for '{name}': {err}");
-                            Handle::default()
-                        }
+                    .map(|name| {
+                        let path = base.resolve_embed(&AssetPath::from(name.clone()));
+                        load_context.load(path)
                     })
                     .collect();
 

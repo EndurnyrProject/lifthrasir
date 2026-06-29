@@ -17,8 +17,8 @@ dlss = ["bevy/dlss", "game-engine/dlss", "lifthrasir-ui/dlss"]
 
 [dependencies]
 bevy = { workspace = true }
-bevy_framepace = "0.21"
-bevy_brp_extras = { version = "0.19.0", optional = true }
+bevy_framepace = { git = "https://github.com/hacknus/bevy_framepace", branch = "bevy_0.19" }
+bevy_brp_extras = { version = "0.20.1", optional = true }
 game-engine = { path = "../game-engine" }
 lifthrasir-ui = { path = "../lifthrasir-ui" }
 toml = "0.9"

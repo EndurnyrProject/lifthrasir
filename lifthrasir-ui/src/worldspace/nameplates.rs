@@ -81,8 +81,8 @@ fn spawn_nameplate(
             children![(
                 Text::new(name),
                 TextFont {
-                    font: font.0.clone(),
-                    font_size: NAMEPLATE_FONT_SIZE,
+                    font: font.0.clone().into(),
+                    font_size: NAMEPLATE_FONT_SIZE.into(),
                     ..default()
                 },
                 TextColor(name_color),

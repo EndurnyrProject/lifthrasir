@@ -29,14 +29,12 @@ pub use presentation::ui::fps_counter::FpsCounterPlugin;
 
 use bevy::app::PluginGroupBuilder;
 use bevy::prelude::*;
-use bevy_tokio_tasks::TokioTasksPlugin;
 
 pub struct CoreGamePlugins;
 
 impl PluginGroup for CoreGamePlugins {
     fn build(self) -> PluginGroupBuilder {
         PluginGroupBuilder::start::<Self>()
-            .add(TokioTasksPlugin::default())
             .add(RoDiagnosticsPlugin)
             .add(LifthrasirPlugin)
             .add(SettingsPlugin)

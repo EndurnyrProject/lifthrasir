@@ -1,21 +1,21 @@
 use crate::infrastructure::networking::{errors::NetworkError, session::UserSession};
 use bevy::prelude::*;
-use bevy_auto_plugin::prelude::auto_add_event;
+use bevy_auto_plugin::prelude::auto_add_message;
 
 #[derive(Message, Debug)]
-#[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct LoginAttemptStartedEvent {
     pub username: String,
 }
 
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct LoginSuccessEvent {
     pub session: UserSession,
 }
 
 #[derive(Message, Debug)]
-#[auto_add_event(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct LoginFailureEvent {
     pub error: NetworkError,
     pub username: String,

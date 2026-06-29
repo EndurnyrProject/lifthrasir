@@ -157,8 +157,8 @@ fn show_character_select_screen(
     commands.spawn((
         Text::new("Select Character"),
         TextFont {
-            font: font_title,
-            font_size: 27.0,
+            font: font_title.into(),
+            font_size: 27.0.into(),
             ..default()
         },
         TextColor(theme::DISPLAY_GOLD),

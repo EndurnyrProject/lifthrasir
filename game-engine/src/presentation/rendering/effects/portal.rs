@@ -55,17 +55,18 @@ struct PortalAssets {
 
 impl FromWorld for PortalAssets {
     fn from_world(world: &mut World) -> Self {
-        let noise = world.resource::<AssetServer>().load_with_settings(
-            "ro://effects/portal_noise.png",
-            |s: &mut ImageLoaderSettings| {
+        let noise = world
+            .resource::<AssetServer>()
+            .load_builder()
+            .with_settings(|s: &mut ImageLoaderSettings| {
                 s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
                     address_mode_u: ImageAddressMode::Repeat,
                     address_mode_v: ImageAddressMode::Repeat,
                     address_mode_w: ImageAddressMode::Repeat,
                     ..ImageSamplerDescriptor::linear()
                 });
-            },
-        );
+            })
+            .load("ro://effects/portal_noise.png");
         Self { noise }
     }
 }

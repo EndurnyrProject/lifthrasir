@@ -12,6 +12,7 @@ pub mod chat_box;
 pub mod draggable;
 pub mod hotbar;
 pub mod inventory_window;
+pub mod placeholder;
 pub mod settings_window;
 pub mod skill_window;
 pub mod status_window;

@@ -52,8 +52,8 @@ pub fn spawn_colored_text(
     default: Color,
 ) -> Entity {
     let make_font = |font: &Handle<Font>| TextFont {
-        font: font.clone(),
-        font_size: size,
+        font: font.clone().into(),
+        font_size: size.into(),
         ..Default::default()
     };
 

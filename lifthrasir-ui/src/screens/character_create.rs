@@ -2,7 +2,7 @@
 //!
 //! Reached from an empty slot's "Create" button on the selection screen (which
 //! stashes the chosen [`CreationSlot`] and switches to [`GameState::CharacterCreation`]).
-//! A raw `bevy_ui` form: a name field (`bevy_ui_text_input`), prev/next cyclers for
+//! A raw `bevy_ui` form: a name field (`EditableText`), prev/next cyclers for
 //! hair style and color, a sex toggle, and Create/Cancel buttons. The cyclers/toggle
 //! drive a [`CreationForm`] resource through pointer observers; a single live SPR/ACT
 //! preview rebuilds from that form through the in-world billboard path (mirroring
@@ -16,7 +16,7 @@ use bevy::camera::{
     ClearColorConfig, OrthographicProjection, Projection, RenderTarget, ScalingMode,
 };
 use bevy::prelude::*;
-use bevy_ui_text_input::{TextInputBuffer, TextInputMode, TextInputNode, TextInputPrompt};
+use bevy::text::EditableText;
 use game_engine::core::state::GameState;
 use game_engine::domain::character::events::{
     CharacterCreatedEvent, CharacterCreationFailedEvent, CreateCharacterRequestEvent,
@@ -33,6 +33,7 @@ use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
 
 use crate::screens::character_preview::{create_render_target, COLUMN_PX, ROW_PX};
 use crate::theme::{self, label};
+use crate::widgets::placeholder::Placeholder;
 
 const NAME_MAX: usize = 16;
 
@@ -178,8 +179,8 @@ fn show_character_create_screen(
     commands.spawn((
         Text::new("Create Character"),
         TextFont {
-            font: font_title,
-            font_size: 27.0,
+            font: font_title.into(),
+            font_size: 27.0.into(),
             ..default()
         },
         TextColor(theme::DISPLAY_GOLD),
@@ -269,27 +270,42 @@ fn show_character_create_screen(
             ChildOf(form_panel),
         ))
         .id();
+    let name_field = commands
+        .spawn((
+            EditableText {
+                max_characters: Some(NAME_MAX),
+                ..default()
+            },
+            TextFont {
+                font: font_body.clone().into(),
+                font_size: 15.0.into(),
+                ..default()
+            },
+            TextColor(theme::TEXT),
+            NameField,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(24.0),
+                ..default()
+            },
+            ChildOf(name_box),
+        ))
+        .id();
     commands.spawn((
-        TextInputNode {
-            mode: TextInputMode::SingleLine,
-            max_chars: Some(NAME_MAX),
-            clear_on_submit: false,
-            ..default()
-        },
-        TextInputPrompt::new("Name your hero"),
+        Text::new("Name your hero"),
         TextFont {
-            font: font_body.clone(),
-            font_size: 15.0,
+            font: font_body.clone().into(),
+            font_size: 15.0.into(),
             ..default()
         },
-        TextColor(theme::TEXT),
-        NameField,
+        TextColor(theme::TEXT_FAINT),
         Node {
-            width: Val::Percent(100.0),
-            height: Val::Px(24.0),
+            position_type: PositionType::Absolute,
             ..default()
         },
-        ChildOf(name_box),
+        Pickable::IGNORE,
+        Placeholder(name_field),
+        ChildOf(name_field),
     ));
 
     spawn_segmented_sex(
@@ -321,8 +337,8 @@ fn show_character_create_screen(
     commands.spawn((
         Text::new(""),
         TextFont {
-            font: font_body.clone(),
-            font_size: 13.0,
+            font: font_body.clone().into(),
+            font_size: 13.0.into(),
             ..default()
         },
         TextColor(theme::BAD),
@@ -416,8 +432,8 @@ fn cc_label(text: &str, font: Handle<Font>) -> impl Bundle {
     (
         Text::new(text),
         TextFont {
-            font,
-            font_size: 11.0,
+            font: font.into(),
+            font_size: 11.0.into(),
             ..default()
         },
         TextColor(theme::TEXT_DIM),
@@ -461,8 +477,8 @@ fn spawn_segmented_sex(
     commands.spawn((
         Text::new(sex_label(sex)),
         TextFont {
-            font,
-            font_size: 15.0,
+            font: font.into(),
+            font_size: 15.0.into(),
             ..default()
         },
         TextColor(theme::EMERALD_INK),
@@ -524,8 +540,8 @@ fn spawn_stepper(
     commands.spawn((
         Text::new(initial.to_string()),
         TextFont {
-            font: font.clone(),
-            font_size: 16.0,
+            font: font.clone().into(),
+            font_size: 16.0.into(),
             ..default()
         },
         TextColor(theme::TEXT),
@@ -713,14 +729,14 @@ fn create_character(
     _click: On<Pointer<Click>>,
     form: Res<CreationForm>,
     slot: Res<CreationSlot>,
-    names: Query<&TextInputBuffer, With<NameField>>,
+    names: Query<&EditableText, With<NameField>>,
     mut writer: MessageWriter<CreateCharacterRequestEvent>,
     mut errors: Query<&mut Text, With<CreateError>>,
 ) {
-    let Ok(buffer) = names.single() else {
+    let Ok(name) = names.single() else {
         return;
     };
-    let submitted = submitted_form(&form.0, buffer.get_text(), slot.0);
+    let submitted = submitted_form(&form.0, name.value().to_string(), slot.0);
     match submitted.validate() {
         Ok(()) => {
             set_error(&mut errors, "");

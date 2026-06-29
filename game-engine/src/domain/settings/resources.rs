@@ -1,6 +1,7 @@
 use bevy::pbr::ScreenSpaceAmbientOcclusionQualityLevel;
 use bevy::prelude::*;
-use bevy::reflect::{DynamicEnum, TypeInfo, Typed};
+use bevy::reflect::enums::DynamicEnum;
+use bevy::reflect::{TypeInfo, Typed};
 use bevy::window::{MonitorSelection, VideoModeSelection, WindowMode};
 use bevy_auto_plugin::prelude::auto_register_type;
 use bevy_framepace::Limiter;

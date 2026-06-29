@@ -1,11 +1,11 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::prelude::auto_add_event;
+use bevy_auto_plugin::prelude::auto_add_message;
 
 use crate::app::zone_domain_plugin::ZoneDomainAutoPlugin;
 
 /// Zone entry accepted: AID folded into EnterAck (collapses ZC_ACCEPT_ENTER + ZC_AID).
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct ZoneEntered {
     pub account_id: u32,
     pub x: u32,
@@ -16,7 +16,7 @@ pub struct ZoneEntered {
 
 /// Own-character authoritative movement.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct SelfMoved {
     pub src_x: u32,
     pub src_y: u32,
@@ -27,7 +27,7 @@ pub struct SelfMoved {
 
 /// Server commanded a map change (warp); the client unloads, loads `map_name`, and re-places at (x, y).
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct MapChangeRequested {
     pub map_name: String,
     pub x: u32,
@@ -36,7 +36,7 @@ pub struct MapChangeRequested {
 
 /// An entity stopped moving.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct UnitMoveStopped {
     pub gid: u32,
     pub x: u32,
@@ -45,7 +45,7 @@ pub struct UnitMoveStopped {
 
 /// An entity entered view (collapses new/stand/move-entry; move fields carry the moving case).
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct UnitEntered {
     pub gid: u32,
     pub aid: u32,
@@ -83,7 +83,7 @@ pub struct UnitEntered {
 
 /// An entity left view.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct UnitLeft {
     pub gid: u32,
     pub reason: u32,
@@ -91,7 +91,7 @@ pub struct UnitLeft {
 
 /// An entity's name (collapses ZC_ACK_REQNAME + ZC_ACK_REQNAMEALL).
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct EntityNamed {
     pub gid: u32,
     pub name: String,
@@ -102,7 +102,7 @@ pub struct EntityNamed {
 
 /// An entity's chat message.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct ChatHeard {
     pub gid: u32,
     pub message: String,
@@ -110,7 +110,7 @@ pub struct ChatHeard {
 
 /// Basic-attack damage result; `damage`/`damage2` stay signed.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct DamageReceived {
     pub src_id: u32,
     pub target_id: u32,
@@ -125,7 +125,7 @@ pub struct DamageReceived {
 
 /// An entity's HP changed.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct UnitHpChanged {
     pub gid: u32,
     pub hp: u32,
@@ -134,7 +134,7 @@ pub struct UnitHpChanged {
 
 /// A status effect (EFST icon) was applied (`on = true`) or removed on a unit.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct StatusEffectChanged {
     pub unit_id: u32,
     pub efst: u32,
@@ -143,7 +143,7 @@ pub struct StatusEffectChanged {
 
 /// A parameter changed (collapses ZC_PAR_CHANGE u16 + ZC_LONGPAR_CHANGE u32).
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct ParamChanged {
     pub var: u32,
     pub value: u64,
@@ -169,14 +169,14 @@ pub struct ZoneInventoryItem {
 
 /// The full inventory dump (collapses ZC_INVENTORY_START/ITEMLIST_*/END).
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct InventoryReceived {
     pub items: Vec<ZoneInventoryItem>,
 }
 
 /// A skill cast bar started.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct SkillCastStarted {
     pub src_id: u32,
     pub target_id: u32,
@@ -189,7 +189,7 @@ pub struct SkillCastStarted {
 
 /// Skill damage result.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct SkillDamageReceived {
     pub skill_id: u32,
     pub level: u32,
@@ -205,7 +205,7 @@ pub struct SkillDamageReceived {
 
 /// No-damage skill effect.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct SkillEffectShown {
     pub skill_id: u32,
     pub level: u32,
@@ -216,14 +216,14 @@ pub struct SkillEffectShown {
 
 /// A skill cast was cancelled.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct CastCancelled {
     pub gid: u32,
 }
 
 /// A skill went on cooldown.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct SkillCooldownSet {
     pub skill_id: u32,
     pub tick: u32,
@@ -249,14 +249,14 @@ pub struct ZoneSkillInfo {
 
 /// The full learned-skill list.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct SkillListReceived {
     pub skills: Vec<ZoneSkillInfo>,
 }
 
 /// The result of a learn attempt.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct LearnSkillResultReceived {
     pub skill_id: u32,
     pub ok: bool,
@@ -265,7 +265,7 @@ pub struct LearnSkillResultReceived {
 
 /// A ground-targeted skill landed.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct GroundSkillPlaced {
     pub skill_id: u32,
     pub src_id: u32,
@@ -277,7 +277,7 @@ pub struct GroundSkillPlaced {
 
 /// An entity was knocked back.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct KnockedBack {
     pub unit_id: u32,
     pub dst_x: u32,
@@ -286,7 +286,7 @@ pub struct KnockedBack {
 
 /// An item was added to the inventory.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct ItemAdded {
     pub index: u32,
     pub amount: u32,
@@ -304,7 +304,7 @@ pub struct ItemAdded {
 
 /// An item was removed from the inventory.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct ItemRemoved {
     pub index: u32,
     pub amount: u32,
@@ -313,7 +313,7 @@ pub struct ItemRemoved {
 
 /// Result of an equip request.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct ItemEquipped {
     pub index: u32,
     pub wear_location: u32,
@@ -323,7 +323,7 @@ pub struct ItemEquipped {
 
 /// Result of an unequip request.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct ItemUnequipped {
     pub index: u32,
     pub wear_location: u32,
@@ -332,7 +332,7 @@ pub struct ItemUnequipped {
 
 /// A use-item attempt was rejected; carries the server reason code.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct ItemUseFailed {
     pub index: u32,
     pub reason: u32,
@@ -340,7 +340,7 @@ pub struct ItemUseFailed {
 
 /// Result of a stat allocation.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct StatRaised {
     pub stat_id: u32,
     pub ok: bool,
@@ -349,7 +349,7 @@ pub struct StatRaised {
 
 /// An entity's sprite changed.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct UnitSpriteChanged {
     pub gid: u32,
     pub type_: u32,
@@ -359,7 +359,7 @@ pub struct UnitSpriteChanged {
 
 /// An entity was resurrected.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct UnitResurrected {
     pub gid: u32,
     pub type_: u32,
@@ -367,14 +367,14 @@ pub struct UnitResurrected {
 
 /// Self respawn / return to char select after death.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct SelfRespawned {
     pub type_: u32,
 }
 
 /// The zone connection was lost or refused.
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct ZoneDisconnected {
     pub reason: String,
 }
@@ -392,7 +392,7 @@ pub struct ZoneSnapshotEntity {
 
 /// A periodic full-state position snapshot (unreliable channel).
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = ZoneDomainAutoPlugin)]
 pub struct SnapshotReceived {
     pub server_tick: u64,
     pub entities: Vec<ZoneSnapshotEntity>,

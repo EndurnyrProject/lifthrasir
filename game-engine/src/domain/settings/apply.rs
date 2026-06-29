@@ -1,7 +1,7 @@
 use bevy::anti_alias::fxaa::Fxaa;
 use bevy::post_process::bloom::Bloom;
+use bevy::camera::Hdr;
 use bevy::prelude::*;
-use bevy::render::view::Hdr;
 use bevy::ui::IsDefaultUiCamera;
 use bevy::window::{
     Monitor, MonitorSelection, PresentMode, PrimaryWindow, VideoMode, VideoModeSelection,
@@ -85,8 +85,8 @@ pub fn apply_graphics(
     }
 
     for mut light in &mut lights {
-        if light.shadows_enabled != graphics.shadows {
-            light.shadows_enabled = graphics.shadows;
+        if light.shadow_maps_enabled != graphics.shadows {
+            light.shadow_maps_enabled = graphics.shadows;
         }
     }
 
@@ -224,8 +224,8 @@ pub fn apply_shadows_on_spawn(
 ) {
     let shadows = settings.graphics.shadows;
     for mut light in &mut lights {
-        if light.shadows_enabled != shadows {
-            light.shadows_enabled = shadows;
+        if light.shadow_maps_enabled != shadows {
+            light.shadow_maps_enabled = shadows;
         }
     }
 }

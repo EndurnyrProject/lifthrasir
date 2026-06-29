@@ -125,7 +125,7 @@ pub fn sync_player_head_layer(
         };
 
         if let Some(texture) = head_animation.textures.get(part.texture_index) {
-            if let Some(material) = materials.get_mut(&material_handle.0) {
+            if let Some(mut material) = materials.get_mut(&material_handle.0) {
                 material.base_color_texture = Some(texture.clone());
             }
         }

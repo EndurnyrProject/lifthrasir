@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::prelude::{auto_add_event, auto_add_system};
+use bevy_auto_plugin::prelude::{auto_add_message, auto_add_system};
 
 use crate::domain::entities::character::components::{CharacterAppearance, CharacterData};
 use crate::domain::entities::sprite_rendering::{
@@ -7,7 +7,7 @@ use crate::domain::entities::sprite_rendering::{
 };
 
 #[derive(Message)]
-#[auto_add_event(plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin)]
+#[auto_add_message(plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin)]
 pub struct SpawnCharacterSpriteEvent {
     pub character_entity: Entity,
     pub spawn_position: Vec3,

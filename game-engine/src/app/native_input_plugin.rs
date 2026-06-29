@@ -168,12 +168,12 @@ mod tests {
 
     #[test]
     fn click_not_forwarded_while_pointer_over_ui() {
+        use bevy::ecs::entity::EntityHashMap;
         use bevy::picking::backend::HitData;
-        use bevy::platform::collections::HashMap;
 
         let mut app = test_app();
         let ui_node = app.world_mut().spawn(Node::default()).id();
-        let mut hits = HashMap::new();
+        let mut hits = EntityHashMap::default();
         hits.insert(ui_node, HitData::new(Entity::PLACEHOLDER, 0.0, None, None));
         app.world_mut()
             .resource_mut::<HoverMap>()

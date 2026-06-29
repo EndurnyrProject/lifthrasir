@@ -34,7 +34,7 @@ fn setup_fps_counter(mut commands: Commands) {
                 FpsText,
                 Text::new("FPS: --"),
                 TextFont {
-                    font_size: 20.0,
+                    font_size: 20.0.into(),
                     ..default()
                 },
                 TextColor(Color::WHITE),

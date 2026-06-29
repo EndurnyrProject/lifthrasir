@@ -67,7 +67,7 @@ fn sync_body_layer_impl<T: ActionLayout>(
 
         if let Some(part) = frame.parts.first() {
             if let Some(texture) = animation.textures.get(part.texture_index) {
-                if let Some(material) = materials.get_mut(&material_handle.0) {
+                if let Some(mut material) = materials.get_mut(&material_handle.0) {
                     material.base_color_texture = Some(texture.clone());
                 }
             }

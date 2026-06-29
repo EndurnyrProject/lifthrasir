@@ -2,19 +2,20 @@
 //! input on submit via the engine's `ChatSendRequested` event.
 //!
 //! Built as raw `bevy_ui` by [`spawn_chat_box`] (called from the HUD root). The input
-//! is a `bevy_ui_text_input` field; focus gating is global
+//! is an `EditableText` field; focus gating is global
 //! (`crate::focus::mirror_text_input_focus` flips `UiFocus.text_input_active` while
 //! a text input holds focus), so typing in chat stops WASD/hotkeys without extra
 //! wiring here.
 
-use bevy::input_focus::InputFocus;
+use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
-use bevy_ui_text_input::{SubmitText, TextInputMode, TextInputNode, TextInputPrompt};
+use bevy::text::EditableText;
 use game_engine::core::state::GameState;
 use game_engine::domain::character::chat::ChatSendRequested;
 use game_engine::infrastructure::networking::zone_messages::ChatHeard;
 
 use crate::theme;
+use crate::widgets::placeholder::Placeholder;
 
 /// Oldest lines past this are dropped so the text (and its layout) stays bounded.
 const MAX_CHAT_LINES: usize = 100;
@@ -39,14 +40,13 @@ impl Plugin for ChatBoxPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (append_incoming_chat, send_chat, chat_focus_control)
-                .run_if(in_state(GameState::InGame)),
+            (append_incoming_chat, chat_input_control).run_if(in_state(GameState::InGame)),
         );
     }
 }
 
-/// Builds the chat box under `parent`. The input clears on submit (`clear_on_submit`),
-/// so no manual clear is needed.
+/// Builds the chat box under `parent`. The input is cleared on submit by
+/// [`chat_input_control`].
 pub fn spawn_chat_box(commands: &mut Commands, parent: Entity, asset_server: &AssetServer) {
     let font = asset_server.load(theme::FONT_BODY);
 
@@ -100,8 +100,8 @@ pub fn spawn_chat_box(commands: &mut Commands, parent: Entity, asset_server: &As
     commands.spawn((
         Text::new(""),
         TextFont {
-            font: font.clone(),
-            font_size: 12.5,
+            font: font.clone().into(),
+            font_size: 12.5.into(),
             ..default()
         },
         TextColor(Color::srgb_u8(0xcd, 0xd8, 0xd0)),
@@ -168,8 +168,8 @@ fn chat_tab(
     commands.spawn((
         Text::new(label),
         TextFont {
-            font,
-            font_size: 11.5,
+            font: font.into(),
+            font_size: 11.5.into(),
             ..default()
         },
         TextColor(if active {
@@ -265,8 +265,8 @@ fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
     commands.spawn((
         Text::new("All"),
         TextFont {
-            font: font.clone(),
-            font_size: 10.5,
+            font: font.clone().into(),
+            font_size: 10.5.into(),
             ..default()
         },
         TextColor(theme::EMERALD_BRI),
@@ -274,34 +274,49 @@ fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
         ChildOf(pill),
     ));
 
+    let input = commands
+        .spawn((
+            EditableText {
+                max_characters: Some(CHAT_MAX_CHARS),
+                ..default()
+            },
+            // Focus is driven by Enter/Escape (see `chat_input_control`), not by
+            // clicking — `Pickable::IGNORE` stops a pointer press from focusing the
+            // field, so a click can't trap the cursor with no way out.
+            Pickable::IGNORE,
+            TextFont {
+                font: font.clone().into(),
+                font_size: 13.0.into(),
+                ..default()
+            },
+            TextColor(theme::TEXT),
+            ChatInput,
+            Node {
+                flex_grow: 1.0,
+                // ~one line tall (default line height = 1.2 * font) so the bar's
+                // center alignment vertically centers the text instead of pinning it
+                // to the top of a taller box.
+                height: Val::Px(16.0),
+                ..default()
+            },
+            ChildOf(bar),
+        ))
+        .id();
     commands.spawn((
-        TextInputNode {
-            mode: TextInputMode::SingleLine,
-            max_chars: Some(CHAT_MAX_CHARS),
-            clear_on_submit: true,
-            // Focus is driven by Enter/Escape (see `chat_focus_control`), not by
-            // clicking — otherwise a click would trap the cursor with no way out
-            // (`unfocus_on_submit` is a no-op in bevy_ui_text_input 0.7).
-            focus_on_pointer_down: false,
-            ..default()
-        },
-        TextInputPrompt::new("Press Enter to chat…"),
+        Text::new("Press Enter to chat…"),
         TextFont {
-            font: font.clone(),
-            font_size: 13.0,
+            font: font.clone().into(),
+            font_size: 13.0.into(),
             ..default()
         },
-        TextColor(theme::TEXT),
-        ChatInput,
+        TextColor(theme::TEXT_FAINT),
         Node {
-            flex_grow: 1.0,
-            // ~one line tall (default line height = 1.2 * font) so the bar's
-            // center alignment vertically centers the text instead of pinning it
-            // to the top of a taller box.
-            height: Val::Px(16.0),
+            position_type: PositionType::Absolute,
             ..default()
         },
-        ChildOf(bar),
+        Pickable::IGNORE,
+        Placeholder(input),
+        ChildOf(input),
     ));
 
     let send = commands
@@ -325,8 +340,8 @@ fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
     commands.spawn((
         Text::new("\u{21B5}"),
         TextFont {
-            font,
-            font_size: 13.0,
+            font: font.into(),
+            font_size: 13.0.into(),
             ..default()
         },
         TextColor(theme::TEXT_DIM),
@@ -363,48 +378,49 @@ fn append_incoming_chat(
     }
 }
 
-fn send_chat(
-    mut submits: MessageReader<SubmitText>,
-    inputs: Query<(), With<ChatInput>>,
+/// RO-style chat control. The core `EditableText` widget has no submit event, so we
+/// drive everything off the keyboard:
+///
+/// - Unfocused + Enter opens the chat input (gating gameplay input while typing).
+/// - Focused + Escape releases it without sending.
+/// - Focused + Enter submits: a non-empty message is sent and the field cleared and
+///   unfocused; an empty submit (e.g. the Enter that opened the chat) leaves it focused.
+///
+/// The input has `Pickable::IGNORE`, so Enter is the only way it gains focus — clicking
+/// can't strand the cursor in the field.
+fn chat_input_control(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut chat_input: Query<(Entity, &mut EditableText), With<ChatInput>>,
     mut writer: MessageWriter<ChatSendRequested>,
     mut input_focus: ResMut<InputFocus>,
 ) {
-    for event in submits.read() {
-        if !inputs.contains(event.entity) {
-            continue;
-        }
-        let message = event.text.trim();
-        if message.is_empty() {
-            continue;
-        }
-        writer.write(ChatSendRequested {
-            message: message.to_string(),
-        });
-        // Submitting returns control to gameplay (the crate's `unfocus_on_submit`
-        // does nothing in 0.7). Only non-empty sends unfocus, so the Enter that
-        // opened the chat (an empty submit) leaves it focused for typing.
-        input_focus.clear();
-    }
-}
-
-/// RO-style focus toggle: Enter opens the chat input (gating gameplay input while
-/// typing), Escape releases it without sending. Submitting also releases it (see
-/// [`send_chat`]). The input has `focus_on_pointer_down: false`, so this is the only
-/// way it gains focus — clicking can't strand the cursor in the field.
-fn chat_focus_control(
-    keys: Res<ButtonInput<KeyCode>>,
-    chat_input: Query<Entity, With<ChatInput>>,
-    mut input_focus: ResMut<InputFocus>,
-) {
-    let Ok(entity) = chat_input.single() else {
+    let Ok((entity, mut field)) = chat_input.single_mut() else {
         return;
     };
-    let focused = input_focus.get() == Some(entity);
     let enter = keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::NumpadEnter);
-    if !focused && enter {
-        input_focus.set(entity);
-    } else if focused && keys.just_pressed(KeyCode::Escape) {
+
+    if input_focus.get() != Some(entity) {
+        if enter {
+            input_focus.set(entity, FocusCause::Navigated);
+        }
+        return;
+    }
+
+    if keys.just_pressed(KeyCode::Escape) {
         input_focus.clear();
+        return;
+    }
+
+    if enter {
+        let value = field.value().to_string();
+        let message = value.trim();
+        if !message.is_empty() {
+            writer.write(ChatSendRequested {
+                message: message.to_string(),
+            });
+            field.clear();
+            input_focus.clear();
+        }
     }
 }
 
@@ -425,8 +441,9 @@ mod tests {
         let mut app = App::new();
         app.init_resource::<ButtonInput<KeyCode>>();
         app.init_resource::<InputFocus>();
-        app.add_systems(Update, chat_focus_control);
-        let chat = app.world_mut().spawn(ChatInput).id();
+        app.add_message::<ChatSendRequested>();
+        app.add_systems(Update, chat_input_control);
+        let chat = app.world_mut().spawn((ChatInput, EditableText::default())).id();
 
         app.world_mut()
             .resource_mut::<ButtonInput<KeyCode>>()

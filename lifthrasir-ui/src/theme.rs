@@ -68,8 +68,8 @@ pub fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Colo
     (
         Text::new(text),
         TextFont {
-            font,
-            font_size: size,
+            font: font.into(),
+            font_size: size.into(),
             ..default()
         },
         TextColor(color),

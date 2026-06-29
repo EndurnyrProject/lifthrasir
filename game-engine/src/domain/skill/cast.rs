@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_auto_plugin::prelude::{auto_add_event, auto_add_system};
+use bevy_auto_plugin::prelude::{auto_add_message, auto_add_system};
 use bevy_quinnet::client::QuinnetClient;
 
 use crate::core::state::GameState;
@@ -15,7 +15,7 @@ use crate::infrastructure::networking::zone_messages::ChatHeard;
 use super::{form, target, Form, SkillCooldownTracker, SkillTreeState, Target};
 
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
 pub struct SkillCastRequested {
     pub skill_id: u32,
 }
@@ -27,7 +27,7 @@ pub enum CastTarget {
 }
 
 #[derive(Message, Debug, Clone)]
-#[auto_add_event(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
 pub struct SkillCastResolved {
     pub skill_id: u32,
     pub level: u32,

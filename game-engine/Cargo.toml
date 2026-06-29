@@ -7,13 +7,13 @@ edition.workspace = true
 ro-formats = { path = "../ro-formats" }
 lifthrasir-data = { path = "../lifthrasir-data" }
 bevy = { workspace = true }
-bevy_auto_plugin = "0.10.0"
-bevy_common_assets = { version = "0.15", features = ["toml", "ron"] }
-bevy_asset_loader = "0.26"
-bevy_kira_audio = { version = "0.25", features = ["mp3", "wav", "ogg"] }
-bevy_framepace = "0.21"
-bevy_hanabi = "0.18"
-bevy-persistent = { version = "0.10", features = ["ron"] }
+bevy_auto_plugin = "0.11.0"
+bevy_common_assets = { version = "0.17", features = ["toml", "ron"] }
+bevy_asset_loader = "0.27"
+bevy_kira_audio = { version = "0.26", features = ["mp3", "wav", "ogg"] }
+bevy_framepace = { git = "https://github.com/hacknus/bevy_framepace", branch = "bevy_0.19" }
+bevy_hanabi = "0.19"
+bevy-persistent = { version = "0.11", features = ["ron"] }
 dirs = "6"
 leafwing-input-manager = { workspace = true }
 
@@ -22,14 +22,14 @@ nom = "8.0.0"
 thiserror = "2.0"
 image = "0.25.8"
 xbrz-rs = "0.1"
-resvg = "0.45"
+resvg = "0.47"
 futures-lite = "2.6.1"
 flate2 = "1.1"
 encoding_rs = "0.8.35"
 nalgebra = "0.35"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-toml = "0.9"
+toml = "1.1.2+spec-1.1.0"
 regex = "1.12"
 once_cell = "1.21"
 lru = "0.18"
@@ -44,14 +44,13 @@ async-trait = "0.1"
 secrecy = { workspace = true }
 
 # Async runtime integration
-bevy-tokio-tasks = { version = "0.18" }
 bevy_quinnet = { workspace = true }
 prost = { workspace = true }
 
 # Character entity system dependencies
-moonshine-kind = "0.4"
-moonshine-tag = "0.4"
-moonshine-behavior = "0.4"
+moonshine-kind = "0.5"
+moonshine-tag = "0.5"
+moonshine-behavior = "0.5"
 
 # Pathfinding
 pathfinding = "4.15"

@@ -231,7 +231,7 @@ pub fn update_map_sound_volume(
             continue;
         };
 
-        let Some(instance) = audio_instances.get_mut(&handle) else {
+        let Some(mut instance) = audio_instances.get_mut(&handle) else {
             continue;
         };
 
@@ -269,7 +269,7 @@ pub fn teardown_map_sounds(
 
     for (entity, src) in sources.iter() {
         if let Some(handle) = &src.instance {
-            if let Some(instance) = audio_instances.get_mut(handle) {
+            if let Some(mut instance) = audio_instances.get_mut(handle) {
                 instance.stop(tween.clone());
             }
         }

@@ -116,7 +116,7 @@ impl Plugin for SettingsWindowPlugin {
                 capture_rebind
                     .run_if(listening_active)
                     .before(toggle_settings),
-                toggle_settings.run_if(ui_unfocused.and(listening_inactive)),
+                toggle_settings.run_if(ui_unfocused.and_then(listening_inactive)),
                 refresh_tabs.run_if(resource_changed::<SettingsUi>),
                 refresh_footer.run_if(resource_changed::<SettingsUi>),
                 refresh_graphics.run_if(resource_changed::<SettingsUi>),
@@ -997,7 +997,7 @@ fn spawn_stepper(commands: &mut Commands, ctrl: Entity, field: GraphicsField, fo
             justify_content: JustifyContent::Center,
             ..default()
         },
-        TextLayout::new_with_justify(Justify::Center),
+        TextLayout { justify: Justify::Center, ..default() },
         ChildOf(stepper),
     ));
 
@@ -1028,8 +1028,8 @@ fn spawn_stepper_arrow(
     commands.spawn((
         Text::new(if dir == StepDir::Prev { "<" } else { ">" }),
         TextFont {
-            font: font.clone(),
-            font_size: 14.0,
+            font: font.clone().into(),
+            font_size: 14.0.into(),
             ..default()
         },
         TextColor(theme::TEXT_DIM),
@@ -1377,7 +1377,7 @@ fn spawn_slider(commands: &mut Commands, ctrl: Entity, channel: AudioChannel, fo
             margin: UiRect::left(Val::Px(14.0)),
             ..default()
         },
-        TextLayout::new_with_justify(Justify::Right),
+        TextLayout { justify: Justify::Right, ..default() },
         ChildOf(ctrl),
     ));
 

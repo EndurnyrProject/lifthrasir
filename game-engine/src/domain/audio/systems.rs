@@ -39,7 +39,7 @@ pub fn handle_bgm_change(
 
         // Fade out current track if one is playing
         if let Some(active_handle) = bgm_manager.take_active_for_fadeout() {
-            if let Some(active_instance) = audio_instances.get_mut(&active_handle) {
+            if let Some(mut active_instance) = audio_instances.get_mut(&active_handle) {
                 debug!(
                     "Fading out previous BGM track over {}s",
                     event.fade_out_duration
@@ -63,7 +63,7 @@ pub fn handle_bgm_change(
             .handle();
 
         // Apply fade-in after starting
-        if let Some(instance) = audio_instances.get_mut(&instance_handle) {
+        if let Some(mut instance) = audio_instances.get_mut(&instance_handle) {
             instance.set_decibels(
                 effective_volume as f32,
                 AudioTween::linear(std::time::Duration::from_secs_f32(event.fade_in_duration)),
@@ -88,7 +88,7 @@ pub fn handle_bgm_stop(
 ) {
     for event in events.read() {
         if let Some(active_handle) = bgm_manager.take_active_for_fadeout() {
-            if let Some(active_instance) = audio_instances.get_mut(&active_handle) {
+            if let Some(mut active_instance) = audio_instances.get_mut(&active_handle) {
                 debug!("Stopping BGM with {}s fade-out", event.fade_out_duration);
                 active_instance.stop(AudioTween::linear(std::time::Duration::from_secs_f32(
                     event.fade_out_duration,
@@ -122,7 +122,7 @@ pub fn handle_volume_change(
 
         // Apply to active track
         if let Some(active_handle) = &bgm_manager.active_instance {
-            if let Some(instance) = audio_instances.get_mut(active_handle) {
+            if let Some(mut instance) = audio_instances.get_mut(active_handle) {
                 instance.set_decibels(effective_volume as f32, AudioTween::default());
             }
         }
@@ -157,14 +157,14 @@ pub fn handle_mute_change(
 
         // Apply to active track
         if let Some(active_handle) = &bgm_manager.active_instance {
-            if let Some(instance) = audio_instances.get_mut(active_handle) {
+            if let Some(mut instance) = audio_instances.get_mut(active_handle) {
                 instance.set_decibels(effective_volume as f32, AudioTween::default());
             }
         }
 
         // Mute/unmute fading tracks as well
         for fading_handle in &bgm_manager.fading_out_instances {
-            if let Some(instance) = audio_instances.get_mut(fading_handle) {
+            if let Some(mut instance) = audio_instances.get_mut(fading_handle) {
                 instance.set_decibels(effective_volume as f32, AudioTween::default());
             }
         }

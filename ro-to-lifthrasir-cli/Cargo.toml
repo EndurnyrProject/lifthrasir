@@ -14,12 +14,12 @@ clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
 ron = "0.12"
-toml = "0.8"
+toml = "1.1.2+spec-1.1.0"
 regex = "1.12"
 encoding_rs = "0.8.35"
 mlua = { version = "0.11", features = ["lua51", "vendored"] }
 luadec = "0.2"
 gag = "1.0"
-protox = "0.7"
-prost-build = "0.13"
+protox = "0.9"
+prost-build = "0.14"
 tempfile = "3"

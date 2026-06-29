@@ -378,9 +378,9 @@ pub fn update_model_meshes(
             if !texture_name.is_empty() {
                 let texture_path = format!("ro://data\\texture\\{}", texture_name);
                 let handle: Handle<Image> = asset_server
-                    .load_with_settings(&texture_path, move |s: &mut BmpLoaderSettings| {
-                        s.upscale = factor
-                    });
+                    .load_builder()
+                    .with_settings(move |s: &mut BmpLoaderSettings| s.upscale = factor)
+                    .load(&texture_path);
                 texture_handles.push(handle);
                 texture_names.push(texture_name.clone());
             } else {

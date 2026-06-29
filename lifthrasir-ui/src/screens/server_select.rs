@@ -141,8 +141,8 @@ fn show_server_select_screen(
     commands.spawn((
         Text::new("Select Server"),
         TextFont {
-            font: font_title,
-            font_size: 25.0,
+            font: font_title.into(),
+            font_size: 25.0.into(),
             ..default()
         },
         TextColor(theme::DISPLAY_GOLD),

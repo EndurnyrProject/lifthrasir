@@ -164,7 +164,7 @@ pub fn finalize_water_loading_system(
             debug!("Water texture loaded, creating mesh and material");
 
             // Fix sampler for tiling
-            if let Some(image) = images.get_mut(&loading_state.texture_handle) {
+            if let Some(mut image) = images.get_mut(&loading_state.texture_handle) {
                 // Override sampler to Repeat mode for proper tiling across water surface
                 // Bevy's built-in JPEG loader uses Default (ClampToEdge), but we need Repeat
                 image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
@@ -280,7 +280,7 @@ pub fn animate_water_system(
         water_animation.uv_offset +=
             Vec2::new(uv_scroll_speed, uv_scroll_speed * 0.7) * time.delta_secs();
 
-        if let Some(material) = materials.get_mut(&water_surface.material_handle) {
+        if let Some(mut material) = materials.get_mut(&water_surface.material_handle) {
             material.extension.water_data.wave_params.w = water_animation.time;
             material.extension.water_data.animation_params = Vec4::new(
                 water_animation.uv_offset.x,

@@ -281,7 +281,7 @@ pub fn update_cursor_for_terrain(
     schedule = Update,
     config(
         in_set = InputSystems::Click,
-        run_if = in_state(GameState::InGame).and(ui_unfocused)
+        run_if = in_state(GameState::InGame).and_then(ui_unfocused)
     )
 )]
 pub fn handle_sit_toggle(

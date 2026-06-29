@@ -114,8 +114,8 @@ fn spawn_damage_numbers(
             children![(
                 Text::new(damage_text(event.amount, event.damage_type)),
                 TextFont {
-                    font: font.0.clone(),
-                    font_size: font_size(event.damage_type),
+                    font: font.0.clone().into(),
+                    font_size: font_size(event.damage_type).into(),
                     ..default()
                 },
                 TextColor(damage_color(event.damage_type)),

@@ -26,8 +26,8 @@ fn show_loading_screen(mut commands: Commands, asset_server: Res<AssetServer>) {
         children![(
             Text::new("LIFTHRASIR"),
             TextFont {
-                font: asset_server.load(theme::FONT_TITLE),
-                font_size: 48.0,
+                font: asset_server.load(theme::FONT_TITLE).into(),
+                font_size: 48.0.into(),
                 ..default()
             },
             TextColor(theme::EMERALD),

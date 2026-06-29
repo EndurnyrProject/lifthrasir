@@ -826,6 +826,7 @@ mod tests {
                 button,
                 hit: HitData::new(target, 0.0, None, None),
                 duration: std::time::Duration::ZERO,
+                count: 1,
             },
             target,
         )

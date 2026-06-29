@@ -126,8 +126,8 @@ fn apply_terrain_texture_filtering(
         if handle.id() == AssetId::default() {
             continue;
         }
-        if let Some(image) = images.get_mut(handle) {
-            generate_mipmaps_with_anisotropy(image, anisotropy);
+        if let Some(mut image) = images.get_mut(handle) {
+            generate_mipmaps_with_anisotropy(&mut image, anisotropy);
             texture_ids.0.insert(handle.id());
         }
     }
@@ -151,8 +151,8 @@ fn reapply_terrain_anisotropy(
 
     let anisotropy = settings.graphics.anisotropy.to_clamp();
     for id in &texture_ids.0 {
-        if let Some(image) = images.get_mut(*id) {
-            apply_anisotropic_sampler(image, anisotropy);
+        if let Some(mut image) = images.get_mut(*id) {
+            apply_anisotropic_sampler(&mut image, anisotropy);
         }
     }
 }
@@ -574,9 +574,9 @@ pub fn generate_terrain_mesh(
             if !texture_name.is_empty() {
                 let texture_path = format!("ro://data\\texture\\{}", texture_name.to_lowercase());
                 let handle: Handle<Image> = asset_server
-                    .load_with_settings(&texture_path, move |s: &mut BmpLoaderSettings| {
-                        s.upscale = factor
-                    });
+                    .load_builder()
+                    .with_settings(move |s: &mut BmpLoaderSettings| s.upscale = factor)
+                    .load(&texture_path);
                 texture_handles.push(handle);
                 texture_names.push(texture_name.clone());
                 debug!("Started loading terrain texture: {}", texture_path);

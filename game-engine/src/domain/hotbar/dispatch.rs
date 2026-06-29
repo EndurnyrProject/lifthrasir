@@ -19,7 +19,7 @@ pub struct HotbarSlotActivated {
 #[auto_add_system(
     plugin = crate::app::input_plugin::InputPlugin,
     schedule = Update,
-    config(run_if = in_state(GameState::InGame).and(ui_unfocused))
+    config(run_if = in_state(GameState::InGame).and_then(ui_unfocused))
 )]
 pub fn activate_from_keys(
     player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,

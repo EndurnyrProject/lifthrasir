@@ -49,7 +49,7 @@ impl Plugin for CharacterInfoPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            update_character_info.run_if(in_state(GameState::InGame).and(character_info_changed)),
+            update_character_info.run_if(in_state(GameState::InGame).and_then(character_info_changed)),
         );
     }
 }
@@ -192,8 +192,8 @@ fn spawn_top(
     commands.spawn((
         Text::new(""),
         TextFont {
-            font: font_title.clone(),
-            font_size: 19.0,
+            font: font_title.clone().into(),
+            font_size: 19.0.into(),
             ..default()
         },
         TextColor(theme::GOLD),
@@ -217,8 +217,8 @@ fn spawn_top(
     commands.spawn((
         Text::new(""),
         TextFont {
-            font: font_title,
-            font_size: 18.0,
+            font: font_title.into(),
+            font_size: 18.0.into(),
             ..default()
         },
         TextColor(theme::EMERALD_BRI),
@@ -282,8 +282,8 @@ fn lv_chip(
     commands.spawn((
         Text::new(label),
         TextFont {
-            font: font.clone(),
-            font_size: 10.5,
+            font: font.clone().into(),
+            font_size: 10.5.into(),
             ..default()
         },
         TextColor(theme::TEXT_FAINT),
@@ -351,12 +351,12 @@ fn spawn_bar(
     commands.spawn((
         Text::new(tag),
         TextFont {
-            font: font.clone(),
-            font_size: 9.5,
+            font: font.clone().into(),
+            font_size: 9.5.into(),
             ..default()
         },
         TextColor(theme::TEXT_FAINT),
-        TextLayout::new_with_justify(Justify::Center),
+        TextLayout { justify: Justify::Center, ..default() },
         Node {
             width: Val::Px(24.0),
             ..default()
@@ -394,7 +394,7 @@ fn spawn_bar(
     ));
     commands.spawn((
         theme::label("", font, 11.0, theme::TEXT_DIM),
-        TextLayout::new_with_justify(Justify::Right),
+        TextLayout { justify: Justify::Right, ..default() },
         HudText::matching(kind),
         Node {
             min_width: Val::Px(56.0),
@@ -465,8 +465,8 @@ fn spawn_exp(
     commands.spawn((
         Text::new(label),
         TextFont {
-            font: font.clone(),
-            font_size: 9.0,
+            font: font.clone().into(),
+            font_size: 9.0.into(),
             ..default()
         },
         TextColor(theme::TEXT_FAINT),

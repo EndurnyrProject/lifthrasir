@@ -91,7 +91,7 @@ fn setup_directional_light(commands: &mut Commands, rsw_light: &RswLight) {
         DirectionalLight {
             illuminance,
             color: light_color,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             shadow_depth_bias: 0.02,
             shadow_normal_bias: 1.8,
             ..default()
@@ -168,7 +168,7 @@ fn spawn_point_light(
             color: light_color,
             range: light_obj.range,
             radius,
-            shadows_enabled: false,
+            shadow_maps_enabled: false,
             ..default()
         },
         Transform::from_translation(position),

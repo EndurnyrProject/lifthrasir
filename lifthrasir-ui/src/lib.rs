@@ -1,8 +1,7 @@
 use bevy::camera::ClearColorConfig;
 use bevy::prelude::*;
-use bevy::render::view::Hdr;
+use bevy::camera::Hdr;
 use bevy::ui::IsDefaultUiCamera;
-use bevy_ui_text_input::TextInputPlugin;
 
 pub mod cursor;
 pub mod focus;
@@ -17,10 +16,10 @@ pub struct LifthrasirUiPlugin;
 impl Plugin for LifthrasirUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_ui_camera);
-        app.add_plugins(TextInputPlugin);
         app.add_plugins((
             cursor::NativeCursorPlugin,
             focus::UiFocusMirrorPlugin,
+            widgets::placeholder::PlaceholderPlugin,
             screens::fade::FadeTransitionPlugin,
             screens::menu_background::MenuBackgroundPlugin,
             screens::loading::LoadingScreenPlugin,
