@@ -33,6 +33,11 @@ jobs:
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
     timeout-minutes: 45
+    # DLSS is built for the RTX-capable desktop targets only. macOS cannot
+    # compile it (no Vulkan backend / NVIDIA RTX), so it stays DLSS-free.
+    env:
+      DLSS_VERSION: "310.5.3"
+      VULKAN_HEADERS_TAG: vulkan-sdk-1.4.313.0
     strategy:
       fail-fast: false
       matrix:
@@ -40,12 +45,14 @@ jobs:
           - name: linux-x86_64
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            dlss: true
           - name: macos-aarch64
             os: macos-14
             target: aarch64-apple-darwin
           - name: windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
+            dlss: true
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -64,12 +71,34 @@ jobs:
             libxcursor-dev \
             libxrandr-dev \
             libxi-dev \
-            libgl1-mesa-dev
+            libgl1-mesa-dev \
+            clang \
+            libclang-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      # dlss_wgpu links the DLSS SDK statically and parses the Vulkan headers
+      # with bindgen at build time (Vulkan itself is loaded at runtime via ash,
+      # so only the headers are needed here). The SDK is not redistributable,
+      # so it is cloned fresh from NVIDIA's public repo on each build.
+      - name: Set up DLSS build environment
+        if: matrix.dlss
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "v${DLSS_VERSION}" \
+            https://github.com/NVIDIA/DLSS.git "${RUNNER_TEMP}/DLSS"
+          git clone --depth 1 --branch "${VULKAN_HEADERS_TAG}" \
+            https://github.com/KhronosGroup/Vulkan-Headers.git "${RUNNER_TEMP}/Vulkan-Headers"
+          echo "DLSS_SDK=${RUNNER_TEMP}/DLSS" >> "$GITHUB_ENV"
+          echo "VULKAN_SDK=${RUNNER_TEMP}/Vulkan-Headers" >> "$GITHUB_ENV"
+
+      - name: Configure libclang (Windows)
+        if: matrix.dlss && runner.os == 'Windows'
+        shell: bash
+        run: echo 'LIBCLANG_PATH=C:\Program Files\LLVM\bin' >> "$GITHUB_ENV"
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -85,6 +114,7 @@ jobs:
           --no-default-features
           --locked
           --target ${{ matrix.target }}
+          ${{ matrix.dlss && '--features dlss' || '' }}
 
       - name: Package (unix)
         if: runner.os != 'Windows'
@@ -95,6 +125,10 @@ jobs:
           cp "target/${{ matrix.target }}/dist/lifthrasir" "$staging/"
           cp -r assets "$staging/"
           cp README.md LICENSE "$staging/"
+          if [ "${{ matrix.dlss }}" = "true" ]; then
+            cp "$DLSS_SDK/lib/Linux_x86_64/rel/libnvidia-ngx-dlss.so.${DLSS_VERSION}" "$staging/"
+            cp "$DLSS_SDK/LICENSE.txt" "$staging/DLSS-LICENSE.txt"
+          fi
           tar -czf "$staging.tar.gz" "$staging"
           echo "ASSET=$staging.tar.gz" >> "$GITHUB_ENV"
 
@@ -107,6 +141,10 @@ jobs:
           Copy-Item "target/${{ matrix.target }}/dist/lifthrasir.exe" "$staging/"
           Copy-Item -Recurse assets "$staging/assets"
           Copy-Item README.md, LICENSE "$staging/"
+          if ("${{ matrix.dlss }}" -eq "true") {
+            Copy-Item "$env:DLSS_SDK/lib/Windows_x86_64/rel/nvngx_dlss.dll" "$staging/"
+            Copy-Item "$env:DLSS_SDK/LICENSE.txt" "$staging/DLSS-LICENSE.txt"
+          }
           Compress-Archive -Path $staging -DestinationPath "$staging.zip"
           "ASSET=$staging.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
