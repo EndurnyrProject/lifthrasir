@@ -145,11 +145,16 @@ pub fn sync_headgear_layer(
         let delta = head_billboard_delta(screen_offset, head_anchor.layer_pos) * SPRITE_WORLD_SCALE;
         let world_delta = camera_transform.rotation * delta.extend(0.0);
 
+        // Stack the headgear in front of the head along the camera's view axis,
+        // not world Z. Head and headgear sit at nearly the same point, so a world-Z
+        // nudge barely changes camera depth under the tilted RO camera and the sort
+        // is undecided. `world_delta` lies in the camera plane (zero depth), so a
+        // push toward the camera is the only term that orders the two reliably.
         let layer_gap = (layer_order(render_layer.layer) as f32 - layer_order(LAYER_HEAD) as f32)
             * Z_OFFSET_PER_LAYER;
+        let towards_camera = -camera_transform.forward().as_vec3();
 
-        transform.translation =
-            head_anchor.translation + world_delta + Vec3::new(0.0, 0.0, layer_gap);
+        transform.translation = head_anchor.translation + world_delta + towards_camera * layer_gap;
     }
 }
 
