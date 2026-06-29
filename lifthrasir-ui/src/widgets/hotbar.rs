@@ -7,9 +7,11 @@
 //!
 //! Slots are also `bevy_picking` drag targets: dropping a `SkillCell` /
 //! `InventoryCell` assigns it, dropping another slot swaps the two, and a
-//! right-click clears. The dragged payload (a skill/item) is carried in the
-//! `HotbarDrag` resource, set by the source cells on `DragStart` and reset on
-//! `DragEnd`; a slot↔slot swap is detected from the `DragDrop` dragged entity.
+//! right-click clears. Dragging a filled slot *off* the bar (releasing over
+//! anything that isn't a slot) unregisters it. The dragged payload (a
+//! skill/item) is carried in the `HotbarDrag` resource, set by the source cells
+//! on `DragStart` and reset on `DragEnd`; a slot↔slot swap is detected from the
+//! `DragDrop` dragged entity.
 //!
 //! `SkillCooldownTracker` only exposes the remaining seconds (not the original
 //! duration), so the cooldown render is a darkening overlay plus the rounded-up
@@ -74,6 +76,13 @@ struct HotbarStackText(usize);
 #[derive(Resource, Default)]
 pub struct HotbarDrag {
     pub payload: Option<HotbarSlot>,
+    /// The bar slot this drag started from, if any. A drag that ends *not* over
+    /// a slot clears it (unregister). Stays `None` for drags from the skill or
+    /// inventory windows, which can never unregister a slot.
+    source: Option<usize>,
+    /// Set when a `DragDrop` lands on a slot, so `reset_drag` knows the drag was
+    /// consumed (placed/swapped) and must not unregister the source.
+    dropped_on_slot: bool,
 }
 
 /// The single cursor-following ghost icon spawned while a drag is in flight.
@@ -481,6 +490,7 @@ fn on_slot_drag_start(
     };
     if let Some(slot) = hotbar.get(cell.0) {
         state.payload = Some(slot);
+        state.source = Some(cell.0);
     }
 }
 
@@ -490,12 +500,13 @@ fn on_slot_drag_start(
 fn on_slot_drag_drop(
     drop: On<Pointer<DragDrop>>,
     cells: Query<&HotbarSlotUi>,
-    state: Res<HotbarDrag>,
+    mut state: ResMut<HotbarDrag>,
     mut hotbar: ResMut<Hotbar>,
 ) {
     let Ok(target) = cells.get(drop.entity) else {
         return;
     };
+    state.dropped_on_slot = true;
     let dragged_slot = cells.get(drop.dropped).ok().map(|c| c.0);
     let Some(dropped) = drop_source(dragged_slot, state.payload) else {
         return;
@@ -503,9 +514,23 @@ fn on_slot_drag_drop(
     apply_drop(&mut hotbar, target.0, dropped);
 }
 
-/// Clears the carried payload once any drag finishes.
-fn reset_drag(_: On<Pointer<DragEnd>>, mut state: ResMut<HotbarDrag>) {
+/// A drag that started on the bar and ended off it unregisters its source slot.
+/// `DragDrop` fires before `DragEnd`, so `dropped_on_slot` is already set when a
+/// drop landed on a slot.
+fn unregister_target(source: Option<usize>, dropped_on_slot: bool) -> Option<usize> {
+    source.filter(|_| !dropped_on_slot)
+}
+
+/// Unregisters the source slot if the drag ended off the bar, then clears the
+/// transient drag state. Runs for every drag (including window-sourced ones,
+/// whose `source` is `None`).
+fn reset_drag(_: On<Pointer<DragEnd>>, mut state: ResMut<HotbarDrag>, mut hotbar: ResMut<Hotbar>) {
+    if let Some(slot) = unregister_target(state.source, state.dropped_on_slot) {
+        hotbar.clear(slot);
+    }
     state.payload = None;
+    state.source = None;
+    state.dropped_on_slot = false;
 }
 
 /// The icon a dragged payload should show on the cursor ghost: the skill catalog
@@ -890,6 +915,22 @@ mod tests {
     }
 
     #[test]
+    fn unregister_off_bar_drag_clears_source() {
+        assert_eq!(unregister_target(Some(4), false), Some(4));
+    }
+
+    #[test]
+    fn unregister_drop_on_slot_keeps_source() {
+        assert_eq!(unregister_target(Some(4), true), None);
+    }
+
+    #[test]
+    fn unregister_window_drag_has_no_source() {
+        assert_eq!(unregister_target(None, false), None);
+        assert_eq!(unregister_target(None, true), None);
+    }
+
+    #[test]
     fn apply_drop_place_into_empty_assigns() {
         let mut bar = Hotbar::default();
         apply_drop(&mut bar, 2, DropSource::Place(HotbarSlot::Item(501)));
@@ -929,6 +970,76 @@ mod tests {
         apply_drop(&mut bar, 99, DropSource::Place(HotbarSlot::Skill(1)));
         apply_drop(&mut bar, 99, DropSource::Swap(0));
         assert!(bar.slots.iter().all(|s| s.is_none()));
+    }
+
+    fn drag_end_event(target: Entity, window: Entity) -> Pointer<DragEnd> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            DragEnd {
+                button: PointerButton::Primary,
+                distance: Vec2::ZERO,
+            },
+            target,
+        )
+    }
+
+    #[test]
+    fn drag_off_bar_unregisters_source_slot() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+
+        let mut hotbar = Hotbar::default();
+        hotbar.assign(2, HotbarSlot::Skill(10));
+        app.insert_resource(hotbar);
+        app.insert_resource(HotbarDrag {
+            payload: Some(HotbarSlot::Skill(10)),
+            source: Some(2),
+            dropped_on_slot: false,
+        });
+        app.add_observer(reset_drag);
+        let target = app.world_mut().spawn_empty().id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut().trigger(drag_end_event(target, window));
+        app.update();
+
+        assert_eq!(app.world().resource::<Hotbar>().get(2), None);
+        assert!(app.world().resource::<HotbarDrag>().source.is_none());
+    }
+
+    #[test]
+    fn drag_dropped_on_slot_keeps_source_slot() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+
+        let mut hotbar = Hotbar::default();
+        hotbar.assign(2, HotbarSlot::Skill(10));
+        app.insert_resource(hotbar);
+        app.insert_resource(HotbarDrag {
+            payload: Some(HotbarSlot::Skill(10)),
+            source: Some(2),
+            dropped_on_slot: true,
+        });
+        app.add_observer(reset_drag);
+        let target = app.world_mut().spawn_empty().id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut().trigger(drag_end_event(target, window));
+        app.update();
+
+        assert_eq!(
+            app.world().resource::<Hotbar>().get(2),
+            Some(HotbarSlot::Skill(10))
+        );
     }
 
     #[test]
