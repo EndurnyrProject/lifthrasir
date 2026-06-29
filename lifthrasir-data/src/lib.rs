@@ -29,6 +29,14 @@ pub struct ItemData {
     pub items: BTreeMap<u32, ItemInfo>,
 }
 
+/// Accessory (headgear) sprite-name table decoded from `accessoryid.lub` + `accname.lub`.
+/// Maps a view id to its sprite name (EUC-KR decoded, leading separator preserved verbatim).
+/// Keyed by `BTreeMap` for stable, key-ordered RON diffs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccessoryData {
+    pub names: BTreeMap<u16, String>,
+}
+
 /// Per-skill presentation metadata decoded from `skillinfolist.lub` and `skilldescript.lub`.
 /// All strings are valid UTF-8 (EUC-KR decoded by the CLI converter).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,6 +151,18 @@ mod tests {
         let deserialized: ItemData = ron::from_str(&serialized).expect("deserialize");
 
         assert_eq!(original.items, deserialized.items);
+    }
+
+    #[test]
+    fn accessory_data_round_trip() {
+        let mut original = AccessoryData::default();
+        original.names.insert(1, "_고글".to_string());
+        original.names.insert(2, "_고양이머리띠".to_string());
+
+        let serialized = ron::to_string(&original).expect("serialize");
+        let deserialized: AccessoryData = ron::from_str(&serialized).expect("deserialize");
+
+        assert_eq!(original, deserialized);
     }
 
     #[test]
