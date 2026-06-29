@@ -138,6 +138,14 @@ mod tests {
             asset.0.effects.values().all(|e| e.str != "magnus.str"),
             "magnus.str must not be referenced by the skill catalog"
         );
+
+        // Bucket-A samples: one ground field and one caster buff.
+        assert_eq!(asset.0.effects[&21].str, "thunderstorm.str");
+        assert_eq!(asset.0.effects[&21].placement, EffectPlacement::Ground);
+        assert!(asset.0.effects[&21].repeating);
+        assert_eq!(asset.0.effects[&33].str, "angelus.str");
+        assert_eq!(asset.0.effects[&33].placement, EffectPlacement::Caster);
+        assert!(!asset.0.effects[&33].repeating);
     }
 
     #[test]
