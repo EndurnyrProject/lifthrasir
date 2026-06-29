@@ -1,11 +1,11 @@
 (
     effects: {
-        18: ( // PR_MAGNUS / consecration-style caster effect
-            str: "magnus.str",
-            sound: None,
-            placement: Caster,
+        18: ( // MG_FIREWALL
+            str: "firewall.str",
+            sound: Some("effect/ef_firewall.wav"),
+            placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
-            repeating: false,
+            repeating: true,
         ),
         28: ( // AL_HEAL
             str: "heal.str",

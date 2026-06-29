@@ -129,6 +129,15 @@ mod tests {
         assert_eq!(asset.0.effects[&28].placement, EffectPlacement::Target);
         assert_eq!(asset.0.effects[&89].placement, EffectPlacement::Ground);
         assert!(asset.0.effects[&89].repeating);
+
+        // id 18 is MG_FIREWALL (was a stale magnus.str mapping).
+        assert_eq!(asset.0.effects[&18].str, "firewall.str");
+        assert_eq!(asset.0.effects[&18].placement, EffectPlacement::Ground);
+        assert!(asset.0.effects[&18].repeating);
+        assert!(
+            asset.0.effects.values().all(|e| e.str != "magnus.str"),
+            "magnus.str must not be referenced by the skill catalog"
+        );
     }
 
     #[test]
