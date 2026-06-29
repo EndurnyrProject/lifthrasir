@@ -1,7 +1,7 @@
 mod layers;
 mod ro_sprite;
 
-pub use layers::{BodyAttachPoint, HeadAttachment, HeadLayer};
+pub use layers::{BodyAttachPoint, HeadAttachPoint, HeadAttachment, HeadLayer};
 pub use ro_sprite::{MobSprite, PlayerSprite, RoSpriteGeneric};
 
 use std::collections::HashMap;

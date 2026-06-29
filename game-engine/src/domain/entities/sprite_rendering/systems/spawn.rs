@@ -1,6 +1,6 @@
 use super::super::components::{
-    BodyAttachPoint, EntitySpriteData, HeadAttachment, HeadLayer, MobSprite, PendingRenderLayers,
-    PlayerAppearance, PlayerSprite, RenderLayer, SpriteHierarchyConfig,
+    BodyAttachPoint, EntitySpriteData, HeadAttachPoint, HeadAttachment, HeadLayer, MobSprite,
+    PendingRenderLayers, PlayerAppearance, PlayerSprite, RenderLayer, SpriteHierarchyConfig,
 };
 use super::super::events::{RequestSpriteSpawn, SpawnSpriteEvent};
 use crate::domain::assets::patterns;
@@ -391,7 +391,7 @@ fn spawn_render_layer_child(
     }
 
     if is_head {
-        entity_commands.insert(HeadLayer);
+        entity_commands.insert((HeadLayer, HeadAttachPoint::default()));
     }
 
     let sprite_entity = entity_commands.id();

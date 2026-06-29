@@ -3,7 +3,7 @@ use bevy_auto_plugin::prelude::*;
 
 use crate::domain::entities::character::components::visual::ActionType;
 use crate::domain::entities::sprite_rendering::components::{
-    BodyAttachPoint, HeadAttachment, HeadLayer, PlayerSprite, RenderLayer,
+    BodyAttachPoint, HeadAttachPoint, HeadAttachment, HeadLayer, PlayerSprite, RenderLayer,
 };
 use crate::domain::entities::sprite_rendering::layout::{ActionLayout, PlayerLayout};
 use crate::domain::sprite::tags::{layer_order, LAYER_BODY, Z_OFFSET_PER_LAYER};
@@ -20,6 +20,7 @@ type HeadLayerQuery<'w, 's> = Query<
         &'static ChildOf,
         &'static MeshMaterial3d<StandardMaterial>,
         &'static mut Transform,
+        &'static mut HeadAttachPoint,
     ),
     With<HeadLayer>,
 >;
@@ -80,7 +81,8 @@ pub fn sync_player_head_layer(
         return;
     };
 
-    for (attachment, head_layer, child_of, material_handle, mut transform) in head_query.iter_mut()
+    for (attachment, head_layer, child_of, material_handle, mut transform, mut head_attach_point) in
+        head_query.iter_mut()
     {
         let Ok((body_attach, body_render_layer, body_transform)) =
             body_query.get(attachment.body_entity)
@@ -162,6 +164,10 @@ pub fn sync_player_head_layer(
 
         transform.translation =
             body_transform.translation + world_delta + Vec3::new(0.0, 0.0, layer_gap);
+
+        head_attach_point.attach_point = head_attach;
+        head_attach_point.frame_index = head_frame_index;
+        head_attach_point.layer_pos = part.position;
     }
 }
 
