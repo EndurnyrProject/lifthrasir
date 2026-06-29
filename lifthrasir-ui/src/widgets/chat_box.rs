@@ -443,7 +443,10 @@ mod tests {
         app.init_resource::<InputFocus>();
         app.add_message::<ChatSendRequested>();
         app.add_systems(Update, chat_input_control);
-        let chat = app.world_mut().spawn((ChatInput, EditableText::default())).id();
+        let chat = app
+            .world_mut()
+            .spawn((ChatInput, EditableText::default()))
+            .id();
 
         app.world_mut()
             .resource_mut::<ButtonInput<KeyCode>>()

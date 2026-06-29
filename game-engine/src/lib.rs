@@ -16,8 +16,10 @@ pub use domain::entities::character::UnifiedCharacterEntityPlugin;
 pub use domain::entities::hover_plugin::EntityHoverPlugin;
 pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
+pub use domain::equipment::EquipmentPlugin;
 pub use domain::inventory::InventoryPlugin;
 pub use domain::settings::SettingsPlugin;
+pub use infrastructure::accessory::{AccessoryDb, AccessoryDbPlugin};
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
 pub use infrastructure::effect::EffectsPlugin;
 pub use infrastructure::item::{ItemDb, ItemDbPlugin};
@@ -45,6 +47,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(EffectsPlugin)
             .add(VfxPlugin)
             .add(ItemDbPlugin)
+            .add(AccessoryDbPlugin)
             .add(AudioPlugin)
             .add(AssetCatalogPlugin)
             .add(EntitySpawningPlugin)
@@ -55,6 +58,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(EntityHoverPlugin)
             .add(CombatPlugin)
             .add(InventoryPlugin)
+            .add(EquipmentPlugin)
             .add(InputPlugin)
             .add(NativeInputPlugin)
             .add(FpsCounterPlugin)

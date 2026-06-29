@@ -6,6 +6,7 @@ pub mod character;
 pub mod combat;
 pub mod effects;
 pub mod entities;
+pub mod equipment;
 pub mod hotbar;
 pub mod input;
 pub mod inventory;

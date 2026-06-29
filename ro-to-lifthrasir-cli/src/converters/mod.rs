@@ -1,3 +1,4 @@
+pub mod accessory;
 pub mod item;
 pub mod job;
 pub mod skill;
@@ -22,6 +23,7 @@ const CONVERTERS: &[(&str, ConverterFn)] = &[
     ("job", job::run),
     ("item", item::run),
     ("skill", skill::run),
+    ("accessory", accessory::run),
 ];
 
 pub fn run(only: Option<&str>, vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {

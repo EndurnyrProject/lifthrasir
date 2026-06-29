@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Gender enum - shared across the application
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Gender {
     Female = 0,
@@ -195,3 +195,15 @@ impl CharacterStats {
 #[derive(Component, Debug, Clone, Copy, Reflect)]
 #[reflect(Component)]
 pub struct Grounded;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_component<T: Component>() {}
+
+    #[test]
+    fn gender_is_a_component() {
+        assert_component::<Gender>();
+    }
+}

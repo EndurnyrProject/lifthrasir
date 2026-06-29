@@ -1,3 +1,4 @@
+pub mod accessory;
 pub mod assets;
 pub mod config;
 pub mod diagnostics;

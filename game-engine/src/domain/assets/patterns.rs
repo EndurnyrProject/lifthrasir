@@ -122,6 +122,21 @@ pub fn item_icon_path(resource_name: &str) -> String {
     format!("ro://data/texture/유저인터페이스/item/{resource_name}.bmp")
 }
 
+/// Generate headgear (accessory) sprite path.
+/// `accname` comes from the accessory db and already carries its leading separator (e.g. `"_고글"`).
+pub fn headgear_sprite_path(gender: Gender, accname: &str) -> String {
+    let sex = match gender {
+        Gender::Male => "남",
+        Gender::Female => "여",
+    };
+    format!("ro://data/sprite/악세사리/{}/{}{}.spr", sex, sex, accname)
+}
+
+/// Generate headgear (accessory) action path.
+pub fn headgear_action_path(gender: Gender, accname: &str) -> String {
+    headgear_sprite_path(gender, accname).replace(".spr", ".act")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,6 +146,30 @@ mod tests {
         assert_eq!(
             item_icon_path("apple"),
             "ro://data/texture/유저인터페이스/item/apple.bmp"
+        );
+    }
+
+    #[test]
+    fn headgear_sprite_path_builds_correct_url() {
+        assert_eq!(
+            headgear_sprite_path(Gender::Male, "_고글"),
+            "ro://data/sprite/악세사리/남/남_고글.spr"
+        );
+        assert_eq!(
+            headgear_sprite_path(Gender::Female, "_고글"),
+            "ro://data/sprite/악세사리/여/여_고글.spr"
+        );
+    }
+
+    #[test]
+    fn headgear_action_path_builds_correct_url() {
+        assert_eq!(
+            headgear_action_path(Gender::Male, "_고글"),
+            "ro://data/sprite/악세사리/남/남_고글.act"
+        );
+        assert_eq!(
+            headgear_action_path(Gender::Female, "_고글"),
+            "ro://data/sprite/악세사리/여/여_고글.act"
         );
     }
 }

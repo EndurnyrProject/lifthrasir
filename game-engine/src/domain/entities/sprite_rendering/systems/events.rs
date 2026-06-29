@@ -1,10 +1,13 @@
 use super::super::components::{EffectType, PlayerAppearance, RenderLayer};
+use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::equipment::EquipmentSlot;
+use crate::domain::entities::character::components::Gender;
 use crate::domain::sprite::tags::{equipment_slot_to_tag, Z_OFFSET_PER_LAYER};
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
+use crate::AccessoryDb;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
@@ -13,7 +16,21 @@ use bevy_auto_plugin::prelude::*;
 pub struct EquipmentChangeEvent {
     pub character: Entity,
     pub slot: EquipmentSlot,
-    pub new_item_id: Option<u32>,
+    pub view_id: Option<u16>,
+}
+
+/// Resolve a headgear `view_id` to its SPR/ACT sprite paths via the accessory db.
+/// Returns `None` for unknown/cosmetic view ids (caller fails soft).
+fn resolve_headgear_paths(
+    accessory_db: &AccessoryDb,
+    gender: Gender,
+    view_id: u16,
+) -> Option<(String, String)> {
+    let accname = accessory_db.accname(view_id)?;
+    Some((
+        patterns::headgear_sprite_path(gender, accname),
+        patterns::headgear_action_path(gender, accname),
+    ))
 }
 
 #[derive(Message)]
@@ -33,19 +50,22 @@ pub struct StatusEffectVisualEvent {
 pub fn handle_equipment_changes(
     mut commands: Commands,
     mut equipment_events: MessageReader<EquipmentChangeEvent>,
-    mut players: Query<(Entity, &mut PlayerAppearance, &Children)>,
+    mut players: Query<(Entity, &mut PlayerAppearance, &Children, &Gender)>,
     render_layers: Query<(Entity, &RenderLayer)>,
     asset_server: Res<AssetServer>,
+    accessory_db: Option<Res<AccessoryDb>>,
     mut pending_animations: ResMut<PendingAnimations>,
 ) {
     for event in equipment_events.read() {
-        let Ok((entity, mut appearance, children)) = players.get_mut(event.character) else {
+        let Ok((entity, mut appearance, children, gender)) = players.get_mut(event.character)
+        else {
             warn!(
-                "handle_equipment_changes: Entity {:?} not found or missing PlayerAppearance",
+                "handle_equipment_changes: Entity {:?} not found or missing PlayerAppearance/Gender",
                 event.character
             );
             continue;
         };
+        let gender = *gender;
 
         for child in children.iter() {
             let Ok((child_entity, render_layer)) = render_layers.get(child) else {
@@ -60,27 +80,42 @@ pub fn handle_equipment_changes(
 
         appearance.remove_equipment(event.slot);
 
-        if let Some(item_id) = event.new_item_id {
-            let spr_path = format!("data/sprite/equipment/{}.spr", item_id);
-            let act_path = format!("data/sprite/equipment/{}.act", item_id);
-
-            let layer_tag = equipment_slot_to_tag(&event.slot);
-
-            let spr = asset_server.load(&spr_path);
-            let act = asset_server.load(&act_path);
-
-            pending_animations.request(spr, act, layer_tag, Some(entity));
-
-            debug!(
-                "handle_equipment_changes: Requested equipment animation for entity {:?}, slot {:?}, item {}",
-                entity, event.slot, item_id
-            );
-        } else {
+        let Some(view_id) = event.view_id else {
             debug!(
                 "handle_equipment_changes: Removed equipment from entity {:?}, slot {:?}",
                 entity, event.slot
             );
-        }
+            continue;
+        };
+
+        let Some(accessory_db) = accessory_db.as_deref() else {
+            warn!(
+                "handle_equipment_changes: AccessoryDb not loaded yet, skipping view id {} for entity {:?}",
+                view_id, entity
+            );
+            continue;
+        };
+
+        let Some((spr_path, act_path)) = resolve_headgear_paths(accessory_db, gender, view_id)
+        else {
+            warn!(
+                "handle_equipment_changes: Unknown headgear view id {} for entity {:?}, skipping",
+                view_id, entity
+            );
+            continue;
+        };
+
+        let layer_tag = equipment_slot_to_tag(&event.slot);
+
+        let spr = asset_server.load(&spr_path);
+        let act = asset_server.load(&act_path);
+
+        pending_animations.request(spr, act, layer_tag, Some(entity));
+
+        debug!(
+            "handle_equipment_changes: Requested headgear animation for entity {:?}, slot {:?}, view id {}",
+            entity, event.slot, view_id
+        );
     }
 }
 
@@ -197,5 +232,30 @@ pub fn handle_status_effect_visuals(mut effect_events: MessageReader<StatusEffec
             "Status effect for {:?}: type={:?}, add={} (effects handled separately)",
             event.character, event.effect_type, event.add
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lifthrasir_data::AccessoryData;
+
+    fn db() -> AccessoryDb {
+        let mut data = AccessoryData::default();
+        data.names.insert(1, "_고글".to_string());
+        AccessoryDb::from_accessory_data(data)
+    }
+
+    #[test]
+    fn resolves_known_view_id_to_headgear_paths() {
+        let (spr, act) =
+            resolve_headgear_paths(&db(), Gender::Male, 1).expect("known view id resolves");
+        assert_eq!(spr, "ro://data/sprite/악세사리/남/남_고글.spr");
+        assert_eq!(act, "ro://data/sprite/악세사리/남/남_고글.act");
+    }
+
+    #[test]
+    fn unknown_view_id_resolves_to_none() {
+        assert!(resolve_headgear_paths(&db(), Gender::Male, 9999).is_none());
     }
 }

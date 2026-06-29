@@ -2,6 +2,7 @@ pub mod action_sync;
 pub mod body_sync;
 pub mod events;
 pub mod head_sync;
+pub mod headgear_sync;
 pub mod spawn;
 pub mod update;
 
@@ -15,5 +16,6 @@ pub use events::{
     StatusEffectVisualEvent,
 };
 pub use head_sync::sync_player_head_layer;
+pub use headgear_sync::sync_headgear_layer;
 pub use spawn::spawn_sprite_hierarchy;
 pub use update::cleanup_orphaned_sprites;

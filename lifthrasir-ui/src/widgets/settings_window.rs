@@ -997,7 +997,10 @@ fn spawn_stepper(commands: &mut Commands, ctrl: Entity, field: GraphicsField, fo
             justify_content: JustifyContent::Center,
             ..default()
         },
-        TextLayout { justify: Justify::Center, ..default() },
+        TextLayout {
+            justify: Justify::Center,
+            ..default()
+        },
         ChildOf(stepper),
     ));
 
@@ -1377,7 +1380,10 @@ fn spawn_slider(commands: &mut Commands, ctrl: Entity, channel: AudioChannel, fo
             margin: UiRect::left(Val::Px(14.0)),
             ..default()
         },
-        TextLayout { justify: Justify::Right, ..default() },
+        TextLayout {
+            justify: Justify::Right,
+            ..default()
+        },
         ChildOf(ctrl),
     ));
 
