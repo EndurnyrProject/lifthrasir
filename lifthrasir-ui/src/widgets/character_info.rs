@@ -49,7 +49,8 @@ impl Plugin for CharacterInfoPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            update_character_info.run_if(in_state(GameState::InGame).and_then(character_info_changed)),
+            update_character_info
+                .run_if(in_state(GameState::InGame).and_then(character_info_changed)),
         );
     }
 }
@@ -356,7 +357,10 @@ fn spawn_bar(
             ..default()
         },
         TextColor(theme::TEXT_FAINT),
-        TextLayout { justify: Justify::Center, ..default() },
+        TextLayout {
+            justify: Justify::Center,
+            ..default()
+        },
         Node {
             width: Val::Px(24.0),
             ..default()
@@ -394,7 +398,10 @@ fn spawn_bar(
     ));
     commands.spawn((
         theme::label("", font, 11.0, theme::TEXT_DIM),
-        TextLayout { justify: Justify::Right, ..default() },
+        TextLayout {
+            justify: Justify::Right,
+            ..default()
+        },
         HudText::matching(kind),
         Node {
             min_width: Val::Px(56.0),

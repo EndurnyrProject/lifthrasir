@@ -1,6 +1,6 @@
 use bevy::anti_alias::fxaa::Fxaa;
-use bevy::post_process::bloom::Bloom;
 use bevy::camera::Hdr;
+use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 use bevy::ui::IsDefaultUiCamera;
 use bevy::window::{
