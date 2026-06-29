@@ -146,6 +146,19 @@ mod tests {
         assert_eq!(asset.0.effects[&33].str, "angelus.str");
         assert_eq!(asset.0.effects[&33].placement, EffectPlacement::Caster);
         assert!(!asset.0.effects[&33].repeating);
+
+        // Sound paths are relative to `data/wav/` (see `mob_sfx_path`). These two
+        // were broken: `_heal_effect.wav` lives at the wav root (no `effect/`
+        // prefix), and Storm Gust's only sound is `wizard_stormgust.wav` —
+        // `effect/stormgust.wav` does not exist in the GRF.
+        assert_eq!(
+            asset.0.effects[&28].sound.as_deref(),
+            Some("_heal_effect.wav")
+        );
+        assert_eq!(
+            asset.0.effects[&89].sound.as_deref(),
+            Some("effect/wizard_stormgust.wav")
+        );
     }
 
     #[test]

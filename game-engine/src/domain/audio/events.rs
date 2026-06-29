@@ -79,7 +79,8 @@ pub struct PlayMobSfx {
 pub struct PlaySkillSfx {
     /// Entity the sound is anchored to (the effect's anchor unit or cell entity).
     pub emitter: Entity,
-    /// Sound path relative to `data/wav/` (e.g. "effect/_heal_effect.wav").
+    /// Sound path relative to `data/wav/` (e.g. "effect/ef_firewall.wav", or
+    /// "_heal_effect.wav" for files at the wav root).
     pub sound: String,
 }
 

@@ -70,7 +70,8 @@ pub enum EffectPlacement {
 pub struct EffectDescriptor {
     /// STR effect filename, e.g. "heal.str".
     pub str: String,
-    /// Optional sound path relative to `data/wav`, e.g. "effect/_heal_effect.wav".
+    /// Optional sound path relative to `data/wav`, e.g. "effect/ef_firewall.wav"
+    /// or "_heal_effect.wav" (files at the wav root take no `effect/` prefix).
     pub sound: Option<String>,
     pub placement: EffectPlacement,
     /// RGBA tint multiplied onto the STR's per-frame color.
@@ -186,7 +187,7 @@ mod tests {
             28,
             EffectDescriptor {
                 str: "heal.str".to_string(),
-                sound: Some("effect/_heal_effect.wav".to_string()),
+                sound: Some("_heal_effect.wav".to_string()),
                 placement: EffectPlacement::Target,
                 color: [1.0, 1.0, 1.0, 1.0],
                 repeating: false,
@@ -221,12 +222,20 @@ mod tests {
         let heal = data.effects.get(&28).expect("AL_HEAL entry");
         assert_eq!(heal.placement, EffectPlacement::Target);
         assert_eq!(heal.str, "heal.str");
-        assert_eq!(heal.sound.as_deref(), Some("effect/_heal_effect.wav"));
+        // Sound is relative to `data/wav/`; `_heal_effect.wav` lives at the root
+        // (no `effect/` prefix), so the old `effect/_heal_effect.wav` was broken.
+        assert_eq!(heal.sound.as_deref(), Some("_heal_effect.wav"));
         assert!(!heal.repeating);
 
         let stormgust = data.effects.get(&89).expect("WZ_STORMGUST entry");
         assert_eq!(stormgust.placement, EffectPlacement::Ground);
         assert_eq!(stormgust.str, "stormgust.str");
+        // `effect/stormgust.wav` does not exist in the GRF; the real sound is
+        // `effect/wizard_stormgust.wav`.
+        assert_eq!(
+            stormgust.sound.as_deref(),
+            Some("effect/wizard_stormgust.wav")
+        );
         assert!(stormgust.repeating);
     }
 }

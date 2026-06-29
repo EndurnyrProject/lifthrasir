@@ -2,7 +2,7 @@
     effects: {
         6: ( // SM_PROVOKE
             str: "provoke.str",
-            sound: None,
+            sound: Some("effect/swordman_provoke.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -44,7 +44,7 @@
         ),
         28: ( // AL_HEAL
             str: "heal.str",
-            sound: Some("effect/_heal_effect.wav"),
+            sound: Some("_heal_effect.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -58,21 +58,21 @@
         ),
         35: ( // AL_CURE
             str: "cure.str",
-            sound: None,
+            sound: Some("effect/acolyte_cure.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         45: ( // AC_CONCENTRATION (Improve Concentration)
             str: "ac_concentration.str",
-            sound: None,
+            sound: Some("effect/ac_concentration.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         89: ( // WZ_STORMGUST
             str: "stormgust.str",
-            sound: Some("effect/stormgust.wav"),
+            sound: Some("effect/wizard_stormgust.wav"),
             placement: Ground,
             color: (0.6, 0.7, 1.0, 1.0),
             repeating: true,
