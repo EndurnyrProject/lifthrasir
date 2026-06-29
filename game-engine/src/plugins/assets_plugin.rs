@@ -1,3 +1,4 @@
+use crate::infrastructure::accessory::AccessoryDataAsset;
 use crate::infrastructure::assets::{bmp_loader::BmpLoader, svg_loader::SvgLoader, *};
 use crate::infrastructure::config::ClientConfig;
 use crate::infrastructure::effect::{LoadedEffectAsset, SkillEffectDataAsset, StrEffectLoader};
@@ -44,6 +45,7 @@ impl Plugin for AssetsPlugin {
                 RonAssetPlugin::<ItemDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<SkillDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<SkillEffectDataAsset>::new(&["ron"]),
+                RonAssetPlugin::<AccessoryDataAsset>::new(&["ron"]),
                 AnimationProcessingPlugin,
             ));
     }
