@@ -5,7 +5,7 @@ use net_contract::state::ZoneSession;
 
 use crate::core::state::GameState;
 use crate::domain::input::TargetingMode;
-use crate::infrastructure::networking::zone_messages::ChatHeard;
+use net_contract::events::ChatHeard;
 
 use super::{form, target, Form, SkillCooldownTracker, SkillTreeState, Target};
 
@@ -127,7 +127,7 @@ mod tests {
     use super::*;
     use crate::domain::skill::cooldown::apply_skill_cooldown;
     use crate::domain::skill::SkillNode;
-    use crate::infrastructure::networking::zone_messages::SkillCooldownSet;
+    use net_contract::events::SkillCooldownSet;
 
     const SKILL_ID: u32 = 28;
     const OWN_GID: u32 = 2_000_042;

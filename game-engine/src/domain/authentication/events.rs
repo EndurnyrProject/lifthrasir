@@ -1,6 +1,6 @@
-use crate::infrastructure::networking::{errors::NetworkError, session::UserSession};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
+use net_contract::{dto::NetworkError, state::UserSession};
 
 #[derive(Message, Debug)]
 #[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]

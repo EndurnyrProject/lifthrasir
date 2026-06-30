@@ -5,7 +5,6 @@ pub mod diagnostics;
 pub mod effect;
 pub mod item;
 pub mod job;
-pub mod networking;
 pub mod ro_formats;
 pub mod skill;
 pub mod storage;

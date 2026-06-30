@@ -4,7 +4,7 @@ use bevy_auto_plugin::prelude::*;
 use crate::domain::entities::character::components::equipment::EquipmentSlot;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::EquipmentChangeEvent;
-use crate::infrastructure::networking::zone_messages::UnitSpriteChanged;
+use net_contract::events::UnitSpriteChanged;
 
 const LOOK_HEAD_BOTTOM: u32 = 3;
 const LOOK_HEAD_TOP: u32 = 4;

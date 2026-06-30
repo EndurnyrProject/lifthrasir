@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 
-use crate::infrastructure::networking::zone_messages::SkillCooldownSet;
+use net_contract::events::SkillCooldownSet;
 
 /// Per-skill post-cast cooldowns, populated from `SkillCooldownSet` and ticked
 /// down with `Time`. `resolve_skill_cast` gates on this; Spec B's cooldown

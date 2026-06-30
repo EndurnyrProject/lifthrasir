@@ -1,6 +1,6 @@
 use crate::domain::entities::types::ObjectType;
-use crate::infrastructure::networking::zone_messages::UnitEntered;
 use bevy::prelude::*;
+use net_contract::events::UnitEntered;
 
 /// Buffer for spawn events that arrive before GameState::InGame
 ///

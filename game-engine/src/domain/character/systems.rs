@@ -9,17 +9,17 @@ use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::domain::world::warp::Warping;
 use crate::domain::world::MapScoped;
 use crate::infrastructure::job::registry::JobSpriteRegistry;
-use crate::infrastructure::networking::char_messages::{
-    CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
-    CharacterServerConnected, ZoneServerInfoReceived,
-};
-use crate::infrastructure::networking::session::UserSession;
-use crate::infrastructure::networking::zone_messages::ZoneDisconnected;
 use crate::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioReceiver;
 use net_contract::commands::{ConnectZone, LeaveZone};
+use net_contract::events::ZoneDisconnected;
+use net_contract::events::{
+    CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
+    CharacterServerConnected, ZoneServerInfoReceived,
+};
+use net_contract::state::UserSession;
 use net_contract::state::ZoneSession;
 use std::time::{Duration, Instant};
 
@@ -195,7 +195,7 @@ pub fn handle_character_creation_failed_protocol(
     mut domain_events: MessageWriter<CharacterCreationFailedEvent>,
 ) {
     for event in protocol_events.read() {
-        use crate::infrastructure::networking::char_types::CharCreationError;
+        use net_contract::dto::CharCreationError;
         let error_msg = match event.error {
             CharCreationError::NameExists => "Character name already exists",
             CharCreationError::InvalidName => "Invalid character name",
@@ -404,9 +404,7 @@ pub fn handle_zone_server_info(
     config(in_set = CharacterFlowSystems::ZoneConnection)
 )]
 pub fn handle_zone_entered(
-    mut entered_events: MessageReader<
-        crate::infrastructure::networking::zone_messages::ZoneEntered,
-    >,
+    mut entered_events: MessageReader<net_contract::events::ZoneEntered>,
     session: Res<ZoneSession>,
     mut commands: Commands,
     mut map_loading_events: MessageWriter<MapLoadingStarted>,

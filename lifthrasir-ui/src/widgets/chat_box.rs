@@ -12,7 +12,7 @@ use bevy::prelude::*;
 use bevy::text::EditableText;
 use game_engine::core::state::GameState;
 use game_engine::domain::character::chat::ChatSendRequested;
-use game_engine::infrastructure::networking::zone_messages::ChatHeard;
+use net_contract::events::ChatHeard;
 
 use crate::theme;
 use crate::widgets::placeholder::Placeholder;

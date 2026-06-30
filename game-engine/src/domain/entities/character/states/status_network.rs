@@ -1,9 +1,9 @@
 use super::observers::handle_status_effect_state_changes;
 use super::status_effects::StatusEffects;
 use crate::domain::entities::registry::EntityRegistry;
-use crate::infrastructure::networking::zone_messages::StatusEffectChanged;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
+use net_contract::events::StatusEffectChanged;
 
 /// rAthena EFST id for Play Dead (SC_TRICKDEAD). Aesir carries no opt field for
 /// it, so this icon toggle is the only signal that drives the dead pose.

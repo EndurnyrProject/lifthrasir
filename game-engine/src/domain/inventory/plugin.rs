@@ -25,7 +25,7 @@ impl Plugin for InventoryPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::networking::zone_messages::InventoryReceived;
+    use net_contract::events::InventoryReceived;
 
     #[test]
     fn plugin_registers_resource() {

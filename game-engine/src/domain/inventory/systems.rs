@@ -1,9 +1,7 @@
 use super::item::Item;
 use super::resource::Inventory;
-use crate::infrastructure::networking::zone_messages::{
-    InventoryReceived, ItemAdded, ItemRemoved, ZoneInventoryItem,
-};
 use bevy::prelude::*;
+use net_contract::events::{InventoryReceived, ItemAdded, ItemRemoved, ZoneInventoryItem};
 
 /// Maps a proto-shaped inventory slot onto the domain `Item`.
 ///
@@ -86,11 +84,9 @@ mod tests {
     use super::item_from_added;
     use crate::core::state::GameState;
     use crate::domain::inventory::{Inventory, InventoryPlugin};
-    use crate::infrastructure::networking::zone_messages::{
-        InventoryReceived, ItemAdded, ItemRemoved, ZoneInventoryItem,
-    };
     use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
+    use net_contract::events::{InventoryReceived, ItemAdded, ItemRemoved, ZoneInventoryItem};
 
     fn slot(index: u32, amount: u32) -> ZoneInventoryItem {
         ZoneInventoryItem {

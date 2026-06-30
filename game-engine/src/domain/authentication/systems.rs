@@ -7,16 +7,12 @@ use super::{events::*, models::*};
 use crate::{
     core::state::GameState,
     domain::system_sets::AuthenticationSystems,
-    infrastructure::{
-        config::ClientConfig,
-        networking::{
-            errors::NetworkError,
-            messages::{LoginAccepted, LoginRefused},
-            session::UserSession,
-        },
-    },
+    infrastructure::config::ClientConfig,
     presentation::ui::events::{LoginAttemptEvent, ServerSelectedEvent},
 };
+use net_contract::dto::NetworkError;
+use net_contract::events::{LoginAccepted, LoginRefused};
+use net_contract::state::UserSession;
 
 /// System to handle login attempts from the UI
 ///

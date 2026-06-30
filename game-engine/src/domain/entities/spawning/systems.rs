@@ -24,15 +24,13 @@ use crate::{
         system_sets::EntityLifecycleSystems,
         world::map_scoped::MapScoped,
     },
-    infrastructure::{
-        job::{registry::WARP_JOB_ID, JobSpriteRegistry},
-        networking::zone_messages::{UnitEntered, UnitLeft},
-    },
+    infrastructure::job::{registry::WARP_JOB_ID, JobSpriteRegistry},
     utils::coordinates::spawn_coords_to_world_position,
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioEmitter;
+use net_contract::events::{UnitEntered, UnitLeft};
 
 /// Legacy-shaped view of a `UnitEntered`, so the spawn body keeps its original
 /// field names/types after the move/stand/new-entry collapse onto one event.

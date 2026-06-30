@@ -775,7 +775,7 @@ mod tests {
     #[test]
     fn update_hotbar_reflects_cooldown_seconds() {
         use game_engine::domain::skill::cooldown::apply_skill_cooldown;
-        use game_engine::infrastructure::networking::zone_messages::SkillCooldownSet;
+        use net_contract::events::SkillCooldownSet;
 
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)

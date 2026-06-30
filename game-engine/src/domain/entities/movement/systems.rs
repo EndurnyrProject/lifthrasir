@@ -16,16 +16,14 @@ use crate::{
         system_sets::MovementSystems,
         world::components::MapLoader,
     },
-    infrastructure::{
-        assets::loaders::RoAltitudeAsset,
-        networking::zone_messages::{SelfMoved, UnitMoveStopped},
-    },
+    infrastructure::assets::loaders::RoAltitudeAsset,
     utils::coordinates::spawn_coords_to_world_position,
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use moonshine_behavior::prelude::*;
 use net_contract::commands::MoveRequested;
+use net_contract::events::{SelfMoved, UnitMoveStopped};
 
 // =============================================================================
 // PHASE 0.2: UPDATED TO USE FLAT ENTITY STRUCTURE

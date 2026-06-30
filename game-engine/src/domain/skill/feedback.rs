@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 
-use crate::infrastructure::networking::zone_messages::{ChatHeard, LearnSkillResultReceived};
+use net_contract::events::{ChatHeard, LearnSkillResultReceived};
 
 #[auto_add_system(
     plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,

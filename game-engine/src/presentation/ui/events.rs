@@ -1,7 +1,7 @@
 use crate::core::state::GameState;
-use crate::infrastructure::networking::server_info::ServerInfo;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_message, auto_register_type};
+use net_contract::dto::ServerInfo;
 use secrecy::SecretString;
 
 #[derive(Message, Clone, Reflect)]

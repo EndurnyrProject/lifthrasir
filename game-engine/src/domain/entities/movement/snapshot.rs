@@ -14,7 +14,7 @@ use bevy_auto_plugin::prelude::*;
 
 use crate::core::state::GameState;
 use crate::domain::entities::registry::EntityRegistry;
-use crate::infrastructure::networking::zone_messages::SnapshotReceived;
+use net_contract::events::SnapshotReceived;
 
 /// Max samples retained per entity. ~6 covers a couple of snapshot intervals
 /// plus interpolation delay; older samples are useless once we've moved past them.
@@ -145,7 +145,7 @@ pub fn ingest_snapshots_system(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::networking::zone_messages::ZoneSnapshotEntity;
+    use net_contract::events::ZoneSnapshotEntity;
 
     fn sample(tick: u64) -> SnapshotSample {
         SnapshotSample {

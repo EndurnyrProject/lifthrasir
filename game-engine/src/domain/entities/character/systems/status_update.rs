@@ -1,15 +1,13 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 
-use crate::{
-    domain::entities::{
-        character::components::status::{CharacterStatus, StatusParameter},
-        character::events::StatusParameterChanged,
-        markers::LocalPlayer,
-        registry::EntityRegistry,
-    },
-    infrastructure::networking::zone_messages::ParamChanged,
+use crate::domain::entities::{
+    character::components::status::{CharacterStatus, StatusParameter},
+    character::events::StatusParameterChanged,
+    markers::LocalPlayer,
+    registry::EntityRegistry,
 };
+use net_contract::events::ParamChanged;
 
 #[auto_add_system(
     plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,

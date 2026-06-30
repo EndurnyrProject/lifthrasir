@@ -19,10 +19,8 @@ use crate::domain::combat::systems::start_attack_animation;
 use crate::domain::entities::character::states::AnimationState;
 use crate::domain::entities::components::NetworkEntity;
 use crate::infrastructure::effect::{EffectCatalog, LoadedEffectAsset};
-use crate::infrastructure::networking::zone_messages::{
-    GroundSkillPlaced, SkillDamageReceived, SkillEffectShown,
-};
 use crate::utils::coordinates::spawn_coords_to_world_position;
+use net_contract::events::{GroundSkillPlaced, SkillDamageReceived, SkillEffectShown};
 
 /// Despawn timer for repeating ground effects (aesir sends no removal packet;
 /// design §4 "Lifetime boundary"). A `RemoveGroundSkill` event would supersede.

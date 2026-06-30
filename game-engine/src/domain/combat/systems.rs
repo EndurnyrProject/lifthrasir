@@ -11,11 +11,11 @@ use crate::domain::{
     },
     system_sets::CombatSystems,
 };
-use crate::infrastructure::networking::zone_messages::{DamageReceived, UnitLeft};
 use crate::utils::coordinates::Direction;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use moonshine_behavior::prelude::*;
+use net_contract::events::{DamageReceived, UnitLeft};
 
 // =============================================================================
 // PHASE 0.2: UPDATED TO USE FLAT ENTITY STRUCTURE

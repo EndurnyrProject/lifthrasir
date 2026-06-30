@@ -8,7 +8,7 @@ use crate::domain::hotbar::model::{Hotbar, HotbarSlot};
 use crate::domain::input::{ui_unfocused, PlayerAction, HOTBAR_ACTIONS};
 use crate::domain::inventory::{Inventory, UseItemRequested};
 use crate::domain::skill::SkillCastRequested;
-use crate::infrastructure::networking::zone_messages::ChatHeard;
+use net_contract::events::ChatHeard;
 
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]

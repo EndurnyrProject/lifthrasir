@@ -4,11 +4,11 @@ use crate::{
         entities::{components::EntityName, hover::EntityHoverEntered, registry::EntityRegistry},
         system_sets::EntityInteractionSystems,
     },
-    infrastructure::networking::zone_messages::EntityNamed,
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use net_contract::commands::NameRequested;
+use net_contract::events::EntityNamed;
 
 #[auto_observer(plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin)]
 pub fn name_request_observer(

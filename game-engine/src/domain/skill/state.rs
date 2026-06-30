@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 
-use crate::infrastructure::networking::zone_messages::SkillListReceived;
+use net_contract::events::SkillListReceived;
 
 /// Authoritative client mirror of the server skill tree, rebuilt wholesale on
 /// every `SkillListReceived` (the server resends the full tree each time).
@@ -64,7 +64,7 @@ pub fn apply_skill_list(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::networking::zone_messages::ZoneSkillInfo;
+    use net_contract::events::ZoneSkillInfo;
 
     fn skill(skill_id: u32, type_: u32, job_id: u32) -> ZoneSkillInfo {
         ZoneSkillInfo {

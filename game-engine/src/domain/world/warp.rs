@@ -2,10 +2,10 @@ use crate::core::GameState;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::entities::movement::events::{MovementStopped, StopReason};
 use crate::domain::world::spawn_context::MapSpawnContext;
-use crate::infrastructure::networking::zone_messages::MapChangeRequested;
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use net_contract::events::MapChangeRequested;
 
 /// Transient marker: present iff the current `Loading` cycle is a warp, not a
 /// first-entry. Inserted by `handle_map_change`; consumed and removed in Task 6's

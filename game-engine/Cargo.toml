@@ -7,7 +7,6 @@ edition.workspace = true
 ro-formats = { path = "../ro-formats" }
 lifthrasir-data = { path = "../lifthrasir-data" }
 net-contract = { path = "../net-contract" }
-net-aesir = { path = "../net-aesir" }
 bevy = { workspace = true }
 bevy_auto_plugin = "0.11.0"
 bevy_common_assets = { version = "0.17", features = ["toml", "ron"] }
@@ -38,16 +37,10 @@ lru = "0.18"
 base64 = "0.22"
 
 # Networking dependencies
-bytes = "1.11"
-byteorder = "1.5"
 async-trait = "0.1"
 
 # Security dependencies
 secrecy = { workspace = true }
-
-# Async runtime integration
-bevy_quinnet = { workspace = true }
-prost = { workspace = true }
 
 # Character entity system dependencies
 moonshine-kind = "0.5"

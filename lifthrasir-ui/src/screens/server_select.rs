@@ -8,9 +8,9 @@
 
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
-use game_engine::infrastructure::networking::server_info::ServerInfo;
-use game_engine::infrastructure::networking::session::UserSession;
 use game_engine::presentation::ui::events::ServerSelectedEvent;
+use net_contract::dto::ServerInfo;
+use net_contract::state::UserSession;
 
 use crate::theme::{self, label};
 
@@ -451,8 +451,8 @@ fn spawn_server_row(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::infrastructure::networking::server_info::{ServerInfo, ServerType};
-    use game_engine::infrastructure::networking::session::SessionTokens;
+    use net_contract::dto::{ServerInfo, ServerType};
+    use net_contract::state::SessionTokens;
 
     #[test]
     fn status_buckets_by_fill_ratio() {

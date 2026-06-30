@@ -3,7 +3,7 @@ use bevy_auto_plugin::prelude::*;
 use net_contract::commands::UseRequested;
 
 use crate::core::state::GameState;
-use crate::infrastructure::networking::zone_messages::{ChatHeard, ItemUseFailed};
+use net_contract::events::{ChatHeard, ItemUseFailed};
 
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]

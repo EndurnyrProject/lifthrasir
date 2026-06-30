@@ -1,6 +1,6 @@
 use super::models::LoginCredentials;
-use crate::infrastructure::networking::{errors::NetworkError, session::UserSession};
 use async_trait::async_trait;
+use net_contract::{dto::NetworkError, state::UserSession};
 
 #[async_trait]
 pub trait AuthenticationService: Send + Sync {

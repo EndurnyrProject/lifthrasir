@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
 use crate::domain::inventory::Inventory;
-use crate::infrastructure::networking::zone_messages::{ChatHeard, ItemEquipped, ItemUnequipped};
+use net_contract::events::{ChatHeard, ItemEquipped, ItemUnequipped};
 
 const EQUIP_RESULT_OK: u32 = 0;
 const UNEQUIP_RESULT_OK: u32 = 0;

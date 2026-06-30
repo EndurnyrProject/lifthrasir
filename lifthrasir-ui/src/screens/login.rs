@@ -11,8 +11,8 @@ use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::authentication::events::LoginFailureEvent;
-use game_engine::infrastructure::networking::errors::NetworkError;
 use game_engine::presentation::ui::events::LoginAttemptEvent;
+use net_contract::dto::NetworkError;
 use secrecy::SecretString;
 
 use crate::theme;
