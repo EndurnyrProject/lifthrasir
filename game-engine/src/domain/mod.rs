@@ -10,6 +10,7 @@ pub mod equipment;
 pub mod hotbar;
 pub mod input;
 pub mod inventory;
+pub mod item_drop;
 pub mod settings;
 pub mod skill;
 pub mod sprite;
