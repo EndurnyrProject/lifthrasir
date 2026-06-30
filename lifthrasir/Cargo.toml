@@ -4,7 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-default = []
+default = ["net-aesir"]
+# Aesir QUIC network adapter. On by default; disable to build the client
+# without the aesir protocol wired in (e.g. to swap in a different adapter).
+net-aesir = ["dep:net-aesir"]
 # Profiling and live-inspection tooling. Opt-in via `--features dev`; normal
 # builds (and distribution) stay clean of Tracy/remote-inspection overhead.
 dev = [
@@ -21,5 +24,5 @@ bevy_framepace = { git = "https://github.com/hacknus/bevy_framepace", branch = "
 bevy_brp_extras = { version = "0.20.1", optional = true }
 game-engine = { path = "../game-engine" }
 lifthrasir-ui = { path = "../lifthrasir-ui" }
-net-aesir = { path = "../net-aesir" }
+net-aesir = { path = "../net-aesir", optional = true }
 toml = "0.9"

@@ -41,6 +41,8 @@ fn main() {
 
     app.add_plugins(game_engine::MapPlugin);
     app.add_plugins(game_engine::CoreGamePlugins);
+
+    #[cfg(feature = "net-aesir")]
     app.add_plugins(net_aesir::AesirNetPlugin);
 
     app.add_plugins(lifthrasir_ui::LifthrasirUiPlugin);
