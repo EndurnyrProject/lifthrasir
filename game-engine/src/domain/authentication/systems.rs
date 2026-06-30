@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
-use bevy_quinnet::client::QuinnetClient;
+use net_contract::commands::{ConnectCharServer, ConnectLogin};
 use secrecy::ExposeSecret;
 
 use super::{events::*, models::*};
@@ -12,10 +12,6 @@ use crate::{
         networking::{
             errors::NetworkError,
             messages::{LoginAccepted, LoginRefused},
-            quic::{
-                character::{self, PendingAuth, QuicCharState},
-                login::{self, Pending, QuicLoginState},
-            },
             session::UserSession,
         },
     },
@@ -39,9 +35,7 @@ use crate::{
 pub fn handle_login_attempts(
     mut login_attempts: MessageReader<LoginAttemptEvent>,
     mut login_started_events: MessageWriter<LoginAttemptStartedEvent>,
-    mut login_failure_events: MessageWriter<LoginFailureEvent>,
-    mut quinnet: ResMut<QuinnetClient>,
-    mut quic_state: ResMut<QuicLoginState>,
+    mut connect_login: MessageWriter<ConnectLogin>,
     auth_context: Res<AuthenticationContext>,
 ) {
     for attempt in login_attempts.read() {
@@ -51,23 +45,10 @@ pub fn handle_login_attempts(
         let password = attempt.password.expose_secret();
 
         info!("Login attempt for user: {}", username);
-        debug!("Attempting QUIC login to server: {}", server_address);
+        debug!("Requesting QUIC login to server: {}", server_address);
 
-        if let Err(e) = login::connect(&mut quinnet, server_address) {
-            error!(
-                "Failed to connect to login server {}: {:?}",
-                server_address, e
-            );
-
-            login_failure_events.write(LoginFailureEvent {
-                error: NetworkError::ConnectionFailed(e.to_string()),
-                username: username.clone(),
-            });
-
-            continue;
-        }
-
-        quic_state.start_connecting(Pending {
+        connect_login.write(ConnectLogin {
+            address: server_address.clone(),
             username: username.clone(),
             password: password.to_string(),
             client_version,
@@ -231,8 +212,7 @@ pub fn handle_server_selection(
     mut commands: Commands,
     mut server_events: MessageReader<ServerSelectedEvent>,
     session: Option<Res<UserSession>>,
-    mut quinnet: ResMut<QuinnetClient>,
-    mut char_state: ResMut<QuicCharState>,
+    mut connect_char: MessageWriter<ConnectCharServer>,
 ) {
     let Some(mut session) = session.map(|s| s.clone()) else {
         return;
@@ -254,15 +234,8 @@ pub fn handle_server_selection(
 
         info!("Connecting to character server at {}", address);
 
-        if let Err(e) = character::connect(&mut quinnet, &address) {
-            error!(
-                "Failed to connect to character server at {}: {:?}",
-                address, e
-            );
-            continue;
-        }
-
-        char_state.start_connecting(PendingAuth {
+        connect_char.write(ConnectCharServer {
+            address,
             account_id: session.tokens.account_id,
             login_id1: session.tokens.login_id1,
             login_id2: session.tokens.login_id2,

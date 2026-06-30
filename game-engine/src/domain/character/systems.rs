@@ -21,7 +21,7 @@ use crate::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioReceiver;
-use bevy_quinnet::client::QuinnetClient;
+use net_contract::commands::ConnectZone;
 use std::time::{Duration, Instant};
 
 /// Builds the slot-keyed character list event from the QUIC roster, resolving
@@ -321,11 +321,10 @@ pub struct ZoneSessionData {
 )]
 pub fn handle_zone_server_info(
     mut events: MessageReader<ZoneServerInfoReceivedEvent>,
-    mut quinnet: ResMut<QuinnetClient>,
-    mut zone_state: ResMut<QuicZoneState>,
     user_session: Option<Res<UserSession>>,
     mut game_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
+    mut connect_zone: MessageWriter<ConnectZone>,
     characters: Query<(
         &crate::domain::entities::character::components::CharacterMeta,
         &crate::domain::entities::character::components::CharacterData,
@@ -357,33 +356,18 @@ pub fn handle_zone_server_info(
             character_name,
         });
 
-        info!("Closing QUIC character connection before zone handoff");
-
         let server_address = format!("{}:{}", event.server_ip, event.server_port);
 
-        if let Err(e) =
-            crate::infrastructure::networking::quic::zone::connect(&mut quinnet, &server_address)
-        {
-            error!(
-                "Failed to connect to zone server at {}: {:?}",
-                server_address, e
-            );
-            continue;
-        }
-
-        info!("Opened QUIC zone connection to {}", server_address);
-
-        zone_state.start_connecting(
-            crate::infrastructure::networking::quic::zone::ZoneAuth {
-                account_id: event.account_id,
-                login_id1: event.login_id1,
-                login_id2: user_session.tokens.login_id2,
-                sex: event.sex as u32,
-                char_id: event.char_id,
-                zone_auth_token: event.zone_auth_token.clone(),
-            },
-            event.map_name.clone(),
-        );
+        connect_zone.write(ConnectZone {
+            address: server_address,
+            account_id: event.account_id,
+            login_id1: event.login_id1,
+            login_id2: user_session.tokens.login_id2,
+            sex: event.sex as u32,
+            char_id: event.char_id,
+            zone_auth_token: event.zone_auth_token.clone(),
+            map_name: event.map_name.clone(),
+        });
 
         game_state.set(GameState::Connecting);
     }

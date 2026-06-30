@@ -125,3 +125,39 @@ pub struct DeleteCharacter {
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct RefreshCharacterList;
+
+/// Request to open the login-server connection and begin the login handshake.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ConnectLogin {
+    pub address: String,
+    pub username: String,
+    pub password: String,
+    pub client_version: u32,
+    pub build: String,
+}
+
+/// Request to open the char-server connection and begin the char-session handshake.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ConnectCharServer {
+    pub address: String,
+    pub account_id: u32,
+    pub login_id1: u32,
+    pub login_id2: u32,
+    pub sex: u32,
+}
+
+/// Request to open the zone-server connection and begin the zone handshake.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ConnectZone {
+    pub address: String,
+    pub account_id: u32,
+    pub login_id1: u32,
+    pub login_id2: u32,
+    pub sex: u32,
+    pub char_id: u32,
+    pub zone_auth_token: Vec<u8>,
+    pub map_name: String,
+}
