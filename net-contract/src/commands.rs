@@ -32,3 +32,10 @@ pub struct UnequipRequested {
 pub struct UseRequested {
     pub index: u32,
 }
+
+/// Request to send a chat line; `message` is the wire-ready, formatted string.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ChatSent {
+    pub message: String,
+}

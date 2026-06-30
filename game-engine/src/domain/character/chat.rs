@@ -2,22 +2,19 @@
 //!
 //! The UI writes [`ChatSendRequested`] when the player submits a chat line; this
 //! handler formats it as `"<character name> : <message>"` (the format the zone
-//! server expects) and ships it as a `ChatRequest` over the QUIC GAMEPLAY channel.
-//! Incoming chat arrives separately as `ChatHeard` (read directly by the UI).
+//! server expects) and emits a [`ChatSent`] contract command. The net-aesir
+//! `send::social` system turns that into a `ChatRequest` on the QUIC GAMEPLAY
+//! channel. Incoming chat arrives separately as `ChatHeard` (read by the UI).
 //!
 //! This was previously the Tauri bridge's `handle_chat_request`; it now lives in
 //! the engine so the native UI only has to emit a plain event.
 
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
-use bevy_quinnet::client::QuinnetClient;
+use net_contract::commands::ChatSent;
 
 use crate::core::state::GameState;
 use crate::domain::character::systems::ZoneSessionData;
-use crate::infrastructure::networking::quic::channels::GAMEPLAY;
-use crate::infrastructure::networking::quic::envelope::Body;
-use crate::infrastructure::networking::quic::proto::aesir::net::ChatRequest;
-use crate::infrastructure::networking::quic::zone::{QuicZoneState, ZonePhase};
 
 /// Emitted by the UI when the player submits a chat line.
 #[derive(Message, Debug, Clone)]
@@ -38,15 +35,9 @@ pub fn format_chat_message(character_name: &str, message: &str) -> String {
 )]
 pub fn handle_chat_send(
     mut events: MessageReader<ChatSendRequested>,
-    mut client: ResMut<QuinnetClient>,
-    mut zone: ResMut<QuicZoneState>,
+    mut chat_requests: MessageWriter<ChatSent>,
     zone_session: Option<Res<ZoneSessionData>>,
 ) {
-    if zone.phase != ZonePhase::Playing {
-        events.clear();
-        return;
-    }
-
     for event in events.read() {
         if event.message.trim().is_empty() {
             continue;
@@ -56,10 +47,7 @@ pub fn handle_chat_send(
             continue;
         };
         let formatted = format_chat_message(&session.character_name, &event.message);
-        let body = Body::ChatRequest(ChatRequest { message: formatted });
-        if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
-            error!("Failed to send chat message: {e}");
-        }
+        chat_requests.write(ChatSent { message: formatted });
     }
 }
 
