@@ -13,6 +13,7 @@ use game_engine::domain::entities::billboard::EquipmentPreviewCamera;
 use crate::theme;
 
 pub mod damage_numbers;
+pub mod floor_item_labels;
 pub mod nameplates;
 
 /// Query filter for the in-game 3D camera that worldspace overlays project
@@ -40,6 +41,7 @@ impl Plugin for WorldspaceUiPlugin {
         app.add_plugins((
             nameplates::NameplatePlugin,
             damage_numbers::DamageNumberPlugin,
+            floor_item_labels::FloorItemLabelPlugin,
         ));
     }
 }
