@@ -39,3 +39,22 @@ pub struct UseRequested {
 pub struct ChatSent {
     pub message: String,
 }
+
+/// Request to cast a single-target skill (`skill_id` at `level`) at `target_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SkillCastRequested {
+    pub skill_id: u32,
+    pub level: u32,
+    pub target_id: u32,
+}
+
+/// Request to cast a ground-targeted skill (`skill_id` at `level`) on cell (`x`, `y`).
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GroundSkillCastRequested {
+    pub skill_id: u32,
+    pub level: u32,
+    pub x: u32,
+    pub y: u32,
+}
