@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_message, auto_add_system};
 use net_contract::commands::{GroundSkillCastRequested, SkillCastRequested as SkillCastCommand};
+use net_contract::state::ZoneSession;
 
 use crate::core::state::GameState;
 use crate::domain::input::TargetingMode;
-use crate::infrastructure::networking::quic::zone::QuicZoneState;
 use crate::infrastructure::networking::zone_messages::ChatHeard;
 
 use super::{form, target, Form, SkillCooldownTracker, SkillTreeState, Target};
@@ -78,7 +78,7 @@ pub fn resolve_skill_cast(
     mut targeting: ResMut<TargetingMode>,
     tree: Res<SkillTreeState>,
     cooldowns: Res<SkillCooldownTracker>,
-    zone: Res<QuicZoneState>,
+    session: Res<ZoneSession>,
 ) {
     for request in requests.read() {
         let skill_id = request.skill_id;
@@ -109,7 +109,7 @@ pub fn resolve_skill_cast(
                 resolved.write(SkillCastResolved {
                     skill_id,
                     level,
-                    target: CastTarget::Entity(zone.auth.char_id),
+                    target: CastTarget::Entity(session.char_id),
                 });
             }
             Target::Enemy | Target::Ally => {
@@ -127,7 +127,6 @@ mod tests {
     use super::*;
     use crate::domain::skill::cooldown::apply_skill_cooldown;
     use crate::domain::skill::SkillNode;
-    use crate::infrastructure::networking::quic::zone::ZoneAuth;
     use crate::infrastructure::networking::zone_messages::SkillCooldownSet;
 
     const SKILL_ID: u32 = 28;
@@ -156,11 +155,8 @@ mod tests {
             .init_resource::<SkillTreeState>()
             .init_resource::<SkillCooldownTracker>()
             .init_resource::<TargetingMode>()
-            .insert_resource(QuicZoneState {
-                auth: ZoneAuth {
-                    char_id: OWN_GID,
-                    ..default()
-                },
+            .insert_resource(ZoneSession {
+                char_id: OWN_GID,
                 ..default()
             })
             .add_systems(Update, resolve_skill_cast);

@@ -2,7 +2,17 @@
 
 use crate::dto::ServerInfo;
 use crate::events::LoginAccepted;
+use bevy::prelude::*;
+use bevy_auto_plugin::prelude::auto_init_resource;
 use serde::{Deserialize, Serialize};
+
+/// Neutral, adapter-agnostic identity of the active zone session.
+#[derive(Resource, Default, Debug, Clone, Copy)]
+#[auto_init_resource(plugin = crate::NetContractPlugin)]
+pub struct ZoneSession {
+    pub char_id: u32,
+    pub account_id: u32,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionTokens {

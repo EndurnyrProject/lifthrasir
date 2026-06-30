@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 
+use net_contract::state::ZoneSession;
+
 use crate::app::zone_domain_plugin::ZoneDomainAutoPlugin;
 use crate::core::state::GameState;
-use crate::infrastructure::networking::quic::zone::QuicZoneState;
 
 use super::model::Hotbar;
 
@@ -62,12 +63,12 @@ fn write_hotbar(path: &Path, hotbar: &Hotbar) {
 fn load_hotbar(
     mut hotbar: ResMut<Hotbar>,
     mut persist: ResMut<HotbarPersistState>,
-    zone: Res<QuicZoneState>,
+    session: Res<ZoneSession>,
 ) {
-    if persist.loaded || zone.auth.char_id == 0 {
+    if persist.loaded || session.char_id == 0 {
         return;
     }
-    let bar = read_hotbar(&hotbar_path(zone.auth.char_id));
+    let bar = read_hotbar(&hotbar_path(session.char_id));
     persist.last_saved = bar.clone();
     *hotbar = bar;
     persist.loaded = true;
@@ -81,12 +82,12 @@ fn load_hotbar(
 fn persist_hotbar(
     hotbar: Res<Hotbar>,
     mut persist: ResMut<HotbarPersistState>,
-    zone: Res<QuicZoneState>,
+    session: Res<ZoneSession>,
 ) {
-    if !persist.loaded || zone.auth.char_id == 0 || *hotbar == persist.last_saved {
+    if !persist.loaded || session.char_id == 0 || *hotbar == persist.last_saved {
         return;
     }
-    write_hotbar(&hotbar_path(zone.auth.char_id), &hotbar);
+    write_hotbar(&hotbar_path(session.char_id), &hotbar);
     persist.last_saved = hotbar.clone();
 }
 
@@ -97,10 +98,10 @@ fn persist_hotbar(
 fn reset_on_exit(
     hotbar: Res<Hotbar>,
     mut persist: ResMut<HotbarPersistState>,
-    zone: Res<QuicZoneState>,
+    session: Res<ZoneSession>,
 ) {
-    if persist.loaded && zone.auth.char_id != 0 {
-        write_hotbar(&hotbar_path(zone.auth.char_id), &hotbar);
+    if persist.loaded && session.char_id != 0 {
+        write_hotbar(&hotbar_path(session.char_id), &hotbar);
     }
     persist.loaded = false;
     persist.last_saved = Hotbar::default();
@@ -110,14 +111,10 @@ fn reset_on_exit(
 mod tests {
     use super::*;
     use crate::domain::hotbar::model::HotbarSlot;
-    use crate::infrastructure::networking::quic::zone::ZoneAuth;
 
-    fn make_zone(char_id: u32) -> QuicZoneState {
-        QuicZoneState {
-            auth: ZoneAuth {
-                char_id,
-                ..Default::default()
-            },
+    fn make_zone(char_id: u32) -> ZoneSession {
+        ZoneSession {
+            char_id,
             ..Default::default()
         }
     }

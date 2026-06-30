@@ -1,5 +1,6 @@
 pub mod flow;
 pub mod mapping;
+pub mod session;
 
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_init_resource;
