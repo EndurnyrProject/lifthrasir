@@ -4,10 +4,6 @@ use crate::app::zone_domain_plugin::ZoneDomainAutoPlugin;
 use crate::domain::entities::character::states::setup_character_state_machines;
 use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
 use crate::domain::entities::sprite_rendering::plugin::GenericSpriteRenderingPlugin;
-use crate::infrastructure::networking::char_messages::{
-    CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
-    CharacterServerConnected, CharacterSlotInfoReceived, ZoneServerInfoReceived,
-};
 use bevy::prelude::*;
 
 /// Character Domain Plugin
@@ -18,8 +14,7 @@ use bevy::prelude::*;
 ///    - StateMachinePlugin (via setup_character_state_machines) - state transitions
 ///    - GenericSpriteRenderingPlugin - sprite hierarchy and rendering
 ///    - UnifiedCharacterEntityPlugin - character entity management (auto-plugin)
-/// 3. Register protocol layer events (networking infrastructure)
-/// 4. Add CharacterDomainAutoPlugin (all domain logic via auto_plugin)
+/// 3. Add CharacterDomainAutoPlugin (all domain logic via auto_plugin)
 pub struct CharacterDomainPlugin;
 
 impl Plugin for CharacterDomainPlugin {
@@ -35,16 +30,7 @@ impl Plugin for CharacterDomainPlugin {
         // Add unified character entity plugin (pure auto-plugin)
         app.add_plugins(UnifiedCharacterEntityPlugin);
 
-        // 3. Register protocol layer events (from networking infrastructure)
-        app.add_message::<CharacterServerConnected>()
-            .add_message::<CharacterCreated>()
-            .add_message::<CharacterCreationFailed>()
-            .add_message::<CharacterDeleted>()
-            .add_message::<CharacterDeletionFailed>()
-            .add_message::<ZoneServerInfoReceived>()
-            .add_message::<CharacterSlotInfoReceived>();
-
-        // 4. Add domain auto-plugins (all domain events and systems)
+        // 3. Add domain auto-plugins (all domain events and systems)
         app.add_plugins(CharacterDomainAutoPlugin);
         app.add_plugins(ZoneDomainAutoPlugin);
 

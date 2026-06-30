@@ -8,3 +8,25 @@ pub mod state;
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]
 pub struct NetContractPlugin;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::prelude::*;
+
+    #[test]
+    fn net_contract_plugin_registers_moved_messages() {
+        let mut app = App::new();
+        app.add_plugins(NetContractPlugin);
+
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::SelfMoved>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::CharacterServerConnected>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::LoginAccepted>>());
+    }
+}
