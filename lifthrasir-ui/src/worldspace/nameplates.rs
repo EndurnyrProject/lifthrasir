@@ -5,13 +5,12 @@
 
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
-use game_engine::domain::entities::billboard::EquipmentPreviewCamera;
 use game_engine::domain::entities::components::EntityName;
 use game_engine::domain::entities::hover::HoveredEntity;
 use game_engine::domain::entities::markers::LocalPlayer;
 
 use crate::theme;
-use crate::worldspace::{viewport_to_ui, WorldspaceFont};
+use crate::worldspace::{viewport_to_ui, WorldCameraFilter, WorldspaceFont};
 
 const NAMEPLATE_WIDTH: f32 = 220.0;
 const NAMEPLATE_FONT_SIZE: f32 = 13.0;
@@ -120,7 +119,7 @@ fn sync_nameplates(
 }
 
 fn follow_targets(
-    camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, Without<EquipmentPreviewCamera>)>,
+    camera: Query<(&Camera, &GlobalTransform), WorldCameraFilter>,
     targets: Query<&GlobalTransform>,
     ui_scale: Res<UiScale>,
     mut nameplates: Query<(Entity, &Nameplate, &mut Node, &mut Visibility)>,

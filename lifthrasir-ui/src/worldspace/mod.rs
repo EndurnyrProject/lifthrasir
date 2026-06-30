@@ -8,11 +8,16 @@
 
 use bevy::prelude::*;
 use bevy::text::Font;
+use game_engine::domain::entities::billboard::EquipmentPreviewCamera;
 
 use crate::theme;
 
 pub mod damage_numbers;
 pub mod nameplates;
+
+/// Query filter for the in-game 3D camera that worldspace overlays project
+/// against, excluding the equipment-window preview camera.
+pub type WorldCameraFilter = (With<Camera3d>, Without<EquipmentPreviewCamera>);
 
 /// Shared font handle for nameplates and damage numbers, loaded once at startup.
 #[derive(Resource)]

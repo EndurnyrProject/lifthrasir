@@ -29,6 +29,14 @@ type HeadgearLayerQuery<'w, 's> = Query<
     Without<HeadLayer>,
 >;
 
+/// Query filter for the camera whose rotation orients the headgear billboard,
+/// excluding render layers and the equipment-window preview camera.
+type CameraFilter = (
+    With<Camera3d>,
+    Without<RenderLayer>,
+    Without<EquipmentPreviewCamera>,
+);
+
 /// Per-frame snapshot the head publishes for headgear to align to.
 struct HeadAnchor {
     attach_point: Vec2,
@@ -56,14 +64,7 @@ fn is_headgear_slot(slot: EquipmentSlot) -> bool {
 pub fn sync_headgear_layer(
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    camera_query: Query<
-        &Transform,
-        (
-            With<Camera3d>,
-            Without<RenderLayer>,
-            Without<EquipmentPreviewCamera>,
-        ),
-    >,
+    camera_query: Query<&Transform, CameraFilter>,
     parent_query: Query<&PlayerSprite>,
     head_query: Query<(&HeadAttachPoint, &ChildOf, &Transform), With<HeadLayer>>,
     mut headgear_query: HeadgearLayerQuery,

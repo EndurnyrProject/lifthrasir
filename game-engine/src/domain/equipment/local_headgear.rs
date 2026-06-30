@@ -18,6 +18,10 @@ pub struct LocalHeadgearApplied {
     head_bottom: Option<u16>,
 }
 
+/// Query filter for the local player once its sprite hierarchy exists.
+/// `With<Children>` gates on the render layers having spawned.
+type LocalPlayerFilter = (With<LocalPlayer>, With<Children>);
+
 /// Render the local player's headgear from its own `Inventory` — the authoritative
 /// worn state the server sends on login (the `equip` list, with `wear_state` and the
 /// `view_sprite` view id) and updates on every equip/unequip ack. One path covers
@@ -35,10 +39,7 @@ pub fn sync_local_player_headgear(
     // `With<Children>` gates on the sprite hierarchy existing (the same access
     // `handle_equipment_changes` requires), so emitted events are never dropped
     // on a bare entity that has not finished spawning its render layers.
-    mut player: Query<
-        (Entity, Option<&mut LocalHeadgearApplied>),
-        (With<LocalPlayer>, With<Children>),
-    >,
+    mut player: Query<(Entity, Option<&mut LocalHeadgearApplied>), LocalPlayerFilter>,
 ) {
     if !inventory.is_ready() {
         return;

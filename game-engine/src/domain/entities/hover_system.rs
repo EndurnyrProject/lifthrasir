@@ -18,6 +18,13 @@ use super::{
 // Removed SpriteObjectTree dependency - queries entity GlobalTransform directly.
 // =============================================================================
 
+/// Query filter for the game 3D camera, excluding the equipment-window preview
+/// camera (a 2D UI camera also exists, so `With<Camera3d>` disambiguates).
+type GameCameraFilter = (
+    With<Camera3d>,
+    Without<crate::domain::entities::billboard::EquipmentPreviewCamera>,
+);
+
 #[auto_add_system(
     plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
     schedule = Update,
@@ -32,13 +39,7 @@ pub fn update_entity_bounds_system(
     // With<Camera3d>: a 2D UI camera also exists, so an unfiltered single() matches
     // two cameras, fails, and the system silently inserts no bounds. Same filter the
     // nameplate's follow_targets uses to pick the game camera.
-    camera_query: Query<
-        (&Camera, &GlobalTransform),
-        (
-            With<Camera3d>,
-            Without<crate::domain::entities::billboard::EquipmentPreviewCamera>,
-        ),
-    >,
+    camera_query: Query<(&Camera, &GlobalTransform), GameCameraFilter>,
     entity_query: Query<(Entity, &NetworkEntity, &GlobalTransform), Without<PendingDespawn>>,
 ) {
     let Ok((camera, camera_transform)) = camera_query.single() else {

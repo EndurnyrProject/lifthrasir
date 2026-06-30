@@ -8,6 +8,13 @@ use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 
 use super::ForwardedCursorPosition;
 
+/// Query filter for the game 3D camera, excluding the equipment-window preview
+/// camera (a 2D UI camera also exists, so `With<Camera3d>` disambiguates).
+type GameCameraFilter = (
+    With<Camera3d>,
+    Without<crate::domain::entities::billboard::EquipmentPreviewCamera>,
+);
+
 #[derive(Resource, Default, Reflect)]
 #[reflect(Resource, Default)]
 #[auto_init_resource(plugin = crate::app::input_plugin::InputPlugin)]
@@ -25,13 +32,7 @@ pub struct TerrainRaycastCache {
 pub fn update_terrain_raycast_cache(
     mut cache: ResMut<TerrainRaycastCache>,
     cursor_pos: Res<ForwardedCursorPosition>,
-    camera_query: Query<
-        (&Camera, &GlobalTransform),
-        (
-            With<Camera3d>,
-            Without<crate::domain::entities::billboard::EquipmentPreviewCamera>,
-        ),
-    >,
+    camera_query: Query<(&Camera, &GlobalTransform), GameCameraFilter>,
     map_loader_query: Query<&MapLoader>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,

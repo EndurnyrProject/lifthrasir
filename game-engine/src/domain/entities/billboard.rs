@@ -21,6 +21,25 @@ pub struct PreviewBillboard;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct EquipmentPreviewCamera;
 
+/// Query filter: the active 3D camera (gameplay follow or selection-screen
+/// preview), excluding the equipment-window preview camera and billboards.
+type ActiveCameraFilter = (
+    With<Camera3d>,
+    Without<EquipmentPreviewCamera>,
+    Without<Billboard>,
+);
+
+/// Query filter: world billboards faced by the active camera, excluding the
+/// equipment-window preview-layer billboards.
+type WorldBillboardFilter = (
+    With<Billboard>,
+    Without<PreviewBillboard>,
+    Without<Camera3d>,
+);
+
+/// Query filter: equipment-window preview-layer billboards.
+type PreviewBillboardFilter = (With<Billboard>, With<PreviewBillboard>, Without<Camera3d>);
+
 /// Resource containing the shared quad mesh used by all character billboards
 #[derive(Resource, Debug, Clone)]
 pub struct SharedSpriteQuad {
@@ -99,22 +118,8 @@ fn setup_shared_sprite_quad(mut commands: Commands, mut meshes: ResMut<Assets<Me
     config(after = bevy::transform::TransformSystems::Propagate)
 )]
 fn billboard_rotation_system(
-    camera_query: Query<
-        &Transform,
-        (
-            With<Camera3d>,
-            Without<EquipmentPreviewCamera>,
-            Without<Billboard>,
-        ),
-    >,
-    mut billboard_query: Query<
-        &mut Transform,
-        (
-            With<Billboard>,
-            Without<PreviewBillboard>,
-            Without<Camera3d>,
-        ),
-    >,
+    camera_query: Query<&Transform, ActiveCameraFilter>,
+    mut billboard_query: Query<&mut Transform, WorldBillboardFilter>,
 ) {
     let Ok(camera_transform) = camera_query.single() else {
         return; // No active camera yet (or ambiguous), skip this frame
@@ -134,10 +139,7 @@ fn billboard_rotation_system(
 )]
 fn preview_billboard_rotation_system(
     camera_query: Query<&Transform, (With<EquipmentPreviewCamera>, Without<Billboard>)>,
-    mut billboard_query: Query<
-        &mut Transform,
-        (With<Billboard>, With<PreviewBillboard>, Without<Camera3d>),
-    >,
+    mut billboard_query: Query<&mut Transform, PreviewBillboardFilter>,
 ) {
     let Ok(camera_transform) = camera_query.single() else {
         return; // No preview camera, skip this frame

@@ -26,6 +26,14 @@ type HeadLayerQuery<'w, 's> = Query<
     With<HeadLayer>,
 >;
 
+/// Query filter for the camera whose rotation orients the head billboard,
+/// excluding head layers and the equipment-window preview camera.
+type CameraFilter = (
+    With<Camera3d>,
+    Without<HeadLayer>,
+    Without<EquipmentPreviewCamera>,
+);
+
 /// Head offset relative to the entity origin in RO screen space, matching the
 /// original client: the head layer position is corrected by the difference
 /// between the body and head attach points so the necks align.
@@ -73,14 +81,7 @@ fn body_idle_attach(
 pub fn sync_player_head_layer(
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    camera_query: Query<
-        &Transform,
-        (
-            With<Camera3d>,
-            Without<HeadLayer>,
-            Without<EquipmentPreviewCamera>,
-        ),
-    >,
+    camera_query: Query<&Transform, CameraFilter>,
     parent_query: Query<&PlayerSprite>,
     body_query: Query<(&BodyAttachPoint, &RenderLayer, &Transform), Without<HeadLayer>>,
     mut head_query: HeadLayerQuery,
