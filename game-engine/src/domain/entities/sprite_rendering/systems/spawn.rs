@@ -74,6 +74,14 @@ pub fn spawn_sprite_hierarchy(
                     &mut pending_animations,
                 );
             }
+            EntitySpriteData::Item { sprite_name } => {
+                spawn_item_components(
+                    &mut entity_commands,
+                    sprite_name,
+                    &asset_server,
+                    &mut pending_animations,
+                );
+            }
         }
 
         debug!(
@@ -186,6 +194,32 @@ fn spawn_npc_components(
 
     debug!(
         "spawn_npc_components: Requested animation for entity {:?} ({})",
+        entity, sprite_name
+    );
+}
+
+fn spawn_item_components(
+    entity_commands: &mut EntityCommands,
+    sprite_name: &str,
+    asset_server: &AssetServer,
+    pending_animations: &mut PendingAnimations,
+) {
+    let entity = entity_commands.id();
+
+    let spr_path = patterns::item_drop_sprite_path(sprite_name);
+    let act_path = patterns::item_drop_action_path(sprite_name);
+
+    let spr = asset_server.load(&spr_path);
+    let act = asset_server.load(&act_path);
+
+    pending_animations.request(spr, act, LAYER_BODY, Some(entity));
+
+    // Ground-drop collection sprites are a single static pose, so they ride the
+    // mob render path (`sync_mob_body_layer`) with one body layer like NPCs.
+    entity_commands.insert((MobSprite::default(), PendingRenderLayers));
+
+    debug!(
+        "spawn_item_components: Requested animation for entity {:?} ({})",
         entity, sprite_name
     );
 }

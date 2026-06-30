@@ -122,6 +122,16 @@ pub fn item_icon_path(resource_name: &str) -> String {
     format!("ro://data/texture/유저인터페이스/item/{resource_name}.bmp")
 }
 
+/// Generate the ground-drop collection sprite path for an item resource name.
+pub fn item_drop_sprite_path(resource_name: &str) -> String {
+    format!("ro://data/sprite/아이템/{resource_name}.spr")
+}
+
+/// Generate the ground-drop collection action path for an item resource name.
+pub fn item_drop_action_path(resource_name: &str) -> String {
+    format!("ro://data/sprite/아이템/{resource_name}.act")
+}
+
 /// Generate headgear (accessory) sprite path.
 /// `accname` comes from the accessory db and already carries its leading separator (e.g. `"_고글"`).
 pub fn headgear_sprite_path(gender: Gender, accname: &str) -> String {
@@ -170,6 +180,22 @@ mod tests {
         assert_eq!(
             headgear_action_path(Gender::Female, "_고글"),
             "ro://data/sprite/악세사리/여/여_고글.act"
+        );
+    }
+
+    #[test]
+    fn item_drop_sprite_path_builds_correct_url() {
+        assert_eq!(
+            item_drop_sprite_path("RED_POTION"),
+            "ro://data/sprite/아이템/RED_POTION.spr"
+        );
+    }
+
+    #[test]
+    fn item_drop_action_path_builds_correct_url() {
+        assert_eq!(
+            item_drop_action_path("RED_POTION"),
+            "ro://data/sprite/아이템/RED_POTION.act"
         );
     }
 }

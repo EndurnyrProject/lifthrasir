@@ -128,6 +128,9 @@ pub enum EntitySpriteData {
     Npc {
         sprite_name: String,
     },
+    Item {
+        sprite_name: String,
+    },
 }
 
 /// Component carrying sprite metadata for spawning
