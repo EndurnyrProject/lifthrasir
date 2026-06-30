@@ -1,5 +1,26 @@
 use bevy::prelude::*;
 
+use crate::infrastructure::assets::IndoorMapTableAsset;
+
+/// Holds the handle to the indoor map table asset (`data\indoorrswtable.txt`).
+/// Loaded once at startup; read by `apply_camera_map_profile` to decide whether
+/// a map uses the restricted indoor camera.
+#[derive(Resource, Debug, Default)]
+pub struct IndoorMapTable {
+    pub handle: Option<Handle<IndoorMapTableAsset>>,
+}
+
+/// Tracks which map profile is currently applied to the camera.
+///
+/// `map_name` is the normalized name the profile was last applied for; it gates
+/// re-application so the profile is only set once per map change. `indoor` lets
+/// the R-key reset re-apply the correct preset.
+#[derive(Resource, Debug, Default)]
+pub struct ActiveCameraProfile {
+    pub map_name: String,
+    pub indoor: bool,
+}
+
 /// Resource that accumulates camera rotation deltas from mouse input.
 ///
 /// # Purpose

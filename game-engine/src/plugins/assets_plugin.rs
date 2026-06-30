@@ -36,6 +36,8 @@ impl Plugin for AssetsPlugin {
             .init_asset_loader::<StrEffectLoader>()
             .init_asset::<BgmNameTableAsset>()
             .init_asset_loader::<BgmNameTableLoader>()
+            .init_asset::<IndoorMapTableAsset>()
+            .init_asset_loader::<IndoorMapTableLoader>()
             .init_asset_loader::<BmpLoader>()
             .init_asset_loader::<SvgLoader>()
             .add_plugins((

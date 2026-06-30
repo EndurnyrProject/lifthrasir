@@ -52,10 +52,10 @@ impl CameraFollowTarget {
 /// - `vertical_smoothing_speed`: Speed for Y axis movement (slower, prevents height snapping)
 /// - `min_distance`: Minimum zoom distance (prevents camera from going too close)
 /// - `max_distance`: Maximum zoom distance (prevents camera from going too far)
-/// - `zoom_speed`: Speed of zoom changes via mouse wheel
+/// - `rotation_locked`: Disables right-drag rotation (indoor maps)
 /// - `rotation_sensitivity`: Degrees per pixel for rotation (0.3 recommended)
 /// - `yaw`: Current horizontal rotation in radians (0.0 = facing north)
-/// - `pitch`: Current vertical rotation in radians (-45° default, looking down)
+/// - `pitch`: Current vertical rotation in radians (+45° default, looking down; -Y up)
 /// - `min_pitch`: Minimum pitch angle to prevent camera flipping
 /// - `max_pitch`: Maximum pitch angle to prevent camera flipping
 ///
@@ -90,8 +90,8 @@ pub struct CameraFollowSettings {
     /// Maximum allowed distance from the player (zoom out limit)
     pub max_distance: f32,
 
-    /// Speed multiplier for zoom operations (mouse wheel)
-    pub zoom_speed: f32,
+    /// When true, right-drag rotation is disabled (indoor maps)
+    pub rotation_locked: bool,
 
     /// Rotation sensitivity in degrees per pixel (0.3 recommended)
     pub rotation_sensitivity: f32,
@@ -100,8 +100,8 @@ pub struct CameraFollowSettings {
     /// 0.0 = camera behind player facing north
     pub yaw: f32,
 
-    /// Current vertical rotation (pitch) in radians
-    /// Negative = looking down (RO style: -45° default)
+    /// Current vertical rotation (pitch) in radians.
+    /// With -Y up, positive = camera above looking down (RO style: +45° default).
     pub pitch: f32,
 
     /// Minimum pitch angle in radians (prevents camera flipping)
@@ -128,17 +128,19 @@ impl Default for CameraFollowSettings {
 
             // Reasonable zoom limits for RO-style gameplay
             min_distance: 100.0,
-            max_distance: 500.0,
+            max_distance: 250.0,
 
-            // Mouse wheel zoom speed
-            zoom_speed: 50.0,
+            // Outdoor maps allow free rotation
+            rotation_locked: false,
 
             // Rotation sensitivity: 0.3 degrees per pixel
             rotation_sensitivity: 0.3,
 
-            // Initial rotation: 0 yaw (behind player), -45 degrees pitch (looking down)
+            // Initial rotation: 0 yaw (behind player), +45 degrees pitch (looking down).
+            // With -Y up, the default offset (0, -150, -150) is above+behind the player,
+            // which corresponds to a *positive* pitch (offset_y = -distance * sin(pitch)).
             yaw: 0.0,
-            pitch: -PI / 4.0, // -45 degrees in radians
+            pitch: PI / 4.0, // +45 degrees in radians
 
             // Pitch limits to prevent gimbal lock (±89 degrees)
             min_pitch: -89.0 * PI / 180.0,
