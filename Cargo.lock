@@ -3621,6 +3621,7 @@ dependencies = [
  "moonshine-kind",
  "moonshine-tag",
  "nalgebra",
+ "net-contract",
  "nom 8.0.0",
  "once_cell",
  "pathfinding",
@@ -4706,6 +4707,7 @@ dependencies = [
  "game-engine",
  "leafwing-input-manager",
  "lifthrasir-data",
+ "net-contract",
  "secrecy",
 ]
 
@@ -5232,6 +5234,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys 0.3.1",
+]
+
+[[package]]
+name = "net-contract"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_auto_plugin",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

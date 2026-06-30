@@ -1,0 +1,10 @@
+[package]
+name = "net-contract"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+bevy_auto_plugin = "0.11.0"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"

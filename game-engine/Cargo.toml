@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 ro-formats = { path = "../ro-formats" }
 lifthrasir-data = { path = "../lifthrasir-data" }
+net-contract = { path = "../net-contract" }
 bevy = { workspace = true }
 bevy_auto_plugin = "0.11.0"
 bevy_common_assets = { version = "0.17", features = ["toml", "ron"] }

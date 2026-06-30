@@ -37,6 +37,7 @@ pub struct CoreGamePlugins;
 impl PluginGroup for CoreGamePlugins {
     fn build(self) -> PluginGroupBuilder {
         PluginGroupBuilder::start::<Self>()
+            .add(net_contract::NetContractPlugin)
             .add(RoDiagnosticsPlugin)
             .add(LifthrasirPlugin)
             .add(SettingsPlugin)
