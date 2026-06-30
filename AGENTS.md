@@ -46,8 +46,38 @@ lifthrasir/
 ├── game-engine/        # Core game engine (Bevy ECS)
 ├── lifthrasir-ui/      # Native Bevy UI components
 ├── lifthrasir/         # Binary entry point
+├── net-contract/       # Protocol-neutral network contract (Bevy Messages)
+├── net-aesir/          # Aesir QUIC network adapter (transport + codec)
 └── grf-utils/          # GRF archive utilities
 ```
+
+### Network boundary
+
+The network stack is split into a protocol-neutral contract and swappable adapters:
+
+- **`net-contract`** is the protocol-neutral Bevy `Message` contract — inbound
+  server→client `events`, outbound client→server `commands`, and the neutral
+  `dto`/`state` types they reference. It depends only on `bevy`; it knows nothing
+  about any wire protocol.
+- **Adapter crates** (e.g. `net-aesir`, the aesir QUIC adapter) own the transport
+  and codec (`bevy_quinnet` + `prost`). An adapter reads the outbound command
+  Messages and writes the inbound event Messages; that is its entire interface to
+  the rest of the app.
+
+`game-engine` and `lifthrasir-ui` depend **only** on `net-contract` and never on a
+transport/codec. This is locked in by `game-engine/tests/no_transport_dep.rs`, which
+fails if `game-engine`'s dependency tree regains `bevy_quinnet`, `prost`, or an
+adapter crate.
+
+The adapter is wired at the binary, not in `game-engine`: the `lifthrasir` binary
+(`lifthrasir/src/main.rs`) depends on `net-aesir` and adds its `AesirNetPlugin`.
+
+**To support a different protocol (e.g. rAthena):** implement a new crate that
+depends only on `net-contract`, write the inbound event Messages from incoming
+packets, read the outbound command Messages and translate them to outgoing packets,
+expose a plugin, and add that plugin in `main.rs`. The contract, `game-engine`, and
+`lifthrasir-ui` stay untouched. See
+`specs/2026-06-30-network-decoupling/design.md`.
 
 
 ### Building
