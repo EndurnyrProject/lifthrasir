@@ -1,12 +1,8 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
-use bevy_quinnet::client::QuinnetClient;
+use net_contract::commands::UseRequested;
 
 use crate::core::state::GameState;
-use crate::infrastructure::networking::quic::channels::GAMEPLAY;
-use crate::infrastructure::networking::quic::envelope::Body;
-use crate::infrastructure::networking::quic::proto::aesir::net::UseItem;
-use crate::infrastructure::networking::quic::zone::{QuicZoneState, ZonePhase};
 use crate::infrastructure::networking::zone_messages::{ChatHeard, ItemUseFailed};
 
 #[derive(Message, Debug, Clone)]
@@ -22,19 +18,10 @@ pub struct UseItemRequested {
 )]
 pub fn handle_use_item_send(
     mut events: MessageReader<UseItemRequested>,
-    mut client: ResMut<QuinnetClient>,
-    mut zone: ResMut<QuicZoneState>,
+    mut use_requests: MessageWriter<UseRequested>,
 ) {
-    if zone.phase != ZonePhase::Playing {
-        events.clear();
-        return;
-    }
-
     for event in events.read() {
-        let body = Body::UseItem(UseItem { index: event.index });
-        if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
-            error!("Failed to send use-item request: {e}");
-        }
+        use_requests.write(UseRequested { index: event.index });
     }
 }
 

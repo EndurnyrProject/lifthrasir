@@ -25,3 +25,10 @@ pub struct EquipRequested {
 pub struct UnequipRequested {
     pub index: u16,
 }
+
+/// Request to use (consume) the inventory item at `index`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct UseRequested {
+    pub index: u32,
+}
