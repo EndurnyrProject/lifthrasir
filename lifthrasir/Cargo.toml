@@ -21,4 +21,5 @@ bevy_framepace = { git = "https://github.com/hacknus/bevy_framepace", branch = "
 bevy_brp_extras = { version = "0.20.1", optional = true }
 game-engine = { path = "../game-engine" }
 lifthrasir-ui = { path = "../lifthrasir-ui" }
+net-aesir = { path = "../net-aesir" }
 toml = "0.9"

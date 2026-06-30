@@ -6,6 +6,7 @@ members = [
     "lifthrasir-data",
     "lifthrasir-ui",
     "lifthrasir",
+    "net-aesir",
     "net-contract",
     "ro-formats",
     "ro-to-lifthrasir-cli",

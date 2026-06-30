@@ -1,7 +1,4 @@
-use bevy_auto_plugin::prelude::{auto_add_plugin, AutoPlugin};
-
-#[auto_add_plugin(plugin = AuthenticationPlugin, init)]
-use bevy_quinnet::client::QuinnetClientPlugin;
+use bevy_auto_plugin::prelude::AutoPlugin;
 
 /// Authentication Plugin
 ///

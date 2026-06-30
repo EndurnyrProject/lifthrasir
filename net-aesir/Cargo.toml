@@ -1,0 +1,12 @@
+[package]
+name = "net-aesir"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+net-contract = { path = "../net-contract" }
+bevy = { workspace = true }
+bevy_auto_plugin = "0.11.0"
+bevy_quinnet = { workspace = true }
+prost = { workspace = true }
+bytes = "1.11"

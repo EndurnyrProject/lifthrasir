@@ -95,12 +95,12 @@ Manual verification checklist: `specs/2026-06-28-dlss/design.md` → "Testing".
 
 ### Generating network protobuf types
 
-The client talks to the aesir account server over QUIC using protobuf (`bevy_quinnet` + `prost`). The Rust types are generated from aesir's canonical `aesir.proto` and committed at `game-engine/src/infrastructure/networking/quic/proto/aesir.net.rs`. Re-run this whenever that schema changes:
+The client talks to the aesir account server over QUIC using protobuf (`bevy_quinnet` + `prost`). The Rust types are generated from aesir's canonical `aesir.proto` and committed at `net-aesir/src/proto/aesir.net.rs`. Re-run this whenever that schema changes:
 
 ```bash
 cargo run -p ro-to-lifthrasir-cli -- gen-proto \
   --src <aesir>/apps/commons/proto \
-  --out game-engine/src/infrastructure/networking/quic/proto/aesir.net.rs
+  --out net-aesir/src/proto/aesir.net.rs
 ```
 
 This uses the pure-Rust `protox` compiler, so no system `protoc` is required. Commit the regenerated file.

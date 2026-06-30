@@ -3621,6 +3621,7 @@ dependencies = [
  "moonshine-kind",
  "moonshine-tag",
  "nalgebra",
+ "net-aesir",
  "net-contract",
  "nom 8.0.0",
  "once_cell",
@@ -4686,6 +4687,7 @@ dependencies = [
  "bevy_framepace",
  "game-engine",
  "lifthrasir-ui",
+ "net-aesir",
  "toml 0.9.12+spec-1.1.0",
 ]
 
@@ -5234,6 +5236,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys 0.3.1",
+]
+
+[[package]]
+name = "net-aesir"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_auto_plugin",
+ "bevy_quinnet",
+ "bytes",
+ "net-contract",
+ "prost",
 ]
 
 [[package]]
