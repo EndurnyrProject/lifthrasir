@@ -6,6 +6,7 @@ pub mod spawn_context;
 pub mod systems;
 pub mod terrain;
 pub mod warp;
+pub mod zone_readiness;
 
 pub use map_scoped::MapScoped;
 pub use warp::Warping;

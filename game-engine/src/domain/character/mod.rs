@@ -1,5 +1,6 @@
 pub mod catalog;
 pub mod catalog_builder;
+pub mod char_server_send;
 pub mod chat;
 pub mod components;
 pub mod events;
