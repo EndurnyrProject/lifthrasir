@@ -1,3 +1,4 @@
+use super::animation::animate_falling_drops;
 use super::components::FloorItemRegistry;
 use super::hover::{floor_item_hover_detection, update_floor_item_bounds, HoveredFloorItem};
 use super::pickup::{
@@ -19,6 +20,10 @@ impl Plugin for ItemDropPlugin {
             .add_systems(
                 Update,
                 (spawn_floor_items, despawn_floor_items).run_if(in_state(GameState::InGame)),
+            )
+            .add_systems(
+                Update,
+                animate_falling_drops.run_if(in_state(GameState::InGame)),
             )
             .add_systems(
                 Update,

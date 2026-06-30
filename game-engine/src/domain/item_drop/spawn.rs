@@ -1,3 +1,4 @@
+use super::animation::FallingDrop;
 use super::components::{FloorItem, FloorItemRegistry};
 use crate::domain::entities::character::components::core::Grounded;
 use crate::domain::entities::sprite_rendering::components::{EntitySpriteData, EntitySpriteInfo};
@@ -31,20 +32,25 @@ pub fn spawn_floor_items(
         pos.x += sub_cell_offset(ev.sub_x);
         pos.z += sub_cell_offset(ev.sub_y);
 
-        let entity = commands
-            .spawn((
-                FloorItem {
-                    ground_id: ev.ground_id,
-                    nameid: ev.nameid,
-                    amount: ev.amount,
-                    identified: ev.identified,
-                },
-                Transform::from_translation(pos),
-                Name::new(format!("FloorItem({})", ev.ground_id)),
-                MapScoped,
-                Grounded,
-            ))
-            .id();
+        let mut entity_commands = commands.spawn((
+            FloorItem {
+                ground_id: ev.ground_id,
+                nameid: ev.nameid,
+                amount: ev.amount,
+                identified: ev.identified,
+            },
+            Transform::from_translation(pos),
+            Name::new(format!("FloorItem({})", ev.ground_id)),
+            MapScoped,
+        ));
+
+        if ev.is_falling {
+            entity_commands.insert(FallingDrop::default());
+        } else {
+            entity_commands.insert(Grounded);
+        }
+
+        let entity = entity_commands.id();
 
         match item_db.icon_resource(ev.nameid, ev.identified) {
             Some(resource) => {
@@ -189,5 +195,43 @@ mod tests {
         let registry = app.world().resource::<FloorItemRegistry>();
         assert_eq!(registry.0.len(), 1);
         assert!(registry.0.contains_key(&1));
+    }
+
+    #[test]
+    fn falling_drop_gets_falling_drop_not_grounded() {
+        let mut app = test_app();
+
+        let mut ev = on_ground(50);
+        ev.is_falling = true;
+        app.world_mut().write_message(ev);
+        app.update();
+
+        let entity = *app
+            .world()
+            .resource::<FloorItemRegistry>()
+            .0
+            .get(&50)
+            .expect("registered");
+
+        assert!(app.world().get::<FallingDrop>(entity).is_some());
+        assert!(app.world().get::<Grounded>(entity).is_none());
+    }
+
+    #[test]
+    fn resting_drop_gets_grounded_not_falling_drop() {
+        let mut app = test_app();
+
+        app.world_mut().write_message(on_ground(51));
+        app.update();
+
+        let entity = *app
+            .world()
+            .resource::<FloorItemRegistry>()
+            .0
+            .get(&51)
+            .expect("registered");
+
+        assert!(app.world().get::<Grounded>(entity).is_some());
+        assert!(app.world().get::<FallingDrop>(entity).is_none());
     }
 }
