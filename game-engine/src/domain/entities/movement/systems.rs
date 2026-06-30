@@ -18,21 +18,14 @@ use crate::{
     },
     infrastructure::{
         assets::loaders::RoAltitudeAsset,
-        networking::{
-            quic::{
-                channels::GAMEPLAY,
-                envelope::Body,
-                proto::aesir::net::MoveRequest,
-                zone::{QuicZoneState, ZonePhase},
-            },
-            zone_messages::{SelfMoved, UnitMoveStopped},
-        },
+        networking::zone_messages::{SelfMoved, UnitMoveStopped},
     },
     utils::coordinates::spawn_coords_to_world_position,
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use moonshine_behavior::prelude::*;
+use net_contract::commands::MoveRequested;
 
 // =============================================================================
 // PHASE 0.2: UPDATED TO USE FLAT ENTITY STRUCTURE
@@ -44,26 +37,18 @@ use moonshine_behavior::prelude::*;
 #[auto_observer(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
 pub fn send_movement_requests_observer(
     trigger: On<MovementRequested>,
-    mut client: ResMut<bevy_quinnet::client::QuinnetClient>,
-    mut zone: ResMut<QuicZoneState>,
+    mut moves: MessageWriter<MoveRequested>,
 ) {
-    if zone.phase != ZonePhase::Playing {
-        return;
-    }
-
     let event = trigger.event();
     debug!(
-        "Sending movement request for {:?} to ({}, {}) dir {}",
+        "Requesting movement for {:?} to ({}, {}) dir {}",
         event.entity, event.dest_x, event.dest_y, event.direction
     );
 
-    let body = Body::MoveRequest(MoveRequest {
-        dest_x: event.dest_x as u32,
-        dest_y: event.dest_y as u32,
+    moves.write(MoveRequested {
+        dest_x: event.dest_x,
+        dest_y: event.dest_y,
     });
-    if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
-        error!("Failed to send movement request: {e}");
-    }
 }
 
 /// Local-player-space view of a `SelfMoved`, casting proto u32 coords back to the

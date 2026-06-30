@@ -7,6 +7,7 @@ pub mod dispatch;
 pub mod envelope;
 pub mod login;
 pub mod proto;
+pub mod send;
 pub mod zone;
 
 #[auto_add_plugin(plugin = AesirNetPlugin, init)]
