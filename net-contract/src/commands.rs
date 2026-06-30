@@ -94,3 +94,34 @@ pub struct LearnSkillRequested {
 pub struct NameRequested {
     pub gid: u32,
 }
+
+/// Request to select the character in the given char-list `slot`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SelectCharacter {
+    pub slot: u32,
+}
+
+/// Request to create a character; the domain flattens and validates the form first.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct CreateCharacter {
+    pub name: String,
+    pub slot: u32,
+    pub hair_color: u32,
+    pub hair_style: u32,
+    pub starting_job: u32,
+    pub sex: u32,
+}
+
+/// Request to delete the character identified by `char_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct DeleteCharacter {
+    pub char_id: u32,
+}
+
+/// Request a fresh character list from the char server.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct RefreshCharacterList;
