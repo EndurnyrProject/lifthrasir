@@ -173,7 +173,13 @@ pub fn follow_effect_anchor(
 /// index-proportional amount along the camera axis (into depth only, so it does
 /// not move on screen); higher indices sit closer to the camera and draw on top.
 pub fn order_effect_layers_by_depth(
-    camera: Query<&GlobalTransform, With<Camera3d>>,
+    camera: Query<
+        &GlobalTransform,
+        (
+            With<Camera3d>,
+            Without<crate::domain::entities::billboard::EquipmentPreviewCamera>,
+        ),
+    >,
     mut layers: Query<(&EffectLayer, &mut Transform)>,
 ) {
     let Ok(camera) = camera.single() else {
@@ -588,6 +594,52 @@ mod tests {
         assert!(depths[0] < depths[1] && depths[1] < depths[2]);
         // The solid layer draws in front of every additive layer despite index 0.
         assert!(depth(solid, &app) > depths[2]);
+    }
+
+    #[test]
+    fn order_effect_layers_ignores_equipment_preview_camera() {
+        // The depth sort must keep working when the equipment-window preview camera
+        // adds a second Camera3d; otherwise `single()` fails and effect layers
+        // z-fight while the window is open.
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_systems(Update, order_effect_layers_by_depth);
+
+        app.world_mut()
+            .spawn((Camera3d::default(), GlobalTransform::default()));
+        app.world_mut().spawn((
+            Camera3d::default(),
+            GlobalTransform::default(),
+            crate::domain::entities::billboard::EquipmentPreviewCamera,
+        ));
+
+        let lower = app
+            .world_mut()
+            .spawn((
+                EffectLayer {
+                    layer_index: 0,
+                    additive: true,
+                },
+                Transform::default(),
+            ))
+            .id();
+        let higher = app
+            .world_mut()
+            .spawn((
+                EffectLayer {
+                    layer_index: 2,
+                    additive: true,
+                },
+                Transform::default(),
+            ))
+            .id();
+
+        app.update();
+
+        let depth = |e: Entity| app.world().get::<Transform>(e).unwrap().translation.z;
+        // A failed single() would leave both at the origin; the ordering proves the
+        // world camera was resolved despite the preview camera being present.
+        assert!(depth(lower) < depth(higher));
     }
 
     #[test]

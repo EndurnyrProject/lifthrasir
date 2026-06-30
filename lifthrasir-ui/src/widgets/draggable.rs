@@ -36,7 +36,7 @@ fn on_drag(drag: On<Pointer<Drag>>, handles: Query<&DraggableWindow>, mut nodes:
     node.top = Val::Px(px_or_zero(node.top) + drag.delta.y);
 }
 
-fn px_or_zero(val: Val) -> f32 {
+pub fn px_or_zero(val: Val) -> f32 {
     match val {
         Val::Px(px) => px,
         _ => 0.0,

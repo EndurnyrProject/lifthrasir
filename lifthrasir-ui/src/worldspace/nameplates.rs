@@ -5,6 +5,7 @@
 
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
+use game_engine::domain::entities::billboard::EquipmentPreviewCamera;
 use game_engine::domain::entities::components::EntityName;
 use game_engine::domain::entities::hover::HoveredEntity;
 use game_engine::domain::entities::markers::LocalPlayer;
@@ -119,7 +120,7 @@ fn sync_nameplates(
 }
 
 fn follow_targets(
-    camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, Without<EquipmentPreviewCamera>)>,
     targets: Query<&GlobalTransform>,
     ui_scale: Res<UiScale>,
     mut nameplates: Query<(Entity, &Nameplate, &mut Node, &mut Visibility)>,

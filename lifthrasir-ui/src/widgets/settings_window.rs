@@ -1485,11 +1485,12 @@ fn refresh_sound(
 
 /// The rebindable non-hotbar actions in display order. The twelve hotbar slots
 /// follow these rows (see `spawn_input_rows`), labelled `Hotbar F1`..`Hotbar F12`.
-const ACTIONS: [(PlayerAction, &str); 4] = [
+const ACTIONS: [(PlayerAction, &str); 5] = [
     (PlayerAction::Sit, "Sit / Stand"),
     (PlayerAction::Status, "Status Window"),
     (PlayerAction::Inventory, "Inventory"),
     (PlayerAction::Skills, "Skills Window"),
+    (PlayerAction::Equipment, "Equipment"),
 ];
 
 /// Borrows the stored binds for an action off the draft keybinds.
@@ -1502,6 +1503,7 @@ fn action_binds(
         PlayerAction::Status => &keybinds.status,
         PlayerAction::Inventory => &keybinds.inventory,
         PlayerAction::Skills => &keybinds.skills,
+        PlayerAction::Equipment => &keybinds.equipment,
         slot => &keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
@@ -1516,6 +1518,7 @@ fn action_binds_mut(
         PlayerAction::Status => &mut keybinds.status,
         PlayerAction::Inventory => &mut keybinds.inventory,
         PlayerAction::Skills => &mut keybinds.skills,
+        PlayerAction::Equipment => &mut keybinds.equipment,
         slot => &mut keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
@@ -1994,6 +1997,7 @@ mod tests {
             status: ActionBinds::default(),
             inventory: ActionBinds::default(),
             skills: ActionBinds::default(),
+            equipment: ActionBinds::default(),
             hotbar: Default::default(),
         };
         let expected = {
@@ -2016,6 +2020,7 @@ mod tests {
             },
             inventory: ActionBinds::default(),
             skills: ActionBinds::default(),
+            equipment: ActionBinds::default(),
             hotbar: Default::default(),
         };
         let expected = {
@@ -2063,5 +2068,6 @@ mod tests {
         assert_eq!(keycap_label(&binds.status.primary), "Alt + A");
         assert_eq!(keycap_label(&binds.status.secondary), "—");
         assert_eq!(keycap_label(&binds.inventory.primary), "Alt + E");
+        assert_eq!(keycap_label(&binds.equipment.primary), "Alt + Q");
     }
 }

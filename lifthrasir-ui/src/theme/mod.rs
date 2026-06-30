@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+pub mod feathers_theme;
+
 // Endurnir palette — the single source of truth for UI colors (raw bevy_ui).
 pub const GLASS: Color = Color::srgba(0.063, 0.086, 0.078, 0.97);
 pub const GLASS_2: Color = Color::srgba(0.086, 0.118, 0.106, 0.97);
@@ -20,6 +22,13 @@ pub const HEALTH_RED: Color = Color::srgb_u8(0xe7, 0x4c, 0x3c);
 pub const MANA_BLUE: Color = Color::srgb_u8(0x4f, 0xb6, 0xe6);
 pub const BAD: Color = Color::srgb_u8(0xe0, 0x62, 0x5e);
 pub const WARN: Color = Color::srgb_u8(0xe6, 0xb5, 0x52);
+
+// Item-rarity tints (from the Endurnir mockups): common reuses TEXT, fine the bright
+// emerald, rare the gold, magic a cold blue. These feed the rarity theme tokens.
+pub const RARITY_COMMON: Color = TEXT;
+pub const RARITY_FINE: Color = EMERALD_BRI;
+pub const RARITY_RARE: Color = GOLD;
+pub const RARITY_MAGIC: Color = Color::srgb_u8(0x6f, 0xc4, 0xec);
 
 pub const FONT_TITLE: &str = "fonts/cinzel.ttf";
 pub const FONT_BODY: &str = "fonts/manrope.ttf";

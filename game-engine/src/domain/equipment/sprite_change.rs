@@ -19,11 +19,12 @@ fn headgear_slot(look_type: u32) -> Option<EquipmentSlot> {
     }
 }
 
-/// Drive headgear rendering from the server's `SpriteChange`, the authoritative
-/// carrier of appearance view ids (`EquipResult.view_id` is always 0). The server
-/// sends it self-targeted to the equipping player and broadcasts it to nearby
-/// players, so this one consumer covers both. `val == 0` means the slot cleared,
-/// mapped to `view_id: None`. Non-headgear look types are out of scope and skipped.
+/// Drive *remote* headgear rendering from the server's `SpriteChange`, the
+/// authoritative carrier of appearance view ids (`EquipResult.view_id` is always 0).
+/// The local player is skipped here and driven from its own `Inventory` instead
+/// (see `local_headgear::sync_local_player_headgear`), so its appearance never
+/// depends on the self-targeted broadcast round-tripping. `val == 0` means the slot
+/// cleared, mapped to `view_id: None`. Non-headgear look types are skipped.
 #[auto_add_system(
     plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
     schedule = Update
@@ -40,6 +41,9 @@ pub fn apply_sprite_changes(
         let Some(character) = registry.get_entity(change.gid) else {
             continue;
         };
+        if registry.local_player_entity() == Some(character) {
+            continue;
+        }
 
         changes.write(EquipmentChangeEvent {
             character,

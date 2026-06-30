@@ -646,13 +646,14 @@ pub struct Keybinds {
     pub status: ActionBinds,
     pub inventory: ActionBinds,
     pub skills: ActionBinds,
+    pub equipment: ActionBinds,
     #[serde(default = "default_hotbar_binds")]
     pub hotbar: [ActionBinds; 12],
 }
 
 impl Default for Keybinds {
     /// Mirrors `PlayerAction::default_input_map()`:
-    /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S.
+    /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S, Equipment = Alt+Q.
     fn default() -> Self {
         Self {
             sit: ActionBinds {
@@ -671,6 +672,10 @@ impl Default for Keybinds {
                 primary: Some(KeyBind::modified(Modifier::Alt, "KeyS")),
                 secondary: None,
             },
+            equipment: ActionBinds {
+                primary: Some(KeyBind::modified(Modifier::Alt, "KeyQ")),
+                secondary: None,
+            },
             hotbar: default_hotbar_binds(),
         }
     }
@@ -686,6 +691,8 @@ impl Keybinds {
         self.inventory
             .insert_into(&mut map, PlayerAction::Inventory);
         self.skills.insert_into(&mut map, PlayerAction::Skills);
+        self.equipment
+            .insert_into(&mut map, PlayerAction::Equipment);
         for (binds, action) in self.hotbar.iter().zip(HOTBAR_ACTIONS) {
             binds.insert_into(&mut map, action);
         }
@@ -713,6 +720,17 @@ mod tests {
         let encoded = ron::to_string(&settings).expect("serialize");
         let decoded: Settings = ron::from_str(&encoded).expect("deserialize");
         assert_eq!(settings, decoded);
+    }
+
+    #[test]
+    fn default_equipment_bind_is_alt_q() {
+        assert_eq!(
+            Keybinds::default().equipment,
+            ActionBinds {
+                primary: Some(KeyBind::modified(Modifier::Alt, "KeyQ")),
+                secondary: None,
+            }
+        );
     }
 
     #[test]

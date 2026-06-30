@@ -27,7 +27,13 @@ pub struct CameraSpawned(pub bool);
 pub fn spawn_camera_on_player_ready(
     mut commands: Commands,
     player_query: PlayerReadyQuery,
-    camera_query: Query<Entity, With<Camera3d>>,
+    camera_query: Query<
+        Entity,
+        (
+            With<Camera3d>,
+            Without<crate::domain::entities::billboard::EquipmentPreviewCamera>,
+        ),
+    >,
     mut camera_spawned: ResMut<CameraSpawned>,
 ) {
     if !camera_query.is_empty() {

@@ -1,3 +1,4 @@
+pub mod local_headgear;
 pub mod location;
 pub mod plugin;
 pub mod request;

@@ -7,8 +7,9 @@ use bevy::prelude::*;
 
 /// Maps a proto-shaped inventory slot onto the domain `Item`.
 ///
-/// NOTE: the proto carries `location` (allowed equip slots) but no worn bitmask;
-/// `wear_state` (and thus `is_equipped()`) defaults to 0 until equip results wire it.
+/// aesir sends the *worn* bitmask in `location` (`item.equip` server-side; 0 for a
+/// bag item), so `wear_state` is taken straight from it — that is what drives
+/// `is_equipped()`, the paperdoll, and the inventory filter on (re)login.
 fn to_item(slot: &ZoneInventoryItem) -> Item {
     let mut cards = [0u32; 4];
     for (dst, src) in cards.iter_mut().zip(slot.cards.iter()) {
@@ -21,7 +22,7 @@ fn to_item(slot: &ZoneInventoryItem) -> Item {
         item_type: slot.type_ as u8,
         amount: slot.amount as u16,
         location: slot.location,
-        wear_state: 0,
+        wear_state: slot.location,
         refine: slot.refine as u8,
         cards,
         options: vec![],
@@ -39,7 +40,7 @@ fn item_from_added(a: &ItemAdded) -> Item {
         item_type: a.type_ as u8,
         amount: a.amount as u16,
         location: a.location,
-        wear_state: 0,
+        wear_state: a.location,
         refine: a.refine as u8,
         cards: std::array::from_fn(|i| a.cards.get(i).copied().unwrap_or(0)),
         options: vec![],

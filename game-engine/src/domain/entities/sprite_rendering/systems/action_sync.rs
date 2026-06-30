@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
 use crate::domain::combat::components::AttackTimer;
+use crate::domain::entities::billboard::EquipmentPreviewCamera;
 use crate::domain::entities::character::components::visual::{
     ActionType, CharacterDirection, Direction,
 };
@@ -108,7 +109,7 @@ pub fn sync_player_sprite_action(time: Res<Time>, mut query: SpriteActionQuery<P
     config(in_set = SpriteRenderingSystems::AnimationSync, after = sync_player_sprite_action)
 )]
 pub fn sync_player_sprite_direction(
-    camera_query: Query<&Transform, With<Camera3d>>,
+    camera_query: Query<&Transform, (With<Camera3d>, Without<EquipmentPreviewCamera>)>,
     mut query: Query<(&CharacterDirection, &mut PlayerSprite)>,
 ) {
     let octant = camera_query
@@ -133,7 +134,7 @@ pub fn sync_mob_sprite_action(time: Res<Time>, mut query: SpriteActionQuery<MobL
     config(in_set = SpriteRenderingSystems::AnimationSync, after = sync_mob_sprite_action)
 )]
 pub fn sync_mob_sprite_direction(
-    camera_query: Query<&Transform, With<Camera3d>>,
+    camera_query: Query<&Transform, (With<Camera3d>, Without<EquipmentPreviewCamera>)>,
     mut query: Query<(&CharacterDirection, &mut MobSprite)>,
 ) {
     let octant = camera_query
@@ -228,6 +229,46 @@ mod tests {
         assert_eq!(
             camera_relative_direction(Direction::South, 4),
             Direction::North
+        );
+    }
+
+    #[test]
+    fn direction_sync_ignores_equipment_preview_camera() {
+        // With the equipment preview camera present, the world direction system must
+        // still resolve the primary camera (not fall back to octant 0), so a standing
+        // unit's displayed frame keeps tracking the orbited world camera.
+        let mut app = App::new();
+        app.add_systems(Update, sync_player_sprite_direction);
+
+        // World camera looking west (octant 2).
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::IDENTITY.looking_to(Vec3::new(-0.707, 0.707, 0.0), Vec3::NEG_Y),
+        ));
+        // Second camera that must be excluded from the world query.
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::IDENTITY.looking_to(Vec3::new(0.0, 0.707, 0.707), Vec3::NEG_Y),
+            EquipmentPreviewCamera,
+        ));
+
+        let unit = app
+            .world_mut()
+            .spawn((
+                CharacterDirection {
+                    facing: Direction::South,
+                },
+                PlayerSprite::default(),
+            ))
+            .id();
+
+        app.update();
+
+        // South (0) rotated by octant 2 = West. A failed single() would fall back to
+        // octant 0 and leave the frame at South.
+        assert_eq!(
+            app.world().get::<PlayerSprite>(unit).unwrap().direction,
+            Direction::West
         );
     }
 }

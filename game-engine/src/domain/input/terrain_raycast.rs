@@ -25,7 +25,13 @@ pub struct TerrainRaycastCache {
 pub fn update_terrain_raycast_cache(
     mut cache: ResMut<TerrainRaycastCache>,
     cursor_pos: Res<ForwardedCursorPosition>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    camera_query: Query<
+        (&Camera, &GlobalTransform),
+        (
+            With<Camera3d>,
+            Without<crate::domain::entities::billboard::EquipmentPreviewCamera>,
+        ),
+    >,
     map_loader_query: Query<&MapLoader>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,

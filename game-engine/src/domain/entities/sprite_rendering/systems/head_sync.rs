@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
+use crate::domain::entities::billboard::EquipmentPreviewCamera;
 use crate::domain::entities::character::components::visual::ActionType;
 use crate::domain::entities::sprite_rendering::components::{
     BodyAttachPoint, HeadAttachPoint, HeadAttachment, HeadLayer, PlayerSprite, RenderLayer,
@@ -72,7 +73,14 @@ fn body_idle_attach(
 pub fn sync_player_head_layer(
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    camera_query: Query<&Transform, (With<Camera3d>, Without<HeadLayer>)>,
+    camera_query: Query<
+        &Transform,
+        (
+            With<Camera3d>,
+            Without<HeadLayer>,
+            Without<EquipmentPreviewCamera>,
+        ),
+    >,
     parent_query: Query<&PlayerSprite>,
     body_query: Query<(&BodyAttachPoint, &RenderLayer, &Transform), Without<HeadLayer>>,
     mut head_query: HeadLayerQuery,

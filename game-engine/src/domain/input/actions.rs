@@ -16,6 +16,8 @@ pub enum PlayerAction {
     Inventory,
     /// Toggle the skills window.
     Skills,
+    /// Toggle the equipment window.
+    Equipment,
     /// Activate hotbar slot 1 (default F1).
     Slot1,
     /// Activate hotbar slot 2 (default F2).
@@ -81,7 +83,7 @@ impl PlayerAction {
     /// `Insert` is the classic RO binding; `Help` occupies Insert's physical
     /// slot on full-size Apple keyboards (MacBooks lack an Insert key entirely).
     /// `Status` is the classic RO Alt+A chord. `Inventory` is the classic RO Alt+E chord.
-    /// `Skills` is the classic RO Alt+S chord.
+    /// `Skills` is the classic RO Alt+S chord. `Equipment` is the classic RO Alt+Q chord.
     pub fn default_input_map() -> InputMap<Self> {
         let mut map = InputMap::new([(Self::Sit, KeyCode::Insert), (Self::Sit, KeyCode::Help)])
             .with(
@@ -95,6 +97,10 @@ impl PlayerAction {
             .with(
                 Self::Skills,
                 ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyS),
+            )
+            .with(
+                Self::Equipment,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyQ),
             );
         for (action, key) in HOTBAR_ACTIONS.into_iter().zip(HOTBAR_KEYS) {
             map.insert(action, key);
@@ -123,6 +129,20 @@ mod tests {
             assert_eq!(action.hotbar_index(), Some(i));
         }
         assert_eq!(PlayerAction::Sit.hotbar_index(), None);
+    }
+
+    #[test]
+    fn default_input_map_binds_equipment_to_alt_q() {
+        let map = PlayerAction::default_input_map();
+        let mut expected = InputMap::default();
+        expected.insert(
+            PlayerAction::Equipment,
+            ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyQ),
+        );
+        assert_eq!(
+            map.get(&PlayerAction::Equipment),
+            expected.get(&PlayerAction::Equipment)
+        );
     }
 
     #[test]

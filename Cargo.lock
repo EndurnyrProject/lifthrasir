@@ -4702,6 +4702,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "bevy-persistent",
+ "bevy_feathers",
  "game-engine",
  "leafwing-input-manager",
  "lifthrasir-data",

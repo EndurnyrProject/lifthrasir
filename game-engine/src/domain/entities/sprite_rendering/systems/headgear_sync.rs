@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
+use crate::domain::entities::billboard::EquipmentPreviewCamera;
 use crate::domain::entities::character::components::equipment::EquipmentSlot;
 use crate::domain::entities::sprite_rendering::components::{
     HeadAttachPoint, HeadLayer, PlayerSprite, RenderLayer,
@@ -55,7 +56,14 @@ fn is_headgear_slot(slot: EquipmentSlot) -> bool {
 pub fn sync_headgear_layer(
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    camera_query: Query<&Transform, (With<Camera3d>, Without<RenderLayer>)>,
+    camera_query: Query<
+        &Transform,
+        (
+            With<Camera3d>,
+            Without<RenderLayer>,
+            Without<EquipmentPreviewCamera>,
+        ),
+    >,
     parent_query: Query<&PlayerSprite>,
     head_query: Query<(&HeadAttachPoint, &ChildOf, &Transform), With<HeadLayer>>,
     mut headgear_query: HeadgearLayerQuery,

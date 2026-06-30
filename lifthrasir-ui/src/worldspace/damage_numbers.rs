@@ -7,6 +7,7 @@
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
+use game_engine::domain::entities::billboard::EquipmentPreviewCamera;
 
 use crate::theme;
 use crate::worldspace::{viewport_to_ui, WorldspaceFont};
@@ -75,7 +76,7 @@ fn horizontal_jitter(counter: u32) -> f32 {
 fn spawn_damage_numbers(
     mut events: MessageReader<DisplayDamageNumber>,
     mut commands: Commands,
-    camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    camera: Query<(&Camera, &GlobalTransform), (With<Camera3d>, Without<EquipmentPreviewCamera>)>,
     targets: Query<&GlobalTransform>,
     ui_scale: Res<UiScale>,
     font: Res<WorldspaceFont>,

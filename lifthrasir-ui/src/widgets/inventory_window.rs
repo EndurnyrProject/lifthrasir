@@ -24,11 +24,12 @@ use crate::rich_text::spawn_colored_text;
 use crate::theme;
 use crate::widgets::draggable::make_draggable;
 
-/// All items in the active tab's category (worn or not).
+/// The bag items in the active tab's category. Worn items live in the equipment
+/// window, not the bag, so they are excluded here.
 fn items_for_tab(inventory: &Inventory, category: ItemCategory) -> Vec<&Item> {
     inventory
         .iter()
-        .filter(|item| item.category() == category)
+        .filter(|item| !item.is_equipped() && item.category() == category)
         .collect()
 }
 
