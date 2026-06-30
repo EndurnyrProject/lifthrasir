@@ -87,3 +87,10 @@ pub struct StatRaiseRequested {
 pub struct LearnSkillRequested {
     pub skill_id: u32,
 }
+
+/// Request the display name of the entity identified by `gid`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct NameRequested {
+    pub gid: u32,
+}

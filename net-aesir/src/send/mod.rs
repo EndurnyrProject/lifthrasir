@@ -4,3 +4,4 @@ pub mod inventory;
 pub mod movement;
 pub mod skill;
 pub mod social;
+pub mod visibility;

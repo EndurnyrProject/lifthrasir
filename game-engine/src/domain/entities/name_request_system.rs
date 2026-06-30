@@ -4,41 +4,20 @@ use crate::{
         entities::{components::EntityName, hover::EntityHoverEntered, registry::EntityRegistry},
         system_sets::EntityInteractionSystems,
     },
-    infrastructure::networking::{
-        quic::{
-            channels::GAMEPLAY,
-            envelope::Body,
-            proto::aesir::net::NameRequest,
-            zone::{QuicZoneState, ZonePhase},
-        },
-        zone_messages::EntityNamed,
-    },
+    infrastructure::networking::zone_messages::EntityNamed,
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
-use bevy_quinnet::client::QuinnetClient;
+use net_contract::commands::NameRequested;
 
 #[auto_observer(plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin)]
 pub fn name_request_observer(
     trigger: On<EntityHoverEntered>,
-    mut client: ResMut<QuinnetClient>,
-    mut zone: ResMut<QuicZoneState>,
+    mut name_requests: MessageWriter<NameRequested>,
 ) {
-    if zone.phase != ZonePhase::Playing {
-        return;
-    }
-
-    let event = trigger.event();
-
-    let body = Body::NameRequest(NameRequest {
-        entity_id: event.entity_id,
+    name_requests.write(NameRequested {
+        gid: trigger.event().entity_id,
     });
-    if let Err(e) = zone.send(&mut client, GAMEPLAY, body) {
-        error!(
-            "Failed to send name request for entity {}: {e}",
-            event.entity_id
-        );
-    }
 }
 
 #[auto_add_system(
