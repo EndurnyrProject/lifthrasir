@@ -33,6 +33,13 @@ pub struct UseRequested {
     pub index: u32,
 }
 
+/// Request to pick up the ground item identified by `ground_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PickupRequested {
+    pub ground_id: u64,
+}
+
 /// Request to send a chat line; `message` is the wire-ready, formatted string.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

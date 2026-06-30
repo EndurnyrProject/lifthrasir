@@ -300,6 +300,55 @@ pub struct ItemAdded {
     pub look: u32,
 }
 
+/// An item appeared on the ground.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ItemOnGround {
+    pub ground_id: u64,
+    pub nameid: u32,
+    pub amount: u32,
+    pub x: u16,
+    pub y: u16,
+    pub identified: bool,
+    pub is_falling: bool,
+    pub sub_x: u8,
+    pub sub_y: u8,
+}
+
+/// A ground item was removed from view.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ItemVanished {
+    pub ground_id: u64,
+    pub reason: VanishReason,
+}
+
+/// Result of a pickup request.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PickupResult {
+    pub ground_id: u64,
+    pub outcome: PickupOutcome,
+}
+
+/// Why a ground item vanished.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VanishReason {
+    PickedUp,
+    Expired,
+}
+
+/// Outcome of a pickup attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PickupOutcome {
+    Ok,
+    TooFar,
+    Overweight,
+    InventoryFull,
+    Gone,
+    Failed,
+}
+
 /// An item was removed from the inventory.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
