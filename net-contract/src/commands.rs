@@ -58,3 +58,32 @@ pub struct GroundSkillCastRequested {
     pub x: u32,
     pub y: u32,
 }
+
+/// Request a basic attack against the entity identified by `target_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct AttackRequested {
+    pub target_id: u32,
+}
+
+/// Request to sit (`sit == true`) or stand (`sit == false`) the local player.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SitToggled {
+    pub sit: bool,
+}
+
+/// Request to allocate `amount` points into the stat identified by `stat_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct StatRaiseRequested {
+    pub stat_id: u32,
+    pub amount: u32,
+}
+
+/// Request to learn (raise a level of) the skill identified by `skill_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct LearnSkillRequested {
+    pub skill_id: u32,
+}
