@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -168,6 +168,43 @@ pub mod envelope {
         MoveToCartRequest(super::MoveToCartRequest),
         #[prost(message, tag = "88")]
         MoveFromCartRequest(super::MoveFromCartRequest),
+        /// 89-96: vending (client intents + server->client board/list/sale deltas)
+        #[prost(message, tag = "89")]
+        VendingOpenRequest(super::VendingOpenRequest),
+        #[prost(message, tag = "90")]
+        VendingCloseRequest(super::VendingCloseRequest),
+        #[prost(message, tag = "91")]
+        VendingListRequest(super::VendingListRequest),
+        #[prost(message, tag = "92")]
+        VendingPurchaseRequest(super::VendingPurchaseRequest),
+        #[prost(message, tag = "93")]
+        VendingBoardShown(super::VendingBoardShown),
+        #[prost(message, tag = "94")]
+        VendingBoardRemoved(super::VendingBoardRemoved),
+        #[prost(message, tag = "95")]
+        VendingList(super::VendingList),
+        #[prost(message, tag = "96")]
+        VendingSaleReport(super::VendingSaleReport),
+        /// 97-101: npc shop (server->client window/result + client buy/sell intents)
+        #[prost(message, tag = "97")]
+        NpcShopOpen(super::NpcShopOpen),
+        #[prost(message, tag = "98")]
+        NpcBuyRequest(super::NpcBuyRequest),
+        #[prost(message, tag = "99")]
+        NpcSellRequest(super::NpcSellRequest),
+        #[prost(message, tag = "100")]
+        NpcBuyResult(super::NpcBuyResult),
+        #[prost(message, tag = "101")]
+        NpcSellResult(super::NpcSellResult),
+        /// 102-105: item drops (server->client ground spawn/vanish + client pickup intent/result)
+        #[prost(message, tag = "102")]
+        ItemOnGround(super::ItemOnGround),
+        #[prost(message, tag = "103")]
+        ItemVanished(super::ItemVanished),
+        #[prost(message, tag = "104")]
+        PickupItemRequest(super::PickupItemRequest),
+        #[prost(message, tag = "105")]
+        PickupResult(super::PickupResult),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -1084,6 +1121,188 @@ pub struct MoveFromCartRequest {
     #[prost(uint32, tag = "2")]
     pub amount: u32,
 }
+/// One line of a vending shop the merchant wants to open: a cart slot, how many
+/// to sell, and the per-unit price.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingEntry {
+    #[prost(uint32, tag = "1")]
+    pub cart_index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+    #[prost(uint32, tag = "3")]
+    pub price: u32,
+}
+/// Client -> server, open a vending shop selling the given cart items under a title.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VendingOpenRequest {
+    #[prost(string, tag = "1")]
+    pub title: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "2")]
+    pub entries: ::prost::alloc::vec::Vec<VendingEntry>,
+}
+/// Client -> server, close the player's own vending shop.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingCloseRequest {}
+/// Client -> server, request the item list of a nearby vendor's shop.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingListRequest {
+    #[prost(uint64, tag = "1")]
+    pub vendor_unit_id: u64,
+}
+/// One line of a buy request: which shop entry and how many units to buy.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingBuy {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+}
+/// Client -> server, buy items from a vendor's shop.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VendingPurchaseRequest {
+    #[prost(uint64, tag = "1")]
+    pub vendor_unit_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub items: ::prost::alloc::vec::Vec<VendingBuy>,
+}
+/// Server -> client, a vending shop board appeared over a merchant (area broadcast / on view enter).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingBoardShown {
+    #[prost(uint64, tag = "1")]
+    pub unit_id: u64,
+    #[prost(string, tag = "2")]
+    pub title: ::prost::alloc::string::String,
+}
+/// Server -> client, a vending shop board was removed (close / sold out / out of view).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingBoardRemoved {
+    #[prost(uint64, tag = "1")]
+    pub unit_id: u64,
+}
+/// One item on display in a vending shop. Mirrors InventoryItem's display fields plus a price.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingShopItem {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub nameid: u32,
+    #[prost(uint32, tag = "3")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "4")]
+    pub amount: u32,
+    #[prost(bool, tag = "5")]
+    pub identified: bool,
+    #[prost(uint32, tag = "6")]
+    pub attribute: u32,
+    #[prost(uint32, tag = "7")]
+    pub refine: u32,
+    #[prost(uint32, repeated, tag = "8")]
+    pub cards: ::prost::alloc::vec::Vec<u32>,
+    #[prost(uint32, tag = "9")]
+    pub price: u32,
+}
+/// Server -> client, the full item list of a vendor's shop (reply to VendingListRequest).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VendingList {
+    #[prost(uint64, tag = "1")]
+    pub vendor_unit_id: u64,
+    #[prost(string, tag = "2")]
+    pub title: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "3")]
+    pub items: ::prost::alloc::vec::Vec<VendingShopItem>,
+}
+/// Server -> client (seller), a unit of the shop was sold.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingSaleReport {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub nameid: u32,
+    #[prost(uint32, tag = "3")]
+    pub amount: u32,
+    #[prost(uint32, tag = "4")]
+    pub zeny_gained: u32,
+    #[prost(string, tag = "5")]
+    pub buyer_name: ::prost::alloc::string::String,
+}
+/// One item the NPC shop sells, shown in the buy window at its buy price.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NpcShopBuyItem {
+    #[prost(uint32, tag = "1")]
+    pub nameid: u32,
+    #[prost(uint32, tag = "2")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "3")]
+    pub price: u32,
+}
+/// One sellable inventory slot, shown in the sell window at its server-computed sell price.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NpcShopSellItem {
+    #[prost(uint32, tag = "1")]
+    pub inventory_index: u32,
+    #[prost(uint32, tag = "2")]
+    pub nameid: u32,
+    #[prost(uint32, tag = "3")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "4")]
+    pub amount: u32,
+    #[prost(uint32, tag = "5")]
+    pub sell_price: u32,
+}
+/// Server -> client, opens the NPC shop window with both buy and sell lists computed server-side.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NpcShopOpen {
+    #[prost(uint64, tag = "1")]
+    pub unit_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub buy_items: ::prost::alloc::vec::Vec<NpcShopBuyItem>,
+    #[prost(message, repeated, tag = "3")]
+    pub sell_items: ::prost::alloc::vec::Vec<NpcShopSellItem>,
+}
+/// One line of a buy request: which shop item and how many units to buy.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NpcBuyEntry {
+    #[prost(uint32, tag = "1")]
+    pub nameid: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+}
+/// Client -> server, buy items from an NPC shop.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NpcBuyRequest {
+    #[prost(uint64, tag = "1")]
+    pub unit_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub items: ::prost::alloc::vec::Vec<NpcBuyEntry>,
+}
+/// One line of a sell request: which inventory slot and how many units to sell.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NpcSellEntry {
+    #[prost(uint32, tag = "1")]
+    pub inventory_index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+}
+/// Client -> server, sell inventory items to an NPC shop.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NpcSellRequest {
+    #[prost(uint64, tag = "1")]
+    pub unit_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub items: ::prost::alloc::vec::Vec<NpcSellEntry>,
+}
+/// Server -> client, result of a buy request (ok | not_enough_zeny | overweight | no_slots | invalid | out_of_range).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NpcBuyResult {
+    #[prost(uint32, tag = "1")]
+    pub result: u32,
+}
+/// Server -> client, result of a sell request (ok | invalid | out_of_range).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NpcSellResult {
+    #[prost(uint32, tag = "1")]
+    pub result: u32,
+}
 /// Client -> server, allocate a status point to a stat (replaces RO CZ_STATUS_CHANGE 0x00BB).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StatUp {
@@ -1254,5 +1473,116 @@ pub mod npc_interact {
         Input(::prost::alloc::string::String),
         #[prost(bool, tag = "6")]
         Cancel(bool),
+    }
+}
+/// Server -> client, an item appeared on a map cell (drop or walk-up discovery).
+/// is_falling marks a fresh drop (animated) vs an already-lying item (view-enter).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ItemOnGround {
+    #[prost(uint64, tag = "1")]
+    pub ground_id: u64,
+    #[prost(uint32, tag = "2")]
+    pub nameid: u32,
+    #[prost(uint32, tag = "3")]
+    pub amount: u32,
+    #[prost(uint32, tag = "4")]
+    pub x: u32,
+    #[prost(uint32, tag = "5")]
+    pub y: u32,
+    #[prost(bool, tag = "6")]
+    pub identified: bool,
+    #[prost(bool, tag = "7")]
+    pub is_falling: bool,
+    #[prost(uint32, tag = "8")]
+    pub sub_x: u32,
+    #[prost(uint32, tag = "9")]
+    pub sub_y: u32,
+}
+/// Server -> client, a ground item was removed (picked up or expired).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ItemVanished {
+    #[prost(uint64, tag = "1")]
+    pub ground_id: u64,
+    #[prost(enumeration = "ItemVanishReason", tag = "2")]
+    pub reason: i32,
+}
+/// Client -> server, request to pick up a ground item by its ground id.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PickupItemRequest {
+    #[prost(uint64, tag = "1")]
+    pub ground_id: u64,
+}
+/// Server -> client, result of a pickup request; the inventory delta rides the existing ItemAdded.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PickupResult {
+    #[prost(uint64, tag = "1")]
+    pub ground_id: u64,
+    #[prost(enumeration = "PickupResultCode", tag = "2")]
+    pub result: i32,
+}
+/// Why a ground item disappeared.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ItemVanishReason {
+    PickedUp = 0,
+    Expired = 1,
+}
+impl ItemVanishReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::PickedUp => "PICKED_UP",
+            Self::Expired => "EXPIRED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PICKED_UP" => Some(Self::PickedUp),
+            "EXPIRED" => Some(Self::Expired),
+            _ => None,
+        }
+    }
+}
+/// Outcome of a pickup request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PickupResultCode {
+    Ok = 0,
+    TooFar = 1,
+    Overweight = 2,
+    InventoryFull = 3,
+    Gone = 4,
+    Failed = 5,
+}
+impl PickupResultCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Ok => "OK",
+            Self::TooFar => "TOO_FAR",
+            Self::Overweight => "OVERWEIGHT",
+            Self::InventoryFull => "INVENTORY_FULL",
+            Self::Gone => "GONE",
+            Self::Failed => "FAILED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "OK" => Some(Self::Ok),
+            "TOO_FAR" => Some(Self::TooFar),
+            "OVERWEIGHT" => Some(Self::Overweight),
+            "INVENTORY_FULL" => Some(Self::InventoryFull),
+            "GONE" => Some(Self::Gone),
+            "FAILED" => Some(Self::Failed),
+            _ => None,
+        }
     }
 }
