@@ -6,9 +6,13 @@ use super::QuicZoneState;
 
 #[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update)]
 fn publish_zone_session(zone: Res<QuicZoneState>, mut session: ResMut<ZoneSession>) {
-    if session.char_id != zone.auth.char_id || session.account_id != zone.auth.account_id {
+    if session.char_id != zone.auth.char_id
+        || session.account_id != zone.auth.account_id
+        || session.map_name != zone.map_name
+    {
         session.char_id = zone.auth.char_id;
         session.account_id = zone.auth.account_id;
+        session.map_name = zone.map_name.clone();
     }
 }
 
@@ -26,6 +30,7 @@ mod tests {
                 account_id: 7,
                 ..Default::default()
             },
+            map_name: "prontera".into(),
             ..Default::default()
         })
         .init_resource::<ZoneSession>()
@@ -36,5 +41,6 @@ mod tests {
         let session = app.world().resource::<ZoneSession>();
         assert_eq!(session.char_id, 42);
         assert_eq!(session.account_id, 7);
+        assert_eq!(session.map_name, "prontera");
     }
 }

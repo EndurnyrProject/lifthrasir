@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Contains all data about a character including stats, appearance,
 /// equipment, and progression. This structure is used across multiple
 /// packets (HC_ACCEPT_ENTER, HC_ACCEPT_MAKECHAR, HC_ACK_CHARINFO_PER_PAGE).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CharacterInfo {
     pub char_id: u32,
     pub base_exp: u64,

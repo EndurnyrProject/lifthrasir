@@ -11,6 +11,8 @@ pub struct CharacterServerConnected {
     pub max_slots: u8,
     pub available_slots: u8,
     pub premium_slots: u8,
+    /// Number of char-select pages the server reports (`CharList.page_count`).
+    pub display_pages: u32,
     pub characters: Vec<CharacterInfo>,
 }
 

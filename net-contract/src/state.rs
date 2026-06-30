@@ -7,11 +7,12 @@ use bevy_auto_plugin::prelude::auto_init_resource;
 use serde::{Deserialize, Serialize};
 
 /// Neutral, adapter-agnostic identity of the active zone session.
-#[derive(Resource, Default, Debug, Clone, Copy)]
+#[derive(Resource, Default, Debug, Clone)]
 #[auto_init_resource(plugin = crate::NetContractPlugin)]
 pub struct ZoneSession {
     pub char_id: u32,
     pub account_id: u32,
+    pub map_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

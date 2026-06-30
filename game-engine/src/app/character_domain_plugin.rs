@@ -3,7 +3,7 @@ use bevy_auto_plugin::prelude::*;
 /// Plugin for character domain logic.
 ///
 /// System organization (chained groups with strict ordering):
-/// 1. Char QUIC Flow: char_drain_control + the char_send_* command systems (QuicCharState)
+/// 1. Char Flow: the char_send_* command bridges + DomainCharacterRoster fed by CharacterServerConnected
 /// 2. Protocol Event Handlers: handle_character_server_connected, handle_character_created_protocol, etc.
 /// 3. Domain Event Handlers: handle_select_character, spawn_unified_character_from_selection, etc.
 /// 4. Post-Selection Handlers: handle_zone_server_info, handle_character_created, handle_character_deleted, etc.

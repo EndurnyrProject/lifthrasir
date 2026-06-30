@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::QuinnetClient;
 use net_contract::commands::{
-    ConnectCharServer, ConnectLogin, ConnectZone, LocalMapLoaded, LocalPlayerReady,
+    ConnectCharServer, ConnectLogin, ConnectZone, LeaveZone, LocalMapLoaded, LocalPlayerReady,
 };
 use net_contract::events::{LoginRefused, MapChangeRequested, ZoneDisconnected};
 
@@ -153,6 +153,19 @@ pub fn advance_zone_handshake(
         if let Some(next) = player_ready_next(state.phase) {
             state.phase = next;
         }
+    }
+}
+
+/// Tear down the zone session when the domain leaves the zone (return to login).
+///
+/// Resets the phase to `Disconnected` and clears the handshake latches so a later
+/// re-entry starts from a clean state machine rather than a stale `Playing`/latched one.
+#[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update)]
+pub fn handle_leave_zone(mut events: MessageReader<LeaveZone>, mut state: ResMut<QuicZoneState>) {
+    for _ in events.read() {
+        state.phase = ZonePhase::Disconnected;
+        state.map_loaded_signal = false;
+        state.player_ready_signal = false;
     }
 }
 

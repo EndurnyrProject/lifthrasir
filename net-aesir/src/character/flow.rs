@@ -10,7 +10,7 @@ use super::mapping::{
     char_create_failed, char_created, char_list_to_connected, char_list_to_slot_info, delete_ack,
     zone_server_info_to_event,
 };
-use super::{CharPhase, CharacterRoster, QuicCharState};
+use super::{CharPhase, QuicCharState};
 use crate::channels::CONTROL;
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
@@ -32,8 +32,8 @@ fn hello_ack_outcome(phase: CharPhase, accepted: bool) -> Option<CharPhase> {
     })
 }
 
-/// Pure outcome of receiving a `CharList`: the next phase, and whether this is the
-/// initial list (emit the UI events) or a `Ready` refresh (roster update only).
+/// Pure outcome of receiving a `CharList`: the next phase. The first list (in
+/// `AuthSent`) advances to `Ready`; later refresh lists stay in their phase.
 fn char_list_outcome(phase: CharPhase) -> CharPhase {
     match phase {
         CharPhase::AuthSent => CharPhase::Ready,
@@ -79,7 +79,6 @@ pub fn char_drain_control(
     mut incoming: MessageReader<IncomingMessage>,
     mut client: ResMut<QuinnetClient>,
     mut state: ResMut<QuicCharState>,
-    mut roster: ResMut<CharacterRoster>,
     mut connected: MessageWriter<CharacterServerConnected>,
     mut slot_info: MessageWriter<CharacterSlotInfoReceived>,
     mut zone_info: MessageWriter<ZoneServerInfoReceived>,
@@ -125,10 +124,12 @@ pub fn char_drain_control(
                 state.phase = next;
             }
             Body::CharList(list) => {
-                let emit = state.phase == CharPhase::AuthSent;
-                roster.update_from_char_list(&list);
-                if emit {
-                    connected.write(char_list_to_connected(&list));
+                // Emit the roster on every list (initial + create/delete refreshes) so
+                // the domain rebuilds its char-select view; slot info only changes on the
+                // initial list, so keep that initial-only.
+                let initial = state.phase == CharPhase::AuthSent;
+                connected.write(char_list_to_connected(&list));
+                if initial {
                     slot_info.write(char_list_to_slot_info(&list));
                 }
                 state.phase = char_list_outcome(state.phase);

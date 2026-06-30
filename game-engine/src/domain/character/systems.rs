@@ -13,22 +13,32 @@ use crate::infrastructure::networking::char_messages::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
     CharacterServerConnected, ZoneServerInfoReceived,
 };
-use crate::infrastructure::networking::quic::character::CharacterRoster;
-use crate::infrastructure::networking::quic::zone::{QuicZoneState, ZonePhase};
 use crate::infrastructure::networking::session::UserSession;
 use crate::infrastructure::networking::zone_messages::ZoneDisconnected;
 use crate::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioReceiver;
-use net_contract::commands::ConnectZone;
+use net_contract::commands::{ConnectZone, LeaveZone};
+use net_contract::state::ZoneSession;
 use std::time::{Duration, Instant};
 
-/// Builds the slot-keyed character list event from the QUIC roster, resolving
+/// Domain-owned snapshot of the char-select roster.
+///
+/// Fed by `CharacterServerConnected` (the initial list and create/delete refreshes
+/// alike), this decouples the char-select UI from the adapter's internal roster cache.
+#[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+pub struct DomainCharacterRoster {
+    pub characters: Vec<net_contract::dto::CharacterInfo>,
+    pub display_pages: u32,
+}
+
+/// Builds the slot-keyed character list event from the domain roster, resolving
 /// job names and sprite paths. Shared by the roster-change and manual-request
 /// paths so the mapping lives in one place.
 fn build_character_list_event(
-    roster: &CharacterRoster,
+    roster: &DomainCharacterRoster,
     job_registry: Option<&JobSpriteRegistry>,
 ) -> CharacterListReceivedEvent {
     let mut char_list = vec![None; 15];
@@ -69,12 +79,12 @@ fn build_character_list_event(
         characters: char_list,
         max_slots: 9,
         available_slots: 9,
-        display_pages: roster.page_count.min(u8::MAX as u32) as u8,
+        display_pages: roster.display_pages.min(u8::MAX as u32) as u8,
     }
 }
 
 /// System to handle explicit character list requests
-/// The character list is cached in `CharacterRoster` by the QUIC drain.
+/// The character list is cached in `DomainCharacterRoster` from `CharacterServerConnected`.
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
@@ -82,7 +92,7 @@ fn build_character_list_event(
 )]
 pub fn handle_request_character_list(
     mut request_events: MessageReader<RequestCharacterListEvent>,
-    roster: Res<CharacterRoster>,
+    roster: Res<DomainCharacterRoster>,
     job_registry: Option<Res<JobSpriteRegistry>>,
     mut list_events: MessageWriter<CharacterListReceivedEvent>,
 ) {
@@ -91,7 +101,12 @@ pub fn handle_request_character_list(
     }
 }
 
-/// System: Handle character server connection and transition to selection
+/// System: Handle character server connection and transition to selection.
+///
+/// `CharacterServerConnected` now fires on every char list (the initial list and
+/// create/delete refreshes), so the transition is guarded to fire only when not
+/// already in `CharacterSelection`, preventing a mid-select refresh from bouncing
+/// the screen.
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
@@ -99,31 +114,36 @@ pub fn handle_request_character_list(
 )]
 pub fn handle_character_server_connected(
     mut connected_events: MessageReader<CharacterServerConnected>,
+    state: Res<State<GameState>>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     for _ in connected_events.read() {
-        next_state.set(GameState::CharacterSelection);
+        if *state.get() != GameState::CharacterSelection {
+            next_state.set(GameState::CharacterSelection);
+        }
     }
 }
 
-/// System: Re-emit the UI character list whenever the roster mutates.
+/// System: Refresh the domain roster and re-emit the UI character list on every
+/// `CharacterServerConnected`.
 ///
-/// The `!roster.is_added()` guard skips the startup default-insert frame so we
-/// don't emit an empty list; the first real list arrives when the QUIC drain
-/// mutates the roster (is_changed, not is_added). Not gated on the selection
-/// state, since the first `CharList` is processed the same frame the state
-/// transition is queued.
+/// Fires for the initial list and for the create/delete refreshes (the adapter
+/// now emits `CharacterServerConnected` on every `CharList`), keeping the
+/// char-select view in sync without reading the adapter's roster cache.
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::CharacterList)
 )]
 pub fn handle_character_roster_changed(
-    roster: Res<CharacterRoster>,
+    mut connected_events: MessageReader<CharacterServerConnected>,
+    mut roster: ResMut<DomainCharacterRoster>,
     job_registry: Option<Res<JobSpriteRegistry>>,
     mut list_events: MessageWriter<CharacterListReceivedEvent>,
 ) {
-    if roster.is_changed() && !roster.is_added() {
+    for event in connected_events.read() {
+        roster.characters = event.characters.clone();
+        roster.display_pages = event.display_pages;
         list_events.write(build_character_list_event(&roster, job_registry.as_deref()));
     }
 }
@@ -274,7 +294,7 @@ pub fn spawn_unified_character_from_selection(
 )]
 pub fn handle_select_character(
     mut events: MessageReader<SelectCharacterEvent>,
-    roster: Res<CharacterRoster>,
+    roster: Res<DomainCharacterRoster>,
     mut state: ResMut<CharacterSelectionState>,
     mut selected_events: MessageWriter<CharacterSelectedEvent>,
 ) {
@@ -307,13 +327,12 @@ pub struct ZoneSessionData {
     pub character_name: String,
 }
 
-/// System: Handle zone server info and open the QUIC zone connection.
+/// System: Handle zone server info and open the zone connection.
 ///
-/// Closes the char connection, opens the QUIC zone connection, and arms
-/// `QuicZoneState` with the session credentials (sourced from the live
-/// `UserSession` for `login_id2`, which the handoff event does not carry) and
-/// the target map. The handshake (`Hello`/`SessionAuth`/`EnterAck`) is driven
-/// from there by `quic::zone::flow::handshake`.
+/// Writes the self-contained `ConnectZone` command with the session credentials
+/// (sourced from the live `UserSession` for `login_id2`, which the handoff event
+/// does not carry) and the target map; the adapter opens the connection and drives
+/// the handshake (`Hello`/`SessionAuth`/`EnterAck`).
 #[auto_add_system(
     plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
     schedule = Update,
@@ -376,7 +395,7 @@ pub fn handle_zone_server_info(
 /// System: Handle zone entry accepted (QUIC `ZoneEntered` from the handshake).
 ///
 /// The QUIC handshake emits `ZoneEntered` on `EnterAck` with the spawn cell;
-/// the map name and char id come from the armed `QuicZoneState`. This feeds the
+/// the map name and char id come from the neutral `ZoneSession`. This feeds the
 /// existing map-load machinery (`MapSpawnContext` + `MapLoadingStarted`) and
 /// transitions to `Loading`.
 #[auto_add_system(
@@ -388,7 +407,7 @@ pub fn handle_zone_entered(
     mut entered_events: MessageReader<
         crate::infrastructure::networking::zone_messages::ZoneEntered,
     >,
-    zone_state: Res<QuicZoneState>,
+    session: Res<ZoneSession>,
     mut commands: Commands,
     mut map_loading_events: MessageWriter<MapLoadingStarted>,
     mut game_state: ResMut<NextState<GameState>>,
@@ -399,8 +418,8 @@ pub fn handle_zone_entered(
             event.x, event.y, event.dir
         );
 
-        let map_name = zone_state.map_name.clone();
-        let character_id = zone_state.auth.char_id;
+        let map_name = session.map_name.clone();
+        let character_id = session.char_id;
 
         commands.insert_resource(MapSpawnContext::new(
             map_name.clone(),
@@ -480,11 +499,11 @@ type ZoneSessionEntities = Or<(With<LocalPlayer>, With<MapScoped>)>;
 )]
 pub fn teardown_zone_session_on_login(
     mut commands: Commands,
-    mut zone_state: ResMut<QuicZoneState>,
+    mut leave_zone: MessageWriter<LeaveZone>,
     mut registry: ResMut<EntityRegistry>,
     world_entities: Query<Entity, ZoneSessionEntities>,
 ) {
-    zone_state.phase = ZonePhase::Disconnected;
+    leave_zone.write(LeaveZone);
     commands.remove_resource::<MapSpawnContext>();
     commands.remove_resource::<ZoneSessionData>();
     commands.remove_resource::<MapLoadingTimer>();
@@ -779,7 +798,6 @@ pub fn spawn_character_sprite_on_game_start(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::infrastructure::networking::quic::proto::aesir::net;
 
     #[test]
     fn disconnect_message_includes_reason() {
@@ -793,7 +811,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(bevy::state::app::StatesPlugin);
         app.init_state::<GameState>();
-        app.init_resource::<QuicZoneState>();
+        app.add_message::<LeaveZone>();
         app.init_resource::<EntityRegistry>();
         app.insert_resource(MapSpawnContext::new("prontera".into(), 100, 100, 42));
         app.insert_resource(ZoneSessionData {
@@ -813,8 +831,6 @@ mod tests {
         {
             let mut entity_registry = app.world_mut().resource_mut::<EntityRegistry>();
             entity_registry.set_local_player(player, 42);
-            let mut zone = app.world_mut().resource_mut::<QuicZoneState>();
-            zone.phase = ZonePhase::Playing;
         }
 
         app.world_mut()
@@ -830,10 +846,14 @@ mod tests {
         // World entities reaped so the next login spawns a fresh local player.
         assert!(app.world().get_entity(player).is_err());
         assert!(app.world().get_entity(terrain).is_err());
-        assert_eq!(
-            app.world().resource::<QuicZoneState>().phase,
-            ZonePhase::Disconnected
-        );
+        // The adapter teardown is now driven by a LeaveZone command, not a direct
+        // phase write, so assert exactly one was emitted.
+        let leave_count = app
+            .world_mut()
+            .resource_mut::<Messages<LeaveZone>>()
+            .drain()
+            .count();
+        assert_eq!(leave_count, 1);
         assert!(app
             .world()
             .resource::<EntityRegistry>()
@@ -841,66 +861,29 @@ mod tests {
             .is_none());
     }
 
-    fn char_list_with_one(char_num: u32, name: &str) -> net::CharList {
-        net::CharList {
-            account_id: 2000001,
-            normal_slots: 9,
-            premium_slots: 0,
-            billing_slots: 0,
-            producible_slots: 9,
-            valid_slots: 9,
-            characters: vec![net::Character {
-                gid: 150001,
-                name: name.into(),
-                class: 7,
-                base_level: 42,
-                job_level: 10,
-                base_exp: 0,
-                job_exp: 0,
-                zeny: 0,
-                hp: 0,
-                max_hp: 0,
-                sp: 0,
-                max_sp: 0,
-                str: 0,
-                agi: 0,
-                vit: 0,
-                int: 0,
-                dex: 0,
-                luk: 0,
-                status_point: 0,
-                skill_point: 0,
-                hair: 0,
-                hair_color: 0,
-                clothes_color: 0,
-                weapon: 0,
-                shield: 0,
-                head_top: 0,
-                head_mid: 0,
-                head_bottom: 0,
-                robe: 0,
-                char_num,
-                last_map: "prontera".into(),
-                sex: 0,
-                option: 0,
-                karma: 0,
-                manner: 0,
-                rename: 0,
-                delete_date: 0,
-            }],
-            page_count: 3,
-            pincode_enabled: false,
+    fn dto_character(char_num: u8, name: &str) -> net_contract::dto::CharacterInfo {
+        net_contract::dto::CharacterInfo {
+            char_id: 150001,
+            class: 7,
+            base_level: 42,
+            job_level: 10,
+            char_num,
+            name: name.into(),
+            last_map: "prontera".into(),
+            ..Default::default()
         }
     }
 
     #[test]
     fn build_character_list_event_places_character_at_its_slot() {
-        let mut roster = CharacterRoster::default();
-        roster.update_from_char_list(&char_list_with_one(2, "Vidar"));
+        let roster = DomainCharacterRoster {
+            characters: vec![dto_character(2, "Vidar")],
+            display_pages: 3,
+        };
 
         let event = build_character_list_event(&roster, None);
 
-        assert_eq!(event.display_pages, roster.page_count as u8);
+        assert_eq!(event.display_pages, roster.display_pages as u8);
         assert!(event.characters[0].is_none());
         let placed = event.characters[2]
             .as_ref()

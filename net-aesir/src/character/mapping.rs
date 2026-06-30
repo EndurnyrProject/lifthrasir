@@ -61,6 +61,7 @@ pub fn char_list_to_connected(l: &net::CharList) -> CharacterServerConnected {
         max_slots: l.valid_slots as u8,
         available_slots: l.normal_slots as u8,
         premium_slots: l.premium_slots as u8,
+        display_pages: l.page_count,
         characters: l
             .characters
             .iter()
@@ -189,6 +190,7 @@ mod tests {
         assert_eq!(connected.max_slots, 12);
         assert_eq!(connected.available_slots, 9);
         assert_eq!(connected.premium_slots, 3);
+        assert_eq!(connected.display_pages, 1);
         assert_eq!(connected.characters.len(), 2);
 
         let alice = &connected.characters[0];

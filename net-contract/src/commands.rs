@@ -162,6 +162,11 @@ pub struct ConnectZone {
     pub map_name: String,
 }
 
+/// Request to abandon the active zone session (e.g. on return to the login screen).
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct LeaveZone;
+
 /// Domain to adapter readiness signal: the local map asset finished loading.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
