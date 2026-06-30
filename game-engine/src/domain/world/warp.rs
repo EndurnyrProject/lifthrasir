@@ -2,7 +2,6 @@ use crate::core::GameState;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::entities::movement::events::{MovementStopped, StopReason};
 use crate::domain::world::spawn_context::MapSpawnContext;
-use crate::infrastructure::networking::quic::zone::{QuicZoneState, ZonePhase};
 use crate::infrastructure::networking::zone_messages::MapChangeRequested;
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
@@ -16,9 +15,10 @@ pub struct Warping;
 
 /// Consume `MapChangeRequested` (server warp) and kick the existing entry cycle.
 ///
-/// Repoints `MapSpawnContext` at the new map/cell (keeping `character_id`), resets
-/// the zone handshake to `Entering` so `zone_send_map_loaded`'s guard re-fires on
-/// the new `Added<MapData>`, flags the cycle as a warp, and flips to `Loading`.
+/// Repoints `MapSpawnContext` at the new map/cell (keeping `character_id`), flags
+/// the cycle as a warp, and flips to `Loading`. The zone handshake re-arm (resetting
+/// the adapter phase to `Entering` so the map-load handshake replays) is owned by
+/// the adapter's `reset_handshake_on_warp`, which reads the same event.
 /// `MapSpawnContext` is guaranteed present in-game (the entry path inserts it), so
 /// a missing resource here fails loudly per the critical-systems guideline.
 #[auto_add_system(
@@ -29,7 +29,6 @@ pub struct Warping;
 pub fn handle_map_change(
     mut events: MessageReader<MapChangeRequested>,
     mut ctx: ResMut<MapSpawnContext>,
-    mut zone_state: ResMut<QuicZoneState>,
     mut next_state: ResMut<NextState<GameState>>,
     mut commands: Commands,
 ) {
@@ -37,7 +36,6 @@ pub fn handle_map_change(
         ctx.map_name = m.map_name.clone();
         ctx.spawn_x = m.x as u16;
         ctx.spawn_y = m.y as u16;
-        zone_state.phase = ZonePhase::Entering;
         commands.insert_resource(Warping);
         next_state.set(GameState::Loading);
     }
@@ -93,15 +91,11 @@ mod tests {
     use bevy::state::app::StatesPlugin;
 
     #[test]
-    fn warp_repoints_context_resets_phase_and_queues_loading() {
+    fn warp_repoints_context_and_queues_loading() {
         let mut app = App::new();
         app.add_plugins(StatesPlugin);
         app.init_state::<GameState>();
         app.insert_resource(MapSpawnContext::new("prontera".into(), 100, 200, 42));
-        app.insert_resource(QuicZoneState {
-            phase: ZonePhase::Playing,
-            ..Default::default()
-        });
         app.add_message::<MapChangeRequested>();
         app.add_systems(Update, handle_map_change);
 
@@ -123,10 +117,6 @@ mod tests {
         assert_eq!(ctx.spawn_y, 60);
         assert_eq!(ctx.character_id, 42);
 
-        assert_eq!(
-            app.world().resource::<QuicZoneState>().phase,
-            ZonePhase::Entering
-        );
         assert!(app.world().get_resource::<Warping>().is_some());
 
         assert!(matches!(

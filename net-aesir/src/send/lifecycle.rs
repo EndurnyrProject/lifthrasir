@@ -1,12 +1,28 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::QuinnetClient;
-use net_contract::commands::{ConnectCharServer, ConnectLogin, ConnectZone};
-use net_contract::events::{LoginRefused, ZoneDisconnected};
+use net_contract::commands::{
+    ConnectCharServer, ConnectLogin, ConnectZone, LocalMapLoaded, LocalPlayerReady,
+};
+use net_contract::events::{LoginRefused, MapChangeRequested, ZoneDisconnected};
 
+use crate::channels::CONTROL;
 use crate::character::{self, PendingAuth, QuicCharState};
+use crate::envelope::Body;
 use crate::login::{self, Pending, QuicLoginState};
-use crate::zone::{self, QuicZoneState, ZoneAuth};
+use crate::proto::aesir::net::MapLoaded;
+use crate::zone::{self, QuicZoneState, ZoneAuth, ZonePhase};
+
+/// Pure outcome of the map asset becoming ready: the next phase, or `None` when out of phase.
+fn map_loaded_next(phase: ZonePhase) -> Option<ZonePhase> {
+    (phase == ZonePhase::Entering).then_some(ZonePhase::MapReady)
+}
+
+/// Pure outcome of the local player entity becoming ready: the next phase, or
+/// `None` when out of phase.
+fn player_ready_next(phase: ZonePhase) -> Option<ZonePhase> {
+    (phase == ZonePhase::MapReady).then_some(ZonePhase::Playing)
+}
 
 /// Open the login-server connection and arm the login handshake.
 ///
@@ -96,5 +112,96 @@ pub fn handle_connect_zone(
             },
             cmd.map_name.clone(),
         );
+    }
+}
+
+/// Drive the zone map-load handshake from the domain readiness signals.
+///
+/// Latches `LocalMapLoaded`/`LocalPlayerReady` onto `QuicZoneState` so signal
+/// order versus phase never matters, then advances the phase machine: once the
+/// map is loaded while `Entering`, send `MapLoaded` (legacy CZ_NOTIFY_ACTORINIT)
+/// and move to `MapReady`; once the player exists while `MapReady`, move to
+/// `Playing` (the gate the gameplay senders wait on).
+#[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update)]
+pub fn advance_zone_handshake(
+    mut map_loaded: MessageReader<LocalMapLoaded>,
+    mut player_ready: MessageReader<LocalPlayerReady>,
+    mut client: ResMut<QuinnetClient>,
+    mut state: ResMut<QuicZoneState>,
+) {
+    if !map_loaded.is_empty() {
+        map_loaded.clear();
+        state.map_loaded_signal = true;
+    }
+    if !player_ready.is_empty() {
+        player_ready.clear();
+        state.player_ready_signal = true;
+    }
+
+    if state.map_loaded_signal {
+        if let Some(next) = map_loaded_next(state.phase) {
+            if let Err(e) = state.send(&mut client, CONTROL, Body::MapLoaded(MapLoaded {})) {
+                error!("failed to send MapLoaded: {e}");
+                state.phase = ZonePhase::Failed;
+                return;
+            }
+            state.phase = next;
+        }
+    }
+
+    if state.player_ready_signal {
+        if let Some(next) = player_ready_next(state.phase) {
+            state.phase = next;
+        }
+    }
+}
+
+/// Re-arm the map-load handshake on a server warp.
+///
+/// `MapChangeRequested` means the client is unloading and reloading a map, so the
+/// handshake must replay: reset to `Entering` and clear the latched map signal so
+/// the next `LocalMapLoaded` re-sends `MapLoaded`. The player entity survives a
+/// warp, so `player_ready_signal` is intentionally kept.
+#[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update)]
+pub fn reset_handshake_on_warp(
+    mut events: MessageReader<MapChangeRequested>,
+    mut state: ResMut<QuicZoneState>,
+) {
+    for _ in events.read() {
+        state.phase = ZonePhase::Entering;
+        state.map_loaded_signal = false;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_loaded_in_entering_advances_to_map_ready() {
+        assert_eq!(
+            map_loaded_next(ZonePhase::Entering),
+            Some(ZonePhase::MapReady)
+        );
+    }
+
+    #[test]
+    fn map_loaded_out_of_phase_is_ignored() {
+        assert_eq!(map_loaded_next(ZonePhase::AuthSent), None);
+        assert_eq!(map_loaded_next(ZonePhase::MapReady), None);
+    }
+
+    #[test]
+    fn player_ready_in_map_ready_advances_to_playing() {
+        assert_eq!(
+            player_ready_next(ZonePhase::MapReady),
+            Some(ZonePhase::Playing)
+        );
+    }
+
+    #[test]
+    fn player_ready_out_of_phase_is_ignored() {
+        assert_eq!(player_ready_next(ZonePhase::Entering), None);
+        assert_eq!(player_ready_next(ZonePhase::Playing), None);
     }
 }

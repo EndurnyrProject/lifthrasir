@@ -66,6 +66,11 @@ pub struct QuicZoneState {
     pub map_name: String,
     pub spawn: Option<ZoneSpawn>,
     pub clock_offset: i64,
+    /// Latched `LocalMapLoaded` signal; gates the `Entering -> MapReady` advance.
+    pub map_loaded_signal: bool,
+    /// Latched `LocalPlayerReady` signal; gates the `MapReady -> Playing` advance.
+    /// Survives a warp (the player entity persists), so it is not cleared on map change.
+    pub player_ready_signal: bool,
 }
 
 impl QuicZoneState {
@@ -78,6 +83,8 @@ impl QuicZoneState {
         self.map_name = map_name;
         self.spawn = None;
         self.phase = ZonePhase::Connecting;
+        self.map_loaded_signal = false;
+        self.player_ready_signal = false;
     }
 
     /// Encode and send a body on the given channel via the seq-counting connection.
@@ -134,6 +141,8 @@ mod tests {
         let mut state = QuicZoneState {
             phase: ZonePhase::Failed,
             spawn: Some(ZoneSpawn::default()),
+            map_loaded_signal: true,
+            player_ready_signal: true,
             ..Default::default()
         };
         state.start_connecting(
@@ -152,6 +161,8 @@ mod tests {
         assert_eq!(state.auth.char_id, 4);
         assert_eq!(state.map_name, "prontera");
         assert!(state.spawn.is_none());
+        assert!(!state.map_loaded_signal);
+        assert!(!state.player_ready_signal);
     }
 
     #[test]

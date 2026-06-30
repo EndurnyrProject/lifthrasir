@@ -539,7 +539,7 @@ pub fn handle_map_load_complete(
 ) {
     for event in events.read() {
         debug!(
-            "Map '{}' loaded; MapLoaded already sent by zone_send_map_loaded",
+            "Map '{}' loaded; MapLoaded handshake driven by the adapter via LocalMapLoaded",
             event.map_name
         );
         actor_init_events.write(ActorInitSent);

@@ -161,3 +161,13 @@ pub struct ConnectZone {
     pub zone_auth_token: Vec<u8>,
     pub map_name: String,
 }
+
+/// Domain to adapter readiness signal: the local map asset finished loading.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct LocalMapLoaded;
+
+/// Domain to adapter readiness signal: the local player entity exists.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct LocalPlayerReady;
