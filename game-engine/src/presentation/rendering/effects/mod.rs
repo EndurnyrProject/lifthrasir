@@ -4,6 +4,7 @@ pub mod portal;
 use bevy::prelude::*;
 use bevy_hanabi::prelude::*;
 
+pub use impact::ImpactVfxPlugin;
 pub use portal::{PortalVfx, PortalVfxPlugin};
 
 /// Ordering anchor for presentation-layer visual-effect systems (hanabi particle
@@ -24,6 +25,7 @@ impl Plugin for VfxPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(HanabiPlugin)
             .configure_sets(Update, VfxSystems)
-            .add_plugins(PortalVfxPlugin);
+            .add_plugins(PortalVfxPlugin)
+            .add_plugins(ImpactVfxPlugin);
     }
 }
