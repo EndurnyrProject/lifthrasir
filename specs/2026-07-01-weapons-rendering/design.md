@@ -2,6 +2,7 @@
 
 Date: 2026-07-01
 Status: Approved
+Tasks: [tasks.md](tasks.md)
 
 ## 1. Overview & scope
 
