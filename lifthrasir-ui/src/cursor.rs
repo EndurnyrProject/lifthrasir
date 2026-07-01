@@ -1,13 +1,21 @@
 //! Native RO cursor.
 //!
 //! The Ragnarok cursors are static single-frame PNGs (one per [`CursorType`]), so
-//! Bevy 0.18's built-in `CursorIcon::Custom` does the whole job — no sprite-sheet
-//! crate, no hand-drawn UI node, no hiding the OS cursor (the custom image *is* the
-//! OS cursor). The engine drives [`CurrentCursorType`] from terrain/hover state; we
-//! mirror it onto the primary window whenever it changes.
+//! Bevy's built-in custom cursor does the whole job — no sprite-sheet crate, no
+//! hand-drawn UI node, no hiding the OS cursor (the custom image *is* the OS
+//! cursor). The engine drives [`CurrentCursorType`] from terrain/hover state.
+//!
+//! We do **not** insert `CursorIcon` on the window directly: `bevy_feathers`'
+//! `CursorIconPlugin` runs its own `update_cursor` every `PreUpdate` and would
+//! overwrite our cursor back to the OS arrow on the next frame, leaving the RO
+//! cursor visible only for the single frame its type changed. Instead we feed the
+//! RO cursor into Feathers' `OverrideCursor` resource, making Feathers the single
+//! authority that mirrors it onto the window (with its own change detection) and
+//! ensuring the RO cursor wins even over Feathers widgets that set their own.
 
 use bevy::prelude::*;
-use bevy::window::{CursorIcon, CustomCursor, CustomCursorImage, PrimaryWindow};
+use bevy::window::{CustomCursor, CustomCursorImage};
+use bevy_feathers::cursor::{EntityCursor, OverrideCursor};
 use game_engine::domain::input::{CurrentCursorType, CursorType};
 
 /// `AssetServer` path (relative to `assets/`) holding the extracted cursor PNGs.
@@ -69,16 +77,15 @@ fn load_cursor_textures(mut commands: Commands, asset_server: Res<AssetServer>) 
     });
 }
 
-/// Pushes the current cursor image onto the primary window once its PNG has
+/// Feeds the current cursor image into Feathers' `OverrideCursor` once its PNG has
 /// loaded. Gating on load avoids winit's per-frame "image not loaded yet" warning,
-/// and the `AppliedCursor` guard re-runs the insert only when the type changes.
+/// and the `AppliedCursor` guard rebuilds the override only when the type changes.
 fn apply_cursor(
     current: Res<CurrentCursorType>,
     textures: Res<CursorTextures>,
     images: Res<Assets<Image>>,
     mut applied: ResMut<AppliedCursor>,
-    mut commands: Commands,
-    window: Query<Entity, With<PrimaryWindow>>,
+    mut override_cursor: ResMut<OverrideCursor>,
 ) {
     let desired = current.get();
     if applied.0 == Some(desired) {
@@ -88,19 +95,16 @@ fn apply_cursor(
     if images.get(&handle).is_none() {
         return;
     }
-    let Ok(window) = window.single() else {
-        return;
-    };
-    commands
-        .entity(window)
-        .insert(CursorIcon::Custom(CustomCursor::Image(CustomCursorImage {
+    override_cursor.0 = Some(EntityCursor::Custom(CustomCursor::Image(
+        CustomCursorImage {
             handle,
             texture_atlas: None,
             flip_x: false,
             flip_y: false,
             rect: None,
             hotspot: hotspot(desired),
-        })));
+        },
+    )));
     applied.0 = Some(desired);
 }
 

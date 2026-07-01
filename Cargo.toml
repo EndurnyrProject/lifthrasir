@@ -18,7 +18,7 @@ edition = "2021"
 
 [workspace.dependencies]
 bevy = { version = "0.19.0", features = ["jpeg", "wayland"] }
-bevy_feathers = "0.19.0"
+bevy_feathers = { version = "0.19.0", features = ["custom_cursor"] }
 secrecy = { version = "0.10", features = ["serde"] }
 leafwing-input-manager = "0.21"
 bevy_quinnet = { git = "https://github.com/ycastorium/bevy_quinnet.git", branch = "bevy-0.19" }
