@@ -26,8 +26,8 @@ use crate::domain::entities::character::events::{SkillLearnRequested, StatIncrea
 use crate::domain::entities::character::states::AnimationState;
 
 use super::{
-    cursor::CursorType, events::CursorChangeRequest, terrain_raycast::TerrainRaycastCache,
-    ui_focus::ui_unfocused, ForwardedMouseClick, PlayerAction,
+    cursor::CursorType, events::CursorChangeRequest, targeting::TargetingMode,
+    terrain_raycast::TerrainRaycastCache, ui_focus::ui_unfocused, ForwardedMouseClick, PlayerAction,
 };
 
 // =============================================================================
@@ -111,10 +111,17 @@ pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>
 )]
 pub fn handle_entity_click(
     mut mouse_click: ResMut<ForwardedMouseClick>,
+    targeting: Res<TargetingMode>,
     currently_hovered: Res<CurrentlyHoveredEntity>,
     mob_query: Query<&NetworkEntity, With<Mob>>,
     mut attacks: MessageWriter<AttackRequested>,
 ) {
+    // While a skill is armed, the click belongs to `targeting_click`; consuming
+    // it here would turn a skill cast into an auto-attack (order-independent guard).
+    if *targeting != TargetingMode::Idle {
+        return;
+    }
+
     if mouse_click.position.is_none() {
         return;
     }
@@ -148,10 +155,17 @@ pub fn handle_entity_click(
 pub fn handle_terrain_click(
     mut commands: Commands,
     mut mouse_click: ResMut<ForwardedMouseClick>,
+    targeting: Res<TargetingMode>,
     cache: Res<TerrainRaycastCache>,
     map_data: MapData,
     player_query: Query<(Entity, &Transform), With<LocalPlayer>>,
 ) {
+    // A click while a skill is armed must not move the player: leave it for
+    // `targeting_click` to resolve into a cast (order-independent guard).
+    if *targeting != TargetingMode::Idle {
+        return;
+    }
+
     if mouse_click.position.take().is_none() {
         return;
     }
@@ -344,4 +358,74 @@ pub fn set_default_cursor_for_character_selection(
     mut cursor_messages: MessageWriter<CursorChangeRequest>,
 ) {
     cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::entities::types::ObjectType;
+
+    fn click_app() -> App {
+        let mut app = App::new();
+        app.init_resource::<ForwardedMouseClick>()
+            .init_resource::<TargetingMode>()
+            .init_resource::<CurrentlyHoveredEntity>()
+            .add_message::<AttackRequested>()
+            .add_systems(Update, handle_entity_click);
+        app
+    }
+
+    fn hovered_mob(app: &mut App) -> Entity {
+        let mob = app
+            .world_mut()
+            .spawn((NetworkEntity::new(42, 42, ObjectType::Mob), Mob))
+            .id();
+        app.world_mut()
+            .resource_mut::<CurrentlyHoveredEntity>()
+            .entity = Some(mob);
+        app.world_mut()
+            .resource_mut::<ForwardedMouseClick>()
+            .position = Some(Vec2::ZERO);
+        mob
+    }
+
+    fn attacks(app: &App) -> Vec<AttackRequested> {
+        app.world()
+            .resource::<Messages<AttackRequested>>()
+            .iter_current_update_messages()
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn armed_targeting_leaves_click_for_targeting_and_does_not_attack() {
+        let mut app = click_app();
+        hovered_mob(&mut app);
+        *app.world_mut().resource_mut::<TargetingMode>() =
+            TargetingMode::AwaitingEntity { skill_id: 5, level: 1 };
+
+        app.update();
+
+        assert!(attacks(&app).is_empty(), "armed skill must not auto-attack");
+        assert!(
+            app.world().resource::<ForwardedMouseClick>().position.is_some(),
+            "click must survive for targeting_click to resolve into a cast"
+        );
+    }
+
+    #[test]
+    fn idle_targeting_attacks_hovered_mob_and_consumes_click() {
+        let mut app = click_app();
+        hovered_mob(&mut app);
+
+        app.update();
+
+        let msgs = attacks(&app);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].target_id, 42);
+        assert!(
+            app.world().resource::<ForwardedMouseClick>().position.is_none(),
+            "a normal attack consumes the click"
+        );
+    }
 }
