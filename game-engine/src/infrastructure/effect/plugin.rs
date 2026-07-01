@@ -5,7 +5,7 @@ use super::catalog::{
 use crate::domain::effects::{
     advance_effect_timers, despawn_finished_effects, follow_effect_anchor,
     initialize_effect_layers, on_ground_skill, on_skill_damage, on_skill_effect,
-    order_effect_layers_by_depth, rebuild_effect_layers,
+    order_effect_layers_by_depth, rebuild_effect_layers, PlayProceduralVfx,
 };
 use crate::presentation::rendering::effect_material::EffectMaterial;
 use bevy::prelude::*;
@@ -18,6 +18,7 @@ pub struct EffectsPlugin;
 impl Plugin for EffectsPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<EffectMaterial>::default())
+            .add_message::<PlayProceduralVfx>()
             .add_systems(
                 Startup,
                 (

@@ -17,6 +17,7 @@ use lifthrasir_data::{EffectDescriptor, EffectPlacement};
 use moonshine_behavior::prelude::BehaviorMut;
 
 use super::components::EffectAnchor;
+use super::events::PlayProceduralVfx;
 use super::systems::spawn_effect;
 use crate::domain::audio::events::PlaySkillSfx;
 use crate::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
@@ -30,6 +31,34 @@ use net_contract::events::{GroundSkillPlaced, SkillDamageReceived, SkillEffectSh
 /// Despawn timer for repeating ground effects (aesir sends no removal packet;
 /// design §4 "Lifetime boundary"). A `RemoveGroundSkill` event would supersede.
 const GROUND_EFFECT_LIFETIME_SECS: f32 = 8.0;
+
+/// Vertical offset from a unit's `Transform.translation` (its feet) to its body
+/// center, where a procedural VFX anchors. Half of the damage-number head offset
+/// (`+2.0`), so the burst reads as centered on the target's torso.
+const VFX_CENTER_HEIGHT: f32 = 1.0;
+
+/// Write a `PlayProceduralVfx` for a descriptor's procedural key, anchored to the
+/// resolved unit's body center. Non-critical (design §D6): skips with a `debug!`
+/// when the unit has no transform, never inventing a default position.
+fn emit_procedural_vfx(
+    proc_vfx: &mut MessageWriter<PlayProceduralVfx>,
+    transforms: &Query<&Transform>,
+    descriptor: &EffectDescriptor,
+    anchor: Entity,
+) {
+    let Some(key) = &descriptor.vfx else {
+        return;
+    };
+    let Ok(transform) = transforms.get(anchor) else {
+        debug!("No transform for procedural vfx anchor {anchor}");
+        return;
+    };
+    proc_vfx.write(PlayProceduralVfx {
+        key: key.clone(),
+        position: transform.translation + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0),
+        color: descriptor_tint(descriptor),
+    });
+}
 
 /// Resolve a unit by the gid aesir keys in-game packets on (see
 /// `combat/systems.rs`). `None` when the unit is not in the world.
@@ -108,6 +137,7 @@ pub fn on_skill_effect(
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     transforms: Query<&Transform>,
     mut sfx: MessageWriter<PlaySkillSfx>,
+    mut proc_vfx: MessageWriter<PlayProceduralVfx>,
 ) {
     for event in events.read() {
         let src = resolve_gid(&network_entities, event.src_id);
@@ -147,6 +177,7 @@ pub fn on_skill_effect(
         );
 
         play_sound(&mut sfx, descriptor, emitter);
+        emit_procedural_vfx(&mut proc_vfx, &transforms, descriptor, anchor_entity);
     }
 }
 
@@ -163,6 +194,7 @@ pub fn on_skill_damage(
     transforms: Query<&Transform>,
     mut damage_display: MessageWriter<DisplayDamageNumber>,
     mut sfx: MessageWriter<PlaySkillSfx>,
+    mut proc_vfx: MessageWriter<PlayProceduralVfx>,
 ) {
     for event in events.read() {
         let src = resolve_gid(&network_entities, event.src_id);
@@ -209,6 +241,7 @@ pub fn on_skill_damage(
         );
 
         play_sound(&mut sfx, descriptor, emitter);
+        emit_procedural_vfx(&mut proc_vfx, &transforms, descriptor, target);
     }
 }
 
@@ -288,6 +321,7 @@ mod tests {
             .add_message::<GroundSkillPlaced>()
             .add_message::<DisplayDamageNumber>()
             .add_message::<PlaySkillSfx>()
+            .add_message::<PlayProceduralVfx>()
             .insert_resource(seeded_catalog());
         app
     }
@@ -452,6 +486,70 @@ mod tests {
         assert_eq!(
             emitted[0].emitter, target,
             "sound anchors to the target unit"
+        );
+    }
+
+    #[test]
+    fn procedural_skill_emits_vfx_without_spawning_effect() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+
+        let target = spawn_unit(&mut app, 200);
+        let target_pos = Vec3::new(3.0, 0.0, 7.0);
+        app.world_mut()
+            .entity_mut(target)
+            .insert(Transform::from_translation(target_pos));
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 5, // SM_BASH — procedural vfx "bash", no STR effect
+            level: 1,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 75,
+            div: 1,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        });
+
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "procedural skill spawns no STR effect"
+        );
+
+        let vfx = app
+            .world_mut()
+            .resource_mut::<Messages<PlayProceduralVfx>>();
+        let mut cursor = vfx.get_cursor();
+        let emitted: Vec<_> = cursor.read(&vfx).collect();
+        assert_eq!(emitted.len(), 1, "one procedural vfx emitted");
+        assert_eq!(emitted[0].key, "bash");
+        assert_eq!(
+            emitted[0].position,
+            target_pos + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0)
+        );
+
+        let damage = app
+            .world_mut()
+            .resource_mut::<Messages<DisplayDamageNumber>>();
+        let mut damage_cursor = damage.get_cursor();
+        assert_eq!(
+            damage_cursor.read(&damage).count(),
+            1,
+            "damage number still emitted"
+        );
+
+        let sfx = app.world_mut().resource_mut::<Messages<PlaySkillSfx>>();
+        let mut sfx_cursor = sfx.get_cursor();
+        assert_eq!(
+            sfx_cursor.read(&sfx).count(),
+            1,
+            "sound still played for the procedural skill"
         );
     }
 

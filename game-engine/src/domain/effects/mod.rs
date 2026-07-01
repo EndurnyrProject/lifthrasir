@@ -1,9 +1,11 @@
 pub mod components;
+pub mod events;
 pub mod map_effects;
 pub mod systems;
 pub mod triggers;
 
 pub use components::{ActiveEffect, EffectAnchor, EffectFrameTimer, EffectLayer, EffectLifetime};
+pub use events::PlayProceduralVfx;
 pub use map_effects::{spawn_map_effects, MapEffectsSpawned};
 pub use systems::{
     advance_effect_timers, despawn_finished_effects, follow_effect_anchor,
