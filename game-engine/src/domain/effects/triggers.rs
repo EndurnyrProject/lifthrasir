@@ -32,10 +32,11 @@ use net_contract::events::{GroundSkillPlaced, SkillDamageReceived, SkillEffectSh
 /// design §4 "Lifetime boundary"). A `RemoveGroundSkill` event would supersede.
 const GROUND_EFFECT_LIFETIME_SECS: f32 = 8.0;
 
-/// Vertical offset from a unit's `Transform.translation` (its feet) to its body
-/// center, where a procedural VFX anchors. Half of the damage-number head offset
-/// (`+2.0`), so the burst reads as centered on the target's torso.
-const VFX_CENTER_HEIGHT: f32 = 1.0;
+/// Vertical offset from a unit's `Transform.translation` (its feet) to where a
+/// procedural VFX anchors. Up is `-Y` in this world, so the offset is negative to
+/// lift the burst off the ground and read it over the target's body rather than
+/// clipping into the terrain.
+const VFX_CENTER_HEIGHT: f32 = -2.0;
 
 /// Write a `PlayProceduralVfx` for a descriptor's procedural key, anchored to the
 /// resolved unit's body center. Non-critical (design §D6): skips with a `debug!`
