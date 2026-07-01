@@ -1,5 +1,71 @@
 # Changelog
 
+## [0.4.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.3.0...v0.4.0) (2026-07-01)
+
+
+### Features
+
+* Added support to TAA and Ssao ([e886294](https://github.com/EndurnyrProject/lifthrasir/commit/e886294b29d50002dab44162ef0d3036f96330d8))
+* **assets:** add xBRZ upscale primitive with memory guard ([cc2b196](https://github.com/EndurnyrProject/lifthrasir/commit/cc2b196da760a149e447fd1207d91370252943cf))
+* **assets:** upscale terrain and model textures via BmpLoader settings ([ab686c7](https://github.com/EndurnyrProject/lifthrasir/commit/ab686c78fff6523b70e70b2e39cce53b058556ef))
+* **camera:** step-based zoom, halve max distance, indoor diagonal profile ([d069be6](https://github.com/EndurnyrProject/lifthrasir/commit/d069be6738c13638759d08941009c28042517336))
+* **character:** store gender as a component ([84bf95d](https://github.com/EndurnyrProject/lifthrasir/commit/84bf95df5bf0b9f57205acf3fe7f2c2a54e6b6d1))
+* **dlss:** add off-by-default dlss feature and DlssProjectId ([51a6360](https://github.com/EndurnyrProject/lifthrasir/commit/51a636088ee7648712eb7f0d6a572b1c826bd361))
+* **dlss:** apply DLSS super resolution to the world camera ([a4832af](https://github.com/EndurnyrProject/lifthrasir/commit/a4832af28c32498780df26ae2cd288263e1b58e3))
+* **effects:** add vfx key to EffectDescriptor and Bash catalog entry ([39fadfe](https://github.com/EndurnyrProject/lifthrasir/commit/39fadfef25989bc8a14aca410ca0f68bdcf0b51c))
+* **effects:** emit PlayProceduralVfx from skill triggers ([f193edc](https://github.com/EndurnyrProject/lifthrasir/commit/f193edc6bff868fc900da26d030af15abff5d560))
+* **effects:** wire Aesir bucket-A skill effects into the catalog ([c23ed53](https://github.com/EndurnyrProject/lifthrasir/commit/c23ed532a920da1e7ea2f70f399bfbd4dfa8eb7e))
+* **equipment:** add accessory-name converter and data ([c14b543](https://github.com/EndurnyrProject/lifthrasir/commit/c14b543fcd3465783f699feeffd488a05e85c130))
+* **equipment:** add equip-location bitmask decode ([4d32033](https://github.com/EndurnyrProject/lifthrasir/commit/4d32033bbf17eb4df8e7e181e0412927875b48e3))
+* **equipment:** add headgear sprite path builder ([e348513](https://github.com/EndurnyrProject/lifthrasir/commit/e3485134733925bca5d4a8acf387d6fa78fd7259))
+* **equipment:** align headgear to head attach point ([e771bee](https://github.com/EndurnyrProject/lifthrasir/commit/e771bee35f2a4582956bc74a21e7d9eece7e3226))
+* **equipment:** apply equip/unequip results ([7e4afc2](https://github.com/EndurnyrProject/lifthrasir/commit/7e4afc27ff47de0b06d12ce556c2fbef94d0123a))
+* **equipment:** load accessory db resource ([45eb281](https://github.com/EndurnyrProject/lifthrasir/commit/45eb281e3601fdaa454eb102839c167b880e448c))
+* **equipment:** render remote players' headgear ([2b8ec7d](https://github.com/EndurnyrProject/lifthrasir/commit/2b8ec7d064c6306f95f08c9515064d651f1bd4d7))
+* **equipment:** resolve headgear sprites by view id ([3858619](https://github.com/EndurnyrProject/lifthrasir/commit/38586197d0aa79084b7daf2d2fab542c9399cae3))
+* **equipment:** send equip/unequip requests ([569f664](https://github.com/EndurnyrProject/lifthrasir/commit/569f66480971a872845787c40dc2b133b5013ca8))
+* **item-drop:** click-to-pickup and pickup-result feedback ([af7ee19](https://github.com/EndurnyrProject/lifthrasir/commit/af7ee1988f681cb6324ae5def535f23c5c3fd37d))
+* **item-drop:** falling/bounce animation for fresh drops ([de09b47](https://github.com/EndurnyrProject/lifthrasir/commit/de09b47a059b4672b99b07219319bc51c8fb83c2))
+* **item-drop:** hover detection and pickup cursor for ground items ([b7c19e4](https://github.com/EndurnyrProject/lifthrasir/commit/b7c19e435ce5938a27277f00afe067c8b233ee0a))
+* **item-drop:** play pickup animation on successful pickup ([efc613a](https://github.com/EndurnyrProject/lifthrasir/commit/efc613a2eff0e767e7bfa78268328c71822f7887))
+* **item-drop:** show item name label on hover ([823be3c](https://github.com/EndurnyrProject/lifthrasir/commit/823be3c4d48a6d179581fe470501d1f809804209))
+* **item-drop:** spawn and despawn ground-item entities ([e3e2430](https://github.com/EndurnyrProject/lifthrasir/commit/e3e24300cf7140dce5483b227590c8861d948c20))
+* **net-contract:** add ground-item events and pickup command ([f5f6572](https://github.com/EndurnyrProject/lifthrasir/commit/f5f65721d0c54dfc0a5dc05e0607b8bda25ad810))
+* **net:** gate net-aesir adapter behind default cargo feature ([909c26d](https://github.com/EndurnyrProject/lifthrasir/commit/909c26d38cbfb66db1a88204b3e12ffef43bb393))
+* **net:** scaffold net-contract crate and NetContractPlugin ([aff1ca9](https://github.com/EndurnyrProject/lifthrasir/commit/aff1ca9c51be0b6df07213ce5aa40a49d00518b7))
+* **net:** wire aesir ground-item adapter (mapping/flow/send) ([3790bf2](https://github.com/EndurnyrProject/lifthrasir/commit/3790bf2ac814514beb32538f337b8aa877ea74a9))
+* **portal:** Added custom portal effec ([98fc86b](https://github.com/EndurnyrProject/lifthrasir/commit/98fc86b92b42fa918a3aaf46ed99939c66ffc2ca))
+* **settings-ui:** add DLSS stepper to graphics settings ([9e4fe59](https://github.com/EndurnyrProject/lifthrasir/commit/9e4fe59e47bff52b043374951eff8475fc7d6272))
+* **settings:** add DlssMode graphics setting ([71f516d](https://github.com/EndurnyrProject/lifthrasir/commit/71f516da8392805c2ce9803e70e0c2d311e63b6a))
+* **settings:** add Upscaling graphics setting ([00329c1](https://github.com/EndurnyrProject/lifthrasir/commit/00329c1e113e237a068ca4e8eef53cb94196c989))
+* **sprite:** render player weapons and shields ([7fcc0a0](https://github.com/EndurnyrProject/lifthrasir/commit/7fcc0a0884c3d5d42ccdfc3b4b12ccd06f36096a))
+* **sprite:** render RO item collection sprites for ground drops ([cbf7573](https://github.com/EndurnyrProject/lifthrasir/commit/cbf757379a11b71d3b6a8eecccbe882d8c7d9313))
+* **sprites:** upscale SPR frame textures via xBRZ ([cba3353](https://github.com/EndurnyrProject/lifthrasir/commit/cba33537c063d3c7a55eb1ad9654f2e0c295fda2))
+* **ui:** add upscaling stepper to graphics settings ([c7e30ae](https://github.com/EndurnyrProject/lifthrasir/commit/c7e30aecfc93f499d7bb923dfb9ec5dd23916a50))
+* **ui:** equip/unequip on inventory double-click ([6f5dc2f](https://github.com/EndurnyrProject/lifthrasir/commit/6f5dc2f4db8c8caade27425eb6986e1797b64c9f))
+* **ui:** equipment window with live preview and inventory-driven equip state ([15808a8](https://github.com/EndurnyrProject/lifthrasir/commit/15808a8c54b575689d87a46453c9ce91466b6bcf))
+* Update to Bevy 0.19 ([08cf9db](https://github.com/EndurnyrProject/lifthrasir/commit/08cf9db5ce14dc17bbe51780134085e0e20f48d1))
+* **vfx:** add Bash impact burst and ImpactVfxPlugin ([926b0a5](https://github.com/EndurnyrProject/lifthrasir/commit/926b0a55399db2d911a16d7e8ff3d2d7b692c02f))
+* **vfx:** add FactorRamp driver and shared quad primitives ([7a74fb4](https://github.com/EndurnyrProject/lifthrasir/commit/7a74fb4dc8219760f19561bc77422048ca185d6a))
+* **vfx:** add impact-core and four-point-star materials ([c34220d](https://github.com/EndurnyrProject/lifthrasir/commit/c34220ded3ef39c6244797cd0c623bcb7ed3983d))
+
+
+### Bug Fixes
+
+* **cursor:** drive RO cursor via Feathers OverrideCursor ([d9975e0](https://github.com/EndurnyrProject/lifthrasir/commit/d9975e00ae022af1e286a0ce40a989e1ffa1c6e6))
+* **effects:** correct skill id 18 mapping to firewall ([130a7cc](https://github.com/EndurnyrProject/lifthrasir/commit/130a7ccab0eefde0c9e192092df339adc267eb3a))
+* **effects:** use correct wav paths for skill sounds ([3c454db](https://github.com/EndurnyrProject/lifthrasir/commit/3c454db174b6f01f036be0e6fca4cce53400729e))
+* **equipment:** drive headgear render from SpriteChange, not equip ack ([8d0af66](https://github.com/EndurnyrProject/lifthrasir/commit/8d0af66fb94a4ac6c4264f91547e0d4b3a02df68))
+* **equipment:** stack headgear in front of head along camera axis ([5e7aa6e](https://github.com/EndurnyrProject/lifthrasir/commit/5e7aa6e7c02a5cdf4de1a0b22470d7472b5b88bc))
+* Fixed the need of STR effects ([00efe05](https://github.com/EndurnyrProject/lifthrasir/commit/00efe05274defb0c0d273b3d5ae6046c3c3dd1c9))
+* Format ([2eb57c1](https://github.com/EndurnyrProject/lifthrasir/commit/2eb57c1730c90218cb908ab931d5b4fb74458a58))
+* **hotbar:** unregister a slot when dragged off the bar ([5263ed4](https://github.com/EndurnyrProject/lifthrasir/commit/5263ed4af97fca3683ac94f80a90889bde4c242e))
+* **item-drop:** give floor items Visibility to silence B0004 ([4506ea2](https://github.com/EndurnyrProject/lifthrasir/commit/4506ea2001659d007cb7a19934750ab4124661db))
+* **skill:** drive Play Dead pose from trickdead status and recover on cancel ([f97671f](https://github.com/EndurnyrProject/lifthrasir/commit/f97671fe09f55a7332ef10957f48527e8f1ac525))
+* **skill:** show damage number and attack animation for uncatalogued skills ([856552d](https://github.com/EndurnyrProject/lifthrasir/commit/856552daa2a9af0d94881094585d5075136d7746))
+* **targeting:** Fix skill targeting ([d5d578e](https://github.com/EndurnyrProject/lifthrasir/commit/d5d578e055be97cc6a13d1d8bed0570d69bc91fa))
+* **vfx:** lift procedural burst off terrain (-Y is up) ([e765ce9](https://github.com/EndurnyrProject/lifthrasir/commit/e765ce9eccc6eb31230e98758ed41090d83eb1f8))
+
 ## [0.3.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.2.0...v0.3.0) (2026-06-26)
 
 
