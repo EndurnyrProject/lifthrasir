@@ -27,7 +27,8 @@ use crate::domain::entities::character::states::AnimationState;
 
 use super::{
     cursor::CursorType, events::CursorChangeRequest, targeting::TargetingMode,
-    terrain_raycast::TerrainRaycastCache, ui_focus::ui_unfocused, ForwardedMouseClick, PlayerAction,
+    terrain_raycast::TerrainRaycastCache, ui_focus::ui_unfocused, ForwardedMouseClick,
+    PlayerAction,
 };
 
 // =============================================================================
@@ -401,14 +402,19 @@ mod tests {
     fn armed_targeting_leaves_click_for_targeting_and_does_not_attack() {
         let mut app = click_app();
         hovered_mob(&mut app);
-        *app.world_mut().resource_mut::<TargetingMode>() =
-            TargetingMode::AwaitingEntity { skill_id: 5, level: 1 };
+        *app.world_mut().resource_mut::<TargetingMode>() = TargetingMode::AwaitingEntity {
+            skill_id: 5,
+            level: 1,
+        };
 
         app.update();
 
         assert!(attacks(&app).is_empty(), "armed skill must not auto-attack");
         assert!(
-            app.world().resource::<ForwardedMouseClick>().position.is_some(),
+            app.world()
+                .resource::<ForwardedMouseClick>()
+                .position
+                .is_some(),
             "click must survive for targeting_click to resolve into a cast"
         );
     }
@@ -424,7 +430,10 @@ mod tests {
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].target_id, 42);
         assert!(
-            app.world().resource::<ForwardedMouseClick>().position.is_none(),
+            app.world()
+                .resource::<ForwardedMouseClick>()
+                .position
+                .is_none(),
             "a normal attack consumes the click"
         );
     }

@@ -9,7 +9,7 @@ pub struct HoverConfig {
 
 impl Default for HoverConfig {
     fn default() -> Self {
-        Self { radius: 30.0 }
+        Self { radius: 45.0 }
     }
 }
 

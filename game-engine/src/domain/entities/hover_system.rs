@@ -1,5 +1,6 @@
 use crate::core::state::GameState;
 use crate::domain::input::ForwardedCursorPosition;
+use crate::domain::sprite::tags::SPRITE_BASE_Y_OFFSET;
 use crate::domain::system_sets::EntityInteractionSystems;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -47,23 +48,42 @@ pub fn update_entity_bounds_system(
     };
 
     for (entity, _network_entity, entity_transform) in entity_query.iter() {
-        let world_pos = entity_transform.translation();
-
-        // Logical viewport pixels to match ForwardedCursorPosition (CursorMoved is
-        // logical). The old world_to_ndc * physical_viewport_size produced physical
-        // pixels, mismatching the cursor by the window scale factor (2x on Retina) so
-        // hover never registered. Same projection the nameplate uses to follow targets.
-        let Ok(screen_pos) = camera.world_to_viewport(camera_transform, world_pos) else {
+        let Some(screen_bounds) = sprite_hover_bounds(
+            camera,
+            camera_transform,
+            entity_transform.translation(),
+            hover_config.radius,
+        ) else {
             continue;
         };
-
-        let screen_bounds =
-            Rect::from_center_size(screen_pos, Vec2::splat(hover_config.radius * 2.0));
 
         commands
             .entity(entity)
             .try_insert(Hoverable::new(screen_bounds));
     }
+}
+
+/// Screen-space hit box centred on the *rendered* sprite, which the billboard
+/// child lifts by `SPRITE_BASE_Y_OFFSET` (world-up is -Y). Anchoring on the
+/// un-lifted root left the box below the visible sprite so clicks missed it.
+///
+/// Logical viewport pixels to match `ForwardedCursorPosition` (CursorMoved is
+/// logical); `world_to_viewport` projects into logical space so the cursor and
+/// box share units regardless of window scale factor.
+fn sprite_hover_bounds(
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    root_translation: Vec3,
+    radius: f32,
+) -> Option<Rect> {
+    let sprite_pos = root_translation + Vec3::Y * SPRITE_BASE_Y_OFFSET;
+    let screen_pos = camera
+        .world_to_viewport(camera_transform, sprite_pos)
+        .ok()?;
+    Some(Rect::from_center_size(
+        screen_pos,
+        Vec2::splat(radius * 2.0),
+    ))
 }
 
 #[auto_add_system(
@@ -133,5 +153,52 @@ pub fn entity_hover_detection_system(
             currently_hovered.entity = None;
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::camera::{PerspectiveProjection, Projection, RenderTargetInfo};
+
+    fn test_camera(size: Vec2) -> Camera {
+        let mut projection = Projection::Perspective(PerspectiveProjection::default());
+        projection.update(size.x, size.y);
+        let mut camera = Camera::default();
+        camera.computed.target_info = Some(RenderTargetInfo {
+            physical_size: size.as_uvec2(),
+            scale_factor: 1.0,
+        });
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        camera
+    }
+
+    #[test]
+    fn hover_box_covers_rendered_sprite() {
+        let size = Vec2::new(1280.0, 720.0);
+        let camera = test_camera(size);
+        let camera_transform = GlobalTransform::from(
+            Transform::from_xyz(0.0, 0.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
+        );
+        let root_translation = Vec3::new(3.0, 0.0, 0.0);
+
+        let bounds =
+            sprite_hover_bounds(&camera, &camera_transform, root_translation, 45.0).unwrap();
+
+        let sprite_pos = root_translation + Vec3::Y * SPRITE_BASE_Y_OFFSET;
+        let sprite_screen = camera
+            .world_to_viewport(&camera_transform, sprite_pos)
+            .unwrap();
+        assert!(
+            bounds.contains(sprite_screen),
+            "cursor on the rendered sprite must fall inside the hover box"
+        );
+
+        // The lift is load-bearing: the box must not stay centred on the un-lifted root.
+        let root_screen = camera
+            .world_to_viewport(&camera_transform, root_translation)
+            .unwrap();
+        assert!(bounds.center().abs_diff_eq(sprite_screen, 0.01));
+        assert!(!bounds.center().abs_diff_eq(root_screen, 0.01));
     }
 }
