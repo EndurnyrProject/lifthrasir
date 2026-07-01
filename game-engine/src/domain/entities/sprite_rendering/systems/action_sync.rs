@@ -6,7 +6,7 @@ use bevy_auto_plugin::prelude::*;
 use crate::domain::combat::components::AttackTimer;
 use crate::domain::entities::billboard::EquipmentPreviewCamera;
 use crate::domain::entities::character::components::visual::{
-    ActionType, CharacterDirection, Direction,
+    ActionType, CharacterDirection, CombatMotion, Direction,
 };
 use crate::domain::entities::character::states::AnimationState;
 use crate::domain::entities::movement::components::MovementSpeed;
@@ -27,18 +27,42 @@ type SpriteActionQuery<'w, 's, T> = Query<
         &'static AnimationState,
         Option<&'static AttackTimer>,
         Option<&'static MovementSpeed>,
+        Option<&'static CombatMotion>,
         &'static mut RoSpriteGeneric<T>,
     ),
-    Or<(Changed<AnimationState>, Added<RoSpriteGeneric<T>>)>,
+    Or<(
+        Changed<AnimationState>,
+        Added<RoSpriteGeneric<T>>,
+        Changed<CombatMotion>,
+    )>,
 >;
+
+fn is_attack(action_type: ActionType) -> bool {
+    matches!(
+        action_type,
+        ActionType::Attack | ActionType::Attack1 | ActionType::Attack2
+    )
+}
+
+/// Remap an armed attack to the equipped weapon's real swing motion (ATTACK1/2/3
+/// vary by weapon). Idle/walk/etc. are left untouched, so an armed character out
+/// of combat stands in normal idle — the weapon simply isn't drawn there (its ACT
+/// has no idle frames), matching the reference client.
+fn resolve_action_type(base: ActionType, motion: Option<CombatMotion>) -> ActionType {
+    match motion {
+        Some(motion) if is_attack(base) => motion.attack,
+        _ => base,
+    }
+}
 
 fn sync_sprite_action_impl<T: ActionLayout>(time: &Res<Time>, query: &mut SpriteActionQuery<T>) {
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
 
-    for (state, attack_timer, movement_speed, mut ro_sprite) in query.iter_mut() {
-        let action_type: ActionType = (*state).into();
+    for (state, attack_timer, movement_speed, combat_motion, mut ro_sprite) in query.iter_mut() {
+        let base: ActionType = (*state).into();
+        let action_type = resolve_action_type(base, combat_motion.copied());
         let duration_ms = attack_timer
-            .filter(|_| action_type == ActionType::Attack)
+            .filter(|_| is_attack(action_type))
             .map(|timer| timer.timer.duration().as_millis() as u32);
         ro_sprite.speed_factor = walk_speed_factor(action_type, movement_speed);
         ro_sprite.set_action_with_duration(action_type, duration_ms, game_time_ms);
@@ -147,6 +171,57 @@ pub fn sync_mob_sprite_direction(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SWORD_MOTION: CombatMotion = CombatMotion {
+        attack: ActionType::Attack2,
+    };
+
+    #[test]
+    fn without_motion_action_is_unchanged() {
+        assert_eq!(
+            resolve_action_type(ActionType::Idle, None),
+            ActionType::Idle
+        );
+        assert_eq!(
+            resolve_action_type(ActionType::Attack, None),
+            ActionType::Attack
+        );
+    }
+
+    #[test]
+    fn motion_remaps_attack_to_swing_and_leaves_idle_relaxed() {
+        // Out of combat the armed character stays in normal idle (the weapon has
+        // no idle frames); only the attack is remapped to the weapon's swing.
+        assert_eq!(
+            resolve_action_type(ActionType::Idle, Some(SWORD_MOTION)),
+            ActionType::Idle
+        );
+        assert_eq!(
+            resolve_action_type(ActionType::Attack, Some(SWORD_MOTION)),
+            ActionType::Attack2
+        );
+    }
+
+    #[test]
+    fn motion_leaves_other_actions_untouched() {
+        assert_eq!(
+            resolve_action_type(ActionType::Walk, Some(SWORD_MOTION)),
+            ActionType::Walk
+        );
+        assert_eq!(
+            resolve_action_type(ActionType::Hit, Some(SWORD_MOTION)),
+            ActionType::Hit
+        );
+    }
+
+    #[test]
+    fn is_attack_covers_all_attack_variants() {
+        assert!(is_attack(ActionType::Attack));
+        assert!(is_attack(ActionType::Attack1));
+        assert!(is_attack(ActionType::Attack2));
+        assert!(!is_attack(ActionType::Idle));
+        assert!(!is_attack(ActionType::ReadyFight));
+    }
 
     #[test]
     fn standard_speed_keeps_natural_walk_rate() {

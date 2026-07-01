@@ -15,9 +15,11 @@ pub mod action_offsets {
     pub const WALK: usize = 8; // 1 * 8
     pub const SIT: usize = 16; // 2 * 8
     pub const PICKUP: usize = 24; // 3 * 8
-    pub const STANDBY: usize = 32; // 4 * 8 (combat idle)
+    pub const STANDBY: usize = 32; // 4 * 8 (combat idle / readyfight)
+    pub const ATTACK1: usize = 40; // 5 * 8
     pub const HIT: usize = 48; // 6 * 8
     pub const DEAD: usize = 64; // 8 * 8
+    pub const ATTACK2: usize = 80; // 10 * 8
     pub const ATTACK: usize = 88; // 11 * 8 (Attack1/Attack3)
     pub const CASTING: usize = 96; // 12 * 8
 }
@@ -49,6 +51,9 @@ pub fn calculate_action_index(action_type: ActionType, direction: Direction) -> 
         ActionType::Dead => action_offsets::DEAD,
         ActionType::Cast => action_offsets::CASTING,
         ActionType::Special => action_offsets::PICKUP,
+        ActionType::ReadyFight => action_offsets::STANDBY,
+        ActionType::Attack1 => action_offsets::ATTACK1,
+        ActionType::Attack2 => action_offsets::ATTACK2,
     };
 
     base_offset + (direction as usize)
@@ -310,6 +315,42 @@ mod tests {
         assert_eq!(
             calculate_action_index(ActionType::Special, Direction::East),
             30
+        );
+    }
+
+    #[test]
+    fn test_readyfight_action_mapping() {
+        assert_eq!(
+            calculate_action_index(ActionType::ReadyFight, Direction::South),
+            32
+        );
+        assert_eq!(
+            calculate_action_index(ActionType::ReadyFight, Direction::East),
+            38
+        );
+    }
+
+    #[test]
+    fn test_attack1_action_mapping() {
+        assert_eq!(
+            calculate_action_index(ActionType::Attack1, Direction::South),
+            40
+        );
+        assert_eq!(
+            calculate_action_index(ActionType::Attack1, Direction::East),
+            46
+        );
+    }
+
+    #[test]
+    fn test_attack2_action_mapping() {
+        assert_eq!(
+            calculate_action_index(ActionType::Attack2, Direction::South),
+            80
+        );
+        assert_eq!(
+            calculate_action_index(ActionType::Attack2, Direction::East),
+            86
         );
     }
 

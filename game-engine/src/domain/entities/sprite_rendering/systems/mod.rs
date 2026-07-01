@@ -5,6 +5,8 @@ pub mod head_sync;
 pub mod headgear_sync;
 pub mod spawn;
 pub mod update;
+pub mod weapon_motion;
+pub mod weapon_sync;
 
 pub use action_sync::{
     sync_mob_sprite_action, sync_mob_sprite_direction, sync_player_sprite_action,
@@ -19,3 +21,5 @@ pub use head_sync::sync_player_head_layer;
 pub use headgear_sync::sync_headgear_layer;
 pub use spawn::spawn_sprite_hierarchy;
 pub use update::cleanup_orphaned_sprites;
+pub use weapon_motion::sync_weapon_combat_motion;
+pub use weapon_sync::sync_weapon_layer;

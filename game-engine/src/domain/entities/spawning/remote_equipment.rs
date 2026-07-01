@@ -21,8 +21,24 @@ pub fn headgear_view_ids(equipment: &EquipmentSet) -> Vec<(EquipmentSlot, u16)> 
     .collect()
 }
 
-/// Drive remote players' equipped headgear through the same renderer the local
-/// player uses. A remote PC is render-ready once its sprite hierarchy spawned its
+/// Weapon and shield slots of an `EquipmentSet` that carry a non-zero view id,
+/// paired with the slot that view id drives. Mirrors `headgear_view_ids`.
+pub fn weapon_shield_view_ids(equipment: &EquipmentSet) -> Vec<(EquipmentSlot, u16)> {
+    [
+        (EquipmentSlot::Weapon, equipment.weapon.as_ref()),
+        (EquipmentSlot::Shield, equipment.shield.as_ref()),
+    ]
+    .into_iter()
+    .filter_map(|(slot, item)| {
+        let view_id = item?.sprite_id;
+        (view_id != 0).then_some((slot, view_id))
+    })
+    .collect()
+}
+
+/// Drive remote players' equipped headgear, weapon and shield through the same
+/// renderer the local player uses. A remote PC is render-ready once its sprite
+/// hierarchy spawned its
 /// first child (`Added<Children>`), at which point `PlayerAppearance`/`Gender` are
 /// already present, so `handle_equipment_changes` can resolve the sprite. Only
 /// remote spawns carry an `EquipmentSet`, so the local player is excluded by the
@@ -32,12 +48,15 @@ pub fn headgear_view_ids(equipment: &EquipmentSet) -> Vec<(EquipmentSlot, u16)> 
     schedule = Update,
     config(in_set = EntityLifecycleSystems::Spawning)
 )]
-pub fn emit_remote_headgear_events(
+pub fn emit_remote_equipment_events(
     new_players: Query<(Entity, &EquipmentSet), Added<Children>>,
     mut changes: MessageWriter<EquipmentChangeEvent>,
 ) {
     for (entity, equipment) in new_players.iter() {
-        for (slot, view_id) in headgear_view_ids(equipment) {
+        let worn = headgear_view_ids(equipment)
+            .into_iter()
+            .chain(weapon_shield_view_ids(equipment));
+        for (slot, view_id) in worn {
             changes.write(EquipmentChangeEvent {
                 character: entity,
                 slot,
@@ -102,10 +121,32 @@ mod tests {
     }
 
     #[test]
+    fn weapon_shield_view_ids_returns_equipped_slots_and_skips_zero_or_absent() {
+        let equipped = EquipmentSet {
+            weapon: Some(item(1116)),
+            shield: Some(item(2)),
+            ..EquipmentSet::default()
+        };
+
+        assert_eq!(
+            weapon_shield_view_ids(&equipped),
+            vec![(EquipmentSlot::Weapon, 1116), (EquipmentSlot::Shield, 2)]
+        );
+
+        let unequipped = EquipmentSet {
+            weapon: Some(item(0)),
+            shield: None,
+            ..EquipmentSet::default()
+        };
+
+        assert!(weapon_shield_view_ids(&unequipped).is_empty());
+    }
+
+    #[test]
     fn render_ready_remote_player_emits_one_event_per_headgear() {
         let mut app = App::new();
         app.add_message::<EquipmentChangeEvent>();
-        app.add_systems(Update, emit_remote_headgear_events);
+        app.add_systems(Update, emit_remote_equipment_events);
 
         let equipment = EquipmentSet {
             head_top: Some(item(5)),

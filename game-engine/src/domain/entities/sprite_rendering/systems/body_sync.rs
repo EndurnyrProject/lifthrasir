@@ -109,6 +109,7 @@ pub fn sync_player_body_layer(
     mut materials: ResMut<Assets<StandardMaterial>>,
     parent_query: Query<&PlayerSprite>,
     mut layer_query: BodyLayerQuery,
+    mut sfx_writer: MessageWriter<PlayMobSfx>,
 ) {
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
     sync_body_layer_impl(
@@ -117,7 +118,7 @@ pub fn sync_player_body_layer(
         &mut materials,
         &parent_query,
         &mut layer_query,
-        None,
+        Some(&mut sfx_writer),
     );
 }
 

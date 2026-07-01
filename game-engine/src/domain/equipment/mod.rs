@@ -1,4 +1,4 @@
-pub mod local_headgear;
+pub mod local_equipment;
 pub mod location;
 pub mod plugin;
 pub mod request;

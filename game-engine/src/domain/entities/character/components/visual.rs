@@ -132,12 +132,16 @@ impl CharacterSprite {
             ActionType::Cast
         } else if index >= super::action_mapping::action_offsets::ATTACK {
             ActionType::Attack
+        } else if index >= super::action_mapping::action_offsets::ATTACK2 {
+            ActionType::Attack2
         } else if index >= super::action_mapping::action_offsets::DEAD {
             ActionType::Dead
         } else if index >= super::action_mapping::action_offsets::HIT {
             ActionType::Hit
+        } else if index >= super::action_mapping::action_offsets::ATTACK1 {
+            ActionType::Attack1
         } else if index >= super::action_mapping::action_offsets::STANDBY {
-            ActionType::Idle // Standby is combat idle
+            ActionType::ReadyFight
         } else if index >= super::action_mapping::action_offsets::PICKUP {
             ActionType::Special
         } else if index >= super::action_mapping::action_offsets::SIT {
@@ -166,6 +170,16 @@ pub enum ActionType {
     Dead = 5,
     Cast = 6,
     Special = 7,
+    ReadyFight = 8,
+    Attack1 = 9,
+    Attack2 = 10,
+}
+
+/// Records the resolved attack motion of a character's equipped weapon so an
+/// armed attack plays the weapon's real swing (ATTACK1/2/3 vary by weapon).
+#[derive(Component, Clone, Copy)]
+pub struct CombatMotion {
+    pub attack: ActionType,
 }
 
 impl From<EffectType> for SpriteLayerType {

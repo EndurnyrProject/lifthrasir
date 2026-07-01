@@ -220,7 +220,7 @@ pub fn spawn_network_entity_system(
 
         match event.object_type {
             crate::domain::entities::types::ObjectType::Pc => {
-                entity_cmd.insert(RemotePlayer);
+                entity_cmd.insert((RemotePlayer, SpatialAudioEmitter::default()));
                 debug!("Spawned remote player: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Npc => {

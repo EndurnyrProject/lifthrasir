@@ -6,6 +6,7 @@ use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::EquipmentChangeEvent;
 use net_contract::events::UnitSpriteChanged;
 
+const LOOK_WEAPON: u32 = 2;
 const LOOK_HEAD_BOTTOM: u32 = 3;
 const LOOK_HEAD_TOP: u32 = 4;
 const LOOK_HEAD_MID: u32 = 5;
@@ -19,10 +20,14 @@ fn headgear_slot(look_type: u32) -> Option<EquipmentSlot> {
     }
 }
 
+fn view_to_option(val: u32) -> Option<u16> {
+    (val != 0).then_some(val as u16)
+}
+
 /// Drive *remote* headgear rendering from the server's `SpriteChange`, the
 /// authoritative carrier of appearance view ids (`EquipResult.view_id` is always 0).
 /// The local player is skipped here and driven from its own `Inventory` instead
-/// (see `local_headgear::sync_local_player_headgear`), so its appearance never
+/// (see `local_equipment::sync_local_player_equipment`), so its appearance never
 /// depends on the self-targeted broadcast round-tripping. `val == 0` means the slot
 /// cleared, mapped to `view_id: None`. Non-headgear look types are skipped.
 #[auto_add_system(
@@ -35,9 +40,6 @@ pub fn apply_sprite_changes(
     registry: Res<EntityRegistry>,
 ) {
     for change in sprite_changes.read() {
-        let Some(slot) = headgear_slot(change.type_) else {
-            continue;
-        };
         let Some(character) = registry.get_entity(change.gid) else {
             continue;
         };
@@ -45,10 +47,27 @@ pub fn apply_sprite_changes(
             continue;
         }
 
+        if change.type_ == LOOK_WEAPON {
+            changes.write(EquipmentChangeEvent {
+                character,
+                slot: EquipmentSlot::Weapon,
+                view_id: view_to_option(change.val),
+            });
+            changes.write(EquipmentChangeEvent {
+                character,
+                slot: EquipmentSlot::Shield,
+                view_id: view_to_option(change.val2),
+            });
+            continue;
+        }
+
+        let Some(slot) = headgear_slot(change.type_) else {
+            continue;
+        };
         changes.write(EquipmentChangeEvent {
             character,
             slot,
-            view_id: (change.val != 0).then_some(change.val as u16),
+            view_id: view_to_option(change.val),
         });
     }
 }
@@ -139,7 +158,7 @@ mod tests {
             .resource_mut::<Messages<UnitSpriteChanged>>()
             .write(UnitSpriteChanged {
                 gid,
-                type_: 2,
+                type_: 1,
                 val: 13,
                 val2: 0,
             });
@@ -147,6 +166,52 @@ mod tests {
         app.update();
 
         assert!(emitted(&app).is_empty());
+    }
+
+    #[test]
+    fn look_weapon_emits_weapon_and_shield_events() {
+        let (mut app, character, gid) = setup();
+        app.world_mut()
+            .resource_mut::<Messages<UnitSpriteChanged>>()
+            .write(UnitSpriteChanged {
+                gid,
+                type_: LOOK_WEAPON,
+                val: 7,
+                val2: 9,
+            });
+
+        app.update();
+
+        assert_eq!(
+            emitted(&app),
+            vec![
+                (character, EquipmentSlot::Weapon, Some(7)),
+                (character, EquipmentSlot::Shield, Some(9)),
+            ]
+        );
+    }
+
+    #[test]
+    fn look_weapon_zero_views_emit_removals() {
+        let (mut app, character, gid) = setup();
+        app.world_mut()
+            .resource_mut::<Messages<UnitSpriteChanged>>()
+            .write(UnitSpriteChanged {
+                gid,
+                type_: LOOK_WEAPON,
+                val: 0,
+                val2: 0,
+            });
+
+        app.update();
+
+        assert_eq!(
+            emitted(&app),
+            vec![
+                (character, EquipmentSlot::Weapon, None),
+                (character, EquipmentSlot::Shield, None),
+            ]
+        );
     }
 
     #[test]

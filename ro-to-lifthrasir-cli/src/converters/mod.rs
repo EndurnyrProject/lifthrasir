@@ -2,6 +2,7 @@ pub mod accessory;
 pub mod item;
 pub mod job;
 pub mod skill;
+pub mod weapon;
 
 use crate::grf_vfs::GrfVfs;
 use anyhow::Context;
@@ -24,6 +25,7 @@ const CONVERTERS: &[(&str, ConverterFn)] = &[
     ("item", item::run),
     ("skill", skill::run),
     ("accessory", accessory::run),
+    ("weapon", weapon::run),
 ];
 
 pub fn run(only: Option<&str>, vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {

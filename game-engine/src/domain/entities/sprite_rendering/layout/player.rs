@@ -10,8 +10,11 @@ impl ActionLayout for PlayerLayout {
             ActionType::Walk => 8,
             ActionType::Sit => 16,
             ActionType::Special => 24,
+            ActionType::ReadyFight => 32,
+            ActionType::Attack1 => 40,
             ActionType::Hit => 48,
             ActionType::Dead => 64,
+            ActionType::Attack2 => 80,
             ActionType::Attack => 88,
             ActionType::Cast => 96,
         }
@@ -20,7 +23,7 @@ impl ActionLayout for PlayerLayout {
     fn is_looping(action_type: ActionType) -> bool {
         matches!(
             action_type,
-            ActionType::Idle | ActionType::Walk | ActionType::Sit
+            ActionType::Idle | ActionType::Walk | ActionType::Sit | ActionType::ReadyFight
         )
     }
 }
@@ -87,11 +90,30 @@ mod tests {
     }
 
     #[test]
+    fn test_readyfight_and_weapon_attack_offsets() {
+        assert_eq!(
+            PlayerLayout::calculate_action_index(ActionType::ReadyFight, Direction::South),
+            32
+        );
+        assert_eq!(
+            PlayerLayout::calculate_action_index(ActionType::Attack1, Direction::South),
+            40
+        );
+        assert_eq!(
+            PlayerLayout::calculate_action_index(ActionType::Attack2, Direction::South),
+            80
+        );
+    }
+
+    #[test]
     fn test_looping_actions() {
         assert!(PlayerLayout::is_looping(ActionType::Idle));
         assert!(PlayerLayout::is_looping(ActionType::Walk));
         assert!(PlayerLayout::is_looping(ActionType::Sit));
+        assert!(PlayerLayout::is_looping(ActionType::ReadyFight));
         assert!(!PlayerLayout::is_looping(ActionType::Attack));
+        assert!(!PlayerLayout::is_looping(ActionType::Attack1));
+        assert!(!PlayerLayout::is_looping(ActionType::Attack2));
         assert!(!PlayerLayout::is_looping(ActionType::Hit));
         assert!(!PlayerLayout::is_looping(ActionType::Dead));
     }

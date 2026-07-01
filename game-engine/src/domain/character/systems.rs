@@ -12,7 +12,7 @@ use crate::infrastructure::job::registry::JobSpriteRegistry;
 use crate::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
-use bevy_kira_audio::prelude::SpatialAudioReceiver;
+use bevy_kira_audio::prelude::{SpatialAudioEmitter, SpatialAudioReceiver};
 use net_contract::commands::{ConnectZone, LeaveZone};
 use net_contract::events::ZoneDisconnected;
 use net_contract::events::{
@@ -746,6 +746,7 @@ pub fn spawn_character_sprite_on_game_start(
         crate::domain::entities::character::components::status::CharacterStatus::default(),
         crate::domain::entities::components::EntityName::new(char_data.name.clone()),
         SpatialAudioReceiver,
+        SpatialAudioEmitter::default(),
         settings.keybinds.to_input_map(),
     ));
     entity_registry.set_local_player(character_entity, char_id);

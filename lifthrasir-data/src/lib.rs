@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobData {
@@ -35,6 +35,18 @@ pub struct ItemData {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccessoryData {
     pub names: BTreeMap<u16, String>,
+}
+
+/// Weapon sprite/SFX metadata decoded from `weapontable.lub`.
+/// Keyed by `BTreeMap`/`BTreeSet` for stable, key-ordered RON diffs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WeaponData {
+    /// weapon view id -> sprite suffix (leading `_` included)
+    pub names: BTreeMap<u16, String>,
+    /// weapon view id -> hit wav filename
+    pub hit_sounds: BTreeMap<u16, String>,
+    /// weapon view ids that are bow-type
+    pub bow_types: BTreeSet<u16>,
 }
 
 /// Per-skill presentation metadata decoded from `skillinfolist.lub` and `skilldescript.lub`.
@@ -168,6 +180,20 @@ mod tests {
 
         let serialized = ron::to_string(&original).expect("serialize");
         let deserialized: AccessoryData = ron::from_str(&serialized).expect("deserialize");
+
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn weapon_data_round_trip() {
+        let mut original = WeaponData::default();
+        original.names.insert(2, "_검".to_string());
+        original.names.insert(3, "_양손검".to_string());
+        original.hit_sounds.insert(2, "_hit_sword.wav".to_string());
+        original.bow_types.insert(11);
+
+        let serialized = ron::to_string(&original).expect("serialize");
+        let deserialized: WeaponData = ron::from_str(&serialized).expect("deserialize");
 
         assert_eq!(original, deserialized);
     }

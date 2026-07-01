@@ -8,10 +8,10 @@ impl ActionLayout for MobLayout {
         match action_type {
             ActionType::Idle => 0,
             ActionType::Walk => 8,
-            ActionType::Attack => 16,
+            ActionType::Attack | ActionType::Attack1 | ActionType::Attack2 => 16,
             ActionType::Hit => 24,
             ActionType::Dead => 32,
-            ActionType::Sit | ActionType::Cast | ActionType::Special => 0,
+            ActionType::Sit | ActionType::Cast | ActionType::Special | ActionType::ReadyFight => 0,
         }
     }
 
