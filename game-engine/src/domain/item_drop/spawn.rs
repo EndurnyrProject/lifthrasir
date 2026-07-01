@@ -40,6 +40,7 @@ pub fn spawn_floor_items(
                 identified: ev.identified,
             },
             Transform::from_translation(pos),
+            Visibility::default(),
             Name::new(format!("FloorItem({})", ev.ground_id)),
             MapScoped,
         ));
