@@ -1,3 +1,4 @@
+pub mod impact;
 pub mod portal;
 
 use bevy::prelude::*;
