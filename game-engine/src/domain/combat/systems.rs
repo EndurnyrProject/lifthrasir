@@ -7,6 +7,7 @@ use super::{
 use crate::domain::{
     entities::{
         character::{components::visual::CharacterDirection, states::AnimationState},
+        markers::LocalPlayer,
         registry::EntityRegistry,
     },
     input::LockedTarget,
@@ -254,19 +255,55 @@ pub fn handle_hit_reactions(
 pub fn update_attack_timers(
     mut commands: Commands,
     time: Res<Time>,
-    mut attack_timers: Query<(Entity, &mut AttackTimer), Without<DeadEntity>>,
+    locked_target: Res<LockedTarget>,
+    mut attack_timers: Query<(Entity, &mut AttackTimer, Has<LocalPlayer>), Without<DeadEntity>>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
 ) {
-    for (entity, mut timer) in attack_timers.iter_mut() {
+    for (entity, mut timer, is_local_player) in attack_timers.iter_mut() {
         timer.timer.tick(time.delta());
 
         if timer.timer.just_finished() {
             commands.entity(entity).remove::<AttackTimer>();
 
+            let next = if is_local_player && locked_target.gid.is_some() {
+                AnimationState::CombatReady
+            } else {
+                AnimationState::Idle
+            };
+
             if let Ok(mut behavior) = behaviors.get_mut(entity) {
-                behavior.start(AnimationState::Idle);
+                behavior.start(next);
             }
         }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::UpdateTimers, before = update_attack_timers)
+)]
+pub fn drive_combat_ready_pose(
+    locked_target: Res<LockedTarget>,
+    mut player: Query<(BehaviorMut<AnimationState>, Has<AttackTimer>), With<LocalPlayer>>,
+) {
+    let Ok((mut behavior, has_attack_timer)) = player.single_mut() else {
+        return;
+    };
+
+    if locked_target.gid.is_none() {
+        if *behavior.current() == AnimationState::CombatReady {
+            behavior.start(AnimationState::Idle);
+        }
+        return;
+    }
+
+    if has_attack_timer {
+        return;
+    }
+
+    if *behavior.current() == AnimationState::Idle {
+        behavior.start(AnimationState::CombatReady);
     }
 }
 
@@ -435,5 +472,122 @@ mod tests {
         app.update();
 
         assert_eq!(app.world().resource::<LockedTarget>().gid, Some(7));
+    }
+
+    fn combat_ready_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(bevy::time::TimePlugin)
+            .add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .init_resource::<LockedTarget>()
+            .add_systems(
+                Update,
+                (
+                    drive_combat_ready_pose,
+                    update_attack_timers,
+                    transition::<AnimationState>,
+                )
+                    .chain(),
+            );
+        app
+    }
+
+    fn state(app: &App, entity: Entity) -> AnimationState {
+        *app.world().get::<AnimationState>(entity).unwrap()
+    }
+
+    #[test]
+    fn locked_idle_local_player_enters_combat_ready() {
+        let mut app = combat_ready_app();
+        app.world_mut().resource_mut::<LockedTarget>().gid = Some(1);
+        let player = app
+            .world_mut()
+            .spawn((LocalPlayer, AnimationState::Idle))
+            .id();
+
+        app.update();
+
+        assert_eq!(state(&app, player), AnimationState::CombatReady);
+    }
+
+    #[test]
+    fn swing_end_returns_local_player_to_combat_ready_when_locked() {
+        let mut app = combat_ready_app();
+        app.world_mut().resource_mut::<LockedTarget>().gid = Some(1);
+        let player = app
+            .world_mut()
+            .spawn((
+                LocalPlayer,
+                AnimationState::Attacking,
+                AttackTimer::new(0.0, 0),
+            ))
+            .id();
+
+        app.update();
+
+        assert!(app.world().get::<AttackTimer>(player).is_none());
+        assert_eq!(state(&app, player), AnimationState::CombatReady);
+    }
+
+    #[test]
+    fn swing_end_returns_local_player_to_idle_when_not_locked() {
+        let mut app = combat_ready_app();
+        let player = app
+            .world_mut()
+            .spawn((
+                LocalPlayer,
+                AnimationState::Attacking,
+                AttackTimer::new(0.0, 0),
+            ))
+            .id();
+
+        app.update();
+
+        assert_eq!(state(&app, player), AnimationState::Idle);
+    }
+
+    #[test]
+    fn swing_end_never_gives_combat_ready_to_non_local_entity() {
+        let mut app = combat_ready_app();
+        app.world_mut().resource_mut::<LockedTarget>().gid = Some(1);
+        let mob = app
+            .world_mut()
+            .spawn((AnimationState::Attacking, AttackTimer::new(0.0, 0)))
+            .id();
+
+        app.update();
+
+        assert_eq!(state(&app, mob), AnimationState::Idle);
+    }
+
+    #[test]
+    fn drive_combat_ready_pose_leaves_busy_state_alone() {
+        let mut app = combat_ready_app();
+        app.world_mut().resource_mut::<LockedTarget>().gid = Some(1);
+        let player = app
+            .world_mut()
+            .spawn((LocalPlayer, AnimationState::Attacking))
+            .id();
+
+        app.update();
+
+        assert_eq!(state(&app, player), AnimationState::Attacking);
+    }
+
+    #[test]
+    fn clearing_lock_returns_local_player_to_idle() {
+        let mut app = combat_ready_app();
+        app.world_mut().resource_mut::<LockedTarget>().gid = Some(1);
+        let player = app
+            .world_mut()
+            .spawn((LocalPlayer, AnimationState::Idle))
+            .id();
+
+        app.update();
+        assert_eq!(state(&app, player), AnimationState::CombatReady);
+
+        app.world_mut().resource_mut::<LockedTarget>().gid = None;
+        app.update();
+
+        assert_eq!(state(&app, player), AnimationState::Idle);
     }
 }

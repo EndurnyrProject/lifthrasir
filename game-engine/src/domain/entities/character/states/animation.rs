@@ -7,6 +7,7 @@ use moonshine_behavior::prelude::*;
 pub enum AnimationState {
     #[default]
     Idle,
+    CombatReady,
     Walking,
     Attacking,
     Hit,
@@ -22,11 +23,13 @@ impl Behavior for AnimationState {
             // Dead is terminal - no transitions out
             (Dead, _) => false,
             // Idle can transition to any state
-            (Idle, Walking | Attacking | Hit | Sitting | Dead | PickingUp) => true,
+            (Idle, CombatReady | Walking | Attacking | Hit | Sitting | Dead | PickingUp) => true,
+            // CombatReady is the engaged idle stance: behaves like Idle
+            (CombatReady, Idle | Walking | Attacking | Hit | Sitting | Dead | PickingUp) => true,
             // Walking can transition to any state
             (Walking, Idle | Attacking | Hit | Sitting | Dead | PickingUp) => true,
-            // Attacking can go back to idle, or be interrupted
-            (Attacking, Idle | Hit | Sitting | Dead) => true,
+            // Attacking can go back to idle/combat-ready, or be interrupted
+            (Attacking, Idle | CombatReady | Hit | Sitting | Dead) => true,
             // Hit can recover to idle, swing back (flinch is interruptible by an attack) or die
             (Hit, Idle | Attacking | Dead) => true,
             // Sitting can stand, be interrupted, or die
@@ -45,6 +48,7 @@ impl From<AnimationState> for ActionType {
     fn from(state: AnimationState) -> Self {
         match state {
             AnimationState::Idle => ActionType::Idle,
+            AnimationState::CombatReady => ActionType::ReadyFight,
             AnimationState::Walking => ActionType::Walk,
             AnimationState::Attacking => ActionType::Attack,
             AnimationState::Hit => ActionType::Hit,
@@ -85,5 +89,28 @@ mod tests {
     #[test]
     fn dead_is_still_terminal() {
         assert!(!AnimationState::Dead.filter_next(&AnimationState::PickingUp));
+    }
+
+    #[test]
+    fn combat_ready_maps_to_ready_fight_action() {
+        assert_eq!(
+            ActionType::from(AnimationState::CombatReady),
+            ActionType::ReadyFight
+        );
+    }
+
+    #[test]
+    fn idle_and_attacking_can_enter_combat_ready() {
+        assert!(AnimationState::Idle.filter_next(&AnimationState::CombatReady));
+        assert!(AnimationState::Attacking.filter_next(&AnimationState::CombatReady));
+    }
+
+    #[test]
+    fn combat_ready_is_interruptible_like_idle() {
+        assert!(AnimationState::CombatReady.filter_next(&AnimationState::Attacking));
+        assert!(AnimationState::CombatReady.filter_next(&AnimationState::Hit));
+        assert!(AnimationState::CombatReady.filter_next(&AnimationState::Walking));
+        assert!(AnimationState::CombatReady.filter_next(&AnimationState::Dead));
+        assert!(AnimationState::CombatReady.filter_next(&AnimationState::Idle));
     }
 }

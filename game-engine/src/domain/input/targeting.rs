@@ -9,7 +9,7 @@ use crate::domain::system_sets::InputSystems;
 
 use super::cursor::{handle_cursor_change_requests, CursorType};
 use super::events::CursorChangeRequest;
-use super::resources::ForwardedMouseClick;
+use super::resources::{ForwardedMouseClick, LockedTarget};
 use super::systems::{handle_entity_click, handle_terrain_click, update_cursor_for_terrain};
 use super::terrain_raycast::TerrainRaycastCache;
 
@@ -93,14 +93,17 @@ pub fn targeting_click(
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
-pub fn cancel_targeting(mut targeting: ResMut<TargetingMode>, keys: Res<ButtonInput<KeyCode>>) {
-    if *targeting == TargetingMode::Idle {
+pub fn cancel_targeting(
+    mut targeting: ResMut<TargetingMode>,
+    mut locked_target: ResMut<LockedTarget>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    if !keys.just_pressed(KeyCode::Escape) {
         return;
     }
 
-    if keys.just_pressed(KeyCode::Escape) {
-        *targeting = TargetingMode::Idle;
-    }
+    *targeting = TargetingMode::Idle;
+    *locked_target = LockedTarget::default();
 }
 
 #[auto_add_system(
@@ -273,9 +276,10 @@ mod tests {
     }
 
     #[test]
-    fn escape_cancels_targeting_while_armed() {
+    fn escape_cancels_targeting_and_clears_lock() {
         let mut app = App::new();
         app.init_resource::<TargetingMode>()
+            .init_resource::<LockedTarget>()
             .init_resource::<ButtonInput<KeyCode>>()
             .add_systems(Update, cancel_targeting);
         arm(
@@ -285,12 +289,14 @@ mod tests {
                 level: LEVEL,
             },
         );
+        app.world_mut().resource_mut::<LockedTarget>().gid = Some(GID);
         app.world_mut()
             .resource_mut::<ButtonInput<KeyCode>>()
             .press(KeyCode::Escape);
         app.update();
 
         assert_eq!(mode(&app), TargetingMode::Idle);
+        assert_eq!(app.world().resource::<LockedTarget>().gid, None);
     }
 
     #[test]
