@@ -47,11 +47,39 @@ pub(crate) fn descriptor_tint(descriptor: &EffectDescriptor) -> Color {
 }
 
 /// Load the descriptor's STR effect through the registered `.str` loader.
+/// `None` for sound-only descriptors (no `str`), which spawn no visual.
 pub(crate) fn load_effect(
     asset_server: &AssetServer,
     descriptor: &EffectDescriptor,
-) -> Handle<LoadedEffectAsset> {
-    asset_server.load(format!("ro://data/texture/effect/{}", descriptor.str))
+) -> Option<Handle<LoadedEffectAsset>> {
+    descriptor
+        .str
+        .as_ref()
+        .map(|name| asset_server.load(format!("ro://data/texture/effect/{}", name)))
+}
+
+/// Spawn the descriptor's STR effect when it has one, returning the entity the
+/// sound should anchor to: the spawned effect if present, otherwise `fallback`
+/// (sound-only skills like Bash anchor their sound to the fallback unit).
+fn spawn_str_or_fallback(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    descriptor: &EffectDescriptor,
+    anchor: EffectAnchor,
+    fallback: Entity,
+    lifetime: Option<Timer>,
+) -> Entity {
+    match load_effect(asset_server, descriptor) {
+        Some(effect) => spawn_effect(
+            commands,
+            effect,
+            anchor,
+            descriptor.repeating,
+            descriptor_tint(descriptor),
+            lifetime,
+        ),
+        None => fallback,
+    }
 }
 
 /// Play the descriptor's sound (if any) anchored to `emitter`.
@@ -109,17 +137,16 @@ pub fn on_skill_effect(
             continue;
         };
 
-        let effect = load_effect(&asset_server, descriptor);
-        let spawned = spawn_effect(
+        let emitter = spawn_str_or_fallback(
             &mut commands,
-            effect,
+            &asset_server,
+            descriptor,
             EffectAnchor::Entity(anchor_entity),
-            descriptor.repeating,
-            descriptor_tint(descriptor),
+            anchor_entity,
             None,
         );
 
-        play_sound(&mut sfx, descriptor, spawned);
+        play_sound(&mut sfx, descriptor, emitter);
     }
 }
 
@@ -172,17 +199,16 @@ pub fn on_skill_damage(
             continue;
         };
 
-        let effect = load_effect(&asset_server, descriptor);
-        let spawned = spawn_effect(
+        let emitter = spawn_str_or_fallback(
             &mut commands,
-            effect,
+            &asset_server,
+            descriptor,
             EffectAnchor::Entity(target),
-            descriptor.repeating,
-            descriptor_tint(descriptor),
+            target,
             None,
         );
 
-        play_sound(&mut sfx, descriptor, spawned);
+        play_sound(&mut sfx, descriptor, emitter);
     }
 }
 
@@ -200,7 +226,8 @@ pub fn on_ground_skill(
     mut sfx: MessageWriter<PlaySkillSfx>,
 ) {
     for event in events.read() {
-        if let Some(src) = resolve_gid(&network_entities, event.src_id) {
+        let src = resolve_gid(&network_entities, event.src_id);
+        if let Some(src) = src {
             start_attack_animation(&mut commands, &mut behaviors, &transforms, src, None, 0);
         }
 
@@ -218,17 +245,23 @@ pub fn on_ground_skill(
             .repeating
             .then(|| Timer::from_seconds(GROUND_EFFECT_LIFETIME_SECS, TimerMode::Once));
 
-        let effect = load_effect(&asset_server, descriptor);
-        let spawned = spawn_effect(
-            &mut commands,
-            effect,
-            EffectAnchor::Position(position),
-            descriptor.repeating,
-            descriptor_tint(descriptor),
-            lifetime,
-        );
+        // A sound-only ground skill (no `str`) has no spawned effect to anchor to,
+        // so its sound anchors to the caster if present.
+        let emitter = match load_effect(&asset_server, descriptor) {
+            Some(effect) => Some(spawn_effect(
+                &mut commands,
+                effect,
+                EffectAnchor::Position(position),
+                descriptor.repeating,
+                descriptor_tint(descriptor),
+                lifetime,
+            )),
+            None => src,
+        };
 
-        play_sound(&mut sfx, descriptor, spawned);
+        if let Some(emitter) = emitter {
+            play_sound(&mut sfx, descriptor, emitter);
+        }
     }
 }
 
@@ -381,6 +414,45 @@ mod tests {
         assert_eq!(emitted.len(), 1, "damage number still emitted");
         assert_eq!(emitted[0].entity, target);
         assert_eq!(emitted[0].amount, 50);
+    }
+
+    #[test]
+    fn sound_only_skill_plays_sound_without_spawning_effect() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+
+        let target = spawn_unit(&mut app, 200);
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 5, // SM_BASH — sound-only, no STR effect
+            level: 1,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 75,
+            div: 1,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        });
+
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "no STR effect for a sound-only skill"
+        );
+
+        let sfx = app.world_mut().resource_mut::<Messages<PlaySkillSfx>>();
+        let mut cursor = sfx.get_cursor();
+        let emitted: Vec<_> = cursor.read(&sfx).collect();
+        assert_eq!(emitted.len(), 1, "sound-only skill still plays its sound");
+        assert_eq!(
+            emitted[0].emitter, target,
+            "sound anchors to the target unit"
+        );
     }
 
     #[test]

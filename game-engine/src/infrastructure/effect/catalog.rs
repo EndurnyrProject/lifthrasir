@@ -125,25 +125,39 @@ mod tests {
         let ron = include_str!("../../../../assets/data/ron/skill_effects.ron");
         let asset = ron::from_str::<SkillEffectDataAsset>(ron).expect("deserialize");
 
-        assert_eq!(asset.0.effects[&28].str, "heal.str");
+        assert_eq!(asset.0.effects[&28].str.as_deref(), Some("heal.str"));
         assert_eq!(asset.0.effects[&28].placement, EffectPlacement::Target);
         assert_eq!(asset.0.effects[&89].placement, EffectPlacement::Ground);
         assert!(asset.0.effects[&89].repeating);
 
         // id 18 is MG_FIREWALL (was a stale magnus.str mapping).
-        assert_eq!(asset.0.effects[&18].str, "firewall.str");
+        assert_eq!(asset.0.effects[&18].str.as_deref(), Some("firewall.str"));
         assert_eq!(asset.0.effects[&18].placement, EffectPlacement::Ground);
         assert!(asset.0.effects[&18].repeating);
         assert!(
-            asset.0.effects.values().all(|e| e.str != "magnus.str"),
+            asset
+                .0
+                .effects
+                .values()
+                .all(|e| e.str.as_deref() != Some("magnus.str")),
             "magnus.str must not be referenced by the skill catalog"
         );
 
+        // id 5 is SM_BASH: sound-only, no STR effect.
+        assert_eq!(asset.0.effects[&5].str, None);
+        assert_eq!(
+            asset.0.effects[&5].sound.as_deref(),
+            Some("effect/ef_bash.wav")
+        );
+
         // Bucket-A samples: one ground field and one caster buff.
-        assert_eq!(asset.0.effects[&21].str, "thunderstorm.str");
+        assert_eq!(
+            asset.0.effects[&21].str.as_deref(),
+            Some("thunderstorm.str")
+        );
         assert_eq!(asset.0.effects[&21].placement, EffectPlacement::Ground);
         assert!(asset.0.effects[&21].repeating);
-        assert_eq!(asset.0.effects[&33].str, "angelus.str");
+        assert_eq!(asset.0.effects[&33].str.as_deref(), Some("angelus.str"));
         assert_eq!(asset.0.effects[&33].placement, EffectPlacement::Caster);
         assert!(!asset.0.effects[&33].repeating);
 
@@ -168,11 +182,11 @@ mod tests {
         let catalog = EffectCatalog::from_skill_effect_data(asset.0);
 
         let target = catalog.get(28).expect("AL_HEAL target descriptor");
-        assert_eq!(target.str, "heal.str");
+        assert_eq!(target.str.as_deref(), Some("heal.str"));
         assert_eq!(target.placement, EffectPlacement::Target);
 
         let ground = catalog.get(89).expect("WZ_STORMGUST ground descriptor");
-        assert_eq!(ground.str, "stormgust.str");
+        assert_eq!(ground.str.as_deref(), Some("stormgust.str"));
         assert_eq!(ground.placement, EffectPlacement::Ground);
         assert!(ground.repeating);
     }
@@ -191,7 +205,7 @@ mod tests {
         let catalog = MapEffectCatalog::from_effect_data(asset.0);
 
         let stormgust = catalog.get(89).expect("EF_STORMGUST descriptor");
-        assert_eq!(stormgust.str, "stormgust.str");
+        assert_eq!(stormgust.str.as_deref(), Some("stormgust.str"));
         assert!(stormgust.repeating);
 
         assert!(catalog.get(9999).is_none());

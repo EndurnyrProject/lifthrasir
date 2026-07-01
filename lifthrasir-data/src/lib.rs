@@ -76,8 +76,10 @@ pub enum EffectPlacement {
 /// converts it to `Color` at its boundary.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct EffectDescriptor {
-    /// STR effect filename, e.g. "heal.str".
-    pub str: String,
+    /// STR effect filename, e.g. "heal.str". `None` for skills with no visual
+    /// STR effect (e.g. sound-only skills like Bash); such entries still play
+    /// their `sound` but spawn no STR.
+    pub str: Option<String>,
     /// Optional sound path relative to `data/wav`, e.g. "effect/ef_firewall.wav"
     /// or "_heal_effect.wav" (files at the wav root take no `effect/` prefix).
     pub sound: Option<String>,
@@ -206,7 +208,7 @@ mod tests {
         original.effects.insert(
             28,
             EffectDescriptor {
-                str: "heal.str".to_string(),
+                str: Some("heal.str".to_string()),
                 sound: Some("_heal_effect.wav".to_string()),
                 placement: EffectPlacement::Target,
                 color: [1.0, 1.0, 1.0, 1.0],
@@ -216,7 +218,7 @@ mod tests {
         original.effects.insert(
             89,
             EffectDescriptor {
-                str: "stormgust.str".to_string(),
+                str: Some("stormgust.str".to_string()),
                 sound: None,
                 placement: EffectPlacement::Ground,
                 color: [0.6, 0.7, 1.0, 1.0],
@@ -241,7 +243,7 @@ mod tests {
 
         let heal = data.effects.get(&28).expect("AL_HEAL entry");
         assert_eq!(heal.placement, EffectPlacement::Target);
-        assert_eq!(heal.str, "heal.str");
+        assert_eq!(heal.str.as_deref(), Some("heal.str"));
         // Sound is relative to `data/wav/`; `_heal_effect.wav` lives at the root
         // (no `effect/` prefix), so the old `effect/_heal_effect.wav` was broken.
         assert_eq!(heal.sound.as_deref(), Some("_heal_effect.wav"));
@@ -249,7 +251,7 @@ mod tests {
 
         let stormgust = data.effects.get(&89).expect("WZ_STORMGUST entry");
         assert_eq!(stormgust.placement, EffectPlacement::Ground);
-        assert_eq!(stormgust.str, "stormgust.str");
+        assert_eq!(stormgust.str.as_deref(), Some("stormgust.str"));
         // `effect/stormgust.wav` does not exist in the GRF; the real sound is
         // `effect/wizard_stormgust.wav`.
         assert_eq!(
@@ -257,5 +259,10 @@ mod tests {
             Some("effect/wizard_stormgust.wav")
         );
         assert!(stormgust.repeating);
+
+        // SM_BASH is sound-only: no STR effect, but it still plays its sound.
+        let bash = data.effects.get(&5).expect("SM_BASH entry");
+        assert_eq!(bash.str, None);
+        assert_eq!(bash.sound.as_deref(), Some("effect/ef_bash.wav"));
     }
 }

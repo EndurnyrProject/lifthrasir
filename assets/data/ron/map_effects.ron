@@ -20,14 +20,14 @@
 (
     effects: {
         89: ( // EF_STORMGUST
-            str: "stormgust.str",
+            str: Some("stormgust.str"),
             sound: None,
             placement: Ground,
             color: (0.6, 0.7, 1.0, 1.0),
             repeating: true,
         ),
         113: ( // EF_MAGNUS
-            str: "magnus.str",
+            str: Some("magnus.str"),
             sound: None,
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),

@@ -71,7 +71,9 @@ pub fn spawn_map_effects(
             };
 
             let position = rsw_position_to_bevy(effect.position, map_width, map_height);
-            let handle = load_effect(&asset_server, descriptor);
+            let Some(handle) = load_effect(&asset_server, descriptor) else {
+                continue;
+            };
             let spawned = spawn_effect(
                 &mut commands,
                 handle,
