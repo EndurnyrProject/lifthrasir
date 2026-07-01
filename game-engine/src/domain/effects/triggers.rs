@@ -1,9 +1,14 @@
 //! Wires the three skill domain events the network layer produces into effect
-//! playback: catalog lookup, spawn the STR effect at the right anchor, play the
-//! caster's attack motion, play the per-effect sound, and (for damage) emit the
-//! existing `DisplayDamageNumber`.
+//! playback: spawn the STR effect at the right anchor, play the caster's attack
+//! motion, play the per-effect sound, and (for damage) emit the existing
+//! `DisplayDamageNumber`.
 //!
-//! Effects are non-critical (design D6): every handler early-returns on a
+//! Gameplay feedback (the target's damage number and the caster's attack motion)
+//! plays for every skill, independent of the catalog: most skills have no `.str`
+//! entry, and gating feedback on one would leave e.g. Bash with no number and no
+//! swing. Only the STR visual effect and its sound are catalog-gated.
+//!
+//! Effects are non-critical (design D6): the visual portion early-returns on a
 //! missing entity or missing catalog entry with a `debug!`, never panicking and
 //! never inventing defaults.
 
@@ -76,18 +81,18 @@ pub fn on_skill_effect(
     transforms: Query<&Transform>,
     mut sfx: MessageWriter<PlaySkillSfx>,
 ) {
-    let Some(catalog) = catalog else {
-        return;
-    };
-
     for event in events.read() {
-        let Some(descriptor) = catalog.get(event.skill_id) else {
+        let src = resolve_gid(&network_entities, event.src_id);
+        let target = resolve_gid(&network_entities, event.target_id);
+
+        if let Some(src) = src {
+            start_attack_animation(&mut commands, &mut behaviors, &transforms, src, target, 0);
+        }
+
+        let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.skill_id)) else {
             debug!("No effect catalog entry for skill {}", event.skill_id);
             continue;
         };
-
-        let src = resolve_gid(&network_entities, event.src_id);
-        let target = resolve_gid(&network_entities, event.target_id);
 
         let anchor_entity = match descriptor.placement {
             EffectPlacement::Caster => src,
@@ -114,10 +119,6 @@ pub fn on_skill_effect(
             None,
         );
 
-        if let Some(src) = src {
-            start_attack_animation(&mut commands, &mut behaviors, &transforms, src, target, 0);
-        }
-
         play_sound(&mut sfx, descriptor, spawned);
     }
 }
@@ -136,20 +137,9 @@ pub fn on_skill_damage(
     mut damage_display: MessageWriter<DisplayDamageNumber>,
     mut sfx: MessageWriter<PlaySkillSfx>,
 ) {
-    let Some(catalog) = catalog else {
-        return;
-    };
-
     for event in events.read() {
-        let Some(descriptor) = catalog.get(event.skill_id) else {
-            debug!("No effect catalog entry for skill {}", event.skill_id);
-            continue;
-        };
-
         let src = resolve_gid(&network_entities, event.src_id);
-        let target = resolve_gid(&network_entities, event.target_id);
-
-        let Some(target) = target else {
+        let Some(target) = resolve_gid(&network_entities, event.target_id) else {
             debug!(
                 "No target entity for skill damage {} (target {})",
                 event.skill_id, event.target_id
@@ -157,16 +147,9 @@ pub fn on_skill_damage(
             continue;
         };
 
-        let effect = load_effect(&asset_server, descriptor);
-        let spawned = spawn_effect(
-            &mut commands,
-            effect,
-            EffectAnchor::Entity(target),
-            descriptor.repeating,
-            descriptor_tint(descriptor),
-            None,
-        );
-
+        // Damage number and caster motion are gameplay feedback, not part of the
+        // STR visual effect: they play for every damage skill, including ones with
+        // no catalog entry (e.g. Bash).
         damage_display.write(DisplayDamageNumber {
             entity: target,
             amount: event.damage.max(0),
@@ -183,6 +166,21 @@ pub fn on_skill_damage(
                 event.src_delay as i32,
             );
         }
+
+        let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.skill_id)) else {
+            debug!("No effect catalog entry for skill {}", event.skill_id);
+            continue;
+        };
+
+        let effect = load_effect(&asset_server, descriptor);
+        let spawned = spawn_effect(
+            &mut commands,
+            effect,
+            EffectAnchor::Entity(target),
+            descriptor.repeating,
+            descriptor_tint(descriptor),
+            None,
+        );
 
         play_sound(&mut sfx, descriptor, spawned);
     }
@@ -201,12 +199,12 @@ pub fn on_ground_skill(
     transforms: Query<&Transform>,
     mut sfx: MessageWriter<PlaySkillSfx>,
 ) {
-    let Some(catalog) = catalog else {
-        return;
-    };
-
     for event in events.read() {
-        let Some(descriptor) = catalog.get(event.skill_id) else {
+        if let Some(src) = resolve_gid(&network_entities, event.src_id) {
+            start_attack_animation(&mut commands, &mut behaviors, &transforms, src, None, 0);
+        }
+
+        let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.skill_id)) else {
             debug!(
                 "No effect catalog entry for ground skill {}",
                 event.skill_id
@@ -229,10 +227,6 @@ pub fn on_ground_skill(
             descriptor_tint(descriptor),
             lifetime,
         );
-
-        if let Some(src) = resolve_gid(&network_entities, event.src_id) {
-            start_attack_animation(&mut commands, &mut behaviors, &transforms, src, None, 0);
-        }
 
         play_sound(&mut sfx, descriptor, spawned);
     }
@@ -351,14 +345,15 @@ mod tests {
     }
 
     #[test]
-    fn unknown_skill_id_is_a_noop() {
+    fn unknown_skill_id_shows_damage_without_effect() {
         let mut app = test_app();
         app.add_systems(Update, on_skill_damage);
 
-        let _target = spawn_unit(&mut app, 200);
+        let target = spawn_unit(&mut app, 200);
+        let _src = spawn_unit(&mut app, 100);
 
         app.world_mut().write_message(SkillDamageReceived {
-            skill_id: 999_999, // not in the catalog
+            skill_id: 999_999, // not in the catalog (e.g. Bash has no STR effect)
             level: 1,
             src_id: 100,
             target_id: 200,
@@ -372,7 +367,20 @@ mod tests {
 
         app.update();
 
-        assert_eq!(active_effects(&mut app), 0, "no effect for unknown skill");
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "no STR effect for unknown skill"
+        );
+
+        let messages = app
+            .world_mut()
+            .resource_mut::<Messages<DisplayDamageNumber>>();
+        let mut cursor = messages.get_cursor();
+        let emitted: Vec<_> = cursor.read(&messages).collect();
+        assert_eq!(emitted.len(), 1, "damage number still emitted");
+        assert_eq!(emitted[0].entity, target);
+        assert_eq!(emitted[0].amount, 50);
     }
 
     #[test]
