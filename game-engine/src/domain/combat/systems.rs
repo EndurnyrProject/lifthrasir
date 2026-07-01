@@ -9,6 +9,7 @@ use crate::domain::{
         character::{components::visual::CharacterDirection, states::AnimationState},
         registry::EntityRegistry,
     },
+    input::LockedTarget,
     system_sets::CombatSystems,
 };
 use crate::utils::coordinates::Direction;
@@ -303,10 +304,15 @@ pub fn handle_death(
     mut vanish_events: MessageReader<UnitLeft>,
     registry: Res<EntityRegistry>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
+    mut locked_target: ResMut<LockedTarget>,
 ) {
     for event in vanish_events.read() {
         if event.reason != 1 {
             continue;
+        }
+
+        if locked_target.gid == Some(event.gid) {
+            *locked_target = LockedTarget::default();
         }
 
         let Some(entity) = registry.get_entity(event.gid) else {
@@ -391,5 +397,43 @@ pub fn animate_damage_indicators(
 
         let _alpha = 1.0 - indicator.lifetime.fraction();
         indicator.velocity.y -= 0.5 * time.delta_secs();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn death_app() -> App {
+        let mut app = App::new();
+        app.init_resource::<EntityRegistry>()
+            .init_resource::<LockedTarget>()
+            .add_message::<UnitLeft>()
+            .add_systems(Update, handle_death);
+        app
+    }
+
+    #[test]
+    fn death_of_locked_target_clears_lock() {
+        let mut app = death_app();
+        app.world_mut().resource_mut::<LockedTarget>().gid = Some(7);
+        app.world_mut()
+            .write_message(UnitLeft { gid: 7, reason: 1 });
+
+        app.update();
+
+        assert_eq!(app.world().resource::<LockedTarget>().gid, None);
+    }
+
+    #[test]
+    fn death_of_other_unit_keeps_lock() {
+        let mut app = death_app();
+        app.world_mut().resource_mut::<LockedTarget>().gid = Some(7);
+        app.world_mut()
+            .write_message(UnitLeft { gid: 9, reason: 1 });
+
+        app.update();
+
+        assert_eq!(app.world().resource::<LockedTarget>().gid, Some(7));
     }
 }

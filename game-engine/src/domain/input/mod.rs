@@ -10,7 +10,7 @@ pub mod ui_focus;
 pub use actions::{PlayerAction, HOTBAR_ACTIONS};
 pub use cursor::{CurrentCursorType, CursorType};
 pub use events::CursorChangeRequest;
-pub use resources::{ForwardedCursorPosition, ForwardedMouseClick};
+pub use resources::{ForwardedCursorPosition, ForwardedMouseClick, LockedTarget};
 pub use targeting::TargetingMode;
 pub use terrain_raycast::TerrainRaycastCache;
 pub use ui_focus::{ui_unfocused, UiFocus};

@@ -14,3 +14,13 @@ pub struct ForwardedCursorPosition {
 pub struct ForwardedMouseClick {
     pub position: Option<Vec2>,
 }
+
+/// Currently locked attack target. Set when a mob is clicked, cleared on
+/// move/death/cancel. The server drives the continuous attack loop off the
+/// single request sent when the lock is set.
+#[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::app::input_plugin::InputPlugin)]
+pub struct LockedTarget {
+    pub entity: Option<Entity>,
+    pub gid: Option<u32>,
+}

@@ -10,15 +10,15 @@ use crate::envelope::Body;
 use crate::proto::aesir::net::{ActionRequest, LearnSkill, StatUp};
 use crate::zone::{QuicZoneState, ZonePhase};
 
-/// CZ_REQUEST_ACT2 action codes: attack = 0, sit = 2, stand = 3.
-const ACTION_ATTACK: u32 = 0;
+/// CZ_REQUEST_ACT2 action codes: sit = 2, stand = 3, continuous attack = 7.
 const ACTION_SIT: u32 = 2;
 const ACTION_STAND: u32 = 3;
+const ACTION_CONTINUOUS: u32 = 7;
 
 fn attack_body(a: &AttackRequested) -> Body {
     Body::ActionRequest(ActionRequest {
         target_id: a.target_id,
-        action: ACTION_ATTACK,
+        action: ACTION_CONTINUOUS,
     })
 }
 
@@ -131,12 +131,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn attack_body_carries_target_with_attack_action() {
+    fn attack_body_carries_target_with_continuous_action() {
         let body = attack_body(&AttackRequested { target_id: 42 });
         match body {
             Body::ActionRequest(ActionRequest { target_id, action }) => {
                 assert_eq!(target_id, 42u32);
-                assert_eq!(action, ACTION_ATTACK);
+                assert_eq!(action, ACTION_CONTINUOUS);
             }
             other => panic!("expected Body::ActionRequest, got {other:?}"),
         }

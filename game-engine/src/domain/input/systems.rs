@@ -28,7 +28,7 @@ use crate::domain::entities::character::states::AnimationState;
 use super::{
     cursor::CursorType, events::CursorChangeRequest, targeting::TargetingMode,
     terrain_raycast::TerrainRaycastCache, ui_focus::ui_unfocused, ForwardedMouseClick,
-    PlayerAction,
+    LockedTarget, PlayerAction,
 };
 
 // =============================================================================
@@ -116,6 +116,7 @@ pub fn handle_entity_click(
     currently_hovered: Res<CurrentlyHoveredEntity>,
     mob_query: Query<&NetworkEntity, With<Mob>>,
     mut attacks: MessageWriter<AttackRequested>,
+    mut locked_target: ResMut<LockedTarget>,
 ) {
     // While a skill is armed, the click belongs to `targeting_click`; consuming
     // it here would turn a skill cast into an auto-attack (order-independent guard).
@@ -142,6 +143,11 @@ pub fn handle_entity_click(
         target_id: target_gid,
     });
 
+    *locked_target = LockedTarget {
+        entity: Some(hovered_entity),
+        gid: Some(target_gid),
+    };
+
     mouse_click.position.take();
 }
 
@@ -160,6 +166,7 @@ pub fn handle_terrain_click(
     cache: Res<TerrainRaycastCache>,
     map_data: MapData,
     player_query: Query<(Entity, &Transform), With<LocalPlayer>>,
+    mut locked_target: ResMut<LockedTarget>,
 ) {
     // A click while a skill is armed must not move the player: leave it for
     // `targeting_click` to resolve into a cast (order-independent guard).
@@ -170,6 +177,9 @@ pub fn handle_terrain_click(
     if mouse_click.position.take().is_none() {
         return;
     }
+
+    // A move command disengages any locked attack target.
+    *locked_target = LockedTarget::default();
 
     let Some((dest_x, dest_y)) = cache.cell_coords else {
         debug!("Click with no valid raycast cache");
@@ -371,6 +381,7 @@ mod tests {
         app.init_resource::<ForwardedMouseClick>()
             .init_resource::<TargetingMode>()
             .init_resource::<CurrentlyHoveredEntity>()
+            .init_resource::<LockedTarget>()
             .add_message::<AttackRequested>()
             .add_systems(Update, handle_entity_click);
         app
@@ -436,5 +447,31 @@ mod tests {
                 .is_none(),
             "a normal attack consumes the click"
         );
+    }
+
+    #[test]
+    fn clicking_a_mob_locks_it() {
+        let mut app = click_app();
+        let mob = hovered_mob(&mut app);
+
+        app.update();
+
+        let lock = app.world().resource::<LockedTarget>();
+        assert_eq!(lock.gid, Some(42));
+        assert_eq!(lock.entity, Some(mob));
+    }
+
+    #[test]
+    fn armed_targeting_does_not_lock() {
+        let mut app = click_app();
+        hovered_mob(&mut app);
+        *app.world_mut().resource_mut::<TargetingMode>() = TargetingMode::AwaitingEntity {
+            skill_id: 5,
+            level: 1,
+        };
+
+        app.update();
+
+        assert_eq!(app.world().resource::<LockedTarget>().gid, None);
     }
 }
