@@ -143,12 +143,16 @@ mod tests {
             "magnus.str must not be referenced by the skill catalog"
         );
 
-        // id 5 is SM_BASH: sound-only, no STR effect.
+        // id 5 is SM_BASH: sound-only, no STR effect, procedural vfx key "bash".
         assert_eq!(asset.0.effects[&5].str, None);
+        assert_eq!(asset.0.effects[&5].vfx.as_deref(), Some("bash"));
         assert_eq!(
             asset.0.effects[&5].sound.as_deref(),
             Some("effect/ef_bash.wav")
         );
+
+        // id 28 is AL_HEAL: omits `vfx`, must default to None.
+        assert_eq!(asset.0.effects[&28].vfx, None);
 
         // Bucket-A samples: one ground field and one caster buff.
         assert_eq!(

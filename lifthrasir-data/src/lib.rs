@@ -80,6 +80,11 @@ pub struct EffectDescriptor {
     /// STR effect (e.g. sound-only skills like Bash); such entries still play
     /// their `sound` but spawn no STR.
     pub str: Option<String>,
+    /// Procedural (non-STR) VFX key, e.g. "bash". Resolved by the presentation
+    /// VFX layer to a spawn function. Mutually exclusive with `str`. `None` for
+    /// skills with no procedural effect.
+    #[serde(default)]
+    pub vfx: Option<String>,
     /// Optional sound path relative to `data/wav`, e.g. "effect/ef_firewall.wav"
     /// or "_heal_effect.wav" (files at the wav root take no `effect/` prefix).
     pub sound: Option<String>,
@@ -209,6 +214,7 @@ mod tests {
             28,
             EffectDescriptor {
                 str: Some("heal.str".to_string()),
+                vfx: None,
                 sound: Some("_heal_effect.wav".to_string()),
                 placement: EffectPlacement::Target,
                 color: [1.0, 1.0, 1.0, 1.0],
@@ -219,6 +225,7 @@ mod tests {
             89,
             EffectDescriptor {
                 str: Some("stormgust.str".to_string()),
+                vfx: None,
                 sound: None,
                 placement: EffectPlacement::Ground,
                 color: [0.6, 0.7, 1.0, 1.0],

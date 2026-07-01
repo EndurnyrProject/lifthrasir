@@ -1,7 +1,8 @@
 (
     effects: {
-        5: ( // SM_BASH — no STR effect in the client; sound only.
+        5: ( // SM_BASH — procedural impact burst (no STR in the official client).
             str: None,
+            vfx: Some("bash"),
             sound: Some("effect/ef_bash.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
