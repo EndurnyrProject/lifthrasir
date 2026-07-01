@@ -1,4 +1,10 @@
+use bevy::mesh::MeshVertexBufferLayoutRef;
+use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
+use bevy::render::render_resource::{
+    AsBindGroup, RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
+};
+use bevy::shader::ShaderRef;
 
 /// One-shot factor ramp. Lives on the parent of a procedural-effect tree and
 /// drives each child `FactorMaterial`'s 0→1 `factor` over its lifetime; the tree
@@ -64,6 +70,104 @@ impl FromWorld for ImpactAssets {
     }
 }
 
+/// Unlit radial hit-flash material. Grows and streaks with `params.factor`,
+/// camera-facing done in the vertex stage. See `assets/data/effects/impact_core.wgsl`.
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+pub struct ImpactCoreMaterial {
+    #[uniform(0)]
+    pub params: ImpactParams,
+}
+
+/// Packed impact-core parameters. Field order and types must match the
+/// `ImpactParams` struct in `impact_core.wgsl`.
+#[derive(Clone, Copy, Debug, ShaderType)]
+pub struct ImpactParams {
+    pub primary_color: Vec4,
+    pub secondary_color: Vec4,
+    /// x=emission y=streak_amount z=edge_hardness w=edge_position
+    pub shape: Vec4,
+    pub factor: f32,
+}
+
+impl Material for ImpactCoreMaterial {
+    fn vertex_shader() -> ShaderRef {
+        "ro://effects/impact_core.wgsl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "ro://effects/impact_core.wgsl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Blend
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        descriptor.primitive.cull_mode = None;
+        Ok(())
+    }
+}
+
+impl FactorMaterial for ImpactCoreMaterial {
+    fn set_factor(&mut self, factor: f32) {
+        self.params.factor = factor;
+    }
+}
+
+/// Unlit additive four-point glint material. Fades with `params.factor`,
+/// camera-facing done in the vertex stage. See `assets/data/effects/four_point_star.wgsl`.
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+pub struct StarMaterial {
+    #[uniform(0)]
+    pub params: StarParams,
+}
+
+/// Packed four-point-star parameters. Field order and types must match the
+/// `StarParams` struct in `four_point_star.wgsl`.
+#[derive(Clone, Copy, Debug, ShaderType)]
+pub struct StarParams {
+    pub primary_color: Vec4,
+    pub secondary_color: Vec4,
+    /// x=emission y=star_shape z=star_smoothness
+    pub shape: Vec4,
+    pub factor: f32,
+}
+
+impl Material for StarMaterial {
+    fn vertex_shader() -> ShaderRef {
+        "ro://effects/four_point_star.wgsl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "ro://effects/four_point_star.wgsl".into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Add
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline,
+        descriptor: &mut RenderPipelineDescriptor,
+        _layout: &MeshVertexBufferLayoutRef,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        descriptor.primitive.cull_mode = None;
+        Ok(())
+    }
+}
+
+impl FactorMaterial for StarMaterial {
+    fn set_factor(&mut self, factor: f32) {
+        self.params.factor = factor;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,5 +228,32 @@ mod tests {
             app.world().get::<FactorRamp>(parent).is_none(),
             "the ramp parent despawns on completion"
         );
+    }
+
+    #[test]
+    fn factor_materials_write_factor() {
+        let bank = Vec4::ONE;
+        let mut core = ImpactCoreMaterial {
+            params: ImpactParams {
+                primary_color: bank,
+                secondary_color: bank,
+                shape: bank,
+                factor: 0.0,
+            },
+        };
+        let mut star = StarMaterial {
+            params: StarParams {
+                primary_color: bank,
+                secondary_color: bank,
+                shape: bank,
+                factor: 0.0,
+            },
+        };
+
+        core.set_factor(0.5);
+        star.set_factor(0.5);
+
+        assert_eq!(core.params.factor, 0.5);
+        assert_eq!(star.params.factor, 0.5);
     }
 }
