@@ -3,9 +3,8 @@
 //!
 //! The window spawns on the first `NpcDialogReceived` and rebuilds only its body
 //! region on later frames (the chrome — wrapper, card, titlebar — persists for the
-//! whole conversation). `NEXT` and `CLOSE` are the only interactive frames this task
-//! wires; `MENU`/`INPUT_INT`/`INPUT_STR` render as a text-only placeholder so a
-//! conversation never panics ahead of Tasks 7/8.
+//! whole conversation). `NEXT`, `CLOSE`, and `MENU` are wired; `INPUT_INT`/`INPUT_STR`
+//! render as a text-only placeholder so a conversation never panics ahead of Task 8.
 
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
@@ -48,6 +47,8 @@ pub enum FooterButtonAction {
     #[default]
     Continue,
     CloseOrCancel,
+    /// A MENU option; carries the already-1-based choice index.
+    Choice(u32),
 }
 
 /// Present only while a conversation is live: the source of truth for the `npc_id`
@@ -111,7 +112,11 @@ fn on_dialog_received(
                 commands.entity(body).despawn();
             }
             commands
-                .spawn_scene(scene::body(event.text.clone(), event.expect))
+                .spawn_scene(scene::body(
+                    event.text.clone(),
+                    event.expect,
+                    event.options.clone(),
+                ))
                 .insert(ChildOf(parts.card));
             if let Ok(mut text) = titles.single_mut() {
                 text.0 = title;
@@ -119,7 +124,12 @@ fn on_dialog_received(
         }
         Err(_) => {
             commands
-                .spawn_scene(scene::window(title, event.text.clone(), event.expect))
+                .spawn_scene(scene::window(
+                    title,
+                    event.text.clone(),
+                    event.expect,
+                    event.options.clone(),
+                ))
                 .insert(DespawnOnExit(GameState::InGame));
         }
     }
@@ -136,9 +146,10 @@ fn title_or_fallback(name: Option<String>) -> String {
     name.unwrap_or_else(|| FALLBACK_TITLE.to_string())
 }
 
-/// Shared handler for every footer/titlebar button: `Continue` responds and leaves
-/// the window open (the server drives the next frame); `CloseOrCancel` despawns
-/// locally, sending `Cancel` unless the active frame is already terminal (`CLOSE`).
+/// Shared handler for every footer/titlebar button: `Continue`/`Choice` respond and
+/// leave the window open (the server drives the next frame); `CloseOrCancel`
+/// despawns locally, sending `Cancel` unless the active frame is already terminal
+/// (`CLOSE`).
 fn on_footer_button(
     activate: On<Activate>,
     actions: Query<&FooterButtonAction>,
@@ -151,15 +162,23 @@ fn on_footer_button(
         return;
     };
 
-    if *action == FooterButtonAction::Continue {
-        respond.write(RespondToNpc {
-            npc_id: active.npc_id,
-            response: NpcResponse::Continue,
-        });
-        return;
+    match *action {
+        FooterButtonAction::Continue => {
+            respond.write(RespondToNpc {
+                npc_id: active.npc_id,
+                response: NpcResponse::Continue,
+            });
+        }
+        FooterButtonAction::Choice(n) => {
+            respond.write(RespondToNpc {
+                npc_id: active.npc_id,
+                response: NpcResponse::Choice(n),
+            });
+        }
+        FooterButtonAction::CloseOrCancel => {
+            close_or_cancel(&active, &roots, &mut commands, &mut respond);
+        }
     }
-
-    close_or_cancel(&active, &roots, &mut commands, &mut respond);
 }
 
 /// ESC ends the conversation exactly like the titlebar close-dot / a `Close`

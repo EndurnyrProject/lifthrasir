@@ -32,7 +32,12 @@ const WINDOW_Z: i32 = 900;
 /// The whole window: wrapper, card, titlebar, and the first body. Spawned once per
 /// conversation, at top level — it doesn't cover any world-click area outside its
 /// own bounds, so it needs no HUD parent.
-pub fn window(title: String, text: String, expect: NpcDialogExpect) -> impl Scene {
+pub fn window(
+    title: String,
+    text: String,
+    expect: NpcDialogExpect,
+    options: Vec<String>,
+) -> impl Scene {
     bsn! {
         NpcDialogRoot
         NpcDialogParts { card: #Card }
@@ -44,17 +49,17 @@ pub fn window(title: String, text: String, expect: NpcDialogExpect) -> impl Scen
         }
         GlobalZIndex(WINDOW_Z)
         ignore_picking()
-        Children [ ( #Card card(title, text, expect) ) ]
+        Children [ ( #Card card(title, text, expect, options) ) ]
     }
 }
 
 /// Just the swappable body region, spawned as a child of the existing card entity
 /// on every later frame of a conversation.
-pub fn body(text: String, expect: NpcDialogExpect) -> impl Scene {
-    body_scene(text, expect)
+pub fn body(text: String, expect: NpcDialogExpect, options: Vec<String>) -> impl Scene {
+    body_scene(text, expect, options)
 }
 
-fn card(title: String, text: String, expect: NpcDialogExpect) -> impl Scene {
+fn card(title: String, text: String, expect: NpcDialogExpect, options: Vec<String>) -> impl Scene {
     bsn! {
         Node {
             width: px(WINDOW_WIDTH),
@@ -66,7 +71,7 @@ fn card(title: String, text: String, expect: NpcDialogExpect) -> impl Scene {
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
-        Children [ titlebar(title), body_scene(text, expect) ]
+        Children [ titlebar(title), body_scene(text, expect, options) ]
     }
 }
 
@@ -104,7 +109,7 @@ fn titlebar(title: String) -> impl Scene {
     }
 }
 
-fn body_scene(text: String, expect: NpcDialogExpect) -> impl Scene {
+fn body_scene(text: String, expect: NpcDialogExpect, options: Vec<String>) -> impl Scene {
     bsn! {
         NpcDialogBody
         Node {
@@ -113,7 +118,7 @@ fn body_scene(text: String, expect: NpcDialogExpect) -> impl Scene {
             padding: {UiRect::axes(px(14), px(12))},
         }
         ignore_picking()
-        Children [ dialog_text(text), footer_row(expect) ]
+        Children [ dialog_text(text), footer_row(expect, options) ]
     }
 }
 
@@ -150,13 +155,21 @@ fn text_span(content: String, color: Color) -> impl Scene {
 }
 
 /// The footer buttons for `expect`: `[Close, Next]` for `NEXT`, `[Close]` for
-/// `CLOSE` (terminal), and none for the frames Tasks 7/8 add (`MENU`/`INPUT_*`), so
-/// those render as a text-only placeholder instead of panicking.
-fn footer_row(expect: NpcDialogExpect) -> impl Scene {
-    let buttons: Vec<_> = footer_buttons(expect)
-        .into_iter()
-        .map(|(label, action)| footer_button(label, action))
-        .collect();
+/// `CLOSE` (terminal), one button per `options` entry plus `[Leave]` for `MENU`,
+/// and none for the frame Task 8 adds (`INPUT_*`), so that renders as a text-only
+/// placeholder instead of panicking.
+fn footer_row(expect: NpcDialogExpect, options: Vec<String>) -> impl Scene {
+    let buttons: Vec<_> = if expect == NpcDialogExpect::Menu {
+        menu_buttons(&options)
+    } else {
+        footer_buttons(expect)
+            .into_iter()
+            .map(|(label, action)| (label.to_string(), action))
+            .collect()
+    }
+    .into_iter()
+    .map(|(label, action)| footer_button(label, action))
+    .collect();
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
@@ -179,7 +192,21 @@ fn footer_buttons(expect: NpcDialogExpect) -> Vec<(&'static str, FooterButtonAct
     }
 }
 
-fn footer_button(label: &'static str, action: FooterButtonAction) -> impl Scene {
+/// `(label, action)` pairs for a `MENU` frame: one `Choice(i + 1)` button per
+/// option, in render order (the server's `Choice` is 1-based), plus a trailing
+/// `Leave` button that cancels the conversation. Empty `options` still yields
+/// `Leave` alone.
+fn menu_buttons(options: &[String]) -> Vec<(String, FooterButtonAction)> {
+    let mut buttons: Vec<_> = options
+        .iter()
+        .enumerate()
+        .map(|(i, label)| (label.clone(), FooterButtonAction::Choice(i as u32 + 1)))
+        .collect();
+    buttons.push(("Leave".to_string(), FooterButtonAction::CloseOrCancel));
+    buttons
+}
+
+fn footer_button(label: String, action: FooterButtonAction) -> impl Scene {
     bsn! {
         @FeathersButton { @caption: bsn! { chrome_text(label) } }
         template_value(action)
@@ -188,7 +215,7 @@ fn footer_button(label: &'static str, action: FooterButtonAction) -> impl Scene 
     }
 }
 
-fn chrome_text(text: &'static str) -> impl Scene {
+fn chrome_text(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
@@ -247,5 +274,29 @@ mod tests {
         assert!(footer_buttons(NpcDialogExpect::Menu).is_empty());
         assert!(footer_buttons(NpcDialogExpect::InputInt).is_empty());
         assert!(footer_buttons(NpcDialogExpect::InputStr).is_empty());
+    }
+
+    #[test]
+    fn menu_buttons_map_render_index_to_one_based_choice() {
+        let options = vec!["Yes".to_string(), "No".to_string(), "Maybe".to_string()];
+        let buttons = menu_buttons(&options);
+        assert_eq!(
+            buttons,
+            vec![
+                ("Yes".to_string(), FooterButtonAction::Choice(1)),
+                ("No".to_string(), FooterButtonAction::Choice(2)),
+                ("Maybe".to_string(), FooterButtonAction::Choice(3)),
+                ("Leave".to_string(), FooterButtonAction::CloseOrCancel),
+            ]
+        );
+    }
+
+    #[test]
+    fn menu_buttons_empty_options_still_has_leave() {
+        let buttons = menu_buttons(&[]);
+        assert_eq!(
+            buttons,
+            vec![("Leave".to_string(), FooterButtonAction::CloseOrCancel)]
+        );
     }
 }
