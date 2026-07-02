@@ -15,6 +15,7 @@ use crate::theme;
 pub mod damage_numbers;
 pub mod floor_item_labels;
 pub mod nameplates;
+pub mod skill_cast_labels;
 
 /// Query filter for the in-game 3D camera that worldspace overlays project
 /// against, excluding the equipment-window preview camera.
@@ -42,6 +43,7 @@ impl Plugin for WorldspaceUiPlugin {
             nameplates::NameplatePlugin,
             damage_numbers::DamageNumberPlugin,
             floor_item_labels::FloorItemLabelPlugin,
+            skill_cast_labels::SkillCastLabelPlugin,
         ));
     }
 }
