@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use net_contract::commands::{AttackRequested, PickupRequested};
+use net_contract::commands::{AttackRequested, PickupRequested, TalkToNpc};
 
 use crate::domain::entities::components::NetworkEntity;
 use crate::domain::entities::hover::{
@@ -102,6 +102,7 @@ pub fn on_sprite_click(
     mut targeting: ResMut<TargetingMode>,
     mut attacks: MessageWriter<AttackRequested>,
     mut pickups: MessageWriter<PickupRequested>,
+    mut talks: MessageWriter<TalkToNpc>,
     mut skills: MessageWriter<SkillCastResolved>,
     mut locked: ResMut<LockedTarget>,
     mut pending: ResMut<PendingPickups>,
@@ -128,7 +129,7 @@ pub fn on_sprite_click(
         return;
     }
 
-    let (is_mob, _is_npc) = kinds.get(root).unwrap_or((false, false));
+    let (is_mob, is_npc) = kinds.get(root).unwrap_or((false, false));
     if is_mob {
         if let Ok(net) = nets.get(root) {
             attacks.write(AttackRequested { target_id: net.gid });
@@ -136,6 +137,13 @@ pub fn on_sprite_click(
                 entity: Some(root),
                 gid: Some(net.gid),
             };
+        }
+        return;
+    }
+
+    if is_npc {
+        if let Ok(net) = nets.get(root) {
+            talks.write(TalkToNpc { npc_id: net.gid });
         }
         return;
     }
@@ -153,6 +161,4 @@ pub fn on_sprite_click(
             },
         );
     }
-
-    // NPC talk: future
 }
