@@ -5,7 +5,8 @@
 //! rebuild the body region on every later frame.
 
 use bevy::prelude::*;
-use bevy::text::{FontSize, FontSourceTemplate};
+use bevy::scene::EntityScene;
+use bevy::text::{EditableText, FontSize, FontSourceTemplate};
 use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
 use net_contract::dto::NpcDialogExpect;
@@ -13,12 +14,13 @@ use net_contract::dto::NpcDialogExpect;
 use crate::rich_text::parse_color_codes;
 use crate::theme;
 use crate::theme::feathers_theme::{
-    TOKEN_TEXT, TOKEN_TEXT_DIM, TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
+    TOKEN_PANEL_BG, TOKEN_PANEL_BORDER, TOKEN_TEXT, TOKEN_TEXT_DIM, TOKEN_TITLEBAR_BG,
+    TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
 };
 
 use super::{
     on_footer_button, FooterButtonAction, NpcDialogBody, NpcDialogParts, NpcDialogRoot,
-    NpcDialogTitle,
+    NpcDialogTitle, NpcInputField,
 };
 
 const WINDOW_WIDTH: f32 = 560.0;
@@ -110,6 +112,11 @@ fn titlebar(title: String) -> impl Scene {
 }
 
 fn body_scene(text: String, expect: NpcDialogExpect, options: Vec<String>) -> impl Scene {
+    let input = matches!(
+        expect,
+        NpcDialogExpect::InputInt | NpcDialogExpect::InputStr
+    )
+    .then(|| EntityScene(input_field()));
     bsn! {
         NpcDialogBody
         Node {
@@ -118,7 +125,29 @@ fn body_scene(text: String, expect: NpcDialogExpect, options: Vec<String>) -> im
             padding: {UiRect::axes(px(14), px(12))},
         }
         ignore_picking()
-        Children [ dialog_text(text), footer_row(expect, options) ]
+        Children [ dialog_text(text), {input}, footer_row(expect, options) ]
+    }
+}
+
+/// The `EditableText` field for `INPUT_INT`/`INPUT_STR`: free-entry (the proto
+/// carries no min/max for `INPUT_INT`), marked so `Confirm` can read its value.
+fn input_field() -> impl Scene {
+    bsn! {
+        NpcInputField
+        EditableText
+        TextFont {
+            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font_size: {FontSize::Px(13.0)},
+        }
+        ThemeTextColor({TOKEN_TEXT})
+        Node {
+            height: px(28),
+            padding: {UiRect::axes(px(10), px(6))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(6)),
+        }
+        ThemeBackgroundColor({TOKEN_PANEL_BG})
+        ThemeBorderColor({TOKEN_PANEL_BORDER})
     }
 }
 
@@ -156,16 +185,12 @@ fn text_span(content: String, color: Color) -> impl Scene {
 
 /// The footer buttons for `expect`: `[Close, Next]` for `NEXT`, `[Close]` for
 /// `CLOSE` (terminal), one button per `options` entry plus `[Leave]` for `MENU`,
-/// and none for the frame Task 8 adds (`INPUT_*`), so that renders as a text-only
-/// placeholder instead of panicking.
+/// and `[Cancel, Confirm]` for `INPUT_INT`/`INPUT_STR`.
 fn footer_row(expect: NpcDialogExpect, options: Vec<String>) -> impl Scene {
-    let buttons: Vec<_> = if expect == NpcDialogExpect::Menu {
-        menu_buttons(&options)
-    } else {
-        footer_buttons(expect)
-            .into_iter()
-            .map(|(label, action)| (label.to_string(), action))
-            .collect()
+    let buttons: Vec<_> = match expect {
+        NpcDialogExpect::Menu => menu_buttons(&options),
+        NpcDialogExpect::InputInt | NpcDialogExpect::InputStr => owned_buttons(input_buttons()),
+        NpcDialogExpect::Next | NpcDialogExpect::Close => owned_buttons(footer_buttons(expect)),
     }
     .into_iter()
     .map(|(label, action)| footer_button(label, action))
@@ -181,6 +206,18 @@ fn footer_row(expect: NpcDialogExpect, options: Vec<String>) -> impl Scene {
     }
 }
 
+fn owned_buttons(
+    pairs: Vec<(&'static str, FooterButtonAction)>,
+) -> Vec<(String, FooterButtonAction)> {
+    pairs
+        .into_iter()
+        .map(|(label, action)| (label.to_string(), action))
+        .collect()
+}
+
+/// `[Close, Next]` for `NEXT`, `[Close]` for `CLOSE` (terminal). Only ever called
+/// with these two variants — `MENU` and `INPUT_INT`/`INPUT_STR` build their own
+/// buttons (`menu_buttons`/`input_buttons`) in `footer_row` instead.
 fn footer_buttons(expect: NpcDialogExpect) -> Vec<(&'static str, FooterButtonAction)> {
     match expect {
         NpcDialogExpect::Next => vec![
@@ -188,8 +225,17 @@ fn footer_buttons(expect: NpcDialogExpect) -> Vec<(&'static str, FooterButtonAct
             ("Next", FooterButtonAction::Continue),
         ],
         NpcDialogExpect::Close => vec![("Close", FooterButtonAction::CloseOrCancel)],
-        NpcDialogExpect::Menu | NpcDialogExpect::InputInt | NpcDialogExpect::InputStr => Vec::new(),
+        _ => Vec::new(),
     }
+}
+
+/// `[Cancel, Confirm]` for `INPUT_INT`/`INPUT_STR`: `Cancel` ends the conversation,
+/// `Confirm` submits the field's current value.
+fn input_buttons() -> Vec<(&'static str, FooterButtonAction)> {
+    vec![
+        ("Cancel", FooterButtonAction::CloseOrCancel),
+        ("Confirm", FooterButtonAction::Confirm),
+    ]
 }
 
 /// `(label, action)` pairs for a `MENU` frame: one `Choice(i + 1)` button per
@@ -270,10 +316,14 @@ mod tests {
     }
 
     #[test]
-    fn placeholder_frames_show_no_footer_buttons() {
-        assert!(footer_buttons(NpcDialogExpect::Menu).is_empty());
-        assert!(footer_buttons(NpcDialogExpect::InputInt).is_empty());
-        assert!(footer_buttons(NpcDialogExpect::InputStr).is_empty());
+    fn input_frame_shows_cancel_and_confirm() {
+        assert_eq!(
+            input_buttons(),
+            vec![
+                ("Cancel", FooterButtonAction::CloseOrCancel),
+                ("Confirm", FooterButtonAction::Confirm),
+            ]
+        );
     }
 
     #[test]
