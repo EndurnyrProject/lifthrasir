@@ -142,6 +142,8 @@ pub fn spawn_camera_on_player_ready(
         Transform::from_translation(camera_position).looking_at(player_position, Vec3::NEG_Y),
         CameraFollowTarget::new(player_entity, player_position),
         settings,
+        // Opts this camera into mesh picking (MeshPickingSettings::require_markers).
+        bevy::picking::mesh_picking::MeshPickingCamera,
         Name::new("FollowCamera"),
     ));
 

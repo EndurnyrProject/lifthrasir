@@ -421,7 +421,15 @@ fn spawn_render_layer_child(
     ));
 
     if is_body {
-        entity_commands.insert(BodyAttachPoint::default());
+        // The body billboard is the pickable surface for world-entity clicks; the
+        // click/hover intent is resolved on the `NetworkEntity`/`FloorItem` root
+        // (`parent`), which carries the Mob/Npc/FloorItem markers.
+        entity_commands.insert((BodyAttachPoint::default(), Pickable::default()));
+
+        entity_commands
+            .observe(crate::domain::entities::picking::on_sprite_over)
+            .observe(crate::domain::entities::picking::on_sprite_out)
+            .observe(crate::domain::entities::picking::on_sprite_click);
     }
 
     if is_head {

@@ -31,6 +31,16 @@ fn main() {
 
     info!("Lifthrasir {VERSION}");
 
+    // World-entity picking (attack/pickup/talk) is routed by bevy_picking mesh hits
+    // instead of a shared-click race. `require_markers` keeps it opt-in: only the
+    // camera (MeshPickingCamera) and the sprite bodies (Pickable) participate, so the
+    // terrain and effect meshes are never picked.
+    app.add_plugins(bevy::picking::mesh_picking::MeshPickingPlugin);
+    app.insert_resource(bevy::picking::mesh_picking::MeshPickingSettings {
+        require_markers: true,
+        ..default()
+    });
+
     app.add_plugins(bevy_framepace::FramepacePlugin);
 
     #[cfg(feature = "dev")]

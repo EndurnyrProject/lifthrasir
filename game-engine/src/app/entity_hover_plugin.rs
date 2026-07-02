@@ -2,17 +2,18 @@ use bevy_auto_plugin::prelude::*;
 
 /// Entity Hover Plugin
 ///
-/// This plugin handles entity hover detection and name requests.
+/// Hover detection now runs through the `bevy_picking` observers in
+/// `entities::picking`, which set `CurrentlyHoveredEntity` and trigger
+/// `EntityHoverEntered`/`EntityHoverExited`. This plugin owns the name-request
+/// side of hover.
 ///
 /// Registered resource:
-/// - HoverConfig
+/// - CurrentlyHoveredEntity
 ///
 /// Registered observer:
 /// - name_request_observer
 ///
-/// Registered systems (chained in EntityHoverSystems set):
-/// - update_entity_bounds_system
-/// - entity_hover_detection_system
+/// Registered system:
 /// - name_response_handler_system
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]

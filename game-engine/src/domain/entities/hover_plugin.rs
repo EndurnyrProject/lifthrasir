@@ -7,11 +7,11 @@ use bevy::prelude::*;
 ///
 /// # System Flow
 ///
-/// 1. `update_entity_bounds_system` - Calculates screen-space bounds for entities
-/// 2. `entity_hover_detection_system` - Detects mouse hover, triggers observer events
-/// 3. `name_request_observer` - Observer that sends CZ_REQNAME2 packets when hovering entities
-/// 4. Server responds with ZC_ACK_REQNAME or ZC_ACK_REQNAMEALL
-/// 5. `name_response_handler_system` - Adds EntityName component to entities
+/// 1. `entities::picking` observers detect hover via `bevy_picking` and trigger
+///    `EntityHoverEntered`
+/// 2. `name_request_observer` - Observer that sends CZ_REQNAME2 packets when hovering entities
+/// 3. Server responds with ZC_ACK_REQNAME or ZC_ACK_REQNAMEALL
+/// 4. `name_response_handler_system` - Adds EntityName component to entities
 ///
 /// # Integration
 ///

@@ -2,15 +2,13 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 
 use crate::core::state::GameState;
-use crate::domain::entities::components::NetworkEntity;
-use crate::domain::entities::hover::CurrentlyHoveredEntity;
 use crate::domain::skill::{CastTarget, SkillCastResolved};
 use crate::domain::system_sets::InputSystems;
 
 use super::cursor::{handle_cursor_change_requests, CursorType};
 use super::events::CursorChangeRequest;
 use super::resources::ForwardedMouseClick;
-use super::systems::{handle_entity_click, handle_terrain_click, update_cursor_for_terrain};
+use super::systems::{handle_terrain_click, update_cursor_for_terrain};
 use super::terrain_raycast::TerrainRaycastCache;
 
 /// RO's press-then-click targeting state machine: `resolve_skill_cast` arms it
@@ -36,56 +34,41 @@ pub enum TargetingMode {
     config(
         in_set = InputSystems::Click,
         run_if = in_state(GameState::InGame),
-        before = handle_entity_click,
         before = handle_terrain_click
     )
 )]
 pub fn targeting_click(
     mut targeting: ResMut<TargetingMode>,
     mut mouse_click: ResMut<ForwardedMouseClick>,
-    currently_hovered: Res<CurrentlyHoveredEntity>,
-    network_entities: Query<&NetworkEntity>,
     cache: Res<TerrainRaycastCache>,
     mut resolved: MessageWriter<SkillCastResolved>,
 ) {
+    // Entity-target skills are resolved by the sprite picking observer
+    // (`entities::picking::on_sprite_click`); here we handle only ground casts.
+    // The click is consumed for any armed mode so an empty-ground click while a
+    // skill is armed never leaks into player movement.
     if *targeting == TargetingMode::Idle {
         return;
     }
 
-    if mouse_click.position.is_none() {
+    if mouse_click.position.take().is_none() {
         return;
     }
 
-    mouse_click.position.take();
+    let TargetingMode::AwaitingGround { skill_id, level } = *targeting else {
+        return;
+    };
 
-    match *targeting {
-        TargetingMode::Idle => {}
-        TargetingMode::AwaitingEntity { skill_id, level } => {
-            let Some(hovered) = currently_hovered.entity else {
-                return;
-            };
-            let Ok(network_entity) = network_entities.get(hovered) else {
-                return;
-            };
-            resolved.write(SkillCastResolved {
-                skill_id,
-                level,
-                target: CastTarget::Entity(network_entity.gid),
-            });
-            *targeting = TargetingMode::Idle;
-        }
-        TargetingMode::AwaitingGround { skill_id, level } => {
-            let Some((x, y)) = cache.cell_coords else {
-                return;
-            };
-            resolved.write(SkillCastResolved {
-                skill_id,
-                level,
-                target: CastTarget::Ground(x, y),
-            });
-            *targeting = TargetingMode::Idle;
-        }
-    }
+    let Some((x, y)) = cache.cell_coords else {
+        return;
+    };
+
+    resolved.write(SkillCastResolved {
+        skill_id,
+        level,
+        target: CastTarget::Ground(x, y),
+    });
+    *targeting = TargetingMode::Idle;
 }
 
 #[auto_add_system(
@@ -132,17 +115,14 @@ pub fn disarm_on_exit(mut targeting: ResMut<TargetingMode>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::entities::types::ObjectType;
 
     const SKILL_ID: u32 = 28;
     const LEVEL: u32 = 3;
-    const GID: u32 = 4096;
 
     fn click_app() -> App {
         let mut app = App::new();
         app.init_resource::<TargetingMode>()
             .init_resource::<ForwardedMouseClick>()
-            .init_resource::<CurrentlyHoveredEntity>()
             .init_resource::<TerrainRaycastCache>()
             .add_message::<SkillCastResolved>()
             .add_systems(Update, targeting_click);
@@ -176,38 +156,6 @@ mod tests {
             .iter_current_update_messages()
             .cloned()
             .collect()
-    }
-
-    #[test]
-    fn entity_click_resolves_to_hovered_gid_and_disarms() {
-        let mut app = click_app();
-        let hovered = app
-            .world_mut()
-            .spawn(NetworkEntity::new(0, GID, ObjectType::Mob))
-            .id();
-        app.world_mut()
-            .resource_mut::<CurrentlyHoveredEntity>()
-            .entity = Some(hovered);
-        arm(
-            &mut app,
-            TargetingMode::AwaitingEntity {
-                skill_id: SKILL_ID,
-                level: LEVEL,
-            },
-        );
-        click(&mut app);
-        app.update();
-
-        let msgs = resolved_msgs(&app);
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].skill_id, SKILL_ID);
-        assert_eq!(msgs[0].level, LEVEL);
-        let CastTarget::Entity(gid) = msgs[0].target else {
-            panic!("expected an entity target");
-        };
-        assert_eq!(gid, GID);
-        assert_eq!(mode(&app), TargetingMode::Idle);
-        assert!(click_consumed(&app));
     }
 
     #[test]
@@ -338,6 +286,7 @@ mod tests {
     fn armed_cursor_wins_over_terrain_cursor_every_frame() {
         use super::super::cursor::{handle_cursor_change_requests, CurrentCursorType};
         use super::super::systems::update_cursor_for_terrain;
+        use crate::domain::entities::hover::CurrentlyHoveredEntity;
 
         let mut app = App::new();
         app.init_resource::<TargetingMode>()

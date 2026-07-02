@@ -37,25 +37,29 @@ fn forward_mouse_click(
     buttons: Res<ButtonInput<MouseButton>>,
     cursor: Res<ForwardedCursorPosition>,
     hover_map: Res<HoverMap>,
-    ui_nodes: Query<(), With<Node>>,
+    windows: Query<(), With<Window>>,
     mut click: ResMut<ForwardedMouseClick>,
 ) {
     if !buttons.just_pressed(MouseButton::Left) {
         return;
     }
-    if pointer_over_ui(&hover_map, &ui_nodes) {
+    if pointer_over_pickable(&hover_map, &windows) {
         return;
     }
     click.position = cursor.position;
 }
 
-/// Whether the mouse pointer is over a pickable UI node. `Pickable::IGNORE`
-/// elements (the always-on HUD) never enter the hover map, so only windows that
-/// opt into picking (e.g. the status window) suppress the world click.
-fn pointer_over_ui(hover_map: &HoverMap, ui_nodes: &Query<(), With<Node>>) -> bool {
+/// Whether the mouse pointer is over a pickable entity that should swallow the
+/// raw world click, so it only fires on empty ground. Picked sprite bodies (mesh
+/// picking) and windows that opt into picking enter the hover map; `Pickable::IGNORE`
+/// elements (the always-on HUD) and the terrain (no `Pickable`) never do.
+///
+/// The pointer's own `Window` entity is always present in the hover map, so it is
+/// excluded here — otherwise every world click would be suppressed.
+fn pointer_over_pickable(hover_map: &HoverMap, windows: &Query<(), With<Window>>) -> bool {
     hover_map
         .get(&PointerId::Mouse)
-        .is_some_and(|hits| hits.keys().any(|entity| ui_nodes.contains(*entity)))
+        .is_some_and(|hits| hits.keys().any(|entity| !windows.contains(*entity)))
 }
 
 #[auto_add_system(
@@ -188,5 +192,31 @@ mod tests {
 
         let click = app.world().resource::<ForwardedMouseClick>();
         assert_eq!(click.position, None);
+    }
+
+    #[test]
+    fn click_forwarded_when_only_hit_is_the_window() {
+        use bevy::ecs::entity::EntityHashMap;
+        use bevy::picking::backend::HitData;
+
+        // The pointer's own `Window` entity is always in the hover map. It must not
+        // count as a pickable target, or every world (terrain) click is swallowed.
+        let mut app = test_app();
+        let window = app.world_mut().spawn(Window::default()).id();
+        let mut hits = EntityHashMap::default();
+        hits.insert(window, HitData::new(Entity::PLACEHOLDER, 0.0, None, None));
+        app.world_mut()
+            .resource_mut::<HoverMap>()
+            .insert(PointerId::Mouse, hits);
+        app.world_mut()
+            .resource_mut::<ForwardedCursorPosition>()
+            .position = Some(Vec2::new(33.0, 44.0));
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        let click = app.world().resource::<ForwardedMouseClick>();
+        assert_eq!(click.position, Some(Vec2::new(33.0, 44.0)));
     }
 }
