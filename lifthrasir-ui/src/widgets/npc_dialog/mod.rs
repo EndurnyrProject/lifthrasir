@@ -18,6 +18,8 @@ use net_contract::commands::RespondToNpc;
 use net_contract::dto::{NpcDialogExpect, NpcResponse};
 use net_contract::events::NpcDialogReceived;
 
+use crate::rich_text::parse_color_codes;
+use crate::theme;
 use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod scene;
@@ -47,6 +49,18 @@ pub struct NpcDialogBody;
 #[derive(Component, Default, Clone)]
 pub struct NpcInputField;
 
+/// Progressively reveals a dialogue line. `full` keeps the original `^RRGGBB`-coded
+/// text so [`scene::slice_colored_runs`] can recompute colored runs for any prefix;
+/// `revealed` is the count of visible characters (Unicode scalar, not bytes) shown
+/// so far; `elapsed` accumulates delta time so the reveal rate is frame-independent.
+/// Lives on the dialogue text entity built by `scene::dialog_text`.
+#[derive(Component, Default, Clone)]
+pub struct Typewriter {
+    pub revealed: usize,
+    pub full: String,
+    pub elapsed: f32,
+}
+
 /// What a footer/titlebar button does when activated.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FooterButtonAction {
@@ -69,6 +83,9 @@ pub struct ActiveNpcDialog {
 
 const FALLBACK_TITLE: &str = "Conversation";
 
+/// Typewriter reveal speed, in visible characters per second.
+const CHARS_PER_SECOND: f32 = 40.0;
+
 pub struct NpcDialogPlugin;
 
 impl Plugin for NpcDialogPlugin {
@@ -84,6 +101,11 @@ impl Plugin for NpcDialogPlugin {
         app.add_systems(
             Update,
             cancel_on_escape
+                .run_if(in_state(GameState::InGame).and_then(resource_exists::<ActiveNpcDialog>)),
+        );
+        app.add_systems(
+            Update,
+            typewriter_reveal
                 .run_if(in_state(GameState::InGame).and_then(resource_exists::<ActiveNpcDialog>)),
         );
         app.add_systems(OnExit(GameState::InGame), |mut commands: Commands| {
@@ -152,6 +174,108 @@ fn on_dialog_received(
 /// hasn't been named yet (e.g. a click without a prior hover).
 fn title_or_fallback(name: Option<String>) -> String {
     name.unwrap_or_else(|| FALLBACK_TITLE.to_string())
+}
+
+/// Advances every open dialogue's [`Typewriter`] by [`CHARS_PER_SECOND`] worth of
+/// delta time and re-renders the revealed prefix. A no-op once `revealed` reaches
+/// the line's visible length, so a fully-revealed (or short/instant) line stops
+/// touching its spans every frame and matches the old static rendering.
+fn typewriter_reveal(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut texts: Query<(
+        Entity,
+        &mut Typewriter,
+        &mut Text,
+        &mut TextColor,
+        Option<&Children>,
+    )>,
+) {
+    for (entity, mut typewriter, mut text, mut color, children) in &mut texts {
+        let (runs, total) = parsed_total(&typewriter.full);
+        if typewriter.revealed >= total {
+            continue;
+        }
+        typewriter.elapsed += time.delta_secs();
+        let revealed = ((typewriter.elapsed * CHARS_PER_SECOND) as usize).min(total);
+        if revealed == typewriter.revealed {
+            continue;
+        }
+        typewriter.revealed = revealed;
+        render_revealed(
+            &mut commands,
+            entity,
+            &mut text,
+            &mut color,
+            children,
+            scene::slice_colored_runs(&runs, revealed),
+        );
+    }
+}
+
+/// Click-to-skip: clicking the dialogue text jumps straight to the full line.
+fn on_text_click(
+    mut click: On<Pointer<Click>>,
+    mut commands: Commands,
+    mut texts: Query<(
+        &mut Typewriter,
+        &mut Text,
+        &mut TextColor,
+        Option<&Children>,
+    )>,
+) {
+    click.propagate(false);
+    let Ok((mut typewriter, mut text, mut color, children)) = texts.get_mut(click.entity) else {
+        return;
+    };
+    let (runs, total) = parsed_total(&typewriter.full);
+    if typewriter.revealed >= total {
+        return;
+    }
+    typewriter.revealed = total;
+    render_revealed(
+        &mut commands,
+        click.entity,
+        &mut text,
+        &mut color,
+        children,
+        runs,
+    );
+}
+
+/// Parses `full`'s `^RRGGBB` runs and the total visible (decoded) character count,
+/// so the reveal cap stays consistent between the tick and click-to-skip paths.
+fn parsed_total(full: &str) -> (Vec<(Color, String)>, usize) {
+    let runs = parse_color_codes(full, theme::TEXT);
+    let total = runs.iter().map(|(_, run)| run.chars().count()).sum();
+    (runs, total)
+}
+
+/// Rewrites the dialogue text entity's root `Text`/`TextColor` from `visible`'s
+/// first run and replaces its `TextSpan` children with the rest, so multi-color
+/// dialogue keeps its per-run colors at every reveal length.
+fn render_revealed(
+    commands: &mut Commands,
+    text_entity: Entity,
+    text: &mut Text,
+    color: &mut TextColor,
+    children: Option<&Children>,
+    visible: Vec<(Color, String)>,
+) {
+    if let Some(children) = children {
+        for &child in children {
+            commands.entity(child).despawn();
+        }
+    }
+    let mut runs = visible.into_iter();
+    let (first_color, first_text) = runs.next().unwrap_or((theme::TEXT, String::new()));
+    text.0 = first_text;
+    color.0 = first_color;
+    for (run_color, content) in runs {
+        commands
+            .spawn_scene(scene::text_span(content, run_color))
+            .insert(ChildOf(text_entity));
+    }
 }
 
 /// Shared handler for every footer/titlebar button: `Continue`/`Choice` respond and

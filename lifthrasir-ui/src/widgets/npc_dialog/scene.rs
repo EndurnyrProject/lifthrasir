@@ -11,7 +11,6 @@ use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
 use net_contract::dto::NpcDialogExpect;
 
-use crate::rich_text::parse_color_codes;
 use crate::theme;
 use crate::theme::feathers_theme::{
     TOKEN_PANEL_BG, TOKEN_PANEL_BORDER, TOKEN_TEXT, TOKEN_TEXT_DIM, TOKEN_TITLEBAR_BG,
@@ -19,8 +18,8 @@ use crate::theme::feathers_theme::{
 };
 
 use super::{
-    on_footer_button, FooterButtonAction, NpcDialogBody, NpcDialogParts, NpcDialogRoot,
-    NpcDialogTitle, NpcInputField,
+    on_footer_button, on_text_click, FooterButtonAction, NpcDialogBody, NpcDialogParts,
+    NpcDialogRoot, NpcDialogTitle, NpcInputField, Typewriter,
 };
 
 const WINDOW_WIDTH: f32 = 560.0;
@@ -151,28 +150,26 @@ fn input_field() -> impl Scene {
     }
 }
 
-/// Splits `text` into `^RRGGBB`-colored runs (see [`crate::rich_text`]) and renders
-/// them as one `Text` root plus a `TextSpan` per following run, so multi-color
-/// dialogue stays a single text layout block.
+/// The dialogue text entity: starts empty, its typewriter reveal driven by
+/// `typewriter_reveal` each frame. Pickable (not `ignore_picking`) so clicking it
+/// fires `on_text_click` and skips straight to the full line. `full` keeps the
+/// `^RRGGBB` codes intact so the reveal can recompute colored runs via
+/// [`crate::rich_text::parse_color_codes`] at any length (see [`slice_colored_runs`]).
 fn dialog_text(text: String) -> impl Scene {
-    let mut runs = parse_color_codes(&text, theme::TEXT).into_iter();
-    let (first_color, first_text) = runs.next().unwrap_or((theme::TEXT, String::new()));
-    let spans: Vec<_> = runs
-        .map(|(color, content)| text_span(content, color))
-        .collect();
     bsn! {
-        Text(first_text)
+        Typewriter { full: text }
+        Text(String::new())
         TextFont {
             font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
             font_size: {FontSize::Px(13.0)},
         }
-        TextColor(first_color)
-        ignore_picking()
-        Children [ {spans} ]
+        TextColor(theme::TEXT)
+        Pickable
+        on(on_text_click)
     }
 }
 
-fn text_span(content: String, color: Color) -> impl Scene {
+pub(super) fn text_span(content: String, color: Color) -> impl Scene {
     bsn! {
         TextSpan(content)
         TextFont {
@@ -181,6 +178,32 @@ fn text_span(content: String, color: Color) -> impl Scene {
         }
         TextColor(color)
     }
+}
+
+/// Slices already-color-parsed `runs` (see [`crate::rich_text::parse_color_codes`]) down to the
+/// first `max_chars` visible characters, preserving each run's color and never
+/// splitting inside a UTF-8 scalar. Runs entirely beyond `max_chars` are dropped;
+/// the run straddling the boundary is truncated in place.
+pub(super) fn slice_colored_runs(
+    runs: &[(Color, String)],
+    max_chars: usize,
+) -> Vec<(Color, String)> {
+    let mut remaining = max_chars;
+    let mut sliced = Vec::new();
+    for (color, content) in runs {
+        if remaining == 0 {
+            break;
+        }
+        let len = content.chars().count();
+        if len <= remaining {
+            sliced.push((*color, content.clone()));
+            remaining -= len;
+        } else {
+            sliced.push((*color, content.chars().take(remaining).collect()));
+            remaining = 0;
+        }
+    }
+    sliced
 }
 
 /// The footer buttons for `expect`: `[Close, Next]` for `NEXT`, `[Close]` for
@@ -347,6 +370,57 @@ mod tests {
         assert_eq!(
             buttons,
             vec![("Leave".to_string(), FooterButtonAction::CloseOrCancel)]
+        );
+    }
+
+    #[test]
+    fn slice_zero_chars_yields_nothing() {
+        let runs = vec![(theme::TEXT, "hello".to_string())];
+        assert_eq!(slice_colored_runs(&runs, 0), Vec::new());
+    }
+
+    #[test]
+    fn slice_mid_run_truncates_in_place() {
+        let runs = vec![
+            (theme::TEXT, "hello ".to_string()),
+            (Color::WHITE, "world".to_string()),
+        ];
+        assert_eq!(
+            slice_colored_runs(&runs, 8),
+            vec![
+                (theme::TEXT, "hello ".to_string()),
+                (Color::WHITE, "wo".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn slice_past_end_returns_every_run_unchanged() {
+        let runs = vec![
+            (theme::TEXT, "hello ".to_string()),
+            (Color::WHITE, "world".to_string()),
+        ];
+        assert_eq!(slice_colored_runs(&runs, 100), runs);
+    }
+
+    #[test]
+    fn slice_exact_boundary_between_runs() {
+        let runs = vec![
+            (theme::TEXT, "hi".to_string()),
+            (Color::WHITE, "there".to_string()),
+        ];
+        assert_eq!(
+            slice_colored_runs(&runs, 2),
+            vec![(theme::TEXT, "hi".to_string())]
+        );
+    }
+
+    #[test]
+    fn slice_counts_unicode_scalars_not_bytes() {
+        let runs = vec![(theme::TEXT, "\u{00e9}\u{00e9}\u{00e9}".to_string())];
+        assert_eq!(
+            slice_colored_runs(&runs, 2),
+            vec![(theme::TEXT, "\u{00e9}\u{00e9}".to_string())]
         );
     }
 }
