@@ -28,5 +28,14 @@ mod tests {
         assert!(app
             .world()
             .contains_resource::<Messages<events::LoginAccepted>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::NpcDialogReceived>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::TalkToNpc>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::RespondToNpc>>());
     }
 }

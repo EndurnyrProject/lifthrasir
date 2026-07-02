@@ -1,5 +1,6 @@
 //! Outbound command Messages (client to server).
 
+use crate::dto::NpcResponse;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
@@ -183,3 +184,18 @@ pub struct LocalMapLoaded;
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct LocalPlayerReady;
+
+/// Request to start an NPC dialogue with the NPC identified by `npc_id` (gid).
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct TalkToNpc {
+    pub npc_id: u32,
+}
+
+/// Respond to the active NPC dialogue frame for `npc_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct RespondToNpc {
+    pub npc_id: u32,
+    pub response: NpcResponse,
+}
