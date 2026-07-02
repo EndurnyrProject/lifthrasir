@@ -13,6 +13,7 @@ pub mod draggable;
 pub mod equipment_window;
 pub mod hotbar;
 pub mod inventory_window;
+pub mod npc_dialog;
 pub mod placeholder;
 pub mod settings_window;
 pub mod skill_window;
@@ -30,6 +31,7 @@ impl Plugin for InGameHudPlugin {
             equipment_window::EquipmentWindowPlugin,
             hotbar::HotbarWidgetPlugin,
             inventory_window::InventoryWindowPlugin,
+            npc_dialog::NpcDialogPlugin,
             settings_window::SettingsWindowPlugin,
             skill_window::SkillWindowPlugin,
             status_window::StatusWindowPlugin,
