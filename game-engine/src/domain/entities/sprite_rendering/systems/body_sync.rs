@@ -6,7 +6,6 @@ use crate::domain::entities::sprite_rendering::components::{
     BodyAttachPoint, HeadLayer, MobSprite, PlayerSprite, RenderLayer, RoSpriteGeneric,
 };
 use crate::domain::entities::sprite_rendering::layout::ActionLayout;
-use crate::domain::sprite::tags::SPRITE_BASE_Y_OFFSET;
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::utils::constants::SPRITE_WORLD_SCALE;
@@ -84,9 +83,13 @@ fn sync_body_layer_impl<T: ActionLayout>(
 
             transform.scale = Vec3::new(scale_x, scale_y, 1.0);
 
-            // Apply layer position offset plus base Y offset to lift sprite above ground
+            // RO authors each frame so the sprite, drawn centered at its ACT
+            // `position`, lands its feet on the ground anchor. `position` was
+            // Y-negated on extraction into a Y-up space, and world up is -Y, so we
+            // negate again to place the center: taller sprites carry a larger
+            // `position.y` and are lifted more, which is what grounds them.
             transform.translation.x = part.position.x * SPRITE_WORLD_SCALE;
-            transform.translation.y = part.position.y * SPRITE_WORLD_SCALE + SPRITE_BASE_Y_OFFSET;
+            transform.translation.y = -part.position.y * SPRITE_WORLD_SCALE;
 
             attach_point.layer_pos = part.position;
         }
