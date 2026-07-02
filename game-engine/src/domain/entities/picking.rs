@@ -152,7 +152,6 @@ pub fn on_sprite_click(
                 identified: item.identified,
             },
         );
-        return;
     }
 
     // NPC talk: future
