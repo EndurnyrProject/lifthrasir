@@ -5,6 +5,7 @@ pub mod ground;
 pub mod inventory;
 pub mod lifecycle;
 pub mod movement;
+pub mod npc;
 pub mod skill;
 pub mod social;
 pub mod visibility;
