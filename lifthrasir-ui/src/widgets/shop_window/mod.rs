@@ -11,8 +11,12 @@ use bevy::ui_widgets::Activate;
 use bevy_feathers::FeathersCorePlugin;
 use bevy_feathers::FeathersPlugins;
 use game_engine::core::state::GameState;
+use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::components::EntityName;
+use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::entities::registry::EntityRegistry;
+use game_engine::domain::inventory::Inventory;
+use game_engine::infrastructure::item::ItemDb;
 use net_contract::dto::{BuyEntry, SellEntry, ShopBuyItem, ShopResult, ShopSellItem};
 use net_contract::events::ShopOpened;
 
@@ -36,6 +40,21 @@ pub enum Selection {
     Buy(u32),
     /// A Sell-tab cell, keyed by `inventory_index`.
     Sell(u32),
+}
+
+/// What a shop button does when activated. The cart-edit variants carry the
+/// active tab's cart key (`nameid` on Buy, `inventory_index` on Sell) — the same
+/// key space `ShopSession`'s cart maps already use. Task 7 only attaches this
+/// marker to each interactive node; the handler that reads it lands in Task 8.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ShopButtonAction {
+    SwitchTab(ShopTab),
+    Select(Selection),
+    IncQty(u32),
+    DecQty(u32),
+    RemoveLine(u32),
+    #[default]
+    OpenConfirm,
 }
 
 /// Window-root marker: the outer chrome (wrapper, titlebar, card). A single
@@ -198,6 +217,11 @@ impl Plugin for ShopWindowPlugin {
             Update,
             close_shop.run_if(in_state(GameState::InGame).and_then(resource_exists::<ShopSession>)),
         );
+        app.add_systems(
+            Update,
+            rebuild_body
+                .run_if(in_state(GameState::InGame).and_then(resource_changed::<ShopSession>)),
+        );
         app.add_systems(OnExit(GameState::InGame), |mut commands: Commands| {
             commands.remove_resource::<ShopSession>()
         });
@@ -256,6 +280,46 @@ fn on_shop_opened(
         selected: None,
         banner: None,
     });
+}
+
+/// Rebuilds the swappable [`ShopWindowBody`] region on every [`ShopSession`]
+/// change: despawns its existing children and respawns the tab strip, grid,
+/// detail panel, cart, and footer from the session snapshot. A missing body
+/// entity (the first open frame, before `on_shop_opened`'s spawn lands) skips
+/// this pass silently; change detection retries on the next `ShopSession`
+/// write. A missing local player is not papered over with a zero-zeny
+/// fallback — `LocalPlayer`/`CharacterStatus` are inserted atomically at
+/// character spawn and are guaranteed present before any NPC talk, so their
+/// absence here is a real bug, not an expected transient; it's logged loudly
+/// rather than rendering a fabricated balance.
+fn rebuild_body(
+    mut commands: Commands,
+    session: Res<ShopSession>,
+    bodies: Query<(Entity, Option<&Children>), With<ShopWindowBody>>,
+    item_db: Option<Res<ItemDb>>,
+    inventory: Res<Inventory>,
+    player: Query<&CharacterStatus, With<LocalPlayer>>,
+) {
+    let Ok((body, children)) = bodies.single() else {
+        return;
+    };
+    let Ok(status) = player.single() else {
+        warn!("shop window rebuild skipped: no LocalPlayer/CharacterStatus while a shop is open");
+        return;
+    };
+    if let Some(children) = children {
+        for child in children.iter() {
+            commands.entity(child).despawn();
+        }
+    }
+    commands
+        .spawn_scene(scene::body(
+            &session,
+            status.zeny,
+            item_db.as_deref(),
+            &inventory,
+        ))
+        .insert(ChildOf(body));
 }
 
 /// Despawns the shop window and clears [`ShopSession`]. Shared by the titlebar
