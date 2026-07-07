@@ -20,8 +20,8 @@ use crate::theme::feathers_theme::{
 use crate::widgets::draggable::px_or_zero;
 
 use super::{
-    on_shop_close_button, Selection, ShopButtonAction, ShopSession, ShopTab, ShopWindowBody,
-    ShopWindowRoot, ShopWindowTitlebar,
+    on_shop_button, on_shop_close_button, Selection, ShopButtonAction, ShopSession, ShopTab,
+    ShopWindowBody, ShopWindowRoot, ShopWindowTitlebar,
 };
 
 const WINDOW_LEFT: f32 = 340.0;
@@ -170,6 +170,7 @@ struct DetailView {
     description: Option<String>,
 }
 
+#[derive(Clone)]
 struct CartLineView {
     key: u32,
     name: String,
@@ -251,7 +252,9 @@ fn sell_refine(inventory: &Inventory, index: u32) -> Option<u8> {
 }
 
 /// Whether the active tab's cart is non-empty and, on the Buy tab, affordable.
-fn cta_enabled(session: &ShopSession, zeny: u32) -> bool {
+/// Reused by [`on_shop_button`](super::on_shop_button) as the `OpenConfirm`
+/// guard, since the CTA's disabled look is visual-only (no `InteractionDisabled`).
+pub(super) fn cta_enabled(session: &ShopSession, zeny: u32) -> bool {
     let cart_empty = match session.tab {
         ShopTab::Buy => session.cart_buy.is_empty(),
         ShopTab::Sell => session.cart_sell.is_empty(),
@@ -431,6 +434,13 @@ pub fn body(
     let detail = detail_view(session, item_db, inventory);
     let cart = cart_lines(session, item_db, inventory);
     let footer_data = footer_view(session, zeny);
+    let overlay = session.confirm_open.then(|| {
+        EntityScene(confirm_overlay(
+            footer_data.buy,
+            cart.clone(),
+            footer_data.total,
+        ))
+    });
 
     bsn! {
         Node {
@@ -438,7 +448,7 @@ pub fn body(
             row_gap: px(10),
         }
         ignore_picking()
-        Children [ tab_strip(tab), content_row(cells, detail, cart), footer(footer_data) ]
+        Children [ tab_strip(tab), content_row(cells, detail, cart), footer(footer_data), {overlay} ]
     }
 }
 
@@ -460,6 +470,7 @@ fn tab_button(label: &'static str, target: ShopTab, active: bool) -> impl Scene 
         template_value(ShopButtonAction::SwitchTab(target))
         Node { flex_grow: 1.0, height: px(26) }
         BackgroundColor(bg)
+        on(on_shop_button)
     }
 }
 
@@ -551,6 +562,7 @@ fn cell(view: CellView) -> impl Scene {
         }
         BackgroundColor(bg)
         BorderColor::all(border)
+        on(on_shop_button)
     }
 }
 
@@ -827,6 +839,7 @@ fn small_icon_button(icon_name: &'static str, action: ShopButtonAction) -> impl 
         @FeathersButton { @caption: bsn! { glyph_icon(icon_name, 10.0, theme::TEXT_DIM) } }
         template_value(action)
         Node { width: px(18), height: px(16) }
+        on(on_shop_button)
     }
 }
 
@@ -945,6 +958,7 @@ fn cta_button(buy: bool, label: String, enabled: bool) -> impl Scene {
         template_value(ShopButtonAction::OpenConfirm)
         Node { height: px(30), padding: {UiRect::horizontal(px(16))} }
         BackgroundColor(bg)
+        on(on_shop_button)
     }
 }
 
@@ -957,6 +971,127 @@ fn chrome_text(text: String) -> impl Scene {
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
         ignore_picking()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Confirm overlay: a dimmed backdrop over the whole body region, blocking
+// clicks to the grid/cart/footer beneath while it's up (design §5.4). Rendered
+// as part of `body()` whenever `ShopSession.confirm_open` is set — no separate
+// spawn/despawn path, it just rides `rebuild_body`'s existing rebuild.
+// ---------------------------------------------------------------------------
+
+fn confirm_overlay(buy: bool, lines: Vec<CartLineView>, total: u64) -> impl Scene {
+    let title = if buy {
+        "Confirm Purchase"
+    } else {
+        "Confirm Sale"
+    };
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            width: percent(100),
+            height: percent(100),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+        }
+        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.55)})
+        Pickable
+        Children [ confirm_card(title.to_string(), lines, total, buy) ]
+    }
+}
+
+fn confirm_card(title: String, lines: Vec<CartLineView>, total: u64, buy: bool) -> impl Scene {
+    let rows: Vec<_> = lines.into_iter().map(confirm_line).collect();
+    let total_label = if buy { "Total cost" } else { "Total payout" };
+    let sign = if buy { "-" } else { "+" };
+    let confirm_label = if buy {
+        "Confirm Purchase"
+    } else {
+        "Confirm Sale"
+    };
+    let confirm_bg = if buy { theme::EMERALD } else { theme::GOLD };
+
+    bsn! {
+        Node {
+            width: px(280),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(10),
+            padding: {UiRect::all(px(16))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(10)),
+        }
+        BackgroundColor(theme::FIELD)
+        BorderColor::all(theme::GOLD_FAINT)
+        Pickable
+        Children [
+            (
+                Text(title)
+                TextFont {
+                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font_size: {FontSize::Px(15.0)},
+                }
+                ThemeTextColor({TOKEN_TEXT})
+                ignore_picking()
+            ),
+            (
+                Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
+                ignore_picking()
+                Children [ {rows} ]
+            ),
+            meta_row(total_label.to_string(), format!("{sign}{total}z")),
+            confirm_actions(confirm_label.to_string(), confirm_bg),
+        ]
+    }
+}
+
+fn confirm_line(view: CartLineView) -> impl Scene {
+    let total = view.unit_price as u64 * view.qty as u64;
+    bsn! {
+        Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
+        ignore_picking()
+        Children [
+            (
+                Text({format!("{} x{}", view.name, view.qty)})
+                TextFont {
+                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font_size: {FontSize::Px(11.0)},
+                }
+                ThemeTextColor({TOKEN_TEXT})
+                ignore_picking()
+            ),
+            (
+                Text({format!("{total}z")})
+                TextFont {
+                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font_size: {FontSize::Px(11.0)},
+                }
+                ThemeTextColor({TOKEN_ACCENT})
+                ignore_picking()
+            ),
+        ]
+    }
+}
+
+fn confirm_actions(confirm_label: String, confirm_bg: Color) -> impl Scene {
+    bsn! {
+        Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
+        ignore_picking()
+        Children [
+            (
+                @FeathersButton { @caption: bsn! { chrome_text("Cancel".to_string()) } }
+                template_value(ShopButtonAction::CancelConfirm)
+                Node { flex_grow: 1.0, height: px(28) }
+                on(on_shop_button)
+            ),
+            (
+                @FeathersButton { @caption: bsn! { chrome_text(confirm_label) } }
+                template_value(ShopButtonAction::ConfirmTrade)
+                Node { flex_grow: 1.0, height: px(28) }
+                BackgroundColor(confirm_bg)
+                on(on_shop_button)
+            ),
+        ]
     }
 }
 
@@ -987,6 +1122,8 @@ mod tests {
             cart_sell: HashMap::new(),
             selected: None,
             banner: None,
+            confirm_open: false,
+            awaiting: false,
         }
     }
 

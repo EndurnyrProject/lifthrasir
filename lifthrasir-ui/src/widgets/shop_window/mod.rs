@@ -17,8 +17,9 @@ use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::entities::registry::EntityRegistry;
 use game_engine::domain::inventory::Inventory;
 use game_engine::infrastructure::item::ItemDb;
+use net_contract::commands::{BuyFromShop, SellToShop};
 use net_contract::dto::{BuyEntry, SellEntry, ShopBuyItem, ShopResult, ShopSellItem};
-use net_contract::events::ShopOpened;
+use net_contract::events::{ChatHeard, ShopBuyResulted, ShopOpened, ShopSellResulted};
 
 use crate::theme::feathers_theme::install_norse_theme;
 use crate::widgets::npc_dialog::{ActiveNpcDialog, NpcDialogRoot};
@@ -44,8 +45,7 @@ pub enum Selection {
 
 /// What a shop button does when activated. The cart-edit variants carry the
 /// active tab's cart key (`nameid` on Buy, `inventory_index` on Sell) — the same
-/// key space `ShopSession`'s cart maps already use. Task 7 only attaches this
-/// marker to each interactive node; the handler that reads it lands in Task 8.
+/// key space `ShopSession`'s cart maps already use.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ShopButtonAction {
     SwitchTab(ShopTab),
@@ -55,6 +55,8 @@ pub enum ShopButtonAction {
     RemoveLine(u32),
     #[default]
     OpenConfirm,
+    ConfirmTrade,
+    CancelConfirm,
 }
 
 /// Window-root marker: the outer chrome (wrapper, titlebar, card). A single
@@ -88,6 +90,14 @@ pub struct ShopSession {
     pub cart_sell: HashMap<u32, u32>,
     pub selected: Option<Selection>,
     pub banner: Option<ShopResult>,
+    /// Whether the confirm-trade overlay is showing. `rebuild_body` renders it
+    /// as part of the body region on every `ShopSession` change.
+    pub confirm_open: bool,
+    /// Set the instant `ConfirmTrade` emits the batched command; cleared when
+    /// its result arrives. Models the design's `Await` state (§5.4): while
+    /// true, `on_shop_button` ignores every cart-editing/re-confirm action so a
+    /// tab switch or a second confirm can't race the in-flight request.
+    pub awaiting: bool,
 }
 
 impl ShopSession {
@@ -198,9 +208,36 @@ impl ShopSession {
         self.active_cart_mut().remove(&key);
     }
 
+    /// Decrements the active tab's cart line for `key` by 1, removing the line
+    /// entirely rather than leaving a zero-qty line behind once it would hit 0.
+    pub fn dec_line(&mut self, key: u32) {
+        let current = self.active_cart_mut().get(&key).copied().unwrap_or(0);
+        if current <= 1 {
+            self.remove_line(key);
+        } else {
+            self.set_line_qty(key, current - 1);
+        }
+    }
+
     /// Empties only the active tab's cart, leaving the other tab intact.
     pub fn clear_active_cart(&mut self) {
         self.active_cart_mut().clear();
+    }
+
+    /// Decrements the sell snapshot's `amount` for each sold slot by the traded
+    /// qty, dropping any slot that reaches 0 — keeps the snapshot honest until
+    /// the next shop open (design §5.4).
+    pub fn apply_sold(&mut self, entries: &[SellEntry]) {
+        for entry in entries {
+            if let Some(item) = self
+                .sell_items
+                .iter_mut()
+                .find(|item| item.inventory_index == entry.inventory_index)
+            {
+                item.amount = item.amount.saturating_sub(entry.amount);
+            }
+        }
+        self.sell_items.retain(|item| item.amount > 0);
     }
 }
 
@@ -222,6 +259,7 @@ impl Plugin for ShopWindowPlugin {
             rebuild_body
                 .run_if(in_state(GameState::InGame).and_then(resource_changed::<ShopSession>)),
         );
+        app.add_systems(Update, on_shop_result.run_if(in_state(GameState::InGame)));
         app.add_systems(OnExit(GameState::InGame), |mut commands: Commands| {
             commands.remove_resource::<ShopSession>()
         });
@@ -279,6 +317,8 @@ fn on_shop_opened(
         cart_sell: HashMap::new(),
         selected: None,
         banner: None,
+        confirm_open: false,
+        awaiting: false,
     });
 }
 
@@ -356,6 +396,203 @@ pub(super) fn on_shop_close_button(
     close_shop_window(&mut commands, &roots);
 }
 
+/// Whether `action` must be ignored while a trade round-trip is in flight
+/// (`ShopSession.awaiting`, design §5.4's `Await` state): every cart edit and
+/// (re-)confirm is blocked so a tab switch or a second confirm can't race the
+/// in-flight request. `Select`, `CancelConfirm`, the titlebar close button,
+/// and Escape stay live — closing/looking around while waiting is harmless.
+fn blocked_while_awaiting(action: ShopButtonAction) -> bool {
+    matches!(
+        action,
+        ShopButtonAction::SwitchTab(_)
+            | ShopButtonAction::IncQty(_)
+            | ShopButtonAction::DecQty(_)
+            | ShopButtonAction::RemoveLine(_)
+            | ShopButtonAction::OpenConfirm
+            | ShopButtonAction::ConfirmTrade
+    )
+}
+
+/// Shared handler for every interactive shop-window node: tab switch, select,
+/// cart +/-/remove mutate `ShopSession` directly; `OpenConfirm` re-checks the
+/// same guard the CTA's disabled look already encodes (a race between render
+/// and click is possible, since the CTA has no `InteractionDisabled`) before
+/// opening the overlay; `ConfirmTrade` emits the batched command for the active
+/// tab, sets `awaiting`, and closes the overlay, leaving the cart intact until
+/// the result arrives; `CancelConfirm` just closes the overlay. While
+/// `awaiting` is set, [`blocked_while_awaiting`] actions are ignored outright.
+pub(super) fn on_shop_button(
+    activate: On<Activate>,
+    actions: Query<&ShopButtonAction>,
+    mut session: ResMut<ShopSession>,
+    player: Query<&CharacterStatus, With<LocalPlayer>>,
+    mut buy_writer: MessageWriter<BuyFromShop>,
+    mut sell_writer: MessageWriter<SellToShop>,
+) {
+    let Ok(action) = actions.get(activate.entity) else {
+        return;
+    };
+    if session.awaiting && blocked_while_awaiting(*action) {
+        return;
+    }
+
+    match *action {
+        ShopButtonAction::SwitchTab(tab) => {
+            session.tab = tab;
+            session.selected = None;
+            session.banner = None;
+        }
+        ShopButtonAction::Select(selection) => {
+            session.selected = Some(selection);
+        }
+        ShopButtonAction::IncQty(key) => {
+            session.add_to_cart(key, 1);
+        }
+        ShopButtonAction::DecQty(key) => {
+            session.dec_line(key);
+        }
+        ShopButtonAction::RemoveLine(key) => {
+            session.remove_line(key);
+        }
+        ShopButtonAction::OpenConfirm => {
+            let Ok(status) = player.single() else {
+                warn!("shop confirm requested with no LocalPlayer/CharacterStatus present");
+                return;
+            };
+            if !scene::cta_enabled(&session, status.zeny) {
+                return;
+            }
+            session.confirm_open = true;
+        }
+        ShopButtonAction::ConfirmTrade => {
+            let unit_id = session.unit_id;
+            match session.tab {
+                ShopTab::Buy => {
+                    buy_writer.write(BuyFromShop {
+                        unit_id,
+                        items: session.to_buy_entries(),
+                    });
+                }
+                ShopTab::Sell => {
+                    sell_writer.write(SellToShop {
+                        unit_id,
+                        items: session.to_sell_entries(),
+                    });
+                }
+            }
+            session.confirm_open = false;
+            session.awaiting = true;
+        }
+        ShopButtonAction::CancelConfirm => {
+            session.confirm_open = false;
+        }
+    }
+}
+
+/// Resolves a display name for `nameid` via `ItemDb`, always as identified — the
+/// trade summary is a concise confirmation line, not a detail panel — falling
+/// back to `#nameid` when the db or the entry is missing.
+fn resolved_name(item_db: Option<&ItemDb>, nameid: u32) -> String {
+    item_db
+        .and_then(|db| db.name(nameid, true))
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("#{nameid}"))
+}
+
+/// Builds the chat-line summary for a successful trade, e.g. "Purchased 30x Red
+/// Potion, 3x White Potion" / "Sold 200x Jellopy". `lines` is `(nameid, qty)`
+/// pairs; empty input still yields a verb-only sentence, which should not occur
+/// in practice since `ConfirmTrade` only ever fires on a non-empty cart.
+fn trade_summary(buy: bool, lines: &[(u32, u32)], item_db: Option<&ItemDb>) -> String {
+    let verb = if buy { "Purchased" } else { "Sold" };
+    let parts: Vec<String> = lines
+        .iter()
+        .map(|(nameid, qty)| format!("{qty}x {}", resolved_name(item_db, *nameid)))
+        .collect();
+    format!("{verb} {}", parts.join(", "))
+}
+
+/// Applies one buy/sell result to `session`, returning the chat summary to
+/// post on success (`None` on error, once `banner` is set). `Ok`: builds the
+/// trade summary from the entries about to be cleared, decrements the sell
+/// snapshot for a sell, then clears the cart for `buy`'s tab specifically —
+/// **not** `clear_active_cart()`/`session.tab`, since the player may have
+/// switched tabs while the request was in flight (design §5.4's `Await`
+/// state); clearing the active tab instead of the traded one would leave a
+/// just-bought/-sold cart line alive for a re-send and wipe the untraded
+/// tab's cart instead. Any error sets `banner` to the mapped reason and
+/// preserves the cart for retry. Either way, closes the confirm overlay and
+/// clears `awaiting` — the request that opened them has now settled.
+fn apply_result(
+    session: &mut ShopSession,
+    buy: bool,
+    result: ShopResult,
+    item_db: Option<&ItemDb>,
+) -> Option<String> {
+    session.confirm_open = false;
+    session.awaiting = false;
+    if result != ShopResult::Ok {
+        session.banner = Some(result);
+        return None;
+    }
+
+    let message = if buy {
+        let lines: Vec<(u32, u32)> = session
+            .to_buy_entries()
+            .into_iter()
+            .map(|entry| (entry.nameid, entry.amount))
+            .collect();
+        trade_summary(true, &lines, item_db)
+    } else {
+        let sold = session.to_sell_entries();
+        let lines: Vec<(u32, u32)> = sold
+            .iter()
+            .filter_map(|entry| {
+                session
+                    .sell_items
+                    .iter()
+                    .find(|item| item.inventory_index == entry.inventory_index)
+                    .map(|item| (item.nameid, entry.amount))
+            })
+            .collect();
+        let message = trade_summary(false, &lines, item_db);
+        session.apply_sold(&sold);
+        message
+    };
+
+    if buy {
+        session.cart_buy.clear();
+    } else {
+        session.cart_sell.clear();
+    }
+    session.banner = None;
+    Some(message)
+}
+
+/// Reads every `ShopBuyResulted`/`ShopSellResulted` this frame and applies each
+/// to `ShopSession` via [`apply_result`], posting a `ChatHeard` line on
+/// success. Inventory/zeny themselves refresh via the existing
+/// `ItemAdded`/`ItemRemoved`/`ParamChange` paths (design §5.4) — this system
+/// never touches `Inventory`/`Status`.
+fn on_shop_result(
+    mut buy_results: MessageReader<ShopBuyResulted>,
+    mut sell_results: MessageReader<ShopSellResulted>,
+    mut session: ResMut<ShopSession>,
+    item_db: Option<Res<ItemDb>>,
+    mut chat: MessageWriter<ChatHeard>,
+) {
+    for event in buy_results.read() {
+        if let Some(message) = apply_result(&mut session, true, event.result, item_db.as_deref()) {
+            chat.write(ChatHeard { gid: 0, message });
+        }
+    }
+    for event in sell_results.read() {
+        if let Some(message) = apply_result(&mut session, false, event.result, item_db.as_deref()) {
+            chat.write(ChatHeard { gid: 0, message });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -392,6 +629,8 @@ mod tests {
             cart_sell: HashMap::new(),
             selected: None,
             banner: None,
+            confirm_open: false,
+            awaiting: false,
         }
     }
 
@@ -513,5 +752,156 @@ mod tests {
         s.clear_active_cart();
         assert!(s.cart_buy.is_empty());
         assert_eq!(s.cart_sell.get(&0), Some(&2));
+    }
+
+    #[test]
+    fn dec_line_decrements_above_one() {
+        let mut s = session(ShopTab::Buy);
+        s.cart_buy.insert(501, 3);
+        s.dec_line(501);
+        assert_eq!(s.cart_buy.get(&501), Some(&2));
+    }
+
+    #[test]
+    fn dec_line_removes_line_at_one() {
+        let mut s = session(ShopTab::Buy);
+        s.cart_buy.insert(501, 1);
+        s.dec_line(501);
+        assert_eq!(s.cart_buy.get(&501), None);
+    }
+
+    #[test]
+    fn dec_line_on_absent_key_is_a_no_op() {
+        let mut s = session(ShopTab::Buy);
+        s.dec_line(999);
+        assert_eq!(s.cart_buy.get(&999), None);
+    }
+
+    #[test]
+    fn apply_sold_decrements_and_drops_exhausted_slots() {
+        let mut s = session(ShopTab::Sell);
+        s.apply_sold(&[SellEntry {
+            inventory_index: 0,
+            amount: 5,
+        }]);
+        assert!(!s.sell_items.iter().any(|item| item.inventory_index == 0));
+        assert!(s.sell_items.iter().any(|item| item.inventory_index == 1));
+    }
+
+    #[test]
+    fn apply_sold_leaves_a_partial_slot_with_the_remainder() {
+        let mut s = session(ShopTab::Sell);
+        s.apply_sold(&[SellEntry {
+            inventory_index: 0,
+            amount: 2,
+        }]);
+        let item = s
+            .sell_items
+            .iter()
+            .find(|item| item.inventory_index == 0)
+            .unwrap();
+        assert_eq!(item.amount, 3);
+    }
+
+    #[test]
+    fn resolved_name_falls_back_to_nameid_without_db() {
+        assert_eq!(resolved_name(None, 501), "#501");
+    }
+
+    #[test]
+    fn trade_summary_formats_buy_lines() {
+        assert_eq!(
+            trade_summary(true, &[(501, 30), (502, 3)], None),
+            "Purchased 30x #501, 3x #502"
+        );
+    }
+
+    #[test]
+    fn trade_summary_formats_sell_lines() {
+        assert_eq!(trade_summary(false, &[(501, 200)], None), "Sold 200x #501");
+    }
+
+    #[test]
+    fn apply_result_ok_clears_cart_and_returns_summary() {
+        let mut s = session(ShopTab::Buy);
+        s.cart_buy.insert(501, 3);
+        s.confirm_open = true;
+        let message = apply_result(&mut s, true, ShopResult::Ok, None);
+        assert_eq!(message, Some("Purchased 3x #501".to_string()));
+        assert!(s.cart_buy.is_empty());
+        assert_eq!(s.banner, None);
+        assert!(!s.confirm_open);
+    }
+
+    #[test]
+    fn apply_result_ok_sell_decrements_snapshot_and_clears_cart() {
+        let mut s = session(ShopTab::Sell);
+        s.cart_sell.insert(0, 5);
+        s.confirm_open = true;
+        let message = apply_result(&mut s, false, ShopResult::Ok, None);
+        assert_eq!(message, Some("Sold 5x #501".to_string()));
+        assert!(s.cart_sell.is_empty());
+        assert!(!s.sell_items.iter().any(|item| item.inventory_index == 0));
+    }
+
+    #[test]
+    fn apply_result_error_sets_banner_and_preserves_cart() {
+        let mut s = session(ShopTab::Buy);
+        s.cart_buy.insert(501, 3);
+        s.confirm_open = true;
+        let message = apply_result(&mut s, true, ShopResult::NotEnoughZeny, None);
+        assert_eq!(message, None);
+        assert_eq!(s.banner, Some(ShopResult::NotEnoughZeny));
+        assert_eq!(s.cart_buy.get(&501), Some(&3));
+        assert!(!s.confirm_open);
+    }
+
+    #[test]
+    fn apply_result_ok_clears_by_result_tab_not_active_tab() {
+        // Player confirmed a Buy, then switched to Sell before the result
+        // arrived: `session.tab` is now Sell, but the result is still `buy`.
+        let mut s = session(ShopTab::Sell);
+        s.cart_buy.insert(501, 3);
+        s.cart_sell.insert(0, 2);
+        s.awaiting = true;
+        let message = apply_result(&mut s, true, ShopResult::Ok, None);
+        assert_eq!(message, Some("Purchased 3x #501".to_string()));
+        assert!(s.cart_buy.is_empty());
+        assert_eq!(s.cart_sell.get(&0), Some(&2));
+    }
+
+    #[test]
+    fn apply_result_clears_awaiting_on_both_ok_and_error() {
+        let mut ok = session(ShopTab::Buy);
+        ok.cart_buy.insert(501, 3);
+        ok.awaiting = true;
+        apply_result(&mut ok, true, ShopResult::Ok, None);
+        assert!(!ok.awaiting);
+
+        let mut err = session(ShopTab::Buy);
+        err.cart_buy.insert(501, 3);
+        err.awaiting = true;
+        apply_result(&mut err, true, ShopResult::NotEnoughZeny, None);
+        assert!(!err.awaiting);
+    }
+
+    #[test]
+    fn blocked_while_awaiting_covers_cart_edits_and_confirm() {
+        assert!(blocked_while_awaiting(ShopButtonAction::SwitchTab(
+            ShopTab::Sell
+        )));
+        assert!(blocked_while_awaiting(ShopButtonAction::IncQty(501)));
+        assert!(blocked_while_awaiting(ShopButtonAction::DecQty(501)));
+        assert!(blocked_while_awaiting(ShopButtonAction::RemoveLine(501)));
+        assert!(blocked_while_awaiting(ShopButtonAction::OpenConfirm));
+        assert!(blocked_while_awaiting(ShopButtonAction::ConfirmTrade));
+    }
+
+    #[test]
+    fn blocked_while_awaiting_allows_select_and_cancel() {
+        assert!(!blocked_while_awaiting(ShopButtonAction::Select(
+            Selection::Buy(501)
+        )));
+        assert!(!blocked_while_awaiting(ShopButtonAction::CancelConfirm));
     }
 }
