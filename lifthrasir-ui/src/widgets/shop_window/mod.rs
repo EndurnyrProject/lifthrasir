@@ -256,10 +256,15 @@ impl Plugin for ShopWindowPlugin {
         );
         app.add_systems(
             Update,
-            rebuild_body
-                .run_if(in_state(GameState::InGame).and_then(resource_changed::<ShopSession>)),
+            rebuild_body.run_if(
+                in_state(GameState::InGame).and_then(resource_exists_and_changed::<ShopSession>),
+            ),
         );
-        app.add_systems(Update, on_shop_result.run_if(in_state(GameState::InGame)));
+        app.add_systems(
+            Update,
+            on_shop_result
+                .run_if(in_state(GameState::InGame).and_then(resource_exists::<ShopSession>)),
+        );
         app.add_systems(OnExit(GameState::InGame), |mut commands: Commands| {
             commands.remove_resource::<ShopSession>()
         });
@@ -903,5 +908,41 @@ mod tests {
             Selection::Buy(501)
         )));
         assert!(!blocked_while_awaiting(ShopButtonAction::CancelConfirm));
+    }
+
+    /// Regression: the `ShopSession`-driven systems must short-circuit when the
+    /// resource is absent (the normal, shop-closed state). Before the fix,
+    /// `rebuild_body`'s `resource_changed::<ShopSession>` run condition read
+    /// `Res<ShopSession>` and panicked on the missing resource the moment the
+    /// game entered `InGame` without a shop open; the `resource_exists`-based
+    /// guards must skip cleanly instead.
+    #[test]
+    fn shop_systems_skip_cleanly_without_session() {
+        use bevy::state::app::StatesPlugin;
+
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.init_state::<GameState>();
+        app.add_message::<ShopBuyResulted>();
+        app.add_message::<ShopSellResulted>();
+        app.add_message::<ChatHeard>();
+        app.add_systems(
+            Update,
+            rebuild_body.run_if(
+                in_state(GameState::InGame).and_then(resource_exists_and_changed::<ShopSession>),
+            ),
+        );
+        app.add_systems(
+            Update,
+            on_shop_result
+                .run_if(in_state(GameState::InGame).and_then(resource_exists::<ShopSession>)),
+        );
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::InGame);
+
+        // No `ShopSession` inserted: two updates in `InGame` must not panic.
+        app.update();
+        app.update();
     }
 }
