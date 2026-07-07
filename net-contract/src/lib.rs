@@ -37,5 +37,11 @@ mod tests {
         assert!(app
             .world()
             .contains_resource::<Messages<commands::RespondToNpc>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::ShopOpened>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::BuyFromShop>>());
     }
 }

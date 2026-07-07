@@ -1,6 +1,6 @@
 //! Outbound command Messages (client to server).
 
-use crate::dto::NpcResponse;
+use crate::dto::{BuyEntry, NpcResponse, SellEntry};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
@@ -198,4 +198,20 @@ pub struct TalkToNpc {
 pub struct RespondToNpc {
     pub npc_id: u32,
     pub response: NpcResponse,
+}
+
+/// Request to buy `items` from the shop NPC identified by `unit_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct BuyFromShop {
+    pub unit_id: u64,
+    pub items: Vec<BuyEntry>,
+}
+
+/// Request to sell `items` to the shop NPC identified by `unit_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SellToShop {
+    pub unit_id: u64,
+    pub items: Vec<SellEntry>,
 }
