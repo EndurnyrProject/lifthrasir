@@ -786,12 +786,22 @@ fn apply_loaded_terrain_textures(
             mesh_count, map_request.map_name
         );
 
+        let (grid_width, grid_height) = altitude
+            .map(|a| (a.width, a.height))
+            .unwrap_or((ground.ground.width * 2, ground.ground.height * 2));
+
+        let map_name = map_request
+            .map_name
+            .trim_end_matches(".gat")
+            .trim_end_matches(".rsw")
+            .to_lowercase();
+
         commands
             .entity(entity)
             .insert(MapData {
-                name: "Map".to_string(),
-                width: ground.ground.width,
-                height: ground.ground.height,
+                name: map_name,
+                width: grid_width,
+                height: grid_height,
             })
             .remove::<TerrainTexturesLoading>();
 

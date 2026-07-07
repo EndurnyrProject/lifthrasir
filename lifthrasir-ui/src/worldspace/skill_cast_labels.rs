@@ -245,7 +245,9 @@ mod tests {
         app.add_systems(Update, spawn_instant_labels);
 
         // Two hits from the same caster in one frame yield a single label.
-        let mut damage = app.world_mut().resource_mut::<Messages<SkillDamageReceived>>();
+        let mut damage = app
+            .world_mut()
+            .resource_mut::<Messages<SkillDamageReceived>>();
         for _ in 0..2 {
             damage.write(SkillDamageReceived {
                 skill_id: 5,

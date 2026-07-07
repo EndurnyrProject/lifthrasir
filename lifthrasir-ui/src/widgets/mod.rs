@@ -13,6 +13,7 @@ pub mod draggable;
 pub mod equipment_window;
 pub mod hotbar;
 pub mod inventory_window;
+pub mod minimap;
 pub mod npc_dialog;
 pub mod placeholder;
 pub mod settings_window;
@@ -31,6 +32,7 @@ impl Plugin for InGameHudPlugin {
             equipment_window::EquipmentWindowPlugin,
             hotbar::HotbarWidgetPlugin,
             inventory_window::InventoryWindowPlugin,
+            minimap::MinimapPlugin,
             npc_dialog::NpcDialogPlugin,
             settings_window::SettingsWindowPlugin,
             skill_window::SkillWindowPlugin,
@@ -57,6 +59,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     equipment_window::spawn_equipment_window(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root, &asset_server);
     inventory_window::spawn_inventory_window(&mut commands, root, &asset_server);
+    minimap::spawn_minimap(&mut commands, root, &asset_server);
     skill_window::spawn_skill_window(&mut commands, root, &asset_server);
     status_window::spawn_status_window(&mut commands, root, &asset_server);
 }

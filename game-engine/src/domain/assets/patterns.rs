@@ -122,6 +122,11 @@ pub fn item_icon_path(resource_name: &str) -> String {
     format!("ro://data/texture/유저인터페이스/item/{resource_name}.bmp")
 }
 
+/// Generate the minimap BMP path for a map name.
+pub fn minimap_path(map_name: &str) -> String {
+    format!("ro://data/texture/유저인터페이스/map/{map_name}.bmp")
+}
+
 /// Generate the ground-drop collection sprite path for an item resource name.
 pub fn item_drop_sprite_path(resource_name: &str) -> String {
     format!("ro://data/sprite/아이템/{resource_name}.spr")
@@ -204,6 +209,14 @@ mod tests {
         assert_eq!(
             item_icon_path("apple"),
             "ro://data/texture/유저인터페이스/item/apple.bmp"
+        );
+    }
+
+    #[test]
+    fn minimap_path_builds_correct_url() {
+        assert_eq!(
+            minimap_path("prontera"),
+            "ro://data/texture/유저인터페이스/map/prontera.bmp"
         );
     }
 

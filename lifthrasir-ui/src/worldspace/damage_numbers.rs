@@ -169,7 +169,10 @@ mod tests {
     fn text_and_color_vary_by_type() {
         assert_eq!(damage_text(120, DamageDisplayType::Normal), "120");
         assert_eq!(damage_text(0, DamageDisplayType::Miss), "Miss");
-        assert_eq!(damage_color(DamageDisplayType::Critical, false), theme::GOLD);
+        assert_eq!(
+            damage_color(DamageDisplayType::Critical, false),
+            theme::GOLD
+        );
         assert_eq!(
             damage_color(DamageDisplayType::Normal, false),
             theme::DAMAGE_DEALT
