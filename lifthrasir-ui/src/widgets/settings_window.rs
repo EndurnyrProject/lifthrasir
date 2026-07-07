@@ -116,9 +116,16 @@ impl Plugin for SettingsWindowPlugin {
                 capture_rebind
                     .run_if(listening_active)
                     .before(toggle_settings),
-                toggle_settings.run_if(ui_unfocused.and_then(listening_inactive).and_then(not(
-                    resource_exists::<crate::widgets::npc_dialog::ActiveNpcDialog>,
-                ))),
+                toggle_settings.run_if(
+                    ui_unfocused
+                        .and_then(listening_inactive)
+                        .and_then(not(resource_exists::<
+                            crate::widgets::npc_dialog::ActiveNpcDialog,
+                        >))
+                        .and_then(not(resource_exists::<
+                            crate::widgets::shop_window::ShopSession,
+                        >)),
+                ),
                 refresh_tabs.run_if(resource_changed::<SettingsUi>),
                 refresh_footer.run_if(resource_changed::<SettingsUi>),
                 refresh_graphics.run_if(resource_changed::<SettingsUi>),
@@ -571,8 +578,8 @@ fn refresh_footer(
 
 /// Escape toggles the settings window in any state (title screen and in-game),
 /// gated by `ui_unfocused` so a focused text field swallows the key, and skipped
-/// entirely while an NPC dialogue is open so Escape only closes/cancels that
-/// instead (see `npc_dialog::cancel_on_escape`).
+/// entirely while an NPC dialogue or shop is open so Escape only closes/cancels
+/// that instead (see `npc_dialog::cancel_on_escape` / `shop_window::close_shop`).
 fn toggle_settings(
     keys: Res<ButtonInput<KeyCode>>,
     mut window: Query<&mut Visibility, With<SettingsWindowRoot>>,

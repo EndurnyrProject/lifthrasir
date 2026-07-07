@@ -1,12 +1,25 @@
-//! NPC shop window data layer: the `ShopSession` resource and its pure cart logic
-//! (design `2026-07-07-npc-shops`). This module is data-only for now; the window's
-//! chrome, projection, and interactions land in later tasks.
+//! NPC shop window: the `ShopSession` resource and its pure cart logic, plus the
+//! open/close lifecycle (design `2026-07-07-npc-shops`). `on_shop_opened` spawns
+//! the chrome and force-closes any active NPC dialog; `close_shop`/the titlebar
+//! close button despawn it locally (no packet). The body projection and cart
+//! interactions land in later tasks.
 
 use std::collections::HashMap;
 
 use bevy::prelude::*;
+use bevy::ui_widgets::Activate;
+use bevy_feathers::FeathersCorePlugin;
+use bevy_feathers::FeathersPlugins;
 use game_engine::core::state::GameState;
+use game_engine::domain::entities::components::EntityName;
+use game_engine::domain::entities::registry::EntityRegistry;
 use net_contract::dto::{BuyEntry, SellEntry, ShopBuyItem, ShopResult, ShopSellItem};
+use net_contract::events::ShopOpened;
+
+use crate::theme::feathers_theme::install_norse_theme;
+use crate::widgets::npc_dialog::{ActiveNpcDialog, NpcDialogRoot};
+
+pub mod scene;
 
 /// Which tab of the shop window is active.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -27,13 +40,21 @@ pub enum Selection {
 
 /// Window-root marker: the outer chrome (wrapper, titlebar, card). A single
 /// instance exists for the lifetime of an open shop.
-#[derive(Component)]
+#[derive(Component, Default, Clone)]
 pub struct ShopWindowRoot;
 
 /// The swappable body region (grid, detail, cart, footer), rebuilt on every
 /// `ShopSession` change.
-#[derive(Component)]
+#[derive(Component, Default, Clone)]
 pub struct ShopWindowBody;
+
+/// The draggable titlebar; the drag observer only moves the window when the
+/// drag's target is the titlebar itself, so dragging from the close button is
+/// inert.
+#[derive(Component, Default, Clone)]
+pub struct ShopWindowTitlebar;
+
+const FALLBACK_TITLE: &str = "Shop";
 
 /// Single source of truth for an open shop: the server's buy/sell snapshots, the
 /// two cart maps, the active tab, the selection, and any result banner. The
@@ -168,10 +189,107 @@ pub struct ShopWindowPlugin;
 
 impl Plugin for ShopWindowPlugin {
     fn build(&self, app: &mut App) {
+        install_norse_theme(app);
+        if !app.is_plugin_added::<FeathersCorePlugin>() {
+            app.add_plugins(FeathersPlugins);
+        }
+        app.add_systems(Update, on_shop_opened.run_if(in_state(GameState::InGame)));
+        app.add_systems(
+            Update,
+            close_shop.run_if(in_state(GameState::InGame).and_then(resource_exists::<ShopSession>)),
+        );
         app.add_systems(OnExit(GameState::InGame), |mut commands: Commands| {
             commands.remove_resource::<ShopSession>()
         });
     }
+}
+
+/// The resolved NPC display name, falling back to `"Shop"` when the shop unit
+/// hasn't been named yet.
+fn title_or_fallback(name: Option<String>) -> String {
+    name.unwrap_or_else(|| FALLBACK_TITLE.to_string())
+}
+
+/// Consumes the latest [`ShopOpened`]: force-closes any active NPC dialog (RO's
+/// `callshop` semantics — dialogue and shop windows never coexist), despawns any
+/// existing shop window (a re-talk is idempotent), spawns the chrome, and inserts
+/// a fresh [`ShopSession`].
+fn on_shop_opened(
+    mut events: MessageReader<ShopOpened>,
+    mut commands: Commands,
+    dialog_roots: Query<Entity, With<NpcDialogRoot>>,
+    shop_roots: Query<Entity, With<ShopWindowRoot>>,
+    registry: Res<EntityRegistry>,
+    names: Query<&EntityName>,
+) {
+    let Some(event) = events.read().last() else {
+        return;
+    };
+
+    if let Ok(dialog_root) = dialog_roots.single() {
+        commands.entity(dialog_root).despawn();
+        commands.remove_resource::<ActiveNpcDialog>();
+    }
+    if let Ok(shop_root) = shop_roots.single() {
+        commands.entity(shop_root).despawn();
+    }
+
+    // Gids occupy a 32-bit space regardless of the wire's uint64 encoding; a
+    // miss just falls back to the "Shop" title.
+    let name = registry
+        .get_entity(event.unit_id as u32)
+        .and_then(|entity| names.get(entity).ok())
+        .map(|entity_name| entity_name.name.clone());
+    let title = title_or_fallback(name);
+
+    commands
+        .spawn_scene(scene::window(title))
+        .insert(DespawnOnExit(GameState::InGame));
+
+    commands.insert_resource(ShopSession {
+        unit_id: event.unit_id,
+        buy_items: event.buy_items.clone(),
+        sell_items: event.sell_items.clone(),
+        tab: ShopTab::default(),
+        cart_buy: HashMap::new(),
+        cart_sell: HashMap::new(),
+        selected: None,
+        banner: None,
+    });
+}
+
+/// Despawns the shop window and clears [`ShopSession`]. Shared by the titlebar
+/// close button and the Escape key; sends no packet — the server holds no
+/// shop-open state to close (design §4).
+fn close_shop_window(commands: &mut Commands, roots: &Query<Entity, With<ShopWindowRoot>>) {
+    if let Ok(root) = roots.single() {
+        commands.entity(root).despawn();
+    }
+    commands.remove_resource::<ShopSession>();
+}
+
+/// ESC ends the shop exactly like the titlebar close button: despawn the window
+/// and clear `ShopSession`. Gated on `ShopSession` existing, so it only fires
+/// while a shop is open; `settings_window`'s own Escape toggle is separately
+/// gated to skip while this resource is present (mirrors `npc_dialog`).
+fn close_shop(
+    keys: Res<ButtonInput<KeyCode>>,
+    roots: Query<Entity, With<ShopWindowRoot>>,
+    mut commands: Commands,
+) {
+    if !keys.just_pressed(KeyCode::Escape) {
+        return;
+    }
+    close_shop_window(&mut commands, &roots);
+}
+
+/// Titlebar close button: same effect as Escape.
+pub(super) fn on_shop_close_button(
+    _: On<Activate>,
+    roots: Query<Entity, With<ShopWindowRoot>>,
+    mut commands: Commands,
+) {
+    close_shop_window(&mut commands, &roots);
 }
 
 #[cfg(test)]
@@ -308,6 +426,19 @@ mod tests {
                 amount: 5
             }]
         );
+    }
+
+    #[test]
+    fn title_or_fallback_uses_resolved_name() {
+        assert_eq!(
+            title_or_fallback(Some("Bennit Bard".to_string())),
+            "Bennit Bard"
+        );
+    }
+
+    #[test]
+    fn title_or_fallback_defaults_when_unresolved() {
+        assert_eq!(title_or_fallback(None), FALLBACK_TITLE);
     }
 
     #[test]
