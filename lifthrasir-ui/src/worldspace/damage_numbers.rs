@@ -7,6 +7,7 @@
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
+use game_engine::domain::entities::markers::LocalPlayer;
 
 use crate::theme;
 use crate::worldspace::{viewport_to_ui, WorldCameraFilter, WorldspaceFont};
@@ -51,11 +52,12 @@ fn damage_text(amount: i32, damage_type: DamageDisplayType) -> String {
     }
 }
 
-fn damage_color(damage_type: DamageDisplayType) -> Color {
+fn damage_color(damage_type: DamageDisplayType, player_is_target: bool) -> Color {
     match damage_type {
         DamageDisplayType::Critical => theme::GOLD,
         DamageDisplayType::Miss => theme::TEXT_DIM,
-        DamageDisplayType::Normal => theme::TEXT,
+        DamageDisplayType::Normal if player_is_target => theme::DAMAGE_RECEIVED,
+        DamageDisplayType::Normal => theme::DAMAGE_DEALT,
     }
 }
 
@@ -76,7 +78,7 @@ fn spawn_damage_numbers(
     mut events: MessageReader<DisplayDamageNumber>,
     mut commands: Commands,
     camera: Query<(&Camera, &GlobalTransform), WorldCameraFilter>,
-    targets: Query<&GlobalTransform>,
+    targets: Query<(&GlobalTransform, Has<LocalPlayer>)>,
     ui_scale: Res<UiScale>,
     font: Res<WorldspaceFont>,
     mut counter: ResMut<DamageSpawnCounter>,
@@ -85,7 +87,7 @@ fn spawn_damage_numbers(
         return;
     };
     for event in events.read() {
-        let Ok(target_transform) = targets.get(event.entity) else {
+        let Ok((target_transform, player_is_target)) = targets.get(event.entity) else {
             continue;
         };
         let Ok(screen) = camera.world_to_viewport(camera_transform, target_transform.translation())
@@ -118,7 +120,7 @@ fn spawn_damage_numbers(
                     font_size: font_size(event.damage_type).into(),
                     ..default()
                 },
-                TextColor(damage_color(event.damage_type)),
+                TextColor(damage_color(event.damage_type, player_is_target)),
                 Pickable::IGNORE,
             )],
         ));
@@ -167,7 +169,15 @@ mod tests {
     fn text_and_color_vary_by_type() {
         assert_eq!(damage_text(120, DamageDisplayType::Normal), "120");
         assert_eq!(damage_text(0, DamageDisplayType::Miss), "Miss");
-        assert_eq!(damage_color(DamageDisplayType::Critical), theme::GOLD);
+        assert_eq!(damage_color(DamageDisplayType::Critical, false), theme::GOLD);
+        assert_eq!(
+            damage_color(DamageDisplayType::Normal, false),
+            theme::DAMAGE_DEALT
+        );
+        assert_eq!(
+            damage_color(DamageDisplayType::Normal, true),
+            theme::DAMAGE_RECEIVED
+        );
         assert_eq!(font_size(DamageDisplayType::Critical), CRIT_FONT_SIZE);
         assert_eq!(font_size(DamageDisplayType::Normal), FONT_SIZE);
     }

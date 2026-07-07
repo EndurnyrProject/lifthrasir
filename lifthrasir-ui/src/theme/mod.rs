@@ -23,6 +23,10 @@ pub const MANA_BLUE: Color = Color::srgb_u8(0x4f, 0xb6, 0xe6);
 pub const BAD: Color = Color::srgb_u8(0xe0, 0x62, 0x5e);
 pub const WARN: Color = Color::srgb_u8(0xe6, 0xb5, 0x52);
 
+// Floating combat numbers: yellow for damage the player deals, red for damage it takes.
+pub const DAMAGE_DEALT: Color = Color::srgb_u8(0xf2, 0xd6, 0x4b);
+pub const DAMAGE_RECEIVED: Color = HEALTH_RED;
+
 // Item-rarity tints (from the Endurnir mockups): common reuses TEXT, fine the bright
 // emerald, rare the gold, magic a cold blue. These feed the rarity theme tokens.
 pub const RARITY_COMMON: Color = TEXT;

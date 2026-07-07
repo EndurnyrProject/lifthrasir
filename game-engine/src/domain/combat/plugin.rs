@@ -17,8 +17,9 @@ use bevy::prelude::*;
 /// 3. `update_attack_timers` - Updates attack animation timers
 /// 4. `update_hit_stun` - Updates hit stun timers
 /// 5. `handle_death` - Plays death animation when entity vanishes with type 1
-/// 6. `spawn_damage_indicators` - Creates floating damage number entities
-/// 7. `animate_damage_indicators` - Animates and despawns damage numbers
+///
+/// Floating damage numbers are rendered by the UI layer (`DamageNumberPlugin`),
+/// which consumes the `DisplayDamageNumber` messages these systems emit.
 ///
 /// # Integration
 ///

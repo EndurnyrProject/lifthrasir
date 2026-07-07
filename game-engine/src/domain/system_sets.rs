@@ -123,8 +123,6 @@ pub enum CombatSystems {
     HandleReactions,
     UpdateTimers,
     HandleDeath,
-    SpawnDamageIndicators,
-    AnimateDamageIndicators,
 }
 
 // =============================================================================

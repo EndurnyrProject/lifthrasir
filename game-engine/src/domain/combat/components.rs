@@ -78,19 +78,3 @@ pub struct HasEndure;
 /// Marker for dead entities
 #[derive(Component, Debug, Clone, Copy)]
 pub struct DeadEntity;
-
-/// Component for damage indicator sprites
-#[derive(Component, Debug, Clone)]
-pub struct DamageIndicator {
-    pub lifetime: Timer,
-    pub velocity: Vec3,
-}
-
-impl DamageIndicator {
-    pub fn new(velocity: Vec3) -> Self {
-        Self {
-            lifetime: Timer::from_seconds(2.0, TimerMode::Once),
-            velocity,
-        }
-    }
-}
