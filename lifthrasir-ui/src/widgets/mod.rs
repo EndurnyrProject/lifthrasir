@@ -17,6 +17,7 @@ pub mod minimap;
 pub mod npc_dialog;
 pub mod placeholder;
 pub mod settings_window;
+pub mod shop_window;
 pub mod skill_window;
 pub mod status_window;
 pub mod system_dialog;
@@ -35,6 +36,7 @@ impl Plugin for InGameHudPlugin {
             minimap::MinimapPlugin,
             npc_dialog::NpcDialogPlugin,
             settings_window::SettingsWindowPlugin,
+            shop_window::ShopWindowPlugin,
             skill_window::SkillWindowPlugin,
             status_window::StatusWindowPlugin,
         ));
