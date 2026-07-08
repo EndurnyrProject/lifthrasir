@@ -4,7 +4,9 @@ pub mod map_effects;
 pub mod systems;
 pub mod triggers;
 
-pub use components::{ActiveEffect, EffectAnchor, EffectFrameTimer, EffectLayer, EffectLifetime};
+pub use components::{
+    ActiveEffect, EffectAnchor, EffectFrameTimer, EffectLayer, EffectLifetime, MapAmbientVfx,
+};
 pub use events::PlayProceduralVfx;
 pub use map_effects::{spawn_map_effects, MapEffectsSpawned};
 pub use systems::{

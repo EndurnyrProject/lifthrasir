@@ -43,6 +43,19 @@ pub struct EffectLayer {
 #[derive(Component, Debug)]
 pub struct EffectLifetime(pub Timer);
 
+/// Bridges a map's non-STR ambient `EFFECT` object (e.g. `EF_SMOKE`,
+/// `EF_EMITTER`) from the domain to a presentation hanabi particle system.
+/// `spawn_map_effects` inserts this on a `Transform` + `MapScoped` entity;
+/// a presentation attach system reads `Added<MapAmbientVfx>` and builds the
+/// actual `ParticleEffect`. `emit_speed`/`params` are the raw RSW object
+/// fields, copied verbatim for the presentation layer to interpret per key.
+#[derive(Component, Debug, Clone)]
+pub struct MapAmbientVfx {
+    pub key: String,
+    pub emit_speed: f32,
+    pub params: [f32; 4],
+}
+
 /// Per-frame clock for an STR effect. ticks
 /// elapsed time, derives `current_frame` from `fps`, and wraps at `max_key`.
 #[derive(Debug, Clone)]

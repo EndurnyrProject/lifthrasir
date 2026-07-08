@@ -20,14 +20,25 @@ fn main() {
         bevy::asset::uuid::uuid!("45e9d9b0-1a0d-4da9-83d1-cf5f8af1ff17"),
     ));
 
-    app.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            title: format!("Lifthrasir {VERSION}"),
-            resolution: WindowResolution::new(1280, 720),
-            ..default()
-        }),
-        ..default()
-    }));
+    app.add_plugins(
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: format!("Lifthrasir {VERSION}"),
+                    resolution: WindowResolution::new(1280, 720),
+                    ..default()
+                }),
+                ..default()
+            })
+            // Silence bevy_hanabi's benign per-load "Failed to find material bind
+            // group layout" error: textured particle effects (map smoke/emitter)
+            // hit a one-frame layout-caching race at spawn; the frame is skipped
+            // harmlessly and the effect renders fine.
+            .set(bevy::log::LogPlugin {
+                filter: format!("{},bevy_hanabi::render=off", bevy::log::DEFAULT_FILTER),
+                ..default()
+            }),
+    );
 
     info!("Lifthrasir {VERSION}");
 

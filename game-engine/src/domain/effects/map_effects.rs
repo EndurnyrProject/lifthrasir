@@ -1,19 +1,22 @@
 //! Spawns the `EFFECT` objects baked into a map's RSW as persistent,
-//! position-anchored STR effects, reusing the skill-effect runtime.
+//! position-anchored effects.
 //!
 //! RSW `effect_type` is the rAthena `e_special_effects` (EF_*) id — the same
-//! namespace aesir's `SpecialEffect` packet keys on. Only the subset of effects
-//! that map to an STR file is playable here; the classic ambient ones (torch,
-//! smoke, firefly, …) are hardcoded particle systems in the original client and
-//! have no STR, so they stay unmapped. Unmapped `effect_type`s are `warn!`-ed so
-//! we can discover which ones real maps actually use and grow `map_effects.ron`.
+//! namespace aesir's `SpecialEffect` packet keys on. A descriptor with `str`
+//! plays as an STR effect, reusing the skill-effect runtime. A descriptor with
+//! `vfx` instead (the classic hardcoded-particle ambient effects like smoke and
+//! generic emitters, which have no STR in the original client) spawns a
+//! `MapAmbientVfx` bridge entity for the presentation layer to attach a hanabi
+//! particle system to. Unmapped `effect_type`s are `warn!`-ed so we can discover
+//! which ones real maps actually use and grow the `map` section of
+//! `effects.ron`.
 
 use std::collections::BTreeMap;
 
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
-use super::components::EffectAnchor;
+use super::components::{EffectAnchor, MapAmbientVfx};
 use super::systems::spawn_effect;
 use super::triggers::{descriptor_tint, load_effect};
 use crate::domain::world::components::MapLoader;
@@ -71,18 +74,36 @@ pub fn spawn_map_effects(
             };
 
             let position = rsw_position_to_bevy(effect.position, map_width, map_height);
-            let Some(handle) = load_effect(&asset_server, descriptor) else {
-                continue;
-            };
-            let spawned = spawn_effect(
-                &mut commands,
-                handle,
-                EffectAnchor::Position(position),
-                true,
-                descriptor_tint(descriptor),
-                None,
-            );
-            commands.entity(spawned).insert(MapScoped);
+
+            if descriptor.str.is_some() {
+                let Some(handle) = load_effect(&asset_server, descriptor) else {
+                    continue;
+                };
+                let spawned = spawn_effect(
+                    &mut commands,
+                    handle,
+                    EffectAnchor::Position(position),
+                    true,
+                    descriptor_tint(descriptor),
+                    None,
+                );
+                commands.entity(spawned).insert(MapScoped);
+            } else if let Some(vfx) = &descriptor.vfx {
+                commands.spawn((
+                    Transform::from_translation(position),
+                    MapScoped,
+                    MapAmbientVfx {
+                        key: vfx.clone(),
+                        emit_speed: effect.emit_speed,
+                        params: effect.params,
+                    },
+                ));
+            } else {
+                debug!(
+                    "Map effect {} has neither str nor vfx; skipping",
+                    effect.effect_type
+                );
+            }
         }
 
         for (effect_type, count) in unmapped {
@@ -99,24 +120,28 @@ pub fn spawn_map_effects(
 mod tests {
     use super::*;
     use crate::domain::effects::components::ActiveEffect;
-    use crate::infrastructure::effect::{LoadedEffectAsset, SkillEffectDataAsset};
+    use crate::infrastructure::effect::{EffectDataAsset, LoadedEffectAsset};
     use crate::infrastructure::ro_formats::{
         RoGround, RoWorld, RswEffect, RswGround, RswLight, RswWater,
     };
 
     fn seeded_map_catalog() -> MapEffectCatalog {
-        let ron = include_str!("../../../../assets/data/ron/map_effects.ron");
-        let asset = ron::from_str::<SkillEffectDataAsset>(ron).expect("seed RON");
-        MapEffectCatalog::from_effect_data(asset.0)
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("seed RON");
+        MapEffectCatalog::from_effect_data(asset.0.map)
     }
 
     fn effect_obj(effect_type: u32) -> RswObject {
+        effect_obj_with_emit(effect_type, 0.0, [0.0; 4])
+    }
+
+    fn effect_obj_with_emit(effect_type: u32, emit_speed: f32, params: [f32; 4]) -> RswObject {
         RswObject::Effect(RswEffect {
             name: "fx".to_string(),
             position: [0.0, 0.0, 0.0],
             effect_type,
-            emit_speed: 0.0,
-            params: [0.0; 4],
+            emit_speed,
+            params,
         })
     }
 
@@ -256,5 +281,66 @@ mod tests {
             0,
             "nothing spawns without a catalog"
         );
+    }
+
+    #[test]
+    fn vfx_descriptor_spawns_map_ambient_vfx_entity() {
+        let mut app = test_app(vec![effect_obj(44)]);
+        app.update();
+
+        let mut query = app.world_mut().query::<(&MapAmbientVfx, &Transform)>();
+        let matches: Vec<_> = query.iter(app.world()).collect();
+        assert_eq!(matches.len(), 1, "exactly one MapAmbientVfx spawns");
+        let (vfx, transform) = matches[0];
+        assert_eq!(vfx.key, "smoke");
+        assert_eq!(
+            transform.translation,
+            rsw_position_to_bevy([0.0; 3], 100.0, 100.0)
+        );
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "vfx path spawns no ActiveEffect"
+        );
+    }
+
+    #[test]
+    fn vfx_descriptor_entity_is_map_scoped() {
+        let mut app = test_app(vec![effect_obj(44)]);
+        app.update();
+        let scoped = app
+            .world_mut()
+            .query_filtered::<&MapScoped, With<MapAmbientVfx>>()
+            .iter(app.world())
+            .count();
+        assert_eq!(scoped, 1, "map ambient vfx despawns with the map");
+    }
+
+    #[test]
+    fn vfx_descriptor_copies_emit_speed_and_params() {
+        let params = [1.0, 2.0, 3.0, 4.0];
+        let mut app = test_app(vec![effect_obj_with_emit(974, 5.5, params)]);
+        app.update();
+
+        let mut query = app.world_mut().query::<&MapAmbientVfx>();
+        let matches: Vec<_> = query.iter(app.world()).collect();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].key, "emitter");
+        assert_eq!(matches[0].emit_speed, 5.5);
+        assert_eq!(matches[0].params, params);
+    }
+
+    #[test]
+    fn str_descriptor_still_spawns_active_effect() {
+        let mut app = test_app(vec![effect_obj(89)]);
+        app.update();
+        assert_eq!(active_effects(&mut app), 1, "STR path is unchanged");
+
+        let vfx_entities = app
+            .world_mut()
+            .query::<&MapAmbientVfx>()
+            .iter(app.world())
+            .count();
+        assert_eq!(vfx_entities, 0, "STR path spawns no MapAmbientVfx");
     }
 }

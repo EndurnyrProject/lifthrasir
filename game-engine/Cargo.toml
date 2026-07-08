@@ -13,7 +13,10 @@ bevy_common_assets = { version = "0.17", features = ["toml", "ron"] }
 bevy_asset_loader = "0.27"
 bevy_kira_audio = { version = "0.26", features = ["mp3", "wav", "ogg"] }
 bevy_framepace = { git = "https://github.com/hacknus/bevy_framepace", branch = "bevy_0.19" }
-bevy_hanabi = "0.19"
+# default-features off drops the `2d` render path: this project has no 2D
+# particles, and the 2D path double-draws every world effect through the UI
+# Camera2d as fixed screen-space specks. Keep only `3d`.
+bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
 bevy-persistent = { version = "0.11", features = ["ron"] }
 dirs = "6"
 leafwing-input-manager = { workspace = true }

@@ -1,9 +1,11 @@
+pub mod ambient;
 pub mod impact;
 pub mod portal;
 
 use bevy::prelude::*;
 use bevy_hanabi::prelude::*;
 
+pub use ambient::MapAmbientVfxPlugin;
 pub use impact::ImpactVfxPlugin;
 pub use portal::{PortalVfx, PortalVfxPlugin};
 
@@ -26,6 +28,7 @@ impl Plugin for VfxPlugin {
         app.add_plugins(HanabiPlugin)
             .configure_sets(Update, VfxSystems)
             .add_plugins(PortalVfxPlugin)
-            .add_plugins(ImpactVfxPlugin);
+            .add_plugins(ImpactVfxPlugin)
+            .add_plugins(MapAmbientVfxPlugin);
     }
 }

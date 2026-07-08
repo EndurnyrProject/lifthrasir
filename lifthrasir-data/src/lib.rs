@@ -107,11 +107,15 @@ pub struct EffectDescriptor {
     pub repeating: bool,
 }
 
-/// Skill effect catalog: skill id -> effect descriptor.
+/// Unified effect catalog: skill-effect and map-effect descriptors, keyed by
+/// their own id namespaces (`skills` by rAthena skill id, `map` by RSW
+/// `effect_type` / rAthena `e_special_effects` `EF_*` id). The two sections
+/// stay distinct because the id spaces overlap but mean different things.
 /// Keyed by `BTreeMap` for stable, key-ordered RON diffs.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SkillEffectData {
-    pub effects: BTreeMap<u32, EffectDescriptor>,
+pub struct EffectData {
+    pub skills: BTreeMap<u32, EffectDescriptor>,
+    pub map: BTreeMap<u32, EffectDescriptor>,
 }
 
 #[cfg(test)]
@@ -234,9 +238,9 @@ mod tests {
     }
 
     #[test]
-    fn skill_effect_data_round_trip() {
-        let mut original = SkillEffectData::default();
-        original.effects.insert(
+    fn effect_data_round_trip() {
+        let mut original = EffectData::default();
+        original.skills.insert(
             28,
             EffectDescriptor {
                 str: Some("heal.str".to_string()),
@@ -247,7 +251,7 @@ mod tests {
                 repeating: false,
             },
         );
-        original.effects.insert(
+        original.map.insert(
             89,
             EffectDescriptor {
                 str: Some("stormgust.str".to_string()),
@@ -260,21 +264,22 @@ mod tests {
         );
 
         let serialized = ron::to_string(&original).expect("serialize");
-        let deserialized: SkillEffectData = ron::from_str(&serialized).expect("deserialize");
+        let deserialized: EffectData = ron::from_str(&serialized).expect("deserialize");
 
-        assert_eq!(original.effects, deserialized.effects);
+        assert_eq!(original.skills, deserialized.skills);
+        assert_eq!(original.map, deserialized.map);
     }
 
     #[test]
-    fn skill_effects_ron_seed_deserializes() {
+    fn effects_ron_seed_deserializes() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../assets/data/ron/skill_effects.ron"
+            "/../assets/data/ron/effects.ron"
         );
-        let contents = std::fs::read_to_string(path).expect("read skill_effects.ron");
-        let data: SkillEffectData = ron::from_str(&contents).expect("deserialize seed");
+        let contents = std::fs::read_to_string(path).expect("read effects.ron");
+        let data: EffectData = ron::from_str(&contents).expect("deserialize seed");
 
-        let heal = data.effects.get(&28).expect("AL_HEAL entry");
+        let heal = data.skills.get(&28).expect("AL_HEAL entry");
         assert_eq!(heal.placement, EffectPlacement::Target);
         assert_eq!(heal.str.as_deref(), Some("heal.str"));
         // Sound is relative to `data/wav/`; `_heal_effect.wav` lives at the root
@@ -282,7 +287,7 @@ mod tests {
         assert_eq!(heal.sound.as_deref(), Some("_heal_effect.wav"));
         assert!(!heal.repeating);
 
-        let stormgust = data.effects.get(&89).expect("WZ_STORMGUST entry");
+        let stormgust = data.skills.get(&89).expect("WZ_STORMGUST entry");
         assert_eq!(stormgust.placement, EffectPlacement::Ground);
         assert_eq!(stormgust.str.as_deref(), Some("stormgust.str"));
         // `effect/stormgust.wav` does not exist in the GRF; the real sound is
@@ -294,8 +299,15 @@ mod tests {
         assert!(stormgust.repeating);
 
         // SM_BASH is sound-only: no STR effect, but it still plays its sound.
-        let bash = data.effects.get(&5).expect("SM_BASH entry");
+        let bash = data.skills.get(&5).expect("SM_BASH entry");
         assert_eq!(bash.str, None);
         assert_eq!(bash.sound.as_deref(), Some("effect/ef_bash.wav"));
+
+        let map_stormgust = data.map.get(&89).expect("EF_STORMGUST entry");
+        assert_eq!(map_stormgust.str.as_deref(), Some("stormgust.str"));
+        assert!(map_stormgust.repeating);
+
+        let magnus = data.map.get(&113).expect("EF_MAGNUS entry");
+        assert_eq!(magnus.str.as_deref(), Some("magnus.str"));
     }
 }

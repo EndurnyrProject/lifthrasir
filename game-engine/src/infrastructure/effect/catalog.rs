@@ -1,11 +1,11 @@
 use bevy::asset::LoadState;
 use bevy::prelude::*;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Asset, TypePath, Deserialize)]
 #[serde(transparent)]
-pub struct SkillEffectDataAsset(pub lifthrasir_data::SkillEffectData);
+pub struct EffectDataAsset(pub lifthrasir_data::EffectData);
 
 #[derive(Resource)]
 pub struct EffectCatalog {
@@ -13,9 +13,9 @@ pub struct EffectCatalog {
 }
 
 impl EffectCatalog {
-    pub fn from_skill_effect_data(data: lifthrasir_data::SkillEffectData) -> Self {
+    pub fn from_skill_effect_data(data: BTreeMap<u32, lifthrasir_data::EffectDescriptor>) -> Self {
         Self {
-            effects: data.effects.into_iter().collect(),
+            effects: data.into_iter().collect(),
         }
     }
 
@@ -34,9 +34,9 @@ pub struct MapEffectCatalog {
 }
 
 impl MapEffectCatalog {
-    pub fn from_effect_data(data: lifthrasir_data::SkillEffectData) -> Self {
+    pub fn from_effect_data(data: BTreeMap<u32, lifthrasir_data::EffectDescriptor>) -> Self {
         Self {
-            effects: data.effects.into_iter().collect(),
+            effects: data.into_iter().collect(),
         }
     }
 
@@ -46,73 +46,41 @@ impl MapEffectCatalog {
 }
 
 #[derive(Resource)]
-pub struct SkillEffectDataHandle(Handle<SkillEffectDataAsset>);
+pub struct EffectDataHandle(Handle<EffectDataAsset>);
 
-#[derive(Resource)]
-pub struct MapEffectDataHandle(Handle<SkillEffectDataAsset>);
-
-pub fn start_loading_skill_effect_data(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let handle = asset_server.load("data/ron/skill_effects.ron");
-    commands.insert_resource(SkillEffectDataHandle(handle));
-    debug!("Loading skill effect data RON");
+pub fn start_loading_effect_data(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let handle = asset_server.load("data/ron/effects.ron");
+    commands.insert_resource(EffectDataHandle(handle));
+    debug!("Loading effect data RON");
 }
 
-pub fn start_loading_map_effect_data(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let handle = asset_server.load("data/ron/map_effects.ron");
-    commands.insert_resource(MapEffectDataHandle(handle));
-    debug!("Loading map effect data RON");
-}
-
-pub fn process_loaded_skill_effect_data(
+pub fn process_loaded_effect_data(
     mut commands: Commands,
-    handle: Option<Res<SkillEffectDataHandle>>,
-    skill_effect_data_assets: Res<Assets<SkillEffectDataAsset>>,
+    handle: Option<Res<EffectDataHandle>>,
+    effect_data_assets: Res<Assets<EffectDataAsset>>,
     asset_server: Res<AssetServer>,
 ) {
     let Some(handle) = handle else { return };
 
     if let LoadState::Failed(err) = asset_server.load_state(&handle.0) {
         error!(
-            "Failed to load data/ron/skill_effects.ron: {:?}. It is hand-authored at assets/data/ron/skill_effects.ron.",
+            "Failed to load data/ron/effects.ron: {:?}. It is hand-authored at assets/data/ron/effects.ron.",
             err
         );
-        commands.remove_resource::<SkillEffectDataHandle>();
+        commands.remove_resource::<EffectDataHandle>();
         return;
     }
 
-    let Some(asset) = skill_effect_data_assets.get(&handle.0) else {
+    let Some(asset) = effect_data_assets.get(&handle.0) else {
         return;
     };
 
-    commands.insert_resource(EffectCatalog::from_skill_effect_data(asset.0.clone()));
-    commands.remove_resource::<SkillEffectDataHandle>();
-    debug!("Effect catalog created from RON");
-}
-
-pub fn process_loaded_map_effect_data(
-    mut commands: Commands,
-    handle: Option<Res<MapEffectDataHandle>>,
-    map_effect_data_assets: Res<Assets<SkillEffectDataAsset>>,
-    asset_server: Res<AssetServer>,
-) {
-    let Some(handle) = handle else { return };
-
-    if let LoadState::Failed(err) = asset_server.load_state(&handle.0) {
-        error!(
-            "Failed to load data/ron/map_effects.ron: {:?}. It is hand-authored at assets/data/ron/map_effects.ron.",
-            err
-        );
-        commands.remove_resource::<MapEffectDataHandle>();
-        return;
-    }
-
-    let Some(asset) = map_effect_data_assets.get(&handle.0) else {
-        return;
-    };
-
-    commands.insert_resource(MapEffectCatalog::from_effect_data(asset.0.clone()));
-    commands.remove_resource::<MapEffectDataHandle>();
-    debug!("Map effect catalog created from RON");
+    commands.insert_resource(EffectCatalog::from_skill_effect_data(
+        asset.0.skills.clone(),
+    ));
+    commands.insert_resource(MapEffectCatalog::from_effect_data(asset.0.map.clone()));
+    commands.remove_resource::<EffectDataHandle>();
+    debug!("Effect catalogs created from RON");
 }
 
 #[cfg(test)]
@@ -121,69 +89,66 @@ mod tests {
     use lifthrasir_data::EffectPlacement;
 
     #[test]
-    fn deserializes_ron_into_skill_effect_data() {
-        let ron = include_str!("../../../../assets/data/ron/skill_effects.ron");
-        let asset = ron::from_str::<SkillEffectDataAsset>(ron).expect("deserialize");
+    fn deserializes_ron_into_effect_data() {
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
 
-        assert_eq!(asset.0.effects[&28].str.as_deref(), Some("heal.str"));
-        assert_eq!(asset.0.effects[&28].placement, EffectPlacement::Target);
-        assert_eq!(asset.0.effects[&89].placement, EffectPlacement::Ground);
-        assert!(asset.0.effects[&89].repeating);
+        assert_eq!(asset.0.skills[&28].str.as_deref(), Some("heal.str"));
+        assert_eq!(asset.0.skills[&28].placement, EffectPlacement::Target);
+        assert_eq!(asset.0.skills[&89].placement, EffectPlacement::Ground);
+        assert!(asset.0.skills[&89].repeating);
 
         // id 18 is MG_FIREWALL (was a stale magnus.str mapping).
-        assert_eq!(asset.0.effects[&18].str.as_deref(), Some("firewall.str"));
-        assert_eq!(asset.0.effects[&18].placement, EffectPlacement::Ground);
-        assert!(asset.0.effects[&18].repeating);
+        assert_eq!(asset.0.skills[&18].str.as_deref(), Some("firewall.str"));
+        assert_eq!(asset.0.skills[&18].placement, EffectPlacement::Ground);
+        assert!(asset.0.skills[&18].repeating);
         assert!(
             asset
                 .0
-                .effects
+                .skills
                 .values()
                 .all(|e| e.str.as_deref() != Some("magnus.str")),
             "magnus.str must not be referenced by the skill catalog"
         );
 
         // id 5 is SM_BASH: sound-only, no STR effect, procedural vfx key "bash".
-        assert_eq!(asset.0.effects[&5].str, None);
-        assert_eq!(asset.0.effects[&5].vfx.as_deref(), Some("bash"));
+        assert_eq!(asset.0.skills[&5].str, None);
+        assert_eq!(asset.0.skills[&5].vfx.as_deref(), Some("bash"));
         assert_eq!(
-            asset.0.effects[&5].sound.as_deref(),
+            asset.0.skills[&5].sound.as_deref(),
             Some("effect/ef_bash.wav")
         );
 
         // id 28 is AL_HEAL: omits `vfx`, must default to None.
-        assert_eq!(asset.0.effects[&28].vfx, None);
+        assert_eq!(asset.0.skills[&28].vfx, None);
 
         // Bucket-A samples: one ground field and one caster buff.
-        assert_eq!(
-            asset.0.effects[&21].str.as_deref(),
-            Some("thunderstorm.str")
-        );
-        assert_eq!(asset.0.effects[&21].placement, EffectPlacement::Ground);
-        assert!(asset.0.effects[&21].repeating);
-        assert_eq!(asset.0.effects[&33].str.as_deref(), Some("angelus.str"));
-        assert_eq!(asset.0.effects[&33].placement, EffectPlacement::Caster);
-        assert!(!asset.0.effects[&33].repeating);
+        assert_eq!(asset.0.skills[&21].str.as_deref(), Some("thunderstorm.str"));
+        assert_eq!(asset.0.skills[&21].placement, EffectPlacement::Ground);
+        assert!(asset.0.skills[&21].repeating);
+        assert_eq!(asset.0.skills[&33].str.as_deref(), Some("angelus.str"));
+        assert_eq!(asset.0.skills[&33].placement, EffectPlacement::Caster);
+        assert!(!asset.0.skills[&33].repeating);
 
         // Sound paths are relative to `data/wav/` (see `mob_sfx_path`). These two
         // were broken: `_heal_effect.wav` lives at the wav root (no `effect/`
         // prefix), and Storm Gust's only sound is `wizard_stormgust.wav` —
         // `effect/stormgust.wav` does not exist in the GRF.
         assert_eq!(
-            asset.0.effects[&28].sound.as_deref(),
+            asset.0.skills[&28].sound.as_deref(),
             Some("_heal_effect.wav")
         );
         assert_eq!(
-            asset.0.effects[&89].sound.as_deref(),
+            asset.0.skills[&89].sound.as_deref(),
             Some("effect/wizard_stormgust.wav")
         );
     }
 
     #[test]
     fn get_returns_seeded_target_and_ground_descriptors() {
-        let ron = include_str!("../../../../assets/data/ron/skill_effects.ron");
-        let asset = ron::from_str::<SkillEffectDataAsset>(ron).expect("deserialize");
-        let catalog = EffectCatalog::from_skill_effect_data(asset.0);
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
+        let catalog = EffectCatalog::from_skill_effect_data(asset.0.skills);
 
         let target = catalog.get(28).expect("AL_HEAL target descriptor");
         assert_eq!(target.str.as_deref(), Some("heal.str"));
@@ -204,13 +169,16 @@ mod tests {
 
     #[test]
     fn map_effects_ron_deserializes_into_catalog() {
-        let ron = include_str!("../../../../assets/data/ron/map_effects.ron");
-        let asset = ron::from_str::<SkillEffectDataAsset>(ron).expect("deserialize");
-        let catalog = MapEffectCatalog::from_effect_data(asset.0);
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
+        let catalog = MapEffectCatalog::from_effect_data(asset.0.map);
 
         let stormgust = catalog.get(89).expect("EF_STORMGUST descriptor");
         assert_eq!(stormgust.str.as_deref(), Some("stormgust.str"));
         assert!(stormgust.repeating);
+
+        let magnus = catalog.get(113).expect("EF_MAGNUS descriptor");
+        assert_eq!(magnus.str.as_deref(), Some("magnus.str"));
 
         assert!(catalog.get(9999).is_none());
     }

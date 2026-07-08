@@ -1,5 +1,31 @@
+// Unified effect catalog: skill-effect and map-effect descriptors.
+//
+// `skills` is keyed by rAthena skill id and drives the skill-effect runtime
+// (`domain/effects/triggers.rs`).
+//
+// `map` is keyed by the RSW `EFFECT` object's `effect_type`, which is the
+// rAthena `e_special_effects` (EF_*) id -- the same id space aesir's
+// `SpecialEffect` packet uses (see aesir `Aesir.ZoneServer.Mmo.EffectId`).
+// `spawn_map_effects` looks each one up and plays it as a persistent,
+// position-anchored STR effect. `placement` is ignored for map effects (they
+// always anchor at the RSW position); only `str`, `sound`, `color`, and
+// `repeating` matter.
+//
+// The two sections stay distinct even though the id spaces overlap (e.g. 89
+// is both the WZ_STORMGUST *skill* and the EF_STORMGUST *effect*) -- a flat
+// merged map would silently collide on ids that happen to mean different
+// things.
+//
+// Caveats (map section):
+//   - Only effects backed by an STR file (or a procedural `vfx` key) can play
+//     here. Many classic ambient effects (firefly=45, sandwind=46, torch=47,
+//     ...) are hardcoded particle systems in the original client with no STR
+//     -- leave them unmapped; they need bespoke emitters, not this path.
+//   - Unmapped `effect_type`s are logged by `spawn_map_effects`; use those
+//     logs to discover which ids real maps actually reference, then add them
+//     here.
 (
-    effects: {
+    skills: {
         5: ( // SM_BASH — procedural impact burst (no STR in the official client).
             str: None,
             vfx: Some("bash"),
@@ -91,6 +117,38 @@
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
+        ),
+    },
+    map: {
+        44: ( // EF_SMOKE — non-STR, procedural (rising/fading smoke column).
+            str: None,
+            vfx: Some("smoke"),
+            sound: None,
+            placement: Ground,
+            color: (0.5, 0.5, 0.5, 0.6),
+            repeating: true,
+        ),
+        89: ( // EF_STORMGUST
+            str: Some("stormgust.str"),
+            sound: None,
+            placement: Ground,
+            color: (0.6, 0.7, 1.0, 1.0),
+            repeating: true,
+        ),
+        113: ( // EF_MAGNUS
+            str: Some("magnus.str"),
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        974: ( // EF_EMITTER — non-STR, procedural (params-driven generic emitter).
+            str: None,
+            vfx: Some("emitter"),
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
         ),
     },
 )

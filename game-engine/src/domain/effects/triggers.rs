@@ -304,12 +304,12 @@ mod tests {
     use super::*;
     use crate::domain::effects::components::ActiveEffect;
     use crate::domain::entities::types::ObjectType;
-    use crate::infrastructure::effect::SkillEffectDataAsset;
+    use crate::infrastructure::effect::EffectDataAsset;
 
     fn seeded_catalog() -> EffectCatalog {
-        let ron = include_str!("../../../../assets/data/ron/skill_effects.ron");
-        let asset = ron::from_str::<SkillEffectDataAsset>(ron).expect("seed RON");
-        EffectCatalog::from_skill_effect_data(asset.0)
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("seed RON");
+        EffectCatalog::from_skill_effect_data(asset.0.skills)
     }
 
     fn test_app() -> App {
