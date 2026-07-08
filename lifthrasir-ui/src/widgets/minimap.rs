@@ -46,7 +46,14 @@ pub struct MinimapState {
 /// Maps grid coordinates `(gx, gy)` on a `w`x`h` map to a pixel position
 /// `(left, top)` inside a `frame_w`x`frame_h` frame, proportionally, flipping
 /// Y since the GAT origin is bottom-left but the UI origin is top-left.
-pub fn grid_to_frame_px(gx: u16, gy: u16, w: u32, h: u32, frame_w: f32, frame_h: f32) -> (f32, f32) {
+pub fn grid_to_frame_px(
+    gx: u16,
+    gy: u16,
+    w: u32,
+    h: u32,
+    frame_w: f32,
+    frame_h: f32,
+) -> (f32, f32) {
     if w == 0 || h == 0 {
         return (0.0, 0.0);
     }

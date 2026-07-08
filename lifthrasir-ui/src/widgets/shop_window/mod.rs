@@ -53,6 +53,12 @@ pub enum ShopButtonAction {
     IncQty(u32),
     DecQty(u32),
     RemoveLine(u32),
+    /// Decrements the detail's pending-quantity stepper (design's "add row").
+    PendingDec,
+    /// Increments the detail's pending-quantity stepper.
+    PendingInc,
+    /// Adds `pending_qty` of the selected item to the active cart.
+    AddToCart,
     #[default]
     OpenConfirm,
     ConfirmTrade,
@@ -89,6 +95,9 @@ pub struct ShopSession {
     pub cart_buy: HashMap<u32, u32>,
     pub cart_sell: HashMap<u32, u32>,
     pub selected: Option<Selection>,
+    /// The quantity staged in the detail panel's stepper, added to the active
+    /// cart by `AddToCart`. Defaults to 1; reset to 1 on `Select`/`SwitchTab`.
+    pub pending_qty: u32,
     pub banner: Option<ShopResult>,
     /// Whether the confirm-trade overlay is showing. `rebuild_body` renders it
     /// as part of the body region on every `ShopSession` change.
@@ -321,6 +330,7 @@ fn on_shop_opened(
         cart_buy: HashMap::new(),
         cart_sell: HashMap::new(),
         selected: None,
+        pending_qty: 1,
         banner: None,
         confirm_open: false,
         awaiting: false,
@@ -413,19 +423,41 @@ fn blocked_while_awaiting(action: ShopButtonAction) -> bool {
             | ShopButtonAction::IncQty(_)
             | ShopButtonAction::DecQty(_)
             | ShopButtonAction::RemoveLine(_)
+            | ShopButtonAction::PendingDec
+            | ShopButtonAction::PendingInc
+            | ShopButtonAction::AddToCart
             | ShopButtonAction::OpenConfirm
             | ShopButtonAction::ConfirmTrade
     )
 }
 
+/// The key (`nameid` on Buy, `inventory_index` on Sell) of the currently
+/// selected item, or `None` when nothing is selected.
+fn selected_key(selection: Option<Selection>) -> Option<u32> {
+    match selection? {
+        Selection::Buy(nameid) => Some(nameid),
+        Selection::Sell(index) => Some(index),
+    }
+}
+
+/// Clamps a pending-quantity stepper value into `[1, cap]`. `cap` is
+/// `u32::MAX` on the Buy tab (unbounded) and the selected Sell slot's
+/// snapshot `amount` on the Sell tab.
+fn clamp_pending(qty: u32, cap: u32) -> u32 {
+    qty.clamp(1, cap.max(1))
+}
+
 /// Shared handler for every interactive shop-window node: tab switch, select,
-/// cart +/-/remove mutate `ShopSession` directly; `OpenConfirm` re-checks the
-/// same guard the CTA's disabled look already encodes (a race between render
-/// and click is possible, since the CTA has no `InteractionDisabled`) before
-/// opening the overlay; `ConfirmTrade` emits the batched command for the active
-/// tab, sets `awaiting`, and closes the overlay, leaving the cart intact until
-/// the result arrives; `CancelConfirm` just closes the overlay. While
-/// `awaiting` is set, [`blocked_while_awaiting`] actions are ignored outright.
+/// cart +/-/remove mutate `ShopSession` directly; `PendingDec`/`PendingInc`
+/// step `pending_qty` (clamped via [`clamp_pending`], capped at the selected
+/// Sell slot's snapshot `amount`); `AddToCart` adds `pending_qty` of the
+/// selected item to the active cart; `OpenConfirm` re-checks the same guard
+/// the CTA's disabled look already encodes (a race between render and click
+/// is possible, since the CTA has no `InteractionDisabled`) before opening the
+/// overlay; `ConfirmTrade` emits the batched command for the active tab, sets
+/// `awaiting`, and closes the overlay, leaving the cart intact until the
+/// result arrives; `CancelConfirm` just closes the overlay. While `awaiting`
+/// is set, [`blocked_while_awaiting`] actions are ignored outright.
 pub(super) fn on_shop_button(
     activate: On<Activate>,
     actions: Query<&ShopButtonAction>,
@@ -446,9 +478,11 @@ pub(super) fn on_shop_button(
             session.tab = tab;
             session.selected = None;
             session.banner = None;
+            session.pending_qty = 1;
         }
         ShopButtonAction::Select(selection) => {
             session.selected = Some(selection);
+            session.pending_qty = 1;
         }
         ShopButtonAction::IncQty(key) => {
             session.add_to_cart(key, 1);
@@ -458,6 +492,24 @@ pub(super) fn on_shop_button(
         }
         ShopButtonAction::RemoveLine(key) => {
             session.remove_line(key);
+        }
+        ShopButtonAction::PendingDec => {
+            if let Some(key) = selected_key(session.selected) {
+                let cap = session.cap_for(key);
+                session.pending_qty = clamp_pending(session.pending_qty.saturating_sub(1), cap);
+            }
+        }
+        ShopButtonAction::PendingInc => {
+            if let Some(key) = selected_key(session.selected) {
+                let cap = session.cap_for(key);
+                session.pending_qty = clamp_pending(session.pending_qty.saturating_add(1), cap);
+            }
+        }
+        ShopButtonAction::AddToCart => {
+            if let Some(key) = selected_key(session.selected) {
+                let qty = session.pending_qty;
+                session.add_to_cart(key, qty);
+            }
         }
         ShopButtonAction::OpenConfirm => {
             let Ok(status) = player.single() else {
@@ -633,6 +685,7 @@ mod tests {
             cart_buy: HashMap::new(),
             cart_sell: HashMap::new(),
             selected: None,
+            pending_qty: 1,
             banner: None,
             confirm_open: false,
             awaiting: false,
@@ -898,8 +951,38 @@ mod tests {
         assert!(blocked_while_awaiting(ShopButtonAction::IncQty(501)));
         assert!(blocked_while_awaiting(ShopButtonAction::DecQty(501)));
         assert!(blocked_while_awaiting(ShopButtonAction::RemoveLine(501)));
+        assert!(blocked_while_awaiting(ShopButtonAction::PendingDec));
+        assert!(blocked_while_awaiting(ShopButtonAction::PendingInc));
+        assert!(blocked_while_awaiting(ShopButtonAction::AddToCart));
         assert!(blocked_while_awaiting(ShopButtonAction::OpenConfirm));
         assert!(blocked_while_awaiting(ShopButtonAction::ConfirmTrade));
+    }
+
+    #[test]
+    fn selected_key_resolves_buy_and_sell() {
+        assert_eq!(selected_key(Some(Selection::Buy(501))), Some(501));
+        assert_eq!(selected_key(Some(Selection::Sell(3))), Some(3));
+        assert_eq!(selected_key(None), None);
+    }
+
+    #[test]
+    fn clamp_pending_floors_at_one() {
+        assert_eq!(clamp_pending(0, 100), 1);
+    }
+
+    #[test]
+    fn clamp_pending_caps_at_provided_cap() {
+        assert_eq!(clamp_pending(50, 5), 5);
+    }
+
+    #[test]
+    fn clamp_pending_passes_through_in_range_values() {
+        assert_eq!(clamp_pending(3, 10), 3);
+    }
+
+    #[test]
+    fn clamp_pending_treats_zero_cap_as_one() {
+        assert_eq!(clamp_pending(5, 0), 1);
     }
 
     #[test]

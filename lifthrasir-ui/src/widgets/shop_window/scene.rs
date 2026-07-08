@@ -6,7 +6,8 @@
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
-use bevy_feathers::controls::FeathersButton;
+use bevy::ui_widgets::{ControlOrientation, ScrollArea};
+use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
 use game_engine::domain::assets::item_icon_path;
 use game_engine::domain::inventory::Inventory;
@@ -26,7 +27,7 @@ use super::{
 
 const WINDOW_LEFT: f32 = 340.0;
 const WINDOW_TOP: f32 = 90.0;
-const WINDOW_WIDTH: f32 = 420.0;
+const WINDOW_WIDTH: f32 = 732.0;
 
 /// The whole window: the root card (draggable, carries [`ShopWindowRoot`]), its
 /// titlebar, and an empty body placeholder for Task 7's grid/detail/cart/footer.
@@ -147,15 +148,23 @@ fn ignore_picking() -> impl Scene {
 // no `ShopSession`/`ItemDb`/`Inventory` reference ever crosses into one.
 // ---------------------------------------------------------------------------
 
-const CELL_SIZE: f32 = 34.0;
+/// Fixed width of the right side column (detail + basket), mirrors the
+/// mockup's `.sh-side-inner`.
+const SIDE_COLUMN_WIDTH: f32 = 286.0;
+/// Fixed height shared by the stock pane and the side column, so the window
+/// never grows with content — both panes scroll internally instead (mirrors
+/// the mockup's fixed `.sh-grid-wrap`/`.sh-side-inner` heights).
+const PANE_HEIGHT: f32 = 388.0;
 
-struct CellView {
+/// One item row in the stock list: a sprite well, the item name (with an
+/// optional refine/stock subtitle), an in-cart badge, and the unit price.
+struct RowView {
     icon: Option<String>,
     name: String,
     price: u32,
-    badge: Option<String>,
     refine: Option<u8>,
-    cards: Vec<bool>,
+    owned: Option<u32>,
+    cart_qty: Option<u32>,
     selected: bool,
     action: ShopButtonAction,
 }
@@ -168,6 +177,7 @@ struct DetailView {
     amount: Option<u32>,
     cards: Vec<bool>,
     description: Option<String>,
+    pending_qty: u32,
 }
 
 #[derive(Clone)]
@@ -176,6 +186,14 @@ struct CartLineView {
     name: String,
     unit_price: u32,
     qty: u32,
+}
+
+/// The basket block's view-model: the active tab's cart lines plus its
+/// subtotal, bundled so [`cart_panel`] doesn't need the whole `ShopSession`.
+struct CartView {
+    buy: bool,
+    lines: Vec<CartLineView>,
+    total: u64,
 }
 
 struct FooterView {
@@ -228,19 +246,6 @@ fn sell_cards(inventory: &Inventory, item_db: Option<&ItemDb>, index: u32) -> Ve
         .collect()
 }
 
-/// The cell's badge: an in-cart quantity always wins; otherwise the Sell tab
-/// shows how many the player owns, and the Buy tab shows nothing (stock is
-/// unbounded — design §9).
-fn cell_badge(tab: ShopTab, cart_qty: Option<u32>, owned: Option<u32>) -> Option<String> {
-    if let Some(qty) = cart_qty.filter(|qty| *qty > 0) {
-        return Some(qty.to_string());
-    }
-    match tab {
-        ShopTab::Sell => owned.map(|amount| amount.to_string()),
-        ShopTab::Buy => None,
-    }
-}
-
 /// The Sell cell's refine badge, resolved from the live `Inventory` by
 /// `inventory_index` (the server's `sell_items` snapshot carries no refine data
 /// — design §8). `None` for an unrefined or no-longer-present slot.
@@ -274,42 +279,46 @@ fn footer_warning(session: &ShopSession, zeny: u32) -> bool {
     session.tab == ShopTab::Buy && !session.can_afford(zeny)
 }
 
-fn grid_cells(
+fn row_views(
     session: &ShopSession,
     item_db: Option<&ItemDb>,
     inventory: &Inventory,
-) -> Vec<CellView> {
+) -> Vec<RowView> {
     match session.tab {
         ShopTab::Buy => session
             .buy_items
             .iter()
-            .map(|item| {
-                let cart_qty = session.cart_buy.get(&item.nameid).copied();
-                CellView {
-                    icon: icon_path(item_db, item.nameid, true),
-                    name: item_name(item_db, item.nameid, true),
-                    price: item.price,
-                    badge: cell_badge(ShopTab::Buy, cart_qty, None),
-                    refine: None,
-                    cards: Vec::new(),
-                    selected: session.selected == Some(Selection::Buy(item.nameid)),
-                    action: ShopButtonAction::Select(Selection::Buy(item.nameid)),
-                }
+            .map(|item| RowView {
+                icon: icon_path(item_db, item.nameid, true),
+                name: item_name(item_db, item.nameid, true),
+                price: item.price,
+                refine: None,
+                owned: None,
+                cart_qty: session
+                    .cart_buy
+                    .get(&item.nameid)
+                    .copied()
+                    .filter(|q| *q > 0),
+                selected: session.selected == Some(Selection::Buy(item.nameid)),
+                action: ShopButtonAction::Select(Selection::Buy(item.nameid)),
             })
             .collect(),
         ShopTab::Sell => session
             .sell_items
             .iter()
             .map(|item| {
-                let cart_qty = session.cart_sell.get(&item.inventory_index).copied();
                 let identified = sell_identified(inventory, item.inventory_index);
-                CellView {
+                RowView {
                     icon: icon_path(item_db, item.nameid, identified),
                     name: item_name(item_db, item.nameid, identified),
                     price: item.sell_price,
-                    badge: cell_badge(ShopTab::Sell, cart_qty, Some(item.amount)),
                     refine: sell_refine(inventory, item.inventory_index),
-                    cards: sell_cards(inventory, item_db, item.inventory_index),
+                    owned: Some(item.amount),
+                    cart_qty: session
+                        .cart_sell
+                        .get(&item.inventory_index)
+                        .copied()
+                        .filter(|q| *q > 0),
                     selected: session.selected == Some(Selection::Sell(item.inventory_index)),
                     action: ShopButtonAction::Select(Selection::Sell(item.inventory_index)),
                 }
@@ -340,6 +349,7 @@ fn detail_view(
                 description: item_db
                     .and_then(|db| db.description(nameid, true))
                     .and_then(|lines| lines.first().cloned()),
+                pending_qty: session.pending_qty,
             })
         }
         Selection::Sell(index) => {
@@ -358,6 +368,7 @@ fn detail_view(
                 description: item_db
                     .and_then(|db| db.description(item.nameid, identified))
                     .and_then(|lines| lines.first().cloned()),
+                pending_qty: session.pending_qty,
             })
         }
     }
@@ -399,6 +410,26 @@ fn cart_lines(
     }
 }
 
+/// Total quantity across every line of the active tab's cart — not the line
+/// *count* — since the CTA badge sums quantities (e.g. "Buy · 53").
+fn cart_qty_total(session: &ShopSession) -> u32 {
+    match session.tab {
+        ShopTab::Buy => session.cart_buy.values().sum(),
+        ShopTab::Sell => session.cart_sell.values().sum(),
+    }
+}
+
+/// The CTA's label: the bare verb when the cart is empty, otherwise
+/// `"{verb} · {qty}"` (e.g. "Sell · 12").
+fn cta_label(buy: bool, cart_qty: u32) -> String {
+    let verb = if buy { "Buy" } else { "Sell" };
+    if cart_qty > 0 {
+        format!("{verb} \u{b7} {cart_qty}")
+    } else {
+        verb.to_string()
+    }
+}
+
 fn footer_view(session: &ShopSession, zeny: u32) -> FooterView {
     let buy = session.tab == ShopTab::Buy;
     let total = if buy {
@@ -411,11 +442,7 @@ fn footer_view(session: &ShopSession, zeny: u32) -> FooterView {
         total,
         buy,
         warning: footer_warning(session, zeny),
-        cta_label: if buy {
-            "Buy".to_string()
-        } else {
-            "Sell".to_string()
-        },
+        cta_label: cta_label(buy, cart_qty_total(session)),
         cta_enabled: cta_enabled(session, zeny),
     }
 }
@@ -430,25 +457,28 @@ pub fn body(
     inventory: &Inventory,
 ) -> impl Scene {
     let tab = session.tab;
-    let cells = grid_cells(session, item_db, inventory);
+    let buy = tab == ShopTab::Buy;
+    let rows = row_views(session, item_db, inventory);
     let detail = detail_view(session, item_db, inventory);
-    let cart = cart_lines(session, item_db, inventory);
+    let lines = cart_lines(session, item_db, inventory);
+    let total = if buy {
+        session.buy_subtotal()
+    } else {
+        session.sell_subtotal()
+    };
     let footer_data = footer_view(session, zeny);
-    let overlay = session.confirm_open.then(|| {
-        EntityScene(confirm_overlay(
-            footer_data.buy,
-            cart.clone(),
-            footer_data.total,
-        ))
-    });
+    let overlay = session
+        .confirm_open
+        .then(|| EntityScene(confirm_overlay(buy, lines.clone(), total)));
+    let cart = CartView { buy, lines, total };
 
     bsn! {
         Node {
             flex_direction: FlexDirection::Column,
-            row_gap: px(10),
+            row_gap: px(12),
         }
         ignore_picking()
-        Children [ tab_strip(tab), content_row(cells, detail, cart), footer(footer_data), {overlay} ]
+        Children [ tab_strip(tab), content_row(tab, rows, detail, cart), footer(footer_data), {overlay} ]
     }
 }
 
@@ -475,90 +505,180 @@ fn tab_button(label: &'static str, target: ShopTab, active: bool) -> impl Scene 
 }
 
 fn content_row(
-    cells: Vec<CellView>,
+    tab: ShopTab,
+    rows: Vec<RowView>,
     detail: Option<DetailView>,
-    cart: Vec<CartLineView>,
+    cart: CartView,
 ) -> impl Scene {
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
             column_gap: px(12),
-            min_height: px(200),
         }
         ignore_picking()
-        Children [ grid(cells), side_column(detail, cart) ]
+        Children [ grid_pane(tab, rows), side_column(tab, detail, cart) ]
     }
 }
 
-fn grid(cells: Vec<CellView>) -> impl Scene {
-    let empty = cells.is_empty();
-    let rows: Vec<_> = cells.into_iter().map(cell).collect();
-    let empty_msg = empty.then(|| EntityScene(muted_text("No items.".to_string())));
+/// The bordered, rounded stock pane: a header (label + item count) over the
+/// scrollable item list. Fixed height so the window never grows; the list
+/// scrolls internally. Mirrors the mockup's `.sh-grid-pane`.
+fn grid_pane(tab: ShopTab, rows: Vec<RowView>) -> impl Scene {
+    let label = if tab == ShopTab::Buy {
+        "For Sale"
+    } else {
+        "Your Goods"
+    };
+    let unit = if tab == ShopTab::Buy {
+        "wares"
+    } else {
+        "stacks"
+    };
+    let count = format!("{} {unit}", rows.len());
     bsn! {
         Node {
             flex_grow: 1.0,
             flex_basis: px(0),
-            flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            align_content: AlignContent::FlexStart,
-            column_gap: px(6),
-            row_gap: px(6),
+            min_width: px(0),
+            height: px(PANE_HEIGHT),
+            flex_direction: FlexDirection::Column,
+            border: px(1),
+            border_radius: BorderRadius::all(px(12)),
         }
+        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.22)})
+        BorderColor::all(theme::STROKE)
         ignore_picking()
-        Children [ {rows}, {empty_msg} ]
+        Children [ pane_head(label.to_string(), count), stock_list(rows) ]
     }
 }
 
-fn cell(view: CellView) -> impl Scene {
+fn pane_head(label: String, count: String) -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            padding: {UiRect::axes(px(12), px(9))},
+            border: {UiRect { bottom: Val::Px(1.0), ..default() }},
+        }
+        BorderColor::all(theme::STROKE)
+        ignore_picking()
+        Children [
+            (
+                Text(label)
+                TextFont {
+                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font_size: {FontSize::Px(13.0)},
+                }
+                ThemeTextColor({TOKEN_TEXT})
+                ignore_picking()
+            ),
+            (Node { flex_grow: 1.0 } ignore_picking()),
+            (
+                Text(count)
+                TextFont {
+                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font_size: {FontSize::Px(10.0)},
+                }
+                ThemeTextColor({TOKEN_TEXT_DIM})
+                ignore_picking()
+            ),
+        ]
+    }
+}
+
+/// The scrollable stock list: a vertical column of [`stock_row`]s inside a
+/// fixed-height, wheel-scrollable viewport (`ScrollArea`) with a draggable
+/// [`FeathersScrollbar`] pinned to the right. The `#inner` id wires the
+/// scrollbar to the viewport whose `ScrollPosition` it drives.
+fn stock_list(rows: Vec<RowView>) -> impl Scene {
+    let empty = rows.is_empty();
+    let items: Vec<_> = rows.into_iter().map(stock_row).collect();
+    let empty_msg = empty.then(|| EntityScene(muted_text("No items.".to_string())));
+    bsn! {
+        Node {
+            flex_grow: 1.0,
+            min_height: px(0),
+            position_type: PositionType::Relative,
+        }
+        ignore_picking()
+        Children [
+            (
+                #inner
+                Node {
+                    flex_grow: 1.0,
+                    min_height: px(0),
+                    overflow: {Overflow::scroll_y()},
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(5),
+                    padding: {UiRect { left: Val::Px(9.0), right: Val::Px(12.0), top: Val::Px(9.0), bottom: Val::Px(9.0) }},
+                }
+                ScrollArea
+                Pickable
+                Children [ {items}, {empty_msg} ]
+            ),
+            @FeathersScrollbar { @target: #inner, @orientation: {ControlOrientation::Vertical} }
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(3),
+                top: px(6),
+                bottom: px(6),
+                width: px(6),
+            }
+        ]
+    }
+}
+
+/// One item row (mirrors the mockup's `.sh-line` recipe, applied to the stock
+/// list): a sprite well on the left, the item name over an optional
+/// refine/stock subtitle, an in-cart badge, and the unit price on the right.
+/// The whole row is the select button.
+fn stock_row(view: RowView) -> impl Scene {
     let (bg, border) = if view.selected {
         (theme::EMERALD_INK, theme::EMERALD)
     } else {
-        (theme::FIELD, theme::GOLD_FAINT)
+        (theme::FIELD, theme::STROKE)
     };
-    let icon = view.icon.map(|path| EntityScene(cell_icon(path)));
-    let refine = view
-        .refine
-        .map(|refine| EntityScene(corner_text(format!("+{refine}"), theme::GOLD, true)));
-    let badge = view
-        .badge
-        .map(|badge| EntityScene(corner_text(badge, theme::TEXT, false)));
-    let cards = (!view.cards.is_empty()).then(|| EntityScene(card_row(view.cards)));
+    let subtitle = row_subtitle(view.refine, view.owned).map(|text| EntityScene(row_sub(text)));
+    let cart = view
+        .cart_qty
+        .map(|qty| EntityScene(cart_pill(qty.to_string())));
     let price_text = format!("{}z", view.price);
-    let name = view.name;
     let action = view.action;
 
     bsn! {
         @FeathersButton {
             @caption: bsn! {
                 Node {
-                    flex_direction: FlexDirection::Column,
+                    width: percent(100),
+                    flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
-                    row_gap: px(2),
+                    column_gap: px(10),
                 }
                 ignore_picking()
                 Children [
+                    row_well(view.icon),
                     (
                         Node {
-                            width: px(CELL_SIZE),
-                            height: px(CELL_SIZE),
-                            position_type: PositionType::Relative,
+                            flex_grow: 1.0,
+                            min_width: px(0),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: px(2),
                         }
                         ignore_picking()
-                        Children [ {icon}, {refine}, {badge} ]
+                        Children [ row_name(view.name), {subtitle} ]
                     ),
-                    cell_name(name),
-                    {cards},
-                    price_label(price_text),
+                    {cart},
+                    row_price(price_text),
                 ]
             }
         }
         template_value(action)
         Node {
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            padding: {UiRect::all(px(4))},
+            width: percent(100),
+            height: px(52),
+            padding: {UiRect::axes(px(9), px(0))},
             border: px(1),
-            border_radius: BorderRadius::all(px(5)),
+            border_radius: BorderRadius::all(px(9)),
         }
         BackgroundColor(bg)
         BorderColor::all(border)
@@ -566,40 +686,113 @@ fn cell(view: CellView) -> impl Scene {
     }
 }
 
+/// The row's sprite well: a fixed 44px square framing a contained item icon.
+fn row_well(icon: Option<String>) -> impl Scene {
+    let inner = icon.map(|path| EntityScene(cell_icon(path)));
+    bsn! {
+        Node {
+            width: px(44),
+            height: px(44),
+            flex_shrink: 0.0,
+            position_type: PositionType::Relative,
+            border: px(1),
+            border_radius: BorderRadius::all(px(8)),
+        }
+        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.40)})
+        BorderColor::all(theme::STROKE)
+        ignore_picking()
+        Children [ {inner} ]
+    }
+}
+
+/// A contained item icon, centered in its parent at ~86% size — big enough to
+/// read at a glance without touching the well's edges.
 fn cell_icon(path: String) -> impl Scene {
     bsn! {
         ImageNode { image: {path} }
         Node {
             position_type: PositionType::Absolute,
-            width: percent(100),
-            height: percent(100),
+            left: px(0),
+            right: px(0),
+            top: px(0),
+            bottom: px(0),
+            margin: {UiRect::all(Val::Auto)},
+            width: percent(86),
+            height: percent(86),
         }
         ignore_picking()
     }
 }
 
-/// A small overlay label pinned to a cell corner: refine (top-left) or the
-/// in-cart/owned quantity (bottom-right).
-fn corner_text(text: String, color: Color, top_left: bool) -> impl Scene {
-    let (left, right, top, bottom) = if top_left {
-        (Val::Px(1.0), Val::Auto, Val::Px(0.0), Val::Auto)
-    } else {
-        (Val::Auto, Val::Px(1.0), Val::Auto, Val::Px(0.0))
-    };
+/// The row's subtitle text (refine and/or stock count), or `None` when there's
+/// nothing to say — the Buy tab, or an unrefined bag stack with no owned count.
+fn row_subtitle(refine: Option<u8>, owned: Option<u32>) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(refine) = refine {
+        parts.push(format!("+{refine}"));
+    }
+    if let Some(owned) = owned {
+        parts.push(format!("{owned} owned"));
+    }
+    (!parts.is_empty()).then(|| parts.join(" \u{b7} "))
+}
+
+fn row_name(name: String) -> impl Scene {
+    bsn! {
+        Text(name)
+        TextFont {
+            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font_size: {FontSize::Px(12.5)},
+        }
+        ThemeTextColor({TOKEN_TEXT})
+        ignore_picking()
+    }
+}
+
+fn row_sub(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
             font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
-            font_size: {FontSize::Px(9.0)},
+            font_size: {FontSize::Px(9.5)},
         }
-        TextColor(color)
+        ThemeTextColor({TOKEN_TEXT_DIM})
+        ignore_picking()
+    }
+}
+
+/// The right-aligned unit price of a stock row.
+fn row_price(text: String) -> impl Scene {
+    bsn! {
+        Text(text)
+        TextFont {
+            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font_size: {FontSize::Px(12.0)},
+        }
+        ThemeTextColor({TOKEN_ACCENT})
+        Node { flex_shrink: 0.0 }
+        ignore_picking()
+    }
+}
+
+/// The in-cart quantity pill shown on a row when the item is already staged in
+/// the active cart.
+fn cart_pill(text: String) -> impl Scene {
+    bsn! {
+        Text(text)
+        TextFont {
+            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font_size: {FontSize::Px(9.5)},
+        }
+        TextColor(theme::EMERALD_INK)
+        TextLayout { justify: Justify::Center }
         Node {
-            position_type: PositionType::Absolute,
-            left: {left},
-            right: {right},
-            top: {top},
-            bottom: {bottom},
+            flex_shrink: 0.0,
+            min_width: px(18),
+            padding: {UiRect::axes(px(5), px(2))},
+            border_radius: BorderRadius::all(px(5)),
         }
+        BackgroundColor(theme::EMERALD)
         ignore_picking()
     }
 }
@@ -632,101 +825,239 @@ fn card_pip(filled: bool) -> impl Scene {
     }
 }
 
-/// The cell's item name, wrapped tight to the cell's width rather than
-/// truncated — the grid has no room for a tooltip layer.
-fn cell_name(text: String) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
-            font_size: {FontSize::Px(9.0)},
-        }
-        ThemeTextColor({TOKEN_TEXT})
-        Node { width: px(CELL_SIZE + 10.0) }
-        ignore_picking()
-    }
-}
-
-fn price_label(text: String) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
-            font_size: {FontSize::Px(10.0)},
-        }
-        ThemeTextColor({TOKEN_ACCENT})
-        ignore_picking()
-    }
-}
-
-fn side_column(detail: Option<DetailView>, cart: Vec<CartLineView>) -> impl Scene {
+/// The right side column: one bordered, rounded container holding the detail
+/// block over the basket block. Mirrors the mockup's `.sh-side-inner`.
+fn side_column(tab: ShopTab, detail: Option<DetailView>, cart: CartView) -> impl Scene {
     bsn! {
         Node {
-            width: px(170),
+            width: px(SIDE_COLUMN_WIDTH),
+            height: px(PANE_HEIGHT),
             flex_direction: FlexDirection::Column,
-            row_gap: px(10),
+            border: px(1),
+            border_radius: BorderRadius::all(px(12)),
         }
+        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.22)})
+        BorderColor::all(theme::STROKE)
         ignore_picking()
-        Children [ detail_panel(detail), cart_panel(cart) ]
+        Children [ detail_panel(tab, detail), cart_panel(cart) ]
     }
 }
 
-fn detail_panel(detail: Option<DetailView>) -> impl Scene {
+fn detail_panel(tab: ShopTab, detail: Option<DetailView>) -> impl Scene {
     let empty = detail.is_none();
     let filled = detail.map(|view| EntityScene(detail_content(view)));
-    let empty_msg =
-        empty.then(|| EntityScene(muted_text("Select an item to inspect it.".to_string())));
+    let empty_label = if tab == ShopTab::Buy {
+        "Select an item to inspect & buy it"
+    } else {
+        "Select an item to inspect & sell it"
+    };
+    let empty_msg = empty.then(|| EntityScene(muted_text(empty_label.to_string())));
     bsn! {
         Node {
+            flex_shrink: 0.0,
             flex_direction: FlexDirection::Column,
-            row_gap: px(6),
-            padding: {UiRect::all(px(10))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(8)),
+            row_gap: px(8),
+            padding: {UiRect::all(px(14))},
+            border: {UiRect { bottom: Val::Px(1.0), ..default() }},
         }
-        BackgroundColor(theme::FIELD)
-        BorderColor::all(theme::GOLD_FAINT)
+        BorderColor::all(theme::STROKE)
         ignore_picking()
         Children [ {filled}, {empty_msg} ]
     }
 }
 
+/// The filled detail block: a header (sprite well + title), a meta row of two
+/// stat boxes (price, stock/owned), the description, and the add row
+/// (quantity stepper + Add to Cart/Sale). Mirrors the mockup's `.sh-detail`.
 fn detail_content(view: DetailView) -> impl Scene {
     let icon = view.icon.map(|path| EntityScene(cell_icon(path)));
-    let amount = view
-        .amount
-        .map(|amount| EntityScene(meta_row("You own".to_string(), amount.to_string())));
+    let price_label = if view.buy { "Unit price" } else { "Sell price" };
+    let stock_label = if view.buy { "In stock" } else { "You own" };
+    let stock_value = if view.buy {
+        "Unlimited".to_string()
+    } else {
+        view.amount.unwrap_or(0).to_string()
+    };
     let cards = (!view.cards.is_empty()).then(|| EntityScene(card_row(view.cards)));
     let description = view.description.map(|text| EntityScene(muted_text(text)));
-    let price_label = if view.buy { "Unit price" } else { "Sell price" };
+    let add_label = if view.buy {
+        "Add to Cart"
+    } else {
+        "Add to Sale"
+    }
+    .to_string();
+    let add_bg = if view.buy {
+        theme::EMERALD
+    } else {
+        theme::GOLD
+    };
 
     bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(6) }
+        Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
         ignore_picking()
         Children [
             (
                 Node {
-                    width: px(40),
-                    height: px(40),
-                    position_type: PositionType::Relative,
+                    flex_direction: FlexDirection::Row,
+                    column_gap: px(11),
+                    align_items: AlignItems::FlexStart,
                 }
                 ignore_picking()
-                Children [ {icon} ]
+                Children [
+                    (
+                        Node {
+                            width: px(50),
+                            height: px(50),
+                            flex_shrink: 0.0,
+                            position_type: PositionType::Relative,
+                            border: px(1),
+                            border_radius: BorderRadius::all(px(9)),
+                        }
+                        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.42)})
+                        BorderColor::all(theme::STROKE)
+                        ignore_picking()
+                        Children [ {icon} ]
+                    ),
+                    (
+                        Text({view.name})
+                        TextFont {
+                            font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                            font_size: {FontSize::Px(14.0)},
+                        }
+                        ThemeTextColor({TOKEN_TEXT})
+                        Node { flex_grow: 1.0 }
+                        ignore_picking()
+                    ),
+                ]
             ),
             (
-                Text({view.name})
-                TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
+                Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
                 ignore_picking()
+                Children [
+                    stat_box(price_label.to_string(), format!("{}z", view.price)),
+                    stat_box(stock_label.to_string(), stock_value),
+                ]
             ),
-            meta_row(price_label.to_string(), format!("{}z", view.price)),
-            {amount},
             {cards},
             {description},
+            add_row(view.pending_qty, add_label, add_bg),
         ]
+    }
+}
+
+/// One stat box of the detail's meta row (mirrors `.sh-d-stat`): a small
+/// uppercase label over a bold gold-accented value.
+fn stat_box(label: String, value: String) -> impl Scene {
+    bsn! {
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(3),
+            padding: {UiRect::axes(px(10), px(8))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(8)),
+        }
+        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.26)})
+        BorderColor::all(theme::STROKE)
+        ignore_picking()
+        Children [
+            (
+                Text(label)
+                TextFont {
+                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font_size: {FontSize::Px(8.5)},
+                }
+                ThemeTextColor({TOKEN_TEXT_DIM})
+                ignore_picking()
+            ),
+            (
+                Text(value)
+                TextFont {
+                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font_size: {FontSize::Px(13.0)},
+                }
+                ThemeTextColor({TOKEN_ACCENT})
+                ignore_picking()
+            ),
+        ]
+    }
+}
+
+/// The detail's add row: the pending-quantity stepper plus the Add to
+/// Cart/Sale button. Mirrors the mockup's `.sh-d-add`.
+fn add_row(qty: u32, label: String, bg: Color) -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: px(8),
+        }
+        ignore_picking()
+        Children [ stepper(qty), add_to_cart_button(label, bg) ]
+    }
+}
+
+/// The pending-quantity stepper (mirrors `.sh-stepper`): minus / value / plus,
+/// driving `ShopSession.pending_qty` via `PendingDec`/`PendingInc`.
+fn stepper(qty: u32) -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Stretch,
+            height: px(30),
+            border: px(1),
+            border_radius: BorderRadius::all(px(7)),
+        }
+        BackgroundColor(theme::FIELD)
+        BorderColor::all(theme::STROKE)
+        ignore_picking()
+        Children [
+            stepper_button("minus", ShopButtonAction::PendingDec),
+            stepper_value(qty),
+            stepper_button("plus", ShopButtonAction::PendingInc),
+        ]
+    }
+}
+
+fn stepper_button(icon_name: &'static str, action: ShopButtonAction) -> impl Scene {
+    bsn! {
+        @FeathersButton { @caption: bsn! { glyph_icon(icon_name, 12.0, theme::TEXT_DIM) } }
+        template_value(action)
+        Node { width: px(26), height: px(28) }
+        on(on_shop_button)
+    }
+}
+
+fn stepper_value(qty: u32) -> impl Scene {
+    bsn! {
+        Text({qty.to_string()})
+        TextFont {
+            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font_size: {FontSize::Px(12.0)},
+        }
+        ThemeTextColor({TOKEN_TEXT})
+        TextLayout { justify: Justify::Center }
+        Node {
+            width: px(36),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+        }
+        ignore_picking()
+    }
+}
+
+fn add_to_cart_button(label: String, bg: Color) -> impl Scene {
+    bsn! {
+        @FeathersButton { @caption: bsn! { chrome_text(label) } }
+        template_value(ShopButtonAction::AddToCart)
+        Node {
+            flex_grow: 1.0,
+            height: px(30),
+            padding: {UiRect::horizontal(px(10))},
+        }
+        BackgroundColor(bg)
+        on(on_shop_button)
     }
 }
 
@@ -769,22 +1100,109 @@ fn muted_text(text: String) -> impl Scene {
     }
 }
 
-fn cart_panel(lines: Vec<CartLineView>) -> impl Scene {
-    let empty = lines.is_empty();
-    let rows: Vec<_> = lines.into_iter().map(cart_line).collect();
-    let empty_msg = empty.then(|| EntityScene(muted_text("Cart is empty.".to_string())));
+/// The basket block: a header ("Cart · N items"/"To Sell · N items"), the
+/// cart lines, and a subtotal row pinned at the bottom. Mirrors the mockup's
+/// `.sh-basket`.
+fn cart_panel(view: CartView) -> impl Scene {
+    let empty = view.lines.is_empty();
+    let count = view.lines.len();
+    let header_label = if view.buy { "Cart" } else { "To Sell" };
+    let unit = if count == 1 { "item" } else { "items" };
+    let header = format!("{header_label} \u{b7} {count} {unit}");
+    let subtotal_label = if view.buy { "Subtotal" } else { "You receive" }.to_string();
+    let total = view.total;
+    let rows: Vec<_> = view.lines.into_iter().map(cart_line).collect();
+    let empty_msg = empty.then(|| EntityScene(muted_text("Nothing added yet.".to_string())));
     bsn! {
         Node {
             flex_direction: FlexDirection::Column,
-            row_gap: px(4),
-            padding: {UiRect::all(px(10))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(8)),
+            flex_grow: 1.0,
+            min_height: px(0),
         }
-        BackgroundColor(theme::FIELD)
-        BorderColor::all(theme::GOLD_FAINT)
         ignore_picking()
-        Children [ {rows}, {empty_msg} ]
+        Children [
+            basket_head(header),
+            (
+                Node {
+                    flex_grow: 1.0,
+                    min_height: px(0),
+                    position_type: PositionType::Relative,
+                }
+                ignore_picking()
+                Children [
+                    (
+                        #basket
+                        Node {
+                            flex_grow: 1.0,
+                            min_height: px(0),
+                            overflow: {Overflow::scroll_y()},
+                            flex_direction: FlexDirection::Column,
+                            row_gap: px(6),
+                            padding: {UiRect { left: Val::Px(11.0), right: Val::Px(13.0), top: Val::Px(2.0), bottom: Val::Px(4.0) }},
+                        }
+                        ScrollArea
+                        Pickable
+                        Children [ {rows}, {empty_msg} ]
+                    ),
+                    @FeathersScrollbar { @target: #basket, @orientation: {ControlOrientation::Vertical} }
+                    Node {
+                        position_type: PositionType::Absolute,
+                        right: px(2),
+                        top: px(2),
+                        bottom: px(2),
+                        width: px(5),
+                    }
+                ]
+            ),
+            subtotal_row(subtotal_label, total),
+        ]
+    }
+}
+
+fn basket_head(text: String) -> impl Scene {
+    bsn! {
+        Text(text)
+        TextFont {
+            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font_size: {FontSize::Px(9.5)},
+        }
+        ThemeTextColor({TOKEN_TEXT_DIM})
+        Node { padding: {UiRect::axes(px(13), px(8))} }
+        ignore_picking()
+    }
+}
+
+fn subtotal_row(label: String, total: u64) -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            padding: {UiRect::axes(px(13), px(9))},
+            border: {UiRect { top: Val::Px(1.0), ..default() }},
+        }
+        BorderColor::all(theme::STROKE)
+        ignore_picking()
+        Children [
+            (
+                Text(label)
+                TextFont {
+                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font_size: {FontSize::Px(9.5)},
+                }
+                ThemeTextColor({TOKEN_TEXT_DIM})
+                ignore_picking()
+            ),
+            (
+                Text({format!("{total}z")})
+                TextFont {
+                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font_size: {FontSize::Px(14.0)},
+                }
+                ThemeTextColor({TOKEN_ACCENT})
+                ignore_picking()
+            ),
+        ]
     }
 }
 
@@ -796,7 +1214,12 @@ fn cart_line(view: CartLineView) -> impl Scene {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
             column_gap: px(4),
+            padding: {UiRect::all(px(6))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(7)),
         }
+        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.26)})
+        BorderColor::all(theme::STROKE)
         ignore_picking()
         Children [
             (
@@ -867,24 +1290,41 @@ fn footer(view: FooterView) -> impl Scene {
     }
 }
 
+/// The footer's zeny display: a coin glyph beside a stacked "YOUR ZENY"
+/// label over the gold balance. Mirrors the mockup's `.sh-zeny`.
 fn zeny_display(zeny: u32) -> impl Scene {
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            column_gap: px(6),
+            column_gap: px(8),
         }
         ignore_picking()
         Children [
-            glyph_icon("coin", 13.0, theme::GOLD),
+            glyph_icon("coin", 16.0, theme::GOLD),
             (
-                Text({format!("{zeny}z")})
-                TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
+                Node { flex_direction: FlexDirection::Column, row_gap: px(1) }
                 ignore_picking()
+                Children [
+                    (
+                        Text({"YOUR ZENY".to_string()})
+                        TextFont {
+                            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                            font_size: {FontSize::Px(9.0)},
+                        }
+                        ThemeTextColor({TOKEN_TEXT_DIM})
+                        ignore_picking()
+                    ),
+                    (
+                        Text({format!("{zeny}z")})
+                        TextFont {
+                            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                            font_size: {FontSize::Px(13.0)},
+                        }
+                        TextColor(theme::GOLD)
+                        ignore_picking()
+                    ),
+                ]
             ),
         ]
     }
@@ -914,7 +1354,13 @@ fn warning_text() -> impl Scene {
 }
 
 fn total_text(buy: bool, total: u64) -> impl Scene {
-    let sign = if buy { "-" } else { "+" };
+    let sign = if total == 0 {
+        ""
+    } else if buy {
+        "-"
+    } else {
+        "+"
+    };
     let label = if buy { "Total" } else { "You receive" };
     let color = if buy { theme::TEXT } else { theme::EMERALD };
     bsn! {
@@ -1021,7 +1467,7 @@ fn confirm_card(title: String, lines: Vec<CartLineView>, total: u64, buy: bool) 
             border: px(1),
             border_radius: BorderRadius::all(px(10)),
         }
-        BackgroundColor(theme::FIELD)
+        BackgroundColor(theme::GLASS)
         BorderColor::all(theme::GOLD_FAINT)
         Pickable
         Children [
@@ -1121,6 +1567,7 @@ mod tests {
             cart_buy: HashMap::new(),
             cart_sell: HashMap::new(),
             selected: None,
+            pending_qty: 1,
             banner: None,
             confirm_open: false,
             awaiting: false,
@@ -1155,6 +1602,26 @@ mod tests {
     }
 
     #[test]
+    fn cart_qty_total_sums_active_tab_only() {
+        let mut session = session_with(ShopTab::Buy);
+        session.cart_buy.insert(501, 3);
+        session.cart_sell.insert(0, 5);
+        assert_eq!(cart_qty_total(&session), 3);
+    }
+
+    #[test]
+    fn cta_label_omits_count_when_cart_empty() {
+        assert_eq!(cta_label(true, 0), "Buy");
+        assert_eq!(cta_label(false, 0), "Sell");
+    }
+
+    #[test]
+    fn cta_label_includes_cart_count() {
+        assert_eq!(cta_label(true, 30), "Buy \u{b7} 30");
+        assert_eq!(cta_label(false, 7), "Sell \u{b7} 7");
+    }
+
+    #[test]
     fn footer_warning_only_on_unaffordable_buy() {
         let mut session = session_with(ShopTab::Buy);
         session.cart_buy.insert(501, 3);
@@ -1170,24 +1637,21 @@ mod tests {
     }
 
     #[test]
-    fn cell_badge_prefers_cart_qty_over_owned() {
-        assert_eq!(
-            cell_badge(ShopTab::Sell, Some(3), Some(10)),
-            Some("3".to_string())
-        );
+    fn row_subtitle_none_on_buy() {
+        assert_eq!(row_subtitle(None, None), None);
     }
 
     #[test]
-    fn cell_badge_falls_back_to_owned_on_sell() {
-        assert_eq!(
-            cell_badge(ShopTab::Sell, None, Some(10)),
-            Some("10".to_string())
-        );
+    fn row_subtitle_shows_owned_on_sell() {
+        assert_eq!(row_subtitle(None, Some(10)), Some("10 owned".to_string()));
     }
 
     #[test]
-    fn cell_badge_none_on_buy_without_cart() {
-        assert_eq!(cell_badge(ShopTab::Buy, None, None), None);
+    fn row_subtitle_combines_refine_and_owned() {
+        assert_eq!(
+            row_subtitle(Some(7), Some(3)),
+            Some("+7 \u{b7} 3 owned".to_string())
+        );
     }
 
     #[test]
