@@ -349,9 +349,9 @@ impl Default for CharacterStatus {
 impl CharacterStatus {
     pub fn update_param(&mut self, param: StatusParameter, value: u32) {
         match param {
-            StatusParameter::Hp => self.hp = value.min(self.max_hp),
+            StatusParameter::Hp => self.hp = value,
             StatusParameter::MaxHp => self.max_hp = value,
-            StatusParameter::Sp => self.sp = value.min(self.max_sp),
+            StatusParameter::Sp => self.sp = value,
             StatusParameter::MaxSp => self.max_sp = value,
             StatusParameter::BaseExp => self.base_exp = value,
             StatusParameter::JobExp => self.job_exp = value,
@@ -373,7 +373,7 @@ impl CharacterStatus {
             StatusParameter::ULuk => self.uluk = value,
             StatusParameter::StatusPoint => self.status_point = value,
             StatusParameter::SkillPoint => self.skill_point = value,
-            StatusParameter::Weight => self.weight = value.min(self.max_weight),
+            StatusParameter::Weight => self.weight = value,
             StatusParameter::MaxWeight => self.max_weight = value,
             StatusParameter::Zeny => self.zeny = value,
             StatusParameter::BankVault => self.bank_vault = value,
@@ -554,6 +554,20 @@ mod tests {
 
         status.update_param(StatusParameter::BaseExp, 12345);
         assert_eq!(status.base_exp, 12345);
+    }
+
+    #[test]
+    fn test_hp_applied_before_max_hp_is_not_clamped() {
+        // The server sends the stat batch as a key-ordered map, so Hp (5) arrives
+        // before MaxHp (6) while max_hp is still the default. Hp must not be
+        // clamped to the stale max, otherwise login shows a wrong (100) value.
+        let mut status = CharacterStatus::default();
+
+        status.update_param(StatusParameter::Hp, 5000);
+        status.update_param(StatusParameter::MaxHp, 5000);
+
+        assert_eq!(status.hp, 5000);
+        assert_eq!(status.max_hp, 5000);
     }
 
     #[test]
