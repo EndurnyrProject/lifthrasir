@@ -118,11 +118,18 @@ pub fn apply_graphics(
     }
 
     // The UI camera shares the window target with the world camera, so their
-    // MSAA sample counts must match or the world pass fails to composite (the
-    // same rule HDR follows here). FXAA stays world-only.
+    // MSAA sample counts and HDR must match or the world pass fails to
+    // composite. FXAA stays world-only.
     let ui_msaa = effective_msaa(&settings, dlss_active);
+    let ui_hdr = needs_hdr(&settings, dlss_active);
     for ui_camera in &ui_cameras {
-        commands.entity(ui_camera).insert(ui_msaa);
+        let mut entity = commands.entity(ui_camera);
+        entity.insert(ui_msaa);
+        if ui_hdr {
+            entity.insert(Hdr);
+        } else {
+            entity.remove::<Hdr>();
+        }
     }
 
     commands.insert_resource(UiScale(graphics.ui_scaling.to_scale_factor()));
@@ -230,6 +237,12 @@ pub fn apply_shadows_on_spawn(
     }
 }
 
+/// Whether the world camera needs the HDR pipeline: bloom reads it and DLSS
+/// requires it. The UI camera must match (it shares the window render target).
+fn needs_hdr(settings: &Settings, dlss_active: bool) -> bool {
+    settings.graphics.bloom || dlss_active
+}
+
 /// The world camera's effective MSAA. DLSS, TAA, and SSAO each rely on the
 /// depth/normal prepass, which is incompatible with MSAA, so any of them forces
 /// it off. The UI camera must match (it shares the window render target).
@@ -259,9 +272,6 @@ fn apply_camera_effects(
     // FXAA is post-process (no prepass), so it coexists with SSAO; DLSS and TAA
     // are themselves the antialiaser and suppress it.
     let has_fxaa = !temporal && graphics.antialiasing == AntiAliasing::Fxaa;
-    // DLSS needs the HDR pipeline; keep it even when bloom is off.
-    let needs_hdr = graphics.bloom || dlss_active;
-
     let mut entity = commands.entity(camera);
     entity.insert(msaa);
     if has_fxaa {
@@ -309,7 +319,7 @@ fn apply_camera_effects(
         entity.remove::<NormalPrepass>();
     }
 
-    if needs_hdr {
+    if needs_hdr(settings, dlss_active) {
         entity.insert(Hdr);
     } else {
         entity.remove::<Hdr>();
@@ -411,6 +421,16 @@ mod tests {
             app.world().resource::<Messages<MuteAmbienceEvent>>().len(),
             1
         );
+    }
+
+    #[test]
+    fn hdr_follows_bloom_and_dlss() {
+        let mut settings = Settings::default();
+        settings.graphics.bloom = false;
+        assert!(!needs_hdr(&settings, false));
+        assert!(needs_hdr(&settings, true));
+        settings.graphics.bloom = true;
+        assert!(needs_hdr(&settings, false));
     }
 
     #[test]

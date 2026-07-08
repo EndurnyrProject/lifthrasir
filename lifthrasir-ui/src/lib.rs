@@ -45,8 +45,10 @@ fn spawn_ui_camera(mut commands: Commands) {
             clear_color: ClearColorConfig::None,
             ..default()
         },
-        // Must match the 3D world camera's HDR setting: cameras sharing the window
-        // target have to agree on HDR, otherwise the 3D pass blows out to white.
+        // Cameras sharing the window target must agree on HDR, otherwise the 3D
+        // pass blows out to white. This is only the pre-settings value: the
+        // settings apply system syncs it with the world camera on the first
+        // Update and on every settings change.
         Hdr,
         IsDefaultUiCamera,
         Name::new("UiCamera"),
