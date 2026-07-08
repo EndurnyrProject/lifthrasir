@@ -60,7 +60,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     chat_box::spawn_chat_box(&mut commands, root, &asset_server);
     equipment_window::spawn_equipment_window(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root, &asset_server);
-    inventory_window::spawn_inventory_window(&mut commands, root, &asset_server);
+    inventory_window::spawn_inventory_window(&mut commands, root);
     minimap::spawn_minimap(&mut commands, root, &asset_server);
     skill_window::spawn_skill_window(&mut commands, root, &asset_server);
     status_window::spawn_status_window(&mut commands, root, &asset_server);
