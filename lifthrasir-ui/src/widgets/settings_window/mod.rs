@@ -1,26 +1,34 @@
 //! Settings window: the draggable shell and the draft/Apply/Cancel/Reset model.
 //!
-//! The window edits a draft `Settings` clone held in `SettingsUi`; nothing
-//! touches the live world until Apply, which persists the draft and emits
-//! `ApplySettings`. The three tab bodies are empty placeholders here — the
-//! per-tab controls land in later tasks. Spawned hidden at `Startup` so it
-//! survives state changes and is reachable from the title screen and in-game.
+//! The chrome (titlebar, tab rail, fixed-height scrollable content pane, and
+//! footer) is authored declaratively with `bsn!` in [`scene`]; Feathers supplies
+//! the buttons and the scrollbar. The window edits a draft `Settings` clone held
+//! in `SettingsUi`; nothing touches the live world until Apply, which persists
+//! the draft and emits `ApplySettings`. The tree is static — the `refresh_*`
+//! systems project the draft onto the controls via their marker components.
+//! Spawned hidden at `Startup` so it survives state changes and is reachable
+//! from the title screen and in-game.
 
 use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
+use bevy::ui_widgets::Activate;
+use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use bevy_persistent::prelude::Persistent;
-use game_engine::domain::input::{ui_unfocused, PlayerAction, HOTBAR_ACTIONS};
+use game_engine::domain::input::{ui_unfocused, PlayerAction};
 use game_engine::domain::settings::{
     resolution_label, resolution_next, resolution_prev, ActionBinds, ApplySettings, DisplayMode,
     GraphicsSettings, KeyBind, Modifier, Settings,
 };
 
 use crate::theme;
-use crate::widgets::draggable::make_draggable;
+use crate::theme::feathers_theme::install_norse_theme;
+
+pub mod scene;
 
 /// Which slot of an action's bindings a rebind capture targets.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum BindSlot {
+    #[default]
     Primary,
     Secondary,
 }
@@ -82,29 +90,39 @@ fn apply_draft(ui: &mut SettingsUi, persistent: &mut Persistent<Settings>) -> bo
 }
 
 /// Marks the toggled window root (Escape / close / login gear flip its `Visibility`).
-#[derive(Component)]
+#[derive(Component, Default, Clone)]
 pub struct SettingsWindowRoot;
 
+/// The draggable titlebar; the drag observer only moves the window when the
+/// drag's target is the titlebar itself, so dragging from the close button is
+/// inert.
+#[derive(Component, Default, Clone)]
+struct SettingsTitlebar;
+
 /// Marks a tab-rail button so its observer and highlight key off a tab.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct TabButton(SettingsTab);
 
 /// Marks a tab body so the active-tab system can show/hide it.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct TabBody(SettingsTab);
 
 /// Marks the unsaved-changes dot so its visibility tracks `dirty()`.
-#[derive(Component)]
+#[derive(Component, Default, Clone)]
 struct DirtyDot;
 
 /// Marks the Apply button so it dims when there is nothing to apply.
-#[derive(Component)]
+#[derive(Component, Default, Clone)]
 struct ApplyButton;
 
 pub struct SettingsWindowPlugin;
 
 impl Plugin for SettingsWindowPlugin {
     fn build(&self, app: &mut App) {
+        install_norse_theme(app);
+        if !app.is_plugin_added::<FeathersCorePlugin>() {
+            app.add_plugins(FeathersPlugins);
+        }
         app.init_resource::<SettingsUi>();
         app.add_systems(Startup, spawn_settings_root);
         app.add_systems(
@@ -144,216 +162,10 @@ fn seed_from_persistent(persistent: Res<Persistent<Settings>>, mut ui: ResMut<Se
     ui.committed = (**persistent).clone();
 }
 
-/// Spawns the (hidden) window root as a top-level UI node so it survives state
+/// Spawns the (hidden) window as a top-level BSN scene so it survives state
 /// changes and renders over both the title screen and the in-game HUD.
-fn spawn_settings_root(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let root = commands
-        .spawn((
-            SettingsWindowRoot,
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(360.0),
-                top: Val::Px(120.0),
-                width: Val::Px(560.0),
-                flex_direction: FlexDirection::Column,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(13.0)),
-                ..default()
-            },
-            BackgroundColor(theme::GLASS),
-            BorderColor::all(theme::GOLD_FAINT),
-            Visibility::Hidden,
-            // Float above every other UI root (login panel, in-game HUD) so the
-            // window owns picking — otherwise a full-screen screen root spawned
-            // later in the stack swallows its clicks and drags.
-            GlobalZIndex(1000),
-            Pickable::default(),
-        ))
-        .id();
-
-    spawn_settings_window(&mut commands, root, &asset_server);
-}
-
-/// Builds the window contents under `root`: titlebar, the tab rail + content
-/// pane, and the footer. The titlebar drives dragging; the close `X` hides the
-/// root. Tab bodies are empty placeholders.
-pub fn spawn_settings_window(commands: &mut Commands, root: Entity, asset_server: &AssetServer) {
-    let font_title = asset_server.load(theme::FONT_TITLE);
-    let font_body = asset_server.load(theme::FONT_BODY);
-
-    let titlebar = spawn_titlebar(commands, root, asset_server, &font_title);
-    spawn_main(commands, root, &font_body);
-    spawn_footer(commands, root, &font_body);
-
-    make_draggable(commands, titlebar, root);
-}
-
-fn spawn_titlebar(
-    commands: &mut Commands,
-    root: Entity,
-    asset_server: &AssetServer,
-    font_title: &Handle<Font>,
-) -> Entity {
-    let titlebar = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(8.0),
-                padding: UiRect::axes(Val::Px(14.0), Val::Px(11.0)),
-                border: UiRect {
-                    bottom: Val::Px(1.0),
-                    ..default()
-                },
-                ..default()
-            },
-            BackgroundColor(theme::GLASS_2),
-            BorderColor::all(theme::GOLD_FAINT),
-            Pickable::default(),
-            ChildOf(root),
-        ))
-        .id();
-
-    commands.spawn((
-        theme::icon(asset_server, "gear", 16.0, theme::GOLD),
-        ChildOf(titlebar),
-    ));
-    commands.spawn((
-        theme::label("System Settings", font_title.clone(), 15.0, theme::TEXT),
-        Node {
-            flex_grow: 1.0,
-            ..default()
-        },
-        ChildOf(titlebar),
-    ));
-
-    let close = commands
-        .spawn((
-            Node {
-                width: Val::Px(22.0),
-                height: Val::Px(22.0),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border_radius: BorderRadius::all(Val::Px(6.0)),
-                ..default()
-            },
-            BackgroundColor(theme::FIELD),
-            Pickable::default(),
-            ChildOf(titlebar),
-        ))
-        .id();
-    commands.spawn((
-        theme::icon(asset_server, "close", 13.0, theme::TEXT_DIM),
-        ChildOf(close),
-    ));
-    commands.entity(close).observe(
-        |_: On<Pointer<Click>>, mut window: Query<&mut Visibility, With<SettingsWindowRoot>>| {
-            if let Ok(mut visibility) = window.single_mut() {
-                *visibility = Visibility::Hidden;
-            }
-        },
-    );
-
-    titlebar
-}
-
-/// The tab rail (left) and the content pane (right) with one empty body per tab.
-fn spawn_main(commands: &mut Commands, root: Entity, font: &Handle<Font>) {
-    let main = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                min_height: Val::Px(260.0),
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(root),
-        ))
-        .id();
-
-    spawn_rail(commands, main, font);
-
-    let content = commands
-        .spawn((
-            Node {
-                flex_grow: 1.0,
-                flex_direction: FlexDirection::Column,
-                padding: UiRect::all(Val::Px(14.0)),
-                row_gap: Val::Px(12.0),
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(main),
-        ))
-        .id();
-
-    for tab in [
-        SettingsTab::Graphics,
-        SettingsTab::Sound,
-        SettingsTab::Input,
-    ] {
-        spawn_tab_body(commands, content, tab, font);
-    }
-}
-
-const TABS: [(SettingsTab, &str); 3] = [
-    (SettingsTab::Graphics, "Graphics"),
-    (SettingsTab::Sound, "Sound"),
-    (SettingsTab::Input, "Input"),
-];
-
-fn spawn_rail(commands: &mut Commands, main: Entity, font: &Handle<Font>) {
-    let rail = commands
-        .spawn((
-            Node {
-                width: Val::Px(140.0),
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(6.0),
-                padding: UiRect::all(Val::Px(14.0)),
-                border: UiRect {
-                    right: Val::Px(1.0),
-                    ..default()
-                },
-                ..default()
-            },
-            BorderColor::all(theme::GOLD_FAINT),
-            Pickable::IGNORE,
-            ChildOf(main),
-        ))
-        .id();
-
-    for (tab, label) in TABS {
-        spawn_tab_button(commands, rail, tab, label, font);
-    }
-}
-
-fn spawn_tab_button(
-    commands: &mut Commands,
-    rail: Entity,
-    tab: SettingsTab,
-    label: &str,
-    font: &Handle<Font>,
-) {
-    let button = commands
-        .spawn((
-            TabButton(tab),
-            Node {
-                height: Val::Px(32.0),
-                align_items: AlignItems::Center,
-                padding: UiRect::horizontal(Val::Px(10.0)),
-                border_radius: BorderRadius::all(Val::Px(7.0)),
-                ..default()
-            },
-            BackgroundColor(theme::FIELD),
-            Pickable::default(),
-            ChildOf(rail),
-        ))
-        .id();
-    commands.spawn((
-        theme::label(label, font.clone(), 13.0, theme::TEXT_DIM),
-        ChildOf(button),
-    ));
-    commands.entity(button).observe(on_tab_click);
+fn spawn_settings_root(mut commands: Commands) {
+    scene::build(&mut commands);
 }
 
 /// Tab click: set the active tab in the draft state.
@@ -362,145 +174,6 @@ fn on_tab_click(click: On<Pointer<Click>>, tabs: Query<&TabButton>, mut ui: ResM
         return;
     };
     ui.tab = tab.0;
-}
-
-/// An (empty) per-tab body. Only the active tab's body is visible; later tasks
-/// fill these with the per-tab controls.
-fn spawn_tab_body(commands: &mut Commands, content: Entity, tab: SettingsTab, font: &Handle<Font>) {
-    let title = match tab {
-        SettingsTab::Graphics => "GRAPHICS",
-        SettingsTab::Sound => "SOUND",
-        SettingsTab::Input => "INPUT",
-    };
-    // Toggle `display`, not `Visibility`: a hidden node still reserves its
-    // layout slot, which would stack the tabs at different heights (Sound mid,
-    // Input at the bottom). `Display::None` removes the slot so the active tab
-    // always sits at the top of the content pane.
-    let display = if tab == SettingsTab::default() {
-        Display::Flex
-    } else {
-        Display::None
-    };
-    let body = commands
-        .spawn((
-            TabBody(tab),
-            Node {
-                display,
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(10.0),
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(content),
-        ))
-        .id();
-    commands.spawn((
-        theme::label(title, font.clone(), 11.0, theme::GOLD),
-        ChildOf(body),
-    ));
-
-    if tab == SettingsTab::Graphics {
-        spawn_graphics_rows(commands, body, font);
-    }
-    if tab == SettingsTab::Sound {
-        spawn_sound_rows(commands, body, font);
-    }
-    if tab == SettingsTab::Input {
-        spawn_input_rows(commands, body, font);
-    }
-}
-
-/// Footer: Reset to Defaults · unsaved-changes dot · Cancel · Apply.
-fn spawn_footer(commands: &mut Commands, root: Entity, font: &Handle<Font>) {
-    let footer = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(8.0),
-                padding: UiRect::all(Val::Px(14.0)),
-                border: UiRect {
-                    top: Val::Px(1.0),
-                    ..default()
-                },
-                ..default()
-            },
-            BackgroundColor(theme::GLASS_2),
-            BorderColor::all(theme::GOLD_FAINT),
-            Pickable::IGNORE,
-            ChildOf(root),
-        ))
-        .id();
-
-    spawn_footer_button(
-        commands,
-        footer,
-        "Reset to Defaults",
-        theme::FIELD,
-        font,
-        on_reset,
-    );
-
-    // Pushes the dirty dot + Cancel/Apply to the right edge.
-    commands.spawn((
-        Node {
-            flex_grow: 1.0,
-            ..default()
-        },
-        Pickable::IGNORE,
-        ChildOf(footer),
-    ));
-
-    commands.spawn((
-        DirtyDot,
-        Node {
-            width: Val::Px(8.0),
-            height: Val::Px(8.0),
-            border_radius: BorderRadius::all(Val::Px(4.0)),
-            ..default()
-        },
-        BackgroundColor(theme::WARN),
-        Visibility::Hidden,
-        Pickable::IGNORE,
-        ChildOf(footer),
-    ));
-
-    spawn_footer_button(commands, footer, "Cancel", theme::FIELD, font, on_cancel);
-    let apply = spawn_footer_button(commands, footer, "Apply", theme::EMERALD, font, on_apply);
-    commands.entity(apply).insert(ApplyButton);
-}
-
-fn spawn_footer_button<M>(
-    commands: &mut Commands,
-    footer: Entity,
-    text: &str,
-    bg: Color,
-    font: &Handle<Font>,
-    observer: impl bevy::ecs::system::IntoObserverSystem<Pointer<Click>, (), M>,
-) -> Entity {
-    let fg = if bg == theme::EMERALD {
-        theme::EMERALD_INK
-    } else {
-        theme::TEXT_DIM
-    };
-    let button = commands
-        .spawn((
-            Node {
-                height: Val::Px(32.0),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                padding: UiRect::horizontal(Val::Px(14.0)),
-                border_radius: BorderRadius::all(Val::Px(7.0)),
-                ..default()
-            },
-            BackgroundColor(bg),
-            Pickable::default(),
-            ChildOf(footer),
-        ))
-        .id();
-    commands.spawn((theme::label(text, font.clone(), 13.0, fg), ChildOf(button)));
-    commands.entity(button).observe(observer);
-    button
 }
 
 /// Apply: persist the draft, mark it committed, and request a live re-apply.
@@ -517,12 +190,12 @@ fn on_apply(
 }
 
 /// Cancel: discard pending edits and any in-progress rebind capture.
-fn on_cancel(_: On<Pointer<Click>>, mut ui: ResMut<SettingsUi>) {
+fn on_cancel(_: On<Activate>, mut ui: ResMut<SettingsUi>) {
     ui.cancel();
 }
 
 /// Reset to Defaults: load the built-in defaults into the draft.
-fn on_reset(_: On<Pointer<Click>>, mut ui: ResMut<SettingsUi>) {
+fn on_reset(_: On<Activate>, mut ui: ResMut<SettingsUi>) {
     ui.reset();
 }
 
@@ -601,14 +274,14 @@ fn toggle_settings(
 /// Which `draft.graphics` field a control edits. Drives both interaction
 /// (steppers/switch/segmented mutate the matching field) and the displayed
 /// value refresh.
-#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Default)]
 enum GraphicsField {
+    #[default]
     DisplayMode,
     Resolution,
     Antialiasing,
     Anisotropy,
     Upscaling,
-    #[cfg_attr(not(feature = "dlss"), allow(dead_code))]
     Dlss,
     Ssao,
     Vsync,
@@ -619,37 +292,38 @@ enum GraphicsField {
 }
 
 /// Direction a stepper arrow moves the value.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 enum StepDir {
+    #[default]
     Prev,
     Next,
 }
 
 /// A segmented-control button: edits `field` to the variant at `index` in
 /// `DisplayMode::ALL`.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct SegButton {
     field: GraphicsField,
     index: usize,
 }
 
 /// A stepper arrow: steps `field` one preset in `dir`.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct StepperArrow {
     field: GraphicsField,
     dir: StepDir,
 }
 
 /// The value text inside a stepper; `refresh_graphics` rewrites it.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct StepperValue(GraphicsField);
 
 /// The clickable switch pill; flips `field`'s bool.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct SwitchPill(GraphicsField);
 
 /// The sliding knob inside a switch; `refresh_graphics` repositions it.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct SwitchKnob(GraphicsField);
 
 /// Reads a field's current stepper/switch display value off the draft.
@@ -730,240 +404,6 @@ fn step_field(graphics: &mut GraphicsSettings, field: GraphicsField, dir: StepDi
     }
 }
 
-/// Builds the Graphics rows under `body`.
-fn spawn_graphics_rows(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
-    spawn_section(commands, body, "Display", font);
-
-    let ctrl = spawn_row(
-        commands,
-        body,
-        "Display Mode",
-        "How the game fills your screen",
-        font,
-    );
-    spawn_segmented(commands, ctrl, GraphicsField::DisplayMode, font);
-
-    let ctrl = spawn_row(commands, body, "Resolution", "Screen size in pixels", font);
-    spawn_stepper(commands, ctrl, GraphicsField::Resolution, font);
-
-    spawn_section(commands, body, "Quality", font);
-
-    let ctrl = spawn_row(commands, body, "Antialiasing", "Smooths jagged edges", font);
-    spawn_stepper(commands, ctrl, GraphicsField::Antialiasing, font);
-
-    let ctrl = spawn_row(
-        commands,
-        body,
-        "Anisotropic Filtering",
-        "Sharpens ground textures at grazing angles",
-        font,
-    );
-    spawn_stepper(commands, ctrl, GraphicsField::Anisotropy, font);
-
-    let ctrl = spawn_row(
-        commands,
-        body,
-        "Upscaling",
-        "xBRZ sprite & texture upscaling (applies on map reload)",
-        font,
-    );
-    spawn_stepper(commands, ctrl, GraphicsField::Upscaling, font);
-
-    #[cfg(feature = "dlss")]
-    {
-        let ctrl = spawn_row(
-            commands,
-            body,
-            "DLSS",
-            "NVIDIA render-resolution upscaling (RTX only)",
-            font,
-        );
-        spawn_stepper(commands, ctrl, GraphicsField::Dlss, font);
-    }
-
-    let ctrl = spawn_row(
-        commands,
-        body,
-        "Ambient Occlusion",
-        "Contact shadows in crevices (SSAO); forces MSAA off",
-        font,
-    );
-    spawn_stepper(commands, ctrl, GraphicsField::Ssao, font);
-
-    let ctrl = spawn_row(commands, body, "Bloom", "Glow around bright lights", font);
-    spawn_switch(commands, ctrl, GraphicsField::Bloom);
-
-    let ctrl = spawn_row(commands, body, "Shadows", "Sun shadow casting", font);
-    spawn_switch(commands, ctrl, GraphicsField::Shadows);
-
-    let ctrl = spawn_row(
-        commands,
-        body,
-        "VSync",
-        "Sync frames to display refresh",
-        font,
-    );
-    spawn_switch(commands, ctrl, GraphicsField::Vsync);
-
-    let ctrl = spawn_row(
-        commands,
-        body,
-        "Frame Rate Cap",
-        "Maximum frames per second",
-        font,
-    );
-    spawn_stepper(commands, ctrl, GraphicsField::FpsCap, font);
-
-    spawn_section(commands, body, "Interface", font);
-
-    let ctrl = spawn_row(
-        commands,
-        body,
-        "UI Scaling",
-        "Scales the interface for high resolutions",
-        font,
-    );
-    spawn_stepper(commands, ctrl, GraphicsField::UiScaling, font);
-}
-
-/// A gold uppercase section caption with a trailing hairline.
-fn spawn_section(commands: &mut Commands, body: Entity, text: &str, font: &Handle<Font>) {
-    let row = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(10.0),
-                margin: UiRect::top(Val::Px(4.0)),
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(body),
-        ))
-        .id();
-    commands.spawn((
-        theme::label(text, font.clone(), 10.0, theme::GOLD),
-        ChildOf(row),
-    ));
-    commands.spawn((
-        Node {
-            flex_grow: 1.0,
-            height: Val::Px(1.0),
-            ..default()
-        },
-        BackgroundColor(theme::GOLD_FAINT),
-        Pickable::IGNORE,
-        ChildOf(row),
-    ));
-}
-
-/// A setting row: a label column (title + sublabel) and a right-aligned control
-/// column. Returns the control column entity to attach the control to.
-fn spawn_row(
-    commands: &mut Commands,
-    body: Entity,
-    label: &str,
-    sublabel: &str,
-    font: &Handle<Font>,
-) -> Entity {
-    let row = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::SpaceBetween,
-                column_gap: Val::Px(18.0),
-                min_height: Val::Px(46.0),
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(body),
-        ))
-        .id();
-
-    let labels = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(3.0),
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(row),
-        ))
-        .id();
-    commands.spawn((
-        theme::label(label, font.clone(), 13.0, theme::TEXT),
-        ChildOf(labels),
-    ));
-    commands.spawn((
-        theme::label(sublabel, font.clone(), 11.0, theme::TEXT_FAINT),
-        ChildOf(labels),
-    ));
-
-    commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(row),
-        ))
-        .id()
-}
-
-/// Segmented control for `DisplayMode`: one button per variant, active one
-/// highlighted by `refresh_graphics`.
-fn spawn_segmented(
-    commands: &mut Commands,
-    ctrl: Entity,
-    field: GraphicsField,
-    font: &Handle<Font>,
-) {
-    let group = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(4.0),
-                padding: UiRect::all(Val::Px(4.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(9.0)),
-                ..default()
-            },
-            BackgroundColor(theme::FIELD),
-            BorderColor::all(theme::STROKE),
-            Pickable::IGNORE,
-            ChildOf(ctrl),
-        ))
-        .id();
-
-    for (index, mode) in DisplayMode::ALL.into_iter().enumerate() {
-        let button = commands
-            .spawn((
-                SegButton { field, index },
-                Node {
-                    height: Val::Px(30.0),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    padding: UiRect::horizontal(Val::Px(13.0)),
-                    border_radius: BorderRadius::all(Val::Px(6.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::NONE),
-                Pickable::default(),
-                ChildOf(group),
-            ))
-            .id();
-        commands.spawn((
-            theme::label(mode.label(), font.clone(), 12.0, theme::TEXT_DIM),
-            ChildOf(button),
-        ));
-        commands.entity(button).observe(on_segment_click);
-    }
-}
-
 /// Clicking a segment sets the segmented field to the clicked variant.
 fn on_segment_click(
     click: On<Pointer<Click>>,
@@ -978,81 +418,6 @@ fn on_segment_click(
     }
 }
 
-/// Stepper control: ◀ value ▶ over a field's presets.
-fn spawn_stepper(commands: &mut Commands, ctrl: Entity, field: GraphicsField, font: &Handle<Font>) {
-    let stepper = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                min_width: Val::Px(188.0),
-                height: Val::Px(38.0),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(9.0)),
-                ..default()
-            },
-            BackgroundColor(theme::FIELD),
-            BorderColor::all(theme::STROKE),
-            Pickable::IGNORE,
-            ChildOf(ctrl),
-        ))
-        .id();
-
-    spawn_stepper_arrow(commands, stepper, field, StepDir::Prev, font);
-
-    commands.spawn((
-        StepperValue(field),
-        theme::label("", font.clone(), 13.0, theme::TEXT),
-        Node {
-            flex_grow: 1.0,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        TextLayout {
-            justify: Justify::Center,
-            ..default()
-        },
-        ChildOf(stepper),
-    ));
-
-    spawn_stepper_arrow(commands, stepper, field, StepDir::Next, font);
-}
-
-fn spawn_stepper_arrow(
-    commands: &mut Commands,
-    stepper: Entity,
-    field: GraphicsField,
-    dir: StepDir,
-    font: &Handle<Font>,
-) {
-    let arrow = commands
-        .spawn((
-            StepperArrow { field, dir },
-            Node {
-                width: Val::Px(38.0),
-                height: Val::Percent(100.0),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            Pickable::default(),
-            ChildOf(stepper),
-        ))
-        .id();
-    commands.spawn((
-        Text::new(if dir == StepDir::Prev { "<" } else { ">" }),
-        TextFont {
-            font: font.clone().into(),
-            font_size: 14.0.into(),
-            ..default()
-        },
-        TextColor(theme::TEXT_DIM),
-        Pickable::IGNORE,
-        ChildOf(arrow),
-    ));
-    commands.entity(arrow).observe(on_stepper_click);
-}
-
 /// Clicking a stepper arrow steps its field one preset.
 fn on_stepper_click(
     click: On<Pointer<Click>>,
@@ -1063,42 +428,6 @@ fn on_stepper_click(
         return;
     };
     step_field(&mut ui.draft.graphics, arrow.field, arrow.dir);
-}
-
-/// Toggle switch (VSync): a pill with a sliding knob.
-fn spawn_switch(commands: &mut Commands, ctrl: Entity, field: GraphicsField) {
-    let pill = commands
-        .spawn((
-            SwitchPill(field),
-            Node {
-                width: Val::Px(50.0),
-                height: Val::Px(28.0),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(16.0)),
-                ..default()
-            },
-            BackgroundColor(theme::FIELD),
-            BorderColor::all(theme::STROKE),
-            Pickable::default(),
-            ChildOf(ctrl),
-        ))
-        .id();
-    commands.spawn((
-        SwitchKnob(field),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(3.0),
-            left: Val::Px(3.0),
-            width: Val::Px(20.0),
-            height: Val::Px(20.0),
-            border_radius: BorderRadius::all(Val::Px(10.0)),
-            ..default()
-        },
-        BackgroundColor(theme::TEXT_DIM),
-        Pickable::IGNORE,
-        ChildOf(pill),
-    ));
-    commands.entity(pill).observe(on_switch_click);
 }
 
 /// Clicking the switch flips its bool field.
@@ -1164,8 +493,9 @@ fn refresh_graphics(
 // ── Sound tab ─────────────────────────────────────────────────────────────
 
 /// The three audio channels, each a `draft.audio` volume + mute pair.
-#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Default)]
 enum AudioChannel {
+    #[default]
     Bgm,
     Sfx,
     Ambient,
@@ -1224,83 +554,25 @@ fn slider_percent(volume: f32, muted: bool) -> f32 {
 }
 
 /// The clickable mute button; toggles its channel's `*_muted`.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct MuteButton(AudioChannel);
 
 /// The draggable slider rail; carries `RelativeCursorPosition` so pointer events
 /// map straight to a 0..1 fraction without manual geometry.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct SliderRail(AudioChannel);
 
 /// The fill bar inside a rail; `refresh_sound` sets its width.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct SliderFill(AudioChannel);
 
 /// The knob inside a rail; `refresh_sound` sets its left offset.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct SliderKnob(AudioChannel);
 
 /// The percent (or "Muted") readout; `refresh_sound` rewrites its text.
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct SliderPercent(AudioChannel);
-
-const SOUND_CHANNELS: [(AudioChannel, &str, &str); 3] = [
-    (
-        AudioChannel::Bgm,
-        "Background Music",
-        "Ambient score & themes",
-    ),
-    (AudioChannel::Sfx, "Sound Effects", "Hits, skills & impacts"),
-    (
-        AudioChannel::Ambient,
-        "Ambient",
-        "World, weather & footsteps",
-    ),
-];
-
-/// Builds the three Sound rows under `body`.
-fn spawn_sound_rows(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
-    spawn_section(commands, body, "Volume Mix", font);
-
-    for (channel, label, sublabel) in SOUND_CHANNELS {
-        let ctrl = spawn_row(commands, body, label, sublabel, font);
-        spawn_mute_button(commands, ctrl, channel, font);
-        spawn_slider(commands, ctrl, channel, font);
-    }
-}
-
-/// A small square button that flips the channel's mute. `refresh_sound` tints it.
-fn spawn_mute_button(
-    commands: &mut Commands,
-    ctrl: Entity,
-    channel: AudioChannel,
-    font: &Handle<Font>,
-) {
-    let button = commands
-        .spawn((
-            MuteButton(channel),
-            Node {
-                width: Val::Px(30.0),
-                height: Val::Px(30.0),
-                margin: UiRect::right(Val::Px(12.0)),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(7.0)),
-                ..default()
-            },
-            BackgroundColor(theme::FIELD),
-            BorderColor::all(theme::STROKE),
-            Pickable::default(),
-            ChildOf(ctrl),
-        ))
-        .id();
-    commands.spawn((
-        theme::label("M", font.clone(), 11.0, theme::TEXT_FAINT),
-        ChildOf(button),
-    ));
-    commands.entity(button).observe(on_mute_click);
-}
 
 /// Clicking a mute button flips its channel's mute on the draft.
 fn on_mute_click(
@@ -1312,96 +584,6 @@ fn on_mute_click(
         return;
     };
     button.0.toggle_muted(&mut ui.draft.audio);
-}
-
-/// A volume slider: a rail (track + fill + knob) and a percent readout. Click and
-/// drag on the rail map the cursor's `RelativeCursorPosition` to the volume.
-fn spawn_slider(commands: &mut Commands, ctrl: Entity, channel: AudioChannel, font: &Handle<Font>) {
-    let rail = commands
-        .spawn((
-            SliderRail(channel),
-            Node {
-                width: Val::Px(200.0),
-                height: Val::Px(22.0),
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            RelativeCursorPosition::default(),
-            Pickable::default(),
-            ChildOf(ctrl),
-        ))
-        .id();
-
-    let track = commands
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(6.0),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(4.0)),
-                ..default()
-            },
-            BackgroundColor(theme::FIELD),
-            BorderColor::all(theme::STROKE),
-            Pickable::IGNORE,
-            ChildOf(rail),
-        ))
-        .id();
-
-    commands.spawn((
-        SliderFill(channel),
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Px(0.0),
-            top: Val::Px(0.0),
-            bottom: Val::Px(0.0),
-            width: Val::Percent(0.0),
-            border_radius: BorderRadius::all(Val::Px(4.0)),
-            ..default()
-        },
-        BackgroundColor(theme::EMERALD),
-        Pickable::IGNORE,
-        ChildOf(track),
-    ));
-
-    commands.spawn((
-        SliderKnob(channel),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(3.0),
-            left: Val::Percent(0.0),
-            margin: UiRect::left(Val::Px(-7.0)),
-            width: Val::Px(15.0),
-            height: Val::Px(15.0),
-            border: UiRect::all(Val::Px(1.0)),
-            border_radius: BorderRadius::all(Val::Px(8.0)),
-            ..default()
-        },
-        BackgroundColor(theme::DISPLAY_GOLD),
-        BorderColor::all(theme::EMERALD_DEEP),
-        Pickable::IGNORE,
-        ChildOf(rail),
-    ));
-
-    commands.spawn((
-        SliderPercent(channel),
-        theme::label("", font.clone(), 13.0, theme::TEXT_DIM),
-        Node {
-            width: Val::Px(44.0),
-            margin: UiRect::left(Val::Px(14.0)),
-            ..default()
-        },
-        TextLayout {
-            justify: Justify::Right,
-            ..default()
-        },
-        ChildOf(ctrl),
-    ));
-
-    commands
-        .entity(rail)
-        .observe(on_slider_press)
-        .observe(on_slider_drag);
 }
 
 /// Reads a rail's cursor fraction and writes it as the channel's volume.
@@ -1493,16 +675,6 @@ fn refresh_sound(
 }
 
 // ── Input tab ─────────────────────────────────────────────────────────────
-
-/// The rebindable non-hotbar actions in display order. The twelve hotbar slots
-/// follow these rows (see `spawn_input_rows`), labelled `Hotbar F1`..`Hotbar F12`.
-const ACTIONS: [(PlayerAction, &str); 5] = [
-    (PlayerAction::Sit, "Sit / Stand"),
-    (PlayerAction::Status, "Status Window"),
-    (PlayerAction::Inventory, "Inventory"),
-    (PlayerAction::Skills, "Skills Window"),
-    (PlayerAction::Equipment, "Equipment"),
-];
 
 /// Borrows the stored binds for an action off the draft keybinds.
 fn action_binds(
@@ -1643,134 +815,13 @@ struct Keycap {
     slot: BindSlot,
 }
 
-/// Builds the three Input rows under `body`: a header, then one row per action
-/// with a Primary and Secondary keycap.
-fn spawn_input_rows(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
-    spawn_section(commands, body, "Key Bindings", font);
-    spawn_bind_header(commands, body, font);
-
-    for (action, label) in ACTIONS {
-        spawn_bind_row(commands, body, action, label, font);
+impl Default for Keycap {
+    fn default() -> Self {
+        Self {
+            action: PlayerAction::Sit,
+            slot: BindSlot::Primary,
+        }
     }
-    for (i, action) in HOTBAR_ACTIONS.into_iter().enumerate() {
-        spawn_bind_row(commands, body, action, &format!("Hotbar F{}", i + 1), font);
-    }
-}
-
-/// The "Action / Primary / Secondary" column header.
-fn spawn_bind_header(commands: &mut Commands, body: Entity, font: &Handle<Font>) {
-    let row = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(body),
-        ))
-        .id();
-    spawn_header_cell(commands, row, "Action", 1.0, font);
-    spawn_header_cell(commands, row, "Primary", 0.0, font);
-    spawn_header_cell(commands, row, "Secondary", 0.0, font);
-}
-
-fn spawn_header_cell(
-    commands: &mut Commands,
-    row: Entity,
-    text: &str,
-    grow: f32,
-    font: &Handle<Font>,
-) {
-    let cell = commands
-        .spawn((
-            Node {
-                width: if grow == 0.0 {
-                    Val::Px(112.0)
-                } else {
-                    Val::Auto
-                },
-                flex_grow: grow,
-                margin: UiRect::left(Val::Px(if grow == 0.0 { 8.0 } else { 0.0 })),
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(row),
-        ))
-        .id();
-    commands.spawn((
-        theme::label(text, font.clone(), 10.0, theme::TEXT_FAINT),
-        ChildOf(cell),
-    ));
-}
-
-/// One action row: action name + two keycaps.
-fn spawn_bind_row(
-    commands: &mut Commands,
-    body: Entity,
-    action: PlayerAction,
-    label: &str,
-    font: &Handle<Font>,
-) {
-    let row = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                min_height: Val::Px(38.0),
-                ..default()
-            },
-            Pickable::IGNORE,
-            ChildOf(body),
-        ))
-        .id();
-
-    commands.spawn((
-        theme::label(label, font.clone(), 13.0, theme::TEXT),
-        Node {
-            flex_grow: 1.0,
-            ..default()
-        },
-        ChildOf(row),
-    ));
-
-    spawn_keycap(commands, row, action, BindSlot::Primary, font);
-    spawn_keycap(commands, row, action, BindSlot::Secondary, font);
-}
-
-/// A clickable keycap cell. `refresh_input` rewrites its label; clicking it
-/// starts a rebind capture for this `(action, slot)`.
-fn spawn_keycap(
-    commands: &mut Commands,
-    row: Entity,
-    action: PlayerAction,
-    slot: BindSlot,
-    font: &Handle<Font>,
-) {
-    let cap = commands
-        .spawn((
-            Keycap { action, slot },
-            Node {
-                width: Val::Px(104.0),
-                height: Val::Px(30.0),
-                margin: UiRect::left(Val::Px(8.0)),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(7.0)),
-                ..default()
-            },
-            BackgroundColor(theme::FIELD),
-            BorderColor::all(theme::STROKE),
-            Pickable::default(),
-            ChildOf(row),
-        ))
-        .id();
-    commands.spawn((
-        theme::label("", font.clone(), 12.0, theme::TEXT_DIM),
-        ChildOf(cap),
-    ));
-    commands.entity(cap).observe(on_keycap_click);
 }
 
 /// Clicking a keycap arms a rebind capture for its slot.
@@ -1864,7 +915,11 @@ mod tests {
     #[test]
     fn spawn_settings_root_builds_the_full_tree_without_duplicate_components() {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            bevy::scene::ScenePlugin,
+        ));
         app.init_asset::<Image>();
         app.init_asset::<Font>();
         app.add_systems(Startup, spawn_settings_root);
