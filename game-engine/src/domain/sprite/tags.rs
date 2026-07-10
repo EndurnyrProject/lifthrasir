@@ -17,6 +17,7 @@ moonshine_tag::tags! {
     pub LAYER_HEAD_MID,
     pub LAYER_HEAD_BOTTOM,
     pub LAYER_EFFECT,
+    pub LAYER_CART,
     pub FRAME_ATTACK,
     pub FRAME_SOUND,
 }
@@ -24,6 +25,7 @@ moonshine_tag::tags! {
 pub fn layer_order(tag: Tag) -> u8 {
     match tag {
         t if t == LAYER_SHADOW => 0,
+        t if t == LAYER_CART => 15,
         t if t == LAYER_HEAD => 10,
         t if t == LAYER_BODY => 20,
         t if t == LAYER_GARMENT => 30,
@@ -47,5 +49,15 @@ pub fn equipment_slot_to_tag(slot: &EquipmentSlot) -> Tag {
         EquipmentSlot::HeadBottom => LAYER_HEAD_BOTTOM,
         EquipmentSlot::Armor | EquipmentSlot::Shoes => LAYER_BODY,
         EquipmentSlot::Accessory1 | EquipmentSlot::Accessory2 => LAYER_EFFECT,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cart_layer_orders_behind_body() {
+        assert_eq!(layer_order(LAYER_CART), 15);
     }
 }

@@ -137,6 +137,16 @@ pub fn item_drop_action_path(resource_name: &str) -> String {
     format!("ro://data/sprite/아이템/{resource_name}.act")
 }
 
+/// Generate the pushcart sprite path (single gender-agnostic sprite).
+pub fn cart_sprite_path() -> String {
+    "ro://data/sprite/아이템/mc_pushcart.spr".to_string()
+}
+
+/// Generate the pushcart action path.
+pub fn cart_action_path() -> String {
+    cart_sprite_path().replace(".spr", ".act")
+}
+
 /// Generate headgear (accessory) sprite path.
 /// `accname` comes from the accessory db and already carries its leading separator (e.g. `"_고글"`).
 pub fn headgear_sprite_path(gender: Gender, accname: &str) -> String {
@@ -217,6 +227,22 @@ mod tests {
         assert_eq!(
             minimap_path("prontera"),
             "ro://data/texture/유저인터페이스/map/prontera.bmp"
+        );
+    }
+
+    #[test]
+    fn cart_sprite_path_builds_correct_url() {
+        assert_eq!(
+            cart_sprite_path(),
+            "ro://data/sprite/아이템/mc_pushcart.spr"
+        );
+    }
+
+    #[test]
+    fn cart_action_path_builds_correct_url() {
+        assert_eq!(
+            cart_action_path(),
+            "ro://data/sprite/아이템/mc_pushcart.act"
         );
     }
 
