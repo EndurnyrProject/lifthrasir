@@ -2,10 +2,12 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
 
-use super::super::mapping::cart::{cart_info, cart_item_added, cart_item_removed};
+use super::super::mapping::cart::{
+    cart_info, cart_item_added, cart_item_removed, cart_mount_result,
+};
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
-use net_contract::events::{CartItemAdded, CartItemRemoved, CartLoaded};
+use net_contract::events::{CartItemAdded, CartItemRemoved, CartLoaded, CartMountResult};
 
 #[auto_add_system(
     plugin = crate::AesirNetPlugin,
@@ -17,6 +19,7 @@ pub fn zone_drain_cart(
     mut loaded: MessageWriter<CartLoaded>,
     mut added: MessageWriter<CartItemAdded>,
     mut removed: MessageWriter<CartItemRemoved>,
+    mut mount_result: MessageWriter<CartMountResult>,
 ) {
     for msg in incoming.read() {
         match msg.body.clone() {
@@ -29,6 +32,9 @@ pub fn zone_drain_cart(
             Body::CartItemRemoved(r) => {
                 removed.write(cart_item_removed(r));
             }
+            Body::CartMountResult(r) => {
+                mount_result.write(cart_mount_result(r));
+            }
             _ => {}
         }
     }
@@ -39,6 +45,7 @@ mod tests {
     use super::*;
     use crate::channels::{BULK, GAMEPLAY};
     use crate::proto::aesir::net;
+    use net_contract::events::CartMountRejection;
 
     fn drain(bodies: Vec<(u8, Body)>) -> App {
         let mut app = App::new();
@@ -46,6 +53,7 @@ mod tests {
             .add_message::<CartLoaded>()
             .add_message::<CartItemAdded>()
             .add_message::<CartItemRemoved>()
+            .add_message::<CartMountResult>()
             .add_systems(Update, zone_drain_cart);
 
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
@@ -117,5 +125,20 @@ mod tests {
         assert_eq!(events[0].index, 3u16);
         assert_eq!(events[0].amount, 2u16);
         assert_eq!(events[0].reason, 1);
+    }
+
+    #[test]
+    fn cart_mount_result_produces_one_rejection_event() {
+        let app = drain(vec![(
+            GAMEPLAY,
+            Body::CartMountResult(net::CartMountResult {
+                result: net::CartMountResultCode::CartSkillNotLearned as i32,
+            }),
+        )]);
+
+        let results = app.world().resource::<Messages<CartMountResult>>();
+        let events: Vec<_> = results.iter_current_update_messages().collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].outcome, Err(CartMountRejection::SkillNotLearned));
     }
 }

@@ -21,6 +21,7 @@ use game_engine::domain::cart::Cart;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::inventory::Inventory;
 use game_engine::infrastructure::item::ItemDb;
+use net_contract::events::CartMountRejection;
 
 use crate::theme;
 use crate::theme::feathers_theme::{
@@ -128,7 +129,7 @@ pub fn body(
     status: Option<&CharacterStatus>,
     item_db: Option<&ItemDb>,
 ) -> impl Scene {
-    let prompt = (!mounted).then(|| EntityScene(mount_prompt()));
+    let prompt = (!mounted).then(|| EntityScene(mount_prompt(cart_ui.mount_error)));
     let mounted_view = mounted
         .then_some(status)
         .flatten()
@@ -140,9 +141,12 @@ pub fn body(
     }
 }
 
-/// Shown when the local player has no cart: a line of copy and a single
-/// "Mount Pushcart" button that sends `MountCart { mount: true }`.
-fn mount_prompt() -> impl Scene {
+/// Shown when the local player has no cart: a line of copy, a single
+/// "Mount Pushcart" button that sends `MountCart { mount: true }`, and — after a
+/// rejected mount — a warning line explaining why the last attempt failed.
+fn mount_prompt(error: Option<CartMountRejection>) -> impl Scene {
+    let hint =
+        error.map(|reason| EntityScene(chrome_text(mount_error_text(reason), 11.0, theme::WARN)));
     bsn! {
         Node {
             flex_direction: FlexDirection::Column,
@@ -166,7 +170,16 @@ fn mount_prompt() -> impl Scene {
                 BackgroundColor(theme::EMERALD_INK)
                 on(on_mount_toggle)
             ),
+            {hint},
         ]
+    }
+}
+
+/// The warning copy shown under the mount button for each rejection reason.
+fn mount_error_text(reason: CartMountRejection) -> String {
+    match reason {
+        CartMountRejection::SkillNotLearned => "You have not learned Pushcart.".to_string(),
+        CartMountRejection::AlreadyMounted => "A cart is already mounted.".to_string(),
     }
 }
 
@@ -933,6 +946,55 @@ mod tests {
             .map(|button| button.mount)
             .collect();
         assert_eq!(mounts, vec![true]);
+    }
+
+    #[test]
+    fn mount_prompt_renders_rejection_hint() {
+        let mut app = test_app();
+        let inv = Inventory::default();
+        let cart = Cart::default();
+        let ui = super::super::CartUi {
+            mount_error: Some(CartMountRejection::SkillNotLearned),
+            ..Default::default()
+        };
+        app.world_mut()
+            .spawn_scene(body(false, &inv, &cart, &ui, None, None))
+            .expect("body spawns");
+        app.update();
+
+        let texts: Vec<String> = app
+            .world_mut()
+            .query::<&Text>()
+            .iter(app.world())
+            .map(|text| text.0.clone())
+            .collect();
+        assert!(
+            texts.iter().any(|t| t == "You have not learned Pushcart."),
+            "rejection hint text present, got {texts:?}"
+        );
+    }
+
+    #[test]
+    fn mount_prompt_without_error_has_no_hint() {
+        let mut app = test_app();
+        let inv = Inventory::default();
+        let cart = Cart::default();
+        let ui = super::super::CartUi::default();
+        app.world_mut()
+            .spawn_scene(body(false, &inv, &cart, &ui, None, None))
+            .expect("body spawns");
+        app.update();
+
+        let texts: Vec<String> = app
+            .world_mut()
+            .query::<&Text>()
+            .iter(app.world())
+            .map(|text| text.0.clone())
+            .collect();
+        assert!(
+            !texts.iter().any(|t| t == "You have not learned Pushcart."),
+            "no rejection hint without an error, got {texts:?}"
+        );
     }
 
     #[test]

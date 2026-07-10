@@ -54,6 +54,9 @@ mod tests {
             .contains_resource::<Messages<events::CartItemRemoved>>());
         assert!(app
             .world()
+            .contains_resource::<Messages<events::CartMountResult>>());
+        assert!(app
+            .world()
             .contains_resource::<Messages<commands::MountCart>>());
         assert!(app
             .world()

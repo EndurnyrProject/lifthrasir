@@ -1,6 +1,8 @@
 use crate::proto::aesir::net;
 use net_contract::dto::CartItem;
-use net_contract::events::{CartItemAdded, CartItemRemoved, CartLoaded};
+use net_contract::events::{
+    CartItemAdded, CartItemRemoved, CartLoaded, CartMountRejection, CartMountResult,
+};
 
 pub fn cart_info(i: net::CartInfo) -> CartLoaded {
     CartLoaded {
@@ -46,6 +48,20 @@ pub fn cart_item_removed(r: net::CartItemRemoved) -> CartItemRemoved {
         amount: r.amount as u16,
         reason: r.reason,
     }
+}
+
+/// Maps the server's mount outcome to the neutral event. The two known
+/// rejections become `Err`; `CART_OK` and any unrecognised code map to `Ok`,
+/// since the only client-actionable outcomes are the rejections.
+pub fn cart_mount_result(r: net::CartMountResult) -> CartMountResult {
+    let outcome = match net::CartMountResultCode::try_from(r.result) {
+        Ok(net::CartMountResultCode::CartSkillNotLearned) => {
+            Err(CartMountRejection::SkillNotLearned)
+        }
+        Ok(net::CartMountResultCode::CartAlreadyMounted) => Err(CartMountRejection::AlreadyMounted),
+        _ => Ok(()),
+    };
+    CartMountResult { outcome }
 }
 
 #[cfg(test)]
@@ -123,5 +139,29 @@ mod tests {
         assert_eq!(removed.index, 3u16);
         assert_eq!(removed.amount, 2u16);
         assert_eq!(removed.reason, 1);
+    }
+
+    #[test]
+    fn cart_mount_result_maps_ok_and_rejections() {
+        let ok = cart_mount_result(net::CartMountResult {
+            result: net::CartMountResultCode::CartOk as i32,
+        });
+        assert_eq!(ok.outcome, Ok(()));
+
+        let no_skill = cart_mount_result(net::CartMountResult {
+            result: net::CartMountResultCode::CartSkillNotLearned as i32,
+        });
+        assert_eq!(no_skill.outcome, Err(CartMountRejection::SkillNotLearned));
+
+        let already = cart_mount_result(net::CartMountResult {
+            result: net::CartMountResultCode::CartAlreadyMounted as i32,
+        });
+        assert_eq!(already.outcome, Err(CartMountRejection::AlreadyMounted));
+    }
+
+    #[test]
+    fn cart_mount_result_maps_unknown_code_to_ok() {
+        let unknown = cart_mount_result(net::CartMountResult { result: 999 });
+        assert_eq!(unknown.outcome, Ok(()));
     }
 }

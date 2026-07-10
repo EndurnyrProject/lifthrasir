@@ -29,6 +29,7 @@ use game_engine::domain::inventory::Inventory;
 use game_engine::infrastructure::item::ItemDb;
 use leafwing_input_manager::prelude::ActionState;
 use net_contract::commands::{MountCart, MoveFromCart, MoveToCart};
+use net_contract::events::{CartMountRejection, CartMountResult};
 
 use crate::theme::feathers_theme::install_norse_theme;
 
@@ -174,12 +175,14 @@ pub(crate) fn clamp_qty(qty: u16, cap: u16) -> u16 {
     qty.clamp(1, cap.max(1))
 }
 
-/// Pending selection + quantity for the Bag<->Cart move UI. Defaults to
-/// no selection and a quantity of one (the stepper's floor).
+/// Pending selection + quantity for the Bag<->Cart move UI, plus the last mount
+/// rejection so the mount prompt can explain a failed mount. Defaults to no
+/// selection, a quantity of one (the stepper's floor), and no error.
 #[derive(Resource, Debug, Clone, PartialEq, Eq)]
 pub struct CartUi {
     pub selected: Option<(Side, u16)>,
     pub qty: u16,
+    pub mount_error: Option<CartMountRejection>,
 }
 
 impl Default for CartUi {
@@ -187,6 +190,7 @@ impl Default for CartUi {
         Self {
             selected: None,
             qty: 1,
+            mount_error: None,
         }
     }
 }
@@ -212,6 +216,10 @@ impl Plugin for PushcartWindowPlugin {
             toggle_pushcart_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
         );
         app.add_systems(Update, rebuild_body.run_if(in_state(GameState::InGame)));
+        app.add_systems(
+            Update,
+            apply_mount_result.run_if(in_state(GameState::InGame)),
+        );
         app.add_systems(OnExit(GameState::InGame), reset);
     }
 }
@@ -389,6 +397,15 @@ fn on_mount_toggle(
     });
 }
 
+/// Record the server's latest mount outcome into [`CartUi::mount_error`] so the
+/// mount prompt can explain a rejection; a successful mount clears it. Marking
+/// [`CartUi`] changed here drives `rebuild_body` to re-render the prompt.
+fn apply_mount_result(mut results: MessageReader<CartMountResult>, mut ui: ResMut<CartUi>) {
+    for result in results.read() {
+        ui.mount_error = result.outcome.err();
+    }
+}
+
 /// Reset the selection/quantity state when leaving the game.
 fn reset(mut ui: ResMut<CartUi>) {
     *ui = CartUi::default();
@@ -493,11 +510,49 @@ mod tests {
         app.insert_resource(CartUi {
             selected: Some((Side::Cart, 3)),
             qty: 12,
+            mount_error: Some(CartMountRejection::AlreadyMounted),
         });
         app.add_systems(Update, reset);
         app.update();
 
         assert_eq!(*app.world().resource::<CartUi>(), CartUi::default());
+    }
+
+    fn run_mount_result(outcome: Result<(), CartMountRejection>) -> Option<CartMountRejection> {
+        let mut app = App::new();
+        app.add_message::<CartMountResult>();
+        app.init_resource::<CartUi>();
+        app.add_systems(Update, apply_mount_result);
+        app.world_mut()
+            .resource_mut::<Messages<CartMountResult>>()
+            .write(CartMountResult { outcome });
+        app.update();
+        app.world().resource::<CartUi>().mount_error
+    }
+
+    #[test]
+    fn apply_mount_result_records_rejection() {
+        assert_eq!(
+            run_mount_result(Err(CartMountRejection::SkillNotLearned)),
+            Some(CartMountRejection::SkillNotLearned)
+        );
+    }
+
+    #[test]
+    fn apply_mount_result_clears_error_on_success() {
+        let mut app = App::new();
+        app.add_message::<CartMountResult>();
+        app.insert_resource(CartUi {
+            mount_error: Some(CartMountRejection::AlreadyMounted),
+            ..Default::default()
+        });
+        app.add_systems(Update, apply_mount_result);
+        app.world_mut()
+            .resource_mut::<Messages<CartMountResult>>()
+            .write(CartMountResult { outcome: Ok(()) });
+        app.update();
+
+        assert_eq!(app.world().resource::<CartUi>().mount_error, None);
     }
 
     #[test]
@@ -659,7 +714,11 @@ mod tests {
         let mut app = App::new();
         app.add_message::<MoveToCart>();
         app.add_message::<MoveFromCart>();
-        app.insert_resource(CartUi { selected, qty });
+        app.insert_resource(CartUi {
+            selected,
+            qty,
+            mount_error: None,
+        });
         app.insert_resource(inv);
         app.insert_resource(cart);
         let button = app.world_mut().spawn_empty().observe(on_move).id();
