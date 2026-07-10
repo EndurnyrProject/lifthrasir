@@ -21,7 +21,8 @@ use game_engine::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
 use crate::theme;
 
 /// Sits just below the fade transition so the modal renders over every screen.
-const DIALOG_Z: i32 = i32::MAX - 2;
+/// `pub` so sibling modals (e.g. the death dialog) can anchor strictly below it.
+pub const DIALOG_Z: i32 = i32::MAX - 2;
 const DIALOG_WIDTH: f32 = 384.0;
 
 pub struct SystemDialogPlugin;

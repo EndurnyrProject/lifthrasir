@@ -29,6 +29,7 @@ impl Plugin for LifthrasirUiPlugin {
             screens::character_create::CharacterCreateScreenPlugin,
             screens::character_preview::CharacterPreviewPlugin,
             widgets::InGameHudPlugin,
+            widgets::death_dialog::DeathDialogPlugin,
             widgets::system_dialog::SystemDialogPlugin,
             worldspace::WorldspaceUiPlugin,
         ));
