@@ -17,6 +17,8 @@ use bevy::prelude::*;
 /// 3. `update_attack_timers` - Updates attack animation timers
 /// 4. `update_hit_stun` - Updates hit stun timers
 /// 5. `handle_death` - Plays death animation when entity vanishes with type 1
+/// 6. `detect_local_death` - Marks the local player dead when its applied HP reaches 0
+/// 7. `recover_local_from_hp` - Clears the local player's death once its HP rises above 0
 ///
 /// Floating damage numbers are rendered by the UI layer (`DamageNumberPlugin`),
 /// which consumes the `DisplayDamageNumber` messages these systems emit.

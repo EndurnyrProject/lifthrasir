@@ -12,6 +12,8 @@ use bevy_auto_plugin::prelude::*;
 /// - update_attack_timers
 /// - update_hit_stun
 /// - handle_death
+/// - detect_local_death
+/// - recover_local_from_hp
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]
 pub struct CombatDomainPlugin;

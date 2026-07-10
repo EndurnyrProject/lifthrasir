@@ -1,4 +1,5 @@
 pub mod components;
+pub mod death;
 pub mod events;
 pub mod plugin;
 pub mod systems;
