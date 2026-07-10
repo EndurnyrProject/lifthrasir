@@ -24,13 +24,21 @@ use crate::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
 use crate::domain::combat::systems::start_attack_animation;
 use crate::domain::entities::character::states::AnimationState;
 use crate::domain::entities::components::NetworkEntity;
-use crate::infrastructure::effect::{EffectCatalog, LoadedEffectAsset};
+use crate::infrastructure::effect::{EffectCatalog, LoadedEffectAsset, MapEffectCatalog};
 use crate::utils::coordinates::spawn_coords_to_world_position;
-use net_contract::events::{GroundSkillPlaced, SkillDamageReceived, SkillEffectShown};
+use net_contract::events::{
+    GroundSkillPlaced, SkillDamageReceived, SkillEffectShown, SpecialEffectShown,
+};
 
 /// Despawn timer for repeating ground effects (aesir sends no removal packet;
 /// design §4 "Lifetime boundary"). A `RemoveGroundSkill` event would supersede.
 const GROUND_EFFECT_LIFETIME_SECS: f32 = 8.0;
+
+/// Despawn timer for repeating `SpecialEffect` visuals. Like ground effects,
+/// `SpecialEffect` is fire-and-forget with no removal packet; a `repeating`
+/// catalog entry (e.g. EF_STORMGUST, EF_MAGNUS) would otherwise never set
+/// `finished` and accumulate one entity per occurrence.
+const SPECIAL_EFFECT_LIFETIME_SECS: f32 = 8.0;
 
 /// Vertical offset from a unit's `Transform.translation` (its feet) to where a
 /// procedural VFX anchors. Up is `-Y` in this world, so the offset is negative to
@@ -299,17 +307,80 @@ pub fn on_ground_skill(
     }
 }
 
+/// `SpecialEffectShown` — a fire-and-forget visual effect keyed by an rAthena
+/// `EF_*` id, spawned at the source unit's position via the same catalog map
+/// effects use. Non-critical (design D6): `debug!` + skip on an unresolved
+/// source, missing transform, or unmapped effect id.
+pub fn on_special_effect(
+    mut events: MessageReader<SpecialEffectShown>,
+    mut commands: Commands,
+    catalog: Option<Res<MapEffectCatalog>>,
+    asset_server: Res<AssetServer>,
+    network_entities: Query<(Entity, &NetworkEntity)>,
+    transforms: Query<&Transform>,
+) {
+    for event in events.read() {
+        let Some(source) = resolve_gid(&network_entities, event.source_id) else {
+            debug!("No entity for special effect source {}", event.source_id);
+            continue;
+        };
+
+        let Ok(transform) = transforms.get(source) else {
+            debug!("No transform for special effect source {source}");
+            continue;
+        };
+
+        let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.effect_id)) else {
+            debug!("No map effect catalog entry for effect {}", event.effect_id);
+            continue;
+        };
+
+        // ponytail: vfx-only descriptors (e.g. EF_SMOKE, EF_EMITTER) are
+        // intentionally unhandled here — a looping ambient vfx doesn't fit a
+        // fire-and-forget SpecialEffect, and the MapAmbientVfx bridge
+        // `spawn_map_effects` uses is out of scope for this event. Add if a
+        // vfx-only EF_* id needs to render from SpecialEffect.
+        let Some(effect) = load_effect(&asset_server, descriptor) else {
+            debug!("Special effect {} has no STR; skipping", event.effect_id);
+            continue;
+        };
+
+        let lifetime = descriptor
+            .repeating
+            .then(|| Timer::from_seconds(SPECIAL_EFFECT_LIFETIME_SECS, TimerMode::Once));
+
+        let position = transform.translation + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0);
+        spawn_effect(
+            &mut commands,
+            effect,
+            EffectAnchor::Position(position),
+            descriptor.repeating,
+            descriptor_tint(descriptor),
+            lifetime,
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::effects::components::ActiveEffect;
+    use crate::domain::effects::systems::despawn_finished_effects;
     use crate::domain::entities::types::ObjectType;
     use crate::infrastructure::effect::EffectDataAsset;
+    use bevy::time::TimeUpdateStrategy;
+    use std::time::Duration;
 
     fn seeded_catalog() -> EffectCatalog {
         let ron = include_str!("../../../../assets/data/ron/effects.ron");
         let asset = ron::from_str::<EffectDataAsset>(ron).expect("seed RON");
         EffectCatalog::from_skill_effect_data(asset.0.skills)
+    }
+
+    fn seeded_map_catalog() -> MapEffectCatalog {
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("seed RON");
+        MapEffectCatalog::from_effect_data(asset.0.map)
     }
 
     fn test_app() -> App {
@@ -323,6 +394,7 @@ mod tests {
             .add_message::<DisplayDamageNumber>()
             .add_message::<PlaySkillSfx>()
             .add_message::<PlayProceduralVfx>()
+            .add_message::<SpecialEffectShown>()
             .insert_resource(seeded_catalog());
         app
     }
@@ -576,5 +648,127 @@ mod tests {
         app.update();
 
         assert_eq!(active_effects(&mut app), 0, "no effect for unknown gid");
+    }
+
+    #[test]
+    fn special_effect_spawns_at_source_position() {
+        let mut app = test_app();
+        app.insert_resource(seeded_map_catalog());
+        app.add_systems(Update, on_special_effect);
+
+        let source_pos = Vec3::new(5.0, 0.0, 9.0);
+        let source = spawn_unit(&mut app, 100);
+        app.world_mut()
+            .entity_mut(source)
+            .insert(Transform::from_translation(source_pos));
+
+        app.world_mut().write_message(SpecialEffectShown {
+            source_id: 100,
+            effect_id: 89, // EF_STORMGUST (seeded map entry)
+        });
+
+        app.update();
+
+        let positions = position_anchored(&mut app);
+        assert_eq!(positions.len(), 1, "one position-anchored effect spawned");
+        assert_eq!(
+            positions[0],
+            source_pos + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0)
+        );
+    }
+
+    #[test]
+    fn special_effect_repeating_effect_despawns_after_lifetime() {
+        let mut app = test_app();
+        app.insert_resource(seeded_map_catalog()).add_systems(
+            Update,
+            (on_special_effect, despawn_finished_effects).chain(),
+        );
+
+        let source = spawn_unit(&mut app, 100);
+        app.world_mut()
+            .entity_mut(source)
+            .insert(Transform::default());
+
+        app.world_mut().write_message(SpecialEffectShown {
+            source_id: 100,
+            effect_id: 89, // EF_STORMGUST, repeating: true
+        });
+
+        // Warm-up: zero-delta update establishes the Time baseline and spawns
+        // the effect (mirrors `systems.rs`'s `warm_up`).
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            1,
+            "effect spawned before its lifetime expires"
+        );
+
+        // Advance past SPECIAL_EFFECT_LIFETIME_SECS in sub-max_delta steps
+        // (mirrors `systems.rs`'s `advance`, staying under Time<Virtual>'s
+        // default 0.25s max_delta clamp per step).
+        let mut remaining = SPECIAL_EFFECT_LIFETIME_SECS + 0.5;
+        while remaining > 0.0 {
+            let dt = remaining.min(0.2);
+            app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f32(
+                dt,
+            )));
+            app.update();
+            remaining -= dt;
+        }
+
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "repeating effect despawns once its lifetime expires"
+        );
+    }
+
+    #[test]
+    fn special_effect_unknown_effect_id_is_noop() {
+        let mut app = test_app();
+        app.insert_resource(seeded_map_catalog());
+        app.add_systems(Update, on_special_effect);
+
+        let source = spawn_unit(&mut app, 100);
+        app.world_mut()
+            .entity_mut(source)
+            .insert(Transform::default());
+
+        app.world_mut().write_message(SpecialEffectShown {
+            source_id: 100,
+            effect_id: 999_999, // not in the map catalog
+        });
+
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "no effect for unknown effect id"
+        );
+    }
+
+    #[test]
+    fn special_effect_unresolved_source_is_noop() {
+        let mut app = test_app();
+        app.insert_resource(seeded_map_catalog());
+        app.add_systems(Update, on_special_effect);
+
+        // No units spawned: source_id resolves to nothing.
+        app.world_mut().write_message(SpecialEffectShown {
+            source_id: 100,
+            effect_id: 89,
+        });
+
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "no effect for unresolved source"
+        );
     }
 }

@@ -14,4 +14,4 @@ pub use systems::{
     initialize_effect_layers, interpolate_layer_frame, order_effect_layers_by_depth,
     rebuild_effect_layers, spawn_effect, RenderFrame, STR_WORLD_SCALE,
 };
-pub use triggers::{on_ground_skill, on_skill_damage, on_skill_effect};
+pub use triggers::{on_ground_skill, on_skill_damage, on_skill_effect, on_special_effect};
