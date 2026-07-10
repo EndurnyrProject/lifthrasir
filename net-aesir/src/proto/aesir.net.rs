@@ -1044,6 +1044,9 @@ pub struct InventoryItem {
     pub favorite: bool,
     #[prost(uint32, tag = "13")]
     pub look: u32,
+    /// Per-unit weight from the item database (multiply by amount for the stack).
+    #[prost(uint32, tag = "14")]
+    pub weight: u32,
 }
 /// Server -> client, the full inventory dump (collapses RO ZC_INVENTORY_START/
 /// ITEMLIST_NORMAL/ITEMLIST_EQUIP/END 0x0B08-0x0B0B).
@@ -1081,6 +1084,9 @@ pub struct ItemAdded {
     pub expire_time: u64,
     #[prost(uint32, tag = "12")]
     pub look: u32,
+    /// Per-unit weight from the item database.
+    #[prost(uint32, tag = "13")]
+    pub weight: u32,
 }
 /// Server -> client, an item was removed from the inventory (replaces RO ZC_DELETE_ITEM_FROM_BODY 0x07FA).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1093,11 +1099,18 @@ pub struct ItemRemoved {
     pub reason: u32,
 }
 /// Server -> client, the full cart dump (sent on mount/login). Mirrors InventoryList
-/// but for the separate cart container.
+/// but for the separate cart container. Carries the cart's own weight totals so the
+/// client can render the cart-weight gauge (the cart cap is flat, not STR-derived).
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CartInfo {
     #[prost(message, repeated, tag = "1")]
     pub items: ::prost::alloc::vec::Vec<InventoryItem>,
+    /// Sum of every cart item's weight, at dump time.
+    #[prost(uint32, tag = "2")]
+    pub current_weight: u32,
+    /// Flat cart weight cap.
+    #[prost(uint32, tag = "3")]
+    pub max_weight: u32,
 }
 /// Server -> client, an item was added to the cart. Mirrors ItemAdded.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1126,6 +1139,9 @@ pub struct CartItemAdded {
     pub expire_time: u64,
     #[prost(uint32, tag = "12")]
     pub look: u32,
+    /// Per-unit weight from the item database.
+    #[prost(uint32, tag = "13")]
+    pub weight: u32,
 }
 /// Server -> client, an item was removed from the cart. Mirrors ItemRemoved.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1716,6 +1732,9 @@ pub struct StorageItemAdded {
     pub expire_time: u64,
     #[prost(uint32, tag = "12")]
     pub look: u32,
+    /// Per-unit weight from the item database.
+    #[prost(uint32, tag = "13")]
+    pub weight: u32,
 }
 /// Server -> client, an item was removed from storage. Mirrors CartItemRemoved.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]

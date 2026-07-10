@@ -101,6 +101,7 @@ mod tests {
             bind_on_equip: 0,
             favorite: false,
             look: 0,
+            weight: 0,
         }
     }
 
@@ -147,6 +148,7 @@ mod tests {
             result: 0,
             expire_time: 0,
             look: 0,
+            weight: 0,
         });
 
         assert_eq!(added.index, 3);
