@@ -1064,6 +1064,7 @@ mod tests {
             inventory: ActionBinds::default(),
             skills: ActionBinds::default(),
             equipment: ActionBinds::default(),
+            cart: ActionBinds::default(),
             hotbar: Default::default(),
         };
         let expected = {
@@ -1087,6 +1088,7 @@ mod tests {
             inventory: ActionBinds::default(),
             skills: ActionBinds::default(),
             equipment: ActionBinds::default(),
+            cart: ActionBinds::default(),
             hotbar: Default::default(),
         };
         let expected = {

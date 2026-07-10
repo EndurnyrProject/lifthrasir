@@ -647,13 +647,15 @@ pub struct Keybinds {
     pub inventory: ActionBinds,
     pub skills: ActionBinds,
     pub equipment: ActionBinds,
+    pub cart: ActionBinds,
     #[serde(default = "default_hotbar_binds")]
     pub hotbar: [ActionBinds; 12],
 }
 
 impl Default for Keybinds {
     /// Mirrors `PlayerAction::default_input_map()`:
-    /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S, Equipment = Alt+Q.
+    /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S, Equipment = Alt+Q,
+    /// Cart = Alt+W.
     fn default() -> Self {
         Self {
             sit: ActionBinds {
@@ -676,6 +678,10 @@ impl Default for Keybinds {
                 primary: Some(KeyBind::modified(Modifier::Alt, "KeyQ")),
                 secondary: None,
             },
+            cart: ActionBinds {
+                primary: Some(KeyBind::modified(Modifier::Alt, "KeyW")),
+                secondary: None,
+            },
             hotbar: default_hotbar_binds(),
         }
     }
@@ -693,6 +699,7 @@ impl Keybinds {
         self.skills.insert_into(&mut map, PlayerAction::Skills);
         self.equipment
             .insert_into(&mut map, PlayerAction::Equipment);
+        self.cart.insert_into(&mut map, PlayerAction::Cart);
         for (binds, action) in self.hotbar.iter().zip(HOTBAR_ACTIONS) {
             binds.insert_into(&mut map, action);
         }
