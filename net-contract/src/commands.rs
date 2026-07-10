@@ -222,3 +222,26 @@ pub struct SellToShop {
 pub struct RespawnRequested {
     pub type_: u32,
 }
+
+/// Request to mount (`mount == true`) or unmount the pushcart.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct MountCart {
+    pub mount: bool,
+}
+
+/// Request to move `amount` of the inventory item at `inventory_index` into the cart.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct MoveToCart {
+    pub inventory_index: u16,
+    pub amount: u16,
+}
+
+/// Request to move `amount` of the cart item at `cart_index` back into the inventory.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct MoveFromCart {
+    pub cart_index: u16,
+    pub amount: u16,
+}

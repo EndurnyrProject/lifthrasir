@@ -43,5 +43,23 @@ mod tests {
         assert!(app
             .world()
             .contains_resource::<Messages<commands::BuyFromShop>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::CartLoaded>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::CartItemAdded>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::CartItemRemoved>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::MountCart>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::MoveToCart>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::MoveFromCart>>());
     }
 }
