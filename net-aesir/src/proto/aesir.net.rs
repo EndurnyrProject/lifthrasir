@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -205,6 +205,44 @@ pub mod envelope {
         PickupItemRequest(super::PickupItemRequest),
         #[prost(message, tag = "105")]
         PickupResult(super::PickupResult),
+        /// 106-116: party
+        #[prost(message, tag = "106")]
+        PartyCreateRequest(super::PartyCreateRequest),
+        #[prost(message, tag = "107")]
+        PartyInviteRequest(super::PartyInviteRequest),
+        #[prost(message, tag = "108")]
+        PartyInviteNotify(super::PartyInviteNotify),
+        #[prost(message, tag = "109")]
+        PartyInviteResponse(super::PartyInviteResponse),
+        #[prost(message, tag = "110")]
+        PartyLeaveRequest(super::PartyLeaveRequest),
+        #[prost(message, tag = "111")]
+        PartyKickRequest(super::PartyKickRequest),
+        #[prost(message, tag = "112")]
+        PartyOptionsRequest(super::PartyOptionsRequest),
+        #[prost(message, tag = "113")]
+        PartyLeaderRequest(super::PartyLeaderRequest),
+        #[prost(message, tag = "114")]
+        PartyActionResult(super::PartyActionResult),
+        #[prost(message, tag = "115")]
+        PartyInfo(super::PartyInfo),
+        #[prost(message, tag = "116")]
+        PartyDisbanded(super::PartyDisbanded),
+        /// 117-123: storage (server->client window/deltas/result + client deposit/withdraw/close intents)
+        #[prost(message, tag = "117")]
+        StorageOpened(super::StorageOpened),
+        #[prost(message, tag = "118")]
+        StorageDepositRequest(super::StorageDepositRequest),
+        #[prost(message, tag = "119")]
+        StorageWithdrawRequest(super::StorageWithdrawRequest),
+        #[prost(message, tag = "120")]
+        StorageCloseRequest(super::StorageCloseRequest),
+        #[prost(message, tag = "121")]
+        StorageItemAdded(super::StorageItemAdded),
+        #[prost(message, tag = "122")]
+        StorageItemRemoved(super::StorageItemRemoved),
+        #[prost(message, tag = "123")]
+        StorageResult(super::StorageResult),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -1520,6 +1558,181 @@ pub struct PickupResult {
     #[prost(enumeration = "PickupResultCode", tag = "2")]
     pub result: i32,
 }
+/// Client -> server, create a new party with the requester as leader.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyCreateRequest {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+}
+/// Client -> server, invite a character to the sender's party by id or by name
+/// (char_id wins when both are set; name is resolved via a UnitRegistry reverse lookup).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyInviteRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_char_id: u32,
+    #[prost(string, tag = "2")]
+    pub target_name: ::prost::alloc::string::String,
+}
+/// Server -> client, party invite notification shown to the invitee.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyInviteNotify {
+    #[prost(uint32, tag = "1")]
+    pub party_id: u32,
+    #[prost(string, tag = "2")]
+    pub party_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub inviter_name: ::prost::alloc::string::String,
+}
+/// Client -> server, the invitee's accept/decline response to a PartyInviteNotify.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyInviteResponse {
+    #[prost(uint32, tag = "1")]
+    pub party_id: u32,
+    #[prost(bool, tag = "2")]
+    pub accept: bool,
+}
+/// Client -> server, leave the sender's current party. If the sender is the
+/// leader, the party disbands instead.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyLeaveRequest {}
+/// Client -> server, leader-only request to remove a member from the party.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyKickRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_char_id: u32,
+}
+/// Client -> server, leader-only request to toggle even-share EXP.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyOptionsRequest {
+    #[prost(bool, tag = "1")]
+    pub exp_share: bool,
+}
+/// Client -> server, leader-only request to transfer leadership to an online,
+/// same-map member.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyLeaderRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_char_id: u32,
+}
+/// Server -> client, acknowledgement of a party request. `action` names the
+/// request being acked (e.g. "create", "invite", "kick"); `error` is
+/// PartyError.NONE on success.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyActionResult {
+    #[prost(string, tag = "1")]
+    pub action: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub success: bool,
+    #[prost(enumeration = "PartyError", tag = "3")]
+    pub error: i32,
+}
+/// One member entry within a PartyInfo snapshot.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyMember {
+    #[prost(uint32, tag = "1")]
+    pub char_id: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub base_level: u32,
+    #[prost(bool, tag = "4")]
+    pub online: bool,
+    #[prost(string, tag = "5")]
+    pub map: ::prost::alloc::string::String,
+}
+/// Server -> client, full party snapshot sent on any membership or option change.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PartyInfo {
+    #[prost(uint32, tag = "1")]
+    pub party_id: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub leader_char_id: u32,
+    #[prost(bool, tag = "4")]
+    pub exp_share: bool,
+    #[prost(message, repeated, tag = "5")]
+    pub members: ::prost::alloc::vec::Vec<PartyMember>,
+}
+/// Server -> client, the party was disbanded (leader left, or the last member left).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyDisbanded {
+    #[prost(uint32, tag = "1")]
+    pub party_id: u32,
+    #[prost(string, tag = "2")]
+    pub reason: ::prost::alloc::string::String,
+}
+/// Server -> client, the full storage dump (sent on open). Mirrors CartInfo.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StorageOpened {
+    #[prost(uint32, tag = "1")]
+    pub capacity: u32,
+    #[prost(message, repeated, tag = "2")]
+    pub items: ::prost::alloc::vec::Vec<InventoryItem>,
+}
+/// Client -> server, move an inventory item into storage.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StorageDepositRequest {
+    #[prost(uint32, tag = "1")]
+    pub inventory_index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+}
+/// Client -> server, move a storage item back into the inventory.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StorageWithdrawRequest {
+    #[prost(uint32, tag = "1")]
+    pub storage_index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+}
+/// Client -> server, close the currently open storage window.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StorageCloseRequest {}
+/// Server -> client, an item was added to storage. Mirrors CartItemAdded.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StorageItemAdded {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+    #[prost(uint32, tag = "3")]
+    pub nameid: u32,
+    #[prost(bool, tag = "4")]
+    pub identified: bool,
+    #[prost(uint32, tag = "5")]
+    pub attribute: u32,
+    #[prost(uint32, tag = "6")]
+    pub refine: u32,
+    #[prost(uint32, repeated, tag = "7")]
+    pub cards: ::prost::alloc::vec::Vec<u32>,
+    #[prost(uint32, tag = "8")]
+    pub location: u32,
+    #[prost(uint32, tag = "9")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "10")]
+    pub result: u32,
+    #[prost(uint64, tag = "11")]
+    pub expire_time: u64,
+    #[prost(uint32, tag = "12")]
+    pub look: u32,
+}
+/// Server -> client, an item was removed from storage. Mirrors CartItemRemoved.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StorageItemRemoved {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+    #[prost(uint32, tag = "3")]
+    pub reason: u32,
+}
+/// Server -> client, result of a storage deposit/withdraw/open request.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StorageResult {
+    #[prost(enumeration = "StorageResultCode", tag = "1")]
+    pub result: i32,
+}
 /// Why a ground item disappeared.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -1582,6 +1795,107 @@ impl PickupResultCode {
             "INVENTORY_FULL" => Some(Self::InventoryFull),
             "GONE" => Some(Self::Gone),
             "FAILED" => Some(Self::Failed),
+            _ => None,
+        }
+    }
+}
+/// Reason a party request failed; NONE means it succeeded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PartyError {
+    None = 0,
+    NameTaken = 1,
+    AlreadyInParty = 2,
+    PartyFull = 3,
+    NotLeader = 4,
+    LevelRange = 5,
+    SameAccount = 6,
+    TargetOffline = 7,
+    NotMember = 8,
+    NotSameMap = 9,
+}
+impl PartyError {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::None => "NONE",
+            Self::NameTaken => "NAME_TAKEN",
+            Self::AlreadyInParty => "ALREADY_IN_PARTY",
+            Self::PartyFull => "PARTY_FULL",
+            Self::NotLeader => "NOT_LEADER",
+            Self::LevelRange => "LEVEL_RANGE",
+            Self::SameAccount => "SAME_ACCOUNT",
+            Self::TargetOffline => "TARGET_OFFLINE",
+            Self::NotMember => "NOT_MEMBER",
+            Self::NotSameMap => "NOT_SAME_MAP",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NONE" => Some(Self::None),
+            "NAME_TAKEN" => Some(Self::NameTaken),
+            "ALREADY_IN_PARTY" => Some(Self::AlreadyInParty),
+            "PARTY_FULL" => Some(Self::PartyFull),
+            "NOT_LEADER" => Some(Self::NotLeader),
+            "LEVEL_RANGE" => Some(Self::LevelRange),
+            "SAME_ACCOUNT" => Some(Self::SameAccount),
+            "TARGET_OFFLINE" => Some(Self::TargetOffline),
+            "NOT_MEMBER" => Some(Self::NotMember),
+            "NOT_SAME_MAP" => Some(Self::NotSameMap),
+            _ => None,
+        }
+    }
+}
+/// Outcome of a storage deposit/withdraw/open request. Values are prefixed
+/// because proto3 enum constants share the package namespace (C++ scoping
+/// rules), and OK/INVENTORY_FULL/OVERWEIGHT already exist on PickupResultCode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum StorageResultCode {
+    StorageOk = 0,
+    StorageFull = 1,
+    StorageInventoryFull = 2,
+    StorageOverweight = 3,
+    StorageNotStorable = 4,
+    StorageItemEquipped = 5,
+    StorageInvalidAmount = 6,
+    StorageNotOpen = 7,
+    StorageBasicSkillRequired = 8,
+}
+impl StorageResultCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::StorageOk => "STORAGE_OK",
+            Self::StorageFull => "STORAGE_FULL",
+            Self::StorageInventoryFull => "STORAGE_INVENTORY_FULL",
+            Self::StorageOverweight => "STORAGE_OVERWEIGHT",
+            Self::StorageNotStorable => "STORAGE_NOT_STORABLE",
+            Self::StorageItemEquipped => "STORAGE_ITEM_EQUIPPED",
+            Self::StorageInvalidAmount => "STORAGE_INVALID_AMOUNT",
+            Self::StorageNotOpen => "STORAGE_NOT_OPEN",
+            Self::StorageBasicSkillRequired => "STORAGE_BASIC_SKILL_REQUIRED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "STORAGE_OK" => Some(Self::StorageOk),
+            "STORAGE_FULL" => Some(Self::StorageFull),
+            "STORAGE_INVENTORY_FULL" => Some(Self::StorageInventoryFull),
+            "STORAGE_OVERWEIGHT" => Some(Self::StorageOverweight),
+            "STORAGE_NOT_STORABLE" => Some(Self::StorageNotStorable),
+            "STORAGE_ITEM_EQUIPPED" => Some(Self::StorageItemEquipped),
+            "STORAGE_INVALID_AMOUNT" => Some(Self::StorageInvalidAmount),
+            "STORAGE_NOT_OPEN" => Some(Self::StorageNotOpen),
+            "STORAGE_BASIC_SKILL_REQUIRED" => Some(Self::StorageBasicSkillRequired),
             _ => None,
         }
     }
