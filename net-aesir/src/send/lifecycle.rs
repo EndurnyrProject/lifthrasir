@@ -1,16 +1,17 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
-use bevy_quinnet::client::QuinnetClient;
+use bevy_quinnet::client::{client_connected, QuinnetClient};
 use net_contract::commands::{
     ConnectCharServer, ConnectLogin, ConnectZone, LeaveZone, LocalMapLoaded, LocalPlayerReady,
+    RespawnRequested,
 };
 use net_contract::events::{LoginRefused, MapChangeRequested, ZoneDisconnected};
 
-use crate::channels::CONTROL;
+use crate::channels::{CONTROL, GAMEPLAY};
 use crate::character::{self, PendingAuth, QuicCharState};
 use crate::envelope::Body;
 use crate::login::{self, Pending, QuicLoginState};
-use crate::proto::aesir::net::MapLoaded;
+use crate::proto::aesir::net::{MapLoaded, Respawn};
 use crate::zone::{self, QuicZoneState, ZoneAuth, ZonePhase};
 
 /// Pure outcome of the map asset becoming ready: the next phase, or `None` when out of phase.
@@ -186,6 +187,32 @@ pub fn reset_handshake_on_warp(
     }
 }
 
+fn respawn_body(r: &RespawnRequested) -> Body {
+    Body::Respawn(Respawn { r#type: r.type_ })
+}
+
+/// Send the death-screen respawn request (save point or char select).
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_respawn_requests(
+    mut events: MessageReader<RespawnRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        events.clear();
+        return;
+    }
+    for ev in events.read() {
+        if let Err(e) = zone.send(&mut client, GAMEPLAY, respawn_body(ev)) {
+            error!("failed to send Respawn: {e}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +243,21 @@ mod tests {
     fn player_ready_out_of_phase_is_ignored() {
         assert_eq!(player_ready_next(ZonePhase::Entering), None);
         assert_eq!(player_ready_next(ZonePhase::Playing), None);
+    }
+
+    #[test]
+    fn respawn_body_carries_type_save_point() {
+        match respawn_body(&RespawnRequested { type_: 0 }) {
+            Body::Respawn(Respawn { r#type }) => assert_eq!(r#type, 0u32),
+            other => panic!("expected Body::Respawn, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn respawn_body_carries_type_char_select() {
+        match respawn_body(&RespawnRequested { type_: 1 }) {
+            Body::Respawn(Respawn { r#type }) => assert_eq!(r#type, 1u32),
+            other => panic!("expected Body::Respawn, got {other:?}"),
+        }
     }
 }

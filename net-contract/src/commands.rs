@@ -215,3 +215,10 @@ pub struct SellToShop {
     pub unit_id: u64,
     pub items: Vec<SellEntry>,
 }
+
+/// Request to respawn after death: `type_ == 0` at the save point, `type_ == 1` to char select.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct RespawnRequested {
+    pub type_: u32,
+}
