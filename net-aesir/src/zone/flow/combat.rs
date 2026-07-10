@@ -4,13 +4,14 @@ use bevy_quinnet::client::client_connected;
 
 use super::super::mapping::combat::{
     cast_cancel, damage_dealt, ground_skill, knockback, learn_skill_result, skill_casting,
-    skill_cooldown, skill_damage, skill_effect, skill_list,
+    skill_cooldown, skill_damage, skill_effect, skill_list, special_effect,
 };
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
 use net_contract::events::{
     CastCancelled, DamageReceived, GroundSkillPlaced, KnockedBack, LearnSkillResultReceived,
     SkillCastStarted, SkillCooldownSet, SkillDamageReceived, SkillEffectShown, SkillListReceived,
+    SpecialEffectShown,
 };
 
 /// Drains combat and skill bodies. These span the gameplay, world, and bulk
@@ -33,6 +34,7 @@ pub fn zone_drain_combat(
     mut ground: MessageWriter<GroundSkillPlaced>,
     mut skills: MessageWriter<SkillListReceived>,
     mut learn_result: MessageWriter<LearnSkillResultReceived>,
+    mut special_fx: MessageWriter<SpecialEffectShown>,
 ) {
     for msg in incoming.read() {
         match msg.body.clone() {
@@ -66,6 +68,9 @@ pub fn zone_drain_combat(
             Body::LearnSkillResult(r) => {
                 learn_result.write(learn_skill_result(r));
             }
+            Body::SpecialEffect(s) => {
+                special_fx.write(special_effect(s));
+            }
             _ => {}
         }
     }
@@ -90,6 +95,7 @@ mod tests {
             .add_message::<GroundSkillPlaced>()
             .add_message::<SkillListReceived>()
             .add_message::<LearnSkillResultReceived>()
+            .add_message::<SpecialEffectShown>()
             .add_systems(Update, zone_drain_combat);
 
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
@@ -145,5 +151,22 @@ mod tests {
 
         let skills = app.world().resource::<Messages<SkillListReceived>>();
         assert_eq!(skills.iter_current_update_messages().count(), 1);
+    }
+
+    #[test]
+    fn special_effect_drains_to_event() {
+        let app = drain(vec![(
+            GAMEPLAY,
+            Body::SpecialEffect(net::SpecialEffect {
+                source_id: 150001,
+                effect_id: 42,
+            }),
+        )]);
+
+        let events = app.world().resource::<Messages<SpecialEffectShown>>();
+        let drained: Vec<_> = events.iter_current_update_messages().collect();
+        assert_eq!(drained.len(), 1);
+        assert_eq!(drained[0].source_id, 150001);
+        assert_eq!(drained[0].effect_id, 42);
     }
 }

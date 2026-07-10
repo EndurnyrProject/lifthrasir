@@ -2,7 +2,7 @@ use crate::proto::aesir::net;
 use net_contract::events::{
     CastCancelled, DamageReceived, GroundSkillPlaced, KnockedBack, LearnSkillResultReceived,
     SkillCastStarted, SkillCooldownSet, SkillDamageReceived, SkillEffectShown, SkillListReceived,
-    ZoneSkillInfo,
+    SpecialEffectShown, ZoneSkillInfo,
 };
 
 pub fn damage_dealt(d: net::DamageDealt) -> DamageReceived {
@@ -118,6 +118,13 @@ pub fn learn_skill_result(r: net::LearnSkillResult) -> LearnSkillResultReceived 
         skill_id: r.skill_id,
         ok: r.ok,
         reason: r.reason,
+    }
+}
+
+pub fn special_effect(s: net::SpecialEffect) -> SpecialEffectShown {
+    SpecialEffectShown {
+        source_id: s.source_id,
+        effect_id: s.effect_id,
     }
 }
 
@@ -329,5 +336,16 @@ mod tests {
         assert_eq!(reject.skill_id, 7);
         assert!(!reject.ok);
         assert_eq!(reject.reason, 3);
+    }
+
+    #[test]
+    fn special_effect_maps_source_and_effect() {
+        let shown = special_effect(net::SpecialEffect {
+            source_id: 150001,
+            effect_id: 42,
+        });
+
+        assert_eq!(shown.source_id, 150001);
+        assert_eq!(shown.effect_id, 42);
     }
 }

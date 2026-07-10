@@ -139,6 +139,14 @@ pub struct StatusEffectChanged {
     pub on: bool,
 }
 
+/// A fire-and-forget visual effect (rAthena `EF_*` id) triggered by `source_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SpecialEffectShown {
+    pub source_id: u32,
+    pub effect_id: u32,
+}
+
 /// A parameter changed (collapses ZC_PAR_CHANGE u16 + ZC_LONGPAR_CHANGE u32).
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
