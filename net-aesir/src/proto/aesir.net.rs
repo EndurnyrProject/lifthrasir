@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -243,6 +243,14 @@ pub mod envelope {
         StorageItemRemoved(super::StorageItemRemoved),
         #[prost(message, tag = "123")]
         StorageResult(super::StorageResult),
+        /// 124: broadcast messages (GM + script announce/mapannounce/areaannounce/broadcast)
+        #[prost(message, tag = "124")]
+        Announcement(super::Announcement),
+        /// 125-126: cart/vending results (server->client outcome of a gated intent)
+        #[prost(message, tag = "125")]
+        CartMountResult(super::CartMountResult),
+        #[prost(message, tag = "126")]
+        VendingOpenResult(super::VendingOpenResult),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -1159,6 +1167,12 @@ pub struct CartMountRequest {
     #[prost(bool, tag = "1")]
     pub mount: bool,
 }
+/// Server -> client, outcome of a cart mount attempt.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CartMountResult {
+    #[prost(enumeration = "CartMountResultCode", tag = "1")]
+    pub result: i32,
+}
 /// Client -> server, move an inventory item into the cart.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct MoveToCartRequest {
@@ -1193,6 +1207,12 @@ pub struct VendingOpenRequest {
     pub title: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "2")]
     pub entries: ::prost::alloc::vec::Vec<VendingEntry>,
+}
+/// Server -> client, outcome of a vending open attempt.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingOpenResult {
+    #[prost(enumeration = "VendingOpenResultCode", tag = "1")]
+    pub result: i32,
 }
 /// Client -> server, close the player's own vending shop.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1751,6 +1771,141 @@ pub struct StorageItemRemoved {
 pub struct StorageResult {
     #[prost(enumeration = "StorageResultCode", tag = "1")]
     pub result: i32,
+}
+/// Server -> client, a styled broadcast message (GM @broadcast, or the rAthena
+/// announce/mapannounce/areaannounce/broadcast script buildins).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Announcement {
+    #[prost(string, tag = "1")]
+    pub text: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub color: u32,
+    #[prost(enumeration = "announcement::Style", tag = "3")]
+    pub style: i32,
+    #[prost(string, tag = "4")]
+    pub source_name: ::prost::alloc::string::String,
+}
+/// Nested message and enum types in `Announcement`.
+pub mod announcement {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum Style {
+        Top = 0,
+        Center = 1,
+        Local = 2,
+    }
+    impl Style {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Top => "TOP",
+                Self::Center => "CENTER",
+                Self::Local => "LOCAL",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "TOP" => Some(Self::Top),
+                "CENTER" => Some(Self::Center),
+                "LOCAL" => Some(Self::Local),
+                _ => None,
+            }
+        }
+    }
+}
+/// Outcome of a cart mount attempt. Values are prefixed because proto3 enum
+/// constants share the package namespace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CartMountResultCode {
+    CartOk = 0,
+    CartSkillNotLearned = 1,
+    CartAlreadyMounted = 2,
+}
+impl CartMountResultCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::CartOk => "CART_OK",
+            Self::CartSkillNotLearned => "CART_SKILL_NOT_LEARNED",
+            Self::CartAlreadyMounted => "CART_ALREADY_MOUNTED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CART_OK" => Some(Self::CartOk),
+            "CART_SKILL_NOT_LEARNED" => Some(Self::CartSkillNotLearned),
+            "CART_ALREADY_MOUNTED" => Some(Self::CartAlreadyMounted),
+            _ => None,
+        }
+    }
+}
+/// Outcome of a vending open attempt. Values are prefixed because proto3 enum
+/// constants share the package namespace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VendingOpenResultCode {
+    VendOk = 0,
+    VendNoCart = 1,
+    VendSkillNotLearned = 2,
+    VendTooManySlots = 3,
+    VendInvalidAmount = 4,
+    VendInvalidPrice = 5,
+    VendItemNotInCart = 6,
+    VendInsufficientStock = 7,
+    VendInvalidState = 8,
+}
+impl VendingOpenResultCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::VendOk => "VEND_OK",
+            Self::VendNoCart => "VEND_NO_CART",
+            Self::VendSkillNotLearned => "VEND_SKILL_NOT_LEARNED",
+            Self::VendTooManySlots => "VEND_TOO_MANY_SLOTS",
+            Self::VendInvalidAmount => "VEND_INVALID_AMOUNT",
+            Self::VendInvalidPrice => "VEND_INVALID_PRICE",
+            Self::VendItemNotInCart => "VEND_ITEM_NOT_IN_CART",
+            Self::VendInsufficientStock => "VEND_INSUFFICIENT_STOCK",
+            Self::VendInvalidState => "VEND_INVALID_STATE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VEND_OK" => Some(Self::VendOk),
+            "VEND_NO_CART" => Some(Self::VendNoCart),
+            "VEND_SKILL_NOT_LEARNED" => Some(Self::VendSkillNotLearned),
+            "VEND_TOO_MANY_SLOTS" => Some(Self::VendTooManySlots),
+            "VEND_INVALID_AMOUNT" => Some(Self::VendInvalidAmount),
+            "VEND_INVALID_PRICE" => Some(Self::VendInvalidPrice),
+            "VEND_ITEM_NOT_IN_CART" => Some(Self::VendItemNotInCart),
+            "VEND_INSUFFICIENT_STOCK" => Some(Self::VendInsufficientStock),
+            "VEND_INVALID_STATE" => Some(Self::VendInvalidState),
+            _ => None,
+        }
+    }
 }
 /// Why a ground item disappeared.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
