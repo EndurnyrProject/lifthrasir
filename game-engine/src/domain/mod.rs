@@ -2,6 +2,7 @@ pub mod assets;
 pub mod audio;
 pub mod authentication;
 pub mod camera;
+pub mod cart;
 pub mod character;
 pub mod combat;
 pub mod effects;
