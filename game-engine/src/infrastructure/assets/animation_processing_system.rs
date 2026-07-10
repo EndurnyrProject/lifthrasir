@@ -45,6 +45,21 @@ impl PendingAnimations {
         std::mem::take(&mut self.completed)
     }
 
+    /// Take only the completed animations for a specific layer, leaving the rest
+    /// queued. `finalize_equipment_layers` drops any completion it doesn't
+    /// recognise, so the cart finalizer must claim its own completions without
+    /// disturbing the body/head/equipment ones it shares the queue with.
+    pub fn take_completed_for_layer(
+        &mut self,
+        layer: Tag,
+    ) -> Vec<(PendingAnimation, Handle<RoAnimationAsset>)> {
+        let (mine, rest) = std::mem::take(&mut self.completed)
+            .into_iter()
+            .partition(|(pending, _)| pending.layer_tag == layer);
+        self.completed = rest;
+        mine
+    }
+
     /// Re-queue completions whose target entity wasn't ready this frame (its
     /// `PendingRenderLayers` hadn't flushed yet), so they're retried next frame
     /// instead of being lost.

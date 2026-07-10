@@ -1,5 +1,6 @@
 pub mod action_sync;
 pub mod body_sync;
+pub mod cart;
 pub mod events;
 pub mod head_sync;
 pub mod headgear_sync;
@@ -13,6 +14,7 @@ pub use action_sync::{
     sync_player_sprite_direction,
 };
 pub use body_sync::{sync_mob_body_layer, sync_player_body_layer};
+pub use cart::{apply_cart_mount, finalize_cart_layer, sync_cart_layer};
 pub use events::{
     handle_equipment_changes, handle_status_effect_visuals, EquipmentChangeEvent,
     StatusEffectVisualEvent,

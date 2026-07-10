@@ -9,6 +9,14 @@ use net_contract::events::UnitStateChanged;
 const OPTION_HIDE: u32 = 2;
 const OPTION_CLOAK: u32 = 4;
 
+/// Pushcart mount bits. A merchant with any cart tier sets one of these in
+/// `effect_state`; we render a single sprite regardless of tier, so
+/// `CART_MASK` collapses all three into one "mounted" test.
+const OPTION_CART1: u32 = 0x08;
+const OPTION_CART2: u32 = 0x80;
+const OPTION_CART3: u32 = 0x100;
+pub(crate) const CART_MASK: u32 = OPTION_CART1 | OPTION_CART2 | OPTION_CART3;
+
 /// Consumes the legacy `UnitStateChange` channel: stores all four state fields
 /// on [`UnitState`] and renders the cheap high-value subset.
 ///
@@ -20,7 +28,8 @@ const OPTION_CLOAK: u32 = 4;
 ///   after ~0.3s), so the pose would flicker then vanish while still active.
 ///   Doing it right needs real stun/freeze/sleep animation states.
 /// - poison/curse/silence tint (health_state/opt2).
-/// - mount/cart/orc-head and the other option bits.
+/// - mount/orc-head and the other option bits. (The cart bits are consumed by
+///   `apply_cart_mount` in the sprite-rendering domain.)
 /// - virtue (opt3).
 #[auto_add_system(
     plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
