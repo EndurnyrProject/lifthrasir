@@ -17,6 +17,15 @@ const OPTION_CART2: u32 = 0x80;
 const OPTION_CART3: u32 = 0x100;
 pub(crate) const CART_MASK: u32 = OPTION_CART1 | OPTION_CART2 | OPTION_CART3;
 
+impl UnitState {
+    /// Whether any pushcart tier bit is set in `effect_state`. The UI reads this
+    /// off the local player to decide between the mount prompt and the mounted
+    /// body; it is the same test the cart render layer uses.
+    pub fn is_cart_mounted(&self) -> bool {
+        self.effect_state & CART_MASK != 0
+    }
+}
+
 /// Consumes the legacy `UnitStateChange` channel: stores all four state fields
 /// on [`UnitState`] and renders the cheap high-value subset.
 ///
@@ -165,6 +174,23 @@ mod tests {
             *app.world().get::<Visibility>(entity).unwrap(),
             Visibility::Inherited
         );
+    }
+
+    #[test]
+    fn is_cart_mounted_reflects_cart_bits() {
+        assert!(!UnitState::default().is_cart_mounted());
+        for bit in [OPTION_CART1, OPTION_CART2, OPTION_CART3] {
+            assert!(UnitState {
+                effect_state: bit,
+                ..Default::default()
+            }
+            .is_cart_mounted());
+        }
+        assert!(!UnitState {
+            effect_state: OPTION_HIDE,
+            ..Default::default()
+        }
+        .is_cart_mounted());
     }
 
     #[test]
