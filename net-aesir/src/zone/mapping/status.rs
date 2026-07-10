@@ -1,11 +1,21 @@
 use crate::proto::aesir::net;
-use net_contract::events::StatusEffectChanged;
+use net_contract::events::{StatusEffectChanged, UnitStateChanged};
 
 pub fn status_change(s: net::StatusChange) -> StatusEffectChanged {
     StatusEffectChanged {
         unit_id: s.unit_id,
         efst: s.efst,
         on: s.on,
+    }
+}
+
+pub fn unit_state_change(s: net::UnitStateChange) -> UnitStateChanged {
+    UnitStateChanged {
+        unit_id: s.unit_id,
+        body_state: s.body_state,
+        health_state: s.health_state,
+        effect_state: s.effect_state,
+        virtue: s.virtue,
     }
 }
 
@@ -38,5 +48,22 @@ mod tests {
         });
 
         assert!(!removed.on);
+    }
+
+    #[test]
+    fn unit_state_change_maps_all_state_fields() {
+        let applied = unit_state_change(net::UnitStateChange {
+            unit_id: 150001,
+            body_state: 1,
+            health_state: 2,
+            effect_state: 4,
+            virtue: 8,
+        });
+
+        assert_eq!(applied.unit_id, 150001);
+        assert_eq!(applied.body_state, 1);
+        assert_eq!(applied.health_state, 2);
+        assert_eq!(applied.effect_state, 4);
+        assert_eq!(applied.virtue, 8);
     }
 }

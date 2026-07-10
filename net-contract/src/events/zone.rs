@@ -147,6 +147,19 @@ pub struct SpecialEffectShown {
     pub effect_id: u32,
 }
 
+/// Legacy unit-state flags (opt1/opt2/option/opt3): stone/freeze/stun/sleep
+/// poses, poison/curse/silence, hide/cloak/mount, and virtue. A separate
+/// channel from the EFST `StatusEffectChanged`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct UnitStateChanged {
+    pub unit_id: u32,
+    pub body_state: u32,
+    pub health_state: u32,
+    pub effect_state: u32,
+    pub virtue: u32,
+}
+
 /// A parameter changed (collapses ZC_PAR_CHANGE u16 + ZC_LONGPAR_CHANGE u32).
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
