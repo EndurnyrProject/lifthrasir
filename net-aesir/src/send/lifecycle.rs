@@ -119,10 +119,19 @@ pub fn handle_connect_zone(
 /// Drive the zone map-load handshake from the domain readiness signals.
 ///
 /// Latches `LocalMapLoaded`/`LocalPlayerReady` onto `QuicZoneState` so signal
-/// order versus phase never matters, then advances the phase machine: once the
-/// map is loaded while `Entering`, send `MapLoaded` (legacy CZ_NOTIFY_ACTORINIT)
-/// and move to `MapReady`; once the player exists while `MapReady`, move to
-/// `Playing` (the gate the gameplay senders wait on).
+/// order versus phase never matters, then advances the phase machine: once
+/// **both** the map and the local player are ready while `Entering`, send
+/// `MapLoaded` (legacy CZ_NOTIFY_ACTORINIT) and move to `MapReady`, then
+/// immediately to `Playing` (the gate the gameplay senders wait on).
+///
+/// `MapLoaded` must wait for the player, not just the map: the server answers
+/// it with the login self-sync (own `UnitStateChange`, status params, cart
+/// dump), and its consumers resolve `unit_id` through the entity registry. If
+/// the ack went out before the local player is spawned and registered, that
+/// sync would arrive early and be dropped on the registry miss (e.g. a
+/// relogged merchant's cart never rendering). The player spawn is purely
+/// client-driven (spawn cell comes from `EnterAck`), so nothing here waits on
+/// the server.
 #[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update)]
 pub fn advance_zone_handshake(
     mut map_loaded: MessageReader<LocalMapLoaded>,
@@ -139,13 +148,14 @@ pub fn advance_zone_handshake(
         state.player_ready_signal = true;
     }
 
-    if state.map_loaded_signal {
+    if state.map_loaded_signal && state.player_ready_signal {
         if let Some(next) = map_loaded_next(state.phase) {
             if let Err(e) = state.send(&mut client, CONTROL, Body::MapLoaded(MapLoaded {})) {
                 error!("failed to send MapLoaded: {e}");
                 state.phase = ZonePhase::Failed;
                 return;
             }
+            debug!("zone handshake: MapLoaded sent (map + player ready)");
             state.phase = next;
         }
     }

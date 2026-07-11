@@ -25,6 +25,10 @@ pub fn zone_drain_status(
             changed.write(status_change(s));
         }
         if let Body::UnitStateChange(s) = msg.body.clone() {
+            debug!(
+                "UnitStateChange received: unit_id={} effect_state={:#x}",
+                s.unit_id, s.effect_state
+            );
             unit_state.write(unit_state_change(s));
         }
     }
