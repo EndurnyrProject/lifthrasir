@@ -1,17 +1,16 @@
 //! Server announcement rendering: echoes every announcement to the chat box as a
-//! colored line and drives per-style on-screen overlays — a scrolling Top marquee
-//! and a fading Center flash — through independent arrival-order queues.
+//! colored line and drives per-style on-screen overlays — a fading Top banner and a
+//! fading Center flash — through independent arrival-order queues.
 //!
 //! An [`AnnouncementReceived`] event fans out in [`ingest_announcements`] to the
 //! chat echo (all styles) and the matching overlay queue (Top/Center only; Local is
-//! chat-only). Two queues let a Top marquee and a Center flash be on screen at once
+//! chat-only). Two queues let a Top banner and a Center flash be on screen at once
 //! while same-style announcements serialize. Overlays parent under the
 //! [`AnnouncementLayer`] node the HUD mounts, so they despawn with the HUD on exit.
 
 use std::collections::VecDeque;
 
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 use game_engine::core::state::GameState;
 use net_contract::events::{AnnouncementReceived, AnnouncementStyle};
 
@@ -23,8 +22,9 @@ const TOP_DEFAULT: Color = Color::srgb_u8(0xff, 0xff, 0x00);
 const CENTER_DEFAULT: Color = Color::WHITE;
 const LOCAL_DEFAULT: Color = Color::srgb_u8(0x2f, 0xd2, 0x7a);
 
-const MARQUEE_SPEED_PX_S: f32 = 120.0;
 const CENTER_DURATION_S: f32 = 4.0;
+const TOP_DURATION_S: f32 = 4.0;
+const TOP_FADE_S: f32 = 0.6;
 const TOP_OFFSET_PX: f32 = 28.0;
 const CENTER_TOP_PCT: f32 = 38.0;
 const TOP_FONT_SIZE: f32 = 20.0;
@@ -42,7 +42,7 @@ impl Plugin for AnnouncementPlugin {
                 ingest_announcements,
                 drive_top,
                 drive_center,
-                advance_top_banner,
+                fade_top_banner,
                 fade_center_flash,
             )
                 .run_if(in_state(GameState::InGame)),
@@ -70,9 +70,12 @@ pub struct AnnouncementQueues {
 #[derive(Component)]
 pub struct AnnouncementLayer;
 
-/// The active scrolling Top marquee (at most one; the next Top waits in the queue).
+/// The active Top banner and its fade-in/out lifetime timer (at most one; the next
+/// Top waits in the queue).
 #[derive(Component)]
-struct TopBanner;
+struct TopBanner {
+    timer: Timer,
+}
 
 /// The active Center flash and its lifetime timer.
 #[derive(Component)]
@@ -158,7 +161,6 @@ fn drive_top(
     mut queues: ResMut<AnnouncementQueues>,
     layer: Query<Entity, With<AnnouncementLayer>>,
     active: Query<(), With<TopBanner>>,
-    window: Query<&Window, With<PrimaryWindow>>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
@@ -166,9 +168,6 @@ fn drive_top(
         return;
     }
     let Ok(layer) = layer.single() else {
-        return;
-    };
-    let Ok(window) = window.single() else {
         return;
     };
     let Some(overlay) = queues.top.pop_front() else {
@@ -181,11 +180,15 @@ fn drive_top(
             Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(TOP_OFFSET_PX),
-                left: Val::Px(window.width()),
+                left: Val::Px(0.0),
+                width: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
                 ..default()
             },
             Pickable::IGNORE,
-            TopBanner,
+            TopBanner {
+                timer: Timer::from_seconds(TOP_DURATION_S, TimerMode::Once),
+            },
             ChildOf(layer),
         ))
         .id();
@@ -244,23 +247,34 @@ fn drive_center(
     );
 }
 
-fn advance_top_banner(
+fn fade_top_banner(
     time: Res<Time>,
-    mut banners: Query<(Entity, &mut Node, &ComputedNode), With<TopBanner>>,
+    mut banners: Query<(Entity, &mut TopBanner)>,
+    children: Query<&Children>,
+    mut colors: Query<&mut TextColor>,
     mut commands: Commands,
 ) {
-    for (entity, mut node, computed) in &mut banners {
-        let Val::Px(left) = node.left else {
-            continue;
-        };
-        let next = left - MARQUEE_SPEED_PX_S * time.delta_secs();
-        node.left = Val::Px(next);
-
-        let width = computed.size().x * computed.inverse_scale_factor;
-        if width > 0.0 && next + width < 0.0 {
+    for (entity, mut banner) in &mut banners {
+        banner.timer.tick(time.delta());
+        if banner.timer.is_finished() {
             commands.entity(entity).despawn();
+            continue;
         }
+        let alpha = fade_in_out_alpha(banner.timer.elapsed_secs(), TOP_DURATION_S, TOP_FADE_S);
+        fade_text_alpha(entity, alpha, &children, &mut colors);
     }
+}
+
+/// A trapezoidal envelope: ramps 0→1 over the first `fade` seconds, holds at 1, then
+/// ramps 1→0 over the last `fade` seconds.
+fn fade_in_out_alpha(elapsed: f32, total: f32, fade: f32) -> f32 {
+    if elapsed < fade {
+        return (elapsed / fade).clamp(0.0, 1.0);
+    }
+    if elapsed > total - fade {
+        return ((total - elapsed) / fade).clamp(0.0, 1.0);
+    }
+    1.0
 }
 
 fn fade_center_flash(
@@ -327,6 +341,16 @@ mod tests {
         assert_eq!(resolve_color(0, AnnouncementStyle::Top), TOP_DEFAULT);
         assert_eq!(resolve_color(0, AnnouncementStyle::Center), CENTER_DEFAULT);
         assert_eq!(resolve_color(0, AnnouncementStyle::Local), LOCAL_DEFAULT);
+    }
+
+    #[test]
+    fn fade_in_out_alpha_ramps_up_holds_and_ramps_down() {
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-4;
+        assert!(close(fade_in_out_alpha(0.0, 4.0, 0.6), 0.0));
+        assert!(close(fade_in_out_alpha(0.3, 4.0, 0.6), 0.5));
+        assert!(close(fade_in_out_alpha(2.0, 4.0, 0.6), 1.0));
+        assert!(close(fade_in_out_alpha(3.7, 4.0, 0.6), 0.5));
+        assert!(close(fade_in_out_alpha(4.0, 4.0, 0.6), 0.0));
     }
 
     #[test]
@@ -440,7 +464,6 @@ mod tests {
         app.init_asset::<Font>();
         app.init_resource::<AnnouncementQueues>();
         app.world_mut().spawn(AnnouncementLayer);
-        app.world_mut().spawn((Window::default(), PrimaryWindow));
         app.add_systems(Update, drive_top);
         app
     }
