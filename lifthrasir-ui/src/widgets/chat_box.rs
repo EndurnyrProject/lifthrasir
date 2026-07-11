@@ -14,21 +14,30 @@ use game_engine::core::state::GameState;
 use game_engine::domain::character::chat::ChatSendRequested;
 use net_contract::events::ChatHeard;
 
+use crate::rich_text::spawn_colored_text;
 use crate::theme;
 use crate::widgets::placeholder::Placeholder;
 
-/// Oldest lines past this are dropped so the text (and its layout) stays bounded.
+/// Oldest lines past this are dropped so the history (and its layout) stays bounded.
 const MAX_CHAT_LINES: usize = 100;
 const CHAT_MAX_CHARS: usize = 255;
+const CHAT_FONT_SIZE: f32 = 12.5;
+const CHAT_DEFAULT_COLOR: Color = Color::srgb_u8(0xcd, 0xd8, 0xd0);
 
 const TAB_ACTIVE_BG: Color = Color::srgba(1.0, 1.0, 1.0, 0.05);
 const PILL_BG: Color = Color::srgba(0.184, 0.824, 0.478, 0.14);
 const PILL_BORDER: Color = Color::srgba(0.184, 0.824, 0.478, 0.30);
 const INPUT_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.34);
 
-/// The chat history text element.
+/// The scroll container that parents the per-line [`ChatLine`] entities. Sibling
+/// widgets (e.g. the announcement echo) query it via `With<ChatHistory>`.
 #[derive(Component)]
-struct ChatHistory;
+pub(crate) struct ChatHistory;
+
+/// One rendered chat line (a `spawn_colored_text` root) under the [`ChatHistory`]
+/// container. Tagged so the line cap can count and despawn oldest lines.
+#[derive(Component)]
+struct ChatLine;
 
 /// The chat input field. Used to filter [`SubmitText`] to this input.
 #[derive(Component)]
@@ -75,39 +84,26 @@ pub fn spawn_chat_box(commands: &mut Commands, parent: Entity, asset_server: &As
     // Column pinned to the bottom + clipped overflow keeps the newest lines visible
     // (older ones scroll off the top) without a scrollbar widget. The top hairline
     // separates the log from the tab strip.
-    let scroll = commands
-        .spawn((
-            Node {
-                height: Val::Px(140.0),
-                margin: UiRect::horizontal(Val::Px(6.0)),
-                padding: UiRect::axes(Val::Px(13.0), Val::Px(10.0)),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::FlexEnd,
-                border: UiRect::top(Val::Px(1.0)),
-                overflow: Overflow::clip(),
-                ..default()
-            },
-            BorderColor {
-                top: theme::STROKE,
-                right: Color::NONE,
-                bottom: Color::NONE,
-                left: Color::NONE,
-            },
-            Pickable::IGNORE,
-            ChildOf(chat_box),
-        ))
-        .id();
     commands.spawn((
-        Text::new(""),
-        TextFont {
-            font: font.clone().into(),
-            font_size: 12.5.into(),
+        Node {
+            height: Val::Px(140.0),
+            margin: UiRect::horizontal(Val::Px(6.0)),
+            padding: UiRect::axes(Val::Px(13.0), Val::Px(10.0)),
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::FlexEnd,
+            border: UiRect::top(Val::Px(1.0)),
+            overflow: Overflow::clip(),
             ..default()
         },
-        TextColor(Color::srgb_u8(0xcd, 0xd8, 0xd0)),
+        BorderColor {
+            top: theme::STROKE,
+            right: Color::NONE,
+            bottom: Color::NONE,
+            left: Color::NONE,
+        },
         ChatHistory,
         Pickable::IGNORE,
-        ChildOf(scroll),
+        ChildOf(chat_box),
     ));
 
     spawn_input(commands, chat_box, font);
@@ -350,31 +346,66 @@ fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
     ));
 }
 
-/// Appends `line` to the newline-joined history, capping at `MAX_CHAT_LINES`.
-fn append_line(history: &mut String, line: &str) {
-    if !history.is_empty() {
-        history.push('\n');
-    }
-    history.push_str(line);
+/// Appends `text` as one `ChatLine` colored-text line under `container`, then
+/// despawns the oldest `ChatLine` children past [`MAX_CHAT_LINES`]. Inline
+/// `^RRGGBB` codes in `text` become colored runs over `default_color`. Shared by
+/// normal chat and the announcement echo, hence `pub(crate)`.
+pub(crate) fn append_colored_line(
+    commands: &mut Commands,
+    container: Entity,
+    text: &str,
+    default_color: Color,
+    font: Handle<Font>,
+) {
+    let line = spawn_colored_text(
+        commands,
+        container,
+        text,
+        font,
+        CHAT_FONT_SIZE,
+        default_color,
+    );
+    commands.entity(line).insert(ChatLine);
 
-    let line_count = history.matches('\n').count() + 1;
-    if line_count > MAX_CHAT_LINES {
-        let drop = line_count - MAX_CHAT_LINES;
-        if let Some((idx, _)) = history.match_indices('\n').nth(drop - 1) {
-            history.replace_range(..=idx, "");
+    commands.queue(move |world: &mut World| {
+        let Some(children) = world.get::<Children>(container) else {
+            return;
+        };
+        let lines: Vec<Entity> = children
+            .iter()
+            .filter(|entity| world.get::<ChatLine>(*entity).is_some())
+            .collect();
+        if lines.len() <= MAX_CHAT_LINES {
+            return;
         }
-    }
+        let drop = lines.len() - MAX_CHAT_LINES;
+        for entity in lines.into_iter().take(drop) {
+            world.entity_mut(entity).despawn();
+        }
+    });
 }
 
 fn append_incoming_chat(
     mut received: MessageReader<ChatHeard>,
-    mut history: Query<&mut Text, With<ChatHistory>>,
+    container: Query<Entity, With<ChatHistory>>,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
 ) {
-    let Ok(mut text) = history.single_mut() else {
+    if received.is_empty() {
+        return;
+    }
+    let Ok(container) = container.single() else {
         return;
     };
+    let font = asset_server.load(theme::FONT_BODY);
     for event in received.read() {
-        append_line(&mut text.0, &event.message);
+        append_colored_line(
+            &mut commands,
+            container,
+            &event.message,
+            CHAT_DEFAULT_COLOR,
+            font.clone(),
+        );
     }
 }
 
@@ -427,13 +458,41 @@ fn chat_input_control(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::world::CommandQueue;
+
+    fn append_test_line(app: &mut App, container: Entity, text: &str) {
+        let mut queue = CommandQueue::default();
+        {
+            let mut commands = Commands::new(&mut queue, app.world());
+            append_colored_line(
+                &mut commands,
+                container,
+                text,
+                CHAT_DEFAULT_COLOR,
+                Handle::default(),
+            );
+        }
+        queue.apply(app.world_mut());
+    }
 
     #[test]
-    fn append_line_joins_with_newline() {
-        let mut history = String::new();
-        append_line(&mut history, "a");
-        append_line(&mut history, "b");
-        assert_eq!(history, "a\nb");
+    fn colored_line_splits_into_runs() {
+        let mut app = App::new();
+        let container = app.world_mut().spawn_empty().id();
+        append_test_line(&mut app, container, "Use ^ff0000fire^000000 here");
+
+        let line = app
+            .world()
+            .get::<Children>(container)
+            .and_then(|c| c.iter().next())
+            .expect("one chat line");
+        let text = app.world().get::<Text>(line).expect("line has text");
+        assert_eq!(text.0, "Use ");
+        let spans = app
+            .world()
+            .get::<Children>(line)
+            .expect("line has run spans");
+        assert_eq!(spans.iter().count(), 2);
     }
 
     #[test]
@@ -465,17 +524,31 @@ mod tests {
     }
 
     #[test]
-    fn append_line_caps_oldest_lines() {
-        let mut history = String::new();
+    fn append_colored_line_caps_oldest_children() {
+        let mut app = App::new();
+        let container = app.world_mut().spawn_empty().id();
         for i in 0..(MAX_CHAT_LINES + 5) {
-            append_line(&mut history, &format!("line{i}"));
+            append_test_line(&mut app, container, &format!("line{i}"));
         }
-        let lines: Vec<&str> = history.split('\n').collect();
+
+        let lines: Vec<Entity> = {
+            let world = app.world();
+            let children = world
+                .get::<Children>(container)
+                .expect("container children");
+            children
+                .iter()
+                .filter(|entity| world.get::<ChatLine>(*entity).is_some())
+                .collect()
+        };
         assert_eq!(lines.len(), MAX_CHAT_LINES);
-        assert_eq!(lines[0], "line5");
-        assert_eq!(
-            *lines.last().unwrap(),
-            format!("line{}", MAX_CHAT_LINES + 4)
-        );
+
+        let oldest = app.world().get::<Text>(lines[0]).expect("oldest line text");
+        assert_eq!(oldest.0, "line5");
+        let newest = app
+            .world()
+            .get::<Text>(*lines.last().unwrap())
+            .expect("newest line text");
+        assert_eq!(newest.0, format!("line{}", MAX_CHAT_LINES + 4));
     }
 }
