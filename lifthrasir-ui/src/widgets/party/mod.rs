@@ -27,8 +27,10 @@ pub mod create_dialog;
 pub mod feedback;
 pub mod invite_dialog;
 pub mod scene;
+pub mod slash;
 
 pub use invite_dialog::PendingPartyInvite;
+pub use slash::{PartySlash, PartySlashSubmitted};
 
 pub use scene::build as spawn_party_window;
 
@@ -88,6 +90,7 @@ impl Plugin for PartyPlugin {
             app.add_plugins(FeathersPlugins);
         }
         app.init_resource::<PendingPartyInvite>();
+        app.add_message::<PartySlashSubmitted>();
         app.add_systems(
             Update,
             toggle_party_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
@@ -102,6 +105,7 @@ impl Plugin for PartyPlugin {
                 invite_dialog::claim_invite_choice,
                 invite_dialog::expire_pending_invite,
                 feedback::ingest_party_feedback,
+                slash::dispatch_party_slash,
             )
                 .run_if(in_state(GameState::InGame)),
         );

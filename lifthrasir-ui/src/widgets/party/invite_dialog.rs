@@ -46,7 +46,7 @@ impl PendingPartyInvite {
         self.timer = Timer::from_seconds(INVITE_TTL_SECS, TimerMode::Once);
     }
 
-    fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         *self = Self::default();
     }
 }

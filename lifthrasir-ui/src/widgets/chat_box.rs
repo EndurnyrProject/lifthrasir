@@ -16,6 +16,7 @@ use net_contract::events::ChatHeard;
 
 use crate::rich_text::spawn_colored_text;
 use crate::theme;
+use crate::widgets::party::slash::{parse_party_slash, PartySlashSubmitted};
 use crate::widgets::placeholder::Placeholder;
 
 /// Oldest lines past this are dropped so the history (and its layout) stays bounded.
@@ -416,6 +417,8 @@ fn append_incoming_chat(
 /// - Focused + Escape releases it without sending.
 /// - Focused + Enter submits: a non-empty message is sent and the field cleared and
 ///   unfocused; an empty submit (e.g. the Enter that opened the chat) leaves it focused.
+///   A recognized party slash command (`parse_party_slash`) is queued as
+///   `PartySlashSubmitted` instead of a normal chat message.
 ///
 /// The input has `Pickable::IGNORE`, so Enter is the only way it gains focus — clicking
 /// can't strand the cursor in the field.
@@ -423,6 +426,7 @@ fn chat_input_control(
     keys: Res<ButtonInput<KeyCode>>,
     mut chat_input: Query<(Entity, &mut EditableText), With<ChatInput>>,
     mut writer: MessageWriter<ChatSendRequested>,
+    mut slash_writer: MessageWriter<PartySlashSubmitted>,
     mut input_focus: ResMut<InputFocus>,
 ) {
     let Ok((entity, mut field)) = chat_input.single_mut() else {
@@ -446,9 +450,16 @@ fn chat_input_control(
         let value = field.value().to_string();
         let message = value.trim();
         if !message.is_empty() {
-            writer.write(ChatSendRequested {
-                message: message.to_string(),
-            });
+            match parse_party_slash(message) {
+                Some(slash) => {
+                    slash_writer.write(PartySlashSubmitted(slash));
+                }
+                None => {
+                    writer.write(ChatSendRequested {
+                        message: message.to_string(),
+                    });
+                }
+            }
             field.clear();
             input_focus.clear();
         }
@@ -495,17 +506,35 @@ mod tests {
         assert_eq!(spans.iter().count(), 2);
     }
 
-    #[test]
-    fn enter_focuses_chat_and_escape_releases_it() {
+    fn chat_control_app(initial_text: &str) -> (App, Entity) {
         let mut app = App::new();
         app.init_resource::<ButtonInput<KeyCode>>();
         app.init_resource::<InputFocus>();
         app.add_message::<ChatSendRequested>();
+        app.add_message::<PartySlashSubmitted>();
         app.add_systems(Update, chat_input_control);
         let chat = app
             .world_mut()
-            .spawn((ChatInput, EditableText::default()))
+            .spawn((ChatInput, EditableText::new(initial_text)))
             .id();
+        (app, chat)
+    }
+
+    fn chat_messages(app: &App) -> Vec<ChatSendRequested> {
+        let messages = app.world().resource::<Messages<ChatSendRequested>>();
+        let mut cursor = messages.get_cursor();
+        cursor.read(messages).cloned().collect()
+    }
+
+    fn slash_messages(app: &App) -> Vec<PartySlashSubmitted> {
+        let messages = app.world().resource::<Messages<PartySlashSubmitted>>();
+        let mut cursor = messages.get_cursor();
+        cursor.read(messages).cloned().collect()
+    }
+
+    #[test]
+    fn enter_focuses_chat_and_escape_releases_it() {
+        let (mut app, chat) = chat_control_app("");
 
         app.world_mut()
             .resource_mut::<ButtonInput<KeyCode>>()
@@ -521,6 +550,53 @@ mod tests {
             .press(KeyCode::Escape);
         app.update();
         assert_eq!(app.world().resource::<InputFocus>().get(), None);
+    }
+
+    #[test]
+    fn enter_with_normal_text_sends_chat_message() {
+        let (mut app, chat) = chat_control_app("hello world");
+        app.world_mut()
+            .resource_mut::<InputFocus>()
+            .set(chat, FocusCause::Navigated);
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.update();
+
+        let sent = chat_messages(&app);
+        assert_eq!(sent.len(), 1, "normal chat still sends one message");
+        assert_eq!(sent[0].message, "hello world");
+        assert!(slash_messages(&app).is_empty(), "no slash message written");
+        assert_eq!(
+            app.world().resource::<InputFocus>().get(),
+            None,
+            "field unfocused after submit"
+        );
+    }
+
+    #[test]
+    fn enter_with_party_slash_writes_slash_not_chat() {
+        let (mut app, chat) = chat_control_app("/pcreate Wolfpack");
+        app.world_mut()
+            .resource_mut::<InputFocus>()
+            .set(chat, FocusCause::Navigated);
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.update();
+
+        let submitted = slash_messages(&app);
+        assert_eq!(submitted.len(), 1, "one slash command queued");
+        assert_eq!(
+            submitted[0].0,
+            crate::widgets::party::PartySlash::Create("Wolfpack".to_string())
+        );
+        assert!(
+            chat_messages(&app).is_empty(),
+            "a recognized slash never sends normal chat"
+        );
     }
 
     #[test]
