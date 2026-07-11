@@ -1,19 +1,32 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use bevy_persistent::prelude::Persistent;
 use net_contract::events::{UnitEntered, UnitStateChanged};
 
 use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
+use crate::domain::entities::character::components::visual::{ActionType, Direction};
 use crate::domain::entities::character::systems::CART_MASK;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::components::{CartLayer, PlayerSprite, RenderLayer};
+use crate::domain::settings::resources::Settings;
 use crate::domain::sprite::tags::{
     layer_order, LAYER_CART, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER,
 };
 use crate::domain::system_sets::{EntityLifecycleSystems, SpriteRenderingSystems};
-use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
+use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
+use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::utils::constants::SPRITE_WORLD_SCALE;
+
+/// SPR/ACT handles still loading for a cart child. Kept on the child itself so
+/// the cart never touches the shared `PendingAnimations` queue (whose whole-queue
+/// drainers raced it); `finalize_cart_layer` polls these and removes the marker.
+#[derive(Component)]
+pub struct CartAnimationPending {
+    spr: Handle<RoSpriteAsset>,
+    act: Handle<RoActAsset>,
+}
 
 /// Query of the parent -> cart child relationship, keyed by the `CartLayer`
 /// marker so the child's presence *is* the parent's mount state.
@@ -48,13 +61,16 @@ pub fn apply_cart_mount(
     registry: Res<EntityRegistry>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut pending_animations: ResMut<PendingAnimations>,
     shared_quad: Res<SharedSpriteQuad>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     cart_layers: CartOwnerQuery,
 ) {
     for event in state_changes.read() {
         let Some(entity) = registry.get_entity(event.unit_id) else {
+            debug!(
+                "cart: UnitStateChanged for unresolved unit {} (effect_state={:#x}) dropped",
+                event.unit_id, event.effect_state
+            );
             continue;
         };
         apply_cart_state(
@@ -63,7 +79,6 @@ pub fn apply_cart_mount(
             &cart_layers,
             &mut commands,
             &asset_server,
-            &mut pending_animations,
             &shared_quad,
             &mut materials,
         );
@@ -79,7 +94,6 @@ pub fn apply_cart_mount(
             &cart_layers,
             &mut commands,
             &asset_server,
-            &mut pending_animations,
             &shared_quad,
             &mut materials,
         );
@@ -88,116 +102,123 @@ pub fn apply_cart_mount(
 
 /// Reconciles one unit's cart layer with its `effect_state`: spawn when the bit
 /// sets and no cart child exists yet, despawn when it clears and one does.
-#[allow(clippy::too_many_arguments)]
 fn apply_cart_state(
     entity: Entity,
     effect_state: u32,
     cart_layers: &CartOwnerQuery,
     commands: &mut Commands,
     asset_server: &AssetServer,
-    pending_animations: &mut PendingAnimations,
     shared_quad: &SharedSpriteQuad,
     materials: &mut Assets<StandardMaterial>,
 ) {
     let mounted = effect_state & CART_MASK != 0;
     // NOTE: the spawn/despawn are deferred commands, so two cart-mount events
-    // for the same unit in a single frame would both see `existing == None`
+    // for the same unit in a single frame would both see no existing children
     // and double-spawn. aesir emits discrete per-change state broadcasts, so
     // this cannot happen in practice; add a per-run dedup set if it ever does.
-    let existing = cart_layers
+    let existing: Vec<Entity> = cart_layers
         .iter()
-        .find(|(_, child_of)| child_of.parent() == entity)
-        .map(|(child, _)| child);
+        .filter(|(_, child_of)| child_of.parent() == entity)
+        .map(|(child, _)| child)
+        .collect();
 
-    match (mounted, existing) {
-        (true, None) => spawn_cart_layer(
-            commands,
-            entity,
-            asset_server,
-            pending_animations,
-            shared_quad,
-            materials,
-        ),
-        (false, Some(child)) => {
-            commands.entity(child).despawn();
+    match (mounted, existing.is_empty()) {
+        (true, true) => spawn_cart_layer(commands, entity, asset_server, shared_quad, materials),
+        (false, false) => {
+            for child in existing {
+                commands.entity(child).despawn();
+            }
         }
         _ => {}
     }
 }
 
-/// Spawns the cart child now (so the mount is observable immediately) with an
-/// empty animation; `finalize_cart_layer` fills it once the SPR/ACT load. The
-/// child starts hidden to avoid a blank quad flashing before its first texture.
+/// Number of ACT layers per cart frame. Every action/frame of 손수레.act
+/// composes exactly two: the wheel piece then the cart body on top.
+const CART_ACT_PARTS: usize = 2;
+
+/// Spawns the cart children now (one quad per ACT part, so the mount is
+/// observable immediately) with empty animations; `finalize_cart_layer` fills
+/// them once the SPR/ACT load. The children start hidden to avoid blank quads
+/// flashing before their first texture.
 fn spawn_cart_layer(
     commands: &mut Commands,
     parent: Entity,
     asset_server: &AssetServer,
-    pending_animations: &mut PendingAnimations,
     shared_quad: &SharedSpriteQuad,
     materials: &mut Assets<StandardMaterial>,
 ) {
     let z_offset = layer_order(LAYER_CART) as f32 * Z_OFFSET_PER_LAYER;
 
-    let material = materials.add(StandardMaterial {
-        base_color_texture: None,
-        alpha_mode: AlphaMode::Blend,
-        unlit: true,
-        cull_mode: None,
-        ..default()
-    });
+    for part in 0..CART_ACT_PARTS {
+        let material = materials.add(StandardMaterial {
+            base_color_texture: None,
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            cull_mode: None,
+            ..default()
+        });
 
-    let child = commands
-        .spawn((
+        // Later ACT layers draw on top, so give each part a tiny z step.
+        let part_z = z_offset + part as f32 * 0.001;
+
+        commands.spawn((
             Mesh3d(shared_quad.mesh.clone()),
             MeshMaterial3d(material),
             Billboard,
             RenderLayer::body(Handle::default(), LAYER_CART, Vec::new()),
-            CartLayer,
-            Transform::from_translation(Vec3::new(0.0, SPRITE_BASE_Y_OFFSET, z_offset)),
+            CartLayer { part },
+            CartAnimationPending {
+                spr: asset_server.load(patterns::cart_sprite_path()),
+                act: asset_server.load(patterns::cart_action_path()),
+            },
+            Transform::from_translation(Vec3::new(0.0, SPRITE_BASE_Y_OFFSET, part_z)),
             GlobalTransform::default(),
             Visibility::Hidden,
             InheritedVisibility::default(),
             ViewVisibility::default(),
             ChildOf(parent),
-        ))
-        .id();
-
-    let spr = asset_server.load(patterns::cart_sprite_path());
-    let act = asset_server.load(patterns::cart_action_path());
-    pending_animations.request(spr, act, LAYER_CART, Some(child));
+        ));
+    }
 }
 
-/// Fills the cart child's animation handle + textures once the SPR/ACT finish
-/// loading. Uses the selective drain so it never steals body/head/equipment
-/// completions from their own finalizers.
+/// Fills the cart child's animation handle + textures once its SPR/ACT finish
+/// loading, polling the handles carried by [`CartAnimationPending`]. The cart
+/// deliberately bypasses `PendingAnimations`: that queue has whole-queue
+/// drainers (`finalize_render_layers`, `finalize_equipment_layers`) that
+/// consumed the cart's completion, leaving the layer permanently hidden.
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
-    config(
-        in_set = SpriteRenderingSystems::AnimationEvents,
-        before = crate::domain::entities::sprite_rendering::systems::events::finalize_equipment_layers
-    )
+    config(in_set = SpriteRenderingSystems::AssetPopulation)
 )]
 pub fn finalize_cart_layer(
-    mut pending_animations: ResMut<PendingAnimations>,
-    animations: Res<Assets<RoAnimationAsset>>,
-    mut cart_layers: Query<&mut RenderLayer, With<CartLayer>>,
+    mut commands: Commands,
+    sprites: Res<Assets<RoSpriteAsset>>,
+    actions: Res<Assets<RoActAsset>>,
+    mut animations: ResMut<Assets<RoAnimationAsset>>,
+    mut images: ResMut<Assets<Image>>,
+    settings: Res<Persistent<Settings>>,
+    mut cart_layers: Query<(Entity, &CartAnimationPending, &mut RenderLayer), With<CartLayer>>,
 ) {
-    for (pending, handle) in pending_animations.take_completed_for_layer(LAYER_CART) {
-        let Some(child) = pending.callback_entity else {
+    for (entity, pending, mut render_layer) in &mut cart_layers {
+        let (Some(sprite), Some(action)) = (sprites.get(&pending.spr), actions.get(&pending.act))
+        else {
             continue;
         };
 
-        let Ok(mut render_layer) = cart_layers.get_mut(child) else {
-            continue;
-        };
-
-        let Some(animation) = animations.get(&handle) else {
-            continue;
-        };
+        let animation = RoAnimationProcessor::process(
+            &sprite.sprite,
+            &action.action,
+            LAYER_CART,
+            &mut images,
+            settings.graphics.upscaling,
+        );
 
         render_layer.textures = animation.textures.clone();
-        render_layer.animation = handle;
+        render_layer.animation = animations.add(animation);
+        commands.entity(entity).remove::<CartAnimationPending>();
+        debug!("cart: animation finalized for {entity:?}");
     }
 }
 
@@ -206,19 +227,43 @@ type CartLayerQuery<'w, 's> = Query<
     's,
     (
         &'static RenderLayer,
+        &'static CartLayer,
         &'static ChildOf,
         &'static MeshMaterial3d<StandardMaterial>,
         &'static mut Transform,
         &'static mut Visibility,
     ),
-    With<CartLayer>,
 >;
 
-/// Drives the cart per frame off its parent's `PlayerSprite`, exactly as the
-/// body layer drives itself: the cart ACT is authored for the same
-/// action/direction layout, so the parent's frame index selects the matching
-/// cart pose. Positions like the body (raw layer position, world up is -Y),
-/// leaving the child's initial z-offset intact so it stays behind the body.
+/// How far behind the character the cart trails, in world units on the ground
+/// plane (one GAT cell = 5.0). The cart ACT carries no anchor positions, so the
+/// pull-behind placement is ours; the offset is opposite the facing direction,
+/// which also gives correct depth order for free (behind the body when facing
+/// the camera, in front when facing away).
+const CART_BACK_DISTANCE: f32 = 7.0;
+
+/// Ground-plane (x, z) offset pointing behind a unit facing `direction`.
+/// World axes: South = -Z, East = +X. Diagonals keep full per-axis magnitude
+/// (a grid-diagonal step, not a normalized vector) so the cart lands on the
+/// visually adjacent back cell.
+fn cart_behind_offset(direction: Direction) -> Vec2 {
+    match direction {
+        Direction::South => Vec2::new(0.0, 1.0),
+        Direction::SouthWest => Vec2::new(1.0, 1.0),
+        Direction::West => Vec2::new(1.0, 0.0),
+        Direction::NorthWest => Vec2::new(1.0, -1.0),
+        Direction::North => Vec2::new(0.0, -1.0),
+        Direction::NorthEast => Vec2::new(-1.0, -1.0),
+        Direction::East => Vec2::new(-1.0, 0.0),
+        Direction::SouthEast => Vec2::new(-1.0, 1.0),
+    }
+}
+
+/// Drives each cart quad per frame off its parent's `PlayerSprite`: the cart
+/// ACT is direction-only (8 actions), so the parent's facing picks the action
+/// and the wheel frames animate on the cart's own delay while walking.
+/// Positions like the body (raw layer position, world up is -Y), then pulls
+/// the quad behind the character on the ground plane.
 #[auto_add_system(
     plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
@@ -233,7 +278,9 @@ pub fn sync_cart_layer(
 ) {
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
 
-    for (layer, child_of, material_handle, mut transform, mut visibility) in cart_query.iter_mut() {
+    for (layer, cart, child_of, material_handle, mut transform, mut visibility) in
+        cart_query.iter_mut()
+    {
         let Ok(ro_sprite) = parent_query.get(child_of.parent()) else {
             continue;
         };
@@ -242,12 +289,34 @@ pub fn sync_cart_layer(
             continue;
         };
 
-        let Some(frame) = ro_sprite.get_frame(animation, game_time_ms) else {
+        // The cart ACT is direction-only (one action per facing), unlike the
+        // body's action-type x direction grid, so index it by facing directly.
+        // The frames roll the wheels: animate them on the cart's own delay
+        // while walking, hold the first frame otherwise.
+        let action_index = ro_sprite.direction as usize;
+        let Some(action_data) = animation.actions.get(action_index) else {
             *visibility = Visibility::Hidden;
             continue;
         };
 
-        let Some(part) = frame.parts.first() else {
+        if action_data.frames.is_empty() {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+
+        let frame_index = if ro_sprite.action_type == ActionType::Walk {
+            let delay = action_data.delay_ms.max(1.0);
+            (game_time_ms as f32 / delay) as usize % action_data.frames.len()
+        } else {
+            0
+        };
+
+        let Some(frame) = action_data.frames.get(frame_index) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+
+        let Some(part) = frame.parts.get(cart.part) else {
             *visibility = Visibility::Hidden;
             continue;
         };
@@ -265,9 +334,13 @@ pub fn sync_cart_layer(
             scale_x = -scale_x;
         }
 
+        let behind = cart_behind_offset(ro_sprite.direction) * CART_BACK_DISTANCE;
+        let part_z = layer_order(LAYER_CART) as f32 * Z_OFFSET_PER_LAYER + cart.part as f32 * 0.001;
+
         transform.scale = Vec3::new(scale_x, scale_y, 1.0);
-        transform.translation.x = part.position.x * SPRITE_WORLD_SCALE;
+        transform.translation.x = part.position.x * SPRITE_WORLD_SCALE + behind.x;
         transform.translation.y = -part.position.y * SPRITE_WORLD_SCALE;
+        transform.translation.z = part_z + behind.y;
 
         *visibility = Visibility::Inherited;
     }
@@ -291,7 +364,6 @@ mod tests {
             .add_message::<UnitStateChanged>()
             .add_message::<UnitEntered>()
             .init_resource::<EntityRegistry>()
-            .init_resource::<PendingAnimations>()
             .add_systems(Update, apply_cart_mount);
 
         let mesh = app
@@ -373,14 +445,14 @@ mod tests {
     }
 
     #[test]
-    fn cart_bit_spawns_exactly_one_cart_layer() {
+    fn cart_bit_spawns_one_quad_per_part() {
         let mut app = app();
         let unit = app.world_mut().spawn_empty().id();
         register(&mut app, 7, unit);
 
         emit(&mut app, OPTION_CART1);
 
-        assert_eq!(cart_children(&mut app, unit).len(), 1);
+        assert_eq!(cart_children(&mut app, unit).len(), CART_ACT_PARTS);
     }
 
     #[test]
@@ -392,7 +464,7 @@ mod tests {
         emit(&mut app, OPTION_CART1);
         emit(&mut app, OPTION_CART1 | 0x02);
 
-        assert_eq!(cart_children(&mut app, unit).len(), 1);
+        assert_eq!(cart_children(&mut app, unit).len(), CART_ACT_PARTS);
     }
 
     #[test]
@@ -402,7 +474,7 @@ mod tests {
         register(&mut app, 7, unit);
 
         emit(&mut app, OPTION_CART1);
-        assert_eq!(cart_children(&mut app, unit).len(), 1);
+        assert_eq!(cart_children(&mut app, unit).len(), CART_ACT_PARTS);
 
         emit(&mut app, 0);
         assert!(cart_children(&mut app, unit).is_empty());
@@ -428,7 +500,7 @@ mod tests {
 
         emit_entered(&mut app, 7, OPTION_CART1);
 
-        assert_eq!(cart_children(&mut app, unit).len(), 1);
+        assert_eq!(cart_children(&mut app, unit).len(), CART_ACT_PARTS);
     }
 
     #[test]
@@ -440,7 +512,7 @@ mod tests {
         emit_entered(&mut app, 7, OPTION_CART1);
         emit(&mut app, OPTION_CART1);
 
-        assert_eq!(cart_children(&mut app, unit).len(), 1);
+        assert_eq!(cart_children(&mut app, unit).len(), CART_ACT_PARTS);
     }
 
     #[test]

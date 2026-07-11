@@ -138,8 +138,10 @@ pub fn item_drop_action_path(resource_name: &str) -> String {
 }
 
 /// Generate the pushcart sprite path (single gender-agnostic sprite).
+/// 손수레 ("handcart") is the tier-1 cart; 손수레1-4 are the higher tiers,
+/// unused since we render one sprite regardless of tier.
 pub fn cart_sprite_path() -> String {
-    "ro://data/sprite/아이템/mc_pushcart.spr".to_string()
+    "ro://data/sprite/이팩트/손수레.spr".to_string()
 }
 
 /// Generate the pushcart action path.
@@ -232,18 +234,12 @@ mod tests {
 
     #[test]
     fn cart_sprite_path_builds_correct_url() {
-        assert_eq!(
-            cart_sprite_path(),
-            "ro://data/sprite/아이템/mc_pushcart.spr"
-        );
+        assert_eq!(cart_sprite_path(), "ro://data/sprite/이팩트/손수레.spr");
     }
 
     #[test]
     fn cart_action_path_builds_correct_url() {
-        assert_eq!(
-            cart_action_path(),
-            "ro://data/sprite/아이템/mc_pushcart.act"
-        );
+        assert_eq!(cart_action_path(), "ro://data/sprite/이팩트/손수레.act");
     }
 
     #[test]
