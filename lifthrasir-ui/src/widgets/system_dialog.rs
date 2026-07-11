@@ -1,4 +1,4 @@
-//! System dialog: a reusable, message-driven modal notice (raw `bevy_ui`).
+//! System dialog: a reusable, message-driven modal notice (BSN + Feathers).
 //!
 //! Ported from the `designs/Endurnir Project` System Dialog mockup. Any system can
 //! summon it by writing a [`ShowSystemDialog`] message; the widget spawns a dimmed,
@@ -10,15 +10,24 @@
 //! Only one dialog lives at a time: a second request while one is open is ignored,
 //! which absorbs the duplicate lost/failed events quinnet can emit on a drop.
 //!
-//! The severity badge renders the mockup's per-preset line icon as an SVG glyph
-//! (via [`theme::icon`]), tinted with the severity accent.
+//! The card chrome is one declarative `bsn!` tree; the primary button is a Feathers
+//! `@FeathersButton` (Primary variant) whose `on(Activate)` observer runs the shared
+//! dismiss + navigate logic. The severity accent tints the badge border/glyph and the
+//! code chip; Feathers owns the button fill from its own tokens, so the severity
+//! colour is carried by the badge rather than the button (see the note on `card`).
 
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
+use bevy::text::{FontSize, FontSourceTemplate};
+use bevy::ui_widgets::Activate;
+use bevy_feathers::controls::{ButtonVariant, FeathersButton};
+use bevy_feathers::theme::ThemedText;
+use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use game_engine::core::state::GameState;
 use game_engine::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
 
 use crate::theme;
+use crate::theme::feathers_theme::install_norse_theme;
 
 /// Sits just below the fade transition so the modal renders over every screen.
 /// `pub` so sibling modals (e.g. the death dialog) can anchor strictly below it.
@@ -29,17 +38,21 @@ pub struct SystemDialogPlugin;
 
 impl Plugin for SystemDialogPlugin {
     fn build(&self, app: &mut App) {
+        install_norse_theme(app);
+        if !app.is_plugin_added::<FeathersCorePlugin>() {
+            app.add_plugins(FeathersPlugins);
+        }
         app.add_systems(Update, (show_system_dialog, confirm_on_enter));
     }
 }
 
 /// The modal root. Carries the screen the primary button navigates to.
-#[derive(Component)]
+#[derive(Component, Clone, Default)]
 pub struct SystemDialogRoot {
     confirm_state: Option<GameState>,
 }
 
-/// Accent colour for a severity — drives the badge border, glyph, and primary button.
+/// Accent colour for a severity — drives the badge border, glyph, and code chip.
 pub fn severity_accent(severity: DialogSeverity) -> Color {
     match severity {
         DialogSeverity::Error => theme::BAD,
@@ -63,7 +76,6 @@ fn severity_icon(severity: DialogSeverity) -> &'static str {
 fn show_system_dialog(
     mut requests: MessageReader<ShowSystemDialog>,
     existing: Query<(), With<SystemDialogRoot>>,
-    asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
     let Some(request) = requests.read().last() else {
@@ -72,169 +84,212 @@ fn show_system_dialog(
     if !existing.is_empty() {
         return;
     }
-    spawn_dialog(&mut commands, &asset_server, request);
+    commands.spawn_scene(system_dialog(request));
 }
 
-fn spawn_dialog(commands: &mut Commands, asset_server: &AssetServer, request: &ShowSystemDialog) {
-    let body = asset_server.load(theme::FONT_BODY);
-    let title_font = asset_server.load(theme::FONT_TITLE);
-    let accent = severity_accent(request.severity);
-
-    let backdrop = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.012, 0.027, 0.024, 0.55)),
-            GlobalZIndex(DIALOG_Z),
-            Pickable::default(),
-            SystemDialogRoot {
-                confirm_state: request.confirm_state.clone(),
-            },
-        ))
-        .id();
-
-    let card = commands
-        .spawn((
-            Node {
-                width: Val::Px(DIALOG_WIDTH),
-                padding: UiRect::axes(Val::Px(30.0), Val::Px(26.0)),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(16.0)),
-                ..default()
-            },
-            BackgroundColor(theme::GLASS),
-            BorderColor::all(theme::STROKE),
-            ChildOf(backdrop),
-        ))
-        .id();
-
-    commands
-        .spawn((
-            Node {
-                width: Val::Px(60.0),
-                height: Val::Px(60.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(16.0)),
-                ..default()
-            },
-            BackgroundColor(theme::FIELD),
-            BorderColor::all(accent.with_alpha(0.4)),
-            ChildOf(card),
-        ))
-        .with_child(theme::icon(
-            asset_server,
-            severity_icon(request.severity),
-            30.0,
-            accent,
-        ));
-
-    commands.spawn((
-        theme::label(
-            request.kicker.to_uppercase(),
-            body.clone(),
-            10.0,
-            theme::GOLD,
-        ),
+/// The whole modal as one scene: a dimmed, click-eating backdrop centering the glass card.
+fn system_dialog(request: &ShowSystemDialog) -> impl Scene {
+    let confirm_state = request.confirm_state.clone();
+    bsn! {
+        template_value(SystemDialogRoot { confirm_state })
         Node {
-            margin: UiRect::top(Val::Px(16.0)),
-            ..default()
-        },
-        ChildOf(card),
-    ));
-
-    commands.spawn((
-        theme::label(request.title.clone(), title_font, 23.0, theme::DISPLAY_GOLD),
-        Node {
-            margin: UiRect::top(Val::Px(7.0)),
-            ..default()
-        },
-        ChildOf(card),
-    ));
-
-    commands.spawn((
-        theme::label(request.message.clone(), body.clone(), 13.5, theme::TEXT_DIM),
-        Node {
-            max_width: Val::Px(DIALOG_WIDTH - 80.0),
-            margin: UiRect::top(Val::Px(11.0)),
-            ..default()
-        },
-        ChildOf(card),
-    ));
-
-    if !request.code.is_empty() {
-        commands
-            .spawn((
-                Node {
-                    padding: UiRect::axes(Val::Px(12.0), Val::Px(5.0)),
-                    margin: UiRect::top(Val::Px(16.0)),
-                    border: UiRect::all(Val::Px(1.0)),
-                    border_radius: BorderRadius::all(Val::Px(7.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.30)),
-                BorderColor::all(theme::STROKE),
-                ChildOf(card),
-            ))
-            .with_child(theme::label(
-                format!("CODE  {}", request.code),
-                body.clone(),
-                11.0,
-                accent,
-            ));
+            position_type: PositionType::Absolute,
+            width: percent(100),
+            height: percent(100),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+        }
+        BackgroundColor({Color::srgba(0.012, 0.027, 0.024, 0.55)})
+        GlobalZIndex({DIALOG_Z})
+        Pickable
+        Children [ card(request) ]
     }
+}
 
-    commands.spawn((
+/// The glass card. The severity accent tints the badge border/glyph and the code chip;
+/// the primary button is a Feathers Primary `@FeathersButton`, which drives its own fill
+/// from `BUTTON_PRIMARY_*` tokens — a per-severity button tint is not expressible through
+/// Feathers, so the severity cue lives on the badge, not the button.
+fn card(request: &ShowSystemDialog) -> impl Scene {
+    let accent = severity_accent(request.severity);
+    let code_display = if request.code.is_empty() {
+        Display::None
+    } else {
+        Display::Flex
+    };
+    let code_text = format!("CODE  {}", request.code);
+    bsn! {
         Node {
-            width: Val::Percent(100.0),
-            height: Val::Px(1.0),
-            margin: UiRect::vertical(Val::Px(20.0)),
-            ..default()
-        },
-        BackgroundColor(theme::STROKE_STRONG),
-        Pickable::IGNORE,
-        ChildOf(card),
-    ));
+            width: px(DIALOG_WIDTH),
+            padding: {UiRect::axes(px(30), px(26))},
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            border: px(1),
+            border_radius: BorderRadius::all(px(16)),
+        }
+        BackgroundColor({theme::GLASS})
+        BorderColor::all(theme::STROKE)
+        Children [
+            badge(severity_icon(request.severity), accent),
+            card_text(request.kicker.to_uppercase(), theme::FONT_BODY, 10.0, theme::GOLD, 16.0),
+            card_text(request.title.clone(), theme::FONT_TITLE, 23.0, theme::DISPLAY_GOLD, 7.0),
+            message(request.message.clone()),
+            code_chip(code_text, accent, code_display),
+            divider(),
+            primary_button(request.button_label.clone()),
+        ]
+    }
+}
 
-    let button = commands
-        .spawn((
-            Pickable::default(),
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(46.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(9.0),
-                border_radius: BorderRadius::all(Val::Px(11.0)),
-                ..default()
+/// Round-cornered severity badge holding the tinted line glyph.
+fn badge(icon_name: &'static str, accent: Color) -> impl Scene {
+    bsn! {
+        Node {
+            width: px(60),
+            height: px(60),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: px(1),
+            border_radius: BorderRadius::all(px(16)),
+        }
+        BackgroundColor({theme::FIELD})
+        BorderColor::all(accent.with_alpha(0.4))
+        Children [ severity_glyph(icon_name, accent) ]
+    }
+}
+
+/// A square white SVG glyph tinted with the severity accent. `ImageNode` has no theme
+/// token, so its colour stays a raw palette value.
+fn severity_glyph(name: &'static str, color: Color) -> impl Scene {
+    bsn! {
+        ImageNode {
+            image: {format!("{}{}.svg", theme::ICON_DIR, name)},
+            color: color,
+        }
+        Node { width: px(30), height: px(30) }
+        ignore_picking()
+    }
+}
+
+/// Standalone card line: Feathers has no font token and this text sits outside a Feathers
+/// ancestor, so font and colour are set explicitly. `margin_top` spaces it from the line above.
+fn card_text(
+    text: String,
+    font: &'static str,
+    size: f32,
+    color: Color,
+    margin_top: f32,
+) -> impl Scene {
+    bsn! {
+        Text(text)
+        TextFont {
+            font: FontSourceTemplate::Handle(font),
+            font_size: {FontSize::Px(size)},
+        }
+        TextColor(color)
+        Node { margin: {UiRect::top(px(margin_top))} }
+        ignore_picking()
+    }
+}
+
+/// The wrapped body message; capped width so long copy stays inside the card.
+fn message(text: String) -> impl Scene {
+    bsn! {
+        Text(text)
+        TextFont {
+            font: FontSourceTemplate::Handle(theme::FONT_BODY),
+            font_size: {FontSize::Px(13.5)},
+        }
+        TextColor({theme::TEXT_DIM})
+        Node {
+            max_width: px(DIALOG_WIDTH - 80.0),
+            margin: {UiRect::top(px(11))},
+        }
+        ignore_picking()
+    }
+}
+
+/// Optional error-code chip. Rendered always but collapsed to `Display::None` (removing it
+/// and its top margin from layout) when the request carried no code.
+fn code_chip(text: String, accent: Color, display: Display) -> impl Scene {
+    bsn! {
+        Node {
+            display: {display},
+            padding: {UiRect::axes(px(12), px(5))},
+            margin: {UiRect::top(px(16))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(7)),
+        }
+        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.30)})
+        BorderColor::all(theme::STROKE)
+        Children [
+            (
+                Text(text)
+                TextFont {
+                    font: FontSourceTemplate::Handle(theme::FONT_BODY),
+                    font_size: {FontSize::Px(11.0)},
+                }
+                TextColor(accent)
+                ignore_picking()
+            ),
+        ]
+    }
+}
+
+/// Hairline separator between the copy and the primary button.
+fn divider() -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            height: px(1),
+            margin: {UiRect::vertical(px(20))},
+        }
+        BackgroundColor({theme::STROKE_STRONG})
+        ignore_picking()
+    }
+}
+
+/// The primary action: a Feathers Primary button captioned with the request label and an
+/// "Enter" hint, wired to the shared confirm handler via `on(Activate)`.
+fn primary_button(label: String) -> impl Scene {
+    bsn! {
+        @FeathersButton {
+            @caption: bsn! {
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: px(9),
+                }
+                ignore_picking()
+                Children [
+                    (Text(label) ThemedText),
+                    (
+                        Text("Enter")
+                        TextFont {
+                            font: FontSourceTemplate::Handle(theme::FONT_BODY),
+                            font_size: {FontSize::Px(9.5)},
+                        }
+                        TextColor({Color::WHITE.with_alpha(0.55)})
+                        ignore_picking()
+                    ),
+                ]
             },
-            BackgroundColor(accent),
-            ChildOf(card),
-        ))
-        .id();
-    commands.spawn((
-        theme::label(
-            request.button_label.clone(),
-            body.clone(),
-            14.5,
-            Color::srgba(0.0, 0.0, 0.0, 0.85),
-        ),
-        ChildOf(button),
-    ));
-    commands.spawn((
-        theme::label("Enter", body, 9.5, Color::srgba(0.0, 0.0, 0.0, 0.55)),
-        ChildOf(button),
-    ));
-    commands.entity(button).observe(confirm_on_click);
+            @variant: ButtonVariant::Primary,
+        }
+        Node {
+            width: percent(100),
+            height: px(46),
+            border_radius: BorderRadius::all(px(11)),
+        }
+        on(confirm_on_click)
+    }
+}
+
+/// `Pickable::IGNORE` as a scene, so non-interactive card nodes don't swallow clicks.
+fn ignore_picking() -> impl Scene {
+    bsn! {
+        Pickable { should_block_lower: false, is_hoverable: false }
+    }
 }
 
 /// Despawns the open dialog and, if it carried a target, navigates there.
@@ -251,7 +306,7 @@ fn confirm_dialog(
 }
 
 fn confirm_on_click(
-    _click: On<Pointer<Click>>,
+    _activate: On<Activate>,
     dialog: Single<(Entity, &SystemDialogRoot)>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
@@ -296,5 +351,30 @@ mod tests {
         assert_eq!(severity_icon(DialogSeverity::Warn), "triangle");
         assert_eq!(severity_icon(DialogSeverity::Info), "info");
         assert_eq!(severity_icon(DialogSeverity::Ok), "ok");
+    }
+
+    #[test]
+    fn confirm_on_click_despawns_dialog_and_navigates() {
+        let mut app = App::new();
+        app.init_resource::<NextState<GameState>>();
+        let target = GameState::CharacterSelection;
+        let root = app
+            .world_mut()
+            .spawn(SystemDialogRoot {
+                confirm_state: Some(target.clone()),
+            })
+            .observe(confirm_on_click)
+            .id();
+        app.world_mut().trigger(Activate { entity: root });
+        app.world_mut().flush();
+
+        assert!(
+            app.world().get_entity(root).is_err(),
+            "confirming despawns the dialog root"
+        );
+        match app.world().resource::<NextState<GameState>>() {
+            NextState::Pending(state) => assert_eq!(*state, target),
+            _ => panic!("confirm_state should have been queued as the next game state"),
+        }
     }
 }
