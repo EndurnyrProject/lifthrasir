@@ -44,12 +44,13 @@ const PANE_HEIGHT: f32 = 340.0;
 
 /// The rebindable non-hotbar actions in display order. The twelve hotbar slots
 /// follow these rows, labelled `Hotbar F1`..`Hotbar F12`.
-const ACTIONS: [(PlayerAction, &str); 5] = [
+const ACTIONS: [(PlayerAction, &str); 6] = [
     (PlayerAction::Sit, "Sit / Stand"),
     (PlayerAction::Status, "Status Window"),
     (PlayerAction::Inventory, "Inventory"),
     (PlayerAction::Skills, "Skills Window"),
     (PlayerAction::Equipment, "Equipment"),
+    (PlayerAction::Party, "Party Window"),
 ];
 
 /// Spawn the whole window as one top-level scene.

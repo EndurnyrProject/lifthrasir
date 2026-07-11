@@ -648,6 +648,7 @@ pub struct Keybinds {
     pub skills: ActionBinds,
     pub equipment: ActionBinds,
     pub cart: ActionBinds,
+    pub party: ActionBinds,
     #[serde(default = "default_hotbar_binds")]
     pub hotbar: [ActionBinds; 12],
 }
@@ -655,7 +656,7 @@ pub struct Keybinds {
 impl Default for Keybinds {
     /// Mirrors `PlayerAction::default_input_map()`:
     /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S, Equipment = Alt+Q,
-    /// Cart = Alt+W.
+    /// Cart = Alt+W, Party = P.
     fn default() -> Self {
         Self {
             sit: ActionBinds {
@@ -682,6 +683,10 @@ impl Default for Keybinds {
                 primary: Some(KeyBind::modified(Modifier::Alt, "KeyW")),
                 secondary: None,
             },
+            party: ActionBinds {
+                primary: Some(KeyBind::new("KeyP")),
+                secondary: None,
+            },
             hotbar: default_hotbar_binds(),
         }
     }
@@ -700,6 +705,7 @@ impl Keybinds {
         self.equipment
             .insert_into(&mut map, PlayerAction::Equipment);
         self.cart.insert_into(&mut map, PlayerAction::Cart);
+        self.party.insert_into(&mut map, PlayerAction::Party);
         for (binds, action) in self.hotbar.iter().zip(HOTBAR_ACTIONS) {
             binds.insert_into(&mut map, action);
         }
@@ -813,6 +819,41 @@ mod tests {
             panic!("expected manual limiter");
         };
         assert!((d.as_secs_f64() - 1.0 / 30.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn default_party_bind_is_unmodified_p_and_unique() {
+        let keybinds = Keybinds::default();
+        assert_eq!(
+            keybinds.party,
+            ActionBinds {
+                primary: Some(KeyBind::new("KeyP")),
+                secondary: None,
+            }
+        );
+
+        let non_hotbar = [
+            &keybinds.sit,
+            &keybinds.status,
+            &keybinds.inventory,
+            &keybinds.skills,
+            &keybinds.equipment,
+            &keybinds.cart,
+            &keybinds.party,
+        ];
+        let mut seen: Vec<&KeyBind> = Vec::new();
+        for action_binds in non_hotbar {
+            for bind in [
+                action_binds.primary.as_ref(),
+                action_binds.secondary.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                assert!(!seen.contains(&bind), "duplicate default keybind {bind:?}");
+                seen.push(bind);
+            }
+        }
     }
 
     #[test]

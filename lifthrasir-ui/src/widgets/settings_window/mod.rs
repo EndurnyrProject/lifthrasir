@@ -687,6 +687,7 @@ fn action_binds(
         PlayerAction::Inventory => &keybinds.inventory,
         PlayerAction::Skills => &keybinds.skills,
         PlayerAction::Equipment => &keybinds.equipment,
+        PlayerAction::Party => &keybinds.party,
         slot => &keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
@@ -702,6 +703,7 @@ fn action_binds_mut(
         PlayerAction::Inventory => &mut keybinds.inventory,
         PlayerAction::Skills => &mut keybinds.skills,
         PlayerAction::Equipment => &mut keybinds.equipment,
+        PlayerAction::Party => &mut keybinds.party,
         slot => &mut keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
@@ -1065,6 +1067,7 @@ mod tests {
             skills: ActionBinds::default(),
             equipment: ActionBinds::default(),
             cart: ActionBinds::default(),
+            party: ActionBinds::default(),
             hotbar: Default::default(),
         };
         let expected = {
@@ -1089,6 +1092,7 @@ mod tests {
             skills: ActionBinds::default(),
             equipment: ActionBinds::default(),
             cart: ActionBinds::default(),
+            party: ActionBinds::default(),
             hotbar: Default::default(),
         };
         let expected = {

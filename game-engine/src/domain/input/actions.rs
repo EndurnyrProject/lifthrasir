@@ -20,6 +20,8 @@ pub enum PlayerAction {
     Equipment,
     /// Toggle the pushcart window.
     Cart,
+    /// Toggle the party roster window.
+    Party,
     /// Activate hotbar slot 1 (default F1).
     Slot1,
     /// Activate hotbar slot 2 (default F2).
@@ -86,7 +88,7 @@ impl PlayerAction {
     /// slot on full-size Apple keyboards (MacBooks lack an Insert key entirely).
     /// `Status` is the classic RO Alt+A chord. `Inventory` is the classic RO Alt+E chord.
     /// `Skills` is the classic RO Alt+S chord. `Equipment` is the classic RO Alt+Q chord.
-    /// `Cart` uses Alt+W.
+    /// `Cart` uses Alt+W. `Party` uses the unmodified P key.
     pub fn default_input_map() -> InputMap<Self> {
         let mut map = InputMap::new([(Self::Sit, KeyCode::Insert), (Self::Sit, KeyCode::Help)])
             .with(
@@ -108,7 +110,8 @@ impl PlayerAction {
             .with(
                 Self::Cart,
                 ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyW),
-            );
+            )
+            .with(Self::Party, KeyCode::KeyP);
         for (action, key) in HOTBAR_ACTIONS.into_iter().zip(HOTBAR_KEYS) {
             map.insert(action, key);
         }
