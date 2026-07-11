@@ -17,6 +17,7 @@ pub mod hotbar;
 pub mod inventory_window;
 pub mod minimap;
 pub mod npc_dialog;
+pub mod party;
 pub mod placeholder;
 pub mod pushcart_window;
 pub mod settings_window;
@@ -39,6 +40,7 @@ impl Plugin for InGameHudPlugin {
             inventory_window::InventoryWindowPlugin,
             minimap::MinimapPlugin,
             npc_dialog::NpcDialogPlugin,
+            party::PartyPlugin,
             pushcart_window::PushcartWindowPlugin,
             settings_window::SettingsWindowPlugin,
             shop_window::ShopWindowPlugin,
@@ -68,6 +70,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     hotbar::spawn_hotbar(&mut commands, root, &asset_server);
     inventory_window::spawn_inventory_window(&mut commands, root);
     minimap::spawn_minimap(&mut commands, root, &asset_server);
+    party::spawn_party_window(&mut commands, root);
     pushcart_window::spawn_pushcart_window(&mut commands, root);
     skill_window::spawn_skill_window(&mut commands, root, &asset_server);
     status_window::spawn_status_window(&mut commands, root, &asset_server);
