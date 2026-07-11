@@ -24,6 +24,7 @@ use net_contract::dto::PartyMemberInfo;
 use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod create_dialog;
+pub mod feedback;
 pub mod invite_dialog;
 pub mod scene;
 
@@ -100,6 +101,7 @@ impl Plugin for PartyPlugin {
                 invite_dialog::show_incoming_invite,
                 invite_dialog::claim_invite_choice,
                 invite_dialog::expire_pending_invite,
+                feedback::ingest_party_feedback,
             )
                 .run_if(in_state(GameState::InGame)),
         );
