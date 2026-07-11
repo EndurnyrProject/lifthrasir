@@ -24,7 +24,10 @@ use net_contract::dto::PartyMemberInfo;
 use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod create_dialog;
+pub mod invite_dialog;
 pub mod scene;
+
+pub use invite_dialog::PendingPartyInvite;
 
 pub use scene::build as spawn_party_window;
 
@@ -83,6 +86,7 @@ impl Plugin for PartyPlugin {
         if !app.is_plugin_added::<FeathersCorePlugin>() {
             app.add_plugins(FeathersPlugins);
         }
+        app.init_resource::<PendingPartyInvite>();
         app.add_systems(
             Update,
             toggle_party_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
@@ -93,6 +97,9 @@ impl Plugin for PartyPlugin {
                 party_visibility,
                 refresh_roster,
                 create_dialog::focus_new_name_field,
+                invite_dialog::show_incoming_invite,
+                invite_dialog::claim_invite_choice,
+                invite_dialog::expire_pending_invite,
             )
                 .run_if(in_state(GameState::InGame)),
         );

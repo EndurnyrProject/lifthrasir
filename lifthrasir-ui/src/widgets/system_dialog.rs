@@ -24,7 +24,9 @@ use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::ThemedText;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use game_engine::core::state::GameState;
-use game_engine::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
+use game_engine::presentation::ui::events::{
+    DialogSeverity, ShowSystemDialog, SystemDialogChoice, SystemDialogKind,
+};
 
 use crate::theme;
 use crate::theme::feathers_theme::install_norse_theme;
@@ -46,10 +48,12 @@ impl Plugin for SystemDialogPlugin {
     }
 }
 
-/// The modal root. Carries the screen the primary button navigates to.
+/// The modal root. Carries the screen the primary button navigates to and the kind
+/// tag echoed onto every emitted choice so a consumer claims only its own dialog.
 #[derive(Component, Clone, Default)]
 pub struct SystemDialogRoot {
     confirm_state: Option<GameState>,
+    kind: SystemDialogKind,
 }
 
 /// Accent colour for a severity — drives the badge border, glyph, and code chip.
@@ -90,8 +94,9 @@ fn show_system_dialog(
 /// The whole modal as one scene: a dimmed, click-eating backdrop centering the glass card.
 fn system_dialog(request: &ShowSystemDialog) -> impl Scene {
     let confirm_state = request.confirm_state.clone();
+    let kind = request.kind;
     bsn! {
-        template_value(SystemDialogRoot { confirm_state })
+        template_value(SystemDialogRoot { confirm_state, kind })
         Node {
             position_type: PositionType::Absolute,
             width: percent(100),
@@ -136,6 +141,39 @@ fn card(request: &ShowSystemDialog) -> impl Scene {
             message(request.message.clone()),
             code_chip(code_text, accent, code_display),
             divider(),
+            button_row(request),
+        ]
+    }
+}
+
+/// Decide whether the secondary button participates in layout: collapsed to
+/// `Display::None` (removed from flow, so the primary keeps full width) when the
+/// request carried no secondary label.
+fn secondary_display(label: &str) -> Display {
+    if label.is_empty() {
+        Display::None
+    } else {
+        Display::Flex
+    }
+}
+
+/// The action row: an optional lesser secondary button beside the primary button.
+/// Both grow to share the row; when the secondary is collapsed the primary spans
+/// the full width, preserving the single-button look.
+fn button_row(request: &ShowSystemDialog) -> impl Scene {
+    let secondary = secondary_button(
+        request.secondary_label.clone(),
+        secondary_display(&request.secondary_label),
+    );
+    bsn! {
+        Node {
+            width: percent(100),
+            flex_direction: FlexDirection::Row,
+            column_gap: px(10),
+        }
+        ignore_picking()
+        Children [
+            secondary,
             primary_button(request.button_label.clone()),
         ]
     }
@@ -277,11 +315,28 @@ fn primary_button(label: String) -> impl Scene {
             @variant: ButtonVariant::Primary,
         }
         Node {
-            width: percent(100),
+            flex_grow: 1.0,
             height: px(46),
             border_radius: BorderRadius::all(px(11)),
         }
         on(confirm_on_click)
+    }
+}
+
+/// The lesser secondary action: a Normal-variant Feathers button. Rendered but
+/// collapsed to `Display::None` when the request carried no secondary label. Its
+/// `on(Activate)` dismisses the dialog and reports a non-primary choice — it never
+/// navigates `confirm_state`.
+fn secondary_button(label: String, display: Display) -> impl Scene {
+    bsn! {
+        @FeathersButton { @caption: bsn! { (Text(label) ThemedText) } }
+        Node {
+            display: {display},
+            flex_grow: 1.0,
+            height: px(46),
+            border_radius: BorderRadius::all(px(11)),
+        }
+        on(dismiss_on_click)
     }
 }
 
@@ -310,8 +365,13 @@ fn confirm_on_click(
     dialog: Single<(Entity, &SystemDialogRoot)>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
+    mut choice: MessageWriter<SystemDialogChoice>,
 ) {
     let (root, dialog) = dialog.into_inner();
+    choice.write(SystemDialogChoice {
+        primary: true,
+        kind: dialog.kind,
+    });
     confirm_dialog(root, &dialog.confirm_state, &mut commands, &mut next_state);
 }
 
@@ -320,6 +380,7 @@ fn confirm_on_enter(
     dialog: Query<(Entity, &SystemDialogRoot)>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
+    mut choice: MessageWriter<SystemDialogChoice>,
 ) {
     let Ok((root, dialog)) = dialog.single() else {
         keys.clear();
@@ -329,8 +390,30 @@ fn confirm_on_enter(
         .read()
         .any(|event| event.state.is_pressed() && event.logical_key == Key::Enter);
     if confirmed {
+        choice.write(SystemDialogChoice {
+            primary: true,
+            kind: dialog.kind,
+        });
         confirm_dialog(root, &dialog.confirm_state, &mut commands, &mut next_state);
     }
+}
+
+/// Secondary button: report a non-primary choice and dismiss the dialog. Unlike
+/// the primary path it never navigates `confirm_state` — a decline just closes.
+fn dismiss_on_click(
+    _activate: On<Activate>,
+    dialog: Query<(Entity, &SystemDialogRoot)>,
+    mut commands: Commands,
+    mut choice: MessageWriter<SystemDialogChoice>,
+) {
+    let Ok((root, dialog)) = dialog.single() else {
+        return;
+    };
+    choice.write(SystemDialogChoice {
+        primary: false,
+        kind: dialog.kind,
+    });
+    commands.entity(root).despawn();
 }
 
 #[cfg(test)]
@@ -353,15 +436,32 @@ mod tests {
         assert_eq!(severity_icon(DialogSeverity::Ok), "ok");
     }
 
+    fn choices(app: &App) -> Vec<(bool, SystemDialogKind)> {
+        let messages = app.world().resource::<Messages<SystemDialogChoice>>();
+        let mut cursor = messages.get_cursor();
+        cursor
+            .read(messages)
+            .map(|choice| (choice.primary, choice.kind))
+            .collect()
+    }
+
+    #[test]
+    fn secondary_display_collapses_when_label_empty() {
+        assert_eq!(secondary_display(""), Display::None);
+        assert_eq!(secondary_display("Decline"), Display::Flex);
+    }
+
     #[test]
     fn confirm_on_click_despawns_dialog_and_navigates() {
         let mut app = App::new();
         app.init_resource::<NextState<GameState>>();
+        app.add_message::<SystemDialogChoice>();
         let target = GameState::CharacterSelection;
         let root = app
             .world_mut()
             .spawn(SystemDialogRoot {
                 confirm_state: Some(target.clone()),
+                kind: SystemDialogKind::PartyInvite,
             })
             .observe(confirm_on_click)
             .id();
@@ -376,5 +476,31 @@ mod tests {
             NextState::Pending(state) => assert_eq!(*state, target),
             _ => panic!("confirm_state should have been queued as the next game state"),
         }
+        assert_eq!(
+            choices(&app),
+            vec![(true, SystemDialogKind::PartyInvite)],
+            "primary press reports primary and echoes the dialog kind"
+        );
+    }
+
+    #[test]
+    fn dismiss_on_click_despawns_and_reports_non_primary() {
+        let mut app = App::new();
+        app.add_message::<SystemDialogChoice>();
+        let root = app.world_mut().spawn(SystemDialogRoot::default()).id();
+        let button = app.world_mut().spawn_empty().observe(dismiss_on_click).id();
+
+        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut().flush();
+
+        assert!(
+            app.world().get_entity(root).is_err(),
+            "dismissing despawns the dialog root"
+        );
+        assert_eq!(
+            choices(&app),
+            vec![(false, SystemDialogKind::Generic)],
+            "secondary press reports non-primary and the default kind"
+        );
     }
 }

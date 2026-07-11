@@ -9,7 +9,7 @@ use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::domain::world::warp::Warping;
 use crate::domain::world::MapScoped;
 use crate::infrastructure::job::registry::JobSpriteRegistry;
-use crate::presentation::ui::events::{DialogSeverity, ShowSystemDialog};
+use crate::presentation::ui::events::{DialogSeverity, ShowSystemDialog, SystemDialogKind};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::{SpatialAudioEmitter, SpatialAudioReceiver};
@@ -464,11 +464,13 @@ pub fn handle_zone_disconnected(
         );
         dialogs.write(ShowSystemDialog {
             severity: DialogSeverity::Error,
+            kind: SystemDialogKind::Generic,
             kicker: "Connection".into(),
             title: "Disconnected".into(),
             message: disconnect_message(&event.reason),
             code: String::new(),
             button_label: "OK".into(),
+            secondary_label: String::new(),
             confirm_state: Some(GameState::Login),
         });
     }
