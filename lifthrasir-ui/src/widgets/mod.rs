@@ -7,6 +7,7 @@
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
 
+pub mod announcement;
 pub mod character_info;
 pub mod chat_box;
 pub mod death_dialog;
@@ -30,6 +31,7 @@ impl Plugin for InGameHudPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::InGame), show_hud);
         app.add_plugins((
+            announcement::AnnouncementPlugin,
             character_info::CharacterInfoPlugin,
             chat_box::ChatBoxPlugin,
             equipment_window::EquipmentWindowPlugin,
@@ -59,6 +61,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
         ))
         .id();
 
+    announcement::spawn_announcement_layer(&mut commands, root);
     character_info::spawn_status_frame(&mut commands, root, &asset_server);
     chat_box::spawn_chat_box(&mut commands, root, &asset_server);
     equipment_window::spawn_equipment_window(&mut commands, root);
