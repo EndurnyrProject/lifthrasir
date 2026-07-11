@@ -6,6 +6,7 @@ pub mod handshake;
 pub mod inventory;
 pub mod movement;
 pub mod npc;
+pub mod party;
 pub mod shop;
 pub mod snapshots;
 pub mod social;
