@@ -64,5 +64,29 @@ mod tests {
         assert!(app
             .world()
             .contains_resource::<Messages<commands::MoveFromCart>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::PartyInfoReceived>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::PartyInviteNotified>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::PartyActionResulted>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::PartyDisbanded>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::PartyCreateRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::PartyInviteRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::PartyInviteResponded>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::PartyLeaveRequested>>());
     }
 }

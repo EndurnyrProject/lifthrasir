@@ -245,3 +245,32 @@ pub struct MoveFromCart {
     pub cart_index: u16,
     pub amount: u16,
 }
+
+/// Request to create a party named `name`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PartyCreateRequested {
+    pub name: String,
+}
+
+/// Request to invite a player to the local player's party; exactly one of
+/// `target_char_id` / `target_name` is populated, the other left `0` / `""`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PartyInviteRequested {
+    pub target_char_id: u32,
+    pub target_name: String,
+}
+
+/// Respond to a pending invite for `party_id`: accept or decline.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PartyInviteResponded {
+    pub party_id: u32,
+    pub accept: bool,
+}
+
+/// Request to leave the local player's current party.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PartyLeaveRequested;
