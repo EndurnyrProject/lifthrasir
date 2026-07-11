@@ -23,6 +23,7 @@ use net_contract::dto::PartyMemberInfo;
 
 use crate::theme::feathers_theme::install_norse_theme;
 
+pub mod context_menu;
 pub mod create_dialog;
 pub mod feedback;
 pub mod invite_dialog;
@@ -91,6 +92,7 @@ impl Plugin for PartyPlugin {
         }
         app.init_resource::<PendingPartyInvite>();
         app.add_message::<PartySlashSubmitted>();
+        app.add_observer(context_menu::open_invite_menu);
         app.add_systems(
             Update,
             toggle_party_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
