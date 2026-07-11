@@ -1,3 +1,4 @@
+pub mod announcement;
 pub mod cart;
 pub mod combat;
 pub mod ground;
