@@ -162,14 +162,26 @@ pub(crate) fn body(header: Option<RosterHeader>, rows: Vec<RosterRow>) -> impl S
     }
 }
 
-/// Partyless empty state: a static hint. The create dialog is wired by a later task.
+/// Partyless empty state: a hint plus a "Create a party" `@FeathersButton` that opens
+/// the create-party modal ([`create_dialog`](super::create_dialog)).
 fn empty_state() -> impl Scene {
     bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(2) }
+        Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
         ignore_picking()
         Children [
-            title_text("Create a party".to_string(), 15.0, theme::GOLD),
-            chrome_text("You are not in a party yet.".to_string(), 11.5, theme::TEXT_DIM),
+            (
+                Node { flex_direction: FlexDirection::Column, row_gap: px(2) }
+                ignore_picking()
+                Children [
+                    title_text("Create a party".to_string(), 15.0, theme::GOLD),
+                    chrome_text("You are not in a party yet.".to_string(), 11.5, theme::TEXT_DIM),
+                ]
+            ),
+            (
+                @FeathersButton { @caption: bsn! { button_label("Create a party") } }
+                Node { height: px(32) }
+                on(super::create_dialog::open_create_dialog)
+            ),
         ]
     }
 }

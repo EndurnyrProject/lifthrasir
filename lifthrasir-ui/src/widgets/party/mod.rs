@@ -23,6 +23,7 @@ use net_contract::dto::PartyMemberInfo;
 
 use crate::theme::feathers_theme::install_norse_theme;
 
+pub mod create_dialog;
 pub mod scene;
 
 pub use scene::build as spawn_party_window;
@@ -88,7 +89,12 @@ impl Plugin for PartyPlugin {
         );
         app.add_systems(
             Update,
-            (party_visibility, refresh_roster).run_if(in_state(GameState::InGame)),
+            (
+                party_visibility,
+                refresh_roster,
+                create_dialog::focus_new_name_field,
+            )
+                .run_if(in_state(GameState::InGame)),
         );
     }
 }
