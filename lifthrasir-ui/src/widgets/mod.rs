@@ -12,6 +12,7 @@ pub mod character_info;
 pub mod chat_box;
 pub mod death_dialog;
 pub mod draggable;
+pub mod emote;
 pub mod equipment_window;
 pub mod hotbar;
 pub mod inventory_window;
@@ -36,6 +37,7 @@ impl Plugin for InGameHudPlugin {
             announcement::AnnouncementPlugin,
             character_info::CharacterInfoPlugin,
             chat_box::ChatBoxPlugin,
+            emote::EmotePickerPlugin,
             equipment_window::EquipmentWindowPlugin,
             hotbar::HotbarWidgetPlugin,
             inventory_window::InventoryWindowPlugin,
@@ -46,8 +48,10 @@ impl Plugin for InGameHudPlugin {
             settings_window::SettingsWindowPlugin,
             shop_window::ShopWindowPlugin,
             skill_window::SkillWindowPlugin,
-            status_icons::StatusIconsPlugin,
-            status_window::StatusWindowPlugin,
+            (
+                status_icons::StatusIconsPlugin,
+                status_window::StatusWindowPlugin,
+            ),
         ));
     }
 }
@@ -68,6 +72,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     announcement::spawn_announcement_layer(&mut commands, root);
     character_info::spawn_status_frame(&mut commands, root, &asset_server);
     chat_box::spawn_chat_box(&mut commands, root, &asset_server);
+    emote::spawn_emote_picker(&mut commands, root);
     equipment_window::spawn_equipment_window(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root, &asset_server);
     inventory_window::spawn_inventory_window(&mut commands, root);

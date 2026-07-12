@@ -12,10 +12,12 @@ use bevy::prelude::*;
 use bevy::text::EditableText;
 use game_engine::core::state::GameState;
 use game_engine::domain::character::chat::ChatSendRequested;
+use game_engine::domain::emote::EmoteRequested;
 use net_contract::events::ChatHeard;
 
 use crate::rich_text::spawn_colored_text;
 use crate::theme;
+use crate::widgets::emote::slash::parse_emote_slash;
 use crate::widgets::party::slash::{parse_party_slash, PartySlashSubmitted};
 use crate::widgets::placeholder::Placeholder;
 
@@ -417,8 +419,10 @@ fn append_incoming_chat(
 /// - Focused + Escape releases it without sending.
 /// - Focused + Enter submits: a non-empty message is sent and the field cleared and
 ///   unfocused; an empty submit (e.g. the Enter that opened the chat) leaves it focused.
-///   A recognized party slash command (`parse_party_slash`) is queued as
-///   `PartySlashSubmitted` instead of a normal chat message.
+///   A recognized emote slash (`parse_emote_slash`) is tried first and writes
+///   `EmoteRequested`; otherwise a recognized party slash command
+///   (`parse_party_slash`) is queued as `PartySlashSubmitted`; otherwise it is sent as
+///   a normal chat message.
 ///
 /// The input has `Pickable::IGNORE`, so Enter is the only way it gains focus — clicking
 /// can't strand the cursor in the field.
@@ -427,6 +431,7 @@ fn chat_input_control(
     mut chat_input: Query<(Entity, &mut EditableText), With<ChatInput>>,
     mut writer: MessageWriter<ChatSendRequested>,
     mut slash_writer: MessageWriter<PartySlashSubmitted>,
+    mut emote_writer: MessageWriter<EmoteRequested>,
     mut input_focus: ResMut<InputFocus>,
 ) {
     let Ok((entity, mut field)) = chat_input.single_mut() else {
@@ -450,15 +455,14 @@ fn chat_input_control(
         let value = field.value().to_string();
         let message = value.trim();
         if !message.is_empty() {
-            match parse_party_slash(message) {
-                Some(slash) => {
-                    slash_writer.write(PartySlashSubmitted(slash));
-                }
-                None => {
-                    writer.write(ChatSendRequested {
-                        message: message.to_string(),
-                    });
-                }
+            if let Some(emote_type) = parse_emote_slash(message) {
+                emote_writer.write(EmoteRequested { emote_type });
+            } else if let Some(slash) = parse_party_slash(message) {
+                slash_writer.write(PartySlashSubmitted(slash));
+            } else {
+                writer.write(ChatSendRequested {
+                    message: message.to_string(),
+                });
             }
             field.clear();
             input_focus.clear();
@@ -512,6 +516,7 @@ mod tests {
         app.init_resource::<InputFocus>();
         app.add_message::<ChatSendRequested>();
         app.add_message::<PartySlashSubmitted>();
+        app.add_message::<EmoteRequested>();
         app.add_systems(Update, chat_input_control);
         let chat = app
             .world_mut()
@@ -528,6 +533,12 @@ mod tests {
 
     fn slash_messages(app: &App) -> Vec<PartySlashSubmitted> {
         let messages = app.world().resource::<Messages<PartySlashSubmitted>>();
+        let mut cursor = messages.get_cursor();
+        cursor.read(messages).cloned().collect()
+    }
+
+    fn emote_messages(app: &App) -> Vec<EmoteRequested> {
+        let messages = app.world().resource::<Messages<EmoteRequested>>();
         let mut cursor = messages.get_cursor();
         cursor.read(messages).cloned().collect()
     }
@@ -596,6 +607,31 @@ mod tests {
         assert!(
             chat_messages(&app).is_empty(),
             "a recognized slash never sends normal chat"
+        );
+    }
+
+    #[test]
+    fn enter_with_emote_slash_writes_emote_not_chat_or_party() {
+        let (mut app, chat) = chat_control_app("/surprise");
+        app.world_mut()
+            .resource_mut::<InputFocus>()
+            .set(chat, FocusCause::Navigated);
+
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.update();
+
+        let requested = emote_messages(&app);
+        assert_eq!(requested.len(), 1, "one emote request queued");
+        assert_eq!(requested[0].emote_type, 0);
+        assert!(
+            chat_messages(&app).is_empty(),
+            "a recognized emote never sends normal chat"
+        );
+        assert!(
+            slash_messages(&app).is_empty(),
+            "a recognized emote never reaches the party parser"
         );
     }
 

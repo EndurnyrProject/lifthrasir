@@ -48,6 +48,13 @@ pub struct ChatSent {
     pub message: String,
 }
 
+/// Request to perform an emote identified by `emote_type`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct EmoteSent {
+    pub emote_type: u32,
+}
+
 /// Request to cast a single-target skill (`skill_id` at `level`) at `target_id`.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

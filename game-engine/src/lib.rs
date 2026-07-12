@@ -13,6 +13,7 @@ pub use domain::camera::CameraPlugin;
 pub use domain::cart::CartPlugin;
 pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
 pub use domain::combat::CombatPlugin;
+pub use domain::emote::EmotePlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
 pub use domain::entities::hover_plugin::EntityHoverPlugin;
 pub use domain::entities::movement::MovementPlugin;
@@ -67,6 +68,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(CombatPlugin)
             .add(InventoryPlugin)
             .add(CartPlugin)
+            .add(EmotePlugin)
             .add(PartyPlugin)
             .add(ItemDropPlugin)
             .add(EquipmentPlugin)

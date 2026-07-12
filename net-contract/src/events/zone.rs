@@ -106,6 +106,14 @@ pub struct ChatHeard {
     pub message: String,
 }
 
+/// An entity performed an emote.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct EmoteShown {
+    pub gid: u32,
+    pub emote_type: u32,
+}
+
 /// Basic-attack damage result; `damage`/`damage2` stay signed.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

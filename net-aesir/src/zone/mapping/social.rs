@@ -1,5 +1,5 @@
 use crate::proto::aesir::net;
-use net_contract::events::{ChatHeard, EntityNamed};
+use net_contract::events::{ChatHeard, EmoteShown, EntityNamed};
 
 pub fn name_response(n: net::NameResponse) -> EntityNamed {
     EntityNamed {
@@ -15,6 +15,13 @@ pub fn chat_message(c: net::ChatMessage) -> ChatHeard {
     ChatHeard {
         gid: c.gid,
         message: c.message,
+    }
+}
+
+pub fn emotion(e: net::Emotion) -> EmoteShown {
+    EmoteShown {
+        gid: e.gid,
+        emote_type: e.r#type,
     }
 }
 
@@ -48,5 +55,16 @@ mod tests {
 
         assert_eq!(heard.gid, 150001);
         assert_eq!(heard.message, "hello world");
+    }
+
+    #[test]
+    fn emotion_maps_gid_and_type() {
+        let shown = emotion(net::Emotion {
+            gid: 150001,
+            r#type: 4,
+        });
+
+        assert_eq!(shown.gid, 150001);
+        assert_eq!(shown.emote_type, 4);
     }
 }

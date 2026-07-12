@@ -149,6 +149,17 @@ pub fn cart_action_path() -> String {
     cart_sprite_path().replace(".spr", ".act")
 }
 
+/// Generate the shared emote sprite path. `emotion.spr` carries every emote's
+/// animation and an embedded palette (no external `.pal`).
+pub fn emotion_sprite_path() -> String {
+    "ro://data/sprite/이팩트/emotion.spr".to_string()
+}
+
+/// Generate the shared emote action path.
+pub fn emotion_action_path() -> String {
+    emotion_sprite_path().replace(".spr", ".act")
+}
+
 /// Generate headgear (accessory) sprite path.
 /// `accname` comes from the accessory db and already carries its leading separator (e.g. `"_고글"`).
 pub fn headgear_sprite_path(gender: Gender, accname: &str) -> String {
@@ -240,6 +251,16 @@ mod tests {
     #[test]
     fn cart_action_path_builds_correct_url() {
         assert_eq!(cart_action_path(), "ro://data/sprite/이팩트/손수레.act");
+    }
+
+    #[test]
+    fn emotion_sprite_path_builds_correct_url() {
+        assert_eq!(emotion_sprite_path(), "ro://data/sprite/이팩트/emotion.spr");
+    }
+
+    #[test]
+    fn emotion_action_path_builds_correct_url() {
+        assert_eq!(emotion_action_path(), "ro://data/sprite/이팩트/emotion.act");
     }
 
     #[test]

@@ -1068,6 +1068,7 @@ mod tests {
             equipment: ActionBinds::default(),
             cart: ActionBinds::default(),
             party: ActionBinds::default(),
+            emote: ActionBinds::default(),
             hotbar: Default::default(),
         };
         let expected = {
@@ -1093,6 +1094,7 @@ mod tests {
             equipment: ActionBinds::default(),
             cart: ActionBinds::default(),
             party: ActionBinds::default(),
+            emote: ActionBinds::default(),
             hotbar: Default::default(),
         };
         let expected = {

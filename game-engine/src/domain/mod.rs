@@ -6,6 +6,7 @@ pub mod cart;
 pub mod character;
 pub mod combat;
 pub mod effects;
+pub mod emote;
 pub mod entities;
 pub mod equipment;
 pub mod hotbar;

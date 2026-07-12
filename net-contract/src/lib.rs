@@ -88,5 +88,11 @@ mod tests {
         assert!(app
             .world()
             .contains_resource::<Messages<commands::PartyLeaveRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::EmoteShown>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::EmoteSent>>());
     }
 }

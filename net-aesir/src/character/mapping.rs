@@ -164,6 +164,15 @@ mod tests {
             manner: 0,
             rename: 0,
             delete_date: 0,
+            pow: 0,
+            sta: 0,
+            wis: 0,
+            spl: 0,
+            con: 0,
+            crt: 0,
+            trait_point: 0,
+            ap: 0,
+            max_ap: 0,
         }
     }
 
