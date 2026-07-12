@@ -257,11 +257,6 @@ pub fn handle_movement_confirmed_system(
     }
 }
 
-// NOTE: `handle_remote_movement_system` (UnitMoved consumer) removed when snapshot
-// interpolation took over remote movement. Remote entities now move via
-// `interpolate::interpolate_remote_entities_system`; `interpolate_movement_system`
-// below only drives the local player's `MovementTarget`.
-
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,

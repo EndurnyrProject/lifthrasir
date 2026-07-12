@@ -84,7 +84,7 @@ fn setup_directional_light(commands: &mut Commands, rsw_light: &RswLight) {
     let light_direction = Vec3::new(sun_dir_x, sun_dir_y, sun_dir_z).normalize();
     let illuminance = calculate_global_lux(rsw_light);
 
-    // NOTE: Bevy 0.17 uses basic orthographic culling for cascades. Per-cascade
+    // Bevy 0.17 uses basic orthographic culling for cascades. Per-cascade
     // frustum culling (github.com/bevyengine/bevy/issues/10397) is not yet implemented.
     // The distance reduction compensates for this limitation.
     commands.spawn((

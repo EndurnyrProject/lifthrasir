@@ -83,12 +83,13 @@ pub fn char_list_to_slot_info(l: &net::CharList) -> CharacterSlotInfoReceived {
     }
 }
 
-pub fn zone_server_info_to_event(z: net::ZoneServerInfo) -> ZoneServerInfoReceived {
-    // NOTE: aesir is trusted; a malformed ip degrades to 0.0.0.0 rather than panicking.
+pub fn zone_server_info_to_event(
+    z: net::ZoneServerInfo,
+) -> Result<ZoneServerInfoReceived, String> {
     let ip = Ipv4Addr::from_str(&z.ip)
         .map(|a| a.octets())
-        .unwrap_or([0, 0, 0, 0]);
-    ZoneServerInfoReceived {
+        .map_err(|_| format!("zone server sent an invalid address '{}'", z.ip))?;
+    Ok(ZoneServerInfoReceived {
         zone_server_info: char_types::ZoneServerInfo {
             char_id: z.char_id,
             map_name: z.map_name,
@@ -96,7 +97,7 @@ pub fn zone_server_info_to_event(z: net::ZoneServerInfo) -> ZoneServerInfoReceiv
             port: z.port as u16,
             auth_token: z.auth_token,
         },
-    }
+    })
 }
 
 pub fn char_created(c: net::CharCreated) -> Option<CharacterCreated> {
@@ -255,7 +256,7 @@ mod tests {
             auth_token: vec![1, 2, 3, 4],
         };
 
-        let event = zone_server_info_to_event(z);
+        let event = zone_server_info_to_event(z).expect("valid ip");
         assert_eq!(event.zone_server_info.char_id, 150001);
         assert_eq!(event.zone_server_info.map_name, "prontera");
         assert_eq!(event.zone_server_info.ip_string(), "127.0.0.1");
@@ -264,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn zone_server_info_malformed_ip_degrades_to_zero() {
+    fn zone_server_info_malformed_ip_is_rejected() {
         let z = net::ZoneServerInfo {
             char_id: 1,
             map_name: "prontera".into(),
@@ -273,8 +274,8 @@ mod tests {
             auth_token: vec![],
         };
 
-        let event = zone_server_info_to_event(z);
-        assert_eq!(event.zone_server_info.ip_string(), "0.0.0.0");
+        let err = zone_server_info_to_event(z).expect_err("malformed ip should be rejected");
+        assert!(err.contains("not-an-ip"));
     }
 
     #[test]

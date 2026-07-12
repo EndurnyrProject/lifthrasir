@@ -61,7 +61,7 @@ struct SpawnFields {
 
 impl From<&UnitEntered> for SpawnFields {
     fn from(e: &UnitEntered) -> Self {
-        // NOTE: remote movement is driven by snapshot interpolation, so the spawn path
+        // remote movement is driven by snapshot interpolation, so the spawn path
         // always sets up a standing entity; `UnitEntered`'s move fields are ignored here.
         SpawnFields {
             aid: e.aid,

@@ -561,7 +561,7 @@ fn spawn_empty_card(
             ChildOf(container),
         ))
         .id();
-    // NOTE: bevy_ui borders can't be dashed; the plus-ring + dimmer fill carry
+    // bevy_ui borders can't be dashed; the plus-ring + dimmer fill carry
     // the "empty" read instead of the mockup's dashed outline.
     let ring = commands
         .spawn((

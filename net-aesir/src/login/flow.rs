@@ -97,11 +97,22 @@ pub fn quic_drain_control(
                 if state.phase != LoginPhase::LoginSent {
                     continue;
                 }
-                accepted.write(login_response_to_accepted(
-                    resp,
-                    state.pending.username.clone(),
-                ));
-                state.phase = LoginPhase::Done;
+                match login_response_to_accepted(resp, state.pending.username.clone()) {
+                    Ok(event) => {
+                        accepted.write(event);
+                        state.phase = LoginPhase::Done;
+                    }
+                    Err(reason) => {
+                        warn!("login response carried an invalid server address: {reason}");
+                        refused.write(LoginRefused {
+                            username: state.pending.username.clone(),
+                            error_code: 3,
+                            error_message: reason,
+                            block_date: None,
+                        });
+                        state.phase = LoginPhase::Failed;
+                    }
+                }
             }
             Body::LoginFailed(failed) => {
                 if state.phase != LoginPhase::LoginSent {

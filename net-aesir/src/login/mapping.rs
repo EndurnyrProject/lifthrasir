@@ -5,33 +5,38 @@ use crate::proto::aesir::net::{CharServerInfo, LoginFailed, LoginResponse};
 use net_contract::dto::{ServerInfo, ServerType};
 use net_contract::events::{LoginAccepted, LoginRefused};
 
-fn char_server_to_server_info(cs: CharServerInfo) -> ServerInfo {
-    // NOTE: aesir is trusted; a malformed ip degrades to 0.0.0.0 rather than panicking.
-    let ip = Ipv4Addr::from_str(&cs.ip).map(u32::from).unwrap_or(0);
-    ServerInfo {
+fn char_server_to_server_info(cs: CharServerInfo) -> Result<ServerInfo, String> {
+    let ip = Ipv4Addr::from_str(&cs.ip)
+        .map(u32::from)
+        .map_err(|_| format!("server '{}' has an invalid address '{}'", cs.name, cs.ip))?;
+    Ok(ServerInfo {
         ip,
         port: cs.port as u16,
         name: cs.name,
         users: cs.user_count as u16,
         server_type: ServerType::from(cs.server_type as u16),
         new_server: cs.is_new as u16,
-    }
+    })
 }
 
-pub fn login_response_to_accepted(resp: LoginResponse, username: String) -> LoginAccepted {
-    LoginAccepted {
+pub fn login_response_to_accepted(
+    resp: LoginResponse,
+    username: String,
+) -> Result<LoginAccepted, String> {
+    let server_list = resp
+        .char_servers
+        .into_iter()
+        .map(char_server_to_server_info)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(LoginAccepted {
         account_id: resp.account_id,
         login_id1: resp.login_id1,
         login_id2: resp.login_id2,
         sex: resp.sex as u8,
-        server_list: resp
-            .char_servers
-            .into_iter()
-            .map(char_server_to_server_info)
-            .collect(),
+        server_list,
         username,
         auth_token: resp.auth_token,
-    }
+    })
 }
 
 pub fn login_failed_to_refused(failed: LoginFailed, username: String) -> LoginRefused {
@@ -75,7 +80,8 @@ mod tests {
             ],
         };
 
-        let accepted = login_response_to_accepted(resp, "player".into());
+        let accepted =
+            login_response_to_accepted(resp, "player".into()).expect("valid server list");
 
         assert_eq!(accepted.account_id, 2000001);
         assert_eq!(accepted.login_id1, 111);
@@ -99,6 +105,30 @@ mod tests {
         assert_eq!(second.port, 6122);
         assert_eq!(second.server_type, ServerType::Maintenance);
         assert_eq!(second.new_server, 1);
+    }
+
+    #[test]
+    fn login_response_malformed_ip_is_rejected() {
+        let resp = LoginResponse {
+            account_id: 2000001,
+            login_id1: 111,
+            login_id2: 222,
+            sex: 1,
+            auth_token: "deadbeefcafebabe".into(),
+            char_servers: vec![CharServerInfo {
+                name: "Midgard".into(),
+                ip: "not-an-ip".into(),
+                port: 6121,
+                user_count: 5,
+                server_type: 0,
+                is_new: false,
+            }],
+        };
+
+        let err = login_response_to_accepted(resp, "player".into())
+            .expect_err("malformed ip should be rejected");
+        assert!(err.contains("Midgard"));
+        assert!(err.contains("not-an-ip"));
     }
 
     #[test]

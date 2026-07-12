@@ -17,7 +17,7 @@ use crate::envelope::Body;
 use crate::proto::aesir::net::{Hello, SessionAuth};
 use net_contract::events::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
-    CharacterServerConnected, CharacterSlotInfoReceived, ZoneServerInfoReceived,
+    CharacterServerConnected, CharacterSlotInfoReceived, ZoneDisconnected, ZoneServerInfoReceived,
 };
 
 /// Pure outcome of receiving a `HelloAck`: whether to send `SessionAuth` and the next phase.
@@ -82,6 +82,7 @@ pub fn char_drain_control(
     mut connected: MessageWriter<CharacterServerConnected>,
     mut slot_info: MessageWriter<CharacterSlotInfoReceived>,
     mut zone_info: MessageWriter<ZoneServerInfoReceived>,
+    mut zone_disconnected: MessageWriter<ZoneDisconnected>,
     mut created: MessageWriter<CharacterCreated>,
     mut create_failed: MessageWriter<CharacterCreationFailed>,
     mut deleted: MessageWriter<CharacterDeleted>,
@@ -143,8 +144,17 @@ pub fn char_drain_control(
                     warn!("unexpected ZoneServerInfo in phase {:?}", state.phase);
                     continue;
                 }
-                zone_info.write(zone_server_info_to_event(z));
-                state.phase = CharPhase::Done;
+                match zone_server_info_to_event(z) {
+                    Ok(event) => {
+                        zone_info.write(event);
+                        state.phase = CharPhase::Done;
+                    }
+                    Err(reason) => {
+                        error!("invalid zone server address: {reason}");
+                        zone_disconnected.write(ZoneDisconnected { reason });
+                        state.phase = CharPhase::Failed;
+                    }
+                }
             }
             Body::CharCreated(c) => match char_created(c) {
                 Some(ev) => {

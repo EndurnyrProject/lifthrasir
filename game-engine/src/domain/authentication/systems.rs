@@ -113,10 +113,14 @@ pub fn handle_login_refused(
     for event in protocol_events.read() {
         warn!("Login refused with error code: {}", event.error_code);
 
+        let reason = if event.error_message.is_empty() {
+            format!("Login refused by server (error code: {})", event.error_code)
+        } else {
+            event.error_message.clone()
+        };
+
         domain_events.write(LoginFailureEvent {
-            error: NetworkError::AuthenticationFailed {
-                reason: format!("Login refused by server (error code: {})", event.error_code),
-            },
+            error: NetworkError::AuthenticationFailed { reason },
             username: event.username.clone(),
         });
 
