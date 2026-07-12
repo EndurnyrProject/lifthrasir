@@ -23,6 +23,7 @@ pub mod pushcart_window;
 pub mod settings_window;
 pub mod shop_window;
 pub mod skill_window;
+pub mod status_icons;
 pub mod status_window;
 pub mod system_dialog;
 
@@ -45,6 +46,7 @@ impl Plugin for InGameHudPlugin {
             settings_window::SettingsWindowPlugin,
             shop_window::ShopWindowPlugin,
             skill_window::SkillWindowPlugin,
+            status_icons::StatusIconsPlugin,
             status_window::StatusWindowPlugin,
         ));
     }
@@ -73,5 +75,6 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     party::spawn_party_window(&mut commands, root);
     pushcart_window::spawn_pushcart_window(&mut commands, root);
     skill_window::spawn_skill_window(&mut commands, root, &asset_server);
+    status_icons::spawn_status_bar(&mut commands, root);
     status_window::spawn_status_window(&mut commands, root, &asset_server);
 }
