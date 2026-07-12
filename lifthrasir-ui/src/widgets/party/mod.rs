@@ -161,16 +161,20 @@ pub fn toggle_party_window(
 type FooterQuery<'w, 's> =
     Query<'w, 's, &'static mut Visibility, (With<PartyFooter>, Without<PartyWindowRoot>)>;
 
-/// Rebuild the swappable body each frame the window is visible: despawn `PartyWindowBody`'s
-/// children and respawn the projected roster scene. The HP join reads `EntityRegistry`
-/// and `CharacterStatus` live (no cached or fabricated HP); an off-screen member becomes
-/// "Elsewhere". Bounded by 12 rows, so a per-frame rebuild is cheap. The footer's
-/// visibility tracks membership so "Leave Party" never shows while partyless.
+/// Rebuild the swappable body when the window is visible and its content actually
+/// changed: despawn `PartyWindowBody`'s children and respawn the projected roster scene.
+/// The HP join reads `EntityRegistry` and `CharacterStatus` live (no cached or fabricated
+/// HP); an off-screen member becomes "Elsewhere". The rebuild is gated on change
+/// detection because the partyless empty state hosts the "Create a party" button — a
+/// per-frame respawn would destroy that button between a click's press and release, so it
+/// would never fire. The footer's visibility tracks membership so "Leave Party" never
+/// shows while partyless.
 pub fn refresh_roster(
     mut commands: Commands,
     party: Res<PartyState>,
     registry: Res<EntityRegistry>,
     statuses: Query<&CharacterStatus>,
+    changed_status: Query<(), Changed<CharacterStatus>>,
     root: Query<&Visibility, With<PartyWindowRoot>>,
     container: Query<(Entity, Option<&Children>), With<PartyWindowBody>>,
     mut footer: FooterQuery,
@@ -185,18 +189,24 @@ pub fn refresh_roster(
         return;
     };
 
-    if let Some(children) = children {
-        for child in children.iter() {
-            commands.entity(child).despawn();
-        }
-    }
-
     if let Ok(mut footer_visibility) = footer.single_mut() {
         *footer_visibility = if party.in_party() {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
+    }
+
+    let empty = children.is_none_or(|children| children.is_empty());
+    let hp_changed = party.in_party() && !changed_status.is_empty();
+    if !empty && !party.is_changed() && !hp_changed {
+        return;
+    }
+
+    if let Some(children) = children {
+        for child in children.iter() {
+            commands.entity(child).despawn();
+        }
     }
 
     let header = party.in_party().then(|| roster_header(&party));
