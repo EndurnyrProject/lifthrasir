@@ -7,6 +7,7 @@ use crate::infrastructure::effect::{EffectDataAsset, LoadedEffectAsset, StrEffec
 use crate::infrastructure::item::ItemDataAsset;
 use crate::infrastructure::job::JobDataAsset;
 use crate::infrastructure::skill::SkillDataAsset;
+use crate::infrastructure::status::StatusIconDataAsset;
 use crate::infrastructure::weapon::WeaponDataAsset;
 use bevy::prelude::*;
 use bevy_common_assets::ron::RonAssetPlugin;
@@ -53,6 +54,7 @@ impl Plugin for AssetsPlugin {
                 RonAssetPlugin::<EffectDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<AccessoryDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<WeaponDataAsset>::new(&["ron"]),
+                RonAssetPlugin::<StatusIconDataAsset>::new(&["ron"]),
                 AnimationProcessingPlugin,
             ));
     }

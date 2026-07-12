@@ -28,6 +28,7 @@ pub use infrastructure::effect::EffectsPlugin;
 pub use infrastructure::item::{ItemDb, ItemDbPlugin};
 pub use infrastructure::job::JobSystemPlugin;
 pub use infrastructure::skill::SkillSystemPlugin;
+pub use infrastructure::status::StatusIconPlugin;
 pub use infrastructure::weapon::{WeaponDb, WeaponDbPlugin};
 pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
 pub use presentation::rendering::VfxPlugin;
@@ -50,6 +51,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(JobSystemPlugin)
             .add(SkillSystemPlugin)
             .add(EffectsPlugin)
+            .add(StatusIconPlugin)
             .add(VfxPlugin)
             .add(ItemDbPlugin)
             .add(AccessoryDbPlugin)
