@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.1](https://github.com/EndurnyrProject/lifthrasir/compare/v0.5.0...v0.5.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* Fixed some error messages ([9250f02](https://github.com/EndurnyrProject/lifthrasir/commit/9250f02f05ad0f0bcfb475457f83eec7419f61d0))
+
+
+### Performance Improvements
+
+* reduce per-frame work in sprite sync, effects, and terrain raycast ([eee67a7](https://github.com/EndurnyrProject/lifthrasir/commit/eee67a7bc2564435a991fb3f6c1752dca91fa61f))
+
 ## [0.5.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.4.0...v0.5.0) (2026-07-12)
 
 
