@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -251,6 +251,11 @@ pub mod envelope {
         CartMountResult(super::CartMountResult),
         #[prost(message, tag = "126")]
         VendingOpenResult(super::VendingOpenResult),
+        /// 127-128: emotes (client intent + server->client display)
+        #[prost(message, tag = "127")]
+        EmoteRequest(super::EmoteRequest),
+        #[prost(message, tag = "128")]
+        Emotion(super::Emotion),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -416,6 +421,24 @@ pub struct Character {
     pub rename: u32,
     #[prost(uint64, tag = "37")]
     pub delete_date: u64,
+    #[prost(uint32, tag = "38")]
+    pub pow: u32,
+    #[prost(uint32, tag = "39")]
+    pub sta: u32,
+    #[prost(uint32, tag = "40")]
+    pub wis: u32,
+    #[prost(uint32, tag = "41")]
+    pub spl: u32,
+    #[prost(uint32, tag = "42")]
+    pub con: u32,
+    #[prost(uint32, tag = "43")]
+    pub crt: u32,
+    #[prost(uint32, tag = "44")]
+    pub trait_point: u32,
+    #[prost(uint32, tag = "45")]
+    pub ap: u32,
+    #[prost(uint32, tag = "46")]
+    pub max_ap: u32,
 }
 /// Server -> client, full character list response (replaces the legacy multi-packet char-list).
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -753,6 +776,21 @@ pub struct ChatMessage {
     pub gid: u32,
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
+}
+/// Client -> server, emote/emoticon request (replaces RO CZ_REQ_EMOTION 0x00bf).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct EmoteRequest {
+    #[prost(uint32, tag = "1")]
+    pub r#type: u32,
+}
+/// Server -> client, an entity's emote/emoticon display (replaces RO ZC_EMOTION 0x00c0,
+/// which carries <gid>.L <type>.B).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Emotion {
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    #[prost(uint32, tag = "2")]
+    pub r#type: u32,
 }
 /// One entity's position/state within a Snapshot.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
