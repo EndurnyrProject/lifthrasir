@@ -83,9 +83,7 @@ pub fn char_list_to_slot_info(l: &net::CharList) -> CharacterSlotInfoReceived {
     }
 }
 
-pub fn zone_server_info_to_event(
-    z: net::ZoneServerInfo,
-) -> Result<ZoneServerInfoReceived, String> {
+pub fn zone_server_info_to_event(z: net::ZoneServerInfo) -> Result<ZoneServerInfoReceived, String> {
     let ip = Ipv4Addr::from_str(&z.ip)
         .map(|a| a.octets())
         .map_err(|_| format!("zone server sent an invalid address '{}'", z.ip))?;

@@ -32,7 +32,7 @@ jobs:
   build:
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     # DLSS is built for the RTX-capable desktop targets only. macOS cannot
     # compile it (no Vulkan backend / NVIDIA RTX), so it stays DLSS-free.
     env:
