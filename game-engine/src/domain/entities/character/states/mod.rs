@@ -1,6 +1,7 @@
 mod animation;
 mod observers;
 mod status_effects;
+pub mod status_icons;
 mod status_network;
 
 pub use animation::AnimationState;
