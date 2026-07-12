@@ -54,7 +54,13 @@ mod tests {
     fn emit(app: &mut App, unit_id: u32, efst: u32, on: bool) {
         app.world_mut()
             .resource_mut::<Messages<StatusEffectChanged>>()
-            .write(StatusEffectChanged { unit_id, efst, on });
+            .write(StatusEffectChanged {
+                unit_id,
+                efst,
+                on,
+                total_ms: 0,
+                remain_ms: 0,
+            });
         app.update();
     }
 

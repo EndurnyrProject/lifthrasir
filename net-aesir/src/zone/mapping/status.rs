@@ -6,6 +6,8 @@ pub fn status_change(s: net::StatusChange) -> StatusEffectChanged {
         unit_id: s.unit_id,
         efst: s.efst,
         on: s.on,
+        total_ms: s.total_ms,
+        remain_ms: s.remain_ms,
     }
 }
 
@@ -48,6 +50,23 @@ mod tests {
         });
 
         assert!(!removed.on);
+    }
+
+    #[test]
+    fn status_change_maps_duration_timing() {
+        let timed = status_change(net::StatusChange {
+            unit_id: 150001,
+            efst: 10,
+            on: true,
+            total_ms: 60_000,
+            remain_ms: 45_000,
+            val1: 0,
+            val2: 0,
+            val3: 0,
+        });
+
+        assert_eq!(timed.total_ms, 60_000);
+        assert_eq!(timed.remain_ms, 45_000);
     }
 
     #[test]

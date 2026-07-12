@@ -1,10 +1,13 @@
 use crate::infrastructure::accessory::AccessoryDataAsset;
-use crate::infrastructure::assets::{bmp_loader::BmpLoader, svg_loader::SvgLoader, *};
+use crate::infrastructure::assets::{
+    bmp_loader::BmpLoader, svg_loader::SvgLoader, tga_loader::TgaLoader, *,
+};
 use crate::infrastructure::config::ClientConfig;
 use crate::infrastructure::effect::{EffectDataAsset, LoadedEffectAsset, StrEffectLoader};
 use crate::infrastructure::item::ItemDataAsset;
 use crate::infrastructure::job::JobDataAsset;
 use crate::infrastructure::skill::SkillDataAsset;
+use crate::infrastructure::status::StatusIconDataAsset;
 use crate::infrastructure::weapon::WeaponDataAsset;
 use bevy::prelude::*;
 use bevy_common_assets::ron::RonAssetPlugin;
@@ -40,6 +43,7 @@ impl Plugin for AssetsPlugin {
             .init_asset::<IndoorMapTableAsset>()
             .init_asset_loader::<IndoorMapTableLoader>()
             .init_asset_loader::<BmpLoader>()
+            .init_asset_loader::<TgaLoader>()
             .init_asset_loader::<SvgLoader>()
             .add_plugins((
                 TomlAssetPlugin::<AssetConfig>::new(&["data.toml"]),
@@ -50,6 +54,7 @@ impl Plugin for AssetsPlugin {
                 RonAssetPlugin::<EffectDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<AccessoryDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<WeaponDataAsset>::new(&["ron"]),
+                RonAssetPlugin::<StatusIconDataAsset>::new(&["ron"]),
                 AnimationProcessingPlugin,
             ));
     }

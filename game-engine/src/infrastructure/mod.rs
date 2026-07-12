@@ -7,5 +7,6 @@ pub mod item;
 pub mod job;
 pub mod ro_formats;
 pub mod skill;
+pub mod status;
 pub mod storage;
 pub mod weapon;

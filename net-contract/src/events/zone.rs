@@ -137,6 +137,10 @@ pub struct StatusEffectChanged {
     pub unit_id: u32,
     pub efst: u32,
     pub on: bool,
+    /// Total duration in ms as sent by the server; `0` = infinite/permanent.
+    pub total_ms: u32,
+    /// Remaining duration in ms at the time of this event; `0` = infinite/permanent.
+    pub remain_ms: u32,
 }
 
 /// A fire-and-forget visual effect (rAthena `EF_*` id) triggered by `source_id`.
