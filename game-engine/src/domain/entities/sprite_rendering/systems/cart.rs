@@ -9,9 +9,10 @@ use crate::domain::entities::character::components::visual::{ActionType, Directi
 use crate::domain::entities::character::systems::CART_MASK;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::components::{CartLayer, PlayerSprite, RenderLayer};
+use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
 use crate::domain::settings::resources::Settings;
 use crate::domain::sprite::tags::{
-    layer_order, LAYER_CART, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER,
+    layer_depth_bias, layer_order, LAYER_CART, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER,
 };
 use crate::domain::system_sets::{EntityLifecycleSystems, SpriteRenderingSystems};
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
@@ -156,6 +157,8 @@ fn spawn_cart_layer(
             alpha_mode: AlphaMode::Blend,
             unlit: true,
             cull_mode: None,
+            // Later ACT parts stack on top within the cart's own bias slot.
+            depth_bias: layer_depth_bias(LAYER_CART) + part as f32 * 0.01,
             ..default()
         });
 
@@ -295,12 +298,12 @@ pub fn sync_cart_layer(
         // while walking, hold the first frame otherwise.
         let action_index = ro_sprite.direction as usize;
         let Some(action_data) = animation.actions.get(action_index) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
 
         if action_data.frames.is_empty() {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
 
@@ -312,19 +315,17 @@ pub fn sync_cart_layer(
         };
 
         let Some(frame) = action_data.frames.get(frame_index) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
 
         let Some(part) = frame.parts.get(cart.part) else {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
 
         if let Some(texture) = animation.textures.get(part.texture_index) {
-            if let Some(mut material) = materials.get_mut(&material_handle.0) {
-                material.base_color_texture = Some(texture.clone());
-            }
+            set_layer_texture(&mut materials, &material_handle.0, texture);
         }
 
         let mut scale_x = part.scale.x * part.texture_size.x * SPRITE_WORLD_SCALE;
@@ -337,12 +338,18 @@ pub fn sync_cart_layer(
         let behind = cart_behind_offset(ro_sprite.direction) * CART_BACK_DISTANCE;
         let part_z = layer_order(LAYER_CART) as f32 * Z_OFFSET_PER_LAYER + cart.part as f32 * 0.001;
 
-        transform.scale = Vec3::new(scale_x, scale_y, 1.0);
-        transform.translation.x = part.position.x * SPRITE_WORLD_SCALE + behind.x;
-        transform.translation.y = -part.position.y * SPRITE_WORLD_SCALE;
-        transform.translation.z = part_z + behind.y;
+        let current = *transform;
+        transform.set_if_neq(Transform {
+            scale: Vec3::new(scale_x, scale_y, 1.0),
+            translation: Vec3::new(
+                part.position.x * SPRITE_WORLD_SCALE + behind.x,
+                -part.position.y * SPRITE_WORLD_SCALE,
+                part_z + behind.y,
+            ),
+            ..current
+        });
 
-        *visibility = Visibility::Inherited;
+        visibility.set_if_neq(Visibility::Inherited);
     }
 }
 

@@ -161,7 +161,10 @@ pub fn follow_effect_anchor(
     for (anchor, mut transform) in &mut effects {
         if let EffectAnchor::Entity(target) = anchor {
             if let Ok(global) = anchored.get(*target) {
-                transform.translation = global.translation();
+                let target_translation = global.translation();
+                if transform.translation != target_translation {
+                    transform.translation = target_translation;
+                }
             }
         }
     }
@@ -193,8 +196,10 @@ pub fn order_effect_layers_by_depth(
         } else {
             EFFECT_SOLID_TIER_DEPTH
         };
-        transform.translation =
-            toward_camera * (tier + layer.layer_index as f32 * EFFECT_LAYER_DEPTH_STEP);
+        let target = toward_camera * (tier + layer.layer_index as f32 * EFFECT_LAYER_DEPTH_STEP);
+        if transform.translation != target {
+            transform.translation = target;
+        }
     }
 }
 
@@ -265,6 +270,7 @@ pub fn initialize_effect_layers(
                 EffectLayer {
                     layer_index,
                     additive: layer.blend == EffectBlend::Add,
+                    last_built_frame: None,
                 },
                 Transform::default(),
                 Visibility::Hidden,
@@ -280,7 +286,7 @@ type LayerRebuildQuery<'w, 's> = Query<
     'w,
     's,
     (
-        &'static EffectLayer,
+        &'static mut EffectLayer,
         &'static ChildOf,
         &'static Mesh3d,
         &'static MeshMaterial3d<EffectMaterial>,
@@ -290,7 +296,10 @@ type LayerRebuildQuery<'w, 's> = Query<
 
 /// Rewrite every effect layer's mesh + material for the current key: quad
 /// corners / UV / colour into the mesh attributes, texture + blend onto the
-/// material. Layers with no frame at this key are hidden.
+/// material. Layers with no frame at this key are hidden. Layers already built
+/// for the current key are skipped: keys advance at the asset fps, so at higher
+/// render rates (and for finished/held effects) the same key would otherwise be
+/// re-uploaded to the GPU every frame.
 pub fn rebuild_effect_layers(
     effects: Query<&ActiveEffect>,
     mut layers: LayerRebuildQuery,
@@ -298,10 +307,14 @@ pub fn rebuild_effect_layers(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<EffectMaterial>>,
 ) {
-    for (layer, child_of, mesh3d, material3d, mut visibility) in &mut layers {
+    for (mut layer, child_of, mesh3d, material3d, mut visibility) in &mut layers {
         let Ok(effect) = effects.get(child_of.parent()) else {
             continue;
         };
+        let current_frame = effect.timer.current_frame;
+        if layer.last_built_frame == Some(current_frame) {
+            continue;
+        }
         let Some(asset) = loaded.get(&effect.effect) else {
             continue;
         };
@@ -309,8 +322,9 @@ pub fn rebuild_effect_layers(
             continue;
         };
 
-        let Some(frame) = interpolate_layer_frame(loaded_layer, effect.timer.current_frame) else {
-            *visibility = Visibility::Hidden;
+        let Some(frame) = interpolate_layer_frame(loaded_layer, current_frame) else {
+            visibility.set_if_neq(Visibility::Hidden);
+            layer.last_built_frame = Some(current_frame);
             continue;
         };
 
@@ -329,7 +343,8 @@ pub fn rebuild_effect_layers(
                 .unwrap_or_default();
         }
 
-        *visibility = Visibility::Visible;
+        visibility.set_if_neq(Visibility::Visible);
+        layer.last_built_frame = Some(current_frame);
     }
 }
 
@@ -565,6 +580,7 @@ mod tests {
                         EffectLayer {
                             layer_index: i,
                             additive: true,
+                            last_built_frame: None,
                         },
                         Transform::default(),
                     ))
@@ -579,6 +595,7 @@ mod tests {
                 EffectLayer {
                     layer_index: 0,
                     additive: false,
+                    last_built_frame: None,
                 },
                 Transform::default(),
             ))
@@ -619,6 +636,7 @@ mod tests {
                 EffectLayer {
                     layer_index: 0,
                     additive: true,
+                    last_built_frame: None,
                 },
                 Transform::default(),
             ))
@@ -629,6 +647,7 @@ mod tests {
                 EffectLayer {
                     layer_index: 2,
                     additive: true,
+                    last_built_frame: None,
                 },
                 Transform::default(),
             ))

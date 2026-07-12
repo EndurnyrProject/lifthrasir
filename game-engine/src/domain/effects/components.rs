@@ -36,6 +36,10 @@ pub struct EffectLayer {
     /// are depth-biased in front of additive ones so a figure's face is not
     /// washed out by overlapping glows (additive brightens regardless of order).
     pub additive: bool,
+    /// STR key the mesh/material were last rebuilt for. Keys are discrete
+    /// (`EffectFrameTimer` derives them from the asset fps), so rebuilding the
+    /// same key again would re-upload identical geometry every render frame.
+    pub last_built_frame: Option<usize>,
 }
 
 /// Despawn timer for repeating (ground) effects: aesir sends no removal packet,

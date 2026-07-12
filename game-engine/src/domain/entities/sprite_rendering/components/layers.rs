@@ -20,7 +20,7 @@ pub struct CartLayer {
 
 /// Body publishes its attach point, frame index, and layer position each frame for head to read.
 /// Head uses the same frame index to get its attach point for synchronized positioning.
-#[derive(Component, Default)]
+#[derive(Component, Default, PartialEq)]
 pub struct BodyAttachPoint {
     pub attach_point: Vec2,
     pub frame_index: usize,
@@ -30,7 +30,7 @@ pub struct BodyAttachPoint {
 /// Head publishes its attach point, frame index, and layer position each frame for headgear to read.
 /// Headgear uses the head's frame index and attach data to align to the head, exactly the way the
 /// head aligns to the body via `BodyAttachPoint`.
-#[derive(Component, Default)]
+#[derive(Component, Default, PartialEq)]
 pub struct HeadAttachPoint {
     pub attach_point: Vec2,
     pub frame_index: usize,

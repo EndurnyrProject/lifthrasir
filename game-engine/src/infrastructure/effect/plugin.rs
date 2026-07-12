@@ -2,7 +2,7 @@ use super::catalog::{process_loaded_effect_data, start_loading_effect_data};
 use crate::domain::effects::{
     advance_effect_timers, despawn_finished_effects, follow_effect_anchor,
     initialize_effect_layers, on_ground_skill, on_skill_damage, on_skill_effect, on_special_effect,
-    order_effect_layers_by_depth, rebuild_effect_layers, PlayProceduralVfx,
+    order_effect_layers_by_depth, rebuild_effect_layers, EffectLayer, PlayProceduralVfx,
 };
 use crate::presentation::rendering::effect_material::EffectMaterial;
 use bevy::prelude::*;
@@ -34,7 +34,10 @@ impl Plugin for EffectsPlugin {
                     (
                         advance_effect_timers,
                         initialize_effect_layers,
-                        rebuild_effect_layers,
+                        // Gated so the Assets<Mesh>/Assets<EffectMaterial> ResMut
+                        // access doesn't serialize the schedule while no effect
+                        // is playing (the common case).
+                        rebuild_effect_layers.run_if(any_with_component::<EffectLayer>),
                         order_effect_layers_by_depth,
                         despawn_finished_effects,
                     )

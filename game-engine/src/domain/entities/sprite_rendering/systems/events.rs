@@ -260,6 +260,7 @@ pub fn finalize_equipment_layers(
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 cull_mode: None,
+                depth_bias: crate::domain::sprite::tags::layer_depth_bias(layer_tag),
                 ..default()
             });
 

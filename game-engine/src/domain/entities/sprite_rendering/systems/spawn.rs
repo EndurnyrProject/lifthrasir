@@ -6,7 +6,8 @@ use super::super::events::{RequestSpriteSpawn, SpawnSpriteEvent};
 use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::sprite::tags::{
-    layer_order, LAYER_BODY, LAYER_HEAD, LAYER_SHADOW, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER,
+    layer_depth_bias, layer_order, LAYER_BODY, LAYER_HEAD, LAYER_SHADOW, SPRITE_BASE_Y_OFFSET,
+    Z_OFFSET_PER_LAYER,
 };
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
@@ -404,6 +405,7 @@ fn spawn_render_layer_child(
         alpha_mode: AlphaMode::Blend,
         unlit: true,
         cull_mode: None,
+        depth_bias: layer_depth_bias(layer),
         ..default()
     });
 

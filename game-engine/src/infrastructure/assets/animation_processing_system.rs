@@ -118,7 +118,12 @@ pub struct AnimationProcessingPlugin;
 
 impl Plugin for AnimationProcessingPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PendingAnimations>()
-            .add_systems(Update, process_pending_animations);
+        // Gated so the Assets<Image> ResMut access doesn't serialize the
+        // schedule on every frame where nothing is queued (the steady state).
+        app.init_resource::<PendingAnimations>().add_systems(
+            Update,
+            process_pending_animations
+                .run_if(|pending: Res<PendingAnimations>| pending.has_pending()),
+        );
     }
 }

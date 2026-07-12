@@ -22,6 +22,20 @@ pub struct TerrainRaycastCache {
     pub cell_coords: Option<(u16, u16)>,
     pub world_position: Option<Vec3>,
     pub is_walkable: bool,
+    /// Cursor + camera pose of the last completed march. While both are
+    /// unchanged the cached result is still valid and the (expensive) ray
+    /// march is skipped. Only set once the map assets resolved, so frames
+    /// bailing on missing assets keep retrying.
+    last_input: Option<(Vec2, GlobalTransform)>,
+}
+
+impl TerrainRaycastCache {
+    fn clear(&mut self) {
+        self.cell_coords = None;
+        self.world_position = None;
+        self.is_walkable = false;
+        self.last_input = None;
+    }
 }
 
 #[auto_add_system(
@@ -38,58 +52,46 @@ pub fn update_terrain_raycast_cache(
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
 ) {
     let Some(cursor_position) = cursor_pos.position else {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
+        cache.clear();
         return;
     };
 
     let Ok((camera, camera_transform)) = camera_query.single() else {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
+        cache.clear();
         return;
     };
 
+    if cache.last_input == Some((cursor_position, *camera_transform)) {
+        return;
+    }
+
     let Ok(map_loader) = map_loader_query.single() else {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
+        cache.clear();
         return;
     };
 
     let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
+        cache.clear();
         return;
     };
 
     let Some(altitude_handle) = map_loader.altitude.as_ref() else {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
+        cache.clear();
         return;
     };
 
     let Some(altitude_asset) = altitude_assets.get(altitude_handle) else {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
+        cache.clear();
         return;
     };
 
     let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_position) else {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
+        cache.clear();
         return;
     };
 
     if ray.direction.dot(Vec3::Y).abs() < 1e-6 {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
+        cache.clear();
         return;
     }
 
@@ -128,6 +130,7 @@ pub fn update_terrain_raycast_cache(
         cache.cell_coords = None;
         cache.world_position = None;
         cache.is_walkable = false;
+        cache.last_input = Some((cursor_position, *camera_transform));
         return;
     };
 
@@ -162,4 +165,5 @@ pub fn update_terrain_raycast_cache(
     cache.cell_coords = Some((cell_x, cell_y));
     cache.world_position = Some(world_pos);
     cache.is_walkable = is_walkable;
+    cache.last_input = Some((cursor_position, *camera_transform));
 }

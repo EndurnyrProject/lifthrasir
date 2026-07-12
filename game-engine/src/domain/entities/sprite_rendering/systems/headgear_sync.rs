@@ -12,6 +12,7 @@ use crate::domain::entities::sprite_rendering::layout::{ActionLayout, PlayerLayo
 use crate::domain::entities::sprite_rendering::systems::head_sync::{
     head_billboard_delta, head_screen_offset,
 };
+use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
 use crate::domain::sprite::tags::{layer_order, LAYER_HEAD, Z_OFFSET_PER_LAYER};
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
@@ -131,9 +132,7 @@ pub fn sync_headgear_layer(
         };
 
         if let Some(texture) = animation.textures.get(part.texture_index) {
-            if let Some(mut material) = materials.get_mut(&material_handle.0) {
-                material.base_color_texture = Some(texture.clone());
-            }
+            set_layer_texture(&mut materials, &material_handle.0, texture);
         }
 
         let mut scale_x = part.scale.x * part.texture_size.x * SPRITE_WORLD_SCALE;
@@ -143,9 +142,14 @@ pub fn sync_headgear_layer(
             scale_x = -scale_x;
         }
 
-        transform.scale = Vec3::new(scale_x, scale_y, 1.0);
+        let new_scale = Vec3::new(scale_x, scale_y, 1.0);
 
         let Some(headgear_attach) = frame.attach_point else {
+            let current = *transform;
+            transform.set_if_neq(Transform {
+                scale: new_scale,
+                ..current
+            });
             continue;
         };
 
@@ -163,7 +167,12 @@ pub fn sync_headgear_layer(
             * Z_OFFSET_PER_LAYER;
         let towards_camera = -camera_transform.forward().as_vec3();
 
-        transform.translation = head_anchor.translation + world_delta + towards_camera * layer_gap;
+        let current = *transform;
+        transform.set_if_neq(Transform {
+            scale: new_scale,
+            translation: head_anchor.translation + world_delta + towards_camera * layer_gap,
+            ..current
+        });
     }
 }
 

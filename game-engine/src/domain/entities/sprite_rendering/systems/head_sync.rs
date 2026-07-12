@@ -7,6 +7,7 @@ use crate::domain::entities::sprite_rendering::components::{
     BodyAttachPoint, HeadAttachPoint, HeadAttachment, HeadLayer, PlayerSprite, RenderLayer,
 };
 use crate::domain::entities::sprite_rendering::layout::{ActionLayout, PlayerLayout};
+use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
 use crate::domain::sprite::tags::{layer_order, LAYER_BODY, Z_OFFSET_PER_LAYER};
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
@@ -136,9 +137,7 @@ pub fn sync_player_head_layer(
         };
 
         if let Some(texture) = head_animation.textures.get(part.texture_index) {
-            if let Some(mut material) = materials.get_mut(&material_handle.0) {
-                material.base_color_texture = Some(texture.clone());
-            }
+            set_layer_texture(&mut materials, &material_handle.0, texture);
         }
 
         let mut scale_x = part.scale.x * part.texture_size.x * SPRITE_WORLD_SCALE;
@@ -148,9 +147,14 @@ pub fn sync_player_head_layer(
             scale_x = -scale_x;
         }
 
-        transform.scale = Vec3::new(scale_x, scale_y, 1.0);
+        let new_scale = Vec3::new(scale_x, scale_y, 1.0);
 
         let Some(head_attach) = head_frame.attach_point else {
+            let current = *transform;
+            transform.set_if_neq(Transform {
+                scale: new_scale,
+                ..current
+            });
             continue;
         };
 
@@ -171,12 +175,18 @@ pub fn sync_player_head_layer(
         let layer_gap = (layer_order(head_layer.layer) as f32 - layer_order(LAYER_BODY) as f32)
             * Z_OFFSET_PER_LAYER;
 
-        transform.translation =
-            body_transform.translation + world_delta + Vec3::new(0.0, 0.0, layer_gap);
+        let current = *transform;
+        transform.set_if_neq(Transform {
+            scale: new_scale,
+            translation: body_transform.translation + world_delta + Vec3::new(0.0, 0.0, layer_gap),
+            ..current
+        });
 
-        head_attach_point.attach_point = head_attach;
-        head_attach_point.frame_index = head_frame_index;
-        head_attach_point.layer_pos = part.position;
+        head_attach_point.set_if_neq(HeadAttachPoint {
+            attach_point: head_attach,
+            frame_index: head_frame_index,
+            layer_pos: part.position,
+        });
     }
 }
 

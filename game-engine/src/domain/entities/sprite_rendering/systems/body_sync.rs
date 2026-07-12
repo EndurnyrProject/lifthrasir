@@ -6,6 +6,7 @@ use crate::domain::entities::sprite_rendering::components::{
     BodyAttachPoint, HeadLayer, MobSprite, PlayerSprite, RenderLayer, RoSpriteGeneric,
 };
 use crate::domain::entities::sprite_rendering::layout::ActionLayout;
+use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::utils::constants::SPRITE_WORLD_SCALE;
@@ -66,9 +67,7 @@ fn sync_body_layer_impl<T: ActionLayout>(
 
         if let Some(part) = frame.parts.first() {
             if let Some(texture) = animation.textures.get(part.texture_index) {
-                if let Some(mut material) = materials.get_mut(&material_handle.0) {
-                    material.base_color_texture = Some(texture.clone());
-                }
+                set_layer_texture(materials, &material_handle.0, texture);
             }
 
             let sprite_width = part.texture_size.x;
@@ -81,23 +80,31 @@ fn sync_body_layer_impl<T: ActionLayout>(
                 scale_x = -scale_x;
             }
 
-            transform.scale = Vec3::new(scale_x, scale_y, 1.0);
-
             // RO authors each frame so the sprite, drawn centered at its ACT
             // `position`, lands its feet on the ground anchor. `position` was
             // Y-negated on extraction into a Y-up space, and world up is -Y, so we
             // negate again to place the center: taller sprites carry a larger
             // `position.y` and are lifted more, which is what grounds them.
-            transform.translation.x = part.position.x * SPRITE_WORLD_SCALE;
-            transform.translation.y = -part.position.y * SPRITE_WORLD_SCALE;
-
-            attach_point.layer_pos = part.position;
+            let current = *transform;
+            transform.set_if_neq(Transform {
+                scale: Vec3::new(scale_x, scale_y, 1.0),
+                translation: Vec3::new(
+                    part.position.x * SPRITE_WORLD_SCALE,
+                    -part.position.y * SPRITE_WORLD_SCALE,
+                    current.translation.z,
+                ),
+                ..current
+            });
         }
 
-        attach_point.frame_index = frame_index;
-        if let Some(ap) = frame.attach_point {
-            attach_point.attach_point = ap;
-        }
+        attach_point.set_if_neq(BodyAttachPoint {
+            attach_point: frame.attach_point.unwrap_or(attach_point.attach_point),
+            frame_index,
+            layer_pos: frame
+                .parts
+                .first()
+                .map_or(attach_point.layer_pos, |part| part.position),
+        });
     }
 }
 

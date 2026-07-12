@@ -39,6 +39,34 @@ pub fn layer_order(tag: Tag) -> u8 {
     }
 }
 
+/// Transparent-sort depth bias for a layer's `StandardMaterial`.
+///
+/// A unit's billboard quads are near-coplanar, so the transparent pass
+/// distance sort alone is undecided between them (the 0.001-scale z nudges
+/// vanish in view-space distance) and Bevy's retained phase then falls back
+/// to insertion order, which is arbitrary. The material `depth_bias` is added
+/// to the sort distance (higher draws on top), deciding the in-unit stacking
+/// deterministically. The step is far below inter-unit distances (cells are
+/// 5 world units) and the effect solid tier (1.0), so it never reorders
+/// across entities.
+pub fn layer_depth_bias(tag: Tag) -> f32 {
+    let rank = match tag {
+        t if t == LAYER_SHADOW => 0,
+        t if t == LAYER_CART => 1,
+        t if t == LAYER_BODY => 2,
+        t if t == LAYER_HEAD => 3,
+        t if t == LAYER_GARMENT => 4,
+        t if t == LAYER_WEAPON => 5,
+        t if t == LAYER_SHIELD => 6,
+        t if t == LAYER_HEAD_BOTTOM => 7,
+        t if t == LAYER_HEAD_MID => 8,
+        t if t == LAYER_HEAD_TOP => 9,
+        t if t == LAYER_EFFECT => 10,
+        _ => 11,
+    };
+    rank as f32 * 0.05
+}
+
 pub fn equipment_slot_to_tag(slot: &EquipmentSlot) -> Tag {
     match slot {
         EquipmentSlot::Weapon => LAYER_WEAPON,
