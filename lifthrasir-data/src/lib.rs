@@ -118,6 +118,21 @@ pub struct EffectData {
     pub map: BTreeMap<u32, EffectDescriptor>,
 }
 
+/// Per-status icon presentation: TGA image name and English display name,
+/// decoded from the client's EFST icon tables.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StatusIconEntry {
+    pub image: String,
+    pub name: String,
+}
+
+/// Full status icon catalog: EFST id -> icon presentation.
+/// Keyed by `BTreeMap` for stable, key-ordered RON diffs.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StatusIconData {
+    pub icons: BTreeMap<u32, StatusIconEntry>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,6 +283,25 @@ mod tests {
 
         assert_eq!(original.skills, deserialized.skills);
         assert_eq!(original.map, deserialized.map);
+    }
+
+    #[test]
+    fn status_icon_data_round_trip() {
+        let mut original = StatusIconData::default();
+        original.icons.insert(
+            10,
+            StatusIconEntry {
+                image: "BLESSING.TGA".to_string(),
+                name: "Blessing".to_string(),
+            },
+        );
+
+        let serialized = ron::to_string(&original).expect("serialize");
+        let deserialized: StatusIconData = ron::from_str(&serialized).expect("deserialize");
+
+        let entry = deserialized.icons.get(&10).expect("efst 10 entry");
+        assert_eq!(entry.image, "BLESSING.TGA");
+        assert_eq!(entry.name, "Blessing");
     }
 
     #[test]
