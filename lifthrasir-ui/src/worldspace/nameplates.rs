@@ -4,12 +4,12 @@
 //! on-hover server name request; positioned by projecting the target's world position.
 
 use bevy::prelude::*;
+use game_engine::core::state::GameState;
 use game_engine::domain::entities::components::EntityName;
 use game_engine::domain::entities::hover::HoveredEntity;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::entities::EntityRegistry;
 use game_engine::domain::party::PartyState;
-use game_engine::core::state::GameState;
 
 use crate::theme;
 use crate::worldspace::{viewport_to_ui, WorldCameraFilter, WorldspaceFont};
@@ -143,6 +143,7 @@ fn spawn_nameplate(
 
 /// Keep one nameplate per hovered, named entity. Runs every frame so it catches
 /// `EntityName`s that arrive after the on-hover server name request resolves.
+#[allow(clippy::too_many_arguments)]
 fn sync_nameplates(
     mut commands: Commands,
     hovered: Query<(Entity, &EntityName), With<HoveredEntity>>,
@@ -166,7 +167,14 @@ fn sync_nameplates(
             .party_name
             .as_deref()
             .or_else(|| party_name_for(&registry, &party, target));
-        spawn_nameplate(&mut commands, &font, target, &name.name, is_self, party_name);
+        spawn_nameplate(
+            &mut commands,
+            &font,
+            target,
+            &name.name,
+            is_self,
+            party_name,
+        );
     }
 
     for (entity, plate) in &stale {

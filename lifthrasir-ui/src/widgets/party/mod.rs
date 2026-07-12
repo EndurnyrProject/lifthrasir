@@ -169,6 +169,7 @@ type FooterQuery<'w, 's> =
 /// per-frame respawn would destroy that button between a click's press and release, so it
 /// would never fire. The footer's visibility tracks membership so "Leave Party" never
 /// shows while partyless.
+#[allow(clippy::too_many_arguments)]
 pub fn refresh_roster(
     mut commands: Commands,
     party: Res<PartyState>,
