@@ -247,7 +247,7 @@ pub fn handle_map_bgm(
         let map_name = map_request.map_name.trim_end_matches(".gat").to_lowercase();
 
         if let Some(bgm_path) = bgm_table_asset.table.get(&map_name) {
-            let full_bgm_path = format!("ro://data/{}", bgm_path);
+            let full_bgm_path = format!("ro://{}", bgm_path);
 
             // Skip if already playing this track
             if bgm_manager.is_playing(&full_bgm_path) {
