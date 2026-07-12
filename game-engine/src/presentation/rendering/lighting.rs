@@ -1,9 +1,17 @@
-use bevy::light::CascadeShadowConfigBuilder;
+use bevy::light::{light_consts::lux, CascadeShadowConfigBuilder};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use std::f32::consts::PI;
 
-const MAX_LUX: f32 = 3_000.0; // Sun illuminance; kept low so point lights read against it (camera Exposure compensates overall brightness)
+// Anchor: RSW diffuse 1.0 at full opacity = ambient daylight, viewed at the
+// default camera exposure (EV100 9.7). All light values here are physical
+// (lux/lumens) against that pairing; brightness is not tuned via exposure.
+const SUN_MAX_LUX: f32 = lux::AMBIENT_DAYLIGHT;
+
+// Illuminance a point light delivers at half its RSW range. Single knob for
+// all map lights; intensity is derived per light so short-range lamps and
+// wide braziers read equally bright inside their own radius.
+const POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 500.0;
 
 use crate::{
     domain::system_sets::MiscRenderingSystems,
@@ -120,7 +128,7 @@ fn setup_ambient_light(commands: &mut Commands, rsw_light: &RswLight) {
 
     commands.insert_resource(GlobalAmbientLight {
         color: ambient_color,
-        brightness: 100.0, // Low fill so the sun and point lights keep contrast (Exposure restores overall brightness)
+        brightness: lux::OFFICE, // Low fill so the sun and point lights keep contrast
         affects_lightmapped_meshes: false,
     });
 }
@@ -155,12 +163,15 @@ fn spawn_point_light(
 
     let light_color = Color::srgb(light_obj.color[0], light_obj.color[1], light_obj.color[2]);
 
-    // Tuned against the lowered sun/ambient baseline and the camera Exposure/Bloom.
-    // The RSW color already scales emitted radiance, so dim torches stay dim without a
-    // separate brightness multiplier.
-    let intensity = 3_000_000.0;
+    // Lumens for POINT_LIGHT_LUX_AT_HALF_RANGE under inverse-square falloff.
+    // The RSW color already scales emitted radiance, so dim torches stay dim
+    // without a separate brightness multiplier.
+    let half_range = 0.5 * light_obj.range;
+    let intensity = POINT_LIGHT_LUX_AT_HALF_RANGE * 4.0 * PI * half_range * half_range;
 
-    let radius = 0.3;
+    // Wide emitter surface softens the inverse-square hot spot near the source
+    // (RO's baked lighting had linear falloff and no hot center).
+    let radius = 1.5;
 
     commands.spawn((
         PointLight {
@@ -180,7 +191,7 @@ fn spawn_point_light(
 fn calculate_global_lux(light: &RswLight) -> f32 {
     let diffuse_intensity = light.diffuse.iter().fold(0.0f32, |acc, &x| acc.max(x));
 
-    MAX_LUX * diffuse_intensity * light.opacity
+    SUN_MAX_LUX * diffuse_intensity * light.opacity
 }
 
 /// System to cleanup map lights when switching maps

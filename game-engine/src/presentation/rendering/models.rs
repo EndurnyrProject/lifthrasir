@@ -543,9 +543,10 @@ fn create_model_materials_from_loaded_textures(
                         } else {
                             AlphaMode::Mask(0.01)
                         },
-                        perceptual_roughness: 0.8,
+                        // Pure lambert: RO textures expect no specular highlights
+                        perceptual_roughness: 1.0,
                         metallic: 0.0,
-                        reflectance: 0.1,
+                        reflectance: 0.0,
                         cull_mode: None,
                         ..default()
                     })
@@ -582,9 +583,9 @@ fn create_colored_fallback_material_for_model(
 
     materials.add(StandardMaterial {
         base_color: color,
-        perceptual_roughness: 0.8,
+        perceptual_roughness: 1.0,
         metallic: 0.0,
-        reflectance: 0.1,
+        reflectance: 0.0,
         cull_mode: None,
         alpha_mode: AlphaMode::Mask(0.5),
         ..default()

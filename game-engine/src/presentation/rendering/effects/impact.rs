@@ -243,7 +243,7 @@ impl FactorMaterial for StarMaterial {
 }
 
 /// Peak intensity of the impact point-light pop, in lumens.
-const LIGHT_PEAK: f32 = 40_000.0;
+const LIGHT_PEAK: f32 = 130_000.0;
 
 /// Short intensity ramp for the impact `PointLight`. Fades the light from its
 /// `peak` to dark over the timer; the whole tree despawns with the `FactorRamp`.

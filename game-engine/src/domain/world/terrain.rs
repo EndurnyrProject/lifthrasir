@@ -38,9 +38,12 @@ type TerrainGenerationQuery<'w, 's> = Query<
     (Without<MapData>, Without<TerrainTexturesLoading>),
 >;
 
-/// Material property constants for terrain rendering
-const TERRAIN_ROUGHNESS: f32 = 0.8;
+/// Material property constants for terrain rendering. Pure lambert response:
+/// RO textures were authored for fixed-function rendering and expect no
+/// specular highlights.
+const TERRAIN_ROUGHNESS: f32 = 1.0;
 const TERRAIN_METALLIC: f32 = 0.0;
+const TERRAIN_REFLECTANCE: f32 = 0.0;
 const TERRAIN_ALPHA_THRESHOLD: f32 = 0.5;
 
 /// Asset ids of every terrain ground texture that has had mipmaps generated, so
@@ -179,6 +182,7 @@ fn create_terrain_materials_from_loaded_textures(
                         base_color: Color::WHITE,
                         perceptual_roughness: TERRAIN_ROUGHNESS,
                         metallic: TERRAIN_METALLIC,
+                        reflectance: TERRAIN_REFLECTANCE,
                         cull_mode: None,
                         alpha_mode: AlphaMode::Mask(TERRAIN_ALPHA_THRESHOLD),
                         ..default()
@@ -224,6 +228,7 @@ fn create_colored_fallback_material(
         base_color: color,
         perceptual_roughness: TERRAIN_ROUGHNESS,
         metallic: TERRAIN_METALLIC,
+        reflectance: TERRAIN_REFLECTANCE,
         cull_mode: None,
         alpha_mode: AlphaMode::Mask(TERRAIN_ALPHA_THRESHOLD),
         ..default()
@@ -764,6 +769,7 @@ fn apply_loaded_terrain_textures(
                     base_color: Color::srgb(0.0, 1.0, 1.0),
                     perceptual_roughness: TERRAIN_ROUGHNESS,
                     metallic: TERRAIN_METALLIC,
+                    reflectance: TERRAIN_REFLECTANCE,
                     double_sided: true,
                     cull_mode: None,
                     alpha_mode: AlphaMode::Mask(TERRAIN_ALPHA_THRESHOLD),

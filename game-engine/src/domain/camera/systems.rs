@@ -1,4 +1,3 @@
-use bevy::camera::Exposure;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -134,11 +133,9 @@ pub fn spawn_camera_on_player_ready(
 
     commands.spawn((
         Camera3d::default(),
-        // Manual exposure decouples final image brightness from absolute light
-        // values. HDR + bloom are inserted by the settings layer
-        // (apply_camera_effects) per the graphics settings; see lighting.rs for the
-        // matching sun/ambient/point-light scale.
-        Exposure { ev100: 8.0 },
+        // Default exposure (EV100 9.7): light values are physical and anchored
+        // against it in lighting.rs. HDR + bloom are inserted by the settings
+        // layer (apply_camera_effects) per the graphics settings.
         Transform::from_translation(camera_position).looking_at(player_position, Vec3::NEG_Y),
         CameraFollowTarget::new(player_entity, player_position),
         settings,
