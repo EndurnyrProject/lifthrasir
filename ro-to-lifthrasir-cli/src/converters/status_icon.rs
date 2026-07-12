@@ -17,6 +17,15 @@ const UNKNOWN_EFST_SENTINEL: i64 = -999_999;
 
 const LUA_BYTECODE_MAGIC: &[u8] = b"\x1bLua";
 
+/// Manual English names for statuses the client's `stateiconinfo.lub` leaves
+/// unnamed but that the server sends to the icon bar. Applied after extraction:
+/// an override adds a name-only entry when the status has neither name nor icon in
+/// the client tables (so it still shows a labelled placeholder tile).
+///
+/// - `673` = `EFST_ON_PUSH_CART`: the merchant pushcart status. The client has no
+///   TGA or name for it, but aesir broadcasts it (SC_PUSHCART), so name it here.
+const NAME_OVERRIDES: &[(u32, &str)] = &[(673, "Cart")];
+
 pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
     let lua = lua::new_vm_unbounded().map_err(lua_err)?;
 
@@ -98,6 +107,9 @@ fn extract_status_icons(lua: &mlua::Lua) -> anyhow::Result<StatusIconData> {
                 name: String::new(),
             },
         );
+    }
+    for (id, name) in NAME_OVERRIDES {
+        data.icons.entry(*id).or_default().name = (*name).to_string();
     }
     Ok(data)
 }
@@ -217,6 +229,25 @@ mod tests {
     }
 
     #[test]
+    fn name_override_adds_name_only_entry_when_absent_from_tables() -> anyhow::Result<()> {
+        let lua = lua::new_vm_unbounded().map_err(lua_err)?;
+        lua::exec_chunk(
+            &lua,
+            b"EFST_IDs = {}\nStateIconImgList = {}\nStateIconList = {}",
+        )
+        .map_err(lua_err)?;
+
+        let data = extract_status_icons(&lua)?;
+
+        // efst 673 (EFST_ON_PUSH_CART) has no name/image in the tables, but the
+        // override adds it as a name-only entry so the cart shows a labelled tile.
+        let cart = data.icons.get(&673).expect("efst 673 added by override");
+        assert_eq!(cart.name, "Cart");
+        assert_eq!(cart.image, "");
+        Ok(())
+    }
+
+    #[test]
     fn unknown_efst_name_resolves_to_sentinel_and_is_skipped() -> anyhow::Result<()> {
         let lua = lua::new_vm_unbounded().map_err(lua_err)?;
         lua::exec_chunk(&lua, b"EFST_IDs = { EFST_KNOWN = 7 }").map_err(lua_err)?;
@@ -236,8 +267,12 @@ mod tests {
         .map_err(lua_err)?;
 
         let data = extract_status_icons(&lua)?;
-        assert_eq!(data.icons.len(), 1);
-        assert!(data.icons.contains_key(&7));
+        // The known efst is kept; the sentinel-keyed "MISSING.TGA" produced no entry.
+        assert_eq!(data.icons.get(&7).expect("efst 7 kept").image, "KNOWN.TGA");
+        assert!(
+            !data.icons.values().any(|e| e.image == "MISSING.TGA"),
+            "sentinel-keyed entry dropped"
+        );
         Ok(())
     }
 }
