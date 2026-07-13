@@ -15,7 +15,7 @@
 - [x] Task 3: Receive Storage protobuf events
 - [x] Task 4: Send Storage protobuf requests
 - [x] Task 5: Add the Storage UI interaction model
-- [ ] Task 6: Render the Storage window
+- [x] Task 6: Render the Storage window
 - [ ] Task 7: Wire transfers, amount prompting, and results
 
 ---
@@ -195,18 +195,18 @@
 - Reference: `designs/Endurnir Project/screenshots/storage.png` — visual comparison target.
 
 **Acceptance criteria:**
-- [ ] `StorageOpened` causes the existing hidden shell to show; close or gameplay exit hides it and resets presentation state.
-- [ ] The visible title/keeper chip says only `Storage Vault`; no Idunn/keeper identity or Zeny UI is rendered.
-- [ ] The shell uses Bevy Feathers 0.19 controls, the Norse theme/chrome, existing item icons, and no new dependency.
-- [ ] All/Use/Etc/Equip controls and one shared search field filter both panes.
-- [ ] The search `EditableText` entity remains stable while pane contents rebuild, preserving focus/cursor state.
-- [ ] Bag and Vault cells render deterministic item order, icons, names, quantities, refinement, and category; equipped Bag items remain hidden.
-- [ ] Vault capacity renders as used slots over server-supplied capacity, and both panes render designed empty states.
-- [ ] Directional buttons, per-cell quick-transfer controls, double-click hooks, red panel-error region, amount-overlay host, title close, and footer close are present with correct enabled/visible state.
-- [ ] Quick-transfer child clicks stop pointer propagation so they do not also toggle cell selection.
-- [ ] Either close control emits `CloseStorage`; authoritative engine state then hides the shell without optimistic item mutation.
-- [ ] Scene/projection tests cover capacity, filtering, empty states, selection/disabled state, red-error styling, overlay visibility, and stable search identity.
-- [ ] `cargo test -p lifthrasir-ui storage_window` passes.
+- [x] `StorageOpened` causes the existing hidden shell to show; close or gameplay exit hides it and resets presentation state.
+- [x] The visible title/keeper chip says only `Storage Vault`; no Idunn/keeper identity or Zeny UI is rendered.
+- [x] The shell uses Bevy Feathers 0.19 controls, the Norse theme/chrome, existing item icons, and no new dependency.
+- [x] All/Use/Etc/Equip controls and one shared search field filter both panes.
+- [x] The search `EditableText` entity remains stable while pane contents rebuild, preserving focus/cursor state.
+- [x] Bag and Vault cells render deterministic item order, icons, names, quantities, refinement, and category; equipped Bag items remain hidden.
+- [x] Vault capacity renders as used slots over server-supplied capacity, and both panes render designed empty states.
+- [x] Directional buttons, per-cell quick-transfer controls, double-click hooks, red panel-error region, amount-overlay host, title close, and footer close are present with correct enabled/visible state.
+- [x] Quick-transfer child clicks stop pointer propagation so they do not also toggle cell selection.
+- [x] Either close control emits `CloseStorage`; authoritative engine state then hides the shell without optimistic item mutation.
+- [x] Scene/projection tests cover capacity, filtering, empty states, selection/disabled state, red-error styling, overlay visibility, and stable search identity.
+- [x] `cargo test -p lifthrasir-ui storage_window` passes.
 
 **Depends on:** Task 5
 

@@ -46,6 +46,7 @@ impl Plugin for InGameHudPlugin {
             settings_window::SettingsWindowPlugin,
             shop_window::ShopWindowPlugin,
             status_icons::StatusIconsPlugin,
+            storage_window::StorageWindowPlugin,
         ));
     }
 }
@@ -72,5 +73,6 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     minimap::spawn_minimap(&mut commands, root, &asset_server);
     party::spawn_party_window(&mut commands, root);
     pushcart_window::spawn_pushcart_window(&mut commands, root);
+    storage_window::scene::build(&mut commands, root);
     status_icons::spawn_status_bar(&mut commands, root);
 }

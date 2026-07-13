@@ -1,13 +1,83 @@
+use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
+use bevy::text::EditableText;
+use bevy::ui::InteractionDisabled;
+use bevy::ui_widgets::Activate;
+use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
+use game_engine::core::state::GameState;
 use game_engine::domain::inventory::item::item_category;
 use game_engine::domain::inventory::{Inventory, Item, ItemCategory};
 use game_engine::domain::storage::Storage;
 use game_engine::infrastructure::item::ItemDb;
+use net_contract::commands::CloseStorage;
 use net_contract::dto::StorageItem;
 use net_contract::events::StorageRejection;
 use std::time::Duration;
 
+use crate::theme;
+use crate::theme::feathers_theme::install_norse_theme;
+
+pub mod scene;
+
 const DOUBLE_CLICK: Duration = Duration::from_millis(300);
+
+#[derive(Component, Default, Clone)]
+pub struct StorageWindowRoot;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageWindowTitlebar;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageBagHost;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageVaultHost;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageOverlayHost;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageErrorHost;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageSearchField;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageSearchPlaceholder;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageAmountField;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageAmountConfirm;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageAmountCancel;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageCloseControl;
+
+#[derive(Component, Default, Clone, Copy)]
+pub struct StorageCategoryButton(pub StorageCategory);
+
+#[derive(Component, Default, Clone, Copy)]
+pub struct StorageCell(pub StorageSelection);
+
+#[derive(Component, Default, Clone, Copy)]
+pub struct StorageQuickTransfer(pub StorageSelection);
+
+#[derive(Component, Default, Clone, Copy, PartialEq, Eq)]
+pub enum StorageTransferDirection {
+    #[default]
+    Deposit,
+    Withdraw,
+}
+
+#[derive(Component, Default, Clone, Copy)]
+pub struct StorageTransferButton {
+    pub direction: StorageTransferDirection,
+    pub enabled: bool,
+}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum StorageCategory {
@@ -22,6 +92,12 @@ pub enum StorageCategory {
 pub enum StorageSelection {
     Bag(u16),
     Vault(u32),
+}
+
+impl Default for StorageSelection {
+    fn default() -> Self {
+        Self::Bag(0)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -201,11 +277,280 @@ pub(crate) fn is_double_click(
     })
 }
 
+pub(crate) fn rebuild_panes(
+    mut commands: Commands,
+    inventory: Res<Inventory>,
+    storage: Res<Storage>,
+    item_db: Res<ItemDb>,
+    mut ui: ResMut<StorageUi>,
+    bag_hosts: Query<(Entity, Option<&Children>), With<StorageBagHost>>,
+    vault_hosts: Query<(Entity, Option<&Children>), With<StorageVaultHost>>,
+    new_bag_hosts: Query<(), Added<StorageBagHost>>,
+    new_vault_hosts: Query<(), Added<StorageVaultHost>>,
+) {
+    if !inventory.is_changed()
+        && !storage.is_changed()
+        && !ui.is_changed()
+        && new_bag_hosts.is_empty()
+        && new_vault_hosts.is_empty()
+    {
+        return;
+    }
+    let (Ok((bag_host, bag_children)), Ok((vault_host, vault_children))) =
+        (bag_hosts.single(), vault_hosts.single())
+    else {
+        return;
+    };
+    let bag_items = bag_projection(&inventory, &item_db, ui.category, ui.query());
+    let vault_items = vault_projection(&storage, &item_db, ui.category, ui.query());
+    ui.selection = validated_selection(ui.selection, &bag_items, &vault_items);
+    let (bag, vault) = scene::pane_views(&inventory, &storage, &ui, &item_db);
+
+    for children in [bag_children, vault_children].into_iter().flatten() {
+        for child in children.iter() {
+            commands.entity(child).despawn();
+        }
+    }
+    commands
+        .spawn_scene(scene::pane(bag, scene::PaneSide::Bag))
+        .insert(ChildOf(bag_host));
+    commands
+        .spawn_scene(scene::pane(vault, scene::PaneSide::Vault))
+        .insert(ChildOf(vault_host));
+}
+
+pub(crate) fn on_category_activate(
+    activate: On<Activate>,
+    buttons: Query<&StorageCategoryButton>,
+    mut ui: ResMut<StorageUi>,
+) {
+    let Ok(button) = buttons.get(activate.entity) else {
+        return;
+    };
+    ui.category = button.0;
+}
+
+pub(crate) fn on_cell_select(
+    click: On<Pointer<Click>>,
+    cells: Query<&StorageCell>,
+    time: Res<Time>,
+    mut ui: ResMut<StorageUi>,
+) {
+    let Ok(cell) = cells.get(click.entity) else {
+        return;
+    };
+    let now = time.elapsed();
+    ui.selection = Some(cell.0);
+    ui.last_click = Some(LastStorageClick {
+        selection: cell.0,
+        at: now,
+    });
+}
+
+pub(crate) fn stop_quick_transfer_propagation(mut click: On<Pointer<Click>>) {
+    click.propagate(false);
+}
+
+fn sync_search(
+    fields: Query<&EditableText, With<StorageSearchField>>,
+    mut placeholders: Query<&mut Visibility, With<StorageSearchPlaceholder>>,
+    mut ui: ResMut<StorageUi>,
+) {
+    let Ok(field) = fields.single() else {
+        return;
+    };
+    let value = field.value().to_string();
+    let normalized = value.trim().to_lowercase();
+    if normalized != ui.query() {
+        ui.set_query(&value);
+    }
+    let visible = if value.is_empty() {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    for mut visibility in &mut placeholders {
+        *visibility = visible;
+    }
+}
+
+fn sync_controls(
+    mut commands: Commands,
+    ui: Res<StorageUi>,
+    mut categories: Query<
+        (&StorageCategoryButton, &mut BackgroundColor),
+        Without<StorageTransferButton>,
+    >,
+    mut transfers: Query<
+        (Entity, &mut StorageTransferButton, &mut BackgroundColor),
+        Without<StorageCategoryButton>,
+    >,
+    quick_transfers: Query<Entity, With<StorageQuickTransfer>>,
+) {
+    for (button, mut background) in &mut categories {
+        background.0 = if button.0 == ui.category {
+            theme::EMERALD_INK
+        } else {
+            theme::FIELD
+        };
+    }
+    for (entity, mut button, mut background) in &mut transfers {
+        button.enabled = !ui.awaiting_result
+            && matches!(
+                (button.direction, ui.selection),
+                (
+                    StorageTransferDirection::Deposit,
+                    Some(StorageSelection::Bag(_))
+                ) | (
+                    StorageTransferDirection::Withdraw,
+                    Some(StorageSelection::Vault(_))
+                )
+            );
+        background.0 = if button.enabled {
+            match button.direction {
+                StorageTransferDirection::Deposit => theme::GOLD,
+                StorageTransferDirection::Withdraw => theme::EMERALD,
+            }
+        } else {
+            theme::FIELD
+        };
+        if button.enabled {
+            commands.entity(entity).remove::<InteractionDisabled>();
+        } else {
+            commands.entity(entity).insert(InteractionDisabled);
+        }
+    }
+    for entity in &quick_transfers {
+        if ui.awaiting_result {
+            commands.entity(entity).insert(InteractionDisabled);
+        } else {
+            commands.entity(entity).remove::<InteractionDisabled>();
+        }
+    }
+}
+
+fn rebuild_feedback(
+    mut commands: Commands,
+    ui: Res<StorageUi>,
+    errors: Query<(Entity, Option<&Children>), With<StorageErrorHost>>,
+    overlays: Query<(Entity, Option<&Children>), With<StorageOverlayHost>>,
+) {
+    if !ui.is_changed() {
+        return;
+    }
+    let (Ok((error_host, error_children)), Ok((overlay_host, overlay_children))) =
+        (errors.single(), overlays.single())
+    else {
+        return;
+    };
+    for children in [error_children, overlay_children].into_iter().flatten() {
+        for child in children.iter() {
+            commands.entity(child).despawn();
+        }
+    }
+    if let Some(error) = &ui.panel_error {
+        commands
+            .spawn_scene(scene::error_message(error.clone()))
+            .insert(ChildOf(error_host));
+    }
+    if let Some(pending) = &ui.pending_transfer {
+        commands
+            .spawn_scene(scene::amount_overlay(pending.amount.clone()))
+            .insert(ChildOf(overlay_host));
+    }
+}
+
+fn clear_storage_focus(
+    input_focus: &mut InputFocus,
+    fields: &Query<(), Or<(With<StorageSearchField>, With<StorageAmountField>)>>,
+) {
+    if input_focus
+        .get()
+        .is_some_and(|entity| fields.contains(entity))
+    {
+        input_focus.clear();
+    }
+}
+
+fn sync_window_visibility(
+    storage: Res<Storage>,
+    mut roots: Query<&mut Visibility, With<StorageWindowRoot>>,
+    mut fields: Query<&mut EditableText, With<StorageSearchField>>,
+    storage_fields: Query<(), Or<(With<StorageSearchField>, With<StorageAmountField>)>>,
+    mut input_focus: ResMut<InputFocus>,
+    mut ui: ResMut<StorageUi>,
+) {
+    let Ok(mut visibility) = roots.single_mut() else {
+        return;
+    };
+    let open = storage.is_open();
+    *visibility = if open {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    if ui.previous_open != open {
+        if let Ok(mut field) = fields.single_mut() {
+            field.clear();
+        }
+        if !open {
+            clear_storage_focus(&mut input_focus, &storage_fields);
+        }
+        *ui = StorageUi {
+            previous_open: open,
+            ..Default::default()
+        };
+    }
+}
+
+pub(crate) fn on_storage_close(
+    _: On<Activate>,
+    mut close: MessageWriter<CloseStorage>,
+    mut roots: Query<&mut Visibility, With<StorageWindowRoot>>,
+    mut fields: Query<&mut EditableText, With<StorageSearchField>>,
+    storage_fields: Query<(), Or<(With<StorageSearchField>, With<StorageAmountField>)>>,
+    mut input_focus: ResMut<InputFocus>,
+    mut ui: ResMut<StorageUi>,
+) {
+    close.write(CloseStorage);
+    if let Ok(mut root) = roots.single_mut() {
+        *root = Visibility::Hidden;
+    }
+    if let Ok(mut field) = fields.single_mut() {
+        field.clear();
+    }
+    clear_storage_focus(&mut input_focus, &storage_fields);
+    *ui = StorageUi::default();
+}
+
+fn reset_storage_ui(mut ui: ResMut<StorageUi>) {
+    *ui = StorageUi::default();
+}
+
 pub struct StorageWindowPlugin;
 
 impl Plugin for StorageWindowPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<StorageUi>();
+        install_norse_theme(app);
+        if !app.is_plugin_added::<FeathersCorePlugin>() {
+            app.add_plugins(FeathersPlugins);
+        }
+        app.init_resource::<StorageUi>()
+            .add_systems(
+                Update,
+                (
+                    sync_search,
+                    rebuild_panes
+                        .after(sync_search)
+                        .after(game_engine::domain::inventory::systems::apply_item_deltas)
+                        .after(game_engine::domain::storage::systems::apply_storage_item_deltas),
+                    sync_controls.after(rebuild_panes),
+                    rebuild_feedback.after(rebuild_panes),
+                    sync_window_visibility,
+                )
+                    .run_if(in_state(GameState::InGame)),
+            )
+            .add_systems(OnExit(GameState::InGame), reset_storage_ui);
     }
 }
 
@@ -249,6 +594,8 @@ mod tests {
     #[test]
     fn plugin_initializes_presentation_state_only() {
         let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.init_asset::<bevy::shader::Shader>();
 
         app.add_plugins(StorageWindowPlugin);
 
@@ -492,5 +839,152 @@ mod tests {
             StorageSelection::Vault(70_000),
             Duration::from_millis(200)
         ));
+    }
+
+    #[test]
+    fn all_transfer_controls_follow_selection_and_awaiting_state() {
+        let mut app = App::new();
+        app.insert_resource(StorageUi {
+            selection: Some(StorageSelection::Bag(7)),
+            ..Default::default()
+        });
+        app.add_systems(Update, sync_controls);
+        let deposit = app
+            .world_mut()
+            .spawn((
+                StorageTransferButton {
+                    direction: StorageTransferDirection::Deposit,
+                    enabled: false,
+                },
+                BackgroundColor::default(),
+            ))
+            .id();
+        let withdraw = app
+            .world_mut()
+            .spawn((
+                StorageTransferButton {
+                    direction: StorageTransferDirection::Withdraw,
+                    enabled: false,
+                },
+                BackgroundColor::default(),
+            ))
+            .id();
+        let quick_bag = app
+            .world_mut()
+            .spawn(StorageQuickTransfer(StorageSelection::Bag(7)))
+            .id();
+        let quick_vault = app
+            .world_mut()
+            .spawn(StorageQuickTransfer(StorageSelection::Vault(70_000)))
+            .id();
+
+        app.update();
+        assert!(
+            app.world()
+                .get::<StorageTransferButton>(deposit)
+                .unwrap()
+                .enabled
+        );
+        assert!(
+            !app.world()
+                .get::<StorageTransferButton>(withdraw)
+                .unwrap()
+                .enabled
+        );
+        assert!(app.world().get::<InteractionDisabled>(deposit).is_none());
+        assert!(app.world().get::<InteractionDisabled>(withdraw).is_some());
+        assert!(app.world().get::<InteractionDisabled>(quick_bag).is_none());
+        assert!(app
+            .world()
+            .get::<InteractionDisabled>(quick_vault)
+            .is_none());
+
+        app.world_mut().resource_mut::<StorageUi>().awaiting_result = true;
+        app.update();
+        assert!(
+            !app.world()
+                .get::<StorageTransferButton>(deposit)
+                .unwrap()
+                .enabled
+        );
+        assert!(app.world().get::<InteractionDisabled>(deposit).is_some());
+        assert!(app.world().get::<InteractionDisabled>(quick_bag).is_some());
+        assert!(app
+            .world()
+            .get::<InteractionDisabled>(quick_vault)
+            .is_some());
+    }
+
+    #[test]
+    fn close_hides_shell_resets_ui_and_emits_command() {
+        let mut app = App::new();
+        app.add_message::<CloseStorage>();
+        app.insert_resource(StorageUi {
+            category: StorageCategory::Equip,
+            panel_error: Some("error".to_string()),
+            ..Default::default()
+        });
+        let root = app
+            .world_mut()
+            .spawn((StorageWindowRoot, Visibility::Inherited))
+            .id();
+        let search = app
+            .world_mut()
+            .spawn((StorageSearchField, EditableText::new("potion")))
+            .id();
+        app.insert_resource(InputFocus::from_entity(search));
+        let button = app.world_mut().spawn_empty().observe(on_storage_close).id();
+
+        app.world_mut().trigger(Activate { entity: button });
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<CloseStorage>>()
+                .drain()
+                .count(),
+            1
+        );
+        assert_eq!(
+            app.world().get::<Visibility>(root),
+            Some(&Visibility::Hidden)
+        );
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
+        assert_eq!(app.world().resource::<StorageUi>(), &StorageUi::default());
+    }
+
+    #[test]
+    fn authoritative_storage_open_state_drives_shell_visibility() {
+        let mut app = App::new();
+        app.init_resource::<Storage>();
+        app.init_resource::<StorageUi>();
+        app.init_resource::<InputFocus>();
+        app.add_systems(Update, sync_window_visibility);
+        let root = app
+            .world_mut()
+            .spawn((StorageWindowRoot, Visibility::Hidden))
+            .id();
+
+        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        app.update();
+        assert_eq!(
+            app.world().get::<Visibility>(root),
+            Some(&Visibility::Inherited)
+        );
+        assert!(app.world().resource::<StorageUi>().previous_open);
+
+        let amount = app
+            .world_mut()
+            .spawn((StorageAmountField, EditableText::new("1")))
+            .id();
+        app.insert_resource(InputFocus::from_entity(amount));
+
+        app.world_mut().resource_mut::<Storage>().close();
+        app.update();
+        assert_eq!(
+            app.world().get::<Visibility>(root),
+            Some(&Visibility::Hidden)
+        );
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
+        assert_eq!(app.world().resource::<StorageUi>(), &StorageUi::default());
     }
 }
