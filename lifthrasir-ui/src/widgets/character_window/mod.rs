@@ -25,6 +25,7 @@ mod character_tab;
 mod identity;
 mod meter;
 pub mod shell;
+mod skills_tab;
 
 /// Which tab the Console shows. The active chord always selects the tab, so this is
 /// never "remembered" independently of the last chord.
@@ -103,6 +104,9 @@ impl Plugin for CharacterWindowPlugin {
         app.init_resource::<CharacterWindowState>();
         app.init_resource::<bag_tab::BagUi>();
         app.init_resource::<bag_tab::LastBagClick>();
+        app.init_resource::<skills_tab::SkillPanelUi>();
+        app.init_resource::<skills_tab::SkillPanelStaging>();
+        app.init_resource::<skills_tab::LastSkillPanelClick>();
         character_tab::register(app);
         app.add_systems(
             Update,
@@ -112,7 +116,20 @@ impl Plugin for CharacterWindowPlugin {
             Update,
             bag_tab::rebuild_bag_body.run_if(in_state(GameState::InGame)),
         );
-        app.add_systems(OnExit(GameState::InGame), bag_tab::reset);
+        app.add_systems(
+            Update,
+            (
+                skills_tab::ensure_default_tab,
+                skills_tab::rebuild_skills_body,
+                skills_tab::update_skill_footer,
+            )
+                .chain()
+                .run_if(in_state(GameState::InGame)),
+        );
+        app.add_systems(
+            OnExit(GameState::InGame),
+            (bag_tab::reset, skills_tab::reset),
+        );
         app.add_systems(
             Update,
             reflect_window_state.run_if(in_state(GameState::InGame)),
