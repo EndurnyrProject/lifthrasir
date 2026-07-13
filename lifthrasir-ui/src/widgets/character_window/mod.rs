@@ -20,6 +20,8 @@ use leafwing_input_manager::prelude::ActionState;
 
 use crate::theme::feathers_theme::install_norse_theme;
 
+mod identity;
+mod meter;
 pub mod shell;
 
 /// Which tab the Console shows. The active chord always selects the tab, so this is
@@ -104,6 +106,11 @@ impl Plugin for CharacterWindowPlugin {
         app.add_systems(
             Update,
             reflect_window_state.run_if(in_state(GameState::InGame)),
+        );
+        app.add_systems(
+            Update,
+            identity::rebuild_identity
+                .run_if(in_state(GameState::InGame).and_then(identity::identity_changed)),
         );
     }
 }

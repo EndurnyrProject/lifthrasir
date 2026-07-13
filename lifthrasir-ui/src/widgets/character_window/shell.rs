@@ -11,7 +11,9 @@ use crate::theme;
 use crate::theme::feathers_theme::{
     TOKEN_TEXT, TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
 };
-use crate::widgets::chrome::{body_container, chrome_text, drag_window, glyph_icon, ignore_picking};
+use crate::widgets::chrome::{
+    body_container, chrome_text, drag_window, glyph_icon, ignore_picking,
+};
 use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
 
