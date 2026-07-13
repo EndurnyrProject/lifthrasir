@@ -14,7 +14,7 @@
 - [x] Task 2: Add authoritative Storage domain state
 - [x] Task 3: Receive Storage protobuf events
 - [x] Task 4: Send Storage protobuf requests
-- [ ] Task 5: Add the Storage UI interaction model
+- [x] Task 5: Add the Storage UI interaction model
 - [ ] Task 6: Render the Storage window
 - [ ] Task 7: Wire transfers, amount prompting, and results
 
@@ -161,15 +161,15 @@
 - Reference: `game-engine/src/domain/inventory/item.rs` — shared category and equipped-item APIs.
 
 **Acceptance criteria:**
-- [ ] `StorageUi` contains category, normalized query, Bag/Vault selection, pending transfer, awaiting-result flag, panel error, double-click state, and previous-open state only; authoritative items remain in engine resources.
-- [ ] Shared category/search projection applies the same case-insensitive predicate to Bag and Vault data and never mutates either source.
-- [ ] Equipped Bag items are excluded before category and search filtering.
-- [ ] Selection validation clears missing or filtered-out items.
-- [ ] A single transfer-intent helper distinguishes Bag deposits from Vault withdrawals and widens Bag indices losslessly.
-- [ ] Live amount validation accepts only `1..=available` and rejects empty, zero, non-numeric, excessive, or disappeared stacks.
-- [ ] Pure rejection-to-panel-message mapping covers all known variants and includes the numeric code for unknown variants.
-- [ ] Double-click timing and all pure helper behavior have focused tests.
-- [ ] `cargo test -p lifthrasir-ui storage_window` passes.
+- [x] `StorageUi` contains category, normalized query, Bag/Vault selection, pending transfer, awaiting-result flag, panel error, double-click state, and previous-open state only; authoritative items remain in engine resources.
+- [x] Shared category/search projection applies the same case-insensitive predicate to Bag and Vault data and never mutates either source.
+- [x] Equipped Bag items are excluded before category and search filtering.
+- [x] Selection validation clears missing or filtered-out items.
+- [x] A single transfer-intent helper distinguishes Bag deposits from Vault withdrawals and widens Bag indices losslessly.
+- [x] Live amount validation accepts only `1..=available` and rejects empty, zero, non-numeric, excessive, or disappeared stacks.
+- [x] Pure rejection-to-panel-message mapping covers all known variants and includes the numeric code for unknown variants.
+- [x] Double-click timing and all pure helper behavior have focused tests.
+- [x] `cargo test -p lifthrasir-ui storage_window` passes.
 
 **Depends on:** Task 1, Task 2
 

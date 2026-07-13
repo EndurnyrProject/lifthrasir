@@ -24,6 +24,7 @@ pub mod pushcart_window;
 pub mod settings_window;
 pub mod shop_window;
 pub mod status_icons;
+pub mod storage_window;
 pub mod system_dialog;
 
 pub struct InGameHudPlugin;
