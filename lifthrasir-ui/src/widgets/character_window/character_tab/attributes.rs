@@ -233,7 +233,7 @@ fn head(text: &'static str) -> impl Scene {
 /// Save / Reset commit row.
 pub fn attributes_panel() -> impl Scene {
     bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(12) }
+        Node { flex_direction: FlexDirection::Column, row_gap: px(12), flex_grow: 1.0, flex_basis: px(0) }
         ignore_picking()
         Children [ ledger(), commit_row() ]
     }

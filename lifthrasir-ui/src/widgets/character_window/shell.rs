@@ -24,7 +24,7 @@ use super::{
 
 const WINDOW_LEFT: f32 = 300.0;
 const WINDOW_TOP: f32 = 100.0;
-const WINDOW_WIDTH: f32 = 460.0;
+const WINDOW_WIDTH: f32 = 780.0;
 
 /// The tab strip, in strip order: label + the tab it selects.
 const TABS: [(&str, CharacterTab); 3] = [

@@ -43,13 +43,14 @@ pub fn rebuild_character_body(
 
 fn body() -> impl Scene {
     bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(14) }
+        Node { flex_direction: FlexDirection::Row, column_gap: px(18), align_items: AlignItems::Start }
         ignore_picking()
         Children [ paperdoll_row(), attributes::attributes_panel() ]
     }
 }
 
-/// Left slot column, center render preview, right slot column.
+/// The equipment block: left slot column, center render preview, right slot column.
+/// Fixed-width on the left of the row so the attributes panel takes the added width.
 fn paperdoll_row() -> impl Scene {
     bsn! {
         Node {
@@ -57,6 +58,9 @@ fn paperdoll_row() -> impl Scene {
             align_items: AlignItems::Stretch,
             justify_content: JustifyContent::SpaceBetween,
             column_gap: px(12),
+            flex_grow: 0.0,
+            flex_shrink: 0.0,
+            flex_basis: px(432),
         }
         ignore_picking()
         Children [
