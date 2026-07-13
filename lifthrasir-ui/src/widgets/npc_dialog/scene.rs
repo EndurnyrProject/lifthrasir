@@ -7,7 +7,7 @@
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{EditableText, FontSize, FontSourceTemplate};
-use bevy_feathers::controls::FeathersButton;
+use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
 use net_contract::dto::NpcDialogExpect;
 
@@ -207,23 +207,39 @@ pub(super) fn slice_colored_runs(
     sliced
 }
 
-/// The footer buttons for `expect`: `[Close, Next]` for `NEXT`, `[Close]` for
-/// `CLOSE` (terminal), one button per `options` entry plus `[Leave]` for `MENU`,
-/// and `[Cancel, Confirm]` for `INPUT_INT`/`INPUT_STR`.
+/// The footer for `expect`. `MENU` renders one full-width, left-aligned text row
+/// per `options` entry plus a trailing `Leave` row (RO-style, stacked vertically,
+/// no button chrome). Every other frame keeps the right-aligned button row:
+/// `[Close, Next]` for `NEXT`, `[Close]` for `CLOSE` (terminal), and
+/// `[Cancel, Confirm]` for `INPUT_INT`/`INPUT_STR`.
 fn footer_row(expect: NpcDialogExpect, options: Vec<String>) -> impl Scene {
+    let menu = expect == NpcDialogExpect::Menu;
     let buttons: Vec<_> = match expect {
         NpcDialogExpect::Menu => menu_buttons(&options),
         NpcDialogExpect::InputInt | NpcDialogExpect::InputStr => owned_buttons(input_buttons()),
         NpcDialogExpect::Next | NpcDialogExpect::Close => owned_buttons(footer_buttons(expect)),
     }
     .into_iter()
-    .map(|(label, action)| footer_button(label, action))
+    .map(|(label, action)| footer_button(label, action, menu))
     .collect();
+    let direction = if menu {
+        FlexDirection::Column
+    } else {
+        FlexDirection::Row
+    };
+    let justify = if menu {
+        JustifyContent::FlexStart
+    } else {
+        JustifyContent::FlexEnd
+    };
+    let row_gap = if menu { px(2) } else { px(0) };
+    let column_gap = if menu { px(0) } else { px(8) };
     bsn! {
         Node {
-            flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::FlexEnd,
-            column_gap: px(8),
+            flex_direction: {direction},
+            justify_content: {justify},
+            row_gap: {row_gap},
+            column_gap: {column_gap},
         }
         ignore_picking()
         Children [ {buttons} ]
@@ -276,11 +292,26 @@ fn menu_buttons(options: &[String]) -> Vec<(String, FooterButtonAction)> {
     buttons
 }
 
-fn footer_button(label: String, action: FooterButtonAction) -> impl Scene {
+/// A footer entry. As a `menu` row it is a full-width, left-aligned, chrome-less
+/// (`ButtonVariant::Plain` → transparent until hovered) text line; otherwise the
+/// usual fixed-width, centered button.
+fn footer_button(label: String, action: FooterButtonAction, menu: bool) -> impl Scene {
+    let variant = if menu {
+        ButtonVariant::Plain
+    } else {
+        ButtonVariant::Normal
+    };
+    let width = if menu { percent(100) } else { px(72) };
+    let justify = if menu {
+        JustifyContent::FlexStart
+    } else {
+        JustifyContent::Center
+    };
     bsn! {
         @FeathersButton { @caption: bsn! { chrome_text(label) } }
         template_value(action)
-        Node { width: px(72), height: px(24) }
+        template_value(variant)
+        Node { width: {width}, height: px(24), justify_content: {justify} }
         on(on_footer_button)
     }
 }
