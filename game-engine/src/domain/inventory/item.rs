@@ -38,17 +38,21 @@ pub enum ItemCategory {
     Equip,
 }
 
+pub fn item_category(item_type: u32) -> ItemCategory {
+    match item_type {
+        0 | 2 | 11 | 18 => ItemCategory::Use,
+        4 | 5 | 8 | 12 => ItemCategory::Equip,
+        _ => ItemCategory::Etc,
+    }
+}
+
 impl Item {
     pub fn is_equipped(&self) -> bool {
         self.wear_state != 0
     }
 
     pub fn category(&self) -> ItemCategory {
-        match self.item_type {
-            0 | 2 | 11 | 18 => ItemCategory::Use,
-            4 | 5 | 8 | 12 => ItemCategory::Equip,
-            _ => ItemCategory::Etc,
-        }
+        item_category(self.item_type.into())
     }
 
     pub fn type_label(&self) -> &'static str {
@@ -106,5 +110,12 @@ mod tests {
         for t in [0u8, 4, 3, 99] {
             assert!(!item_with_type(t).type_label().is_empty(), "item_type {t}");
         }
+    }
+
+    #[test]
+    fn shared_item_category_accepts_storage_item_types() {
+        assert_eq!(item_category(18), ItemCategory::Use);
+        assert_eq!(item_category(12), ItemCategory::Equip);
+        assert_eq!(item_category(300), ItemCategory::Etc);
     }
 }

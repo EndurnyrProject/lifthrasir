@@ -23,6 +23,7 @@ pub use domain::inventory::InventoryPlugin;
 pub use domain::item_drop::ItemDropPlugin;
 pub use domain::party::PartyPlugin;
 pub use domain::settings::SettingsPlugin;
+pub use domain::storage::StoragePlugin;
 pub use infrastructure::accessory::{AccessoryDb, AccessoryDbPlugin};
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
 pub use infrastructure::effect::EffectsPlugin;
@@ -68,6 +69,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(CombatPlugin)
             .add(InventoryPlugin)
             .add(CartPlugin)
+            .add(StoragePlugin)
             .add(EmotePlugin)
             .add(PartyPlugin)
             .add(ItemDropPlugin)

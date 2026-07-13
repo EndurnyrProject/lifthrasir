@@ -11,7 +11,7 @@
 ## Progress
 
 - [x] Task 1: Define the protocol-neutral Storage contract
-- [ ] Task 2: Add authoritative Storage domain state
+- [x] Task 2: Add authoritative Storage domain state
 - [ ] Task 3: Receive Storage protobuf events
 - [ ] Task 4: Send Storage protobuf requests
 - [ ] Task 5: Add the Storage UI interaction model
@@ -80,15 +80,15 @@
 - Reference: `game-engine/tests/no_transport_dep.rs` — transport-boundary regression test.
 
 **Acceptance criteria:**
-- [ ] Opening Storage atomically replaces items and capacity and marks the resource open.
-- [ ] Added deltas upsert server-reported items; removals decrement stacks and delete entries at zero.
-- [ ] Deltas received while closed are ignored and cannot reopen or mutate Storage.
-- [ ] `CloseStorage` marks the resource closed locally after snapshot/delta application, while leaving the message available to other independent readers.
-- [ ] Leaving `GameState::InGame` clears items, capacity, and open state.
-- [ ] Iteration is deterministic by Storage index.
-- [ ] Existing Inventory categorization behavior remains unchanged after extracting `item_category`.
-- [ ] Unit/App tests cover replacement, capacity, upsert, decrement, zero removal, ordering, closed deltas, close, and reset.
-- [ ] `cargo test -p game-engine storage` and `cargo test -p game-engine --test no_transport_dep` pass.
+- [x] Opening Storage atomically replaces items and capacity and marks the resource open.
+- [x] Added deltas upsert server-reported items; removals decrement stacks and delete entries at zero.
+- [x] Deltas received while closed are ignored and cannot reopen or mutate Storage.
+- [x] `CloseStorage` marks the resource closed locally after snapshot/delta application, while leaving the message available to other independent readers.
+- [x] Leaving `GameState::InGame` clears items, capacity, and open state.
+- [x] Iteration is deterministic by Storage index.
+- [x] Existing Inventory categorization behavior remains unchanged after extracting `item_category`.
+- [x] Unit/App tests cover replacement, capacity, upsert, decrement, zero removal, ordering, closed deltas, close, and reset.
+- [x] `cargo test -p game-engine storage` and `cargo test -p game-engine --test no_transport_dep` pass.
 
 **Depends on:** Task 1
 

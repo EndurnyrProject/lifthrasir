@@ -17,5 +17,6 @@ pub mod party;
 pub mod settings;
 pub mod skill;
 pub mod sprite;
+pub mod storage;
 pub mod system_sets;
 pub mod world;
