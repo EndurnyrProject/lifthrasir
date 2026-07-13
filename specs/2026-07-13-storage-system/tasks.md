@@ -13,7 +13,7 @@
 - [x] Task 1: Define the protocol-neutral Storage contract
 - [x] Task 2: Add authoritative Storage domain state
 - [x] Task 3: Receive Storage protobuf events
-- [ ] Task 4: Send Storage protobuf requests
+- [x] Task 4: Send Storage protobuf requests
 - [ ] Task 5: Add the Storage UI interaction model
 - [ ] Task 6: Render the Storage window
 - [ ] Task 7: Wire transfers, amount prompting, and results
@@ -135,13 +135,13 @@
 - Reference only: `net-aesir/src/proto/aesir.net.rs` — existing generated request bodies; do not edit.
 
 **Acceptance criteria:**
-- [ ] Deposit requests carry the widened Bag inventory index and requested amount exactly.
-- [ ] Withdrawal requests carry the Storage index and requested amount exactly.
-- [ ] Close commands produce a `StorageCloseRequest` body.
-- [ ] Commands are cleared without network sends when disconnected or outside `ZonePhase::Playing`.
-- [ ] Send failures are logged and do not panic the application.
-- [ ] Builder and system tests cover all three request kinds plus phase gating.
-- [ ] The generated protobuf file remains unchanged and `cargo test -p net-aesir storage` passes.
+- [x] Deposit requests carry the widened Bag inventory index and requested amount exactly.
+- [x] Withdrawal requests carry the Storage index and requested amount exactly.
+- [x] Close commands produce a `StorageCloseRequest` body.
+- [x] Commands are cleared without network sends when disconnected or outside `ZonePhase::Playing`.
+- [x] Send failures are logged and do not panic the application.
+- [x] Builder and system tests cover all three request kinds plus phase gating.
+- [x] The generated protobuf file remains unchanged and `cargo test -p net-aesir storage` passes.
 
 **Depends on:** Task 1
 

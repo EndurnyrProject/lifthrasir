@@ -11,4 +11,5 @@ pub mod party;
 pub mod shop;
 pub mod skill;
 pub mod social;
+pub mod storage;
 pub mod visibility;
