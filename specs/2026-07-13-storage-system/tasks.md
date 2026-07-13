@@ -227,22 +227,22 @@
 - Reference: `lifthrasir-ui/src/widgets/party/create_dialog.rs` — editable input handling.
 
 **Acceptance criteria:**
-- [ ] Directional buttons, cell quick-transfer controls, and double-click all call the same `begin_transfer` behavior.
-- [ ] A source stack of one immediately emits the correct neutral deposit/withdraw command; a larger stack opens the prompt initialized to `1`.
-- [ ] The amount field uses `EditableTextFilter` to accept ASCII digits only, and confirmation revalidates against the live source stack.
-- [ ] Invalid input stays in the prompt, shows red validation feedback, and emits no command; cancellation emits nothing.
-- [ ] A valid confirmation emits the exact source index/amount and enters `awaiting_result`.
-- [ ] While awaiting a result, all transfer affordances are disabled so the request/result association remains unambiguous.
-- [ ] No UI observer or system mutates `Inventory` or `Storage`; visible moves occur only after server deltas update engine resources.
-- [ ] A new transfer clears the old panel error; success clears awaiting/error state; each known rejection shows its readable red panel message.
-- [ ] Unknown rejection codes are logged and shown in a generic red message containing the code.
-- [ ] Results received while Storage is closed are ignored and cannot affect a later session.
-- [ ] Closing or leaving gameplay cancels prompts and awaiting state; reopening starts from the new authoritative snapshot.
-- [ ] UI rebuild runs after Inventory and Storage message application so a rendered frame does not expose a half-applied transfer.
-- [ ] Tests cover every transfer affordance, single/stack paths, live validation, duplicate blocking, all result mappings, closed-session results, and server-authoritative rendering.
+- [x] Directional buttons, cell quick-transfer controls, and double-click all call the same `begin_transfer` behavior.
+- [x] A source stack of one immediately emits the correct neutral deposit/withdraw command; a larger stack opens the prompt initialized to `1`.
+- [x] The amount field uses `EditableTextFilter` to accept ASCII digits only, and confirmation revalidates against the live source stack.
+- [x] Invalid input stays in the prompt, shows red validation feedback, and emits no command; cancellation emits nothing.
+- [x] A valid confirmation emits the exact source index/amount and enters `awaiting_result`.
+- [x] While awaiting a result, all transfer affordances are disabled so the request/result association remains unambiguous.
+- [x] No UI observer or system mutates `Inventory` or `Storage`; visible moves occur only after server deltas update engine resources.
+- [x] A new transfer clears the old panel error; success clears awaiting/error state; each known rejection shows its readable red panel message.
+- [x] Unknown rejection codes are logged and shown in a generic red message containing the code.
+- [x] Results received while Storage is closed are ignored and cannot affect a later session.
+- [x] Closing or leaving gameplay cancels prompts and awaiting state; reopening starts from the new authoritative snapshot.
+- [x] UI rebuild runs after Inventory and Storage message application so a rendered frame does not expose a half-applied transfer.
+- [x] Tests cover every transfer affordance, single/stack paths, live validation, duplicate blocking, all result mappings, closed-session results, and server-authoritative rendering.
 - [ ] Manual comparison against `designs/Endurnir Project/screenshots/storage.png` confirms the intended dual-pane layout, with Zeny omitted and the label exactly `Storage Vault`.
 - [ ] Manual verification covers shared filters, both directions, cancellation, known rejections, both close controls, and reopen with a fresh snapshot.
-- [ ] `cargo fmt --check`, targeted Storage tests in all four crates, and the full `cargo test` workspace suite pass.
+- [x] `cargo fmt --check`, targeted Storage tests in all four crates, and the full `cargo test` workspace suite pass.
 
 **Depends on:** Task 3, Task 4, Task 6
 

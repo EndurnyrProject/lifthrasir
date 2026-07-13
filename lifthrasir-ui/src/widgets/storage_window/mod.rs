@@ -9,9 +9,9 @@ use game_engine::domain::inventory::item::item_category;
 use game_engine::domain::inventory::{Inventory, Item, ItemCategory};
 use game_engine::domain::storage::Storage;
 use game_engine::infrastructure::item::ItemDb;
-use net_contract::commands::CloseStorage;
+use net_contract::commands::{CloseStorage, DepositStorageItem, WithdrawStorageItem};
 use net_contract::dto::StorageItem;
-use net_contract::events::StorageRejection;
+use net_contract::events::{StorageRejection, StorageResult};
 use std::time::Duration;
 
 use crate::theme;
@@ -277,6 +277,190 @@ pub(crate) fn is_double_click(
     })
 }
 
+fn write_transfer(
+    source: StorageSelection,
+    amount: u32,
+    deposit: &mut MessageWriter<DepositStorageItem>,
+    withdraw: &mut MessageWriter<WithdrawStorageItem>,
+) {
+    match transfer_intent(source, amount) {
+        TransferIntent::Deposit {
+            inventory_index,
+            amount,
+        } => {
+            deposit.write(DepositStorageItem {
+                inventory_index,
+                amount,
+            });
+        }
+        TransferIntent::Withdraw {
+            storage_index,
+            amount,
+        } => {
+            withdraw.write(WithdrawStorageItem {
+                storage_index,
+                amount,
+            });
+        }
+    }
+}
+
+fn begin_transfer(
+    source: StorageSelection,
+    inventory: &Inventory,
+    storage: &Storage,
+    ui: &mut StorageUi,
+    deposit: &mut MessageWriter<DepositStorageItem>,
+    withdraw: &mut MessageWriter<WithdrawStorageItem>,
+) {
+    if ui.awaiting_result || ui.pending_transfer.is_some() || !storage.is_open() {
+        return;
+    }
+    let available = match source {
+        StorageSelection::Bag(index) => inventory
+            .get(index)
+            .filter(|item| !item.is_equipped())
+            .map(|item| u32::from(item.amount)),
+        StorageSelection::Vault(index) => storage.get(index).map(|item| item.amount),
+    };
+    let Some(available) = available.filter(|amount| *amount > 0) else {
+        return;
+    };
+    ui.last_click = None;
+    ui.panel_error = None;
+    if available == 1 {
+        write_transfer(source, 1, deposit, withdraw);
+        ui.awaiting_result = true;
+    } else {
+        ui.pending_transfer = Some(PendingTransfer {
+            source,
+            amount: "1".to_string(),
+        });
+    }
+}
+
+pub(crate) fn on_transfer_activate(
+    activate: On<Activate>,
+    buttons: Query<&StorageTransferButton>,
+    inventory: Res<Inventory>,
+    storage: Res<Storage>,
+    mut ui: ResMut<StorageUi>,
+    mut deposit: MessageWriter<DepositStorageItem>,
+    mut withdraw: MessageWriter<WithdrawStorageItem>,
+) {
+    let Ok(button) = buttons.get(activate.entity) else {
+        return;
+    };
+    let Some(source) = ui.selection else {
+        return;
+    };
+    let direction_matches = matches!(
+        (button.direction, source),
+        (StorageTransferDirection::Deposit, StorageSelection::Bag(_))
+            | (
+                StorageTransferDirection::Withdraw,
+                StorageSelection::Vault(_)
+            )
+    );
+    if !button.enabled || !direction_matches {
+        return;
+    }
+    begin_transfer(
+        source,
+        &inventory,
+        &storage,
+        &mut ui,
+        &mut deposit,
+        &mut withdraw,
+    );
+}
+
+pub(crate) fn on_quick_transfer_activate(
+    activate: On<Activate>,
+    buttons: Query<&StorageQuickTransfer>,
+    inventory: Res<Inventory>,
+    storage: Res<Storage>,
+    mut ui: ResMut<StorageUi>,
+    mut deposit: MessageWriter<DepositStorageItem>,
+    mut withdraw: MessageWriter<WithdrawStorageItem>,
+) {
+    let Ok(button) = buttons.get(activate.entity) else {
+        return;
+    };
+    begin_transfer(
+        button.0,
+        &inventory,
+        &storage,
+        &mut ui,
+        &mut deposit,
+        &mut withdraw,
+    );
+}
+
+fn amount_validation_message(error: AmountValidationError) -> &'static str {
+    match error {
+        AmountValidationError::Empty => "Enter an amount.",
+        AmountValidationError::NotNumber => "Enter a valid number.",
+        AmountValidationError::OutOfRange => "Enter an amount within the available stack.",
+        AmountValidationError::SourceMissing => "The source item is no longer available.",
+    }
+}
+
+pub(crate) fn on_amount_confirm(
+    _: On<Activate>,
+    fields: Query<(Entity, &EditableText), With<StorageAmountField>>,
+    inventory: Res<Inventory>,
+    storage: Res<Storage>,
+    mut input_focus: ResMut<InputFocus>,
+    mut ui: ResMut<StorageUi>,
+    mut deposit: MessageWriter<DepositStorageItem>,
+    mut withdraw: MessageWriter<WithdrawStorageItem>,
+) {
+    if ui.awaiting_result || !storage.is_open() {
+        return;
+    }
+    let (Some(source), Ok((field_entity, field))) = (
+        ui.pending_transfer.as_ref().map(|pending| pending.source),
+        fields.single(),
+    ) else {
+        return;
+    };
+    let input = field.value().to_string();
+    match validate_live_amount(source, &input, &inventory, &storage) {
+        Ok(amount) => {
+            write_transfer(source, amount, &mut deposit, &mut withdraw);
+            ui.pending_transfer = None;
+            ui.awaiting_result = true;
+            ui.panel_error = None;
+            if input_focus.get() == Some(field_entity) {
+                input_focus.clear();
+            }
+        }
+        Err(error) => {
+            if let Some(pending) = &mut ui.pending_transfer {
+                pending.amount = input;
+            }
+            ui.panel_error = Some(amount_validation_message(error).to_string());
+        }
+    }
+}
+
+pub(crate) fn on_amount_cancel(
+    _: On<Activate>,
+    fields: Query<(), With<StorageAmountField>>,
+    mut input_focus: ResMut<InputFocus>,
+    mut ui: ResMut<StorageUi>,
+) {
+    ui.pending_transfer = None;
+    ui.panel_error = None;
+    if input_focus
+        .get()
+        .is_some_and(|entity| fields.contains(entity))
+    {
+        input_focus.clear();
+    }
+}
+
 pub(crate) fn rebuild_panes(
     mut commands: Commands,
     inventory: Res<Inventory>,
@@ -303,7 +487,10 @@ pub(crate) fn rebuild_panes(
     };
     let bag_items = bag_projection(&inventory, &item_db, ui.category, ui.query());
     let vault_items = vault_projection(&storage, &item_db, ui.category, ui.query());
-    ui.selection = validated_selection(ui.selection, &bag_items, &vault_items);
+    let selection = validated_selection(ui.selection, &bag_items, &vault_items);
+    if ui.selection != selection {
+        ui.selection = selection;
+    }
     let (bag, vault) = scene::pane_views(&inventory, &storage, &ui, &item_db);
 
     for children in [bag_children, vault_children].into_iter().flatten() {
@@ -334,17 +521,35 @@ pub(crate) fn on_cell_select(
     click: On<Pointer<Click>>,
     cells: Query<&StorageCell>,
     time: Res<Time>,
+    inventory: Res<Inventory>,
+    storage: Res<Storage>,
     mut ui: ResMut<StorageUi>,
+    mut deposit: MessageWriter<DepositStorageItem>,
+    mut withdraw: MessageWriter<WithdrawStorageItem>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
         return;
     };
-    let now = time.elapsed();
     ui.selection = Some(cell.0);
+    if ui.awaiting_result {
+        return;
+    }
+    let now = time.elapsed();
+    let double_click = is_double_click(ui.last_click, cell.0, now);
     ui.last_click = Some(LastStorageClick {
         selection: cell.0,
         at: now,
     });
+    if double_click {
+        begin_transfer(
+            cell.0,
+            &inventory,
+            &storage,
+            &mut ui,
+            &mut deposit,
+            &mut withdraw,
+        );
+    }
 }
 
 pub(crate) fn stop_quick_transfer_propagation(mut click: On<Pointer<Click>>) {
@@ -448,15 +653,47 @@ fn rebuild_feedback(
             commands.entity(child).despawn();
         }
     }
-    if let Some(error) = &ui.panel_error {
+    if let (None, Some(error)) = (&ui.pending_transfer, &ui.panel_error) {
         commands
             .spawn_scene(scene::error_message(error.clone()))
             .insert(ChildOf(error_host));
     }
     if let Some(pending) = &ui.pending_transfer {
         commands
-            .spawn_scene(scene::amount_overlay(pending.amount.clone()))
+            .spawn_scene(scene::amount_overlay(
+                pending.amount.clone(),
+                ui.panel_error.clone(),
+            ))
             .insert(ChildOf(overlay_host));
+    }
+}
+
+fn apply_storage_results(
+    mut results: MessageReader<StorageResult>,
+    storage: Res<Storage>,
+    mut ui: ResMut<StorageUi>,
+) {
+    for result in results.read() {
+        if !storage.is_open() {
+            warn!("ignoring Storage result while Storage is closed");
+            continue;
+        }
+        if !ui.awaiting_result {
+            warn!("ignoring Storage result without an in-flight request");
+            continue;
+        }
+        ui.awaiting_result = false;
+        ui.pending_transfer = None;
+        ui.last_click = None;
+        ui.panel_error = match result.outcome {
+            Ok(()) => None,
+            Err(rejection) => {
+                if let StorageRejection::Unknown(code) = rejection {
+                    warn!(code, "unknown Storage rejection code");
+                }
+                Some(rejection_message(rejection))
+            }
+        };
     }
 }
 
@@ -540,13 +777,21 @@ impl Plugin for StorageWindowPlugin {
                 Update,
                 (
                     sync_search,
+                    apply_storage_results
+                        .after(game_engine::domain::inventory::systems::apply_item_deltas)
+                        .after(game_engine::domain::storage::systems::apply_storage_item_deltas)
+                        .after(game_engine::domain::storage::systems::apply_storage_close),
                     rebuild_panes
                         .after(sync_search)
+                        .after(apply_storage_results)
                         .after(game_engine::domain::inventory::systems::apply_item_deltas)
+                        .after(game_engine::domain::storage::systems::apply_storage_opened)
                         .after(game_engine::domain::storage::systems::apply_storage_item_deltas),
                     sync_controls.after(rebuild_panes),
                     rebuild_feedback.after(rebuild_panes),
-                    sync_window_visibility,
+                    sync_window_visibility
+                        .after(game_engine::domain::storage::systems::apply_storage_opened)
+                        .after(game_engine::domain::storage::systems::apply_storage_close),
                 )
                     .run_if(in_state(GameState::InGame)),
             )
@@ -567,6 +812,7 @@ mod tests {
                 ItemInfo {
                     identified_name: name.to_string(),
                     unidentified_name: format!("Unknown {name}"),
+                    identified_resource: name.to_uppercase().replace(' ', "_"),
                     ..Default::default()
                 },
             );
@@ -589,6 +835,30 @@ mod tests {
             identified: true,
             cards: vec![],
         }
+    }
+
+    fn click_event(target: Entity, window: Entity) -> Pointer<Click> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            Click {
+                button: PointerButton::Primary,
+                hit: HitData::new(target, 0.0, None, None),
+                duration: Duration::ZERO,
+                count: 1,
+            },
+            target,
+        )
     }
 
     #[test]
@@ -916,11 +1186,750 @@ mod tests {
     }
 
     #[test]
+    fn directional_single_item_emits_deposit_without_mutating_containers() {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.init_resource::<Inventory>();
+        app.init_resource::<Storage>();
+        app.insert_resource(StorageUi {
+            selection: Some(StorageSelection::Bag(7)),
+            ..Default::default()
+        });
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 7,
+            amount: 1,
+            ..Default::default()
+        });
+        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        let button = app
+            .world_mut()
+            .spawn(StorageTransferButton {
+                direction: StorageTransferDirection::Deposit,
+                enabled: true,
+            })
+            .observe(on_transfer_activate)
+            .id();
+
+        app.world_mut().trigger(Activate { entity: button });
+
+        let deposits: Vec<_> = app
+            .world_mut()
+            .resource_mut::<Messages<DepositStorageItem>>()
+            .drain()
+            .collect();
+        assert_eq!(deposits.len(), 1);
+        assert_eq!(deposits[0].inventory_index, 7);
+        assert_eq!(deposits[0].amount, 1);
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<WithdrawStorageItem>>()
+                .drain()
+                .count(),
+            0
+        );
+        assert!(app.world().resource::<StorageUi>().awaiting_result);
+        assert!(app
+            .world()
+            .resource::<StorageUi>()
+            .pending_transfer
+            .is_none());
+        assert_eq!(
+            app.world().resource::<Inventory>().get(7).unwrap().amount,
+            1
+        );
+        assert!(app.world().resource::<Storage>().is_empty());
+    }
+
+    #[test]
+    fn directional_stack_opens_amount_prompt_at_one_without_command() {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.init_resource::<Inventory>();
+        app.init_resource::<Storage>();
+        app.insert_resource(StorageUi {
+            selection: Some(StorageSelection::Bag(7)),
+            panel_error: Some("old error".to_string()),
+            ..Default::default()
+        });
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 7,
+            amount: 5,
+            ..Default::default()
+        });
+        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        let button = app
+            .world_mut()
+            .spawn(StorageTransferButton {
+                direction: StorageTransferDirection::Deposit,
+                enabled: true,
+            })
+            .observe(on_transfer_activate)
+            .id();
+
+        app.world_mut().trigger(Activate { entity: button });
+
+        assert_eq!(
+            app.world().resource::<StorageUi>().pending_transfer,
+            Some(PendingTransfer {
+                source: StorageSelection::Bag(7),
+                amount: "1".to_string(),
+            })
+        );
+        assert_eq!(app.world().resource::<StorageUi>().panel_error, None);
+        assert!(!app.world().resource::<StorageUi>().awaiting_result);
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<DepositStorageItem>>()
+                .drain()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn quick_transfer_uses_its_cell_source_for_withdrawal() {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.init_resource::<Inventory>();
+        app.insert_resource(StorageUi::default());
+        let mut storage = Storage::default();
+        storage.open(600, vec![storage_item(70_000, 501, 0, 1)]);
+        app.insert_resource(storage);
+        let button = app
+            .world_mut()
+            .spawn(StorageQuickTransfer(StorageSelection::Vault(70_000)))
+            .observe(on_quick_transfer_activate)
+            .id();
+
+        app.world_mut().trigger(Activate { entity: button });
+
+        let withdrawals: Vec<_> = app
+            .world_mut()
+            .resource_mut::<Messages<WithdrawStorageItem>>()
+            .drain()
+            .collect();
+        assert_eq!(withdrawals.len(), 1);
+        assert_eq!(withdrawals[0].storage_index, 70_000);
+        assert_eq!(withdrawals[0].amount, 1);
+        assert!(app.world().resource::<StorageUi>().awaiting_result);
+        assert_eq!(
+            app.world()
+                .resource::<Storage>()
+                .get(70_000)
+                .unwrap()
+                .amount,
+            1
+        );
+    }
+
+    #[test]
+    fn cell_double_click_uses_the_shared_transfer_path() {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.init_resource::<Time>();
+        app.init_resource::<Inventory>();
+        app.init_resource::<Storage>();
+        app.init_resource::<StorageUi>();
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 7,
+            amount: 1,
+            ..Default::default()
+        });
+        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        let window = app.world_mut().spawn(Window::default()).id();
+        let cell = app
+            .world_mut()
+            .spawn(StorageCell(StorageSelection::Bag(7)))
+            .observe(on_cell_select)
+            .id();
+
+        app.world_mut().trigger(click_event(cell, window));
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<DepositStorageItem>>()
+                .drain()
+                .count(),
+            0
+        );
+        app.world_mut().trigger(click_event(cell, window));
+
+        let deposits: Vec<_> = app
+            .world_mut()
+            .resource_mut::<Messages<DepositStorageItem>>()
+            .drain()
+            .collect();
+        assert_eq!(deposits.len(), 1);
+        assert_eq!(deposits[0].inventory_index, 7);
+        assert_eq!(deposits[0].amount, 1);
+        let ui = app.world().resource::<StorageUi>();
+        assert!(ui.awaiting_result);
+        assert_eq!(ui.last_click, None);
+    }
+
+    #[test]
+    fn awaiting_result_blocks_direction_quick_transfer_and_double_click() {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.init_resource::<Time>();
+        app.init_resource::<Inventory>();
+        app.insert_resource(StorageUi {
+            selection: Some(StorageSelection::Bag(7)),
+            awaiting_result: true,
+            ..Default::default()
+        });
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 7,
+            amount: 1,
+            ..Default::default()
+        });
+        let mut storage = Storage::default();
+        storage.open(600, vec![storage_item(70_000, 501, 0, 1)]);
+        app.insert_resource(storage);
+        let direction = app
+            .world_mut()
+            .spawn(StorageTransferButton {
+                direction: StorageTransferDirection::Deposit,
+                enabled: true,
+            })
+            .observe(on_transfer_activate)
+            .id();
+        let quick = app
+            .world_mut()
+            .spawn(StorageQuickTransfer(StorageSelection::Vault(70_000)))
+            .observe(on_quick_transfer_activate)
+            .id();
+        let window = app.world_mut().spawn(Window::default()).id();
+        let cell = app
+            .world_mut()
+            .spawn(StorageCell(StorageSelection::Bag(7)))
+            .observe(on_cell_select)
+            .id();
+
+        app.world_mut().trigger(Activate { entity: direction });
+        app.world_mut().trigger(Activate { entity: quick });
+        app.world_mut().trigger(click_event(cell, window));
+        app.world_mut().trigger(click_event(cell, window));
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<DepositStorageItem>>()
+                .drain()
+                .count(),
+            0
+        );
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<WithdrawStorageItem>>()
+                .drain()
+                .count(),
+            0
+        );
+        let ui = app.world().resource::<StorageUi>();
+        assert!(ui.awaiting_result);
+        assert!(ui.pending_transfer.is_none());
+    }
+
+    #[test]
+    fn awaiting_click_then_result_does_not_turn_next_single_click_into_double_click() {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.add_message::<StorageResult>();
+        app.init_resource::<Time>();
+        app.init_resource::<Inventory>();
+        app.insert_resource(StorageUi {
+            awaiting_result: true,
+            ..Default::default()
+        });
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 7,
+            amount: 1,
+            ..Default::default()
+        });
+        let mut storage = Storage::default();
+        storage.open(600, vec![]);
+        app.insert_resource(storage);
+        app.add_systems(Update, apply_storage_results);
+        let window = app.world_mut().spawn(Window::default()).id();
+        let cell = app
+            .world_mut()
+            .spawn(StorageCell(StorageSelection::Bag(7)))
+            .observe(on_cell_select)
+            .id();
+
+        app.world_mut().trigger(click_event(cell, window));
+        assert_eq!(app.world().resource::<StorageUi>().last_click, None);
+        app.world_mut()
+            .write_message(StorageResult { outcome: Ok(()) });
+        app.update();
+        app.world_mut().trigger(click_event(cell, window));
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<DepositStorageItem>>()
+                .drain()
+                .count(),
+            0
+        );
+        assert_eq!(
+            app.world().resource::<StorageUi>().last_click,
+            Some(LastStorageClick {
+                selection: StorageSelection::Bag(7),
+                at: Duration::ZERO,
+            })
+        );
+    }
+
+    #[test]
+    fn invalid_confirmation_stays_in_prompt_and_emits_no_command() {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.init_resource::<Inventory>();
+        app.init_resource::<Storage>();
+        app.init_resource::<InputFocus>();
+        app.insert_resource(StorageUi {
+            pending_transfer: Some(PendingTransfer {
+                source: StorageSelection::Bag(7),
+                amount: "1".to_string(),
+            }),
+            ..Default::default()
+        });
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 7,
+            amount: 5,
+            ..Default::default()
+        });
+        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        app.world_mut()
+            .spawn((StorageAmountField, EditableText::new("6")));
+        let confirm = app
+            .world_mut()
+            .spawn_empty()
+            .observe(on_amount_confirm)
+            .id();
+
+        app.world_mut().trigger(Activate { entity: confirm });
+
+        assert_eq!(
+            app.world().resource::<StorageUi>().pending_transfer,
+            Some(PendingTransfer {
+                source: StorageSelection::Bag(7),
+                amount: "6".to_string(),
+            })
+        );
+        assert_eq!(
+            app.world().resource::<StorageUi>().panel_error.as_deref(),
+            Some("Enter an amount within the available stack.")
+        );
+        assert!(!app.world().resource::<StorageUi>().awaiting_result);
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<DepositStorageItem>>()
+                .drain()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn valid_confirmation_emits_exact_live_amount_and_releases_focus() {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.init_resource::<Inventory>();
+        app.insert_resource(StorageUi {
+            pending_transfer: Some(PendingTransfer {
+                source: StorageSelection::Vault(70_000),
+                amount: "1".to_string(),
+            }),
+            ..Default::default()
+        });
+        let mut storage = Storage::default();
+        storage.open(600, vec![storage_item(70_000, 501, 0, 4)]);
+        app.insert_resource(storage);
+        let field = app
+            .world_mut()
+            .spawn((StorageAmountField, EditableText::new("3")))
+            .id();
+        app.insert_resource(InputFocus::from_entity(field));
+        let confirm = app
+            .world_mut()
+            .spawn_empty()
+            .observe(on_amount_confirm)
+            .id();
+
+        app.world_mut().trigger(Activate { entity: confirm });
+
+        let withdrawals: Vec<_> = app
+            .world_mut()
+            .resource_mut::<Messages<WithdrawStorageItem>>()
+            .drain()
+            .collect();
+        assert_eq!(withdrawals.len(), 1);
+        assert_eq!(withdrawals[0].storage_index, 70_000);
+        assert_eq!(withdrawals[0].amount, 3);
+        let ui = app.world().resource::<StorageUi>();
+        assert!(ui.pending_transfer.is_none());
+        assert!(ui.awaiting_result);
+        assert_eq!(ui.panel_error, None);
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
+        assert_eq!(
+            app.world()
+                .resource::<Storage>()
+                .get(70_000)
+                .unwrap()
+                .amount,
+            4
+        );
+    }
+
+    #[test]
+    fn cancelling_amount_prompt_emits_nothing_and_releases_focus() {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.insert_resource(StorageUi {
+            pending_transfer: Some(PendingTransfer {
+                source: StorageSelection::Bag(7),
+                amount: "3".to_string(),
+            }),
+            panel_error: Some("Enter an amount.".to_string()),
+            ..Default::default()
+        });
+        let field = app
+            .world_mut()
+            .spawn((StorageAmountField, EditableText::new("3")))
+            .id();
+        app.insert_resource(InputFocus::from_entity(field));
+        let cancel = app.world_mut().spawn_empty().observe(on_amount_cancel).id();
+
+        app.world_mut().trigger(Activate { entity: cancel });
+
+        let ui = app.world().resource::<StorageUi>();
+        assert!(ui.pending_transfer.is_none());
+        assert_eq!(ui.panel_error, None);
+        assert!(!ui.awaiting_result);
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<DepositStorageItem>>()
+                .drain()
+                .count(),
+            0
+        );
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<WithdrawStorageItem>>()
+                .drain()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn successful_result_releases_awaiting_state_without_mutating_containers() {
+        let mut app = App::new();
+        app.add_message::<StorageResult>();
+        app.init_resource::<Inventory>();
+        app.insert_resource(StorageUi {
+            awaiting_result: true,
+            panel_error: Some("old error".to_string()),
+            ..Default::default()
+        });
+        let mut storage = Storage::default();
+        storage.open(600, vec![storage_item(70_000, 501, 0, 4)]);
+        app.insert_resource(storage);
+        app.add_systems(Update, apply_storage_results);
+
+        app.world_mut()
+            .write_message(StorageResult { outcome: Ok(()) });
+        app.update();
+
+        let ui = app.world().resource::<StorageUi>();
+        assert!(!ui.awaiting_result);
+        assert_eq!(ui.panel_error, None);
+        assert_eq!(
+            app.world()
+                .resource::<Storage>()
+                .get(70_000)
+                .unwrap()
+                .amount,
+            4
+        );
+        assert!(app.world().resource::<Inventory>().is_empty());
+    }
+
+    #[test]
+    fn rejected_results_release_awaiting_and_show_known_or_unknown_errors() {
+        let mut app = App::new();
+        app.add_message::<StorageResult>();
+        app.insert_resource(StorageUi::default());
+        let mut storage = Storage::default();
+        storage.open(600, vec![]);
+        app.insert_resource(storage);
+        app.add_systems(Update, apply_storage_results);
+
+        let cases = [
+            (StorageRejection::Full, "Storage is full."),
+            (StorageRejection::InventoryFull, "Your inventory is full."),
+            (
+                StorageRejection::Overweight,
+                "You are carrying too much weight.",
+            ),
+            (StorageRejection::NotStorable, "This item cannot be stored."),
+            (
+                StorageRejection::ItemEquipped,
+                "Equipped items cannot be stored.",
+            ),
+            (StorageRejection::InvalidAmount, "Enter a valid amount."),
+            (StorageRejection::NotOpen, "Storage is not open."),
+            (
+                StorageRejection::BasicSkillRequired,
+                "Basic Skill level 6 is required.",
+            ),
+            (
+                StorageRejection::Unknown(-37),
+                "Storage request failed (code -37).",
+            ),
+        ];
+
+        for (rejection, expected) in cases {
+            app.world_mut().resource_mut::<StorageUi>().awaiting_result = true;
+            app.world_mut().write_message(StorageResult {
+                outcome: Err(rejection),
+            });
+            app.update();
+
+            let ui = app.world().resource::<StorageUi>();
+            assert!(!ui.awaiting_result);
+            assert_eq!(ui.panel_error.as_deref(), Some(expected));
+        }
+    }
+
+    #[test]
+    fn result_received_while_closed_cannot_leak_into_reopen() {
+        let mut app = App::new();
+        app.add_message::<StorageResult>();
+        app.init_resource::<Storage>();
+        app.init_resource::<InputFocus>();
+        app.insert_resource(StorageUi {
+            awaiting_result: true,
+            panel_error: Some("existing".to_string()),
+            ..Default::default()
+        });
+        app.world_mut()
+            .spawn((StorageWindowRoot, Visibility::Hidden));
+        app.add_systems(
+            Update,
+            (apply_storage_results, sync_window_visibility).chain(),
+        );
+
+        app.world_mut().write_message(StorageResult {
+            outcome: Err(StorageRejection::Full),
+        });
+        app.update();
+        assert!(app.world().resource::<StorageUi>().awaiting_result);
+        assert_eq!(
+            app.world().resource::<StorageUi>().panel_error.as_deref(),
+            Some("existing")
+        );
+
+        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        app.update();
+        let ui = app.world().resource::<StorageUi>();
+        assert!(!ui.awaiting_result);
+        assert_eq!(ui.panel_error, None);
+        assert!(ui.previous_open);
+    }
+
+    #[test]
+    fn leaving_gameplay_cancels_prompt_and_awaiting_state() {
+        use bevy::state::app::StatesPlugin;
+
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.init_state::<GameState>();
+        app.init_resource::<StorageUi>();
+        app.add_systems(OnExit(GameState::InGame), reset_storage_ui);
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::InGame);
+        app.update();
+        *app.world_mut().resource_mut::<StorageUi>() = StorageUi {
+            pending_transfer: Some(PendingTransfer {
+                source: StorageSelection::Bag(7),
+                amount: "3".to_string(),
+            }),
+            awaiting_result: true,
+            panel_error: Some("error".to_string()),
+            previous_open: true,
+            ..Default::default()
+        };
+
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::Login);
+        app.update();
+
+        assert_eq!(app.world().resource::<StorageUi>(), &StorageUi::default());
+    }
+
+    #[test]
+    fn same_frame_container_deltas_reach_both_rendered_panes() {
+        use bevy::scene::ScenePlugin;
+        use net_contract::events::{ItemAdded, ItemRemoved, StorageItemAdded, StorageItemRemoved};
+
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.add_message::<ItemAdded>();
+        app.add_message::<ItemRemoved>();
+        app.add_message::<StorageItemAdded>();
+        app.add_message::<StorageItemRemoved>();
+        app.init_resource::<Inventory>();
+        app.init_resource::<StorageUi>();
+        let mut storage = Storage::default();
+        storage.open(600, vec![]);
+        app.insert_resource(storage);
+        app.insert_resource(item_db());
+        app.add_systems(
+            Update,
+            (
+                game_engine::domain::inventory::systems::apply_item_deltas,
+                game_engine::domain::storage::systems::apply_storage_item_deltas,
+                rebuild_panes
+                    .after(game_engine::domain::inventory::systems::apply_item_deltas)
+                    .after(game_engine::domain::storage::systems::apply_storage_item_deltas),
+            ),
+        );
+        app.world_mut().spawn(StorageBagHost);
+        app.world_mut().spawn(StorageVaultHost);
+        app.world_mut().write_message(ItemAdded {
+            index: 7,
+            amount: 2,
+            nameid: 501,
+            identified: true,
+            attribute: 0,
+            refine: 0,
+            cards: vec![],
+            location: 0,
+            type_: 0,
+            result: 0,
+            expire_time: 0,
+            look: 0,
+        });
+        app.world_mut().write_message(StorageItemAdded {
+            item: storage_item(70_000, 501, 0, 3),
+        });
+
+        app.update();
+
+        let rendered: Vec<_> = app
+            .world_mut()
+            .query::<&StorageCell>()
+            .iter(app.world())
+            .map(|cell| cell.0)
+            .collect();
+        assert!(rendered.contains(&StorageSelection::Bag(7)));
+        assert!(rendered.contains(&StorageSelection::Vault(70_000)));
+    }
+
+    #[test]
+    fn unrelated_pane_rebuild_preserves_typed_amount_entity_and_focus() {
+        use bevy::scene::ScenePlugin;
+
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        let mut inventory = Inventory::default();
+        inventory.upsert(Item {
+            index: 7,
+            item_id: 501,
+            item_type: 0,
+            amount: 5,
+            identified: true,
+            ..Default::default()
+        });
+        app.insert_resource(inventory);
+        let mut storage = Storage::default();
+        storage.open(600, vec![]);
+        app.insert_resource(storage);
+        app.insert_resource(StorageUi {
+            selection: Some(StorageSelection::Bag(7)),
+            pending_transfer: Some(PendingTransfer {
+                source: StorageSelection::Bag(7),
+                amount: "1".to_string(),
+            }),
+            previous_open: true,
+            ..Default::default()
+        });
+        app.insert_resource(item_db());
+        app.add_systems(
+            Update,
+            (rebuild_panes, rebuild_feedback.after(rebuild_panes)),
+        );
+        app.world_mut().spawn(StorageBagHost);
+        app.world_mut().spawn(StorageVaultHost);
+        app.world_mut().spawn(StorageErrorHost);
+        app.world_mut().spawn(StorageOverlayHost);
+        app.update();
+        let amount = app
+            .world_mut()
+            .query_filtered::<Entity, With<StorageAmountField>>()
+            .single(app.world())
+            .unwrap();
+        app.world_mut()
+            .get_mut::<EditableText>(amount)
+            .unwrap()
+            .editor_mut()
+            .set_text("3");
+        app.insert_resource(InputFocus::from_entity(amount));
+
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 8,
+            item_id: 501,
+            item_type: 0,
+            amount: 1,
+            identified: true,
+            ..Default::default()
+        });
+        app.update();
+
+        let amount_after = app
+            .world_mut()
+            .query_filtered::<Entity, With<StorageAmountField>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(amount_after, amount);
+        assert_eq!(
+            app.world()
+                .get::<EditableText>(amount_after)
+                .unwrap()
+                .value(),
+            "3"
+        );
+        assert_eq!(app.world().resource::<InputFocus>().get(), Some(amount));
+    }
+
+    #[test]
     fn close_hides_shell_resets_ui_and_emits_command() {
         let mut app = App::new();
         app.add_message::<CloseStorage>();
         app.insert_resource(StorageUi {
             category: StorageCategory::Equip,
+            pending_transfer: Some(PendingTransfer {
+                source: StorageSelection::Bag(7),
+                amount: "3".to_string(),
+            }),
+            awaiting_result: true,
             panel_error: Some("error".to_string()),
             ..Default::default()
         });

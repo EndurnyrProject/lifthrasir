@@ -1,6 +1,7 @@
+use bevy::input_focus::AutoFocus;
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::text::{EditableText, FontSize, FontSourceTemplate};
+use bevy::text::{EditableText, EditableTextFilter, FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
@@ -234,6 +235,7 @@ fn cell(view: StorageCellView) -> impl Scene {
                 template_value(StorageQuickTransfer(view.selection))
                 Node { position_type: PositionType::Absolute, right: px(2), top: px(2), width: px(18), height: px(18) }
                 on(stop_quick_transfer_propagation)
+                on(on_quick_transfer_activate)
             ),
         ]
     }
@@ -484,6 +486,7 @@ fn transfer_button(direction: StorageTransferDirection, icon: &'static str) -> i
         template_value(StorageTransferButton { direction, enabled: false })
         Node { width: px(42), height: px(42), border_radius: BorderRadius::all(px(10)) }
         BackgroundColor({theme::FIELD})
+        on(on_transfer_activate)
     }
 }
 
@@ -519,7 +522,8 @@ pub(crate) fn error_message(message: String) -> impl Scene {
     }
 }
 
-pub(crate) fn amount_overlay(amount: String) -> impl Scene {
+pub(crate) fn amount_overlay(amount: String, error: Option<String>) -> impl Scene {
+    let error = error.map(|message| EntityScene(error_message(message)));
     bsn! {
         Node {
             width: percent(100), height: percent(100),
@@ -545,12 +549,15 @@ pub(crate) fn amount_overlay(amount: String) -> impl Scene {
                     (
                         StorageAmountField
                         template_value(EditableText::new(amount))
+                        template_value(EditableTextFilter::new(|c| c.is_ascii_digit()))
+                        AutoFocus
                         TextFont { font: FontSourceTemplate::Handle(theme::FONT_BODY), font_size: {FontSize::Px(13.0)} }
                         TextColor({theme::TEXT})
                         Node { height: px(34), padding: {UiRect::axes(px(10), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
                         BackgroundColor({theme::FIELD})
                         BorderColor::all(theme::STROKE)
                     ),
+                    {error},
                     (
                         Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
                         ignore_picking()
@@ -559,12 +566,14 @@ pub(crate) fn amount_overlay(amount: String) -> impl Scene {
                                 StorageAmountCancel
                                 @FeathersButton { @caption: bsn! { chrome_text("Cancel".to_string(), 12.0, theme::TEXT_DIM) } }
                                 Node { flex_grow: 1.0, height: px(34) }
+                                on(on_amount_cancel)
                             ),
                             (
                                 StorageAmountConfirm
                                 @FeathersButton { @caption: bsn! { chrome_text("Transfer".to_string(), 12.0, theme::TEXT) } }
                                 Node { flex_grow: 1.0, height: px(34) }
                                 BackgroundColor({theme::EMERALD})
+                                on(on_amount_confirm)
                             ),
                         ]
                     ),
@@ -880,7 +889,7 @@ mod tests {
             .spawn_scene(error_message("Storage is full.".to_string()))
             .unwrap();
         app.world_mut()
-            .spawn_scene(amount_overlay("1".to_string()))
+            .spawn_scene(amount_overlay("1".to_string(), None))
             .unwrap();
         app.update();
 
@@ -910,5 +919,36 @@ mod tests {
                 .count(),
             1
         );
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, (
+                    With<StorageAmountField>,
+                    With<bevy::text::EditableTextFilter>,
+                )>()
+                .iter(app.world())
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn amount_overlay_renders_validation_feedback_in_red() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(amount_overlay(
+                "6".to_string(),
+                Some("Enter an amount within the available stack.".to_string()),
+            ))
+            .unwrap();
+        app.update();
+
+        assert!(app
+            .world_mut()
+            .query::<(&Text, &TextColor)>()
+            .iter(app.world())
+            .any(
+                |(text, color)| text.0 == "Enter an amount within the available stack."
+                    && color.0 == theme::BAD
+            ));
     }
 }
