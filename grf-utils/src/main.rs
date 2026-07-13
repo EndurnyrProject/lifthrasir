@@ -124,6 +124,57 @@ fn extract_files(grf: &GrfFile, files: &[String], output_path: &Path) -> Result<
     Ok(())
 }
 
+enum WriteOutcome {
+    Written,
+    PathTraversalBlocked,
+    WriteFailed(std::io::Error),
+}
+
+/// Validates `output_file_path` stays within `canonical_output` (path traversal
+/// protection), creates parent directories, and writes `data`. Shared by
+/// `extract_all_files` and `extract_specific_files`; callers own their own
+/// success/failure messages and counters.
+fn write_entry(
+    canonical_output: &Path,
+    output_file_path: &Path,
+    label: &str,
+    data: &[u8],
+) -> WriteOutcome {
+    match output_file_path.canonicalize() {
+        Ok(canonical_file) => {
+            if !canonical_file.starts_with(canonical_output) {
+                eprintln!(
+                    "Warning: Skipping potentially malicious file path '{}'",
+                    label
+                );
+                return WriteOutcome::PathTraversalBlocked;
+            }
+        }
+        Err(_) => {
+            // File doesn't exist yet, check parent directory
+            if let Some(parent) = output_file_path.parent() {
+                if !parent.starts_with(canonical_output) {
+                    eprintln!(
+                        "Warning: Skipping potentially malicious file path '{}'",
+                        label
+                    );
+                    return WriteOutcome::PathTraversalBlocked;
+                }
+            }
+        }
+    }
+
+    // Create parent directories
+    if let Some(parent) = output_file_path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+
+    match fs::write(output_file_path, data) {
+        Ok(_) => WriteOutcome::Written,
+        Err(e) => WriteOutcome::WriteFailed(e),
+    }
+}
+
 fn extract_all_files(grf: &GrfFile, canonical_output: &Path) -> Result<()> {
     let entries_count = grf.entries.len() as u64;
 
@@ -147,45 +198,11 @@ fn extract_all_files(grf: &GrfFile, canonical_output: &Path) -> Result<()> {
 
         let output_file_path = canonical_output.join(&normalized_path);
 
-        // SECURITY: Validate path to prevent directory traversal
-        match output_file_path.canonicalize() {
-            Ok(canonical_file) => {
-                if !canonical_file.starts_with(canonical_output) {
-                    eprintln!(
-                        "Warning: Skipping potentially malicious file path '{}'",
-                        entry.filename
-                    );
-                    skipped_count += 1;
-                    pb.inc(1);
-                    continue;
-                }
-            }
-            Err(_) => {
-                // File doesn't exist yet, check parent directory
-                if let Some(parent) = output_file_path.parent() {
-                    if !parent.starts_with(canonical_output) {
-                        eprintln!(
-                            "Warning: Skipping potentially malicious file path '{}'",
-                            entry.filename
-                        );
-                        skipped_count += 1;
-                        pb.inc(1);
-                        continue;
-                    }
-                }
-            }
-        }
-
         if let Some(data) = grf.get_file(&entry.filename) {
-            // Create parent directories
-            if let Some(parent) = output_file_path.parent() {
-                fs::create_dir_all(parent).ok();
-            }
-
-            // Write file
-            match fs::write(&output_file_path, data) {
-                Ok(_) => extracted_count += 1,
-                Err(e) => {
+            match write_entry(canonical_output, &output_file_path, &entry.filename, &data) {
+                WriteOutcome::Written => extracted_count += 1,
+                WriteOutcome::PathTraversalBlocked => skipped_count += 1,
+                WriteOutcome::WriteFailed(e) => {
                     eprintln!(
                         "Failed to write file '{}': {}",
                         output_file_path.display(),
@@ -238,45 +255,13 @@ fn extract_specific_files(grf: &GrfFile, files: &[String], canonical_output: &Pa
             // Use the user-provided name for output (with forward slashes)
             let output_file_path = canonical_output.join(file_name);
 
-            // SECURITY: Validate path to prevent directory traversal
-            match output_file_path.canonicalize() {
-                Ok(canonical_file) => {
-                    if !canonical_file.starts_with(canonical_output) {
-                        eprintln!(
-                            "Warning: Skipping potentially malicious file path '{}'",
-                            file_name
-                        );
-                        pb.inc(1);
-                        continue;
-                    }
-                }
-                Err(_) => {
-                    // File doesn't exist yet, check parent directory
-                    if let Some(parent) = output_file_path.parent() {
-                        if !parent.starts_with(canonical_output) {
-                            eprintln!(
-                                "Warning: Skipping potentially malicious file path '{}'",
-                                file_name
-                            );
-                            pb.inc(1);
-                            continue;
-                        }
-                    }
-                }
-            }
-
-            // Create parent directories
-            if let Some(parent) = output_file_path.parent() {
-                fs::create_dir_all(parent).ok();
-            }
-
-            // Write file
-            match fs::write(&output_file_path, data) {
-                Ok(_) => {
+            match write_entry(canonical_output, &output_file_path, file_name, &data) {
+                WriteOutcome::Written => {
                     extracted_count += 1;
                     println!("  ✓ {}", file_name);
                 }
-                Err(e) => {
+                WriteOutcome::PathTraversalBlocked => {}
+                WriteOutcome::WriteFailed(e) => {
                     eprintln!("  ✗ Failed to write '{}': {}", file_name, e);
                 }
             }

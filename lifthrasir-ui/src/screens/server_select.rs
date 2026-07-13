@@ -186,7 +186,7 @@ fn populate_server_list(
     };
 
     let font_body = asset_server.load(theme::FONT_BODY);
-    let font_bold = asset_server.load(theme::FONT_BODY_BOLD);
+    let font_bold = asset_server.load(theme::FONT_BODY);
 
     for server in session.server_list.iter() {
         spawn_server_row(

@@ -71,6 +71,7 @@ pub fn char_list_to_connected(l: &net::CharList) -> CharacterServerConnected {
     }
 }
 
+// NOTE: no client consumer yet; kept for future implementation.
 pub fn char_list_to_slot_info(l: &net::CharList) -> CharacterSlotInfoReceived {
     CharacterSlotInfoReceived {
         slot_info: char_types::CharacterSlotInfo {

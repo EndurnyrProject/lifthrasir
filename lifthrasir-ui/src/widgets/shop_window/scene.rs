@@ -18,7 +18,7 @@ use crate::theme::feathers_theme::{
     TOKEN_ACCENT, TOKEN_TEXT, TOKEN_TEXT_DIM, TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG,
     TOKEN_WINDOW_BORDER,
 };
-use crate::widgets::draggable::px_or_zero;
+use crate::widgets::chrome::{body_container, drag_window, glyph_icon, ignore_picking};
 
 use super::{
     on_shop_button, on_shop_close_button, Selection, ShopButtonAction, ShopSession, ShopTab,
@@ -47,7 +47,7 @@ pub fn window(title: String) -> impl Scene {
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
-        Children [ titlebar(title), body_container() ]
+        Children [ titlebar(title), body_container::<ShopWindowBody>(UiRect::axes(Val::Px(14.0), Val::Px(12.0))) ]
     }
 }
 
@@ -64,7 +64,7 @@ fn titlebar(title: String) -> impl Scene {
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         ShopWindowTitlebar
         Pickable
-        on(on_titlebar_drag)
+        on(drag_window::<ShopWindowTitlebar, ShopWindowRoot>)
         Children [
             glyph_icon("rune", 13.0, theme::GOLD),
             (
@@ -86,60 +86,9 @@ fn titlebar(title: String) -> impl Scene {
     }
 }
 
-/// The (initially empty) body region; [`rebuild_body`](super::rebuild_body) fills
-/// it with [`body`]'s content on every `ShopSession` change.
-fn body_container() -> impl Scene {
-    bsn! {
-        ShopWindowBody
-        Node {
-            flex_direction: FlexDirection::Column,
-            row_gap: px(10),
-            padding: {UiRect::axes(px(14), px(12))},
-        }
-        ignore_picking()
-    }
-}
-
-/// Drags the single open shop window by its titlebar; mirrors `make_draggable`
-/// but resolves the root from its marker instead of a captured entity, so the
-/// whole window can spawn as one scene with no imperative drag wiring. Only the
-/// titlebar itself moves the window: `Pointer<Drag>` bubbles up from the close
-/// button, so a drag targeting it is ignored.
-fn on_titlebar_drag(
-    drag: On<Pointer<Drag>>,
-    titlebars: Query<(), With<ShopWindowTitlebar>>,
-    mut roots: Query<&mut Node, With<ShopWindowRoot>>,
-) {
-    if titlebars.get(drag.entity).is_err() {
-        return;
-    }
-    let Ok(mut node) = roots.single_mut() else {
-        return;
-    };
-    node.left = Val::Px(px_or_zero(node.left) + drag.delta.x);
-    node.top = Val::Px(px_or_zero(node.top) + drag.delta.y);
-}
-
-/// A square white SVG glyph tinted with `color`. `ImageNode` has no theme-token
-/// tint, so glyph colors stay raw palette values.
-fn glyph_icon(name: &'static str, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        ImageNode {
-            image: {format!("{}{}.svg", theme::ICON_DIR, name)},
-            color: color,
-        }
-        Node { width: px(size), height: px(size) }
-        ignore_picking()
-    }
-}
-
-/// `Pickable::IGNORE` as a scene, so non-interactive nodes don't swallow clicks.
-fn ignore_picking() -> impl Scene {
-    bsn! {
-        Pickable { should_block_lower: false, is_hoverable: false }
-    }
-}
-
+// The (initially empty) body region is `chrome::body_container`; `rebuild_body` fills
+// it with a single [`body`] child on every `ShopSession` change, so the container's own
+// `row_gap` never applied (it needs two siblings) and is dropped.
 // ---------------------------------------------------------------------------
 // Body: tab strip, grid, detail panel, cart, footer (design §5.4).
 //

@@ -16,14 +16,12 @@ use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::FeathersButton;
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor, ThemedText};
+use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
 use net_contract::commands::PartyLeaveRequested;
 
 use crate::theme;
-use crate::theme::feathers_theme::{
-    TOKEN_TEXT, TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
-};
-use crate::widgets::draggable::px_or_zero;
+use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
+use crate::widgets::chrome::{body_container, chrome_text, glyph_icon, ignore_picking, titlebar};
 
 use super::{
     MemberPresence, PartyFooter, PartyTitlebar, PartyWindowBody, PartyWindowRoot, PARTY_MAX,
@@ -75,54 +73,16 @@ fn window() -> impl Scene {
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Visibility::Hidden
         Pickable
-        Children [ titlebar(), body_container(), footer() ]
-    }
-}
-
-fn titlebar() -> impl Scene {
-    bsn! {
-        PartyTitlebar
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-            padding: {UiRect::axes(px(14), px(11))},
-            border: {UiRect { bottom: Val::Px(1.0), ..default() }},
-        }
-        ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        Pickable
-        on(on_titlebar_drag)
         Children [
-            glyph_icon("members", 16.0, theme::GOLD),
-            (
-                Text("Party")
-                TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(15.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { glyph_icon("close", 13.0, theme::TEXT_DIM) } }
-                Node { width: px(22), height: px(22) }
-                on(on_close)
-            ),
+            titlebar::<PartyTitlebar, PartyWindowRoot>("members", "Party"),
+            body_container::<PartyWindowBody>(UiRect {
+                left: Val::Px(14.0),
+                right: Val::Px(14.0),
+                top: Val::Px(12.0),
+                bottom: Val::Px(10.0),
+            }),
+            footer(),
         ]
-    }
-}
-
-/// The (initially empty) body region; [`body`] fills it via `refresh_roster`.
-fn body_container() -> impl Scene {
-    bsn! {
-        PartyWindowBody
-        Node {
-            flex_direction: FlexDirection::Column,
-            padding: {UiRect { left: Val::Px(14.0), right: Val::Px(14.0), top: Val::Px(12.0), bottom: Val::Px(10.0) }},
-        }
-        ignore_picking()
     }
 }
 
@@ -383,66 +343,8 @@ fn title_text(text: String, size: f32, color: Color) -> impl Scene {
     }
 }
 
-/// A plain colored text label with the body font.
-fn chrome_text(text: String, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
-            font_size: {FontSize::Px(size)},
-        }
-        TextColor(color)
-        ignore_picking()
-    }
-}
-
-/// A square white SVG glyph tinted with `color`. `ImageNode` has no theme-token tint,
-/// so glyph colors stay raw palette values.
-fn glyph_icon(name: &'static str, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        ImageNode {
-            image: {format!("{}{}.svg", theme::ICON_DIR, name)},
-            color: color,
-        }
-        Node { width: px(size), height: px(size) }
-        ignore_picking()
-    }
-}
-
-/// `Pickable::IGNORE` as a scene, so non-interactive nodes don't swallow clicks.
-fn ignore_picking() -> impl Scene {
-    bsn! {
-        Pickable { should_block_lower: false, is_hoverable: false }
-    }
-}
-
-fn on_close(_: On<Activate>, mut window: Query<&mut Visibility, With<PartyWindowRoot>>) {
-    if let Ok(mut visibility) = window.single_mut() {
-        *visibility = Visibility::Hidden;
-    }
-}
-
 fn on_leave(_: On<Activate>, mut writer: MessageWriter<PartyLeaveRequested>) {
     writer.write(PartyLeaveRequested);
-}
-
-/// Drag the single party window by its titlebar; mirrors `make_draggable` but resolves
-/// the root from its marker instead of a captured entity, so the whole window spawns as
-/// one scene. Only the titlebar itself moves the window: `Pointer<Drag>` bubbles up from
-/// the close button, so a drag targeting it is ignored.
-fn on_titlebar_drag(
-    drag: On<Pointer<Drag>>,
-    titlebars: Query<(), With<PartyTitlebar>>,
-    mut roots: Query<&mut Node, With<PartyWindowRoot>>,
-) {
-    if titlebars.get(drag.entity).is_err() {
-        return;
-    }
-    let Ok(mut node) = roots.single_mut() else {
-        return;
-    };
-    node.left = Val::Px(px_or_zero(node.left) + drag.delta.x);
-    node.top = Val::Px(px_or_zero(node.top) + drag.delta.y);
 }
 
 #[cfg(test)]

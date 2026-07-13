@@ -30,6 +30,7 @@ use game_engine::presentation::ui::events::{
 
 use crate::theme;
 use crate::theme::feathers_theme::install_norse_theme;
+use crate::widgets::chrome::ignore_picking;
 
 /// Sits just below the fade transition so the modal renders over every screen.
 /// `pub` so sibling modals (e.g. the death dialog) can anchor strictly below it.
@@ -337,13 +338,6 @@ fn secondary_button(label: String, display: Display) -> impl Scene {
             border_radius: BorderRadius::all(px(11)),
         }
         on(dismiss_on_click)
-    }
-}
-
-/// `Pickable::IGNORE` as a scene, so non-interactive card nodes don't swallow clicks.
-fn ignore_picking() -> impl Scene {
-    bsn! {
-        Pickable { should_block_lower: false, is_hoverable: false }
     }
 }
 

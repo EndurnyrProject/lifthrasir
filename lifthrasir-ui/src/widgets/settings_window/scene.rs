@@ -14,17 +14,15 @@ use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui::RelativeCursorPosition;
-use bevy::ui_widgets::{Activate, ControlOrientation, ScrollArea};
+use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
+use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
 use game_engine::domain::input::{PlayerAction, HOTBAR_ACTIONS};
 use game_engine::domain::settings::DisplayMode;
 
 use crate::theme;
-use crate::theme::feathers_theme::{
-    TOKEN_TEXT, TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
-};
-use crate::widgets::draggable::px_or_zero;
+use crate::theme::feathers_theme::{TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
+use crate::widgets::chrome::{chrome_text, ignore_picking, titlebar};
 
 use super::{
     on_apply, on_cancel, on_keycap_click, on_mute_click, on_reset, on_segment_click,
@@ -79,42 +77,7 @@ fn window() -> impl Scene {
         // later in the stack swallows its clicks and drags.
         GlobalZIndex(1000)
         Pickable
-        Children [ titlebar(), main_row(), footer() ]
-    }
-}
-
-fn titlebar() -> impl Scene {
-    bsn! {
-        SettingsTitlebar
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-            padding: {UiRect::axes(px(14), px(11))},
-            border: {UiRect { bottom: Val::Px(1.0), ..default() }},
-        }
-        ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        Pickable
-        on(on_titlebar_drag)
-        Children [
-            glyph_icon("gear", 16.0, theme::GOLD),
-            (
-                Text("System Settings")
-                TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(15.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { glyph_icon("close", 13.0, theme::TEXT_DIM) } }
-                Node { width: px(22), height: px(22) }
-                on(on_close)
-            ),
-        ]
+        Children [ titlebar::<SettingsTitlebar, SettingsWindowRoot>("gear", "System Settings"), main_row(), footer() ]
     }
 }
 
@@ -701,66 +664,4 @@ fn footer() -> impl Scene {
             ),
         ]
     }
-}
-
-// ---------------------------------------------------------------------------
-// Shared helpers (mirror the inventory/shop scenes).
-// ---------------------------------------------------------------------------
-
-/// A plain colored text label with the body font.
-fn chrome_text(text: String, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
-            font_size: {FontSize::Px(size)},
-        }
-        TextColor(color)
-        ignore_picking()
-    }
-}
-
-/// A square white SVG glyph tinted with `color`. `ImageNode` has no theme-token
-/// tint, so glyph colors stay raw palette values.
-fn glyph_icon(name: &'static str, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        ImageNode {
-            image: {format!("{}{}.svg", theme::ICON_DIR, name)},
-            color: color,
-        }
-        Node { width: px(size), height: px(size) }
-        ignore_picking()
-    }
-}
-
-/// `Pickable::IGNORE` as a scene, so non-interactive nodes don't swallow clicks.
-fn ignore_picking() -> impl Scene {
-    bsn! {
-        Pickable { should_block_lower: false, is_hoverable: false }
-    }
-}
-
-fn on_close(_: On<Activate>, mut window: Query<&mut Visibility, With<SettingsWindowRoot>>) {
-    if let Ok(mut visibility) = window.single_mut() {
-        *visibility = Visibility::Hidden;
-    }
-}
-
-/// Drag the settings window by its titlebar; the root is resolved from its
-/// marker so the whole window spawns as one scene with no imperative drag
-/// wiring. Only the titlebar itself moves the window: `Pointer<Drag>` bubbles up
-/// from the close button, so a drag targeting it is ignored.
-fn on_titlebar_drag(
-    drag: On<Pointer<Drag>>,
-    titlebars: Query<(), With<SettingsTitlebar>>,
-    mut roots: Query<&mut Node, With<SettingsWindowRoot>>,
-) {
-    if titlebars.get(drag.entity).is_err() {
-        return;
-    }
-    let Ok(mut node) = roots.single_mut() else {
-        return;
-    };
-    node.left = Val::Px(px_or_zero(node.left) + drag.delta.x);
-    node.top = Val::Px(px_or_zero(node.top) + drag.delta.y);
 }

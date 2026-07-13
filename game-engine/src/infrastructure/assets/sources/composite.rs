@@ -52,26 +52,6 @@ impl CompositeAssetSource {
         None
     }
 
-    pub fn get_source_info(&self, path: &str) -> Option<String> {
-        if let Some(source_idx) = self.find_source_for_asset(path) {
-            if let Some(source) = self.sources.get(source_idx) {
-                return Some(format!(
-                    "{} (priority: {})",
-                    source.name(),
-                    source.priority()
-                ));
-            }
-        }
-        None
-    }
-
-    pub fn list_sources(&self) -> Vec<String> {
-        self.sources
-            .iter()
-            .map(|source| format!("{} (priority: {})", source.name(), source.priority()))
-            .collect()
-    }
-
     pub fn get_debug_info(&self) -> String {
         let mut info = format!(
             "CompositeAssetSource with {} sources:\n",
@@ -87,24 +67,6 @@ impl CompositeAssetSource {
         }
         info.push_str(&format!("Cache entries: {}\n", self.resolution_cache.len()));
         info
-    }
-
-    pub fn clear_cache(&mut self) {
-        self.resolution_cache.clear();
-        debug!("Asset resolution cache cleared");
-    }
-
-    pub fn warm_cache(&mut self, common_paths: &[&str]) {
-        debug!(
-            "Warming asset resolution cache with {} paths",
-            common_paths.len()
-        );
-        for path in common_paths {
-            if let Some(source_idx) = self.find_source_for_asset(path) {
-                self.resolution_cache.insert(path.to_string(), source_idx);
-            }
-        }
-        debug!("Cache warmed with {} entries", self.resolution_cache.len());
     }
 }
 

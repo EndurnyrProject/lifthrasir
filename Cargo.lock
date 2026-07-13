@@ -460,17 +460,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-trait"
-version = "0.1.89"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "atomic-arena"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3596,8 +3585,6 @@ dependencies = [
 name = "game-engine"
 version = "0.0.1"
 dependencies = [
- "async-trait",
- "base64",
  "bevy",
  "bevy-persistent",
  "bevy_asset_loader",
@@ -3608,19 +3595,14 @@ dependencies = [
  "bevy_kira_audio",
  "dirs",
  "encoding_rs",
- "flate2",
  "futures-lite",
  "image",
  "leafwing-input-manager",
  "lifthrasir-data",
- "lru",
  "moonshine-behavior",
  "moonshine-kind",
  "moonshine-tag",
- "nalgebra",
  "net-contract",
- "nom 8.0.0",
- "once_cell",
  "pathfinding",
  "regex",
  "resvg",
@@ -3628,7 +3610,6 @@ dependencies = [
  "ron 0.12.2",
  "secrecy",
  "serde",
- "serde_json",
  "thiserror 2.0.18",
  "toml 1.1.2+spec-1.1.0",
  "xbrz-rs",
@@ -4010,8 +3991,6 @@ version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
- "allocator-api2",
- "equivalent",
  "foldhash 0.2.0",
 ]
 
@@ -4859,15 +4838,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fae87c125b03c1d2c0150c90365d7d6bcc53fb73a9acaef207d2d065860f062"
 dependencies = [
  "imgref",
-]
-
-[[package]]
-name = "lru"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a860605968fce16869fd239cf4237a82f3ac470723415db603b0e8b6c8d4fb9"
-dependencies = [
- "hashbrown 0.17.1",
 ]
 
 [[package]]

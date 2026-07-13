@@ -17,6 +17,7 @@ pub struct CharacterServerConnected {
 }
 
 /// Event emitted when character slot information is received
+// NOTE: no client consumer yet; kept for future implementation.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct CharacterSlotInfoReceived {

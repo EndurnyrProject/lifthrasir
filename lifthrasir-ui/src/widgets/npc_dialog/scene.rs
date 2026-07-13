@@ -16,6 +16,7 @@ use crate::theme::feathers_theme::{
     TOKEN_PANEL_BG, TOKEN_PANEL_BORDER, TOKEN_TEXT, TOKEN_TEXT_DIM, TOKEN_TITLEBAR_BG,
     TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
 };
+use crate::widgets::chrome::{glyph_icon, ignore_picking};
 
 use super::{
     on_footer_button, on_text_click, FooterButtonAction, NpcDialogBody, NpcDialogParts,
@@ -293,26 +294,6 @@ fn chrome_text(text: String) -> impl Scene {
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
         ignore_picking()
-    }
-}
-
-/// A square white SVG glyph tinted with `color`. `ImageNode` has no theme-token
-/// tint, so glyph colors stay raw palette values.
-fn glyph_icon(name: &'static str, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        ImageNode {
-            image: {format!("{}{}.svg", theme::ICON_DIR, name)},
-            color: color,
-        }
-        Node { width: px(size), height: px(size) }
-        ignore_picking()
-    }
-}
-
-/// `Pickable::IGNORE` as a scene, so non-interactive nodes don't swallow clicks.
-fn ignore_picking() -> impl Scene {
-    bsn! {
-        Pickable { should_block_lower: false, is_hoverable: false }
     }
 }
 

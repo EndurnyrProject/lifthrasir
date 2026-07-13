@@ -130,6 +130,7 @@ pub struct DamageReceived {
 }
 
 /// An entity's HP changed.
+// NOTE: no client consumer yet; kept for future implementation.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct UnitHpChanged {
@@ -246,6 +247,7 @@ pub struct SkillEffectShown {
 }
 
 /// A skill cast was cancelled.
+// NOTE: no client consumer yet; kept for future implementation.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct CastCancelled {
@@ -307,6 +309,7 @@ pub struct GroundSkillPlaced {
 }
 
 /// An entity was knocked back.
+// NOTE: no client consumer yet; kept for future implementation.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct KnockedBack {
@@ -419,6 +422,7 @@ pub struct ItemUseFailed {
 }
 
 /// Result of a stat allocation.
+// NOTE: no client consumer yet; kept for future implementation.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct StatRaised {
@@ -438,6 +442,7 @@ pub struct UnitSpriteChanged {
 }
 
 /// An entity was resurrected.
+// NOTE: no client consumer yet; kept for future implementation.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct UnitResurrected {
@@ -446,6 +451,7 @@ pub struct UnitResurrected {
 }
 
 /// Self respawn / return to char select after death.
+// NOTE: never emitted — respawn() is not wired into any drainer; game-engine reader is waiting on this.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct SelfRespawned {

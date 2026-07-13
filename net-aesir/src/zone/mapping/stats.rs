@@ -10,6 +10,7 @@ pub fn param_change(p: net::ParamChange) -> ParamChanged {
     }
 }
 
+// NOTE: no client consumer yet; kept for future implementation.
 pub fn unit_hp(u: net::UnitHp) -> UnitHpChanged {
     UnitHpChanged {
         gid: u.id,
@@ -18,6 +19,7 @@ pub fn unit_hp(u: net::UnitHp) -> UnitHpChanged {
     }
 }
 
+// NOTE: no client consumer yet; kept for future implementation.
 pub fn stat_up_result(s: net::StatUpResult) -> StatRaised {
     StatRaised {
         stat_id: s.stat_id,
@@ -35,6 +37,7 @@ pub fn sprite_change(s: net::SpriteChange) -> UnitSpriteChanged {
     }
 }
 
+// NOTE: no client consumer yet; kept for future implementation.
 pub fn resurrect(r: net::Resurrect) -> UnitResurrected {
     UnitResurrected {
         gid: r.gid,
@@ -42,6 +45,7 @@ pub fn resurrect(r: net::Resurrect) -> UnitResurrected {
     }
 }
 
+// NOTE: never emitted — respawn() is not wired into any drainer; game-engine reader is waiting on this.
 pub fn respawn(r: net::Respawn) -> SelfRespawned {
     SelfRespawned { type_: r.r#type }
 }

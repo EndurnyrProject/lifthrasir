@@ -1,54 +1,5 @@
-use super::{
-    hierarchical_reader::HierarchicalAssetReader, sources::CompositeAssetSource, AssetConfig,
-};
-use bevy::{
-    asset::io::{AssetSource, AssetSourceBuilder, AssetSourceId},
-    log::{debug, error},
-};
-use std::sync::{Arc, RwLock};
-
-/// Creates and configures the "ro://" asset source for Ragnarok Online assets.
-///
-/// This function sets up the custom asset source that uses our hierarchical
-/// asset resolution system (data folder > GRF files) while integrating
-/// seamlessly with Bevy's asset pipeline.
-///
-/// # Returns
-///
-/// Returns a configured `AssetSource` that can be registered with Bevy's
-/// asset system using the "ro" source ID.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// // In your app setup:
-/// app.register_asset_source(
-///     AssetSourceId::from("ro"),
-///     create_ro_asset_source(&config)?,
-/// );
-///
-/// // Then load assets with:
-/// let handle: Handle<RoGroundAsset> = asset_server.load("ro://data/prontera.gnd");
-/// ```
-pub fn create_ro_asset_source(
-    config: &AssetConfig,
-) -> Result<AssetSource, Box<dyn std::error::Error>> {
-    debug!("Creating RO asset source with hierarchical resolution");
-
-    // Create the composite source with the same logic as HierarchicalAssetManager
-    let composite_source = setup_composite_source_from_config(config)?;
-    let composite_arc = Arc::new(RwLock::new(composite_source));
-
-    // Create the asset source using our hierarchical reader
-    let asset_source = AssetSourceBuilder::new({
-        let composite_clone = composite_arc.clone();
-        move || Box::new(HierarchicalAssetReader::new(composite_clone.clone()))
-    })
-    .build(AssetSourceId::Default, false, false);
-
-    debug!("RO asset source created successfully");
-    Ok(asset_source)
-}
+use super::{sources::CompositeAssetSource, AssetConfig};
+use bevy::log::{debug, error};
 
 /// Sets up CompositeAssetSource from configuration, preserving the exact logic
 /// from HierarchicalAssetManager for compatibility.
@@ -116,20 +67,4 @@ pub fn setup_composite_source_from_config(
     }
 
     Ok(composite)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::infrastructure::assets::config::AssetConfig;
-
-    #[test]
-    fn test_create_ro_asset_source() {
-        // Create a minimal config for testing
-        let config = AssetConfig::default();
-
-        // This should not panic, even if no assets are available
-        let result = create_ro_asset_source(&config);
-        assert!(result.is_ok(), "Should create asset source successfully");
-    }
 }

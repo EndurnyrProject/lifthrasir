@@ -21,6 +21,7 @@ use bevy_feathers::theme::ThemedText;
 use net_contract::commands::PartyCreateRequested;
 
 use crate::theme;
+use crate::widgets::chrome::ignore_picking;
 use crate::widgets::system_dialog;
 
 /// Its own tier strictly below both the death dialog (`MAX - 3`) and the system dialog
@@ -209,13 +210,6 @@ fn button_row() -> impl Scene {
                 on(on_create)
             ),
         ]
-    }
-}
-
-/// `Pickable::IGNORE` as a scene, so non-interactive card nodes don't swallow clicks.
-fn ignore_picking() -> impl Scene {
-    bsn! {
-        Pickable { should_block_lower: false, is_hoverable: false }
     }
 }
 

@@ -22,6 +22,7 @@ use crate::theme;
 use crate::theme::feathers_theme::{
     TOKEN_TEXT, TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
 };
+use crate::widgets::chrome::{close_window, glyph_icon, ignore_picking};
 
 use super::{EmoteButton, EmotePickerRoot};
 
@@ -88,7 +89,7 @@ fn titlebar() -> impl Scene {
             (
                 @FeathersButton { @caption: bsn! { glyph_icon("close", 13.0, theme::TEXT_DIM) } }
                 Node { width: px(22), height: px(22) }
-                on(on_close)
+                on(close_window::<EmotePickerRoot>)
             ),
         ]
     }
@@ -131,31 +132,6 @@ fn thumbnail() -> impl Scene {
     bsn! {
         ImageNode {}
         Node { width: px(CELL_SIZE - 6.0), height: px(CELL_SIZE - 6.0) }
-    }
-}
-
-/// A square white SVG glyph tinted with `color`; used for the close button.
-fn glyph_icon(name: &'static str, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        ImageNode {
-            image: {format!("{}{}.svg", theme::ICON_DIR, name)},
-            color: color,
-        }
-        Node { width: px(size), height: px(size) }
-        ignore_picking()
-    }
-}
-
-/// `Pickable::IGNORE` as a scene, so non-interactive nodes don't swallow clicks.
-fn ignore_picking() -> impl Scene {
-    bsn! {
-        Pickable { should_block_lower: false, is_hoverable: false }
-    }
-}
-
-fn on_close(_: On<Activate>, mut window: Query<&mut Visibility, With<EmotePickerRoot>>) {
-    if let Ok(mut visibility) = window.single_mut() {
-        *visibility = Visibility::Hidden;
     }
 }
 

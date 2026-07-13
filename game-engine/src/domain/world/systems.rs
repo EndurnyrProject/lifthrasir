@@ -163,6 +163,35 @@ pub fn monitor_game_state(current_state: Res<State<GameState>>) {
     }
 }
 
+fn check_map_asset_load<A: Asset>(
+    asset_server: &AssetServer,
+    handle: &Handle<A>,
+    map_name: &str,
+    lower: &str,
+    upper: &str,
+    extension: &str,
+) {
+    use bevy::asset::LoadState;
+
+    match asset_server.load_state(handle) {
+        LoadState::Failed(err) => {
+            panic!(
+                "Failed to load {lower} asset ({extension}) for map '{}': {:?}. File not found in GRF or data folder.",
+                map_name, err
+            );
+        }
+        LoadState::Loading => {
+            debug!("Loading {lower} asset for '{}'...", map_name);
+        }
+        LoadState::Loaded => {
+            debug!("{upper} asset loaded for '{}'", map_name);
+        }
+        LoadState::NotLoaded => {
+            debug!("{upper} asset not yet loading for '{}'", map_name);
+        }
+    }
+}
+
 /// System to detect asset loading failures and provide diagnostic information
 /// Reports loading progress and fails fast when assets are missing
 #[auto_add_system(
@@ -174,72 +203,36 @@ pub fn detect_asset_load_failures(
     query: Query<(&MapLoader, &MapRequestLoader)>,
     asset_server: Res<AssetServer>,
 ) {
-    use bevy::asset::LoadState;
-
     for (map_loader, map_request) in query.iter() {
-        match asset_server.load_state(&map_loader.ground) {
-            LoadState::Failed(err) => {
-                panic!(
-                    "Failed to load ground asset (.gnd) for map '{}': {:?}. File not found in GRF or data folder.",
-                    map_request.map_name, err
-                );
-            }
-            LoadState::Loading => {
-                debug!("Loading ground asset for '{}'...", map_request.map_name);
-            }
-            LoadState::Loaded => {
-                debug!("Ground asset loaded for '{}'", map_request.map_name);
-            }
-            LoadState::NotLoaded => {
-                debug!(
-                    "Ground asset not yet loading for '{}'",
-                    map_request.map_name
-                );
-            }
-        }
+        check_map_asset_load(
+            &asset_server,
+            &map_loader.ground,
+            &map_request.map_name,
+            "ground",
+            "Ground",
+            ".gnd",
+        );
 
         if let Some(ref alt_handle) = map_loader.altitude {
-            match asset_server.load_state(alt_handle) {
-                LoadState::Failed(err) => {
-                    panic!(
-                        "Failed to load altitude asset (.gat) for map '{}': {:?}. File not found in GRF or data folder.",
-                        map_request.map_name, err
-                    );
-                }
-                LoadState::Loading => {
-                    debug!("Loading altitude asset for '{}'...", map_request.map_name);
-                }
-                LoadState::Loaded => {
-                    debug!("Altitude asset loaded for '{}'", map_request.map_name);
-                }
-                LoadState::NotLoaded => {
-                    debug!(
-                        "Altitude asset not yet loading for '{}'",
-                        map_request.map_name
-                    );
-                }
-            }
+            check_map_asset_load(
+                &asset_server,
+                alt_handle,
+                &map_request.map_name,
+                "altitude",
+                "Altitude",
+                ".gat",
+            );
         }
 
-        // Check world asset if present
         if let Some(ref world_handle) = map_loader.world {
-            match asset_server.load_state(world_handle) {
-                LoadState::Failed(err) => {
-                    panic!(
-                        "Failed to load world asset (.rsw) for map '{}': {:?}. File not found in GRF or data folder.",
-                        map_request.map_name, err
-                    );
-                }
-                LoadState::Loading => {
-                    debug!("Loading world asset for '{}'...", map_request.map_name);
-                }
-                LoadState::Loaded => {
-                    debug!("World asset loaded for '{}'", map_request.map_name);
-                }
-                LoadState::NotLoaded => {
-                    debug!("World asset not yet loading for '{}'", map_request.map_name);
-                }
-            }
+            check_map_asset_load(
+                &asset_server,
+                world_handle,
+                &map_request.map_name,
+                "world",
+                "World",
+                ".rsw",
+            );
         }
     }
 }

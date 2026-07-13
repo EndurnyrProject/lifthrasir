@@ -1,50 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_init_resource;
-use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone)]
-pub struct LoginCredentials {
-    pub username: String,
-    pub password: SecretString,
-    pub remember_me: bool,
-}
-
-// Custom Serialize implementation to avoid serializing the password
-impl Serialize for LoginCredentials {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("LoginCredentials", 2)?;
-        state.serialize_field("username", &self.username)?;
-        state.serialize_field("remember_me", &self.remember_me)?;
-        state.end()
-    }
-}
-
-// Custom Deserialize implementation
-impl<'de> Deserialize<'de> for LoginCredentials {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct TempCredentials {
-            username: String,
-            password: String,
-            remember_me: bool,
-        }
-
-        let temp = TempCredentials::deserialize(deserializer)?;
-        Ok(LoginCredentials {
-            username: temp.username,
-            password: SecretString::from(temp.password),
-            remember_me: temp.remember_me,
-        })
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Resource)]
 #[auto_init_resource(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
@@ -64,20 +20,8 @@ impl Default for ServerConfiguration {
     }
 }
 
-#[derive(Debug, Clone, Resource)]
+#[derive(Debug, Clone, Default, Resource)]
 #[auto_init_resource(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct AuthenticationContext {
     pub server_config: ServerConfiguration,
-    pub retry_attempts: u32,
-    pub max_retry_attempts: u32,
-}
-
-impl Default for AuthenticationContext {
-    fn default() -> Self {
-        Self {
-            server_config: ServerConfiguration::default(),
-            retry_attempts: 0,
-            max_retry_attempts: 3,
-        }
-    }
 }

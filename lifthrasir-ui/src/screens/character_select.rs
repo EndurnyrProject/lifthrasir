@@ -276,7 +276,7 @@ fn build_cards(
     let start = (page * page_size).min(slots);
     let end = (start + page_size).min(slots);
 
-    let font_bold = asset_server.load(theme::FONT_BODY_BOLD);
+    let font_bold = asset_server.load(theme::FONT_BODY);
     let font_body = asset_server.load(theme::FONT_BODY);
 
     for (offset, entry) in data.characters[start..end].iter().enumerate() {

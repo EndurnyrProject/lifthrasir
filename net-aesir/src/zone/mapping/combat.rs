@@ -19,6 +19,7 @@ pub fn damage_dealt(d: net::DamageDealt) -> DamageReceived {
     }
 }
 
+// NOTE: no client consumer yet; kept for future implementation.
 pub fn knockback(k: net::Knockback) -> KnockedBack {
     KnockedBack {
         unit_id: k.unit_id,
@@ -64,6 +65,7 @@ pub fn skill_effect(s: net::SkillEffect) -> SkillEffectShown {
     }
 }
 
+// NOTE: no client consumer yet; kept for future implementation.
 pub fn cast_cancel(c: net::CastCancel) -> CastCancelled {
     CastCancelled { gid: c.gid }
 }

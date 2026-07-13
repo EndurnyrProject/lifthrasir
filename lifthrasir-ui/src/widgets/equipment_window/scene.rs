@@ -10,7 +10,6 @@
 
 use bevy::prelude::*;
 use bevy::text::{FontSize, FontSourceTemplate};
-use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor, ThemeToken};
 
@@ -18,7 +17,7 @@ use crate::theme;
 use crate::theme::feathers_theme::{
     TOKEN_TEXT, TOKEN_TEXT_DIM, TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
 };
-use crate::widgets::draggable::px_or_zero;
+use crate::widgets::chrome::{close_window, drag_window, glyph_icon, ignore_picking};
 
 use super::preview::{on_rotate_left, on_rotate_right};
 use super::slots::{on_slot_click, on_slot_hover_out, on_slot_hover_over};
@@ -68,7 +67,7 @@ fn titlebar() -> impl Scene {
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         EquipmentTitlebar
         Pickable
-        on(on_titlebar_drag)
+        on(drag_window::<EquipmentTitlebar, EquipmentWindowRoot>)
         Children [
             glyph_icon("rune", 13.0, theme::GOLD),
             (
@@ -88,7 +87,7 @@ fn titlebar() -> impl Scene {
             (
                 @FeathersButton { @caption: bsn! { glyph_icon("close", 11.0, theme::TEXT_DIM) } }
                 Node { width: px(20), height: px(16) }
-                on(on_close)
+                on(close_window::<EquipmentWindowRoot>)
             ),
         ]
     }
@@ -243,52 +242,6 @@ fn chrome_text(text: &'static str, font: &'static str, size: f32, token: ThemeTo
         ThemeTextColor(token)
         ignore_picking()
     }
-}
-
-/// A square white SVG glyph tinted with `color`. `ImageNode` has no theme-token tint,
-/// so glyph colors stay raw palette values.
-fn glyph_icon(name: &'static str, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        ImageNode {
-            image: {format!("{}{}.svg", theme::ICON_DIR, name)},
-            color: color,
-        }
-        Node { width: px(size), height: px(size) }
-        ignore_picking()
-    }
-}
-
-/// `Pickable::IGNORE` as a scene, so non-interactive nodes don't swallow clicks.
-fn ignore_picking() -> impl Scene {
-    bsn! {
-        Pickable { should_block_lower: false, is_hoverable: false }
-    }
-}
-
-fn on_close(_: On<Activate>, mut window: Query<&mut Visibility, With<EquipmentWindowRoot>>) {
-    if let Ok(mut visibility) = window.single_mut() {
-        *visibility = Visibility::Hidden;
-    }
-}
-
-/// Drag the single equipment window root by the titlebar; mirrors `make_draggable` but
-/// resolves the root from its marker instead of a captured entity, so the whole window
-/// can spawn as one scene with no imperative drag wiring. Only the titlebar itself moves
-/// the window: `Pointer<Drag>` bubbles up from the close/minimize buttons, so a drag
-/// targeting a child button is ignored.
-fn on_titlebar_drag(
-    drag: On<Pointer<Drag>>,
-    titlebars: Query<(), With<EquipmentTitlebar>>,
-    mut roots: Query<&mut Node, With<EquipmentWindowRoot>>,
-) {
-    if titlebars.get(drag.entity).is_err() {
-        return;
-    }
-    let Ok(mut node) = roots.single_mut() else {
-        return;
-    };
-    node.left = Val::Px(px_or_zero(node.left) + drag.delta.x);
-    node.top = Val::Px(px_or_zero(node.top) + drag.delta.y);
 }
 
 #[cfg(test)]

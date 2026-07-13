@@ -28,6 +28,7 @@ pub struct UserSession {
     pub username: String,
     pub tokens: SessionTokens,
     pub login_timestamp: std::time::SystemTime,
+    // NOTE: always 0 today; server does not send it yet.
     pub last_login_ip: u32,
     pub sex: u8,
     pub server_list: Vec<ServerInfo>,

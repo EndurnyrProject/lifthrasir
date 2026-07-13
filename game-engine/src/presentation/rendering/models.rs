@@ -164,8 +164,6 @@ pub fn spawn_map_models(
 
         let (map_width, map_height) = get_map_dimensions_from_ground(&ground_asset.ground);
 
-        let mut model_groups: HashMap<String, Vec<(Transform, String, AnimationType, f32)>> =
-            HashMap::new();
         let mut empty_count = 0;
 
         for obj in &world_asset.world.objects {
@@ -194,24 +192,6 @@ pub fn spawn_map_models(
                     }
                 };
 
-                model_groups
-                    .entry(model.filename.clone())
-                    .or_default()
-                    .push((
-                        transform,
-                        model.node_name.clone(),
-                        anim_type,
-                        model.anim_speed,
-                    ));
-            }
-        }
-
-        if empty_count > 0 {
-            warn!("{} models have empty filenames", empty_count);
-        }
-
-        for (filename, instances) in model_groups {
-            for (transform, node_name, anim_type, anim_speed) in instances {
                 let model_entity = commands
                     .spawn((
                         Transform::from_translation(transform.translation)
@@ -222,8 +202,8 @@ pub fn spawn_map_models(
                         ViewVisibility::default(),
                         InheritedVisibility::default(),
                         MapModel {
-                            filename: filename.clone(),
-                            node_name: node_name.clone(),
+                            filename: model.filename.clone(),
+                            node_name: model.node_name.clone(),
                         },
                         MapScoped,
                     ))
@@ -233,9 +213,13 @@ pub fn spawn_map_models(
                 if anim_type != AnimationType::None {
                     commands
                         .entity(model_entity)
-                        .insert((anim_type, AnimationSpeed(anim_speed)));
+                        .insert((anim_type, AnimationSpeed(model.anim_speed)));
                 }
             }
+        }
+
+        if empty_count > 0 {
+            warn!("{} models have empty filenames", empty_count);
         }
 
         // Mark this MapLoader entity as having models spawned

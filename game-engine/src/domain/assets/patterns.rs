@@ -1,21 +1,21 @@
 use crate::domain::entities::character::components::Gender;
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 // Hair sprite pattern: data[\\/]sprite[\\/]인간족[\\/]머리통[\\/]{sex}[\\/]{id}_{sex}.spr
-pub static HAIR_SPRITE: Lazy<Regex> = Lazy::new(|| {
+pub static HAIR_SPRITE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"data[\\/]sprite[\\/]인간족[\\/]머리통[\\/](남|여)[\\/](\d+)_(남|여)\.spr")
         .expect("Invalid hair sprite regex")
 });
 
 // Hair action pattern: data[\\/]sprite[\\/]인간족[\\/]머리통[\\/]{sex}[\\/]{id}_{sex}.act
-pub static HAIR_ACTION: Lazy<Regex> = Lazy::new(|| {
+pub static HAIR_ACTION: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"data[\\/]sprite[\\/]인간족[\\/]머리통[\\/](남|여)[\\/](\d+)_(남|여)\.act")
         .expect("Invalid hair action regex")
 });
 
 // Hair palette pattern: data[\\/]palette[\\/]머리[\\/]{id}_{sex}_{color}.pal
-pub static HAIR_PALETTE: Lazy<Regex> = Lazy::new(|| {
+pub static HAIR_PALETTE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"data[\\/]palette[\\/]머리[\\/](\d+)_(남|여)_(\d+)\.pal")
         .expect("Invalid hair palette regex")
 });

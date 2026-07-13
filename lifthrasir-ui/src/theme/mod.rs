@@ -36,7 +36,6 @@ pub const RARITY_MAGIC: Color = Color::srgb_u8(0x6f, 0xc4, 0xec);
 
 pub const FONT_TITLE: &str = "fonts/cinzel.ttf";
 pub const FONT_BODY: &str = "fonts/manrope.ttf";
-pub const FONT_BODY_BOLD: &str = "fonts/manrope.ttf";
 
 /// Asset directory for the SVG glyph icons extracted from the Endurnir mockups.
 pub const ICON_DIR: &str = "ui/icons/";
@@ -57,21 +56,6 @@ pub fn icon(assets: &AssetServer, name: &str, size: f32, color: Color) -> impl B
             ..default()
         },
         Pickable::IGNORE,
-    )
-}
-
-/// Glass panel: translucent dark fill, gold-faint hairline border, rounded.
-pub fn glass_panel() -> impl Bundle {
-    (
-        Node {
-            padding: UiRect::all(Val::Px(16.0)),
-            border: UiRect::all(Val::Px(1.0)),
-            flex_direction: FlexDirection::Column,
-            border_radius: BorderRadius::all(Val::Px(11.0)),
-            ..default()
-        },
-        BackgroundColor(GLASS),
-        BorderColor::all(GOLD_FAINT),
     )
 }
 

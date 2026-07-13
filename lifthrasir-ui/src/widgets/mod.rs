@@ -10,6 +10,7 @@ use game_engine::core::state::GameState;
 pub mod announcement;
 pub mod character_info;
 pub mod chat_box;
+pub mod chrome;
 pub mod death_dialog;
 pub mod draggable;
 pub mod emote;
