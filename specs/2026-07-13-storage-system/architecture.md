@@ -49,7 +49,8 @@ flowchart LR
 
 New file `net-contract/src/dto/storage.rs` defines `StorageItem`. It carries the intersection of fields present in both a full `StorageOpened` item and a `StorageItemAdded` delta:
 
-- `index`, `nameid`, `amount`, `type_`, `location`, `attribute`, `refine`, `expire_time`, `look`, and `weight` as `u32`;
+- `index`, `nameid`, `amount`, `type_`, `location`, `attribute`, `refine`, `look`, and `weight` as `u32`;
+- `expire_time` as `u64`, matching both Storage protobuf item forms and the existing neutral Inventory/Cart contracts;
 - `identified` as `bool`;
 - `cards` as `Vec<u32>`.
 
@@ -286,6 +287,8 @@ Only one request can be in flight because `StorageResult` has no request identif
 ## Critique Findings
 
 The critique rejected narrowing Storage indices and amounts to `u16`. Keeping them as `u32` through the contract and resource matches the protobuf, avoids truncation, and costs no additional complexity. Bag indices widen losslessly when a deposit command is emitted.
+
+Implementation discovery corrected the original `expire_time` width from `u32` to `u64`. Both Storage protobuf item forms use `u64`, as do the existing neutral Inventory and Cart contracts; retaining that width avoids an unnecessary lossy conversion.
 
 Because `StorageResult` has no request ID, allowing multiple simultaneous transfers would make responses ambiguous. The design therefore permits one in-flight request and disables transfer controls until the result arrives.
 

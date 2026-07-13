@@ -12,7 +12,7 @@
 
 - [x] Task 1: Define the protocol-neutral Storage contract
 - [x] Task 2: Add authoritative Storage domain state
-- [ ] Task 3: Receive Storage protobuf events
+- [x] Task 3: Receive Storage protobuf events
 - [ ] Task 4: Send Storage protobuf requests
 - [ ] Task 5: Add the Storage UI interaction model
 - [ ] Task 6: Render the Storage window
@@ -48,7 +48,7 @@
 - Reference: `net-contract/src/commands.rs` — existing Cart commands and `auto_add_message` usage.
 
 **Acceptance criteria:**
-- [x] `StorageItem` contains `index`, `nameid`, `amount`, `type_`, `location`, `attribute`, `refine`, `expire_time`, `look`, and `weight` as `u32`, `identified` as `bool`, and `cards` as `Vec<u32>`.
+- [x] `StorageItem` contains `index`, `nameid`, `amount`, `type_`, `location`, `attribute`, `refine`, `look`, and `weight` as `u32`, `expire_time` as `u64`, `identified` as `bool`, and `cards` as `Vec<u32>`.
 - [x] The contract exposes snapshot, add, remove, and typed result messages plus deposit, withdrawal, and close commands.
 - [x] Every known rejection has a distinct enum variant and unknown numeric codes can be retained through `Unknown(i32)`.
 - [x] Storage indices and amounts are never narrowed below `u32` in the new contract.
@@ -110,13 +110,13 @@
 - Reference only: `net-aesir/src/proto/aesir.net.rs` — existing generated Storage bodies and result-code values; do not edit.
 
 **Acceptance criteria:**
-- [ ] `StorageOpened`, `StorageItemAdded`, and `StorageItemRemoved` fields map exactly into neutral messages without index/amount narrowing.
-- [ ] Every known `StorageResultCode` maps to success or its matching `StorageRejection`.
-- [ ] An unknown numeric result becomes `StorageRejection::Unknown(code)`, is logged, and is never treated as success.
-- [ ] Each matching protobuf body emits exactly one corresponding neutral message; unrelated bodies emit none.
-- [ ] The generated `net-aesir/src/proto/aesir.net.rs` file is unchanged.
-- [ ] Mapping and flow tests cover snapshots, both deltas, all known results, an unknown result, and unrelated bodies.
-- [ ] `cargo test -p net-aesir storage` passes.
+- [x] `StorageOpened`, `StorageItemAdded`, and `StorageItemRemoved` fields map exactly into neutral messages without index/amount narrowing.
+- [x] Every known `StorageResultCode` maps to success or its matching `StorageRejection`.
+- [x] An unknown numeric result becomes `StorageRejection::Unknown(code)`, is logged, and is never treated as success.
+- [x] Each matching protobuf body emits exactly one corresponding neutral message; unrelated bodies emit none.
+- [x] The generated `net-aesir/src/proto/aesir.net.rs` file is unchanged.
+- [x] Mapping and flow tests cover snapshots, both deltas, all known results, an unknown result, and unrelated bodies.
+- [x] `cargo test -p net-aesir storage` passes.
 
 **Depends on:** Task 1
 
