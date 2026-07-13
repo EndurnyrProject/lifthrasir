@@ -116,3 +116,36 @@ pub fn is_player_job(job_id: u32) -> bool {
         || (21..=25).contains(&job_id)
         || (4046..=4049).contains(&job_id)
 }
+
+// Source: aesir TraitJobs @trait_job_ids (apps/zone_server/lib/aesir/zone_server/mmo/job_management/trait_jobs.ex).
+pub fn is_fourth_job(job_id: u32) -> bool {
+    matches!(job_id, 4252..=4264 | 4278..=4281 | 4302..=4308 | 4316)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_fourth_job() {
+        assert!(is_fourth_job(4252));
+        assert!(is_fourth_job(4264));
+        assert!(is_fourth_job(4278));
+        assert!(is_fourth_job(4281));
+        assert!(is_fourth_job(4302));
+        assert!(is_fourth_job(4308));
+        assert!(is_fourth_job(4316));
+
+        assert!(!is_fourth_job(0));
+        assert!(!is_fourth_job(25));
+        assert!(!is_fourth_job(4001));
+        assert!(!is_fourth_job(4054));
+        assert!(!is_fourth_job(4096));
+        assert!(!is_fourth_job(4251));
+        assert!(!is_fourth_job(4265));
+        assert!(!is_fourth_job(4277));
+        assert!(!is_fourth_job(4309));
+        assert!(!is_fourth_job(4315));
+        assert!(!is_fourth_job(4317));
+    }
+}

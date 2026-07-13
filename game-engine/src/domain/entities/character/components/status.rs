@@ -65,6 +65,8 @@ pub enum StatusParameter {
     CharFont = 126,
     BankVault = 127,
     RouletteBronze = 128,
+    Ap = 232,
+    MaxAp = 233,
 }
 
 impl StatusParameter {
@@ -132,6 +134,8 @@ impl StatusParameter {
             126 => Some(Self::CharFont),
             127 => Some(Self::BankVault),
             128 => Some(Self::RouletteBronze),
+            232 => Some(Self::Ap),
+            233 => Some(Self::MaxAp),
             _ => None,
         }
     }
@@ -200,6 +204,8 @@ impl StatusParameter {
             Self::CharFont => "Character Font",
             Self::BankVault => "Bank Vault",
             Self::RouletteBronze => "Roulette Bronze",
+            Self::Ap => "AP",
+            Self::MaxAp => "Max AP",
         }
     }
 
@@ -275,6 +281,8 @@ pub struct CharacterStatus {
     pub char_rename: u32,
     pub char_font: u32,
     pub roulette_bronze: u32,
+    pub ap: u32,
+    pub max_ap: u32,
 }
 
 impl Default for CharacterStatus {
@@ -342,6 +350,8 @@ impl Default for CharacterStatus {
             char_rename: 0,
             char_font: 0,
             roulette_bronze: 0,
+            ap: 0,
+            max_ap: 0,
         }
     }
 }
@@ -411,6 +421,8 @@ impl CharacterStatus {
             StatusParameter::CharRename => self.char_rename = value,
             StatusParameter::CharFont => self.char_font = value,
             StatusParameter::RouletteBronze => self.roulette_bronze = value,
+            StatusParameter::Ap => self.ap = value,
+            StatusParameter::MaxAp => self.max_ap = value,
         }
     }
 
@@ -478,6 +490,8 @@ impl CharacterStatus {
             StatusParameter::CharRename => self.char_rename,
             StatusParameter::CharFont => self.char_font,
             StatusParameter::RouletteBronze => self.roulette_bronze,
+            StatusParameter::Ap => self.ap,
+            StatusParameter::MaxAp => self.max_ap,
         }
     }
 
@@ -530,6 +544,28 @@ mod tests {
             Some(StatusParameter::Zeny)
         );
         assert_eq!(StatusParameter::from_var_id(9999), None);
+    }
+
+    #[test]
+    fn test_status_parameter_from_var_id_ap() {
+        assert_eq!(StatusParameter::from_var_id(232), Some(StatusParameter::Ap));
+        assert_eq!(
+            StatusParameter::from_var_id(233),
+            Some(StatusParameter::MaxAp)
+        );
+    }
+
+    #[test]
+    fn test_status_update_param_ap() {
+        let mut status = CharacterStatus::default();
+
+        status.update_param(StatusParameter::Ap, 70);
+        assert_eq!(status.ap, 70);
+        assert_eq!(status.get_param(StatusParameter::Ap), 70);
+
+        status.update_param(StatusParameter::MaxAp, 120);
+        assert_eq!(status.max_ap, 120);
+        assert_eq!(status.get_param(StatusParameter::MaxAp), 120);
     }
 
     #[test]
