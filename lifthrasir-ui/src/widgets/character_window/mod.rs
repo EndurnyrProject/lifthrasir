@@ -5,9 +5,9 @@
 //! This module owns the open/tab state machine ([`CharacterWindowState`] +
 //! [`next_state`]), the four-chord toggle ([`toggle_character_window`]), and the
 //! visibility projection ([`reflect_window_state`]). The persistent chrome is built
-//! in [`shell`]. The plugin is intentionally left unregistered while the four old
-//! windows still exist (architecture §5.5); it stays inert until the integration
-//! task wires it and deletes the old windows.
+//! in [`shell`]. [`CharacterWindowPlugin`] is registered by `InGameHudPlugin`, which
+//! also spawns the shell in `show_hud`; it replaced the four old in-game windows
+//! (architecture §5.5).
 
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
