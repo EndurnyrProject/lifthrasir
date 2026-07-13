@@ -7,6 +7,7 @@ mod npc;
 mod party;
 mod server_info;
 mod shop;
+mod storage;
 
 pub use cart::*;
 pub use char_types::*;
@@ -15,3 +16,4 @@ pub use npc::*;
 pub use party::*;
 pub use server_info::*;
 pub use shop::*;
+pub use storage::*;

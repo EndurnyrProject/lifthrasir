@@ -7,6 +7,7 @@ pub mod login;
 pub mod npc;
 pub mod party;
 pub mod shop;
+pub mod storage;
 pub mod zone;
 
 pub use announcement::*;
@@ -16,4 +17,5 @@ pub use login::*;
 pub use npc::*;
 pub use party::*;
 pub use shop::*;
+pub use storage::*;
 pub use zone::*;

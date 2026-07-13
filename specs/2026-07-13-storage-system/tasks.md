@@ -10,7 +10,7 @@
 
 ## Progress
 
-- [ ] Task 1: Define the protocol-neutral Storage contract
+- [x] Task 1: Define the protocol-neutral Storage contract
 - [ ] Task 2: Add authoritative Storage domain state
 - [ ] Task 3: Receive Storage protobuf events
 - [ ] Task 4: Send Storage protobuf requests
@@ -48,12 +48,12 @@
 - Reference: `net-contract/src/commands.rs` — existing Cart commands and `auto_add_message` usage.
 
 **Acceptance criteria:**
-- [ ] `StorageItem` contains `index`, `nameid`, `amount`, `type_`, `location`, `attribute`, `refine`, `expire_time`, `look`, and `weight` as `u32`, `identified` as `bool`, and `cards` as `Vec<u32>`.
-- [ ] The contract exposes snapshot, add, remove, and typed result messages plus deposit, withdrawal, and close commands.
-- [ ] Every known rejection has a distinct enum variant and unknown numeric codes can be retained through `Unknown(i32)`.
-- [ ] Storage indices and amounts are never narrowed below `u32` in the new contract.
-- [ ] Plugin registration tests prove that all new Storage messages are registered.
-- [ ] `cargo test -p net-contract` passes.
+- [x] `StorageItem` contains `index`, `nameid`, `amount`, `type_`, `location`, `attribute`, `refine`, `expire_time`, `look`, and `weight` as `u32`, `identified` as `bool`, and `cards` as `Vec<u32>`.
+- [x] The contract exposes snapshot, add, remove, and typed result messages plus deposit, withdrawal, and close commands.
+- [x] Every known rejection has a distinct enum variant and unknown numeric codes can be retained through `Unknown(i32)`.
+- [x] Storage indices and amounts are never narrowed below `u32` in the new contract.
+- [x] Plugin registration tests prove that all new Storage messages are registered.
+- [x] `cargo test -p net-contract` passes.
 
 **Depends on:** none
 
@@ -247,4 +247,3 @@
 **Depends on:** Task 3, Task 4, Task 6
 
 **Commit:** `feat(ui): wire storage transfers`
-

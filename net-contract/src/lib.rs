@@ -66,6 +66,27 @@ mod tests {
             .contains_resource::<Messages<commands::MoveFromCart>>());
         assert!(app
             .world()
+            .contains_resource::<Messages<events::StorageOpened>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::StorageItemAdded>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::StorageItemRemoved>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::StorageResult>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::DepositStorageItem>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::WithdrawStorageItem>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::CloseStorage>>());
+        assert!(app
+            .world()
             .contains_resource::<Messages<events::PartyInfoReceived>>());
         assert!(app
             .world()

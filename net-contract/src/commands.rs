@@ -253,6 +253,27 @@ pub struct MoveFromCart {
     pub amount: u16,
 }
 
+/// Request to deposit `amount` of an inventory item into Storage.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct DepositStorageItem {
+    pub inventory_index: u32,
+    pub amount: u32,
+}
+
+/// Request to withdraw `amount` of a Storage item into the inventory.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct WithdrawStorageItem {
+    pub storage_index: u32,
+    pub amount: u32,
+}
+
+/// Request to close the active Storage session.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct CloseStorage;
+
 /// Request to create a party named `name`.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
