@@ -21,6 +21,7 @@ use leafwing_input_manager::prelude::ActionState;
 use crate::theme::feathers_theme::install_norse_theme;
 
 mod bag_tab;
+mod character_tab;
 mod identity;
 mod meter;
 pub mod shell;
@@ -102,6 +103,7 @@ impl Plugin for CharacterWindowPlugin {
         app.init_resource::<CharacterWindowState>();
         app.init_resource::<bag_tab::BagUi>();
         app.init_resource::<bag_tab::LastBagClick>();
+        character_tab::register(app);
         app.add_systems(
             Update,
             toggle_character_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
