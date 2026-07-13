@@ -171,7 +171,7 @@ fn toggle_character_window(
     *state = next_state(*state, tab);
 }
 
-/// Sets the single entity matched by `q` visible or hidden, writing only on change.
+/// Shows/hides the whole window via the root's `Visibility`, writing only on change.
 fn set_visible<F: QueryFilter>(q: &mut Query<&mut Visibility, F>, visible: bool) {
     let Ok(mut vis) = q.single_mut() else {
         return;
@@ -186,46 +186,51 @@ fn set_visible<F: QueryFilter>(q: &mut Query<&mut Visibility, F>, visible: bool)
     }
 }
 
-/// The four disjoint `&mut Visibility` queries `reflect_window_state` drives; the
-/// `Without` filters keep them provably non-overlapping so the system builds.
-type RootVis<'w, 's> = Query<
+/// Shows/hides a tab body via `Node.display`, writing only on change. Tabs must
+/// toggle `Display`, not `Visibility`: a `Visibility::Hidden` node still occupies
+/// flex layout, so the inactive tabs would stack behind the active one.
+fn set_displayed<F: QueryFilter>(q: &mut Query<&mut Node, F>, shown: bool) {
+    let Ok(mut node) = q.single_mut() else {
+        return;
+    };
+    let want = if shown { Display::Flex } else { Display::None };
+    if node.display != want {
+        node.display = want;
+    }
+}
+
+/// The root `Visibility` query (window open/close), kept disjoint from the tab-body
+/// `Node` queries below by component type.
+type RootVis<'w, 's> = Query<'w, 's, &'static mut Visibility, With<CharacterWindowRoot>>;
+/// The three disjoint tab-body `&mut Node` queries `reflect_window_state` drives;
+/// the `Without` filters keep them provably non-overlapping so the system builds.
+type CharBodyNode<'w, 's> = Query<
     'w,
     's,
-    &'static mut Visibility,
-    (
-        With<CharacterWindowRoot>,
-        Without<CharacterTabBody>,
-        Without<BagTabBody>,
-        Without<SkillsTabBody>,
-    ),
->;
-type CharBodyVis<'w, 's> = Query<
-    'w,
-    's,
-    &'static mut Visibility,
+    &'static mut Node,
     (
         With<CharacterTabBody>,
         Without<BagTabBody>,
         Without<SkillsTabBody>,
     ),
 >;
-type BagBodyVis<'w, 's> =
-    Query<'w, 's, &'static mut Visibility, (With<BagTabBody>, Without<SkillsTabBody>)>;
-type SkillsBodyVis<'w, 's> = Query<'w, 's, &'static mut Visibility, With<SkillsTabBody>>;
+type BagBodyNode<'w, 's> =
+    Query<'w, 's, &'static mut Node, (With<BagTabBody>, Without<SkillsTabBody>)>;
+type SkillsBodyNode<'w, 's> = Query<'w, 's, &'static mut Node, With<SkillsTabBody>>;
 
-/// Projects [`CharacterWindowState`] onto visibility: `open` → root, `tab` → the
-/// active tab body.
+/// Projects [`CharacterWindowState`]: `open` → root `Visibility`, `tab` → the active
+/// tab body's `Node.display` (inactive tabs are `Display::None` so they leave layout).
 fn reflect_window_state(
     state: Res<CharacterWindowState>,
     mut root: RootVis,
-    mut character: CharBodyVis,
-    mut bag: BagBodyVis,
-    mut skills: SkillsBodyVis,
+    mut character: CharBodyNode,
+    mut bag: BagBodyNode,
+    mut skills: SkillsBodyNode,
 ) {
     set_visible(&mut root, state.open);
-    set_visible(&mut character, state.tab == CharacterTab::Character);
-    set_visible(&mut bag, state.tab == CharacterTab::Bag);
-    set_visible(&mut skills, state.tab == CharacterTab::Skills);
+    set_displayed(&mut character, state.tab == CharacterTab::Character);
+    set_displayed(&mut bag, state.tab == CharacterTab::Bag);
+    set_displayed(&mut skills, state.tab == CharacterTab::Skills);
 }
 
 /// A tab-strip button click sets the active tab (never toggles closed).
