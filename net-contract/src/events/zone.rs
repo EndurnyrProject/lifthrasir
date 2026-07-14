@@ -70,6 +70,8 @@ pub struct UnitEntered {
     pub head_dir: u32,
     pub robe: u32,
     pub guild_id: u32,
+    pub guild_name: String,
+    pub emblem_id: u32,
     pub sex: u32,
     pub is_boss: bool,
     pub name: String,

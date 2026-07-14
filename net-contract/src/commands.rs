@@ -302,3 +302,81 @@ pub struct PartyInviteResponded {
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct PartyLeaveRequested;
+
+/// Request to create a guild named `name`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildCreateRequested {
+    pub name: String,
+}
+
+/// Request to invite a player to the local player's guild; exactly one of
+/// `target_char_id` / `target_name` is populated, the other left `0` / `""`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildInviteRequested {
+    pub target_char_id: u32,
+    pub target_name: String,
+}
+
+/// Respond to a pending invite for `guild_id`: accept or decline.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildInviteResponded {
+    pub guild_id: u32,
+    pub accept: bool,
+}
+
+/// Request to leave the local player's current guild.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildLeaveRequested;
+
+/// Request to expel a guild member for the supplied reason.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildExpelRequested {
+    pub target_char_id: u32,
+    pub reason: String,
+}
+
+/// Request to edit a fixed guild position slot.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildPositionEditRequested {
+    pub index: u32,
+    pub name: String,
+    pub can_invite: bool,
+    pub can_expel: bool,
+}
+
+/// Request to assign a guild member to a fixed position slot.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildMemberPositionRequested {
+    pub target_char_id: u32,
+    pub index: u32,
+}
+
+/// Request to replace the guild notice.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildNoticeEditRequested {
+    pub subject: String,
+    pub body: String,
+}
+
+/// Request to upload the original guild emblem bytes.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildEmblemUploadRequested {
+    pub data: Vec<u8>,
+}
+
+/// Request the exact emblem version for a guild.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildEmblemFetchRequested {
+    pub guild_id: u32,
+    pub emblem_id: u32,
+}

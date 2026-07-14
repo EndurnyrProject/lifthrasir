@@ -429,6 +429,8 @@ mod tests {
                 head_dir: 0,
                 robe: 0,
                 guild_id: 0,
+                guild_name: String::new(),
+                emblem_id: 0,
                 sex: 0,
                 is_boss: false,
                 name: String::new(),

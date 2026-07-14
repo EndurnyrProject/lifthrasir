@@ -15,6 +15,11 @@ pub struct ZoneSession {
     pub map_name: String,
 }
 
+/// Monotonic identity of the current zone/character session.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[auto_init_resource(plugin = crate::NetContractPlugin)]
+pub struct ZoneSessionGeneration(pub u64);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionTokens {
     pub login_id1: u32,

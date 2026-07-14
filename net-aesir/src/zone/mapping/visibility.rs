@@ -28,6 +28,8 @@ pub fn unit_spawn(s: net::UnitSpawn) -> UnitEntered {
         head_dir: s.head_dir,
         robe: s.robe,
         guild_id: s.guild_id,
+        guild_name: s.guild_name,
+        emblem_id: s.emblem_id,
         sex: s.sex,
         is_boss: s.is_boss,
         name: s.name,
@@ -76,6 +78,8 @@ mod tests {
             head_dir: 1,
             robe: 200,
             guild_id: 42,
+            guild_name: "Knights of Midgard".into(),
+            emblem_id: 9,
             sex: 1,
             is_boss: false,
             name: "Alice".into(),
@@ -143,6 +147,8 @@ mod tests {
         assert_eq!(entered.head_dir, 1);
         assert_eq!(entered.robe, 200);
         assert_eq!(entered.guild_id, 42);
+        assert_eq!(entered.guild_name, "Knights of Midgard");
+        assert_eq!(entered.emblem_id, 9);
         assert_eq!(entered.sex, 1);
         assert!(!entered.is_boss);
     }

@@ -114,6 +114,42 @@ mod tests {
             .contains_resource::<Messages<commands::PartyLeaveRequested>>());
         assert!(app
             .world()
+            .contains_resource::<Messages<commands::GuildCreateRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::GuildInviteRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::GuildInviteResponded>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::GuildLeaveRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::GuildExpelRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::GuildPositionEditRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::GuildMemberPositionRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::GuildNoticeEditRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::GuildEmblemUploadRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<commands::GuildEmblemFetchRequested>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::GuildIngress>>());
+        assert!(app
+            .world()
+            .contains_resource::<state::ZoneSessionGeneration>());
+        assert!(app
+            .world()
             .contains_resource::<Messages<events::EmoteShown>>());
         assert!(app
             .world()
