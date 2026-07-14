@@ -29,9 +29,8 @@ pub enum DialogSeverity {
     Ok,
 }
 
-/// Who raised the dialog, so a [`SystemDialogChoice`] can be routed back to the right
-/// consumer even when two dialogs contend in one tick. Carried on both the request and
-/// the emitted choice.
+/// Who raised the dialog, so a [`SystemDialogChoice`] can be routed to the right
+/// consumer. Correlation distinguishes separate operations of the same kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Reflect)]
 pub enum SystemDialogKind {
     #[default]
@@ -55,15 +54,19 @@ pub struct ShowSystemDialog {
     pub button_label: String,
     pub secondary_label: String,
     pub confirm_state: Option<GameState>,
+    /// Identifies the operation that owns this dialog, when replacement/expiry races matter.
+    pub correlation: Option<u64>,
 }
 
 /// Emitted by the system dialog when either button is pressed: `primary` is true
 /// for the primary (confirm) button, false for the secondary (dismiss) button.
-/// `kind` echoes the raising [`ShowSystemDialog`] so a consumer claims only its own
-/// dialog's choice, immune to two dialogs contending in one tick.
+/// `kind` and `correlation` echo the raising [`ShowSystemDialog`] so a consumer claims
+/// only its own dialog's choice.
 #[derive(Message, Clone)]
 #[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
 pub struct SystemDialogChoice {
     pub primary: bool,
     pub kind: SystemDialogKind,
+    /// Echoes the visible dialog's correlation token exactly.
+    pub correlation: Option<u64>,
 }

@@ -472,6 +472,7 @@ pub fn handle_zone_disconnected(
             button_label: "OK".into(),
             secondary_label: String::new(),
             confirm_state: Some(GameState::Login),
+            correlation: None,
         });
     }
 }

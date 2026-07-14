@@ -49,12 +49,31 @@ impl Plugin for SystemDialogPlugin {
     }
 }
 
-/// The modal root. Carries the screen the primary button navigates to and the kind
-/// tag echoed onto every emitted choice so a consumer claims only its own dialog.
+/// The modal root. Carries navigation and ownership data echoed onto every choice.
 #[derive(Component, Clone, Default)]
 pub struct SystemDialogRoot {
     confirm_state: Option<GameState>,
     kind: SystemDialogKind,
+    correlation: Option<u64>,
+}
+
+impl SystemDialogRoot {
+    pub(crate) fn new(
+        confirm_state: Option<GameState>,
+        kind: SystemDialogKind,
+        correlation: Option<u64>,
+    ) -> Self {
+        Self {
+            confirm_state,
+            kind,
+            correlation,
+        }
+    }
+
+    /// Whether this root belongs to one exact dialog-producing operation.
+    pub fn matches(&self, kind: SystemDialogKind, correlation: Option<u64>) -> bool {
+        self.kind == kind && self.correlation == correlation
+    }
 }
 
 /// Accent colour for a severity — drives the badge border, glyph, and code chip.
@@ -96,8 +115,9 @@ fn show_system_dialog(
 fn system_dialog(request: &ShowSystemDialog) -> impl Scene {
     let confirm_state = request.confirm_state.clone();
     let kind = request.kind;
+    let correlation = request.correlation;
     bsn! {
-        template_value(SystemDialogRoot { confirm_state, kind })
+        template_value(SystemDialogRoot::new(confirm_state, kind, correlation))
         Node {
             position_type: PositionType::Absolute,
             width: percent(100),
@@ -365,6 +385,7 @@ fn confirm_on_click(
     choice.write(SystemDialogChoice {
         primary: true,
         kind: dialog.kind,
+        correlation: dialog.correlation,
     });
     confirm_dialog(root, &dialog.confirm_state, &mut commands, &mut next_state);
 }
@@ -387,6 +408,7 @@ fn confirm_on_enter(
         choice.write(SystemDialogChoice {
             primary: true,
             kind: dialog.kind,
+            correlation: dialog.correlation,
         });
         confirm_dialog(root, &dialog.confirm_state, &mut commands, &mut next_state);
     }
@@ -406,6 +428,7 @@ fn dismiss_on_click(
     choice.write(SystemDialogChoice {
         primary: false,
         kind: dialog.kind,
+        correlation: dialog.correlation,
     });
     commands.entity(root).despawn();
 }
@@ -430,12 +453,12 @@ mod tests {
         assert_eq!(severity_icon(DialogSeverity::Ok), "ok");
     }
 
-    fn choices(app: &App) -> Vec<(bool, SystemDialogKind)> {
+    fn choices(app: &App) -> Vec<(bool, SystemDialogKind, Option<u64>)> {
         let messages = app.world().resource::<Messages<SystemDialogChoice>>();
         let mut cursor = messages.get_cursor();
         cursor
             .read(messages)
-            .map(|choice| (choice.primary, choice.kind))
+            .map(|choice| (choice.primary, choice.kind, choice.correlation))
             .collect()
     }
 
@@ -456,6 +479,7 @@ mod tests {
             .spawn(SystemDialogRoot {
                 confirm_state: Some(target.clone()),
                 kind: SystemDialogKind::PartyInvite,
+                correlation: Some(42),
             })
             .observe(confirm_on_click)
             .id();
@@ -472,8 +496,8 @@ mod tests {
         }
         assert_eq!(
             choices(&app),
-            vec![(true, SystemDialogKind::PartyInvite)],
-            "primary press reports primary and echoes the dialog kind"
+            vec![(true, SystemDialogKind::PartyInvite, Some(42))],
+            "primary press echoes the dialog kind and correlation"
         );
     }
 
@@ -493,8 +517,8 @@ mod tests {
         );
         assert_eq!(
             choices(&app),
-            vec![(false, SystemDialogKind::Generic)],
-            "secondary press reports non-primary and the default kind"
+            vec![(false, SystemDialogKind::Generic, None)],
+            "secondary press reports non-primary and the default dialog identity"
         );
     }
 }

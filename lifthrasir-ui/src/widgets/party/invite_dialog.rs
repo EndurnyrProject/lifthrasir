@@ -3,14 +3,12 @@
 //! An inbound [`PartyInviteNotified`] raises the reusable dialog with Accept
 //! (primary) and Decline (secondary), tagged [`SystemDialogKind::PartyInvite`], and
 //! records the invite in [`PendingPartyInvite`]. The dialog reports the press as a
-//! [`SystemDialogChoice`] carrying that tag; the party handler claims it only when the
-//! tag is `PartyInvite` *and* an invite is pending. A 30s TTL clears the pending invite
-//! and closes the (single-open) dialog, matching the server's auto-decline.
+//! [`SystemDialogChoice`] carrying its kind and correlation; the party handler claims
+//! only the exact pending invite. A 30s TTL clears the pending invite and closes only
+//! its matching dialog, matching the server's auto-decline.
 //!
-//! Correlation guarantee: the `kind` tag alone routes a choice to its raiser, so even if
-//! a disconnect dialog and an invite are written in the same tick (only one dialog
-//! actually spawns), a `Generic` disconnect choice can never be claimed as an invite
-//! response. The single-open guard still prevents invites stacking on an open dialog.
+//! A monotonically increasing local token prevents an expired choice from claiming a
+//! later party invite. The single-open guard still prevents invites stacking.
 
 use bevy::prelude::*;
 use game_engine::presentation::ui::events::{
@@ -32,6 +30,8 @@ pub struct PendingPartyInvite {
     pub party_name: String,
     pub inviter_name: String,
     timer: Timer,
+    correlation: Option<u64>,
+    next_correlation: u64,
 }
 
 impl PendingPartyInvite {
@@ -40,14 +40,20 @@ impl PendingPartyInvite {
     }
 
     fn set(&mut self, invite: &PartyInviteNotified) {
+        self.next_correlation = self.next_correlation.wrapping_add(1).max(1);
         self.party_id = invite.party_id;
         self.party_name = invite.party_name.clone();
         self.inviter_name = invite.inviter_name.clone();
         self.timer = Timer::from_seconds(INVITE_TTL_SECS, TimerMode::Once);
+        self.correlation = Some(self.next_correlation);
     }
 
     pub(crate) fn clear(&mut self) {
-        *self = Self::default();
+        self.party_id = 0;
+        self.party_name.clear();
+        self.inviter_name.clear();
+        self.timer = Timer::default();
+        self.correlation = None;
     }
 }
 
@@ -66,6 +72,7 @@ pub fn show_incoming_invite(
     if !existing.is_empty() {
         return;
     }
+    pending.set(invite);
     dialogs.write(ShowSystemDialog {
         severity: DialogSeverity::Info,
         kind: SystemDialogKind::PartyInvite,
@@ -79,29 +86,30 @@ pub fn show_incoming_invite(
         button_label: "Accept".into(),
         secondary_label: "Decline".into(),
         confirm_state: None,
+        correlation: pending.correlation,
     });
-    pending.set(invite);
 }
 
-/// Turn a dialog choice into a party response, but only when the choice came from an
-/// invite dialog (`kind == PartyInvite`) and an invite is pending. A `Generic` choice
-/// (e.g. the disconnect dialog's button) is ignored even if a race left it interleaved
-/// with a pending invite, so it never becomes a spurious `PartyInviteResponded`.
+/// Turn a dialog choice into a party response only when its kind and token match the
+/// pending invite. Unrelated and stale choices remain no-ops.
 pub fn claim_invite_choice(
     mut choices: MessageReader<SystemDialogChoice>,
     mut pending: ResMut<PendingPartyInvite>,
     mut responses: MessageWriter<PartyInviteResponded>,
 ) {
+    if !pending.is_pending() {
+        return;
+    }
     let Some(choice) = choices
         .read()
-        .filter(|choice| choice.kind == SystemDialogKind::PartyInvite)
+        .filter(|choice| {
+            choice.kind == SystemDialogKind::PartyInvite
+                && choice.correlation == pending.correlation
+        })
         .last()
     else {
         return;
     };
-    if !pending.is_pending() {
-        return;
-    }
     responses.write(PartyInviteResponded {
         party_id: pending.party_id,
         accept: choice.primary,
@@ -109,12 +117,11 @@ pub fn claim_invite_choice(
     pending.clear();
 }
 
-/// After the TTL with no response, clear the pending invite and despawn the (single-open)
-/// dialog. A late press then finds nothing pending and is a no-op.
+/// After the TTL, clear the pending invite and despawn only its matching dialog.
 pub fn expire_pending_invite(
     time: Res<Time>,
     mut pending: ResMut<PendingPartyInvite>,
-    root: Query<Entity, With<SystemDialogRoot>>,
+    roots: Query<(Entity, &SystemDialogRoot)>,
     mut commands: Commands,
 ) {
     if !pending.is_pending() {
@@ -123,9 +130,13 @@ pub fn expire_pending_invite(
     if !pending.timer.tick(time.delta()).just_finished() {
         return;
     }
+    let correlation = pending.correlation;
     pending.clear();
-    if let Ok(root) = root.single() {
-        commands.entity(root).despawn();
+    if let Some((entity, _)) = roots
+        .iter()
+        .find(|(_, root)| root.matches(SystemDialogKind::PartyInvite, correlation))
+    {
+        commands.entity(entity).despawn();
     }
 }
 
@@ -172,10 +183,12 @@ mod tests {
         assert_eq!(dialogs[0].button_label, "Accept");
         assert_eq!(dialogs[0].secondary_label, "Decline");
         assert!(dialogs[0].confirm_state.is_none());
+        assert!(dialogs[0].correlation.is_some());
 
         let pending = app.world().resource::<PendingPartyInvite>();
         assert!(pending.is_pending());
         assert_eq!(pending.party_id, 42);
+        assert_eq!(dialogs[0].correlation, pending.correlation);
     }
 
     #[test]
@@ -209,12 +222,14 @@ mod tests {
         app.world_mut()
             .resource_mut::<PendingPartyInvite>()
             .set(&invite());
+        let correlation = app.world().resource::<PendingPartyInvite>().correlation;
 
         app.world_mut()
             .resource_mut::<Messages<SystemDialogChoice>>()
             .write(SystemDialogChoice {
                 primary: true,
                 kind: SystemDialogKind::PartyInvite,
+                correlation,
             });
         app.update();
 
@@ -241,6 +256,7 @@ mod tests {
             .write(SystemDialogChoice {
                 primary: true,
                 kind: SystemDialogKind::PartyInvite,
+                correlation: None,
             });
         app.update();
 
@@ -266,6 +282,7 @@ mod tests {
             .write(SystemDialogChoice {
                 primary: true,
                 kind: SystemDialogKind::Generic,
+                correlation: None,
             });
         app.update();
 
@@ -280,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn decline_choice_sends_non_accept_response() {
+    fn wrong_correlation_choice_writes_nothing_and_keeps_pending() {
         let mut app = App::new();
         app.add_message::<SystemDialogChoice>()
             .add_message::<PartyInviteResponded>()
@@ -293,8 +310,67 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<SystemDialogChoice>>()
             .write(SystemDialogChoice {
+                primary: true,
+                kind: SystemDialogKind::PartyInvite,
+                correlation: Some(999),
+            });
+        app.update();
+
+        assert!(responses(&app).is_empty());
+        assert!(app.world().resource::<PendingPartyInvite>().is_pending());
+    }
+
+    #[test]
+    fn stale_choice_cannot_claim_a_later_invite() {
+        let mut app = App::new();
+        app.add_message::<SystemDialogChoice>()
+            .add_message::<PartyInviteResponded>()
+            .init_resource::<PendingPartyInvite>()
+            .add_systems(Update, claim_invite_choice);
+        let mut pending = app.world_mut().resource_mut::<PendingPartyInvite>();
+        pending.set(&invite());
+        let stale = pending.correlation;
+        pending.clear();
+        pending.set(&invite());
+        let current = pending.correlation;
+        drop(pending);
+        assert_ne!(stale, current);
+
+        app.world_mut()
+            .resource_mut::<Messages<SystemDialogChoice>>()
+            .write(SystemDialogChoice {
+                primary: true,
+                kind: SystemDialogKind::PartyInvite,
+                correlation: stale,
+            });
+        app.update();
+
+        assert!(responses(&app).is_empty());
+        assert!(app.world().resource::<PendingPartyInvite>().is_pending());
+        assert_eq!(
+            app.world().resource::<PendingPartyInvite>().correlation,
+            current
+        );
+    }
+
+    #[test]
+    fn decline_choice_sends_non_accept_response() {
+        let mut app = App::new();
+        app.add_message::<SystemDialogChoice>()
+            .add_message::<PartyInviteResponded>()
+            .init_resource::<PendingPartyInvite>()
+            .add_systems(Update, claim_invite_choice);
+        app.world_mut()
+            .resource_mut::<PendingPartyInvite>()
+            .set(&invite());
+        let correlation = app.world().resource::<PendingPartyInvite>().correlation;
+
+        app.world_mut()
+            .resource_mut::<Messages<SystemDialogChoice>>()
+            .write(SystemDialogChoice {
                 primary: false,
                 kind: SystemDialogKind::PartyInvite,
+                correlation,
             });
         app.update();
 
@@ -328,5 +404,53 @@ mod tests {
             !app.world().resource::<PendingPartyInvite>().is_pending(),
             "TTL clears the pending invite"
         );
+    }
+
+    #[test]
+    fn invite_timeout_does_not_close_an_unrelated_dialog() {
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .init_resource::<PendingPartyInvite>()
+            .add_systems(Update, expire_pending_invite);
+        app.world_mut()
+            .resource_mut::<PendingPartyInvite>()
+            .set(&invite());
+        let unrelated = app.world_mut().spawn(SystemDialogRoot::default()).id();
+
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs_f32(INVITE_TTL_SECS + 1.0));
+        app.update();
+
+        assert!(app.world().get_entity(unrelated).is_ok());
+        assert!(!app.world().resource::<PendingPartyInvite>().is_pending());
+    }
+
+    #[test]
+    fn invite_timeout_closes_its_matching_dialog() {
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .init_resource::<PendingPartyInvite>()
+            .add_systems(Update, expire_pending_invite);
+        app.world_mut()
+            .resource_mut::<PendingPartyInvite>()
+            .set(&invite());
+        let correlation = app.world().resource::<PendingPartyInvite>().correlation;
+        let owned = app
+            .world_mut()
+            .spawn(SystemDialogRoot::new(
+                None,
+                SystemDialogKind::PartyInvite,
+                correlation,
+            ))
+            .id();
+
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs_f32(INVITE_TTL_SECS + 1.0));
+        app.update();
+
+        assert!(app.world().get_entity(owned).is_err());
+        assert!(!app.world().resource::<PendingPartyInvite>().is_pending());
     }
 }
