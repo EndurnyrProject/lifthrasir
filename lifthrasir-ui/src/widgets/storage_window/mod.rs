@@ -48,6 +48,8 @@ pub struct StorageSearchPlaceholder;
 #[derive(Component, Default, Clone)]
 pub struct StorageAmountField;
 
+type StorageFieldFilter = Or<(With<StorageSearchField>, With<StorageAmountField>)>;
+
 #[derive(Component, Default, Clone)]
 pub struct StorageAmountConfirm;
 
@@ -406,6 +408,7 @@ fn amount_validation_message(error: AmountValidationError) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn on_amount_confirm(
     _: On<Activate>,
     fields: Query<(Entity, &EditableText), With<StorageAmountField>>,
@@ -461,6 +464,7 @@ pub(crate) fn on_amount_cancel(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn rebuild_panes(
     mut commands: Commands,
     inventory: Res<Inventory>,
@@ -517,6 +521,7 @@ pub(crate) fn on_category_activate(
     ui.category = button.0;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn on_cell_select(
     click: On<Pointer<Click>>,
     cells: Query<&StorageCell>,
@@ -699,7 +704,7 @@ fn apply_storage_results(
 
 fn clear_storage_focus(
     input_focus: &mut InputFocus,
-    fields: &Query<(), Or<(With<StorageSearchField>, With<StorageAmountField>)>>,
+    fields: &Query<(), StorageFieldFilter>,
 ) {
     if input_focus
         .get()
@@ -713,7 +718,7 @@ fn sync_window_visibility(
     storage: Res<Storage>,
     mut roots: Query<&mut Visibility, With<StorageWindowRoot>>,
     mut fields: Query<&mut EditableText, With<StorageSearchField>>,
-    storage_fields: Query<(), Or<(With<StorageSearchField>, With<StorageAmountField>)>>,
+    storage_fields: Query<(), StorageFieldFilter>,
     mut input_focus: ResMut<InputFocus>,
     mut ui: ResMut<StorageUi>,
 ) {
@@ -745,7 +750,7 @@ pub(crate) fn on_storage_close(
     mut close: MessageWriter<CloseStorage>,
     mut roots: Query<&mut Visibility, With<StorageWindowRoot>>,
     mut fields: Query<&mut EditableText, With<StorageSearchField>>,
-    storage_fields: Query<(), Or<(With<StorageSearchField>, With<StorageAmountField>)>>,
+    storage_fields: Query<(), StorageFieldFilter>,
     mut input_focus: ResMut<InputFocus>,
     mut ui: ResMut<StorageUi>,
 ) {

@@ -721,8 +721,10 @@ mod tests {
         });
         let mut storage = Storage::default();
         storage.open(600, vec![vault_item(70_000)]);
-        let mut ui = StorageUi::default();
-        ui.category = StorageCategory::Use;
+        let mut ui = StorageUi {
+            category: StorageCategory::Use,
+            ..Default::default()
+        };
         ui.set_query("potion");
 
         let (bag, vault) = pane_views(&inventory, &storage, &ui, &db);
