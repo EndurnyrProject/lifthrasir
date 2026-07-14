@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -256,6 +256,28 @@ pub mod envelope {
         EmoteRequest(super::EmoteRequest),
         #[prost(message, tag = "128")]
         Emotion(super::Emotion),
+        /// 129-133: quest log (server->client dump + deltas)
+        #[prost(message, tag = "129")]
+        QuestList(super::QuestList),
+        #[prost(message, tag = "130")]
+        QuestAdded(super::QuestAdded),
+        #[prost(message, tag = "131")]
+        QuestRemoved(super::QuestRemoved),
+        #[prost(message, tag = "132")]
+        QuestStateChanged(super::QuestStateChanged),
+        #[prost(message, tag = "133")]
+        QuestHuntProgress(super::QuestHuntProgress),
+        /// 134: minimap viewpoint marker (script viewpoint buildin)
+        #[prost(message, tag = "134")]
+        Viewpoint(super::Viewpoint),
+        /// 135-136: script cutscene image + sound effect (cutin/soundeffect buildins)
+        #[prost(message, tag = "135")]
+        Cutin(super::Cutin),
+        #[prost(message, tag = "136")]
+        SoundEffect(super::SoundEffect),
+        /// 137: party member state delta
+        #[prost(message, tag = "137")]
+        PartyMemberUpdate(super::PartyMemberUpdate),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -742,6 +764,49 @@ pub struct SpecialEffect {
     /// rAthena EF_* id
     #[prost(uint32, tag = "2")]
     pub effect_id: u32,
+}
+/// Server -> client, a minimap/compass marker (replaces RO ZC_COMPASS 0x0144).
+/// Sent only to the invoking player (script `viewpoint`).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Viewpoint {
+    /// the NPC that owns the marker (rAthena st->oid)
+    #[prost(uint32, tag = "1")]
+    pub npc_id: u32,
+    /// action: 0 remove / 1 display / 2 display+remove-others
+    #[prost(uint32, tag = "2")]
+    pub r#type: u32,
+    #[prost(uint32, tag = "3")]
+    pub x: u32,
+    #[prost(uint32, tag = "4")]
+    pub y: u32,
+    /// marker slot / point number
+    #[prost(uint32, tag = "5")]
+    pub id: u32,
+    /// 0xRRGGBB
+    #[prost(uint32, tag = "6")]
+    pub color: u32,
+}
+/// Server -> client, a cutscene illustration overlay (replaces RO ZC_SHOW_IMAGE).
+/// Sent only to the invoking player (script `cutin`).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Cutin {
+    /// illustration bitmap name; empty with type 255 clears all cutins
+    #[prost(string, tag = "1")]
+    pub image: ::prost::alloc::string::String,
+    /// position: 0 bottom-left / 1 bottom-mid / 2 bottom-right / 3-4 center / 255 clear
+    #[prost(uint32, tag = "2")]
+    pub r#type: u32,
+}
+/// Server -> client, a one-shot sound effect (replaces RO ZC_SOUND).
+/// Sent only to the invoking player (script `soundeffect`).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SoundEffect {
+    /// wav filename played from the client's data/wav directory
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    /// playback type (0 = data/wav)
+    #[prost(uint32, tag = "2")]
+    pub r#type: u32,
 }
 /// Client -> server, request an entity's name (replaces RO CZ_REQNAME2 0x0368).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1713,6 +1778,20 @@ pub struct PartyMember {
     pub online: bool,
     #[prost(string, tag = "5")]
     pub map: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "6")]
+    pub job_id: u32,
+    #[prost(uint64, tag = "7")]
+    pub hp: u64,
+    #[prost(uint64, tag = "8")]
+    pub max_hp: u64,
+    #[prost(uint64, tag = "9")]
+    pub sp: u64,
+    #[prost(uint64, tag = "10")]
+    pub max_sp: u64,
+    #[prost(uint32, tag = "11")]
+    pub ap: u32,
+    #[prost(uint32, tag = "12")]
+    pub max_ap: u32,
 }
 /// Server -> client, full party snapshot sent on any membership or option change.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1727,6 +1806,14 @@ pub struct PartyInfo {
     pub exp_share: bool,
     #[prost(message, repeated, tag = "5")]
     pub members: ::prost::alloc::vec::Vec<PartyMember>,
+}
+/// Server -> client, complete current snapshot for one party member.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PartyMemberUpdate {
+    #[prost(uint32, tag = "1")]
+    pub party_id: u32,
+    #[prost(message, optional, tag = "2")]
+    pub member: ::core::option::Option<PartyMember>,
 }
 /// Server -> client, the party was disbanded (leader left, or the last member left).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1864,6 +1951,72 @@ pub mod announcement {
             }
         }
     }
+}
+/// One hunt objective within a QuestEntry, joining the persisted counter with
+/// the quest definition's target so the client needs no quest database of its
+/// own. `needed` is copied from the quest definition; `current` is clamped
+/// by the server.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QuestObjective {
+    #[prost(uint32, tag = "1")]
+    pub mob_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub needed: u32,
+    #[prost(uint32, tag = "3")]
+    pub current: u32,
+}
+/// One quest-log row within a QuestList/QuestAdded. `state` mirrors rAthena's
+/// e_quest_state: 0 = inactive, 1 = active, 2 = complete. `objectives` is empty
+/// for a quest with no hunt targets, or whose definition no longer resolves.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QuestEntry {
+    #[prost(uint32, tag = "1")]
+    pub quest_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub state: u32,
+    #[prost(message, repeated, tag = "3")]
+    pub objectives: ::prost::alloc::vec::Vec<QuestObjective>,
+}
+/// Server -> client, the full quest log dump (sent on map load, mirrors InventoryList).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QuestList {
+    #[prost(message, repeated, tag = "1")]
+    pub quests: ::prost::alloc::vec::Vec<QuestEntry>,
+}
+/// Server -> client, a quest entered the log (setquest, or the new side of changequest).
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QuestAdded {
+    #[prost(message, optional, tag = "1")]
+    pub quest: ::core::option::Option<QuestEntry>,
+}
+/// Server -> client, a quest left the log (erasequest, or the old side of changequest).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QuestRemoved {
+    #[prost(uint32, tag = "1")]
+    pub quest_id: u32,
+}
+/// Server -> client, a quest's state changed in place, objectives unaffected
+/// (completequest). See QuestEntry.state for the value meaning.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QuestStateChanged {
+    #[prost(uint32, tag = "1")]
+    pub quest_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub state: u32,
+}
+/// Server -> client, one hunt objective's counter advanced
+/// (quest_update_objective). `objective_index` is positional within the
+/// quest's targets; `count`/`needed` are the new (clamped) current and cap.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QuestHuntProgress {
+    #[prost(uint32, tag = "1")]
+    pub quest_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub objective_index: u32,
+    #[prost(uint32, tag = "3")]
+    pub count: u32,
+    #[prost(uint32, tag = "4")]
+    pub needed: u32,
 }
 /// Outcome of a cart mount attempt. Values are prefixed because proto3 enum
 /// constants share the package namespace.
