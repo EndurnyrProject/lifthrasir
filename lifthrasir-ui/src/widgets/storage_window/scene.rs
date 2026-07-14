@@ -150,10 +150,9 @@ pub(crate) fn pane(view: StoragePaneView, side: PaneSide) -> impl Scene {
                             position_type: PositionType::Absolute,
                             left: px(0), top: px(0), right: px(0), bottom: px(0),
                             overflow: {Overflow::scroll_y()},
-                            flex_direction: FlexDirection::Row,
-                            flex_wrap: FlexWrap::Wrap,
-                            align_content: AlignContent::FlexStart,
-                            column_gap: px(6), row_gap: px(8),
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::Stretch,
+                            row_gap: px(6),
                             padding: {UiRect { left: Val::Px(10.0), right: Val::Px(14.0), top: Val::Px(10.0), bottom: Val::Px(10.0) }},
                         }
                         ScrollArea
@@ -208,14 +207,15 @@ fn cell(view: StorageCellView) -> impl Scene {
     bsn! {
         template_value(StorageCell(view.selection))
         Node {
-            width: px(68), height: px(78),
-            position_type: PositionType::Relative,
-            flex_direction: FlexDirection::Column,
+            width: percent(100), height: px(52),
+            flex_shrink: 0.0,
+            flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            justify_content: JustifyContent::FlexEnd,
-            padding: {UiRect::bottom(px(5))},
+            column_gap: px(8),
+            padding: {UiRect::horizontal(px(8))},
             border: px(1),
             border_radius: BorderRadius::all(px(7)),
+            overflow: {Overflow::clip()},
         }
         BackgroundColor({theme::FIELD})
         BorderColor::all(border)
@@ -224,16 +224,28 @@ fn cell(view: StorageCellView) -> impl Scene {
         Children [
             (
                 ImageNode { image: {view.icon} }
-                Node { position_type: PositionType::Absolute, left: px(13), top: px(8), width: px(42), height: px(42) }
+                Node { width: px(38), height: px(38), flex_shrink: 0.0 }
                 ignore_picking()
             ),
-            chrome_text(view.name, 8.5, theme::TEXT_DIM),
-            chrome_text(view.category.to_string(), 7.5, theme::TEXT_FAINT),
-            {amount}, {refine},
+            (
+                Node {
+                    flex_grow: 1.0,
+                    min_width: px(0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(2),
+                    overflow: {Overflow::clip()},
+                }
+                ignore_picking()
+                Children [
+                    chrome_text(view.name, 10.5, theme::TEXT_DIM),
+                    chrome_text(view.category.to_string(), 8.5, theme::TEXT_FAINT),
+                ]
+            ),
+            {refine}, {amount},
             (
                 @FeathersButton { @caption: bsn! { glyph_icon(quick_icon, 10.0, theme::TEXT_DIM) } }
                 template_value(StorageQuickTransfer(view.selection))
-                Node { position_type: PositionType::Absolute, right: px(2), top: px(2), width: px(18), height: px(18) }
+                Node { width: px(24), height: px(24), flex_shrink: 0.0 }
                 on(stop_quick_transfer_propagation)
                 on(on_quick_transfer_activate)
             ),
@@ -242,28 +254,12 @@ fn cell(view: StorageCellView) -> impl Scene {
 }
 
 fn badge(text: String, refine: bool) -> impl Scene {
-    let (left, right, top, bottom, color) = if refine {
-        (
-            Val::Px(2.0),
-            Val::Auto,
-            Val::Px(2.0),
-            Val::Auto,
-            theme::GOLD,
-        )
-    } else {
-        (
-            Val::Auto,
-            Val::Px(2.0),
-            Val::Auto,
-            Val::Px(20.0),
-            theme::TEXT,
-        )
-    };
+    let color = if refine { theme::GOLD } else { theme::TEXT };
     bsn! {
         Text(text)
         TextFont { font: FontSourceTemplate::Handle(theme::FONT_BODY), font_size: {FontSize::Px(9.0)} }
         TextColor(color)
-        Node { position_type: PositionType::Absolute, left, right, top, bottom }
+        Node { min_width: px(18), flex_shrink: 0.0 }
         ignore_picking()
     }
 }
@@ -803,7 +799,7 @@ mod tests {
             name: "Red Potion".to_string(),
             category: "Use",
             amount: 3,
-            refine: 0,
+            refine: 7,
             selected: true,
         };
         app.world_mut()
@@ -825,6 +821,22 @@ mod tests {
                 .count(),
             1
         );
+        let row = app
+            .world_mut()
+            .query_filtered::<&Node, With<StorageCell>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(row.width, percent(100));
+        assert_eq!(row.height, px(52));
+        assert_eq!(row.flex_direction, FlexDirection::Row);
+        assert_eq!(row.flex_shrink, 0.0);
+        let list = app
+            .world_mut()
+            .query_filtered::<&Node, With<ScrollArea>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(list.flex_direction, FlexDirection::Column);
+        assert_eq!(list.align_items, AlignItems::Stretch);
         let texts: Vec<_> = app
             .world_mut()
             .query::<&Text>()
@@ -832,6 +844,9 @@ mod tests {
             .map(|text| text.0.clone())
             .collect();
         assert!(texts.iter().any(|text| text == "Red Potion"));
+        assert!(texts.iter().any(|text| text == "Use"));
+        assert!(texts.iter().any(|text| text == "3"));
+        assert!(texts.iter().any(|text| text == "+7"));
         assert!(!texts.iter().any(|text| text == "Nothing here yet."));
 
         app.world_mut()

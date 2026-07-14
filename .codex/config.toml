@@ -1,0 +1,3 @@
+[mcp_servers.smart-tree]
+command = "/usr/local/bin/st"
+args = ["--mcp"]
