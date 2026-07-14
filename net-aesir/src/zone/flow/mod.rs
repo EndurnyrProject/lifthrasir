@@ -2,6 +2,7 @@ pub mod announcement;
 pub mod cart;
 pub mod combat;
 pub mod ground;
+pub mod guild;
 pub mod handshake;
 pub mod inventory;
 pub mod movement;
