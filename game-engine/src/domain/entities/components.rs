@@ -67,6 +67,18 @@ impl EntityName {
     }
 }
 
+/// Guild identity supplied with a remote player's visibility spawn.
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct GuildIdentity {
+    pub guild_id: u32,
+    pub guild_name: String,
+    pub emblem_id: u32,
+}
+
+/// Marks a remote PC whose current guild membership is authoritative from its spawn.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct SpawnGuildIdentityKnown;
+
 /// Pending despawn component for deferred entity removal
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PendingDespawn {

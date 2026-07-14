@@ -11,7 +11,7 @@ use crate::{
                 },
                 states::{AnimationState, StatusEffects},
             },
-            components::{NetworkEntity, PendingDespawn},
+            components::{GuildIdentity, NetworkEntity, PendingDespawn, SpawnGuildIdentityKnown},
             markers::*,
             movement::components::{MovementSpeed, MovementState},
             registry::EntityRegistry,
@@ -57,6 +57,9 @@ struct SpawnFields {
     hp: u32,
     max_hp: u32,
     level: u16,
+    guild_id: u32,
+    guild_name: String,
+    emblem_id: u32,
 }
 
 impl From<&UnitEntered> for SpawnFields {
@@ -85,6 +88,9 @@ impl From<&UnitEntered> for SpawnFields {
             hp: e.hp,
             max_hp: e.max_hp,
             level: e.clevel as u16,
+            guild_id: e.guild_id,
+            guild_name: e.guild_name.clone(),
+            emblem_id: e.emblem_id,
         }
     }
 }
@@ -112,7 +118,22 @@ pub fn spawn_network_entity_system(
         if let Some(existing_entity) = entity_registry.get_entity(event.gid) {
             // Re-entering view: de-queue any pending despawn. Remote movement is now driven
             // by snapshot interpolation, so we no longer forward a per-step destination here.
-            commands.entity(existing_entity).remove::<PendingDespawn>();
+            let mut entity = commands.entity(existing_entity);
+            entity.remove::<PendingDespawn>();
+            if event.object_type == crate::domain::entities::types::ObjectType::Pc {
+                entity.insert(SpawnGuildIdentityKnown);
+                if event.guild_id != 0 {
+                    entity.insert(GuildIdentity {
+                        guild_id: event.guild_id,
+                        guild_name: event.guild_name,
+                        emblem_id: event.emblem_id,
+                    });
+                } else {
+                    entity.remove::<GuildIdentity>();
+                }
+            } else {
+                entity.remove::<(GuildIdentity, SpawnGuildIdentityKnown)>();
+            }
             continue;
         }
 
@@ -220,7 +241,18 @@ pub fn spawn_network_entity_system(
 
         match event.object_type {
             crate::domain::entities::types::ObjectType::Pc => {
-                entity_cmd.insert((RemotePlayer, SpatialAudioEmitter::default()));
+                entity_cmd.insert((
+                    RemotePlayer,
+                    SpatialAudioEmitter::default(),
+                    SpawnGuildIdentityKnown,
+                ));
+                if event.guild_id != 0 {
+                    entity_cmd.insert(GuildIdentity {
+                        guild_id: event.guild_id,
+                        guild_name: event.guild_name.clone(),
+                        emblem_id: event.emblem_id,
+                    });
+                }
                 debug!("Spawned remote player: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Npc => {
@@ -560,5 +592,211 @@ pub fn drain_spawn_buffer_system(
         for event in buffer.events.drain(..) {
             spawn_writer.write(event);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{
+        entities::{
+            components::{EntityName, GuildIdentity},
+            name_request_system::name_response_handler_system,
+        },
+        system_sets::{EntityInteractionSystems, EntityLifecycleSystems},
+    };
+    use net_contract::events::EntityNamed;
+
+    fn unit(guild_id: u32, guild_name: &str, emblem_id: u32) -> UnitEntered {
+        UnitEntered {
+            gid: 150_001,
+            aid: 2_000_001,
+            object_type: 0,
+            job: 7,
+            x: 100,
+            y: 200,
+            dir: 4,
+            speed: 150,
+            hp: 4_000,
+            max_hp: 4_200,
+            clevel: 99,
+            body_state: 0,
+            health_state: 0,
+            effect_state: 0,
+            head: 12,
+            weapon: 0,
+            shield: 0,
+            accessory: 0,
+            accessory2: 0,
+            accessory3: 0,
+            head_palette: 0,
+            body_palette: 0,
+            head_dir: 0,
+            robe: 0,
+            guild_id,
+            guild_name: guild_name.into(),
+            emblem_id,
+            sex: 1,
+            is_boss: false,
+            name: "Alice".into(),
+            moving: false,
+            dst_x: 0,
+            dst_y: 0,
+            move_start_time: 0,
+        }
+    }
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_message::<UnitEntered>()
+            .add_message::<EntityNamed>()
+            .init_resource::<EntityRegistry>()
+            .add_systems(
+                Update,
+                (
+                    spawn_network_entity_system.in_set(EntityLifecycleSystems::Spawning),
+                    ApplyDeferred
+                        .after(EntityLifecycleSystems::Spawning)
+                        .before(EntityInteractionSystems::Naming),
+                    name_response_handler_system.in_set(EntityInteractionSystems::Naming),
+                ),
+            );
+        app
+    }
+
+    #[test]
+    fn guilded_remote_pc_receives_spawn_identity() {
+        let mut app = app();
+        app.world_mut()
+            .write_message(unit(42, "Knights of Midgard", 9));
+
+        app.update();
+
+        let mut query = app.world_mut().query::<&GuildIdentity>();
+        let identity = query.single(app.world()).unwrap();
+        assert_eq!(identity.guild_id, 42);
+        assert_eq!(identity.guild_name, "Knights of Midgard");
+        assert_eq!(identity.emblem_id, 9);
+    }
+
+    #[test]
+    fn unguilded_remote_pc_has_no_guild_identity() {
+        let mut app = app();
+        app.world_mut().write_message(unit(0, "", 0));
+
+        app.update();
+
+        let mut query = app.world_mut().query::<&GuildIdentity>();
+        assert_eq!(query.iter(app.world()).count(), 0);
+    }
+
+    #[test]
+    fn non_pc_has_no_guild_identity_even_when_spawn_carries_guild_fields() {
+        let mut app = app();
+        let mut npc = unit(42, "Knights of Midgard", 9);
+        npc.object_type = 1;
+        app.world_mut().write_message(npc);
+
+        app.update();
+
+        let mut query = app.world_mut().query::<&GuildIdentity>();
+        assert_eq!(query.iter(app.world()).count(), 0);
+    }
+
+    #[test]
+    fn visibility_respawn_replaces_guild_identity_with_new_spawn_version() {
+        let mut app = app();
+        app.world_mut().write_message(unit(42, "Old Guild", 9));
+        app.update();
+
+        app.world_mut().write_message(unit(77, "New Guild", 10));
+        app.update();
+
+        let mut query = app.world_mut().query::<&GuildIdentity>();
+        let identity = query.single(app.world()).unwrap();
+        assert_eq!(identity.guild_id, 77);
+        assert_eq!(identity.guild_name, "New Guild");
+        assert_eq!(identity.emblem_id, 10);
+    }
+
+    #[test]
+    fn visibility_respawn_as_unguilded_removes_old_identity() {
+        let mut app = app();
+        app.world_mut().write_message(unit(42, "Old Guild", 9));
+        app.update();
+
+        app.world_mut().write_message(unit(0, "", 0));
+        app.update();
+
+        let mut query = app.world_mut().query::<&GuildIdentity>();
+        assert_eq!(query.iter(app.world()).count(), 0);
+    }
+
+    #[test]
+    fn stale_name_response_cannot_restore_guild_after_unguilded_respawn() {
+        let mut app = app();
+        app.world_mut().write_message(unit(42, "Old Guild", 9));
+        app.update();
+
+        app.world_mut().write_message(unit(0, "", 0));
+        app.update();
+
+        app.world_mut().write_message(EntityNamed {
+            gid: 150_001,
+            name: "Alice".into(),
+            party_name: String::new(),
+            guild_name: "Old Guild".into(),
+            position_name: "Old Position".into(),
+        });
+        app.update();
+
+        let entity = app
+            .world()
+            .resource::<EntityRegistry>()
+            .get_entity(150_001)
+            .unwrap();
+        let entity_ref = app.world().entity(entity);
+        assert!(entity_ref.get::<GuildIdentity>().is_none());
+        assert_eq!(
+            entity_ref
+                .get::<EntityName>()
+                .unwrap()
+                .guild_name
+                .as_deref(),
+            None
+        );
+    }
+
+    #[test]
+    fn same_frame_unguilded_respawn_precedes_stale_name_response() {
+        let mut app = app();
+        app.world_mut().write_message(unit(42, "Old Guild", 9));
+        app.update();
+
+        app.world_mut().write_message(unit(0, "", 0));
+        app.world_mut().write_message(EntityNamed {
+            gid: 150_001,
+            name: "Alice".into(),
+            party_name: String::new(),
+            guild_name: "Old Guild".into(),
+            position_name: "Old Position".into(),
+        });
+        app.update();
+
+        let entity = app
+            .world()
+            .resource::<EntityRegistry>()
+            .get_entity(150_001)
+            .unwrap();
+        let entity_ref = app.world().entity(entity);
+        assert!(entity_ref.get::<GuildIdentity>().is_none());
+        assert_eq!(
+            entity_ref
+                .get::<EntityName>()
+                .unwrap()
+                .guild_name
+                .as_deref(),
+            None
+        );
     }
 }

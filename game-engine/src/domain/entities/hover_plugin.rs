@@ -1,4 +1,7 @@
-use crate::app::entity_hover_plugin::EntityHoverDomainPlugin;
+use crate::{
+    app::entity_hover_plugin::EntityHoverDomainPlugin,
+    domain::system_sets::{EntityInteractionSystems, EntityLifecycleSystems},
+};
 use bevy::prelude::*;
 
 /// Entity Hover Plugin (Wrapper)
@@ -24,6 +27,12 @@ impl Plugin for EntityHoverPlugin {
     fn build(&self, app: &mut App) {
         // Add entity hover domain plugin (auto-plugin with resource, observer, and systems)
         app.add_plugins(EntityHoverDomainPlugin);
+        app.add_systems(
+            Update,
+            ApplyDeferred
+                .after(EntityLifecycleSystems::Spawning)
+                .before(EntityInteractionSystems::Naming),
+        );
 
         debug!("EntityHoverPlugin initialized");
     }

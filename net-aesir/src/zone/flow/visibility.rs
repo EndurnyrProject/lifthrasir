@@ -61,6 +61,9 @@ mod tests {
         let spawn = net::UnitSpawn {
             gid: 150001,
             name: "Alice".into(),
+            guild_id: 42,
+            guild_name: "Knights of Midgard".into(),
+            emblem_id: 9,
             ..Default::default()
         };
         let app = drain_world(vec![(WORLD, Body::UnitSpawn(spawn))]);
@@ -70,6 +73,9 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].gid, 150001);
         assert_eq!(events[0].name, "Alice");
+        assert_eq!(events[0].guild_id, 42);
+        assert_eq!(events[0].guild_name, "Knights of Midgard");
+        assert_eq!(events[0].emblem_id, 9);
     }
 
     #[test]
