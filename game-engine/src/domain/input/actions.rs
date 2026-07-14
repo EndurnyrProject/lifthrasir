@@ -22,6 +22,8 @@ pub enum PlayerAction {
     Cart,
     /// Toggle the party roster window.
     Party,
+    /// Toggle the guild window.
+    Guild,
     /// Toggle the emote picker window.
     Emote,
     /// Activate hotbar slot 1 (default F1).
@@ -90,7 +92,8 @@ impl PlayerAction {
     /// slot on full-size Apple keyboards (MacBooks lack an Insert key entirely).
     /// `Status` is the classic RO Alt+A chord. `Inventory` is the classic RO Alt+E chord.
     /// `Skills` is the classic RO Alt+S chord. `Equipment` is the classic RO Alt+Q chord.
-    /// `Cart` uses Alt+W. `Party` uses the unmodified P key. `Emote` uses Alt+M.
+    /// `Cart` uses Alt+W. `Party` uses the unmodified P key. `Guild` uses Alt+G.
+    /// `Emote` uses Alt+M.
     pub fn default_input_map() -> InputMap<Self> {
         let mut map = InputMap::new([(Self::Sit, KeyCode::Insert), (Self::Sit, KeyCode::Help)])
             .with(
@@ -114,6 +117,10 @@ impl PlayerAction {
                 ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyW),
             )
             .with(Self::Party, KeyCode::KeyP)
+            .with(
+                Self::Guild,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyG),
+            )
             .with(
                 Self::Emote,
                 ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyM),
@@ -186,6 +193,20 @@ mod tests {
         assert_eq!(
             map.get(&PlayerAction::Emote),
             expected.get(&PlayerAction::Emote)
+        );
+    }
+
+    #[test]
+    fn default_input_map_binds_guild_to_alt_g() {
+        let map = PlayerAction::default_input_map();
+        let mut expected = InputMap::default();
+        expected.insert(
+            PlayerAction::Guild,
+            ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyG),
+        );
+        assert_eq!(
+            map.get(&PlayerAction::Guild),
+            expected.get(&PlayerAction::Guild)
         );
     }
 

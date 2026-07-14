@@ -688,6 +688,7 @@ fn action_binds(
         PlayerAction::Skills => &keybinds.skills,
         PlayerAction::Equipment => &keybinds.equipment,
         PlayerAction::Party => &keybinds.party,
+        PlayerAction::Guild => &keybinds.guild,
         slot => &keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
@@ -704,6 +705,7 @@ fn action_binds_mut(
         PlayerAction::Skills => &mut keybinds.skills,
         PlayerAction::Equipment => &mut keybinds.equipment,
         PlayerAction::Party => &mut keybinds.party,
+        PlayerAction::Guild => &mut keybinds.guild,
         slot => &mut keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
@@ -1068,6 +1070,7 @@ mod tests {
             equipment: ActionBinds::default(),
             cart: ActionBinds::default(),
             party: ActionBinds::default(),
+            guild: ActionBinds::default(),
             emote: ActionBinds::default(),
             hotbar: Default::default(),
         };
@@ -1094,6 +1097,7 @@ mod tests {
             equipment: ActionBinds::default(),
             cart: ActionBinds::default(),
             party: ActionBinds::default(),
+            guild: ActionBinds::default(),
             emote: ActionBinds::default(),
             hotbar: Default::default(),
         };

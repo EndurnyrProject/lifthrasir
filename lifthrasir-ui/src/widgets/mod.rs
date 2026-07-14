@@ -15,6 +15,7 @@ pub mod chrome;
 pub mod death_dialog;
 pub mod draggable;
 pub mod emote;
+pub mod guild_window;
 pub mod hotbar;
 pub mod minimap;
 pub mod npc_dialog;
@@ -38,6 +39,7 @@ impl Plugin for InGameHudPlugin {
             character_window::CharacterWindowPlugin,
             chat_box::ChatBoxPlugin,
             emote::EmotePickerPlugin,
+            guild_window::GuildWindowPlugin,
             hotbar::HotbarWidgetPlugin,
             minimap::MinimapPlugin,
             npc_dialog::NpcDialogPlugin,
@@ -69,6 +71,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     character_window::shell::build(&mut commands, root);
     chat_box::spawn_chat_box(&mut commands, root, &asset_server);
     emote::spawn_emote_picker(&mut commands, root);
+    guild_window::scene::build(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root, &asset_server);
     minimap::spawn_minimap(&mut commands, root, &asset_server);
     party::spawn_party_window(&mut commands, root);
