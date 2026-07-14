@@ -3,6 +3,7 @@ pub mod cart;
 pub mod character;
 pub mod equipment;
 pub mod ground;
+pub mod guild;
 pub mod inventory;
 pub mod lifecycle;
 pub mod movement;
