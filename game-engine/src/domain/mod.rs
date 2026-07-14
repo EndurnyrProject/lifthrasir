@@ -9,6 +9,7 @@ pub mod effects;
 pub mod emote;
 pub mod entities;
 pub mod equipment;
+pub mod guild;
 pub mod hotbar;
 pub mod input;
 pub mod inventory;

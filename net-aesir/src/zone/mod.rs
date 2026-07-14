@@ -62,6 +62,8 @@ pub struct ZoneSpawn {
 pub struct QuicZoneState {
     pub phase: ZonePhase,
     pub conn: QuicConnection,
+    /// Monotonic epoch advanced by each successfully opened zone connection.
+    pub connection_epoch: u64,
     pub auth: ZoneAuth,
     pub map_name: String,
     pub spawn: Option<ZoneSpawn>,
@@ -78,6 +80,7 @@ impl QuicZoneState {
     /// and the target map, clear any prior spawn, and arm the `Connecting` phase so
     /// `zone_send_hello` fires once the connection opens.
     pub fn start_connecting(&mut self, auth: ZoneAuth, map_name: String) {
+        self.connection_epoch = self.connection_epoch.saturating_add(1);
         self.conn = QuicConnection::default();
         self.auth = auth;
         self.map_name = map_name;

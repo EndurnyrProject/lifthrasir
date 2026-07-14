@@ -19,6 +19,7 @@ pub use domain::entities::hover_plugin::EntityHoverPlugin;
 pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
 pub use domain::equipment::EquipmentPlugin;
+pub use domain::guild::GuildPlugin;
 pub use domain::inventory::InventoryPlugin;
 pub use domain::item_drop::ItemDropPlugin;
 pub use domain::party::PartyPlugin;
@@ -72,6 +73,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(StoragePlugin)
             .add(EmotePlugin)
             .add(PartyPlugin)
+            .add(GuildPlugin)
             .add(ItemDropPlugin)
             .add(EquipmentPlugin)
             .add(InputPlugin)

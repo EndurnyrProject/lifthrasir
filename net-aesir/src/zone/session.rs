@@ -10,11 +10,14 @@ pub(crate) fn publish_zone_session(
     mut session: ResMut<ZoneSession>,
     mut generation: ResMut<ZoneSessionGeneration>,
 ) {
+    if generation.0 != zone.connection_epoch {
+        generation.0 = zone.connection_epoch;
+    }
+
     if session.char_id != zone.auth.char_id
         || session.account_id != zone.auth.account_id
         || session.map_name != zone.map_name
     {
-        generation.0 = generation.0.saturating_add(1);
         session.char_id = zone.auth.char_id;
         session.account_id = zone.auth.account_id;
         session.map_name = zone.map_name.clone();
@@ -51,7 +54,39 @@ mod tests {
     }
 
     #[test]
-    fn advances_generation_only_when_the_published_session_changes() {
+    fn fresh_same_identity_connection_advances_generation() {
+        let mut app = App::new();
+        app.init_resource::<QuicZoneState>()
+            .init_resource::<ZoneSession>()
+            .init_resource::<ZoneSessionGeneration>()
+            .add_systems(Update, publish_zone_session);
+
+        let auth = ZoneAuth {
+            char_id: 42,
+            account_id: 7,
+            ..Default::default()
+        };
+        app.world_mut()
+            .resource_mut::<QuicZoneState>()
+            .start_connecting(auth.clone(), "prontera".into());
+        app.update();
+        assert_eq!(
+            *app.world().resource::<ZoneSessionGeneration>(),
+            ZoneSessionGeneration(1)
+        );
+
+        app.world_mut()
+            .resource_mut::<QuicZoneState>()
+            .start_connecting(auth, "prontera".into());
+        app.update();
+        assert_eq!(
+            *app.world().resource::<ZoneSessionGeneration>(),
+            ZoneSessionGeneration(2)
+        );
+    }
+
+    #[test]
+    fn same_connection_map_change_does_not_advance_generation() {
         let mut app = App::new();
         app.insert_resource(QuicZoneState {
             auth: ZoneAuth {
@@ -66,23 +101,28 @@ mod tests {
         .init_resource::<ZoneSessionGeneration>()
         .add_systems(Update, publish_zone_session);
 
+        app.world_mut()
+            .resource_mut::<QuicZoneState>()
+            .start_connecting(
+                ZoneAuth {
+                    char_id: 42,
+                    account_id: 7,
+                    ..Default::default()
+                },
+                "prontera".into(),
+            );
         app.update();
         assert_eq!(
             *app.world().resource::<ZoneSessionGeneration>(),
             ZoneSessionGeneration(1)
         );
 
+        app.world_mut().resource_mut::<QuicZoneState>().map_name = "geffen".into();
         app.update();
         assert_eq!(
             *app.world().resource::<ZoneSessionGeneration>(),
             ZoneSessionGeneration(1)
         );
-
-        app.world_mut().resource_mut::<QuicZoneState>().auth.char_id = 43;
-        app.update();
-        assert_eq!(
-            *app.world().resource::<ZoneSessionGeneration>(),
-            ZoneSessionGeneration(2)
-        );
+        assert_eq!(app.world().resource::<ZoneSession>().map_name, "geffen");
     }
 }
