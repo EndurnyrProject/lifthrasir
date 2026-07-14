@@ -1,5 +1,8 @@
+mod dialogs;
 mod members;
 pub mod scene;
+
+pub(crate) use members::request_invite;
 
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
@@ -16,7 +19,7 @@ use leafwing_input_manager::prelude::ActionState;
 use net_contract::commands::GuildCreateRequested;
 use net_contract::dto::GuildErrorKind;
 use net_contract::events::{GuildIngress, GuildIngressPayload};
-use net_contract::state::ZoneSessionGeneration;
+use net_contract::state::{ZoneSession, ZoneSessionGeneration};
 
 use crate::theme;
 use crate::theme::feathers_theme::install_norse_theme;
@@ -89,6 +92,12 @@ pub struct GuildNoticePanel;
 #[derive(Component, Default, Clone)]
 pub struct GuildMembersList;
 #[derive(Component, Default, Clone)]
+pub struct GuildInviteControls;
+#[derive(Component, Default, Clone)]
+pub struct GuildInviteNameField;
+#[derive(Component, Default, Clone)]
+pub struct GuildInviteButton;
+#[derive(Component, Default, Clone)]
 pub struct GuildCreateNameField;
 #[derive(Component, Default, Clone)]
 pub struct GuildCreateButton;
@@ -111,6 +120,9 @@ pub struct PositionsTabButton;
 #[derive(Component, Default, Clone)]
 pub struct NoticeTabButton;
 
+type GuildTextFields<'w, 's> =
+    Query<'w, 's, Entity, Or<(With<GuildCreateNameField>, With<GuildInviteNameField>)>>;
+
 pub struct GuildWindowPlugin;
 
 impl Plugin for GuildWindowPlugin {
@@ -120,6 +132,11 @@ impl Plugin for GuildWindowPlugin {
             app.add_plugins(FeathersPlugins);
         }
         app.init_resource::<GuildUi>()
+            .init_resource::<dialogs::PendingGuildInvite>()
+            .add_systems(
+                Update,
+                dialogs::reset_stale_invite.in_set(GuildSystems::SessionReset),
+            )
             .add_systems(
                 Update,
                 toggle_guild_window.run_if(in_state(GameState::InGame)),
@@ -133,6 +150,7 @@ impl Plugin for GuildWindowPlugin {
                     sync_header,
                     sync_tabs,
                     sync_feedback,
+                    sync_invite_controls,
                     refresh_members,
                     release_hidden_guild_focus,
                 )
@@ -140,7 +158,25 @@ impl Plugin for GuildWindowPlugin {
                     .in_set(GuildSystems::UiSync)
                     .run_if(in_state(GameState::InGame)),
             );
-        app.add_systems(OnExit(GameState::InGame), clear_guild_focus_on_exit);
+        app.add_systems(
+            Update,
+            (dialogs::queue_incoming_invite, dialogs::claim_invite_choice)
+                .in_set(GuildSystems::UiSync)
+                .run_if(in_state(GameState::InGame)),
+        );
+        app.add_systems(
+            PostUpdate,
+            (
+                dialogs::expire_pending_invite,
+                dialogs::show_pending_invite,
+                dialogs::close_finished_invite_dialog,
+            )
+                .chain(),
+        );
+        app.add_systems(
+            OnExit(GameState::InGame),
+            (clear_guild_focus_on_exit, dialogs::clear_pending_invite),
+        );
     }
 }
 
@@ -149,7 +185,8 @@ fn toggle_guild_window(
     guild: Res<GuildState>,
     ui_focus: Res<UiFocus>,
     mut root: Query<&mut Visibility, With<GuildWindowRoot>>,
-    field: Query<Entity, With<GuildCreateNameField>>,
+    create_field: Query<Entity, With<GuildCreateNameField>>,
+    owned_fields: GuildTextFields,
     mut input_focus: ResMut<InputFocus>,
 ) {
     let Ok(actions) = player.single() else {
@@ -167,23 +204,20 @@ fn toggle_guild_window(
         }
         *visibility = Visibility::Visible;
         if !guild.in_guild() {
-            if let Ok(field) = field.single() {
+            if let Ok(field) = create_field.single() {
                 input_focus.set(field, FocusCause::Navigated);
             }
         }
         return;
     }
     *visibility = Visibility::Hidden;
-    clear_create_focus(&mut input_focus, &field);
+    clear_guild_focus(&mut input_focus, &owned_fields);
 }
 
-fn clear_create_focus(
-    input_focus: &mut InputFocus,
-    field: &Query<Entity, With<GuildCreateNameField>>,
-) {
+fn clear_guild_focus(input_focus: &mut InputFocus, fields: &GuildTextFields) {
     if input_focus
         .get()
-        .is_some_and(|focused| field.contains(focused))
+        .is_some_and(|focused| fields.contains(focused))
     {
         input_focus.clear();
     }
@@ -191,22 +225,19 @@ fn clear_create_focus(
 
 fn release_hidden_guild_focus(
     root: Query<&Visibility, With<GuildWindowRoot>>,
-    field: Query<Entity, With<GuildCreateNameField>>,
+    fields: GuildTextFields,
     mut input_focus: ResMut<InputFocus>,
 ) {
     if root
         .single()
         .is_ok_and(|visibility| *visibility == Visibility::Hidden)
     {
-        clear_create_focus(&mut input_focus, &field);
+        clear_guild_focus(&mut input_focus, &fields);
     }
 }
 
-fn clear_guild_focus_on_exit(
-    field: Query<Entity, With<GuildCreateNameField>>,
-    mut input_focus: ResMut<InputFocus>,
-) {
-    clear_create_focus(&mut input_focus, &field);
+fn clear_guild_focus_on_exit(fields: GuildTextFields, mut input_focus: ResMut<InputFocus>) {
+    clear_guild_focus(&mut input_focus, &fields);
 }
 
 pub(crate) fn on_create(
@@ -268,7 +299,11 @@ fn apply_guild_results(
         }
         ui.pending = None;
         if result.success {
-            ui.feedback = Some("Guild created. Waiting for guild information…".to_string());
+            ui.feedback = Some(match result.action.as_str() {
+                "create" => "Guild created. Waiting for guild information…".to_string(),
+                "invite" => "Guild invitation sent.".to_string(),
+                _ => "Guild action completed.".to_string(),
+            });
             ui.feedback_is_error = false;
         } else {
             ui.feedback = Some(guild_error_text(result.error).to_string());
@@ -422,7 +457,7 @@ fn sync_feedback(
     button: Query<Entity, With<GuildCreateButton>>,
     mut commands: Commands,
 ) {
-    if let Ok((mut text, mut color, mut visibility)) = feedback.single_mut() {
+    for (mut text, mut color, mut visibility) in &mut feedback {
         if let Some(message) = &ui.feedback {
             text.0.clone_from(message);
             color.0 = if ui.feedback_is_error {
@@ -434,6 +469,31 @@ fn sync_feedback(
         } else {
             *visibility = Visibility::Hidden;
         }
+    }
+    let Ok(button) = button.single() else {
+        return;
+    };
+    if ui.pending.is_some() {
+        commands.entity(button).insert(InteractionDisabled);
+    } else {
+        commands.entity(button).remove::<InteractionDisabled>();
+    }
+}
+
+fn sync_invite_controls(
+    guild: Res<GuildState>,
+    session: Res<ZoneSession>,
+    ui: Res<GuildUi>,
+    mut controls: Query<&mut Visibility, With<GuildInviteControls>>,
+    button: Query<Entity, With<GuildInviteButton>>,
+    mut commands: Commands,
+) {
+    if let Ok(mut visibility) = controls.single_mut() {
+        *visibility = if guild.can_invite(session.char_id) {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
     }
     let Ok(button) = button.single() else {
         return;
@@ -572,6 +632,23 @@ mod tests {
     }
 
     #[test]
+    fn guilded_window_close_releases_invite_field_focus() {
+        let (mut app, _, player) = toggle_app(Visibility::Visible);
+        let invite = app
+            .world_mut()
+            .spawn((GuildInviteNameField, EditableText::new("Thor")))
+            .id();
+        app.insert_resource(InputFocus::from_entity(invite));
+        app.update();
+
+        press_guild(&mut app, player);
+        app.update();
+
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
+        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Hidden);
+    }
+
+    #[test]
     fn titlebar_close_releases_guild_owned_focus() {
         let mut app = App::new();
         app.init_resource::<InputFocus>();
@@ -597,6 +674,7 @@ mod tests {
         let mut app = App::new();
         app.init_resource::<InputFocus>();
         let field = app.world_mut().spawn(GuildCreateNameField).id();
+        let invite = app.world_mut().spawn(GuildInviteNameField).id();
         let other = app.world_mut().spawn_empty().id();
         app.world_mut().spawn((GuildWindowRoot, Visibility::Hidden));
         app.add_systems(Update, release_hidden_guild_focus);
@@ -605,9 +683,34 @@ mod tests {
         app.update();
         assert_eq!(app.world().resource::<InputFocus>().get(), None);
 
+        app.insert_resource(InputFocus::from_entity(invite));
+        app.update();
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
+
         app.insert_resource(InputFocus::from_entity(other));
         app.update();
         assert_eq!(app.world().resource::<InputFocus>().get(), Some(other));
+    }
+
+    #[test]
+    fn gameplay_teardown_releases_invite_field_focus() {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.init_state::<GameState>();
+        app.add_systems(OnExit(GameState::InGame), clear_guild_focus_on_exit);
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::InGame);
+        app.update();
+        let invite = app.world_mut().spawn(GuildInviteNameField).id();
+        app.insert_resource(InputFocus::from_entity(invite));
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::CharacterSelection);
+
+        app.update();
+
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
     }
 
     fn authoritative_ui_app() -> App {

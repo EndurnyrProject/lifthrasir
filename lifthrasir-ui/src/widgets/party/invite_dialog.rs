@@ -327,13 +327,14 @@ mod tests {
             .add_message::<PartyInviteResponded>()
             .init_resource::<PendingPartyInvite>()
             .add_systems(Update, claim_invite_choice);
-        let mut pending = app.world_mut().resource_mut::<PendingPartyInvite>();
-        pending.set(&invite());
-        let stale = pending.correlation;
-        pending.clear();
-        pending.set(&invite());
-        let current = pending.correlation;
-        drop(pending);
+        let (stale, current) = {
+            let mut pending = app.world_mut().resource_mut::<PendingPartyInvite>();
+            pending.set(&invite());
+            let stale = pending.correlation;
+            pending.clear();
+            pending.set(&invite());
+            (stale, pending.correlation)
+        };
         assert_ne!(stale, current);
 
         app.world_mut()

@@ -1,5 +1,56 @@
+use bevy::prelude::*;
+use bevy::text::EditableText;
+use bevy::ui_widgets::Activate;
 use game_engine::infrastructure::job::JobSpriteRegistry;
+use net_contract::commands::GuildInviteRequested;
 use net_contract::dto::GuildInfo;
+use net_contract::state::ZoneSessionGeneration;
+
+use super::{GuildInviteNameField, GuildUi, PendingGuildMutation};
+
+pub(crate) fn request_invite(
+    ui: &mut GuildUi,
+    generation: ZoneSessionGeneration,
+    target_char_id: u32,
+    raw_name: &str,
+) -> Option<GuildInviteRequested> {
+    if ui.pending.is_some() {
+        ui.feedback = Some("A guild action is already pending.".into());
+        ui.feedback_is_error = true;
+        return None;
+    }
+    let target_name = raw_name.trim();
+    if (target_char_id == 0) == target_name.is_empty() {
+        ui.feedback = Some("Enter a character name.".into());
+        ui.feedback_is_error = true;
+        return None;
+    }
+    ui.pending = Some(PendingGuildMutation {
+        action: "invite",
+        generation,
+    });
+    ui.feedback = Some("Sending guild invitation…".into());
+    ui.feedback_is_error = false;
+    Some(GuildInviteRequested {
+        target_char_id,
+        target_name: target_name.into(),
+    })
+}
+
+pub(crate) fn on_invite_by_name(
+    _: On<Activate>,
+    field: Query<&EditableText, With<GuildInviteNameField>>,
+    generation: Res<ZoneSessionGeneration>,
+    mut ui: ResMut<GuildUi>,
+    mut writer: MessageWriter<GuildInviteRequested>,
+) {
+    let Ok(field) = field.single() else {
+        return;
+    };
+    if let Some(command) = request_invite(&mut ui, *generation, 0, &field.value().to_string()) {
+        writer.write(command);
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct MemberRow {
@@ -41,7 +92,21 @@ pub(crate) fn project_rows(info: &GuildInfo, jobs: Option<&JobSpriteRegistry>) -
 
 #[cfg(test)]
 mod tests {
+    use super::{request_invite, GuildUi};
     use net_contract::dto::{GuildInfo, GuildMemberInfo, GuildPositionInfo};
+    use net_contract::state::ZoneSessionGeneration;
+
+    #[test]
+    fn by_name_and_character_id_use_the_same_neutral_command() {
+        let generation = ZoneSessionGeneration(3);
+        let by_name = request_invite(&mut GuildUi::default(), generation, 0, "  Thor ").unwrap();
+        let by_id = request_invite(&mut GuildUi::default(), generation, 42, "").unwrap();
+
+        assert_eq!(by_name.target_char_id, 0);
+        assert_eq!(by_name.target_name, "Thor");
+        assert_eq!(by_id.target_char_id, 42);
+        assert_eq!(by_id.target_name, "");
+    }
 
     #[test]
     fn projects_authoritative_online_and_offline_roster_rows() {

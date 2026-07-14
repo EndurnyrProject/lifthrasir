@@ -115,7 +115,7 @@ fn guild_panel() -> impl Scene {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         Visibility::Hidden
         ignore_picking()
-        Children [ header(), tabs(), content() ]
+        Children [ header(), tabs(), content(), feedback_text() ]
     }
 }
 
@@ -215,6 +215,7 @@ fn content() -> impl Scene {
                         ScrollArea
                         Pickable
                         Children [
+                            invite_controls(),
                             roster_heading(),
                             (GuildMembersList Node { flex_direction: FlexDirection::Column, row_gap: px(5) } ignore_picking()),
                         ]
@@ -236,6 +237,52 @@ fn content() -> impl Scene {
                 Visibility::Hidden
                 ignore_picking()
                 Children [ chrome_text("Notice".to_string(), 13.0, theme::TEXT_DIM) ]
+            ),
+        ]
+    }
+}
+
+fn invite_controls() -> impl Scene {
+    let editable = EditableText {
+        max_characters: Some(24),
+        ..default()
+    };
+    bsn! {
+        GuildInviteControls
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: px(8),
+            padding: {UiRect::bottom(px(7))},
+        }
+        Pickable
+        Children [
+            (
+                GuildInviteNameField
+                template_value(editable)
+                TextFont {
+                    font: FontSourceTemplate::Handle(theme::FONT_BODY),
+                    font_size: {FontSize::Px(13.0)},
+                }
+                TextColor(theme::TEXT)
+                BackgroundColor(theme::FIELD)
+                Node {
+                    flex_grow: 1.0,
+                    height: px(36),
+                    padding: {UiRect::axes(px(10), px(8))},
+                    border: px(1),
+                    border_radius: BorderRadius::all(px(8)),
+                }
+                BorderColor::all(theme::STROKE)
+            ),
+            (
+                GuildInviteButton
+                @FeathersButton {
+                    @caption: bsn! { (Text("Invite by Name") ThemedText) },
+                    @variant: ButtonVariant::Primary,
+                }
+                Node { width: px(150), height: px(36) }
+                on(super::members::on_invite_by_name)
             ),
         ]
     }

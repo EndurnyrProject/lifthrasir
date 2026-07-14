@@ -36,6 +36,7 @@ pub enum SystemDialogKind {
     #[default]
     Generic,
     PartyInvite,
+    GuildInvite,
 }
 
 /// Summons the reusable system-dialog modal (see `lifthrasir-ui` `SystemDialog`).

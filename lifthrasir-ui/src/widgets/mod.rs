@@ -21,6 +21,7 @@ pub mod minimap;
 pub mod npc_dialog;
 pub mod party;
 pub mod placeholder;
+pub mod player_context_menu;
 pub mod pushcart_window;
 pub mod settings_window;
 pub mod shop_window;
