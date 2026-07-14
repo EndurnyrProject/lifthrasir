@@ -1,9 +1,12 @@
 mod dialogs;
 mod members;
+mod notice;
+mod positions;
 pub mod scene;
 
 pub(crate) use members::request_invite;
 
+use bevy::ecs::system::SystemParam;
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use bevy::text::EditableText;
@@ -90,6 +93,10 @@ pub struct GuildPositionsPanel;
 #[derive(Component, Default, Clone)]
 pub struct GuildNoticePanel;
 #[derive(Component, Default, Clone)]
+pub struct GuildPositionsList;
+#[derive(Component, Default, Clone)]
+pub struct GuildNoticeContent;
+#[derive(Component, Default, Clone)]
 pub struct GuildMembersList;
 #[derive(Component, Default, Clone)]
 pub struct GuildInviteControls;
@@ -119,9 +126,29 @@ pub struct MembersTabButton;
 pub struct PositionsTabButton;
 #[derive(Component, Default, Clone)]
 pub struct NoticeTabButton;
+#[derive(Component, Default, Clone)]
+pub struct GuildMutationControl;
 
-type GuildTextFields<'w, 's> =
-    Query<'w, 's, Entity, Or<(With<GuildCreateNameField>, With<GuildInviteNameField>)>>;
+#[derive(SystemParam)]
+pub(crate) struct GuildMutationContext<'w> {
+    pub guild: Res<'w, GuildState>,
+    pub session: Res<'w, ZoneSession>,
+    pub generation: Res<'w, ZoneSessionGeneration>,
+    pub ui: ResMut<'w, GuildUi>,
+}
+
+type GuildTextFields<'w, 's> = Query<
+    'w,
+    's,
+    Entity,
+    Or<(
+        With<GuildCreateNameField>,
+        With<GuildInviteNameField>,
+        With<positions::PositionNameField>,
+        With<notice::GuildNoticeSubjectField>,
+        With<notice::GuildNoticeBodyField>,
+    )>,
+>;
 
 pub struct GuildWindowPlugin;
 
@@ -152,6 +179,11 @@ impl Plugin for GuildWindowPlugin {
                     sync_feedback,
                     sync_invite_controls,
                     refresh_members,
+                    positions::refresh_positions,
+                    positions::sync_invite_labels,
+                    positions::sync_expel_labels,
+                    notice::refresh_notice,
+                    sync_management_controls,
                     release_hidden_guild_focus,
                 )
                     .chain()
@@ -177,6 +209,20 @@ impl Plugin for GuildWindowPlugin {
             OnExit(GameState::InGame),
             (clear_guild_focus_on_exit, dialogs::clear_pending_invite),
         );
+    }
+}
+
+fn sync_management_controls(
+    ui: Res<GuildUi>,
+    controls: Query<Entity, With<GuildMutationControl>>,
+    mut commands: Commands,
+) {
+    for control in &controls {
+        if ui.pending.is_some() {
+            commands.entity(control).insert(InteractionDisabled);
+        } else {
+            commands.entity(control).remove::<InteractionDisabled>();
+        }
     }
 }
 
@@ -295,6 +341,15 @@ fn apply_guild_results(
                 && event.generation == *generation
         });
         if !matches {
+            if let Some(pending) = ui.pending.as_ref() {
+                if pending.action != result.action {
+                    warn!(
+                        expected = pending.action,
+                        received = %result.action,
+                        "ignoring mismatched guild action result"
+                    );
+                }
+            }
             continue;
         }
         ui.pending = None;
@@ -302,6 +357,11 @@ fn apply_guild_results(
             ui.feedback = Some(match result.action.as_str() {
                 "create" => "Guild created. Waiting for guild information…".to_string(),
                 "invite" => "Guild invitation sent.".to_string(),
+                "position_edit" => "Position saved. Waiting for guild information…".to_string(),
+                "member_position" => {
+                    "Position assignment sent. Waiting for guild information…".to_string()
+                }
+                "notice_edit" => "Notice saved. Waiting for guild information…".to_string(),
                 _ => "Guild action completed.".to_string(),
             });
             ui.feedback_is_error = false;
@@ -314,17 +374,21 @@ fn apply_guild_results(
 
 fn guild_error_text(error: GuildErrorKind) -> &'static str {
     match error {
-        GuildErrorKind::NameTaken => "Guild name is already taken.",
-        GuildErrorKind::AlreadyInGuild => "Character already belongs to a guild.",
-        GuildErrorKind::GuildFull => "Guild is full.",
-        GuildErrorKind::NoPermission => "Current position lacks permission.",
-        GuildErrorKind::NotMember => "Character is not a guild member.",
-        GuildErrorKind::TargetOffline => "Target is offline.",
-        GuildErrorKind::NoEmperium => "Creation requires an Emperium.",
-        GuildErrorKind::InvalidEmblem => "Emblem is invalid.",
-        GuildErrorKind::CannotTargetMaster => "Guild master cannot be expelled.",
-        GuildErrorKind::InvalidPosition => "Position is invalid.",
-        GuildErrorKind::None | GuildErrorKind::Unknown(_) => "Guild action failed.",
+        GuildErrorKind::None => "Success",
+        GuildErrorKind::NameTaken => "Guild name is already taken",
+        GuildErrorKind::AlreadyInGuild => "Character already belongs to a guild",
+        GuildErrorKind::GuildFull => "Guild is full",
+        GuildErrorKind::NoPermission => "Current position lacks permission",
+        GuildErrorKind::NotMember => "Character is not a guild member",
+        GuildErrorKind::TargetOffline => "Target is offline",
+        GuildErrorKind::NoEmperium => "Creation requires an Emperium",
+        GuildErrorKind::InvalidEmblem => "Emblem is invalid",
+        GuildErrorKind::CannotTargetMaster => "Guild master cannot be expelled",
+        GuildErrorKind::InvalidPosition => "Position is invalid",
+        GuildErrorKind::Unknown(value) => {
+            warn!(value, "unknown guild operation error");
+            "Guild operation failed"
+        }
     }
 }
 
@@ -542,7 +606,6 @@ mod tests {
         GuildActionResult, GuildErrorKind, GuildInfo, GuildMemberInfo, GuildPositionInfo,
     };
     use net_contract::events::ZoneDisconnected;
-
     fn toggle_app(visibility: Visibility) -> (App, Entity, Entity) {
         let mut app = App::new();
         app.add_plugins(StatesPlugin);
@@ -922,5 +985,144 @@ mod tests {
                 generation,
             })
         );
+    }
+
+    #[test]
+    fn guild_error_copy_maps_every_known_error_and_unknown_is_generic() {
+        let expected = [
+            (GuildErrorKind::None, "Success"),
+            (GuildErrorKind::NameTaken, "Guild name is already taken"),
+            (
+                GuildErrorKind::AlreadyInGuild,
+                "Character already belongs to a guild",
+            ),
+            (GuildErrorKind::GuildFull, "Guild is full"),
+            (
+                GuildErrorKind::NoPermission,
+                "Current position lacks permission",
+            ),
+            (GuildErrorKind::NotMember, "Character is not a guild member"),
+            (GuildErrorKind::TargetOffline, "Target is offline"),
+            (GuildErrorKind::NoEmperium, "Creation requires an Emperium"),
+            (GuildErrorKind::InvalidEmblem, "Emblem is invalid"),
+            (
+                GuildErrorKind::CannotTargetMaster,
+                "Guild master cannot be expelled",
+            ),
+            (GuildErrorKind::InvalidPosition, "Position is invalid"),
+        ];
+        for (error, copy) in expected {
+            assert_eq!(guild_error_text(error), copy);
+        }
+        assert_eq!(
+            guild_error_text(GuildErrorKind::Unknown(99)),
+            "Guild operation failed"
+        );
+    }
+
+    #[test]
+    fn successful_notice_result_releases_pending_without_changing_durable_notice() {
+        let generation = ZoneSessionGeneration(12);
+        let mut app = App::new();
+        app.add_message::<GuildIngress>();
+        app.insert_resource(generation);
+        app.insert_resource(GuildUi {
+            pending: Some(PendingGuildMutation {
+                action: "notice_edit",
+                generation,
+            }),
+            ..default()
+        });
+        app.add_systems(Update, apply_guild_results);
+        app.world_mut().write_message(GuildIngress {
+            generation,
+            payload: GuildIngressPayload::ActionResult(GuildActionResult {
+                action: "notice_edit".into(),
+                success: true,
+                error: GuildErrorKind::None,
+            }),
+        });
+
+        app.update();
+
+        let ui = app.world().resource::<GuildUi>();
+        assert!(ui.pending.is_none());
+        assert_eq!(
+            ui.feedback.as_deref(),
+            Some("Notice saved. Waiting for guild information…")
+        );
+    }
+
+    #[test]
+    fn mismatched_management_result_is_ignored_then_matching_failure_is_shown() {
+        let generation = ZoneSessionGeneration(13);
+        let mut app = App::new();
+        app.add_message::<GuildIngress>();
+        app.insert_resource(generation);
+        app.insert_resource(GuildUi {
+            pending: Some(PendingGuildMutation {
+                action: "position_edit",
+                generation,
+            }),
+            ..default()
+        });
+        app.add_systems(Update, apply_guild_results);
+        app.world_mut().write_message(GuildIngress {
+            generation,
+            payload: GuildIngressPayload::ActionResult(GuildActionResult {
+                action: "notice_edit".into(),
+                success: false,
+                error: GuildErrorKind::NoPermission,
+            }),
+        });
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<GuildUi>()
+                .pending
+                .as_ref()
+                .unwrap()
+                .action,
+            "position_edit"
+        );
+
+        app.world_mut().write_message(GuildIngress {
+            generation,
+            payload: GuildIngressPayload::ActionResult(GuildActionResult {
+                action: "position_edit".into(),
+                success: false,
+                error: GuildErrorKind::InvalidPosition,
+            }),
+        });
+        app.update();
+
+        let ui = app.world().resource::<GuildUi>();
+        assert!(ui.pending.is_none());
+        assert_eq!(ui.feedback.as_deref(), Some("Position is invalid"));
+    }
+
+    #[test]
+    fn one_pending_mutation_disables_every_management_control() {
+        let generation = ZoneSessionGeneration(2);
+        let mut app = App::new();
+        app.insert_resource(GuildUi {
+            pending: Some(PendingGuildMutation {
+                action: "notice_edit",
+                generation,
+            }),
+            ..default()
+        });
+        let first = app.world_mut().spawn(GuildMutationControl).id();
+        let second = app.world_mut().spawn(GuildMutationControl).id();
+        app.add_systems(Update, sync_management_controls);
+
+        app.update();
+        assert!(app.world().entity(first).contains::<InteractionDisabled>());
+        assert!(app.world().entity(second).contains::<InteractionDisabled>());
+
+        app.world_mut().resource_mut::<GuildUi>().pending = None;
+        app.update();
+        assert!(!app.world().entity(first).contains::<InteractionDisabled>());
+        assert!(!app.world().entity(second).contains::<InteractionDisabled>());
     }
 }

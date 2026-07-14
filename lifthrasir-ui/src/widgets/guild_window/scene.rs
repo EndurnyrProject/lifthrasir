@@ -226,17 +226,22 @@ fn content() -> impl Scene {
             ),
             (
                 GuildPositionsPanel
-                Node { padding: {UiRect::vertical(px(16))} }
+                Node {
+                    height: percent(100),
+                    overflow: {Overflow::scroll_y()},
+                    flex_direction: FlexDirection::Column,
+                    padding: {UiRect::vertical(px(10))},
+                }
                 Visibility::Hidden
-                ignore_picking()
-                Children [ chrome_text("Positions".to_string(), 13.0, theme::TEXT_DIM) ]
+                Pickable
+                Children [ (GuildPositionsList Node { flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
             ),
             (
                 GuildNoticePanel
-                Node { padding: {UiRect::vertical(px(16))} }
+                Node { height: percent(100), padding: {UiRect::vertical(px(10))} }
                 Visibility::Hidden
                 ignore_picking()
-                Children [ chrome_text("Notice".to_string(), 13.0, theme::TEXT_DIM) ]
+                Children [ (GuildNoticeContent Node { flex_direction: FlexDirection::Column, row_gap: px(10) } ignore_picking()) ]
             ),
         ]
     }
