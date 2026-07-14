@@ -90,6 +90,9 @@ mod tests {
             .contains_resource::<Messages<events::PartyInfoReceived>>());
         assert!(app
             .world()
+            .contains_resource::<Messages<events::PartyMemberUpdated>>());
+        assert!(app
+            .world()
             .contains_resource::<Messages<events::PartyInviteNotified>>());
         assert!(app
             .world()

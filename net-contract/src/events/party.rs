@@ -13,6 +13,14 @@ pub struct PartyInfoReceived {
     pub members: Vec<PartyMemberInfo>,
 }
 
+/// Complete current snapshot for one party member.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PartyMemberUpdated {
+    pub party_id: u32,
+    pub member: PartyMemberInfo,
+}
+
 /// An incoming invite to join a party.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

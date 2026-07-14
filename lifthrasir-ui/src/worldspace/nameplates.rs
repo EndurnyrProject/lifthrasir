@@ -285,6 +285,13 @@ mod tests {
                 base_level: 99,
                 online: true,
                 map: "prontera".to_string(),
+                job_id: 0,
+                hp: 0,
+                max_hp: 0,
+                sp: 0,
+                max_sp: 0,
+                ap: 0,
+                max_ap: 0,
             }],
             ..default()
         });

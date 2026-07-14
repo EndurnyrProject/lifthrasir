@@ -270,6 +270,13 @@ mod tests {
             base_level: 50,
             online,
             map: "prontera".into(),
+            job_id: 0,
+            hp: 0,
+            max_hp: 0,
+            sp: 0,
+            max_sp: 0,
+            ap: 0,
+            max_ap: 0,
         }
     }
 
