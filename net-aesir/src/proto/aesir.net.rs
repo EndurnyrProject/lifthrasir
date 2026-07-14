@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -278,6 +278,41 @@ pub mod envelope {
         /// 137: party member state delta
         #[prost(message, tag = "137")]
         PartyMemberUpdate(super::PartyMemberUpdate),
+        /// 138-154: guild (client intents + server->client roster/emblem/notice deltas)
+        #[prost(message, tag = "138")]
+        GuildCreateRequest(super::GuildCreateRequest),
+        #[prost(message, tag = "139")]
+        GuildInviteRequest(super::GuildInviteRequest),
+        #[prost(message, tag = "140")]
+        GuildInviteResponse(super::GuildInviteResponse),
+        #[prost(message, tag = "141")]
+        GuildLeaveRequest(super::GuildLeaveRequest),
+        #[prost(message, tag = "142")]
+        GuildExpelRequest(super::GuildExpelRequest),
+        #[prost(message, tag = "143")]
+        GuildPositionEditRequest(super::GuildPositionEditRequest),
+        #[prost(message, tag = "144")]
+        GuildMemberPositionRequest(super::GuildMemberPositionRequest),
+        #[prost(message, tag = "145")]
+        GuildNoticeEditRequest(super::GuildNoticeEditRequest),
+        #[prost(message, tag = "146")]
+        GuildEmblemUploadRequest(super::GuildEmblemUploadRequest),
+        #[prost(message, tag = "147")]
+        GuildEmblemRequest(super::GuildEmblemRequest),
+        #[prost(message, tag = "148")]
+        GuildActionResult(super::GuildActionResult),
+        #[prost(message, tag = "149")]
+        GuildInviteNotify(super::GuildInviteNotify),
+        #[prost(message, tag = "150")]
+        GuildInfo(super::GuildInfo),
+        #[prost(message, tag = "151")]
+        GuildMemberUpdate(super::GuildMemberUpdate),
+        #[prost(message, tag = "152")]
+        GuildEmblemChanged(super::GuildEmblemChanged),
+        #[prost(message, tag = "153")]
+        GuildEmblemData(super::GuildEmblemData),
+        #[prost(message, tag = "154")]
+        GuildDisbanded(super::GuildDisbanded),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -705,6 +740,10 @@ pub struct UnitSpawn {
     pub move_start_time: u64,
     #[prost(uint32, tag = "33")]
     pub virtue: u32,
+    #[prost(string, tag = "34")]
+    pub guild_name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "35")]
+    pub emblem_id: u32,
 }
 /// Server -> client, an entity left view (replaces RO ZC_NOTIFY_VANISH 0x0080).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1823,6 +1862,211 @@ pub struct PartyDisbanded {
     #[prost(string, tag = "2")]
     pub reason: ::prost::alloc::string::String,
 }
+/// Client -> server, create a new guild with the requester as guild master.
+/// Gated on holding an Emperium and not already being in a guild.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildCreateRequest {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+}
+/// Client -> server, invite a character to the sender's guild by id or by name
+/// (char_id wins when both are set; name is resolved via a UnitRegistry reverse lookup).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildInviteRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_char_id: u32,
+    #[prost(string, tag = "2")]
+    pub target_name: ::prost::alloc::string::String,
+}
+/// Client -> server, the invitee's accept/decline response to a GuildInviteNotify.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildInviteResponse {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(bool, tag = "2")]
+    pub accept: bool,
+}
+/// Client -> server, leave the sender's current guild. If the sender is the
+/// guild master, the guild disbands instead.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildLeaveRequest {}
+/// Client -> server, request (EXPEL permission) to remove a member from the guild.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildExpelRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_char_id: u32,
+    #[prost(string, tag = "2")]
+    pub reason: ::prost::alloc::string::String,
+}
+/// Client -> server, edit one position's title and permission flags
+/// (requires the :positions permission; index 0 is protected).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildPositionEditRequest {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(bool, tag = "3")]
+    pub can_invite: bool,
+    #[prost(bool, tag = "4")]
+    pub can_expel: bool,
+}
+/// Client -> server, master-only request to assign a member to a position slot.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildMemberPositionRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_char_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub index: u32,
+}
+/// Client -> server, edit the guild notice (requires the :notice permission).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildNoticeEditRequest {
+    #[prost(string, tag = "1")]
+    pub subject: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub body: ::prost::alloc::string::String,
+}
+/// Client -> server, master-only upload of a new emblem bitmap (24x24 BMP <= 100 KB).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildEmblemUploadRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub data: ::prost::alloc::vec::Vec<u8>,
+}
+/// Client -> server, on-demand fetch of a guild's current emblem blob by version.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildEmblemRequest {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub emblem_id: u32,
+}
+/// Server -> client, acknowledgement of a guild request. `action` names the
+/// request being acked (e.g. "create", "invite", "expel"); `error` is
+/// GuildError.GUILD_ERR_NONE on success.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildActionResult {
+    #[prost(string, tag = "1")]
+    pub action: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub success: bool,
+    #[prost(enumeration = "GuildError", tag = "3")]
+    pub error: i32,
+}
+/// Server -> client, guild invite notification shown to the invitee.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildInviteNotify {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(string, tag = "2")]
+    pub guild_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub inviter_name: ::prost::alloc::string::String,
+}
+/// One position slot within a GuildInfo. `can_storage` and `tax` are inert in phase 1.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildPosition {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(bool, tag = "3")]
+    pub can_invite: bool,
+    #[prost(bool, tag = "4")]
+    pub can_expel: bool,
+    #[prost(bool, tag = "5")]
+    pub can_storage: bool,
+    #[prost(uint32, tag = "6")]
+    pub tax: u32,
+}
+/// One member entry within a GuildInfo snapshot.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildMember {
+    #[prost(uint32, tag = "1")]
+    pub char_id: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub job_id: u32,
+    #[prost(uint32, tag = "4")]
+    pub base_level: u32,
+    #[prost(bool, tag = "5")]
+    pub online: bool,
+    #[prost(string, tag = "6")]
+    pub map: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "7")]
+    pub position_index: u32,
+    #[prost(uint64, tag = "8")]
+    pub hp: u64,
+    #[prost(uint64, tag = "9")]
+    pub max_hp: u64,
+    #[prost(uint64, tag = "10")]
+    pub sp: u64,
+    #[prost(uint64, tag = "11")]
+    pub max_sp: u64,
+    #[prost(uint32, tag = "12")]
+    pub ap: u32,
+    #[prost(uint32, tag = "13")]
+    pub max_ap: u32,
+}
+/// Server -> client, full guild snapshot sent on any membership, position, or
+/// notice change. The emblem blob is not inlined; clients fetch it via
+/// GuildEmblemRequest keyed on emblem_id.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GuildInfo {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub master_char_id: u32,
+    #[prost(uint32, tag = "4")]
+    pub emblem_id: u32,
+    #[prost(string, tag = "5")]
+    pub notice_subject: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub notice_body: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "7")]
+    pub positions: ::prost::alloc::vec::Vec<GuildPosition>,
+    #[prost(message, repeated, tag = "8")]
+    pub members: ::prost::alloc::vec::Vec<GuildMember>,
+}
+/// Server -> client, complete current snapshot for one guild member.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildMemberUpdate {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(message, optional, tag = "2")]
+    pub member: ::core::option::Option<GuildMember>,
+}
+/// Server -> client, the guild's emblem version changed; clients lacking this
+/// emblem_id should issue a GuildEmblemRequest to fetch the new blob.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildEmblemChanged {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub emblem_id: u32,
+}
+/// Server -> client, the emblem blob for a guild at a given version (reply to
+/// GuildEmblemRequest). Served straight from Postgres from any node.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildEmblemData {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub emblem_id: u32,
+    #[prost(bytes = "vec", tag = "3")]
+    pub data: ::prost::alloc::vec::Vec<u8>,
+}
+/// Server -> client, the guild was disbanded (guild master left, or removed).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildDisbanded {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(string, tag = "2")]
+    pub reason: ::prost::alloc::string::String,
+}
 /// Server -> client, the full storage dump (sent on open). Mirrors CartInfo.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StorageOpened {
@@ -2211,6 +2455,62 @@ impl PartyError {
             "TARGET_OFFLINE" => Some(Self::TargetOffline),
             "NOT_MEMBER" => Some(Self::NotMember),
             "NOT_SAME_MAP" => Some(Self::NotSameMap),
+            _ => None,
+        }
+    }
+}
+/// Reason a guild request failed; NONE means it succeeded. Values are prefixed
+/// because proto3 enum constants share the package namespace (C++ scoping rules),
+/// and NONE/NAME_TAKEN/TARGET_OFFLINE/NOT_MEMBER already exist on PartyError.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum GuildError {
+    GuildErrNone = 0,
+    GuildErrNameTaken = 1,
+    GuildErrAlreadyInGuild = 2,
+    GuildErrGuildFull = 3,
+    GuildErrNoPermission = 4,
+    GuildErrNotMember = 5,
+    GuildErrTargetOffline = 6,
+    GuildErrNoEmperium = 7,
+    GuildErrInvalidEmblem = 8,
+    GuildErrCannotTargetMaster = 9,
+    GuildErrInvalidPosition = 10,
+}
+impl GuildError {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::GuildErrNone => "GUILD_ERR_NONE",
+            Self::GuildErrNameTaken => "GUILD_ERR_NAME_TAKEN",
+            Self::GuildErrAlreadyInGuild => "GUILD_ERR_ALREADY_IN_GUILD",
+            Self::GuildErrGuildFull => "GUILD_ERR_GUILD_FULL",
+            Self::GuildErrNoPermission => "GUILD_ERR_NO_PERMISSION",
+            Self::GuildErrNotMember => "GUILD_ERR_NOT_MEMBER",
+            Self::GuildErrTargetOffline => "GUILD_ERR_TARGET_OFFLINE",
+            Self::GuildErrNoEmperium => "GUILD_ERR_NO_EMPERIUM",
+            Self::GuildErrInvalidEmblem => "GUILD_ERR_INVALID_EMBLEM",
+            Self::GuildErrCannotTargetMaster => "GUILD_ERR_CANNOT_TARGET_MASTER",
+            Self::GuildErrInvalidPosition => "GUILD_ERR_INVALID_POSITION",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "GUILD_ERR_NONE" => Some(Self::GuildErrNone),
+            "GUILD_ERR_NAME_TAKEN" => Some(Self::GuildErrNameTaken),
+            "GUILD_ERR_ALREADY_IN_GUILD" => Some(Self::GuildErrAlreadyInGuild),
+            "GUILD_ERR_GUILD_FULL" => Some(Self::GuildErrGuildFull),
+            "GUILD_ERR_NO_PERMISSION" => Some(Self::GuildErrNoPermission),
+            "GUILD_ERR_NOT_MEMBER" => Some(Self::GuildErrNotMember),
+            "GUILD_ERR_TARGET_OFFLINE" => Some(Self::GuildErrTargetOffline),
+            "GUILD_ERR_NO_EMPERIUM" => Some(Self::GuildErrNoEmperium),
+            "GUILD_ERR_INVALID_EMBLEM" => Some(Self::GuildErrInvalidEmblem),
+            "GUILD_ERR_CANNOT_TARGET_MASTER" => Some(Self::GuildErrCannotTargetMaster),
+            "GUILD_ERR_INVALID_POSITION" => Some(Self::GuildErrInvalidPosition),
             _ => None,
         }
     }
