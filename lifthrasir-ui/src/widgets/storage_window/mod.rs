@@ -702,10 +702,7 @@ fn apply_storage_results(
     }
 }
 
-fn clear_storage_focus(
-    input_focus: &mut InputFocus,
-    fields: &Query<(), StorageFieldFilter>,
-) {
+fn clear_storage_focus(input_focus: &mut InputFocus, fields: &Query<(), StorageFieldFilter>) {
     if input_focus
         .get()
         .is_some_and(|entity| fields.contains(entity))
