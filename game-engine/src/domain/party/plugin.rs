@@ -10,7 +10,12 @@ impl Plugin for PartyPlugin {
         app.init_resource::<PartyState>()
             .add_systems(
                 Update,
-                (systems::apply_party_info, systems::clear_on_disband),
+                (
+                    systems::apply_party_info,
+                    systems::apply_party_member_updates,
+                    systems::clear_on_disband,
+                )
+                    .chain(),
             )
             .add_systems(
                 OnEnter(GameState::CharacterSelection),
