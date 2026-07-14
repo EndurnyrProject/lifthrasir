@@ -94,9 +94,7 @@ impl Plugin for PartyPlugin {
     }
 }
 
-/// Open the roster on the `!in_party -> in_party` edge and close it on the reverse,
-/// tracking prior membership in a `Local<bool>`. Intermediate same-party `PartyInfo`
-/// updates leave `in_party` unchanged, so a manually closed window is not re-opened.
+/// Keep the roster closed when joining a party and hide it when leaving one.
 pub fn party_visibility(
     party: Res<PartyState>,
     mut prev_in_party: Local<bool>,
@@ -107,14 +105,13 @@ pub fn party_visibility(
         return;
     }
     *prev_in_party = now;
+    if now {
+        return;
+    }
     let Ok(mut visibility) = root.single_mut() else {
         return;
     };
-    *visibility = if now {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
+    *visibility = Visibility::Hidden;
 }
 
 /// `PlayerAction::Party` toggles the window. Unconditional (works while partyless too)
@@ -466,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn opens_on_join_edge_and_closes_on_leave_edge() {
+    fn stays_hidden_on_join_edge_and_closes_on_leave_edge() {
         let mut app = visibility_app();
 
         app.update();
@@ -474,8 +471,9 @@ mod tests {
 
         set_party(&mut app, 7);
         app.update();
-        assert_eq!(root_visibility(&mut app), Visibility::Visible);
+        assert_eq!(root_visibility(&mut app), Visibility::Hidden);
 
+        set_window_visibility(&mut app, Visibility::Visible);
         set_party(&mut app, 0);
         app.update();
         assert_eq!(root_visibility(&mut app), Visibility::Hidden);
@@ -487,6 +485,7 @@ mod tests {
 
         set_party(&mut app, 7);
         app.update();
+        set_window_visibility(&mut app, Visibility::Visible);
         assert_eq!(root_visibility(&mut app), Visibility::Visible);
 
         for mut visibility in app
