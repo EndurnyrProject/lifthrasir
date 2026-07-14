@@ -13,11 +13,11 @@
 use bevy::prelude::*;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use game_engine::core::state::GameState;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::entities::EntityRegistry;
 use game_engine::domain::input::{ui_unfocused, PlayerAction};
 use game_engine::domain::party::PartyState;
+use game_engine::infrastructure::job::JobSpriteRegistry;
 use leafwing_input_manager::prelude::ActionState;
 use net_contract::dto::PartyMemberInfo;
 
@@ -47,8 +47,8 @@ pub struct PartyWindowRoot;
 #[derive(Component, Default, Clone)]
 pub struct PartyTitlebar;
 
-/// The swappable body region that `refresh_roster` clears and refills each visible
-/// frame.
+/// The swappable body region that `refresh_roster` clears and refills when visible
+/// roster inputs change.
 #[derive(Component, Default, Clone)]
 pub struct PartyWindowBody;
 
@@ -56,26 +56,6 @@ pub struct PartyWindowBody;
 /// control.
 #[derive(Component, Default, Clone)]
 pub struct PartyFooter;
-
-/// Whether a party member is currently resolvable to a live world entity, and if so
-/// its HP. Off-screen members carry no fabricated HP — the roster shows "Elsewhere".
-#[derive(Debug, PartialEq, Eq)]
-pub enum MemberPresence {
-    OnScreen { hp: u32, max_hp: u32 },
-    Elsewhere,
-}
-
-/// A member is "on screen" only when it resolves to an entity *and* that entity carries
-/// a `CharacterStatus`; either miss yields `Elsewhere` (never a made-up HP value).
-pub fn member_presence(entity: Option<Entity>, status: Option<&CharacterStatus>) -> MemberPresence {
-    match (entity, status) {
-        (Some(_), Some(status)) => MemberPresence::OnScreen {
-            hp: status.hp,
-            max_hp: status.max_hp,
-        },
-        _ => MemberPresence::Elsewhere,
-    }
-}
 
 /// Count of members flagged online by the server (the header's "active" figure).
 pub fn active_count(members: &[PartyMemberInfo]) -> usize {
@@ -163,29 +143,33 @@ type FooterQuery<'w, 's> =
 
 /// Rebuild the swappable body when the window is visible and its content actually
 /// changed: despawn `PartyWindowBody`'s children and respawn the projected roster scene.
-/// The HP join reads `EntityRegistry` and `CharacterStatus` live (no cached or fabricated
-/// HP); an off-screen member becomes "Elsewhere". The rebuild is gated on change
-/// detection because the partyless empty state hosts the "Create a party" button — a
-/// per-frame respawn would destroy that button between a click's press and release, so it
-/// would never fire. The footer's visibility tracks membership so "Leave Party" never
-/// shows while partyless.
+/// Party snapshots own the displayed resources; `EntityRegistry` contributes only the
+/// independent "on screen" chip. The rebuild is gated on change detection because the
+/// partyless empty state hosts the "Create a party" button — a per-frame respawn would
+/// destroy that button between a click's press and release, so it would never fire. A
+/// hidden window resets `was_visible`, making the next open rebuild even when no resource
+/// changed while hidden. The footer's visibility tracks membership so "Leave Party"
+/// never shows while partyless.
 #[allow(clippy::too_many_arguments)]
 pub fn refresh_roster(
     mut commands: Commands,
     party: Res<PartyState>,
     registry: Res<EntityRegistry>,
-    statuses: Query<&CharacterStatus>,
-    changed_status: Query<(), Changed<CharacterStatus>>,
+    jobs: Option<Res<JobSpriteRegistry>>,
     root: Query<&Visibility, With<PartyWindowRoot>>,
     container: Query<(Entity, Option<&Children>), With<PartyWindowBody>>,
     mut footer: FooterQuery,
+    mut was_visible: Local<bool>,
 ) {
     let Ok(visibility) = root.single() else {
         return;
     };
     if *visibility == Visibility::Hidden {
+        *was_visible = false;
         return;
     }
+    let reopened = !*was_visible;
+    *was_visible = true;
     let Ok((body, children)) = container.single() else {
         return;
     };
@@ -199,8 +183,8 @@ pub fn refresh_roster(
     }
 
     let empty = children.is_none_or(|children| children.is_empty());
-    let hp_changed = party.in_party() && !changed_status.is_empty();
-    if !empty && !party.is_changed() && !hp_changed {
+    let jobs_changed = jobs.as_ref().is_some_and(|jobs| jobs.is_changed());
+    if !empty && !reopened && !party.is_changed() && !registry.is_changed() && !jobs_changed {
         return;
     }
 
@@ -211,7 +195,7 @@ pub fn refresh_roster(
     }
 
     let header = party.in_party().then(|| roster_header(&party));
-    let rows = roster_rows(&party, &registry, &statuses);
+    let rows = roster_rows(&party, &registry, jobs.as_deref());
 
     commands
         .spawn_scene(scene::body(header, rows))
@@ -234,27 +218,42 @@ fn roster_header(party: &PartyState) -> scene::RosterHeader {
     }
 }
 
-/// Project each member into a row view-model, resolving the live HP join here so the
-/// scene stays free of ECS queries. Empty when partyless (no members).
+/// Project each server member snapshot into a row view-model. Job lookup is deliberately
+/// quiet (`try_display_name`) because unknown jobs and a not-yet-loaded registry both use
+/// the stable UI fallback. Empty when partyless (no members).
 fn roster_rows(
     party: &PartyState,
     registry: &EntityRegistry,
-    statuses: &Query<&CharacterStatus>,
+    jobs: Option<&JobSpriteRegistry>,
 ) -> Vec<scene::RosterRow> {
     party
         .members
         .iter()
-        .map(|member| {
-            let entity = registry.get_entity(member.char_id);
-            let status = entity.and_then(|entity| statuses.get(entity).ok());
-            scene::RosterRow {
-                name: member.name.clone(),
-                level: member.base_level,
-                map: member.map.clone(),
-                online: member.online,
-                leader: member.char_id == party.leader_char_id,
-                presence: member_presence(entity, status),
-            }
+        .map(|member| scene::RosterRow {
+            name: member.name.clone(),
+            level: member.base_level,
+            map: member.map.clone(),
+            job_name: jobs
+                .and_then(|jobs| jobs.try_display_name(member.job_id))
+                .unwrap_or("Unknown Job")
+                .to_string(),
+            online: member.online,
+            leader: member.char_id == party.leader_char_id,
+            on_screen: registry.get_entity(member.char_id).is_some(),
+            resources: member.online.then(|| scene::MemberResources {
+                hp: scene::ResourceValue {
+                    current: member.hp,
+                    max: member.max_hp,
+                },
+                sp: scene::ResourceValue {
+                    current: member.sp,
+                    max: member.max_sp,
+                },
+                ap: (member.max_ap > 0).then(|| scene::ResourceValue {
+                    current: u64::from(member.ap),
+                    max: u64::from(member.max_ap),
+                }),
+            }),
         })
         .collect()
 }
@@ -262,6 +261,8 @@ fn roster_rows(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::scene::ScenePlugin;
+    use game_engine::infrastructure::job::JobSpriteRegistry;
 
     fn member(char_id: u32, online: bool) -> PartyMemberInfo {
         PartyMemberInfo {
@@ -281,33 +282,162 @@ mod tests {
     }
 
     #[test]
-    fn present_when_entity_and_status_resolve() {
-        let status = CharacterStatus {
-            hp: 120,
-            max_hp: 200,
+    fn roster_rows_project_party_snapshot_job_and_world_presence() {
+        let mut known = member(1, true);
+        known.job_id = 4008;
+        known.hp = u64::from(u32::MAX) + 25;
+        known.max_hp = u64::from(u32::MAX) + 100;
+        known.sp = 34;
+        known.max_sp = 80;
+        known.ap = 12;
+        known.max_ap = 20;
+
+        let mut unknown = member(2, false);
+        unknown.job_id = 999_999;
+
+        let party = PartyState {
+            leader_char_id: known.char_id,
+            members: vec![known, unknown],
             ..default()
         };
-        let presence = member_presence(Some(Entity::from_bits(1)), Some(&status));
+        let mut entities = EntityRegistry::default();
+        entities.register_entity(1, Entity::from_bits(7));
+        let mut job_data = lifthrasir_data::JobData::default();
+        job_data
+            .display_names
+            .insert(4008, "Rune Knight".to_string());
+        let jobs = JobSpriteRegistry::from_job_data(job_data);
+
+        let rows = roster_rows(&party, &entities, Some(&jobs));
+
+        assert_eq!(rows[0].job_name, "Rune Knight");
+        assert!(rows[0].leader);
+        assert!(rows[0].on_screen);
         assert_eq!(
-            presence,
-            MemberPresence::OnScreen {
-                hp: 120,
-                max_hp: 200
-            }
+            rows[0].resources,
+            Some(scene::MemberResources {
+                hp: scene::ResourceValue {
+                    current: u64::from(u32::MAX) + 25,
+                    max: u64::from(u32::MAX) + 100,
+                },
+                sp: scene::ResourceValue {
+                    current: 34,
+                    max: 80,
+                },
+                ap: Some(scene::ResourceValue {
+                    current: 12,
+                    max: 20,
+                }),
+            })
         );
+        assert_eq!(rows[1].job_name, "Unknown Job");
+        assert!(!rows[1].on_screen);
+        assert_eq!(rows[1].resources, None);
+
+        let rows_without_registry = roster_rows(&party, &entities, None);
+        assert_eq!(rows_without_registry[0].job_name, "Unknown Job");
     }
 
     #[test]
-    fn elsewhere_when_entity_resolves_without_status() {
-        assert_eq!(
-            member_presence(Some(Entity::from_bits(1)), None),
-            MemberPresence::Elsewhere
-        );
+    fn online_snapshot_omits_ap_when_max_ap_is_zero() {
+        let mut online = member(1, true);
+        online.ap = 8;
+        online.max_ap = 0;
+        let party = PartyState {
+            party_id: 7,
+            members: vec![online],
+            ..default()
+        };
+
+        let rows = roster_rows(&party, &EntityRegistry::default(), None);
+
+        assert!(rows[0].resources.as_ref().unwrap().ap.is_none());
+    }
+
+    fn refresh_app(member: PartyMemberInfo) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.insert_resource(PartyState {
+            party_id: 7,
+            name: "Wolfpack".to_string(),
+            leader_char_id: member.char_id,
+            members: vec![member],
+            ..default()
+        });
+        app.init_resource::<EntityRegistry>();
+        app.world_mut()
+            .spawn((PartyWindowRoot, Visibility::Visible));
+        app.world_mut().spawn(PartyWindowBody);
+        app.world_mut().spawn((PartyFooter, Visibility::Hidden));
+        app.add_systems(Update, refresh_roster);
+        app
+    }
+
+    fn text_values(app: &mut App) -> Vec<String> {
+        app.world_mut()
+            .query::<&Text>()
+            .iter(app.world())
+            .map(|text| text.0.clone())
+            .collect()
+    }
+
+    fn set_window_visibility(app: &mut App, visibility: Visibility) {
+        *app.world_mut()
+            .query_filtered::<&mut Visibility, With<PartyWindowRoot>>()
+            .single_mut(app.world_mut())
+            .unwrap() = visibility;
     }
 
     #[test]
-    fn elsewhere_when_entity_unresolved() {
-        assert_eq!(member_presence(None, None), MemberPresence::Elsewhere);
+    fn reopening_rebuilds_snapshot_changed_while_hidden() {
+        let mut online = member(1, true);
+        online.hp = 10;
+        online.max_hp = 20;
+        let mut app = refresh_app(online);
+
+        app.update();
+        assert!(text_values(&mut app).contains(&"10 / 20".to_string()));
+
+        set_window_visibility(&mut app, Visibility::Hidden);
+        app.world_mut().resource_mut::<PartyState>().members[0].hp = 15;
+        app.update();
+        assert!(text_values(&mut app).contains(&"10 / 20".to_string()));
+
+        set_window_visibility(&mut app, Visibility::Visible);
+        app.update();
+        let texts = text_values(&mut app);
+        assert!(texts.contains(&"15 / 20".to_string()));
+        assert!(!texts.contains(&"10 / 20".to_string()));
+    }
+
+    #[test]
+    fn job_and_entity_registry_changes_rebuild_visible_rows() {
+        let mut online = member(1, true);
+        online.job_id = 4008;
+        let mut app = refresh_app(online);
+
+        app.update();
+        let texts = text_values(&mut app);
+        assert!(texts.contains(&"Unknown Job".to_string()));
+        assert!(!texts.contains(&"on screen".to_string()));
+
+        let mut job_data = lifthrasir_data::JobData::default();
+        job_data
+            .display_names
+            .insert(4008, "Rune Knight".to_string());
+        app.insert_resource(JobSpriteRegistry::from_job_data(job_data));
+        app.update();
+        let texts = text_values(&mut app);
+        assert!(texts.contains(&"Rune Knight".to_string()));
+        assert!(!texts.contains(&"Unknown Job".to_string()));
+
+        app.world_mut()
+            .resource_mut::<EntityRegistry>()
+            .register_entity(1, Entity::from_bits(7));
+        app.update();
+        assert!(text_values(&mut app).contains(&"on screen".to_string()));
     }
 
     #[test]

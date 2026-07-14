@@ -4,7 +4,7 @@
 //! [`PartyWindowBody`] region, and a persistent footer with a real `@FeathersButton`
 //! "Leave Party" — as one `bsn!` tree. [`body`] projects the live roster view-model
 //! (header band + one row per member, or the partyless empty state) and is respawned
-//! by [`refresh_roster`](super::refresh_roster) each frame the window is visible.
+//! by [`refresh_roster`](super::refresh_roster) when visible roster inputs change.
 //!
 //! Scenes own their data, so every view-model ([`RosterHeader`], [`RosterRow`]) is
 //! prepared as owned values in the system before entering a `bsn!` block. The window
@@ -23,13 +23,11 @@ use crate::theme;
 use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
 use crate::widgets::chrome::{body_container, chrome_text, glyph_icon, ignore_picking, titlebar};
 
-use super::{
-    MemberPresence, PartyFooter, PartyTitlebar, PartyWindowBody, PartyWindowRoot, PARTY_MAX,
-};
+use super::{PartyFooter, PartyTitlebar, PartyWindowBody, PartyWindowRoot, PARTY_MAX};
 
 const WINDOW_LEFT: f32 = 300.0;
 const WINDOW_TOP: f32 = 90.0;
-const WINDOW_WIDTH: f32 = 320.0;
+const WINDOW_WIDTH: f32 = 400.0;
 
 /// The owned header view-model: party name, leader name, and the member/active counts.
 pub(crate) struct RosterHeader {
@@ -39,15 +37,30 @@ pub(crate) struct RosterHeader {
     pub active: usize,
 }
 
-/// One roster row's owned view-model. `presence` already encodes the HP join result,
-/// so the scene never touches `EntityRegistry`/`CharacterStatus`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ResourceValue {
+    pub current: u64,
+    pub max: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct MemberResources {
+    pub hp: ResourceValue,
+    pub sp: ResourceValue,
+    pub ap: Option<ResourceValue>,
+}
+
+/// One roster row's owned view-model. Resources come exclusively from the latest
+/// `PartyState` snapshot; `on_screen` is an independent world-entity lookup.
 pub(crate) struct RosterRow {
     pub name: String,
     pub level: u32,
     pub map: String,
+    pub job_name: String,
     pub online: bool,
     pub leader: bool,
-    pub presence: MemberPresence,
+    pub on_screen: bool,
+    pub resources: Option<MemberResources>,
 }
 
 /// Spawn the whole window as one scene and parent it under `parent` with a single
@@ -195,8 +208,7 @@ fn header_band(header: RosterHeader) -> impl Scene {
     }
 }
 
-/// One roster row: online dot, name (+ leader crown), `Lv`/map meta, and the presence
-/// cell (HP bar + "on screen", or "Elsewhere").
+/// One roster row: online dot, identity/meta, and the server-owned resource snapshot.
 fn member_row(row: RosterRow) -> impl Scene {
     let crown = row
         .leader
@@ -227,83 +239,115 @@ fn member_row(row: RosterRow) -> impl Scene {
                         ignore_picking()
                         Children [
                             chrome_text(format!("Lv {}", row.level), 11.0, theme::GOLD),
+                            chrome_text(row.job_name, 11.0, theme::TEXT_DIM),
                             glyph_icon("pin", 11.0, theme::TEXT_FAINT),
                             chrome_text(row.map, 11.0, theme::TEXT_DIM),
                         ]
                     ),
                 ]
             ),
-            presence_cell(row.presence),
+            resource_cell(row.resources, row.on_screen),
         ]
     }
 }
 
-/// Right-hand presence cell. `OnScreen` shows the HP bar, `hp / max`, and an "on
-/// screen" chip; `Elsewhere` shows a plain tag with no bar and no fabricated HP.
-fn presence_cell(presence: MemberPresence) -> impl Scene {
-    let (bar, hp_text, chip, elsewhere) = match presence {
-        MemberPresence::OnScreen { hp, max_hp } => {
-            let fraction = if max_hp == 0 {
-                0.0
-            } else {
-                (hp as f32 / max_hp as f32).clamp(0.0, 1.0)
-            };
-            let color = if fraction < 0.25 {
-                theme::HEALTH_RED
-            } else {
-                theme::EMERALD
-            };
-            (
-                Some(EntityScene(hp_bar(fraction * 100.0, color))),
-                Some(EntityScene(chrome_text(
-                    format!("{hp} / {max_hp}"),
-                    10.5,
-                    theme::TEXT_DIM,
-                ))),
-                Some(EntityScene(chrome_text(
-                    "on screen".to_string(),
-                    9.5,
-                    theme::EMERALD_BRI,
-                ))),
-                None,
-            )
-        }
-        MemberPresence::Elsewhere => (
+/// Right-hand status cell. Offline rows have no meters; world presence remains an
+/// independent chip and therefore may coexist with either online or offline state.
+fn resource_cell(resources: Option<MemberResources>, on_screen: bool) -> impl Scene {
+    let (hp, sp, ap, offline) = match resources {
+        Some(resources) => (
+            Some(EntityScene(resource_meter(
+                "HP",
+                resources.hp,
+                hp_meter_color(resources.hp),
+            ))),
+            Some(EntityScene(resource_meter(
+                "SP",
+                resources.sp,
+                theme::MANA_BLUE,
+            ))),
+            resources
+                .ap
+                .map(|ap| EntityScene(resource_meter("AP", ap, theme::GOLD))),
+            None,
+        ),
+        None => (
             None,
             None,
             None,
             Some(EntityScene(chrome_text(
-                "Elsewhere".to_string(),
+                "Offline".to_string(),
                 11.0,
                 theme::TEXT_FAINT,
             ))),
         ),
     };
+    let chip = on_screen.then(|| {
+        EntityScene(chrome_text(
+            "on screen".to_string(),
+            9.5,
+            theme::EMERALD_BRI,
+        ))
+    });
     bsn! {
         Node {
-            width: px(96),
+            width: px(168),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::FlexEnd,
             row_gap: px(3),
         }
         ignore_picking()
-        Children [ {bar}, {hp_text}, {chip}, {elsewhere} ]
+        Children [ {hp}, {sp}, {ap}, {offline}, {chip} ]
     }
 }
 
-/// An HP track with a fill sized to `percent_full` (0..=100) and tinted `color`.
-fn hp_bar(percent_full: f32, color: Color) -> impl Scene {
+/// One compact resource line. Labels retain the exact integer snapshot while only the
+/// visual fill is clamped into the track.
+fn resource_meter(label: &'static str, value: ResourceValue, color: Color) -> impl Scene {
+    let percent_full = resource_fill_percent(value);
     bsn! {
-        Node { width: percent(100), height: px(6), border_radius: BorderRadius::all(px(3)) }
-        BackgroundColor(theme::FIELD)
+        Node {
+            width: percent(100),
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: px(4),
+        }
         ignore_picking()
         Children [
+            chrome_text(label.to_string(), 9.5, color),
             (
-                Node { width: percent(percent_full), height: percent(100), border_radius: BorderRadius::all(px(3)) }
-                BackgroundColor(color)
+                Node { flex_grow: 1.0, height: px(6), border_radius: BorderRadius::all(px(3)) }
+                BackgroundColor(theme::GLASS_2)
                 ignore_picking()
+                Children [
+                    (
+                        Node { width: percent(percent_full), height: percent(100), border_radius: BorderRadius::all(px(3)) }
+                        BackgroundColor(color)
+                        ignore_picking()
+                    ),
+                ]
             ),
+            chrome_text(format!("{} / {}", value.current, value.max), 9.5, theme::TEXT_DIM),
         ]
+    }
+}
+
+fn resource_ratio(value: ResourceValue) -> f32 {
+    if value.max == 0 {
+        return 0.0;
+    }
+    (value.current as f64 / value.max as f64) as f32
+}
+
+fn resource_fill_percent(value: ResourceValue) -> f32 {
+    resource_ratio(value).clamp(0.0, 1.0) * 100.0
+}
+
+fn hp_meter_color(value: ResourceValue) -> Color {
+    if resource_ratio(value) < 0.25 {
+        theme::HEALTH_RED
+    } else {
+        theme::EMERALD
     }
 }
 
@@ -360,6 +404,102 @@ mod tests {
         app
     }
 
+    fn text_values(app: &mut App) -> Vec<String> {
+        app.world_mut()
+            .query::<&Text>()
+            .iter(app.world())
+            .map(|text| text.0.clone())
+            .collect()
+    }
+
+    #[test]
+    fn online_resources_render_exact_labels_and_optional_ap() {
+        let mut app = scene_app();
+        let large = u64::from(u32::MAX) + 1;
+        app.world_mut()
+            .spawn_scene(resource_cell(
+                Some(MemberResources {
+                    hp: ResourceValue {
+                        current: large,
+                        max: large * 2,
+                    },
+                    sp: ResourceValue {
+                        current: 34,
+                        max: 80,
+                    },
+                    ap: Some(ResourceValue {
+                        current: 12,
+                        max: 20,
+                    }),
+                }),
+                false,
+            ))
+            .unwrap();
+
+        let texts = text_values(&mut app);
+        assert!(texts.contains(&"HP".to_string()));
+        assert!(texts.contains(&format!("{large} / {}", large * 2)));
+        assert!(texts.contains(&"SP".to_string()));
+        assert!(texts.contains(&"34 / 80".to_string()));
+        assert!(texts.contains(&"AP".to_string()));
+        assert!(texts.contains(&"12 / 20".to_string()));
+        assert!(!texts.contains(&"Offline".to_string()));
+        assert!(!texts.contains(&"on screen".to_string()));
+        assert_eq!(
+            resource_ratio(ResourceValue {
+                current: large,
+                max: large * 2,
+            }),
+            0.5
+        );
+    }
+
+    #[test]
+    fn offline_omits_meters_but_keeps_world_presence_independent() {
+        let mut app = scene_app();
+        app.world_mut()
+            .spawn_scene(resource_cell(None, true))
+            .unwrap();
+
+        let texts = text_values(&mut app);
+        assert!(texts.contains(&"Offline".to_string()));
+        assert!(texts.contains(&"on screen".to_string()));
+        assert!(!texts.contains(&"HP".to_string()));
+        assert!(!texts.contains(&"SP".to_string()));
+        assert!(!texts.contains(&"AP".to_string()));
+    }
+
+    #[test]
+    fn resource_fill_handles_zero_and_clamps_only_the_visual() {
+        let zero_max = ResourceValue {
+            current: 10,
+            max: 0,
+        };
+        let over_max = ResourceValue {
+            current: 150,
+            max: 100,
+        };
+
+        assert_eq!(resource_ratio(zero_max), 0.0);
+        assert_eq!(resource_ratio(over_max), 1.5);
+        assert_eq!(resource_fill_percent(zero_max), 0.0);
+        assert_eq!(resource_fill_percent(over_max), 100.0);
+        assert_eq!(
+            hp_meter_color(ResourceValue {
+                current: 24,
+                max: 100,
+            }),
+            theme::HEALTH_RED
+        );
+        assert_eq!(
+            hp_meter_color(ResourceValue {
+                current: 25,
+                max: 100,
+            }),
+            theme::EMERALD
+        );
+    }
+
     #[test]
     fn window_scene_spawns_root_titlebar_body_and_footer() {
         let mut app = scene_app();
@@ -403,20 +543,44 @@ mod tests {
                 name: "Solveig".to_string(),
                 level: 99,
                 map: "prontera".to_string(),
+                job_name: "Rune Knight".to_string(),
                 online: true,
                 leader: true,
-                presence: MemberPresence::OnScreen {
-                    hp: 100,
-                    max_hp: 200,
-                },
+                on_screen: true,
+                resources: Some(MemberResources {
+                    hp: ResourceValue {
+                        current: 100,
+                        max: 200,
+                    },
+                    sp: ResourceValue {
+                        current: 40,
+                        max: 80,
+                    },
+                    ap: None,
+                }),
             },
             RosterRow {
                 name: "Brynjar".to_string(),
                 level: 88,
                 map: "payon".to_string(),
+                job_name: "Arch Bishop".to_string(),
                 online: true,
                 leader: false,
-                presence: MemberPresence::Elsewhere,
+                on_screen: false,
+                resources: Some(MemberResources {
+                    hp: ResourceValue {
+                        current: 90,
+                        max: 100,
+                    },
+                    sp: ResourceValue {
+                        current: 70,
+                        max: 100,
+                    },
+                    ap: Some(ResourceValue {
+                        current: 10,
+                        max: 20,
+                    }),
+                }),
             },
         ];
         assert!(app
