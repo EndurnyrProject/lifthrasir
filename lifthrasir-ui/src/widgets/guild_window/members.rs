@@ -6,7 +6,19 @@ use net_contract::commands::GuildInviteRequested;
 use net_contract::dto::GuildInfo;
 use net_contract::state::ZoneSessionGeneration;
 
-use super::{GuildInviteNameField, GuildUi, PendingGuildMutation};
+use super::{
+    dialogs::PendingGuildConfirmation, GuildInviteNameField, GuildMutationContext, GuildUi,
+    PendingGuildMutation,
+};
+
+#[derive(Component, Clone, Default)]
+pub(crate) struct GuildExpelControl(pub u32);
+
+#[derive(Component, Clone, Default)]
+pub(crate) struct GuildExpelButton(pub u32);
+
+#[derive(Component, Clone, Default)]
+pub(crate) struct GuildExpelReasonField(pub u32);
 
 pub(crate) fn request_invite(
     ui: &mut GuildUi,
@@ -52,8 +64,49 @@ pub(crate) fn on_invite_by_name(
     }
 }
 
+pub(crate) fn on_expel(
+    activate: On<Activate>,
+    buttons: Query<&GuildExpelButton>,
+    fields: Query<(&GuildExpelReasonField, &EditableText)>,
+    mut context: GuildMutationContext,
+    mut pending: ResMut<PendingGuildConfirmation>,
+) {
+    let Ok(button) = buttons.get(activate.entity) else {
+        return;
+    };
+    if context.ui.pending.is_some() || pending.is_pending() {
+        return;
+    }
+    if button.0 == context.session.char_id
+        || !context.guild.can_expel(context.session.char_id)
+        || context.guild.is_master(button.0)
+        || context.guild.member(button.0).is_none()
+    {
+        return;
+    }
+    let Some((_, field)) = fields.iter().find(|(field, _)| field.0 == button.0) else {
+        return;
+    };
+    let reason = field.value().to_string();
+    let reason = reason.trim();
+    if reason.is_empty() {
+        context.ui.feedback = Some("Enter a reason before expelling a member.".into());
+        context.ui.feedback_is_error = true;
+        return;
+    }
+    let Some(target_name) = context
+        .guild
+        .member(button.0)
+        .map(|member| member.name.clone())
+    else {
+        return;
+    };
+    pending.expel(*context.generation, button.0, &target_name, reason);
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct MemberRow {
+    pub char_id: u32,
     pub name: String,
     pub position: String,
     pub job: String,
@@ -69,6 +122,7 @@ pub(crate) fn project_rows(info: &GuildInfo, jobs: Option<&JobSpriteRegistry>) -
     info.members
         .iter()
         .map(|member| MemberRow {
+            char_id: member.char_id,
             name: member.name.clone(),
             position: info
                 .positions

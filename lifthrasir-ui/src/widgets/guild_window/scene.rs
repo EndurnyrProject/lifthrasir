@@ -115,7 +115,30 @@ fn guild_panel() -> impl Scene {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         Visibility::Hidden
         ignore_picking()
-        Children [ header(), tabs(), content(), feedback_text() ]
+        Children [ header(), tabs(), content(), leave_control(), feedback_text() ]
+    }
+}
+
+fn leave_control() -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::FlexEnd,
+            padding: {UiRect::top(px(5))},
+        }
+        Pickable
+        Children [
+            (
+                GuildLeaveButton
+                GuildMutationControl
+                @FeathersButton {
+                    @caption: bsn! { (Text("Leave Guild") ThemedText) },
+                    @variant: ButtonVariant::Normal,
+                }
+                Node { width: px(170), height: px(36) }
+                on(super::dialogs::on_leave)
+            ),
+        ]
     }
 }
 
@@ -348,6 +371,35 @@ fn member_row(row: MemberRow) -> impl Scene {
                     theme::TEXT_DIM,
                 )
             ),
+            (
+                template_value(super::members::GuildExpelControl(row.char_id))
+                Node { width: px(190), flex_direction: FlexDirection::Row, column_gap: px(5) }
+                Pickable
+                Children [
+                    (
+                        template_value(super::members::GuildExpelReasonField(row.char_id))
+                        template_value(EditableText::new(""))
+                        TextFont {
+                            font: FontSourceTemplate::Handle(theme::FONT_BODY),
+                            font_size: {FontSize::Px(11.0)},
+                        }
+                        TextColor(theme::TEXT)
+                        BackgroundColor(theme::FIELD)
+                        Node { flex_grow: 1.0, height: px(30), padding: {UiRect::horizontal(px(6))} }
+                        BorderColor::all(theme::STROKE)
+                    ),
+                    (
+                        template_value(super::members::GuildExpelButton(row.char_id))
+                        GuildMutationControl
+                        @FeathersButton {
+                            @caption: bsn! { (Text("Expel") ThemedText) },
+                            @variant: ButtonVariant::Normal,
+                        }
+                        Node { width: px(68), height: px(30) }
+                        on(super::members::on_expel)
+                    ),
+                ]
+            ),
         ]
     }
 }
@@ -429,6 +481,7 @@ mod tests {
         let mut app = app();
         app.world_mut()
             .spawn_scene(member_rows(vec![MemberRow {
+                char_id: 42,
                 name: "Odin".into(),
                 position: "Master".into(),
                 job: "Rune Knight".into(),
@@ -456,6 +509,7 @@ mod tests {
         let mut app = app();
         app.world_mut()
             .spawn_scene(member_rows(vec![MemberRow {
+                char_id: 43,
                 name: "Thor".into(),
                 position: "Member".into(),
                 job: "Blacksmith".into(),
@@ -489,8 +543,9 @@ mod tests {
             .map(|text| text.0.as_str())
             .collect();
 
-        for management_control in ["Edit", "Expel", "Assign", "Upload Emblem", "Leave Guild"] {
+        for management_control in ["Edit", "Expel", "Assign", "Upload Emblem"] {
             assert!(!texts.contains(&management_control));
         }
+        assert!(texts.contains(&"Leave Guild"));
     }
 }

@@ -128,6 +128,8 @@ pub struct PositionsTabButton;
 pub struct NoticeTabButton;
 #[derive(Component, Default, Clone)]
 pub struct GuildMutationControl;
+#[derive(Component, Default, Clone)]
+pub struct GuildLeaveButton;
 
 #[derive(SystemParam)]
 pub(crate) struct GuildMutationContext<'w> {
@@ -147,6 +149,7 @@ type GuildTextFields<'w, 's> = Query<
         With<positions::PositionNameField>,
         With<notice::GuildNoticeSubjectField>,
         With<notice::GuildNoticeBodyField>,
+        With<members::GuildExpelReasonField>,
     )>,
 >;
 
@@ -160,9 +163,14 @@ impl Plugin for GuildWindowPlugin {
         }
         app.init_resource::<GuildUi>()
             .init_resource::<dialogs::PendingGuildInvite>()
+            .init_resource::<dialogs::PendingGuildConfirmation>()
             .add_systems(
                 Update,
                 dialogs::reset_stale_invite.in_set(GuildSystems::SessionReset),
+            )
+            .add_systems(
+                Update,
+                dialogs::reset_stale_confirmation.in_set(GuildSystems::SessionReset),
             )
             .add_systems(
                 Update,
@@ -178,6 +186,7 @@ impl Plugin for GuildWindowPlugin {
                     sync_tabs,
                     sync_feedback,
                     sync_invite_controls,
+                    sync_expel_controls,
                     refresh_members,
                     positions::refresh_positions,
                     positions::sync_invite_labels,
@@ -192,7 +201,11 @@ impl Plugin for GuildWindowPlugin {
             );
         app.add_systems(
             Update,
-            (dialogs::queue_incoming_invite, dialogs::claim_invite_choice)
+            (
+                dialogs::queue_incoming_invite,
+                dialogs::claim_invite_choice,
+                dialogs::claim_confirmation_choice,
+            )
                 .in_set(GuildSystems::UiSync)
                 .run_if(in_state(GameState::InGame)),
         );
@@ -202,23 +215,33 @@ impl Plugin for GuildWindowPlugin {
                 dialogs::expire_pending_invite,
                 dialogs::show_pending_invite,
                 dialogs::close_finished_invite_dialog,
+                dialogs::show_pending_confirmation,
             )
                 .chain(),
         );
         app.add_systems(
             OnExit(GameState::InGame),
-            (clear_guild_focus_on_exit, dialogs::clear_pending_invite),
+            (
+                clear_guild_focus_on_exit,
+                dialogs::clear_pending_invite,
+                dialogs::clear_pending_confirmation,
+            ),
         );
     }
 }
 
 fn sync_management_controls(
     ui: Res<GuildUi>,
+    confirmation: Option<Res<dialogs::PendingGuildConfirmation>>,
     controls: Query<Entity, With<GuildMutationControl>>,
     mut commands: Commands,
 ) {
     for control in &controls {
-        if ui.pending.is_some() {
+        if ui.pending.is_some()
+            || confirmation
+                .as_deref()
+                .is_some_and(|pending| pending.is_pending())
+        {
             commands.entity(control).insert(InteractionDisabled);
         } else {
             commands.entity(control).remove::<InteractionDisabled>();
@@ -362,6 +385,8 @@ fn apply_guild_results(
                     "Position assignment sent. Waiting for guild information…".to_string()
                 }
                 "notice_edit" => "Notice saved. Waiting for guild information…".to_string(),
+                "leave" => "Guild leave requested. Waiting for authoritative state…".to_string(),
+                "expel" => "Guild member expelled. Waiting for roster refresh…".to_string(),
                 _ => "Guild action completed.".to_string(),
             });
             ui.feedback_is_error = false;
@@ -566,6 +591,21 @@ fn sync_invite_controls(
         commands.entity(button).insert(InteractionDisabled);
     } else {
         commands.entity(button).remove::<InteractionDisabled>();
+    }
+}
+
+fn sync_expel_controls(
+    guild: Res<GuildState>,
+    session: Res<ZoneSession>,
+    mut controls: Query<(&members::GuildExpelControl, &mut Visibility)>,
+) {
+    let allowed = guild.can_expel(session.char_id);
+    for (control, mut visibility) in &mut controls {
+        *visibility = if allowed && control.0 != session.char_id && !guild.is_master(control.0) {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
     }
 }
 

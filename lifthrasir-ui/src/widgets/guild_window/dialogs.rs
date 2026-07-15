@@ -1,12 +1,15 @@
 use bevy::prelude::*;
+use bevy::ui_widgets::Activate;
+use game_engine::domain::guild::GuildState;
 use game_engine::presentation::ui::events::{
     DialogSeverity, ShowSystemDialog, SystemDialogChoice, SystemDialogKind,
 };
-use net_contract::commands::GuildInviteResponded;
+use net_contract::commands::{GuildExpelRequested, GuildInviteResponded, GuildLeaveRequested};
 use net_contract::dto::GuildInviteInfo;
 use net_contract::events::{GuildIngress, GuildIngressPayload};
 use net_contract::state::ZoneSessionGeneration;
 
+use super::{GuildMutationContext, GuildUi, PendingGuildMutation};
 use crate::widgets::system_dialog::SystemDialogRoot;
 
 const INVITE_TTL_SECS: f32 = 30.0;
@@ -18,6 +21,60 @@ pub struct PendingGuildInvite {
     timer: Timer,
     correlation: Option<u64>,
     next_correlation: u64,
+}
+
+#[derive(Resource, Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct PendingGuildConfirmation {
+    pub(crate) kind: Option<SystemDialogKind>,
+    pub(crate) generation: ZoneSessionGeneration,
+    pub(crate) target_char_id: u32,
+    pub(crate) target_name: String,
+    pub(crate) reason: String,
+    pub(crate) master_disband: bool,
+    pub(crate) correlation: Option<u64>,
+    next_correlation: u64,
+}
+
+impl PendingGuildConfirmation {
+    pub(crate) fn is_pending(&self) -> bool {
+        self.kind.is_some()
+    }
+
+    pub(crate) fn leave(&mut self, generation: ZoneSessionGeneration, master: bool) {
+        self.next_correlation = self.next_correlation.wrapping_add(1).max(1);
+        self.kind = Some(SystemDialogKind::GuildLeave);
+        self.generation = generation;
+        self.target_char_id = 0;
+        self.target_name.clear();
+        self.reason.clear();
+        self.master_disband = master;
+        self.correlation = Some(self.next_correlation);
+    }
+
+    pub(crate) fn expel(
+        &mut self,
+        generation: ZoneSessionGeneration,
+        target_char_id: u32,
+        target_name: &str,
+        reason: &str,
+    ) {
+        self.next_correlation = self.next_correlation.wrapping_add(1).max(1);
+        self.kind = Some(SystemDialogKind::GuildExpel);
+        self.generation = generation;
+        self.target_char_id = target_char_id;
+        self.target_name = target_name.to_string();
+        self.reason = reason.to_string();
+        self.master_disband = false;
+        self.correlation = Some(self.next_correlation);
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.kind = None;
+        self.target_char_id = 0;
+        self.target_name.clear();
+        self.reason.clear();
+        self.master_disband = false;
+    }
 }
 
 impl PendingGuildInvite {
@@ -190,9 +247,196 @@ pub fn close_finished_invite_dialog(
     }
 }
 
+pub(crate) fn on_leave(
+    _: On<Activate>,
+    guild: Res<GuildState>,
+    session: Res<net_contract::state::ZoneSession>,
+    generation: Res<ZoneSessionGeneration>,
+    ui: Res<GuildUi>,
+    mut confirmation: ResMut<PendingGuildConfirmation>,
+) {
+    if !guild.in_guild() || ui.pending.is_some() || confirmation.is_pending() {
+        return;
+    }
+    confirmation.leave(*generation, guild.is_master(session.char_id));
+}
+
+pub(crate) fn show_pending_confirmation(
+    pending: Res<PendingGuildConfirmation>,
+    existing: Query<(), With<SystemDialogRoot>>,
+    mut dialogs: MessageWriter<ShowSystemDialog>,
+) {
+    let Some(kind) = pending.kind else {
+        return;
+    };
+    if !existing.is_empty() {
+        return;
+    }
+    let (title, message, button_label) = confirmation_copy(&pending, kind);
+    let message = if kind == SystemDialogKind::GuildExpel {
+        format!(
+            "Are you sure you want to expel {}?\nReason: {}",
+            pending.target_name, pending.reason
+        )
+    } else {
+        message.to_string()
+    };
+    dialogs.write(ShowSystemDialog {
+        severity: if kind == SystemDialogKind::GuildExpel {
+            DialogSeverity::Warn
+        } else {
+            DialogSeverity::Error
+        },
+        kind,
+        kicker: "Guild".into(),
+        title: title.into(),
+        message,
+        code: String::new(),
+        button_label: button_label.into(),
+        secondary_label: "Cancel".into(),
+        confirm_state: None,
+        correlation: pending.correlation,
+    });
+}
+
+fn confirmation_copy(
+    pending: &PendingGuildConfirmation,
+    kind: SystemDialogKind,
+) -> (&'static str, &'static str, &'static str) {
+    match kind {
+        SystemDialogKind::GuildLeave if pending.master_disband => (
+            "Disband Guild",
+            "Leaving will disband the guild. Are you sure you want to continue?",
+            "Leave and Disband",
+        ),
+        SystemDialogKind::GuildLeave => (
+            "Leave Guild",
+            "Are you sure you want to leave the guild?",
+            "Leave Guild",
+        ),
+        SystemDialogKind::GuildExpel => ("Expel Guild Member", "", "Expel Member"),
+        _ => ("Guild Action", "Confirm this guild action?", "Confirm"),
+    }
+}
+
+pub(crate) fn claim_confirmation_choice(
+    mut choices: MessageReader<SystemDialogChoice>,
+    mut context: GuildMutationContext,
+    mut confirmation: ResMut<PendingGuildConfirmation>,
+    mut leave: MessageWriter<GuildLeaveRequested>,
+    mut expel: MessageWriter<GuildExpelRequested>,
+) {
+    if !confirmation.is_pending() || confirmation.generation != *context.generation {
+        return;
+    }
+    let Some(choice) = choices
+        .read()
+        .filter(|choice| {
+            Some(choice.kind) == confirmation.kind && choice.correlation == confirmation.correlation
+        })
+        .last()
+        .cloned()
+    else {
+        return;
+    };
+    if choice.primary {
+        match confirmation.kind {
+            Some(SystemDialogKind::GuildLeave) => {
+                let still_member = context.guild.in_guild()
+                    && context.guild.member(context.session.char_id).is_some();
+                let warning_still_matches =
+                    confirmation.master_disband == context.guild.is_master(context.session.char_id);
+                if !still_member || !warning_still_matches {
+                    context.ui.feedback =
+                        Some("Guild membership changed; leaving was cancelled.".into());
+                    context.ui.feedback_is_error = true;
+                } else if context.ui.pending.is_none() {
+                    context.ui.pending = Some(PendingGuildMutation {
+                        action: "leave",
+                        generation: *context.generation,
+                    });
+                    context.ui.feedback = Some("Leaving guild…".into());
+                    context.ui.feedback_is_error = false;
+                    leave.write(GuildLeaveRequested);
+                }
+            }
+            Some(SystemDialogKind::GuildExpel) => {
+                let reason = confirmation.reason.trim();
+                let target = confirmation.target_char_id;
+                let valid = !reason.is_empty()
+                    && target != 0
+                    && target != context.session.char_id
+                    && context.guild.member(context.session.char_id).is_some()
+                    && context.guild.can_expel(context.session.char_id)
+                    && context.guild.member(target).is_some()
+                    && !context.guild.is_master(target);
+                if !valid {
+                    context.ui.feedback = Some(
+                        "Guild membership or permissions changed; expulsion was cancelled.".into(),
+                    );
+                    context.ui.feedback_is_error = true;
+                } else if context.ui.pending.is_none() {
+                    context.ui.pending = Some(PendingGuildMutation {
+                        action: "expel",
+                        generation: *context.generation,
+                    });
+                    context.ui.feedback = Some("Expelling guild member…".into());
+                    context.ui.feedback_is_error = false;
+                    expel.write(GuildExpelRequested {
+                        target_char_id: target,
+                        reason: reason.to_string(),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    confirmation.clear();
+}
+
+pub(crate) fn reset_stale_confirmation(
+    generation: Res<ZoneSessionGeneration>,
+    mut pending: ResMut<PendingGuildConfirmation>,
+    roots: Query<(Entity, &SystemDialogRoot)>,
+    mut commands: Commands,
+) {
+    if !pending.is_pending() || pending.generation == *generation {
+        return;
+    }
+    let kind = pending.kind;
+    let correlation = pending.correlation;
+    pending.clear();
+    if let Some(kind) = kind {
+        for (entity, root) in &roots {
+            if root.matches(kind, correlation) {
+                commands.entity(entity).despawn();
+            }
+        }
+    }
+}
+
+pub(crate) fn clear_pending_confirmation(
+    mut pending: ResMut<PendingGuildConfirmation>,
+    roots: Query<(Entity, &SystemDialogRoot)>,
+    mut commands: Commands,
+) {
+    let kind = pending.kind;
+    let correlation = pending.correlation;
+    pending.clear();
+    if let Some(kind) = kind {
+        for (entity, root) in &roots {
+            if root.matches(kind, correlation) {
+                commands.entity(entity).despawn();
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use game_engine::domain::guild::{GuildPlugin, GuildSystems};
+    use net_contract::dto::{GuildInfo, GuildMemberInfo, GuildPositionInfo};
     use std::time::Duration;
 
     fn invite() -> GuildInviteInfo {
@@ -208,6 +452,97 @@ mod tests {
             generation,
             payload: GuildIngressPayload::InviteNotified(invite()),
         }
+    }
+
+    fn member(char_id: u32, position_index: u32, name: &str) -> GuildMemberInfo {
+        GuildMemberInfo {
+            char_id,
+            name: name.into(),
+            job_id: 1,
+            base_level: 50,
+            online: true,
+            map: "prontera".into(),
+            position_index,
+            hp: 100,
+            max_hp: 100,
+            sp: 50,
+            max_sp: 50,
+            ap: 0,
+            max_ap: 0,
+        }
+    }
+
+    fn guild_info(master_char_id: u32, master_can_expel: bool) -> GuildInfo {
+        GuildInfo {
+            guild_id: 7,
+            name: "Vikings".into(),
+            master_char_id,
+            emblem_id: 1,
+            notice_subject: String::new(),
+            notice_body: String::new(),
+            positions: vec![
+                GuildPositionInfo {
+                    index: 0,
+                    name: "Master".into(),
+                    can_invite: true,
+                    can_expel: master_can_expel,
+                    can_storage: false,
+                    tax: 0,
+                },
+                GuildPositionInfo {
+                    index: 1,
+                    name: "Member".into(),
+                    can_invite: false,
+                    can_expel: false,
+                    can_storage: false,
+                    tax: 0,
+                },
+            ],
+            members: vec![member(42, 0, "Odin"), member(43, 1, "Thor")],
+        }
+    }
+
+    fn confirmation_app() -> App {
+        let mut app = App::new();
+        app.add_message::<GuildIngress>()
+            .add_message::<net_contract::events::ZoneDisconnected>()
+            .add_message::<SystemDialogChoice>()
+            .add_message::<GuildLeaveRequested>()
+            .add_message::<GuildExpelRequested>()
+            .insert_resource(ZoneSessionGeneration(2))
+            .insert_resource(net_contract::state::ZoneSession {
+                char_id: 42,
+                ..default()
+            })
+            .insert_resource(GuildUi::default())
+            .init_resource::<PendingGuildConfirmation>()
+            .add_plugins(GuildPlugin)
+            .add_systems(
+                Update,
+                claim_confirmation_choice.in_set(GuildSystems::UiSync),
+            );
+        app
+    }
+
+    fn set_guild(app: &mut App, info: GuildInfo) {
+        app.world_mut().write_message(GuildIngress {
+            generation: ZoneSessionGeneration(2),
+            payload: GuildIngressPayload::Info(info),
+        });
+        app.update();
+    }
+
+    fn accept_confirmation(app: &mut App) {
+        let token = app
+            .world()
+            .resource::<PendingGuildConfirmation>()
+            .correlation;
+        app.world_mut().write_message(SystemDialogChoice {
+            primary: true,
+            kind: SystemDialogKind::GuildExpel,
+            correlation: token,
+        });
+        app.update();
     }
 
     fn dialog_app() -> App {
@@ -452,5 +787,171 @@ mod tests {
         assert_eq!(pending.invite.as_ref().unwrap().guild_id, 8);
         assert_ne!(pending.correlation, old_token);
         assert!(app.world().get_entity(old_dialog).is_err());
+    }
+
+    #[test]
+    fn leave_confirmation_copy_distinguishes_master_disband_warning() {
+        let mut pending = PendingGuildConfirmation::default();
+        pending.leave(ZoneSessionGeneration(1), false);
+        assert_eq!(
+            confirmation_copy(&pending, SystemDialogKind::GuildLeave).1,
+            "Are you sure you want to leave the guild?"
+        );
+
+        pending.leave(ZoneSessionGeneration(1), true);
+        assert!(confirmation_copy(&pending, SystemDialogKind::GuildLeave)
+            .1
+            .contains("disband the guild"));
+    }
+
+    #[test]
+    fn wrong_kind_or_token_confirmation_choice_writes_no_destructive_command() {
+        let mut app = App::new();
+        app.add_message::<SystemDialogChoice>()
+            .add_message::<GuildLeaveRequested>()
+            .add_message::<GuildExpelRequested>()
+            .insert_resource(ZoneSessionGeneration(2))
+            .insert_resource(net_contract::state::ZoneSession::default())
+            .insert_resource(GuildState::default())
+            .insert_resource(GuildUi::default())
+            .insert_resource(PendingGuildConfirmation::default())
+            .add_systems(Update, claim_confirmation_choice);
+        {
+            let mut pending = app.world_mut().resource_mut::<PendingGuildConfirmation>();
+            pending.leave(ZoneSessionGeneration(2), false);
+        }
+        let token = app
+            .world()
+            .resource::<PendingGuildConfirmation>()
+            .correlation;
+        app.world_mut().write_message(SystemDialogChoice {
+            primary: true,
+            kind: SystemDialogKind::GuildExpel,
+            correlation: token,
+        });
+        app.world_mut().write_message(SystemDialogChoice {
+            primary: true,
+            kind: SystemDialogKind::GuildLeave,
+            correlation: token.map(|token| token + 1),
+        });
+        app.update();
+
+        let leaves = app.world().resource::<Messages<GuildLeaveRequested>>();
+        let expels = app.world().resource::<Messages<GuildExpelRequested>>();
+        assert_eq!(leaves.len(), 0);
+        assert_eq!(expels.len(), 0);
+        assert!(app
+            .world()
+            .resource::<PendingGuildConfirmation>()
+            .is_pending());
+    }
+
+    #[test]
+    fn revoked_expel_permission_between_prompt_and_acceptance_writes_no_command() {
+        let mut app = confirmation_app();
+        set_guild(&mut app, guild_info(42, true));
+        app.world_mut()
+            .resource_mut::<PendingGuildConfirmation>()
+            .expel(ZoneSessionGeneration(2), 43, "Thor", "  reason  ");
+        set_guild(&mut app, guild_info(42, false));
+
+        accept_confirmation(&mut app);
+
+        assert_eq!(
+            app.world()
+                .resource::<Messages<GuildExpelRequested>>()
+                .len(),
+            0
+        );
+        assert!(!app
+            .world()
+            .resource::<PendingGuildConfirmation>()
+            .is_pending());
+    }
+
+    #[test]
+    fn promoted_target_between_prompt_and_acceptance_writes_no_command() {
+        let mut app = confirmation_app();
+        set_guild(&mut app, guild_info(42, true));
+        app.world_mut()
+            .resource_mut::<PendingGuildConfirmation>()
+            .expel(ZoneSessionGeneration(2), 43, "Thor", "reason");
+        set_guild(&mut app, guild_info(43, true));
+
+        accept_confirmation(&mut app);
+
+        assert_eq!(
+            app.world()
+                .resource::<Messages<GuildExpelRequested>>()
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn self_target_between_prompt_and_acceptance_writes_no_command() {
+        let mut app = confirmation_app();
+        set_guild(&mut app, guild_info(42, true));
+        app.world_mut()
+            .resource_mut::<PendingGuildConfirmation>()
+            .expel(ZoneSessionGeneration(2), 42, "Odin", "reason");
+
+        accept_confirmation(&mut app);
+
+        assert_eq!(
+            app.world()
+                .resource::<Messages<GuildExpelRequested>>()
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn valid_expel_trims_reason_and_writes_exact_command() {
+        let mut app = confirmation_app();
+        set_guild(&mut app, guild_info(42, true));
+        app.world_mut()
+            .resource_mut::<PendingGuildConfirmation>()
+            .expel(ZoneSessionGeneration(2), 43, "Thor", "  too noisy  ");
+
+        accept_confirmation(&mut app);
+
+        let messages = app.world().resource::<Messages<GuildExpelRequested>>();
+        let mut cursor = messages.get_cursor();
+        let written: Vec<_> = cursor.read(messages).cloned().collect();
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].target_char_id, 43);
+        assert_eq!(written[0].reason, "too noisy");
+    }
+
+    #[test]
+    fn master_role_change_after_leave_prompt_requires_a_new_warning() {
+        let mut app = confirmation_app();
+        let mut initial = guild_info(43, true);
+        initial.members[0].position_index = 1;
+        initial.members[1].position_index = 0;
+        set_guild(&mut app, initial);
+        app.world_mut()
+            .resource_mut::<PendingGuildConfirmation>()
+            .leave(ZoneSessionGeneration(2), false);
+
+        set_guild(&mut app, guild_info(42, true));
+        let token = app
+            .world()
+            .resource::<PendingGuildConfirmation>()
+            .correlation;
+        app.world_mut().write_message(SystemDialogChoice {
+            primary: true,
+            kind: SystemDialogKind::GuildLeave,
+            correlation: token,
+        });
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .resource::<Messages<GuildLeaveRequested>>()
+                .len(),
+            0
+        );
     }
 }
