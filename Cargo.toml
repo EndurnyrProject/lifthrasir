@@ -19,7 +19,7 @@ edition = "2021"
 [workspace.dependencies]
 bevy = { version = "0.19.0", features = ["bmp", "jpeg", "wayland", "mesh_picking"] }
 bevy_feathers = { version = "0.19.0", features = ["custom_cursor"] }
-rfd = { version = "0.15", default-features = false, features = ["xdg-portal"] }
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
 secrecy = { version = "0.10", features = ["serde"] }
 leafwing-input-manager = "0.21"
 bevy_quinnet = { git = "https://github.com/ycastorium/bevy_quinnet.git", branch = "bevy-0.19" }
