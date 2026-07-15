@@ -260,7 +260,6 @@ impl Plugin for GuildWindowPlugin {
                 block_guild_ui_on_exit,
                 dialogs::clear_pending_invite,
                 dialogs::clear_pending_confirmation,
-                emblem::clear_emblems_on_exit,
             ),
         );
     }

@@ -365,13 +365,6 @@ pub(crate) fn reset_emblems(
     images.generation = *generation;
 }
 
-pub(crate) fn clear_emblems_on_exit(
-    mut images: ResMut<GuildEmblemImages>,
-    mut assets: ResMut<Assets<Image>>,
-) {
-    images.clear(&mut assets);
-}
-
 fn decode_bmp(data: &[u8]) -> Result<Image, &'static str> {
     if data.len() > MAX_EMBLEM_BYTES {
         return Err("Guild emblems must be 100 KB or smaller.");
@@ -650,6 +643,34 @@ mod tests {
             app.world().resource::<GuildEmblemImages>().form_generation,
             after_disconnect
         );
+    }
+
+    #[test]
+    fn reset_keeps_cached_emblems_for_the_same_zone_session() {
+        let key = EmblemKey::new(7, 3).unwrap();
+        let mut app = App::new();
+        app.add_message::<ZoneDisconnected>()
+            .insert_resource(ZoneSessionGeneration(7))
+            .init_resource::<GuildEmblemImages>()
+            .insert_resource(Assets::<Image>::default())
+            .add_systems(Update, reset_emblems);
+        app.update();
+        let image = app
+            .world_mut()
+            .resource_mut::<Assets<Image>>()
+            .add(decode_bmp(&bmp(24, 24)).unwrap());
+        app.world_mut()
+            .resource_mut::<GuildEmblemImages>()
+            .cache
+            .insert(key, image);
+
+        app.update();
+
+        assert!(app
+            .world()
+            .resource::<GuildEmblemImages>()
+            .cached(key)
+            .is_some());
     }
 
     #[test]

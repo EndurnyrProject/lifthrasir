@@ -9,7 +9,7 @@ use game_engine::domain::entities::components::{EntityName, GuildIdentity};
 use game_engine::domain::entities::hover::HoveredEntity;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::entities::EntityRegistry;
-use game_engine::domain::guild::GuildSystems;
+use game_engine::domain::guild::{GuildState, GuildSystems};
 use game_engine::domain::party::PartyState;
 
 use crate::theme;
@@ -18,6 +18,7 @@ use crate::worldspace::{viewport_to_ui, WorldCameraFilter, WorldspaceFont};
 
 const NAMEPLATE_WIDTH: f32 = 220.0;
 const NAMEPLATE_FONT_SIZE: f32 = 13.0;
+const GUILD_EMBLEM_SIZE: f32 = 24.0;
 /// The party-name line above the character name; smaller than the name and gold-tinted.
 const PARTY_FONT_SIZE: f32 = 11.0;
 /// Pixels below the entity's projected origin (the feet). Classic RO shows the name at
@@ -86,6 +87,42 @@ fn party_name_for<'a>(
         .then_some(party.name.as_str())
 }
 
+fn spawn_guild_mark(commands: &mut Commands, row: Entity, key: Option<EmblemKey>) {
+    commands.spawn((
+        NameplateGuildFallback { key },
+        Text::new("G"),
+        TextFont {
+            font_size: PARTY_FONT_SIZE.into(),
+            ..default()
+        },
+        TextColor(theme::GOLD),
+        Node {
+            width: Val::Px(GUILD_EMBLEM_SIZE),
+            height: Val::Px(GUILD_EMBLEM_SIZE),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        Pickable::IGNORE,
+        ChildOf(row),
+    ));
+    if let Some(key) = key {
+        commands.spawn((
+            NameplateGuildEmblem { key },
+            ImageNode::new(Handle::default()),
+            Node {
+                width: Val::Px(GUILD_EMBLEM_SIZE),
+                height: Val::Px(GUILD_EMBLEM_SIZE),
+                display: Display::None,
+                ..default()
+            },
+            Visibility::Hidden,
+            Pickable::IGNORE,
+            ChildOf(row),
+        ));
+    }
+}
+
 fn spawn_nameplate(
     commands: &mut Commands,
     font: &WorldspaceFont,
@@ -118,8 +155,7 @@ fn spawn_nameplate(
         ))
         .id();
 
-    // Endurnir glass pill: translucent dark fill, gold-faint hairline, rounded. A column
-    // so an optional party line stacks above the character name (classic RO ordering).
+    // Endurnir glass pill: translucent dark fill, gold-faint hairline, rounded.
     let inner = commands
         .spawn((
             Node {
@@ -137,20 +173,6 @@ fn spawn_nameplate(
         ))
         .id();
 
-    if let Some(party) = party {
-        commands.spawn((
-            Text::new(party),
-            TextFont {
-                font: font.0.clone().into(),
-                font_size: PARTY_FONT_SIZE.into(),
-                ..default()
-            },
-            TextColor(theme::GOLD),
-            Pickable::IGNORE,
-            ChildOf(inner),
-        ));
-    }
-
     if let Some(guild) = guild.filter(|guild| guild.guild_id != 0) {
         let key = guild_key;
         let row = commands
@@ -164,32 +186,32 @@ fn spawn_nameplate(
                 ChildOf(inner),
             ))
             .id();
-        commands.spawn((
-            NameplateGuildFallback { key },
-            Text::new("G"),
-            TextFont {
-                font: font.0.clone().into(),
-                font_size: PARTY_FONT_SIZE.into(),
-                ..default()
-            },
-            TextColor(theme::GOLD),
-            Pickable::IGNORE,
-            ChildOf(row),
-        ));
-        if let Some(key) = key {
-            commands.spawn((
-                NameplateGuildEmblem { key },
-                ImageNode::new(Handle::default()),
+        spawn_guild_mark(commands, row, key);
+        let text_column = commands
+            .spawn((
                 Node {
-                    width: Val::Px(12.0),
-                    height: Val::Px(12.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::FlexStart,
                     ..default()
                 },
-                Visibility::Hidden,
                 Pickable::IGNORE,
                 ChildOf(row),
-            ));
-        }
+            ))
+            .id();
+        commands.spawn((
+            Text::new(match party {
+                Some(party) => format!("{name} ({party})"),
+                None => name.to_string(),
+            }),
+            TextFont {
+                font: font.0.clone().into(),
+                font_size: NAMEPLATE_FONT_SIZE.into(),
+                ..default()
+            },
+            TextColor(name_color),
+            Pickable::IGNORE,
+            ChildOf(text_column),
+        ));
         commands.spawn((
             Text::new(guild.guild_name.clone()),
             TextFont {
@@ -199,21 +221,24 @@ fn spawn_nameplate(
             },
             TextColor(theme::GOLD),
             Pickable::IGNORE,
-            ChildOf(row),
+            ChildOf(text_column),
+        ));
+    } else {
+        commands.spawn((
+            Text::new(match party {
+                Some(party) => format!("{name} ({party})"),
+                None => name.to_string(),
+            }),
+            TextFont {
+                font: font.0.clone().into(),
+                font_size: NAMEPLATE_FONT_SIZE.into(),
+                ..default()
+            },
+            TextColor(name_color),
+            Pickable::IGNORE,
+            ChildOf(inner),
         ));
     }
-
-    commands.spawn((
-        Text::new(name),
-        TextFont {
-            font: font.0.clone().into(),
-            font_size: NAMEPLATE_FONT_SIZE.into(),
-            ..default()
-        },
-        TextColor(name_color),
-        Pickable::IGNORE,
-        ChildOf(inner),
-    ));
 }
 
 /// Keep one nameplate per hovered, named entity. Runs every frame so it catches
@@ -228,6 +253,7 @@ fn sync_nameplates(
     still_hovered: Query<(), With<HoveredEntity>>,
     registry: Res<EntityRegistry>,
     party: Res<PartyState>,
+    local_guild: Res<GuildState>,
     font: Res<WorldspaceFont>,
 ) {
     for (target, name, guild) in &hovered {
@@ -242,6 +268,15 @@ fn sync_nameplates(
             .party_name
             .as_deref()
             .or_else(|| party_name_for(&registry, &party, target));
+        let local_guild = is_self
+            .then(|| {
+                local_guild.info().map(|info| GuildIdentity {
+                    guild_id: info.guild_id,
+                    guild_name: info.name.clone(),
+                    emblem_id: info.emblem_id,
+                })
+            })
+            .flatten();
         spawn_nameplate(
             &mut commands,
             &font,
@@ -249,7 +284,7 @@ fn sync_nameplates(
             &name.name,
             is_self,
             party_name,
-            guild,
+            guild.or(local_guild.as_ref()),
         );
     }
 
@@ -280,25 +315,37 @@ fn request_visible_emblems(
 
 fn sync_nameplate_emblems(
     images: Option<Res<GuildEmblemImages>>,
-    mut emblems: Query<(&NameplateGuildEmblem, &mut ImageNode, &mut Visibility)>,
-    mut fallbacks: Query<(&NameplateGuildFallback, &mut Visibility), Without<NameplateGuildEmblem>>,
+    mut emblems: Query<(
+        &NameplateGuildEmblem,
+        &mut ImageNode,
+        &mut Visibility,
+        &mut Node,
+    )>,
+    mut fallbacks: Query<
+        (&NameplateGuildFallback, &mut Visibility, &mut Node),
+        Without<NameplateGuildEmblem>,
+    >,
 ) {
     let Some(images) = images else {
         return;
     };
-    for (emblem, mut image, mut visibility) in &mut emblems {
+    for (emblem, mut image, mut visibility, mut node) in &mut emblems {
         if let Some(handle) = images.cached(emblem.key) {
             image.image = handle;
             *visibility = Visibility::Inherited;
+            node.display = Display::Flex;
         } else {
             *visibility = Visibility::Hidden;
+            node.display = Display::None;
         }
     }
-    for (fallback, mut visibility) in &mut fallbacks {
+    for (fallback, mut visibility, mut node) in &mut fallbacks {
         if fallback.key.and_then(|key| images.cached(key)).is_some() {
             *visibility = Visibility::Hidden;
+            node.display = Display::None;
         } else {
             *visibility = Visibility::Inherited;
+            node.display = Display::Flex;
         }
     }
 }
@@ -339,6 +386,12 @@ fn despawn_all_nameplates(mut commands: Commands, nameplates: Query<Entity, With
 #[cfg(test)]
 mod tests {
     use super::*;
+    use game_engine::domain::guild::GuildPlugin;
+    use net_contract::{
+        dto::GuildInfo,
+        events::{GuildIngress, GuildIngressPayload, ZoneDisconnected},
+        state::ZoneSessionGeneration,
+    };
 
     fn test_app() -> App {
         let mut app = App::new();
@@ -348,7 +401,11 @@ mod tests {
         app.init_resource::<PartyState>();
         app.init_resource::<GuildEmblemImages>();
         app.insert_resource(Assets::<Image>::default());
-        app.add_systems(Update, sync_nameplates);
+        app.add_message::<GuildIngress>()
+            .add_message::<ZoneDisconnected>()
+            .insert_resource(ZoneSessionGeneration(1))
+            .add_plugins(GuildPlugin)
+            .add_systems(Update, sync_nameplates.after(GuildSystems::UiSync));
         app
     }
 
@@ -385,7 +442,7 @@ mod tests {
     }
 
     #[test]
-    fn party_member_plate_shows_party_name_above_char_name() {
+    fn party_member_plate_shows_party_name_with_character_name() {
         use game_engine::domain::party::PartyState;
         use net_contract::dto::PartyMemberInfo;
 
@@ -425,8 +482,7 @@ mod tests {
             .iter(world)
             .map(|text| text.0.clone())
             .collect();
-        assert!(labels.contains(&"Wolfpack".to_string()));
-        assert!(labels.contains(&"Solveig".to_string()));
+        assert_eq!(labels, vec!["Solveig (Wolfpack)".to_string()]);
     }
 
     #[test]
@@ -444,14 +500,14 @@ mod tests {
             .iter(world)
             .map(|text| text.0.clone())
             .collect();
-        assert!(labels.contains(&"Ravens".to_string()));
-        assert!(labels.contains(&"Rival".to_string()));
+        assert_eq!(labels, vec!["Rival (Ravens)".to_string()]);
     }
 
     #[test]
     fn guilded_plate_shows_emblem_and_name_without_position_title() {
         let mut app = test_app();
         let mut name = EntityName::new("Sigrun".to_string());
+        name.party_name = Some("Wolfpack".to_string());
         name.position_name = Some("Guild Master".to_string());
         app.world_mut().spawn((
             name,
@@ -471,9 +527,59 @@ mod tests {
             .iter(world)
             .map(|text| text.0.clone())
             .collect();
-        assert!(labels.contains(&"G".to_string()));
-        assert!(labels.contains(&"Valkyries".to_string()));
+        assert_eq!(
+            labels,
+            vec![
+                "G".to_string(),
+                "Sigrun (Wolfpack)".to_string(),
+                "Valkyries".to_string(),
+            ]
+        );
         assert!(!labels.contains(&"Guild Master".to_string()));
+    }
+
+    #[test]
+    fn local_guilded_plate_uses_the_authoritative_guild_state() {
+        let mut app = test_app();
+        app.world_mut().spawn((
+            EntityName::new("Sigrun".to_string()),
+            LocalPlayer,
+            HoveredEntity,
+        ));
+        app.world_mut().write_message(GuildIngress {
+            generation: ZoneSessionGeneration(1),
+            payload: GuildIngressPayload::Info(GuildInfo {
+                guild_id: 7,
+                name: "Valkyries".to_string(),
+                master_char_id: 42,
+                emblem_id: 3,
+                notice_subject: String::new(),
+                notice_body: String::new(),
+                positions: vec![],
+                members: vec![],
+            }),
+        });
+
+        app.update();
+
+        let world = app.world_mut();
+        let labels: Vec<String> = world
+            .query::<&Text>()
+            .iter(world)
+            .map(|text| text.0.clone())
+            .collect();
+        assert_eq!(
+            labels,
+            vec![
+                "G".to_string(),
+                "Sigrun".to_string(),
+                "Valkyries".to_string(),
+            ]
+        );
+        assert_eq!(
+            world.query::<&Nameplate>().single(world).unwrap().guild_key,
+            EmblemKey::new(7, 3)
+        );
     }
 
     #[test]
@@ -574,40 +680,28 @@ mod tests {
 
         app.update();
         let world = app.world_mut();
-        assert_eq!(
-            *world
-                .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
-                .single(world)
-                .unwrap(),
-            Visibility::Inherited
-        );
-        assert_eq!(
-            *world
-                .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
-                .single(world)
-                .unwrap(),
-            Visibility::Hidden
-        );
+        assert!(world
+            .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
+            .iter(world)
+            .all(|visibility| *visibility == Visibility::Inherited));
+        assert!(world
+            .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
+            .iter(world)
+            .all(|visibility| *visibility == Visibility::Hidden));
 
         app.world_mut()
             .resource_mut::<GuildEmblemImages>()
             .remove_cached_for_test(key);
         app.update();
         let world = app.world_mut();
-        assert_eq!(
-            *world
-                .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
-                .single(world)
-                .unwrap(),
-            Visibility::Hidden
-        );
-        assert_eq!(
-            *world
-                .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
-                .single(world)
-                .unwrap(),
-            Visibility::Inherited
-        );
+        assert!(world
+            .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
+            .iter(world)
+            .all(|visibility| *visibility == Visibility::Hidden));
+        assert!(world
+            .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
+            .iter(world)
+            .all(|visibility| *visibility == Visibility::Inherited));
     }
 
     #[test]
