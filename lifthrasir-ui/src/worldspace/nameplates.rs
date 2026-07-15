@@ -5,13 +5,15 @@
 
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
-use game_engine::domain::entities::components::EntityName;
+use game_engine::domain::entities::components::{EntityName, GuildIdentity};
 use game_engine::domain::entities::hover::HoveredEntity;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::entities::EntityRegistry;
+use game_engine::domain::guild::GuildSystems;
 use game_engine::domain::party::PartyState;
 
 use crate::theme;
+use crate::widgets::guild_window::emblem::{EmblemKey, GuildEmblemImages};
 use crate::worldspace::{viewport_to_ui, WorldCameraFilter, WorldspaceFont};
 
 const NAMEPLATE_WIDTH: f32 = 220.0;
@@ -31,7 +33,15 @@ impl Plugin for NameplatePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (sync_nameplates, follow_targets).run_if(in_state(GameState::InGame)),
+            (
+                sync_nameplates,
+                follow_targets,
+                request_visible_emblems,
+                sync_nameplate_emblems,
+            )
+                .chain()
+                .after(GuildSystems::UiSync)
+                .run_if(in_state(GameState::InGame)),
         );
         app.add_systems(OnExit(GameState::InGame), despawn_all_nameplates);
     }
@@ -40,6 +50,17 @@ impl Plugin for NameplatePlugin {
 #[derive(Component)]
 struct Nameplate {
     target: Entity,
+    guild_key: Option<EmblemKey>,
+}
+
+#[derive(Component)]
+struct NameplateGuildEmblem {
+    key: EmblemKey,
+}
+
+#[derive(Component)]
+struct NameplateGuildFallback {
+    key: Option<EmblemKey>,
 }
 
 fn has_nameplate(nameplates: &Query<&Nameplate>, target: Entity) -> bool {
@@ -72,12 +93,14 @@ fn spawn_nameplate(
     name: &str,
     is_self: bool,
     party: Option<&str>,
+    guild: Option<&GuildIdentity>,
 ) {
     let name_color = if is_self {
         theme::EMERALD_BRI
     } else {
         theme::TEXT
     };
+    let guild_key = guild.and_then(|guild| EmblemKey::new(guild.guild_id, guild.emblem_id));
     let pill = commands
         .spawn((
             // Transparent positioning wrapper: a fixed width centered on the entity keeps
@@ -91,7 +114,7 @@ fn spawn_nameplate(
             GlobalZIndex(NAMEPLATE_Z),
             Visibility::Hidden,
             Pickable::IGNORE,
-            Nameplate { target },
+            Nameplate { target, guild_key },
         ))
         .id();
 
@@ -128,6 +151,58 @@ fn spawn_nameplate(
         ));
     }
 
+    if let Some(guild) = guild.filter(|guild| guild.guild_id != 0) {
+        let key = guild_key;
+        let row = commands
+            .spawn((
+                Node {
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(4.0),
+                    ..default()
+                },
+                Pickable::IGNORE,
+                ChildOf(inner),
+            ))
+            .id();
+        commands.spawn((
+            NameplateGuildFallback { key },
+            Text::new("G"),
+            TextFont {
+                font: font.0.clone().into(),
+                font_size: PARTY_FONT_SIZE.into(),
+                ..default()
+            },
+            TextColor(theme::GOLD),
+            Pickable::IGNORE,
+            ChildOf(row),
+        ));
+        if let Some(key) = key {
+            commands.spawn((
+                NameplateGuildEmblem { key },
+                ImageNode::new(Handle::default()),
+                Node {
+                    width: Val::Px(12.0),
+                    height: Val::Px(12.0),
+                    ..default()
+                },
+                Visibility::Hidden,
+                Pickable::IGNORE,
+                ChildOf(row),
+            ));
+        }
+        commands.spawn((
+            Text::new(guild.guild_name.clone()),
+            TextFont {
+                font: font.0.clone().into(),
+                font_size: PARTY_FONT_SIZE.into(),
+                ..default()
+            },
+            TextColor(theme::GOLD),
+            Pickable::IGNORE,
+            ChildOf(row),
+        ));
+    }
+
     commands.spawn((
         Text::new(name),
         TextFont {
@@ -146,7 +221,7 @@ fn spawn_nameplate(
 #[allow(clippy::too_many_arguments)]
 fn sync_nameplates(
     mut commands: Commands,
-    hovered: Query<(Entity, &EntityName), With<HoveredEntity>>,
+    hovered: Query<(Entity, &EntityName, Option<&GuildIdentity>), With<HoveredEntity>>,
     local_player: Query<(), With<LocalPlayer>>,
     nameplates: Query<&Nameplate>,
     stale: Query<(Entity, &Nameplate)>,
@@ -155,7 +230,7 @@ fn sync_nameplates(
     party: Res<PartyState>,
     font: Res<WorldspaceFont>,
 ) {
-    for (target, name) in &hovered {
+    for (target, name, guild) in &hovered {
         if has_nameplate(&nameplates, target) {
             continue;
         }
@@ -174,12 +249,56 @@ fn sync_nameplates(
             &name.name,
             is_self,
             party_name,
+            guild,
         );
     }
 
     for (entity, plate) in &stale {
         if still_hovered.get(plate.target).is_err() {
             commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn request_visible_emblems(
+    nameplates: Query<(&Nameplate, &Visibility)>,
+    images: Option<ResMut<GuildEmblemImages>>,
+) {
+    let Some(mut images) = images else {
+        return;
+    };
+    for (plate, visibility) in &nameplates {
+        if *visibility == Visibility::Hidden {
+            continue;
+        }
+        let Some(key) = plate.guild_key else {
+            continue;
+        };
+        images.request(key);
+    }
+}
+
+fn sync_nameplate_emblems(
+    images: Option<Res<GuildEmblemImages>>,
+    mut emblems: Query<(&NameplateGuildEmblem, &mut ImageNode, &mut Visibility)>,
+    mut fallbacks: Query<(&NameplateGuildFallback, &mut Visibility), Without<NameplateGuildEmblem>>,
+) {
+    let Some(images) = images else {
+        return;
+    };
+    for (emblem, mut image, mut visibility) in &mut emblems {
+        if let Some(handle) = images.cached(emblem.key) {
+            image.image = handle;
+            *visibility = Visibility::Inherited;
+        } else {
+            *visibility = Visibility::Hidden;
+        }
+    }
+    for (fallback, mut visibility) in &mut fallbacks {
+        if fallback.key.and_then(|key| images.cached(key)).is_some() {
+            *visibility = Visibility::Hidden;
+        } else {
+            *visibility = Visibility::Inherited;
         }
     }
 }
@@ -227,6 +346,8 @@ mod tests {
         app.insert_resource(WorldspaceFont(Handle::default()));
         app.init_resource::<EntityRegistry>();
         app.init_resource::<PartyState>();
+        app.init_resource::<GuildEmblemImages>();
+        app.insert_resource(Assets::<Image>::default());
         app.add_systems(Update, sync_nameplates);
         app
     }
@@ -325,6 +446,168 @@ mod tests {
             .collect();
         assert!(labels.contains(&"Ravens".to_string()));
         assert!(labels.contains(&"Rival".to_string()));
+    }
+
+    #[test]
+    fn guilded_plate_shows_emblem_and_name_without_position_title() {
+        let mut app = test_app();
+        let mut name = EntityName::new("Sigrun".to_string());
+        name.position_name = Some("Guild Master".to_string());
+        app.world_mut().spawn((
+            name,
+            GuildIdentity {
+                guild_id: 7,
+                guild_name: "Valkyries".to_string(),
+                emblem_id: 3,
+            },
+            HoveredEntity,
+        ));
+
+        app.update();
+
+        let world = app.world_mut();
+        let labels: Vec<String> = world
+            .query::<&Text>()
+            .iter(world)
+            .map(|text| text.0.clone())
+            .collect();
+        assert!(labels.contains(&"G".to_string()));
+        assert!(labels.contains(&"Valkyries".to_string()));
+        assert!(!labels.contains(&"Guild Master".to_string()));
+    }
+
+    #[test]
+    fn hidden_plate_never_queues_an_emblem_request() {
+        let mut app = test_app();
+        let key = EmblemKey::new(7, 3).unwrap();
+        app.world_mut().spawn((
+            Nameplate {
+                target: Entity::PLACEHOLDER,
+                guild_key: Some(key),
+            },
+            Visibility::Hidden,
+        ));
+        app.add_systems(Update, request_visible_emblems);
+
+        app.update();
+
+        assert!(app
+            .world()
+            .resource::<GuildEmblemImages>()
+            .cached(key)
+            .is_none());
+        assert!(!app.world().resource::<GuildEmblemImages>().has_queued(key));
+    }
+
+    #[test]
+    fn plate_keeps_its_spawned_guild_tuple_until_it_respawns() {
+        let mut app = test_app();
+        let target = app
+            .world_mut()
+            .spawn((
+                EntityName::new("Sigrun".to_string()),
+                GuildIdentity {
+                    guild_id: 7,
+                    guild_name: "Valkyries".to_string(),
+                    emblem_id: 3,
+                },
+                HoveredEntity,
+            ))
+            .id();
+        app.update();
+        let first = app
+            .world_mut()
+            .query::<&Nameplate>()
+            .single(app.world())
+            .unwrap()
+            .guild_key;
+
+        app.world_mut().entity_mut(target).insert(GuildIdentity {
+            guild_id: 7,
+            guild_name: "Valkyries".to_string(),
+            emblem_id: 4,
+        });
+        app.update();
+        let frozen = app
+            .world_mut()
+            .query::<&Nameplate>()
+            .single(app.world())
+            .unwrap()
+            .guild_key;
+        assert_eq!(frozen, first);
+
+        app.world_mut().entity_mut(target).remove::<HoveredEntity>();
+        app.update();
+        app.world_mut().entity_mut(target).insert(HoveredEntity);
+        app.update();
+        let respawned = app
+            .world_mut()
+            .query::<&Nameplate>()
+            .single(app.world())
+            .unwrap()
+            .guild_key;
+        assert_eq!(respawned, EmblemKey::new(7, 4));
+    }
+
+    #[test]
+    fn cache_appearance_and_removal_toggle_the_nameplate_emblem_and_fallback() {
+        let mut app = test_app();
+        let key = EmblemKey::new(7, 3).unwrap();
+        app.world_mut().spawn((
+            EntityName::new("Sigrun".to_string()),
+            GuildIdentity {
+                guild_id: key.guild_id,
+                guild_name: "Valkyries".to_string(),
+                emblem_id: key.emblem_id,
+            },
+            HoveredEntity,
+        ));
+        app.update();
+        let image = {
+            let mut assets = app.world_mut().resource_mut::<Assets<Image>>();
+            assets.add(Image::default())
+        };
+        app.world_mut()
+            .resource_mut::<GuildEmblemImages>()
+            .insert_cached_for_test(key, image);
+        app.add_systems(Update, sync_nameplate_emblems);
+
+        app.update();
+        let world = app.world_mut();
+        assert_eq!(
+            *world
+                .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
+                .single(world)
+                .unwrap(),
+            Visibility::Inherited
+        );
+        assert_eq!(
+            *world
+                .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
+                .single(world)
+                .unwrap(),
+            Visibility::Hidden
+        );
+
+        app.world_mut()
+            .resource_mut::<GuildEmblemImages>()
+            .remove_cached_for_test(key);
+        app.update();
+        let world = app.world_mut();
+        assert_eq!(
+            *world
+                .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
+                .single(world)
+                .unwrap(),
+            Visibility::Hidden
+        );
+        assert_eq!(
+            *world
+                .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
+                .single(world)
+                .unwrap(),
+            Visibility::Inherited
+        );
     }
 
     #[test]

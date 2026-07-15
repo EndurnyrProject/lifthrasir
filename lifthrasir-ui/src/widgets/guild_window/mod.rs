@@ -1,4 +1,5 @@
 mod dialogs;
+pub(crate) mod emblem;
 mod members;
 mod notice;
 mod positions;
@@ -121,6 +122,12 @@ pub struct GuildMemberCountText;
 #[derive(Component, Default, Clone)]
 pub struct GuildOnlineCountText;
 #[derive(Component, Default, Clone)]
+pub struct GuildHeaderEmblemImage;
+#[derive(Component, Default, Clone)]
+pub struct GuildHeaderEmblemFallback;
+#[derive(Component, Default, Clone)]
+pub struct GuildEmblemUploadButton;
+#[derive(Component, Default, Clone)]
 pub struct MembersTabButton;
 #[derive(Component, Default, Clone)]
 pub struct PositionsTabButton;
@@ -162,6 +169,7 @@ impl Plugin for GuildWindowPlugin {
             app.add_plugins(FeathersPlugins);
         }
         app.init_resource::<GuildUi>()
+            .init_resource::<emblem::GuildEmblemImages>()
             .init_resource::<dialogs::PendingGuildInvite>()
             .init_resource::<dialogs::PendingGuildConfirmation>()
             .add_systems(
@@ -174,26 +182,45 @@ impl Plugin for GuildWindowPlugin {
             )
             .add_systems(
                 Update,
-                toggle_guild_window.run_if(in_state(GameState::InGame)),
+                emblem::reset_emblems.in_set(GuildSystems::SessionReset),
+            )
+            .add_systems(
+                Update,
+                toggle_guild_window
+                    .before(GuildSystems::UiSync)
+                    .run_if(in_state(GameState::InGame)),
             )
             .add_systems(
                 Update,
                 (
-                    sync_create_draft,
-                    apply_guild_results,
-                    sync_membership_mode,
-                    sync_header,
-                    sync_tabs,
-                    sync_feedback,
-                    sync_invite_controls,
-                    sync_expel_controls,
-                    refresh_members,
-                    positions::refresh_positions,
-                    positions::sync_invite_labels,
-                    positions::sync_expel_labels,
-                    notice::refresh_notice,
-                    sync_management_controls,
-                    release_hidden_guild_focus,
+                    (
+                        sync_create_draft,
+                        apply_guild_results,
+                        sync_membership_mode,
+                        sync_header,
+                        emblem::invalidate_picker_when_hidden,
+                        emblem::poll_picker,
+                        emblem::receive_emblem_data,
+                        emblem::queue_current_guild_emblem,
+                        emblem::send_next_fetch,
+                        emblem::sync_header_emblem,
+                        sync_emblem_upload_control,
+                    )
+                        .chain(),
+                    (
+                        sync_tabs,
+                        sync_feedback,
+                        sync_invite_controls,
+                        sync_expel_controls,
+                        refresh_members,
+                        positions::refresh_positions,
+                        positions::sync_invite_labels,
+                        positions::sync_expel_labels,
+                        notice::refresh_notice,
+                        sync_management_controls,
+                        release_hidden_guild_focus,
+                    )
+                        .chain(),
                 )
                     .chain()
                     .in_set(GuildSystems::UiSync)
@@ -225,8 +252,24 @@ impl Plugin for GuildWindowPlugin {
                 clear_guild_focus_on_exit,
                 dialogs::clear_pending_invite,
                 dialogs::clear_pending_confirmation,
+                emblem::clear_emblems_on_exit,
             ),
         );
+    }
+}
+
+fn sync_emblem_upload_control(
+    guild: Res<GuildState>,
+    session: Res<ZoneSession>,
+    mut controls: Query<&mut Visibility, With<GuildEmblemUploadButton>>,
+) {
+    let visible = guild.is_master(session.char_id);
+    for mut visibility in &mut controls {
+        *visibility = if visible {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
     }
 }
 
@@ -353,6 +396,8 @@ fn apply_guild_results(
     mut ingress: MessageReader<GuildIngress>,
     generation: Res<ZoneSessionGeneration>,
     mut ui: ResMut<GuildUi>,
+    mut images: ResMut<emblem::GuildEmblemImages>,
+    mut assets: ResMut<Assets<Image>>,
 ) {
     for event in ingress.read() {
         let GuildIngressPayload::ActionResult(result) = &event.payload else {
@@ -385,12 +430,18 @@ fn apply_guild_results(
                     "Position assignment sent. Waiting for guild information…".to_string()
                 }
                 "notice_edit" => "Notice saved. Waiting for guild information…".to_string(),
+                "emblem_upload" => {
+                    "Emblem uploaded. Waiting for the authoritative emblem update…".to_string()
+                }
                 "leave" => "Guild leave requested. Waiting for authoritative state…".to_string(),
                 "expel" => "Guild member expelled. Waiting for roster refresh…".to_string(),
                 _ => "Guild action completed.".to_string(),
             });
             ui.feedback_is_error = false;
         } else {
+            if result.action == "emblem_upload" {
+                images.discard_preview(&mut assets);
+            }
             ui.feedback = Some(guild_error_text(result.error).to_string());
             ui.feedback_is_error = true;
         }
@@ -968,6 +1019,8 @@ mod tests {
             ..default()
         });
         app.init_resource::<GuildState>();
+        app.init_resource::<emblem::GuildEmblemImages>()
+            .insert_resource(Assets::<Image>::default());
         app.add_systems(Update, apply_guild_results);
         app.world_mut()
             .resource_mut::<Messages<GuildIngress>>()
@@ -1004,6 +1057,8 @@ mod tests {
             }),
             ..default()
         });
+        app.init_resource::<emblem::GuildEmblemImages>()
+            .insert_resource(Assets::<Image>::default());
         app.add_systems(Update, apply_guild_results);
         app.world_mut()
             .resource_mut::<Messages<GuildIngress>>()
@@ -1073,6 +1128,8 @@ mod tests {
             }),
             ..default()
         });
+        app.init_resource::<emblem::GuildEmblemImages>()
+            .insert_resource(Assets::<Image>::default());
         app.add_systems(Update, apply_guild_results);
         app.world_mut().write_message(GuildIngress {
             generation,
@@ -1106,6 +1163,8 @@ mod tests {
             }),
             ..default()
         });
+        app.init_resource::<emblem::GuildEmblemImages>()
+            .insert_resource(Assets::<Image>::default());
         app.add_systems(Update, apply_guild_results);
         app.world_mut().write_message(GuildIngress {
             generation,

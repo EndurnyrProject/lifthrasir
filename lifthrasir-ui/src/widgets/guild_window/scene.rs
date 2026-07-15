@@ -165,7 +165,15 @@ fn header() -> impl Scene {
                 BackgroundColor(theme::FIELD)
                 BorderColor::all(theme::GOLD_FAINT)
                 ignore_picking()
-                Children [ title_text("G".to_string(), 22.0, theme::GOLD) ]
+                Children [
+                    (GuildHeaderEmblemFallback title_text("G".to_string(), 22.0, theme::GOLD)),
+                    (
+                        GuildHeaderEmblemImage
+                        ImageNode {}
+                        Node { width: px(48), height: px(48) }
+                        Visibility::Hidden
+                    ),
+                ]
             ),
             (
                 Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(4) }
@@ -182,6 +190,17 @@ fn header() -> impl Scene {
                 Children [
                     (GuildMemberCountText chrome_text(String::new(), 12.0, theme::TEXT)),
                     (GuildOnlineCountText chrome_text(String::new(), 11.5, theme::EMERALD_BRI)),
+                    (
+                        GuildEmblemUploadButton
+                        GuildMutationControl
+                        @FeathersButton {
+                            @caption: bsn! { (Text("Change Emblem") ThemedText) },
+                            @variant: ButtonVariant::Normal,
+                        }
+                        Node { width: px(138), height: px(30) }
+                        Visibility::Hidden
+                        on(super::emblem::on_select_emblem)
+                    ),
                 ]
             ),
         ]
