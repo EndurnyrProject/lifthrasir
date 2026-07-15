@@ -89,6 +89,30 @@ Spawn the whole tree and parent it with ONE insert:
 commands.spawn_scene(window()).insert(ChildOf(hud_root));
 ```
 
+## Flex-first layout
+
+Prefer normal flex flow for window chrome, stacked sections, tab bodies, forms, and scroll content. Use absolute positioning only for true overlays or anchored controls that flex cannot express.
+
+- Declare `flex_direction` on every structural container. Use `Column` for window/body stacks and `Row` for controls that belong on one line.
+- Make column containers stretch their children with `align_items: AlignItems::Stretch`. Give full-width children `width: percent(100)` when the inherited size is otherwise ambiguous; use `flex_grow: 1.0` and `min_width: px(0)` for flexible row children.
+- Bound scroll regions with a flex size or explicit height, then set `overflow`. Do not build the primary panel layout from absolute insets.
+- **`Visibility::Hidden` does not remove an entity from layout.** For mutually exclusive tabs, pages, or modes, set the inactive `Node.display` to `Display::None` and the active one to `Display::Flex`. Optionally mirror `Visibility` as well when existing systems/tests depend on it.
+- Never leave several `height: percent(100)` siblings in one flex container and hide the inactive ones only with `Visibility`; Bevy still flex-shrinks all of them, producing tiny panels and stray scrollbars.
+- Keep `EditableText` fields in normal flex flow, stretched to the form width. Do not attach `Pickable::IGNORE` to an input; pointer focus is required for refocusing and native Backspace/Delete editing.
+- Check the exact picking settings type before diagnosing marker behavior: `MeshPickingSettings::require_markers` affects 3D mesh picking, not Bevy UI. Only `UiPickingSettings::require_markers` controls UI marker requirements.
+- **Every `EditableText` needs a `TabIndex`** (on itself or an ancestor). Feathers installs `TabNavigationPlugin`, whose global `click_to_focus` observer fires an `AcquireFocus` on every pointer press; the event bubbles up looking for a `TabIndex`, and if it reaches the window it **clears `InputFocus`** — silently undoing the click-to-focus that `EditableTextInputPlugin`'s own press observer just performed, in the same frame. Feathers' own text-input control ships with `TabIndex`; a bare `EditableText` does not. In Lifthrasir this is handled once via `register_required_components::<EditableText, TabIndex>()` in `UiFocusMirrorPlugin`. Symptom of the missing index: Enter/programmatic focus works, clicking the field does nothing.
+- Do not pass a `ResMut<T>` as `&mut T` into a helper that runs every frame and usually does nothing: the deref-mut coercion alone flags the resource as changed each frame, breaking every `is_changed` consumer (Feathers gates its focus-indicator scan on `InputFocus::is_changed`). Pass `&mut ResMut<T>` and only deref-mut on the write path.
+
+For tabbed UI, leave exactly one page participating in layout:
+
+```rust
+let active = selected == Tab::Members;
+*visibility = if active { Visibility::Inherited } else { Visibility::Hidden };
+node.display = if active { Display::Flex } else { Display::None };
+```
+
+Add one structural test that asserts exactly one page has `Display::Flex` and inactive pages have `Display::None`. For editable fields, assert the field carries `TabIndex` — that is the piece whose absence breaks click-to-focus.
+
 ### Hierarchy — `Children [ ... ]`
 
 - `Children [ a(), b() ]` — comma-separated entries are sibling entities.
@@ -201,12 +225,14 @@ So: **structure + behavior in `bsn!`; live data in a system keyed on marker comp
 
 ## Quick checklist when authoring a window
 
-1. One `bsn!` tree of composable `fn() -> impl Scene`; `Children [...]` for hierarchy; one `.insert(ChildOf(parent))` to mount it.
+1. One flex-first `bsn!` tree of composable `fn() -> impl Scene`; `Children [...]` for hierarchy; one `.insert(ChildOf(parent))` to mount it. Reserve absolute positioning for overlays.
 2. Interactions via `on(...)`; Feathers buttons via `@FeathersButton { @caption: ... }` observing `On<Activate>`.
 3. Colors via `ThemeBackgroundColor/ThemeBorderColor/ThemeTextColor`; fonts/icons via asset-path string literals.
 4. Child-id capture via `#Name` + a `FromTemplate` parent component.
 5. Live data via a marker-querying system, not SceneComponents.
-6. `template_value` only for runtime values / complex constructors.
+6. Inactive flex pages use `Display::None`; `Visibility::Hidden` alone is not a layout toggle.
+7. Every `EditableText` carries a `TabIndex` (else Feathers' `click_to_focus` clears `InputFocus` right after the click sets it). Do not confuse UI marker settings with mesh marker settings.
+8. `template_value` only for runtime values / complex constructors.
 
 ## Reference
 

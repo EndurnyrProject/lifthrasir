@@ -137,7 +137,7 @@ pub(crate) fn notice_management(subject: String, body: String, is_master: bool) 
         body
     };
     bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(9) }
+        Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(9) }
         ignore_picking()
         Children [
             chrome_text("Guild notice".to_string(), 13.0, theme::TEXT),
@@ -153,26 +153,28 @@ pub(crate) fn notice_management(subject: String, body: String, is_master: bool) 
             (
                 GuildNoticeEditControls
                 template_value(edit_visibility)
-                Node { flex_direction: FlexDirection::Column, row_gap: px(7), padding: {UiRect::top(px(7))} }
+                Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(7), padding: {UiRect::top(px(7))} }
                 Pickable
                 Children [
                     chrome_text("Edit notice".to_string(), 12.0, theme::TEXT),
                     (
                         GuildNoticeSubjectField
+                        Pickable
                         template_value(subject_editable)
                         TextFont { font: FontSourceTemplate::Handle(theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
                         TextColor(theme::TEXT)
                         BackgroundColor(theme::FIELD)
-                        Node { height: px(34), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
+                        Node { width: percent(100), height: px(34), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
                         BorderColor::all(theme::STROKE)
                     ),
                     (
                         GuildNoticeBodyField
+                        Pickable
                         template_value(body_editable)
                         TextFont { font: FontSourceTemplate::Handle(theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
                         TextColor(theme::TEXT)
                         BackgroundColor(theme::FIELD)
-                        Node { height: px(82), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
+                        Node { width: percent(100), height: px(82), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
                         BorderColor::all(theme::STROKE)
                     ),
                     (
@@ -275,5 +277,26 @@ mod tests {
                 .unwrap(),
             Visibility::Inherited
         );
+        for entity in [
+            master
+                .world_mut()
+                .query_filtered::<Entity, With<GuildNoticeSubjectField>>()
+                .single(master.world())
+                .unwrap(),
+            master
+                .world_mut()
+                .query_filtered::<Entity, With<GuildNoticeBodyField>>()
+                .single(master.world())
+                .unwrap(),
+        ] {
+            assert_eq!(
+                master.world().get::<Node>(entity).unwrap().width,
+                percent(100)
+            );
+            assert_eq!(
+                master.world().get::<Pickable>(entity),
+                Some(&Pickable::default())
+            );
+        }
     }
 }

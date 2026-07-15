@@ -241,7 +241,7 @@ fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
             },
             BackgroundColor(INPUT_BG),
             BorderColor::all(theme::STROKE),
-            Pickable::IGNORE,
+            Pickable::default(),
             ChildOf(chat_box),
         ))
         .id();
@@ -279,10 +279,7 @@ fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
                 max_characters: Some(CHAT_MAX_CHARS),
                 ..default()
             },
-            // Focus is driven by Enter/Escape (see `chat_input_control`), not by
-            // clicking — `Pickable::IGNORE` stops a pointer press from focusing the
-            // field, so a click can't trap the cursor with no way out.
-            Pickable::IGNORE,
+            Pickable::default(),
             TextFont {
                 font: font.clone().into(),
                 font_size: 13.0.into(),
@@ -424,8 +421,6 @@ fn append_incoming_chat(
 ///   (`parse_party_slash`) is queued as `PartySlashSubmitted`; otherwise it is sent as
 ///   a normal chat message.
 ///
-/// The input has `Pickable::IGNORE`, so Enter is the only way it gains focus — clicking
-/// can't strand the cursor in the field.
 fn chat_input_control(
     keys: Res<ButtonInput<KeyCode>>,
     mut chat_input: Query<(Entity, &mut EditableText), With<ChatInput>>,

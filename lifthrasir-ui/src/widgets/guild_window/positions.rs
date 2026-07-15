@@ -435,6 +435,7 @@ fn position_row(row: PositionRow) -> impl Scene {
             ),
             (
                 PositionNameField
+                Pickable
                 template_value(edit_visibility)
                 template_value(editable)
                 TextFont { font: FontSourceTemplate::Handle(theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
@@ -709,6 +710,14 @@ mod tests {
             .collect();
         assert!(saves.contains(&(2, Visibility::Inherited)));
         assert!(saves.contains(&(7, Visibility::Hidden)));
+
+        for pickable in app
+            .world_mut()
+            .query_filtered::<&Pickable, With<PositionNameField>>()
+            .iter(app.world())
+        {
+            assert_eq!(pickable, &Pickable::default());
+        }
 
         let texts: Vec<_> = app
             .world_mut()

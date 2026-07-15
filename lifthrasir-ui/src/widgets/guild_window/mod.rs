@@ -8,7 +8,7 @@ pub mod scene;
 pub(crate) use members::request_invite;
 
 use bevy::ecs::system::SystemParam;
-use bevy::input_focus::{FocusCause, InputFocus};
+use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui::InteractionDisabled;
@@ -165,6 +165,7 @@ type GuildTextFieldFilter = Or<(
 type GuildTextFields<'w, 's> = Query<'w, 's, Entity, GuildTextFieldFilter>;
 type GuildEditableTextFields<'w, 's> =
     Query<'w, 's, &'static mut EditableText, GuildTextFieldFilter>;
+type GuildModePanel<'w, 's, F> = Query<'w, 's, (&'static mut Visibility, &'static mut Node), F>;
 
 pub struct GuildWindowPlugin;
 
@@ -349,10 +350,8 @@ fn sync_management_controls(
 
 fn toggle_guild_window(
     player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,
-    guild: Res<GuildState>,
     ui_focus: Res<UiFocus>,
     mut root: Query<&mut Visibility, With<GuildWindowRoot>>,
-    create_field: Query<Entity, With<GuildCreateNameField>>,
     owned_fields: GuildTextFields,
     mut input_focus: ResMut<InputFocus>,
 ) {
@@ -370,18 +369,17 @@ fn toggle_guild_window(
             return;
         }
         *visibility = Visibility::Visible;
-        if !guild.in_guild() {
-            if let Ok(field) = create_field.single() {
-                input_focus.set(field, FocusCause::Navigated);
-            }
-        }
         return;
     }
     *visibility = Visibility::Hidden;
     clear_guild_focus(&mut input_focus, &owned_fields);
 }
 
-fn clear_guild_focus(input_focus: &mut InputFocus, fields: &GuildTextFields) {
+/// Takes the `ResMut` wrapper (not `&mut InputFocus`) so the no-op path never
+/// deref-muts the resource: this runs every frame via
+/// `release_hidden_guild_focus`, and an unconditional deref-mut would flag
+/// `InputFocus` as changed each frame for every `is_changed` consumer.
+fn clear_guild_focus(input_focus: &mut ResMut<InputFocus>, fields: &GuildTextFields) {
     if input_focus
         .get()
         .is_some_and(|focused| fields.contains(focused))
@@ -530,22 +528,44 @@ fn guild_error_text(error: GuildErrorKind) -> &'static str {
 
 fn sync_membership_mode(
     guild: Res<GuildState>,
-    mut create: Query<&mut Visibility, (With<GuildUnguildedPanel>, Without<GuildGuildedPanel>)>,
-    mut guilded: Query<&mut Visibility, (With<GuildGuildedPanel>, Without<GuildUnguildedPanel>)>,
+    mut create: GuildModePanel<(
+        With<GuildUnguildedPanel>,
+        Without<GuildGuildedPanel>,
+        Without<GuildWindowRoot>,
+    )>,
+    mut guilded: GuildModePanel<(
+        With<GuildGuildedPanel>,
+        Without<GuildUnguildedPanel>,
+        Without<GuildWindowRoot>,
+    )>,
+    mut root: Query<&mut Node, With<GuildWindowRoot>>,
 ) {
-    let Ok(mut create) = create.single_mut() else {
+    let Ok((mut create_visibility, mut create_node)) = create.single_mut() else {
         return;
     };
-    let Ok(mut guilded) = guilded.single_mut() else {
+    let Ok((mut guilded_visibility, mut guilded_node)) = guilded.single_mut() else {
         return;
     };
-    if guild.in_guild() {
-        *create = Visibility::Hidden;
-        *guilded = Visibility::Inherited;
+    let Ok(mut root) = root.single_mut() else {
+        return;
+    };
+    let in_guild = guild.in_guild();
+    if in_guild {
+        *create_visibility = Visibility::Hidden;
+        *guilded_visibility = Visibility::Inherited;
+        create_node.display = Display::None;
+        guilded_node.display = Display::Flex;
     } else {
-        *create = Visibility::Inherited;
-        *guilded = Visibility::Hidden;
+        *create_visibility = Visibility::Inherited;
+        *guilded_visibility = Visibility::Hidden;
+        create_node.display = Display::Flex;
+        guilded_node.display = Display::None;
     }
+    root.width = px(if in_guild {
+        scene::GUILD_WINDOW_WIDTH
+    } else {
+        scene::CREATE_MODAL_WIDTH
+    });
 }
 
 #[allow(clippy::type_complexity)]
@@ -601,7 +621,7 @@ fn set_single_text<F: bevy::ecs::query::QueryFilter>(
 fn sync_tabs(
     ui: Res<GuildUi>,
     mut members: Query<
-        &mut Visibility,
+        (&mut Visibility, &mut Node),
         (
             With<GuildMembersPanel>,
             Without<GuildPositionsPanel>,
@@ -609,7 +629,7 @@ fn sync_tabs(
         ),
     >,
     mut positions: Query<
-        &mut Visibility,
+        (&mut Visibility, &mut Node),
         (
             With<GuildPositionsPanel>,
             Without<GuildMembersPanel>,
@@ -617,7 +637,7 @@ fn sync_tabs(
         ),
     >,
     mut notice: Query<
-        &mut Visibility,
+        (&mut Visibility, &mut Node),
         (
             With<GuildNoticePanel>,
             Without<GuildMembersPanel>,
@@ -634,20 +654,38 @@ fn sync_tabs(
     let Ok(mut notice) = notice.single_mut() else {
         return;
     };
-    *members = if ui.selected_tab == GuildTab::Members {
+    let members_active = ui.selected_tab == GuildTab::Members;
+    *members.0 = if members_active {
         Visibility::Inherited
     } else {
         Visibility::Hidden
     };
-    *positions = if ui.selected_tab == GuildTab::Positions {
+    members.1.display = if members_active {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    let positions_active = ui.selected_tab == GuildTab::Positions;
+    *positions.0 = if positions_active {
         Visibility::Inherited
     } else {
         Visibility::Hidden
     };
-    *notice = if ui.selected_tab == GuildTab::Notice {
+    positions.1.display = if positions_active {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    let notice_active = ui.selected_tab == GuildTab::Notice;
+    *notice.0 = if notice_active {
         Visibility::Inherited
     } else {
         Visibility::Hidden
+    };
+    notice.1.display = if notice_active {
+        Display::Flex
+    } else {
+        Display::None
     };
 }
 
@@ -794,8 +832,8 @@ mod tests {
     }
 
     #[test]
-    fn passive_primary_window_focus_opens_and_focuses_the_unguilded_create_field() {
-        let (mut app, field, player) = toggle_app(Visibility::Hidden);
+    fn opening_unguilded_window_does_not_claim_text_focus() {
+        let (mut app, _, player) = toggle_app(Visibility::Hidden);
         let primary_window = app
             .world_mut()
             .spawn((Window::default(), PrimaryWindow))
@@ -807,7 +845,10 @@ mod tests {
         press_guild(&mut app, player);
         app.update();
 
-        assert_eq!(app.world().resource::<InputFocus>().get(), Some(field));
+        assert_eq!(
+            app.world().resource::<InputFocus>().get(),
+            Some(primary_window)
+        );
         let visibility = app
             .world_mut()
             .query_filtered::<&Visibility, With<GuildWindowRoot>>()
@@ -829,6 +870,34 @@ mod tests {
 
         assert_eq!(app.world().resource::<InputFocus>().get(), Some(unrelated));
         assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Hidden);
+    }
+
+    #[test]
+    fn only_the_active_guild_tab_participates_in_layout() {
+        let mut app = App::new();
+        app.init_resource::<GuildUi>();
+        app.world_mut()
+            .spawn((GuildMembersPanel, Node::default(), Visibility::Inherited));
+        app.world_mut()
+            .spawn((GuildPositionsPanel, Node::default(), Visibility::Hidden));
+        app.world_mut()
+            .spawn((GuildNoticePanel, Node::default(), Visibility::Hidden));
+        app.add_systems(Update, sync_tabs);
+
+        app.update();
+        assert_eq!(node::<GuildMembersPanel>(&mut app).display, Display::Flex);
+        assert_eq!(node::<GuildPositionsPanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildNoticePanel>(&mut app).display, Display::None);
+
+        app.world_mut().resource_mut::<GuildUi>().selected_tab = GuildTab::Notice;
+        app.update();
+        assert_eq!(node::<GuildMembersPanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildPositionsPanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildNoticePanel>(&mut app).display, Display::Flex);
+        assert_eq!(
+            visibility::<GuildNoticePanel>(&mut app),
+            Visibility::Inherited
+        );
     }
 
     #[test]
@@ -934,9 +1003,10 @@ mod tests {
             .insert_resource(ZoneSessionGeneration(9))
             .add_plugins(game_engine::domain::guild::GuildPlugin);
         app.world_mut()
-            .spawn((GuildUnguildedPanel, Visibility::Hidden));
+            .spawn((GuildUnguildedPanel, Visibility::Hidden, Node::default()));
         app.world_mut()
-            .spawn((GuildGuildedPanel, Visibility::Inherited));
+            .spawn((GuildGuildedPanel, Visibility::Inherited, Node::default()));
+        app.world_mut().spawn((GuildWindowRoot, Node::default()));
         app.world_mut().spawn((GuildNameText, Text::default()));
         app.world_mut().spawn((GuildMasterText, Text::default()));
         app.world_mut().spawn((GuildNoticeText, Text::default()));
@@ -978,6 +1048,12 @@ mod tests {
         assert_eq!(
             visibility::<GuildGuildedPanel>(&mut app),
             Visibility::Hidden
+        );
+        assert_eq!(node::<GuildUnguildedPanel>(&mut app).display, Display::Flex);
+        assert_eq!(node::<GuildGuildedPanel>(&mut app).display, Display::None);
+        assert_eq!(
+            node::<GuildWindowRoot>(&mut app).width,
+            px(scene::CREATE_MODAL_WIDTH)
         );
 
         app.world_mut().write_message(GuildIngress {
@@ -1024,6 +1100,12 @@ mod tests {
             visibility::<GuildGuildedPanel>(&mut app),
             Visibility::Inherited
         );
+        assert_eq!(node::<GuildUnguildedPanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildGuildedPanel>(&mut app).display, Display::Flex);
+        assert_eq!(
+            node::<GuildWindowRoot>(&mut app).width,
+            px(scene::GUILD_WINDOW_WIDTH)
+        );
         assert_eq!(marked_text::<GuildNameText>(&mut app), "Vikings");
         assert_eq!(
             marked_text::<GuildMasterText>(&mut app),
@@ -1032,6 +1114,14 @@ mod tests {
         assert_eq!(marked_text::<GuildNoticeText>(&mut app), "Welcome");
         assert_eq!(marked_text::<GuildMemberCountText>(&mut app), "1 member");
         assert_eq!(marked_text::<GuildOnlineCountText>(&mut app), "0 online");
+    }
+
+    fn node<M: Component>(app: &mut App) -> Node {
+        app.world_mut()
+            .query_filtered::<&Node, With<M>>()
+            .single(app.world())
+            .unwrap()
+            .clone()
     }
 
     #[test]

@@ -13,7 +13,8 @@ use super::*;
 
 const WINDOW_LEFT: f32 = 250.0;
 const WINDOW_TOP: f32 = 70.0;
-const WINDOW_WIDTH: f32 = 690.0;
+pub(crate) const CREATE_MODAL_WIDTH: f32 = 360.0;
+pub(crate) const GUILD_WINDOW_WIDTH: f32 = 690.0;
 
 pub fn build(commands: &mut Commands, parent: Entity) {
     commands.spawn_scene(window()).insert(ChildOf(parent));
@@ -26,7 +27,7 @@ fn window() -> impl Scene {
             position_type: PositionType::Absolute,
             left: px(WINDOW_LEFT),
             top: px(WINDOW_TOP),
-            width: px(WINDOW_WIDTH),
+            width: px(CREATE_MODAL_WIDTH),
             max_height: px(650),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Stretch,
@@ -40,7 +41,11 @@ fn window() -> impl Scene {
         Children [
             titlebar::<GuildTitlebar, GuildWindowRoot>("members", "Guild"),
             (
-                Node { padding: {UiRect::all(px(16))} }
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Stretch,
+                    padding: {UiRect::all(px(16))},
+                }
                 ignore_picking()
                 Children [ create_panel(), guild_panel() ]
             ),
@@ -56,7 +61,6 @@ fn create_panel() -> impl Scene {
     bsn! {
         GuildUnguildedPanel
         Node { flex_direction: FlexDirection::Column, row_gap: px(12) }
-        ignore_picking()
         Children [
             title_text("Create a Guild".to_string(), 20.0, theme::DISPLAY_GOLD),
             chrome_text("Choose a guild name to establish your banner.".to_string(), 12.0, theme::TEXT_DIM),
@@ -71,9 +75,11 @@ fn create_panel() -> impl Scene {
                 }
                 BackgroundColor(theme::FIELD)
                 BorderColor::all(theme::STROKE)
+                Pickable
                 Children [
                     (
                         GuildCreateNameField
+                        Pickable
                         template_value(editable)
                         TextFont {
                             font: FontSourceTemplate::Handle(theme::FONT_BODY),
@@ -112,7 +118,7 @@ fn create_panel() -> impl Scene {
 fn guild_panel() -> impl Scene {
     bsn! {
         GuildGuildedPanel
-        Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
+        Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10), display: Display::None }
         Visibility::Hidden
         ignore_picking()
         Children [ header(), tabs(), content(), leave_control(), feedback_text() ]
@@ -236,54 +242,70 @@ fn tabs() -> impl Scene {
 
 fn content() -> impl Scene {
     bsn! {
-        Node { height: px(350), flex_direction: FlexDirection::Column }
+        Node { width: percent(100), height: px(350), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch }
         ignore_picking()
         Children [
             (
                 GuildMembersPanel
-                Node { height: percent(100), position_type: PositionType::Relative }
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Stretch,
+                    column_gap: px(4),
+                }
                 ignore_picking()
                 Children [
                     (
                         #members_scroll
                         Node {
-                            position_type: PositionType::Absolute,
-                            left: px(0), top: px(0), right: px(0), bottom: px(0),
+                            flex_grow: 1.0,
+                            min_width: px(0),
+                            height: percent(100),
                             overflow: {Overflow::scroll_y()},
                             flex_direction: FlexDirection::Column,
                             row_gap: px(5),
-                            padding: {UiRect::right(px(12))},
+                            padding: {UiRect::right(px(6))},
                         }
                         ScrollArea
                         Pickable
                         Children [
                             invite_controls(),
                             roster_heading(),
-                            (GuildMembersList Node { flex_direction: FlexDirection::Column, row_gap: px(5) } ignore_picking()),
+                            (GuildMembersList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(5) } ignore_picking()),
                         ]
                     ),
                     @FeathersScrollbar { @target: #members_scroll, @orientation: {ControlOrientation::Vertical} }
-                    Node { position_type: PositionType::Absolute, right: px(1), top: px(2), bottom: px(2), width: px(6) }
+                    Node { width: px(6), height: percent(100) }
                 ]
             ),
             (
                 GuildPositionsPanel
                 Node {
+                    width: percent(100),
                     height: percent(100),
+                    display: Display::None,
                     overflow: {Overflow::scroll_y()},
                     flex_direction: FlexDirection::Column,
                     padding: {UiRect::vertical(px(10))},
                 }
                 Visibility::Hidden
                 Pickable
-                Children [ (GuildPositionsList Node { flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
+                Children [ (GuildPositionsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
             ),
             (
                 GuildNoticePanel
-                Node { height: percent(100), padding: {UiRect::vertical(px(10))} }
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    display: Display::None,
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Stretch,
+                    padding: {UiRect::vertical(px(10))},
+                }
                 Visibility::Hidden
                 ignore_picking()
-                Children [ (GuildNoticeContent Node { flex_direction: FlexDirection::Column, row_gap: px(10) } ignore_picking()) ]
+                Children [ (GuildNoticeContent Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(10) } ignore_picking()) ]
             ),
         ]
     }
@@ -306,6 +328,7 @@ fn invite_controls() -> impl Scene {
         Children [
             (
                 GuildInviteNameField
+                Pickable
                 template_value(editable)
                 TextFont {
                     font: FontSourceTemplate::Handle(theme::FONT_BODY),
@@ -397,6 +420,7 @@ fn member_row(row: MemberRow) -> impl Scene {
                 Children [
                     (
                         template_value(super::members::GuildExpelReasonField(row.char_id))
+                        Pickable
                         template_value(EditableText::new(""))
                         TextFont {
                             font: FontSourceTemplate::Handle(theme::FONT_BODY),
@@ -496,6 +520,48 @@ mod tests {
     }
 
     #[test]
+    fn create_view_is_compact_and_name_fields_are_click_focusable() {
+        let mut app = app();
+        app.add_plugins(crate::focus::UiFocusMirrorPlugin);
+        app.world_mut().spawn_scene(window()).unwrap();
+
+        let root = app
+            .world_mut()
+            .query_filtered::<&Node, With<GuildWindowRoot>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(root.width, px(CREATE_MODAL_WIDTH));
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<&Node, With<GuildGuildedPanel>>()
+                .single(app.world())
+                .unwrap()
+                .display,
+            Display::None
+        );
+        for entity in [
+            app.world_mut()
+                .query_filtered::<Entity, With<GuildCreateNameField>>()
+                .single(app.world())
+                .unwrap(),
+            app.world_mut()
+                .query_filtered::<Entity, With<GuildInviteNameField>>()
+                .single(app.world())
+                .unwrap(),
+        ] {
+            assert_eq!(
+                app.world().get::<Pickable>(entity),
+                Some(&Pickable::default())
+            );
+            assert_eq!(
+                app.world()
+                    .get::<bevy::input_focus::tab_navigation::TabIndex>(entity),
+                Some(&bevy::input_focus::tab_navigation::TabIndex(0))
+            );
+        }
+    }
+
+    #[test]
     fn roster_row_renders_online_map_position_job_level_and_resources() {
         let mut app = app();
         app.world_mut()
@@ -521,6 +587,15 @@ mod tests {
         assert!(texts.contains(&"Master · Rune Knight · Lv 99".to_string()));
         assert!(texts.contains(&"Online · prontera".to_string()));
         assert!(texts.contains(&"HP 90/100  SP 40/50  AP 8/10".to_string()));
+        let reason_field = app
+            .world_mut()
+            .query_filtered::<Entity, With<super::members::GuildExpelReasonField>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(
+            app.world().get::<Pickable>(reason_field),
+            Some(&Pickable::default())
+        );
     }
 
     #[test]
