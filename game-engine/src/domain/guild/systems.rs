@@ -2,23 +2,29 @@ use super::{plugin::GuildSessionGate, resource::GuildState};
 use bevy::prelude::*;
 use net_contract::{
     events::{GuildIngress, GuildIngressPayload, ZoneDisconnected},
-    state::ZoneSessionGeneration,
+    state::{ZoneSession, ZoneSessionGeneration},
 };
 
 pub(super) fn reset_guild_session(
     generation: Res<ZoneSessionGeneration>,
+    zone_session: Option<Res<ZoneSession>>,
     mut disconnected: MessageReader<ZoneDisconnected>,
     mut gate: ResMut<GuildSessionGate>,
     mut state: ResMut<GuildState>,
 ) {
-    if gate.generation != *generation {
+    let char_id = zone_session.as_deref().map_or(0, |session| session.char_id);
+    let generation_changed = gate.generation != *generation;
+    let character_changed = gate.char_id != char_id;
+    let disconnected = disconnected.read().count() != 0;
+    if generation_changed || character_changed {
         gate.generation = *generation;
-        gate.blocked = false;
+        gate.char_id = char_id;
+        gate.blocked = character_changed && !generation_changed;
         *state = GuildState::default();
     }
 
-    if disconnected.read().count() != 0 {
-        gate.blocked = true;
+    if disconnected {
+        gate.blocked = !generation_changed;
         *state = GuildState::default();
     }
 }
@@ -96,7 +102,7 @@ mod tests {
     use net_contract::{
         dto::{GuildActionResult, GuildErrorKind, GuildInfo, GuildMemberInfo, GuildPositionInfo},
         events::{GuildIngress, GuildIngressPayload, ZoneDisconnected},
-        state::ZoneSessionGeneration,
+        state::{ZoneSession, ZoneSessionGeneration},
     };
 
     fn member(char_id: u32, position_index: u32) -> GuildMemberInfo {
@@ -577,6 +583,47 @@ mod tests {
     }
 
     #[test]
+    fn same_generation_character_change_blocks_ambiguous_ingress_until_a_fresh_epoch() {
+        let mut app = app(1);
+        app.world_mut().insert_resource(ZoneSession {
+            char_id: 42,
+            ..default()
+        });
+        app.update();
+        ingress(
+            &mut app,
+            1,
+            GuildIngressPayload::Info(info(7, member(42, 0))),
+        );
+        app.update();
+        assert!(app.world().resource::<GuildState>().in_guild());
+
+        app.world_mut().resource_mut::<ZoneSession>().char_id = 43;
+        ingress(
+            &mut app,
+            1,
+            GuildIngressPayload::Info(info(8, member(42, 0))),
+        );
+        app.update();
+        assert!(!app.world().resource::<GuildState>().in_guild());
+
+        *app.world_mut().resource_mut::<ZoneSessionGeneration>() = ZoneSessionGeneration(2);
+        ingress(
+            &mut app,
+            2,
+            GuildIngressPayload::Info(info(9, member(43, 0))),
+        );
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<GuildState>()
+                .info()
+                .map(|info| info.guild_id),
+            Some(9)
+        );
+    }
+
+    #[test]
     fn disconnect_clears_and_blocks_same_generation_ingress() {
         let mut app = app(1);
         ingress(
@@ -636,6 +683,36 @@ mod tests {
     }
 
     #[test]
+    fn connection_replacement_unblocks_when_disconnect_and_fresh_epoch_coincide() {
+        let mut app = app(1);
+        ingress(
+            &mut app,
+            1,
+            GuildIngressPayload::Info(info(7, member(42, 0))),
+        );
+        app.update();
+
+        app.world_mut().write_message(ZoneDisconnected {
+            reason: "replaced".into(),
+        });
+        *app.world_mut().resource_mut::<ZoneSessionGeneration>() = ZoneSessionGeneration(2);
+        ingress(
+            &mut app,
+            2,
+            GuildIngressPayload::Info(info(9, member(43, 0))),
+        );
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .resource::<GuildState>()
+                .info()
+                .map(|info| info.guild_id),
+            Some(9)
+        );
+    }
+
+    #[test]
     fn character_selection_clears_and_blocks_same_generation_ingress() {
         let mut app = App::new();
         app.add_plugins(StatesPlugin)
@@ -663,6 +740,46 @@ mod tests {
             1,
             GuildIngressPayload::Info(info(8, member(42, 0))),
         );
+        app.update();
+
+        assert!(!app.world().resource::<GuildState>().in_guild());
+    }
+
+    #[test]
+    fn expelled_target_stays_stale_until_character_selection_resets_state() {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin)
+            .init_state::<GameState>()
+            .add_message::<GuildIngress>()
+            .add_message::<ZoneDisconnected>()
+            .insert_resource(ZoneSessionGeneration(1))
+            .add_plugins(GuildPlugin);
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::InGame);
+        app.update();
+
+        ingress(
+            &mut app,
+            1,
+            GuildIngressPayload::Info(info(7, member(42, 0))),
+        );
+        app.update();
+        ingress(
+            &mut app,
+            1,
+            GuildIngressPayload::ActionResult(GuildActionResult {
+                action: "expel".into(),
+                success: true,
+                error: GuildErrorKind::None,
+            }),
+        );
+        app.update();
+        assert!(app.world().resource::<GuildState>().in_guild());
+
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::CharacterSelection);
         app.update();
 
         assert!(!app.world().resource::<GuildState>().in_guild());

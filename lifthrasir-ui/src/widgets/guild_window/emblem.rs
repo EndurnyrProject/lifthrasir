@@ -14,7 +14,7 @@ use net_contract::{
 };
 
 use super::{
-    GuildHeaderEmblemFallback, GuildHeaderEmblemImage, GuildUi, GuildWindowRoot,
+    GuildHeaderEmblemFallback, GuildHeaderEmblemImage, GuildUi, GuildUiSession, GuildWindowRoot,
     PendingGuildMutation,
 };
 
@@ -230,10 +230,15 @@ pub(crate) fn queue_current_guild_emblem(
 
 pub(crate) fn receive_emblem_data(
     generation: Res<ZoneSessionGeneration>,
+    session: Option<Res<GuildUiSession>>,
     mut ingress: MessageReader<GuildIngress>,
     mut images: ResMut<GuildEmblemImages>,
     mut assets: ResMut<Assets<Image>>,
 ) {
+    if session.as_deref().is_some_and(|session| session.blocked) {
+        ingress.clear();
+        return;
+    }
     for event in ingress.read() {
         if event.generation != *generation {
             continue;
@@ -344,12 +349,16 @@ pub(crate) fn invalidate_picker_when_hidden(
 
 pub(crate) fn reset_emblems(
     generation: Res<ZoneSessionGeneration>,
-    mut disconnected: MessageReader<ZoneDisconnected>,
+    mut disconnected: Option<MessageReader<ZoneDisconnected>>,
+    session: Option<Res<GuildUiSession>>,
     mut images: ResMut<GuildEmblemImages>,
     mut assets: ResMut<Assets<Image>>,
 ) {
-    let disconnected = disconnected.read().count() != 0;
-    if images.generation == *generation && !disconnected {
+    let disconnected = disconnected
+        .as_mut()
+        .is_some_and(|reader| reader.read().count() != 0);
+    let session_reset = session.as_deref().is_some_and(|session| session.reset);
+    if images.generation == *generation && !disconnected && !session_reset {
         return;
     }
     images.clear(&mut assets);

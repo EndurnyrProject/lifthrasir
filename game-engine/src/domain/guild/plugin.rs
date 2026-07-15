@@ -13,6 +13,7 @@ pub enum GuildSystems {
 #[derive(Resource, Default)]
 pub(super) struct GuildSessionGate {
     pub generation: ZoneSessionGeneration,
+    pub char_id: u32,
     pub blocked: bool,
 }
 

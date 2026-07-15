@@ -88,6 +88,7 @@ fn guild_emblem_fetch_body(command: &GuildEmblemFetchRequested) -> Body {
     schedule = Last,
     config(run_if = not(client_connected))
 )]
+#[allow(clippy::too_many_arguments)]
 pub fn clear_guild_commands_while_disconnected(
     mut creates: ResMut<Messages<GuildCreateRequested>>,
     mut invites: ResMut<Messages<GuildInviteRequested>>,
@@ -360,6 +361,10 @@ mod tests {
                 send_guild_emblem_fetch,
             ),
         );
+        app.add_systems(
+            Last,
+            clear_guild_commands_while_disconnected.run_if(not(client_connected)),
+        );
         app
     }
 
@@ -572,15 +577,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn out_of_phase_systems_consume_all_guild_commands() {
-        let mut app = app_with_guild_senders();
-        write_all_commands(&mut app);
-
-        app.update();
-        app.world_mut().resource_mut::<QuicZoneState>().phase = ZonePhase::Playing;
-        app.update();
-
+    fn assert_all_commands_empty(app: &App) {
         assert!(app
             .world()
             .resource::<Messages<GuildCreateRequested>>()
@@ -624,6 +621,18 @@ mod tests {
     }
 
     #[test]
+    fn disconnected_commands_are_drained_before_playing_reconnect() {
+        let mut app = app_with_guild_senders();
+        write_all_commands(&mut app);
+
+        app.update();
+        app.world_mut().resource_mut::<QuicZoneState>().phase = ZonePhase::Playing;
+        app.update();
+
+        assert_all_commands_empty(&app);
+    }
+
+    #[test]
     fn commands_queued_while_disconnected_are_consumed() {
         let mut app = app_with_guild_messages();
         app.add_systems(
@@ -635,45 +644,6 @@ mod tests {
 
         app.update();
 
-        assert!(app
-            .world()
-            .resource::<Messages<GuildCreateRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildInviteRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildInviteResponded>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildLeaveRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildExpelRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildPositionEditRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildMemberPositionRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildNoticeEditRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildEmblemUploadRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildEmblemFetchRequested>>()
-            .is_empty());
+        assert_all_commands_empty(&app);
     }
 }

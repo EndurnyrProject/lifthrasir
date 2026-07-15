@@ -6,10 +6,10 @@ use game_engine::presentation::ui::events::{
 };
 use net_contract::commands::{GuildExpelRequested, GuildInviteResponded, GuildLeaveRequested};
 use net_contract::dto::GuildInviteInfo;
-use net_contract::events::{GuildIngress, GuildIngressPayload};
+use net_contract::events::{GuildIngress, GuildIngressPayload, ZoneDisconnected};
 use net_contract::state::ZoneSessionGeneration;
 
-use super::{GuildMutationContext, GuildUi, PendingGuildMutation};
+use super::{GuildMutationContext, GuildUi, GuildUiSession, PendingGuildMutation};
 use crate::widgets::system_dialog::SystemDialogRoot;
 
 const INVITE_TTL_SECS: f32 = 30.0;
@@ -98,11 +98,19 @@ impl PendingGuildInvite {
 
 pub fn reset_stale_invite(
     generation: Res<ZoneSessionGeneration>,
+    mut disconnected: Option<MessageReader<ZoneDisconnected>>,
+    session: Option<Res<GuildUiSession>>,
     mut pending: ResMut<PendingGuildInvite>,
     roots: Query<(Entity, &SystemDialogRoot)>,
     mut commands: Commands,
 ) {
-    if !pending.is_pending() || pending.generation == *generation {
+    let disconnected = disconnected
+        .as_mut()
+        .is_some_and(|reader| reader.read().count() != 0);
+    let session_reset = session.as_deref().is_some_and(|session| session.reset);
+    if !pending.is_pending()
+        || (!session_reset && pending.generation == *generation && !disconnected)
+    {
         return;
     }
     let old_correlation = pending.correlation;
@@ -117,8 +125,13 @@ pub fn reset_stale_invite(
 pub fn queue_incoming_invite(
     mut ingress: MessageReader<GuildIngress>,
     generation: Res<ZoneSessionGeneration>,
+    session: Option<Res<GuildUiSession>>,
     mut pending: ResMut<PendingGuildInvite>,
 ) {
+    if session.as_deref().is_some_and(|session| session.blocked) {
+        ingress.clear();
+        return;
+    }
     let mut newest = None;
     for event in ingress.read() {
         if event.generation != *generation {
@@ -396,11 +409,19 @@ pub(crate) fn claim_confirmation_choice(
 
 pub(crate) fn reset_stale_confirmation(
     generation: Res<ZoneSessionGeneration>,
+    mut disconnected: Option<MessageReader<ZoneDisconnected>>,
+    session: Option<Res<GuildUiSession>>,
     mut pending: ResMut<PendingGuildConfirmation>,
     roots: Query<(Entity, &SystemDialogRoot)>,
     mut commands: Commands,
 ) {
-    if !pending.is_pending() || pending.generation == *generation {
+    let disconnected = disconnected
+        .as_mut()
+        .is_some_and(|reader| reader.read().count() != 0);
+    let session_reset = session.as_deref().is_some_and(|session| session.reset);
+    if !pending.is_pending()
+        || (!session_reset && pending.generation == *generation && !disconnected)
+    {
         return;
     }
     let kind = pending.kind;
@@ -787,6 +808,83 @@ mod tests {
         assert_eq!(pending.invite.as_ref().unwrap().guild_id, 8);
         assert_ne!(pending.correlation, old_token);
         assert!(app.world().get_entity(old_dialog).is_err());
+    }
+
+    #[test]
+    fn disconnect_clears_invite_and_only_its_matching_dialog() {
+        let mut app = App::new();
+        app.add_message::<ZoneDisconnected>()
+            .insert_resource(ZoneSessionGeneration(9))
+            .init_resource::<PendingGuildInvite>()
+            .add_systems(Update, reset_stale_invite);
+        let token = {
+            let mut pending = app.world_mut().resource_mut::<PendingGuildInvite>();
+            pending.set(invite(), ZoneSessionGeneration(9));
+            pending.correlation
+        };
+        let guild_dialog = app
+            .world_mut()
+            .spawn(SystemDialogRoot::new(
+                None,
+                SystemDialogKind::GuildInvite,
+                token,
+            ))
+            .id();
+        let unrelated_dialog = app
+            .world_mut()
+            .spawn(SystemDialogRoot::new(
+                None,
+                SystemDialogKind::Generic,
+                token,
+            ))
+            .id();
+        app.world_mut().write_message(ZoneDisconnected {
+            reason: "closed".into(),
+        });
+
+        app.update();
+
+        assert!(!app.world().resource::<PendingGuildInvite>().is_pending());
+        assert!(app.world().get_entity(guild_dialog).is_err());
+        assert!(app.world().get_entity(unrelated_dialog).is_ok());
+    }
+
+    #[test]
+    fn disconnect_clears_confirmation_and_only_its_matching_dialog() {
+        let mut app = App::new();
+        app.add_message::<ZoneDisconnected>()
+            .insert_resource(ZoneSessionGeneration(9))
+            .init_resource::<PendingGuildConfirmation>()
+            .add_systems(Update, reset_stale_confirmation);
+        let (kind, token) = {
+            let mut pending = app.world_mut().resource_mut::<PendingGuildConfirmation>();
+            pending.leave(ZoneSessionGeneration(9), false);
+            (pending.kind.unwrap(), pending.correlation)
+        };
+        let guild_dialog = app
+            .world_mut()
+            .spawn(SystemDialogRoot::new(None, kind, token))
+            .id();
+        let unrelated_dialog = app
+            .world_mut()
+            .spawn(SystemDialogRoot::new(
+                None,
+                SystemDialogKind::Generic,
+                token,
+            ))
+            .id();
+        app.world_mut().write_message(ZoneDisconnected {
+            reason: "closed".into(),
+        });
+
+        app.update();
+
+        assert!(!app
+            .world()
+            .resource::<PendingGuildConfirmation>()
+            .is_pending());
+        assert!(app.world().get_entity(guild_dialog).is_err());
+        assert!(app.world().get_entity(unrelated_dialog).is_ok());
     }
 
     #[test]

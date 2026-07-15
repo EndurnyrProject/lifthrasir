@@ -22,7 +22,7 @@ use game_engine::infrastructure::job::JobSpriteRegistry;
 use leafwing_input_manager::prelude::ActionState;
 use net_contract::commands::GuildCreateRequested;
 use net_contract::dto::GuildErrorKind;
-use net_contract::events::{GuildIngress, GuildIngressPayload};
+use net_contract::events::{GuildIngress, GuildIngressPayload, ZoneDisconnected};
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};
 
 use crate::theme;
@@ -42,13 +42,21 @@ pub struct PendingGuildMutation {
     pub generation: ZoneSessionGeneration,
 }
 
-#[derive(Resource, Debug, Default)]
+#[derive(Resource, Debug, Default, PartialEq, Eq)]
 pub struct GuildUi {
     pub selected_tab: GuildTab,
     pub create_name: String,
     pub feedback: Option<String>,
     pub pending: Option<PendingGuildMutation>,
     feedback_is_error: bool,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct GuildUiSession {
+    generation: ZoneSessionGeneration,
+    char_id: u32,
+    blocked: bool,
+    reset: bool,
 }
 
 fn request_create(
@@ -146,19 +154,17 @@ pub(crate) struct GuildMutationContext<'w> {
     pub ui: ResMut<'w, GuildUi>,
 }
 
-type GuildTextFields<'w, 's> = Query<
-    'w,
-    's,
-    Entity,
-    Or<(
-        With<GuildCreateNameField>,
-        With<GuildInviteNameField>,
-        With<positions::PositionNameField>,
-        With<notice::GuildNoticeSubjectField>,
-        With<notice::GuildNoticeBodyField>,
-        With<members::GuildExpelReasonField>,
-    )>,
->;
+type GuildTextFieldFilter = Or<(
+    With<GuildCreateNameField>,
+    With<GuildInviteNameField>,
+    With<positions::PositionNameField>,
+    With<notice::GuildNoticeSubjectField>,
+    With<notice::GuildNoticeBodyField>,
+    With<members::GuildExpelReasonField>,
+)>;
+type GuildTextFields<'w, 's> = Query<'w, 's, Entity, GuildTextFieldFilter>;
+type GuildEditableTextFields<'w, 's> =
+    Query<'w, 's, &'static mut EditableText, GuildTextFieldFilter>;
 
 pub struct GuildWindowPlugin;
 
@@ -169,20 +175,20 @@ impl Plugin for GuildWindowPlugin {
             app.add_plugins(FeathersPlugins);
         }
         app.init_resource::<GuildUi>()
+            .init_resource::<GuildUiSession>()
             .init_resource::<emblem::GuildEmblemImages>()
             .init_resource::<dialogs::PendingGuildInvite>()
             .init_resource::<dialogs::PendingGuildConfirmation>()
             .add_systems(
                 Update,
-                dialogs::reset_stale_invite.in_set(GuildSystems::SessionReset),
-            )
-            .add_systems(
-                Update,
-                dialogs::reset_stale_confirmation.in_set(GuildSystems::SessionReset),
-            )
-            .add_systems(
-                Update,
-                emblem::reset_emblems.in_set(GuildSystems::SessionReset),
+                (
+                    reset_guild_ui_session,
+                    dialogs::reset_stale_invite,
+                    dialogs::reset_stale_confirmation,
+                    emblem::reset_emblems,
+                )
+                    .chain()
+                    .in_set(GuildSystems::SessionReset),
             )
             .add_systems(
                 Update,
@@ -250,11 +256,60 @@ impl Plugin for GuildWindowPlugin {
             OnExit(GameState::InGame),
             (
                 clear_guild_focus_on_exit,
+                block_guild_ui_on_exit,
                 dialogs::clear_pending_invite,
                 dialogs::clear_pending_confirmation,
                 emblem::clear_emblems_on_exit,
             ),
         );
+    }
+}
+
+fn reset_guild_ui_session(
+    generation: Res<ZoneSessionGeneration>,
+    zone_session: Option<Res<ZoneSession>>,
+    mut disconnected: Option<MessageReader<ZoneDisconnected>>,
+    mut session: ResMut<GuildUiSession>,
+    mut ui: ResMut<GuildUi>,
+    mut roots: Query<&mut Visibility, With<GuildWindowRoot>>,
+    mut fields: GuildEditableTextFields,
+) {
+    let disconnected = disconnected
+        .as_mut()
+        .is_some_and(|reader| reader.read().count() != 0);
+    let char_id = zone_session.as_deref().map_or(0, |session| session.char_id);
+    let generation_changed = session.generation != *generation;
+    let character_changed = session.char_id != char_id;
+    let reset = generation_changed || character_changed || disconnected;
+    session.reset = reset;
+    if !reset {
+        return;
+    }
+    session.generation = *generation;
+    session.char_id = char_id;
+    session.blocked = !generation_changed && (disconnected || character_changed);
+    *ui = GuildUi::default();
+    for mut visibility in &mut roots {
+        *visibility = Visibility::Hidden;
+    }
+    for mut field in &mut fields {
+        field.clear();
+    }
+}
+
+fn block_guild_ui_on_exit(
+    mut session: ResMut<GuildUiSession>,
+    mut ui: ResMut<GuildUi>,
+    mut roots: Query<&mut Visibility, With<GuildWindowRoot>>,
+    mut fields: GuildEditableTextFields,
+) {
+    session.blocked = true;
+    *ui = GuildUi::default();
+    for mut visibility in &mut roots {
+        *visibility = Visibility::Hidden;
+    }
+    for mut field in &mut fields {
+        field.clear();
     }
 }
 
@@ -395,10 +450,15 @@ pub(crate) fn select_notice(_: On<Activate>, mut ui: ResMut<GuildUi>) {
 fn apply_guild_results(
     mut ingress: MessageReader<GuildIngress>,
     generation: Res<ZoneSessionGeneration>,
+    session: Option<Res<GuildUiSession>>,
     mut ui: ResMut<GuildUi>,
     mut images: ResMut<emblem::GuildEmblemImages>,
     mut assets: ResMut<Assets<Image>>,
 ) {
+    if session.as_deref().is_some_and(|session| session.blocked) {
+        ingress.clear();
+        return;
+    }
     for event in ingress.read() {
         let GuildIngressPayload::ActionResult(result) = &event.payload else {
             continue;
@@ -1223,5 +1283,108 @@ mod tests {
         app.update();
         assert!(!app.world().entity(first).contains::<InteractionDisabled>());
         assert!(!app.world().entity(second).contains::<InteractionDisabled>());
+    }
+
+    #[test]
+    fn same_generation_character_switch_resets_ui_and_blocks_old_session_work() {
+        let mut app = App::new();
+        app.add_message::<ZoneDisconnected>()
+            .insert_resource(ZoneSessionGeneration(4))
+            .insert_resource(ZoneSession {
+                char_id: 42,
+                ..default()
+            })
+            .insert_resource(GuildUi {
+                selected_tab: GuildTab::Notice,
+                create_name: "Character A draft".into(),
+                feedback: Some("pending".into()),
+                pending: Some(PendingGuildMutation {
+                    action: "create",
+                    generation: ZoneSessionGeneration(4),
+                }),
+                ..default()
+            })
+            .insert_resource(GuildUiSession {
+                generation: ZoneSessionGeneration(4),
+                char_id: 42,
+                ..default()
+            });
+        let root = app
+            .world_mut()
+            .spawn((GuildWindowRoot, Visibility::Visible))
+            .id();
+        let create = app
+            .world_mut()
+            .spawn((GuildCreateNameField, EditableText::new("Character A")))
+            .id();
+        let invite = app
+            .world_mut()
+            .spawn((GuildInviteNameField, EditableText::new("Old target")))
+            .id();
+        app.add_systems(Update, reset_guild_ui_session);
+
+        app.world_mut().resource_mut::<ZoneSession>().char_id = 43;
+        app.update();
+
+        assert_eq!(*app.world().resource::<GuildUi>(), GuildUi::default());
+        assert_eq!(
+            *app.world().entity(root).get::<Visibility>().unwrap(),
+            Visibility::Hidden
+        );
+        assert!(app
+            .world()
+            .entity(create)
+            .get::<EditableText>()
+            .unwrap()
+            .value()
+            .to_string()
+            .is_empty());
+        assert!(app
+            .world()
+            .entity(invite)
+            .get::<EditableText>()
+            .unwrap()
+            .value()
+            .to_string()
+            .is_empty());
+        let session = app.world().resource::<GuildUiSession>();
+        assert_eq!(session.char_id, 43);
+        assert!(session.blocked);
+        assert!(session.reset);
+    }
+
+    #[test]
+    fn connection_replacement_disconnect_does_not_block_the_fresh_ui_epoch() {
+        let mut app = App::new();
+        app.add_message::<ZoneDisconnected>()
+            .insert_resource(ZoneSessionGeneration(1))
+            .insert_resource(ZoneSession {
+                char_id: 42,
+                ..default()
+            })
+            .insert_resource(GuildUi {
+                feedback: Some("Character A".into()),
+                ..default()
+            })
+            .insert_resource(GuildUiSession {
+                generation: ZoneSessionGeneration(1),
+                char_id: 42,
+                ..default()
+            });
+        app.add_systems(Update, reset_guild_ui_session);
+
+        *app.world_mut().resource_mut::<ZoneSessionGeneration>() = ZoneSessionGeneration(2);
+        app.world_mut().resource_mut::<ZoneSession>().char_id = 43;
+        app.world_mut().write_message(ZoneDisconnected {
+            reason: "replaced".into(),
+        });
+        app.update();
+
+        assert_eq!(*app.world().resource::<GuildUi>(), GuildUi::default());
+        let session = app.world().resource::<GuildUiSession>();
+        assert_eq!(session.generation, ZoneSessionGeneration(2));
+        assert_eq!(session.char_id, 43);
+        assert!(!session.blocked);
+        assert!(session.reset);
     }
 }

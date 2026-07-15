@@ -22,9 +22,16 @@ use crate::{
 )]
 pub fn zone_drain_guild(
     generation: Res<ZoneSessionGeneration>,
+    mut observed_generation: Local<Option<ZoneSessionGeneration>>,
     mut incoming: MessageReader<IncomingMessage>,
     mut out: MessageWriter<GuildIngress>,
 ) {
+    if observed_generation.is_some_and(|previous| previous != *generation) {
+        incoming.clear();
+        *observed_generation = Some(*generation);
+        return;
+    }
+    *observed_generation = Some(*generation);
     for message in incoming.read() {
         if guild_scope_id(&message.body) == Some(0) {
             warn!("dropping guild packet with zero guild id");
@@ -200,6 +207,77 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    #[test]
+    fn generation_change_discards_unread_old_packets_before_accepting_new_packets() {
+        let mut app = App::new();
+        app.add_message::<IncomingMessage>()
+            .add_message::<GuildIngress>()
+            .insert_resource(ZoneSessionGeneration(1))
+            .add_systems(Update, zone_drain_guild);
+
+        app.world_mut()
+            .resource_mut::<Messages<IncomingMessage>>()
+            .write(IncomingMessage {
+                channel: GAMEPLAY,
+                body: Body::GuildInviteNotify(crate::proto::aesir::net::GuildInviteNotify {
+                    guild_id: 7,
+                    guild_name: "Character A".into(),
+                    inviter_name: "Odin".into(),
+                }),
+            });
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<Messages<GuildIngress>>()
+                .iter_current_update_messages()
+                .count(),
+            1
+        );
+
+        *app.world_mut().resource_mut::<ZoneSessionGeneration>() = ZoneSessionGeneration(2);
+        app.world_mut()
+            .resource_mut::<Messages<IncomingMessage>>()
+            .write(IncomingMessage {
+                channel: GAMEPLAY,
+                body: Body::GuildInviteNotify(crate::proto::aesir::net::GuildInviteNotify {
+                    guild_id: 8,
+                    guild_name: "Character A stale".into(),
+                    inviter_name: "Odin".into(),
+                }),
+            });
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<Messages<GuildIngress>>()
+                .iter_current_update_messages()
+                .count(),
+            0
+        );
+
+        app.world_mut()
+            .resource_mut::<Messages<IncomingMessage>>()
+            .write(IncomingMessage {
+                channel: GAMEPLAY,
+                body: Body::GuildInviteNotify(crate::proto::aesir::net::GuildInviteNotify {
+                    guild_id: 9,
+                    guild_name: "Character B".into(),
+                    inviter_name: "Freya".into(),
+                }),
+            });
+        app.update();
+        let events = app
+            .world()
+            .resource::<Messages<GuildIngress>>()
+            .iter_current_update_messages()
+            .collect::<Vec<_>>();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].generation, ZoneSessionGeneration(2));
+        assert!(matches!(
+            &events[0].payload,
+            GuildIngressPayload::InviteNotified(invite) if invite.guild_id == 9
+        ));
     }
 
     #[test]
