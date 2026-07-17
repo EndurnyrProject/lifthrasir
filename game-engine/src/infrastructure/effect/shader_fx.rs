@@ -3,8 +3,8 @@ use bevy::prelude::*;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap};
 
-/// Point-light pop accompanying a shader-fx entry. Mirrors the hardcoded
-/// `PointLight` + `LightFade` pair `spawn_jupitel_burst` builds today.
+/// Point-light pop accompanying a shader-fx entry. Drives the `PointLight` +
+/// `LightFade` pair `spawn_shader_fx` builds.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ShaderFxLight {
     pub color: (f32, f32, f32),
@@ -19,7 +19,7 @@ pub struct ShaderFxGarnish {
 }
 
 /// One shader-fx catalog entry: the `SkillFxParams` payload plus the optional
-/// light/garnish children `spawn_shader_fx` (Task 4) will build. `shape`'s
+/// light/garnish children `spawn_shader_fx` builds. `shape`'s
 /// meaning is per-`kind`, documented in each kind's wgsl fragment function.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ShaderFxEntry {
@@ -28,6 +28,8 @@ pub struct ShaderFxEntry {
     pub secondary: (f32, f32, f32, f32),
     pub shape: (f32, f32, f32, f32),
     pub duration: f32,
+    /// Uniform world-space scale of the billboard quad.
+    pub scale: f32,
     #[serde(default)]
     pub light: Option<ShaderFxLight>,
     #[serde(default)]
@@ -108,6 +110,7 @@ mod tests {
         assert_eq!(jupitel.secondary, (0.25, 0.55, 3.2, 1.0));
         assert_eq!(jupitel.shape, (2.0, 7.0, 24.0, 0.0));
         assert_eq!(jupitel.duration, 0.7);
+        assert_eq!(jupitel.scale, 26.0);
 
         let light = jupitel.light.as_ref().expect("jupitel_thunder light");
         assert_eq!(light.color, (0.55, 0.65, 1.0));

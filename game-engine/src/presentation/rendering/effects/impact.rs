@@ -1,6 +1,7 @@
-use super::jupitel::{spawn_jupitel_burst, JupitelMaterial};
+use super::skill_fx::{spawn_shader_fx, SkillFxMaterial};
 use super::VfxSystems;
 use crate::domain::effects::PlayProceduralVfx;
+use crate::infrastructure::effect::ShaderFxCatalog;
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
@@ -185,8 +186,8 @@ fn spark_effect() -> EffectAsset {
 }
 
 /// Child bundle spawning the tintable spark garnish under a `FactorRamp` tree
-/// (the same child-spawn slot `spawn_jupitel_burst` uses for its hanabi
-/// burst): one `ParticleEffect` referencing the shared `spark` asset plus an
+/// (the child-spawn slot `spawn_shader_fx` uses for its optional garnish): one
+/// `ParticleEffect` referencing the shared `spark` asset plus an
 /// `EffectProperties` setting `spark_tint` to `tint` for this instance only.
 /// No new `EffectAsset` is built per call.
 pub fn spark_garnish_bundle(assets: &ImpactAssets, tint: Vec4) -> impl Bundle {
@@ -789,10 +790,22 @@ pub fn on_play_procedural_vfx(
     mut commands: Commands,
     mut core_materials: ResMut<Assets<ImpactCoreMaterial>>,
     mut star_materials: ResMut<Assets<StarMaterial>>,
-    mut jupitel_materials: ResMut<Assets<JupitelMaterial>>,
+    mut skill_fx_materials: ResMut<Assets<SkillFxMaterial>>,
+    shader_fx: Option<Res<ShaderFxCatalog>>,
     assets: Res<ImpactAssets>,
 ) {
     for msg in reader.read() {
+        if let Some(entry) = shader_fx.as_ref().and_then(|catalog| catalog.get(&msg.key)) {
+            spawn_shader_fx(
+                &mut commands,
+                &mut skill_fx_materials,
+                &assets,
+                entry,
+                msg.position,
+            );
+            continue;
+        }
+
         match msg.key.as_str() {
             "bash" => spawn_flash_burst(
                 &mut commands,
@@ -803,9 +816,6 @@ pub fn on_play_procedural_vfx(
                 msg.position,
                 bash_style(msg.color),
             ),
-            "jupitel_thunder" => {
-                spawn_jupitel_burst(&mut commands, &mut jupitel_materials, &assets, msg.position)
-            }
             key => {
                 let Some((effect, ttl)) = assets.bursts.get(key) else {
                     debug!("unknown procedural vfx key {key}");
@@ -825,7 +835,6 @@ impl Plugin for ImpactVfxPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<ImpactCoreMaterial>::default())
             .add_plugins(MaterialPlugin::<StarMaterial>::default())
-            .add_plugins(MaterialPlugin::<JupitelMaterial>::default())
             .init_resource::<ImpactAssets>()
             .add_systems(
                 Update,
@@ -833,7 +842,6 @@ impl Plugin for ImpactVfxPlugin {
                     advance_ramps,
                     drive_factor::<ImpactCoreMaterial>,
                     drive_factor::<StarMaterial>,
-                    drive_factor::<JupitelMaterial>,
                     fade_light,
                 )
                     .chain()
@@ -964,7 +972,7 @@ mod tests {
             .init_asset::<EffectAsset>()
             .init_asset::<ImpactCoreMaterial>()
             .init_asset::<StarMaterial>()
-            .init_asset::<JupitelMaterial>()
+            .init_asset::<SkillFxMaterial>()
             .init_resource::<ImpactAssets>()
             .add_message::<PlayProceduralVfx>()
             .add_systems(Update, on_play_procedural_vfx);
@@ -1018,5 +1026,46 @@ mod tests {
         });
         app.update();
         assert_eq!(ramp_count(&mut app), 0, "unknown key spawns no ramp");
+    }
+
+    #[test]
+    fn catalog_key_routes_to_shader_path_not_bursts() {
+        use crate::infrastructure::effect::ShaderFxEntry;
+        use std::collections::BTreeMap;
+
+        let mut app = dispatch_app();
+        // Key collides with a burst preset to prove the catalog lookup wins.
+        let mut entries = BTreeMap::new();
+        entries.insert(
+            "fire_bolt".to_string(),
+            ShaderFxEntry {
+                kind: 1,
+                primary: (1.0, 1.0, 1.0, 1.0),
+                secondary: (1.0, 1.0, 1.0, 1.0),
+                shape: (0.0, 0.0, 0.0, 0.0),
+                duration: 0.5,
+                scale: 10.0,
+                light: None,
+                garnish: None,
+            },
+        );
+        app.insert_resource(ShaderFxCatalog::from_entries(entries));
+
+        app.world_mut().write_message(PlayProceduralVfx {
+            key: "fire_bolt".into(),
+            position: Vec3::ZERO,
+            color: Color::WHITE,
+        });
+        app.update();
+
+        let shader_quads = app
+            .world_mut()
+            .query::<&MeshMaterial3d<SkillFxMaterial>>()
+            .iter(app.world())
+            .count();
+        assert_eq!(
+            shader_quads, 1,
+            "a catalog key spawns the SkillFxMaterial shader quad, not a burst"
+        );
     }
 }

@@ -1,7 +1,6 @@
 pub mod ambient;
 pub mod cast_circle;
 pub mod impact;
-pub mod jupitel;
 pub mod portal;
 pub mod skill_fx;
 

@@ -1,5 +1,9 @@
-use super::impact::{drive_factor, FactorMaterial};
+use super::impact::{
+    drive_factor, spark_garnish_bundle, FactorMaterial, FactorRamp, ImpactAssets, LightFade,
+    LIGHT_PEAK,
+};
 use super::VfxSystems;
+use crate::infrastructure::effect::ShaderFxEntry;
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
@@ -58,6 +62,60 @@ impl FactorMaterial for SkillFxMaterial {
     fn set_factor(&mut self, factor: f32) {
         self.params.factor = factor;
     }
+}
+
+/// Spawn a data-driven shader effect from a `ShaderFxCatalog` entry: a
+/// `FactorRamp` parent at `position` carrying a billboard quad with a
+/// `SkillFxMaterial` built from the entry, plus an optional point-light pop and
+/// an optional tintable spark garnish when the entry declares them. Generalizes
+/// `spawn_jupitel_burst`; the light `range` (45.0) matches jupitel's, the only
+/// light knob the entry does not carry.
+pub fn spawn_shader_fx(
+    commands: &mut Commands,
+    materials: &mut Assets<SkillFxMaterial>,
+    assets: &ImpactAssets,
+    entry: &ShaderFxEntry,
+    position: Vec3,
+) {
+    let material = materials.add(SkillFxMaterial {
+        params: SkillFxParams {
+            kind: entry.kind,
+            primary: entry.primary.into(),
+            secondary: entry.secondary.into(),
+            shape: entry.shape.into(),
+            factor: 0.0,
+        },
+    });
+
+    commands
+        .spawn((
+            FactorRamp::new(entry.duration),
+            Transform::from_translation(position),
+            Visibility::default(),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Mesh3d(assets.quad.clone()),
+                MeshMaterial3d(material),
+                Transform::from_scale(Vec3::splat(entry.scale)),
+            ));
+            if let Some(light) = &entry.light {
+                let peak = light.intensity_scale * LIGHT_PEAK;
+                parent.spawn((
+                    PointLight {
+                        color: Color::srgb(light.color.0, light.color.1, light.color.2),
+                        intensity: peak,
+                        range: 45.0,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    LightFade::new(light.fade, peak),
+                ));
+            }
+            if let Some(garnish) = &entry.garnish {
+                parent.spawn(spark_garnish_bundle(assets, garnish.tint.into()));
+            }
+        });
 }
 
 /// Registers the `SkillFxMaterial` `MaterialPlugin` and its factor driver.
