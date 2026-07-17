@@ -34,6 +34,11 @@ pub struct ShaderFxEntry {
     pub light: Option<ShaderFxLight>,
     #[serde(default)]
     pub garnish: Option<ShaderFxGarnish>,
+    /// Optional classic GRF effect texture, a path relative to the `ro://` asset
+    /// source root (e.g. `data/texture/effect/fire_fall_b.bmp`). `spawn_shader_fx`
+    /// loads it as `ro://{path}`; `None` binds the fallback image.
+    #[serde(default)]
+    pub texture: Option<String>,
 }
 
 #[derive(Asset, TypePath, Deserialize)]
@@ -119,6 +124,29 @@ mod tests {
 
         let garnish = jupitel.garnish.as_ref().expect("jupitel_thunder garnish");
         assert_eq!(garnish.tint, (1.8, 2.4, 4.5, 1.0));
+
+        assert_eq!(jupitel.texture, None);
+    }
+
+    #[test]
+    fn entry_deserializes_optional_texture() {
+        let ron = r#"{
+            "textured_fx": (
+                kind: 1,
+                primary: (1.0, 1.0, 1.0, 1.0),
+                secondary: (1.0, 1.0, 1.0, 1.0),
+                shape: (0.0, 0.0, 0.0, 0.0),
+                duration: 0.5,
+                scale: 10.0,
+                texture: Some("data/texture/effect/fire_fall_b.bmp"),
+            ),
+        }"#;
+        let asset = ron::from_str::<ShaderFxAsset>(ron).expect("deserialize");
+        let entry = asset.0.get("textured_fx").expect("textured_fx entry");
+        assert_eq!(
+            entry.texture.as_deref(),
+            Some("data/texture/effect/fire_fall_b.bmp")
+        );
     }
 
     #[test]

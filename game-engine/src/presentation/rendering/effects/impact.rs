@@ -452,6 +452,7 @@ fn spawn_flash_burst(
 
 /// Read `PlayProceduralVfx` and dispatch to the matching burst spawner. Unknown
 /// keys are logged and ignored (design §D6, non-critical).
+#[allow(clippy::too_many_arguments)]
 pub fn on_play_procedural_vfx(
     mut reader: MessageReader<PlayProceduralVfx>,
     mut commands: Commands,
@@ -459,6 +460,7 @@ pub fn on_play_procedural_vfx(
     mut star_materials: ResMut<Assets<StarMaterial>>,
     mut skill_fx_materials: ResMut<Assets<SkillFxMaterial>>,
     shader_fx: Option<Res<ShaderFxCatalog>>,
+    asset_server: Res<AssetServer>,
     assets: Res<ImpactAssets>,
 ) {
     for msg in reader.read() {
@@ -466,6 +468,7 @@ pub fn on_play_procedural_vfx(
             spawn_shader_fx(
                 &mut commands,
                 &mut skill_fx_materials,
+                &asset_server,
                 &assets,
                 entry,
                 msg.position,
@@ -690,6 +693,7 @@ mod tests {
                 scale: 10.0,
                 light: None,
                 garnish: None,
+                texture: None,
             },
         );
         app.insert_resource(ShaderFxCatalog::from_entries(entries));

@@ -24,6 +24,11 @@ struct SkillFxParams {
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: SkillFxParams;
+// Optional classic GRF effect texture (SkillFxMaterial binding 1/2). Declared
+// for the bind-group layout; fragments start sampling it in a later task. When
+// the material carries no texture, Bevy binds the fallback image here.
+@group(#{MATERIAL_BIND_GROUP}) @binding(1) var fx_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(2) var fx_sampler: sampler;
 
 struct Vertex {
     @builtin(instance_index) instance_index: u32,

@@ -20,6 +20,12 @@ use bevy::shader::ShaderRef;
 pub struct SkillFxMaterial {
     #[uniform(0)]
     pub params: SkillFxParams,
+    /// Optional classic GRF effect texture the fragment may sample (kinds that
+    /// don't sample leave it `None`, which binds Bevy's fallback image). Loaded
+    /// from `ShaderFxEntry::texture` in `spawn_shader_fx`.
+    #[texture(1)]
+    #[sampler(2)]
+    pub texture: Option<Handle<Image>>,
 }
 
 /// Packed skill-fx parameters. Field order and types must match the
@@ -73,10 +79,16 @@ impl FactorMaterial for SkillFxMaterial {
 pub fn spawn_shader_fx(
     commands: &mut Commands,
     materials: &mut Assets<SkillFxMaterial>,
+    asset_server: &AssetServer,
     assets: &ImpactAssets,
     entry: &ShaderFxEntry,
     position: Vec3,
 ) {
+    let texture = entry
+        .texture
+        .as_ref()
+        .map(|path| asset_server.load(format!("ro://{path}")));
+
     let material = materials.add(SkillFxMaterial {
         params: SkillFxParams {
             kind: entry.kind,
@@ -85,6 +97,7 @@ pub fn spawn_shader_fx(
             shape: entry.shape.into(),
             factor: 0.0,
         },
+        texture,
     });
 
     commands
@@ -143,6 +156,7 @@ mod tests {
                 shape: Vec4::ZERO,
                 factor: 0.0,
             },
+            texture: None,
         };
         material.set_factor(0.6);
         assert_eq!(material.params.factor, 0.6);
