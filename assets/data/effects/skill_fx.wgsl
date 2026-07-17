@@ -77,10 +77,21 @@ fn vnoise(p: vec2<f32>) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// Scalar intensity of the bound classic GRF effect texture. Black-background
+// BMPs are additive-safe, so the brightest channel reads as glow. uv is clamped
+// so out-of-range lookups sample the edge; callers still mask contribution to
+// zero outside [0,1] to avoid edge smear. Level 0 (no derivatives) is required
+// inside the non-uniform per-streak loops.
+fn sample_fx(uv: vec2<f32>) -> f32 {
+    let t = textureSampleLevel(fx_texture, fx_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)), 0.0);
+    return max(max(t.r, t.g), t.b);
+}
+
 // kind 0 — Jupitel Thunder detonation. shape: x=emission y=bolt_count z=crackle_hz.
 // Flickering white-hot core, jagged radial bolts re-seeded crackle_hz times per
-// second, and a thin expanding shock ring. Ported verbatim from the standalone
-// jupitel_thunder.wgsl.
+// second, and a thin expanding shock ring. The classic thunder_pang starburst is
+// sampled centered (uv direct) and added under the procedural bolts/ring, faded
+// out early by `f` so the detonation flash reads first.
 fn jupitel_fragment(uv: vec2<f32>) -> vec4<f32> {
     let centered = uv * 2.0 - 1.0;
     let r = length(centered);
@@ -124,8 +135,10 @@ fn jupitel_fragment(uv: vec2<f32>) -> vec4<f32> {
     let ring = exp(-pow((r - (0.12 + prog * 0.8)) / 0.035, 2.0))
         * (1.0 - prog) * smoothstep(0.0, 0.08, f) * ring_mod;
 
+    let pang = sample_fx(uv) * appear * (1.0 - smoothstep(0.1, 0.7, f));
+
     let hot = core + sharp;
-    let cool = halo + glow + ring * 1.3;
+    let cool = halo + glow + ring * 1.3 + pang * 0.6;
     let alpha = clamp(hot + cool, 0.0, 1.0);
     if (alpha < 0.01) {
         discard;
@@ -135,10 +148,12 @@ fn jupitel_fragment(uv: vec2<f32>) -> vec4<f32> {
 }
 
 // kind 1 — Fire Bolt. shape: x=streak_count y=flicker_hz z=impact_bloom.
-// A handful of white-hot streaks fall from screen-up and strike the target
-// (quad center), staggered across `factor` so they land in sequence; each
+// A handful of fire_fall_b flame streaks fall from screen-up and strike the
+// target (quad center), staggered across `factor` so they land in sequence; each
 // landing blooms a brief fire flash (z is the flash falloff — larger = tighter).
-// primary is the white-hot core, secondary the orange-red falloff. Ember
+// The texture (flame head at its bottom) is mapped per lane: u across the streak
+// width around lane+wob, v tracks the falling head so the flame body lands at the
+// head. primary tints the sampled core, secondary the orange-red falloff. Ember
 // shimmer is scrolling vnoise near the impact, flicker keyed off globals.time.
 fn fire_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
     let centered = uv * 2.0 - 1.0;
@@ -163,13 +178,13 @@ fn fire_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
         let head = 1.3 - 1.3 * p;
 
         let wob = (vnoise(vec2<f32>(centered.y * 5.0 + seed * 11.0, globals.time * flicker_hz)) - 0.5) * 0.12;
-        let width = 0.026 + 0.02 * hash11(seed + 1.7);
-        let hdist = abs(centered.x - lane - wob);
-        let above = centered.y - head;
-        let tail = (1.0 - smoothstep(0.0, 0.55, above)) * step(-0.02, above);
+        let along = (centered.y - head) / 0.55;
+        let u = 0.5 + (centered.x - lane - wob) / 0.5;
+        let mask = step(0.0, along) * step(along, 1.0) * step(0.0, u) * step(u, 1.0);
+        let ti = sample_fx(vec2<f32>(u, 1.0 - along)) * mask;
         let flick = 0.75 + 0.4 * hash11(floor(globals.time * flicker_hz) + seed);
-        hot += exp(-pow(hdist / width, 2.0)) * tail * vis * flick;
-        warm += exp(-pow(hdist / (width * 4.5), 2.0)) * tail * vis * 0.35;
+        hot += ti * vis * flick;
+        warm += ti * vis * 0.35;
 
         let tl = local - 0.4;
         let ri = length(centered - vec2<f32>(lane, 0.0));
@@ -194,14 +209,14 @@ fn fire_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
 }
 
 // kind 2 — Cold Bolt. shape: x=shard_count y=glint_hz z=impact_bloom.
-// A handful of hard-edged ice shards drop straight down (no wobble) and
-// strike the target, staggered across `factor` so they land in sequence;
-// each landing blooms a brief frosty flash (z is the flash falloff — larger
-// = tighter). primary is the white-blue HDR core, secondary the deep-blue
-// falloff. Streaks use a smoothstep-hardened edge (narrower and crisper than
-// fire's gaussian) and glints are hash-gated brightness pops (glint_hz reseeds
-// per period) rather than continuous flicker. A slow-drifting cold mist glow
-// sits at the impact base in place of fire's ember shimmer.
+// The ice twin of fire: a handful of ice_fall_bb shard streaks drop straight
+// down (no wobble) and strike the target, staggered across `factor` so they land
+// in sequence; each landing blooms a brief frosty flash (z is the flash falloff —
+// larger = tighter). The texture (shard head at its bottom) is mapped per lane
+// like fire_bolt. primary tints the white-blue HDR core, secondary the deep-blue
+// falloff. Glints are hash-gated brightness pops (glint_hz reseeds per period)
+// on the sampled streak. A slow-drifting cold mist glow sits at the impact base
+// in place of fire's ember shimmer.
 fn cold_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
     let centered = uv * 2.0 - 1.0;
     let f = material.factor;
@@ -224,15 +239,14 @@ fn cold_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
         let vis = step(0.0, local) * (1.0 - smoothstep(0.4, 0.55, local));
         let head = 1.3 - 1.3 * p;
 
-        let width = 0.016 + 0.012 * hash11(seed + 1.7);
-        let hdist = abs(centered.x - lane);
-        let above = centered.y - head;
-        let tail = (1.0 - smoothstep(0.0, 0.4, above)) * step(-0.02, above);
+        let along = (centered.y - head) / 0.55;
+        let u = 0.5 + (centered.x - lane) / 0.5;
+        let mask = step(0.0, along) * step(along, 1.0) * step(0.0, u) * step(u, 1.0);
+        let ti = sample_fx(vec2<f32>(u, 1.0 - along)) * mask;
         let glint_gate = step(0.94, hash11(floor(globals.time * glint_hz) + seed * 5.3));
         let glint = 1.0 + glint_gate * 1.6;
-        let edge = 1.0 - smoothstep(width * 0.5, width, hdist);
-        hot += edge * tail * vis * glint;
-        cold += exp(-pow(hdist / (width * 4.0), 2.0)) * tail * vis * 0.3;
+        hot += ti * vis * glint;
+        cold += ti * vis * 0.3;
 
         let tl = local - 0.4;
         let ri = length(centered - vec2<f32>(lane, 0.0));
@@ -257,12 +271,14 @@ fn cold_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
 }
 
 // kind 3 — Lightning Bolt. shape: x=restrike_count y=crackle_hz z=fork_count.
-// A single jagged bolt strikes vertically from the top of the quad to the
-// target at quad center (not radial like jupitel), reseeding restrike_count
-// times across `factor` for a fast-attack/decay double-or-triple strike, each
-// restrike also throwing fork_count short branches off the main path.
-// primary is the white-violet core, secondary the blue-violet falloff; an
-// impact flash pulses on every restrike, afterglow dims through the tail.
+// The classic lightning.bmp (full-height vertical bolt) is mapped into the upper
+// half of the quad — u across the bolt width (nudged per restrike so the strike
+// path shifts), v from the target at quad center up to the top — reseeding
+// restrike_count times across `factor` for a fast-attack/decay double-or-triple
+// strike. The texture's own jaggedness carries the wander; each restrike still
+// throws fork_count procedural branches off the main path. primary tints the
+// white-violet core, secondary the blue-violet falloff; an impact flash pulses
+// on every restrike, afterglow dims through the tail.
 fn lightning_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
     let centered = uv * 2.0 - 1.0;
     let f = material.factor;
@@ -287,11 +303,13 @@ fn lightning_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
         let reseed = floor(globals.time * crackle_hz) + seed;
         let crackle = 0.8 + 0.5 * hash11(reseed * 5.3);
 
-        let wander = (vnoise(vec2<f32>(y * 4.0, reseed)) - 0.5) * 0.55 * y;
         let width = 0.018 + 0.02 * y;
-        let dist = abs(centered.x - wander);
-        sharp += exp(-pow(dist / width, 2.0)) * env * crackle * above;
-        glow += exp(-pow(dist / (width * 5.0), 2.0)) * env * 0.3 * above;
+        let u_off = (hash11(reseed * 2.3) - 0.5) * 0.3;
+        let u = 0.5 + (centered.x + u_off) / 0.8;
+        let mask = step(0.0, u) * step(u, 1.0) * above;
+        let ti = sample_fx(vec2<f32>(u, 1.0 - y)) * mask;
+        sharp += ti * env * crackle;
+        glow += ti * env * 0.3;
 
         for (var k = 0; k < fork_count; k++) {
             let fseed = seed + f32(k) * 7.3;

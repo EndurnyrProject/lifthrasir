@@ -6,6 +6,7 @@
         shape: (2.0, 7.0, 24.0, 0.0),
         duration: 0.7,
         scale: 26.0,
+        texture: Some("data/texture/effect/thunder_pang.bmp"),
         light: Some((
             color: (0.55, 0.65, 1.0),
             intensity_scale: 2.0,
@@ -22,6 +23,7 @@
         shape: (4.0, 18.0, 16.0, 0.0),
         duration: 0.9,
         scale: 18.0,
+        texture: Some("data/texture/effect/fire_fall_b.bmp"),
         light: Some((
             color: (1.0, 0.55, 0.25),
             intensity_scale: 1.2,
@@ -38,6 +40,7 @@
         shape: (5.0, 6.0, 20.0, 0.0),
         duration: 0.9,
         scale: 18.0,
+        texture: Some("data/texture/effect/ice_fall_bb.bmp"),
         light: Some((
             color: (0.6, 0.8, 1.0),
             intensity_scale: 1.2,
@@ -54,6 +57,7 @@
         shape: (3.0, 22.0, 2.0, 0.0),
         duration: 0.7,
         scale: 20.0,
+        texture: Some("data/texture/effect/lightning.bmp"),
         light: Some((
             color: (0.75, 0.55, 1.0),
             intensity_scale: 1.8,

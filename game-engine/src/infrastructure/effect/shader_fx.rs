@@ -125,7 +125,10 @@ mod tests {
         let garnish = jupitel.garnish.as_ref().expect("jupitel_thunder garnish");
         assert_eq!(garnish.tint, (1.8, 2.4, 4.5, 1.0));
 
-        assert_eq!(jupitel.texture, None);
+        assert_eq!(
+            jupitel.texture.as_deref(),
+            Some("data/texture/effect/thunder_pang.bmp")
+        );
     }
 
     #[test]
