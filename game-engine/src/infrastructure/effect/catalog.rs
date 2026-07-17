@@ -45,6 +45,25 @@ impl MapEffectCatalog {
     }
 }
 
+/// Persistent status-aura descriptors, keyed by EFST id (e.g. Energy Coat).
+/// Reuses `EffectDescriptor`; `placement`/`ground_anchor` are ignored.
+#[derive(Resource)]
+pub struct StatusEffectCatalog {
+    effects: HashMap<u32, lifthrasir_data::EffectDescriptor>,
+}
+
+impl StatusEffectCatalog {
+    pub fn from_status_effect_data(data: BTreeMap<u32, lifthrasir_data::EffectDescriptor>) -> Self {
+        Self {
+            effects: data.into_iter().collect(),
+        }
+    }
+
+    pub fn get(&self, efst_id: u32) -> Option<&lifthrasir_data::EffectDescriptor> {
+        self.effects.get(&efst_id)
+    }
+}
+
 #[derive(Resource)]
 pub struct EffectDataHandle(Handle<EffectDataAsset>);
 
@@ -79,6 +98,9 @@ pub fn process_loaded_effect_data(
         asset.0.skills.clone(),
     ));
     commands.insert_resource(MapEffectCatalog::from_effect_data(asset.0.map.clone()));
+    commands.insert_resource(StatusEffectCatalog::from_status_effect_data(
+        asset.0.statuses.clone(),
+    ));
     commands.remove_resource::<EffectDataHandle>();
     debug!("Effect catalogs created from RON");
 }
@@ -181,5 +203,40 @@ mod tests {
         assert_eq!(magnus.str.as_deref(), Some("magnus.str"));
 
         assert!(catalog.get(9999).is_none());
+    }
+
+    #[test]
+    fn status_effects_ron_round_trips_into_catalog() {
+        let ron = r#"(
+            skills: {},
+            map: {},
+            statuses: {
+                157: (
+                    str: Some("energycoat.str"),
+                    vfx: None,
+                    sound: None,
+                    placement: Caster,
+                    color: (1.0, 1.0, 1.0, 1.0),
+                    repeating: true,
+                ),
+            },
+        )"#;
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
+        let catalog = StatusEffectCatalog::from_status_effect_data(asset.0.statuses);
+
+        let energy_coat = catalog.get(157).expect("EFST 157 descriptor");
+        assert_eq!(energy_coat.str.as_deref(), Some("energycoat.str"));
+        assert!(energy_coat.repeating);
+
+        assert!(catalog.get(9999).is_none());
+    }
+
+    #[test]
+    fn status_effect_catalog_empty_for_seeded_ron() {
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
+        let catalog = StatusEffectCatalog::from_status_effect_data(asset.0.statuses);
+
+        assert!(catalog.get(157).is_none());
     }
 }

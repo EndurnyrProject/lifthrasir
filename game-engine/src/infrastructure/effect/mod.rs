@@ -8,7 +8,7 @@ pub use asset::{
 };
 pub use catalog::{
     process_loaded_effect_data, start_loading_effect_data, EffectCatalog, EffectDataAsset,
-    MapEffectCatalog,
+    MapEffectCatalog, StatusEffectCatalog,
 };
 pub use loader::StrEffectLoader;
 pub use plugin::EffectsPlugin;

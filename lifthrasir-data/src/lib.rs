@@ -83,6 +83,15 @@ pub enum EffectPlacement {
     Ground,
 }
 
+/// Where a ground skill's persistent visual anchors: once at the skill-unit
+/// group center, or once per skill-unit cell.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GroundAnchor {
+    #[default]
+    Group,
+    Cell,
+}
+
 /// Hand-authored skill -> effect mapping entry.
 /// `color` is `[f32; 4]` (RGBA) to keep this crate Bevy-free; the runtime
 /// converts it to `Color` at its boundary.
@@ -105,6 +114,10 @@ pub struct EffectDescriptor {
     pub color: [f32; 4],
     /// One-shot vs persistent (ground) effect.
     pub repeating: bool,
+    /// Where a ground skill's persistent visual anchors. Ignored for
+    /// non-ground skills.
+    #[serde(default)]
+    pub ground_anchor: GroundAnchor,
 }
 
 /// Unified effect catalog: skill-effect and map-effect descriptors, keyed by
@@ -116,6 +129,9 @@ pub struct EffectDescriptor {
 pub struct EffectData {
     pub skills: BTreeMap<u32, EffectDescriptor>,
     pub map: BTreeMap<u32, EffectDescriptor>,
+    /// Persistent status-aura descriptors, keyed by EFST id.
+    #[serde(default)]
+    pub statuses: BTreeMap<u32, EffectDescriptor>,
 }
 
 /// Per-status icon presentation: TGA image name and English display name,
@@ -264,6 +280,7 @@ mod tests {
                 placement: EffectPlacement::Target,
                 color: [1.0, 1.0, 1.0, 1.0],
                 repeating: false,
+                ground_anchor: GroundAnchor::Group,
             },
         );
         original.map.insert(
@@ -275,6 +292,19 @@ mod tests {
                 placement: EffectPlacement::Ground,
                 color: [0.6, 0.7, 1.0, 1.0],
                 repeating: true,
+                ground_anchor: GroundAnchor::Group,
+            },
+        );
+        original.statuses.insert(
+            157,
+            EffectDescriptor {
+                str: Some("energycoat.str".to_string()),
+                vfx: None,
+                sound: None,
+                placement: EffectPlacement::Caster,
+                color: [1.0, 1.0, 1.0, 1.0],
+                repeating: true,
+                ground_anchor: GroundAnchor::Group,
             },
         );
 
@@ -283,6 +313,38 @@ mod tests {
 
         assert_eq!(original.skills, deserialized.skills);
         assert_eq!(original.map, deserialized.map);
+        assert_eq!(original.statuses, deserialized.statuses);
+
+        let energy_coat = deserialized.statuses.get(&157).expect("EFST 157 entry");
+        assert_eq!(energy_coat.ground_anchor, GroundAnchor::Group);
+    }
+
+    #[test]
+    fn ground_anchor_defaults_to_group_when_absent() {
+        let ron = r#"(
+            str: Some("firewall.str"),
+            vfx: None,
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        )"#;
+
+        let descriptor: EffectDescriptor = ron::from_str(ron).expect("deserialize");
+
+        assert_eq!(descriptor.ground_anchor, GroundAnchor::Group);
+    }
+
+    #[test]
+    fn effect_data_without_statuses_section_deserializes() {
+        let ron = r#"(
+            skills: {},
+            map: {},
+        )"#;
+
+        let data: EffectData = ron::from_str(ron).expect("deserialize");
+
+        assert!(data.statuses.is_empty());
     }
 
     #[test]
@@ -343,5 +405,9 @@ mod tests {
 
         let magnus = data.map.get(&113).expect("EF_MAGNUS entry");
         assert_eq!(magnus.str.as_deref(), Some("magnus.str"));
+
+        assert_eq!(heal.ground_anchor, GroundAnchor::Group);
+        assert_eq!(stormgust.ground_anchor, GroundAnchor::Group);
+        assert!(data.statuses.is_empty());
     }
 }

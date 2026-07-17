@@ -24,6 +24,12 @@
 //   - Unmapped `effect_type`s are logged by `spawn_map_effects`; use those
 //     logs to discover which ids real maps actually reference, then add them
 //     here.
+//
+// `statuses` is keyed by EFST id and will drive persistent status auras (e.g.
+// Energy Coat) attached/detached on `StatusEffectChanged` once the efst_auras
+// system lands, independent of the skill cast that applied them.
+// `placement`/`ground_anchor` are ignored; only `str`, `sound`, `color`, and
+// `repeating` matter.
 (
     skills: {
         5: ( // SM_BASH — procedural impact burst (no STR in the official client).
@@ -151,4 +157,5 @@
             repeating: true,
         ),
     },
+    statuses: {},
 )
