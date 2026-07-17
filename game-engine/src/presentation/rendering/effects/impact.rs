@@ -1,3 +1,4 @@
+use super::jupitel::{spawn_jupitel_burst, JupitelMaterial};
 use super::VfxSystems;
 use crate::domain::effects::PlayProceduralVfx;
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -383,12 +384,12 @@ const BURST_PRESETS: &[(&str, BurstPreset)] = &[
     (
         "jupitel_thunder",
         BurstPreset {
-            color: Vec3::new(3.0, 3.0, 2.0),
-            count: 22.0,
-            size: 1.8,
-            speed: (9.0, 17.0),
-            lifetime: (0.3, 0.5),
-            radius: 0.7,
+            color: Vec3::new(1.8, 2.4, 4.5),
+            count: 32.0,
+            size: 1.1,
+            speed: (11.0, 22.0),
+            lifetime: (0.25, 0.5),
+            radius: 0.5,
             vel: BurstVel::Radial,
         },
     ),
@@ -574,7 +575,7 @@ impl FactorMaterial for StarMaterial {
 }
 
 /// Peak intensity of the impact point-light pop, in lumens.
-const LIGHT_PEAK: f32 = 130_000.0;
+pub(super) const LIGHT_PEAK: f32 = 130_000.0;
 
 /// Short intensity ramp for the impact `PointLight`. Fades the light from its
 /// `peak` to dark over the timer; the whole tree despawns with the `FactorRamp`.
@@ -585,7 +586,7 @@ pub struct LightFade {
 }
 
 impl LightFade {
-    fn new(seconds: f32, peak: f32) -> Self {
+    pub(super) fn new(seconds: f32, peak: f32) -> Self {
         Self {
             timer: Timer::from_seconds(seconds, TimerMode::Once),
             peak,
@@ -601,36 +602,60 @@ pub fn fade_light(time: Res<Time>, mut lights: Query<(&mut LightFade, &mut Point
     }
 }
 
-/// Spawn the Bash impact burst: a `FactorRamp` parent at `position` carrying an
-/// impact-core flash, two non-uniformly-scaled star glints (the in-shader
+/// Palette and shape tuning for one composite flash tree (`spawn_flash_burst`).
+/// Star glint scales derive from `scale` with Bash's original 7:2.5 proportions.
+struct FlashStyle {
+    primary: Vec4,
+    secondary: Vec4,
+    /// Streak count of the radial core; higher reads as jagged/electric.
+    streaks: f32,
+    scale: f32,
+    ramp: f32,
+    light_color: Color,
+    light_peak: f32,
+}
+
+/// Bash's original tuning: caster-tinted core with a warm orange fringe.
+fn bash_style(color: Color) -> FlashStyle {
+    let c = color.to_linear();
+    FlashStyle {
+        primary: Vec4::new(c.red, c.green, c.blue, 1.0),
+        secondary: Vec4::new(1.0, 0.5, 0.15, 1.0),
+        streaks: 8.0,
+        scale: 6.0,
+        ramp: 0.35,
+        light_color: color,
+        light_peak: LIGHT_PEAK,
+    }
+}
+
+/// Spawn a composite impact flash: a `FactorRamp` parent at `position` carrying
+/// an impact-core flash, two non-uniformly-scaled star glints (the in-shader
 /// billboard ignores rotation, so the stars are differentiated by scale), a
-/// fading point light, and the hanabi dust/spark burst. The tree self-despawns
-/// when the ramp finishes (design §6).
-pub fn spawn_bash_burst(
+/// fading point light, and a hanabi spark burst. The tree self-despawns when
+/// the ramp finishes (design §6).
+fn spawn_flash_burst(
     commands: &mut Commands,
     core_materials: &mut Assets<ImpactCoreMaterial>,
     star_materials: &mut Assets<StarMaterial>,
     assets: &ImpactAssets,
+    particles: Handle<EffectAsset>,
     position: Vec3,
-    color: Color,
+    style: FlashStyle,
 ) {
-    let c = color.to_linear();
-    let primary = Vec4::new(c.red, c.green, c.blue, 1.0);
-    let warm = Vec4::new(1.0, 0.5, 0.15, 1.0);
-
     let core = core_materials.add(ImpactCoreMaterial {
         params: ImpactParams {
-            primary_color: primary,
-            secondary_color: warm,
-            shape: Vec4::new(2.0, 8.0, 0.6, 0.5),
+            primary_color: style.primary,
+            secondary_color: style.secondary,
+            shape: Vec4::new(2.0, style.streaks, 0.6, 0.5),
             factor: 0.0,
         },
     });
     let star = |mats: &mut Assets<StarMaterial>| {
         mats.add(StarMaterial {
             params: StarParams {
-                primary_color: primary,
-                secondary_color: warm,
+                primary_color: style.primary,
+                secondary_color: style.secondary,
                 shape: Vec4::new(3.0, 6.0, 0.7, 0.0),
                 factor: 0.0,
             },
@@ -638,10 +663,12 @@ pub fn spawn_bash_burst(
     };
     let star_wide = star(star_materials);
     let star_tall = star(star_materials);
+    let long = style.scale * 7.0 / 6.0;
+    let short = style.scale * 2.5 / 6.0;
 
     commands
         .spawn((
-            FactorRamp::new(0.35),
+            FactorRamp::new(style.ramp),
             Transform::from_translation(position),
             Visibility::default(),
         ))
@@ -649,29 +676,29 @@ pub fn spawn_bash_burst(
             parent.spawn((
                 Mesh3d(assets.quad.clone()),
                 MeshMaterial3d(core),
-                Transform::from_scale(Vec3::splat(6.0)),
+                Transform::from_scale(Vec3::splat(style.scale)),
             ));
             parent.spawn((
                 Mesh3d(assets.quad.clone()),
                 MeshMaterial3d(star_wide),
-                Transform::from_scale(Vec3::new(7.0, 2.5, 1.0)),
+                Transform::from_scale(Vec3::new(long, short, 1.0)),
             ));
             parent.spawn((
                 Mesh3d(assets.quad.clone()),
                 MeshMaterial3d(star_tall),
-                Transform::from_scale(Vec3::new(2.5, 7.0, 1.0)),
+                Transform::from_scale(Vec3::new(short, long, 1.0)),
             ));
             parent.spawn((
                 PointLight {
-                    color,
-                    intensity: LIGHT_PEAK,
+                    color: style.light_color,
+                    intensity: style.light_peak,
                     range: 40.0,
                     shadow_maps_enabled: false,
                     ..default()
                 },
-                LightFade::new(0.15, LIGHT_PEAK),
+                LightFade::new(0.15, style.light_peak),
             ));
-            parent.spawn(ParticleEffect::new(assets.burst.clone()));
+            parent.spawn(ParticleEffect::new(particles));
         });
 }
 
@@ -682,18 +709,23 @@ pub fn on_play_procedural_vfx(
     mut commands: Commands,
     mut core_materials: ResMut<Assets<ImpactCoreMaterial>>,
     mut star_materials: ResMut<Assets<StarMaterial>>,
+    mut jupitel_materials: ResMut<Assets<JupitelMaterial>>,
     assets: Res<ImpactAssets>,
 ) {
     for msg in reader.read() {
         match msg.key.as_str() {
-            "bash" => spawn_bash_burst(
+            "bash" => spawn_flash_burst(
                 &mut commands,
                 &mut core_materials,
                 &mut star_materials,
                 &assets,
+                assets.burst.clone(),
                 msg.position,
-                msg.color,
+                bash_style(msg.color),
             ),
+            "jupitel_thunder" => {
+                spawn_jupitel_burst(&mut commands, &mut jupitel_materials, &assets, msg.position)
+            }
             key => {
                 let Some((effect, ttl)) = assets.bursts.get(key) else {
                     debug!("unknown procedural vfx key {key}");
@@ -713,6 +745,7 @@ impl Plugin for ImpactVfxPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<ImpactCoreMaterial>::default())
             .add_plugins(MaterialPlugin::<StarMaterial>::default())
+            .add_plugins(MaterialPlugin::<JupitelMaterial>::default())
             .init_resource::<ImpactAssets>()
             .add_systems(
                 Update,
@@ -720,6 +753,7 @@ impl Plugin for ImpactVfxPlugin {
                     advance_ramps,
                     drive_factor::<ImpactCoreMaterial>,
                     drive_factor::<StarMaterial>,
+                    drive_factor::<JupitelMaterial>,
                     fade_light,
                 )
                     .chain()
@@ -832,6 +866,7 @@ mod tests {
             .init_asset::<EffectAsset>()
             .init_asset::<ImpactCoreMaterial>()
             .init_asset::<StarMaterial>()
+            .init_asset::<JupitelMaterial>()
             .init_resource::<ImpactAssets>()
             .add_message::<PlayProceduralVfx>()
             .add_systems(Update, on_play_procedural_vfx);

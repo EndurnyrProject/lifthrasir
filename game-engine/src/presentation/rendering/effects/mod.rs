@@ -1,6 +1,7 @@
 pub mod ambient;
 pub mod cast_circle;
 pub mod impact;
+pub mod jupitel;
 pub mod portal;
 
 use bevy::prelude::*;
