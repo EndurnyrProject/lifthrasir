@@ -251,6 +251,76 @@ fn cold_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(color, alpha);
 }
 
+// kind 3 — Lightning Bolt. shape: x=restrike_count y=crackle_hz z=fork_count.
+// A single jagged bolt strikes vertically from the top of the quad to the
+// target at quad center (not radial like jupitel), reseeding restrike_count
+// times across `factor` for a fast-attack/decay double-or-triple strike, each
+// restrike also throwing fork_count short branches off the main path.
+// primary is the white-violet core, secondary the blue-violet falloff; an
+// impact flash pulses on every restrike, afterglow dims through the tail.
+fn lightning_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
+    let centered = uv * 2.0 - 1.0;
+    let f = material.factor;
+    let restrike_count = i32(material.shape.x);
+    let crackle_hz = material.shape.y;
+    let fork_count = i32(material.shape.z);
+    let fcount = max(f32(restrike_count), 1.0);
+
+    let y = clamp(centered.y, 0.0, 1.0);
+    let above = step(0.0, centered.y);
+
+    var sharp = 0.0;
+    var glow = 0.0;
+    var flash = 0.0;
+    for (var i = 0; i < restrike_count; i++) {
+        let seed = f32(i) * 13.7;
+        let t0 = f32(i) / fcount * 0.55;
+        let local = f - t0;
+        let attack = smoothstep(0.0, 0.025, local);
+        let decay = exp(-max(local, 0.0) * 9.0);
+        let env = attack * decay;
+        let reseed = floor(globals.time * crackle_hz) + seed;
+        let crackle = 0.8 + 0.5 * hash11(reseed * 5.3);
+
+        let wander = (vnoise(vec2<f32>(y * 4.0, reseed)) - 0.5) * 0.55 * y;
+        let width = 0.018 + 0.02 * y;
+        let dist = abs(centered.x - wander);
+        sharp += exp(-pow(dist / width, 2.0)) * env * crackle * above;
+        glow += exp(-pow(dist / (width * 5.0), 2.0)) * env * 0.3 * above;
+
+        for (var k = 0; k < fork_count; k++) {
+            let fseed = seed + f32(k) * 7.3;
+            let hbranch = 0.3 + 0.5 * hash11(fseed);
+            let flen = 0.2 + 0.2 * hash11(fseed + 1.3);
+            let fdir = sign(hash11(fseed + 2.1) - 0.5);
+            let fx = (vnoise(vec2<f32>(hbranch * 4.0, reseed)) - 0.5) * 0.55 * hbranch
+                + fdir * clamp((hbranch - y) / flen, 0.0, 1.0) * 0.35;
+            let fvis = step(y, hbranch) * step(hbranch - flen, y);
+            let fdist = abs(centered.x - fx);
+            sharp += exp(-pow(fdist / (width * 0.5), 2.0)) * env * crackle * fvis * 0.6 * above;
+            glow += exp(-pow(fdist / (width * 2.5), 2.0)) * env * 0.2 * fvis * above;
+        }
+
+        flash += exp(-dot(centered, centered) * 26.0) * attack * decay;
+    }
+
+    let tail = 1.0 - smoothstep(0.5, 1.0, f);
+    let afterglow = exp(-abs(centered.x) * 3.0) * exp(-y * 1.5) * tail * 0.15;
+
+    sharp = min(sharp, 2.0);
+    glow = min(glow + afterglow, 1.5);
+    flash = min(flash, 1.5);
+
+    let core = sharp + flash;
+    let cool = glow + flash * 0.5;
+    let alpha = clamp(core + cool, 0.0, 1.0);
+    if (alpha < 0.01) {
+        discard;
+    }
+    let color = material.primary.rgb * core + material.secondary.rgb * cool;
+    return vec4<f32>(color, alpha);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     switch material.kind {
@@ -262,6 +332,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         case 2u: {
             return cold_bolt_fragment(in.uv);
+        }
+        case 3u: {
+            return lightning_bolt_fragment(in.uv);
         }
         default: {
             return vec4<f32>(1.0, 0.0, 1.0, 1.0);
