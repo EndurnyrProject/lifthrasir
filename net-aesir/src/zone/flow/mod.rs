@@ -9,6 +9,7 @@ pub mod movement;
 pub mod npc;
 pub mod party;
 pub mod shop;
+pub mod skill_units;
 pub mod snapshots;
 pub mod social;
 pub mod stats;
