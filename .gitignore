@@ -42,6 +42,7 @@ data.grf
 # Generated assets
 assets/data/ron/*
 !assets/data/ron/effects.ron
+!assets/data/ron/shader_fx.ron
 
 # Reference
 robrowser-src

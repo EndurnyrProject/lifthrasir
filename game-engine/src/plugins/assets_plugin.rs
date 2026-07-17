@@ -3,7 +3,9 @@ use crate::infrastructure::assets::{
     bmp_loader::BmpLoader, svg_loader::SvgLoader, tga_loader::TgaLoader, *,
 };
 use crate::infrastructure::config::ClientConfig;
-use crate::infrastructure::effect::{EffectDataAsset, LoadedEffectAsset, StrEffectLoader};
+use crate::infrastructure::effect::{
+    EffectDataAsset, LoadedEffectAsset, ShaderFxAsset, StrEffectLoader,
+};
 use crate::infrastructure::item::ItemDataAsset;
 use crate::infrastructure::job::JobDataAsset;
 use crate::infrastructure::skill::SkillDataAsset;
@@ -52,6 +54,7 @@ impl Plugin for AssetsPlugin {
                 RonAssetPlugin::<ItemDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<SkillDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<EffectDataAsset>::new(&["ron"]),
+                RonAssetPlugin::<ShaderFxAsset>::new(&["ron"]),
                 RonAssetPlugin::<AccessoryDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<WeaponDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<StatusIconDataAsset>::new(&["ron"]),
