@@ -11,7 +11,8 @@ pub use components::{
 pub use events::PlayProceduralVfx;
 pub use map_effects::{spawn_map_effects, MapEffectsSpawned};
 pub use status_visuals::{
-    apply_body_state_tint, body_state_visuals, AnimationPaused, BodyStateTint, PendingBodyStates,
+    apply_body_state_tint, body_state_visuals, efst_auras, option_visuals, orbit_sight_visuals,
+    AnimationPaused, BodyStateTint, PendingBodyStates, PendingEffectStates, SightOrbit, StatusAura,
 };
 pub use systems::{
     advance_effect_timers, despawn_finished_effects, follow_effect_anchor,

@@ -408,6 +408,15 @@ mod tests {
 
         assert_eq!(heal.ground_anchor, GroundAnchor::Group);
         assert_eq!(stormgust.ground_anchor, GroundAnchor::Group);
-        assert!(data.statuses.is_empty());
+
+        // 31 EFST_ENERGYCOAT: the persistent Energy Coat aura, migrated out of
+        // `skills:` (157 there stays as the one-shot cast flash).
+        let energy_coat_aura = data.statuses.get(&31).expect("EFST_ENERGYCOAT entry");
+        assert_eq!(energy_coat_aura.str.as_deref(), Some("energycoat.str"));
+        assert!(energy_coat_aura.repeating);
+
+        let energy_coat_cast = data.skills.get(&157).expect("MG_ENERGYCOAT entry");
+        assert_eq!(energy_coat_cast.str.as_deref(), Some("energycoat.str"));
+        assert!(!energy_coat_cast.repeating);
     }
 }

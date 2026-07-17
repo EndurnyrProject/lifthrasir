@@ -232,11 +232,16 @@ mod tests {
     }
 
     #[test]
-    fn status_effect_catalog_empty_for_seeded_ron() {
+    fn status_effect_catalog_seeded_with_energy_coat() {
         let ron = include_str!("../../../../assets/data/ron/effects.ron");
         let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
         let catalog = StatusEffectCatalog::from_status_effect_data(asset.0.statuses);
 
+        // 31 is EFST_ENERGYCOAT (aesir Efst.id(:energycoat)); 157 is the
+        // MG_ENERGYCOAT *skill* id, a different namespace with no status entry.
+        let energy_coat = catalog.get(31).expect("EFST_ENERGYCOAT descriptor");
+        assert_eq!(energy_coat.str.as_deref(), Some("energycoat.str"));
+        assert!(energy_coat.repeating);
         assert!(catalog.get(157).is_none());
     }
 }

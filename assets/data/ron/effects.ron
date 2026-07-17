@@ -346,7 +346,9 @@
         // no dedicated sound found in the GRF. Intentionally omitted: a
         // catalog miss here logs a harmless warn! and plays no visual, which is
         // correct for a skill that genuinely has none.
-        157: ( // MG_ENERGYCOAT
+        157: ( // MG_ENERGYCOAT -- cast-moment flash only; the persistent glow
+               // (energycoat.str, repeating) now lives in `statuses:` keyed by
+               // EFST_ENERGYCOAT (31), driven by StatusEffectChanged.
             str: Some("energycoat.str"),
             sound: None,
             placement: Caster,
@@ -398,5 +400,16 @@
             repeating: true,
         ),
     },
-    statuses: {},
+    statuses: {
+        // 31 EFST_ENERGYCOAT (aesir Efst.id(:energycoat)) -- Energy Coat's
+        // persistent aura, driven by StatusEffectChanged(on=true/false) rather
+        // than the one-shot cast flash in `skills:` above.
+        31: (
+            str: Some("energycoat.str"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+    },
 )
