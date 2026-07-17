@@ -5,8 +5,7 @@
 //!
 //! GRF has no reusable neutral ring texture (the `ring`/`circle` hits under
 //! `data\texture\effect\` are per-skill numbered animation frames, e.g. the
-//! `4ig_firstfaithpower`/`abyss_chaser` sets, not a generic tintable asset), and
-//! the ones that exist are `.tga` (no `tga` bevy_image feature enabled here). So
+//! `4ig_firstfaithpower`/`abyss_chaser` sets, not a generic tintable asset). So
 //! the ring is procedural: a flat `Annulus` mesh, tinted per element, following
 //! the same procedural-quad pattern as `portal.rs`.
 
