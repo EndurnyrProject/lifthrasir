@@ -3,6 +3,7 @@ pub mod cast_circle;
 pub mod impact;
 pub mod jupitel;
 pub mod portal;
+pub mod skill_fx;
 
 use bevy::prelude::*;
 use bevy_hanabi::prelude::*;
@@ -11,6 +12,7 @@ pub use ambient::MapAmbientVfxPlugin;
 pub use cast_circle::CastCircleVfxPlugin;
 pub use impact::ImpactVfxPlugin;
 pub use portal::{PortalVfx, PortalVfxPlugin};
+pub use skill_fx::SkillFxPlugin;
 
 /// Ordering anchor for presentation-layer visual-effect systems (hanabi particle
 /// attach, custom-material drivers, future effects, ...). Each effect plugin
@@ -32,6 +34,7 @@ impl Plugin for VfxPlugin {
             .configure_sets(Update, VfxSystems)
             .add_plugins(PortalVfxPlugin)
             .add_plugins(ImpactVfxPlugin)
+            .add_plugins(SkillFxPlugin)
             .add_plugins(MapAmbientVfxPlugin)
             .add_plugins(CastCircleVfxPlugin);
     }
