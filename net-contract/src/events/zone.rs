@@ -251,7 +251,6 @@ pub struct SkillEffectShown {
 }
 
 /// A skill cast was cancelled.
-// NOTE: no client consumer yet; kept for future implementation.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct CastCancelled {
