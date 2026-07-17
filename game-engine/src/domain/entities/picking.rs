@@ -6,6 +6,7 @@ use crate::domain::entities::hover::{
     CurrentlyHoveredEntity, EntityHoverEntered, EntityHoverExited, HoveredEntity,
 };
 use crate::domain::entities::markers::{Mob, Npc};
+use crate::domain::entities::types::ObjectType;
 use crate::domain::input::terrain_raycast::TerrainRaycastCache;
 use crate::domain::input::{CursorChangeRequest, CursorType, LockedTarget, TargetingMode};
 use crate::domain::item_drop::components::FloorItem;
@@ -35,7 +36,8 @@ pub fn on_sprite_over(
     let root = pick_root(over.entity, &child_of);
     hovered.entity = Some(root);
 
-    if let Ok(net) = nets.get(root) {
+    let net = nets.get(root).ok();
+    if let Some(net) = net {
         commands.entity(root).try_insert(HoveredEntity);
         commands.trigger(EntityHoverEntered {
             entity: root,
@@ -46,7 +48,8 @@ pub fn on_sprite_over(
     }
 
     let (is_mob, is_npc, is_item) = kinds.get(root).unwrap_or((false, false, false));
-    let cursor_type = if is_mob {
+    let is_skill_unit = net.is_some_and(|net| net.object_type == ObjectType::SkillUnit);
+    let cursor_type = if is_mob || is_skill_unit {
         CursorType::Attack
     } else if is_npc {
         CursorType::Talk
@@ -130,8 +133,10 @@ pub fn on_sprite_click(
     }
 
     let (is_mob, is_npc) = kinds.get(root).unwrap_or((false, false));
-    if is_mob {
-        if let Ok(net) = nets.get(root) {
+    let net = nets.get(root).ok();
+    let is_attackable = is_mob || net.is_some_and(|net| net.object_type == ObjectType::SkillUnit);
+    if is_attackable {
+        if let Some(net) = net {
             attacks.write(AttackRequested { target_id: net.gid });
             *locked = LockedTarget {
                 entity: Some(root),

@@ -237,6 +237,9 @@ pub fn spawn_network_entity_system(
                 // Simple entities don't need character-specific components
                 // They will get EntitySpriteInfo added via sprite spawn event
             }
+            crate::domain::entities::types::ObjectType::SkillUnit => {
+                unreachable!("SkillUnit is client-spawned only, never parsed from UnitEntered")
+            }
         }
 
         match event.object_type {
@@ -277,6 +280,9 @@ pub fn spawn_network_entity_system(
             crate::domain::entities::types::ObjectType::Elemental => {
                 entity_cmd.insert(Elemental);
                 debug!("Spawned elemental: {} (AID: {})", event.name, event.aid);
+            }
+            crate::domain::entities::types::ObjectType::SkillUnit => {
+                unreachable!("SkillUnit is client-spawned only, never parsed from UnitEntered")
             }
         }
 
@@ -366,6 +372,9 @@ pub fn spawn_network_entity_system(
                     position: world_pos,
                     sprite_info,
                 });
+            }
+            crate::domain::entities::types::ObjectType::SkillUnit => {
+                unreachable!("SkillUnit is client-spawned only, never parsed from UnitEntered")
             }
         }
 

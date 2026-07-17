@@ -25,9 +25,18 @@ use super::components::{SkillUnitCell, SkillUnitGroup};
 use crate::domain::effects::components::EffectAnchor;
 use crate::domain::effects::spawn_effect;
 use crate::domain::effects::triggers::{descriptor_tint, load_effect};
+use crate::domain::entities::components::NetworkEntity;
+use crate::domain::entities::picking::{on_sprite_click, on_sprite_out, on_sprite_over};
+use crate::domain::entities::registry::EntityRegistry;
+use crate::domain::entities::types::ObjectType;
 use crate::domain::world::map_scoped::MapScoped;
 use crate::infrastructure::effect::EffectCatalog;
 use crate::utils::coordinates::spawn_coords_to_world_position;
+
+/// Half-extent of a targetable cell's click collider, matching the 5.0-unit
+/// `RO_UNITS_PER_CELL` grid step (`utils::coordinates`) so one collider covers
+/// exactly one cell.
+const CELL_COLLIDER_HALF_SIZE: f32 = 2.5;
 
 /// RO grid coordinates are non-negative; a negative wire value is malformed.
 /// Reject it (the caller warns and skips) rather than wrapping it into a bogus
@@ -43,39 +52,65 @@ fn grid_coord(value: i32) -> Option<u16> {
 /// The `existing` query is read at system start, so two references to the same
 /// `group_id` within a single frame can both spawn; the server does not do that
 /// (a group arrives via spawn OR snapshot, not both at once).
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_skill_units(
     mut spawned: MessageReader<SkillUnitSpawned>,
     mut snapshots: MessageReader<SkillUnitSnapshotReceived>,
     mut commands: Commands,
     catalog: Option<Res<EffectCatalog>>,
     asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut entity_registry: ResMut<EntityRegistry>,
     existing: Query<(Entity, &SkillUnitGroup)>,
+    existing_cells: Query<&SkillUnitCell>,
 ) {
     let catalog = catalog.as_deref();
     for event in spawned.read() {
         spawn_group(
             &mut commands,
             &asset_server,
+            &mut meshes,
+            &mut entity_registry,
             catalog,
             &existing,
+            &existing_cells,
             &event.group,
         );
     }
     for snapshot in snapshots.read() {
         for group in &snapshot.groups {
-            spawn_group(&mut commands, &asset_server, catalog, &existing, group);
+            spawn_group(
+                &mut commands,
+                &asset_server,
+                &mut meshes,
+                &mut entity_registry,
+                catalog,
+                &existing,
+                &existing_cells,
+                group,
+            );
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_group(
     commands: &mut Commands,
     asset_server: &AssetServer,
+    meshes: &mut Assets<Mesh>,
+    entity_registry: &mut EntityRegistry,
     catalog: Option<&EffectCatalog>,
     existing: &Query<(Entity, &SkillUnitGroup)>,
+    existing_cells: &Query<&SkillUnitCell>,
     group: &SkillUnitGroupState,
 ) {
     if let Some((old_root, _)) = existing.iter().find(|(_, g)| g.group_id == group.group_id) {
+        for cell in existing_cells
+            .iter()
+            .filter(|c| c.group_id == group.group_id && c.flags.targetable)
+        {
+            entity_registry.unregister_entity_by_aid(cell.cell_id);
+        }
         commands.entity(old_root).despawn();
     }
 
@@ -128,6 +163,17 @@ fn spawn_group(
                 ChildOf(root),
             ))
             .id();
+
+        if cell.flags.targetable {
+            commands.entity(cell_entity).insert(NetworkEntity::new(
+                cell.cell_id,
+                cell.cell_id,
+                ObjectType::SkillUnit,
+            ));
+            entity_registry.register_entity(cell.cell_id, cell_entity);
+            spawn_cell_collider(commands, meshes, cell_entity);
+        }
+
         cell_entities.push((cell_entity, cell));
     }
 
@@ -151,6 +197,35 @@ fn spawn_group(
             }
         }
     }
+}
+
+/// Spawn a flat, invisible (unmaterialed) click collider as a child of a
+/// targetable cell. The STR effect is the visible thing; this quad exists only
+/// so `bevy_picking`'s mesh backend has geometry to raycast against, mirroring
+/// how a mob/NPC's body billboard carries `Pickable` while its `NetworkEntity`
+/// lives one level up on the root (here: the cell).
+fn spawn_cell_collider(commands: &mut Commands, meshes: &mut Assets<Mesh>, cell_entity: Entity) {
+    // World up is -Y here; the plane's front face must point along NEG_Y or
+    // bevy_picking backface-culls it and no click ever hits it.
+    let mesh = meshes.add(Mesh::from(Plane3d::new(
+        Vec3::NEG_Y,
+        Vec2::splat(CELL_COLLIDER_HALF_SIZE),
+    )));
+
+    commands
+        .spawn((
+            Mesh3d(mesh),
+            Transform::default(),
+            GlobalTransform::default(),
+            Visibility::default(),
+            InheritedVisibility::default(),
+            ViewVisibility::default(),
+            Pickable::default(),
+            ChildOf(cell_entity),
+        ))
+        .observe(on_sprite_over)
+        .observe(on_sprite_out)
+        .observe(on_sprite_click);
 }
 
 /// Spawn the descriptor's STR effect as a child of `parent` (root or cell), at
@@ -204,6 +279,7 @@ pub fn update_skill_units(
 pub fn despawn_skill_units(
     mut events: MessageReader<SkillUnitDespawned>,
     mut commands: Commands,
+    mut entity_registry: ResMut<EntityRegistry>,
     groups: Query<(Entity, &SkillUnitGroup)>,
     cells: Query<(Entity, &SkillUnitCell)>,
 ) {
@@ -220,6 +296,9 @@ pub fn despawn_skill_units(
         let mut remaining = 0;
         for (entity, cell) in cells.iter().filter(|(_, c)| c.group_id == event.group_id) {
             if removed.contains(&cell.cell_id) {
+                if cell.flags.targetable {
+                    entity_registry.unregister_entity_by_aid(cell.cell_id);
+                }
                 commands.entity(entity).despawn();
             } else {
                 remaining += 1;
@@ -236,10 +315,26 @@ pub fn despawn_skill_units(
 mod tests {
     use super::*;
     use crate::domain::effects::components::ActiveEffect;
+    use crate::domain::entities::registry::EntityRegistry;
     use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset, LoadedEffectAsset};
     use lifthrasir_data::{EffectDescriptor, EffectPlacement};
     use net_contract::dto::{SkillUnitCellFlags, SkillUnitCellState, SkillUnitGroupState};
     use std::collections::BTreeMap;
+
+    fn targetable_cell(cell_id: u32, x: i32, y: i32, visible: bool) -> SkillUnitCellState {
+        SkillUnitCellState {
+            cell_id,
+            x,
+            y,
+            hp: 100,
+            max_hp: 100,
+            flags: SkillUnitCellFlags {
+                targetable: true,
+                visible,
+                ..Default::default()
+            },
+        }
+    }
 
     const STORM_GUST: u32 = 89; // seeded Ground/Group anchor with an STR.
 
@@ -271,6 +366,8 @@ mod tests {
         app.add_plugins(MinimalPlugins)
             .add_plugins(bevy::asset::AssetPlugin::default())
             .init_asset::<LoadedEffectAsset>()
+            .init_asset::<Mesh>()
+            .init_resource::<EntityRegistry>()
             .add_message::<SkillUnitSpawned>()
             .add_message::<SkillUnitSnapshotReceived>()
             .add_message::<SkillUnitUpdated>()
@@ -612,5 +709,85 @@ mod tests {
             2,
             "one effect per visible cell, none for the hidden cell"
         );
+    }
+
+    #[test]
+    fn targetable_cell_registers_non_targetable_does_not() {
+        let mut app = test_app(seeded_catalog());
+        app.world_mut().write_message(SkillUnitSpawned {
+            group: group(
+                1,
+                STORM_GUST,
+                vec![targetable_cell(100, 40, 50, true), cell(101, 41, 50, true)],
+            ),
+        });
+        app.update();
+
+        let registry = app.world().resource::<EntityRegistry>();
+        assert!(
+            registry.get_entity(100).is_some(),
+            "targetable cell registers its cell_id"
+        );
+        assert!(
+            registry.get_entity(101).is_none(),
+            "non-targetable cell does not register"
+        );
+    }
+
+    #[test]
+    fn despawn_unregisters_targetable_cell() {
+        let mut app = test_app(seeded_catalog());
+        app.world_mut().write_message(SkillUnitSpawned {
+            group: group(1, STORM_GUST, vec![targetable_cell(100, 40, 50, true)]),
+        });
+        app.update();
+        assert!(app
+            .world()
+            .resource::<EntityRegistry>()
+            .get_entity(100)
+            .is_some());
+
+        app.world_mut().write_message(SkillUnitDespawned {
+            group_id: 1,
+            cell_ids: vec![100],
+            reason: Default::default(),
+        });
+        app.update();
+
+        assert!(
+            app.world()
+                .resource::<EntityRegistry>()
+                .get_entity(100)
+                .is_none(),
+            "despawn unregisters the targetable cell"
+        );
+    }
+
+    #[test]
+    fn duplicate_spawn_unregisters_old_targetable_cells() {
+        let mut app = test_app(seeded_catalog());
+        app.world_mut().write_message(SkillUnitSpawned {
+            group: group(1, STORM_GUST, vec![targetable_cell(100, 40, 50, true)]),
+        });
+        app.update();
+        assert!(app
+            .world()
+            .resource::<EntityRegistry>()
+            .get_entity(100)
+            .is_some());
+
+        // Group re-entering view (or a duplicate spawn) with a different cell
+        // id: the old targetable cell's registration must not survive the replace.
+        app.world_mut().write_message(SkillUnitSpawned {
+            group: group(1, STORM_GUST, vec![targetable_cell(200, 40, 50, true)]),
+        });
+        app.update();
+
+        let registry = app.world().resource::<EntityRegistry>();
+        assert!(
+            registry.get_entity(100).is_none(),
+            "old cell's registration is dropped on replace"
+        );
+        assert!(registry.get_entity(200).is_some(), "new cell registers");
     }
 }

@@ -16,6 +16,10 @@ pub enum ObjectType {
     Mercenary = 0x7,
     /// Elemental (summoned element)
     Elemental = 0x8,
+    /// Server-authoritative skill-unit cell (Ice Wall, Fire Pillar, ...).
+    /// Client-spawned only: never parsed off the wire, so `From<u8>` has no
+    /// arm producing it (unknown wire values fall back to `Pc`).
+    SkillUnit = 0xFF,
 }
 
 impl From<u8> for ObjectType {
@@ -35,5 +39,21 @@ impl From<u8> for ObjectType {
 impl From<ObjectType> for u8 {
     fn from(value: ObjectType) -> Self {
         value as u8
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wire_parsing_never_produces_skill_unit() {
+        for value in 0..=u8::MAX {
+            assert_ne!(
+                ObjectType::from(value),
+                ObjectType::SkillUnit,
+                "wire value {value} must not decode to the client-only SkillUnit variant"
+            );
+        }
     }
 }
