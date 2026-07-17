@@ -12,6 +12,7 @@
 
 use super::VfxSystems;
 use crate::domain::entities::registry::EntityRegistry;
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use net_contract::events::{CastCancelled, SkillCastStarted};
 use std::f32::consts::FRAC_PI_2;
@@ -118,6 +119,7 @@ fn spawn_cast_circles(
                 Mesh3d(assets.ring.clone()),
                 MeshMaterial3d(material),
                 Transform::from_xyz(0.0, CIRCLE_LIFT, 0.0),
+                NotShadowCaster,
                 CastCircle {
                     caster_gid: event.src_id,
                     timer: Timer::from_seconds(event.cast_time as f32 / 1000.0, TimerMode::Once),

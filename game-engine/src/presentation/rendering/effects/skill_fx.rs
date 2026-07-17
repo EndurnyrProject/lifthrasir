@@ -4,6 +4,7 @@ use super::impact::{
 };
 use super::VfxSystems;
 use crate::infrastructure::effect::ShaderFxEntry;
+use bevy::light::NotShadowCaster;
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
@@ -111,6 +112,7 @@ pub fn spawn_shader_fx(
                 Mesh3d(assets.quad.clone()),
                 MeshMaterial3d(material),
                 Transform::from_scale(Vec3::splat(entry.scale)),
+                NotShadowCaster,
             ));
             if let Some(light) = &entry.light {
                 let peak = light.intensity_scale * LIGHT_PEAK;

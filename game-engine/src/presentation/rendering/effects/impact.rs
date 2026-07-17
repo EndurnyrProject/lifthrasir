@@ -2,6 +2,7 @@ use super::skill_fx::{spawn_shader_fx, SkillFxMaterial};
 use super::VfxSystems;
 use crate::domain::effects::PlayProceduralVfx;
 use crate::infrastructure::effect::ShaderFxCatalog;
+use bevy::light::NotShadowCaster;
 use bevy::mesh::MeshVertexBufferLayoutRef;
 use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
@@ -425,16 +426,19 @@ fn spawn_flash_burst(
                 Mesh3d(assets.quad.clone()),
                 MeshMaterial3d(core),
                 Transform::from_scale(Vec3::splat(style.scale)),
+                NotShadowCaster,
             ));
             parent.spawn((
                 Mesh3d(assets.quad.clone()),
                 MeshMaterial3d(star_wide),
                 Transform::from_scale(Vec3::new(long, short, 1.0)),
+                NotShadowCaster,
             ));
             parent.spawn((
                 Mesh3d(assets.quad.clone()),
                 MeshMaterial3d(star_tall),
                 Transform::from_scale(Vec3::new(short, long, 1.0)),
+                NotShadowCaster,
             ));
             parent.spawn((
                 PointLight {
