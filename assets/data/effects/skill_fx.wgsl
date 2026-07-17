@@ -188,6 +188,69 @@ fn fire_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(color, alpha);
 }
 
+// kind 2 — Cold Bolt. shape: x=shard_count y=glint_hz z=impact_bloom.
+// A handful of hard-edged ice shards drop straight down (no wobble) and
+// strike the target, staggered across `factor` so they land in sequence;
+// each landing blooms a brief frosty flash (z is the flash falloff — larger
+// = tighter). primary is the white-blue HDR core, secondary the deep-blue
+// falloff. Streaks use a smoothstep-hardened edge (narrower and crisper than
+// fire's gaussian) and glints are hash-gated brightness pops (glint_hz reseeds
+// per period) rather than continuous flicker. A slow-drifting cold mist glow
+// sits at the impact base in place of fire's ember shimmer.
+fn cold_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
+    let centered = uv * 2.0 - 1.0;
+    let f = material.factor;
+    let count = i32(material.shape.x);
+    let glint_hz = material.shape.y;
+    let bloom = material.shape.z;
+
+    let life = 1.0 - smoothstep(0.9, 1.0, f);
+    let fcount = max(f32(count), 1.0);
+
+    var hot = 0.0;
+    var cold = 0.0;
+    var flash = 0.0;
+    for (var i = 0; i < count; i++) {
+        let seed = f32(i);
+        let lane = (hash11(seed * 4.7) - 0.5) * 1.3;
+        let t0 = seed / fcount * 0.55;
+        let local = f - t0;
+        let p = clamp(local / 0.4, 0.0, 1.0);
+        let vis = step(0.0, local) * (1.0 - smoothstep(0.4, 0.55, local));
+        let head = 1.3 - 1.3 * p;
+
+        let width = 0.016 + 0.012 * hash11(seed + 1.7);
+        let hdist = abs(centered.x - lane);
+        let above = centered.y - head;
+        let tail = (1.0 - smoothstep(0.0, 0.4, above)) * step(-0.02, above);
+        let glint_gate = step(0.94, hash11(floor(globals.time * glint_hz) + seed * 5.3));
+        let glint = 1.0 + glint_gate * 1.6;
+        let edge = 1.0 - smoothstep(width * 0.5, width, hdist);
+        hot += edge * tail * vis * glint;
+        cold += exp(-pow(hdist / (width * 4.0), 2.0)) * tail * vis * 0.3;
+
+        let tl = local - 0.4;
+        let ri = length(centered - vec2<f32>(lane, 0.0));
+        flash += exp(-ri * ri * bloom) * exp(-tl * tl * 55.0) * step(0.0, local);
+    }
+
+    let mist = vnoise(vec2<f32>(centered.x * 3.0 + globals.time * 0.4, centered.y * 3.0));
+    let mist_glow = smoothstep(0.4, 0.9, mist) * exp(-dot(centered, centered) * 2.5) * 0.22;
+
+    hot = min(hot, 2.0) * life;
+    cold = (min(cold, 1.5) + mist_glow) * life;
+    flash = min(flash, 1.5) * life;
+
+    let core = hot + flash;
+    let glow = cold + flash * 0.5;
+    let alpha = clamp(core + glow, 0.0, 1.0);
+    if (alpha < 0.01) {
+        discard;
+    }
+    let color = material.primary.rgb * core + material.secondary.rgb * glow;
+    return vec4<f32>(color, alpha);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     switch material.kind {
@@ -196,6 +259,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         case 1u: {
             return fire_bolt_fragment(in.uv);
+        }
+        case 2u: {
+            return cold_bolt_fragment(in.uv);
         }
         default: {
             return vec4<f32>(1.0, 0.0, 1.0, 1.0);

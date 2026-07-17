@@ -31,4 +31,20 @@
             tint: (3.0, 0.8, 0.15, 1.0),
         )),
     ),
+    "cold_bolt": (
+        kind: 2,
+        primary: (2.2, 3.4, 5.0, 1.0),
+        secondary: (0.6, 1.6, 3.0, 1.0),
+        shape: (5.0, 6.0, 20.0, 0.0),
+        duration: 0.9,
+        scale: 18.0,
+        light: Some((
+            color: (0.6, 0.8, 1.0),
+            intensity_scale: 1.2,
+            fade: 0.2,
+        )),
+        garnish: Some((
+            tint: (0.6, 1.6, 3.0, 1.0),
+        )),
+    ),
 }
