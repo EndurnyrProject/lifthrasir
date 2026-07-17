@@ -88,6 +88,7 @@ pub fn process_combat_actions(
                     entity: target,
                     amount: 0,
                     damage_type: DamageDisplayType::Miss,
+                    delay_secs: 0.0,
                 });
             }
         } else if matches!(
@@ -196,6 +197,7 @@ pub fn apply_pending_hit_reactions(
             entity: reaction.target,
             amount: reaction.damage.max(0),
             damage_type,
+            delay_secs: 0.0,
         });
 
         if is_dead || has_endure || reaction.damage <= 0 || !reaction.flinches {

@@ -79,6 +79,9 @@ pub struct DisplayDamageNumber {
     pub entity: Entity,
     pub amount: i32,
     pub damage_type: DamageDisplayType,
+    /// Seconds to wait before showing this number, for staggering multi-hit
+    /// skills into a readable sequence. Zero shows it immediately.
+    pub delay_secs: f32,
 }
 
 /// Type of damage to display

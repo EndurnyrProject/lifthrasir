@@ -42,6 +42,43 @@ const SPECIAL_EFFECT_LIFETIME_SECS: f32 = 8.0;
 /// clipping into the terrain.
 const VFX_CENTER_HEIGHT: f32 = -2.0;
 
+/// Delay between successive damage numbers of a multi-hit skill (bolts, Napalm
+/// Beat), so `div` hits read as a sequence rather than one stacked total.
+const HIT_STAGGER_SECS: f32 = 0.15;
+
+/// Sanity cap on hit count: no real skill exceeds ~10 hits, but a malformed or
+/// hostile `div` must never drive the allocation below.
+const MAX_HITS: u32 = 32;
+
+/// Splits a skill's total damage into per-hit amounts that sum back to the
+/// (clamped non-negative) total, remainder folded into the last hit.
+///
+/// `div` arrives over the wire as `u32`, but aesir encodes negative hit counts
+/// for some skills (e.g. Fire Pillar against player targets sends
+/// `div: -hit_count`) to signal different classic-client display semantics we
+/// don't distinguish yet. Reinterpret the wire value as signed and take its
+/// magnitude so those arrive as the same hit count rather than wrapping to
+/// ~4.3 billion, then clamp to `MAX_HITS` against any other malformed value.
+/// `div <= 1` always returns a single hit for the whole amount.
+fn split_hits(damage: i32, div: u32) -> Vec<i32> {
+    let total = damage.max(0);
+    let div = (div as i32).unsigned_abs().clamp(1, MAX_HITS);
+    if div == 1 {
+        return vec![total];
+    }
+    let per_hit = total / div as i32;
+    let remainder = total % div as i32;
+    (0..div)
+        .map(|i| {
+            if i == div - 1 {
+                per_hit + remainder
+            } else {
+                per_hit
+            }
+        })
+        .collect()
+}
+
 /// Write a `PlayProceduralVfx` for a descriptor's procedural key, anchored to the
 /// resolved unit's body center. Non-critical (design §D6): skips with a `debug!`
 /// when the unit has no transform, never inventing a default position.
@@ -210,12 +247,16 @@ pub fn on_skill_damage(
 
         // Damage number and caster motion are gameplay feedback, not part of the
         // STR visual effect: they play for every damage skill, including ones with
-        // no catalog entry (e.g. Bash).
-        damage_display.write(DisplayDamageNumber {
-            entity: target,
-            amount: event.damage.max(0),
-            damage_type: DamageDisplayType::Normal,
-        });
+        // no catalog entry (e.g. Bash). Multi-hit skills (bolts, Napalm Beat) split
+        // their total across `div` staggered numbers so they read as N hits.
+        for (i, amount) in split_hits(event.damage, event.div).into_iter().enumerate() {
+            damage_display.write(DisplayDamageNumber {
+                entity: target,
+                amount,
+                damage_type: DamageDisplayType::Normal,
+                delay_secs: i as f32 * HIT_STAGGER_SECS,
+            });
+        }
 
         if let Some(src) = src {
             start_attack_animation(
@@ -467,6 +508,117 @@ mod tests {
         assert_eq!(emitted.len(), 1, "one damage number emitted");
         assert_eq!(emitted[0].entity, target);
         assert_eq!(emitted[0].amount, 123);
+        assert_eq!(emitted[0].delay_secs, 0.0, "div: 1 has no stagger");
+    }
+
+    #[test]
+    fn multi_hit_skill_splits_damage_into_staggered_numbers() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+
+        let target = spawn_unit(&mut app, 200);
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 28, // AL_HEAL (seeded Target); catalog entry irrelevant here
+            level: 1,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 300,
+            div: 3,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        });
+
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            1,
+            "STR effect still spawns once, not per hit"
+        );
+
+        let messages = app
+            .world_mut()
+            .resource_mut::<Messages<DisplayDamageNumber>>();
+        let mut cursor = messages.get_cursor();
+        let emitted: Vec<_> = cursor.read(&messages).collect();
+        assert_eq!(emitted.len(), 3, "div: 3 emits three hits");
+        assert_eq!(
+            emitted.iter().map(|e| e.amount).sum::<i32>(),
+            300,
+            "hits sum to the total damage"
+        );
+        for e in &emitted {
+            assert_eq!(e.entity, target);
+        }
+        assert_eq!(
+            emitted.iter().map(|e| e.delay_secs).collect::<Vec<_>>(),
+            vec![0.0, HIT_STAGGER_SECS, 2.0 * HIT_STAGGER_SECS],
+            "hits stagger by increasing multiples of the const"
+        );
+    }
+
+    #[test]
+    fn split_hits_reinterprets_wire_negative_div_as_hit_count() {
+        // aesir encodes negative hit counts for some skills (e.g. Fire Pillar
+        // against player targets sends div: -3), which arrive over the u32
+        // wire as u32::MAX - 2.
+        let wire_div = (-3i32) as u32;
+        let hits = split_hits(300, wire_div);
+        assert_eq!(hits.len(), 3, "magnitude of -3 is 3 hits");
+        assert_eq!(hits.iter().sum::<i32>(), 300);
+    }
+
+    #[test]
+    fn split_hits_div_zero_is_a_single_hit() {
+        let hits = split_hits(50, 0);
+        assert_eq!(hits, vec![50]);
+    }
+
+    #[test]
+    fn split_hits_absurd_div_is_clamped_to_max_hits() {
+        let hits = split_hits(3200, 1000);
+        assert_eq!(hits.len(), MAX_HITS as usize, "clamped to the sanity cap");
+        assert_eq!(hits.iter().sum::<i32>(), 3200);
+    }
+
+    #[test]
+    fn multi_hit_skill_rounds_remainder_onto_last_hit() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+
+        let target = spawn_unit(&mut app, 200);
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 28,
+            level: 1,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 100,
+            div: 3,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        });
+
+        app.update();
+
+        let messages = app
+            .world_mut()
+            .resource_mut::<Messages<DisplayDamageNumber>>();
+        let mut cursor = messages.get_cursor();
+        let emitted: Vec<_> = cursor.read(&messages).collect();
+        assert_eq!(
+            emitted.iter().map(|e| e.amount).collect::<Vec<_>>(),
+            vec![33, 33, 34],
+            "remainder lands on the last hit"
+        );
+        assert!(emitted.iter().all(|e| e.entity == target));
     }
 
     #[test]

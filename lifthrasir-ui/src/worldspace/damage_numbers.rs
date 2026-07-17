@@ -45,6 +45,15 @@ struct DamageNumber {
 #[derive(Resource, Default)]
 struct DamageSpawnCounter(u32);
 
+/// A damage number waiting out `DisplayDamageNumber::delay_secs` before it
+/// appears, for staggering multi-hit skills into a readable sequence.
+struct PendingDamageNumber {
+    timer: Timer,
+    entity: Entity,
+    amount: i32,
+    damage_type: DamageDisplayType,
+}
+
 fn damage_text(amount: i32, damage_type: DamageDisplayType) -> String {
     match damage_type {
         DamageDisplayType::Miss => "Miss".to_string(),
@@ -74,6 +83,59 @@ fn horizontal_jitter(counter: u32) -> f32 {
     ((counter % 5) as f32 - 2.0) * 12.0
 }
 
+#[allow(clippy::too_many_arguments)]
+fn spawn_one(
+    commands: &mut Commands,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    targets: &Query<(&GlobalTransform, Has<LocalPlayer>)>,
+    ui_scale: &UiScale,
+    font: &WorldspaceFont,
+    counter: &mut DamageSpawnCounter,
+    entity: Entity,
+    amount: i32,
+    damage_type: DamageDisplayType,
+) {
+    let Ok((target_transform, player_is_target)) = targets.get(entity) else {
+        return;
+    };
+    let Ok(screen) = camera.world_to_viewport(camera_transform, target_transform.translation())
+    else {
+        return;
+    };
+    let pos = viewport_to_ui(screen, ui_scale);
+
+    let left = pos.x + horizontal_jitter(counter.0);
+    let top = pos.y - SPAWN_OFFSET_Y;
+    counter.0 = counter.0.wrapping_add(1);
+
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(left),
+            top: Val::Px(top),
+            ..default()
+        },
+        GlobalZIndex(DAMAGE_Z),
+        Pickable::IGNORE,
+        DamageNumber {
+            timer: Timer::from_seconds(LIFETIME_SECS, TimerMode::Once),
+            top,
+        },
+        children![(
+            Text::new(damage_text(amount, damage_type)),
+            TextFont {
+                font: font.0.clone().into(),
+                font_size: font_size(damage_type).into(),
+                ..default()
+            },
+            TextColor(damage_color(damage_type, player_is_target)),
+            Pickable::IGNORE,
+        )],
+    ));
+}
+
+#[allow(clippy::too_many_arguments)]
 fn spawn_damage_numbers(
     mut events: MessageReader<DisplayDamageNumber>,
     mut commands: Commands,
@@ -82,49 +144,57 @@ fn spawn_damage_numbers(
     ui_scale: Res<UiScale>,
     font: Res<WorldspaceFont>,
     mut counter: ResMut<DamageSpawnCounter>,
+    time: Res<Time>,
+    mut pending: Local<Vec<PendingDamageNumber>>,
 ) {
     let Ok((camera, camera_transform)) = camera.single() else {
         return;
     };
+
     for event in events.read() {
-        let Ok((target_transform, player_is_target)) = targets.get(event.entity) else {
-            continue;
-        };
-        let Ok(screen) = camera.world_to_viewport(camera_transform, target_transform.translation())
-        else {
-            continue;
-        };
-        let pos = viewport_to_ui(screen, &ui_scale);
-
-        let left = pos.x + horizontal_jitter(counter.0);
-        let top = pos.y - SPAWN_OFFSET_Y;
-        counter.0 = counter.0.wrapping_add(1);
-
-        commands.spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(left),
-                top: Val::Px(top),
-                ..default()
-            },
-            GlobalZIndex(DAMAGE_Z),
-            Pickable::IGNORE,
-            DamageNumber {
-                timer: Timer::from_seconds(LIFETIME_SECS, TimerMode::Once),
-                top,
-            },
-            children![(
-                Text::new(damage_text(event.amount, event.damage_type)),
-                TextFont {
-                    font: font.0.clone().into(),
-                    font_size: font_size(event.damage_type).into(),
-                    ..default()
-                },
-                TextColor(damage_color(event.damage_type, player_is_target)),
-                Pickable::IGNORE,
-            )],
-        ));
+        if event.delay_secs <= 0.0 {
+            spawn_one(
+                &mut commands,
+                camera,
+                camera_transform,
+                &targets,
+                &ui_scale,
+                &font,
+                &mut counter,
+                event.entity,
+                event.amount,
+                event.damage_type,
+            );
+        } else {
+            pending.push(PendingDamageNumber {
+                timer: Timer::from_seconds(event.delay_secs, TimerMode::Once),
+                entity: event.entity,
+                amount: event.amount,
+                damage_type: event.damage_type,
+            });
+        }
     }
+
+    let delta = time.delta();
+    pending.retain_mut(|hit| {
+        hit.timer.tick(delta);
+        if !hit.timer.is_finished() {
+            return true;
+        }
+        spawn_one(
+            &mut commands,
+            camera,
+            camera_transform,
+            &targets,
+            &ui_scale,
+            &font,
+            &mut counter,
+            hit.entity,
+            hit.amount,
+            hit.damage_type,
+        );
+        false
+    });
 }
 
 fn animate_damage_numbers(
