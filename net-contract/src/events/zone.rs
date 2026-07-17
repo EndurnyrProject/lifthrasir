@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
+use crate::dto::{SkillUnitDespawnReason, SkillUnitGroupState, SkillUnitUpdateReason};
+
 /// Zone entry accepted: AID folded into EnterAck (collapses ZC_ACCEPT_ENTER + ZC_AID).
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
@@ -254,6 +256,44 @@ pub struct SkillEffectShown {
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct CastCancelled {
     pub gid: u32,
+}
+
+/// Full skill-unit state for the zone, sent on zone-in (e.g. Storm Gust
+/// groups already active on the map).
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SkillUnitSnapshotReceived {
+    pub server_tick: u64,
+    pub groups: Vec<SkillUnitGroupState>,
+}
+
+/// A skill-unit group was placed (e.g. a Storm Gust cast, an Ice Wall).
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SkillUnitSpawned {
+    pub group: SkillUnitGroupState,
+}
+
+/// A skill-unit cell's HP changed.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SkillUnitUpdated {
+    pub group_id: u64,
+    pub cell_id: u32,
+    pub hp: u32,
+    pub max_hp: u32,
+    pub hp_delta: i32,
+    pub reason: SkillUnitUpdateReason,
+}
+
+/// One or more cells of a skill-unit group were removed; the group root
+/// despawns once its last cell is gone.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SkillUnitDespawned {
+    pub group_id: u64,
+    pub cell_ids: Vec<u32>,
+    pub reason: SkillUnitDespawnReason,
 }
 
 /// A skill went on cooldown.

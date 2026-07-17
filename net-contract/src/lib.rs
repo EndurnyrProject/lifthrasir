@@ -154,5 +154,17 @@ mod tests {
         assert!(app
             .world()
             .contains_resource::<Messages<commands::EmoteSent>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::SkillUnitSnapshotReceived>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::SkillUnitSpawned>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::SkillUnitUpdated>>());
+        assert!(app
+            .world()
+            .contains_resource::<Messages<events::SkillUnitDespawned>>());
     }
 }

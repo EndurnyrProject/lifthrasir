@@ -8,6 +8,7 @@ mod npc;
 mod party;
 mod server_info;
 mod shop;
+mod skill_units;
 mod storage;
 
 pub use cart::*;
@@ -18,4 +19,5 @@ pub use npc::*;
 pub use party::*;
 pub use server_info::*;
 pub use shop::*;
+pub use skill_units::*;
 pub use storage::*;
