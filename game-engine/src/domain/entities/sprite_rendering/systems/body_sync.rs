@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
 use crate::domain::audio::events::PlayMobSfx;
+use crate::domain::effects::AnimationPaused;
 use crate::domain::entities::sprite_rendering::components::{
     BodyAttachPoint, HeadLayer, MobSprite, PlayerSprite, RenderLayer, RoSpriteGeneric,
 };
@@ -28,14 +29,14 @@ fn sync_body_layer_impl<T: ActionLayout>(
     game_time_ms: u32,
     animations: &Res<Assets<RoAnimationAsset>>,
     materials: &mut Assets<StandardMaterial>,
-    parent_query: &Query<&RoSpriteGeneric<T>>,
+    parent_query: &Query<(&RoSpriteGeneric<T>, Option<&AnimationPaused>)>,
     layer_query: &mut BodyLayerQuery,
     mut sfx: Option<&mut MessageWriter<PlayMobSfx>>,
 ) {
     for (layer, child_of, material_handle, mut transform, mut attach_point) in
         layer_query.iter_mut()
     {
-        let Ok(ro_sprite) = parent_query.get(child_of.parent()) else {
+        let Ok((ro_sprite, paused)) = parent_query.get(child_of.parent()) else {
             continue;
         };
 
@@ -43,8 +44,14 @@ fn sync_body_layer_impl<T: ActionLayout>(
             continue;
         };
 
-        let frame_index = ro_sprite.get_frame_index(animation, game_time_ms);
-        let Some(frame) = ro_sprite.get_frame(animation, game_time_ms) else {
+        // A frozen/petrified unit holds its animation on the frame that was
+        // showing when the pause began: feed that captured timestamp instead of
+        // the live clock. The head and weapon layers ride the body's published
+        // frame index, so freezing the body alone holds the whole character.
+        let effective_time = paused.map_or(game_time_ms, |p| p.at_ms);
+
+        let frame_index = ro_sprite.get_frame_index(animation, effective_time);
+        let Some(frame) = ro_sprite.get_frame(animation, effective_time) else {
             continue;
         };
 
@@ -117,7 +124,7 @@ pub fn sync_player_body_layer(
     time: Res<Time>,
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    parent_query: Query<&PlayerSprite>,
+    parent_query: Query<(&PlayerSprite, Option<&AnimationPaused>)>,
     mut layer_query: BodyLayerQuery,
     mut sfx_writer: MessageWriter<PlayMobSfx>,
 ) {
@@ -141,7 +148,7 @@ pub fn sync_mob_body_layer(
     time: Res<Time>,
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    parent_query: Query<&MobSprite>,
+    parent_query: Query<(&MobSprite, Option<&AnimationPaused>)>,
     mut layer_query: BodyLayerQuery,
     mut sfx_writer: MessageWriter<PlayMobSfx>,
 ) {

@@ -29,13 +29,12 @@ impl UnitState {
 /// Consumes the legacy `UnitStateChange` channel: stores all four state fields
 /// on [`UnitState`] and renders the cheap high-value subset.
 ///
-/// ponytail: only hide/cloak visibility (option) renders. Deliberately deferred
-/// and stored-only:
-/// - stone/freeze/stun/sleep body poses (opt1): no dedicated `AnimationState`
-///   variants exist for them, and mapping onto `Hit` collides with the combat
-///   HitStun revert (`update_hit_stun` forces unmarked `Hit` back to `Idle`
-///   after ~0.3s), so the pose would flicker then vanish while still active.
-///   Doing it right needs real stun/freeze/sleep animation states.
+/// ponytail: only hide/cloak visibility (option) renders here. Deliberately
+/// deferred and stored-only:
+/// - freeze/stone body poses (opt1) render in `domain/effects/status_visuals.rs`
+///   (`body_state_visuals`): tint + `AnimationPaused`, off the combat
+///   `AnimationState` machine so the HitStun revert can't fight them.
+/// - stun/sleep body poses (opt1): still stored-only; no visual yet.
 /// - poison/curse/silence tint (health_state/opt2).
 /// - mount/orc-head and the other option bits. (The cart bits are consumed by
 ///   `apply_cart_mount` in the sprite-rendering domain.)

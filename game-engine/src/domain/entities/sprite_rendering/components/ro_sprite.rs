@@ -112,7 +112,11 @@ impl<T: ActionLayout> RoSpriteGeneric<T> {
             return 0;
         }
 
-        let elapsed = game_time_ms.wrapping_sub(self.start_time);
+        // Saturating, not wrapping: a paused unit feeds a frozen timestamp that
+        // can predate a later `start_time`, and an underflow there would jump to
+        // an arbitrary frame. `game_time_ms >= start_time` in normal play, so
+        // this matches the previous behaviour outside that edge.
+        let elapsed = game_time_ms.saturating_sub(self.start_time);
         let frame_time = match self.fixed_duration_ms {
             Some(duration) => {
                 (elapsed as u64 * frame_count as u64 / u64::from(duration.max(1))) as usize

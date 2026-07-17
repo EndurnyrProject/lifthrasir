@@ -1,6 +1,7 @@
 pub mod components;
 pub mod events;
 pub mod map_effects;
+pub mod status_visuals;
 pub mod systems;
 pub mod triggers;
 
@@ -9,6 +10,9 @@ pub use components::{
 };
 pub use events::PlayProceduralVfx;
 pub use map_effects::{spawn_map_effects, MapEffectsSpawned};
+pub use status_visuals::{
+    apply_body_state_tint, body_state_visuals, AnimationPaused, BodyStateTint, PendingBodyStates,
+};
 pub use systems::{
     advance_effect_timers, despawn_finished_effects, follow_effect_anchor,
     initialize_effect_layers, interpolate_layer_frame, order_effect_layers_by_depth,

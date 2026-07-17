@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
 use crate::domain::combat::components::AttackTimer;
+use crate::domain::effects::AnimationPaused;
 use crate::domain::entities::billboard::EquipmentPreviewCamera;
 use crate::domain::entities::character::components::visual::{
     ActionType, CharacterDirection, CombatMotion, Direction,
@@ -28,6 +29,7 @@ type SpriteActionQuery<'w, 's, T> = Query<
         Option<&'static AttackTimer>,
         Option<&'static MovementSpeed>,
         Option<&'static CombatMotion>,
+        Option<&'static AnimationPaused>,
         &'static mut RoSpriteGeneric<T>,
     ),
     Or<(
@@ -58,7 +60,17 @@ fn resolve_action_type(base: ActionType, motion: Option<CombatMotion>) -> Action
 fn sync_sprite_action_impl<T: ActionLayout>(time: &Res<Time>, query: &mut SpriteActionQuery<T>) {
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
 
-    for (state, attack_timer, movement_speed, combat_motion, mut ro_sprite) in query.iter_mut() {
+    for (state, attack_timer, movement_speed, combat_motion, paused, mut ro_sprite) in
+        query.iter_mut()
+    {
+        // A frozen/petrified unit holds its captured pose: skip the action reset
+        // (which would rewrite start_time and, being newer than the pause
+        // timestamp, underflow the frame clock) so Hit and other state changes do
+        // not disturb it. The tint + pause clear together, letting it resume.
+        if paused.is_some() {
+            continue;
+        }
+
         let base: ActionType = (*state).into();
         let action_type = resolve_action_type(base, combat_motion.copied());
         let duration_ms = attack_timer
@@ -304,6 +316,36 @@ mod tests {
         assert_eq!(
             camera_relative_direction(Direction::South, 4),
             Direction::North
+        );
+    }
+
+    #[test]
+    fn frozen_unit_ignores_animation_state_change() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_systems(Update, sync_player_sprite_action);
+
+        let unit = app
+            .world_mut()
+            .spawn((
+                AnimationState::Idle,
+                PlayerSprite::default(),
+                AnimationPaused { at_ms: 500 },
+            ))
+            .id();
+
+        let before = app.world().get::<PlayerSprite>(unit).unwrap().start_time;
+
+        // Taking damage while frozen fires a Hit state change (the common case).
+        *app.world_mut().get_mut::<AnimationState>(unit).unwrap() = AnimationState::Hit;
+        app.update();
+
+        let after = app.world().get::<PlayerSprite>(unit).unwrap();
+        assert_eq!(after.start_time, before, "pause must not restart the clock");
+        assert_eq!(
+            after.action_type,
+            ActionType::Idle,
+            "frozen unit must not play Hit"
         );
     }
 
