@@ -15,4 +15,20 @@
             tint: (1.8, 2.4, 4.5, 1.0),
         )),
     ),
+    "fire_bolt": (
+        kind: 1,
+        primary: (5.5, 3.2, 1.6, 1.0),
+        secondary: (3.0, 0.8, 0.15, 1.0),
+        shape: (4.0, 18.0, 16.0, 0.0),
+        duration: 0.9,
+        scale: 18.0,
+        light: Some((
+            color: (1.0, 0.55, 0.25),
+            intensity_scale: 1.2,
+            fade: 0.2,
+        )),
+        garnish: Some((
+            tint: (3.0, 0.8, 0.15, 1.0),
+        )),
+    ),
 }

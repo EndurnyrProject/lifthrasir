@@ -129,11 +129,73 @@ fn jupitel_fragment(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(color, alpha);
 }
 
+// kind 1 — Fire Bolt. shape: x=streak_count y=flicker_hz z=impact_bloom.
+// A handful of white-hot streaks fall from screen-up and strike the target
+// (quad center), staggered across `factor` so they land in sequence; each
+// landing blooms a brief fire flash (z is the flash falloff — larger = tighter).
+// primary is the white-hot core, secondary the orange-red falloff. Ember
+// shimmer is scrolling vnoise near the impact, flicker keyed off globals.time.
+fn fire_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
+    let centered = uv * 2.0 - 1.0;
+    let f = material.factor;
+    let count = i32(material.shape.x);
+    let flicker_hz = material.shape.y;
+    let bloom = material.shape.z;
+
+    let life = 1.0 - smoothstep(0.9, 1.0, f);
+    let fcount = max(f32(count), 1.0);
+
+    var hot = 0.0;
+    var warm = 0.0;
+    var flash = 0.0;
+    for (var i = 0; i < count; i++) {
+        let seed = f32(i);
+        let lane = (hash11(seed * 4.7) - 0.5) * 1.3;
+        let t0 = seed / fcount * 0.55;
+        let local = f - t0;
+        let p = clamp(local / 0.4, 0.0, 1.0);
+        let vis = step(0.0, local) * (1.0 - smoothstep(0.4, 0.55, local));
+        let head = 1.3 - 1.3 * p;
+
+        let wob = (vnoise(vec2<f32>(centered.y * 5.0 + seed * 11.0, globals.time * flicker_hz)) - 0.5) * 0.12;
+        let width = 0.026 + 0.02 * hash11(seed + 1.7);
+        let hdist = abs(centered.x - lane - wob);
+        let above = centered.y - head;
+        let tail = (1.0 - smoothstep(0.0, 0.55, above)) * step(-0.02, above);
+        let flick = 0.75 + 0.4 * hash11(floor(globals.time * flicker_hz) + seed);
+        hot += exp(-pow(hdist / width, 2.0)) * tail * vis * flick;
+        warm += exp(-pow(hdist / (width * 4.5), 2.0)) * tail * vis * 0.35;
+
+        let tl = local - 0.4;
+        let ri = length(centered - vec2<f32>(lane, 0.0));
+        flash += exp(-ri * ri * bloom) * exp(-tl * tl * 55.0) * step(0.0, local);
+    }
+
+    let ember = vnoise(vec2<f32>(centered.x * 8.0, centered.y * 8.0 - globals.time * 2.5));
+    let ember_glow = smoothstep(0.62, 1.0, ember) * exp(-dot(centered, centered) * 2.2) * 0.25;
+
+    hot = min(hot, 2.0) * life;
+    warm = (min(warm, 1.5) + ember_glow) * life;
+    flash = min(flash, 1.5) * life;
+
+    let core = hot + flash;
+    let glow = warm + flash * 0.5;
+    let alpha = clamp(core + glow, 0.0, 1.0);
+    if (alpha < 0.01) {
+        discard;
+    }
+    let color = material.primary.rgb * core + material.secondary.rgb * glow;
+    return vec4<f32>(color, alpha);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     switch material.kind {
         case 0u: {
             return jupitel_fragment(in.uv);
+        }
+        case 1u: {
+            return fire_bolt_fragment(in.uv);
         }
         default: {
             return vec4<f32>(1.0, 0.0, 1.0, 1.0);
