@@ -476,6 +476,11 @@ pub fn on_play_procedural_vfx(
                 &assets,
                 entry,
                 msg.position,
+                msg.source,
+                msg.hits,
+                msg.sound.clone(),
+                &msg.key,
+                msg.color,
             );
             continue;
         }
@@ -660,6 +665,9 @@ mod tests {
         app.world_mut().write_message(PlayProceduralVfx {
             key: "bash".into(),
             position: Vec3::new(1.0, 2.0, 3.0),
+            source: None,
+            hits: 1,
+            sound: None,
             color: Color::WHITE,
         });
         app.update();
@@ -672,6 +680,9 @@ mod tests {
         app.world_mut().write_message(PlayProceduralVfx {
             key: "not-a-real-effect".into(),
             position: Vec3::ZERO,
+            source: None,
+            hits: 1,
+            sound: None,
             color: Color::WHITE,
         });
         app.update();
@@ -698,6 +709,8 @@ mod tests {
                 light: None,
                 garnish: None,
                 texture: None,
+                frames: None,
+                travel: None,
             },
         );
         app.insert_resource(ShaderFxCatalog::from_entries(entries));
@@ -705,6 +718,9 @@ mod tests {
         app.world_mut().write_message(PlayProceduralVfx {
             key: "fire_bolt".into(),
             position: Vec3::ZERO,
+            source: None,
+            hits: 1,
+            sound: None,
             color: Color::WHITE,
         });
         app.update();

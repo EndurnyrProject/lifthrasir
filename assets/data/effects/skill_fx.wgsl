@@ -344,6 +344,28 @@ fn lightning_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(color, alpha);
 }
 
+// kind 100 — traveling projectile. Renders the bound classic orb sprite
+// (fireorb, waterorb, lightningorb, thunder_ball_*) as a soft glowing ball tinted
+// by the entry's OWN colors, so each skill's in-flight projectile looks like that
+// skill. The orb art carries the shape; a radial vignette hides the quad corners
+// and a fast subtle pulse keeps it alive. shape and factor are unused (the
+// projectile holds a steady look across its flight, driven by its ECS motion).
+fn projectile_fragment(uv: vec2<f32>) -> vec4<f32> {
+    let centered = uv * 2.0 - 1.0;
+    let r = length(centered);
+    let tex = sample_fx(uv);
+    let vignette = 1.0 - smoothstep(0.75, 1.0, r);
+    let pulse = 0.85 + 0.15 * sin(globals.time * 22.0);
+    let core = tex * pulse * vignette;
+    let glow = tex * 0.4 * vignette;
+    let alpha = clamp(core + glow, 0.0, 1.0);
+    if (alpha < 0.01) {
+        discard;
+    }
+    let color = material.primary.rgb * core + material.secondary.rgb * glow;
+    return vec4<f32>(color, alpha);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     switch material.kind {
@@ -358,6 +380,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         case 3u: {
             return lightning_bolt_fragment(in.uv);
+        }
+        case 100u: {
+            return projectile_fragment(in.uv);
         }
         default: {
             return vec4<f32>(1.0, 0.0, 1.0, 1.0);

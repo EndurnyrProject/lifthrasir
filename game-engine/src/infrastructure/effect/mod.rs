@@ -15,5 +15,5 @@ pub use loader::StrEffectLoader;
 pub use plugin::EffectsPlugin;
 pub use shader_fx::{
     process_loaded_shader_fx, start_loading_shader_fx, ShaderFxAsset, ShaderFxCatalog,
-    ShaderFxEntry, ShaderFxGarnish, ShaderFxLight,
+    ShaderFxEntry, ShaderFxGarnish, ShaderFxLight, ShaderFxTravel, TextureFrames,
 };

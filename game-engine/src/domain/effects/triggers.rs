@@ -24,7 +24,9 @@ use crate::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
 use crate::domain::combat::systems::start_attack_animation;
 use crate::domain::entities::character::states::AnimationState;
 use crate::domain::entities::registry::EntityRegistry;
-use crate::infrastructure::effect::{EffectCatalog, LoadedEffectAsset, MapEffectCatalog};
+use crate::infrastructure::effect::{
+    EffectCatalog, LoadedEffectAsset, MapEffectCatalog, ShaderFxCatalog,
+};
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use net_contract::events::{
     GroundSkillPlaced, SkillDamageReceived, SkillEffectShown, SpecialEffectShown,
@@ -82,11 +84,15 @@ fn split_hits(damage: i32, div: u32) -> Vec<i32> {
 /// Write a `PlayProceduralVfx` for a descriptor's procedural key, anchored to the
 /// resolved unit's body center. Non-critical (design §D6): skips with a `debug!`
 /// when the unit has no transform, never inventing a default position.
+#[allow(clippy::too_many_arguments)]
 fn emit_procedural_vfx(
     proc_vfx: &mut MessageWriter<PlayProceduralVfx>,
     transforms: &Query<&Transform>,
+    shader_fx: Option<&ShaderFxCatalog>,
     descriptor: &EffectDescriptor,
     anchor: Entity,
+    source: Option<Entity>,
+    hits: u32,
 ) {
     let Some(key) = &descriptor.vfx else {
         return;
@@ -95,11 +101,54 @@ fn emit_procedural_vfx(
         debug!("No transform for procedural vfx anchor {anchor}");
         return;
     };
+    let center = Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0);
+    // The caster's body center, for `travel` entries. Skipped when the caster is
+    // the anchor (a self-targeted effect would travel zero distance) so those play
+    // straight at the anchor as before.
+    let source = source
+        .filter(|&s| s != anchor)
+        .and_then(|s| transforms.get(s).ok())
+        .map(|t| t.translation + center);
+    // The per-projectile whoosh rides the message only for traveling effects; the
+    // trigger plays a non-traveling effect's sound once at cast instead (see
+    // `play_procedural_sound`). Riding it here would double a non-travel sound.
+    let sound = travels(shader_fx, key)
+        .then(|| descriptor.sound.clone())
+        .flatten();
     proc_vfx.write(PlayProceduralVfx {
         key: key.clone(),
-        position: transform.translation + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0),
+        position: transform.translation + center,
+        source,
+        hits: hits.max(1),
+        sound,
         color: descriptor_tint(descriptor),
     });
+}
+
+/// Whether `key`'s shader-fx entry declares `travel`. `false` when the catalog is
+/// still loading or the key is not a shader effect (e.g. a hanabi-only vfx).
+fn travels(shader_fx: Option<&ShaderFxCatalog>, key: &str) -> bool {
+    shader_fx
+        .and_then(|catalog| catalog.get(key))
+        .is_some_and(|entry| entry.travel.is_some())
+}
+
+/// Play the descriptor's sound at cast time UNLESS the effect travels — a
+/// traveling effect plays its sound per projectile launch instead (carried on
+/// `PlayProceduralVfx.sound`), so playing here too would double it.
+fn play_procedural_sound(
+    sfx: &mut MessageWriter<PlaySkillSfx>,
+    shader_fx: Option<&ShaderFxCatalog>,
+    descriptor: &EffectDescriptor,
+    emitter: Entity,
+) {
+    let travels = descriptor
+        .vfx
+        .as_deref()
+        .is_some_and(|key| travels(shader_fx, key));
+    if !travels {
+        play_sound(sfx, descriptor, emitter);
+    }
 }
 
 /// Resolve a unit by the gid aesir keys in-game packets on (see
@@ -175,9 +224,11 @@ pub fn on_skill_effect(
     registry: Res<EntityRegistry>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     transforms: Query<&Transform>,
+    shader_fx: Option<Res<ShaderFxCatalog>>,
     mut sfx: MessageWriter<PlaySkillSfx>,
     mut proc_vfx: MessageWriter<PlayProceduralVfx>,
 ) {
+    let shader_fx = shader_fx.as_deref();
     for event in events.read() {
         let src = resolve_gid(&registry, event.src_id);
         let target = resolve_gid(&registry, event.target_id);
@@ -215,8 +266,16 @@ pub fn on_skill_effect(
             None,
         );
 
-        play_sound(&mut sfx, descriptor, emitter);
-        emit_procedural_vfx(&mut proc_vfx, &transforms, descriptor, anchor_entity);
+        play_procedural_sound(&mut sfx, shader_fx, descriptor, emitter);
+        emit_procedural_vfx(
+            &mut proc_vfx,
+            &transforms,
+            shader_fx,
+            descriptor,
+            anchor_entity,
+            src,
+            1,
+        );
     }
 }
 
@@ -232,9 +291,11 @@ pub fn on_skill_damage(
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     transforms: Query<&Transform>,
     mut damage_display: MessageWriter<DisplayDamageNumber>,
+    shader_fx: Option<Res<ShaderFxCatalog>>,
     mut sfx: MessageWriter<PlaySkillSfx>,
     mut proc_vfx: MessageWriter<PlayProceduralVfx>,
 ) {
+    let shader_fx = shader_fx.as_deref();
     for event in events.read() {
         let src = resolve_gid(&registry, event.src_id);
         let Some(target) = resolve_gid(&registry, event.target_id) else {
@@ -249,7 +310,9 @@ pub fn on_skill_damage(
         // STR visual effect: they play for every damage skill, including ones with
         // no catalog entry (e.g. Bash). Multi-hit skills (bolts, Napalm Beat) split
         // their total across `div` staggered numbers so they read as N hits.
-        for (i, amount) in split_hits(event.damage, event.div).into_iter().enumerate() {
+        let hits = split_hits(event.damage, event.div);
+        let hit_count = hits.len() as u32;
+        for (i, amount) in hits.into_iter().enumerate() {
             damage_display.write(DisplayDamageNumber {
                 entity: target,
                 amount,
@@ -292,8 +355,16 @@ pub fn on_skill_damage(
             None,
         );
 
-        play_sound(&mut sfx, descriptor, emitter);
-        emit_procedural_vfx(&mut proc_vfx, &transforms, descriptor, target);
+        play_procedural_sound(&mut sfx, shader_fx, descriptor, emitter);
+        emit_procedural_vfx(
+            &mut proc_vfx,
+            &transforms,
+            shader_fx,
+            descriptor,
+            target,
+            src,
+            hit_count,
+        );
     }
 }
 

@@ -83,10 +83,11 @@
             repeating: false,
         ),
         14: ( // MG_COLDBOLT — no STR in the official client, hardcoded there —
-              // procedural hit burst. No dedicated hit sound found in the GRF.
+              // procedural hit burst. No dedicated ef_coldbolt in the GRF; the ice
+              // projectile sound is the classic element match.
             str: None,
             vfx: Some("cold_bolt"),
-            sound: None,
+            sound: Some("effect/ef_icearrow.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -125,10 +126,11 @@
             repeating: true,
         ),
         19: ( // MG_FIREBOLT — no STR in the official client, hardcoded there —
-              // procedural hit burst. No dedicated hit sound found in the GRF.
+              // procedural hit burst. No dedicated ef_firebolt in the GRF; the fire
+              // hit sound is the classic element match.
             str: None,
             vfx: Some("fire_bolt"),
-            sound: None,
+            sound: Some("effect/ef_firehit.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -235,11 +237,11 @@
             repeating: false,
         ),
         84: ( // WZ_JUPITEL (Jupitel Thunder) -- no STR in the official client,
-              // hardcoded there -- procedural hit burst. No dedicated hit sound
-              // found in the GRF.
+              // hardcoded there -- procedural hit burst. No dedicated ef_jupitel in
+              // the GRF; the light-bolt sound is the classic electric match.
             str: None,
             vfx: Some("jupitel_thunder"),
-            sound: None,
+            sound: Some("effect/ef_lightbolt.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
