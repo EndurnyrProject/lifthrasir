@@ -47,6 +47,24 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        10: ( // MG_SIGHT — cast flash only (persistent orbit is Task 12); no STR
+              // in the official client, hardcoded there — procedural burst.
+            str: None,
+            vfx: Some("sight"),
+            sound: Some("effect/ef_sight.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        11: ( // MG_NAPALMBEAT — no STR in the official client, hardcoded there —
+              // procedural hit burst.
+            str: None,
+            vfx: Some("napalm_beat"),
+            sound: Some("effect/ef_napalmbeat.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         12: ( // MG_SAFETYWALL
             str: Some("safetywall.str"),
             sound: Some("effect/ef_glasswall.wav"),
@@ -54,9 +72,47 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
+        13: ( // MG_SOULSTRIKE — no STR in the official client; classic visual is
+              // a legacy ACT sprite (soule.spr, not usable via `str`) — procedural
+              // hit burst.
+            str: None,
+            vfx: Some("soul_strike"),
+            sound: Some("effect/ef_soulstrike.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        14: ( // MG_COLDBOLT — no STR in the official client, hardcoded there —
+              // procedural hit burst. No dedicated hit sound found in the GRF.
+            str: None,
+            vfx: Some("cold_bolt"),
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        15: ( // MG_FROSTDIVER — no STR in the official client, hardcoded there —
+              // procedural hit burst.
+            str: None,
+            vfx: Some("frost_diver"),
+            sound: Some("effect/ef_frostdiver.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         16: ( // MG_STONECURSE
             str: Some("stonecurse.str"),
             sound: Some("effect/ef_stonecurse.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        17: ( // MG_FIREBALL — no STR in the official client; classic visual is a
+              // legacy ACT sprite (fireball.spr, not usable via `str`) — procedural
+              // hit burst.
+            str: None,
+            vfx: Some("fireball"),
+            sound: Some("effect/ef_fireball.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -67,6 +123,24 @@
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
+        ),
+        19: ( // MG_FIREBOLT — no STR in the official client, hardcoded there —
+              // procedural hit burst. No dedicated hit sound found in the GRF.
+            str: None,
+            vfx: Some("fire_bolt"),
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        20: ( // MG_LIGHTNINGBOLT — no STR in the official client, hardcoded there —
+              // procedural hit burst.
+            str: None,
+            vfx: Some("lightning_bolt"),
+            sound: Some("effect/ef_lightbolt.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
         ),
         21: ( // MG_THUNDERSTORM
             str: Some("thunderstorm.str"),
