@@ -344,6 +344,146 @@ fn lightning_bolt_fragment(uv: vec2<f32>) -> vec4<f32> {
     return vec4<f32>(color, alpha);
 }
 
+// kind 4 — ring blast. shape: x=emission y=ring_tightness z=flicker_hz.
+// An expanding shockring around the anchor: the bound classic art (firering,
+// freeze_ice_part, bubble frames) is scaled outward with the ring so it reads as
+// the blast wave itself, under a hot ignition core flash and a noise-modulated
+// rim. Shared by Sight, Sight Blaster, Sightrasher, Frost Nova, and Water Ball's
+// splash — the entry's colors, texture, and scale carry each skill's identity.
+fn ring_blast_fragment(uv: vec2<f32>) -> vec4<f32> {
+    let centered = uv * 2.0 - 1.0;
+    let r = length(centered);
+    let theta = atan2(centered.y, centered.x);
+    let f = material.factor;
+    let emission = material.shape.x;
+    let tightness = material.shape.y;
+    let flicker_hz = material.shape.z;
+
+    let appear = smoothstep(0.0, 0.06, f);
+    let fade = 1.0 - smoothstep(0.6, 1.0, f);
+
+    let flick = 0.85 + 0.3 * hash11(floor(globals.time * flicker_hz));
+    let core = exp(-r * r * 20.0) * (1.0 - smoothstep(0.0, 0.4, f)) * appear * flick * 1.5;
+
+    let prog = 0.1 + 0.85 * smoothstep(0.0, 0.85, f);
+    let rim_mod = 0.7 + 0.6 * vnoise(vec2<f32>(theta * 3.0 + 7.0, f * 3.0));
+    let ring = exp(-pow((r - prog) * tightness, 2.0)) * rim_mod * appear * fade;
+
+    // The classic art grows with the ring: sampled in a frame expanding from
+    // 40% to full quad size across the effect, masked outside the frame.
+    let grow = 0.35 + 0.65 * prog;
+    let tex_uv = centered / grow * 0.5 + 0.5;
+    let in_frame = step(abs(centered.x), grow) * step(abs(centered.y), grow);
+    let tex = sample_fx(tex_uv) * in_frame * appear * fade;
+
+    let hot = core + ring * 0.8 + tex * flick;
+    let cool = ring + tex * 0.5 + exp(-r * r * 4.0) * 0.25 * appear * fade;
+    let alpha = clamp(hot + cool, 0.0, 1.0);
+    if (alpha < 0.01) {
+        discard;
+    }
+    let color = (material.primary.rgb * hot + material.secondary.rgb * cool) * emission;
+    return vec4<f32>(color, alpha);
+}
+
+// kind 5 — spirit swirl. shape: x=wisp_count y=spin_turns z=wisp_size.
+// Ghost wisps (the classic ghost01..03 sprites, cycled by the flipbook) spiral
+// inward from the quad rim and converge on the target, where a cold flash pops
+// as they land. Napalm Beat tints it violet, Soul Strike blue-white; Soul
+// Strike's traveling orbs bind the same wisp frames.
+fn spirit_swirl_fragment(uv: vec2<f32>) -> vec4<f32> {
+    let centered = uv * 2.0 - 1.0;
+    let f = material.factor;
+    let count = i32(material.shape.x);
+    let spin = material.shape.y;
+    let size = material.shape.z;
+
+    let converge = smoothstep(0.0, 0.7, f);
+    let fade = 1.0 - smoothstep(0.75, 1.0, f);
+
+    var body = 0.0;
+    var haze = 0.0;
+    for (var i = 0; i < count; i++) {
+        let seed = f32(i) * 17.3;
+        let a0 = hash11(seed) * TAU;
+        let ang = a0 + spin * TAU * f * (0.7 + 0.6 * hash11(seed + 1.1));
+        let rad = (1.0 - converge) * (0.55 + 0.35 * hash11(seed + 2.3));
+        let pos = vec2<f32>(cos(ang), sin(ang)) * rad;
+        let d = centered - pos;
+        let wuv = d / size + 0.5;
+        let inside = step(0.0, wuv.x) * step(wuv.x, 1.0) * step(0.0, wuv.y) * step(wuv.y, 1.0);
+        body += sample_fx(wuv) * inside;
+        haze += exp(-dot(d, d) / (size * size * 1.5)) * 0.25;
+    }
+
+    let hit = smoothstep(0.55, 0.75, f);
+    let flash = exp(-dot(centered, centered) * 14.0) * hit * fade * 1.6;
+
+    body = min(body, 2.0) * fade;
+    haze = min(haze, 1.2) * fade;
+    let hot = body + flash;
+    let cool = haze + flash * 0.5;
+    let alpha = clamp(hot + cool, 0.0, 1.0);
+    if (alpha < 0.01) {
+        discard;
+    }
+    let color = material.primary.rgb * hot + material.secondary.rgb * cool;
+    return vec4<f32>(color, alpha);
+}
+
+// kind 6 — ground eruption. shape: x=spike_count y=rise_sharpness z=base_glow.
+// Textured shards erupt from the quad's lower edge (the anchor's feet), hold,
+// and crumble out through the tail while noise-lit dust glows at the base.
+// Earth Spike and Heaven's Drive bind stone, Frost Diver's landing an ice shard
+// — colors, texture, and scale differentiate them.
+fn eruption_fragment(uv: vec2<f32>) -> vec4<f32> {
+    let centered = uv * 2.0 - 1.0;
+    let f = material.factor;
+    let count = i32(material.shape.x);
+    let rise_k = material.shape.y;
+    let base_glow = material.shape.z;
+
+    let fade = 1.0 - smoothstep(0.7, 1.0, f);
+    let fcount = max(f32(count), 1.0);
+
+    var body = 0.0;
+    var glow = 0.0;
+    for (var i = 0; i < count; i++) {
+        let seed = f32(i);
+        let lane = (hash11(seed * 3.9) - 0.5) * 1.3;
+        let t0 = seed / fcount * 0.25;
+        let local = max(f - t0, 0.0);
+        let rise = 1.0 - exp(-local * rise_k);
+        let h = rise * (0.7 + 0.6 * hash11(seed + 5.1));
+        let along = (centered.y + 1.0) / max(h, 0.02);
+        // Width tapers off the CLAMPED along so half_w stays strictly positive
+        // (a raw along > 1.25 would flip smoothstep's edges — NaN territory).
+        let along_c = clamp(along, 0.0, 1.0);
+        let half_w = (0.14 + 0.08 * hash11(seed + 7.7)) * (1.0 - along_c * 0.8);
+        let dx = centered.x - lane;
+        let edge = 1.0 - smoothstep(half_w * 0.6, half_w, abs(dx));
+        let inside = step(0.0, along) * step(along, 1.0) * step(0.05, h);
+        let ti = sample_fx(vec2<f32>(0.5 + dx / 0.5, 1.0 - along_c));
+        body += ti * edge * inside;
+        glow += edge * inside * 0.2;
+    }
+
+    let base = exp(-pow((centered.y + 1.0) * 2.2, 2.0)) * exp(-centered.x * centered.x * 1.5);
+    let dust = base * (0.4 + 0.6 * vnoise(vec2<f32>(centered.x * 6.0, globals.time * 3.0)))
+        * base_glow * smoothstep(0.0, 0.15, f);
+
+    body = min(body, 2.0) * fade;
+    glow = min(glow, 1.2) * fade;
+    let hot = body;
+    let cool = glow + dust * fade;
+    let alpha = clamp(hot + cool, 0.0, 1.0);
+    if (alpha < 0.01) {
+        discard;
+    }
+    let color = material.primary.rgb * hot + material.secondary.rgb * cool;
+    return vec4<f32>(color, alpha);
+}
+
 // kind 100 — traveling projectile. Renders the bound classic orb sprite
 // (fireorb, waterorb, lightningorb, thunder_ball_*) as a soft glowing ball tinted
 // by the entry's OWN colors, so each skill's in-flight projectile looks like that
@@ -380,6 +520,15 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         case 3u: {
             return lightning_bolt_fragment(in.uv);
+        }
+        case 4u: {
+            return ring_blast_fragment(in.uv);
+        }
+        case 5u: {
+            return spirit_swirl_fragment(in.uv);
+        }
+        case 6u: {
+            return eruption_fragment(in.uv);
         }
         case 100u: {
             return projectile_fragment(in.uv);

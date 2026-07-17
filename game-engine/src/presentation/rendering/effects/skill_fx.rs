@@ -4,7 +4,7 @@ use super::impact::{
 };
 use super::VfxSystems;
 use crate::domain::audio::events::PlaySkillSfx;
-use crate::domain::effects::PlayProceduralVfx;
+use crate::domain::effects::{PlayProceduralVfx, SightOrbit};
 use crate::infrastructure::effect::{ShaderFxEntry, ShaderFxTravel, TextureFrames};
 use bevy::light::NotShadowCaster;
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -137,6 +137,73 @@ pub fn animate_flipbook(
         };
         if material.texture.as_ref() != Some(&frame) {
             material.texture = Some(frame);
+        }
+    }
+}
+
+/// The classic Sight flame's flicker frames (`fire-1..3.bmp`, magenta-keyed
+/// small flame sprites — the loader zeroes keyed pixels, so they are
+/// additive-safe), cycled by the shared `FxFlipbook`.
+const SIGHT_FLAME_FRAMES: [&str; 3] = [
+    "data/texture/effect/fire-1.bmp",
+    "data/texture/effect/fire-2.bmp",
+    "data/texture/effect/fire-3.bmp",
+];
+const SIGHT_FLAME_FPS: f32 = 10.0;
+/// Uniform world-space scale of the orbiting flame billboard. The flame art
+/// fills only ~1/6 of its 128px frame (the rest is keyed away), so the quad
+/// must be several times the intended flame size: 14 units of quad ≈ a
+/// 2-unit visible flame next to a ~5-unit-tall character.
+const SIGHT_FLAME_SCALE: f32 = 14.0;
+
+/// Dress every freshly spawned [`SightOrbit`] anchor (domain spawns it bare —
+/// see `status_visuals.rs`) with the classic orbiting fireball: a flame-frame
+/// billboard on the projectile fragment (kind 100 — steady look, no
+/// `FactorRamp`) plus a warm point light on the anchor so the flame lights its
+/// surroundings. The anchor's despawn (sight bit cleared) takes the child
+/// quad with it.
+pub fn dress_sight_orbits(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    assets: Res<ImpactAssets>,
+    mut materials: ResMut<Assets<SkillFxMaterial>>,
+    orbits: Query<Entity, Added<SightOrbit>>,
+) {
+    for orbit in &orbits {
+        let frames = TextureFrames {
+            paths: SIGHT_FLAME_FRAMES.map(String::from).to_vec(),
+            fps: SIGHT_FLAME_FPS,
+        };
+        let (texture, flipbook) = resolve_fx_texture(&asset_server, None, Some(&frames));
+
+        let material = materials.add(SkillFxMaterial {
+            params: SkillFxParams {
+                kind: PROJECTILE_KIND,
+                primary: Vec4::new(3.2, 1.9, 0.8, 1.0),
+                secondary: Vec4::new(2.4, 0.9, 0.25, 1.0),
+                shape: Vec4::ZERO,
+                factor: 0.0,
+            },
+            texture,
+        });
+
+        commands.entity(orbit).insert(PointLight {
+            color: Color::srgb(1.0, 0.6, 0.3),
+            intensity: LIGHT_PEAK * 0.5,
+            range: 30.0,
+            shadow_maps_enabled: false,
+            ..default()
+        });
+
+        let mut quad = commands.spawn((
+            Mesh3d(assets.quad.clone()),
+            MeshMaterial3d(material),
+            Transform::from_scale(Vec3::splat(SIGHT_FLAME_SCALE)),
+            NotShadowCaster,
+            ChildOf(orbit),
+        ));
+        if let Some(flipbook) = flipbook {
+            quad.insert(flipbook);
         }
     }
 }
@@ -403,6 +470,7 @@ impl Plugin for SkillFxPlugin {
                     drive_factor::<SkillFxMaterial>,
                     advance_traveling_vfx,
                     animate_flipbook,
+                    dress_sight_orbits,
                 )
                     .in_set(VfxSystems),
             );
@@ -561,6 +629,50 @@ mod tests {
         let (texture, flipbook) = resolve_fx_texture(server, Some(&single), None);
         assert!(texture.is_some());
         assert!(flipbook.is_none(), "a single texture yields no flipbook");
+    }
+
+    #[test]
+    fn sight_orbit_anchor_gets_flame_quad_and_light() {
+        let mut app = travel_app();
+        app.add_systems(Update, dress_sight_orbits);
+
+        let unit = app.world_mut().spawn_empty().id();
+        let orbit = app
+            .world_mut()
+            .spawn((
+                SightOrbit { unit },
+                Transform::default(),
+                Visibility::default(),
+            ))
+            .id();
+        app.update();
+
+        assert!(
+            app.world().get::<PointLight>(orbit).is_some(),
+            "the anchor carries the flame's light"
+        );
+        let children = app.world().get::<Children>(orbit).expect("flame child");
+        let flame = children
+            .iter()
+            .find(|child| {
+                app.world()
+                    .get::<MeshMaterial3d<SkillFxMaterial>>(*child)
+                    .is_some()
+            })
+            .expect("a flame quad child");
+        assert!(
+            app.world().get::<FxFlipbook>(flame).is_some(),
+            "the flame cycles its flicker frames"
+        );
+
+        // Dressing runs once: another update must not stack a second quad.
+        app.update();
+        let count = app
+            .world()
+            .get::<Children>(orbit)
+            .map(|children| children.iter().count())
+            .unwrap_or(0);
+        assert_eq!(count, 1, "Added-filter dresses each anchor exactly once");
     }
 
     #[test]

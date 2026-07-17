@@ -47,8 +47,9 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        10: ( // MG_SIGHT — cast flash only (persistent orbit is Task 12); no STR
-              // in the official client, hardcoded there — procedural burst.
+        10: ( // MG_SIGHT — cast flash only; the persistent orbiting fireball is
+              // driven by the sight option bit (status_visuals + dress_sight_orbits),
+              // not this one-shot. No STR in the official client, hardcoded there.
             str: None,
             vfx: Some("sight"),
             sound: Some("effect/ef_sight.wav"),
@@ -248,9 +249,10 @@
         ),
         85: ( // WZ_VERMILION (Lord of Vermilion) -- persistent 13x13 Wind field
               // (aesir wz_vermilion.ex: Layout.square(center, 6)); one STR at
-              // the field center, not per cell. No dedicated hit sound found.
+              // the field center, not per cell. No dedicated wav in the GRF;
+              // the thunderstorm rumble is the classic thunder-family match.
             str: Some("lord_of_vermillion/lord_of_vermillion.str"),
-            sound: None,
+            sound: Some("effect/ef_thunderstorm.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
@@ -286,12 +288,13 @@
         ),
         88: ( // WZ_FROSTNOVA -- caster-centered 7x7 Water burst (aesir
               // target_type: :self); no STR in the official client, hardcoded
-              // there -- procedural burst. No dedicated sound found (the
+              // there -- procedural burst. No dedicated wav in the GRF (the
               // jack_frost* files belong to the unrelated Jack Frost
-              // mob/hyper-novice skill).
+              // mob/hyper-novice skill); ef_frostdiver2 is the classic
+              // freeze-shatter companion sound.
             str: None,
             vfx: Some("frost_nova"),
-            sound: None,
+            sound: Some("effect/ef_frostdiver2.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -324,9 +327,11 @@
               // the shared magic pipeline, so the client only ever sees
               // per-target SkillDamage, never a GroundSkill/SkillUnitSpawn. No
               // STR in the official client -- procedural hit burst per target.
+              // No dedicated wav in the GRF; the earthspike strike is the
+              // classic earth-family match.
             str: None,
             vfx: Some("heavens_drive"),
-            sound: None,
+            sound: Some("effect/wizard_earthspike.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -361,10 +366,11 @@
                 // (aesir wz_sightblaster.ex: damage_type: no_damage, applies
                 // sc_sightblaster); no STR in the official client (only its
                 // status icon i_sightblaster.tga exists) -- procedural cast
-                // flash. No dedicated sound found.
+                // flash. No dedicated wav in the GRF; it arms the same sight
+                // orb, so ef_sight is the classic match.
             str: None,
             vfx: Some("sight_blaster"),
-            sound: None,
+            sound: Some("effect/ef_sight.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,

@@ -457,22 +457,27 @@ pub fn sync_frozen_overlays(
 /// applies `SC_SIGHT` with this bit). Matches rAthena `OPTION_SIGHT`.
 const OPTION_SIGHT: u32 = 1;
 
-/// Orbit radius, in world units, of the Sight placeholder visual.
-const SIGHT_ORBIT_RADIUS: f32 = 2.0;
-/// Full revolution period of the Sight placeholder visual.
+/// Orbit radius, in world units, of the Sight fireball — well outside the
+/// body sprite so the flame circles the character instead of clipping it.
+const SIGHT_ORBIT_RADIUS: f32 = 9.0;
+/// Full revolution period of the Sight fireball.
 const SIGHT_ORBIT_PERIOD_SECS: f32 = 2.0;
 /// Vertical offset lifting the orbit above the unit's feet; world up is `-Y`.
-const SIGHT_ORBIT_LIFT: f32 = -2.5;
-/// Placeholder colour for the Sight orbit quad.
-const SIGHT_ORBIT_COLOR: Color = Color::srgb(1.0, 0.9, 0.35);
+const SIGHT_ORBIT_LIFT: f32 = -8.0;
 
-/// Marks the small orbiting quad spawned as a child of a unit with the Sight
-/// option bit set. There is no `sight.str` asset in the GRF (verified when
-/// filling the effect catalog), so this is a minimal procedural stand-in
-/// circling the unit; read every frame by [`orbit_sight_visuals`]. Task 14's
-/// hanabi emitters may replace it with something fancier.
+/// The anchor entity orbiting a unit with the Sight option bit set. A
+/// TOP-LEVEL entity following `unit` from the outside (the STR-effect
+/// `EffectAnchor::Entity` pattern), NOT a child of it — effect visuals do not
+/// render reliably as unit children. There is no `sight.str` asset in the GRF
+/// (verified when filling the effect catalog); the domain spawns only this bare
+/// anchor (moved every frame by [`orbit_sight_visuals`], despawned there when
+/// the unit disappears) and the presentation layer dresses it with the classic
+/// flame visual (`dress_sight_orbits` in
+/// `presentation/rendering/effects/skill_fx.rs`).
 #[derive(Component, Debug, Clone, Copy)]
-pub struct SightOrbit;
+pub struct SightOrbit {
+    pub unit: Entity,
+}
 
 /// Latest `effect_state` for units whose entity has not registered yet, keyed
 /// by unit_id. Same shape and rationale as [`PendingBodyStates`].
@@ -485,17 +490,14 @@ pub struct PendingEffectStates(HashMap<u32, u32>);
 /// `effect_state` — live `UnitStateChanged` toggles and the spawn-time
 /// `UnitEntered` for units that enter view already sighted — mirroring
 /// [`body_state_visuals`].
-#[allow(clippy::too_many_arguments)]
 pub fn option_visuals(
     mut state_changes: MessageReader<UnitStateChanged>,
     mut entered: MessageReader<UnitEntered>,
     registry: Res<EntityRegistry>,
     mut pending: ResMut<PendingEffectStates>,
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    children_query: Query<&Children>,
-    orbits: Query<Entity, With<SightOrbit>>,
+    transforms: Query<&Transform>,
+    orbits: Query<(Entity, &SightOrbit)>,
 ) {
     for event in state_changes.read() {
         match registry.get_entity(event.unit_id) {
@@ -503,9 +505,7 @@ pub fn option_visuals(
                 &mut commands,
                 entity,
                 event.effect_state,
-                &mut meshes,
-                &mut materials,
-                &children_query,
+                &transforms,
                 &orbits,
             ),
             None => {
@@ -522,9 +522,7 @@ pub fn option_visuals(
             &mut commands,
             entity,
             event.effect_state,
-            &mut meshes,
-            &mut materials,
-            &children_query,
+            &transforms,
             &orbits,
         );
     }
@@ -537,9 +535,7 @@ pub fn option_visuals(
             &mut commands,
             entity,
             effect_state,
-            &mut meshes,
-            &mut materials,
-            &children_query,
+            &transforms,
             &orbits,
         );
         false
@@ -550,54 +546,59 @@ fn apply_sight_state(
     commands: &mut Commands,
     entity: Entity,
     effect_state: u32,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    children_query: &Query<&Children>,
-    orbits: &Query<Entity, With<SightOrbit>>,
+    transforms: &Query<&Transform>,
+    orbits: &Query<(Entity, &SightOrbit)>,
 ) {
     let sight_on = effect_state & OPTION_SIGHT != 0;
-    let existing_child = children_query
-        .get(entity)
-        .ok()
-        .and_then(|children| children.iter().find(|child| orbits.contains(*child)));
+    let existing = orbits
+        .iter()
+        .find(|(_, orbit)| orbit.unit == entity)
+        .map(|(orbit_entity, _)| orbit_entity);
 
-    match (sight_on, existing_child) {
+    match (sight_on, existing) {
         (true, None) => {
-            let mesh = meshes.add(Rectangle::new(0.6, 0.6));
-            let material = materials.add(StandardMaterial {
-                base_color: SIGHT_ORBIT_COLOR,
-                unlit: true,
-                cull_mode: None,
-                alpha_mode: AlphaMode::Blend,
-                ..default()
-            });
+            // Start at the unit so the first frame never flashes at the origin.
+            let start = transforms
+                .get(entity)
+                .map(|t| t.translation)
+                .unwrap_or_default();
             commands.spawn((
-                SightOrbit,
-                Mesh3d(mesh),
-                MeshMaterial3d(material),
-                Transform::from_xyz(SIGHT_ORBIT_RADIUS, SIGHT_ORBIT_LIFT, 0.0),
+                SightOrbit { unit: entity },
+                Transform::from_translation(start),
                 Visibility::default(),
-                ChildOf(entity),
             ));
         }
-        (false, Some(child)) => {
-            commands.entity(child).despawn();
+        (false, Some(orbit_entity)) => {
+            commands.entity(orbit_entity).despawn();
         }
         _ => {}
     }
 }
 
-/// Rotates every [`SightOrbit`] child's local offset around its parent unit
-/// each frame, a fixed radius/period circle lifted above the ground.
-pub fn orbit_sight_visuals(time: Res<Time>, mut orbits: Query<&mut Transform, With<SightOrbit>>) {
+/// Moves every [`SightOrbit`] anchor along its fixed radius/period circle
+/// around the tracked unit's current position, lifted above the ground —
+/// the same outside-follow the STR `EffectAnchor::Entity` path uses, plus the
+/// circular offset. An orbit whose unit is gone (despawned, map change) is
+/// despawned here, taking the dressed flame with it.
+pub fn orbit_sight_visuals(
+    time: Res<Time>,
+    mut commands: Commands,
+    units: Query<&GlobalTransform>,
+    mut orbits: Query<(Entity, &SightOrbit, &mut Transform)>,
+) {
     let angle = time.elapsed_secs() * (TAU / SIGHT_ORBIT_PERIOD_SECS);
     let (sin, cos) = angle.sin_cos();
-    for mut transform in &mut orbits {
-        transform.translation = Vec3::new(
-            cos * SIGHT_ORBIT_RADIUS,
-            SIGHT_ORBIT_LIFT,
-            sin * SIGHT_ORBIT_RADIUS,
-        );
+    for (orbit_entity, orbit, mut transform) in &mut orbits {
+        let Ok(unit) = units.get(orbit.unit) else {
+            commands.entity(orbit_entity).despawn();
+            continue;
+        };
+        transform.translation = unit.translation()
+            + Vec3::new(
+                cos * SIGHT_ORBIT_RADIUS,
+                SIGHT_ORBIT_LIFT,
+                sin * SIGHT_ORBIT_RADIUS,
+            );
     }
 }
 
@@ -966,46 +967,48 @@ mod tests {
         app.update();
     }
 
-    fn orbit_child(app: &mut App, unit: Entity) -> Option<Entity> {
-        app.world().get::<Children>(unit).and_then(|children| {
-            children
-                .iter()
-                .find(|child| app.world().get::<SightOrbit>(*child).is_some())
-        })
+    fn orbits_for(app: &mut App, unit: Entity) -> Vec<Entity> {
+        app.world_mut()
+            .query::<(Entity, &SightOrbit)>()
+            .iter(app.world())
+            .filter(|(_, orbit)| orbit.unit == unit)
+            .map(|(entity, _)| entity)
+            .collect()
     }
 
     #[test]
-    fn sight_bit_spawns_orbit_child() {
+    fn sight_bit_spawns_orbit_anchor() {
         let mut app = sight_app();
         let unit = app.world_mut().spawn_empty().id();
         register(&mut app, 7, unit);
 
         emit_effect_state(&mut app, 7, OPTION_SIGHT);
 
-        assert!(
-            orbit_child(&mut app, unit).is_some(),
-            "sight bit spawns an orbit child"
+        assert_eq!(
+            orbits_for(&mut app, unit).len(),
+            1,
+            "sight bit spawns a top-level orbit anchor tracking the unit"
         );
     }
 
     #[test]
-    fn clearing_sight_bit_despawns_orbit_child() {
+    fn clearing_sight_bit_despawns_orbit_anchor() {
         let mut app = sight_app();
         let unit = app.world_mut().spawn_empty().id();
         register(&mut app, 7, unit);
 
         emit_effect_state(&mut app, 7, OPTION_SIGHT);
-        assert!(orbit_child(&mut app, unit).is_some());
+        assert_eq!(orbits_for(&mut app, unit).len(), 1);
 
         emit_effect_state(&mut app, 7, 0);
         assert!(
-            orbit_child(&mut app, unit).is_none(),
-            "clearing the bit despawns the orbit child"
+            orbits_for(&mut app, unit).is_empty(),
+            "clearing the bit despawns the orbit anchor"
         );
     }
 
     #[test]
-    fn repeated_sight_bit_does_not_stack_children() {
+    fn repeated_sight_bit_does_not_stack_anchors() {
         let mut app = sight_app();
         let unit = app.world_mut().spawn_empty().id();
         register(&mut app, 7, unit);
@@ -1013,17 +1016,11 @@ mod tests {
         emit_effect_state(&mut app, 7, OPTION_SIGHT);
         emit_effect_state(&mut app, 7, OPTION_SIGHT | 2); // sight stays on, another bit toggles
 
-        let count = app
-            .world()
-            .get::<Children>(unit)
-            .map(|children| {
-                children
-                    .iter()
-                    .filter(|child| app.world().get::<SightOrbit>(*child).is_some())
-                    .count()
-            })
-            .unwrap_or(0);
-        assert_eq!(count, 1, "re-applying the bit does not spawn a duplicate");
+        assert_eq!(
+            orbits_for(&mut app, unit).len(),
+            1,
+            "re-applying the bit does not spawn a duplicate"
+        );
     }
 
     #[test]
@@ -1036,9 +1033,29 @@ mod tests {
         register(&mut app, 7, unit);
         app.update();
 
-        assert!(
-            orbit_child(&mut app, unit).is_some(),
+        assert_eq!(
+            orbits_for(&mut app, unit).len(),
+            1,
             "buffered sight state applies once the unit resolves"
+        );
+    }
+
+    #[test]
+    fn orbit_despawns_when_its_unit_disappears() {
+        let mut app = sight_app();
+        app.add_systems(Update, orbit_sight_visuals);
+        let unit = app.world_mut().spawn(Transform::default()).id();
+        register(&mut app, 7, unit);
+
+        emit_effect_state(&mut app, 7, OPTION_SIGHT);
+        assert_eq!(orbits_for(&mut app, unit).len(), 1);
+
+        app.world_mut().entity_mut(unit).despawn();
+        app.update();
+
+        assert!(
+            orbits_for(&mut app, unit).is_empty(),
+            "an orbit whose unit is gone self-despawns"
         );
     }
 
