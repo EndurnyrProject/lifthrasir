@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -313,6 +313,17 @@ pub mod envelope {
         GuildEmblemData(super::GuildEmblemData),
         #[prost(message, tag = "154")]
         GuildDisbanded(super::GuildDisbanded),
+        /// 155-159: persistent skill-unit state and caster-only Estimation results
+        #[prost(message, tag = "155")]
+        SkillUnitSnapshot(super::SkillUnitSnapshot),
+        #[prost(message, tag = "156")]
+        SkillUnitSpawn(super::SkillUnitSpawn),
+        #[prost(message, tag = "157")]
+        SkillUnitUpdate(super::SkillUnitUpdate),
+        #[prost(message, tag = "158")]
+        SkillUnitDespawn(super::SkillUnitDespawn),
+        #[prost(message, tag = "159")]
+        EstimationResult(super::EstimationResult),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -2262,6 +2273,144 @@ pub struct QuestHuntProgress {
     #[prost(uint32, tag = "4")]
     pub needed: u32,
 }
+/// A persistent skill-unit cell's client-visible traits. Flags may be combined:
+/// bit 0 targetable, bit 1 blocks movement, bit 2 blocks projectiles, bit 3
+/// consumable water, bit 4 visible. HP values are zero for non-destructible cells.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SkillUnitCellState {
+    #[prost(uint32, tag = "1")]
+    pub cell_id: u32,
+    #[prost(int32, tag = "2")]
+    pub x: i32,
+    #[prost(int32, tag = "3")]
+    pub y: i32,
+    #[prost(uint32, tag = "4")]
+    pub hp: u32,
+    #[prost(uint32, tag = "5")]
+    pub max_hp: u32,
+    #[prost(uint32, tag = "6")]
+    pub flags: u32,
+}
+/// Complete authoritative state for one persistent skill-unit cast. The stream
+/// is scoped to the observer's current map, so no map identifier is required.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SkillUnitGroupState {
+    #[prost(uint64, tag = "1")]
+    pub group_id: u64,
+    #[prost(uint32, tag = "2")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "3")]
+    pub skill_level: u32,
+    #[prost(enumeration = "SkillUnitOwnerType", tag = "4")]
+    pub owner_type: i32,
+    #[prost(uint32, tag = "5")]
+    pub owner_id: u32,
+    #[prost(int32, tag = "6")]
+    pub center_x: i32,
+    #[prost(int32, tag = "7")]
+    pub center_y: i32,
+    #[prost(uint64, tag = "8")]
+    pub created_tick: u64,
+    #[prost(uint64, tag = "9")]
+    pub expires_tick: u64,
+    #[prost(message, repeated, tag = "10")]
+    pub cells: ::prost::alloc::vec::Vec<SkillUnitCellState>,
+}
+/// Server -> client, an authoritative replacement for the observer's complete
+/// active visible skill-unit set.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SkillUnitSnapshot {
+    #[prost(uint64, tag = "1")]
+    pub server_tick: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub groups: ::prost::alloc::vec::Vec<SkillUnitGroupState>,
+}
+/// Server -> client, complete current state for a group entering visibility.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SkillUnitSpawn {
+    #[prost(message, optional, tag = "1")]
+    pub group: ::core::option::Option<SkillUnitGroupState>,
+}
+/// Server -> client, an authoritative HP change for one persistent skill-unit cell.
+/// `hp_delta` is signed. `source_type` and `source_id` identify the actor that
+/// caused DAMAGE; automatic updates use UNSPECIFIED and zero.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SkillUnitUpdate {
+    #[prost(uint64, tag = "1")]
+    pub group_id: u64,
+    #[prost(uint32, tag = "2")]
+    pub cell_id: u32,
+    #[prost(uint32, tag = "3")]
+    pub hp: u32,
+    #[prost(uint32, tag = "4")]
+    pub max_hp: u32,
+    #[prost(sint32, tag = "5")]
+    pub hp_delta: i32,
+    #[prost(enumeration = "SkillUnitOwnerType", tag = "6")]
+    pub source_type: i32,
+    #[prost(uint32, tag = "7")]
+    pub source_id: u32,
+    #[prost(enumeration = "SkillUnitUpdateReason", tag = "8")]
+    pub reason: i32,
+    #[prost(uint64, tag = "9")]
+    pub server_tick: u64,
+}
+/// Server -> client, removes the listed cells from a persistent group.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SkillUnitDespawn {
+    #[prost(uint64, tag = "1")]
+    pub group_id: u64,
+    #[prost(uint32, repeated, tag = "2")]
+    pub cell_ids: ::prost::alloc::vec::Vec<u32>,
+    #[prost(enumeration = "SkillUnitDespawnReason", tag = "3")]
+    pub reason: i32,
+    #[prost(uint64, tag = "4")]
+    pub server_tick: u64,
+}
+/// Server -> client, caster-only result for Estimation. Element modifiers are
+/// signed percentages for Water, Earth, Fire, Wind, Poison, Holy, Shadow,
+/// Ghost, and Undead respectively.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct EstimationResult {
+    #[prost(uint32, tag = "1")]
+    pub target_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub class_id: u32,
+    #[prost(uint32, tag = "3")]
+    pub level: u32,
+    #[prost(uint32, tag = "4")]
+    pub size: u32,
+    #[prost(uint32, tag = "5")]
+    pub hp: u32,
+    #[prost(uint32, tag = "6")]
+    pub def: u32,
+    #[prost(uint32, tag = "7")]
+    pub race: u32,
+    #[prost(uint32, tag = "8")]
+    pub mdef: u32,
+    #[prost(uint32, tag = "9")]
+    pub element: u32,
+    #[prost(sint32, tag = "10")]
+    pub water_modifier: i32,
+    #[prost(sint32, tag = "11")]
+    pub earth_modifier: i32,
+    #[prost(sint32, tag = "12")]
+    pub fire_modifier: i32,
+    #[prost(sint32, tag = "13")]
+    pub wind_modifier: i32,
+    #[prost(sint32, tag = "14")]
+    pub poison_modifier: i32,
+    #[prost(sint32, tag = "15")]
+    pub holy_modifier: i32,
+    #[prost(sint32, tag = "16")]
+    pub shadow_modifier: i32,
+    #[prost(sint32, tag = "17")]
+    pub ghost_modifier: i32,
+    #[prost(sint32, tag = "18")]
+    pub undead_modifier: i32,
+    #[prost(uint64, tag = "19")]
+    pub server_tick: u64,
+}
 /// Outcome of a cart mount attempt. Values are prefixed because proto3 enum
 /// constants share the package namespace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -2561,6 +2710,118 @@ impl StorageResultCode {
             "STORAGE_INVALID_AMOUNT" => Some(Self::StorageInvalidAmount),
             "STORAGE_NOT_OPEN" => Some(Self::StorageNotOpen),
             "STORAGE_BASIC_SKILL_REQUIRED" => Some(Self::StorageBasicSkillRequired),
+            _ => None,
+        }
+    }
+}
+/// The identity kind for an actor that owns a persistent skill-unit group or
+/// causes a skill-unit update. In group state it identifies the caster/owner;
+/// in update state it identifies the damage source. UNSPECIFIED with ID zero
+/// means no actor applies, such as an automatic DECAY update.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SkillUnitOwnerType {
+    Unspecified = 0,
+    Player = 1,
+    Mob = 2,
+    Npc = 3,
+}
+impl SkillUnitOwnerType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SKILL_UNIT_OWNER_TYPE_UNSPECIFIED",
+            Self::Player => "SKILL_UNIT_OWNER_TYPE_PLAYER",
+            Self::Mob => "SKILL_UNIT_OWNER_TYPE_MOB",
+            Self::Npc => "SKILL_UNIT_OWNER_TYPE_NPC",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SKILL_UNIT_OWNER_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "SKILL_UNIT_OWNER_TYPE_PLAYER" => Some(Self::Player),
+            "SKILL_UNIT_OWNER_TYPE_MOB" => Some(Self::Mob),
+            "SKILL_UNIT_OWNER_TYPE_NPC" => Some(Self::Npc),
+            _ => None,
+        }
+    }
+}
+/// Why a skill-unit cell's authoritative HP changed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SkillUnitUpdateReason {
+    Unspecified = 0,
+    Damage = 1,
+    Decay = 2,
+}
+impl SkillUnitUpdateReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SKILL_UNIT_UPDATE_REASON_UNSPECIFIED",
+            Self::Damage => "SKILL_UNIT_UPDATE_REASON_DAMAGE",
+            Self::Decay => "SKILL_UNIT_UPDATE_REASON_DECAY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SKILL_UNIT_UPDATE_REASON_UNSPECIFIED" => Some(Self::Unspecified),
+            "SKILL_UNIT_UPDATE_REASON_DAMAGE" => Some(Self::Damage),
+            "SKILL_UNIT_UPDATE_REASON_DECAY" => Some(Self::Decay),
+            _ => None,
+        }
+    }
+}
+/// Why one or more skill-unit cells were removed. Selected cell IDs do not
+/// imply that their parent group or its other cells were removed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SkillUnitDespawnReason {
+    Unspecified = 0,
+    Expired = 1,
+    Destroyed = 2,
+    SourceConsumed = 3,
+    Lifecycle = 4,
+    MapShutdown = 5,
+    LeftView = 6,
+    Canceled = 7,
+}
+impl SkillUnitDespawnReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SKILL_UNIT_DESPAWN_REASON_UNSPECIFIED",
+            Self::Expired => "SKILL_UNIT_DESPAWN_REASON_EXPIRED",
+            Self::Destroyed => "SKILL_UNIT_DESPAWN_REASON_DESTROYED",
+            Self::SourceConsumed => "SKILL_UNIT_DESPAWN_REASON_SOURCE_CONSUMED",
+            Self::Lifecycle => "SKILL_UNIT_DESPAWN_REASON_LIFECYCLE",
+            Self::MapShutdown => "SKILL_UNIT_DESPAWN_REASON_MAP_SHUTDOWN",
+            Self::LeftView => "SKILL_UNIT_DESPAWN_REASON_LEFT_VIEW",
+            Self::Canceled => "SKILL_UNIT_DESPAWN_REASON_CANCELED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SKILL_UNIT_DESPAWN_REASON_UNSPECIFIED" => Some(Self::Unspecified),
+            "SKILL_UNIT_DESPAWN_REASON_EXPIRED" => Some(Self::Expired),
+            "SKILL_UNIT_DESPAWN_REASON_DESTROYED" => Some(Self::Destroyed),
+            "SKILL_UNIT_DESPAWN_REASON_SOURCE_CONSUMED" => Some(Self::SourceConsumed),
+            "SKILL_UNIT_DESPAWN_REASON_LIFECYCLE" => Some(Self::Lifecycle),
+            "SKILL_UNIT_DESPAWN_REASON_MAP_SHUTDOWN" => Some(Self::MapShutdown),
+            "SKILL_UNIT_DESPAWN_REASON_LEFT_VIEW" => Some(Self::LeftView),
+            "SKILL_UNIT_DESPAWN_REASON_CANCELED" => Some(Self::Canceled),
             _ => None,
         }
     }
