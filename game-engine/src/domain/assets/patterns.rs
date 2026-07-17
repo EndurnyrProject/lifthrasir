@@ -160,6 +160,18 @@ pub fn emotion_action_path() -> String {
     emotion_sprite_path().replace(".spr", ".act")
 }
 
+/// Generate the shared frozen-status ice-block overlay sprite path
+/// (`얼음땡`, "ice stuck"), drawn over a unit while its `body_state` reports
+/// Freeze. See `domain::effects::status_visuals`.
+pub fn frozen_ice_sprite_path() -> String {
+    "ro://data/sprite/이팩트/얼음땡.spr".to_string()
+}
+
+/// Generate the shared frozen-status ice-block overlay action path.
+pub fn frozen_ice_action_path() -> String {
+    frozen_ice_sprite_path().replace(".spr", ".act")
+}
+
 /// Generate headgear (accessory) sprite path.
 /// `accname` comes from the accessory db and already carries its leading separator (e.g. `"_고글"`).
 pub fn headgear_sprite_path(gender: Gender, accname: &str) -> String {
@@ -261,6 +273,22 @@ mod tests {
     #[test]
     fn emotion_action_path_builds_correct_url() {
         assert_eq!(emotion_action_path(), "ro://data/sprite/이팩트/emotion.act");
+    }
+
+    #[test]
+    fn frozen_ice_sprite_path_builds_correct_url() {
+        assert_eq!(
+            frozen_ice_sprite_path(),
+            "ro://data/sprite/이팩트/얼음땡.spr"
+        );
+    }
+
+    #[test]
+    fn frozen_ice_action_path_builds_correct_url() {
+        assert_eq!(
+            frozen_ice_action_path(),
+            "ro://data/sprite/이팩트/얼음땡.act"
+        );
     }
 
     #[test]

@@ -1,15 +1,28 @@
 use std::collections::HashMap;
 use std::f32::consts::TAU;
 
+use bevy::asset::LoadState;
 use bevy::prelude::*;
+use bevy_persistent::prelude::Persistent;
 use net_contract::events::{StatusEffectChanged, UnitEntered, UnitStateChanged};
 
 use super::components::EffectAnchor;
 use super::systems::spawn_effect;
 use super::triggers::{descriptor_tint, load_effect};
+use crate::domain::assets::patterns;
+use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::components::RenderLayer;
+use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
+use crate::domain::settings::resources::Settings;
+use crate::domain::sprite::tags::{
+    layer_depth_bias, layer_order, LAYER_EFFECT, Z_OFFSET_PER_LAYER,
+};
+use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
+use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
+use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::infrastructure::effect::StatusEffectCatalog;
+use crate::utils::constants::SPRITE_WORLD_SCALE;
 
 /// aesir `OPT1_*` body-state wire ids (`Aesir.ZoneServer.Mmo.Opt1`, the rAthena
 /// `e_sc_opt1` table). Single-valued: `UnitStateChanged.body_state` carries at
@@ -65,6 +78,7 @@ fn body_state_tint(body_state: u32) -> Option<Color> {
 /// `UnitStateChanged` toggles and the spawn-time `UnitEntered` for units that
 /// enter view already frozen (no follow-up state change arrives in that case) —
 /// so it is ordered after entity spawning to resolve the entered unit.
+#[allow(clippy::too_many_arguments)]
 pub fn body_state_visuals(
     time: Res<Time>,
     mut state_changes: MessageReader<UnitStateChanged>,
@@ -72,12 +86,25 @@ pub fn body_state_visuals(
     registry: Res<EntityRegistry>,
     mut pending: ResMut<PendingBodyStates>,
     mut commands: Commands,
+    shared_quad: Res<SharedSpriteQuad>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    children_query: Query<&Children>,
+    overlays: Query<Entity, With<FrozenOverlay>>,
 ) {
     let at_ms = (time.elapsed_secs() * 1000.0) as u32;
 
     for event in state_changes.read() {
         match registry.get_entity(event.unit_id) {
-            Some(entity) => apply_body_state(&mut commands, entity, event.body_state, at_ms),
+            Some(entity) => apply_body_state(
+                &mut commands,
+                entity,
+                event.body_state,
+                at_ms,
+                &shared_quad,
+                &mut materials,
+                &children_query,
+                &overlays,
+            ),
             None => {
                 pending.0.insert(event.unit_id, event.body_state);
             }
@@ -88,29 +115,70 @@ pub fn body_state_visuals(
         let Some(entity) = registry.get_entity(event.gid) else {
             continue;
         };
-        apply_body_state(&mut commands, entity, event.body_state, at_ms);
+        apply_body_state(
+            &mut commands,
+            entity,
+            event.body_state,
+            at_ms,
+            &shared_quad,
+            &mut materials,
+            &children_query,
+            &overlays,
+        );
     }
 
     pending.0.retain(|&unit_id, &mut body_state| {
         let Some(entity) = registry.get_entity(unit_id) else {
             return true;
         };
-        apply_body_state(&mut commands, entity, body_state, at_ms);
+        apply_body_state(
+            &mut commands,
+            entity,
+            body_state,
+            at_ms,
+            &shared_quad,
+            &mut materials,
+            &children_query,
+            &overlays,
+        );
         false
     });
 }
 
-fn apply_body_state(commands: &mut Commands, entity: Entity, body_state: u32, at_ms: u32) {
+#[allow(clippy::too_many_arguments)]
+fn apply_body_state(
+    commands: &mut Commands,
+    entity: Entity,
+    body_state: u32,
+    at_ms: u32,
+    shared_quad: &SharedSpriteQuad,
+    materials: &mut Assets<StandardMaterial>,
+    children_query: &Query<&Children>,
+    overlays: &Query<Entity, With<FrozenOverlay>>,
+) {
     match body_state_tint(body_state) {
         Some(color) => {
             commands
                 .entity(entity)
                 .insert((BodyStateTint(color), AnimationPaused { at_ms }));
+            if body_state == OPT1_FREEZE {
+                spawn_frozen_overlay(
+                    commands,
+                    entity,
+                    shared_quad,
+                    materials,
+                    children_query,
+                    overlays,
+                );
+            } else {
+                despawn_frozen_overlay(commands, entity, children_query, overlays);
+            }
         }
         None => {
             commands
                 .entity(entity)
                 .remove::<(BodyStateTint, AnimationPaused)>();
+            despawn_frozen_overlay(commands, entity, children_query, overlays);
         }
     }
 }
@@ -143,6 +211,244 @@ pub fn apply_body_state_tint(
             continue;
         };
         material.base_color = desired;
+    }
+}
+
+/// `얼음땡.act` action indexes, verified by inspecting the extracted ACT
+/// (grf-utils): action 0 is a minimal single-frame, single-layer variant
+/// (unused here); action 1 is the 22-frame, 25-layer ice-encasement the
+/// classic client draws over a frozen unit, subtly drifting/glinting across
+/// its loop.
+const FROZEN_ICE_ACTION_INDEX: usize = 1;
+
+/// Number of ACT layers composing one frame of the ice-encasement animation
+/// (`얼음땡.act` action 1), fixed across every frame of that action. The
+/// overlay spawns exactly this many part-quad children, mirroring the cart's
+/// `CART_ACT_PARTS`.
+const FROZEN_OVERLAY_PARTS: usize = 25;
+
+/// One ACT-layer part-quad of the ice-block overlay drawn over a frozen unit
+/// (`얼음땡.act`/`.spr`, action [`FROZEN_ICE_ACTION_INDEX`]). `part` indexes
+/// into the current frame's `parts` slice; [`sync_frozen_overlays`] drives
+/// every part's texture/transform off the shared [`FrozenIceAssets`] each
+/// frame, looping continuously while the overlay exists. Spawned/despawned as
+/// a group by [`apply_body_state`] alongside [`BodyStateTint`]; stone gets no
+/// overlay, only the tint.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct FrozenOverlay {
+    part: usize,
+}
+
+/// Shared, processed `얼음땡` (ice-block) overlay animation. Loaded once;
+/// every frozen unit's [`FrozenOverlay`] parts read the same handle,
+/// mirroring `domain::emote::assets::EmoteAssets`.
+#[derive(Resource)]
+pub struct FrozenIceAssets {
+    pub animation: Handle<RoAnimationAsset>,
+}
+
+/// SPR/ACT handles still loading for [`FrozenIceAssets`].
+#[derive(Resource)]
+pub struct FrozenIceAssetsPending {
+    spr: Handle<RoSpriteAsset>,
+    act: Handle<RoActAsset>,
+}
+
+/// Kicks off the shared `얼음땡.spr`/`.act` load.
+pub fn load_frozen_ice_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.insert_resource(FrozenIceAssetsPending {
+        spr: asset_server.load(patterns::frozen_ice_sprite_path()),
+        act: asset_server.load(patterns::frozen_ice_action_path()),
+    });
+}
+
+/// Polls the pending handles; once both are loaded, processes them through
+/// `RoAnimationProcessor` and inserts [`FrozenIceAssets`], then drops the
+/// pending marker so this runs exactly once.
+///
+/// A missing GRF sprite otherwise fails silently (a known project gotcha):
+/// `Assets::get` just never returns `Some`, so this would poll forever with
+/// no overlay and no signal. Guarded here by checking `LoadState::Failed` on
+/// either handle — logs once and drops the pending marker so the freeze
+/// tint/pause still land, just without the ice overlay.
+#[allow(clippy::too_many_arguments)]
+pub fn finalize_frozen_ice_assets(
+    mut commands: Commands,
+    pending: Option<Res<FrozenIceAssetsPending>>,
+    asset_server: Res<AssetServer>,
+    sprites: Res<Assets<RoSpriteAsset>>,
+    actions: Res<Assets<RoActAsset>>,
+    mut animations: ResMut<Assets<RoAnimationAsset>>,
+    mut images: ResMut<Assets<Image>>,
+    settings: Res<Persistent<Settings>>,
+) {
+    let Some(pending) = pending else {
+        return;
+    };
+
+    let spr_state = asset_server.load_state(&pending.spr);
+    let act_state = asset_server.load_state(&pending.act);
+    if let LoadState::Failed(err) = &spr_state {
+        warn!("Failed to load frozen-ice overlay sprite: {err:?}; overlay disabled");
+        commands.remove_resource::<FrozenIceAssetsPending>();
+        return;
+    }
+    if let LoadState::Failed(err) = &act_state {
+        warn!("Failed to load frozen-ice overlay action: {err:?}; overlay disabled");
+        commands.remove_resource::<FrozenIceAssetsPending>();
+        return;
+    }
+
+    let (Some(sprite), Some(action)) = (sprites.get(&pending.spr), actions.get(&pending.act))
+    else {
+        return;
+    };
+
+    let animation = RoAnimationProcessor::process(
+        &sprite.sprite,
+        &action.action,
+        LAYER_EFFECT,
+        &mut images,
+        settings.graphics.upscaling,
+    );
+
+    commands.insert_resource(FrozenIceAssets {
+        animation: animations.add(animation),
+    });
+    commands.remove_resource::<FrozenIceAssetsPending>();
+}
+
+/// Spawns the [`FROZEN_OVERLAY_PARTS`] part-quad children of the ice-block
+/// overlay, empty (hidden) until [`sync_frozen_overlays`] fills them in from
+/// [`FrozenIceAssets`] — spawning does not wait on the asset load. A no-op if
+/// `entity` already carries an overlay: a freeze -> freeze transition must
+/// not stack a second set.
+fn spawn_frozen_overlay(
+    commands: &mut Commands,
+    entity: Entity,
+    shared_quad: &SharedSpriteQuad,
+    materials: &mut Assets<StandardMaterial>,
+    children_query: &Query<&Children>,
+    overlays: &Query<Entity, With<FrozenOverlay>>,
+) {
+    let already_present = children_query
+        .get(entity)
+        .is_ok_and(|children| children.iter().any(|child| overlays.contains(child)));
+    if already_present {
+        return;
+    }
+
+    let z_offset = layer_order(LAYER_EFFECT) as f32 * Z_OFFSET_PER_LAYER;
+
+    for part in 0..FROZEN_OVERLAY_PARTS {
+        let material = materials.add(StandardMaterial {
+            base_color_texture: None,
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            cull_mode: None,
+            // Later ACT layers draw on top, mirroring the cart's per-part bias.
+            depth_bias: layer_depth_bias(LAYER_EFFECT) + part as f32 * 0.01,
+            ..default()
+        });
+
+        commands.spawn((
+            Mesh3d(shared_quad.mesh.clone()),
+            MeshMaterial3d(material),
+            Billboard,
+            FrozenOverlay { part },
+            Transform::from_translation(Vec3::new(0.0, 0.0, z_offset + part as f32 * 0.001)),
+            Visibility::Hidden,
+            ChildOf(entity),
+        ));
+    }
+}
+
+/// Despawns every [`FrozenOverlay`] child of `entity`, if any.
+fn despawn_frozen_overlay(
+    commands: &mut Commands,
+    entity: Entity,
+    children_query: &Query<&Children>,
+    overlays: &Query<Entity, With<FrozenOverlay>>,
+) {
+    let Ok(children) = children_query.get(entity) else {
+        return;
+    };
+    for child in children.iter() {
+        if overlays.contains(child) {
+            commands.entity(child).despawn();
+        }
+    }
+}
+
+type FrozenOverlayQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static FrozenOverlay,
+        &'static MeshMaterial3d<StandardMaterial>,
+        &'static mut Transform,
+        &'static mut Visibility,
+    ),
+>;
+
+/// Drives every ice-block overlay part-quad from the shared
+/// [`FrozenIceAssets`] animation, looping [`FROZEN_ICE_ACTION_INDEX`]
+/// continuously off the global clock (mirroring the cart's
+/// `sync_cart_layer`, which also derives its frame off wall-clock time rather
+/// than a per-instance elapsed). A part with no data at the current frame, or
+/// the asset not being loaded yet, hides rather than showing stale geometry.
+pub fn sync_frozen_overlays(
+    time: Res<Time>,
+    frozen_ice: Option<Res<FrozenIceAssets>>,
+    animations: Res<Assets<RoAnimationAsset>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut overlays: FrozenOverlayQuery,
+) {
+    let Some(frozen_ice) = frozen_ice.as_deref() else {
+        return;
+    };
+    let Some(animation) = animations.get(&frozen_ice.animation) else {
+        return;
+    };
+    let Some(action) = animation.actions.get(FROZEN_ICE_ACTION_INDEX) else {
+        return;
+    };
+    if action.frames.is_empty() {
+        return;
+    }
+
+    let delay = action.delay_ms.max(1.0);
+    let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
+    let frame = &action.frames[(game_time_ms as f32 / delay) as usize % action.frames.len()];
+
+    for (overlay, material_handle, mut transform, mut visibility) in &mut overlays {
+        let Some(part) = frame.parts.get(overlay.part) else {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+
+        if let Some(texture) = animation.textures.get(part.texture_index) {
+            set_layer_texture(&mut materials, &material_handle.0, texture);
+        }
+
+        let mut scale_x = part.scale.x * part.texture_size.x * SPRITE_WORLD_SCALE;
+        let scale_y = part.scale.y * part.texture_size.y * SPRITE_WORLD_SCALE;
+        if part.mirror {
+            scale_x = -scale_x;
+        }
+
+        let current = *transform;
+        transform.set_if_neq(Transform {
+            scale: Vec3::new(scale_x, scale_y, 1.0),
+            translation: Vec3::new(
+                part.position.x * SPRITE_WORLD_SCALE,
+                -part.position.y * SPRITE_WORLD_SCALE,
+                current.translation.z,
+            ),
+            ..current
+        });
+
+        visibility.set_if_neq(Visibility::Inherited);
     }
 }
 
@@ -378,13 +684,33 @@ mod tests {
 
     fn app() -> App {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
             .add_message::<UnitStateChanged>()
             .add_message::<UnitEntered>()
             .init_resource::<EntityRegistry>()
             .init_resource::<PendingBodyStates>()
+            .init_asset::<Mesh>()
+            .init_asset::<StandardMaterial>()
             .add_systems(Update, body_state_visuals);
+
+        let mesh = app
+            .world_mut()
+            .resource_mut::<Assets<Mesh>>()
+            .add(crate::domain::entities::billboard::create_sprite_quad_mesh());
+        app.insert_resource(SharedSpriteQuad { mesh });
         app
+    }
+
+    fn frozen_overlay_parts(app: &mut App, unit: Entity) -> usize {
+        app.world()
+            .get::<Children>(unit)
+            .map(|children| {
+                children
+                    .iter()
+                    .filter(|child| app.world().get::<FrozenOverlay>(*child).is_some())
+                    .count()
+            })
+            .unwrap_or(0)
     }
 
     fn register(app: &mut App, gid: u32, entity: Entity) {
@@ -547,6 +873,71 @@ mod tests {
             Some(&BodyStateTint(ICE_BLUE))
         );
         assert!(app.world().get::<AnimationPaused>(unit).is_some());
+    }
+
+    #[test]
+    fn freeze_spawns_ice_overlay_parts() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_FREEZE);
+
+        assert_eq!(frozen_overlay_parts(&mut app, unit), FROZEN_OVERLAY_PARTS);
+    }
+
+    #[test]
+    fn clearing_freeze_despawns_ice_overlay() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_FREEZE);
+        assert_eq!(frozen_overlay_parts(&mut app, unit), FROZEN_OVERLAY_PARTS);
+
+        emit_state(&mut app, 7, 0);
+        assert_eq!(frozen_overlay_parts(&mut app, unit), 0);
+    }
+
+    #[test]
+    fn stone_spawns_no_ice_overlay() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_STONE);
+
+        assert_eq!(frozen_overlay_parts(&mut app, unit), 0);
+    }
+
+    #[test]
+    fn freeze_then_stone_removes_overlay_and_grays_tint() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_FREEZE);
+        assert_eq!(frozen_overlay_parts(&mut app, unit), FROZEN_OVERLAY_PARTS);
+
+        emit_state(&mut app, 7, OPT1_STONE);
+
+        assert_eq!(frozen_overlay_parts(&mut app, unit), 0);
+        assert_eq!(
+            app.world().get::<BodyStateTint>(unit),
+            Some(&BodyStateTint(STONE_GRAY))
+        );
+    }
+
+    #[test]
+    fn repeated_freeze_does_not_stack_overlay() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_FREEZE);
+        emit_state(&mut app, 7, OPT1_FREEZE);
+
+        assert_eq!(frozen_overlay_parts(&mut app, unit), FROZEN_OVERLAY_PARTS);
     }
 
     fn sight_app() -> App {

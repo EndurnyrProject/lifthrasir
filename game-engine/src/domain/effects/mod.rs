@@ -11,8 +11,10 @@ pub use components::{
 pub use events::PlayProceduralVfx;
 pub use map_effects::{spawn_map_effects, MapEffectsSpawned};
 pub use status_visuals::{
-    apply_body_state_tint, body_state_visuals, efst_auras, option_visuals, orbit_sight_visuals,
-    AnimationPaused, BodyStateTint, PendingBodyStates, PendingEffectStates, SightOrbit, StatusAura,
+    apply_body_state_tint, body_state_visuals, efst_auras, finalize_frozen_ice_assets,
+    load_frozen_ice_assets, option_visuals, orbit_sight_visuals, sync_frozen_overlays,
+    AnimationPaused, BodyStateTint, FrozenIceAssets, FrozenOverlay, PendingBodyStates,
+    PendingEffectStates, SightOrbit, StatusAura,
 };
 pub use systems::{
     advance_effect_timers, despawn_finished_effects, follow_effect_anchor,
