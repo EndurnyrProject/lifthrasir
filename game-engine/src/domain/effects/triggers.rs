@@ -274,6 +274,15 @@ pub fn on_skill_damage(
             continue;
         };
 
+        // Repeating descriptors (e.g. Storm Gust, Lord of Vermilion, Fire
+        // Pillar) tick damage every ~450ms per victim; their persistent visual
+        // belongs to the skill-unit group/cell entities (`domain/skill_units`),
+        // which own the whole lifetime. Spawning the STR here on every tick
+        // would leave one un-despawned effect (and sound) per tick.
+        if descriptor.repeating {
+            continue;
+        }
+
         let emitter = spawn_str_or_fallback(
             &mut commands,
             &asset_server,
@@ -619,6 +628,53 @@ mod tests {
             "remainder lands on the last hit"
         );
         assert!(emitted.iter().all(|e| e.entity == target));
+    }
+
+    #[test]
+    fn skill_damage_repeating_descriptor_spawns_no_effect_or_sound() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+
+        let target = spawn_unit(&mut app, 200);
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 89, // WZ_STORMGUST (seeded skills entry, repeating: true)
+            level: 10,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 80,
+            div: 1,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        });
+
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "repeating skill damage spawns no per-tick STR effect"
+        );
+
+        let sfx = app.world_mut().resource_mut::<Messages<PlaySkillSfx>>();
+        let mut sfx_cursor = sfx.get_cursor();
+        assert_eq!(
+            sfx_cursor.read(&sfx).count(),
+            0,
+            "repeating skill damage plays no per-tick sound"
+        );
+
+        let messages = app
+            .world_mut()
+            .resource_mut::<Messages<DisplayDamageNumber>>();
+        let mut cursor = messages.get_cursor();
+        let emitted: Vec<_> = cursor.read(&messages).collect();
+        assert_eq!(emitted.len(), 1, "damage number still emitted");
+        assert_eq!(emitted[0].entity, target);
+        assert_eq!(emitted[0].amount, 80);
     }
 
     #[test]
