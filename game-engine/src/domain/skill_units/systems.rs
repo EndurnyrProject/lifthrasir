@@ -38,6 +38,15 @@ use crate::utils::coordinates::spawn_coords_to_world_position;
 /// exactly one cell.
 const CELL_COLLIDER_HALF_SIZE: f32 = 2.5;
 
+/// Footprint and height of the persistent placeholder prism spawned for a
+/// ground descriptor that has a `vfx` key but no STR (e.g. Ice Wall). Roughly
+/// one grid cell wide, standing above the ground along world-up (`-Y`).
+const VFX_PRISM_FOOTPRINT: f32 = 3.5;
+const VFX_PRISM_HEIGHT: f32 = 6.0;
+/// Translucency of the placeholder prism so it reads as a rough crystal, not a
+/// solid block.
+const VFX_PRISM_ALPHA: f32 = 0.5;
+
 /// RO grid coordinates are non-negative; a negative wire value is malformed.
 /// Reject it (the caller warns and skips) rather than wrapping it into a bogus
 /// cell far off the map.
@@ -60,6 +69,7 @@ pub fn spawn_skill_units(
     catalog: Option<Res<EffectCatalog>>,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut entity_registry: ResMut<EntityRegistry>,
     existing: Query<(Entity, &SkillUnitGroup)>,
     existing_cells: Query<&SkillUnitCell>,
@@ -70,6 +80,7 @@ pub fn spawn_skill_units(
             &mut commands,
             &asset_server,
             &mut meshes,
+            &mut materials,
             &mut entity_registry,
             catalog,
             &existing,
@@ -83,6 +94,7 @@ pub fn spawn_skill_units(
                 &mut commands,
                 &asset_server,
                 &mut meshes,
+                &mut materials,
                 &mut entity_registry,
                 catalog,
                 &existing,
@@ -98,6 +110,7 @@ fn spawn_group(
     commands: &mut Commands,
     asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
     entity_registry: &mut EntityRegistry,
     catalog: Option<&EffectCatalog>,
     existing: &Query<(Entity, &SkillUnitGroup)>,
@@ -187,12 +200,19 @@ fn spawn_group(
 
     match descriptor.ground_anchor {
         GroundAnchor::Group => {
-            spawn_effect_child(commands, asset_server, descriptor, root);
+            spawn_effect_child(commands, asset_server, meshes, materials, descriptor, root);
         }
         GroundAnchor::Cell => {
             for (cell_entity, cell) in &cell_entities {
                 if cell.flags.visible {
-                    spawn_effect_child(commands, asset_server, descriptor, *cell_entity);
+                    spawn_effect_child(
+                        commands,
+                        asset_server,
+                        meshes,
+                        materials,
+                        descriptor,
+                        *cell_entity,
+                    );
                 }
             }
         }
@@ -228,27 +248,75 @@ fn spawn_cell_collider(commands: &mut Commands, meshes: &mut Assets<Mesh>, cell_
         .observe(on_sprite_click);
 }
 
-/// Spawn the descriptor's STR effect as a child of `parent` (root or cell), at
-/// the parent's origin. A missing `str` (sound-only / procedural descriptor)
-/// spawns nothing; the group is still gameplay-relevant, so this is not an error.
+/// Spawn the descriptor's persistent visual as a child of `parent` (root or
+/// cell), at the parent's origin. Preference order:
+///   1. an STR effect when the descriptor has one;
+///   2. otherwise, for a `vfx`-only descriptor (e.g. Ice Wall, which the classic
+///      client hardcodes and no STR exists for), a simple translucent placeholder
+///      prism tinted by the descriptor — `PlayProceduralVfx` is fire-and-forget
+///      and cannot back a persistent wall cell, so the wall lives here as a child
+///      that despawns with the group/cell.
+///
+/// A descriptor with neither spawns nothing; the group is still
+/// gameplay-relevant, so that is not an error.
 fn spawn_effect_child(
     commands: &mut Commands,
     asset_server: &AssetServer,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
     descriptor: &EffectDescriptor,
     parent: Entity,
 ) {
-    let Some(handle) = load_effect(asset_server, descriptor) else {
+    if let Some(handle) = load_effect(asset_server, descriptor) {
+        let effect = spawn_effect(
+            commands,
+            handle,
+            EffectAnchor::Position(Vec3::ZERO),
+            descriptor.repeating,
+            descriptor_tint(descriptor),
+            None,
+        );
+        commands.entity(effect).insert(ChildOf(parent));
         return;
-    };
-    let effect = spawn_effect(
-        commands,
-        handle,
-        EffectAnchor::Position(Vec3::ZERO),
-        descriptor.repeating,
-        descriptor_tint(descriptor),
-        None,
-    );
-    commands.entity(effect).insert(ChildOf(parent));
+    }
+
+    if descriptor.vfx.is_some() {
+        spawn_vfx_placeholder(commands, meshes, materials, descriptor, parent);
+    }
+}
+
+/// Spawn a persistent translucent prism placeholder for a `vfx`-only ground
+/// descriptor. Unlit, alpha-blended, tinted by the descriptor color; lifted along
+/// world-up (`-Y`) so it stands on the cell rather than sinking through it. Dead
+/// simple by design — no looping hanabi, no animation; child hierarchy handles
+/// teardown when the group/cell despawns.
+fn spawn_vfx_placeholder(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    descriptor: &EffectDescriptor,
+    parent: Entity,
+) {
+    let mesh = meshes.add(Mesh::from(Cuboid::new(
+        VFX_PRISM_FOOTPRINT,
+        VFX_PRISM_HEIGHT,
+        VFX_PRISM_FOOTPRINT,
+    )));
+    let tint = descriptor_tint(descriptor).with_alpha(VFX_PRISM_ALPHA);
+    let material = materials.add(StandardMaterial {
+        base_color: tint,
+        unlit: true,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
+
+    commands.spawn((
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Transform::from_xyz(0.0, -VFX_PRISM_HEIGHT / 2.0, 0.0),
+        Visibility::default(),
+        ChildOf(parent),
+    ));
 }
 
 /// Apply server HP updates to a cell. An unknown group/cell (e.g. an update that
@@ -361,12 +429,32 @@ mod tests {
         EffectCatalog::from_skill_effect_data(skills)
     }
 
+    /// Cell-anchored descriptor with a `vfx` key and NO STR (the Ice Wall shape):
+    /// spawns a persistent placeholder prism per visible cell instead of an STR.
+    fn cell_anchored_vfx_catalog(skill_id: u32) -> EffectCatalog {
+        let mut skills = BTreeMap::new();
+        skills.insert(
+            skill_id,
+            EffectDescriptor {
+                str: None,
+                vfx: Some("ice_wall".into()),
+                sound: None,
+                placement: EffectPlacement::Ground,
+                color: [1.0, 1.0, 1.0, 1.0],
+                repeating: true,
+                ground_anchor: GroundAnchor::Cell,
+            },
+        );
+        EffectCatalog::from_skill_effect_data(skills)
+    }
+
     fn test_app(catalog: EffectCatalog) -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .add_plugins(bevy::asset::AssetPlugin::default())
             .init_asset::<LoadedEffectAsset>()
             .init_asset::<Mesh>()
+            .init_asset::<StandardMaterial>()
             .init_resource::<EntityRegistry>()
             .add_message::<SkillUnitSpawned>()
             .add_message::<SkillUnitSnapshotReceived>()
@@ -423,6 +511,15 @@ mod tests {
     fn effects(app: &mut App) -> usize {
         app.world_mut()
             .query::<&ActiveEffect>()
+            .iter(app.world())
+            .count()
+    }
+
+    /// Placeholder prisms carry a `StandardMaterial`; the click colliders on
+    /// targetable cells are material-less, so this counts only the vfx prisms.
+    fn placeholders(app: &mut App) -> usize {
+        app.world_mut()
+            .query::<&MeshMaterial3d<StandardMaterial>>()
             .iter(app.world())
             .count()
     }
@@ -708,6 +805,35 @@ mod tests {
             effects(&mut app),
             2,
             "one effect per visible cell, none for the hidden cell"
+        );
+    }
+
+    #[test]
+    fn cell_anchored_vfx_only_spawns_one_placeholder_per_visible_cell() {
+        const ICE_WALL: u32 = 87;
+        let mut app = test_app(cell_anchored_vfx_catalog(ICE_WALL));
+        app.world_mut().write_message(SkillUnitSpawned {
+            group: group(
+                1,
+                ICE_WALL,
+                vec![
+                    cell(100, 40, 50, true),
+                    cell(101, 41, 50, true),
+                    cell(102, 42, 50, false), // not visible: no placeholder
+                ],
+            ),
+        });
+        app.update();
+
+        assert_eq!(
+            placeholders(&mut app),
+            2,
+            "one persistent prism per visible cell, none for the hidden cell or STR"
+        );
+        assert_eq!(
+            effects(&mut app),
+            0,
+            "vfx-only descriptor spawns no STR effect"
         );
     }
 

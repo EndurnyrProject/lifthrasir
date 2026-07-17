@@ -12,6 +12,7 @@ use bevy_hanabi::{
     ParticleEffect, SetAttributeModifier, SetPositionSphereModifier, SetVelocitySphereModifier,
     ShapeDimension, SizeOverLifetimeModifier, SpawnerSettings,
 };
+use std::collections::HashMap;
 
 /// One-shot factor ramp. Lives on the parent of a procedural-effect tree and
 /// drives each child `FactorMaterial`'s 0→1 `factor` over its lifetime; the tree
@@ -87,6 +88,10 @@ pub fn drive_factor<M: FactorMaterial + Material>(
 pub struct ImpactAssets {
     pub quad: Handle<Mesh>,
     pub burst: Handle<EffectAsset>,
+    /// One built `EffectAsset` per procedural burst preset key (mage/wizard skill
+    /// placeholders), paired with the entity time-to-live that outlives its
+    /// particles. Looked up by `PlayProceduralVfx.key`.
+    pub bursts: HashMap<&'static str, (Handle<EffectAsset>, f32)>,
 }
 
 impl FromWorld for ImpactAssets {
@@ -94,10 +99,20 @@ impl FromWorld for ImpactAssets {
         let quad = world
             .resource_mut::<Assets<Mesh>>()
             .add(Mesh::from(Rectangle::from_size(Vec2::ONE)));
-        let burst = world
-            .resource_mut::<Assets<EffectAsset>>()
-            .add(bash_burst_effect());
-        Self { quad, burst }
+        let mut effects = world.resource_mut::<Assets<EffectAsset>>();
+        let burst = effects.add(bash_burst_effect());
+        let bursts = BURST_PRESETS
+            .iter()
+            .map(|(key, preset)| {
+                let ttl = preset.lifetime.1 + 0.15;
+                (*key, (effects.add(burst_effect(key, *preset)), ttl))
+            })
+            .collect();
+        Self {
+            quad,
+            burst,
+            bursts,
+        }
     }
 }
 
@@ -142,6 +157,322 @@ fn bash_burst_effect() -> EffectAsset {
             gradient: size,
             screen_space_size: false,
         })
+}
+
+/// Whether a burst throws its particles out in every direction (spell impacts)
+/// or biases them along world-up (`-Y`) for a ground eruption/spike.
+#[derive(Clone, Copy)]
+enum BurstVel {
+    Radial,
+    Upward,
+}
+
+/// One procedural burst placeholder, parameterized so the whole mage/wizard
+/// roster is a preset table over a single emitter instead of bespoke effects.
+/// `color` is an HDR linear tint (values may exceed 1.0 for glow); the gradient
+/// fades from it to a dimmer, transparent tail.
+#[derive(Clone, Copy)]
+struct BurstPreset {
+    color: Vec3,
+    count: f32,
+    size: f32,
+    speed: (f32, f32),
+    lifetime: (f32, f32),
+    radius: f32,
+    vel: BurstVel,
+}
+
+/// Build a one-shot hanabi burst from a preset. Mirrors `bash_burst_effect`'s
+/// shape (sphere spawn, drag to a stop, color+size fade) with the preset's tint,
+/// count, and velocity mode. Upward mode packs a `-Y`-biased velocity with a
+/// little horizontal jitter; radial mode reuses the sphere-velocity modifier.
+fn burst_effect(name: &str, p: BurstPreset) -> EffectAsset {
+    let writer = ExprWriter::new();
+
+    let init_pos = SetPositionSphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        radius: writer.lit(p.radius).expr(),
+        dimension: ShapeDimension::Volume,
+    };
+    let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.0).expr());
+    let init_lifetime = SetAttributeModifier::new(
+        Attribute::LIFETIME,
+        writer
+            .lit(p.lifetime.0)
+            .uniform(writer.lit(p.lifetime.1))
+            .expr(),
+    );
+    let update_drag = LinearDragModifier::new(writer.lit(5.0).expr());
+
+    let vel_center = writer.lit(Vec3::ZERO).expr();
+    let radial_speed = writer.lit(p.speed.0).uniform(writer.lit(p.speed.1)).expr();
+    let spread = p.speed.1 * 0.35;
+    let up_vel = writer
+        .lit(-spread)
+        .uniform(writer.lit(spread))
+        .vec3(
+            // Negative Y is up in this world; bias the vertical component up.
+            writer.lit(-p.speed.1).uniform(writer.lit(-p.speed.0)),
+            writer.lit(-spread).uniform(writer.lit(spread)),
+        )
+        .expr();
+
+    let mut color = Gradient::new();
+    color.add_key(0.0, p.color.extend(1.0));
+    color.add_key(1.0, (p.color * 0.5).extend(0.0));
+
+    let mut size = Gradient::new();
+    size.add_key(0.0, Vec3::splat(p.size));
+    size.add_key(1.0, Vec3::ZERO);
+
+    let capacity = (p.count as u32).max(1) * 2;
+    let effect = EffectAsset::new(
+        capacity,
+        SpawnerSettings::once(p.count.into()),
+        writer.finish(),
+    )
+    .with_name(name.to_string())
+    .init(init_pos)
+    .init(init_age)
+    .init(init_lifetime)
+    .update(update_drag)
+    .render(ColorOverLifetimeModifier::new(color))
+    .render(SizeOverLifetimeModifier {
+        gradient: size,
+        screen_space_size: false,
+    });
+
+    match p.vel {
+        BurstVel::Radial => effect.init(SetVelocitySphereModifier {
+            center: vel_center,
+            speed: radial_speed,
+        }),
+        BurstVel::Upward => effect.init(SetAttributeModifier::new(Attribute::VELOCITY, up_vel)),
+    }
+}
+
+/// Element-appropriate placeholder tuning for every mage/wizard `vfx` key that
+/// dispatches to a procedural burst (catalog Tasks 9/10). Deliberately readable
+/// stand-ins, not authentic effects: warm reds/oranges for fire, ice-blue for
+/// water/ice, purple for psychic, yellow-white for lightning, brown+upward for
+/// earth. `ice_wall` is absent — it is a persistent per-cell wall handled in
+/// the skill-units spawn path, not a one-shot burst.
+const BURST_PRESETS: &[(&str, BurstPreset)] = &[
+    // Mage
+    (
+        "sight",
+        BurstPreset {
+            color: Vec3::new(3.0, 1.4, 0.3),
+            count: 8.0,
+            size: 1.2,
+            speed: (4.0, 8.0),
+            lifetime: (0.2, 0.35),
+            radius: 0.4,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "napalm_beat",
+        BurstPreset {
+            color: Vec3::new(1.6, 0.3, 2.6),
+            count: 12.0,
+            size: 1.4,
+            speed: (5.0, 10.0),
+            lifetime: (0.3, 0.45),
+            radius: 0.5,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "soul_strike",
+        BurstPreset {
+            color: Vec3::new(1.6, 2.0, 3.0),
+            count: 6.0,
+            size: 1.8,
+            speed: (3.0, 6.0),
+            lifetime: (0.4, 0.6),
+            radius: 0.5,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "cold_bolt",
+        BurstPreset {
+            color: Vec3::new(0.6, 1.6, 3.0),
+            count: 12.0,
+            size: 1.0,
+            speed: (6.0, 12.0),
+            lifetime: (0.25, 0.4),
+            radius: 0.4,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "frost_diver",
+        BurstPreset {
+            color: Vec3::new(0.7, 1.7, 3.0),
+            count: 14.0,
+            size: 1.1,
+            speed: (5.0, 10.0),
+            lifetime: (0.3, 0.45),
+            radius: 0.6,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "fireball",
+        BurstPreset {
+            color: Vec3::new(3.0, 1.1, 0.2),
+            count: 20.0,
+            size: 2.0,
+            speed: (7.0, 14.0),
+            lifetime: (0.3, 0.5),
+            radius: 0.6,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "fire_bolt",
+        BurstPreset {
+            color: Vec3::new(3.0, 0.8, 0.15),
+            count: 16.0,
+            size: 0.9,
+            speed: (6.0, 13.0),
+            lifetime: (0.25, 0.4),
+            radius: 0.4,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "lightning_bolt",
+        BurstPreset {
+            color: Vec3::new(3.0, 3.0, 1.6),
+            count: 14.0,
+            size: 0.9,
+            speed: (8.0, 16.0),
+            lifetime: (0.2, 0.35),
+            radius: 0.4,
+            vel: BurstVel::Radial,
+        },
+    ),
+    // Wizard
+    (
+        "sightrasher",
+        BurstPreset {
+            color: Vec3::new(3.0, 1.0, 0.2),
+            count: 24.0,
+            size: 1.6,
+            speed: (8.0, 15.0),
+            lifetime: (0.3, 0.5),
+            radius: 0.8,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "meteor",
+        BurstPreset {
+            color: Vec3::new(3.0, 0.6, 0.1),
+            count: 28.0,
+            size: 2.4,
+            speed: (8.0, 16.0),
+            lifetime: (0.35, 0.6),
+            radius: 0.9,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "jupitel_thunder",
+        BurstPreset {
+            color: Vec3::new(3.0, 3.0, 2.0),
+            count: 22.0,
+            size: 1.8,
+            speed: (9.0, 17.0),
+            lifetime: (0.3, 0.5),
+            radius: 0.7,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "water_ball",
+        BurstPreset {
+            color: Vec3::new(0.3, 0.9, 3.0),
+            count: 18.0,
+            size: 1.4,
+            speed: (6.0, 12.0),
+            lifetime: (0.3, 0.5),
+            radius: 0.6,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "frost_nova",
+        BurstPreset {
+            color: Vec3::new(0.7, 1.7, 3.0),
+            count: 26.0,
+            size: 1.4,
+            speed: (9.0, 16.0),
+            lifetime: (0.3, 0.5),
+            radius: 0.8,
+            vel: BurstVel::Radial,
+        },
+    ),
+    (
+        "earth_spike",
+        BurstPreset {
+            color: Vec3::new(1.2, 0.7, 0.3),
+            count: 12.0,
+            size: 1.2,
+            speed: (8.0, 14.0),
+            lifetime: (0.3, 0.5),
+            radius: 0.3,
+            vel: BurstVel::Upward,
+        },
+    ),
+    (
+        "heavens_drive",
+        BurstPreset {
+            color: Vec3::new(1.1, 0.65, 0.3),
+            count: 22.0,
+            size: 1.4,
+            speed: (9.0, 15.0),
+            lifetime: (0.35, 0.55),
+            radius: 0.7,
+            vel: BurstVel::Upward,
+        },
+    ),
+    (
+        "sight_blaster",
+        BurstPreset {
+            color: Vec3::new(3.0, 1.2, 0.3),
+            count: 16.0,
+            size: 1.5,
+            speed: (7.0, 13.0),
+            lifetime: (0.3, 0.45),
+            radius: 0.5,
+            vel: BurstVel::Radial,
+        },
+    ),
+];
+
+/// Spawn a procedural burst: a `FactorRamp` parent at `position` (whose `ttl`
+/// outlives the particles, then despawns the tree via `advance_ramps`) carrying
+/// the preset's one-shot hanabi emitter. No materials/light — that heavier tree
+/// is Bash-specific; these are lightweight element placeholders.
+fn spawn_procedural_burst(
+    commands: &mut Commands,
+    effect: Handle<EffectAsset>,
+    ttl: f32,
+    position: Vec3,
+) {
+    commands
+        .spawn((
+            FactorRamp::new(ttl),
+            Transform::from_translation(position),
+            Visibility::default(),
+        ))
+        .with_children(|parent| {
+            parent.spawn(ParticleEffect::new(effect));
+        });
 }
 
 /// Unlit radial hit-flash material. Grows and streaks with `params.factor`,
@@ -363,7 +694,13 @@ pub fn on_play_procedural_vfx(
                 msg.position,
                 msg.color,
             ),
-            other => debug!("unknown procedural vfx key {other}"),
+            key => {
+                let Some((effect, ttl)) = assets.bursts.get(key) else {
+                    debug!("unknown procedural vfx key {key}");
+                    continue;
+                };
+                spawn_procedural_burst(&mut commands, effect.clone(), *ttl, msg.position);
+            }
         }
     }
 }
@@ -518,6 +855,24 @@ mod tests {
         });
         app.update();
         assert_eq!(ramp_count(&mut app), 1, "bash spawns exactly one ramp tree");
+    }
+
+    #[test]
+    fn every_burst_preset_key_spawns_one_ramp() {
+        for (key, _) in BURST_PRESETS {
+            let mut app = dispatch_app();
+            app.world_mut().write_message(PlayProceduralVfx {
+                key: (*key).into(),
+                position: Vec3::new(1.0, 2.0, 3.0),
+                color: Color::WHITE,
+            });
+            app.update();
+            assert_eq!(
+                ramp_count(&mut app),
+                1,
+                "preset key {key} spawns exactly one burst tree (not the unknown-key path)"
+            );
+        }
     }
 
     #[test]
