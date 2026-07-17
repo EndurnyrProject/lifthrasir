@@ -23,21 +23,17 @@ use crate::domain::audio::events::PlaySkillSfx;
 use crate::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
 use crate::domain::combat::systems::start_attack_animation;
 use crate::domain::entities::character::states::AnimationState;
-use crate::domain::entities::components::NetworkEntity;
+use crate::domain::entities::registry::EntityRegistry;
 use crate::infrastructure::effect::{EffectCatalog, LoadedEffectAsset, MapEffectCatalog};
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use net_contract::events::{
     GroundSkillPlaced, SkillDamageReceived, SkillEffectShown, SpecialEffectShown,
 };
 
-/// Despawn timer for repeating ground effects (aesir sends no removal packet;
-/// design §4 "Lifetime boundary"). A `RemoveGroundSkill` event would supersede.
-const GROUND_EFFECT_LIFETIME_SECS: f32 = 8.0;
-
-/// Despawn timer for repeating `SpecialEffect` visuals. Like ground effects,
-/// `SpecialEffect` is fire-and-forget with no removal packet; a `repeating`
-/// catalog entry (e.g. EF_STORMGUST, EF_MAGNUS) would otherwise never set
-/// `finished` and accumulate one entity per occurrence.
+/// Despawn timer for repeating `SpecialEffect` visuals: `SpecialEffect` is
+/// fire-and-forget with no removal packet, so a `repeating` catalog entry
+/// (e.g. EF_STORMGUST, EF_MAGNUS) would otherwise never set `finished` and
+/// accumulate one entity per occurrence.
 const SPECIAL_EFFECT_LIFETIME_SECS: f32 = 8.0;
 
 /// Vertical offset from a unit's `Transform.translation` (its feet) to where a
@@ -70,12 +66,9 @@ fn emit_procedural_vfx(
 }
 
 /// Resolve a unit by the gid aesir keys in-game packets on (see
-/// `combat/systems.rs`). `None` when the unit is not in the world.
-fn resolve_gid(network_entities: &Query<(Entity, &NetworkEntity)>, gid: u32) -> Option<Entity> {
-    network_entities
-        .iter()
-        .find(|(_, ne)| ne.gid == gid)
-        .map(|(e, _)| e)
+/// `combat/systems.rs`). `None` when the unit is not registered.
+fn resolve_gid(registry: &EntityRegistry, gid: u32) -> Option<Entity> {
+    registry.get_entity(gid)
 }
 
 /// The descriptor's RGBA tint as a Bevy `Color` (the data crate stays Bevy-free).
@@ -142,22 +135,22 @@ pub fn on_skill_effect(
     mut commands: Commands,
     catalog: Option<Res<EffectCatalog>>,
     asset_server: Res<AssetServer>,
-    network_entities: Query<(Entity, &NetworkEntity)>,
+    registry: Res<EntityRegistry>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     transforms: Query<&Transform>,
     mut sfx: MessageWriter<PlaySkillSfx>,
     mut proc_vfx: MessageWriter<PlayProceduralVfx>,
 ) {
     for event in events.read() {
-        let src = resolve_gid(&network_entities, event.src_id);
-        let target = resolve_gid(&network_entities, event.target_id);
+        let src = resolve_gid(&registry, event.src_id);
+        let target = resolve_gid(&registry, event.target_id);
 
         if let Some(src) = src {
             start_attack_animation(&mut commands, &mut behaviors, &transforms, src, target, 0);
         }
 
         let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.skill_id)) else {
-            debug!("No effect catalog entry for skill {}", event.skill_id);
+            warn!("No effect catalog entry for skill {}", event.skill_id);
             continue;
         };
 
@@ -198,7 +191,7 @@ pub fn on_skill_damage(
     mut commands: Commands,
     catalog: Option<Res<EffectCatalog>>,
     asset_server: Res<AssetServer>,
-    network_entities: Query<(Entity, &NetworkEntity)>,
+    registry: Res<EntityRegistry>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     transforms: Query<&Transform>,
     mut damage_display: MessageWriter<DisplayDamageNumber>,
@@ -206,8 +199,8 @@ pub fn on_skill_damage(
     mut proc_vfx: MessageWriter<PlayProceduralVfx>,
 ) {
     for event in events.read() {
-        let src = resolve_gid(&network_entities, event.src_id);
-        let Some(target) = resolve_gid(&network_entities, event.target_id) else {
+        let src = resolve_gid(&registry, event.src_id);
+        let Some(target) = resolve_gid(&registry, event.target_id) else {
             debug!(
                 "No target entity for skill damage {} (target {})",
                 event.skill_id, event.target_id
@@ -236,7 +229,7 @@ pub fn on_skill_damage(
         }
 
         let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.skill_id)) else {
-            debug!("No effect catalog entry for skill {}", event.skill_id);
+            warn!("No effect catalog entry for skill {}", event.skill_id);
             continue;
         };
 
@@ -254,51 +247,55 @@ pub fn on_skill_damage(
     }
 }
 
-/// `GroundSkillPlaced` — spawn a position-anchored effect at the converted cell,
-/// play caster motion on the source, play the sound.
+/// `GroundSkillPlaced` — cast-moment feedback only: caster motion, the landing
+/// sound, and (for non-repeating descriptors) a one-shot STR at the converted
+/// cell. Repeating descriptors (e.g. Storm Gust) spawn no visual here — their
+/// persistent effect belongs to the skill-unit group/cell entities
+/// (`domain/skill_units`), which own the whole lifetime and never rely on a
+/// client-side despawn timer.
 #[allow(clippy::too_many_arguments)]
 pub fn on_ground_skill(
     mut events: MessageReader<GroundSkillPlaced>,
     mut commands: Commands,
     catalog: Option<Res<EffectCatalog>>,
     asset_server: Res<AssetServer>,
-    network_entities: Query<(Entity, &NetworkEntity)>,
+    registry: Res<EntityRegistry>,
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     transforms: Query<&Transform>,
     mut sfx: MessageWriter<PlaySkillSfx>,
 ) {
     for event in events.read() {
-        let src = resolve_gid(&network_entities, event.src_id);
+        let src = resolve_gid(&registry, event.src_id);
         if let Some(src) = src {
             start_attack_animation(&mut commands, &mut behaviors, &transforms, src, None, 0);
         }
 
         let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.skill_id)) else {
-            debug!(
+            warn!(
                 "No effect catalog entry for ground skill {}",
                 event.skill_id
             );
             continue;
         };
 
-        let position = spawn_coords_to_world_position(event.x as u16, event.y as u16, 0, 0);
-
-        let lifetime = descriptor
-            .repeating
-            .then(|| Timer::from_seconds(GROUND_EFFECT_LIFETIME_SECS, TimerMode::Once));
-
-        // A sound-only ground skill (no `str`) has no spawned effect to anchor to,
-        // so its sound anchors to the caster if present.
-        let emitter = match load_effect(&asset_server, descriptor) {
-            Some(effect) => Some(spawn_effect(
-                &mut commands,
-                effect,
-                EffectAnchor::Position(position),
-                descriptor.repeating,
-                descriptor_tint(descriptor),
-                lifetime,
-            )),
-            None => src,
+        // A sound-only ground skill (no `str`), or a repeating one whose visual
+        // now belongs to the skill unit, has no spawned effect to anchor to, so
+        // its sound anchors to the caster if present.
+        let emitter = if descriptor.repeating {
+            src
+        } else {
+            let position = spawn_coords_to_world_position(event.x as u16, event.y as u16, 0, 0);
+            match load_effect(&asset_server, descriptor) {
+                Some(effect) => Some(spawn_effect(
+                    &mut commands,
+                    effect,
+                    EffectAnchor::Position(position),
+                    false,
+                    descriptor_tint(descriptor),
+                    None,
+                )),
+                None => src,
+            }
         };
 
         if let Some(emitter) = emitter {
@@ -316,11 +313,11 @@ pub fn on_special_effect(
     mut commands: Commands,
     catalog: Option<Res<MapEffectCatalog>>,
     asset_server: Res<AssetServer>,
-    network_entities: Query<(Entity, &NetworkEntity)>,
+    registry: Res<EntityRegistry>,
     transforms: Query<&Transform>,
 ) {
     for event in events.read() {
-        let Some(source) = resolve_gid(&network_entities, event.source_id) else {
+        let Some(source) = resolve_gid(&registry, event.source_id) else {
             debug!("No entity for special effect source {}", event.source_id);
             continue;
         };
@@ -366,6 +363,7 @@ mod tests {
     use super::*;
     use crate::domain::effects::components::ActiveEffect;
     use crate::domain::effects::systems::despawn_finished_effects;
+    use crate::domain::entities::components::NetworkEntity;
     use crate::domain::entities::types::ObjectType;
     use crate::infrastructure::effect::EffectDataAsset;
     use bevy::time::TimeUpdateStrategy;
@@ -395,17 +393,27 @@ mod tests {
             .add_message::<PlaySkillSfx>()
             .add_message::<PlayProceduralVfx>()
             .add_message::<SpecialEffectShown>()
+            .init_resource::<EntityRegistry>()
             .insert_resource(seeded_catalog());
         app
     }
 
+    /// Spawns a `NetworkEntity` unit and registers it in `EntityRegistry`,
+    /// mirroring how `spawning/systems.rs` and `skill_units` register real
+    /// entities — `resolve_gid` looks units up through the registry, not by
+    /// scanning `NetworkEntity` components.
     fn spawn_unit(app: &mut App, gid: u32) -> Entity {
-        app.world_mut()
+        let entity = app
+            .world_mut()
             .spawn((
                 NetworkEntity::new(gid, gid, ObjectType::Pc),
                 Transform::default(),
             ))
-            .id()
+            .id();
+        app.world_mut()
+            .resource_mut::<EntityRegistry>()
+            .register_entity(gid, entity);
+        entity
     }
 
     fn active_effects(app: &mut App) -> usize {
@@ -462,14 +470,54 @@ mod tests {
     }
 
     #[test]
-    fn ground_skill_spawns_position_anchored_effect_at_cell() {
+    fn ground_skill_repeating_descriptor_spawns_no_effect() {
         let mut app = test_app();
         app.add_systems(Update, on_ground_skill);
 
         let _src = spawn_unit(&mut app, 100);
 
         app.world_mut().write_message(GroundSkillPlaced {
-            skill_id: 89, // WZ_STORMGUST (seeded Ground)
+            skill_id: 89, // WZ_STORMGUST (seeded Ground, repeating: true)
+            src_id: 100,
+            level: 10,
+            x: 40,
+            y: 50,
+            server_tick: 0,
+        });
+
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "repeating ground visuals belong to the skill-unit entity, not the trigger"
+        );
+    }
+
+    #[test]
+    fn ground_skill_non_repeating_descriptor_spawns_landing_effect_at_cell() {
+        let mut app = test_app();
+        // No non-repeating Ground skill is seeded in effects.ron today, so this
+        // fabricates one to exercise the landing-flash path (e.g. Thunder Storm's
+        // strike).
+        app.insert_resource(EffectCatalog::from_skill_effect_data(
+            std::collections::BTreeMap::from([(
+                900_001,
+                EffectDescriptor {
+                    str: Some("stonecurse.str".to_string()),
+                    placement: EffectPlacement::Ground,
+                    color: [1.0, 1.0, 1.0, 1.0],
+                    repeating: false,
+                    ..Default::default()
+                },
+            )]),
+        ));
+        app.add_systems(Update, on_ground_skill);
+
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(GroundSkillPlaced {
+            skill_id: 900_001,
             src_id: 100,
             level: 10,
             x: 40,
@@ -480,7 +528,7 @@ mod tests {
         app.update();
 
         let positions = position_anchored(&mut app);
-        assert_eq!(positions.len(), 1, "one position-anchored ground effect");
+        assert_eq!(positions.len(), 1, "one landing effect spawned at the cell");
         assert_eq!(positions[0], spawn_coords_to_world_position(40, 50, 0, 0));
     }
 
