@@ -9,9 +9,10 @@ use bevy::render::render_resource::{
 };
 use bevy::shader::ShaderRef;
 use bevy_hanabi::{
-    Attribute, ColorOverLifetimeModifier, EffectAsset, ExprWriter, Gradient, LinearDragModifier,
-    ParticleEffect, SetAttributeModifier, SetPositionSphereModifier, SetVelocitySphereModifier,
-    ShapeDimension, SizeOverLifetimeModifier, SpawnerSettings,
+    Attribute, ColorBlendMode, ColorOverLifetimeModifier, EffectAsset, EffectProperties,
+    ExprWriter, Gradient, LinearDragModifier, ParticleEffect, SetAttributeModifier,
+    SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SizeOverLifetimeModifier,
+    SpawnerSettings,
 };
 use std::collections::HashMap;
 
@@ -93,6 +94,10 @@ pub struct ImpactAssets {
     /// placeholders), paired with the entity time-to-live that outlives its
     /// particles. Looked up by `PlayProceduralVfx.key`.
     pub bursts: HashMap<&'static str, (Handle<EffectAsset>, f32)>,
+    /// Single tintable one-shot spark garnish, shared by every shader-fx
+    /// caller. Color is not baked in: each spawn supplies its own tint via the
+    /// `spark_tint` hanabi property (see `spark_garnish_bundle`).
+    pub spark: Handle<EffectAsset>,
 }
 
 impl FromWorld for ImpactAssets {
@@ -109,12 +114,87 @@ impl FromWorld for ImpactAssets {
                 (*key, (effects.add(burst_effect(key, *preset)), ttl))
             })
             .collect();
+        let spark = effects.add(spark_effect());
         Self {
             quad,
             burst,
             bursts,
+            spark,
         }
     }
+}
+
+/// Hanabi effect property name carrying `ImpactAssets::spark`'s per-instance
+/// HDR tint. Declared once in `spark_effect` and set per spawn by
+/// `spark_garnish_bundle` via `EffectProperties`.
+const SPARK_TINT_PROPERTY: &str = "spark_tint";
+
+/// One-shot tintable spark garnish: ~16 particles fired outward from the
+/// impact point, dragged to a quick stop, shrinking to nothing. Shape (sphere
+/// spawn, drag, size fade) mirrors `burst_effect`, but color is never baked
+/// into the asset — each particle reads its base HDR color from the
+/// `spark_tint` property at init, then a neutral white-to-transparent
+/// gradient modulates (multiplies) that tint down over its lifetime.
+fn spark_effect() -> EffectAsset {
+    let writer = ExprWriter::new();
+
+    let tint = writer.add_property(SPARK_TINT_PROPERTY, Vec4::ONE.into());
+
+    let init_pos = SetPositionSphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        radius: writer.lit(0.4).expr(),
+        dimension: ShapeDimension::Volume,
+    };
+    let init_vel = SetVelocitySphereModifier {
+        center: writer.lit(Vec3::ZERO).expr(),
+        speed: writer.lit(8.0).uniform(writer.lit(16.0)).expr(),
+    };
+    let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.0).expr());
+    let init_lifetime = SetAttributeModifier::new(
+        Attribute::LIFETIME,
+        writer.lit(0.2).uniform(writer.lit(0.35)).expr(),
+    );
+    let init_color = SetAttributeModifier::new(Attribute::HDR_COLOR, writer.prop(tint).expr());
+    let update_drag = LinearDragModifier::new(writer.lit(5.0).expr());
+
+    let mut alpha = Gradient::new();
+    alpha.add_key(0.0, Vec4::ONE);
+    alpha.add_key(1.0, Vec4::new(1.0, 1.0, 1.0, 0.0));
+
+    let mut size = Gradient::new();
+    size.add_key(0.0, Vec3::splat(1.0));
+    size.add_key(1.0, Vec3::ZERO);
+
+    EffectAsset::new(32, SpawnerSettings::once(16.0.into()), writer.finish())
+        .with_name("spark_garnish")
+        .init(init_pos)
+        .init(init_vel)
+        .init(init_age)
+        .init(init_lifetime)
+        .init(init_color)
+        .update(update_drag)
+        .render(ColorOverLifetimeModifier {
+            gradient: alpha,
+            blend: ColorBlendMode::Modulate,
+            mask: default(),
+        })
+        .render(SizeOverLifetimeModifier {
+            gradient: size,
+            screen_space_size: false,
+        })
+}
+
+/// Child bundle spawning the tintable spark garnish under a `FactorRamp` tree
+/// (the same child-spawn slot `spawn_jupitel_burst` uses for its hanabi
+/// burst): one `ParticleEffect` referencing the shared `spark` asset plus an
+/// `EffectProperties` setting `spark_tint` to `tint` for this instance only.
+/// No new `EffectAsset` is built per call.
+pub fn spark_garnish_bundle(assets: &ImpactAssets, tint: Vec4) -> impl Bundle {
+    (
+        ParticleEffect::new(assets.spark.clone()),
+        EffectProperties::default()
+            .with_properties([(SPARK_TINT_PROPERTY.to_string(), tint.into())]),
+    )
 }
 
 /// One-shot radial dust/spark burst: ~10 particles fired outward from the impact
@@ -856,6 +936,24 @@ mod tests {
 
         assert_eq!(core.params.factor, 0.5);
         assert_eq!(star.params.factor, 0.5);
+    }
+
+    #[test]
+    fn spark_garnish_bundle_carries_its_own_tint() {
+        let mut world = World::new();
+        world.init_resource::<Assets<Mesh>>();
+        world.init_resource::<Assets<EffectAsset>>();
+        let assets = ImpactAssets::from_world(&mut world);
+
+        let tint = Vec4::new(0.2, 0.8, 3.0, 1.0);
+        let entity = world.spawn(spark_garnish_bundle(&assets, tint)).id();
+
+        let stored = world
+            .get::<EffectProperties>(entity)
+            .expect("bundle carries EffectProperties")
+            .get_stored(SPARK_TINT_PROPERTY)
+            .expect("spark_tint was set on spawn");
+        assert_eq!(stored, tint.into(), "tint is per-instance, not baked in");
     }
 
     fn dispatch_app() -> App {
