@@ -17,6 +17,7 @@ pub mod item_drop;
 pub mod party;
 pub mod settings;
 pub mod skill;
+pub mod skill_units;
 pub mod sprite;
 pub mod storage;
 pub mod system_sets;

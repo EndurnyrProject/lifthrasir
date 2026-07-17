@@ -24,6 +24,7 @@ pub use domain::inventory::InventoryPlugin;
 pub use domain::item_drop::ItemDropPlugin;
 pub use domain::party::PartyPlugin;
 pub use domain::settings::SettingsPlugin;
+pub use domain::skill_units::SkillUnitsPlugin;
 pub use domain::storage::StoragePlugin;
 pub use infrastructure::accessory::{AccessoryDb, AccessoryDbPlugin};
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
@@ -54,6 +55,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(JobSystemPlugin)
             .add(SkillSystemPlugin)
             .add(EffectsPlugin)
+            .add(SkillUnitsPlugin)
             .add(StatusIconPlugin)
             .add(VfxPlugin)
             .add(ItemDbPlugin)
