@@ -40,24 +40,28 @@ impl PendingAnimations {
         });
     }
 
-    /// Take all completed animations for processing by other systems.
-    pub fn take_completed(&mut self) -> Vec<(PendingAnimation, Handle<RoAnimationAsset>)> {
-        std::mem::take(&mut self.completed)
+    /// Take only the completed animations whose layer satisfies `pred`, leaving
+    /// the rest queued. The queue is shared by the body/head, cart, and equipment
+    /// finalizers; each MUST claim only its own layers — a finalizer that drains
+    /// everything eats (and loses) completions belonging to the others.
+    pub fn take_completed_where(
+        &mut self,
+        mut pred: impl FnMut(Tag) -> bool,
+    ) -> Vec<(PendingAnimation, Handle<RoAnimationAsset>)> {
+        let (mine, rest) = std::mem::take(&mut self.completed)
+            .into_iter()
+            .partition(|(pending, _)| pred(pending.layer_tag));
+        self.completed = rest;
+        mine
     }
 
     /// Take only the completed animations for a specific layer, leaving the rest
-    /// queued. `finalize_equipment_layers` drops any completion it doesn't
-    /// recognise, so the cart finalizer must claim its own completions without
-    /// disturbing the body/head/equipment ones it shares the queue with.
+    /// queued.
     pub fn take_completed_for_layer(
         &mut self,
         layer: Tag,
     ) -> Vec<(PendingAnimation, Handle<RoAnimationAsset>)> {
-        let (mine, rest) = std::mem::take(&mut self.completed)
-            .into_iter()
-            .partition(|(pending, _)| pending.layer_tag == layer);
-        self.completed = rest;
-        mine
+        self.take_completed_where(|tag| tag == layer)
     }
 
     /// Re-queue completions whose target entity wasn't ready this frame (its

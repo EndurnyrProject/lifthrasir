@@ -255,7 +255,10 @@ pub fn finalize_render_layers(
     shared_quad: Res<SharedSpriteQuad>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let completed = pending_animations.take_completed();
+    // Claim only the layers this finalizer owns; cart and equipment completions
+    // stay queued for their own finalizers instead of being stolen or dropped.
+    let completed =
+        pending_animations.take_completed_where(|tag| tag == LAYER_BODY || tag == LAYER_HEAD);
     if completed.is_empty() {
         return;
     }

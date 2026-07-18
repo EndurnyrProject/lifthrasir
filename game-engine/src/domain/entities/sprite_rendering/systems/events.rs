@@ -223,13 +223,21 @@ pub fn finalize_equipment_layers(
     mut pending_animations: ResMut<PendingAnimations>,
     animations: Res<Assets<RoAnimationAsset>>,
     mut players: Query<(Entity, &mut PlayerAppearance)>,
+    alive: Query<Entity>,
     shared_quad: Res<SharedSpriteQuad>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let completed = pending_animations.take_completed();
+    // Claim only equipment layers; body/head/cart completions belong to the
+    // other finalizers sharing this queue and must stay untouched.
+    let completed =
+        pending_animations.take_completed_where(|tag| tag_to_equipment_slot(tag).is_some());
     if completed.is_empty() {
         return;
     }
+
+    // Completions whose entity is alive but doesn't carry `PlayerAppearance`
+    // yet (spawn-frame race): retried next frame instead of dropped.
+    let mut deferred = Vec::new();
 
     for (pending, animation_handle) in completed {
         let Some(callback_entity) = pending.callback_entity else {
@@ -237,6 +245,9 @@ pub fn finalize_equipment_layers(
         };
 
         let Ok((entity, mut appearance)) = players.get_mut(callback_entity) else {
+            if alive.contains(callback_entity) {
+                deferred.push((pending, animation_handle));
+            }
             continue;
         };
 
@@ -291,6 +302,8 @@ pub fn finalize_equipment_layers(
             );
         }
     }
+
+    pending_animations.defer_completed(deferred);
 }
 
 fn tag_to_equipment_slot(tag: moonshine_tag::Tag) -> Option<EquipmentSlot> {
@@ -384,5 +397,85 @@ mod tests {
         let (spr, act) = resolve_shield_paths("검사", Gender::Male, 28901);
         assert_eq!(spr, "ro://data/sprite/방패/검사/검사_남_28901_방패.spr");
         assert_eq!(act, "ro://data/sprite/방패/검사/검사_남_28901_방패.act");
+    }
+
+    mod finalize {
+        use super::super::*;
+        use crate::domain::sprite::tags::{LAYER_BODY, LAYER_WEAPON};
+        use crate::infrastructure::assets::animation_processing_system::PendingAnimation;
+        use bevy::asset::AssetPlugin;
+        use moonshine_tag::Tag;
+
+        fn app() -> App {
+            let mut app = App::new();
+            app.add_plugins((TaskPoolPlugin::default(), AssetPlugin::default()))
+                .init_asset::<RoAnimationAsset>()
+                .init_asset::<StandardMaterial>()
+                .init_resource::<PendingAnimations>()
+                .insert_resource(SharedSpriteQuad {
+                    mesh: Handle::default(),
+                })
+                .add_systems(Update, finalize_equipment_layers);
+            app
+        }
+
+        fn queue_completion(app: &mut App, tag: Tag, entity: Entity) {
+            app.world_mut()
+                .resource_mut::<PendingAnimations>()
+                .defer_completed(vec![(
+                    PendingAnimation {
+                        sprite_handle: Handle::default(),
+                        action_handle: Handle::default(),
+                        layer_tag: tag,
+                        callback_entity: Some(entity),
+                    },
+                    Handle::default(),
+                )]);
+        }
+
+        fn queued_count(app: &mut App) -> usize {
+            app.world_mut()
+                .resource_mut::<PendingAnimations>()
+                .take_completed_where(|_| true)
+                .len()
+        }
+
+        #[test]
+        fn equipment_finalizer_leaves_body_completions_queued() {
+            // Regression: a body completion deferred by finalize_render_layers
+            // (spawn-frame race) must survive finalize_equipment_layers instead
+            // of being drained and silently dropped — that loss left characters
+            // permanently invisible.
+            let mut app = app();
+            let entity = app.world_mut().spawn_empty().id();
+            queue_completion(&mut app, LAYER_BODY, entity);
+
+            app.update();
+
+            assert_eq!(queued_count(&mut app), 1, "body completion must survive");
+        }
+
+        #[test]
+        fn equipment_completion_for_unready_entity_is_deferred() {
+            let mut app = app();
+            let entity = app.world_mut().spawn_empty().id();
+            queue_completion(&mut app, LAYER_WEAPON, entity);
+
+            app.update();
+
+            assert_eq!(queued_count(&mut app), 1, "retried, not dropped");
+        }
+
+        #[test]
+        fn equipment_completion_for_dead_entity_is_dropped() {
+            let mut app = app();
+            let entity = app.world_mut().spawn_empty().id();
+            app.world_mut().despawn(entity);
+            queue_completion(&mut app, LAYER_WEAPON, entity);
+
+            app.update();
+
+            assert_eq!(queued_count(&mut app), 0);
+        }
     }
 }
