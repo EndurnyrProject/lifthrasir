@@ -4,6 +4,7 @@ pub mod cart;
 pub mod events;
 pub mod head_sync;
 pub mod headgear_sync;
+pub mod job_change;
 pub mod spawn;
 pub mod update;
 pub mod weapon_motion;
@@ -21,6 +22,7 @@ pub use events::{
 };
 pub use head_sync::sync_player_head_layer;
 pub use headgear_sync::sync_headgear_layer;
+pub use job_change::apply_base_look_changes;
 pub use spawn::spawn_sprite_hierarchy;
 pub use update::cleanup_orphaned_sprites;
 pub use weapon_motion::sync_weapon_combat_motion;

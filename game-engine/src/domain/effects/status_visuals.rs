@@ -531,13 +531,7 @@ pub fn option_visuals(
         let Some(entity) = registry.get_entity(unit_id) else {
             return true;
         };
-        apply_sight_state(
-            &mut commands,
-            entity,
-            effect_state,
-            &transforms,
-            &orbits,
-        );
+        apply_sight_state(&mut commands, entity, effect_state, &transforms, &orbits);
         false
     });
 }
