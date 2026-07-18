@@ -7,8 +7,10 @@ use crate::{
             character::{
                 components::{
                     core::Grounded,
+                    status::StatusParameter,
                     visual::{CharacterDirection, Direction},
                 },
+                events::StatusParameterChanged,
                 states::AnimationState,
             },
             pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
@@ -17,7 +19,7 @@ use crate::{
         world::components::MapLoader,
     },
     infrastructure::assets::loaders::RoAltitudeAsset,
-    utils::coordinates::spawn_coords_to_world_position,
+    utils::coordinates::{spawn_coords_to_world_position, world_position_to_spawn_coords},
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -354,14 +356,41 @@ pub fn handle_server_stop_system(
     }
 }
 
+/// Mirrors the server's walk-speed param (var 0) into the local player's
+/// interpolation speed. The server steps its position at `walk_speed` ms per
+/// cell; without this the sprite always covers cells at the default 150 and
+/// drifts behind (or ahead of) the authoritative walk whenever a status
+/// changes the speed (cart weight, Agi buffs, Quagmire, Free Cast).
+#[auto_add_system(
+    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    schedule = Update,
+    config(run_if = in_state(GameState::InGame))
+)]
+pub fn sync_walk_speed_from_params(
+    mut events: MessageReader<StatusParameterChanged>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        if event.parameter != StatusParameter::Speed {
+            continue;
+        }
+
+        let Ok(mut entity_commands) = commands.get_entity(event.entity) else {
+            continue;
+        };
+
+        entity_commands.insert(MovementSpeed::from_server_speed(event.new_value as u16));
+    }
+}
+
 /// Attacks root you in place. The server only fires an attack once the unit is
-/// in range, so the unit is already where it should be - it just needs to stop
-/// sliding. Without this the client keeps interpolating its in-flight move
-/// through the swing. We drop the move and freeze at the current position rather
-/// than snapping to the target cell: that target may be a stale ground-walk
-/// destination (clicking a mob already in range mid-walk), and snapping to it
-/// would teleport the unit. If the server sends an authoritative stop,
-/// `handle_server_stop_system` corrects the exact cell.
+/// in range, but its stepper leads the client's interpolation, so the swing
+/// packet lands while the in-flight move is still short of the attack cell.
+/// When the move is nearly done, fast-forward to its destination so the swing
+/// plays where the server attacked from. A farther destination may be a stale
+/// ground-walk target (clicking a mob already in range mid-walk), so freeze at
+/// the current position instead of teleporting; the server's authoritative
+/// stop (`handle_server_stop_system`) corrects the exact cell.
 #[auto_add_system(
     plugin = crate::app::movement_plugin::MovementDomainPlugin,
     schedule = Update,
@@ -372,11 +401,24 @@ pub fn handle_server_stop_system(
 )]
 pub fn cancel_movement_on_attack(
     mut commands: Commands,
-    query: Query<(Entity, &AnimationState), With<MovementTarget>>,
+    mut query: Query<(Entity, &AnimationState, &MovementTarget, &mut Transform)>,
 ) {
-    for (entity, state) in query.iter() {
+    const SNAP_RANGE_CELLS: u16 = 3;
+
+    for (entity, state, target, mut transform) in query.iter_mut() {
         if *state != AnimationState::Attacking {
             continue;
+        }
+
+        let (cell_x, cell_y) = world_position_to_spawn_coords(transform.translation, 0, 0);
+        let remaining_cells = target
+            .dest_x
+            .abs_diff(cell_x)
+            .max(target.dest_y.abs_diff(cell_y));
+
+        if remaining_cells <= SNAP_RANGE_CELLS {
+            transform.translation.x = target.dest_world_pos.x;
+            transform.translation.z = target.dest_world_pos.z;
         }
 
         commands
@@ -478,6 +520,79 @@ pub fn update_entity_altitude_system(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn cancel_app() -> App {
+        let mut app = App::new();
+        app.add_systems(Update, cancel_movement_on_attack);
+        app
+    }
+
+    fn moving_entity(app: &mut App, cell: (u16, u16), dest: (u16, u16)) -> Entity {
+        let pos = spawn_coords_to_world_position(cell.0, cell.1, 0, 0);
+        let target = MovementTarget::new(
+            cell.0,
+            cell.1,
+            dest.0,
+            dest.1,
+            pos,
+            spawn_coords_to_world_position(dest.0, dest.1, 0, 0),
+            0,
+        );
+
+        app.world_mut()
+            .spawn((
+                AnimationState::Attacking,
+                target,
+                Transform::from_translation(pos),
+                MovementState::Moving,
+            ))
+            .id()
+    }
+
+    #[test]
+    fn attack_near_destination_fast_forwards_to_it() {
+        let mut app = cancel_app();
+        let entity = moving_entity(&mut app, (10, 10), (12, 10));
+
+        app.update();
+
+        let expected = spawn_coords_to_world_position(12, 10, 0, 0);
+        let transform = app.world().get::<Transform>(entity).unwrap();
+        assert_eq!(transform.translation.x, expected.x);
+        assert_eq!(transform.translation.z, expected.z);
+        assert!(app.world().get::<MovementTarget>(entity).is_none());
+        assert_eq!(
+            *app.world().get::<MovementState>(entity).unwrap(),
+            MovementState::Idle
+        );
+    }
+
+    #[test]
+    fn attack_far_from_destination_freezes_in_place() {
+        let mut app = cancel_app();
+        let entity = moving_entity(&mut app, (10, 10), (20, 10));
+
+        app.update();
+
+        let expected = spawn_coords_to_world_position(10, 10, 0, 0);
+        let transform = app.world().get::<Transform>(entity).unwrap();
+        assert_eq!(transform.translation.x, expected.x);
+        assert_eq!(transform.translation.z, expected.z);
+        assert!(app.world().get::<MovementTarget>(entity).is_none());
+    }
+
+    #[test]
+    fn non_attacking_entity_keeps_its_movement() {
+        let mut app = cancel_app();
+        let entity = moving_entity(&mut app, (10, 10), (12, 10));
+        app.world_mut()
+            .entity_mut(entity)
+            .insert(AnimationState::Walking);
+
+        app.update();
+
+        assert!(app.world().get::<MovementTarget>(entity).is_some());
+    }
 
     #[test]
     fn test_direction_from_movement() {
