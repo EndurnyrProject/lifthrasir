@@ -43,7 +43,7 @@ const ELEMENT_COLORS: [Color; 10] = [
     Color::srgb(0.45, 0.55, 0.15), // 9 undead
 ];
 
-fn element_color(property: u32) -> Color {
+pub(super) fn element_color(property: u32) -> Color {
     ELEMENT_COLORS
         .get(property as usize)
         .copied()
@@ -77,7 +77,7 @@ impl FromWorld for CastCircleAssets {
     }
 }
 
-fn cast_circle_material(color: Color) -> StandardMaterial {
+pub(super) fn cast_circle_material(color: Color) -> StandardMaterial {
     let c = color.to_srgba();
     StandardMaterial {
         base_color: Color::srgba(c.red, c.green, c.blue, 0.65),
