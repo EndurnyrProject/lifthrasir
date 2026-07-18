@@ -1200,6 +1200,7 @@ mod tests {
             range: 0,
             inf_type: 0,
             job_id,
+            splash_radius: 0,
         }
     }
 
@@ -1219,6 +1220,7 @@ mod tests {
                     range: n.range,
                     inf_type: n.inf_type,
                     job_id: n.job_id,
+                    splash_radius: n.splash_radius,
                 },
             );
         }

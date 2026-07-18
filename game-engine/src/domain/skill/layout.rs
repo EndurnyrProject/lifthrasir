@@ -106,6 +106,7 @@ mod tests {
             range: 0,
             inf_type: 0,
             job_id,
+            splash_radius: 0,
         }
     }
 

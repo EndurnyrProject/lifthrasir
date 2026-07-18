@@ -144,6 +144,7 @@ mod tests {
             range: 0,
             inf_type,
             job_id: 0,
+            splash_radius: 0,
         }
     }
 
