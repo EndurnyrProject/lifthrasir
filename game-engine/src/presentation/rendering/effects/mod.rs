@@ -1,4 +1,5 @@
 pub mod ambient;
+pub mod aoe_preview;
 pub mod cast_circle;
 pub mod impact;
 pub mod portal;
@@ -8,6 +9,7 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::*;
 
 pub use ambient::MapAmbientVfxPlugin;
+pub use aoe_preview::AoePreviewPlugin;
 pub use cast_circle::CastCircleVfxPlugin;
 pub use impact::ImpactVfxPlugin;
 pub use portal::{PortalVfx, PortalVfxPlugin};
@@ -35,6 +37,7 @@ impl Plugin for VfxPlugin {
             .add_plugins(ImpactVfxPlugin)
             .add_plugins(SkillFxPlugin)
             .add_plugins(MapAmbientVfxPlugin)
-            .add_plugins(CastCircleVfxPlugin);
+            .add_plugins(CastCircleVfxPlugin)
+            .add_plugins(AoePreviewPlugin);
     }
 }
