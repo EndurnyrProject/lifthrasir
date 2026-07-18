@@ -148,6 +148,25 @@ mod tests {
         // id 28 is AL_HEAL: omits `vfx`, must default to None.
         assert_eq!(asset.0.skills[&28].vfx, None);
 
+        // ids 14/19/20 are the authored bolt effects: MG_COLDBOLT, MG_FIREBOLT,
+        // MG_LIGHTNINGBOLT, each pointing at its strfx.ron asset with no
+        // procedural vfx fallback.
+        assert_eq!(
+            asset.0.skills[&14].str.as_deref(),
+            Some("cold_bolt.strfx.ron")
+        );
+        assert_eq!(asset.0.skills[&14].vfx, None);
+        assert_eq!(
+            asset.0.skills[&19].str.as_deref(),
+            Some("fire_bolt.strfx.ron")
+        );
+        assert_eq!(asset.0.skills[&19].vfx, None);
+        assert_eq!(
+            asset.0.skills[&20].str.as_deref(),
+            Some("lightning_bolt.strfx.ron")
+        );
+        assert_eq!(asset.0.skills[&20].vfx, None);
+
         // Bucket-A samples: one ground field and one caster buff.
         assert_eq!(asset.0.skills[&21].str.as_deref(), Some("thunderstorm.str"));
         assert_eq!(asset.0.skills[&21].placement, EffectPlacement::Ground);

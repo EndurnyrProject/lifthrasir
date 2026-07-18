@@ -84,10 +84,10 @@
             repeating: false,
         ),
         14: ( // MG_COLDBOLT — no STR in the official client, hardcoded there —
-              // procedural hit burst. No dedicated ef_coldbolt in the GRF; the ice
-              // projectile sound is the classic element match.
-            str: None,
-            vfx: Some("cold_bolt"),
+              // now an authored strfx asset. No dedicated ef_coldbolt in the GRF;
+              // the ice projectile sound is the classic element match.
+            str: Some("cold_bolt.strfx.ron"),
+            vfx: None,
             sound: Some("effect/ef_icearrow.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -133,19 +133,19 @@
             ground_anchor: Cell,
         ),
         19: ( // MG_FIREBOLT — no STR in the official client, hardcoded there —
-              // procedural hit burst. No dedicated ef_firebolt in the GRF; the fire
-              // hit sound is the classic element match.
-            str: None,
-            vfx: Some("fire_bolt"),
+              // now an authored strfx asset. No dedicated ef_firebolt in the GRF;
+              // the fire hit sound is the classic element match.
+            str: Some("fire_bolt.strfx.ron"),
+            vfx: None,
             sound: Some("effect/ef_firehit.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         20: ( // MG_LIGHTNINGBOLT — no STR in the official client, hardcoded there —
-              // procedural hit burst.
-            str: None,
-            vfx: Some("lightning_bolt"),
+              // now an authored strfx asset.
+            str: Some("lightning_bolt.strfx.ron"),
+            vfx: None,
             sound: Some("effect/ef_lightbolt.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
