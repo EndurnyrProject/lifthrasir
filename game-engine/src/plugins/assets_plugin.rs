@@ -4,7 +4,7 @@ use crate::infrastructure::assets::{
 };
 use crate::infrastructure::config::ClientConfig;
 use crate::infrastructure::effect::{
-    EffectDataAsset, LoadedEffectAsset, ShaderFxAsset, StrEffectLoader,
+    AuthoredEffectLoader, EffectDataAsset, LoadedEffectAsset, ShaderFxAsset, StrEffectLoader,
 };
 use crate::infrastructure::item::ItemDataAsset;
 use crate::infrastructure::job::JobDataAsset;
@@ -40,6 +40,7 @@ impl Plugin for AssetsPlugin {
             .init_asset_loader::<RoPaletteLoader>()
             .init_asset::<LoadedEffectAsset>()
             .init_asset_loader::<StrEffectLoader>()
+            .init_asset_loader::<AuthoredEffectLoader>()
             .init_asset::<BgmNameTableAsset>()
             .init_asset_loader::<BgmNameTableLoader>()
             .init_asset::<IndoorMapTableAsset>()
@@ -60,5 +61,16 @@ impl Plugin for AssetsPlugin {
                 RonAssetPlugin::<StatusIconDataAsset>::new(&["ron"]),
                 AnimationProcessingPlugin,
             ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::asset::AssetLoader;
+
+    #[test]
+    fn authored_effect_loader_extension_is_strfx_ron() {
+        assert_eq!(AuthoredEffectLoader.extensions(), ["strfx.ron"]);
     }
 }

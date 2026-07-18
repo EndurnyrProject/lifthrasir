@@ -163,8 +163,19 @@ pub(crate) fn descriptor_tint(descriptor: &EffectDescriptor) -> Color {
     Color::srgba(r, g, b, a)
 }
 
-/// Load the descriptor's STR effect through the registered `.str` loader.
-/// `None` for sound-only descriptors (no `str`), which spawn no visual.
+/// Resolves an effect descriptor's `str` name to its asset path: authored
+/// `.strfx.ron` effects load from the default filesystem source, GRF `.str`
+/// effects keep the `ro://` GRF source.
+fn effect_asset_path(name: &str) -> String {
+    if name.ends_with(".strfx.ron") {
+        format!("data/effects/{name}")
+    } else {
+        format!("ro://data/texture/effect/{name}")
+    }
+}
+
+/// Load the descriptor's STR effect through the registered `.str`/`.strfx.ron`
+/// loader. `None` for sound-only descriptors (no `str`), which spawn no visual.
 pub(crate) fn load_effect(
     asset_server: &AssetServer,
     descriptor: &EffectDescriptor,
@@ -172,7 +183,7 @@ pub(crate) fn load_effect(
     descriptor
         .str
         .as_ref()
-        .map(|name| asset_server.load(format!("ro://data/texture/effect/{}", name)))
+        .map(|name| asset_server.load(effect_asset_path(name)))
 }
 
 /// Spawn the descriptor's STR effect when it has one, returning the entity the
@@ -663,6 +674,22 @@ mod tests {
         let hits = split_hits(3200, 1000);
         assert_eq!(hits.len(), MAX_HITS as usize, "clamped to the sanity cap");
         assert_eq!(hits.iter().sum::<i32>(), 3200);
+    }
+
+    #[test]
+    fn effect_asset_path_resolves_authored_names_to_the_filesystem_source() {
+        assert_eq!(
+            effect_asset_path("fire_bolt.strfx.ron"),
+            "data/effects/fire_bolt.strfx.ron"
+        );
+    }
+
+    #[test]
+    fn effect_asset_path_resolves_grf_names_to_the_ro_source() {
+        assert_eq!(
+            effect_asset_path("heal.str"),
+            "ro://data/texture/effect/heal.str"
+        );
     }
 
     #[test]
