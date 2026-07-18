@@ -14,6 +14,7 @@ pub enum AnimationState {
     Sitting,
     Dead,
     PickingUp,
+    Casting,
 }
 
 impl Behavior for AnimationState {
@@ -23,15 +24,24 @@ impl Behavior for AnimationState {
             // Dead is terminal - no transitions out
             (Dead, _) => false,
             // Idle can transition to any state
-            (Idle, CombatReady | Walking | Attacking | Hit | Sitting | Dead | PickingUp) => true,
+            (
+                Idle,
+                CombatReady | Walking | Attacking | Hit | Sitting | Dead | PickingUp | Casting,
+            ) => true,
             // CombatReady is the engaged idle stance: behaves like Idle
-            (CombatReady, Idle | Walking | Attacking | Hit | Sitting | Dead | PickingUp) => true,
+            (
+                CombatReady,
+                Idle | Walking | Attacking | Hit | Sitting | Dead | PickingUp | Casting,
+            ) => true,
             // Walking can transition to any state
-            (Walking, Idle | Attacking | Hit | Sitting | Dead | PickingUp) => true,
+            (Walking, Idle | Attacking | Hit | Sitting | Dead | PickingUp | Casting) => true,
             // Attacking can go back to idle/combat-ready, or be interrupted
-            (Attacking, Idle | CombatReady | Hit | Sitting | Dead) => true,
+            (Attacking, Idle | CombatReady | Hit | Sitting | Dead | Casting) => true,
             // Hit can recover to idle, swing back (flinch is interruptible by an attack) or die
             (Hit, Idle | Attacking | Dead) => true,
+            // Casting holds until the cast resolves, is interruptible, and the
+            // executed skill may swing straight into an attack motion
+            (Casting, Idle | CombatReady | Walking | Attacking | Hit | Dead) => true,
             // Sitting can stand, be interrupted, or die
             (Sitting, Idle | Walking | Attacking | Hit | Dead) => true,
             // PickingUp finishes back to idle, is interruptible by a hit/death, or by walking off
@@ -55,6 +65,7 @@ impl From<AnimationState> for ActionType {
             AnimationState::Sitting => ActionType::Sit,
             AnimationState::Dead => ActionType::Dead,
             AnimationState::PickingUp => ActionType::Special,
+            AnimationState::Casting => ActionType::Cast,
         }
     }
 }
@@ -89,6 +100,27 @@ mod tests {
     #[test]
     fn dead_is_still_terminal() {
         assert!(!AnimationState::Dead.filter_next(&AnimationState::PickingUp));
+    }
+
+    #[test]
+    fn casting_maps_to_cast_action() {
+        assert_eq!(ActionType::from(AnimationState::Casting), ActionType::Cast);
+    }
+
+    #[test]
+    fn idle_walking_and_combat_ready_can_start_casting() {
+        assert!(AnimationState::Idle.filter_next(&AnimationState::Casting));
+        assert!(AnimationState::Walking.filter_next(&AnimationState::Casting));
+        assert!(AnimationState::CombatReady.filter_next(&AnimationState::Casting));
+    }
+
+    #[test]
+    fn casting_resolves_to_idle_and_is_interruptible() {
+        assert!(AnimationState::Casting.filter_next(&AnimationState::Idle));
+        assert!(AnimationState::Casting.filter_next(&AnimationState::Attacking));
+        assert!(AnimationState::Casting.filter_next(&AnimationState::Hit));
+        assert!(AnimationState::Casting.filter_next(&AnimationState::Dead));
+        assert!(!AnimationState::Casting.filter_next(&AnimationState::Sitting));
     }
 
     #[test]

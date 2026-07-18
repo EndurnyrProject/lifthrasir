@@ -1,3 +1,4 @@
+pub mod casting;
 pub mod components;
 pub mod death;
 pub mod events;

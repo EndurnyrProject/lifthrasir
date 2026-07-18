@@ -27,6 +27,8 @@ const INSTANT_LABEL_SECS: f32 = 0.6;
 const LABEL_HEAD_GAP: f32 = 88.0;
 /// Above nameplates (100) so a cast reads over a name; below fade/cursor.
 const LABEL_Z: i32 = 160;
+const CAST_BAR_WIDTH: f32 = 130.0;
+const CAST_BAR_HEIGHT: f32 = 5.0;
 
 pub struct SkillCastLabelPlugin;
 
@@ -38,6 +40,7 @@ impl Plugin for SkillCastLabelPlugin {
                 spawn_cast_labels,
                 spawn_instant_labels,
                 expire_cast_labels,
+                fill_cast_bars,
                 follow_cast_labels,
             )
                 .chain()
@@ -52,6 +55,10 @@ struct SkillCastLabel {
     target: Entity,
     timer: Timer,
 }
+
+/// Fill node of a timed cast's progress bar; width tracks the label's timer.
+#[derive(Component)]
+struct CastBarFill;
 
 fn skill_name(skill_id: u32, catalog: Option<&SkillCatalog>) -> String {
     catalog
@@ -84,7 +91,7 @@ fn spawn_cast_labels(
         }
 
         let name = skill_name(event.skill_id, catalog.as_deref());
-        spawn_label(&mut commands, &font, target, &name, event.cast_time);
+        spawn_label(&mut commands, &font, target, &name, event.cast_time, true);
     }
 }
 
@@ -120,6 +127,7 @@ fn spawn_instant_labels(
             target,
             &name,
             (INSTANT_LABEL_SECS * 1000.0) as u32,
+            false,
         );
     }
 }
@@ -130,45 +138,77 @@ fn spawn_label(
     target: Entity,
     name: &str,
     cast_time_ms: u32,
+    with_bar: bool,
 ) {
-    commands.spawn((
-        // Transparent positioning wrapper: a fixed width centered on the caster
-        // keeps the content-sized pill horizontally centered regardless of name length.
-        Node {
-            position_type: PositionType::Absolute,
-            width: Val::Px(LABEL_WIDTH),
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        GlobalZIndex(LABEL_Z),
-        Visibility::Hidden,
-        Pickable::IGNORE,
-        SkillCastLabel {
-            target,
-            timer: Timer::from_seconds(cast_time_ms as f32 / 1000.0, TimerMode::Once),
-        },
-        children![(
+    commands
+        .spawn((
+            // Transparent positioning wrapper: a fixed width centered on the caster
+            // keeps the content-sized pill horizontally centered regardless of name length.
             Node {
-                padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(9.0)),
+                position_type: PositionType::Absolute,
+                width: Val::Px(LABEL_WIDTH),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(4.0),
                 ..default()
             },
-            BackgroundColor(theme::GLASS),
-            BorderColor::all(theme::GOLD_FAINT),
+            GlobalZIndex(LABEL_Z),
+            Visibility::Hidden,
             Pickable::IGNORE,
-            children![(
-                Text::new(name),
-                TextFont {
-                    font: font.0.clone().into(),
-                    font_size: LABEL_FONT_SIZE.into(),
+            SkillCastLabel {
+                target,
+                timer: Timer::from_seconds(cast_time_ms as f32 / 1000.0, TimerMode::Once),
+            },
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Node {
+                    padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
+                    border: UiRect::all(Val::Px(1.0)),
+                    border_radius: BorderRadius::all(Val::Px(9.0)),
                     ..default()
                 },
-                TextColor(theme::GOLD),
+                BackgroundColor(theme::GLASS),
+                BorderColor::all(theme::GOLD_FAINT),
                 Pickable::IGNORE,
-            )],
-        )],
-    ));
+                children![(
+                    Text::new(name),
+                    TextFont {
+                        font: font.0.clone().into(),
+                        font_size: LABEL_FONT_SIZE.into(),
+                        ..default()
+                    },
+                    TextColor(theme::GOLD),
+                    Pickable::IGNORE,
+                )],
+            ));
+            if !with_bar {
+                return;
+            }
+            parent.spawn((
+                Node {
+                    width: Val::Px(CAST_BAR_WIDTH),
+                    height: Val::Px(CAST_BAR_HEIGHT),
+                    border: UiRect::all(Val::Px(1.0)),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
+                    ..default()
+                },
+                BackgroundColor(theme::FIELD),
+                BorderColor::all(theme::GOLD_FAINT),
+                Pickable::IGNORE,
+                children![(
+                    Node {
+                        width: Val::Percent(0.0),
+                        height: Val::Percent(100.0),
+                        border_radius: BorderRadius::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(theme::EMERALD),
+                    CastBarFill,
+                    Pickable::IGNORE,
+                )],
+            ));
+        });
 }
 
 /// Expire labels when their cast finishes. Kept separate from positioning so a
@@ -184,6 +224,24 @@ fn expire_cast_labels(
         if label.timer.is_finished() {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+/// Grow each cast bar's fill with its label's timer (the same timer that
+/// expires the label, so bar and lifetime can never drift apart).
+fn fill_cast_bars(
+    labels: Query<&SkillCastLabel>,
+    parents: Query<&ChildOf>,
+    mut fills: Query<(Entity, &mut Node), With<CastBarFill>>,
+) {
+    for (entity, mut node) in &mut fills {
+        let Some(label) = parents
+            .iter_ancestors(entity)
+            .find_map(|ancestor| labels.get(ancestor).ok())
+        else {
+            continue;
+        };
+        node.width = Val::Percent(label.timer.fraction() * 100.0);
     }
 }
 
@@ -266,6 +324,28 @@ mod tests {
 
         let world = app.world_mut();
         assert_eq!(world.query::<&SkillCastLabel>().iter(world).count(), 1);
+    }
+
+    #[test]
+    fn cast_bar_fill_tracks_timer_fraction() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_systems(Update, fill_cast_bars);
+
+        let target = app.world_mut().spawn_empty().id();
+        let mut timer = Timer::from_seconds(2.0, TimerMode::Once);
+        timer.set_elapsed(std::time::Duration::from_secs(1));
+        let root = app.world_mut().spawn(SkillCastLabel { target, timer }).id();
+        let track = app.world_mut().spawn((Node::default(), ChildOf(root))).id();
+        let fill = app
+            .world_mut()
+            .spawn((Node::default(), CastBarFill, ChildOf(track)))
+            .id();
+
+        app.update();
+
+        let width = app.world().get::<Node>(fill).unwrap().width;
+        assert_eq!(width, Val::Percent(50.0));
     }
 
     #[test]
