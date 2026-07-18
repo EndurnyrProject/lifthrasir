@@ -273,9 +273,9 @@
         ),
         87: ( // WZ_ICEWALL -- five-cell directional wall (aesir wz_icewall.ex:
               // Layout.line); no STR in the official client (rendered as
-              // terrain geometry there) -- procedural per-cell burst as a
-              // stand-in. Cell-anchored so a future emitter renders once per
-              // wall segment, not once for the whole wall. Cell HP decay
+              // terrain geometry there) -- the vfx-only descriptor spawns a
+              // persistent ice-crystal cluster per visible cell (skill_units::
+              // visuals::spawn_vfx_crystal, textured with ice.tga). Cell HP decay
               // arrives as SkillUnitUpdated, not SkillDamage -- no risk of the
               // Meteor/Storm-Gust-style per-hit duplicate here.
             str: None,

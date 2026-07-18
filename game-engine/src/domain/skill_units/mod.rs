@@ -2,9 +2,17 @@
 //!
 //! A `SkillUnitGroup` root owns `SkillUnitCell` children; both are driven purely
 //! by the four skill-unit lifecycle messages and carry no client-side timers.
+//! `spawn` builds the group/cell hierarchy and click colliders, `visuals`
+//! attaches the persistent per-group or per-cell visual, `lifecycle` applies
+//! server HP updates and despawns.
 
 pub mod components;
-pub mod systems;
+mod lifecycle;
+mod spawn;
+mod visuals;
+
+#[cfg(test)]
+mod tests;
 
 pub use components::{SkillUnitCell, SkillUnitGroup};
 
@@ -19,9 +27,9 @@ impl Plugin for SkillUnitsPlugin {
         app.add_systems(
             Update,
             (
-                systems::spawn_skill_units,
-                systems::update_skill_units,
-                systems::despawn_skill_units,
+                spawn::spawn_skill_units,
+                lifecycle::update_skill_units,
+                lifecycle::despawn_skill_units,
             ),
         );
     }
