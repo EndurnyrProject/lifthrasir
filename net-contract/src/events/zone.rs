@@ -319,6 +319,7 @@ pub struct ZoneSkillInfo {
     pub req_base_level: u32,
     pub req_job_level: u32,
     pub job_id: u32,
+    pub splash_radius: u16,
 }
 
 /// The full learned-skill list.

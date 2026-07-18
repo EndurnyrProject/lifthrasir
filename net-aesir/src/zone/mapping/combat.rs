@@ -112,6 +112,7 @@ fn skill_info(s: net::SkillInfo) -> ZoneSkillInfo {
         req_base_level: s.req_base_level,
         req_job_level: s.req_job_level,
         job_id: s.job_id,
+        splash_radius: s.splash_radius as u16,
     }
 }
 
@@ -287,6 +288,7 @@ mod tests {
                     req_base_level: 12,
                     req_job_level: 8,
                     job_id: 4002,
+                    splash_radius: 0,
                 },
                 net::SkillInfo {
                     skill_id: 6,
@@ -301,6 +303,7 @@ mod tests {
                     req_base_level: 0,
                     req_job_level: 0,
                     job_id: 0,
+                    splash_radius: 2,
                 },
             ],
         });
@@ -315,8 +318,10 @@ mod tests {
         assert_eq!(received.skills[0].req_base_level, 12);
         assert_eq!(received.skills[0].req_job_level, 8);
         assert_eq!(received.skills[0].job_id, 4002);
+        assert_eq!(received.skills[0].splash_radius, 0);
         assert_eq!(received.skills[1].skill_id, 6);
         assert!(!received.skills[1].upgradable);
+        assert_eq!(received.skills[1].splash_radius, 2);
     }
 
     #[test]

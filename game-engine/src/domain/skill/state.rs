@@ -80,6 +80,7 @@ mod tests {
             req_base_level: 10,
             req_job_level: 5,
             job_id,
+            splash_radius: 0,
         }
     }
 
