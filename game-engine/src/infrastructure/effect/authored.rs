@@ -560,6 +560,37 @@ mod tests {
         convert(&effect).expect("convert");
     }
 
+    /// Deserialize an authored effect the way the loader does (implicit_some) and
+    /// convert it, asserting both succeed. Textures resolve to default handles.
+    fn parse_and_convert(ron: &str) -> LoadedEffectAsset {
+        let effect: AuthoredEffect = ron_options().from_str(ron).expect("deserialize");
+        convert(&effect).expect("convert")
+    }
+
+    #[test]
+    fn fire_bolt_asset_parses_and_converts() {
+        let ron = include_str!("../../../../assets/data/effects/fire_bolt.strfx.ron");
+        let asset = parse_and_convert(ron);
+        assert_eq!(asset.fps, 30);
+        assert!(!asset.layers.is_empty());
+    }
+
+    #[test]
+    fn cold_bolt_asset_parses_and_converts() {
+        let ron = include_str!("../../../../assets/data/effects/cold_bolt.strfx.ron");
+        let asset = parse_and_convert(ron);
+        assert_eq!(asset.fps, 30);
+        assert!(!asset.layers.is_empty());
+    }
+
+    #[test]
+    fn lightning_bolt_asset_parses_and_converts() {
+        let ron = include_str!("../../../../assets/data/effects/lightning_bolt.strfx.ron");
+        let asset = parse_and_convert(ron);
+        assert_eq!(asset.fps, 30);
+        assert!(!asset.layers.is_empty());
+    }
+
     #[test]
     fn round_trip_lerps_at_midpoint() {
         // Two keys: offset (0,-320)->(0,0), alpha 0->255. At key 6 (midpoint of

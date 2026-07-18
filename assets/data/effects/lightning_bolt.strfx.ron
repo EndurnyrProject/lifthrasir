@@ -1,0 +1,111 @@
+// Lightning Bolt (MG_LIGHTNINGBOLT) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, with EFFECT_ORIGIN = (319, 291)
+//     and STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits exactly on the effect anchor (the target unit).
+//   - y grows DOWNWARD on screen (STR is Y-down). The runtime flips Y at mesh
+//     write, so a SMALLER offset.y renders HIGHER above the anchor. Bolts strike by
+//     animating offset.y upward toward 291.
+//   - angle is in raw STR units (1024 = 360 degrees); each bolt carries a slight
+//     rotation so the two segments jitter apart instead of overlapping.
+//   - fps: 30. Keys interpolate LINEARLY between their `at` indices (offset, quad,
+//     color, angle all lerp); texture_index is held, not lerped (flipbook).
+//   - blend Add = additive. The loader enables RON implicit_some, so optional
+//     fields (quad) are written bare, not wrapped in Some(...).
+//
+// Shape: two jagged jong_* bolts strike fast from above (landing ~30% through);
+// an elec_y crackle and a lens_w flash burst white-blue on the strike; a lens_w
+// glow flashes and decays. This is the fastest of the three (max_key ~27).
+(
+    fps: 30,
+    layers: [
+        // Striking bolt A (flipbook jong_a..jong_i segments).
+        (
+            textures: [
+                "ro://data/texture/effect/jong_a.bmp",
+                "ro://data/texture/effect/jong_b.bmp",
+                "ro://data/texture/effect/jong_c.bmp",
+                "ro://data/texture/effect/jong_d.bmp",
+                "ro://data/texture/effect/jong_e.bmp",
+                "ro://data/texture/effect/jong_f.bmp",
+                "ro://data/texture/effect/jong_g.bmp",
+                "ro://data/texture/effect/jong_h.bmp",
+                "ro://data/texture/effect/jong_i.bmp",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 70.0),  quad: (26.0, 110.0), color: (200, 215, 255, 0),   angle: 20.0, texture_index: 0 ),
+                ( at: 3,  offset: (319.0, 150.0), quad: (30.0, 124.0), color: (220, 235, 255, 255), angle: 20.0, texture_index: 2 ),
+                ( at: 6,  offset: (319.0, 230.0), quad: (32.0, 130.0), color: (235, 245, 255, 255), angle: 20.0, texture_index: 4 ),
+                ( at: 9,  offset: (319.0, 291.0), quad: (34.0, 134.0), color: (245, 250, 255, 255), angle: 20.0, texture_index: 6 ),
+                ( at: 12, offset: (319.0, 291.0), quad: (30.0, 120.0), color: (230, 240, 255, 180), angle: 20.0, texture_index: 8 ),
+                ( at: 15, offset: (319.0, 291.0), quad: (26.0, 100.0), color: (210, 225, 255, 0),   angle: 20.0, texture_index: 7 ),
+            ],
+        ),
+        // Striking bolt B (staggered, leans the other way).
+        (
+            textures: [
+                "ro://data/texture/effect/jong_a.bmp",
+                "ro://data/texture/effect/jong_b.bmp",
+                "ro://data/texture/effect/jong_c.bmp",
+                "ro://data/texture/effect/jong_d.bmp",
+                "ro://data/texture/effect/jong_e.bmp",
+                "ro://data/texture/effect/jong_f.bmp",
+                "ro://data/texture/effect/jong_g.bmp",
+                "ro://data/texture/effect/jong_h.bmp",
+                "ro://data/texture/effect/jong_i.bmp",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 3,  offset: (326.0, 74.0),  quad: (22.0, 96.0),  color: (200, 215, 255, 0),   angle: -25.0, texture_index: 1 ),
+                ( at: 6,  offset: (324.0, 160.0), quad: (26.0, 110.0), color: (220, 235, 255, 255), angle: -25.0, texture_index: 3 ),
+                ( at: 9,  offset: (322.0, 240.0), quad: (28.0, 116.0), color: (235, 245, 255, 255), angle: -25.0, texture_index: 5 ),
+                ( at: 12, offset: (319.0, 291.0), quad: (30.0, 122.0), color: (245, 250, 255, 255), angle: -25.0, texture_index: 7 ),
+                ( at: 15, offset: (319.0, 291.0), quad: (26.0, 104.0), color: (225, 238, 255, 150), angle: -25.0, texture_index: 8 ),
+                ( at: 18, offset: (319.0, 291.0), quad: (22.0, 86.0),  color: (205, 222, 255, 0),   angle: -25.0, texture_index: 6 ),
+            ],
+        ),
+        // Electric crackle at the strike point (flipbook elec_y_01..04).
+        (
+            textures: [
+                "ro://data/texture/effect/elec_y_01.bmp",
+                "ro://data/texture/effect/elec_y_02.bmp",
+                "ro://data/texture/effect/elec_y_03.bmp",
+                "ro://data/texture/effect/elec_y_04.bmp",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 9,  offset: (319.0, 285.0), quad: (40.0, 60.0),   color: (210, 230, 255, 0),   texture_index: 0 ),
+                ( at: 12, offset: (319.0, 288.0), quad: (70.0, 90.0),   color: (230, 242, 255, 255), texture_index: 1 ),
+                ( at: 16, offset: (319.0, 290.0), quad: (90.0, 110.0),  color: (220, 236, 255, 220), texture_index: 2 ),
+                ( at: 20, offset: (319.0, 291.0), quad: (100.0, 120.0), color: (200, 222, 255, 120), texture_index: 3 ),
+                ( at: 24, offset: (319.0, 291.0), quad: (110.0, 130.0), color: (190, 215, 255, 0),   texture_index: 0 ),
+            ],
+        ),
+        // White-blue flash on the strike (lens_w, fast spike).
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 9,  offset: (319.0, 291.0), quad: (30.0, 30.0),   color: (230, 240, 255, 0) ),
+                ( at: 11, offset: (319.0, 291.0), quad: (140.0, 140.0), color: (245, 250, 255, 255) ),
+                ( at: 15, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (220, 235, 255, 140) ),
+                ( at: 22, offset: (319.0, 291.0), quad: (260.0, 260.0), color: (200, 220, 255, 0) ),
+            ],
+        ),
+        // Underlying glow flash (lens_w) that spikes on the strike and decays out.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (50.0, 50.0),   color: (180, 205, 255, 0) ),
+                ( at: 8,  offset: (319.0, 291.0), quad: (110.0, 110.0), color: (210, 230, 255, 180) ),
+                ( at: 11, offset: (319.0, 291.0), quad: (180.0, 180.0), color: (240, 248, 255, 240) ),
+                ( at: 18, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (200, 222, 255, 110) ),
+                ( at: 26, offset: (319.0, 291.0), quad: (150.0, 150.0), color: (170, 200, 255, 0) ),
+            ],
+        ),
+    ],
+)
