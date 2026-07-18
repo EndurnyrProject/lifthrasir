@@ -784,6 +784,7 @@ mod tests {
                 900_001,
                 EffectDescriptor {
                     str: Some("stonecurse.str".to_string()),
+                    sprite: None,
                     placement: EffectPlacement::Ground,
                     color: [1.0, 1.0, 1.0, 1.0],
                     repeating: false,

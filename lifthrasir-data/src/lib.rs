@@ -106,6 +106,12 @@ pub struct EffectDescriptor {
     /// skills with no procedural effect.
     #[serde(default)]
     pub vfx: Option<String>,
+    /// SPR/ACT sprite animation stem under `data/sprite/`, e.g.
+    /// `"이팩트/firewall"`, for the effects the classic client draws as looping
+    /// sprites instead of STR sequences (Fire Wall, Fire Pillar). Takes
+    /// precedence over `str`/`vfx` for a ground skill's persistent visual.
+    #[serde(default)]
+    pub sprite: Option<String>,
     /// Optional sound path relative to `data/wav`, e.g. "effect/ef_firewall.wav"
     /// or "_heal_effect.wav" (files at the wav root take no `effect/` prefix).
     pub sound: Option<String>,
@@ -275,6 +281,7 @@ mod tests {
             28,
             EffectDescriptor {
                 str: Some("heal.str".to_string()),
+                sprite: None,
                 vfx: None,
                 sound: Some("_heal_effect.wav".to_string()),
                 placement: EffectPlacement::Target,
@@ -287,6 +294,7 @@ mod tests {
             89,
             EffectDescriptor {
                 str: Some("stormgust.str".to_string()),
+                sprite: None,
                 vfx: None,
                 sound: None,
                 placement: EffectPlacement::Ground,
@@ -299,6 +307,7 @@ mod tests {
             157,
             EffectDescriptor {
                 str: Some("energycoat.str".to_string()),
+                sprite: None,
                 vfx: None,
                 sound: None,
                 placement: EffectPlacement::Caster,

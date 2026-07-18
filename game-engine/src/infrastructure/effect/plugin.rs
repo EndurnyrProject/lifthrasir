@@ -5,7 +5,8 @@ use crate::domain::effects::{
     efst_auras, finalize_frozen_ice_assets, follow_effect_anchor, initialize_effect_layers,
     load_frozen_ice_assets, on_ground_skill, on_skill_damage, on_skill_effect, on_special_effect,
     option_visuals, orbit_sight_visuals, order_effect_layers_by_depth, rebuild_effect_layers,
-    sync_frozen_overlays, EffectLayer, PendingBodyStates, PendingEffectStates, PlayProceduralVfx,
+    spawn_effect_sprites, sync_effect_sprites, sync_frozen_overlays, EffectLayer,
+    EffectSpriteAssets, PendingBodyStates, PendingEffectStates, PlayProceduralVfx,
 };
 use crate::domain::system_sets::EntityLifecycleSystems;
 use crate::presentation::rendering::effect_material::EffectMaterial;
@@ -22,6 +23,7 @@ impl Plugin for EffectsPlugin {
             .add_message::<PlayProceduralVfx>()
             .init_resource::<PendingBodyStates>()
             .init_resource::<PendingEffectStates>()
+            .init_resource::<EffectSpriteAssets>()
             .add_systems(
                 Startup,
                 (
@@ -30,7 +32,16 @@ impl Plugin for EffectsPlugin {
                     load_frozen_ice_assets,
                 ),
             )
-            .add_systems(Update, (finalize_frozen_ice_assets, sync_frozen_overlays))
+            .add_systems(
+                Update,
+                (
+                    finalize_frozen_ice_assets,
+                    sync_frozen_overlays,
+                    // Spawn must land before sync so a freshly dressed cell
+                    // animates on the same frame its parts appear.
+                    (spawn_effect_sprites, sync_effect_sprites).chain(),
+                ),
+            )
             .add_systems(
                 Update,
                 (

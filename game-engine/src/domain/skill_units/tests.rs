@@ -14,6 +14,7 @@ use super::components::{SkillUnitCell, SkillUnitGroup};
 use super::lifecycle::{despawn_skill_units, update_skill_units};
 use super::spawn::spawn_skill_units;
 use crate::domain::effects::components::ActiveEffect;
+use crate::domain::effects::EffectSprite;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset, LoadedEffectAsset};
 use crate::utils::coordinates::spawn_coords_to_world_position;
@@ -47,6 +48,7 @@ fn cell_anchored_catalog(skill_id: u32) -> EffectCatalog {
         skill_id,
         EffectDescriptor {
             str: Some("icewall.str".into()),
+            sprite: None,
             vfx: None,
             sound: None,
             placement: EffectPlacement::Ground,
@@ -66,7 +68,28 @@ fn cell_anchored_vfx_catalog(skill_id: u32) -> EffectCatalog {
         skill_id,
         EffectDescriptor {
             str: None,
+            sprite: None,
             vfx: Some("ice_wall".into()),
+            sound: None,
+            placement: EffectPlacement::Ground,
+            color: [1.0, 1.0, 1.0, 1.0],
+            repeating: true,
+            ground_anchor: GroundAnchor::Cell,
+        },
+    );
+    EffectCatalog::from_skill_effect_data(skills)
+}
+
+/// Cell-anchored descriptor with a `sprite` stem and NO STR (the Fire Wall /
+/// Fire Pillar shape): each visible cell gets a looping SPR/ACT animation.
+fn cell_anchored_sprite_catalog(skill_id: u32) -> EffectCatalog {
+    let mut skills = BTreeMap::new();
+    skills.insert(
+        skill_id,
+        EffectDescriptor {
+            str: None,
+            sprite: Some("이팩트/firewall".into()),
+            vfx: None,
             sound: None,
             placement: EffectPlacement::Ground,
             color: [1.0, 1.0, 1.0, 1.0],
@@ -465,6 +488,59 @@ fn cell_anchored_vfx_only_spawns_one_placeholder_per_visible_cell() {
         0,
         "vfx-only descriptor spawns no STR effect"
     );
+}
+
+#[test]
+fn cell_anchored_sprite_requests_one_animation_per_visible_cell() {
+    const FIRE_WALL: u32 = 18;
+    let mut app = test_app(cell_anchored_sprite_catalog(FIRE_WALL));
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            FIRE_WALL,
+            vec![
+                cell(100, 40, 50, true),
+                cell(101, 41, 50, true),
+                cell(102, 42, 50, false), // not visible: no flame
+            ],
+        ),
+    });
+    app.update();
+
+    let requests: Vec<EffectSprite> = app
+        .world_mut()
+        .query::<&EffectSprite>()
+        .iter(app.world())
+        .cloned()
+        .collect();
+    assert_eq!(
+        requests.len(),
+        2,
+        "one sprite request per visible cell, none for the hidden cell"
+    );
+    assert!(requests.iter().all(|r| r.path == "이팩트/firewall"));
+    assert_eq!(
+        effects(&mut app),
+        0,
+        "sprite descriptor spawns no STR effect"
+    );
+}
+
+#[test]
+fn seeded_firewall_and_firepillar_are_cell_anchored_sprites() {
+    let catalog = seeded_catalog();
+    for skill_id in [18, 80] {
+        let descriptor = catalog.get(skill_id).expect("seeded descriptor");
+        assert_eq!(descriptor.ground_anchor, GroundAnchor::Cell);
+        assert!(
+            descriptor.sprite.is_some(),
+            "skill {skill_id} needs a sprite"
+        );
+        assert!(
+            descriptor.str.is_none(),
+            "skill {skill_id} must not also STR"
+        );
+    }
 }
 
 #[test]

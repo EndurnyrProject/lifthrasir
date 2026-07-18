@@ -120,8 +120,12 @@ mod tests {
         assert_eq!(asset.0.skills[&89].placement, EffectPlacement::Ground);
         assert!(asset.0.skills[&89].repeating);
 
-        // id 18 is MG_FIREWALL (was a stale magnus.str mapping).
-        assert_eq!(asset.0.skills[&18].str.as_deref(), Some("firewall.str"));
+        // id 18 is MG_FIREWALL: a looping sprite effect, not an STR.
+        assert_eq!(asset.0.skills[&18].str, None);
+        assert_eq!(
+            asset.0.skills[&18].sprite.as_deref(),
+            Some("이팩트/firewall")
+        );
         assert_eq!(asset.0.skills[&18].placement, EffectPlacement::Ground);
         assert!(asset.0.skills[&18].repeating);
         assert!(

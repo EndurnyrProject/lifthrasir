@@ -12,8 +12,8 @@ use bevy::prelude::*;
 use lifthrasir_data::EffectDescriptor;
 
 use crate::domain::effects::components::EffectAnchor;
-use crate::domain::effects::spawn_effect;
 use crate::domain::effects::triggers::{descriptor_tint, load_effect};
+use crate::domain::effects::{spawn_effect, EffectSprite};
 
 /// The classic client's translucent frosted-ice texture (`ice.tga`) — the same
 /// one it wraps around its hardcoded Ice Wall pillars. Its own alpha channel
@@ -36,14 +36,16 @@ const CRYSTAL_SHARD_TILT: f32 = 0.28;
 
 /// Spawn the descriptor's persistent visual as a child of `parent` (root or
 /// cell), at the parent's origin. Preference order:
-///   1. an STR effect when the descriptor has one;
-///   2. otherwise, for a `vfx`-only descriptor (e.g. Ice Wall, which the classic
+///   1. a looping SPR/ACT sprite when the descriptor has one — Fire Wall and
+///      Fire Pillar are sprite effects in the classic client, not STR ones;
+///   2. an STR effect when the descriptor has one;
+///   3. otherwise, for a `vfx`-only descriptor (e.g. Ice Wall, which the classic
 ///      client hardcodes and no STR exists for), a persistent ice-crystal
 ///      cluster tinted by the descriptor — `PlayProceduralVfx` is fire-and-forget
 ///      and cannot back a persistent wall cell, so the wall lives here as a child
 ///      that despawns with the group/cell.
 ///
-/// A descriptor with neither spawns nothing; the group is still
+/// A descriptor with none spawns nothing; the group is still
 /// gameplay-relevant, so that is not an error.
 pub(super) fn spawn_effect_child(
     commands: &mut Commands,
@@ -53,6 +55,19 @@ pub(super) fn spawn_effect_child(
     descriptor: &EffectDescriptor,
     parent: Entity,
 ) {
+    if let Some(path) = &descriptor.sprite {
+        commands.spawn((
+            EffectSprite {
+                path: path.clone(),
+                tint: descriptor_tint(descriptor),
+            },
+            Transform::default(),
+            Visibility::default(),
+            ChildOf(parent),
+        ));
+        return;
+    }
+
     if let Some(handle) = load_effect(asset_server, descriptor) {
         let effect = spawn_effect(
             commands,

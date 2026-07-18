@@ -1,6 +1,7 @@
 pub mod components;
 pub mod events;
 pub mod map_effects;
+pub mod sprite_effects;
 pub mod status_visuals;
 pub mod systems;
 pub mod triggers;
@@ -10,6 +11,9 @@ pub use components::{
 };
 pub use events::PlayProceduralVfx;
 pub use map_effects::{spawn_map_effects, MapEffectsSpawned};
+pub use sprite_effects::{
+    spawn_effect_sprites, sync_effect_sprites, EffectSprite, EffectSpriteAssets, EffectSpritePart,
+};
 pub use status_visuals::{
     apply_body_state_tint, body_state_visuals, efst_auras, finalize_frozen_ice_assets,
     load_frozen_ice_assets, option_visuals, orbit_sight_visuals, sync_frozen_overlays,

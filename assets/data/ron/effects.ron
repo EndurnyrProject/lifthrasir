@@ -119,12 +119,18 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        18: ( // MG_FIREWALL
-            str: Some("firewall.str"),
+        18: ( // MG_FIREWALL -- three-cell line (aesir mg_firewall.ex: Layout.line).
+              // The classic client draws the wall as a looping sprite effect
+              // (이팩트/firewall.spr/.act, 8 frames), NOT as firewall.str -- that
+              // STR is the pre-renewal full-wall stamp and renders as one blob at
+              // the group centre. Cell-anchored so every wall segment burns.
+            str: None,
+            sprite: Some("이팩트/firewall"),
             sound: Some("effect/ef_firewall.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
+            ground_anchor: Cell,
         ),
         19: ( // MG_FIREBOLT — no STR in the official client, hardcoded there —
               // procedural hit burst. No dedicated ef_firebolt in the GRF; the fire
@@ -188,12 +194,13 @@
             repeating: false,
         ),
         80: ( // WZ_FIREPILLAR -- single-cell waiting field (aesir wz_firepillar.ex
-              // on_place: cells: [center]); firepillar.str is the waiting pillar,
-              // Cell-anchored so it renders on that one skill-unit cell. The
-              // explosion has its own asset (firepillarbomb.str, 43KB) but the
-              // shared skills: entry only carries one STR -- the bomb is a
-              // future landing-effect addition, not wired here.
-            str: Some("firepillar.str"),
+              // on_place: cells: [center]). The waiting pillar is the sprite
+              // effect 이팩트/화염진 ("flame column", 5 frames, ACT-authored 2x2.5
+              // scale and -53px lift that stands the flame on the cell), not
+              // firepillar.str -- that STR is the detonation (meteo_comet /
+              // lord_blast layers), a future landing-effect addition.
+            str: None,
+            sprite: Some("이팩트/화염진"),
             sound: Some("effect/wizard_fire_pillar_a.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
