@@ -27,6 +27,7 @@ mod meter;
 pub mod shell;
 mod skills_tab;
 
+pub(crate) use skills_tab::skill_name;
 pub use skills_tab::SkillPanelStaging;
 
 /// Which tab the Console shows. The active chord always selects the tab, so this is

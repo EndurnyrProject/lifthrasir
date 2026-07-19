@@ -1,8 +1,9 @@
 //! The Console's Skills tab: a faithful port of the skill window's body — the
 //! branch/job tab strip, the skill grid with learn steppers, the prereq connector
-//! layer, the selected-skill info panel, and the Skill-Points footer with the
-//! Reset/Apply commit buttons — projected into the shell's [`SkillsTabBody`]
-//! container instead of a standalone window.
+//! layer, and the Skill-Points footer with the Reset/Apply commit buttons —
+//! projected into the shell's [`SkillsTabBody`] container instead of a standalone
+//! window. Skill details open in the shared right-click info modal
+//! ([`crate::widgets::info_modal`]).
 //!
 //! This file is deliberately self-contained: it defines its OWN UI-only types
 //! ([`SkillPanelUi`], [`SkillPanelStaging`], [`SkillPanelTab`], [`SkillPanelCell`],
@@ -11,16 +12,16 @@
 //! [`SkillPanelStaging::can_raise`], `tab_ids`, `tab_label`, ...) so `skill_window`
 //! can be deleted wholesale in the integration task with zero dangling references. It
 //! reuses only the shared DOMAIN types + messages (`SkillTreeState`, `SkillNode`,
-//! `SkillCatalog`, `layout`/`Placement`, `form`/`target`, `SkillCastRequested`,
+//! `SkillCatalog`, `layout`/`Placement`, `SkillCastRequested`,
 //! `SkillLearnRequested`, `JobSpriteRegistry`, `CharacterStatus`,
 //! `HotbarDrag`/`HotbarSlot`, `LocalPlayer`) and the chrome/theme helpers.
 //!
 //! Unlike the old window, the whole body is respawned on tree/ui/staging change (the
-//! Bag-tab idiom), so the tab strip, grid, connectors, and info panel are baked from
-//! live state each rebuild; only the footer point-bank / commit-dim stays patched in
-//! place by [`update_skill_footer`] so it tracks `skill_point` between rebuilds. The
-//! prereq connector layer is the one place that keeps imperative geometry (architecture
-//! §7): its orthogonal segments are computed in Rust and embedded as `bsn!` children.
+//! Bag-tab idiom), so the tab strip, grid, and connectors are baked from live state
+//! each rebuild; only the footer point-bank / commit-dim stays patched in place by
+//! [`update_skill_footer`] so it tracks `skill_point` between rebuilds. The prereq
+//! connector layer is the one place that keeps imperative geometry (architecture §7):
+//! its orthogonal segments are computed in Rust and embedded as `bsn!` children.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -33,13 +34,10 @@ use game_engine::domain::entities::character::components::status::CharacterStatu
 use game_engine::domain::entities::character::events::SkillLearnRequested;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::hotbar::HotbarSlot;
-use game_engine::domain::skill::{
-    form, layout, target, Form, Placement, SkillCastRequested, SkillTreeState,
-};
+use game_engine::domain::skill::{layout, Placement, SkillCastRequested, SkillTreeState};
 use game_engine::infrastructure::job::registry::JobSpriteRegistry;
 use game_engine::infrastructure::skill::SkillCatalog;
 
-use crate::rich_text::parse_color_codes;
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, ignore_picking};
 use crate::widgets::hotbar::HotbarDrag;
@@ -54,9 +52,8 @@ const CELL_H: f32 = 82.0;
 const IC_X: f32 = 31.0;
 const IC_Y: f32 = 26.0;
 const TAB_STRIP_W: f32 = 86.0;
-const INFO_WIDTH: f32 = 176.0;
 /// Fixed height of the body row so the Console never grows with the tree; the grid
-/// and info panel scroll internally instead.
+/// scrolls internally instead.
 const PANE_HEIGHT: f32 = 300.0;
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(300);
@@ -269,32 +266,13 @@ fn cell_icon_color(learned: bool, maxed: bool) -> Color {
     }
 }
 
-fn skill_name(skill_id: u32, catalog: Option<&SkillCatalog>) -> String {
+/// Shared with [`crate::widgets::info_modal::view`], which builds the same label
+/// for the info modal's header/chips.
+pub(crate) fn skill_name(skill_id: u32, catalog: Option<&SkillCatalog>) -> String {
     catalog
         .and_then(|c| c.get(skill_id))
         .map(|m| m.display_name.clone())
         .unwrap_or_else(|| format!("#{skill_id}"))
-}
-
-fn form_label(inf: u32) -> String {
-    match form(inf) {
-        Form::Passive => "Passive",
-        Form::Active => "Active",
-        Form::Supportive => "Supportive",
-    }
-    .to_string()
-}
-
-fn target_label(inf: u32) -> String {
-    use game_engine::domain::skill::Target;
-    match target(inf) {
-        Target::None => "\u{2014}",
-        Target::Enemy => "Enemy",
-        Target::Ground => "Ground",
-        Target::SelfTarget => "Self",
-        Target::Ally => "Ally",
-    }
-    .to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -520,24 +498,6 @@ struct Seg {
     color: Color,
 }
 
-/// One "Requires" row's owned view-model.
-struct ReqView {
-    name: String,
-    min_level: u32,
-    met: bool,
-}
-
-/// The selected skill's owned view-model for the info panel.
-struct InfoView {
-    name: String,
-    level_line: String,
-    form: String,
-    sp: Option<String>,
-    target: String,
-    requires: Vec<ReqView>,
-    description: Vec<String>,
-}
-
 fn cell_views(
     tab: u32,
     tree: &SkillTreeState,
@@ -635,39 +595,7 @@ fn connector_segments(
     segs
 }
 
-fn info_view(
-    skill_id: u32,
-    tree: &SkillTreeState,
-    staging: &SkillPanelStaging,
-    catalog: Option<&SkillCatalog>,
-) -> Option<InfoView> {
-    let node = tree.skills.get(&skill_id)?;
-    let passive = form(node.inf_type) == Form::Passive;
-    let effective = staging.effective_level(skill_id, tree);
-    let level_label = if passive { "Max Lv" } else { "Lv" };
-    Some(InfoView {
-        name: skill_name(skill_id, catalog),
-        level_line: format!("{level_label} {}", format_level(effective, node.max_level)),
-        form: form_label(node.inf_type),
-        sp: (!passive && node.sp > 0).then(|| node.sp.to_string()),
-        target: target_label(node.inf_type),
-        requires: node
-            .requires
-            .iter()
-            .map(|&(prereq, min_level)| ReqView {
-                name: skill_name(prereq, catalog),
-                min_level,
-                met: staging.effective_level(prereq, tree) >= min_level,
-            })
-            .collect(),
-        description: catalog
-            .and_then(|c| c.get(skill_id))
-            .map(|m| m.description.clone())
-            .unwrap_or_default(),
-    })
-}
-
-/// The whole swappable body: the tab strip / grid+connectors / info-panel row over the
+/// The whole swappable body: the tab strip / grid+connectors row over the
 /// Skill-Points footer.
 fn body(
     tree: &SkillTreeState,
@@ -708,9 +636,6 @@ fn body(
         .tab
         .map(|tab| connector_segments(tab, tree, staging, &placements))
         .unwrap_or_default();
-    let info = ui
-        .selected
-        .and_then(|skill_id| info_view(skill_id, tree, staging, catalog));
 
     let points_left = status
         .map(|s| staging.points_left(s.skill_point))
@@ -720,22 +645,17 @@ fn body(
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         ignore_picking()
         Children [
-            body_row(tabs, cells, segs, info),
+            body_row(tabs, cells, segs),
             footer(points_left, staging.is_empty()),
         ]
     }
 }
 
-fn body_row(
-    tabs: Vec<impl Scene>,
-    cells: Vec<CellView>,
-    segs: Vec<Seg>,
-    info: Option<InfoView>,
-) -> impl Scene {
+fn body_row(tabs: Vec<impl Scene>, cells: Vec<CellView>, segs: Vec<Seg>) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, height: px(PANE_HEIGHT) }
         ignore_picking()
-        Children [ tab_strip(tabs), grid_pane(cells, segs), info_panel(info) ]
+        Children [ tab_strip(tabs), grid_pane(cells, segs) ]
     }
 }
 
@@ -957,141 +877,6 @@ fn stepper_arrow(skill_id: u32, raise: bool, enabled: bool) -> impl Scene {
         Pickable
         on(on_stepper)
         Children [ chrome_text(glyph.to_string(), 9.0, color) ]
-    }
-}
-
-/// The selected-skill info panel: a fixed-width bordered box whose content scrolls
-/// internally. The `#info` id wires the scrollbar to the scrollable viewport.
-fn info_panel(info: Option<InfoView>) -> impl Scene {
-    let content = info.map(|view| EntityScene(info_content(view)));
-    let empty_msg = content
-        .is_none()
-        .then(|| EntityScene(muted_text("Select a skill\nto view details".to_string())));
-    bsn! {
-        Node {
-            width: px(INFO_WIDTH),
-            flex_shrink: 0.0,
-            position_type: PositionType::Relative,
-            border: {UiRect { left: Val::Px(1.0), ..default() }},
-        }
-        BorderColor::all(theme::STROKE)
-        ignore_picking()
-        Children [
-            (
-                #info
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0), top: px(0), right: px(0), bottom: px(0),
-                    overflow: {Overflow::scroll_y()},
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(10),
-                    padding: {UiRect { left: Val::Px(13.0), right: Val::Px(15.0), top: Val::Px(13.0), bottom: Val::Px(13.0) }},
-                }
-                ScrollArea
-                Pickable
-                Children [ {content}, {empty_msg} ]
-            ),
-            @FeathersScrollbar { @target: #info, @orientation: {ControlOrientation::Vertical} }
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(2),
-                top: px(4),
-                bottom: px(4),
-                width: px(5),
-            }
-        ]
-    }
-}
-
-fn info_content(view: InfoView) -> impl Scene {
-    let sp_row = view
-        .sp
-        .map(|sp| EntityScene(meta_row("SP Cost".to_string(), sp)));
-    let requires = (!view.requires.is_empty()).then(|| EntityScene(requires_block(view.requires)));
-    let description: Vec<_> = view.description.into_iter().map(colored_line).collect();
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
-        ignore_picking()
-        Children [
-            chrome_text(view.name, 12.5, theme::EMERALD_BRI),
-            chrome_text(view.level_line, 10.0, theme::TEXT_FAINT),
-            meta_row("Form".to_string(), view.form),
-            {sp_row},
-            meta_row("Target".to_string(), view.target),
-            {requires},
-            {description},
-        ]
-    }
-}
-
-/// A `label : value` row (info panel meta).
-fn meta_row(label: String, value: String) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-        ignore_picking()
-        Children [
-            chrome_text(label, 9.0, theme::TEXT_FAINT),
-            chrome_text(value, 10.5, theme::TEXT),
-        ]
-    }
-}
-
-/// "Requires" list: one row per prereq with a met/unmet dot, name, and `Lv n`.
-fn requires_block(requires: Vec<ReqView>) -> impl Scene {
-    let rows: Vec<_> = requires.into_iter().map(requires_row).collect();
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
-        ignore_picking()
-        Children [ chrome_text("Requires".to_string(), 9.0, theme::TEXT_FAINT), {rows} ]
-    }
-}
-
-fn requires_row(req: ReqView) -> impl Scene {
-    let dot_color = if req.met {
-        theme::EMERALD
-    } else {
-        theme::TEXT_FAINT
-    };
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(7) }
-        ignore_picking()
-        Children [
-            chrome_text("\u{25CF}".to_string(), 6.0, dot_color),
-            (
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-                Children [ chrome_text(req.name, 10.0, theme::TEXT_FAINT) ]
-            ),
-            chrome_text(format!("Lv {}", req.min_level), 9.5, dot_color),
-        ]
-    }
-}
-
-/// A description line, split into `^RRGGBB`-colored runs.
-fn colored_line(text: String) -> impl Scene {
-    let mut runs = parse_color_codes(&text, theme::TEXT_DIM).into_iter();
-    let (first_color, first_text) = runs.next().unwrap_or((theme::TEXT_DIM, String::new()));
-    let spans: Vec<_> = runs.map(|(color, seg)| colored_span(color, seg)).collect();
-    bsn! {
-        Text(first_text)
-        TextFont {
-            font: {body_font()},
-            font_size: {bevy::text::FontSize::Px(10.0)},
-        }
-        TextColor(first_color)
-        ignore_picking()
-        Children [ {spans} ]
-    }
-}
-
-fn colored_span(color: Color, text: String) -> impl Scene {
-    bsn! {
-        TextSpan(text)
-        TextFont {
-            font: {body_font()},
-            font_size: {bevy::text::FontSize::Px(10.0)},
-        }
-        TextColor(color)
     }
 }
 
@@ -1419,6 +1204,29 @@ mod tests {
             .query_filtered::<(), With<SkillPanelCell>>()
             .iter(world)
             .count()
+    }
+
+    fn node_count(app: &mut App) -> usize {
+        let world = app.world_mut();
+        world.query::<&Node>().iter(world).count()
+    }
+
+    #[test]
+    fn selecting_a_skill_spawns_no_inline_info_panel() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        let unselected = node_count(&mut app);
+
+        app.world_mut().resource_mut::<SkillPanelUi>().selected = Some(1);
+        app.update();
+        let selected = node_count(&mut app);
+
+        assert_eq!(
+            selected, unselected,
+            "the skills tab no longer renders a selection info panel"
+        );
     }
 
     #[test]

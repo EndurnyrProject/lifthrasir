@@ -23,7 +23,7 @@ use game_engine::infrastructure::skill::SkillCatalog;
 
 use crate::rich_text::parse_color_codes;
 use crate::theme;
-use crate::widgets::character_window::SkillPanelStaging;
+use crate::widgets::character_window::{skill_name, SkillPanelStaging};
 use crate::widgets::shop_window::ShopSession;
 use crate::widgets::storage_window::StorageSelection;
 
@@ -301,13 +301,6 @@ fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfo
 // ---------------------------------------------------------------------------
 // Skill view builder.
 // ---------------------------------------------------------------------------
-
-fn skill_name(id: u32, catalog: Option<&SkillCatalog>) -> String {
-    catalog
-        .and_then(|c| c.get(id))
-        .map(|m| m.display_name.clone())
-        .unwrap_or_else(|| format!("#{id}"))
-}
 
 fn kind_label(inf: u32) -> String {
     use game_engine::domain::skill::{form, Form};
