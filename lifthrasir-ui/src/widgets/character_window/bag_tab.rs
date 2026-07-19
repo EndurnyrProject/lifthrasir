@@ -28,6 +28,7 @@ use crate::rich_text::parse_color_codes;
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 use crate::widgets::hotbar::HotbarDrag;
+use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
 
 use super::BagTabBody;
 
@@ -186,7 +187,8 @@ fn on_cell_drag_start(
 }
 
 /// Cell click: select the item; a double-click resolves to Use/Equip/Unequip via
-/// [`cell_action`].
+/// [`cell_action`]. Secondary-click opens the info modal for a filled cell instead;
+/// empty cells are inert on either button.
 #[allow(clippy::too_many_arguments)]
 fn on_cell_click(
     click: On<Pointer<Click>>,
@@ -198,10 +200,19 @@ fn on_cell_click(
     mut use_writer: MessageWriter<UseItemRequested>,
     mut equip_writer: MessageWriter<EquipItemRequested>,
     mut unequip_writer: MessageWriter<UnequipItemRequested>,
+    mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
         return;
     };
+    if click.button == PointerButton::Secondary {
+        if inventory.get(cell.index).is_some() {
+            info_writer.write(ShowInfoModal {
+                target: InfoTarget::Item(ItemRef::Inventory(cell.index)),
+            });
+        }
+        return;
+    }
     ui.selected = Some(cell.index);
     let now = time.elapsed();
     if let Some(item) = inventory.get(cell.index) {
@@ -811,6 +822,115 @@ mod tests {
             bag_cell_count(&mut app),
             1,
             "switching to Equip shows its single item"
+        );
+    }
+
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            Click {
+                button,
+                hit: HitData::new(target, 0.0, None, None),
+                duration: Duration::ZERO,
+                count: 1,
+            },
+            target,
+        )
+    }
+
+    fn cell_click_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_message::<UseItemRequested>();
+        app.add_message::<EquipItemRequested>();
+        app.add_message::<UnequipItemRequested>();
+        app.add_message::<ShowInfoModal>();
+        app.init_resource::<BagUi>();
+        app.init_resource::<LastBagClick>();
+        app.init_resource::<Time>();
+        app.init_resource::<Inventory>();
+        app
+    }
+
+    #[test]
+    fn secondary_click_on_a_filled_cell_opens_the_info_modal_without_selecting() {
+        let mut app = cell_click_app();
+        app.world_mut()
+            .resource_mut::<Inventory>()
+            .upsert(item(3, 0));
+        let cell = app
+            .world_mut()
+            .spawn(BagCell { index: 3 })
+            .observe(on_cell_click)
+            .id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Inventory(3))]);
+        assert_eq!(app.world().resource::<BagUi>().selected, None);
+    }
+
+    #[test]
+    fn secondary_click_on_an_empty_cell_writes_nothing() {
+        let mut app = cell_click_app();
+        let cell = app
+            .world_mut()
+            .spawn(BagCell { index: 3 })
+            .observe(on_cell_click)
+            .id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
+        assert_eq!(app.world().resource::<BagUi>().selected, None);
+    }
+
+    #[test]
+    fn primary_click_on_a_cell_still_selects_and_does_not_open_the_modal() {
+        let mut app = cell_click_app();
+        app.world_mut()
+            .resource_mut::<Inventory>()
+            .upsert(item(3, 0));
+        let cell = app
+            .world_mut()
+            .spawn(BagCell { index: 3 })
+            .observe(on_cell_click)
+            .id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
+
+        assert_eq!(app.world().resource::<BagUi>().selected, Some(3));
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
         );
     }
 }

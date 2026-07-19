@@ -43,6 +43,7 @@ use crate::rich_text::parse_color_codes;
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, ignore_picking};
 use crate::widgets::hotbar::HotbarDrag;
+use crate::widgets::info_modal::{InfoTarget, ShowInfoModal};
 
 use super::SkillsTabBody;
 
@@ -425,7 +426,7 @@ fn on_stepper(
 }
 
 /// Cell click: select the skill; a double-click within the cast window emits
-/// [`SkillCastRequested`].
+/// [`SkillCastRequested`]. Secondary-click opens the info modal instead.
 fn on_cell_click(
     click: On<Pointer<Click>>,
     cells: Query<&SkillPanelCell>,
@@ -433,10 +434,17 @@ fn on_cell_click(
     time: Res<Time>,
     mut last: ResMut<LastSkillPanelClick>,
     mut cast_writer: MessageWriter<SkillCastRequested>,
+    mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
         return;
     };
+    if click.button == PointerButton::Secondary {
+        info_writer.write(ShowInfoModal {
+            target: InfoTarget::Skill(cell.0),
+        });
+        return;
+    }
     ui.selected = Some(cell.0);
     let now = time.elapsed();
     if is_cast_double_click(&last, cell.0, now) {
@@ -1439,7 +1447,7 @@ mod tests {
         );
     }
 
-    fn click_event(target: Entity, window: Entity) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
@@ -1453,7 +1461,7 @@ mod tests {
                 position: Vec2::ZERO,
             },
             Click {
-                button: PointerButton::Primary,
+                button,
                 hit: HitData::new(target, 0.0, None, None),
                 duration: Duration::ZERO,
                 count: 1,
@@ -1479,7 +1487,8 @@ mod tests {
 
         let button = app.world_mut().spawn_empty().observe(on_apply).id();
         let window = app.world_mut().spawn_empty().id();
-        app.world_mut().trigger(click_event(button, window));
+        app.world_mut()
+            .trigger(click_event(button, window, PointerButton::Primary));
         app.update();
 
         let messages = app.world().resource::<Messages<SkillLearnRequested>>();
@@ -1488,5 +1497,62 @@ mod tests {
 
         assert_eq!(learned, vec![1, 1, 2]);
         assert!(app.world().resource::<SkillPanelStaging>().is_empty());
+    }
+
+    #[test]
+    fn secondary_click_on_cell_opens_info_modal_without_selecting() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_message::<SkillCastRequested>();
+        app.add_message::<ShowInfoModal>();
+        app.init_resource::<SkillPanelUi>();
+        app.init_resource::<LastSkillPanelClick>();
+        app.init_resource::<Time>();
+
+        let cell = app
+            .world_mut()
+            .spawn(SkillPanelCell(42))
+            .observe(on_cell_click)
+            .id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(targets, vec![InfoTarget::Skill(42)]);
+        assert_eq!(app.world().resource::<SkillPanelUi>().selected, None);
+    }
+
+    #[test]
+    fn primary_click_on_cell_still_selects_and_does_not_open_the_modal() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_message::<SkillCastRequested>();
+        app.add_message::<ShowInfoModal>();
+        app.init_resource::<SkillPanelUi>();
+        app.init_resource::<LastSkillPanelClick>();
+        app.init_resource::<Time>();
+
+        let cell = app
+            .world_mut()
+            .spawn(SkillPanelCell(42))
+            .observe(on_cell_click)
+            .id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
+
+        assert_eq!(app.world().resource::<SkillPanelUi>().selected, Some(42));
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
     }
 }

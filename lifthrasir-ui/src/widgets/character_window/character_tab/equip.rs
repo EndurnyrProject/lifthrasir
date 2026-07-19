@@ -30,6 +30,7 @@ use game_engine::infrastructure::item::ItemDb;
 use crate::theme;
 use crate::theme::feathers_theme::{TOKEN_PANEL_BG, TOKEN_WINDOW_BORDER};
 use crate::widgets::chrome::{glyph_icon, ignore_picking};
+use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
 
 /// Which paperdoll slot a well represents.
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -341,17 +342,25 @@ fn clear_slot(
 pub struct CharEquipSlotTooltip;
 
 /// Double-clicking a filled slot unequips it; the resulting `Inventory` change re-runs
-/// [`sync_console_equipment_slots`], which empties the slot. Empty slots are inert.
+/// [`sync_console_equipment_slots`], which empties the slot. Secondary-click opens the
+/// info modal instead. Empty slots are inert on either button.
 fn on_slot_click(
     click: On<Pointer<Click>>,
     slots: Query<&CharEquippedIndex>,
     time: Res<Time>,
     mut last: ResMut<CharLastSlotClick>,
     mut unequip: MessageWriter<UnequipItemRequested>,
+    mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     let Ok(equipped) = slots.get(click.entity) else {
         return;
     };
+    if click.button == PointerButton::Secondary {
+        info_writer.write(ShowInfoModal {
+            target: InfoTarget::Item(ItemRef::Equipped(equipped.0)),
+        });
+        return;
+    }
     let now = time.elapsed();
     if is_slot_double_click(&last, equipped.0, now) {
         unequip.write(UnequipItemRequested { index: equipped.0 });
@@ -602,6 +611,114 @@ mod tests {
         assert_eq!(
             app.world().get::<Visibility>(icon),
             Some(&Visibility::Hidden)
+        );
+    }
+
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            Click {
+                button,
+                hit: HitData::new(target, 0.0, None, None),
+                duration: Duration::ZERO,
+                count: 1,
+            },
+            target,
+        )
+    }
+
+    fn slot_click_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_message::<UnequipItemRequested>();
+        app.add_message::<ShowInfoModal>();
+        app.init_resource::<CharLastSlotClick>();
+        app.init_resource::<Time>();
+        app
+    }
+
+    #[test]
+    fn secondary_click_on_a_filled_slot_opens_the_info_modal() {
+        let mut app = slot_click_app();
+        let slot = app
+            .world_mut()
+            .spawn(CharEquippedIndex(4))
+            .observe(on_slot_click)
+            .id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(slot, window, PointerButton::Secondary));
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Equipped(4))]);
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<UnequipItemRequested>>()
+                .drain()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn secondary_click_on_an_empty_slot_writes_nothing() {
+        let mut app = slot_click_app();
+        let slot = app.world_mut().spawn_empty().observe(on_slot_click).id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(slot, window, PointerButton::Secondary));
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn primary_double_click_on_a_filled_slot_still_unequips() {
+        let mut app = slot_click_app();
+        let slot = app
+            .world_mut()
+            .spawn(CharEquippedIndex(4))
+            .observe(on_slot_click)
+            .id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(slot, window, PointerButton::Primary));
+        app.world_mut()
+            .trigger(click_event(slot, window, PointerButton::Primary));
+
+        let unequips: Vec<_> = app
+            .world_mut()
+            .resource_mut::<Messages<UnequipItemRequested>>()
+            .drain()
+            .collect();
+        assert_eq!(unequips.len(), 1);
+        assert_eq!(unequips[0].index, 4);
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
         );
     }
 }
