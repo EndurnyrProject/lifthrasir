@@ -24,7 +24,7 @@ use crate::theme;
 use crate::widgets::chrome::ignore_picking;
 
 use super::shell::{self, HeaderView};
-use super::view::{ColoredLine, ItemInfoView};
+use super::view::ItemInfoView;
 use super::{InfoModalRoot, ItemRef};
 
 /// Which command a footer button writes on click.
@@ -97,7 +97,7 @@ pub(super) fn scene(
         ))
     });
     let description = (!view.description.is_empty())
-        .then(|| EntityScene(description_section(view.description.clone())));
+        .then(|| EntityScene(shell::description_section(view.description.clone())));
 
     let actions = footer_actions(item_ref, item_id, view.identified, category);
     let footer = (!actions.is_empty()).then(|| EntityScene(shell::footer_bar(actions)));
@@ -178,46 +178,6 @@ fn card_slot(name: Option<String>) -> impl Scene {
                 ignore_picking()
             ),
         ]
-    }
-}
-
-fn description_section(lines: Vec<ColoredLine>) -> impl Scene {
-    let rows: Vec<_> = lines.into_iter().map(colored_line).collect();
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
-        ignore_picking()
-        Children [ {rows} ]
-    }
-}
-
-/// One description line, already split into `^RRGGBB`-colored runs: a `Text` root
-/// holding the first run plus a `TextSpan` child per following run.
-fn colored_line(runs: ColoredLine) -> impl Scene {
-    let mut runs = runs.into_iter();
-    let (first_color, first_text) = runs.next().unwrap_or((theme::TEXT_DIM, String::new()));
-    let spans: Vec<_> = runs
-        .map(|(color, text)| colored_span(color, text))
-        .collect();
-    bsn! {
-        Text(first_text)
-        TextFont {
-            font: FontSourceTemplate::Handle(theme::FONT_BODY),
-            font_size: {FontSize::Px(12.0)},
-        }
-        TextColor(first_color)
-        ignore_picking()
-        Children [ {spans} ]
-    }
-}
-
-fn colored_span(color: Color, text: String) -> impl Scene {
-    bsn! {
-        TextSpan(text)
-        TextFont {
-            font: FontSourceTemplate::Handle(theme::FONT_BODY),
-            font_size: {FontSize::Px(12.0)},
-        }
-        TextColor(color)
     }
 }
 

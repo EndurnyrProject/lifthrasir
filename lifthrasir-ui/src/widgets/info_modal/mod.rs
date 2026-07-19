@@ -4,32 +4,34 @@
 //! Any surface (bag, equipment, skills, storage, shop, cart) summons it by writing
 //! [`ShowInfoModal`]; `show_info_modal` despawns any modal already open and spawns a
 //! fresh one — rebuild-on-show, which is also how requirement-chip navigation works
-//! in the skill scene (a later task). Unlike [`system_dialog`](super::system_dialog),
-//! the backdrop itself closes the modal on click, in addition to the close button
-//! and Escape.
+//! in the skill scene. Unlike [`system_dialog`](super::system_dialog), the backdrop
+//! itself closes the modal on click, in addition to the close button and Escape.
 //!
 //! This module only owns the shell and lifecycle; [`shell`] holds the shared chrome
-//! scenes and item/skill content is added by later scenes dispatched from
-//! `show_info_modal`.
+//! scenes and item/skill content lives in `item_scene`/`skill_scene`, dispatched
+//! from `show_info_modal`.
 
 use bevy::prelude::*;
-use bevy::text::{FontSize, FontSourceTemplate};
-use bevy_feathers::theme::ThemeTextColor;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 
 use game_engine::domain::cart::Cart;
+use game_engine::domain::entities::character::components::status::CharacterStatus;
+use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::inventory::Inventory;
+use game_engine::domain::skill::SkillTreeState;
 use game_engine::domain::storage::Storage;
 use game_engine::infrastructure::item::ItemDb;
+use game_engine::infrastructure::skill::SkillCatalog;
 
-use crate::theme;
-use crate::theme::feathers_theme::{install_norse_theme, TOKEN_TEXT_DIM};
+use crate::theme::feathers_theme::install_norse_theme;
+use crate::widgets::character_window::SkillPanelStaging;
 use crate::widgets::shop_window::ShopSession;
 use crate::widgets::storage_window::StorageSelection;
 use crate::widgets::system_dialog;
 
 mod item_scene;
 pub mod shell;
+mod skill_scene;
 pub mod view;
 
 /// Sits one tier below the system dialog, so a confirm/disconnect dialog always
@@ -51,6 +53,7 @@ impl Plugin for InfoModalPlugin {
                 show_info_modal,
                 close_on_escape,
                 item_scene::apply_footer_disabled.after(show_info_modal),
+                skill_scene::apply_raise_disabled.after(show_info_modal),
             ),
         );
     }
@@ -100,6 +103,10 @@ fn show_info_modal(
     storage: Res<Storage>,
     cart: Res<Cart>,
     shop: Option<Res<ShopSession>>,
+    skill_catalog: Option<Res<SkillCatalog>>,
+    skill_tree: Res<SkillTreeState>,
+    skill_staging: Res<SkillPanelStaging>,
+    local_player: Query<&CharacterStatus, With<LocalPlayer>>,
     mut commands: Commands,
 ) {
     let Some(request) = requests.read().last() else {
@@ -107,11 +114,19 @@ fn show_info_modal(
     };
     match request.target {
         InfoTarget::Skill(id) => {
+            let Some(catalog) = skill_catalog.as_deref() else {
+                warn!("info modal: SkillCatalog not loaded yet, ignoring show request");
+                return;
+            };
+            let status = local_player.single().ok();
+            let Some(view) =
+                view::build_skill_view(id, Some(catalog), &skill_tree, &skill_staging, status)
+            else {
+                warn!("info modal: skill #{id} not in the tree, ignoring show request");
+                return;
+            };
             despawn_existing(&existing, &mut commands);
-            commands.spawn_scene(info_modal(
-                shell::EdgeGrade::default(),
-                placeholder_body(id),
-            ));
+            commands.spawn_scene(info_modal(view.edge, skill_scene::scene(view, id)));
         }
         InfoTarget::Item(item_ref) => {
             let Some(item_db) = item_db.as_deref() else {
@@ -201,33 +216,34 @@ fn info_modal(edge: shell::EdgeGrade, body: impl Scene) -> impl Scene {
     }
 }
 
-/// Task-1 placeholder body for skills; the skill scene replaces this once its view
-/// model and content scene exist (Task 4).
-fn placeholder_body(skill_id: u32) -> impl Scene {
-    let text = format!("Skill #{skill_id}");
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Column,
-            padding: {UiRect::axes(px(20), px(20))},
-        }
-        Children [
-            (
-                Text(text)
-                TextFont {
-                    font: FontSourceTemplate::Handle(theme::FONT_BODY),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT_DIM})
-                Pickable { should_block_lower: false, is_hoverable: false }
-            ),
-        ]
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
+
+    fn skill_tree() -> SkillTreeState {
+        use game_engine::domain::skill::SkillNode;
+        let mut skills = std::collections::HashMap::new();
+        for id in [1, 2] {
+            skills.insert(
+                id,
+                SkillNode {
+                    level: 0,
+                    max_level: 5,
+                    upgradable: true,
+                    requires: vec![],
+                    req_base_level: 0,
+                    req_job_level: 0,
+                    sp: 1,
+                    range: 1,
+                    inf_type: 0,
+                    job_id: 1,
+                    splash_radius: 0,
+                },
+            );
+        }
+        SkillTreeState { skills }
+    }
 
     fn test_app() -> App {
         let mut app = App::new();
@@ -238,6 +254,11 @@ mod tests {
         app.init_resource::<Inventory>();
         app.init_resource::<Storage>();
         app.init_resource::<Cart>();
+        app.insert_resource(skill_tree());
+        app.insert_resource(SkillCatalog::from_skill_data(
+            lifthrasir_data::SkillData::default(),
+        ));
+        app.init_resource::<SkillPanelStaging>();
         app.add_message::<ShowInfoModal>();
         app.add_systems(Update, (show_info_modal, close_on_escape));
         app
@@ -278,6 +299,29 @@ mod tests {
         let after = roots(&mut app);
         assert_eq!(after.len(), 1);
         assert_ne!(after[0], first);
+    }
+
+    #[test]
+    fn skill_target_with_no_catalog_ignores_the_request() {
+        let mut app = test_app();
+        app.world_mut().remove_resource::<SkillCatalog>();
+        app.world_mut().write_message(ShowInfoModal {
+            target: InfoTarget::Skill(1),
+        });
+        app.update();
+
+        assert!(roots(&mut app).is_empty());
+    }
+
+    #[test]
+    fn skill_target_not_in_the_tree_ignores_the_request() {
+        let mut app = test_app();
+        app.world_mut().write_message(ShowInfoModal {
+            target: InfoTarget::Skill(9999),
+        });
+        app.update();
+
+        assert!(roots(&mut app).is_empty());
     }
 
     #[test]

@@ -17,6 +17,7 @@ use crate::theme::feathers_theme::{
 };
 use crate::widgets::chrome::{glyph_icon, ignore_picking};
 
+use super::view::ColoredLine;
 use super::InfoModalRoot;
 
 /// Card width — `.im-modal { width: 372px; }`.
@@ -399,6 +400,48 @@ fn meta_grid_slot(cell: impl Scene) -> impl Scene {
     bsn! {
         Node { flex_basis: percent(50), flex_grow: 1.0, min_width: px(0) }
         Children [ cell ]
+    }
+}
+
+/// A stack of description lines, each already split into `^RRGGBB`-colored runs —
+/// `.im-desc`. Shared by the item and skill scenes.
+pub fn description_section(lines: Vec<ColoredLine>) -> impl Scene {
+    let rows: Vec<_> = lines.into_iter().map(colored_line).collect();
+    bsn! {
+        Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
+        ignore_picking()
+        Children [ {rows} ]
+    }
+}
+
+/// One description line, already split into `^RRGGBB`-colored runs: a `Text` root
+/// holding the first run plus a `TextSpan` child per following run.
+fn colored_line(runs: ColoredLine) -> impl Scene {
+    let mut runs = runs.into_iter();
+    let (first_color, first_text) = runs.next().unwrap_or((theme::TEXT_DIM, String::new()));
+    let spans: Vec<_> = runs
+        .map(|(color, text)| colored_span(color, text))
+        .collect();
+    bsn! {
+        Text(first_text)
+        TextFont {
+            font: FontSourceTemplate::Handle(theme::FONT_BODY),
+            font_size: {FontSize::Px(12.0)},
+        }
+        TextColor(first_color)
+        ignore_picking()
+        Children [ {spans} ]
+    }
+}
+
+fn colored_span(color: Color, text: String) -> impl Scene {
+    bsn! {
+        TextSpan(text)
+        TextFont {
+            font: FontSourceTemplate::Handle(theme::FONT_BODY),
+            font_size: {FontSize::Px(12.0)},
+        }
+        TextColor(color)
     }
 }
 
