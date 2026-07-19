@@ -27,6 +27,8 @@ mod meter;
 pub mod shell;
 mod skills_tab;
 
+pub use skills_tab::SkillPanelStaging;
+
 /// Which tab the Console shows. The active chord always selects the tab, so this is
 /// never "remembered" independently of the last chord.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]

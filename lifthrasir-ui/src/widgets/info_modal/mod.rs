@@ -23,6 +23,7 @@ use crate::widgets::storage_window::StorageSelection;
 use crate::widgets::system_dialog;
 
 pub mod shell;
+pub mod view;
 
 /// Sits one tier below the system dialog, so a confirm/disconnect dialog always
 /// stacks above and stays clickable.
