@@ -45,6 +45,11 @@ pub struct ItemInfoView {
     pub edge: EdgeGrade,
     pub name: String,
     pub identified: bool,
+    /// Display-only server flag; not identification-gated. Accurate only for
+    /// refs that resolve through a real domain `Item` (Inventory/Equipped/
+    /// Storage bag) — false for every other `ItemRef`, since neither the
+    /// storage vault, cart, nor shop DTOs carry it.
+    pub favorite: bool,
     pub tags: Vec<String>,
     pub refine: Option<i32>,
     pub sockets_filled: u8,
@@ -92,6 +97,7 @@ pub struct SkillInfoView {
 struct ResolvedItem<'a> {
     item_id: u32,
     identified: bool,
+    favorite: bool,
     refine: u8,
     cards: &'a [u32],
     wear_mask: u32,
@@ -118,6 +124,7 @@ fn resolve_item<'a>(
             Some(ResolvedItem {
                 item_id: item.item_id,
                 identified: item.identified,
+                favorite: item.favorite,
                 refine: item.refine,
                 cards: &item.cards,
                 wear_mask: item.location,
@@ -131,6 +138,7 @@ fn resolve_item<'a>(
             Some(ResolvedItem {
                 item_id: item.nameid,
                 identified: item.identified,
+                favorite: false,
                 refine: item.refine as u8,
                 cards: &item.cards,
                 wear_mask: item.location,
@@ -144,6 +152,7 @@ fn resolve_item<'a>(
             Some(ResolvedItem {
                 item_id: item.nameid,
                 identified: item.identified,
+                favorite: false,
                 refine: item.refine as u8,
                 cards: &item.cards,
                 wear_mask: 0,
@@ -159,6 +168,7 @@ fn resolve_item<'a>(
             Some(ResolvedItem {
                 item_id: nameid,
                 identified: true,
+                favorite: false,
                 refine: 0,
                 cards: &[],
                 wear_mask: 0,
@@ -238,6 +248,7 @@ pub fn build_item_view(
 fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfoView {
     let item_id = resolved.item_id;
     let identified = resolved.identified;
+    let favorite = resolved.favorite;
     let name = item_db
         .name(resolved.item_id, identified)
         .map(str::to_string)
@@ -288,6 +299,7 @@ fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfo
         edge,
         name,
         identified,
+        favorite,
         tags,
         refine,
         sockets_filled,
@@ -784,6 +796,77 @@ mod tests {
 
         assert_eq!(view.meta, vec![("Price".to_string(), "500z".to_string())]);
         assert!(view.identified);
+    }
+
+    #[test]
+    fn inventory_ref_carries_favorite_flag() {
+        let db = item_db();
+        let inventory = {
+            let mut inv = Inventory::default();
+            let mut item = equip_item(2, 0, [0; 4], true);
+            item.favorite = true;
+            inv.upsert(item);
+            inv
+        };
+        let storage = Storage::default();
+        let cart = Cart::default();
+
+        let view = build_item_view(
+            ItemRef::Inventory(2),
+            &db,
+            &inventory,
+            &storage,
+            &cart,
+            None,
+        )
+        .unwrap();
+
+        assert!(view.favorite);
+    }
+
+    #[test]
+    fn inventory_ref_carries_unfavorited_flag() {
+        let db = item_db();
+        let inventory = {
+            let mut inv = Inventory::default();
+            inv.upsert(equip_item(2, 0, [0; 4], true));
+            inv
+        };
+        let storage = Storage::default();
+        let cart = Cart::default();
+
+        let view = build_item_view(
+            ItemRef::Inventory(2),
+            &db,
+            &inventory,
+            &storage,
+            &cart,
+            None,
+        )
+        .unwrap();
+
+        assert!(!view.favorite);
+    }
+
+    #[test]
+    fn shop_buy_ref_is_never_favorited() {
+        let db = item_db();
+        let inventory = Inventory::default();
+        let storage = Storage::default();
+        let cart = Cart::default();
+        let shop = shop_session();
+
+        let view = build_item_view(
+            ItemRef::ShopBuy(501),
+            &db,
+            &inventory,
+            &storage,
+            &cart,
+            Some(&shop),
+        )
+        .unwrap();
+
+        assert!(!view.favorite);
     }
 
     #[test]

@@ -28,9 +28,15 @@ fn to_item(slot: &ZoneInventoryItem) -> Item {
         view_sprite: slot.look as u16,
         identified: slot.identified,
         damaged: slot.attribute != 0,
+        favorite: slot.favorite,
     }
 }
 
+/// `ItemAdded` carries no `favorite` bit. A brand-new slot lands unfavorited until
+/// the next full inventory dump resyncs it; `apply_item_deltas` preserves the
+/// existing slot's `favorite` across a restock of an already-tracked index (the
+/// server sends `ItemAdded` for stack top-ups too, e.g. potions), so this default
+/// only takes effect for slots not yet present in `Inventory`.
 fn item_from_added(a: &ItemAdded) -> Item {
     Item {
         index: a.index as u16,
@@ -46,6 +52,7 @@ fn item_from_added(a: &ItemAdded) -> Item {
         view_sprite: a.look as u16,
         identified: a.identified,
         damaged: a.attribute != 0,
+        favorite: false,
     }
 }
 
@@ -68,7 +75,11 @@ pub fn apply_item_deltas(
     mut inventory: ResMut<Inventory>,
 ) {
     for a in added.read() {
-        inventory.upsert(item_from_added(a));
+        let mut item = item_from_added(a);
+        if let Some(existing) = inventory.get(item.index) {
+            item.favorite = existing.favorite;
+        }
+        inventory.upsert(item);
     }
     for r in removed.read() {
         inventory.remove_amount(r.index as u16, r.amount as u16);
@@ -104,6 +115,30 @@ mod tests {
             favorite: false,
             look: 0,
         }
+    }
+
+    #[test]
+    fn dump_maps_favorite_flag() {
+        let mut app = app_with_inventory();
+
+        let mut favorited = slot(2, 1);
+        favorited.favorite = true;
+        let mut not_favorited = slot(3, 1);
+        not_favorited.favorite = false;
+
+        app.world_mut()
+            .write_message(dump(vec![favorited, not_favorited]));
+        app.update();
+
+        let inventory = app.world().resource::<Inventory>();
+        assert!(inventory.get(2).unwrap().favorite);
+        assert!(!inventory.get(3).unwrap().favorite);
+    }
+
+    #[test]
+    fn item_added_does_not_carry_favorite() {
+        let item = item_from_added(&added(7, 1));
+        assert!(!item.favorite);
     }
 
     fn app_with_inventory() -> App {
@@ -263,6 +298,25 @@ mod tests {
         let inventory = app.world().resource::<Inventory>();
         assert_eq!(inventory.get(7).unwrap().amount, 8);
         assert_eq!(inventory.len(), 1);
+    }
+
+    #[test]
+    fn item_added_restock_preserves_existing_favorite() {
+        let mut app = app_with_inventory();
+
+        let mut favorited = slot(7, 5);
+        favorited.favorite = true;
+        app.world_mut().write_message(dump(vec![favorited]));
+        app.update();
+        assert!(app.world().resource::<Inventory>().get(7).unwrap().favorite);
+
+        app.world_mut().write_message(added(7, 8));
+        app.update();
+
+        let inventory = app.world().resource::<Inventory>();
+        let item = inventory.get(7).unwrap();
+        assert_eq!(item.amount, 8);
+        assert!(item.favorite);
     }
 
     #[test]

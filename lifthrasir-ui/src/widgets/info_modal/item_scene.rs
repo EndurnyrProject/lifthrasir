@@ -21,7 +21,7 @@ use game_engine::domain::equipment::{EquipItemRequested, UnequipItemRequested};
 use game_engine::domain::inventory::{Inventory, ItemCategory, UseItemRequested};
 
 use crate::theme;
-use crate::widgets::chrome::ignore_picking;
+use crate::widgets::chrome::{glyph_icon, ignore_picking};
 
 use super::shell::{self, HeaderView};
 use super::view::ItemInfoView;
@@ -69,6 +69,50 @@ impl Default for FooterAction {
     }
 }
 
+/// Marks the display-only favorite indicator in the item footer — `.im-act.ghost`
+/// (`.on` when lit). Carries the flag it renders so tests can assert lit state
+/// without inspecting colors; not a button, never targeted by an observer.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct FavoriteStar {
+    pub lit: bool,
+}
+
+/// The footer's favorite indicator — gold when `favorite`, dim otherwise. Rendered
+/// only for `Inventory` refs, since favorite is server item state with no command
+/// to toggle it here. `ignore_picking` (not a `FeathersButton`, no observer) keeps
+/// it a display-only ghost button per the mockup.
+fn favorite_star(favorite: bool) -> impl Scene {
+    let (bg, border, color) = if favorite {
+        (
+            Color::srgba(0.851, 0.643, 0.255, 0.1),
+            theme::GOLD_FAINT,
+            theme::GOLD,
+        )
+    } else {
+        (
+            Color::WHITE.with_alpha(0.03),
+            theme::STROKE,
+            theme::TEXT_DIM,
+        )
+    };
+    bsn! {
+        template_value(FavoriteStar { lit: favorite })
+        Node {
+            width: px(42),
+            height: px(40),
+            flex_shrink: 0.0,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: px(1),
+            border_radius: BorderRadius::all(px(9)),
+        }
+        BackgroundColor(bg)
+        BorderColor::all(border)
+        ignore_picking()
+        Children [ glyph_icon("star", 15.0, color) ]
+    }
+}
+
 /// The item modal's whole content: header, then the scrollable section stack, then
 /// the contextual footer.
 pub(super) fn scene(
@@ -99,8 +143,15 @@ pub(super) fn scene(
     let description = (!view.description.is_empty())
         .then(|| EntityScene(shell::description_section(view.description.clone())));
 
-    let actions = footer_actions(item_ref, item_id, view.identified, category);
-    let footer = (!actions.is_empty()).then(|| EntityScene(shell::footer_bar(actions)));
+    let primary_actions = footer_actions(item_ref, item_id, view.identified, category);
+    let star = matches!(item_ref, ItemRef::Inventory(_)).then(|| favorite_star(view.favorite));
+    let mut footer_children: Vec<Box<dyn Scene>> = primary_actions
+        .into_iter()
+        .map(|action| Box::new(action) as Box<dyn Scene>)
+        .collect();
+    footer_children.extend(star.map(|star| Box::new(star) as Box<dyn Scene>));
+    let footer =
+        (!footer_children.is_empty()).then(|| EntityScene(shell::footer_bar(footer_children)));
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, min_height: px(0) }
@@ -307,6 +358,7 @@ mod tests {
             edge: shell::EdgeGrade::Fine,
             name: "Red Potion".to_string(),
             identified: true,
+            favorite: false,
             tags: vec!["Usable".to_string()],
             refine: Some(4),
             sockets_filled: 1,
@@ -324,6 +376,7 @@ mod tests {
             edge: shell::EdgeGrade::Common,
             name: "Junk".to_string(),
             identified: true,
+            favorite: false,
             tags: vec![],
             refine: None,
             sockets_filled: 0,
@@ -500,6 +553,88 @@ mod tests {
 
         assert!(app.world().get::<InteractionDisabled>(disabled).is_some());
         assert!(app.world().get::<InteractionDisabled>(enabled).is_none());
+    }
+
+    #[test]
+    fn favorite_star_renders_for_inventory_ref_with_no_primary_action() {
+        let mut app = test_app();
+        let mut view = full_view();
+        view.favorite = true;
+        app.world_mut()
+            .spawn_scene(scene(view, ItemRef::Inventory(1), Some(ItemCategory::Etc)))
+            .expect("scene spawns");
+        app.update();
+
+        let stars: Vec<_> = app
+            .world_mut()
+            .query::<&FavoriteStar>()
+            .iter(app.world())
+            .copied()
+            .collect();
+        assert_eq!(stars.len(), 1);
+        assert!(stars[0].lit);
+    }
+
+    #[test]
+    fn favorite_star_unlit_when_view_not_favorited() {
+        let mut app = test_app();
+        let mut view = full_view();
+        view.favorite = false;
+        app.world_mut()
+            .spawn_scene(scene(view, ItemRef::Inventory(1), Some(ItemCategory::Use)))
+            .expect("scene spawns");
+        app.update();
+
+        let stars: Vec<_> = app
+            .world_mut()
+            .query::<&FavoriteStar>()
+            .iter(app.world())
+            .copied()
+            .collect();
+        assert_eq!(stars.len(), 1);
+        assert!(!stars[0].lit);
+    }
+
+    #[test]
+    fn favorite_star_absent_for_non_inventory_refs() {
+        for item_ref in [
+            ItemRef::Equipped(1),
+            ItemRef::Cart(1),
+            ItemRef::ShopBuy(501),
+        ] {
+            let mut app = test_app();
+            app.world_mut()
+                .spawn_scene(scene(full_view(), item_ref, None))
+                .expect("scene spawns");
+            app.update();
+
+            let count = app
+                .world_mut()
+                .query::<&FavoriteStar>()
+                .iter(app.world())
+                .count();
+            assert_eq!(count, 0, "{item_ref:?}");
+        }
+    }
+
+    #[test]
+    fn favorite_star_is_not_interactive() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(scene(
+                full_view(),
+                ItemRef::Inventory(1),
+                Some(ItemCategory::Use),
+            ))
+            .expect("scene spawns");
+        app.update();
+
+        let pickable = app
+            .world_mut()
+            .query_filtered::<&Pickable, With<FavoriteStar>>()
+            .single(app.world())
+            .expect("star entity has a Pickable component");
+        assert!(!pickable.is_hoverable);
     }
 
     fn revalidation_app() -> App {

@@ -21,6 +21,7 @@ pub struct Item {
     pub view_sprite: u16,
     pub identified: bool,
     pub damaged: bool,
+    pub favorite: bool,
 }
 
 #[derive(Debug, Clone, Default)]
