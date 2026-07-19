@@ -17,11 +17,18 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy_feathers::theme::ThemeTextColor;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 
+use game_engine::domain::cart::Cart;
+use game_engine::domain::inventory::Inventory;
+use game_engine::domain::storage::Storage;
+use game_engine::infrastructure::item::ItemDb;
+
 use crate::theme;
 use crate::theme::feathers_theme::{install_norse_theme, TOKEN_TEXT_DIM};
+use crate::widgets::shop_window::ShopSession;
 use crate::widgets::storage_window::StorageSelection;
 use crate::widgets::system_dialog;
 
+mod item_scene;
 pub mod shell;
 pub mod view;
 
@@ -38,7 +45,14 @@ impl Plugin for InfoModalPlugin {
             app.add_plugins(FeathersPlugins);
         }
         app.add_message::<ShowInfoModal>();
-        app.add_systems(Update, (show_info_modal, close_on_escape));
+        app.add_systems(
+            Update,
+            (
+                show_info_modal,
+                close_on_escape,
+                item_scene::apply_footer_disabled.after(show_info_modal),
+            ),
+        );
     }
 }
 
@@ -73,18 +87,69 @@ pub struct InfoModalRoot;
 /// Spawns the modal for the latest request, despawning any modal already open.
 /// Last message wins when several are written in one frame (e.g. a requirement-chip
 /// click that rebuilds the modal for a different skill).
+///
+/// Built before despawning the existing root, so a request that can't be honored
+/// (registry not loaded, or the item ref no longer resolves) leaves an already-open
+/// modal untouched instead of replacing it with nothing.
+#[allow(clippy::too_many_arguments)]
 fn show_info_modal(
     mut requests: MessageReader<ShowInfoModal>,
     existing: Query<Entity, With<InfoModalRoot>>,
+    item_db: Option<Res<ItemDb>>,
+    inventory: Res<Inventory>,
+    storage: Res<Storage>,
+    cart: Res<Cart>,
+    shop: Option<Res<ShopSession>>,
     mut commands: Commands,
 ) {
     let Some(request) = requests.read().last() else {
         return;
     };
-    for root in &existing {
+    match request.target {
+        InfoTarget::Skill(id) => {
+            despawn_existing(&existing, &mut commands);
+            commands.spawn_scene(info_modal(
+                shell::EdgeGrade::default(),
+                placeholder_body(id),
+            ));
+        }
+        InfoTarget::Item(item_ref) => {
+            let Some(item_db) = item_db.as_deref() else {
+                warn!("info modal: ItemDb not loaded yet, ignoring show request");
+                return;
+            };
+            let Some(view) = view::build_item_view(
+                item_ref,
+                item_db,
+                &inventory,
+                &storage,
+                &cart,
+                shop.as_deref(),
+            ) else {
+                warn!(
+                    "info modal: {item_ref:?} no longer resolves to an item, ignoring show request"
+                );
+                return;
+            };
+            let category = match item_ref {
+                ItemRef::Inventory(index) | ItemRef::Equipped(index) => {
+                    inventory.get(index).map(|item| item.category())
+                }
+                ItemRef::Storage(_) | ItemRef::Cart(_) | ItemRef::ShopBuy(_) => None,
+            };
+            despawn_existing(&existing, &mut commands);
+            commands.spawn_scene(info_modal(
+                view.edge,
+                item_scene::scene(view, item_ref, category),
+            ));
+        }
+    }
+}
+
+fn despawn_existing(existing: &Query<Entity, With<InfoModalRoot>>, commands: &mut Commands) {
+    for root in existing {
         commands.entity(root).despawn();
     }
-    commands.spawn_scene(info_modal(request.target));
 }
 
 /// Escape closes the modal, gated on a root existing so it never swallows the key
@@ -118,7 +183,7 @@ fn close_on_backdrop_click(
 }
 
 /// The whole modal as one scene: a dimmed, click-eating backdrop centering the card.
-fn info_modal(target: InfoTarget) -> impl Scene {
+fn info_modal(edge: shell::EdgeGrade, body: impl Scene) -> impl Scene {
     bsn! {
         InfoModalRoot
         Node {
@@ -132,17 +197,14 @@ fn info_modal(target: InfoTarget) -> impl Scene {
         GlobalZIndex({INFO_MODAL_Z})
         Pickable
         on(close_on_backdrop_click)
-        Children [ shell::card(shell::EdgeGrade::default(), placeholder_body(target)) ]
+        Children [ shell::card(edge, body) ]
     }
 }
 
-/// Task-1 placeholder body; item/skill scenes replace this once their view models
-/// and content scenes exist (later tasks).
-fn placeholder_body(target: InfoTarget) -> impl Scene {
-    let text = match target {
-        InfoTarget::Skill(id) => format!("Skill #{id}"),
-        InfoTarget::Item(item_ref) => format!("Item {item_ref:?}"),
-    };
+/// Task-1 placeholder body for skills; the skill scene replaces this once its view
+/// model and content scene exist (Task 4).
+fn placeholder_body(skill_id: u32) -> impl Scene {
+    let text = format!("Skill #{skill_id}");
     bsn! {
         Node {
             flex_direction: FlexDirection::Column,
@@ -173,6 +235,9 @@ mod tests {
         app.init_asset::<Image>();
         app.init_asset::<Font>();
         app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<Inventory>();
+        app.init_resource::<Storage>();
+        app.init_resource::<Cart>();
         app.add_message::<ShowInfoModal>();
         app.add_systems(Update, (show_info_modal, close_on_escape));
         app
@@ -206,13 +271,56 @@ mod tests {
         let first = roots(&mut app)[0];
 
         app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Item(ItemRef::Inventory(3)),
+            target: InfoTarget::Skill(2),
         });
         app.update();
 
         let after = roots(&mut app);
         assert_eq!(after.len(), 1);
         assert_ne!(after[0], first);
+    }
+
+    #[test]
+    fn item_target_with_no_item_db_ignores_the_request() {
+        let mut app = test_app();
+        app.world_mut().write_message(ShowInfoModal {
+            target: InfoTarget::Item(ItemRef::Inventory(3)),
+        });
+        app.update();
+
+        assert!(roots(&mut app).is_empty());
+    }
+
+    #[test]
+    fn item_target_with_an_empty_slot_ignores_the_request() {
+        let mut app = test_app();
+        app.insert_resource(ItemDb::default());
+        app.world_mut().write_message(ShowInfoModal {
+            target: InfoTarget::Item(ItemRef::Inventory(3)),
+        });
+        app.update();
+
+        assert!(roots(&mut app).is_empty());
+    }
+
+    #[test]
+    fn item_target_resolves_and_spawns_a_root() {
+        let mut app = test_app();
+        app.insert_resource(ItemDb::default());
+        app.world_mut()
+            .resource_mut::<Inventory>()
+            .upsert(game_engine::domain::inventory::Item {
+                index: 3,
+                item_id: 501,
+                identified: true,
+                ..Default::default()
+            });
+        app.world_mut().write_message(ShowInfoModal {
+            target: InfoTarget::Item(ItemRef::Inventory(3)),
+        });
+        app.update();
+
+        assert_eq!(roots(&mut app).len(), 1);
     }
 
     #[test]

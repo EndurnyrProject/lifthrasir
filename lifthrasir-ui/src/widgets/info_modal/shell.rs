@@ -4,6 +4,7 @@
 //! / `.im-edge-*`) using the project's existing window and rarity theme tokens.
 
 use bevy::prelude::*;
+use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::FeathersButton;
@@ -110,18 +111,21 @@ fn close_modal(_: On<Activate>, root: Query<Entity, With<InfoModalRoot>>, mut co
     }
 }
 
+/// Owned inputs for [`header`], grouped so item/skill scenes pass one value instead
+/// of a long positional argument list.
+pub struct HeaderView {
+    pub icon_path: Option<String>,
+    pub refine: Option<i32>,
+    pub sockets_filled: u8,
+    pub sockets_total: u8,
+    pub edge: EdgeGrade,
+    pub name: String,
+    pub tags: Vec<String>,
+}
+
 /// The header row — `.im-head`: icon box (optional refine badge + socket pips),
 /// item/skill name, and a row of tag chips.
-#[allow(clippy::too_many_arguments)]
-pub fn header(
-    icon_path: String,
-    refine: Option<i32>,
-    sockets_filled: u8,
-    sockets_total: u8,
-    edge: EdgeGrade,
-    name: String,
-    tags: Vec<String>,
-) -> impl Scene {
+pub fn header(view: HeaderView) -> impl Scene {
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
@@ -130,19 +134,20 @@ pub fn header(
             padding: {UiRect { left: px(20), right: px(20), top: px(20), bottom: px(16) }},
         }
         Children [
-            icon_box(icon_path, refine, sockets_filled, sockets_total, edge),
-            titles(name, tags, edge),
+            icon_box(view.icon_path, view.refine, view.sockets_filled, view.sockets_total, view.edge),
+            titles(view.name, view.tags, view.edge),
         ]
     }
 }
 
 fn icon_box(
-    icon_path: String,
+    icon_path: Option<String>,
     refine: Option<i32>,
     sockets_filled: u8,
     sockets_total: u8,
     edge: EdgeGrade,
 ) -> impl Scene {
+    let icon = icon_path.map(|path| EntityScene(item_icon(path)));
     let refine_text = refine.map(|r| format!("+{r}")).unwrap_or_default();
     let refine_display = if refine.is_some() {
         Display::Flex
@@ -170,11 +175,7 @@ fn icon_box(
         BackgroundColor({Color::BLACK.with_alpha(0.42)})
         ThemeBorderColor({edge.token()})
         Children [
-            (
-                ImageNode { image: {icon_path} }
-                Node { width: percent(100), height: percent(100) }
-                ignore_picking()
-            ),
+            {icon},
             (
                 Node {
                     display: {refine_display},
@@ -211,6 +212,16 @@ fn icon_box(
                 Children [ {pips} ]
             ),
         ]
+    }
+}
+
+/// The icon image filling the icon box, spawned only when `icon_path` resolved —
+/// an absent icon leaves the box's dark background bare rather than an empty node.
+fn item_icon(icon_path: String) -> impl Scene {
+    bsn! {
+        ImageNode { image: {icon_path} }
+        Node { width: percent(100), height: percent(100) }
+        ignore_picking()
     }
 }
 

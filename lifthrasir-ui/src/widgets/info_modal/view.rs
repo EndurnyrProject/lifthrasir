@@ -38,6 +38,9 @@ pub type ColoredLine = Vec<(Color, String)>;
 /// section is absent for this item/context.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ItemInfoView {
+    /// The resolved item's `item_id`, carried through so the footer can
+    /// revalidate the item at its stored index is still the one shown.
+    pub item_id: u32,
     pub icon_path: Option<String>,
     pub edge: EdgeGrade,
     pub name: String,
@@ -233,6 +236,7 @@ pub fn build_item_view(
 }
 
 fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfoView {
+    let item_id = resolved.item_id;
     let identified = resolved.identified;
     let name = item_db
         .name(resolved.item_id, identified)
@@ -279,6 +283,7 @@ fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfo
     }
 
     ItemInfoView {
+        item_id,
         icon_path,
         edge,
         name,
