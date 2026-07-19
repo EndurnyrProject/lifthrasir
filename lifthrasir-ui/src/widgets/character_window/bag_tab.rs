@@ -1,7 +1,8 @@
 //! The Console's Bag tab: a faithful port of the inventory window's body —
-//! Use/Etc/Equip tab strip, a fixed-height scrollable item grid, and the selection
-//! info panel — projected into the shell's [`BagTabBody`] container instead of a
-//! standalone window.
+//! Use/Etc/Equip tab strip and a fixed-height scrollable item grid — projected
+//! into the shell's [`BagTabBody`] container instead of a standalone window.
+//! Item details open in the shared right-click info modal
+//! ([`crate::widgets::info_modal`]).
 //!
 //! This file is deliberately self-contained: it defines its OWN UI-only types
 //! ([`BagUi`], [`BagCell`], [`BagTab`], [`LastBagClick`]) rather than importing the
@@ -24,7 +25,6 @@ use game_engine::domain::hotbar::HotbarSlot;
 use game_engine::domain::inventory::{Inventory, Item, ItemCategory, UseItemRequested};
 use game_engine::infrastructure::item::ItemDb;
 
-use crate::rich_text::parse_color_codes;
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 use crate::widgets::hotbar::HotbarDrag;
@@ -33,10 +33,8 @@ use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
 use super::BagTabBody;
 
 const CELL_SIZE: f32 = 32.0;
-const INFO_WIDTH: f32 = 150.0;
-const INFO_ICON_SIZE: f32 = 48.0;
-/// Fixed height of the grid + info-panel row, so the tab never grows with content —
-/// both panes scroll internally instead.
+/// Fixed height of the grid, so the tab never grows with content — it scrolls
+/// internally instead.
 const PANE_HEIGHT: f32 = 300.0;
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(300);
@@ -237,8 +235,8 @@ fn on_cell_click(
 }
 
 // ---------------------------------------------------------------------------
-// Body: tab strip + (grid | info panel). Projected from live state; `bsn!` scenes
-// own their data, so every view-model is prepared as owned values before entering a
+// Body: tab strip + grid. Projected from live state; `bsn!` scenes own their
+// data, so every view-model is prepared as owned values before entering a
 // `bsn!` block.
 // ---------------------------------------------------------------------------
 
@@ -249,17 +247,6 @@ struct CellView {
     amount: u16,
     refine: u8,
     selected: bool,
-}
-
-/// The selected item's owned view-model for the info panel.
-struct InfoView {
-    icon: Option<String>,
-    name: String,
-    type_label: String,
-    amount: u16,
-    refine: u8,
-    cards: Vec<bool>,
-    description: Vec<String>,
 }
 
 fn icon_path(item_db: Option<&ItemDb>, item: &Item) -> Option<String> {
@@ -286,48 +273,15 @@ fn cell_views(
         .collect()
 }
 
-/// One `true`/`false` per card slot the item type has, `true` where the slot is
-/// filled. Empty when the item type has no sockets.
-fn card_slots(item: &Item, item_db: Option<&ItemDb>) -> Vec<bool> {
-    let slots = item_db
-        .and_then(|db| db.slot_count(item.item_id))
-        .unwrap_or(0);
-    (0..slots)
-        .map(|slot| item.cards.get(slot as usize).copied().unwrap_or(0) != 0)
-        .collect()
-}
-
-fn info_view(item: &Item, item_db: Option<&ItemDb>) -> InfoView {
-    InfoView {
-        icon: icon_path(item_db, item),
-        name: item_db
-            .and_then(|db| db.name(item.item_id, item.identified))
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("#{}", item.item_id)),
-        type_label: item.type_label().to_string(),
-        amount: item.amount,
-        refine: item.refine,
-        cards: card_slots(item, item_db),
-        description: item_db
-            .and_then(|db| db.description(item.item_id, item.identified))
-            .map(|lines| lines.to_vec())
-            .unwrap_or_default(),
-    }
-}
-
-/// The whole swappable body: tab strip over the grid + info-panel row.
+/// The whole swappable body: tab strip over the item grid.
 fn body(inventory: &Inventory, ui: &BagUi, item_db: Option<&ItemDb>) -> impl Scene {
     let counts = TABS.map(|(category, _, _)| tab_count(inventory, category));
     let cells = cell_views(inventory, ui.tab, item_db, ui.selected);
-    let info = ui
-        .selected
-        .and_then(|index| inventory.get(index))
-        .map(|item| info_view(item, item_db));
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         ignore_picking()
-        Children [ tab_strip(ui.tab, counts), content_row(cells, info) ]
+        Children [ tab_strip(ui.tab, counts), grid_pane(cells) ]
     }
 }
 
@@ -377,26 +331,17 @@ fn tab_button(
     }
 }
 
-fn content_row(cells: Vec<CellView>, info: Option<InfoView>) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, column_gap: px(12), height: px(PANE_HEIGHT) }
-        ignore_picking()
-        Children [ grid_pane(cells), info_panel(info) ]
-    }
-}
-
 /// The bordered item grid: a fixed-height, wheel-scrollable viewport of wrapped cells
 /// with a draggable [`FeathersScrollbar`] pinned to the right. The `#grid` id wires the
-/// scrollbar to the viewport whose `ScrollPosition` it drives.
+/// scrollbar to the viewport whose `ScrollPosition` it drives. Fills the tab's full
+/// width now that the inline info panel is gone.
 fn grid_pane(cells: Vec<CellView>) -> impl Scene {
     let empty = cells.is_empty();
     let items: Vec<_> = cells.into_iter().map(cell).collect();
     let empty_msg = empty.then(|| EntityScene(muted_text("No items.".to_string())));
     bsn! {
         Node {
-            flex_grow: 1.0,
-            flex_basis: px(0),
-            min_width: px(0),
+            height: px(PANE_HEIGHT),
             position_type: PositionType::Relative,
             border: px(1),
             border_radius: BorderRadius::all(px(8)),
@@ -502,159 +447,6 @@ fn refine_badge(text: String) -> impl Scene {
         TextColor(theme::GOLD)
         Node { position_type: PositionType::Absolute, left: px(1), top: px(0) }
         ignore_picking()
-    }
-}
-
-/// The selection info panel: a fixed-width, fixed-height bordered box whose content
-/// scrolls internally. The `#info` id wires the scrollbar to the scrollable viewport.
-fn info_panel(info: Option<InfoView>) -> impl Scene {
-    let empty = info.is_none();
-    let content = info.map(|view| EntityScene(info_content(view)));
-    let empty_msg = empty.then(|| EntityScene(muted_text("Select an item".to_string())));
-    bsn! {
-        Node {
-            width: px(INFO_WIDTH),
-            flex_shrink: 0.0,
-            position_type: PositionType::Relative,
-            border: px(1),
-            border_radius: BorderRadius::all(px(8)),
-        }
-        BackgroundColor(theme::FIELD)
-        BorderColor::all(theme::GOLD_FAINT)
-        ignore_picking()
-        Children [
-            (
-                #info
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0), top: px(0), right: px(0), bottom: px(0),
-                    overflow: {Overflow::scroll_y()},
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(8),
-                    padding: {UiRect { left: Val::Px(10.0), right: Val::Px(13.0), top: Val::Px(10.0), bottom: Val::Px(10.0) }},
-                }
-                ScrollArea
-                Pickable
-                Children [ {content}, {empty_msg} ]
-            ),
-            @FeathersScrollbar { @target: #info, @orientation: {ControlOrientation::Vertical} }
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(2),
-                top: px(4),
-                bottom: px(4),
-                width: px(5),
-            }
-        ]
-    }
-}
-
-fn info_content(view: InfoView) -> impl Scene {
-    let icon = view.icon.map(|path| EntityScene(info_icon(path)));
-    let refine = (view.refine > 0)
-        .then(|| EntityScene(meta_row("Refine".to_string(), format!("+{}", view.refine))));
-    let cards = (!view.cards.is_empty()).then(|| EntityScene(card_row(view.cards)));
-    let description: Vec<_> = view.description.into_iter().map(colored_line).collect();
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
-        ignore_picking()
-        Children [
-            {icon},
-            name_text(view.name),
-            chrome_text(view.type_label, 11.0, theme::TEXT_DIM),
-            meta_row("Quantity".to_string(), view.amount.to_string()),
-            {refine},
-            {cards},
-            {description},
-        ]
-    }
-}
-
-fn info_icon(path: String) -> impl Scene {
-    bsn! {
-        ImageNode { image: {path} }
-        Node { width: px(INFO_ICON_SIZE), height: px(INFO_ICON_SIZE) }
-        ignore_picking()
-    }
-}
-
-fn name_text(text: String) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
-            font_size: {FontSize::Px(13.0)},
-        }
-        TextColor(theme::TEXT)
-        ignore_picking()
-    }
-}
-
-/// A `label : value` row (info panel meta).
-fn meta_row(label: String, value: String) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-        ignore_picking()
-        Children [
-            chrome_text(label, 11.0, theme::TEXT_DIM),
-            chrome_text(value, 11.5, theme::TEXT),
-        ]
-    }
-}
-
-/// One "◆" pip per card slot, emerald when filled and faint when empty.
-fn card_row(cards: Vec<bool>) -> impl Scene {
-    let pips: Vec<_> = cards.into_iter().map(card_pip).collect();
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, column_gap: px(4) }
-        ignore_picking()
-        Children [ {pips} ]
-    }
-}
-
-fn card_pip(filled: bool) -> impl Scene {
-    let color = if filled {
-        theme::EMERALD
-    } else {
-        theme::TEXT_FAINT
-    };
-    bsn! {
-        Text({"\u{25C6}".to_string()})
-        TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
-            font_size: {FontSize::Px(11.0)},
-        }
-        TextColor(color)
-        ignore_picking()
-    }
-}
-
-/// A description line, split into `^RRGGBB`-colored runs: a `Text` root holding the
-/// first run plus a `TextSpan` child per following run.
-fn colored_line(text: String) -> impl Scene {
-    let mut runs = parse_color_codes(&text, theme::TEXT_DIM).into_iter();
-    let (first_color, first_text) = runs.next().unwrap_or((theme::TEXT_DIM, String::new()));
-    let spans: Vec<_> = runs.map(|(color, seg)| colored_span(color, seg)).collect();
-    bsn! {
-        Text(first_text)
-        TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
-            font_size: {FontSize::Px(11.0)},
-        }
-        TextColor(first_color)
-        ignore_picking()
-        Children [ {spans} ]
-    }
-}
-
-fn colored_span(color: Color, text: String) -> impl Scene {
-    bsn! {
-        TextSpan(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
-            font_size: {FontSize::Px(11.0)},
-        }
-        TextColor(color)
     }
 }
 
@@ -822,6 +614,29 @@ mod tests {
             bag_cell_count(&mut app),
             1,
             "switching to Equip shows its single item"
+        );
+    }
+
+    fn node_count(app: &mut App) -> usize {
+        let world = app.world_mut();
+        world.query::<&Node>().iter(world).count()
+    }
+
+    #[test]
+    fn selecting_an_item_spawns_no_inline_info_panel() {
+        let mut app = bag_app();
+        app.insert_resource(mixed_inventory());
+        app.world_mut().spawn(BagTabBody);
+        app.update();
+        let unselected = node_count(&mut app);
+
+        app.world_mut().resource_mut::<BagUi>().selected = Some(2);
+        app.update();
+        let selected = node_count(&mut app);
+
+        assert_eq!(
+            selected, unselected,
+            "the bag tab no longer renders a selection info panel"
         );
     }
 
