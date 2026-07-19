@@ -17,6 +17,7 @@ pub mod draggable;
 pub mod emote;
 pub mod guild_window;
 pub mod hotbar;
+pub mod info_modal;
 pub mod minimap;
 pub mod npc_dialog;
 pub mod party;
