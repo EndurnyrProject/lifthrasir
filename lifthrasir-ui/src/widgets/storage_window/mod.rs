@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use crate::theme;
 use crate::theme::feathers_theme::install_norse_theme;
+use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
 
 pub mod scene;
 
@@ -521,6 +522,9 @@ pub(crate) fn on_category_activate(
     ui.category = button.0;
 }
 
+/// Cell click: select the item; a double-click begins the transfer via
+/// [`begin_transfer`]. Secondary-click opens the info modal for a filled cell
+/// instead; empty cells are inert on either button.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn on_cell_select(
     click: On<Pointer<Click>>,
@@ -531,10 +535,23 @@ pub(crate) fn on_cell_select(
     mut ui: ResMut<StorageUi>,
     mut deposit: MessageWriter<DepositStorageItem>,
     mut withdraw: MessageWriter<WithdrawStorageItem>,
+    mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
         return;
     };
+    if click.button == PointerButton::Secondary {
+        let occupied = match cell.0 {
+            StorageSelection::Bag(index) => inventory.get(index).is_some(),
+            StorageSelection::Vault(index) => storage.get(index).is_some(),
+        };
+        if occupied {
+            info_writer.write(ShowInfoModal {
+                target: InfoTarget::Item(ItemRef::Storage(cell.0)),
+            });
+        }
+        return;
+    }
     ui.selection = Some(cell.0);
     if ui.awaiting_result {
         return;
@@ -839,7 +856,7 @@ mod tests {
         }
     }
 
-    fn click_event(target: Entity, window: Entity) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
@@ -854,7 +871,7 @@ mod tests {
                 position: Vec2::ZERO,
             },
             Click {
-                button: PointerButton::Primary,
+                button,
                 hit: HitData::new(target, 0.0, None, None),
                 duration: Duration::ZERO,
                 count: 1,
@@ -1332,6 +1349,7 @@ mod tests {
         let mut app = App::new();
         app.add_message::<DepositStorageItem>();
         app.add_message::<WithdrawStorageItem>();
+        app.add_message::<ShowInfoModal>();
         app.init_resource::<Time>();
         app.init_resource::<Inventory>();
         app.init_resource::<Storage>();
@@ -1349,7 +1367,8 @@ mod tests {
             .observe(on_cell_select)
             .id();
 
-        app.world_mut().trigger(click_event(cell, window));
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
         assert_eq!(
             app.world_mut()
                 .resource_mut::<Messages<DepositStorageItem>>()
@@ -1357,7 +1376,8 @@ mod tests {
                 .count(),
             0
         );
-        app.world_mut().trigger(click_event(cell, window));
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
 
         let deposits: Vec<_> = app
             .world_mut()
@@ -1372,11 +1392,133 @@ mod tests {
         assert_eq!(ui.last_click, None);
     }
 
+    fn secondary_click_app() -> App {
+        let mut app = App::new();
+        app.add_message::<DepositStorageItem>();
+        app.add_message::<WithdrawStorageItem>();
+        app.add_message::<ShowInfoModal>();
+        app.init_resource::<Time>();
+        app.init_resource::<Inventory>();
+        app.init_resource::<Storage>();
+        app.init_resource::<StorageUi>();
+        app
+    }
+
+    #[test]
+    fn secondary_click_on_a_filled_bag_cell_opens_the_info_modal_without_selecting() {
+        let mut app = secondary_click_app();
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 7,
+            amount: 1,
+            ..Default::default()
+        });
+        let window = app.world_mut().spawn(Window::default()).id();
+        let cell = app
+            .world_mut()
+            .spawn(StorageCell(StorageSelection::Bag(7)))
+            .observe(on_cell_select)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(
+            targets,
+            vec![InfoTarget::Item(ItemRef::Storage(StorageSelection::Bag(7)))]
+        );
+        assert_eq!(app.world().resource::<StorageUi>().selection, None);
+    }
+
+    #[test]
+    fn secondary_click_on_a_filled_vault_cell_opens_the_info_modal() {
+        let mut app = secondary_click_app();
+        app.world_mut()
+            .resource_mut::<Storage>()
+            .open(600, vec![storage_item(70_000, 501, 0, 4)]);
+        let window = app.world_mut().spawn(Window::default()).id();
+        let cell = app
+            .world_mut()
+            .spawn(StorageCell(StorageSelection::Vault(70_000)))
+            .observe(on_cell_select)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(
+            targets,
+            vec![InfoTarget::Item(ItemRef::Storage(StorageSelection::Vault(
+                70_000
+            )))]
+        );
+    }
+
+    #[test]
+    fn secondary_click_on_an_empty_cell_writes_nothing() {
+        let mut app = secondary_click_app();
+        let window = app.world_mut().spawn(Window::default()).id();
+        let cell = app
+            .world_mut()
+            .spawn(StorageCell(StorageSelection::Bag(7)))
+            .observe(on_cell_select)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
+        assert_eq!(app.world().resource::<StorageUi>().selection, None);
+    }
+
+    #[test]
+    fn primary_click_on_a_cell_still_selects_and_does_not_open_the_modal() {
+        let mut app = secondary_click_app();
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 7,
+            amount: 1,
+            ..Default::default()
+        });
+        let window = app.world_mut().spawn(Window::default()).id();
+        let cell = app
+            .world_mut()
+            .spawn(StorageCell(StorageSelection::Bag(7)))
+            .observe(on_cell_select)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
+
+        assert_eq!(
+            app.world().resource::<StorageUi>().selection,
+            Some(StorageSelection::Bag(7))
+        );
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
+    }
+
     #[test]
     fn awaiting_result_blocks_direction_quick_transfer_and_double_click() {
         let mut app = App::new();
         app.add_message::<DepositStorageItem>();
         app.add_message::<WithdrawStorageItem>();
+        app.add_message::<ShowInfoModal>();
         app.init_resource::<Time>();
         app.init_resource::<Inventory>();
         app.insert_resource(StorageUi {
@@ -1414,8 +1556,10 @@ mod tests {
 
         app.world_mut().trigger(Activate { entity: direction });
         app.world_mut().trigger(Activate { entity: quick });
-        app.world_mut().trigger(click_event(cell, window));
-        app.world_mut().trigger(click_event(cell, window));
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
 
         assert_eq!(
             app.world_mut()
@@ -1442,6 +1586,7 @@ mod tests {
         app.add_message::<DepositStorageItem>();
         app.add_message::<WithdrawStorageItem>();
         app.add_message::<StorageResult>();
+        app.add_message::<ShowInfoModal>();
         app.init_resource::<Time>();
         app.init_resource::<Inventory>();
         app.insert_resource(StorageUi {
@@ -1464,12 +1609,14 @@ mod tests {
             .observe(on_cell_select)
             .id();
 
-        app.world_mut().trigger(click_event(cell, window));
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
         assert_eq!(app.world().resource::<StorageUi>().last_click, None);
         app.world_mut()
             .write_message(StorageResult { outcome: Ok(()) });
         app.update();
-        app.world_mut().trigger(click_event(cell, window));
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
 
         assert_eq!(
             app.world_mut()

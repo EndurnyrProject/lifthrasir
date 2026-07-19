@@ -32,6 +32,7 @@ use net_contract::commands::{MountCart, MoveFromCart, MoveToCart};
 use net_contract::events::{CartMountRejection, CartMountResult};
 
 use crate::theme::feathers_theme::install_norse_theme;
+use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
 
 pub mod scene;
 
@@ -294,10 +295,34 @@ fn rebuild_body(
 
 /// Cell click: select the clicked `(side, index)` and reset the quantity stepper
 /// to one, mirroring how the shop window resets its pending quantity on select.
-fn on_cell_click(click: On<Pointer<Click>>, cells: Query<&CartCell>, mut ui: ResMut<CartUi>) {
+/// Secondary-click opens the info modal for a filled cell instead — `Bag`
+/// resolves to `ItemRef::Inventory`, `Cart` to `ItemRef::Cart`; empty cells are
+/// inert on either button.
+fn on_cell_click(
+    click: On<Pointer<Click>>,
+    cells: Query<&CartCell>,
+    mut ui: ResMut<CartUi>,
+    inventory: Res<Inventory>,
+    cart: Res<Cart>,
+    mut info_writer: MessageWriter<ShowInfoModal>,
+) {
     let Ok(cell) = cells.get(click.entity) else {
         return;
     };
+    if click.button == PointerButton::Secondary {
+        let item_ref = match cell.side {
+            Side::Bag => inventory
+                .get(cell.index)
+                .map(|_| ItemRef::Inventory(cell.index)),
+            Side::Cart => cart.get(cell.index).map(|_| ItemRef::Cart(cell.index)),
+        };
+        if let Some(item_ref) = item_ref {
+            info_writer.write(ShowInfoModal {
+                target: InfoTarget::Item(item_ref),
+            });
+        }
+        return;
+    }
     ui.selected = Some((cell.side, cell.index));
     ui.qty = 1;
 }
@@ -770,5 +795,144 @@ mod tests {
             Cart::default(),
         );
         assert!(emitted.is_empty());
+    }
+
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            Click {
+                button,
+                hit: HitData::new(target, 0.0, None, None),
+                duration: std::time::Duration::ZERO,
+                count: 1,
+            },
+            target,
+        )
+    }
+
+    fn cell_click_app() -> App {
+        let mut app = App::new();
+        app.add_message::<ShowInfoModal>();
+        app.init_resource::<CartUi>();
+        app.init_resource::<Inventory>();
+        app.init_resource::<Cart>();
+        app
+    }
+
+    #[test]
+    fn secondary_click_on_a_filled_bag_cell_opens_the_info_modal_without_selecting() {
+        let mut app = cell_click_app();
+        app.world_mut()
+            .resource_mut::<Inventory>()
+            .upsert(bag_item(7, 5));
+        let window = app.world_mut().spawn_empty().id();
+        let cell = app
+            .world_mut()
+            .spawn(CartCell {
+                side: Side::Bag,
+                index: 7,
+            })
+            .observe(on_cell_click)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Inventory(7))]);
+        assert_eq!(app.world().resource::<CartUi>().selected, None);
+    }
+
+    #[test]
+    fn secondary_click_on_a_filled_cart_cell_opens_the_info_modal() {
+        let mut app = cell_click_app();
+        app.world_mut().resource_mut::<Cart>().upsert(cart_item(2));
+        let window = app.world_mut().spawn_empty().id();
+        let cell = app
+            .world_mut()
+            .spawn(CartCell {
+                side: Side::Cart,
+                index: 2,
+            })
+            .observe(on_cell_click)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Cart(2))]);
+        assert_eq!(app.world().resource::<CartUi>().selected, None);
+    }
+
+    #[test]
+    fn secondary_click_on_an_empty_cell_writes_nothing() {
+        let mut app = cell_click_app();
+        let window = app.world_mut().spawn_empty().id();
+        let cell = app
+            .world_mut()
+            .spawn(CartCell {
+                side: Side::Cart,
+                index: 2,
+            })
+            .observe(on_cell_click)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
+        assert_eq!(app.world().resource::<CartUi>().selected, None);
+    }
+
+    #[test]
+    fn primary_click_on_a_cell_still_selects_and_does_not_open_the_modal() {
+        let mut app = cell_click_app();
+        app.world_mut().resource_mut::<Cart>().upsert(cart_item(2));
+        let window = app.world_mut().spawn_empty().id();
+        let cell = app
+            .world_mut()
+            .spawn(CartCell {
+                side: Side::Cart,
+                index: 2,
+            })
+            .observe(on_cell_click)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
+
+        assert_eq!(
+            app.world().resource::<CartUi>().selected,
+            Some((Side::Cart, 2))
+        );
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
     }
 }

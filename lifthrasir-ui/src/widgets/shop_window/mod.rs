@@ -22,6 +22,7 @@ use net_contract::dto::{BuyEntry, SellEntry, ShopBuyItem, ShopResult, ShopSellIt
 use net_contract::events::{ChatHeard, ShopBuyResulted, ShopOpened, ShopSellResulted};
 
 use crate::theme::feathers_theme::install_norse_theme;
+use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
 use crate::widgets::npc_dialog::{ActiveNpcDialog, NpcDialogRoot};
 
 pub mod scene;
@@ -458,14 +459,26 @@ fn clamp_pending(qty: u32, cap: u32) -> u32 {
 /// `awaiting`, and closes the overlay, leaving the cart intact until the
 /// result arrives; `CancelConfirm` just closes the overlay. While `awaiting`
 /// is set, [`blocked_while_awaiting`] actions are ignored outright.
+///
+/// `bevy_ui_widgets`' `Button` fires `Activate` on release of *any* pointer
+/// button (`button_on_pointer_click` has no button check), so a right-click
+/// on a row — meant only to open the info modal — reaches this handler too.
+/// The pointer's own release always lands in the same frame as the `Activate`
+/// it triggers, so gating on that frame's `ButtonInput<MouseButton>` is
+/// deterministic frame-scoped state, not a bet on observer-execution order
+/// between this handler and the row's separate secondary-click observer.
 pub(super) fn on_shop_button(
     activate: On<Activate>,
     actions: Query<&ShopButtonAction>,
     mut session: ResMut<ShopSession>,
     player: Query<&CharacterStatus, With<LocalPlayer>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     mut buy_writer: MessageWriter<BuyFromShop>,
     mut sell_writer: MessageWriter<SellToShop>,
 ) {
+    if mouse.just_released(MouseButton::Right) {
+        return;
+    }
     let Ok(action) = actions.get(activate.entity) else {
         return;
     };
@@ -544,6 +557,33 @@ pub(super) fn on_shop_button(
             session.confirm_open = false;
         }
     }
+}
+
+/// Secondary-click on a stock row opens the info modal for that item instead of
+/// selecting it: a Buy row resolves to `ItemRef::ShopBuy(nameid)`, a Sell row to
+/// `ItemRef::Inventory(inventory_index)` (the sell snapshot mirrors a live bag
+/// slot). Only fires for `Select` rows — the row builder is the only shop
+/// button carrying that action, but the guard keeps this safe if it's ever
+/// attached elsewhere; other shop buttons (tab switch, qty steppers, cart
+/// controls) stay untouched.
+pub(super) fn on_shop_row_secondary_click(
+    click: On<Pointer<Click>>,
+    actions: Query<&ShopButtonAction>,
+    mut info_writer: MessageWriter<ShowInfoModal>,
+) {
+    if click.button != PointerButton::Secondary {
+        return;
+    }
+    let Ok(ShopButtonAction::Select(selection)) = actions.get(click.entity) else {
+        return;
+    };
+    let item_ref = match *selection {
+        Selection::Buy(nameid) => ItemRef::ShopBuy(nameid),
+        Selection::Sell(index) => ItemRef::Inventory(index as u16),
+    };
+    info_writer.write(ShowInfoModal {
+        target: InfoTarget::Item(item_ref),
+    });
 }
 
 /// Resolves a display name for `nameid` via `ItemDb`, always as identified — the
@@ -1027,5 +1067,254 @@ mod tests {
         // No `ShopSession` inserted: two updates in `InGame` must not panic.
         app.update();
         app.update();
+    }
+
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            Click {
+                button,
+                hit: HitData::new(target, 0.0, None, None),
+                duration: std::time::Duration::ZERO,
+                count: 1,
+            },
+            target,
+        )
+    }
+
+    fn row_click_app() -> App {
+        let mut app = App::new();
+        app.add_message::<ShowInfoModal>();
+        app
+    }
+
+    #[test]
+    fn secondary_click_on_a_buy_row_opens_the_info_modal_for_shop_buy() {
+        let mut app = row_click_app();
+        let window = app.world_mut().spawn_empty().id();
+        let row = app
+            .world_mut()
+            .spawn(ShopButtonAction::Select(Selection::Buy(501)))
+            .observe(on_shop_row_secondary_click)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(row, window, PointerButton::Secondary));
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::ShopBuy(501))]);
+    }
+
+    #[test]
+    fn secondary_click_on_a_sell_row_opens_the_info_modal_for_inventory() {
+        let mut app = row_click_app();
+        let window = app.world_mut().spawn_empty().id();
+        let row = app
+            .world_mut()
+            .spawn(ShopButtonAction::Select(Selection::Sell(3)))
+            .observe(on_shop_row_secondary_click)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(row, window, PointerButton::Secondary));
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Inventory(3))]);
+    }
+
+    #[test]
+    fn secondary_click_on_a_non_select_button_writes_nothing() {
+        let mut app = row_click_app();
+        let window = app.world_mut().spawn_empty().id();
+        let button = app
+            .world_mut()
+            .spawn(ShopButtonAction::SwitchTab(ShopTab::Sell))
+            .observe(on_shop_row_secondary_click)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(button, window, PointerButton::Secondary));
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn primary_click_on_a_row_does_not_open_the_info_modal() {
+        let mut app = row_click_app();
+        let window = app.world_mut().spawn_empty().id();
+        let row = app
+            .world_mut()
+            .spawn(ShopButtonAction::Select(Selection::Buy(501)))
+            .observe(on_shop_row_secondary_click)
+            .id();
+
+        app.world_mut()
+            .trigger(click_event(row, window, PointerButton::Primary));
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
+    }
+
+    fn press_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Press> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            Press {
+                button,
+                hit: HitData::new(target, 0.0, None, None),
+                count: 1,
+            },
+            target,
+        )
+    }
+
+    /// Drives a real press-then-click through `bevy_ui_widgets`' actual `ButtonPlugin`
+    /// observers (not a hand-rolled `Activate` trigger), and updates
+    /// `ButtonInput<MouseButton>` the way that plugin's own frame would: the mouse
+    /// button that drove the click is pressed then released before the click fires,
+    /// mirroring `on_shop_button`'s guard precondition.
+    fn real_click(
+        app: &mut App,
+        row: Entity,
+        window: Entity,
+        pointer: PointerButton,
+        mouse: MouseButton,
+    ) {
+        app.world_mut().trigger(press_event(row, window, pointer));
+        app.world_mut().flush();
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(mouse);
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .release(mouse);
+        app.world_mut().trigger(click_event(row, window, pointer));
+        app.world_mut().flush();
+    }
+
+    fn real_button_pipeline_app(session: ShopSession) -> App {
+        use bevy::ui_widgets::ButtonPlugin;
+
+        let mut app = App::new();
+        app.add_plugins(ButtonPlugin);
+        app.add_message::<ShowInfoModal>();
+        app.add_message::<BuyFromShop>();
+        app.add_message::<SellToShop>();
+        app.init_resource::<ButtonInput<MouseButton>>();
+        app.insert_resource(session);
+        app
+    }
+
+    #[test]
+    fn real_secondary_click_pipeline_opens_the_modal_without_touching_the_session() {
+        use bevy::ui_widgets::Button;
+
+        let mut s = session(ShopTab::Sell);
+        s.selected = Some(Selection::Sell(1));
+        s.pending_qty = 7;
+        let mut app = real_button_pipeline_app(s);
+        let window = app.world_mut().spawn_empty().id();
+        let row = app
+            .world_mut()
+            .spawn((Button, ShopButtonAction::Select(Selection::Sell(0))))
+            .observe(on_shop_button)
+            .observe(on_shop_row_secondary_click)
+            .id();
+
+        real_click(
+            &mut app,
+            row,
+            window,
+            PointerButton::Secondary,
+            MouseButton::Right,
+        );
+
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
+        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Inventory(0))]);
+
+        let session = app.world().resource::<ShopSession>();
+        assert_eq!(session.selected, Some(Selection::Sell(1)));
+        assert_eq!(session.pending_qty, 7);
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<SellToShop>>()
+                .drain()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn real_primary_click_pipeline_still_selects_and_does_not_open_the_modal() {
+        use bevy::ui_widgets::Button;
+
+        let mut s = session(ShopTab::Sell);
+        s.selected = Some(Selection::Sell(1));
+        s.pending_qty = 7;
+        let mut app = real_button_pipeline_app(s);
+        let window = app.world_mut().spawn_empty().id();
+        let row = app
+            .world_mut()
+            .spawn((Button, ShopButtonAction::Select(Selection::Sell(0))))
+            .observe(on_shop_button)
+            .observe(on_shop_row_secondary_click)
+            .id();
+
+        real_click(
+            &mut app,
+            row,
+            window,
+            PointerButton::Primary,
+            MouseButton::Left,
+        );
+
+        let session = app.world().resource::<ShopSession>();
+        assert_eq!(session.selected, Some(Selection::Sell(0)));
+        assert_eq!(session.pending_qty, 1);
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<ShowInfoModal>>()
+                .drain()
+                .count(),
+            0
+        );
     }
 }

@@ -21,8 +21,8 @@ use crate::theme::feathers_theme::{
 use crate::widgets::chrome::{body_container, drag_window, glyph_icon, ignore_picking};
 
 use super::{
-    on_shop_button, on_shop_close_button, Selection, ShopButtonAction, ShopSession, ShopTab,
-    ShopWindowBody, ShopWindowRoot, ShopWindowTitlebar,
+    on_shop_button, on_shop_close_button, on_shop_row_secondary_click, Selection, ShopButtonAction,
+    ShopSession, ShopTab, ShopWindowBody, ShopWindowRoot, ShopWindowTitlebar,
 };
 
 const WINDOW_LEFT: f32 = 340.0;
@@ -632,6 +632,7 @@ fn stock_row(view: RowView) -> impl Scene {
         BackgroundColor(bg)
         BorderColor::all(border)
         on(on_shop_button)
+        on(on_shop_row_secondary_click)
     }
 }
 
