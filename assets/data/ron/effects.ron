@@ -176,6 +176,17 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
+        26: ( // AL_TELEPORT -- authored effect (teleport.strfx.ron): blue swirl
+              // collapsing into the caster at the departure cell. The aesir
+              // server broadcasts this SkillEffect at the pre-warp position
+              // (fix landed in Task 2), so it plays where the caster stood, not
+              // where they arrive.
+            str: Some("teleport.strfx.ron"),
+            sound: Some("effect/ef_teleportation.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         28: ( // AL_HEAL -- authored effect (heal.strfx.ron), replaces the dead
               // GRF heal.str; establishes the local-texture path convention.
             str: Some("heal.strfx.ron"),

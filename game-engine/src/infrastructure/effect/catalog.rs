@@ -187,6 +187,14 @@ mod tests {
             Some("effect/wizard_stormgust.wav")
         );
 
+        // id 26 is AL_TELEPORT: authored effect, caster-anchored, non-repeating.
+        assert_eq!(
+            asset.0.skills[&26].str.as_deref(),
+            Some("teleport.strfx.ron")
+        );
+        assert_eq!(asset.0.skills[&26].placement, EffectPlacement::Caster);
+        assert!(!asset.0.skills[&26].repeating);
+
         // id 68 is PR_ASPERSIO: official STR, target-anchored, non-repeating.
         assert_eq!(asset.0.skills[&68].str.as_deref(), Some("aspersio.str"));
         assert_eq!(asset.0.skills[&68].placement, EffectPlacement::Target);

@@ -1,0 +1,97 @@
+// Teleport (AL_TELEPORT) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// mirrors heal.strfx.ron / blessing.strfx.ron):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
+//     STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits on the effect anchor (the departing
+//     caster's pre-warp cell).
+//   - y grows DOWNWARD (STR is Y-down); the runtime flips Y at mesh write, so a
+//     SMALLER offset.y renders HIGHER above the anchor. The column and streaks
+//     rise by animating offset.y downward toward smaller values (upward on
+//     screen).
+//   - angle is in RAW STR units (1024 = 360 degrees), NOT degrees, and LERPS
+//     linearly between keys. The two streak layers each span exactly 1024 raw
+//     units across their keys (one full turn) so the swirl reads as a
+//     continuous spin rather than a snap-back.
+//   - fps 30; keys interpolate LINEARLY (offset, quad, color, angle); RON
+//     implicit_some is on, so optional fields (quad) are written bare.
+//   - blend Add = additive (glow/column/streaks all read as light, no painted
+//     shading to preserve here).
+//
+// Textures: GRF-only, no local PNGs.
+//   - `ro://data/texture/effect/lens_b.bmp` -- soft radial glow burst, reused
+//     here (as in heal.strfx.ron / inc_agi.strfx.ron) for the flare-and-collapse
+//     disc at the caster's feet.
+//   - `ro://data/texture/effect/new_judex/new_judex_light/arch_light_pillar.bmp`
+//     -- a tall soft light column (native gold), tinted blue here. Chosen over
+//     `light_b.bmp` (a lightning-bolt silhouette, wrong shape for a column) as
+//     the vertical light pillar.
+//   - `ro://data/texture/effect/icearrow.tga` -- reused per project convention
+//     (see inc_agi.strfx.ron) as a generic pointed streak silhouette for the
+//     two swirling layers, tinted blue-white.
+//
+// Shape: a blue glow flares out at the caster's feet and collapses inward,
+// two streaks spiral upward around the body with a full 360-degree turn each,
+// and a light column rises through the center, narrowing and fading as it
+// goes -- reading as the caster being drawn upward and away. ~0.73s (22 frames
+// @ 30fps).
+(
+    fps: 30,
+    layers: [
+        // Ground glow: lens_b flares out around the feet, then collapses back
+        // inward as the caster departs.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (20.0, 10.0),  color: (130, 190, 255, 0) ),
+                ( at: 3,  offset: (319.0, 291.0), quad: (150.0, 55.0), color: (160, 210, 255, 220) ),
+                ( at: 8,  offset: (319.0, 291.0), quad: (190.0, 65.0), color: (150, 205, 255, 160) ),
+                ( at: 14, offset: (319.0, 291.0), quad: (120.0, 45.0), color: (140, 195, 255, 80) ),
+                ( at: 20, offset: (319.0, 291.0), quad: (40.0, 15.0),  color: (130, 190, 255, 0) ),
+            ],
+        ),
+        // Swirl streak A: icearrow silhouette spinning one full turn (0 -> 1024
+        // raw) while it rises and narrows toward a point, straight through center.
+        (
+            textures: ["ro://data/texture/effect/icearrow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (70.0, 10.0),  color: (150, 200, 255, 0),   angle: 0.0 ),
+                ( at: 4,  offset: (316.0, 270.0), quad: (60.0, 90.0),  color: (180, 220, 255, 220), angle: 256.0 ),
+                ( at: 9,  offset: (313.0, 240.0), quad: (45.0, 110.0), color: (200, 235, 255, 255), angle: 512.0 ),
+                ( at: 14, offset: (310.0, 205.0), quad: (30.0, 120.0), color: (210, 240, 255, 200), angle: 768.0 ),
+                ( at: 19, offset: (308.0, 170.0), quad: (15.0, 130.0), color: (200, 235, 255, 0),   angle: 1024.0 ),
+            ],
+        ),
+        // Swirl streak B: same texture, phase-shifted by half a turn and
+        // staggered start, drifting the opposite way -- reads as two streaks
+        // circling the departing caster.
+        (
+            textures: ["ro://data/texture/effect/icearrow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 3,  offset: (322.0, 288.0), quad: (65.0, 15.0),  color: (150, 200, 255, 0),   angle: 512.0 ),
+                ( at: 7,  offset: (325.0, 265.0), quad: (55.0, 85.0),  color: (180, 220, 255, 210), angle: 768.0 ),
+                ( at: 12, offset: (328.0, 232.0), quad: (40.0, 105.0), color: (200, 235, 255, 245), angle: 1024.0 ),
+                ( at: 17, offset: (330.0, 198.0), quad: (25.0, 115.0), color: (205, 235, 255, 190), angle: 1280.0 ),
+                ( at: 22, offset: (332.0, 165.0), quad: (12.0, 125.0), color: (195, 230, 255, 0),   angle: 1536.0 ),
+            ],
+        ),
+        // Rising column: arch_light_pillar tinted blue, growing tall and narrow
+        // as it climbs and fades -- the departure beam.
+        (
+            textures: ["ro://data/texture/effect/new_judex/new_judex_light/arch_light_pillar.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (90.0, 10.0),  color: (140, 190, 255, 0) ),
+                ( at: 3,  offset: (319.0, 270.0), quad: (70.0, 140.0), color: (170, 215, 255, 230) ),
+                ( at: 8,  offset: (319.0, 240.0), quad: (50.0, 180.0), color: (160, 210, 255, 200) ),
+                ( at: 14, offset: (319.0, 205.0), quad: (30.0, 200.0), color: (150, 200, 255, 120) ),
+                ( at: 20, offset: (319.0, 170.0), quad: (10.0, 220.0), color: (140, 195, 255, 0) ),
+            ],
+        ),
+    ],
+)
