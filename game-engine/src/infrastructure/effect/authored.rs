@@ -607,6 +607,39 @@ mod tests {
         assert!(!asset.layers.is_empty());
     }
 
+    /// Walks every checked-in `*.strfx.ron` asset and runs it through the same
+    /// parse -> convert pipeline the per-file tests use, so newly authored
+    /// effects are covered without a dedicated test. Fails with the offending
+    /// filename on any parse or validation error.
+    #[test]
+    fn all_authored_effects_parse_and_convert() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/data/effects");
+        let mut found = 0;
+
+        for entry in std::fs::read_dir(&dir).expect("read effects dir") {
+            let path = entry.expect("dir entry").path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if !name.ends_with(".strfx.ron") {
+                continue;
+            }
+            found += 1;
+
+            let ron = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("{name}: failed to read file: {e}"));
+            let effect: AuthoredEffect = ron_options()
+                .from_str(&ron)
+                .unwrap_or_else(|e| panic!("{name}: failed to parse: {e}"));
+            convert(&effect).unwrap_or_else(|e| panic!("{name}: failed to convert: {e}"));
+        }
+
+        assert!(
+            found >= 5,
+            "expected at least 5 checked-in strfx.ron assets, found {found}"
+        );
+    }
+
     #[test]
     fn round_trip_lerps_at_midpoint() {
         // Two keys: offset (0,-320)->(0,0), alpha 0->255. At key 6 (midpoint of
