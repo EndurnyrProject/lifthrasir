@@ -19,12 +19,6 @@ use bevy_auto_plugin::prelude::*;
 use moonshine_behavior::prelude::*;
 use net_contract::events::{DamageReceived, UnitLeft};
 
-// =============================================================================
-// PHASE 0.2: UPDATED TO USE FLAT ENTITY STRUCTURE
-// =============================================================================
-// Removed SpriteObjectTree dependency - queries entity Transform directly.
-// =============================================================================
-
 #[auto_add_system(
     plugin = crate::app::combat_plugin::CombatDomainPlugin,
     schedule = Update,
@@ -38,9 +32,7 @@ pub fn process_combat_actions(
     registry: Res<EntityRegistry>,
     transforms: Query<&Transform>,
 ) {
-    let events: Vec<_> = combat_events.read().collect();
-
-    for event in events.iter() {
+    for event in combat_events.read() {
         let action_type = CombatActionType::from(event.type_ as u8);
         let src_speed = event.src_speed as i32;
         let dmg_speed = event.dmg_speed as i32;
@@ -151,7 +143,7 @@ pub(crate) fn start_attack_animation(
 
     commands
         .entity(src)
-        .insert(AttackTimer::new(attack_duration_ms as f32 / 1000.0, 0));
+        .insert(AttackTimer::new(attack_duration_ms as f32 / 1000.0));
 
     if let Ok(mut behavior) = behaviors.get_mut(src) {
         behavior.start(AnimationState::Attacking);
@@ -448,7 +440,7 @@ mod tests {
             .spawn((
                 LocalPlayer,
                 AnimationState::Attacking,
-                AttackTimer::new(0.0, 0),
+                AttackTimer::new(0.0),
             ))
             .id();
 
@@ -466,7 +458,7 @@ mod tests {
             .spawn((
                 LocalPlayer,
                 AnimationState::Attacking,
-                AttackTimer::new(0.0, 0),
+                AttackTimer::new(0.0),
             ))
             .id();
 
@@ -481,7 +473,7 @@ mod tests {
         app.world_mut().resource_mut::<LockedTarget>().gid = Some(1);
         let mob = app
             .world_mut()
-            .spawn((AnimationState::Attacking, AttackTimer::new(0.0, 0)))
+            .spawn((AnimationState::Attacking, AttackTimer::new(0.0)))
             .id();
 
         app.update();

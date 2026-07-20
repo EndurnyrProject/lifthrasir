@@ -1,7 +1,6 @@
 use crate::{
     core::state::GameState,
     domain::{
-        combat::components::Combatant,
         entities::{
             character::{
                 components::{
@@ -286,11 +285,7 @@ pub fn spawn_network_entity_system(
             }
         }
 
-        entity_cmd.insert((
-            AnimationState::Idle,
-            StatusEffects::default(),
-            Combatant::new(150),
-        ));
+        entity_cmd.insert((AnimationState::Idle, StatusEffects::default()));
 
         // Remote entities are placed standing; their position is driven by snapshot
         // interpolation via `interpolate_remote_entities_system`.

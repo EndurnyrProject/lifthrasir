@@ -7,7 +7,6 @@ pub mod visual;
 
 use bevy_auto_plugin::prelude::AutoPlugin;
 
-use crate::domain::combat::components::Combatant;
 use crate::domain::entities::character::states::{AnimationState, StatusEffects};
 use crate::domain::entities::movement;
 
@@ -49,8 +48,6 @@ pub fn add_gameplay_components_to_entity(commands: &mut bevy::ecs::system::Entit
         // Animation state (moonshine-behavior)
         AnimationState::Idle,
         StatusEffects::default(),
-        // Combat component (required for attack animations)
-        Combatant::new(150),
         // Terrain following
         components::core::Grounded,
     ));
