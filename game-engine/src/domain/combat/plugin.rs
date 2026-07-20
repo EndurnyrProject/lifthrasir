@@ -17,9 +17,10 @@ use bevy::prelude::*;
 /// 3. `start_untimed_hit_stun` - Adds fallback timing to otherwise untimed hit states
 /// 4. `update_attack_timers` - Updates attack animation timers
 /// 5. `update_hit_stun` - Updates hit stun timers
-/// 6. `handle_death` - Plays death animation when an entity dies
-/// 7. `detect_local_death` - Marks the local player dead when its applied HP reaches 0
-/// 8. `recover_local_from_hp` - Clears the local player's death once its HP rises above 0
+/// 6. `handle_death` - Binds a death to its in-flight killing blow, or holds it briefly
+/// 7. `update_death_grace` - Plays held deaths whose killing blow never arrived
+/// 8. `detect_local_death` - Marks the local player dead when its applied HP reaches 0
+/// 9. `recover_local_from_hp` - Clears the local player's death once its HP rises above 0
 ///
 /// Floating damage numbers are rendered by the UI layer (`DamageNumberPlugin`),
 /// which consumes the `DisplayDamageNumber` messages these systems emit.

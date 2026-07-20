@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use super::{
-    components::{AttackTimer, DeadEntity, HasEndure, HitStun, PendingHitReaction},
+    components::{AttackTimer, DeadEntity, DeathGrace, HasEndure, HitStun, PendingHitReaction},
     events::{CombatActionType, DamageDisplayType, DisplayDamageNumber},
 };
 use crate::domain::{
@@ -31,6 +31,7 @@ pub fn process_combat_actions(
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     registry: Res<EntityRegistry>,
     transforms: Query<&Transform>,
+    dying: Query<(), With<DeathGrace>>,
 ) {
     for event in combat_events.read() {
         let action_type = CombatActionType::from(event.type_ as u8);
@@ -40,6 +41,7 @@ pub fn process_combat_actions(
                 &mut behaviors,
                 &registry,
                 &transforms,
+                &dying,
                 event,
                 action,
             ),
@@ -59,6 +61,7 @@ fn process_damage_action(
     behaviors: &mut Query<BehaviorMut<AnimationState>>,
     registry: &EntityRegistry,
     transforms: &Query<&Transform>,
+    dying: &Query<(), With<DeathGrace>>,
     event: &DamageReceived,
     action_type: CombatActionType,
 ) {
@@ -88,12 +91,21 @@ fn process_damage_action(
     // is the target's damage motion (dmotion) and sets the flinch length.
     let dmg_speed = event.dmg_speed as i32;
     let delay_ms = src_speed.clamp(0, 450) as u64;
+
+    // The despawn beat this blow across channels: bind the held death to it so
+    // the corpse drops when this swing connects.
+    let kills_target = dying.get(target).is_ok();
+    if kills_target {
+        commands.entity(target).remove::<DeathGrace>();
+    }
+
     commands.spawn(PendingHitReaction {
         target,
         damage: event.damage,
         is_critical: action_type.is_critical(),
         flinches: action_type.target_flinches() && dmg_speed > 0,
         stun_secs: dmg_speed.max(0) as f32 / 1000.0,
+        kills_target,
         timer: Timer::new(Duration::from_millis(delay_ms), TimerMode::Once),
     });
 }
@@ -224,6 +236,11 @@ pub fn apply_pending_hit_reactions(
             damage_type,
             delay_secs: 0.0,
         });
+
+        if reaction.kills_target {
+            play_death(&mut commands, &mut behaviors, reaction.target);
+            continue;
+        }
 
         if is_dead || has_endure || reaction.damage <= 0 || !reaction.flinches {
             continue;
@@ -364,7 +381,7 @@ pub fn handle_death(
     mut commands: Commands,
     mut vanish_events: MessageReader<UnitLeft>,
     registry: Res<EntityRegistry>,
-    mut behaviors: Query<BehaviorMut<AnimationState>>,
+    mut pending_reactions: Query<&mut PendingHitReaction>,
     mut locked_target: ResMut<LockedTarget>,
 ) {
     for event in vanish_events.read() {
@@ -380,11 +397,56 @@ pub fn handle_death(
             continue;
         };
 
-        commands.entity(entity).insert(DeadEntity);
+        // The killing blow's swing is usually still mid-air (amotion delay):
+        // hand death to the latest scheduled reaction so the mob only drops
+        // once that hit visibly connects.
+        if let Some(mut reaction) = pending_reactions
+            .iter_mut()
+            .filter(|reaction| reaction.target == entity)
+            .max_by_key(|reaction| reaction.timer.remaining())
+        {
+            reaction.kills_target = true;
+            continue;
+        }
 
-        if let Ok(mut behavior) = behaviors.get_mut(entity) {
-            behavior.reset();
-            behavior.start(AnimationState::Dead);
+        // No blow in sight: the killing damage may still be in flight on the
+        // gameplay channel. Hold the corpse briefly so it can bind on arrival.
+        commands.entity(entity).insert(DeathGrace::new(0.3));
+    }
+}
+
+fn play_death(
+    commands: &mut Commands,
+    behaviors: &mut Query<BehaviorMut<AnimationState>>,
+    entity: Entity,
+) {
+    commands.entity(entity).insert(DeadEntity);
+
+    if let Ok(mut behavior) = behaviors.get_mut(entity) {
+        behavior.reset();
+        behavior.start(AnimationState::Dead);
+    }
+}
+
+/// Expire held deaths whose killing blow never arrived (skill kills and
+/// off-screen damage report no melee swing): play the death animation now.
+#[auto_add_system(
+    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::UpdateTimers)
+)]
+pub fn update_death_grace(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut graces: Query<(Entity, &mut DeathGrace)>,
+    mut behaviors: Query<BehaviorMut<AnimationState>>,
+) {
+    for (entity, mut grace) in graces.iter_mut() {
+        grace.timer.tick(time.delta());
+
+        if grace.timer.just_finished() {
+            commands.entity(entity).remove::<DeathGrace>();
+            play_death(&mut commands, &mut behaviors, entity);
         }
     }
 }
@@ -516,6 +578,7 @@ mod tests {
                 is_critical: false,
                 flinches: true,
                 stun_secs: 0.75,
+                kills_target: false,
                 timer: Timer::from_seconds(0.1, TimerMode::Once),
             })
             .id()
@@ -630,6 +693,129 @@ mod tests {
             .add_message::<UnitLeft>()
             .add_systems(Update, handle_death);
         app
+    }
+
+    #[test]
+    fn death_defers_to_the_pending_killing_blow() {
+        let mut app = App::new();
+        app.add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .init_resource::<Time>()
+            .init_resource::<EntityRegistry>()
+            .init_resource::<LockedTarget>()
+            .add_message::<UnitLeft>()
+            .add_message::<DisplayDamageNumber>()
+            .add_systems(
+                Update,
+                (
+                    apply_pending_hit_reactions,
+                    handle_death,
+                    transition::<AnimationState>,
+                )
+                    .chain(),
+            );
+
+        let mob = spawn_registered(&mut app, 7, Transform::default());
+        spawn_pending_reaction(&mut app, mob);
+        app.world_mut()
+            .write_message(UnitLeft { gid: 7, reason: 1 });
+
+        app.update();
+
+        assert_eq!(state(&app, mob), AnimationState::Idle);
+        assert!(app.world().get::<DeadEntity>(mob).is_none());
+
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs(1));
+        app.update();
+
+        assert_eq!(state(&app, mob), AnimationState::Dead);
+        assert!(app.world().get::<DeadEntity>(mob).is_some());
+    }
+
+    #[test]
+    fn death_without_pending_hit_expires_grace_into_death() {
+        let mut app = App::new();
+        app.add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .init_resource::<Time>()
+            .init_resource::<EntityRegistry>()
+            .init_resource::<LockedTarget>()
+            .add_message::<UnitLeft>()
+            .add_systems(
+                Update,
+                (
+                    handle_death,
+                    update_death_grace,
+                    transition::<AnimationState>,
+                )
+                    .chain(),
+            );
+
+        let mob = spawn_registered(&mut app, 7, Transform::default());
+        app.world_mut()
+            .write_message(UnitLeft { gid: 7, reason: 1 });
+
+        app.update();
+
+        assert_eq!(state(&app, mob), AnimationState::Idle);
+        assert!(app.world().get::<DeathGrace>(mob).is_some());
+
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs(1));
+        app.update();
+
+        assert_eq!(state(&app, mob), AnimationState::Dead);
+        assert!(app.world().get::<DeadEntity>(mob).is_some());
+        assert!(app.world().get::<DeathGrace>(mob).is_none());
+    }
+
+    #[test]
+    fn late_killing_blow_binds_to_held_death() {
+        let mut app = App::new();
+        app.add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .init_resource::<Time>()
+            .init_resource::<EntityRegistry>()
+            .init_resource::<LockedTarget>()
+            .add_message::<UnitLeft>()
+            .add_message::<DamageReceived>()
+            .add_message::<DisplayDamageNumber>()
+            .add_systems(
+                Update,
+                (
+                    process_combat_actions,
+                    apply_pending_hit_reactions,
+                    update_death_grace,
+                    handle_death,
+                    transition::<AnimationState>,
+                )
+                    .chain(),
+            );
+
+        let attacker = spawn_registered(&mut app, 1, Transform::default());
+        let mob = spawn_registered(&mut app, 2, Transform::from_xyz(1.0, 0.0, 0.0));
+
+        // The despawn wins the cross-channel race: death arrives first.
+        app.world_mut()
+            .write_message(UnitLeft { gid: 2, reason: 1 });
+        app.update();
+        assert!(app.world().get::<DeathGrace>(mob).is_some());
+
+        // The killing blow lands next frame and binds to the held death.
+        app.world_mut().write_message(combat_action(0));
+        app.update();
+        assert!(app.world().get::<DeathGrace>(mob).is_none());
+        assert_eq!(state(&app, attacker), AnimationState::Attacking);
+        assert_eq!(state(&app, mob), AnimationState::Idle);
+
+        // The mob only drops once the swing connects.
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_millis(250));
+        app.update();
+
+        assert_eq!(state(&app, mob), AnimationState::Dead);
+        assert!(app.world().get::<DeadEntity>(mob).is_some());
     }
 
     #[test]
