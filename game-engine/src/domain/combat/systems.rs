@@ -34,78 +34,111 @@ pub fn process_combat_actions(
 ) {
     for event in combat_events.read() {
         let action_type = CombatActionType::from(event.type_ as u8);
-        let src_speed = event.src_speed as i32;
-        let dmg_speed = event.dmg_speed as i32;
-
-        // aesir identifies every in-game unit by char_id (the gid field), so
-        // combat src/target ids resolve against the registry's char_id key.
-        let src_entity = registry.get_entity(event.src_id);
-        let target_entity = registry.get_entity(event.target_id);
-
-        if action_type.is_damage() {
-            if let Some(src) = src_entity {
-                start_attack_animation(
-                    &mut commands,
-                    &mut behaviors,
-                    &transforms,
-                    src,
-                    target_entity,
-                    src_speed,
-                );
-            } else {
-                warn!("No entity found for src_id: {}", event.src_id);
+        match action_type {
+            action if action.is_damage() => process_damage_action(
+                &mut commands,
+                &mut behaviors,
+                &registry,
+                &transforms,
+                event,
+                action,
+            ),
+            CombatActionType::LuckyDodge => {
+                display_lucky_dodge(&mut damage_display, &registry, event)
             }
-
-            if let Some(target) = target_entity {
-                // The reaction fires when the swing connects: src_speed is the
-                // attacker's attack motion (amotion), capped like the original
-                // client so slow weapons don't feel unresponsive. dmg_speed is
-                // the target's damage motion (dmotion) and sets the flinch length.
-                let delay_ms = src_speed.clamp(0, 450) as u64;
-
-                commands.spawn(PendingHitReaction {
-                    target,
-                    damage: event.damage,
-                    is_critical: action_type.is_critical(),
-                    flinches: action_type.target_flinches() && dmg_speed > 0,
-                    stun_secs: dmg_speed.max(0) as f32 / 1000.0,
-                    timer: Timer::new(Duration::from_millis(delay_ms), TimerMode::Once),
-                });
-            } else {
-                warn!("No entity found for target_id: {}", event.target_id);
+            CombatActionType::SitDown | CombatActionType::StandUp => {
+                process_posture_action(&mut behaviors, &registry, event, action_type)
             }
-        } else if action_type == CombatActionType::LuckyDodge {
-            if let Some(target) = target_entity {
-                damage_display.write(DisplayDamageNumber {
-                    entity: target,
-                    amount: 0,
-                    damage_type: DamageDisplayType::Miss,
-                    delay_secs: 0.0,
-                });
-            }
-        } else if matches!(
-            action_type,
-            CombatActionType::SitDown | CombatActionType::StandUp
-        ) {
-            // The server broadcasts sit/stand (incl. back to the actor itself),
-            // so this drives both the local player and remote players.
-            let Some(src) = src_entity else {
-                warn!("No entity found for src_id: {}", event.src_id);
-                continue;
-            };
-
-            let next = if action_type == CombatActionType::SitDown {
-                AnimationState::Sitting
-            } else {
-                AnimationState::Idle
-            };
-
-            if let Ok(mut behavior) = behaviors.get_mut(src) {
-                if *behavior.current() != next {
-                    behavior.start(next);
-                }
-            }
+            _ => {}
         }
+    }
+}
+
+fn process_damage_action(
+    commands: &mut Commands,
+    behaviors: &mut Query<BehaviorMut<AnimationState>>,
+    registry: &EntityRegistry,
+    transforms: &Query<&Transform>,
+    event: &DamageReceived,
+    action_type: CombatActionType,
+) {
+    let src_speed = event.src_speed as i32;
+    let target_entity = registry.get_entity(event.target_id);
+
+    if let Some(src) = registry.get_entity(event.src_id) {
+        start_attack_animation(
+            commands,
+            behaviors,
+            transforms,
+            src,
+            target_entity,
+            src_speed,
+        );
+    } else {
+        warn!("No entity found for src_id: {}", event.src_id);
+    }
+
+    let Some(target) = target_entity else {
+        warn!("No entity found for target_id: {}", event.target_id);
+        return;
+    };
+
+    // The reaction fires when the swing connects: src_speed is the attacker's
+    // attack motion (amotion), capped so slow weapons stay responsive. dmg_speed
+    // is the target's damage motion (dmotion) and sets the flinch length.
+    let dmg_speed = event.dmg_speed as i32;
+    let delay_ms = src_speed.clamp(0, 450) as u64;
+    commands.spawn(PendingHitReaction {
+        target,
+        damage: event.damage,
+        is_critical: action_type.is_critical(),
+        flinches: action_type.target_flinches() && dmg_speed > 0,
+        stun_secs: dmg_speed.max(0) as f32 / 1000.0,
+        timer: Timer::new(Duration::from_millis(delay_ms), TimerMode::Once),
+    });
+}
+
+fn display_lucky_dodge(
+    damage_display: &mut MessageWriter<DisplayDamageNumber>,
+    registry: &EntityRegistry,
+    event: &DamageReceived,
+) {
+    let Some(target) = registry.get_entity(event.target_id) else {
+        return;
+    };
+
+    damage_display.write(DisplayDamageNumber {
+        entity: target,
+        amount: 0,
+        damage_type: DamageDisplayType::Miss,
+        delay_secs: 0.0,
+    });
+}
+
+fn process_posture_action(
+    behaviors: &mut Query<BehaviorMut<AnimationState>>,
+    registry: &EntityRegistry,
+    event: &DamageReceived,
+    action_type: CombatActionType,
+) {
+    // The server broadcasts sit/stand back to the actor, so this drives both
+    // the local player and remote players.
+    let Some(src) = registry.get_entity(event.src_id) else {
+        warn!("No entity found for src_id: {}", event.src_id);
+        return;
+    };
+
+    let next = match action_type {
+        CombatActionType::SitDown => AnimationState::Sitting,
+        CombatActionType::StandUp => AnimationState::Idle,
+        _ => return,
+    };
+
+    let Ok(mut behavior) = behaviors.get_mut(src) else {
+        return;
+    };
+    if *behavior.current() != next {
+        behavior.start(next);
     }
 }
 
@@ -362,6 +395,109 @@ pub fn handle_death(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn combat_action_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .init_resource::<EntityRegistry>()
+            .add_message::<DamageReceived>()
+            .add_message::<DisplayDamageNumber>()
+            .add_systems(
+                Update,
+                (process_combat_actions, transition::<AnimationState>).chain(),
+            );
+        app
+    }
+
+    fn spawn_registered(app: &mut App, gid: u32, transform: Transform) -> Entity {
+        let entity = app
+            .world_mut()
+            .spawn((transform, AnimationState::Idle))
+            .id();
+        app.world_mut()
+            .resource_mut::<EntityRegistry>()
+            .register_entity(gid, entity);
+        entity
+    }
+
+    fn combat_action(type_: u32) -> DamageReceived {
+        DamageReceived {
+            src_id: 1,
+            target_id: 2,
+            server_tick: 0,
+            src_speed: 200,
+            dmg_speed: 300,
+            damage: 42,
+            div: 1,
+            type_,
+            damage2: 0,
+        }
+    }
+
+    #[test]
+    fn damage_action_starts_attack_and_schedules_target_reaction() {
+        let mut app = combat_action_app();
+        let source = spawn_registered(&mut app, 1, Transform::default());
+        let target = spawn_registered(&mut app, 2, Transform::from_xyz(1.0, 0.0, 0.0));
+
+        app.world_mut().write_message(combat_action(0));
+        app.update();
+
+        assert_eq!(state(&app, source), AnimationState::Attacking);
+        let attack_duration = app
+            .world()
+            .get::<AttackTimer>(source)
+            .unwrap()
+            .timer
+            .duration()
+            .as_secs_f32();
+        assert!((attack_duration - 0.2).abs() < f32::EPSILON);
+        assert!(app.world().get::<CharacterDirection>(source).is_some());
+
+        let world = app.world_mut();
+        let mut reactions = world.query::<&PendingHitReaction>();
+        let reaction = reactions.single(world).unwrap();
+        assert_eq!(reaction.target, target);
+        assert_eq!(reaction.damage, 42);
+        assert!(!reaction.is_critical);
+        assert!(reaction.flinches);
+        assert_eq!(reaction.stun_secs, 0.3);
+        assert_eq!(reaction.timer.duration(), Duration::from_millis(200));
+    }
+
+    #[test]
+    fn lucky_dodge_displays_an_immediate_miss() {
+        let mut app = combat_action_app();
+        let target = spawn_registered(&mut app, 2, Transform::default());
+
+        app.world_mut().write_message(combat_action(11));
+        app.update();
+
+        let messages: Vec<_> = app
+            .world_mut()
+            .resource_mut::<Messages<DisplayDamageNumber>>()
+            .drain()
+            .collect();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].entity, target);
+        assert_eq!(messages[0].amount, 0);
+        assert_eq!(messages[0].damage_type, DamageDisplayType::Miss);
+        assert_eq!(messages[0].delay_secs, 0.0);
+    }
+
+    #[test]
+    fn posture_actions_toggle_sitting_state() {
+        let mut app = combat_action_app();
+        let source = spawn_registered(&mut app, 1, Transform::default());
+
+        app.world_mut().write_message(combat_action(2));
+        app.update();
+        assert_eq!(state(&app, source), AnimationState::Sitting);
+
+        app.world_mut().write_message(combat_action(3));
+        app.update();
+        assert_eq!(state(&app, source), AnimationState::Idle);
+    }
 
     fn death_app() -> App {
         let mut app = App::new();
