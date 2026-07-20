@@ -1,0 +1,93 @@
+// Warp Portal (AL_WARP, open phase) - authored STR-style effect.
+//
+// Persistent skill-unit visual: repeating, Ground-placed, Group-anchored
+// (ground_anchor omitted in effects.ron, matching the Sanctuary/Magnus
+// convention). Spawned as a child of the skill-unit group by
+// `spawn_effect_child` (game-engine/src/domain/skill_units/visuals.rs:50-94)
+// and torn down by the group's recursive despawn -- no separate cast-circle
+// descriptor is authored (architecture decision: the classic client's
+// pre-open charging visual is a distinct hardcoded sprite, out of scope here).
+//
+// Loop semantics (confirmed from source, not assumed):
+//   - `EffectFrameTimer::update` (game-engine/src/domain/effects/components.rs:86-101)
+//     advances `current_frame` from elapsed time and, once
+//     `current_frame >= max_key`, HARD-RESETS both `elapsed` and
+//     `current_frame` to 0 (components.rs:97-99) rather than wrapping/carrying
+//     over remainder time. `repeating` effects simply keep ticking after this
+//     reset (systems.rs:147: `!effect.timer.update(delta) && !effect.repeating`
+//     only despawns non-repeating ones); repeating effects are otherwise
+//     inert to their own restart -- there is no crossfade back to key 0.
+//   - `max_key` is `last_key.at + 1` for a layer (authored.rs:205), and the
+//     asset-wide `max_key` is the widest across all layers (authored.rs:238),
+//     so every layer here shares the same final `at` -- otherwise a
+//     shorter-lived layer would blank out for the tail frames before the
+//     shared wrap (its `frame_index_map` runs out at its own last key).
+//   - Consequence: the loop is seamless only if each layer's key at the final
+//     `at` renders IDENTICALLY to its key at `at: 0` -- offset/quad/color must
+//     match exactly (per the module doc on `AuthoredEffect`, `texture_index`
+//     is held per-key, not lerped, so a same-texture close is exact, not
+//     approximate). Every layer below closes this way. `angle` additionally
+//     uses the whole-turn trick (raw STR units, 1024 = 360 degrees): a layer
+//     that rotates by a multiple of 1024 across the loop reads as the same
+//     angle at both ends even though the raw value differs.
+//
+// Texture choice: GRF-only, not the Pipoya WarpPortal pack. The pack ships no
+// license file in its own directory (checked: `vfxs/Pipoya VFX WarpPortal/`
+// has only the two resolution folders, no docx/txt -- unlike the Frostwindz
+// packs used for Heal/Blessing/Turn Undead/Redemptio, whose
+// "Frostwindz Asset License Agreement.docx" sits right next to the frames).
+// With no license terms to verify, its frames are not committed. The GRF's
+// own `efst_magiccircle_blue_tw` set (a blue hexagram "magic circle" ground
+// disc, already shipped as an EFST aura texture) reads as a swirling blue
+// vortex once two copies are counter-rotated at different whole-turn counts,
+// with `pokjuk_c.bmp` (a scattered white sparkle field, already used by
+// `efst_magiccircle`) for twinkle accents. No new local textures needed.
+//
+// Coordinate/unit convention: identical to heal.strfx.ron (offset/quad in STR
+// screen pixels, mapped as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE,
+// EFFECT_ORIGIN = (319, 291); y grows downward pre-flip). This is a flat
+// ground disc, so every key's offset stays at the anchor (319, 291) -- only
+// quad, color and angle animate.
+(
+    fps: 20,
+    layers: [
+        // Outer hexagram disc: the official blue magic-circle texture,
+        // spinning one full turn (0 -> 1024) over the loop with a gentle
+        // alpha breathe. Real alpha channel (TGA), so Blend reads its edges
+        // correctly.
+        (
+            textures: ["ro://data/texture/effect/efst_magiccircle_blue_tw/magiccircle.tga"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (180.0, 180.0), color: (255, 255, 255, 210), angle: 0.0 ),
+                ( at: 20, offset: (319.0, 291.0), quad: (186.0, 186.0), color: (255, 255, 255, 235), angle: 512.0 ),
+                ( at: 40, offset: (319.0, 291.0), quad: (180.0, 180.0), color: (255, 255, 255, 210), angle: 1024.0 ),
+            ],
+        ),
+        // Inner glow ring: the additive purple-blue variant of the same
+        // hexagram, smaller and counter-spinning two full turns over the same
+        // span for a layered, swirling-vortex read.
+        (
+            textures: ["ro://data/texture/effect/efst_magiccircle_blue_tw/magiccircle3.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (140.0, 140.0), color: (150, 190, 255, 130), angle: 0.0 ),
+                ( at: 20, offset: (319.0, 291.0), quad: (146.0, 146.0), color: (170, 205, 255, 170), angle: -1024.0 ),
+                ( at: 40, offset: (319.0, 291.0), quad: (140.0, 140.0), color: (150, 190, 255, 130), angle: -2048.0 ),
+            ],
+        ),
+        // Sparkle accents: the shared sparkle-field texture, static (no
+        // rotation), twinkling by alpha alone. First/last key match exactly.
+        (
+            textures: ["ro://data/texture/effect/efst_magiccircle/pokjuk_c.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (200.0, 200.0), color: (200, 225, 255, 90) ),
+                ( at: 10, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (200, 225, 255, 160) ),
+                ( at: 20, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (200, 225, 255, 80) ),
+                ( at: 30, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (200, 225, 255, 150) ),
+                ( at: 40, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (200, 225, 255, 90) ),
+            ],
+        ),
+    ],
+)

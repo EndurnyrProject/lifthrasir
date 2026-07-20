@@ -214,6 +214,15 @@ mod tests {
         assert_eq!(asset.0.skills[&79].str.as_deref(), Some("magnus.str"));
         assert_eq!(asset.0.skills[&79].placement, EffectPlacement::Ground);
         assert!(asset.0.skills[&79].repeating);
+
+        // id 27 is AL_WARP: authored open-portal loop, persistent ground
+        // field, Group-anchored (default).
+        assert_eq!(
+            asset.0.skills[&27].str.as_deref(),
+            Some("warp_portal.strfx.ron")
+        );
+        assert_eq!(asset.0.skills[&27].placement, EffectPlacement::Ground);
+        assert!(asset.0.skills[&27].repeating);
     }
 
     #[test]

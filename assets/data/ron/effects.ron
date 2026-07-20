@@ -187,6 +187,19 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        27: ( // AL_WARP (Warp Portal, open phase) -- authored effect
+              // (warp_portal.strfx.ron): persistent ground field,
+              // Group-anchored (default). Spawns as a skill-unit child on
+              // SkillUnitSpawn and despawns with the group; no separate
+              // cast-circle descriptor (architecture decision). Sound is the
+              // classic open-portal cue (ef_readyportal.wav is the charging
+              // stage; this is the opened gate).
+            str: Some("warp_portal.strfx.ron"),
+            sound: Some("effect/ef_portal.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         28: ( // AL_HEAL -- authored effect (heal.strfx.ron), replaces the dead
               // GRF heal.str; establishes the local-texture path convention.
             str: Some("heal.strfx.ron"),
