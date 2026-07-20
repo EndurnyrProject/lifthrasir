@@ -1,0 +1,66 @@
+// Ruwach (AL_RUWACH) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// mirrors heal.strfx.ron / blessing.strfx.ron):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
+//     STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits on the effect anchor (the caster). All
+//     layers here sit at (319, 250), roughly chest height, so the shell reads
+//     as centered on the body rather than pooling at the feet.
+//   - fps 30; keys interpolate LINEARLY (offset, quad, color); angle is omitted
+//     throughout (defaults to 0 -- the rings are circular, no rotation needed).
+//     RON implicit_some is on, so optional fields (quad) are written bare.
+//   - blend Add = additive glow/ring layers (all GRF assets here).
+//
+// Textures: GRF-only, no local PNGs.
+//   - `ro://data/texture/effect/lens_b.bmp` -- the same soft radial glow used
+//     as the base pop in heal.strfx.ron/inc_agi.strfx.ron, tinted magenta-pink.
+//   - `ro://data/texture/effect/ring.bmp` -- a clean thin white ring silhouette
+//     (verified: a single circular outline, no ornamentation), tinted
+//     magenta-pink to read as the classic Ruwach pulse. Reused twice for two
+//     staggered expanding shells.
+//
+// Shape: a magenta-pink glow pops at the caster's chest, and two ring shells
+// expand outward from the body and fade, staggered so the second catches the
+// first as it dissipates -- the classic "detect" pulse. ~0.8s (24 frames @ 30fps).
+(
+    fps: 30,
+    layers: [
+        // Core glow pop, additive.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 250.0), quad: (30.0, 30.0),   color: (255, 110, 220, 0) ),
+                ( at: 4,  offset: (319.0, 250.0), quad: (110.0, 110.0), color: (255, 130, 230, 220) ),
+                ( at: 10, offset: (319.0, 250.0), quad: (130.0, 130.0), color: (255, 120, 225, 130) ),
+                ( at: 16, offset: (319.0, 250.0), quad: (140.0, 140.0), color: (255, 110, 220, 0) ),
+            ],
+        ),
+        // First expanding pulse shell.
+        (
+            textures: ["ro://data/texture/effect/ring.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 250.0), quad: (30.0, 30.0),   color: (255, 90, 220, 0) ),
+                ( at: 3,  offset: (319.0, 250.0), quad: (90.0, 90.0),   color: (255, 110, 230, 230) ),
+                ( at: 9,  offset: (319.0, 250.0), quad: (170.0, 170.0), color: (255, 100, 225, 150) ),
+                ( at: 16, offset: (319.0, 250.0), quad: (230.0, 230.0), color: (255, 90, 220, 60) ),
+                ( at: 22, offset: (319.0, 250.0), quad: (270.0, 270.0), color: (255, 80, 215, 0) ),
+            ],
+        ),
+        // Second pulse shell, staggered start, slightly larger max radius.
+        (
+            textures: ["ro://data/texture/effect/ring.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 4,  offset: (319.0, 250.0), quad: (24.0, 24.0),   color: (255, 130, 235, 0) ),
+                ( at: 8,  offset: (319.0, 250.0), quad: (100.0, 100.0), color: (255, 150, 240, 210) ),
+                ( at: 14, offset: (319.0, 250.0), quad: (190.0, 190.0), color: (255, 140, 235, 130) ),
+                ( at: 20, offset: (319.0, 250.0), quad: (250.0, 250.0), color: (255, 130, 230, 50) ),
+                ( at: 24, offset: (319.0, 250.0), quad: (300.0, 300.0), color: (255, 120, 225, 0) ),
+            ],
+        ),
+    ],
+)

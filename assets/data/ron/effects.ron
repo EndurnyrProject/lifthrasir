@@ -161,6 +161,14 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
+        24: ( // AL_RUWACH -- authored effect (ruwach.strfx.ron): magenta-pink
+              // pulse shell expanding around the caster.
+            str: Some("ruwach.strfx.ron"),
+            sound: Some("effect/ef_ruwach.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         25: ( // AL_PNEUMA
             str: Some("pneuma1.str"),
             sound: None,
@@ -189,6 +197,15 @@
             str: Some("dec_agi.strfx.ron"),
             sound: Some("effect/ef_decagility.wav"),
             placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        31: ( // AL_HOLYWATER (Aqua Benedicta) -- authored effect
+              // (aqua_benedicta.strfx.ron): blue water shimmer/splash over the
+              // caster.
+            str: Some("aqua_benedicta.strfx.ron"),
+            sound: Some("effect/ef_aqua.wav"),
+            placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
