@@ -1,0 +1,163 @@
+// Redemptio (PR_REDEMPTIO) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// mirrors heal.strfx.ron / blessing.strfx.ron / turn_undead.strfx.ron):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
+//     STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits on the effect anchor (the caster).
+//   - y grows DOWNWARD (STR is Y-down); the runtime flips Y at mesh write, so a
+//     SMALLER offset.y renders HIGHER above the anchor. The rising motes climb
+//     by animating offset.y downward toward smaller values (upward on screen).
+//   - fps 30; keys interpolate LINEARLY (offset, quad, color, angle); the
+//     per-key texture_index is HELD, not lerped -- that is what animates the
+//     pack burst frames. RON implicit_some is on, so optional fields (quad)
+//     are written bare.
+//   - blend Add = additive (GRF glow layers, motes); Blend = alpha over (the
+//     pack burst frames, so their painted gold shading survives instead of
+//     blowing out to solid white).
+//
+// Pack frames: cherry-picked from the Frostwindz "Pixel Art VFX - Priest" pack.
+//   - Main bloom: set VFX10 (the pack's largest, 23 frames) -- rising motes
+//     coalesce into a small cross, then bloom into a full radiant sun/halo
+//     before ringing outward and fading. Read directly as a grand,
+//     mass-resurrection-scale radiant burst; the natural choice for the
+//     biggest set in the pack. VFX2 (heal) and VFX4 (turn undead) are already
+//     used elsewhere and were skipped regardless. Subsampled to every OTHER
+//     frame (1,3,5,...,23 of 23) to keep the referenced set lean -- 12 frames
+//     copied into assets/data/textures/effects/redemptio/frame_01..12.png;
+//     the held texture_index still reads as a smooth bloom at 30fps since
+//     each key already spans 4 engine frames.
+//   - Rising light motes accent: set VFX6 (a rising light-column set) was
+//     inspected as an alternative for the whole burst but its later frames
+//     solidify into a solid beam, which reads as a column, not the wide
+//     dome/halo this skill calls for -- so only its early scattered-motes
+//     frames (before the beam solidifies) are used, as a secondary "rising
+//     motes" accent layered around the VFX10 bloom. Subsampled to every OTHER
+//     frame of the motes stage (1,3,5 of frames 1-6) -- 3 frames copied into
+//     assets/data/textures/effects/redemptio/motes_01..03.png.
+//
+// GRF textures: `ro://data/texture/effect/lens_b.bmp` (soft radial flash,
+// reused from heal.strfx.ron / teleport.strfx.ron / turn_undead.strfx.ron),
+// tinted golden via the `color` key for the instant flash and the wide
+// expanding ground dome.
+//
+// Shape: a bright golden flash pops on the caster, a wide dome-shaped halo of
+// light blooms outward low around their feet, three streams of light motes
+// rise and dissipate around them, and the VFX10 burst grows from scattered
+// motes into a small cross into a full radiant sun/halo that rings outward
+// and fades -- solemn and grand, ~1.5s (45 frames @ 30fps), the largest-scale
+// authored effect so far (quads up to 400px).
+(
+    fps: 30,
+    layers: [
+        // Instant flash: lens_b pops bright gold-white at the moment of
+        // sacrifice, gone well before the dome or the burst finish blooming.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (40.0, 40.0),   color: (255, 255, 255, 0) ),
+                ( at: 3,  offset: (319.0, 291.0), quad: (260.0, 260.0), color: (255, 250, 220, 255) ),
+                ( at: 8,  offset: (319.0, 291.0), quad: (320.0, 320.0), color: (255, 240, 190, 150) ),
+                ( at: 14, offset: (319.0, 291.0), quad: (360.0, 360.0), color: (255, 235, 180, 0) ),
+            ],
+        ),
+        // Wide ground dome: a flattened lens_b glow blooms outward low around
+        // the caster's feet and lingers well past the flash, reading as the
+        // base of a light dome settling over them.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (60.0, 25.0),  color: (255, 225, 140, 0) ),
+                ( at: 6,  offset: (319.0, 291.0), quad: (220.0, 90.0), color: (255, 235, 170, 200) ),
+                ( at: 16, offset: (319.0, 291.0), quad: (340.0, 140.0), color: (255, 240, 185, 170) ),
+                ( at: 28, offset: (319.0, 291.0), quad: (400.0, 165.0), color: (255, 238, 180, 90) ),
+                ( at: 40, offset: (319.0, 291.0), quad: (420.0, 175.0), color: (255, 235, 175, 0) ),
+            ],
+        ),
+        // Main radiant burst: VFX10 pack frames cycled via texture_index --
+        // scattered motes coalesce into a cross, bloom into a full radiant
+        // sun/halo, then ring outward and fade.
+        (
+            textures: [
+                "data/textures/effects/redemptio/frame_01.png",
+                "data/textures/effects/redemptio/frame_02.png",
+                "data/textures/effects/redemptio/frame_03.png",
+                "data/textures/effects/redemptio/frame_04.png",
+                "data/textures/effects/redemptio/frame_05.png",
+                "data/textures/effects/redemptio/frame_06.png",
+                "data/textures/effects/redemptio/frame_07.png",
+                "data/textures/effects/redemptio/frame_08.png",
+                "data/textures/effects/redemptio/frame_09.png",
+                "data/textures/effects/redemptio/frame_10.png",
+                "data/textures/effects/redemptio/frame_11.png",
+                "data/textures/effects/redemptio/frame_12.png",
+            ],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (30.0, 30.0),   color: (255, 250, 220, 0),   texture_index: 0 ),
+                ( at: 4,  offset: (319.0, 291.0), quad: (60.0, 60.0),   color: (255, 250, 222, 120), texture_index: 1 ),
+                ( at: 8,  offset: (319.0, 291.0), quad: (100.0, 100.0), color: (255, 251, 225, 200), texture_index: 2 ),
+                ( at: 12, offset: (319.0, 291.0), quad: (150.0, 150.0), color: (255, 252, 228, 230), texture_index: 3 ),
+                ( at: 16, offset: (319.0, 291.0), quad: (210.0, 210.0), color: (255, 253, 232, 245), texture_index: 4 ),
+                ( at: 20, offset: (319.0, 291.0), quad: (260.0, 260.0), color: (255, 253, 235, 255), texture_index: 5 ),
+                ( at: 24, offset: (319.0, 291.0), quad: (310.0, 310.0), color: (255, 253, 235, 255), texture_index: 6 ),
+                ( at: 28, offset: (319.0, 291.0), quad: (350.0, 350.0), color: (255, 252, 232, 255), texture_index: 7 ),
+                ( at: 32, offset: (319.0, 291.0), quad: (380.0, 380.0), color: (255, 250, 228, 245), texture_index: 8 ),
+                ( at: 36, offset: (319.0, 291.0), quad: (400.0, 400.0), color: (255, 248, 224, 210), texture_index: 9 ),
+                ( at: 40, offset: (319.0, 291.0), quad: (400.0, 400.0), color: (255, 246, 220, 130), texture_index: 10 ),
+                ( at: 44, offset: (319.0, 291.0), quad: (400.0, 400.0), color: (255, 245, 218, 0),   texture_index: 11 ),
+            ],
+        ),
+        // Rising light motes, left stream: staggered early, drifts up and
+        // fades over the caster's left side.
+        (
+            textures: [
+                "data/textures/effects/redemptio/motes_01.png",
+                "data/textures/effects/redemptio/motes_02.png",
+                "data/textures/effects/redemptio/motes_03.png",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 2,  offset: (280.0, 300.0), quad: (24.0, 30.0), color: (255, 245, 190, 0),   texture_index: 0 ),
+                ( at: 10, offset: (276.0, 270.0), quad: (30.0, 40.0), color: (255, 250, 205, 220), texture_index: 1 ),
+                ( at: 20, offset: (272.0, 240.0), quad: (28.0, 38.0), color: (255, 248, 200, 180), texture_index: 2 ),
+                ( at: 30, offset: (268.0, 210.0), quad: (24.0, 32.0), color: (255, 245, 195, 0),   texture_index: 2 ),
+            ],
+        ),
+        // Rising light motes, right stream: staggered mid, mirrors the left
+        // stream over the caster's right side.
+        (
+            textures: [
+                "data/textures/effects/redemptio/motes_01.png",
+                "data/textures/effects/redemptio/motes_02.png",
+                "data/textures/effects/redemptio/motes_03.png",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 8,  offset: (358.0, 300.0), quad: (24.0, 30.0), color: (255, 245, 190, 0),   texture_index: 0 ),
+                ( at: 16, offset: (362.0, 268.0), quad: (30.0, 40.0), color: (255, 250, 205, 220), texture_index: 1 ),
+                ( at: 26, offset: (366.0, 236.0), quad: (28.0, 38.0), color: (255, 248, 200, 180), texture_index: 2 ),
+                ( at: 36, offset: (370.0, 204.0), quad: (24.0, 32.0), color: (255, 245, 195, 0),   texture_index: 2 ),
+            ],
+        ),
+        // Rising light motes, center stream: staggered latest, climbs highest
+        // directly above the caster.
+        (
+            textures: [
+                "data/textures/effects/redemptio/motes_01.png",
+                "data/textures/effects/redemptio/motes_02.png",
+                "data/textures/effects/redemptio/motes_03.png",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 14, offset: (319.0, 305.0), quad: (26.0, 32.0), color: (255, 248, 200, 0),   texture_index: 0 ),
+                ( at: 22, offset: (319.0, 270.0), quad: (32.0, 42.0), color: (255, 252, 210, 230), texture_index: 1 ),
+                ( at: 32, offset: (319.0, 235.0), quad: (30.0, 40.0), color: (255, 250, 205, 190), texture_index: 2 ),
+                ( at: 42, offset: (319.0, 200.0), quad: (26.0, 34.0), color: (255, 248, 200, 0),   texture_index: 2 ),
+            ],
+        ),
+    ],
+)

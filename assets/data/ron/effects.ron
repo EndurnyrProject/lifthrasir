@@ -560,6 +560,17 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        1014: ( // PR_REDEMPTIO -- authored effect (redemptio.strfx.ron): a
+                // large solemn radiant burst on the caster (mass-resurrection
+                // sacrifice). No plausible dedicated wav found in the GRF
+                // (only priest_resurrection.wav, which belongs to
+                // ALL_RESURRECTION); sound intentionally omitted.
+            str: Some("redemptio.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
     },
     map: {
         44: ( // EF_SMOKE — non-STR, procedural (rising/fading smoke column).
