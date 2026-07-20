@@ -1,7 +1,6 @@
 use crate::domain::entities::character::components::Gender;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CharacterCreationForm {
     pub name: String,
     pub slot: u8,
@@ -9,12 +8,6 @@ pub struct CharacterCreationForm {
     pub hair_color: u16,
     pub starting_job: u16,
     pub sex: Gender,
-    pub str: u8,
-    pub agi: u8,
-    pub vit: u8,
-    pub int: u8,
-    pub dex: u8,
-    pub luk: u8,
 }
 
 impl Default for CharacterCreationForm {
@@ -26,12 +19,6 @@ impl Default for CharacterCreationForm {
             hair_color: 0,
             starting_job: 0,
             sex: Gender::Male,
-            str: 1,
-            agi: 1,
-            vit: 1,
-            int: 1,
-            dex: 1,
-            luk: 1,
         }
     }
 }
@@ -65,10 +52,4 @@ pub enum CharacterCreationError {
     NameTooLong,
     #[error("Character name can only contain letters, numbers, and underscores")]
     NameInvalidCharacters,
-    #[error("Character name contains forbidden words")]
-    NameForbidden,
-    #[error("Invalid stat distribution")]
-    InvalidStats,
-    #[error("Server error: {0}")]
-    ServerError(String),
 }

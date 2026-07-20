@@ -14,7 +14,8 @@ use bevy_auto_plugin::prelude::*;
 use net_contract::commands::ChatSent;
 
 use crate::core::state::GameState;
-use crate::domain::character::systems::ZoneSessionData;
+use crate::domain::entities::components::EntityName;
+use crate::domain::entities::markers::LocalPlayer;
 
 /// Emitted by the UI when the player submits a chat line.
 #[derive(Message, Debug, Clone)]
@@ -36,17 +37,17 @@ pub fn format_chat_message(character_name: &str, message: &str) -> String {
 pub fn handle_chat_send(
     mut events: MessageReader<ChatSendRequested>,
     mut chat_requests: MessageWriter<ChatSent>,
-    zone_session: Option<Res<ZoneSessionData>>,
+    player: Query<&EntityName, With<LocalPlayer>>,
 ) {
     for event in events.read() {
         if event.message.trim().is_empty() {
             continue;
         }
-        let Some(session) = zone_session.as_ref() else {
-            warn!("Cannot send chat message: ZoneSessionData not available");
+        let Ok(player) = player.single() else {
+            warn!("Cannot send chat message: local player name not available");
             continue;
         };
-        let formatted = format_chat_message(&session.character_name, &event.message);
+        let formatted = format_chat_message(&player.name, &event.message);
         chat_requests.write(ChatSent { message: formatted });
     }
 }

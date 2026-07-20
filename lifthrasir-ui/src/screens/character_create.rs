@@ -797,7 +797,6 @@ fn submitted_form(base: &CharacterCreationForm, name: String, slot: u8) -> Chara
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::entities::character::components::CharacterInfo as DomainCharacterInfo;
 
     #[test]
     fn cycle_wraps_both_directions() {
@@ -848,24 +847,6 @@ mod tests {
         assert!(form.validate().is_ok());
     }
 
-    fn created_character() -> DomainCharacterInfo {
-        DomainCharacterInfo {
-            name: "Hero".into(),
-            job_id: 0,
-            level: 1,
-            experience: 0,
-            stats: CharacterStats::default(),
-            slot: 0,
-            sex: Gender::Male,
-            hair_style: 1,
-            hair_color: 0,
-            clothes_color: 0,
-            char_id: 1,
-            last_map: "prontera".into(),
-            delete_date: None,
-        }
-    }
-
     #[test]
     fn character_created_returns_to_selection() {
         let mut app = App::new();
@@ -888,10 +869,7 @@ mod tests {
 
         app.world_mut()
             .resource_mut::<Messages<CharacterCreatedEvent>>()
-            .write(CharacterCreatedEvent {
-                character: created_character(),
-                slot: 0,
-            });
+            .write(CharacterCreatedEvent);
         app.update(); // reader sets NextState(CharacterSelection)
         app.update(); // StateTransition applies it
 

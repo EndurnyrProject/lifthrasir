@@ -103,7 +103,6 @@ mod tests {
             hair_color: 3,
             starting_job: 0,
             sex: Gender::Male,
-            ..Default::default()
         };
 
         let cmd = form_to_create_character(&form);

@@ -11,7 +11,7 @@ pub mod utils;
 pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin, NativeInputPlugin};
 pub use domain::camera::CameraPlugin;
 pub use domain::cart::CartPlugin;
-pub use domain::character::{AssetCatalogPlugin, CharacterDomainPlugin};
+pub use domain::character::CharacterDomainPlugin;
 pub use domain::combat::CombatPlugin;
 pub use domain::emote::EmotePlugin;
 pub use domain::entities::character::UnifiedCharacterEntityPlugin;
@@ -62,7 +62,6 @@ impl PluginGroup for CoreGamePlugins {
             .add(AccessoryDbPlugin)
             .add(WeaponDbPlugin)
             .add(AudioPlugin)
-            .add(AssetCatalogPlugin)
             .add(EntitySpawningPlugin)
             .add(CharacterDomainPlugin)
             .add(AuthenticationPlugin)
