@@ -1,0 +1,85 @@
+// Blessing (AL_BLESSING) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// mirrors heal.strfx.ron / cold_bolt.strfx.ron):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
+//     STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits on the effect anchor (the blessed target).
+//   - y grows DOWNWARD (STR is Y-down); the runtime flips Y at mesh write, so a
+//     SMALLER offset.y renders HIGHER above the anchor. The crosses sit around
+//     the upper body (well above 291) and rise further by animating offset.y
+//     downward toward smaller values (upward on screen).
+//   - angle is in RAW STR units (1024 = 360 degrees), NOT degrees. All crosses
+//     here stay upright (angle: 0.0).
+//   - fps 30; keys interpolate LINEARLY (offset, quad, color, angle); RON
+//     implicit_some is on, so optional fields (quad) are written bare.
+//   - blend Add = additive (glow layer); Blend = alpha over (cross sprites, so
+//     their painted highlights survive instead of blowing out to white).
+//
+// Textures: GRF-only, no local PNGs.
+//   - `ro://data/texture/effect/cross_old.bmp` -- simple engraved cross, magenta
+//     color-keyed. Chosen over `cross1.bmp` (more ornate, reads busy at small
+//     size) and `arrown.tga` (a decorative 4-point flourish, not a cross
+//     silhouette once inspected). Tinted golden-white via the `color` key.
+//   - `ro://data/texture/effect/cardinal/cd_divinus_flos/divinus_flos_hit/div_cross.bmp`
+//     -- a small 4-point golden star flare, additive, black background. Used as
+//     the soft glow underneath the crosses; already gold-toned in the source art.
+//
+// Shape: three small crosses fade in around the target's upper body -- one
+// centered and slightly higher, two flanking lower to each side -- rising
+// gently as they fade in, holding briefly, then fading out together with a
+// soft golden glow underneath. ~1s (30 frames @ 30fps).
+(
+    fps: 30,
+    layers: [
+        // Soft golden glow underneath the crosses, additive, expands and fades.
+        (
+            textures: ["ro://data/texture/effect/cardinal/cd_divinus_flos/divinus_flos_hit/div_cross.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 220.0), quad: (30.0, 30.0), color: (255, 235, 170, 0),   angle: 0.0 ),
+                ( at: 5,  offset: (319.0, 218.0), quad: (60.0, 60.0), color: (255, 240, 190, 200), angle: 0.0 ),
+                ( at: 14, offset: (319.0, 214.0), quad: (72.0, 72.0), color: (255, 245, 200, 170), angle: 0.0 ),
+                ( at: 22, offset: (319.0, 210.0), quad: (78.0, 78.0), color: (255, 245, 205, 90),  angle: 0.0 ),
+                ( at: 30, offset: (319.0, 206.0), quad: (82.0, 82.0), color: (255, 250, 210, 0),   angle: 0.0 ),
+            ],
+        ),
+        // Center cross, sits slightly higher than the flanking pair.
+        (
+            textures: ["ro://data/texture/effect/cross_old.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 3,  offset: (319.0, 182.0), quad: (26.0, 32.0), color: (255, 245, 210, 0),   angle: 0.0 ),
+                ( at: 9,  offset: (319.0, 178.0), quad: (30.0, 37.0), color: (255, 250, 225, 235), angle: 0.0 ),
+                ( at: 16, offset: (319.0, 173.0), quad: (31.0, 38.0), color: (255, 252, 230, 255), angle: 0.0 ),
+                ( at: 23, offset: (319.0, 168.0), quad: (31.0, 38.0), color: (255, 250, 225, 200), angle: 0.0 ),
+                ( at: 30, offset: (319.0, 163.0), quad: (28.0, 34.0), color: (255, 248, 220, 0),   angle: 0.0 ),
+            ],
+        ),
+        // Left flanking cross, staggered slightly earlier and lower.
+        (
+            textures: ["ro://data/texture/effect/cross_old.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (297.0, 208.0), quad: (20.0, 25.0), color: (255, 240, 195, 0),   angle: 0.0 ),
+                ( at: 6,  offset: (296.0, 204.0), quad: (23.0, 29.0), color: (255, 245, 205, 220), angle: 0.0 ),
+                ( at: 13, offset: (295.0, 199.0), quad: (24.0, 30.0), color: (255, 248, 210, 245), angle: 0.0 ),
+                ( at: 20, offset: (294.0, 194.0), quad: (24.0, 30.0), color: (255, 245, 205, 190), angle: 0.0 ),
+                ( at: 27, offset: (293.0, 189.0), quad: (21.0, 27.0), color: (255, 242, 200, 0),   angle: 0.0 ),
+            ],
+        ),
+        // Right flanking cross, staggered slightly later and lower.
+        (
+            textures: ["ro://data/texture/effect/cross_old.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 6,  offset: (341.0, 208.0), quad: (20.0, 25.0), color: (255, 240, 195, 0),   angle: 0.0 ),
+                ( at: 12, offset: (342.0, 204.0), quad: (23.0, 29.0), color: (255, 245, 205, 220), angle: 0.0 ),
+                ( at: 19, offset: (343.0, 199.0), quad: (24.0, 30.0), color: (255, 248, 210, 245), angle: 0.0 ),
+                ( at: 26, offset: (344.0, 194.0), quad: (24.0, 30.0), color: (255, 245, 205, 190), angle: 0.0 ),
+                ( at: 33, offset: (345.0, 189.0), quad: (21.0, 27.0), color: (255, 242, 200, 0),   angle: 0.0 ),
+            ],
+        ),
+    ],
+)

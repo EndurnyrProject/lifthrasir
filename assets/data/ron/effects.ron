@@ -208,6 +208,14 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        34: ( // AL_BLESSING -- authored effect (blessing.strfx.ron): three small
+              // golden-white crosses fading in around the target's upper body.
+            str: Some("blessing.strfx.ron"),
+            sound: Some("effect/ef_blessing.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         35: ( // AL_CURE
             str: Some("cure.str"),
             sound: Some("effect/acolyte_cure.wav"),
