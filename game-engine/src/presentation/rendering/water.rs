@@ -2,13 +2,15 @@ use bevy::{
     asset::RenderAssetUsages,
     image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     mesh::{Indices, PrimitiveTopology},
+    pbr::{ExtendedMaterial, MaterialExtension, StandardMaterial},
     prelude::*,
+    render::render_resource::{AsBindGroup, ShaderType},
+    shader::ShaderRef,
 };
 use bevy_auto_plugin::prelude::*;
 
 use crate::{
     domain::{
-        assets::components::{WaterAnimation, WaterExtension, WaterMaterial, WaterSurface},
         system_sets::WaterRenderingSystems,
         world::{
             components::MapLoader, map::MapData, map_loader::MapRequestLoader,
@@ -18,6 +20,68 @@ use crate::{
     infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
     utils::constants::CELL_SIZE,
 };
+
+#[derive(Component)]
+pub struct WaterSurface {
+    pub water_level: f32,
+    pub wave_height: f32,
+    pub wave_speed: f32,
+    pub wave_pitch: f32,
+    pub animation_speed: f32,
+    pub mesh_handle: Handle<Mesh>,
+    pub material_handle: Handle<WaterMaterial>,
+}
+
+#[derive(Component)]
+pub struct WaterAnimation {
+    pub time: f32,
+    pub uv_offset: Vec2,
+}
+
+#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
+pub struct WaterExtension {
+    #[uniform(100)]
+    pub water_data: WaterData,
+    #[texture(101)]
+    #[sampler(102)]
+    pub water_texture: Handle<Image>,
+    #[texture(103)]
+    #[sampler(104)]
+    pub normal_map: Handle<Image>,
+}
+
+#[derive(Debug, Clone, ShaderType)]
+pub struct WaterData {
+    pub wave_params: Vec4,
+    pub animation_params: Vec4,
+    pub tile_coords: Vec4,
+}
+
+impl MaterialExtension for WaterExtension {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/water.wgsl".into()
+    }
+
+    fn vertex_shader() -> ShaderRef {
+        "shaders/water.wgsl".into()
+    }
+}
+
+pub type WaterMaterial = ExtendedMaterial<StandardMaterial, WaterExtension>;
+
+impl Default for WaterExtension {
+    fn default() -> Self {
+        Self {
+            water_data: WaterData {
+                wave_params: Vec4::new(0.2, 2.0, 50.0, 0.0),
+                animation_params: Vec4::ZERO,
+                tile_coords: Vec4::ZERO,
+            },
+            water_texture: Handle::default(),
+            normal_map: Handle::default(),
+        }
+    }
+}
 
 /// Type alias for maps ready for water loading
 type MapsReadyForWater<'w, 's> = Query<
@@ -202,7 +266,7 @@ pub fn finalize_water_loading_system(
 
             // Create a single material for all water with loaded texture
             let water_extension = WaterExtension {
-                water_data: crate::domain::assets::components::WaterData {
+                water_data: WaterData {
                     wave_params: Vec4::new(
                         scaled_wave_height,
                         loading_state.wave_speed.min(MAX_WAVE_SPEED),

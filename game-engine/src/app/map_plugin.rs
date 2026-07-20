@@ -1,6 +1,6 @@
 use crate::{
-    app::map_domain_plugin::MapDomainPlugin, domain::assets::components::WaterMaterial,
-    presentation::rendering::lighting::EnhancedLightingPlugin,
+    app::map_domain_plugin::MapDomainPlugin,
+    presentation::rendering::{lighting::EnhancedLightingPlugin, water::WaterMaterial},
 };
 use bevy::prelude::*;
 
