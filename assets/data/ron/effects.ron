@@ -175,6 +175,15 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        32: ( // AL_CRUCIS (Signum Crucis) -- str is a filename-based candidate,
+              // UNVERIFIED visually; eyeball in the Task 15 acceptance pass and
+              // replace with an authored effect if wrong.
+            str: Some("cross.str"),
+            sound: Some("effect/ef_signum.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         33: ( // AL_ANGELUS
             str: Some("angelus.str"),
             sound: Some("effect/ef_angelus.wav"),
@@ -444,6 +453,17 @@
         // no dedicated sound found in the GRF. Intentionally omitted: a
         // catalog miss here logs a harmless warn! and plays no visual, which is
         // correct for a skill that genuinely has none.
+        156: ( // AL_HOLYLIGHT (Holy Light) -- damage skill, arrives via the
+              // SkillDamage path. str is a filename-based candidate, UNVERIFIED
+              // visually; eyeball in the Task 15 acceptance pass and replace
+              // with an authored effect if wrong. No plausible dedicated wav
+              // found in the GRF.
+            str: Some("holyhit.str"),
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         157: ( // MG_ENERGYCOAT -- cast-moment flash only; the persistent glow
                // (energycoat.str, repeating) now lives in `statuses:` keyed by
                // EFST_ENERGYCOAT (31), driven by StatusEffectChanged.
