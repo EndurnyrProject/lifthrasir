@@ -380,11 +380,12 @@ pub fn on_skill_damage(
 }
 
 /// `GroundSkillPlaced` — cast-moment feedback only: caster motion, the landing
-/// sound, and (for non-repeating descriptors) a one-shot STR at the converted
-/// cell. Repeating descriptors (e.g. Storm Gust) spawn no visual here — their
-/// persistent effect belongs to the skill-unit group/cell entities
-/// (`domain/skill_units`), which own the whole lifetime and never rely on a
-/// client-side despawn timer.
+/// sound, and (for non-repeating Ground descriptors) a one-shot STR at the
+/// converted cell. Target/Caster descriptors defer their visual to their
+/// corresponding entity event. Repeating descriptors (e.g. Storm Gust) spawn
+/// no visual here — their persistent effect belongs to the skill-unit group/cell
+/// entities (`domain/skill_units`), which own the whole lifetime and never rely
+/// on a client-side despawn timer.
 #[allow(clippy::too_many_arguments)]
 pub fn on_ground_skill(
     mut events: MessageReader<GroundSkillPlaced>,
@@ -413,7 +414,7 @@ pub fn on_ground_skill(
         // A sound-only ground skill (no `str`), or a repeating one whose visual
         // now belongs to the skill unit, has no spawned effect to anchor to, so
         // its sound anchors to the caster if present.
-        let emitter = if descriptor.repeating {
+        let emitter = if descriptor.repeating || descriptor.placement != EffectPlacement::Ground {
             src
         } else {
             let position = spawn_coords_to_world_position(event.x as u16, event.y as u16, 0, 0);
@@ -600,6 +601,52 @@ mod tests {
         assert_eq!(emitted[0].entity, target);
         assert_eq!(emitted[0].amount, 123);
         assert_eq!(emitted[0].delay_secs, 0.0, "div: 1 has no stagger");
+    }
+
+    #[test]
+    fn meteor_damage_uses_native_str_without_procedural_vfx() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+
+        let _target = spawn_unit(&mut app, 200);
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 83, // WZ_METEOR
+            level: 10,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 500,
+            div: 1,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        });
+
+        app.update();
+
+        let effect_handle = {
+            let world = app.world_mut();
+            let mut query = world.query::<&ActiveEffect>();
+            query
+                .single(world)
+                .expect("one Meteor STR effect")
+                .effect
+                .clone()
+        };
+        let path = app
+            .world()
+            .resource::<AssetServer>()
+            .get_path(effect_handle.id())
+            .expect("Meteor effect has an asset path");
+        assert_eq!(path.to_string(), "ro://data/texture/effect/meteor1.str");
+
+        let vfx = app
+            .world_mut()
+            .resource_mut::<Messages<PlayProceduralVfx>>();
+        let mut cursor = vfx.get_cursor();
+        assert_eq!(cursor.read(&vfx).count(), 0);
     }
 
     #[test]
@@ -837,6 +884,30 @@ mod tests {
         let positions = position_anchored(&mut app);
         assert_eq!(positions.len(), 1, "one landing effect spawned at the cell");
         assert_eq!(positions[0], spawn_coords_to_world_position(40, 50, 0, 0));
+    }
+
+    #[test]
+    fn ground_skill_target_descriptor_defers_visual_to_damage_event() {
+        let mut app = test_app();
+        app.add_systems(Update, on_ground_skill);
+
+        let _src = spawn_unit(&mut app, 100);
+        app.world_mut().write_message(GroundSkillPlaced {
+            skill_id: 83, // WZ_METEOR (seeded Target, repeating: false)
+            src_id: 100,
+            level: 10,
+            x: 40,
+            y: 50,
+            server_tick: 0,
+        });
+
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            0,
+            "Meteor must not stamp an STR at its administrative center"
+        );
     }
 
     #[test]

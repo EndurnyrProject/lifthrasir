@@ -220,28 +220,12 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        83: ( // WZ_METEOR -- Meteor Storm open question resolved: aesir's
-              // Skill.Unit.place broadcasts exactly one GroundSkill (cast
-              // moment, group center) and one SkillUnitSpawn per cast, both for
-              // a single administrative cell (wz_meteor.ex on_place: cells:
-              // [center]); every subsequent random-position impact
-              // (wz_meteor.ex schedule/on_interval) reaches the client only as
-              // a periodic SkillDamage to whatever it hits -- there is no
-              // per-wave position broadcast. Real meteor STRs exist
-              // (meteor1..4.str, meteorstorm/meteor1-3.str), but this catalog
-              // row is shared by on_ground_skill (cast moment) and the
-              // skill-unit group spawn, both of which anchor at that same
-              // administrative center cell -- and aesir's Skill.Unit.place
-              // always marks placed cells visible, so setting `str` here would
-              // flash a real meteor sprite at the harmless center cell on every
-              // cast, in addition to the correct per-hit ones. Falling back to
-              // a procedural burst keyed on SkillDamageReceived (Target
-              // placement, one per impact) avoids that, matching the
-              // bolt-family fallback pattern; wiring the real STR needs the
-              // group/damage triggers to stop sharing one descriptor
-              // (follow-up, out of scope for this data-only task).
-            str: None,
-            vfx: Some("meteor"),
+        83: ( // WZ_METEOR -- aesir reports the random impacts as SkillDamage at
+              // their affected targets; its short-lived skill-unit group is only
+              // administrative. Target placement therefore plays the native STR
+              // once per reported impact without stamping the harmless center.
+            str: Some("meteor1.str"),
+            vfx: None,
             sound: Some("effect/wizard_meteor.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),

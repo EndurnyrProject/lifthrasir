@@ -512,6 +512,23 @@ fn cell_anchored_vfx_only_spawns_one_placeholder_per_visible_cell() {
 }
 
 #[test]
+fn non_repeating_skill_unit_spawns_no_persistent_visual() {
+    const METEOR_STORM: u32 = 83;
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, METEOR_STORM, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    assert_eq!(effects(&mut app), 0, "no STR at the administrative center");
+    assert_eq!(
+        placeholders(&mut app),
+        0,
+        "non-repeating VFX must not fall back to an Ice Wall crystal"
+    );
+}
+
+#[test]
 fn cell_anchored_sprite_requests_one_animation_per_visible_cell() {
     const FIRE_WALL: u32 = 18;
     let mut app = test_app(cell_anchored_sprite_catalog(FIRE_WALL));

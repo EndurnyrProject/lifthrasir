@@ -176,6 +176,13 @@ fn spawn_group(
         return;
     };
 
+    // Skill-unit entities own persistent visuals only. Some ground skills use
+    // a short-lived administrative group for scheduling; their one-shot visual
+    // belongs to the damage/ground trigger instead of this group center.
+    if !descriptor.repeating {
+        return;
+    }
+
     match descriptor.ground_anchor {
         GroundAnchor::Group => {
             spawn_effect_child(commands, asset_server, meshes, materials, descriptor, root);
