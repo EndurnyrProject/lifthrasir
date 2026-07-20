@@ -66,12 +66,15 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        12: ( // MG_SAFETYWALL
+        12: ( // MG_SAFETYWALL -- a single-cell persistent field. Anchor the
+              // native safetywall.str to its visible unit cell, matching the
+              // other wall skills instead of relying on the group fallback.
             str: Some("safetywall.str"),
             sound: Some("effect/ef_glasswall.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
+            ground_anchor: Cell,
         ),
         13: ( // MG_SOULSTRIKE — no STR in the official client; classic visual is
               // a legacy ACT sprite (soule.spr, not usable via `str`) — procedural

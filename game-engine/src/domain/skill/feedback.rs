@@ -1,7 +1,42 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 
-use net_contract::events::{ChatHeard, LearnSkillResultReceived};
+use net_contract::events::{
+    ChatHeard, LearnSkillResultReceived, SkillCastFailed, SkillCastFailureReason,
+};
+
+fn cast_failure_message(reason: SkillCastFailureReason) -> &'static str {
+    match reason {
+        SkillCastFailureReason::MissingCatalyst => {
+            "You are missing a catalyst required to cast this skill."
+        }
+        SkillCastFailureReason::InsufficientSp => "You do not have enough SP.",
+        SkillCastFailureReason::InsufficientZeny => "You do not have enough zeny.",
+        SkillCastFailureReason::NoAmmo => "You need ammunition to cast this skill.",
+        SkillCastFailureReason::OnCooldown => "This skill is still on cooldown.",
+        SkillCastFailureReason::InvalidTarget => "You cannot cast this skill on that target.",
+        SkillCastFailureReason::NotLearned => "You have not learned this skill.",
+        SkillCastFailureReason::OutOfRange => "The target is out of range.",
+        SkillCastFailureReason::Busy => "You cannot cast a skill right now.",
+        SkillCastFailureReason::Unspecified => "The skill cast failed.",
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    schedule = Update
+)]
+pub fn report_skill_cast_failure(
+    mut failures: MessageReader<SkillCastFailed>,
+    mut chat: MessageWriter<ChatHeard>,
+) {
+    for failure in failures.read() {
+        chat.write(ChatHeard {
+            gid: 0,
+            message: cast_failure_message(failure.reason).to_string(),
+        });
+    }
+}
 
 #[auto_add_system(
     plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
@@ -68,5 +103,30 @@ mod tests {
         });
 
         assert!(msgs.is_empty());
+    }
+
+    #[test]
+    fn missing_catalyst_reports_chat_feedback() {
+        let mut app = App::new();
+        app.add_message::<SkillCastFailed>()
+            .add_message::<ChatHeard>()
+            .add_systems(Update, report_skill_cast_failure);
+
+        app.world_mut()
+            .resource_mut::<Messages<SkillCastFailed>>()
+            .write(SkillCastFailed {
+                skill_id: 12,
+                reason: SkillCastFailureReason::MissingCatalyst,
+            });
+
+        app.update();
+
+        let chat = app.world().resource::<Messages<ChatHeard>>();
+        let messages: Vec<_> = chat.iter_current_update_messages().collect();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(
+            messages[0].message,
+            "You are missing a catalyst required to cast this skill."
+        );
     }
 }

@@ -303,6 +303,28 @@ pub struct SkillCooldownSet {
     pub tick: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkillCastFailureReason {
+    Unspecified,
+    MissingCatalyst,
+    InsufficientSp,
+    InsufficientZeny,
+    NoAmmo,
+    OnCooldown,
+    InvalidTarget,
+    NotLearned,
+    OutOfRange,
+    Busy,
+}
+
+/// A player-initiated skill cast was rejected by the server.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SkillCastFailed {
+    pub skill_id: u32,
+    pub reason: SkillCastFailureReason,
+}
+
 /// One learned skill within a SkillListReceived.
 #[derive(Debug, Clone)]
 pub struct ZoneSkillInfo {

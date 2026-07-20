@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -329,6 +329,9 @@ pub mod envelope {
         SkillMenu(super::SkillMenu),
         #[prost(message, tag = "161")]
         SkillMenuReply(super::SkillMenuReply),
+        /// 162: caster-only reason for a rejected skill cast
+        #[prost(message, tag = "162")]
+        SkillCastFailed(super::SkillCastFailed),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -2481,6 +2484,14 @@ pub struct SkillMenuReply {
     #[prost(uint32, tag = "2")]
     pub selected_id: u32,
 }
+/// Server -> client, caster-only feedback when an attempted skill cast is rejected.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SkillCastFailed {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(enumeration = "SkillCastFailureReason", tag = "2")]
+    pub reason: i32,
+}
 /// Outcome of a cart mount attempt. Values are prefixed because proto3 enum
 /// constants share the package namespace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -2892,6 +2903,56 @@ impl SkillUnitDespawnReason {
             "SKILL_UNIT_DESPAWN_REASON_MAP_SHUTDOWN" => Some(Self::MapShutdown),
             "SKILL_UNIT_DESPAWN_REASON_LEFT_VIEW" => Some(Self::LeftView),
             "SKILL_UNIT_DESPAWN_REASON_CANCELED" => Some(Self::Canceled),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SkillCastFailureReason {
+    Unspecified = 0,
+    MissingCatalyst = 1,
+    InsufficientSp = 2,
+    InsufficientZeny = 3,
+    NoAmmo = 4,
+    OnCooldown = 5,
+    InvalidTarget = 6,
+    NotLearned = 7,
+    OutOfRange = 8,
+    Busy = 9,
+}
+impl SkillCastFailureReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SKILL_CAST_FAILURE_REASON_UNSPECIFIED",
+            Self::MissingCatalyst => "SKILL_CAST_FAILURE_REASON_MISSING_CATALYST",
+            Self::InsufficientSp => "SKILL_CAST_FAILURE_REASON_INSUFFICIENT_SP",
+            Self::InsufficientZeny => "SKILL_CAST_FAILURE_REASON_INSUFFICIENT_ZENY",
+            Self::NoAmmo => "SKILL_CAST_FAILURE_REASON_NO_AMMO",
+            Self::OnCooldown => "SKILL_CAST_FAILURE_REASON_ON_COOLDOWN",
+            Self::InvalidTarget => "SKILL_CAST_FAILURE_REASON_INVALID_TARGET",
+            Self::NotLearned => "SKILL_CAST_FAILURE_REASON_NOT_LEARNED",
+            Self::OutOfRange => "SKILL_CAST_FAILURE_REASON_OUT_OF_RANGE",
+            Self::Busy => "SKILL_CAST_FAILURE_REASON_BUSY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SKILL_CAST_FAILURE_REASON_UNSPECIFIED" => Some(Self::Unspecified),
+            "SKILL_CAST_FAILURE_REASON_MISSING_CATALYST" => Some(Self::MissingCatalyst),
+            "SKILL_CAST_FAILURE_REASON_INSUFFICIENT_SP" => Some(Self::InsufficientSp),
+            "SKILL_CAST_FAILURE_REASON_INSUFFICIENT_ZENY" => Some(Self::InsufficientZeny),
+            "SKILL_CAST_FAILURE_REASON_NO_AMMO" => Some(Self::NoAmmo),
+            "SKILL_CAST_FAILURE_REASON_ON_COOLDOWN" => Some(Self::OnCooldown),
+            "SKILL_CAST_FAILURE_REASON_INVALID_TARGET" => Some(Self::InvalidTarget),
+            "SKILL_CAST_FAILURE_REASON_NOT_LEARNED" => Some(Self::NotLearned),
+            "SKILL_CAST_FAILURE_REASON_OUT_OF_RANGE" => Some(Self::OutOfRange),
+            "SKILL_CAST_FAILURE_REASON_BUSY" => Some(Self::Busy),
             _ => None,
         }
     }

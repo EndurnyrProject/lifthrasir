@@ -108,7 +108,7 @@ pub fn process_loaded_effect_data(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lifthrasir_data::EffectPlacement;
+    use lifthrasir_data::{EffectPlacement, GroundAnchor};
 
     #[test]
     fn deserializes_ron_into_effect_data() {
@@ -128,6 +128,11 @@ mod tests {
         );
         assert_eq!(asset.0.skills[&18].placement, EffectPlacement::Ground);
         assert!(asset.0.skills[&18].repeating);
+
+        // Safety Wall is a persistent single-cell unit and uses the native STR.
+        assert_eq!(asset.0.skills[&12].str.as_deref(), Some("safetywall.str"));
+        assert_eq!(asset.0.skills[&12].ground_anchor, GroundAnchor::Cell);
+        assert!(asset.0.skills[&12].repeating);
         assert!(
             asset
                 .0

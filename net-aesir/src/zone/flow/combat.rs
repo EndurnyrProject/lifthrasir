@@ -3,15 +3,15 @@ use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
 
 use super::super::mapping::combat::{
-    cast_cancel, damage_dealt, ground_skill, knockback, learn_skill_result, skill_casting,
-    skill_cooldown, skill_damage, skill_effect, skill_list, special_effect,
+    cast_cancel, damage_dealt, ground_skill, knockback, learn_skill_result, skill_cast_failed,
+    skill_casting, skill_cooldown, skill_damage, skill_effect, skill_list, special_effect,
 };
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
 use net_contract::events::{
     CastCancelled, DamageReceived, GroundSkillPlaced, KnockedBack, LearnSkillResultReceived,
-    SkillCastStarted, SkillCooldownSet, SkillDamageReceived, SkillEffectShown, SkillListReceived,
-    SpecialEffectShown,
+    SkillCastFailed, SkillCastStarted, SkillCooldownSet, SkillDamageReceived, SkillEffectShown,
+    SkillListReceived, SpecialEffectShown,
 };
 
 /// Drains combat and skill bodies. These span the gameplay, world, and bulk
@@ -31,6 +31,7 @@ pub fn zone_drain_combat(
     mut skill_fx: MessageWriter<SkillEffectShown>,
     mut cancelled: MessageWriter<CastCancelled>,
     mut cooldown: MessageWriter<SkillCooldownSet>,
+    mut cast_failed: MessageWriter<SkillCastFailed>,
     mut ground: MessageWriter<GroundSkillPlaced>,
     mut skills: MessageWriter<SkillListReceived>,
     mut learn_result: MessageWriter<LearnSkillResultReceived>,
@@ -58,6 +59,9 @@ pub fn zone_drain_combat(
             }
             Body::SkillCooldown(s) => {
                 cooldown.write(skill_cooldown(s));
+            }
+            Body::SkillCastFailed(f) => {
+                cast_failed.write(skill_cast_failed(f));
             }
             Body::GroundSkill(g) => {
                 ground.write(ground_skill(g));
@@ -92,6 +96,7 @@ mod tests {
             .add_message::<SkillEffectShown>()
             .add_message::<CastCancelled>()
             .add_message::<SkillCooldownSet>()
+            .add_message::<SkillCastFailed>()
             .add_message::<GroundSkillPlaced>()
             .add_message::<SkillListReceived>()
             .add_message::<LearnSkillResultReceived>()
@@ -142,6 +147,26 @@ mod tests {
 
         let ground = app.world().resource::<Messages<GroundSkillPlaced>>();
         assert_eq!(ground.iter_current_update_messages().count(), 1);
+    }
+
+    #[test]
+    fn skill_cast_failure_drains_with_reason() {
+        let app = drain(vec![(
+            GAMEPLAY,
+            Body::SkillCastFailed(net::SkillCastFailed {
+                skill_id: 12,
+                reason: net::SkillCastFailureReason::MissingCatalyst as i32,
+            }),
+        )]);
+
+        let failures = app.world().resource::<Messages<SkillCastFailed>>();
+        let events: Vec<_> = failures.iter_current_update_messages().collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].skill_id, 12);
+        assert_eq!(
+            events[0].reason,
+            net_contract::events::SkillCastFailureReason::MissingCatalyst
+        );
     }
 
     #[test]

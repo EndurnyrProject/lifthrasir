@@ -34,6 +34,7 @@ fn targetable_cell(cell_id: u32, x: i32, y: i32, visible: bool) -> SkillUnitCell
     }
 }
 
+const SAFETY_WALL: u32 = 12; // seeded Ground/Cell anchor with the native STR.
 const STORM_GUST: u32 = 89; // seeded Ground/Group anchor with an STR.
 
 fn seeded_catalog() -> EffectCatalog {
@@ -435,6 +436,26 @@ fn group_anchor_yields_exactly_one_effect() {
         effects(&mut app),
         1,
         "group anchor spawns one effect on the root regardless of cell count"
+    );
+}
+
+#[test]
+fn safety_wall_attaches_native_str_to_its_visible_cell() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, SAFETY_WALL, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    let (effect, parent) = app
+        .world_mut()
+        .query::<(&ActiveEffect, &ChildOf)>()
+        .single(app.world())
+        .expect("one Safety Wall effect");
+    assert!(effect.repeating);
+    assert!(
+        app.world().get::<SkillUnitCell>(parent.parent()).is_some(),
+        "Safety Wall STR must be anchored to its visible unit cell"
     );
 }
 

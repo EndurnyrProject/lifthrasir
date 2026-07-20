@@ -1,8 +1,8 @@
 use crate::proto::aesir::net;
 use net_contract::events::{
     CastCancelled, DamageReceived, GroundSkillPlaced, KnockedBack, LearnSkillResultReceived,
-    SkillCastStarted, SkillCooldownSet, SkillDamageReceived, SkillEffectShown, SkillListReceived,
-    SpecialEffectShown, ZoneSkillInfo,
+    SkillCastFailed, SkillCastFailureReason, SkillCastStarted, SkillCooldownSet,
+    SkillDamageReceived, SkillEffectShown, SkillListReceived, SpecialEffectShown, ZoneSkillInfo,
 };
 
 pub fn damage_dealt(d: net::DamageDealt) -> DamageReceived {
@@ -74,6 +74,28 @@ pub fn skill_cooldown(s: net::SkillCooldown) -> SkillCooldownSet {
     SkillCooldownSet {
         skill_id: s.skill_id,
         tick: s.tick,
+    }
+}
+
+pub fn skill_cast_failed(f: net::SkillCastFailed) -> SkillCastFailed {
+    let reason = match net::SkillCastFailureReason::try_from(f.reason)
+        .unwrap_or(net::SkillCastFailureReason::Unspecified)
+    {
+        net::SkillCastFailureReason::Unspecified => SkillCastFailureReason::Unspecified,
+        net::SkillCastFailureReason::MissingCatalyst => SkillCastFailureReason::MissingCatalyst,
+        net::SkillCastFailureReason::InsufficientSp => SkillCastFailureReason::InsufficientSp,
+        net::SkillCastFailureReason::InsufficientZeny => SkillCastFailureReason::InsufficientZeny,
+        net::SkillCastFailureReason::NoAmmo => SkillCastFailureReason::NoAmmo,
+        net::SkillCastFailureReason::OnCooldown => SkillCastFailureReason::OnCooldown,
+        net::SkillCastFailureReason::InvalidTarget => SkillCastFailureReason::InvalidTarget,
+        net::SkillCastFailureReason::NotLearned => SkillCastFailureReason::NotLearned,
+        net::SkillCastFailureReason::OutOfRange => SkillCastFailureReason::OutOfRange,
+        net::SkillCastFailureReason::Busy => SkillCastFailureReason::Busy,
+    };
+
+    SkillCastFailed {
+        skill_id: f.skill_id,
+        reason,
     }
 }
 
