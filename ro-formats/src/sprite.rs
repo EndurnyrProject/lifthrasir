@@ -182,16 +182,45 @@ fn parse_rgba_frame(data: &[u8]) -> IResult<&[u8], SpriteFrame> {
     let width = width_signed.unsigned_abs();
     let height = height_signed.unsigned_abs();
 
-    let data_size = (width as usize) * (height as usize) * 4; // RGBA = 4 bytes per pixel
+    let data_size = (width as usize) * (height as usize) * 4;
     let (data, pixel_data) = take(data_size)(data)?;
+
+    // The file stores RGBA frames bottom-up in ABGR byte order; normalize to
+    // top-down RGBA so consumers can treat the frame as an ordinary image.
+    let row_bytes = (width as usize) * 4;
+    let mut normalized = Vec::with_capacity(data_size);
+    for row in pixel_data.chunks_exact(row_bytes).rev() {
+        for abgr in row.chunks_exact(4) {
+            normalized.extend_from_slice(&[abgr[3], abgr[2], abgr[1], abgr[0]]);
+        }
+    }
 
     Ok((
         data,
         SpriteFrame {
             width,
             height,
-            data: pixel_data.to_vec(),
+            data: normalized,
             is_rgba: true,
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rgba_frame_is_flipped_and_swizzled() {
+        // 1x2 frame, bottom-up ABGR: first stored row is the image's bottom row.
+        let mut input = Vec::new();
+        input.extend_from_slice(&1i16.to_le_bytes());
+        input.extend_from_slice(&2i16.to_le_bytes());
+        input.extend_from_slice(&[10, 20, 30, 40]); // bottom pixel: A=10 B=20 G=30 R=40
+        input.extend_from_slice(&[50, 60, 70, 80]); // top pixel: A=50 B=60 G=70 R=80
+
+        let (_, frame) = parse_rgba_frame(&input).unwrap();
+        assert_eq!((frame.width, frame.height), (1, 2));
+        assert_eq!(frame.data, vec![80, 70, 60, 50, 40, 30, 20, 10]);
+    }
 }

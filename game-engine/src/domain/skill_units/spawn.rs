@@ -12,6 +12,7 @@ use net_contract::events::{SkillUnitSnapshotReceived, SkillUnitSpawned};
 
 use super::components::{SkillUnitCell, SkillUnitGroup};
 use super::visuals::spawn_effect_child;
+use crate::domain::entities::character::components::core::Grounded;
 use crate::domain::entities::components::NetworkEntity;
 use crate::domain::entities::picking::{on_sprite_click, on_sprite_out, on_sprite_over};
 use crate::domain::entities::registry::EntityRegistry;
@@ -124,6 +125,8 @@ fn spawn_group(
             },
             Transform::from_translation(center),
             Visibility::default(),
+            // Snap the group to terrain height like any unit; cells inherit it.
+            Grounded,
             MapScoped,
             Name::new(format!("SkillUnitGroup({})", group.group_id)),
         ))
