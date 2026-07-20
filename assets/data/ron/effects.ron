@@ -196,6 +196,102 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        54: ( // ALL_RESURRECTION
+            str: Some("resurrection.str"),
+            sound: Some("effect/priest_resurrection.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        66: ( // PR_IMPOSITIO (Impositio Manus)
+            str: Some("impositio.str"),
+            sound: Some("effect/priest_impositio.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        67: ( // PR_SUFFRAGIUM
+            str: Some("suffragium.str"),
+            sound: Some("effect/priest_suffragium.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        68: ( // PR_ASPERSIO
+            str: Some("aspersio.str"),
+            sound: Some("effect/priest_aspersio.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        69: ( // PR_BENEDICTIO (Magnus Exorcismus's precursor blessing, aka B.S. Sacramenti)
+            str: Some("benedictio.str"),
+            sound: Some("effect/priest_benedictio.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        71: ( // PR_SLOWPOISON
+            str: Some("slowp.str"),
+            sound: Some("effect/priest_slowpoison.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        72: ( // PR_STRECOVERY (Status Recovery)
+            str: Some("recovery.str"),
+            sound: Some("effect/priest_recovery.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        73: ( // PR_KYRIE (Kyrie Eleison) -- cast-moment flash only; the persistent
+              // barrier shimmer (kyrie_min.str, repeating) lives in `statuses:`
+              // keyed by EFST_KYRIE, driven by StatusEffectChanged.
+            str: Some("kyrie.str"),
+            sound: Some("effect/priest_kyrie_eleison_a.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        74: ( // PR_MAGNIFICAT
+            str: Some("magnificat.str"),
+            sound: Some("effect/priest_magnificat.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        75: ( // PR_GLORIA
+            str: Some("gloria.str"),
+            sound: Some("effect/priest_gloria.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        76: ( // PR_LEXDIVINA
+            str: Some("lexdivina.str"),
+            sound: Some("effect/priest_lexdivina.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        77: ( // PR_TURNUNDEAD -- temporary: reuses holyhit.str until Task 11
+              // authors a dedicated turn_undead.strfx.ron.
+            str: Some("holyhit.str"),
+            sound: Some("effect/priest_turn_undead.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        78: ( // PR_LEXAETERNA -- cast-moment flash only; the persistent mark
+              // (lex_mark.strfx.ron, repeating) lives in `statuses:` keyed by
+              // EFST_LEX_AETERNA, driven by StatusEffectChanged.
+            str: Some("lexaeterna.str"),
+            sound: Some("effect/priest_lexaeterna.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         80: ( // WZ_FIREPILLAR -- single-cell waiting field (aesir wz_firepillar.ex
               // on_place: cells: [center]). The waiting pillar is the sprite
               // effect 이팩트/화염진 ("flame column", 5 frames, ACT-authored 2x2.5

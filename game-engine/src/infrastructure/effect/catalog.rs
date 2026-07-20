@@ -194,6 +194,16 @@ mod tests {
             asset.0.skills[&89].sound.as_deref(),
             Some("effect/wizard_stormgust.wav")
         );
+
+        // id 68 is PR_ASPERSIO: official STR, target-anchored, non-repeating.
+        assert_eq!(asset.0.skills[&68].str.as_deref(), Some("aspersio.str"));
+        assert_eq!(asset.0.skills[&68].placement, EffectPlacement::Target);
+        assert!(!asset.0.skills[&68].repeating);
+
+        // id 78 is PR_LEXAETERNA: official STR, target-anchored, non-repeating.
+        assert_eq!(asset.0.skills[&78].str.as_deref(), Some("lexaeterna.str"));
+        assert_eq!(asset.0.skills[&78].placement, EffectPlacement::Target);
+        assert!(!asset.0.skills[&78].repeating);
     }
 
     #[test]
