@@ -132,13 +132,14 @@ pub(super) fn scene(view: SkillInfoView, skill_id: u32) -> impl Scene {
     };
 
     bsn! {
-        Node { flex_direction: FlexDirection::Column, min_height: px(0) }
+        Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: px(0) }
         ignore_picking()
         Children [
             header,
-            (
+            shell::scroll_body(bsn! {
                 Node {
                     flex_direction: FlexDirection::Column,
+                    flex_shrink: 0.0,
                     row_gap: px(14),
                     padding: {UiRect { left: px(20), right: px(20), top: px(0), bottom: px(6) }},
                 }
@@ -150,7 +151,7 @@ pub(super) fn scene(view: SkillInfoView, skill_id: u32) -> impl Scene {
                     {requires},
                     {unlocks},
                 ]
-            ),
+            }),
             shell::footer_bar(vec![raise_button(skill_id, raise_label, raise_disabled)]),
         ]
     }

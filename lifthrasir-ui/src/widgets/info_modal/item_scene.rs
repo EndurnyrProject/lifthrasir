@@ -77,6 +77,24 @@ pub(super) struct FavoriteStar {
     pub lit: bool,
 }
 
+/// Marks the native RO collection illustration in the item details body.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ItemIllustration;
+
+fn item_illustration(path: String) -> impl Scene {
+    bsn! {
+        ItemIllustration
+        ImageNode { image: {path} }
+        Node {
+            width: px(75),
+            height: px(100),
+            flex_shrink: 0.0,
+            align_self: AlignSelf::Center,
+        }
+        ignore_picking()
+    }
+}
+
 /// The footer's favorite indicator — gold when `favorite`, dim otherwise. Rendered
 /// only for `Inventory` refs, since favorite is server item state with no command
 /// to toggle it here. `ignore_picking` (not a `FeathersButton`, no observer) keeps
@@ -142,6 +160,10 @@ pub(super) fn scene(
     });
     let description = (!view.description.is_empty())
         .then(|| EntityScene(shell::description_section(view.description.clone())));
+    let illustration = view
+        .illustration_path
+        .clone()
+        .map(|path| EntityScene(item_illustration(path)));
 
     let primary_actions = footer_actions(item_ref, item_id, view.identified, category);
     let star = matches!(item_ref, ItemRef::Inventory(_)).then(|| favorite_star(view.favorite));
@@ -154,19 +176,20 @@ pub(super) fn scene(
         (!footer_children.is_empty()).then(|| EntityScene(shell::footer_bar(footer_children)));
 
     bsn! {
-        Node { flex_direction: FlexDirection::Column, min_height: px(0) }
+        Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: px(0) }
         ignore_picking()
         Children [
             header,
-            (
+            shell::scroll_body(bsn! {
                 Node {
                     flex_direction: FlexDirection::Column,
+                    flex_shrink: 0.0,
                     row_gap: px(14),
                     padding: {UiRect { left: px(20), right: px(20), top: px(0), bottom: px(6) }},
                 }
                 ignore_picking()
-                Children [ {cards}, {meta}, {description} ]
-            ),
+                Children [ {illustration}, {cards}, {meta}, {description} ]
+            }),
             {footer},
         ]
     }
@@ -355,6 +378,7 @@ mod tests {
         ItemInfoView {
             item_id: 501,
             icon_path: Some("items/red_potion.png".to_string()),
+            illustration_path: Some("items/red_potion_illustration.png".to_string()),
             edge: shell::EdgeGrade::Fine,
             name: "Red Potion".to_string(),
             identified: true,
@@ -373,6 +397,7 @@ mod tests {
         ItemInfoView {
             item_id: 502,
             icon_path: None,
+            illustration_path: None,
             edge: shell::EdgeGrade::Common,
             name: "Junk".to_string(),
             identified: true,
@@ -417,6 +442,13 @@ mod tests {
         assert!(texts.contains(&"10".to_string()), "{texts:?}");
         assert!(texts.contains(&"Restores HP.".to_string()), "{texts:?}");
         assert!(texts.contains(&"Use".to_string()), "{texts:?}");
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, With<ItemIllustration>>()
+                .iter(app.world())
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -429,6 +461,13 @@ mod tests {
 
         let texts = texts(&mut app);
         assert!(texts.contains(&"Junk".to_string()), "{texts:?}");
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, With<ItemIllustration>>()
+                .iter(app.world())
+                .count(),
+            0
+        );
         for absent in [
             "CARD SLOTS",
             "Empty Socket",

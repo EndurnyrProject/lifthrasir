@@ -9,7 +9,7 @@
 
 use bevy::prelude::Color;
 
-use game_engine::domain::assets::item_icon_path;
+use game_engine::domain::assets::{item_collection_path, item_icon_path};
 use game_engine::domain::cart::Cart;
 use game_engine::domain::entities::character::components::equipment::EquipmentSlot;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
@@ -42,6 +42,7 @@ pub struct ItemInfoView {
     /// revalidate the item at its stored index is still the one shown.
     pub item_id: u32,
     pub icon_path: Option<String>,
+    pub illustration_path: Option<String>,
     pub edge: EdgeGrade,
     pub name: String,
     pub identified: bool,
@@ -262,9 +263,9 @@ fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfo
                 .collect()
         })
         .unwrap_or_default();
-    let icon_path = item_db
-        .icon_resource(resolved.item_id, identified)
-        .map(item_icon_path);
+    let resource = item_db.icon_resource(resolved.item_id, identified);
+    let icon_path = resource.map(item_icon_path);
+    let illustration_path = resource.map(item_collection_path);
 
     let (refine, sockets_filled, sockets_total, cards, edge) = if identified {
         let slot_count = item_db.slot_count(resolved.item_id).unwrap_or(0);
@@ -296,6 +297,7 @@ fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfo
     ItemInfoView {
         item_id,
         icon_path,
+        illustration_path,
         edge,
         name,
         identified,
@@ -666,6 +668,7 @@ mod tests {
         assert_eq!(view.name, "Item #9999");
         assert!(view.description.is_empty());
         assert!(view.icon_path.is_none());
+        assert!(view.illustration_path.is_none());
     }
 
     #[test]

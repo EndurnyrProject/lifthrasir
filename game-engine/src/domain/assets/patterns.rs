@@ -122,6 +122,11 @@ pub fn item_icon_path(resource_name: &str) -> String {
     format!("ro://data/texture/유저인터페이스/item/{resource_name}.bmp")
 }
 
+/// Generate the item-details illustration BMP path for an item resource name.
+pub fn item_collection_path(resource_name: &str) -> String {
+    format!("ro://data/texture/유저인터페이스/collection/{resource_name}.bmp")
+}
+
 /// Generate the minimap BMP path for a map name.
 pub fn minimap_path(map_name: &str) -> String {
     format!("ro://data/texture/유저인터페이스/map/{map_name}.bmp")
@@ -320,6 +325,14 @@ mod tests {
         assert_eq!(
             item_drop_sprite_path("RED_POTION"),
             "ro://data/sprite/아이템/RED_POTION.spr"
+        );
+    }
+
+    #[test]
+    fn item_collection_path_builds_correct_url() {
+        assert_eq!(
+            item_collection_path("RED_POTION"),
+            "ro://data/texture/유저인터페이스/collection/RED_POTION.bmp"
         );
     }
 

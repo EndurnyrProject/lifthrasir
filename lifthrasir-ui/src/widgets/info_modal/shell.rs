@@ -1,4 +1,4 @@
-//! Shared chrome for the info modal: the 372px card, edge-grade ribbon, close
+//! Shared chrome for the info modal: the fixed-size card, edge-grade ribbon, close
 //! button, header, section label, meta-grid cell, and footer bar. Faithful to
 //! `info-modals.css` (`.im-modal` / `.im-head` / `.im-sec` / `.im-meta` / `.im-foot`
 //! / `.im-edge-*`) using the project's existing window and rarity theme tokens.
@@ -6,8 +6,8 @@
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
-use bevy::ui_widgets::Activate;
-use bevy_feathers::controls::FeathersButton;
+use bevy::ui_widgets::{Activate, ControlOrientation, ScrollArea};
+use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor, ThemeToken};
 
 use crate::theme;
@@ -20,8 +20,9 @@ use crate::widgets::chrome::{glyph_icon, ignore_picking};
 use super::view::ColoredLine;
 use super::InfoModalRoot;
 
-/// Card width — `.im-modal { width: 372px; }`.
-pub const MODAL_WIDTH: f32 = 372.0;
+/// Fixed card dimensions shared by item and skill details.
+pub const MODAL_WIDTH: f32 = 440.0;
+pub const MODAL_HEIGHT: f32 = 600.0;
 
 /// Icon box side — `.im-icon { width/height: 62px; }`.
 pub const ICON_BOX_SIZE: f32 = 62.0;
@@ -56,7 +57,7 @@ pub fn card(edge: EdgeGrade, body: impl Scene) -> impl Scene {
     bsn! {
         Node {
             width: px(MODAL_WIDTH),
-            max_height: percent(90),
+            height: px(MODAL_HEIGHT),
             flex_direction: FlexDirection::Column,
             border: px(1),
             border_radius: BorderRadius::all(px(16)),
@@ -70,6 +71,42 @@ pub fn card(edge: EdgeGrade, body: impl Scene) -> impl Scene {
             ribbon(edge),
             close_button(),
             body,
+        ]
+    }
+}
+
+/// The modal's flexible middle section. Header and footer remain fixed while
+/// overflowing details can be scrolled with the wheel or the visible thumb.
+pub fn scroll_body(content: impl Scene) -> impl Scene {
+    bsn! {
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            min_height: px(0),
+            position_type: PositionType::Relative,
+        }
+        ignore_picking()
+        Children [
+            (
+                #viewport
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0), top: px(0), right: px(0), bottom: px(0),
+                    overflow: {Overflow::scroll_y()},
+                    flex_direction: FlexDirection::Column,
+                }
+                ScrollArea
+                Pickable
+                Children [ content ]
+            ),
+            @FeathersScrollbar { @target: #viewport, @orientation: {ControlOrientation::Vertical} }
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(3),
+                top: px(4),
+                bottom: px(4),
+                width: px(6),
+            }
         ]
     }
 }
