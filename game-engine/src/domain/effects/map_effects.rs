@@ -75,10 +75,7 @@ pub fn spawn_map_effects(
 
             let position = rsw_position_to_bevy(effect.position, map_width, map_height);
 
-            if descriptor.str.is_some() {
-                let Some(handle) = load_effect(&asset_server, descriptor) else {
-                    continue;
-                };
+            if let Some(handle) = load_effect(&asset_server, descriptor) {
                 let spawned = spawn_effect(
                     &mut commands,
                     handle,
@@ -88,22 +85,26 @@ pub fn spawn_map_effects(
                     None,
                 );
                 commands.entity(spawned).insert(MapScoped);
-            } else if let Some(vfx) = &descriptor.vfx {
-                commands.spawn((
-                    Transform::from_translation(position),
-                    MapScoped,
-                    MapAmbientVfx {
-                        key: vfx.clone(),
-                        emit_speed: effect.emit_speed,
-                        params: effect.params,
-                    },
-                ));
-            } else {
+                continue;
+            }
+
+            let Some(vfx) = &descriptor.vfx else {
                 debug!(
                     "Map effect {} has neither str nor vfx; skipping",
                     effect.effect_type
                 );
-            }
+                continue;
+            };
+
+            commands.spawn((
+                Transform::from_translation(position),
+                MapScoped,
+                MapAmbientVfx {
+                    key: vfx.clone(),
+                    emit_speed: effect.emit_speed,
+                    params: effect.params,
+                },
+            ));
         }
 
         for (effect_type, count) in unmapped {

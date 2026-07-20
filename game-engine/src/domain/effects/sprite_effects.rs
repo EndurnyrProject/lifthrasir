@@ -23,7 +23,7 @@ use crate::domain::sprite::tags::{
 };
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
-use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
+use crate::infrastructure::assets::ro_animation_asset::{FramePart, RoAnimationAsset};
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 
 /// Effect sprites carry one action; the classic client plays it on a loop.
@@ -53,6 +53,41 @@ pub struct EffectSpritePart {
 pub struct EffectSpriteAssets {
     ready: HashMap<String, Handle<RoAnimationAsset>>,
     pending: HashMap<String, (Handle<RoSpriteAsset>, Handle<RoActAsset>)>,
+}
+
+pub(super) fn apply_animation_part(
+    part: &FramePart,
+    animation: &RoAnimationAsset,
+    materials: &mut Assets<StandardMaterial>,
+    material: &MeshMaterial3d<StandardMaterial>,
+    mut transform: Mut<Transform>,
+    mut visibility: Mut<Visibility>,
+) {
+    if let Some(texture) = animation.textures.get(part.texture_index) {
+        set_layer_texture(materials, &material.0, texture);
+    }
+
+    let scale_x = part.scale.x
+        * part.texture_size.x
+        * SPRITE_WORLD_SCALE
+        * if part.mirror { -1.0 } else { 1.0 };
+    let current = *transform;
+    transform.set_if_neq(Transform {
+        scale: Vec3::new(
+            scale_x,
+            part.scale.y * part.texture_size.y * SPRITE_WORLD_SCALE,
+            1.0,
+        ),
+        // World up is -Y and RO centres the sprite on the ACT position, so
+        // the authored y offset lifts the sprite off the cell when negated.
+        translation: Vec3::new(
+            part.position.x * SPRITE_WORLD_SCALE,
+            -part.position.y * SPRITE_WORLD_SCALE,
+            current.translation.z,
+        ),
+        ..current
+    });
+    visibility.set_if_neq(Visibility::Inherited);
 }
 
 /// Resolves every [`EffectSprite`] request: starts the SPR/ACT load the first
@@ -212,7 +247,7 @@ pub fn sync_effect_sprites(
 ) {
     let game_time_ms = time.elapsed_secs() * 1000.0;
 
-    for (sprite_part, material_handle, mut transform, mut visibility) in &mut parts {
+    for (sprite_part, material_handle, transform, mut visibility) in &mut parts {
         let Some(animation) = animations.get(&sprite_part.animation) else {
             continue;
         };
@@ -231,29 +266,13 @@ pub fn sync_effect_sprites(
             continue;
         };
 
-        if let Some(texture) = animation.textures.get(part.texture_index) {
-            set_layer_texture(&mut materials, &material_handle.0, texture);
-        }
-
-        let mut scale_x = part.scale.x * part.texture_size.x * SPRITE_WORLD_SCALE;
-        let scale_y = part.scale.y * part.texture_size.y * SPRITE_WORLD_SCALE;
-        if part.mirror {
-            scale_x = -scale_x;
-        }
-
-        let current = *transform;
-        transform.set_if_neq(Transform {
-            scale: Vec3::new(scale_x, scale_y, 1.0),
-            // World up is -Y and RO centres the sprite on the ACT position, so
-            // the authored y offset lifts the flame off the cell when negated.
-            translation: Vec3::new(
-                part.position.x * SPRITE_WORLD_SCALE,
-                -part.position.y * SPRITE_WORLD_SCALE,
-                current.translation.z,
-            ),
-            ..current
-        });
-
-        visibility.set_if_neq(Visibility::Inherited);
+        apply_animation_part(
+            part,
+            animation,
+            &mut materials,
+            material_handle,
+            transform,
+            visibility,
+        );
     }
 }

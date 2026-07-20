@@ -144,8 +144,7 @@ pub fn advance_effect_timers(time: Res<Time>, mut effects: Query<&mut ActiveEffe
         if effect.finished || !effect.layers_initialized {
             continue;
         }
-        let still_running = effect.timer.update(delta);
-        if !still_running && !effect.repeating {
+        if !effect.timer.update(delta) && !effect.repeating {
             effect.finished = true;
         }
     }
@@ -159,13 +158,15 @@ pub fn follow_effect_anchor(
     mut effects: Query<(&EffectAnchor, &mut Transform)>,
 ) {
     for (anchor, mut transform) in &mut effects {
-        if let EffectAnchor::Entity(target) = anchor {
-            if let Ok(global) = anchored.get(*target) {
-                let target_translation = global.translation();
-                if transform.translation != target_translation {
-                    transform.translation = target_translation;
-                }
-            }
+        let EffectAnchor::Entity(target) = anchor else {
+            continue;
+        };
+        let Ok(global) = anchored.get(*target) else {
+            continue;
+        };
+        let target_translation = global.translation();
+        if transform.translation != target_translation {
+            transform.translation = target_translation;
         }
     }
 }
@@ -388,15 +389,10 @@ pub fn despawn_finished_effects(
     mut effects: Query<(Entity, &ActiveEffect, Option<&mut EffectLifetime>)>,
 ) {
     for (entity, effect, lifetime) in &mut effects {
-        if effect.finished {
+        if effect.finished
+            || lifetime.is_some_and(|mut lifetime| lifetime.0.tick(time.delta()).just_finished())
+        {
             commands.entity(entity).despawn();
-            continue;
-        }
-
-        if let Some(mut lifetime) = lifetime {
-            if lifetime.0.tick(time.delta()).just_finished() {
-                commands.entity(entity).despawn();
-            }
         }
     }
 }

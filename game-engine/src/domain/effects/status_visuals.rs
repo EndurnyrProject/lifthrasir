@@ -7,13 +7,13 @@ use bevy_persistent::prelude::Persistent;
 use net_contract::events::{StatusEffectChanged, UnitEntered, UnitStateChanged};
 
 use super::components::EffectAnchor;
+use super::sprite_effects::apply_animation_part;
 use super::systems::spawn_effect;
 use super::triggers::{descriptor_tint, load_effect};
 use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::components::RenderLayer;
-use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
 use crate::domain::settings::resources::Settings;
 use crate::domain::sprite::tags::{
     layer_depth_bias, layer_order, LAYER_EFFECT, Z_OFFSET_PER_LAYER,
@@ -22,7 +22,6 @@ use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::infrastructure::effect::StatusEffectCatalog;
-use crate::utils::constants::SPRITE_WORLD_SCALE;
 
 /// aesir `OPT1_*` body-state wire ids (`Aesir.ZoneServer.Mmo.Opt1`, the rAthena
 /// `e_sc_opt1` table). Single-valued: `UnitStateChanged.body_state` carries at
@@ -94,21 +93,20 @@ pub fn body_state_visuals(
     let at_ms = (time.elapsed_secs() * 1000.0) as u32;
 
     for event in state_changes.read() {
-        match registry.get_entity(event.unit_id) {
-            Some(entity) => apply_body_state(
-                &mut commands,
-                entity,
-                event.body_state,
-                at_ms,
-                &shared_quad,
-                &mut materials,
-                &children_query,
-                &overlays,
-            ),
-            None => {
-                pending.0.insert(event.unit_id, event.body_state);
-            }
-        }
+        let Some(entity) = registry.get_entity(event.unit_id) else {
+            pending.0.insert(event.unit_id, event.body_state);
+            continue;
+        };
+        apply_body_state(
+            &mut commands,
+            entity,
+            event.body_state,
+            at_ms,
+            &shared_quad,
+            &mut materials,
+            &children_query,
+            &overlays,
+        );
     }
 
     for event in entered.read() {
@@ -156,31 +154,30 @@ fn apply_body_state(
     children_query: &Query<&Children>,
     overlays: &Query<Entity, With<FrozenOverlay>>,
 ) {
-    match body_state_tint(body_state) {
-        Some(color) => {
-            commands
-                .entity(entity)
-                .insert((BodyStateTint(color), AnimationPaused { at_ms }));
-            if body_state == OPT1_FREEZE {
-                spawn_frozen_overlay(
-                    commands,
-                    entity,
-                    shared_quad,
-                    materials,
-                    children_query,
-                    overlays,
-                );
-            } else {
-                despawn_frozen_overlay(commands, entity, children_query, overlays);
-            }
-        }
-        None => {
-            commands
-                .entity(entity)
-                .remove::<(BodyStateTint, AnimationPaused)>();
-            despawn_frozen_overlay(commands, entity, children_query, overlays);
-        }
+    let Some(color) = body_state_tint(body_state) else {
+        commands
+            .entity(entity)
+            .remove::<(BodyStateTint, AnimationPaused)>();
+        despawn_frozen_overlay(commands, entity, children_query, overlays);
+        return;
+    };
+
+    commands
+        .entity(entity)
+        .insert((BodyStateTint(color), AnimationPaused { at_ms }));
+    if body_state == OPT1_FREEZE {
+        spawn_frozen_overlay(
+            commands,
+            entity,
+            shared_quad,
+            materials,
+            children_query,
+            overlays,
+        );
+        return;
     }
+
+    despawn_frozen_overlay(commands, entity, children_query, overlays);
 }
 
 /// Multiplies each sprite layer's material `base_color` by its parent unit's
@@ -421,34 +418,20 @@ pub fn sync_frozen_overlays(
     let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
     let frame = &action.frames[(game_time_ms as f32 / delay) as usize % action.frames.len()];
 
-    for (overlay, material_handle, mut transform, mut visibility) in &mut overlays {
+    for (overlay, material_handle, transform, mut visibility) in &mut overlays {
         let Some(part) = frame.parts.get(overlay.part) else {
             visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
 
-        if let Some(texture) = animation.textures.get(part.texture_index) {
-            set_layer_texture(&mut materials, &material_handle.0, texture);
-        }
-
-        let mut scale_x = part.scale.x * part.texture_size.x * SPRITE_WORLD_SCALE;
-        let scale_y = part.scale.y * part.texture_size.y * SPRITE_WORLD_SCALE;
-        if part.mirror {
-            scale_x = -scale_x;
-        }
-
-        let current = *transform;
-        transform.set_if_neq(Transform {
-            scale: Vec3::new(scale_x, scale_y, 1.0),
-            translation: Vec3::new(
-                part.position.x * SPRITE_WORLD_SCALE,
-                -part.position.y * SPRITE_WORLD_SCALE,
-                current.translation.z,
-            ),
-            ..current
-        });
-
-        visibility.set_if_neq(Visibility::Inherited);
+        apply_animation_part(
+            part,
+            animation,
+            &mut materials,
+            material_handle,
+            transform,
+            visibility,
+        );
     }
 }
 
@@ -500,18 +483,17 @@ pub fn option_visuals(
     orbits: Query<(Entity, &SightOrbit)>,
 ) {
     for event in state_changes.read() {
-        match registry.get_entity(event.unit_id) {
-            Some(entity) => apply_sight_state(
-                &mut commands,
-                entity,
-                event.effect_state,
-                &transforms,
-                &orbits,
-            ),
-            None => {
-                pending.0.insert(event.unit_id, event.effect_state);
-            }
-        }
+        let Some(entity) = registry.get_entity(event.unit_id) else {
+            pending.0.insert(event.unit_id, event.effect_state);
+            continue;
+        };
+        apply_sight_state(
+            &mut commands,
+            entity,
+            event.effect_state,
+            &transforms,
+            &orbits,
+        );
     }
 
     for event in entered.read() {

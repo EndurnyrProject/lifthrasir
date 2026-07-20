@@ -444,32 +444,32 @@ pub fn on_ground_skill(
         // A sound-only ground skill (no `str`), or a repeating one whose visual
         // now belongs to the skill unit, has no spawned effect to anchor to, so
         // its sound anchors to the caster if present.
-        let emitter = if descriptor.repeating || descriptor.placement != EffectPlacement::Ground {
-            src
-        } else {
-            let position = ground_world_position(
-                event.x as u16,
-                event.y as u16,
-                &map_loader_query,
-                altitude_assets.as_deref(),
-            );
-            match load_effect(&asset_server, descriptor) {
-                Some(effect) => Some(spawn_effect(
-                    &mut commands,
-                    effect,
-                    EffectAnchor::Position(position),
-                    false,
-                    descriptor_tint(descriptor),
-                    None,
-                )),
-                None => src,
-            }
-        };
+        let ground_effect =
+            if descriptor.repeating || descriptor.placement != EffectPlacement::Ground {
+                None
+            } else {
+                let position = ground_world_position(
+                    event.x as u16,
+                    event.y as u16,
+                    &map_loader_query,
+                    altitude_assets.as_deref(),
+                );
+                load_effect(&asset_server, descriptor).map(|effect| {
+                    spawn_effect(
+                        &mut commands,
+                        effect,
+                        EffectAnchor::Position(position),
+                        false,
+                        descriptor_tint(descriptor),
+                        None,
+                    )
+                })
+            };
 
         // Sound anchors to the caster when resolved: unit entities are the
         // exercised spatial-emitter path, and they outlive a short effect (a
         // bare effect entity despawns with the visual, cutting the wav).
-        if let Some(emitter) = src.or(emitter) {
+        if let Some(emitter) = src.or(ground_effect) {
             play_sound(&mut sfx, descriptor, emitter);
         }
     }
