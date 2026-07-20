@@ -168,8 +168,9 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        28: ( // AL_HEAL
-            str: Some("heal.str"),
+        28: ( // AL_HEAL -- authored effect (heal.strfx.ron), replaces the dead
+              // GRF heal.str; establishes the local-texture path convention.
+            str: Some("heal.strfx.ron"),
             sound: Some("_heal_effect.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),

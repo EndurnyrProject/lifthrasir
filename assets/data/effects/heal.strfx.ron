@@ -1,0 +1,122 @@
+// Heal (AL_HEAL) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// mirrors cold_bolt.strfx.ron):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
+//     STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits on the effect anchor (the healed target).
+//   - y grows DOWNWARD (STR is Y-down); the runtime flips Y at mesh write, so a
+//     SMALLER offset.y renders HIGHER above the anchor. The light columns rise by
+//     animating offset.y downward (upward on screen).
+//   - fps 30; keys interpolate LINEARLY (offset, quad, color, angle); the
+//     per-key texture_index is HELD, not lerped -- that is what animates the pack
+//     frame columns.
+//   - blend Add = additive (GRF glow layers); Blend = alpha over (pixel-art
+//     frame layers, so their painted shading survives). RON implicit_some is on,
+//     so optional fields (quad) are written bare.
+//
+// Texture path convention (PROVEN here, first authored effect to use local PNGs):
+//   Local frames are referenced ASSET-ROOT-RELATIVE, no source prefix and no
+//   leading "./": `data/textures/effects/heal/frame_01.png` resolves to
+//   `assets/data/textures/effects/heal/frame_01.png`.
+//   Verified against bevy_asset 0.19.0: LoadContext::load (loader.rs:684) forwards
+//   the path verbatim through load_builder().load (loader_builders.rs:91) into
+//   load_internal (loader_builders.rs:224), which hands it straight to
+//   asset_server.load_with_meta_transform. No AssetPath::resolve against the
+//   parent asset's directory is invoked, so the path is NOT relative to this
+//   strfx file's dir -- it is asset-root-relative (default asset source = assets/).
+//   GRF textures keep their `ro://` source prefix, as in the bolts.
+//   In-game render confirmation is deferred to Task 15.
+//
+// Pack frames: cherry-picked from the Frostwindz "Pixel Art VFX - Priest" pack,
+// set VFX2 (rising golden light column with a ground ring and sparkle crosses),
+// tinted green-white to read as classic Heal. Only the referenced frames are
+// copied into assets/data/textures/effects/heal/.
+//
+// Shape: a soft green-white ground ring flashes out and fades, a glow pops at the
+// base, and one main + one smaller offset light column rise and dissipate (~1.1s).
+(
+    fps: 30,
+    layers: [
+        // Ground ring: flattened lens_b glow expanding outward and fading.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (40.0, 18.0),  color: (150, 240, 175, 0) ),
+                ( at: 4,  offset: (319.0, 291.0), quad: (140.0, 50.0), color: (170, 250, 190, 190) ),
+                ( at: 12, offset: (319.0, 291.0), quad: (210.0, 66.0), color: (160, 245, 185, 140) ),
+                ( at: 22, offset: (319.0, 291.0), quad: (260.0, 78.0), color: (150, 240, 180, 70) ),
+                ( at: 32, offset: (319.0, 291.0), quad: (300.0, 88.0), color: (140, 235, 175, 0) ),
+            ],
+        ),
+        // Base glow flash: quick lens_b pop just above the ground.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 1,  offset: (319.0, 284.0), quad: (40.0, 40.0),   color: (200, 255, 215, 0) ),
+                ( at: 6,  offset: (319.0, 284.0), quad: (120.0, 120.0), color: (210, 255, 220, 220) ),
+                ( at: 12, offset: (319.0, 282.0), quad: (150.0, 150.0), color: (190, 252, 205, 110) ),
+                ( at: 19, offset: (319.0, 280.0), quad: (170.0, 170.0), color: (170, 248, 195, 0) ),
+            ],
+        ),
+        // Main rising light column: VFX2 frames cycled via texture_index, drifting
+        // up and fading, tinted green-white over the golden art.
+        (
+            textures: [
+                "data/textures/effects/heal/frame_01.png",
+                "data/textures/effects/heal/frame_02.png",
+                "data/textures/effects/heal/frame_03.png",
+                "data/textures/effects/heal/frame_04.png",
+                "data/textures/effects/heal/frame_05.png",
+                "data/textures/effects/heal/frame_06.png",
+                "data/textures/effects/heal/frame_07.png",
+                "data/textures/effects/heal/frame_08.png",
+                "data/textures/effects/heal/frame_09.png",
+                "data/textures/effects/heal/frame_10.png",
+                "data/textures/effects/heal/frame_11.png",
+            ],
+            blend: Blend,
+            keys: [
+                ( at: 1,  offset: (319.0, 258.0), quad: (78.0, 150.0), color: (150, 255, 180, 0),   texture_index: 0 ),
+                ( at: 4,  offset: (319.0, 255.0), quad: (86.0, 156.0), color: (160, 255, 185, 210), texture_index: 1 ),
+                ( at: 7,  offset: (319.0, 252.0), quad: (90.0, 160.0), color: (165, 255, 188, 245), texture_index: 2 ),
+                ( at: 10, offset: (319.0, 249.0), quad: (92.0, 162.0), color: (168, 255, 190, 255), texture_index: 3 ),
+                ( at: 13, offset: (319.0, 246.0), quad: (92.0, 162.0), color: (168, 255, 190, 255), texture_index: 4 ),
+                ( at: 16, offset: (319.0, 243.0), quad: (92.0, 160.0), color: (165, 255, 188, 255), texture_index: 5 ),
+                ( at: 19, offset: (319.0, 240.0), quad: (90.0, 158.0), color: (162, 255, 186, 235), texture_index: 6 ),
+                ( at: 22, offset: (319.0, 237.0), quad: (88.0, 154.0), color: (158, 255, 184, 200), texture_index: 7 ),
+                ( at: 25, offset: (319.0, 234.0), quad: (85.0, 150.0), color: (155, 255, 182, 150), texture_index: 8 ),
+                ( at: 28, offset: (319.0, 231.0), quad: (80.0, 144.0), color: (152, 255, 180, 90),  texture_index: 9 ),
+                ( at: 31, offset: (319.0, 228.0), quad: (76.0, 138.0), color: (150, 255, 178, 0),   texture_index: 10 ),
+            ],
+        ),
+        // Secondary smaller column: offset to the side, staggered, same frames.
+        (
+            textures: [
+                "data/textures/effects/heal/frame_01.png",
+                "data/textures/effects/heal/frame_02.png",
+                "data/textures/effects/heal/frame_03.png",
+                "data/textures/effects/heal/frame_04.png",
+                "data/textures/effects/heal/frame_05.png",
+                "data/textures/effects/heal/frame_06.png",
+                "data/textures/effects/heal/frame_07.png",
+                "data/textures/effects/heal/frame_08.png",
+                "data/textures/effects/heal/frame_09.png",
+                "data/textures/effects/heal/frame_10.png",
+                "data/textures/effects/heal/frame_11.png",
+            ],
+            blend: Blend,
+            keys: [
+                ( at: 6,  offset: (348.0, 268.0), quad: (44.0, 86.0),  color: (155, 255, 185, 0),   texture_index: 1 ),
+                ( at: 10, offset: (349.0, 264.0), quad: (50.0, 96.0),  color: (162, 255, 188, 190), texture_index: 3 ),
+                ( at: 15, offset: (350.0, 259.0), quad: (52.0, 100.0), color: (162, 255, 186, 210), texture_index: 5 ),
+                ( at: 20, offset: (351.0, 254.0), quad: (50.0, 94.0),  color: (158, 255, 184, 150), texture_index: 7 ),
+                ( at: 25, offset: (352.0, 249.0), quad: (46.0, 88.0),  color: (154, 255, 182, 80),  texture_index: 9 ),
+                ( at: 30, offset: (353.0, 245.0), quad: (42.0, 80.0),  color: (150, 255, 180, 0),   texture_index: 10 ),
+            ],
+        ),
+    ],
+)

@@ -117,7 +117,7 @@ mod tests {
         let ron = include_str!("../../../../assets/data/ron/effects.ron");
         let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
 
-        assert_eq!(asset.0.skills[&28].str.as_deref(), Some("heal.str"));
+        assert_eq!(asset.0.skills[&28].str.as_deref(), Some("heal.strfx.ron"));
         assert_eq!(asset.0.skills[&28].placement, EffectPlacement::Target);
         assert_eq!(asset.0.skills[&89].placement, EffectPlacement::Ground);
         assert!(asset.0.skills[&89].repeating);
@@ -215,7 +215,7 @@ mod tests {
         let catalog = EffectCatalog::from_skill_effect_data(asset.0.skills);
 
         let target = catalog.get(28).expect("AL_HEAL target descriptor");
-        assert_eq!(target.str.as_deref(), Some("heal.str"));
+        assert_eq!(target.str.as_deref(), Some("heal.strfx.ron"));
         assert_eq!(target.placement, EffectPlacement::Target);
 
         let ground = catalog.get(89).expect("WZ_STORMGUST ground descriptor");
