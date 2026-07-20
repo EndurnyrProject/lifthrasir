@@ -1,4 +1,7 @@
-use crate::{core::MapState, plugins::world_domain_plugin::WorldDomainPlugin};
+use crate::{
+    core::MapState, domain::world::loading_progress::MapLoadProgressPlugin,
+    plugins::world_domain_plugin::WorldDomainPlugin,
+};
 use bevy::prelude::*;
 
 /// World Plugin (Wrapper)
@@ -10,7 +13,7 @@ pub struct WorldPlugin;
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<MapState>();
-        app.add_plugins(WorldDomainPlugin);
+        app.add_plugins((WorldDomainPlugin, MapLoadProgressPlugin));
 
         debug!("WorldPlugin initialized");
     }

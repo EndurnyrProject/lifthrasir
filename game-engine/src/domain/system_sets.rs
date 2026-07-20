@@ -165,7 +165,6 @@ pub enum CharacterFlowSystems {
     MapLoadStart,
     MapLoadTimeout,
     MapLoadDetect,
-    MapLoadComplete,
 }
 
 // =============================================================================

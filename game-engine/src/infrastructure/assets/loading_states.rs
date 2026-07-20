@@ -110,36 +110,3 @@ pub fn ensure_default_config() -> std::io::Result<()> {
 
     Ok(())
 }
-
-// Resource to track loading progress
-#[derive(Resource, Default)]
-pub struct LoadingProgress {
-    pub total_steps: u32,
-    pub completed_steps: u32,
-    pub current_step: String,
-    pub errors: Vec<String>,
-}
-
-impl LoadingProgress {
-    pub fn new(total_steps: u32) -> Self {
-        Self {
-            total_steps,
-            completed_steps: 0,
-            current_step: "Initializing...".to_string(),
-            errors: Vec::new(),
-        }
-    }
-
-    pub fn advance(&mut self, step_description: &str) {
-        self.completed_steps += 1;
-        self.current_step = step_description.to_string();
-        debug!(
-            "Loading progress: {}/{} - {}",
-            self.completed_steps, self.total_steps, step_description
-        );
-    }
-
-    pub fn is_complete(&self) -> bool {
-        self.completed_steps >= self.total_steps
-    }
-}

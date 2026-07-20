@@ -109,7 +109,7 @@ fn cell_vertex_position(x: usize, y: usize, height: f32, offset_x: f32, offset_y
 /// Component to track terrain textures that are loading
 #[derive(Component)]
 pub struct TerrainTexturesLoading {
-    texture_handles: Vec<Handle<Image>>,
+    pub(crate) texture_handles: Vec<Handle<Image>>,
     texture_names: Vec<String>,
     ground_handle: Handle<RoGroundAsset>,
     altitude_handle: Option<Handle<RoAltitudeAsset>>,

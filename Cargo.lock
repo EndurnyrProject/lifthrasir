@@ -3675,6 +3675,7 @@ dependencies = [
  "encoding_rs",
  "futures-lite",
  "image",
+ "iyes_progress",
  "leafwing-input-manager",
  "lifthrasir-data",
  "moonshine-behavior",
@@ -4503,6 +4504,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "iyes_progress"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbf754ab5c0ffc9bc6802ceff90dc5a2f96a83d2ff54af7968543113effc4d69"
+dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_platform",
+ "bevy_state",
+ "derive_more",
+ "parking_lot",
+]
+
+[[package]]
 name = "jni"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4786,6 +4801,7 @@ dependencies = [
  "bevy-persistent",
  "bevy_feathers",
  "game-engine",
+ "iyes_progress",
  "leafwing-input-manager",
  "lifthrasir-data",
  "net-contract",

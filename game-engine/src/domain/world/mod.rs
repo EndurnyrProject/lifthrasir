@@ -1,4 +1,5 @@
 pub mod components;
+pub mod loading_progress;
 pub mod map;
 pub mod map_loader;
 pub mod map_scoped;

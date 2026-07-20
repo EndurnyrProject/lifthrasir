@@ -103,21 +103,6 @@ pub fn detect_map_load_complete(
     }
 }
 
-#[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
-    schedule = Update,
-    config(in_set = CharacterFlowSystems::MapLoadComplete)
-)]
-pub fn handle_map_load_complete(
-    mut events: MessageReader<MapLoadCompleted>,
-    mut game_state: ResMut<NextState<GameState>>,
-) {
-    for event in events.read() {
-        debug!("Map '{}' loaded; entering the game world", event.map_name);
-        game_state.set(GameState::InGame);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
