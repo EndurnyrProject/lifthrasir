@@ -135,14 +135,6 @@ mod tests {
         assert_eq!(asset.0.skills[&12].str.as_deref(), Some("safetywall.str"));
         assert_eq!(asset.0.skills[&12].ground_anchor, GroundAnchor::Cell);
         assert!(asset.0.skills[&12].repeating);
-        assert!(
-            asset
-                .0
-                .skills
-                .values()
-                .all(|e| e.str.as_deref() != Some("magnus.str")),
-            "magnus.str must not be referenced by the skill catalog"
-        );
 
         // id 5 is SM_BASH: sound-only, no STR effect, procedural vfx key "bash".
         assert_eq!(asset.0.skills[&5].str, None);
@@ -204,6 +196,16 @@ mod tests {
         assert_eq!(asset.0.skills[&78].str.as_deref(), Some("lexaeterna.str"));
         assert_eq!(asset.0.skills[&78].placement, EffectPlacement::Target);
         assert!(!asset.0.skills[&78].repeating);
+
+        // id 70 is PR_SANCTUARY: persistent ground field, Group-anchored (default).
+        assert_eq!(asset.0.skills[&70].str.as_deref(), Some("sanctuary.str"));
+        assert_eq!(asset.0.skills[&70].placement, EffectPlacement::Ground);
+        assert!(asset.0.skills[&70].repeating);
+
+        // id 79 is PR_MAGNUS: persistent ground field, Group-anchored (default).
+        assert_eq!(asset.0.skills[&79].str.as_deref(), Some("magnus.str"));
+        assert_eq!(asset.0.skills[&79].placement, EffectPlacement::Ground);
+        assert!(asset.0.skills[&79].repeating);
     }
 
     #[test]

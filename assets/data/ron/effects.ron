@@ -240,6 +240,16 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        70: ( // PR_SANCTUARY -- persistent ground field, Group-anchored (default,
+              // one STR at the field center, matching WZ_STORMGUST's convention).
+              // The skill-unit child visual spawns on SkillUnitSpawn and despawns
+              // with the group; repeating entries spawn nothing extra on trigger.
+            str: Some("sanctuary.str"),
+            sound: Some("effect/priest_sanctuary.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         71: ( // PR_SLOWPOISON
             str: Some("slowp.str"),
             sound: Some("effect/priest_slowpoison.wav"),
@@ -300,6 +310,17 @@
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
+        ),
+        79: ( // PR_MAGNUS (Magnus Exorcismus) -- persistent ground field,
+              // Group-anchored (default). Damage ticks arrive via SkillDamage
+              // and spawn nothing extra since this entry is repeating; the
+              // map: section's 113 EF_MAGNUS entry is a separate id space and
+              // is left untouched here.
+            str: Some("magnus.str"),
+            sound: Some("effect/priest_magnus.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
         ),
         80: ( // WZ_FIREPILLAR -- single-cell waiting field (aesir wz_firepillar.ex
               // on_place: cells: [center]). The waiting pillar is the sprite
