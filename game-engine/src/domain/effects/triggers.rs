@@ -24,6 +24,8 @@ use crate::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
 use crate::domain::combat::systems::start_attack_animation;
 use crate::domain::entities::character::states::AnimationState;
 use crate::domain::entities::registry::EntityRegistry;
+use crate::domain::world::components::MapLoader;
+use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use crate::infrastructure::effect::{
     EffectCatalog, LoadedEffectAsset, MapEffectCatalog, ShaderFxCatalog,
 };
@@ -357,6 +359,12 @@ pub fn on_skill_damage(
             continue;
         }
 
+        // Ground-placement visuals belong to the GroundSkillPlaced event (the
+        // classic poseffect); per-victim damage keeps numbers and motion only.
+        if descriptor.placement == EffectPlacement::Ground {
+            continue;
+        }
+
         let emitter = spawn_str_or_fallback(
             &mut commands,
             &asset_server,
@@ -379,6 +387,26 @@ pub fn on_skill_damage(
     }
 }
 
+/// World position of a ground cell with terrain height applied. Effects are
+/// non-critical (design D6): with no altitude data loaded yet the cell stays on
+/// the y=0 grid plane rather than skipping the visual.
+fn ground_world_position(
+    x: u16,
+    y: u16,
+    map_loader: &Query<&MapLoader>,
+    altitude_assets: Option<&Assets<RoAltitudeAsset>>,
+) -> Vec3 {
+    let world = spawn_coords_to_world_position(x, y, 0, 0);
+    map_loader
+        .single()
+        .ok()
+        .and_then(|loader| loader.altitude.as_ref())
+        .zip(altitude_assets)
+        .and_then(|(handle, assets)| assets.get(handle))
+        .and_then(|asset| asset.altitude.get_terrain_height_at_position(world))
+        .map_or(world, |height| Vec3::new(world.x, height, world.z))
+}
+
 /// `GroundSkillPlaced` — cast-moment feedback only: caster motion, the landing
 /// sound, and (for non-repeating Ground descriptors) a one-shot STR at the
 /// converted cell. Target/Caster descriptors defer their visual to their
@@ -396,6 +424,8 @@ pub fn on_ground_skill(
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     transforms: Query<&Transform>,
     mut sfx: MessageWriter<PlaySkillSfx>,
+    map_loader_query: Query<&MapLoader>,
+    altitude_assets: Option<Res<Assets<RoAltitudeAsset>>>,
 ) {
     for event in events.read() {
         let src = resolve_gid(&registry, event.src_id);
@@ -417,7 +447,12 @@ pub fn on_ground_skill(
         let emitter = if descriptor.repeating || descriptor.placement != EffectPlacement::Ground {
             src
         } else {
-            let position = spawn_coords_to_world_position(event.x as u16, event.y as u16, 0, 0);
+            let position = ground_world_position(
+                event.x as u16,
+                event.y as u16,
+                &map_loader_query,
+                altitude_assets.as_deref(),
+            );
             match load_effect(&asset_server, descriptor) {
                 Some(effect) => Some(spawn_effect(
                     &mut commands,
@@ -431,7 +466,10 @@ pub fn on_ground_skill(
             }
         };
 
-        if let Some(emitter) = emitter {
+        // Sound anchors to the caster when resolved: unit entities are the
+        // exercised spatial-emitter path, and they outlive a short effect (a
+        // bare effect entity despawns with the visual, cutting the wav).
+        if let Some(emitter) = src.or(emitter) {
             play_sound(&mut sfx, descriptor, emitter);
         }
     }
@@ -907,6 +945,78 @@ mod tests {
             active_effects(&mut app),
             0,
             "Meteor must not stamp an STR at its administrative center"
+        );
+    }
+
+    #[test]
+    fn heavens_drive_ground_cast_spawns_authored_str_at_cell() {
+        let mut app = test_app();
+        app.add_systems(Update, on_ground_skill);
+
+        let _src = spawn_unit(&mut app, 100);
+        app.world_mut().write_message(GroundSkillPlaced {
+            skill_id: 91, // WZ_HEAVENDRIVE (seeded Ground, authored strfx)
+            src_id: 100,
+            level: 5,
+            x: 40,
+            y: 50,
+            server_tick: 0,
+        });
+
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            1,
+            "one authored eruption at the announced cell"
+        );
+        let expected = spawn_coords_to_world_position(40, 50, 0, 0);
+        assert_eq!(position_anchored(&mut app), vec![expected]);
+    }
+
+    #[test]
+    fn heavens_drive_damage_defers_vfx_to_ground_event() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+
+        let _target = spawn_unit(&mut app, 200);
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 91, // WZ_HEAVENDRIVE (seeded Ground)
+            level: 5,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 500,
+            div: 1,
+            type_: 0,
+            src_delay: 200,
+            dst_delay: 100,
+        });
+
+        app.update();
+
+        assert_eq!(active_effects(&mut app), 0, "no per-victim STR");
+
+        let vfx = app
+            .world_mut()
+            .resource_mut::<Messages<PlayProceduralVfx>>();
+        let mut cursor = vfx.get_cursor();
+        assert_eq!(
+            cursor.read(&vfx).count(),
+            0,
+            "Ground placement defers the burst to GroundSkillPlaced"
+        );
+
+        let numbers = app
+            .world_mut()
+            .resource_mut::<Messages<DisplayDamageNumber>>();
+        let mut cursor = numbers.get_cursor();
+        assert_eq!(
+            cursor.read(&numbers).count(),
+            1,
+            "damage number still shows"
         );
     }
 

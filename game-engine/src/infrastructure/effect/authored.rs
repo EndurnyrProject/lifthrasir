@@ -592,6 +592,14 @@ mod tests {
     }
 
     #[test]
+    fn heavens_drive_asset_parses_and_converts() {
+        let ron = include_str!("../../../../assets/data/effects/heavens_drive.strfx.ron");
+        let asset = parse_and_convert(ron);
+        assert_eq!(asset.fps, 30);
+        assert!(!asset.layers.is_empty());
+    }
+
+    #[test]
     fn round_trip_lerps_at_midpoint() {
         // Two keys: offset (0,-320)->(0,0), alpha 0->255. At key 6 (midpoint of
         // 0..12) the runtime should lerp to offset (0,-160) and alpha 0.5.

@@ -1,0 +1,139 @@
+// Heaven's Drive (WZ_HEAVENDRIVE) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, with EFFECT_ORIGIN = (319, 291)
+//     and STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits exactly on the effect anchor (here the
+//     targeted ground cell, terrain-height corrected by on_ground_skill).
+//   - y grows DOWNWARD on screen (STR is Y-down). A SMALLER offset.y renders
+//     HIGHER above the anchor; shards erupt by animating offset.y downward
+//     from ~302 (buried) to ~240 (peak).
+//   - fps: 30. Keys lerp linearly; texture_index is held (flipbook).
+//   - The loader enables implicit_some: optional fields are written bare.
+//
+// Shape: five stone shards (stone-1/2/3, magenta-keyed so Blend) burst out of
+// the ground staggered across the 5x5 splash (a cell is 25 px; lanes span
+// ~±55 px), overshoot, settle and fade; a dust_blast eruption and a looping
+// dust01..09 cloud sell the upheaval at the base; a short stone_part debris
+// spray pops during the burst peak.
+(
+    fps: 30,
+    layers: [
+        // Base eruption (dust_blast expanding at the cell).
+        (
+            textures: ["ro://data/texture/effect/dust_blast.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (60.0, 50.0),   color: (200, 170, 110, 0) ),
+                ( at: 5,  offset: (319.0, 284.0), quad: (150.0, 110.0), color: (220, 190, 130, 190) ),
+                ( at: 14, offset: (319.0, 278.0), quad: (210.0, 150.0), color: (200, 170, 110, 120) ),
+                ( at: 26, offset: (319.0, 272.0), quad: (250.0, 170.0), color: (150, 130, 90, 0) ),
+            ],
+        ),
+        // Swirling dust cloud (dust01..09 flipbook) hugging the ground.
+        (
+            textures: [
+                "ro://data/texture/effect/dust01.bmp",
+                "ro://data/texture/effect/dust02.bmp",
+                "ro://data/texture/effect/dust03.bmp",
+                "ro://data/texture/effect/dust04.bmp",
+                "ro://data/texture/effect/dust05.bmp",
+                "ro://data/texture/effect/dust06.bmp",
+                "ro://data/texture/effect/dust07.bmp",
+                "ro://data/texture/effect/dust08.bmp",
+                "ro://data/texture/effect/dust09.bmp",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 2,  offset: (319.0, 285.0), quad: (110.0, 70.0),  color: (170, 140, 100, 0),   texture_index: 0 ),
+                ( at: 6,  offset: (319.0, 281.0), quad: (150.0, 95.0),  color: (190, 160, 110, 140), texture_index: 2 ),
+                ( at: 12, offset: (319.0, 277.0), quad: (180.0, 115.0), color: (190, 160, 110, 150), texture_index: 4 ),
+                ( at: 18, offset: (319.0, 273.0), quad: (200.0, 130.0), color: (170, 140, 100, 110), texture_index: 6 ),
+                ( at: 26, offset: (319.0, 268.0), quad: (220.0, 145.0), color: (140, 120, 90, 50),   texture_index: 8 ),
+                ( at: 32, offset: (319.0, 264.0), quad: (235.0, 155.0), color: (120, 100, 80, 0),    texture_index: 8 ),
+            ],
+        ),
+        // Debris spray popping through the burst peak.
+        (
+            textures: ["ro://data/texture/effect/stone_part.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 5,  offset: (319.0, 288.0), quad: (70.0, 55.0),   color: (255, 235, 200, 0) ),
+                ( at: 9,  offset: (319.0, 272.0), quad: (130.0, 95.0),  color: (255, 235, 200, 190) ),
+                ( at: 15, offset: (319.0, 258.0), quad: (185.0, 130.0), color: (230, 210, 180, 90) ),
+                ( at: 22, offset: (319.0, 248.0), quad: (225.0, 155.0), color: (200, 180, 150, 0) ),
+            ],
+        ),
+        // Shards are distributed through the 5x5 by faking depth on the
+        // billboard: each lane has its own ground baseline (a cell of depth
+        // shifts the baseline ~17 px up-screen at the 45-degree camera) and
+        // back lanes render smaller. Draw order is back-to-front so nearer
+        // shards overdraw farther ones.
+        // Back-right shard (~2 cells behind, smallest).
+        (
+            textures: ["ro://data/texture/effect/stone-2.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 7,  offset: (367.0, 271.0), quad: (30.0, 38.0), color: (255, 255, 255, 0),   angle: -10.0 ),
+                ( at: 9,  offset: (367.0, 258.0), quad: (38.0, 46.0), color: (255, 255, 255, 255), angle: -7.0 ),
+                ( at: 15, offset: (367.0, 231.0), quad: (48.0, 58.0), color: (255, 255, 255, 255), angle: -1.0 ),
+                ( at: 20, offset: (367.0, 236.0), quad: (48.0, 58.0), color: (255, 255, 255, 255), angle: 1.0 ),
+                ( at: 29, offset: (367.0, 240.0), quad: (48.0, 58.0), color: (200, 200, 200, 170), angle: 1.0 ),
+                ( at: 35, offset: (367.0, 244.0), quad: (44.0, 54.0), color: (150, 150, 150, 0),   angle: 1.0 ),
+            ],
+        ),
+        // Back-left shard (one cell behind).
+        (
+            textures: ["ro://data/texture/effect/stone-3.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 3,  offset: (296.0, 284.0), quad: (34.0, 42.0), color: (255, 255, 255, 0),   angle: 8.0 ),
+                ( at: 5,  offset: (296.0, 272.0), quad: (42.0, 52.0), color: (255, 255, 255, 255), angle: 5.0 ),
+                ( at: 11, offset: (296.0, 240.0), quad: (54.0, 66.0), color: (255, 255, 255, 255), angle: -2.0 ),
+                ( at: 16, offset: (296.0, 246.0), quad: (54.0, 66.0), color: (255, 255, 255, 255), angle: -4.0 ),
+                ( at: 27, offset: (296.0, 250.0), quad: (54.0, 66.0), color: (200, 200, 200, 180), angle: -4.0 ),
+                ( at: 34, offset: (296.0, 255.0), quad: (50.0, 62.0), color: (150, 150, 150, 0),   angle: -4.0 ),
+            ],
+        ),
+        // Center shard (largest, first out, on the anchor cell).
+        (
+            textures: ["ro://data/texture/effect/stone-1.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (319.0, 302.0), quad: (52.0, 62.0), color: (255, 255, 255, 0),   angle: -4.0 ),
+                ( at: 2,  offset: (319.0, 288.0), quad: (66.0, 80.0), color: (255, 255, 255, 255), angle: -2.0 ),
+                ( at: 8,  offset: (319.0, 238.0), quad: (86.0, 104.0), color: (255, 255, 255, 255), angle: 3.0 ),
+                ( at: 13, offset: (319.0, 246.0), quad: (86.0, 104.0), color: (255, 255, 255, 255), angle: 5.0 ),
+                ( at: 26, offset: (319.0, 250.0), quad: (86.0, 104.0), color: (200, 200, 200, 200), angle: 5.0 ),
+                ( at: 34, offset: (319.0, 256.0), quad: (82.0, 98.0),  color: (150, 150, 150, 0),   angle: 5.0 ),
+            ],
+        ),
+        // Front-right shard (one cell toward the camera, bigger).
+        (
+            textures: ["ro://data/texture/effect/stone-3.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 5,  offset: (349.0, 318.0), quad: (48.0, 58.0), color: (255, 255, 255, 0),   angle: -9.0 ),
+                ( at: 7,  offset: (349.0, 304.0), quad: (58.0, 72.0), color: (255, 255, 255, 255), angle: -6.0 ),
+                ( at: 13, offset: (349.0, 262.0), quad: (74.0, 92.0), color: (255, 255, 255, 255), angle: 2.0 ),
+                ( at: 18, offset: (349.0, 270.0), quad: (74.0, 92.0), color: (255, 255, 255, 255), angle: 4.0 ),
+                ( at: 28, offset: (349.0, 274.0), quad: (74.0, 92.0), color: (200, 200, 200, 180), angle: 4.0 ),
+                ( at: 35, offset: (349.0, 279.0), quad: (70.0, 86.0), color: (150, 150, 150, 0),   angle: 4.0 ),
+            ],
+        ),
+        // Front-left shard (nearest lane, last out).
+        (
+            textures: ["ro://data/texture/effect/stone-2.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 9,  offset: (272.0, 325.0), quad: (44.0, 54.0), color: (255, 255, 255, 0),   angle: 12.0 ),
+                ( at: 11, offset: (272.0, 311.0), quad: (54.0, 66.0), color: (255, 255, 255, 255), angle: 9.0 ),
+                ( at: 17, offset: (272.0, 275.0), quad: (68.0, 84.0), color: (255, 255, 255, 255), angle: 2.0 ),
+                ( at: 22, offset: (272.0, 282.0), quad: (68.0, 84.0), color: (255, 255, 255, 255), angle: 0.0 ),
+                ( at: 30, offset: (272.0, 286.0), quad: (68.0, 84.0), color: (200, 200, 200, 170), angle: 0.0 ),
+                ( at: 36, offset: (272.0, 290.0), quad: (64.0, 78.0), color: (150, 150, 150, 0),   angle: 0.0 ),
+            ],
+        ),
+    ],
+)

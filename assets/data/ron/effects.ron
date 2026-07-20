@@ -316,17 +316,18 @@
         ),
         91: ( // WZ_HEAVENDRIVE -- ground-targeted but NOT a skill-unit (aesir
               // wz_heavendrive.ex implements only Skill.Active, not
-              // Skill.Ground -- "no persistent skill unit is created"): the
-              // cast directly hits whatever stands in the 5x5 splash through
-              // the shared magic pipeline, so the client only ever sees
-              // per-target SkillDamage, never a GroundSkill/SkillUnitSpawn. No
-              // STR in the official client -- procedural hit burst per target.
-              // No dedicated wav in the GRF; the earthspike strike is the
-              // classic earth-family match.
-            str: None,
-            vfx: Some("heavens_drive"),
+              // Skill.Ground -- "no persistent skill unit is created"). aesir
+              // announces the execution point with a GroundSkill packet
+              // (rAthena clif_skill_poseffect); Ground placement plays one
+              // authored area eruption at that cell and per-victim damage
+              // keeps only numbers. No STR in the official client (hardcoded
+              // rising stones there) -- authored from the classic stone-1/2/3
+              // + dust textures. No dedicated wav in the GRF; the earthspike
+              // strike is the classic earth-family match.
+            str: Some("heavens_drive.strfx.ron"),
+            vfx: None,
             sound: Some("effect/wizard_earthspike.wav"),
-            placement: Target,
+            placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
@@ -666,23 +667,6 @@
             )),
             garnish: Some((
                 tint: (2.2, 1.5, 0.7, 1.0),
-            )),
-        ),
-        "heavens_drive": ( // WZ_HEAVENDRIVE — Earth Spike's eruption, wider and brighter per victim.
-            kind: 6,
-            primary: (3.0, 2.2, 1.2, 1.0),
-            secondary: (1.8, 1.2, 0.6, 1.0),
-            shape: (7.0, 8.0, 1.0, 0.0),
-            duration: 0.65,
-            scale: 22.0,
-            texture: Some("data/texture/effect/stone.bmp"),
-            light: Some((
-                color: (1.0, 0.8, 0.5),
-                intensity_scale: 1.4,
-                fade: 0.2,
-            )),
-            garnish: Some((
-                tint: (2.6, 1.8, 0.8, 1.0),
             )),
         ),
         "frost_diver": ( // MG_FROSTDIVER — an ice particle skims to the target, ice shards erupt.
