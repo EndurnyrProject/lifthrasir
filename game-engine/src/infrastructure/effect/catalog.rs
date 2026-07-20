@@ -270,6 +270,22 @@ mod tests {
             skills: {},
             map: {},
             statuses: {
+                19: (
+                    str: Some("kyrie_min.str"),
+                    vfx: None,
+                    sound: None,
+                    placement: Caster,
+                    color: (1.0, 1.0, 1.0, 1.0),
+                    repeating: true,
+                ),
+                22: (
+                    str: Some("lex_mark.strfx.ron"),
+                    vfx: None,
+                    sound: None,
+                    placement: Target,
+                    color: (1.0, 1.0, 1.0, 1.0),
+                    repeating: true,
+                ),
                 157: (
                     str: Some("energycoat.str"),
                     vfx: None,
@@ -282,6 +298,14 @@ mod tests {
         )"#;
         let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
         let catalog = StatusEffectCatalog::from_status_effect_data(asset.0.statuses);
+
+        let kyrie = catalog.get(19).expect("EFST 19 (kyrie) descriptor");
+        assert_eq!(kyrie.str.as_deref(), Some("kyrie_min.str"));
+        assert!(kyrie.repeating);
+
+        let lex_aeterna = catalog.get(22).expect("EFST 22 (lex aeterna) descriptor");
+        assert_eq!(lex_aeterna.str.as_deref(), Some("lex_mark.strfx.ron"));
+        assert!(lex_aeterna.repeating);
 
         let energy_coat = catalog.get(157).expect("EFST 157 descriptor");
         assert_eq!(energy_coat.str.as_deref(), Some("energycoat.str"));
@@ -302,5 +326,17 @@ mod tests {
         assert_eq!(energy_coat.str.as_deref(), Some("energycoat.str"));
         assert!(energy_coat.repeating);
         assert!(catalog.get(157).is_none());
+
+        // 19 is EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's barrier
+        // shimmer aura, a leaner GRF variant than the one-shot cast STR.
+        let kyrie = catalog.get(19).expect("EFST_KYRIE descriptor");
+        assert_eq!(kyrie.str.as_deref(), Some("kyrie_min.str"));
+        assert!(kyrie.repeating);
+
+        // 22 is EFST_LEX_AETERNA (aesir Efst.id(:lexaeterna)) -- the pulsing
+        // mark hovering above the marked unit while the status is active.
+        let lex_aeterna = catalog.get(22).expect("EFST_LEX_AETERNA descriptor");
+        assert_eq!(lex_aeterna.str.as_deref(), Some("lex_mark.strfx.ron"));
+        assert!(lex_aeterna.repeating);
     }
 }

@@ -618,6 +618,28 @@
         ),
     },
     statuses: {
+        // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
+        // barrier shimmer, driven by StatusEffectChanged(on=true/false). Uses
+        // the leaner "_min" GRF variant, not the full one-shot cast STR (id 73
+        // in `skills:` above already plays the cast sound, so no sound here).
+        19: (
+            str: Some("kyrie_min.str"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        // 22 EFST_LEX_AETERNA (aesir Efst.id(:lexaeterna)) -- Lex Aeterna's
+        // persistent danger mark hovering above the marked unit (player or
+        // mob), driven by StatusEffectChanged rather than the one-shot cast
+        // flash in `skills:` above (id 78, `lexaeterna.str`).
+        22: (
+            str: Some("lex_mark.strfx.ron"),
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         // 31 EFST_ENERGYCOAT (aesir Efst.id(:energycoat)) -- Energy Coat's
         // persistent aura, driven by StatusEffectChanged(on=true/false) rather
         // than the one-shot cast flash in `skills:` above.

@@ -1,0 +1,59 @@
+// Lex Aeterna (PR_LEXAETERNA) - persistent status mark, authored STR-style
+// effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// mirrors heal.strfx.ron / inc_agi.strfx.ron):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
+//     STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits on the effect anchor (the marked unit,
+//     player or mob). y grows DOWNWARD (STR is Y-down), so a SMALLER offset.y
+//     renders HIGHER above the anchor. offset.y ~150 here parks the mark just
+//     above head height (compare inc_agi.strfx.ron's arrows fading out around
+//     y 150-180).
+//   - blend Add = additive glow; Blend = alpha-over for the crisp cross mark.
+//
+// Driven by `StatusEffectChanged` (EFST_LEX_AETERNA = 22), not the one-shot
+// cast flash in effects.ron's `skills:` section (id 78, `lexaeterna.str`).
+// Attached/despawned by `efst_auras` (status_visuals.rs) as a child of the
+// marked unit, so it tracks mobs and players alike and persists until the
+// status clears.
+//
+// Loop semantics (per warp_portal.strfx.ron's header, confirmed the same way
+// here): `max_key` is `last_key.at + 1`, and a repeating effect hard-resets to
+// key 0 on wrap with no crossfade -- so the loop reads seamless only if every
+// layer's key at the final `at` renders IDENTICALLY to its key at `at: 0`.
+// Both layers below close on an exact repeat of their `at: 0` key (same
+// offset, quad, color; no rotation used, so the angle whole-turn rule is
+// trivially satisfied at the default 0.0). fps 20, keys at 0/10/20 = one
+// breathe cycle in 1.0s.
+//
+// Shape: a small red-white danger mark hovering above the victim -- a soft
+// additive glow (lens_b) behind a crisp cross (cross_old.bmp), both gently
+// pulsing in size (20<->30px) and alpha. Subtle, meant to read at a glance,
+// not compete with the cast flash.
+(
+    fps: 20,
+    layers: [
+        // Glow: soft additive halo behind the cross, breathing size and alpha.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 150.0), quad: (20.0, 20.0), color: (255, 140, 140, 90) ),
+                ( at: 10, offset: (319.0, 150.0), quad: (30.0, 30.0), color: (255, 160, 160, 150) ),
+                ( at: 20, offset: (319.0, 150.0), quad: (20.0, 20.0), color: (255, 140, 140, 90) ),
+            ],
+        ),
+        // Mark: crisp cross, red-white tint, breathing alpha with the glow.
+        (
+            textures: ["ro://data/texture/effect/cross_old.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (319.0, 150.0), quad: (20.0, 20.0), color: (255, 210, 210, 130) ),
+                ( at: 10, offset: (319.0, 150.0), quad: (26.0, 26.0), color: (255, 220, 220, 210) ),
+                ( at: 20, offset: (319.0, 150.0), quad: (20.0, 20.0), color: (255, 210, 210, 130) ),
+            ],
+        ),
+    ],
+)
