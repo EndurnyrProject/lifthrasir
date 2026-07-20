@@ -14,7 +14,7 @@ use bevy::prelude::*;
 ///
 /// 1. `process_combat_actions` - Interprets `DamageReceived` messages
 /// 2. `apply_pending_hit_reactions` - Displays damage and starts timed flinches
-/// 3. `handle_hit_reactions` - Adds fallback timing to otherwise untimed hit states
+/// 3. `start_untimed_hit_stun` - Adds fallback timing to otherwise untimed hit states
 /// 4. `update_attack_timers` - Updates attack animation timers
 /// 5. `update_hit_stun` - Updates hit stun timers
 /// 6. `handle_death` - Plays death animation when an entity dies

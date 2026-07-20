@@ -8,7 +8,7 @@ use bevy_auto_plugin::prelude::*;
 ///
 /// Registered systems:
 /// - process_combat_actions
-/// - handle_hit_reactions
+/// - start_untimed_hit_stun
 /// - update_attack_timers
 /// - update_hit_stun
 /// - handle_death

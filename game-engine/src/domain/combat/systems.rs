@@ -243,12 +243,12 @@ pub fn apply_pending_hit_reactions(
     }
 }
 
-type HitReactionQuery<'w, 's> = Query<
+type UntimedHitQuery<'w, 's> = Query<
     'w,
     's,
-    Entity,
+    (Entity, &'static AnimationState),
     (
-        With<AnimationState>,
+        Changed<AnimationState>,
         Without<HasEndure>,
         Without<AttackTimer>,
         Without<HitStun>,
@@ -260,16 +260,10 @@ type HitReactionQuery<'w, 's> = Query<
     schedule = Update,
     config(in_set = CombatSystems::HandleReactions)
 )]
-pub fn handle_hit_reactions(
-    mut commands: Commands,
-    hit_entities: HitReactionQuery,
-    animation_states: Query<&AnimationState>,
-) {
-    for entity in hit_entities.iter() {
-        if let Ok(state) = animation_states.get(entity) {
-            if *state == AnimationState::Hit {
-                commands.entity(entity).insert(HitStun::new(0.3));
-            }
+pub fn start_untimed_hit_stun(mut commands: Commands, hit_entities: UntimedHitQuery) {
+    for (entity, state) in hit_entities.iter() {
+        if *state == AnimationState::Hit {
+            commands.entity(entity).insert(HitStun::new(0.3));
         }
     }
 }
@@ -351,7 +345,10 @@ pub fn update_hit_stun(
         if stun.timer.just_finished() {
             commands.entity(entity).remove::<HitStun>();
 
-            if let Ok(mut behavior) = behaviors.get_mut(entity) {
+            let Ok(mut behavior) = behaviors.get_mut(entity) else {
+                continue;
+            };
+            if *behavior.current() == AnimationState::Hit {
                 behavior.start(AnimationState::Idle);
             }
         }
@@ -497,6 +494,133 @@ mod tests {
         app.world_mut().write_message(combat_action(3));
         app.update();
         assert_eq!(state(&app, source), AnimationState::Idle);
+    }
+
+    fn pending_reaction_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .init_resource::<Time>()
+            .add_message::<DisplayDamageNumber>()
+            .add_systems(
+                Update,
+                (apply_pending_hit_reactions, transition::<AnimationState>).chain(),
+            );
+        app
+    }
+
+    fn spawn_pending_reaction(app: &mut App, target: Entity) -> Entity {
+        app.world_mut()
+            .spawn(PendingHitReaction {
+                target,
+                damage: 42,
+                is_critical: false,
+                flinches: true,
+                stun_secs: 0.75,
+                timer: Timer::from_seconds(0.1, TimerMode::Once),
+            })
+            .id()
+    }
+
+    #[test]
+    fn pending_reaction_uses_server_hit_stun_duration() {
+        let mut app = pending_reaction_app();
+        let target = app.world_mut().spawn(AnimationState::Idle).id();
+        let pending = spawn_pending_reaction(&mut app, target);
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs(1));
+
+        app.update();
+
+        assert!(app.world().get_entity(pending).is_err());
+        assert_eq!(state(&app, target), AnimationState::Hit);
+        let stun_duration = app
+            .world()
+            .get::<HitStun>(target)
+            .unwrap()
+            .timer
+            .duration()
+            .as_secs_f32();
+        assert!((stun_duration - 0.75).abs() < f32::EPSILON);
+
+        let messages: Vec<_> = app
+            .world_mut()
+            .resource_mut::<Messages<DisplayDamageNumber>>()
+            .drain()
+            .collect();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].entity, target);
+        assert_eq!(messages[0].amount, 42);
+    }
+
+    #[test]
+    fn endure_target_displays_damage_without_flinching() {
+        let mut app = pending_reaction_app();
+        let target = app
+            .world_mut()
+            .spawn((AnimationState::Idle, HasEndure))
+            .id();
+        spawn_pending_reaction(&mut app, target);
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs(1));
+
+        app.update();
+
+        assert_eq!(state(&app, target), AnimationState::Idle);
+        assert!(app.world().get::<HitStun>(target).is_none());
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<DisplayDamageNumber>>()
+                .drain()
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn unchanged_hit_state_does_not_restart_fallback_stun() {
+        let mut app = App::new();
+        app.add_systems(Update, start_untimed_hit_stun);
+        let entity = app.world_mut().spawn(AnimationState::Idle).id();
+
+        app.update();
+        *app.world_mut().get_mut::<AnimationState>(entity).unwrap() = AnimationState::Hit;
+        app.update();
+        assert!(app.world().get::<HitStun>(entity).is_some());
+
+        app.world_mut().entity_mut(entity).remove::<HitStun>();
+        app.update();
+        assert!(app.world().get::<HitStun>(entity).is_none());
+    }
+
+    #[test]
+    fn hit_stun_expiry_only_resets_the_hit_pose() {
+        let mut app = App::new();
+        app.add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .init_resource::<Time>()
+            .add_systems(
+                Update,
+                (update_hit_stun, transition::<AnimationState>).chain(),
+            );
+        let hit = app
+            .world_mut()
+            .spawn((AnimationState::Hit, HitStun::new(0.1)))
+            .id();
+        let attacking = app
+            .world_mut()
+            .spawn((AnimationState::Attacking, HitStun::new(0.1)))
+            .id();
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs(1));
+
+        app.update();
+
+        assert_eq!(state(&app, hit), AnimationState::Idle);
+        assert_eq!(state(&app, attacking), AnimationState::Attacking);
+        assert!(app.world().get::<HitStun>(hit).is_none());
+        assert!(app.world().get::<HitStun>(attacking).is_none());
     }
 
     fn death_app() -> App {
