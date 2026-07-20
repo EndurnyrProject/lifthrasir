@@ -126,10 +126,97 @@ pub struct EffectDescriptor {
     pub ground_anchor: GroundAnchor,
 }
 
+/// Point-light pop accompanying a shader-fx entry. Drives the `PointLight` +
+/// `LightFade` pair `spawn_shader_fx` builds.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShaderFxLight {
+    pub color: (f32, f32, f32),
+    pub intensity_scale: f32,
+    pub fade: f32,
+}
+
+/// Tint for the tintable spark garnish child.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShaderFxGarnish {
+    pub tint: (f32, f32, f32, f32),
+}
+
+/// An animated classic GRF texture: the ordered frame paths (each relative to
+/// the `ro://` root) plus the playback rate. Used wherever a `SkillFxMaterial`
+/// binds a texture — burst or projectile — cycling the bound frame at `fps`,
+/// looping. Prefer this over a single `texture` when the source art is a series
+/// (most RO effect textures are, e.g. `thunder_ball_0001..0006`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TextureFrames {
+    pub paths: Vec<String>,
+    pub fps: f32,
+}
+
+/// Caster→target travel config. When present on an entry (and the caster is
+/// resolvable), the effect first flies a projectile billboard from the caster to
+/// the target, then plays the burst on arrival. `texture` is the projectile's own
+/// classic GRF orb sprite (e.g. `data/texture/effect/fireorb.bmp`); when `None`
+/// the projectile falls back to the entry's burst `texture`. Each skill supplies
+/// its own orb, so every projectile looks like its skill.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShaderFxTravel {
+    /// World units per second the projectile advances toward the target.
+    pub speed: f32,
+    /// Uniform world-space scale of the in-flight projectile billboard.
+    pub scale: f32,
+    #[serde(default)]
+    pub texture: Option<String>,
+    /// Animated projectile art; wins over `texture` when set.
+    #[serde(default)]
+    pub frames: Option<TextureFrames>,
+    /// Launch one projectile per hit (the classic bolt behavior: a level-N bolt
+    /// throws N orbs in sequence). `false` (default) launches a single orb
+    /// regardless of hit count (e.g. Jupitel Thunder's one ball).
+    #[serde(default)]
+    pub per_hit: bool,
+    /// Seconds between successive per-hit launches. `0` (default) fires them all
+    /// at once; ignored when `per_hit` is false.
+    #[serde(default)]
+    pub stagger: f32,
+}
+
+/// One shader-fx catalog entry: the `SkillFxParams` payload plus the optional
+/// light/garnish children `spawn_shader_fx` builds. `shape`'s meaning is
+/// per-`kind`, documented in each kind's wgsl fragment function.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShaderFxEntry {
+    pub kind: u32,
+    pub primary: (f32, f32, f32, f32),
+    pub secondary: (f32, f32, f32, f32),
+    pub shape: (f32, f32, f32, f32),
+    pub duration: f32,
+    /// Uniform world-space scale of the billboard quad.
+    pub scale: f32,
+    #[serde(default)]
+    pub light: Option<ShaderFxLight>,
+    #[serde(default)]
+    pub garnish: Option<ShaderFxGarnish>,
+    /// Optional classic GRF effect texture, a path relative to the `ro://` asset
+    /// source root (e.g. `data/texture/effect/fire_fall_b.bmp`). `spawn_shader_fx`
+    /// loads it as `ro://{path}`; `None` binds the fallback image.
+    #[serde(default)]
+    pub texture: Option<String>,
+    /// Animated burst art; wins over `texture` when set.
+    #[serde(default)]
+    pub frames: Option<TextureFrames>,
+    /// Optional caster→target travel. `None` plays the burst straight at the
+    /// target, exactly as before.
+    #[serde(default)]
+    pub travel: Option<ShaderFxTravel>,
+}
+
 /// Unified effect catalog: skill-effect and map-effect descriptors, keyed by
 /// their own id namespaces (`skills` by rAthena skill id, `map` by RSW
 /// `effect_type` / rAthena `e_special_effects` `EF_*` id). The two sections
 /// stay distinct because the id spaces overlap but mean different things.
+/// `shader_fx` is the name-keyed procedural burst table the descriptors'
+/// `vfx` keys resolve against (keys without an entry dispatch to bespoke
+/// spawners in code, e.g. `"bash"`, `"smoke"`, `"emitter"`, `"ice_wall"`).
 /// Keyed by `BTreeMap` for stable, key-ordered RON diffs.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EffectData {
@@ -138,6 +225,9 @@ pub struct EffectData {
     /// Persistent status-aura descriptors, keyed by EFST id.
     #[serde(default)]
     pub statuses: BTreeMap<u32, EffectDescriptor>,
+    /// Procedural shader-fx entries, keyed by `vfx` key.
+    #[serde(default)]
+    pub shader_fx: BTreeMap<String, ShaderFxEntry>,
 }
 
 /// Per-status icon presentation: TGA image name and English display name,

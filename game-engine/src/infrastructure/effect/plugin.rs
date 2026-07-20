@@ -1,5 +1,4 @@
 use super::catalog::{process_loaded_effect_data, start_loading_effect_data};
-use super::shader_fx::{process_loaded_shader_fx, start_loading_shader_fx};
 use crate::domain::effects::{
     advance_effect_timers, apply_body_state_tint, body_state_visuals, despawn_finished_effects,
     efst_auras, finalize_frozen_ice_assets, follow_effect_anchor, initialize_effect_layers,
@@ -24,14 +23,7 @@ impl Plugin for EffectsPlugin {
             .init_resource::<PendingBodyStates>()
             .init_resource::<PendingEffectStates>()
             .init_resource::<EffectSpriteAssets>()
-            .add_systems(
-                Startup,
-                (
-                    start_loading_effect_data,
-                    start_loading_shader_fx,
-                    load_frozen_ice_assets,
-                ),
-            )
+            .add_systems(Startup, (start_loading_effect_data, load_frozen_ice_assets))
             .add_systems(
                 Update,
                 (
@@ -46,7 +38,6 @@ impl Plugin for EffectsPlugin {
                 Update,
                 (
                     process_loaded_effect_data,
-                    process_loaded_shader_fx,
                     // The skill-event and special-effect consumers spawn the effect instances.
                     (
                         on_skill_effect,

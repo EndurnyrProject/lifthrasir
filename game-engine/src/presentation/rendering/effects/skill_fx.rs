@@ -17,7 +17,8 @@ use bevy::shader::ShaderRef;
 
 /// Generic unlit additive billboard material for procedural skill effects. The
 /// `kind` uniform selects the per-skill fragment function in the uber-shader, so
-/// a new effect is one WGSL fragment plus one `shader_fx.ron` entry, zero Rust.
+/// a new effect is one WGSL fragment plus one `shader_fx` entry in
+/// `effects.ron`, zero Rust.
 /// Animated by `FactorRamp` via `factor`. See `assets/data/effects/skill_fx.wgsl`.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct SkillFxMaterial {

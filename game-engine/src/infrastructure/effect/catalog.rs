@@ -1,3 +1,4 @@
+use super::shader_fx::ShaderFxCatalog;
 use bevy::asset::LoadState;
 use bevy::prelude::*;
 use serde::Deserialize;
@@ -101,6 +102,7 @@ pub fn process_loaded_effect_data(
     commands.insert_resource(StatusEffectCatalog::from_status_effect_data(
         asset.0.statuses.clone(),
     ));
+    commands.insert_resource(ShaderFxCatalog::from_entries(asset.0.shader_fx.clone()));
     commands.remove_resource::<EffectDataHandle>();
     debug!("Effect catalogs created from RON");
 }
