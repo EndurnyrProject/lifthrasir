@@ -176,6 +176,22 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        29: ( // AL_INCAGI (Increase AGI) -- authored effect (inc_agi.strfx.ron):
+              // rising blue-white arrow column.
+            str: Some("inc_agi.strfx.ron"),
+            sound: Some("effect/ef_incagility.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        30: ( // AL_DECAGI (Decrease AGI) -- authored effect (dec_agi.strfx.ron):
+              // sinking red-orange arrow column, mirror of AL_INCAGI.
+            str: Some("dec_agi.strfx.ron"),
+            sound: Some("effect/ef_decagility.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         32: ( // AL_CRUCIS (Signum Crucis) -- str is a filename-based candidate,
               // UNVERIFIED visually; eyeball in the Task 15 acceptance pass and
               // replace with an authored effect if wrong.

@@ -1,0 +1,78 @@
+// Increase AGI (AL_INCAGI) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// mirrors cold_bolt.strfx.ron / heal.strfx.ron):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
+//     STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits on the effect anchor (the buffed target).
+//   - y grows DOWNWARD (STR is Y-down); the runtime flips Y at mesh write, so a
+//     SMALLER offset.y renders HIGHER above the anchor. Arrows rise by animating
+//     offset.y DOWNWARD (toward smaller values -- upward on screen).
+//   - angle is in raw STR units (1024 = 360 degrees, STR_ANGLE_UNITS_PER_DEGREE
+//     in systems.rs). icearrow.tga's native orientation (angle: 0) points
+//     DOWNWARD along its fall (see cold_bolt.strfx.ron); rising arrows here need
+//     the 180-degree flip = 512 raw, with small per-layer jitter around it so
+//     they point upward.
+//   - fps 30; keys interpolate LINEARLY (offset, quad, color, angle); RON
+//     implicit_some is on, so optional fields (quad) are written bare.
+//   - blend Add = additive (glow + arrow streaks, all GRF assets here).
+//
+// Texture: GRF `icearrow.tga` reused as a generic pointed-streak/arrow silhouette
+// (per project convention, see cold_bolt.strfx.ron) -- tinted blue-white here to
+// read as the classic Increase AGI column instead of an ice shard.
+//
+// Shape: three staggered arrow streaks climb from the target's feet and fade out
+// near head height, plus a faint blue glow pulse at the base. Quick, ~0.83s.
+(
+    fps: 30,
+    layers: [
+        // Base glow: soft pulse at the target's feet.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (30.0, 30.0),  color: (140, 200, 255, 0) ),
+                ( at: 4,  offset: (319.0, 291.0), quad: (90.0, 90.0),  color: (160, 215, 255, 200) ),
+                ( at: 10, offset: (319.0, 291.0), quad: (110.0, 110.0), color: (150, 210, 255, 90) ),
+                ( at: 16, offset: (319.0, 291.0), quad: (120.0, 120.0), color: (140, 205, 255, 0) ),
+            ],
+        ),
+        // Rising arrow A -- straight up through the center.
+        (
+            textures: ["ro://data/texture/effect/icearrow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (24.0, 90.0), color: (160, 210, 255, 0),   angle: 512.0 ),
+                ( at: 4,  offset: (319.0, 260.0), quad: (26.0, 96.0), color: (190, 230, 255, 235), angle: 512.0 ),
+                ( at: 9,  offset: (319.0, 220.0), quad: (28.0, 100.0), color: (210, 240, 255, 255), angle: 512.0 ),
+                ( at: 14, offset: (319.0, 180.0), quad: (28.0, 100.0), color: (220, 245, 255, 220), angle: 512.0 ),
+                ( at: 18, offset: (319.0, 150.0), quad: (24.0, 90.0), color: (210, 240, 255, 0),   angle: 512.0 ),
+            ],
+        ),
+        // Rising arrow B -- staggered start, drifts left.
+        (
+            textures: ["ro://data/texture/effect/icearrow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 3,  offset: (300.0, 291.0), quad: (20.0, 78.0), color: (160, 210, 255, 0),   angle: 486.0 ),
+                ( at: 7,  offset: (298.0, 255.0), quad: (22.0, 84.0), color: (190, 230, 255, 225), angle: 486.0 ),
+                ( at: 12, offset: (295.0, 213.0), quad: (24.0, 88.0), color: (210, 240, 255, 245), angle: 486.0 ),
+                ( at: 17, offset: (292.0, 172.0), quad: (22.0, 84.0), color: (215, 242, 255, 200), angle: 486.0 ),
+                ( at: 21, offset: (289.0, 142.0), quad: (18.0, 74.0), color: (205, 235, 255, 0),   angle: 486.0 ),
+            ],
+        ),
+        // Rising arrow C -- latest start, drifts right.
+        (
+            textures: ["ro://data/texture/effect/icearrow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 6,  offset: (338.0, 291.0), quad: (18.0, 72.0), color: (160, 210, 255, 0),   angle: 540.0 ),
+                ( at: 10, offset: (341.0, 258.0), quad: (20.0, 78.0), color: (190, 230, 255, 220), angle: 540.0 ),
+                ( at: 15, offset: (345.0, 218.0), quad: (22.0, 82.0), color: (210, 240, 255, 245), angle: 540.0 ),
+                ( at: 20, offset: (349.0, 178.0), quad: (20.0, 78.0), color: (212, 242, 255, 195), angle: 540.0 ),
+                ( at: 24, offset: (352.0, 148.0), quad: (16.0, 68.0), color: (200, 235, 255, 0),   angle: 540.0 ),
+            ],
+        ),
+    ],
+)

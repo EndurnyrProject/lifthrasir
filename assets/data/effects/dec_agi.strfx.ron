@@ -1,0 +1,81 @@
+// Decrease AGI (AL_DECAGI) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// mirrors cold_bolt.strfx.ron / inc_agi.strfx.ron):
+//   - offset & quad are in STR screen pixels. The runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
+//     STR_WORLD_SCALE = 0.2.
+//   - anchor: offset (319, 291) sits on the effect anchor (the debuffed target).
+//   - y grows DOWNWARD (STR is Y-down); the runtime flips Y at mesh write, so a
+//     LARGER offset.y renders LOWER than the anchor. Arrows sink by animating
+//     offset.y UPWARD from above the anchor down to it (downward on screen) --
+//     the mirror of inc_agi.strfx.ron's rising column.
+//   - angle is in raw STR units (1024 = 360 degrees, STR_ANGLE_UNITS_PER_DEGREE
+//     in systems.rs). icearrow.tga's native orientation (angle: 0) already
+//     points DOWNWARD along its fall (see cold_bolt.strfx.ron), so falling
+//     arrows here keep that ~0 baseline with small per-layer jitter -- the
+//     mirror of inc_agi.strfx.ron's 512-raw (180-degree) flip.
+//   - fps 30; keys interpolate LINEARLY (offset, quad, color, angle); RON
+//     implicit_some is on, so optional fields (quad) are written bare.
+//   - blend Add = additive (glow + arrow streaks, all GRF assets here).
+//
+// Texture: GRF `icearrow.tga` reused as a generic pointed-streak/arrow silhouette
+// (per project convention, see cold_bolt.strfx.ron / inc_agi.strfx.ron) -- tinted
+// red-orange here to read as the classic Decrease AGI column, the mirror of
+// Increase AGI's blue-white rising arrows.
+//
+// Shape: three staggered arrow streaks fall from above the target's head and
+// crash to a stop at the feet, plus a faint red glow pulse on landing. Quick,
+// ~0.83s.
+(
+    fps: 30,
+    layers: [
+        // Landing glow: soft pulse at the target's feet as the arrows arrive.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 10, offset: (319.0, 291.0), quad: (30.0, 30.0),  color: (255, 150, 90, 0) ),
+                ( at: 14, offset: (319.0, 291.0), quad: (90.0, 90.0),  color: (255, 170, 100, 210) ),
+                ( at: 20, offset: (319.0, 291.0), quad: (110.0, 110.0), color: (255, 160, 90, 90) ),
+                ( at: 26, offset: (319.0, 291.0), quad: (120.0, 120.0), color: (255, 150, 85, 0) ),
+            ],
+        ),
+        // Falling arrow A -- straight down through the center.
+        (
+            textures: ["ro://data/texture/effect/icearrow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 150.0), quad: (24.0, 90.0), color: (255, 160, 90, 0),   angle: 0.0 ),
+                ( at: 4,  offset: (319.0, 180.0), quad: (26.0, 96.0), color: (255, 180, 110, 235), angle: 0.0 ),
+                ( at: 9,  offset: (319.0, 220.0), quad: (28.0, 100.0), color: (255, 195, 130, 255), angle: 0.0 ),
+                ( at: 14, offset: (319.0, 260.0), quad: (28.0, 100.0), color: (255, 200, 140, 220), angle: 0.0 ),
+                ( at: 18, offset: (319.0, 291.0), quad: (24.0, 90.0), color: (255, 190, 120, 0),   angle: 0.0 ),
+            ],
+        ),
+        // Falling arrow B -- staggered start, drifts left on the way down.
+        (
+            textures: ["ro://data/texture/effect/icearrow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 3,  offset: (300.0, 142.0), quad: (20.0, 78.0), color: (255, 160, 90, 0),   angle: 18.0 ),
+                ( at: 7,  offset: (298.0, 172.0), quad: (22.0, 84.0), color: (255, 180, 110, 225), angle: 18.0 ),
+                ( at: 12, offset: (295.0, 213.0), quad: (24.0, 88.0), color: (255, 195, 130, 245), angle: 18.0 ),
+                ( at: 17, offset: (292.0, 255.0), quad: (22.0, 84.0), color: (255, 198, 135, 200), angle: 18.0 ),
+                ( at: 21, offset: (289.0, 291.0), quad: (18.0, 74.0), color: (255, 190, 120, 0),   angle: 18.0 ),
+            ],
+        ),
+        // Falling arrow C -- latest start, drifts right on the way down.
+        (
+            textures: ["ro://data/texture/effect/icearrow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 6,  offset: (338.0, 148.0), quad: (18.0, 72.0), color: (255, 160, 90, 0),   angle: -20.0 ),
+                ( at: 10, offset: (341.0, 178.0), quad: (20.0, 78.0), color: (255, 180, 110, 220), angle: -20.0 ),
+                ( at: 15, offset: (345.0, 218.0), quad: (22.0, 82.0), color: (255, 195, 130, 245), angle: -20.0 ),
+                ( at: 20, offset: (349.0, 258.0), quad: (20.0, 78.0), color: (255, 198, 135, 195), angle: -20.0 ),
+                ( at: 24, offset: (352.0, 291.0), quad: (16.0, 68.0), color: (255, 190, 120, 0),   angle: -20.0 ),
+            ],
+        ),
+    ],
+)
