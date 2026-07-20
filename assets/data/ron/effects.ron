@@ -347,9 +347,9 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        77: ( // PR_TURNUNDEAD -- temporary: reuses holyhit.str until Task 11
-              // authors a dedicated turn_undead.strfx.ron.
-            str: Some("holyhit.str"),
+        77: ( // PR_TURNUNDEAD -- holy exorcism burst on the victim, arrives via
+              // the SkillDamage path (instant-kill or damage outcomes).
+            str: Some("turn_undead.strfx.ron"),
             sound: Some("effect/priest_turn_undead.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
