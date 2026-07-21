@@ -58,12 +58,18 @@ fn track_map_load_progress(
     let asset_done = |loaded: bool| loaded as u32;
     let mut done = 1;
     done += asset_done(asset_server.is_loaded_with_dependencies(loader.ground.id()));
-    done += asset_done(loader.altitude.as_ref().is_none_or(|h| {
-        asset_server.is_loaded_with_dependencies(h.id())
-    }));
-    done += asset_done(loader.world.as_ref().is_none_or(|h| {
-        asset_server.is_loaded_with_dependencies(h.id())
-    }));
+    done += asset_done(
+        loader
+            .altitude
+            .as_ref()
+            .is_none_or(|h| asset_server.is_loaded_with_dependencies(h.id())),
+    );
+    done += asset_done(
+        loader
+            .world
+            .as_ref()
+            .is_none_or(|h| asset_server.is_loaded_with_dependencies(h.id())),
+    );
 
     if let Some(loading) = textures.iter().next() {
         done += 1;
@@ -71,9 +77,7 @@ fn track_map_load_progress(
         done += loading
             .texture_handles
             .iter()
-            .filter(|h| {
-                **h == default_handle || asset_server.is_loaded_with_dependencies(h.id())
-            })
+            .filter(|h| **h == default_handle || asset_server.is_loaded_with_dependencies(h.id()))
             .count() as u32;
     }
 
