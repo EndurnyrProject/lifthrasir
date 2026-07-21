@@ -15,6 +15,7 @@ pub mod chrome;
 pub mod death_dialog;
 pub mod draggable;
 pub mod emote;
+pub mod escape_menu;
 pub mod guild_window;
 pub mod hotbar;
 pub mod info_modal;

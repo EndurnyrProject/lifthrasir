@@ -97,7 +97,7 @@ fn severity_icon(severity: DialogSeverity) -> &'static str {
 }
 
 /// Spawns the modal for the latest request, unless one is already open.
-fn show_system_dialog(
+pub(crate) fn show_system_dialog(
     mut requests: MessageReader<ShowSystemDialog>,
     existing: Query<(), With<SystemDialogRoot>>,
     mut commands: Commands,

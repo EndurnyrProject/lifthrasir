@@ -95,7 +95,7 @@ pub struct InfoModalRoot;
 /// (registry not loaded, or the item ref no longer resolves) leaves an already-open
 /// modal untouched instead of replacing it with nothing.
 #[allow(clippy::too_many_arguments)]
-fn show_info_modal(
+pub(crate) fn show_info_modal(
     mut requests: MessageReader<ShowInfoModal>,
     existing: Query<Entity, With<InfoModalRoot>>,
     item_db: Option<Res<ItemDb>>,

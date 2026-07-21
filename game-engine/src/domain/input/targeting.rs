@@ -76,12 +76,16 @@ pub fn targeting_click(
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
-pub fn cancel_targeting(mut targeting: ResMut<TargetingMode>, keys: Res<ButtonInput<KeyCode>>) {
-    if !keys.just_pressed(KeyCode::Escape) {
+pub fn cancel_targeting(
+    mut targeting: ResMut<TargetingMode>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
+) {
+    if !keys.just_pressed(KeyCode::Escape) || *targeting == TargetingMode::Idle {
         return;
     }
 
     *targeting = TargetingMode::Idle;
+    keys.clear_just_pressed(KeyCode::Escape);
 }
 
 #[auto_add_system(

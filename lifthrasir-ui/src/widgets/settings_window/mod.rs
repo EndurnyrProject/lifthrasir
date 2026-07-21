@@ -14,7 +14,7 @@ use bevy::ui::RelativeCursorPosition;
 use bevy::ui_widgets::Activate;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use bevy_persistent::prelude::Persistent;
-use game_engine::domain::input::{PlayerAction, ui_unfocused};
+use game_engine::domain::input::PlayerAction;
 use game_engine::domain::settings::{
     ActionBinds, ApplySettings, DisplayMode, GraphicsSettings, KeyBind, Modifier, Settings,
     resolution_label, resolution_next, resolution_prev,
@@ -89,7 +89,7 @@ fn apply_draft(ui: &mut SettingsUi, persistent: &mut Persistent<Settings>) -> bo
     true
 }
 
-/// Marks the toggled window root (Escape / close / login gear flip its `Visibility`).
+/// Marks the toggled window root (menu / close / login gear change its `Visibility`).
 #[derive(Component, Default, Clone)]
 pub struct SettingsWindowRoot;
 
@@ -129,21 +129,7 @@ impl Plugin for SettingsWindowPlugin {
             Update,
             (
                 seed_from_persistent.run_if(resource_added::<Persistent<Settings>>),
-                // Capture runs before the Escape toggle and consumes the press, so
-                // Escape-while-listening cancels the capture instead of closing.
-                capture_rebind
-                    .run_if(listening_active)
-                    .before(toggle_settings),
-                toggle_settings.run_if(
-                    ui_unfocused
-                        .and_then(listening_inactive)
-                        .and_then(not(resource_exists::<
-                            crate::widgets::npc_dialog::ActiveNpcDialog,
-                        >))
-                        .and_then(not(resource_exists::<
-                            crate::widgets::shop_window::ShopSession,
-                        >)),
-                ),
+                capture_rebind.run_if(listening_active),
                 refresh_tabs.run_if(resource_changed::<SettingsUi>),
                 refresh_footer.run_if(resource_changed::<SettingsUi>),
                 refresh_graphics.run_if(resource_changed::<SettingsUi>),
@@ -247,26 +233,6 @@ fn refresh_footer(
             bg.0.set_alpha(alpha);
         }
     }
-}
-
-/// Escape toggles the settings window in any state (title screen and in-game),
-/// gated by `ui_unfocused` so a focused text field swallows the key, and skipped
-/// entirely while an NPC dialogue or shop is open so Escape only closes/cancels
-/// that instead (see `npc_dialog::cancel_on_escape` / `shop_window::close_shop`).
-fn toggle_settings(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut window: Query<&mut Visibility, With<SettingsWindowRoot>>,
-) {
-    if !keys.just_pressed(KeyCode::Escape) {
-        return;
-    }
-    let Ok(mut visibility) = window.single_mut() else {
-        return;
-    };
-    *visibility = match *visibility {
-        Visibility::Hidden => Visibility::Visible,
-        _ => Visibility::Hidden,
-    };
 }
 
 // ── Graphics tab ──────────────────────────────────────────────────────────
@@ -804,12 +770,6 @@ fn modifier_label(modifier: Modifier) -> &'static str {
 /// Whether a rebind capture is in progress (gates `capture_rebind`).
 fn listening_active(ui: Res<SettingsUi>) -> bool {
     ui.listening.is_some()
-}
-
-/// Whether no rebind capture is in progress (gates `toggle_settings` so Escape
-/// cancels the capture instead of closing the window).
-fn listening_inactive(ui: Res<SettingsUi>) -> bool {
-    ui.listening.is_none()
 }
 
 /// A clickable keycap cell; clicking it starts listening for `(action, slot)`.

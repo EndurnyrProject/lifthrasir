@@ -32,6 +32,7 @@ impl Plugin for LifthrasirUiPlugin {
         ));
         app.add_plugins((
             widgets::death_dialog::DeathDialogPlugin,
+            widgets::escape_menu::EscapeMenuPlugin,
             widgets::info_modal::InfoModalPlugin,
             widgets::system_dialog::SystemDialogPlugin,
             worldspace::WorldspaceUiPlugin,
