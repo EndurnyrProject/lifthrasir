@@ -48,9 +48,10 @@ pub fn zone_drain_guild(
             continue;
         };
         if let GuildIngressPayload::ActionResult(result) = &payload
-            && let GuildErrorKind::Unknown(value) = result.error {
-                warn!("unknown guild error value {value}");
-            }
+            && let GuildErrorKind::Unknown(value) = result.error
+        {
+            warn!("unknown guild error value {value}");
+        }
         out.write(GuildIngress {
             generation: *generation,
             payload,

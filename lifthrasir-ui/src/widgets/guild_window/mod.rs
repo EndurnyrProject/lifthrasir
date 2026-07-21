@@ -467,13 +467,14 @@ fn apply_guild_results(
         });
         if !matches {
             if let Some(pending) = ui.pending.as_ref()
-                && pending.action != result.action {
-                    warn!(
-                        expected = pending.action,
-                        received = %result.action,
-                        "ignoring mismatched guild action result"
-                    );
-                }
+                && pending.action != result.action
+            {
+                warn!(
+                    expected = pending.action,
+                    received = %result.action,
+                    "ignoring mismatched guild action result"
+                );
+            }
             continue;
         }
         ui.pending = None;
@@ -609,9 +610,10 @@ fn set_single_text<F: bevy::ecs::query::QueryFilter>(
     value: String,
 ) {
     if let Ok(mut text) = query.single_mut()
-        && text.0 != value {
-            text.0 = value;
-        }
+        && text.0 != value
+    {
+        text.0 = value;
+    }
 }
 
 #[allow(clippy::type_complexity)]

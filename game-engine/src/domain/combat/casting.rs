@@ -57,15 +57,16 @@ pub fn start_cast_pose(
         // Face the target while casting. Self- and ground-targeted casts keep
         // the current facing (a self-cast yields a zero vector).
         if let Some(target) = registry.get_entity(event.target_id)
-            && let (Ok(src_t), Ok(target_t)) = (transforms.get(caster), transforms.get(target)) {
-                let dx = target_t.translation.x - src_t.translation.x;
-                let dz = target_t.translation.z - src_t.translation.z;
-                if dx != 0.0 || dz != 0.0 {
-                    commands.entity(caster).insert(CharacterDirection {
-                        facing: Direction::from_movement_vector(dx, dz),
-                    });
-                }
+            && let (Ok(src_t), Ok(target_t)) = (transforms.get(caster), transforms.get(target))
+        {
+            let dx = target_t.translation.x - src_t.translation.x;
+            let dz = target_t.translation.z - src_t.translation.z;
+            if dx != 0.0 || dz != 0.0 {
+                commands.entity(caster).insert(CharacterDirection {
+                    facing: Direction::from_movement_vector(dx, dz),
+                });
             }
+        }
 
         commands.entity(caster).insert(CastTimer {
             timer: Timer::from_seconds(event.cast_time as f32 / 1000.0, TimerMode::Once),
@@ -95,9 +96,10 @@ pub fn update_cast_timers(
         commands.entity(entity).remove::<CastTimer>();
 
         if let Ok(mut behavior) = behaviors.get_mut(entity)
-            && *behavior.current() == AnimationState::Casting {
-                behavior.start(AnimationState::Idle);
-            }
+            && *behavior.current() == AnimationState::Casting
+        {
+            behavior.start(AnimationState::Idle);
+        }
     }
 }
 
@@ -119,9 +121,10 @@ pub fn cancel_cast_pose(
         commands.entity(entity).remove::<CastTimer>();
 
         if let Ok(mut behavior) = behaviors.get_mut(entity)
-            && *behavior.current() == AnimationState::Casting {
-                behavior.start(AnimationState::Idle);
-            }
+            && *behavior.current() == AnimationState::Casting
+        {
+            behavior.start(AnimationState::Idle);
+        }
     }
 }
 

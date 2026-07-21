@@ -174,24 +174,25 @@ fn check_client_config_loaded(
 ) {
     if let Some(handle) = config_handle
         && !config_loaded.0
-            && let Some(config) = client_configs.get(&handle.0) {
-                auth_context.server_config = ServerConfiguration {
-                    login_server_address: config.server.to_address(),
-                    client_version: config.server.client_version,
-                    default_port: config.server.port,
-                };
+        && let Some(config) = client_configs.get(&handle.0)
+    {
+        auth_context.server_config = ServerConfiguration {
+            login_server_address: config.server.to_address(),
+            client_version: config.server.client_version,
+            default_port: config.server.port,
+        };
 
-                info!(
-                    "Client configured - Server: {}, Version: {}",
-                    auth_context.server_config.login_server_address,
-                    auth_context.server_config.client_version
-                );
+        info!(
+            "Client configured - Server: {}, Version: {}",
+            auth_context.server_config.login_server_address,
+            auth_context.server_config.client_version
+        );
 
-                // Mark as loaded to prevent repeated execution
-                config_loaded.0 = true;
+        // Mark as loaded to prevent repeated execution
+        config_loaded.0 = true;
 
-                next_state.set(GameState::Login);
-            }
+        next_state.set(GameState::Login);
+    }
 }
 
 // ============================================================================

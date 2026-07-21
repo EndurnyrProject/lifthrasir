@@ -142,9 +142,10 @@ pub fn queue_incoming_invite(
         }
     }
     if !pending.is_pending()
-        && let Some(invite) = newest {
-            pending.set(invite, *generation);
-        }
+        && let Some(invite) = newest
+    {
+        pending.set(invite, *generation);
+    }
 }
 
 /// Runs after Update's shared-dialog consumer. A busy dialog keeps the invite queued;

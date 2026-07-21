@@ -59,16 +59,16 @@ fn sync_body_layer_impl<T: ActionLayout>(
         // `as_mut()` reborrows the Option each iteration (MessageWriter is not DerefMut).
         if let Some(writer) = sfx.as_mut()
             && frame_index != attach_point.frame_index
-                && let Some(name) = frame
-                    .sound_id
-                    .and_then(|id| animation.sounds.get(id as usize))
-                    .filter(|name| !name.is_empty())
-                {
-                    writer.write(PlayMobSfx {
-                        emitter: child_of.parent(),
-                        sound: name.clone(),
-                    });
-                }
+            && let Some(name) = frame
+                .sound_id
+                .and_then(|id| animation.sounds.get(id as usize))
+                .filter(|name| !name.is_empty())
+        {
+            writer.write(PlayMobSfx {
+                emitter: child_of.parent(),
+                sound: name.clone(),
+            });
+        }
 
         if let Some(part) = frame.parts.first() {
             if let Some(texture) = animation.textures.get(part.texture_index) {

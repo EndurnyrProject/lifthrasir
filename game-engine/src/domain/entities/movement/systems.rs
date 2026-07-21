@@ -443,13 +443,14 @@ pub fn handle_movement_stopped_observer(
     );
 
     if let Ok(movement_state) = movement_states.get(event.entity)
-        && matches!(movement_state, MovementState::Idle) {
-            debug!(
-                "Skipping Idle transition for {:?}: already Idle",
-                event.entity
-            );
-            return;
-        }
+        && matches!(movement_state, MovementState::Idle)
+    {
+        debug!(
+            "Skipping Idle transition for {:?}: already Idle",
+            event.entity
+        );
+        return;
+    }
 
     let Ok(mut entity_commands) = commands.get_entity(event.entity) else {
         debug!(
@@ -471,9 +472,10 @@ pub fn handle_movement_stopped_observer(
     // Only walking returns to idle here. A trailing move-stop must not clobber a
     // busy animation (attacking, hit, sitting, dead) that took over the entity.
     if let Ok(mut behavior) = behaviors.get_mut(event.entity)
-        && *behavior.current() == AnimationState::Walking {
-            behavior.start(AnimationState::Idle);
-        }
+        && *behavior.current() == AnimationState::Walking
+    {
+        behavior.start(AnimationState::Idle);
+    }
 }
 
 #[auto_add_system(

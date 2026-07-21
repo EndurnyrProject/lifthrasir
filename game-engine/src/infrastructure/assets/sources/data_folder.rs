@@ -37,9 +37,10 @@ fn scan_directory_recursive(dir: &Path, relative_to: &Path) -> Vec<String> {
 
             if path.is_file() {
                 if let Ok(relative_path) = path.strip_prefix(relative_to)
-                    && let Some(path_str) = relative_path.to_str() {
-                        files.push(path_str.replace('\\', "/"));
-                    }
+                    && let Some(path_str) = relative_path.to_str()
+                {
+                    files.push(path_str.replace('\\', "/"));
+                }
             } else if path.is_dir() {
                 files.extend(scan_directory_recursive(&path, relative_to));
             }

@@ -117,10 +117,12 @@ pub fn update_terrain_raycast_cache(
         let current = ray.origin + ray.direction * (step as f32 * STEP);
         let current_gap = signed_gap(current);
         if let (Some(prev), Some(cur)) = (above_gap, current_gap)
-            && prev <= 0.0 && cur >= 0.0 {
-                crossing = Some((above, current));
-                break;
-            }
+            && prev <= 0.0
+            && cur >= 0.0
+        {
+            crossing = Some((above, current));
+            break;
+        }
         above = current;
         above_gap = current_gap;
     }

@@ -36,9 +36,11 @@ impl CompositeAssetSource {
     pub fn find_source_for_asset(&self, path: &str) -> Option<usize> {
         // Check cache first
         if let Some(&source_idx) = self.resolution_cache.get(path)
-            && source_idx < self.sources.len() && self.sources[source_idx].exists(path) {
-                return Some(source_idx);
-            }
+            && source_idx < self.sources.len()
+            && self.sources[source_idx].exists(path)
+        {
+            return Some(source_idx);
+        }
 
         // Search through sources by priority
         for (idx, source) in self.sources.iter().enumerate() {
@@ -90,9 +92,10 @@ impl AssetSource for CompositeAssetSource {
 
     fn load(&self, path: &str) -> Result<Vec<u8>, AssetSourceError> {
         if let Some(source_idx) = self.find_source_for_asset(path)
-            && let Some(source) = self.sources.get(source_idx) {
-                return source.load(path);
-            }
+            && let Some(source) = self.sources.get(source_idx)
+        {
+            return source.load(path);
+        }
 
         Err(AssetSourceError::NotFound(path.to_string()))
     }

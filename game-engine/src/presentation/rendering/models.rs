@@ -88,43 +88,44 @@ pub fn log_loaded_world_data(
 ) {
     for map_loader in query.iter() {
         if let Some(world) = map_loader.world.as_ref()
-            && let Some(world_asset) = world_assets.get(world) {
-                let model_count = world_asset
-                    .world
-                    .objects
-                    .iter()
-                    .filter(|o| matches!(o, RswObject::Model(_)))
-                    .count();
-                let light_count = world_asset
-                    .world
-                    .objects
-                    .iter()
-                    .filter(|o| matches!(o, RswObject::Light(_)))
-                    .count();
-                let sound_count = world_asset
-                    .world
-                    .objects
-                    .iter()
-                    .filter(|o| matches!(o, RswObject::Sound(_)))
-                    .count();
-                let effect_count = world_asset
-                    .world
-                    .objects
-                    .iter()
-                    .filter(|o| matches!(o, RswObject::Effect(_)))
-                    .count();
+            && let Some(world_asset) = world_assets.get(world)
+        {
+            let model_count = world_asset
+                .world
+                .objects
+                .iter()
+                .filter(|o| matches!(o, RswObject::Model(_)))
+                .count();
+            let light_count = world_asset
+                .world
+                .objects
+                .iter()
+                .filter(|o| matches!(o, RswObject::Light(_)))
+                .count();
+            let sound_count = world_asset
+                .world
+                .objects
+                .iter()
+                .filter(|o| matches!(o, RswObject::Sound(_)))
+                .count();
+            let effect_count = world_asset
+                .world
+                .objects
+                .iter()
+                .filter(|o| matches!(o, RswObject::Effect(_)))
+                .count();
 
-                debug!("World data loaded:");
-                debug!("  Version: {}", world_asset.world.version);
-                debug!("  GND file: {}", world_asset.world.gnd_file);
-                debug!("  GAT file: {}", world_asset.world.gat_file);
-                debug!("  Water level: {}", world_asset.world.water.level);
-                debug!("  Total objects: {}", world_asset.world.objects.len());
-                debug!("    Models: {}", model_count);
-                debug!("    Lights: {}", light_count);
-                debug!("    Sounds: {}", sound_count);
-                debug!("    Effects: {}", effect_count);
-            }
+            debug!("World data loaded:");
+            debug!("  Version: {}", world_asset.world.version);
+            debug!("  GND file: {}", world_asset.world.gnd_file);
+            debug!("  GAT file: {}", world_asset.world.gat_file);
+            debug!("  Water level: {}", world_asset.world.water.level);
+            debug!("  Total objects: {}", world_asset.world.objects.len());
+            debug!("    Models: {}", model_count);
+            debug!("    Lights: {}", light_count);
+            debug!("    Sounds: {}", sound_count);
+            debug!("    Effects: {}", effect_count);
+        }
 
         if let Some(ground_asset) = ground_assets.get(&map_loader.ground) {
             debug!("Ground data loaded:");
@@ -795,13 +796,12 @@ fn rsm_node_to_bevy_transform(
     // Special handling for the main node: apply bounding box adjustment
     // This maintains the coordinate system setup with NEG_Y camera
     let is_main_node = node.name == rsm.main_node_name || node_idx == 0;
-    if is_main_node
-        && let Some(ref bbox) = rsm.bounding_box {
-            // Apply bounding box translation to the main node's transform
-            // This replaces the global bbox transform that was applied to all vertices
-            let bbox_offset = Vec3::new(-bbox.center[0], -bbox.max[1], -bbox.center[2]);
-            transform.translation += bbox_offset;
-        }
+    if is_main_node && let Some(ref bbox) = rsm.bounding_box {
+        // Apply bounding box translation to the main node's transform
+        // This replaces the global bbox transform that was applied to all vertices
+        let bbox_offset = Vec3::new(-bbox.center[0], -bbox.max[1], -bbox.center[2]);
+        transform.translation += bbox_offset;
+    }
 
     transform
 }

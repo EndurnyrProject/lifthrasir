@@ -166,11 +166,12 @@ impl Rsm {
         // Build parent-child relationships
         let mut children: Vec<Vec<usize>> = vec![Vec::new(); self.nodes.len()];
         for (idx, node) in self.nodes.iter().enumerate() {
-            if !node.parent_name.is_empty() && node.name != node.parent_name
+            if !node.parent_name.is_empty()
+                && node.name != node.parent_name
                 && let Some(parent_idx) = self.nodes.iter().position(|n| n.name == node.parent_name)
-                {
-                    children[parent_idx].push(idx);
-                }
+            {
+                children[parent_idx].push(idx);
+            }
         }
 
         // Start with identity matrix

@@ -153,13 +153,14 @@ fn write_entry(
         Err(_) => {
             // File doesn't exist yet, check parent directory
             if let Some(parent) = output_file_path.parent()
-                && !parent.starts_with(canonical_output) {
-                    eprintln!(
-                        "Warning: Skipping potentially malicious file path '{}'",
-                        label
-                    );
-                    return WriteOutcome::PathTraversalBlocked;
-                }
+                && !parent.starts_with(canonical_output)
+            {
+                eprintln!(
+                    "Warning: Skipping potentially malicious file path '{}'",
+                    label
+                );
+                return WriteOutcome::PathTraversalBlocked;
+            }
         }
     }
 

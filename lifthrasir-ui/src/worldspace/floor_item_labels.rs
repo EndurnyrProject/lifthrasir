@@ -96,10 +96,9 @@ fn sync_floor_item_labels(
             .ok()
             .zip(item_db.as_deref())
             .and_then(|(item, db)| db.name(item.nameid, item.identified));
-        if !already_labeled
-            && let Some(name) = name {
-                spawn_floor_item_label(&mut commands, &font, target, name);
-            }
+        if !already_labeled && let Some(name) = name {
+            spawn_floor_item_label(&mut commands, &font, target, name);
+        }
     }
 
     for (entity, label) in &labels {

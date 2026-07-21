@@ -269,9 +269,10 @@ pub fn teardown_map_sounds(
 
     for (entity, src) in sources.iter() {
         if let Some(handle) = &src.instance
-            && let Some(mut instance) = audio_instances.get_mut(handle) {
-                instance.stop(tween.clone());
-            }
+            && let Some(mut instance) = audio_instances.get_mut(handle)
+        {
+            instance.stop(tween.clone());
+        }
         commands.entity(entity).despawn();
     }
 }
