@@ -476,7 +476,7 @@ mod tests {
 
         let heal = data.skills.get(&28).expect("AL_HEAL entry");
         assert_eq!(heal.placement, EffectPlacement::Target);
-        assert_eq!(heal.str.as_deref(), Some("heal.str"));
+        assert_eq!(heal.str.as_deref(), Some("heal.strfx.ron"));
         // Sound is relative to `data/wav/`; `_heal_effect.wav` lives at the root
         // (no `effect/` prefix), so the old `effect/_heal_effect.wav` was broken.
         assert_eq!(heal.sound.as_deref(), Some("_heal_effect.wav"));
