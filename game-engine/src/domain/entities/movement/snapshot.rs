@@ -65,11 +65,10 @@ impl SnapshotBuffer {
 
     /// Append a sample, dropping out-of-order/duplicate ticks and trimming to capacity.
     pub fn push(&mut self, sample: SnapshotSample) {
-        if let Some(last) = self.samples.back() {
-            if sample.server_tick <= last.server_tick {
+        if let Some(last) = self.samples.back()
+            && sample.server_tick <= last.server_tick {
                 return;
             }
-        }
         self.samples.push_back(sample);
         if self.samples.len() > BUFFER_CAPACITY {
             self.samples.pop_front();

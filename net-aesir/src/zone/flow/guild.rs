@@ -47,11 +47,10 @@ pub fn zone_drain_guild(
         let Some(payload) = guild_payload(message.body.clone()) else {
             continue;
         };
-        if let GuildIngressPayload::ActionResult(result) = &payload {
-            if let GuildErrorKind::Unknown(value) = result.error {
+        if let GuildIngressPayload::ActionResult(result) = &payload
+            && let GuildErrorKind::Unknown(value) = result.error {
                 warn!("unknown guild error value {value}");
             }
-        }
         out.write(GuildIngress {
             generation: *generation,
             payload,

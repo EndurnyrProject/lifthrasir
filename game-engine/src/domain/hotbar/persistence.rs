@@ -39,12 +39,11 @@ fn read_hotbar(path: &Path) -> Hotbar {
 }
 
 fn write_hotbar(path: &Path, hotbar: &Hotbar) {
-    if let Some(parent) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent) {
             error!("hotbar: failed to create directory: {e}");
             return;
         }
-    }
     match ron::to_string(hotbar) {
         Ok(text) => {
             if let Err(e) = std::fs::write(path, text) {

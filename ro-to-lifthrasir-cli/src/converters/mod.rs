@@ -31,11 +31,10 @@ const CONVERTERS: &[(&str, ConverterFn)] = &[
 ];
 
 pub fn run(only: Option<&str>, vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
-    if let Some(name) = only {
-        if !CONVERTERS.iter().any(|(n, _)| *n == name) {
+    if let Some(name) = only
+        && !CONVERTERS.iter().any(|(n, _)| *n == name) {
             anyhow::bail!("unknown converter: {name}");
         }
-    }
     for (name, f) in CONVERTERS {
         if only.is_none_or(|o| o == *name) {
             f(vfs, out)?;

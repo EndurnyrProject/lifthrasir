@@ -220,11 +220,10 @@ fn on_create(
     mut writer: MessageWriter<PartyCreateRequested>,
     mut commands: Commands,
 ) {
-    if let Ok(field) = field.single() {
-        if let Some(name) = submit_name(&field.value().to_string()) {
+    if let Ok(field) = field.single()
+        && let Some(name) = submit_name(&field.value().to_string()) {
             writer.write(PartyCreateRequested { name });
         }
-    }
     close_dialog(&root, &mut commands);
 }
 

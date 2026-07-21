@@ -73,11 +73,10 @@ pub fn handle_cursor_change_requests(
     mut current_cursor: ResMut<CurrentCursorType>,
     mut messages: MessageReader<CursorChangeRequest>,
 ) {
-    if let Some(last_message) = messages.read().last() {
-        if current_cursor.set(last_message.cursor_type) {
+    if let Some(last_message) = messages.read().last()
+        && current_cursor.set(last_message.cursor_type) {
             trace!("Cursor changed to: {:?}", last_message.cursor_type);
         }
-    }
 }
 
 #[cfg(test)]

@@ -71,12 +71,11 @@ pub fn log_performance_metrics(
     let mut gpu_diagnostics_found = false;
     for diagnostic in diagnostics.iter() {
         let path_str = diagnostic.path().as_str();
-        if path_str.contains("gpu_time") {
-            if let Some(smoothed) = diagnostic.smoothed() {
+        if path_str.contains("gpu_time")
+            && let Some(smoothed) = diagnostic.smoothed() {
                 debug!("GPU Time ({}): {:.2}ms", path_str, smoothed * 1000.0);
                 gpu_diagnostics_found = true;
             }
-        }
     }
 
     if !gpu_diagnostics_found {

@@ -78,14 +78,13 @@ impl EntityRegistry {
     /// This should be called when spawning any entity from a network packet.
     pub fn register_entity(&mut self, account_id: u32, entity: Entity) {
         // Debug check for double-registration
-        if let Some(old_entity) = self.account_to_entity.insert(account_id, entity) {
-            if old_entity != entity {
+        if let Some(old_entity) = self.account_to_entity.insert(account_id, entity)
+            && old_entity != entity {
                 warn!(
                     "Account ID {} was already registered to entity {:?}, replacing with {:?}",
                     account_id, old_entity, entity
                 );
             }
-        }
 
         self.entity_to_account.insert(entity, account_id);
 

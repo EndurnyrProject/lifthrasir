@@ -536,26 +536,24 @@ pub fn generate_terrain_mesh(
         }
 
         // Check optional altitude asset
-        if let Some(ref alt_handle) = map_loader.altitude {
-            if !asset_server.is_loaded_with_dependencies(alt_handle) {
+        if let Some(ref alt_handle) = map_loader.altitude
+            && !asset_server.is_loaded_with_dependencies(alt_handle) {
                 debug!(
                     "generate_terrain_mesh: Waiting for altitude asset to load for '{}'",
                     map_request.map_name
                 );
                 continue;
             }
-        }
 
         // Check optional world asset
-        if let Some(ref world_handle) = map_loader.world {
-            if !asset_server.is_loaded_with_dependencies(world_handle) {
+        if let Some(ref world_handle) = map_loader.world
+            && !asset_server.is_loaded_with_dependencies(world_handle) {
                 debug!(
                     "generate_terrain_mesh: Waiting for world asset to load for '{}'",
                     map_request.map_name
                 );
                 continue;
             }
-        }
 
         // NOW it's safe to access - assets are guaranteed loaded
         let Some(ground) = ground_assets.get(&map_loader.ground) else {

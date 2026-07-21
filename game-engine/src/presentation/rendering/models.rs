@@ -87,8 +87,8 @@ pub fn log_loaded_world_data(
     query: Query<&MapLoader, Changed<MapLoader>>,
 ) {
     for map_loader in query.iter() {
-        if let Some(world) = map_loader.world.as_ref() {
-            if let Some(world_asset) = world_assets.get(world) {
+        if let Some(world) = map_loader.world.as_ref()
+            && let Some(world_asset) = world_assets.get(world) {
                 let model_count = world_asset
                     .world
                     .objects
@@ -125,7 +125,6 @@ pub fn log_loaded_world_data(
                 debug!("    Sounds: {}", sound_count);
                 debug!("    Effects: {}", effect_count);
             }
-        }
 
         if let Some(ground_asset) = ground_assets.get(&map_loader.ground) {
             debug!("Ground data loaded:");
@@ -796,14 +795,13 @@ fn rsm_node_to_bevy_transform(
     // Special handling for the main node: apply bounding box adjustment
     // This maintains the coordinate system setup with NEG_Y camera
     let is_main_node = node.name == rsm.main_node_name || node_idx == 0;
-    if is_main_node {
-        if let Some(ref bbox) = rsm.bounding_box {
+    if is_main_node
+        && let Some(ref bbox) = rsm.bounding_box {
             // Apply bounding box translation to the main node's transform
             // This replaces the global bbox transform that was applied to all vertices
             let bbox_offset = Vec3::new(-bbox.center[0], -bbox.max[1], -bbox.center[2]);
             transform.translation += bbox_offset;
         }
-    }
 
     transform
 }

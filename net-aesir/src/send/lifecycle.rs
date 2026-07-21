@@ -148,8 +148,8 @@ pub fn advance_zone_handshake(
         state.player_ready_signal = true;
     }
 
-    if state.map_loaded_signal && state.player_ready_signal {
-        if let Some(next) = map_loaded_next(state.phase) {
+    if state.map_loaded_signal && state.player_ready_signal
+        && let Some(next) = map_loaded_next(state.phase) {
             if let Err(e) = state.send(&mut client, CONTROL, Body::MapLoaded(MapLoaded {})) {
                 error!("failed to send MapLoaded: {e}");
                 state.phase = ZonePhase::Failed;
@@ -158,13 +158,11 @@ pub fn advance_zone_handshake(
             debug!("zone handshake: MapLoaded sent (map + player ready)");
             state.phase = next;
         }
-    }
 
-    if state.player_ready_signal {
-        if let Some(next) = player_ready_next(state.phase) {
+    if state.player_ready_signal
+        && let Some(next) = player_ready_next(state.phase) {
             state.phase = next;
         }
-    }
 }
 
 /// Tear down the zone session when the domain leaves the zone (return to login).

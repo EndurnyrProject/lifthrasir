@@ -31,11 +31,10 @@ impl JobSpriteRegistry {
             return Some(WARP_SPRITE_NAME);
         }
 
-        if is_player_job(jt_id) {
-            if let Some(sprite) = self.player_jobs.get(&jt_id) {
+        if is_player_job(jt_id)
+            && let Some(sprite) = self.player_jobs.get(&jt_id) {
                 return Some(sprite);
             }
-        }
 
         if let Some(sprite) = self.npc_sprites.get(&jt_id) {
             return Some(sprite.as_str());

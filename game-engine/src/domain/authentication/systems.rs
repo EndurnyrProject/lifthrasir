@@ -172,9 +172,9 @@ fn check_client_config_loaded(
     mut auth_context: ResMut<AuthenticationContext>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
-    if let Some(handle) = config_handle {
-        if !config_loaded.0 {
-            if let Some(config) = client_configs.get(&handle.0) {
+    if let Some(handle) = config_handle
+        && !config_loaded.0
+            && let Some(config) = client_configs.get(&handle.0) {
                 auth_context.server_config = ServerConfiguration {
                     login_server_address: config.server.to_address(),
                     client_version: config.server.client_version,
@@ -192,8 +192,6 @@ fn check_client_config_loaded(
 
                 next_state.set(GameState::Login);
             }
-        }
-    }
 }
 
 // ============================================================================

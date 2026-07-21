@@ -268,11 +268,10 @@ pub fn teardown_map_sounds(
     let tween = AudioTween::linear(Duration::from_secs_f32(0.1));
 
     for (entity, src) in sources.iter() {
-        if let Some(handle) = &src.instance {
-            if let Some(mut instance) = audio_instances.get_mut(handle) {
+        if let Some(handle) = &src.instance
+            && let Some(mut instance) = audio_instances.get_mut(handle) {
                 instance.stop(tween.clone());
             }
-        }
         commands.entity(entity).despawn();
     }
 }
