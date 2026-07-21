@@ -57,12 +57,15 @@ impl QuicLoginState {
 
 /// Opens the QUIC connection to the aesir account server.
 ///
-/// Dev cert handling: `SkipVerification` (self-signed). The send channels use
-/// aesir's fixed order so channel ids line up; recv channels keep their defaults.
+/// Closes any existing connection first so reconnecting after a zone disconnect
+/// restores the one-active-connection invariant. Dev cert handling:
+/// `SkipVerification` (self-signed). The send channels use aesir's fixed order so
+/// channel ids line up; recv channels keep their defaults.
 pub fn connect(
     client: &mut QuinnetClient,
     addr: &str,
 ) -> Result<ConnectionLocalId, AsyncChannelError> {
+    client.close_all_connections();
     let addr_config = ClientAddrConfiguration::from_strings(addr, "0.0.0.0:0")
         .expect("valid login server address");
     client.open_connection(ClientConnectionConfiguration {
