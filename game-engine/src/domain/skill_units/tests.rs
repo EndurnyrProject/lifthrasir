@@ -13,8 +13,8 @@ use std::collections::BTreeMap;
 use super::components::{SkillUnitCell, SkillUnitGroup};
 use super::lifecycle::{despawn_skill_units, update_skill_units};
 use super::spawn::spawn_skill_units;
-use crate::domain::effects::components::ActiveEffect;
 use crate::domain::effects::EffectSprite;
+use crate::domain::effects::components::ActiveEffect;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset, LoadedEffectAsset};
 use crate::utils::coordinates::spawn_coords_to_world_position;
@@ -611,11 +611,12 @@ fn despawn_unregisters_targetable_cell() {
         group: group(1, STORM_GUST, vec![targetable_cell(100, 40, 50, true)]),
     });
     app.update();
-    assert!(app
-        .world()
-        .resource::<EntityRegistry>()
-        .get_entity(100)
-        .is_some());
+    assert!(
+        app.world()
+            .resource::<EntityRegistry>()
+            .get_entity(100)
+            .is_some()
+    );
 
     app.world_mut().write_message(SkillUnitDespawned {
         group_id: 1,
@@ -640,11 +641,12 @@ fn duplicate_spawn_unregisters_old_targetable_cells() {
         group: group(1, STORM_GUST, vec![targetable_cell(100, 40, 50, true)]),
     });
     app.update();
-    assert!(app
-        .world()
-        .resource::<EntityRegistry>()
-        .get_entity(100)
-        .is_some());
+    assert!(
+        app.world()
+            .resource::<EntityRegistry>()
+            .get_entity(100)
+            .is_some()
+    );
 
     // Group re-entering view (or a duplicate spawn) with a different cell
     // id: the old targetable cell's registration must not survive the replace.

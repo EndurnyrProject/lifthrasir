@@ -5,7 +5,7 @@ use crate::{
             hover::CurrentlyHoveredEntity,
             markers::LocalPlayer,
             movement::events::MovementRequested,
-            pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
+            pathfinding::{CurrentMapPathfindingGrid, WalkablePath, find_path},
         },
         system_sets::InputSystems,
         world::components::MapLoader,
@@ -23,9 +23,9 @@ use crate::domain::entities::character::events::{SkillLearnRequested, StatIncrea
 use crate::domain::entities::character::states::AnimationState;
 
 use super::{
-    cursor::CursorType, events::CursorChangeRequest, targeting::TargetingMode,
-    terrain_raycast::TerrainRaycastCache, ui_focus::ui_unfocused, ForwardedMouseClick,
-    LockedTarget, PlayerAction,
+    ForwardedMouseClick, LockedTarget, PlayerAction, cursor::CursorType,
+    events::CursorChangeRequest, targeting::TargetingMode, terrain_raycast::TerrainRaycastCache,
+    ui_focus::ui_unfocused,
 };
 
 // =============================================================================

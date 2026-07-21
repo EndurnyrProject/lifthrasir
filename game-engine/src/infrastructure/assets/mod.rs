@@ -20,7 +20,7 @@ pub mod upscale;
 pub use animation_processing_system::{
     AnimationProcessingPlugin, PendingAnimation, PendingAnimations,
 };
-pub use animation_processor::{calculate_attach_offset, RoAnimationProcessor};
+pub use animation_processor::{RoAnimationProcessor, calculate_attach_offset};
 pub use config::*;
 pub use converters::*;
 pub use hierarchical_manager::*;

@@ -1183,10 +1183,11 @@ mod tests {
         assert!(app.world().get::<InteractionDisabled>(deposit).is_none());
         assert!(app.world().get::<InteractionDisabled>(withdraw).is_some());
         assert!(app.world().get::<InteractionDisabled>(quick_bag).is_none());
-        assert!(app
-            .world()
-            .get::<InteractionDisabled>(quick_vault)
-            .is_none());
+        assert!(
+            app.world()
+                .get::<InteractionDisabled>(quick_vault)
+                .is_none()
+        );
 
         app.world_mut().resource_mut::<StorageUi>().awaiting_result = true;
         app.update();
@@ -1198,10 +1199,11 @@ mod tests {
         );
         assert!(app.world().get::<InteractionDisabled>(deposit).is_some());
         assert!(app.world().get::<InteractionDisabled>(quick_bag).is_some());
-        assert!(app
-            .world()
-            .get::<InteractionDisabled>(quick_vault)
-            .is_some());
+        assert!(
+            app.world()
+                .get::<InteractionDisabled>(quick_vault)
+                .is_some()
+        );
     }
 
     #[test]
@@ -1248,11 +1250,12 @@ mod tests {
             0
         );
         assert!(app.world().resource::<StorageUi>().awaiting_result);
-        assert!(app
-            .world()
-            .resource::<StorageUi>()
-            .pending_transfer
-            .is_none());
+        assert!(
+            app.world()
+                .resource::<StorageUi>()
+                .pending_transfer
+                .is_none()
+        );
         assert_eq!(
             app.world().resource::<Inventory>().get(7).unwrap().amount,
             1

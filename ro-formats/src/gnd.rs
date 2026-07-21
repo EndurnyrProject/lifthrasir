@@ -1,9 +1,9 @@
-use crate::{string_utils::parse_korean_string, CELL_SIZE};
+use crate::{CELL_SIZE, string_utils::parse_korean_string};
 use glam::Vec3;
 use nom::{
-    bytes::complete::{tag, take},
-    number::complete::{le_f32, le_i32, le_u16, le_u32, le_u8},
     IResult, Parser,
+    bytes::complete::{tag, take},
+    number::complete::{le_f32, le_i32, le_u8, le_u16, le_u32},
 };
 use thiserror::Error;
 use tracing::{debug, error};

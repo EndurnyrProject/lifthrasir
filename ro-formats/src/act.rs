@@ -1,8 +1,8 @@
 use nom::{
+    IResult,
     bytes::complete::take,
     error::Error as NomError,
-    number::complete::{le_f32, le_i32, le_u16, le_u32, le_u8},
-    IResult,
+    number::complete::{le_f32, le_i32, le_u8, le_u16, le_u32},
 };
 use thiserror::Error;
 

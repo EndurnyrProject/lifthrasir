@@ -15,7 +15,7 @@ use bevy::ui_widgets::Activate;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use game_engine::core::state::GameState;
 use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::input::{ui_unfocused, PlayerAction};
+use game_engine::domain::input::{PlayerAction, ui_unfocused};
 use leafwing_input_manager::prelude::ActionState;
 
 use crate::theme::feathers_theme::install_norse_theme;
@@ -27,8 +27,8 @@ mod meter;
 pub mod shell;
 mod skills_tab;
 
-pub(crate) use skills_tab::skill_name;
 pub use skills_tab::SkillPanelStaging;
+pub(crate) use skills_tab::skill_name;
 
 /// Which tab the Console shows. The active chord always selects the tab, so this is
 /// never "remembered" independently of the last chord.

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_message, auto_add_system};
-use bevy_quinnet::client::client_connected;
 use bevy_quinnet::client::QuinnetClient;
+use bevy_quinnet::client::client_connected;
 
 use super::connection::QuicConnection;
 use super::envelope::Body;

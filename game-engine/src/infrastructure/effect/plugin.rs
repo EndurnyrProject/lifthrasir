@@ -1,11 +1,11 @@
 use super::catalog::{process_loaded_effect_data, start_loading_effect_data};
 use crate::domain::effects::{
+    EffectLayer, EffectSpriteAssets, PendingBodyStates, PendingEffectStates, PlayProceduralVfx,
     advance_effect_timers, apply_body_state_tint, body_state_visuals, despawn_finished_effects,
     efst_auras, finalize_frozen_ice_assets, follow_effect_anchor, initialize_effect_layers,
     load_frozen_ice_assets, on_ground_skill, on_skill_damage, on_skill_effect, on_special_effect,
     option_visuals, orbit_sight_visuals, order_effect_layers_by_depth, rebuild_effect_layers,
-    spawn_effect_sprites, sync_effect_sprites, sync_frozen_overlays, EffectLayer,
-    EffectSpriteAssets, PendingBodyStates, PendingEffectStates, PlayProceduralVfx,
+    spawn_effect_sprites, sync_effect_sprites, sync_frozen_overlays,
 };
 use crate::domain::system_sets::EntityLifecycleSystems;
 use crate::presentation::rendering::effect_material::EffectMaterial;

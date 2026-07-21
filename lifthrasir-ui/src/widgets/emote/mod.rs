@@ -12,10 +12,10 @@ use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use game_engine::core::state::GameState;
-use game_engine::domain::emote::assets::EmoteAssets;
 use game_engine::domain::emote::EmoteCooldown;
+use game_engine::domain::emote::assets::EmoteAssets;
 use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::input::{ui_unfocused, PlayerAction};
+use game_engine::domain::input::{PlayerAction, ui_unfocused};
 use leafwing_input_manager::prelude::ActionState;
 
 use crate::theme::feathers_theme::install_norse_theme;

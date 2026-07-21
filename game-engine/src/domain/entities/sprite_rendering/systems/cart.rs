@@ -12,7 +12,7 @@ use crate::domain::entities::sprite_rendering::components::{CartLayer, PlayerSpr
 use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
 use crate::domain::settings::resources::Settings;
 use crate::domain::sprite::tags::{
-    layer_depth_bias, layer_order, LAYER_CART, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER,
+    LAYER_CART, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER, layer_depth_bias, layer_order,
 };
 use crate::domain::system_sets::{EntityLifecycleSystems, SpriteRenderingSystems};
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;

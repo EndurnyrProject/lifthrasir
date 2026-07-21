@@ -22,6 +22,7 @@ use game_engine::domain::character::events::{
     CharacterCreatedEvent, CharacterCreationFailedEvent, CreateCharacterRequestEvent,
 };
 use game_engine::domain::character::forms::CharacterCreationForm;
+use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
 use game_engine::domain::entities::character::components::visual::{
     CharacterDirection, CharacterSprite,
 };
@@ -29,9 +30,8 @@ use game_engine::domain::entities::character::components::{
     CharacterAppearance, CharacterData, CharacterStats, Gender,
 };
 use game_engine::domain::entities::character::events::forward_character_sprite_events;
-use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
 
-use crate::screens::character_preview::{create_render_target, COLUMN_PX, ROW_PX};
+use crate::screens::character_preview::{COLUMN_PX, ROW_PX, create_render_target};
 use crate::theme::{self, label};
 use crate::widgets::placeholder::Placeholder;
 
@@ -428,7 +428,7 @@ fn show_character_create_screen(
     };
 }
 
-fn cc_label(text: &str, font: Handle<Font>) -> impl Bundle {
+fn cc_label(text: &str, font: Handle<Font>) -> impl Bundle + use<> {
     (
         Text::new(text),
         TextFont {

@@ -1,12 +1,12 @@
 use bevy::{
-    asset::{io::Reader, AssetLoader, AssetPath, LoadContext},
+    asset::{AssetLoader, AssetPath, LoadContext, io::Reader},
     prelude::*,
     reflect::TypePath,
 };
 use thiserror::Error;
 
 use super::asset::{
-    build_frame_index_map, decode_blend, EffectBlend, LoadedEffectAsset, LoadedFrame, LoadedLayer,
+    EffectBlend, LoadedEffectAsset, LoadedFrame, LoadedLayer, build_frame_index_map, decode_blend,
 };
 use crate::infrastructure::ro_formats::{StrEffect, StrError};
 

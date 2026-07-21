@@ -27,12 +27,12 @@ use game_engine::core::state::GameState;
 use game_engine::domain::character::events::{
     CharacterInfoWithJobName, CharacterListReceivedEvent,
 };
+use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
+use game_engine::domain::entities::character::components::CharacterInfo;
 use game_engine::domain::entities::character::components::visual::{
     CharacterDirection, CharacterSprite,
 };
-use game_engine::domain::entities::character::components::CharacterInfo;
 use game_engine::domain::entities::character::events::forward_character_sprite_events;
-use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
 
 /// Pixel width of one character column in the shared render target. Also the
 /// display width of each card's preview image.

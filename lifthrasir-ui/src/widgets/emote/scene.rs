@@ -15,8 +15,8 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
-use game_engine::domain::emote::table::MAX_EMOTE_ID;
 use game_engine::domain::emote::EmoteRequested;
+use game_engine::domain::emote::table::MAX_EMOTE_ID;
 
 use crate::theme;
 use crate::theme::feathers_theme::{

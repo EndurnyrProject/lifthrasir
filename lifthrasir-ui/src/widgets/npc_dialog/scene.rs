@@ -19,8 +19,8 @@ use crate::theme::feathers_theme::{
 use crate::widgets::chrome::{glyph_icon, ignore_picking};
 
 use super::{
-    on_footer_button, on_text_click, FooterButtonAction, NpcDialogBody, NpcDialogParts,
-    NpcDialogRoot, NpcDialogTitle, NpcInputField, Typewriter,
+    FooterButtonAction, NpcDialogBody, NpcDialogParts, NpcDialogRoot, NpcDialogTitle,
+    NpcInputField, Typewriter, on_footer_button, on_text_click,
 };
 
 const WINDOW_WIDTH: f32 = 560.0;

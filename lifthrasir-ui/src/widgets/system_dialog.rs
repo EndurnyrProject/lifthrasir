@@ -112,7 +112,7 @@ fn show_system_dialog(
 }
 
 /// The whole modal as one scene: a dimmed, click-eating backdrop centering the glass card.
-fn system_dialog(request: &ShowSystemDialog) -> impl Scene {
+fn system_dialog(request: &ShowSystemDialog) -> impl Scene + use<> {
     let confirm_state = request.confirm_state.clone();
     let kind = request.kind;
     let correlation = request.correlation;
@@ -136,7 +136,7 @@ fn system_dialog(request: &ShowSystemDialog) -> impl Scene {
 /// the primary button is a Feathers Primary `@FeathersButton`, which drives its own fill
 /// from `BUTTON_PRIMARY_*` tokens — a per-severity button tint is not expressible through
 /// Feathers, so the severity cue lives on the badge, not the button.
-fn card(request: &ShowSystemDialog) -> impl Scene {
+fn card(request: &ShowSystemDialog) -> impl Scene + use<> {
     let accent = severity_accent(request.severity);
     let code_display = if request.code.is_empty() {
         Display::None
@@ -181,7 +181,7 @@ fn secondary_display(label: &str) -> Display {
 /// The action row: an optional lesser secondary button beside the primary button.
 /// Both grow to share the row; when the secondary is collapsed the primary spans
 /// the full width, preserving the single-button look.
-fn button_row(request: &ShowSystemDialog) -> impl Scene {
+fn button_row(request: &ShowSystemDialog) -> impl Scene + use<> {
     let secondary = secondary_button(
         request.secondary_label.clone(),
         secondary_display(&request.secondary_label),

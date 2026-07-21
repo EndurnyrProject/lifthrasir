@@ -23,12 +23,12 @@ use game_engine::infrastructure::skill::SkillCatalog;
 
 use crate::rich_text::parse_color_codes;
 use crate::theme;
-use crate::widgets::character_window::{skill_name, SkillPanelStaging};
+use crate::widgets::character_window::{SkillPanelStaging, skill_name};
 use crate::widgets::shop_window::ShopSession;
 use crate::widgets::storage_window::StorageSelection;
 
-use super::shell::EdgeGrade;
 use super::ItemRef;
+use super::shell::EdgeGrade;
 
 /// One description line split into `^RRGGBB`-colored runs (already parsed —
 /// scenes render each run as-is, no further `parse_color_codes` call needed).
@@ -317,7 +317,7 @@ fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfo
 // ---------------------------------------------------------------------------
 
 fn kind_label(inf: u32) -> String {
-    use game_engine::domain::skill::{form, Form};
+    use game_engine::domain::skill::{Form, form};
     match form(inf) {
         Form::Passive => "Passive",
         Form::Active => "Active",

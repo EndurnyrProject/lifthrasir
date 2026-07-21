@@ -4,7 +4,7 @@ use bevy::{
     asset::RenderAssetUsages,
     image::{CompressedImageFormats, ImageSampler, ImageType},
     prelude::*,
-    tasks::{poll_once, IoTaskPool, Task},
+    tasks::{IoTaskPool, Task, poll_once},
 };
 use game_engine::domain::guild::GuildState;
 use net_contract::{
@@ -592,11 +592,12 @@ mod tests {
             },
         });
         app.update();
-        assert!(app
-            .world()
-            .resource::<GuildEmblemImages>()
-            .cached(key)
-            .is_some());
+        assert!(
+            app.world()
+                .resource::<GuildEmblemImages>()
+                .cached(key)
+                .is_some()
+        );
 
         let invalid = EmblemKey::new(7, 4).unwrap();
         app.world_mut()
@@ -666,11 +667,12 @@ mod tests {
 
         app.update();
 
-        assert!(app
-            .world()
-            .resource::<GuildEmblemImages>()
-            .cached(key)
-            .is_some());
+        assert!(
+            app.world()
+                .resource::<GuildEmblemImages>()
+                .cached(key)
+                .is_some()
+        );
     }
 
     #[test]
@@ -716,16 +718,18 @@ mod tests {
 
         app.update();
 
-        assert!(app
-            .world()
-            .resource::<GuildEmblemImages>()
-            .preview
-            .is_none());
-        assert!(app
-            .world()
-            .resource::<Assets<Image>>()
-            .get(&preview)
-            .is_none());
+        assert!(
+            app.world()
+                .resource::<GuildEmblemImages>()
+                .preview
+                .is_none()
+        );
+        assert!(
+            app.world()
+                .resource::<Assets<Image>>()
+                .get(&preview)
+                .is_none()
+        );
         let world = app.world_mut();
         assert_eq!(
             *world

@@ -5,7 +5,7 @@ use leafwing_input_manager::prelude::ActionState;
 use crate::core::state::GameState;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::hotbar::model::{Hotbar, HotbarSlot};
-use crate::domain::input::{ui_unfocused, PlayerAction, HOTBAR_ACTIONS};
+use crate::domain::input::{HOTBAR_ACTIONS, PlayerAction, ui_unfocused};
 use crate::domain::inventory::{Inventory, UseItemRequested};
 use crate::domain::skill::SkillCastRequested;
 use net_contract::events::ChatHeard;

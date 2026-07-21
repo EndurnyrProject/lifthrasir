@@ -43,7 +43,7 @@ pub const ICON_DIR: &str = "ui/icons/";
 /// A square UI icon loaded from `assets/ui/icons/<name>.svg`. The icons ship as white
 /// glyphs, so `color` is what sets their final tint (emerald play, crimson trash, …).
 /// `Pickable::IGNORE` keeps the glyph from swallowing clicks on its host button.
-pub fn icon(assets: &AssetServer, name: &str, size: f32, color: Color) -> impl Bundle {
+pub fn icon(assets: &AssetServer, name: &str, size: f32, color: Color) -> impl Bundle + use<> {
     (
         ImageNode {
             image: assets.load(format!("{ICON_DIR}{name}.svg")),

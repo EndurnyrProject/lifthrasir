@@ -1,12 +1,12 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
-use bevy_quinnet::client::{client_connected, QuinnetClient};
+use bevy_quinnet::client::{QuinnetClient, client_connected};
 use net_contract::commands::{RespondToNpc, TalkToNpc};
 use net_contract::dto::NpcResponse;
 
 use crate::channels::GAMEPLAY;
 use crate::envelope::Body;
-use crate::proto::aesir::net::{npc_interact, NpcInteract, NpcTalk};
+use crate::proto::aesir::net::{NpcInteract, NpcTalk, npc_interact};
 use crate::zone::{QuicZoneState, ZonePhase};
 
 fn talk_body(t: &TalkToNpc) -> Body {

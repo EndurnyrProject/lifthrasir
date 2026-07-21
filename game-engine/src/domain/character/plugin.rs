@@ -1,7 +1,7 @@
 use crate::app::character_domain_plugin::CharacterDomainAutoPlugin;
 use crate::app::zone_domain_plugin::ZoneDomainAutoPlugin;
-use crate::domain::entities::character::states::setup_character_state_machines;
 use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
+use crate::domain::entities::character::states::setup_character_state_machines;
 use crate::domain::entities::sprite_rendering::plugin::GenericSpriteRenderingPlugin;
 use bevy::prelude::*;
 

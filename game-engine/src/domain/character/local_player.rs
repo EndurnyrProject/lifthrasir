@@ -1,9 +1,9 @@
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::{
-    status::CharacterStatus, CharacterData, CharacterMeta,
+    CharacterData, CharacterMeta, status::CharacterStatus,
 };
 use crate::domain::entities::character::{
-    add_gameplay_components_to_entity, SpawnCharacterSpriteEvent,
+    SpawnCharacterSpriteEvent, add_gameplay_components_to_entity,
 };
 use crate::domain::entities::components::{EntityName, NetworkEntity};
 use crate::domain::entities::markers::LocalPlayer;

@@ -8,7 +8,7 @@ use bevy_framepace::Limiter;
 use leafwing_input_manager::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::input::{PlayerAction, HOTBAR_ACTIONS};
+use crate::domain::input::{HOTBAR_ACTIONS, PlayerAction};
 
 /// Resolution presets offered in the settings UI.
 pub const RESOLUTIONS: [(u32, u32); 5] = [

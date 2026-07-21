@@ -1,4 +1,4 @@
-use bevy_auto_plugin::prelude::{auto_add_plugin, AutoPlugin};
+use bevy_auto_plugin::prelude::{AutoPlugin, auto_add_plugin};
 
 pub mod channels;
 pub mod character;
@@ -28,8 +28,9 @@ mod tests {
         app.add_plugins(net_contract::NetContractPlugin);
         app.add_plugins(AesirNetPlugin);
 
-        assert!(app
-            .world()
-            .contains_resource::<crate::zone::QuicZoneState>());
+        assert!(
+            app.world()
+                .contains_resource::<crate::zone::QuicZoneState>()
+        );
     }
 }

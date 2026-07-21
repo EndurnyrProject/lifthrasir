@@ -14,10 +14,10 @@ use bevy::ui::RelativeCursorPosition;
 use bevy::ui_widgets::Activate;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use bevy_persistent::prelude::Persistent;
-use game_engine::domain::input::{ui_unfocused, PlayerAction};
+use game_engine::domain::input::{PlayerAction, ui_unfocused};
 use game_engine::domain::settings::{
-    resolution_label, resolution_next, resolution_prev, ActionBinds, ApplySettings, DisplayMode,
-    GraphicsSettings, KeyBind, Modifier, Settings,
+    ActionBinds, ApplySettings, DisplayMode, GraphicsSettings, KeyBind, Modifier, Settings,
+    resolution_label, resolution_next, resolution_prev,
 };
 
 use crate::theme;

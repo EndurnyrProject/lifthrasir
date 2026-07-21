@@ -8,7 +8,7 @@ use game_engine::domain::assets::patterns::minimap_path;
 use game_engine::domain::entities::character::components::visual::CharacterDirection;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::world::map::MapData;
-use game_engine::utils::coordinates::{world_position_to_spawn_coords, Direction};
+use game_engine::utils::coordinates::{Direction, world_position_to_spawn_coords};
 
 use crate::theme;
 

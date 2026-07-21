@@ -1,5 +1,5 @@
 use encoding_rs::EUC_KR;
-use nom::{bytes::complete::take, IResult};
+use nom::{IResult, bytes::complete::take};
 
 pub fn parse_korean_string(input: &[u8], length: usize) -> IResult<&[u8], String> {
     let (input, bytes) = take(length)(input)?;

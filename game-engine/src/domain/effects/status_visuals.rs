@@ -16,7 +16,7 @@ use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::components::RenderLayer;
 use crate::domain::settings::resources::Settings;
 use crate::domain::sprite::tags::{
-    layer_depth_bias, layer_order, LAYER_EFFECT, Z_OFFSET_PER_LAYER,
+    LAYER_EFFECT, Z_OFFSET_PER_LAYER, layer_depth_bias, layer_order,
 };
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};

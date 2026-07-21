@@ -88,19 +88,11 @@ impl Default for AudioSettings {
 impl AudioSettings {
     /// Get the effective BGM volume (considering mute state)
     pub fn effective_bgm_volume(&self) -> f32 {
-        if self.bgm_muted {
-            0.0
-        } else {
-            self.bgm_volume
-        }
+        if self.bgm_muted { 0.0 } else { self.bgm_volume }
     }
 
     pub fn effective_sfx_volume(&self) -> f32 {
-        if self.sfx_muted {
-            0.0
-        } else {
-            self.sfx_volume
-        }
+        if self.sfx_muted { 0.0 } else { self.sfx_volume }
     }
 
     pub fn effective_ambience_volume(&self) -> f32 {

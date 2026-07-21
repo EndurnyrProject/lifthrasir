@@ -143,9 +143,11 @@ mod tests {
         let received = app.world().resource::<Messages<GuildIngress>>();
         let events: Vec<_> = received.iter_current_update_messages().collect();
         assert_eq!(events.len(), 7);
-        assert!(events
-            .iter()
-            .all(|event| event.generation == ZoneSessionGeneration(9)));
+        assert!(
+            events
+                .iter()
+                .all(|event| event.generation == ZoneSessionGeneration(9))
+        );
         assert_eq!(
             events[0].payload,
             GuildIngressPayload::ActionResult(GuildActionResult {

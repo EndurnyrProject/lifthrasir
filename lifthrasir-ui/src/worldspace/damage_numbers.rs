@@ -10,7 +10,7 @@ use game_engine::domain::combat::events::{DamageDisplayType, DisplayDamageNumber
 use game_engine::domain::entities::markers::LocalPlayer;
 
 use crate::theme;
-use crate::worldspace::{viewport_to_ui, WorldCameraFilter, WorldspaceFont};
+use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};
 
 const LIFETIME_SECS: f32 = 0.9;
 const RISE_SPEED_PX: f32 = 60.0;

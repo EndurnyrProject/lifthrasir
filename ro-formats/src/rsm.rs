@@ -1,9 +1,9 @@
 use crate::string_utils::parse_korean_string;
 use nalgebra::{Matrix4, Vector3, Vector4};
 use nom::{
-    bytes::complete::{tag, take},
-    number::complete::{le_f32, le_i32, le_u16, le_u8},
     IResult,
+    bytes::complete::{tag, take},
+    number::complete::{le_f32, le_i32, le_u8, le_u16},
 };
 use thiserror::Error;
 

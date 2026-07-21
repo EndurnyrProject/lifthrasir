@@ -4,9 +4,9 @@ use crate::core::state::GameState;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::system_sets::CharacterFlowSystems;
+use crate::domain::world::MapScoped;
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::domain::world::warp::Warping;
-use crate::domain::world::MapScoped;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use net_contract::commands::{ConnectZone, LeaveZone};
@@ -138,10 +138,11 @@ mod tests {
                 .count(),
             1
         );
-        assert!(app
-            .world()
-            .resource::<EntityRegistry>()
-            .local_player_entity()
-            .is_none());
+        assert!(
+            app.world()
+                .resource::<EntityRegistry>()
+                .local_player_entity()
+                .is_none()
+        );
     }
 }

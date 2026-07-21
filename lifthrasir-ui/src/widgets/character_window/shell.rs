@@ -18,8 +18,8 @@ use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
 
 use super::{
-    on_close_click, on_tab_click, BagTabBody, CharacterIdentityMount, CharacterTab,
-    CharacterTabBody, CharacterTabButton, CharacterTitlebar, CharacterWindowRoot, SkillsTabBody,
+    BagTabBody, CharacterIdentityMount, CharacterTab, CharacterTabBody, CharacterTabButton,
+    CharacterTitlebar, CharacterWindowRoot, SkillsTabBody, on_close_click, on_tab_click,
 };
 
 const WINDOW_LEFT: f32 = 300.0;

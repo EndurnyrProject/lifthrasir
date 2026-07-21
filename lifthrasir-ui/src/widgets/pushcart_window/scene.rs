@@ -28,8 +28,9 @@ use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
 use crate::widgets::chrome::{body_container, chrome_text, glyph_icon, ignore_picking, titlebar};
 
 use super::{
-    move_enabled, on_cell_click, on_mount_toggle, on_move, on_qty_step, CartCell, CartWindowBody,
-    CartWindowRoot, CartWindowTitlebar, MountToggleButton, QtyButton, Side, CART_MAX_SLOTS,
+    CART_MAX_SLOTS, CartCell, CartWindowBody, CartWindowRoot, CartWindowTitlebar,
+    MountToggleButton, QtyButton, Side, move_enabled, on_cell_click, on_mount_toggle, on_move,
+    on_qty_step,
 };
 
 const WINDOW_LEFT: f32 = 360.0;
@@ -87,7 +88,7 @@ pub fn body(
     cart_ui: &super::CartUi,
     status: Option<&CharacterStatus>,
     item_db: Option<&ItemDb>,
-) -> impl Scene {
+) -> impl Scene + use<> {
     let prompt = (!mounted).then(|| EntityScene(mount_prompt(cart_ui.mount_error)));
     let mounted_view = mounted
         .then_some(status)
@@ -285,7 +286,7 @@ fn mounted_body(
     cart_ui: &super::CartUi,
     status: &CharacterStatus,
     item_db: Option<&ItemDb>,
-) -> impl Scene {
+) -> impl Scene + use<> {
     let bag = bag_cells(inventory, item_db, cart_ui.selected);
     let cart_items = cart_cells(cart, item_db, cart_ui.selected);
     let detail = detail_view(cart_ui.selected, inventory, cart, item_db);

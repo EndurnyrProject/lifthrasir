@@ -3,10 +3,10 @@ use bevy::picking::hover::HoverMap;
 use bevy::picking::pointer::PointerId;
 use bevy::prelude::*;
 use bevy::window::CursorMoved;
-use bevy_auto_plugin::prelude::{auto_add_system, AutoPlugin};
+use bevy_auto_plugin::prelude::{AutoPlugin, auto_add_system};
 
 use crate::domain::camera::CameraRotationDelta;
-use crate::domain::input::{ui_unfocused, ForwardedCursorPosition, ForwardedMouseClick};
+use crate::domain::input::{ForwardedCursorPosition, ForwardedMouseClick, ui_unfocused};
 use crate::domain::system_sets::InputSystems;
 
 /// Feeds engine input resources from native window input.

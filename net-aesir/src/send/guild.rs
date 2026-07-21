@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
-use bevy_quinnet::client::{client_connected, QuinnetClient};
+use bevy_quinnet::client::{QuinnetClient, client_connected};
 use net_contract::commands::{
     GuildCreateRequested, GuildEmblemFetchRequested, GuildEmblemUploadRequested,
     GuildExpelRequested, GuildInviteRequested, GuildInviteResponded, GuildLeaveRequested,
@@ -578,46 +578,56 @@ mod tests {
     }
 
     fn assert_all_commands_empty(app: &App) {
-        assert!(app
-            .world()
-            .resource::<Messages<GuildCreateRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildInviteRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildInviteResponded>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildLeaveRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildExpelRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildPositionEditRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildMemberPositionRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildNoticeEditRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildEmblemUploadRequested>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<GuildEmblemFetchRequested>>()
-            .is_empty());
+        assert!(
+            app.world()
+                .resource::<Messages<GuildCreateRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildInviteRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildInviteResponded>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildLeaveRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildExpelRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildPositionEditRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildMemberPositionRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildNoticeEditRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildEmblemUploadRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildEmblemFetchRequested>>()
+                .is_empty()
+        );
     }
 
     #[test]

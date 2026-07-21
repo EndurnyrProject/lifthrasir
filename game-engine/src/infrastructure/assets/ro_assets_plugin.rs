@@ -1,13 +1,12 @@
 use super::{
-    hierarchical_reader::HierarchicalAssetReader,
+    AssetConfig, HierarchicalAssetManager, hierarchical_reader::HierarchicalAssetReader,
     ro_asset_source::setup_composite_source_from_config, sources::CompositeAssetSource,
-    AssetConfig, HierarchicalAssetManager,
 };
 use bevy::{
     app::{App, Plugin},
     asset::{
-        io::{AssetSourceBuilder, AssetSourceId},
         AssetApp,
+        io::{AssetSourceBuilder, AssetSourceId},
     },
     log::info,
     prelude::*,
@@ -81,7 +80,9 @@ impl Plugin for RoAssetsPlugin {
                 .expect("Failed to create HierarchicalAssetManager from config");
             app.insert_resource(manager);
 
-            debug!("Successfully registered 'ro://' asset source, SharedCompositeAssetSource, and HierarchicalAssetManager");
+            debug!(
+                "Successfully registered 'ro://' asset source, SharedCompositeAssetSource, and HierarchicalAssetManager"
+            );
         }
     }
 }

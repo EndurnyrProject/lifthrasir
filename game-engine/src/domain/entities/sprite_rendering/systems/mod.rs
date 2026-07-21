@@ -17,8 +17,8 @@ pub use action_sync::{
 pub use body_sync::{sync_mob_body_layer, sync_player_body_layer};
 pub use cart::{apply_cart_mount, finalize_cart_layer, sync_cart_layer};
 pub use events::{
-    handle_equipment_changes, handle_status_effect_visuals, EquipmentChangeEvent,
-    StatusEffectVisualEvent,
+    EquipmentChangeEvent, StatusEffectVisualEvent, handle_equipment_changes,
+    handle_status_effect_visuals,
 };
 pub use head_sync::sync_player_head_layer;
 pub use headgear_sync::sync_headgear_layer;

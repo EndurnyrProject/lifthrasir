@@ -133,9 +133,11 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tmp(name);
         let _ = std::fs::remove_dir_all(&dir);
-        std::env::set_var("LIFTHRASIR_HOTBAR_DIR", &dir);
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("LIFTHRASIR_HOTBAR_DIR", &dir) };
         let result = f();
-        std::env::remove_var("LIFTHRASIR_HOTBAR_DIR");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("LIFTHRASIR_HOTBAR_DIR") };
         let _ = std::fs::remove_dir_all(&dir);
         result
     }

@@ -6,7 +6,7 @@ pub use ro_sprite::{MobSprite, PlayerSprite, RoSpriteGeneric};
 
 use std::collections::HashMap;
 
-use crate::domain::entities::character::components::{equipment::EquipmentSlot, Gender};
+use crate::domain::entities::character::components::{Gender, equipment::EquipmentSlot};
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;

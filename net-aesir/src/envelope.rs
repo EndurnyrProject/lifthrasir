@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use prost::Message;
 
-use crate::proto::aesir::net::{envelope, Envelope};
+use crate::proto::aesir::net::{Envelope, envelope};
 
 pub use envelope::Body;
 

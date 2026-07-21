@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
-use bevy_quinnet::client::{client_connected, QuinnetClient};
+use bevy_quinnet::client::{QuinnetClient, client_connected};
 use net_contract::commands::{CloseStorage, DepositStorageItem, WithdrawStorageItem};
 
 use crate::channels::GAMEPLAY;
@@ -224,14 +224,16 @@ mod tests {
 
         app.update();
 
-        assert!(app
-            .world()
-            .resource::<Messages<DepositStorageItem>>()
-            .is_empty());
-        assert!(app
-            .world()
-            .resource::<Messages<WithdrawStorageItem>>()
-            .is_empty());
+        assert!(
+            app.world()
+                .resource::<Messages<DepositStorageItem>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<WithdrawStorageItem>>()
+                .is_empty()
+        );
         assert!(app.world().resource::<Messages<CloseStorage>>().is_empty());
     }
 }

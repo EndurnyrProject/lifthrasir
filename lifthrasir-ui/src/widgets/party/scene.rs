@@ -23,7 +23,7 @@ use crate::theme;
 use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
 use crate::widgets::chrome::{body_container, chrome_text, glyph_icon, ignore_picking, titlebar};
 
-use super::{PartyFooter, PartyTitlebar, PartyWindowBody, PartyWindowRoot, PARTY_MAX};
+use super::{PARTY_MAX, PartyFooter, PartyTitlebar, PartyWindowBody, PartyWindowRoot};
 
 const WINDOW_LEFT: f32 = 300.0;
 const WINDOW_TOP: f32 = 90.0;
@@ -583,9 +583,10 @@ mod tests {
                 }),
             },
         ];
-        assert!(app
-            .world_mut()
-            .spawn_scene(body(Some(header), rows))
-            .is_ok());
+        assert!(
+            app.world_mut()
+                .spawn_scene(body(Some(header), rows))
+                .is_ok()
+        );
     }
 }

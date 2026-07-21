@@ -39,7 +39,7 @@ fn nearest_mode_index(candidates: &[(u32, u32)], target: (u32, u32)) -> Option<u
     candidates
         .iter()
         .enumerate()
-        .min_by_key(|(_, &(w, h))| {
+        .min_by_key(|&(_, &(w, h))| {
             let dw = w.abs_diff(target.0) as u64;
             let dh = h.abs_diff(target.1) as u64;
             dw * dw + dh * dh

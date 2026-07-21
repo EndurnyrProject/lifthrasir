@@ -6,8 +6,8 @@ use super::super::events::{RequestSpriteSpawn, SpawnSpriteEvent};
 use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::sprite::tags::{
-    layer_depth_bias, layer_order, LAYER_BODY, LAYER_HEAD, LAYER_SHADOW, SPRITE_BASE_Y_OFFSET,
-    Z_OFFSET_PER_LAYER,
+    LAYER_BODY, LAYER_HEAD, LAYER_SHADOW, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER,
+    layer_depth_bias, layer_order,
 };
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
@@ -328,14 +328,19 @@ pub fn finalize_render_layers(
         if first_texture.is_none() {
             warn!(
                 "finalize_render_layers: No textures available for entity {:?}, layer {:?}. Animation has {} textures.",
-                entity, pending.layer_tag, animation.textures.len()
+                entity,
+                pending.layer_tag,
+                animation.textures.len()
             );
         }
         let first_texture = first_texture.unwrap_or_default();
 
         debug!(
             "finalize_render_layers: Using texture handle {:?} for entity {:?}, animation has {} textures, first in animation: {:?}",
-            first_texture, entity, animation.textures.len(), animation.textures.first()
+            first_texture,
+            entity,
+            animation.textures.len(),
+            animation.textures.first()
         );
 
         let _layer_entity = spawn_render_layer_child(

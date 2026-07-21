@@ -16,7 +16,7 @@ use net_contract::events::{AnnouncementReceived, AnnouncementStyle};
 
 use crate::rich_text::spawn_colored_text;
 use crate::theme;
-use crate::widgets::chat_box::{append_colored_line, ChatHistory};
+use crate::widgets::chat_box::{ChatHistory, append_colored_line};
 
 const TOP_DEFAULT: Color = Color::srgb_u8(0xff, 0xff, 0x00);
 const CENTER_DEFAULT: Color = Color::WHITE;

@@ -23,7 +23,7 @@ use crate::{
         system_sets::EntityLifecycleSystems,
         world::map_scoped::MapScoped,
     },
-    infrastructure::job::{registry::WARP_JOB_ID, JobSpriteRegistry},
+    infrastructure::job::{JobSpriteRegistry, registry::WARP_JOB_ID},
     utils::coordinates::spawn_coords_to_world_position,
 };
 use bevy::prelude::*;

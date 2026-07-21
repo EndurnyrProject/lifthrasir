@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
-use bevy_quinnet::client::{client_connected, QuinnetClient};
+use bevy_quinnet::client::{QuinnetClient, client_connected};
 use net_contract::commands::{EquipRequested, UnequipRequested};
 
 use crate::channels::GAMEPLAY;

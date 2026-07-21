@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_persistent::prelude::*;
 
-use super::resources::Settings;
 use super::SettingsPlugin;
+use super::resources::Settings;
 
 /// `<config dir>/lifthrasir/settings.ron`.
 pub fn settings_path() -> PathBuf {

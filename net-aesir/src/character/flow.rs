@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
+use bevy_quinnet::client::QuinnetClient;
 use bevy_quinnet::client::client_connected;
 use bevy_quinnet::client::connection::{
     ConnectionEvent, ConnectionFailedEvent, ConnectionLostEvent,
 };
-use bevy_quinnet::client::QuinnetClient;
 
 use super::mapping::{
     char_create_failed, char_created, char_list_to_connected, char_list_to_slot_info, delete_ack,

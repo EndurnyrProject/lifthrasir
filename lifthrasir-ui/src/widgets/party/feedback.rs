@@ -11,7 +11,7 @@ use net_contract::dto::PartyErrorKind;
 use net_contract::events::{PartyActionResulted, PartyDisbanded};
 
 use crate::theme;
-use crate::widgets::chat_box::{append_colored_line, ChatHistory};
+use crate::widgets::chat_box::{ChatHistory, append_colored_line};
 
 /// A distinct, human-readable line for every `PartyErrorKind`. `None` shouldn't occur
 /// on a `success:false` result, but still gets a generic fallback rather than a panic.

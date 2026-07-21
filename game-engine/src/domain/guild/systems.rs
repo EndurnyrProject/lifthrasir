@@ -493,10 +493,12 @@ mod tests {
             },
         );
         snapshot_then_disband.update();
-        assert!(!snapshot_then_disband
-            .world()
-            .resource::<GuildState>()
-            .in_guild());
+        assert!(
+            !snapshot_then_disband
+                .world()
+                .resource::<GuildState>()
+                .in_guild()
+        );
 
         let mut disband_then_snapshot = app(1);
         ingress(

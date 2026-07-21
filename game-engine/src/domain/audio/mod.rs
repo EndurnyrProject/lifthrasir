@@ -7,5 +7,5 @@ pub use events::{
     MuteAmbienceEvent, MuteBgmEvent, MuteSfxEvent, PlayBgmEvent, PlayMobSfx, PlaySkillSfx,
     SetAmbienceVolumeEvent, SetBgmVolumeEvent, SetSfxVolumeEvent, StopBgmEvent,
 };
-pub use map_sounds::{map_sound_path, MapSound, MapSoundSource, MapSoundState, MapSoundsSpawned};
+pub use map_sounds::{MapSound, MapSoundSource, MapSoundState, MapSoundsSpawned, map_sound_path};
 pub use resources::{AmbienceChannel, AudioSettings, BgmManager, SfxChannel};

@@ -7,8 +7,8 @@ use net_contract::dto::GuildInfo;
 use net_contract::state::ZoneSessionGeneration;
 
 use super::{
-    dialogs::PendingGuildConfirmation, GuildInviteNameField, GuildMutationContext, GuildUi,
-    PendingGuildMutation,
+    GuildInviteNameField, GuildMutationContext, GuildUi, PendingGuildMutation,
+    dialogs::PendingGuildConfirmation,
 };
 
 #[derive(Component, Clone, Default)]
@@ -146,7 +146,7 @@ pub(crate) fn project_rows(info: &GuildInfo, jobs: Option<&JobSpriteRegistry>) -
 
 #[cfg(test)]
 mod tests {
-    use super::{request_invite, GuildUi};
+    use super::{GuildUi, request_invite};
     use net_contract::dto::{GuildInfo, GuildMemberInfo, GuildPositionInfo};
     use net_contract::state::ZoneSessionGeneration;
 

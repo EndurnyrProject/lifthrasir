@@ -7,7 +7,7 @@ use crate::core::state::GameState;
 use crate::domain::input::TargetingMode;
 use net_contract::events::ChatHeard;
 
-use super::{form, target, Form, SkillCooldownTracker, SkillTreeState, Target};
+use super::{Form, SkillCooldownTracker, SkillTreeState, Target, form, target};
 
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
@@ -125,8 +125,8 @@ pub fn resolve_skill_cast(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::skill::cooldown::apply_skill_cooldown;
     use crate::domain::skill::SkillNode;
+    use crate::domain::skill::cooldown::apply_skill_cooldown;
     use net_contract::events::SkillCooldownSet;
 
     const SKILL_ID: u32 = 28;

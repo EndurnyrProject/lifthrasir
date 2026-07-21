@@ -1,5 +1,5 @@
 use bevy::log::{debug, warn};
-use bevy_quinnet::client::{connection::ClientSideConnection, ClientSendError};
+use bevy_quinnet::client::{ClientSendError, connection::ClientSideConnection};
 
 use super::{
     channels,

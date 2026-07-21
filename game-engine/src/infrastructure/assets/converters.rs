@@ -1,5 +1,5 @@
 use crate::infrastructure::assets::loaders::RoPaletteAsset;
-use crate::infrastructure::ro_formats::{sprite::SpriteFrame, Palette};
+use crate::infrastructure::ro_formats::{Palette, sprite::SpriteFrame};
 use bevy::prelude::*;
 use std::collections::HashSet;
 

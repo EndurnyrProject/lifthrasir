@@ -34,7 +34,7 @@ use game_engine::domain::entities::character::components::status::CharacterStatu
 use game_engine::domain::entities::character::events::SkillLearnRequested;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::hotbar::HotbarSlot;
-use game_engine::domain::skill::{layout, Placement, SkillCastRequested, SkillTreeState};
+use game_engine::domain::skill::{Placement, SkillCastRequested, SkillTreeState, layout};
 use game_engine::infrastructure::job::registry::JobSpriteRegistry;
 use game_engine::infrastructure::skill::SkillCatalog;
 
@@ -604,7 +604,7 @@ fn body(
     status: Option<&CharacterStatus>,
     catalog: Option<&SkillCatalog>,
     registry: Option<&JobSpriteRegistry>,
-) -> impl Scene {
+) -> impl Scene + use<> {
     let placements = layout(tree);
     let tabs: Vec<_> = tab_ids(tree)
         .into_iter()

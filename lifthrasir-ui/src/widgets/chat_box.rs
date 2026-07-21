@@ -18,7 +18,7 @@ use net_contract::events::ChatHeard;
 use crate::rich_text::spawn_colored_text;
 use crate::theme;
 use crate::widgets::emote::slash::parse_emote_slash;
-use crate::widgets::party::slash::{parse_party_slash, PartySlashSubmitted};
+use crate::widgets::party::slash::{PartySlashSubmitted, parse_party_slash};
 use crate::widgets::placeholder::Placeholder;
 
 /// Oldest lines past this are dropped so the history (and its layout) stays bounded.

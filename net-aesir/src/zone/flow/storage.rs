@@ -150,29 +150,33 @@ mod tests {
             Body::Announcement(net::Announcement::default()),
         )]);
 
-        assert!(app
-            .world()
-            .resource::<Messages<StorageOpened>>()
-            .iter_current_update_messages()
-            .next()
-            .is_none());
-        assert!(app
-            .world()
-            .resource::<Messages<StorageItemAdded>>()
-            .iter_current_update_messages()
-            .next()
-            .is_none());
-        assert!(app
-            .world()
-            .resource::<Messages<StorageItemRemoved>>()
-            .iter_current_update_messages()
-            .next()
-            .is_none());
-        assert!(app
-            .world()
-            .resource::<Messages<StorageResult>>()
-            .iter_current_update_messages()
-            .next()
-            .is_none());
+        assert!(
+            app.world()
+                .resource::<Messages<StorageOpened>>()
+                .iter_current_update_messages()
+                .next()
+                .is_none()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<StorageItemAdded>>()
+                .iter_current_update_messages()
+                .next()
+                .is_none()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<StorageItemRemoved>>()
+                .iter_current_update_messages()
+                .next()
+                .is_none()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<StorageResult>>()
+                .iter_current_update_messages()
+                .next()
+                .is_none()
+        );
     }
 }

@@ -17,8 +17,8 @@ use crate::theme::feathers_theme::{
 };
 use crate::widgets::chrome::{glyph_icon, ignore_picking};
 
-use super::view::ColoredLine;
 use super::InfoModalRoot;
+use super::view::ColoredLine;
 
 /// Fixed card dimensions shared by item and skill details.
 pub const MODAL_WIDTH: f32 = 440.0;

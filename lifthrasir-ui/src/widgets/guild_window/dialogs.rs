@@ -661,10 +661,11 @@ mod tests {
         assert_eq!(written.len(), 1);
         assert_eq!(written[0].guild_id, 7);
         assert!(written[0].accept);
-        assert!(!app
-            .world()
-            .resource::<game_engine::domain::guild::GuildState>()
-            .in_guild());
+        assert!(
+            !app.world()
+                .resource::<game_engine::domain::guild::GuildState>()
+                .in_guild()
+        );
     }
 
     #[test]
@@ -879,10 +880,11 @@ mod tests {
 
         app.update();
 
-        assert!(!app
-            .world()
-            .resource::<PendingGuildConfirmation>()
-            .is_pending());
+        assert!(
+            !app.world()
+                .resource::<PendingGuildConfirmation>()
+                .is_pending()
+        );
         assert!(app.world().get_entity(guild_dialog).is_err());
         assert!(app.world().get_entity(unrelated_dialog).is_ok());
     }
@@ -897,9 +899,11 @@ mod tests {
         );
 
         pending.leave(ZoneSessionGeneration(1), true);
-        assert!(confirmation_copy(&pending, SystemDialogKind::GuildLeave)
-            .1
-            .contains("disband the guild"));
+        assert!(
+            confirmation_copy(&pending, SystemDialogKind::GuildLeave)
+                .1
+                .contains("disband the guild")
+        );
     }
 
     #[test]
@@ -938,10 +942,11 @@ mod tests {
         let expels = app.world().resource::<Messages<GuildExpelRequested>>();
         assert_eq!(leaves.len(), 0);
         assert_eq!(expels.len(), 0);
-        assert!(app
-            .world()
-            .resource::<PendingGuildConfirmation>()
-            .is_pending());
+        assert!(
+            app.world()
+                .resource::<PendingGuildConfirmation>()
+                .is_pending()
+        );
     }
 
     #[test]
@@ -961,10 +966,11 @@ mod tests {
                 .len(),
             0
         );
-        assert!(!app
-            .world()
-            .resource::<PendingGuildConfirmation>()
-            .is_pending());
+        assert!(
+            !app.world()
+                .resource::<PendingGuildConfirmation>()
+                .is_pending()
+        );
     }
 
     #[test]

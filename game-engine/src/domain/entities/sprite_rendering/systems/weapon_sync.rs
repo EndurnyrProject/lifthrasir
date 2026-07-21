@@ -13,7 +13,7 @@ use crate::domain::entities::sprite_rendering::systems::head_sync::{
     head_billboard_delta, head_screen_offset,
 };
 use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
-use crate::domain::sprite::tags::{layer_order, LAYER_BODY, Z_OFFSET_PER_LAYER};
+use crate::domain::sprite::tags::{LAYER_BODY, Z_OFFSET_PER_LAYER, layer_order};
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::utils::constants::SPRITE_WORLD_SCALE;

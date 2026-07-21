@@ -1,10 +1,10 @@
 use crate::string_utils::parse_korean_string;
 use glam::Vec2;
 use nom::{
+    IResult, Parser,
     bytes::complete::{tag, take},
     multi::count,
-    number::complete::{le_f32, le_i32, le_u32, le_u8},
-    IResult, Parser,
+    number::complete::{le_f32, le_i32, le_u8, le_u32},
 };
 use thiserror::Error;
 

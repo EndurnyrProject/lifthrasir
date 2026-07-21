@@ -5,7 +5,7 @@ use crate::core::state::GameState;
 use crate::domain::skill::{CastTarget, SkillCastResolved};
 use crate::domain::system_sets::InputSystems;
 
-use super::cursor::{handle_cursor_change_requests, CursorType};
+use super::cursor::{CursorType, handle_cursor_change_requests};
 use super::events::CursorChangeRequest;
 use super::resources::ForwardedMouseClick;
 use super::systems::{handle_terrain_click, update_cursor_for_terrain};
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn armed_cursor_wins_over_terrain_cursor_every_frame() {
-        use super::super::cursor::{handle_cursor_change_requests, CurrentCursorType};
+        use super::super::cursor::{CurrentCursorType, handle_cursor_change_requests};
         use super::super::systems::update_cursor_for_terrain;
         use crate::domain::entities::hover::CurrentlyHoveredEntity;
 

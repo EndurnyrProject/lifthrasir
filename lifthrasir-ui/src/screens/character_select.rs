@@ -13,7 +13,7 @@ use game_engine::domain::character::events::{
 };
 
 use crate::screens::character_create::CreationSlot;
-use crate::screens::character_preview::{CharacterDiorama, COLUMN_PX, ROW_PX};
+use crate::screens::character_preview::{COLUMN_PX, CharacterDiorama, ROW_PX};
 use crate::theme::{self, label};
 
 pub struct CharacterSelectScreenPlugin;

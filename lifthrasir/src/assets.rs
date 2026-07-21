@@ -1,12 +1,11 @@
 use std::sync::{Arc, RwLock};
 
-use bevy::asset::{io::AssetSourceBuilder, io::AssetSourceId, AssetApp};
+use bevy::asset::{AssetApp, io::AssetSourceBuilder, io::AssetSourceId};
 use bevy::prelude::*;
 
 use game_engine::infrastructure::assets::{
-    hierarchical_reader::HierarchicalAssetReader,
+    AssetConfig, SharedCompositeAssetSource, hierarchical_reader::HierarchicalAssetReader,
     ro_asset_source::setup_composite_source_from_config, sources::CompositeAssetSource,
-    AssetConfig, SharedCompositeAssetSource,
 };
 
 pub fn load_composite_source() -> Arc<RwLock<CompositeAssetSource>> {

@@ -10,10 +10,6 @@ pub trait ActionLayout: Send + Sync + 'static {
     fn is_looping(action_type: ActionType) -> bool;
 
     fn validate_action_index(index: usize, total_actions: usize) -> usize {
-        if index >= total_actions {
-            0
-        } else {
-            index
-        }
+        if index >= total_actions { 0 } else { index }
     }
 }

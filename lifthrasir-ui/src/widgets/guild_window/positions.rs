@@ -252,11 +252,7 @@ pub(crate) fn sync_expel_labels(
 }
 
 fn yes_no(value: bool) -> &'static str {
-    if value {
-        "Yes"
-    } else {
-        "No"
-    }
+    if value { "Yes" } else { "No" }
 }
 
 fn parent_draft(
@@ -642,29 +638,33 @@ mod tests {
             can_expel: false,
         };
         let mut member_ui = crate::widgets::guild_window::GuildUi::default();
-        assert!(request_position_edit(
-            &mut member_ui,
-            ZoneSessionGeneration(1),
-            &guild(),
-            43,
-            command,
-        )
-        .is_none());
+        assert!(
+            request_position_edit(
+                &mut member_ui,
+                ZoneSessionGeneration(1),
+                &guild(),
+                43,
+                command,
+            )
+            .is_none()
+        );
 
         let mut master_ui = crate::widgets::guild_window::GuildUi::default();
-        assert!(request_position_edit(
-            &mut master_ui,
-            ZoneSessionGeneration(1),
-            &guild(),
-            42,
-            GuildPositionEditRequested {
-                index: 7,
-                name: "Renamed".into(),
-                can_invite: false,
-                can_expel: false,
-            },
-        )
-        .is_none());
+        assert!(
+            request_position_edit(
+                &mut master_ui,
+                ZoneSessionGeneration(1),
+                &guild(),
+                42,
+                GuildPositionEditRequested {
+                    index: 7,
+                    name: "Renamed".into(),
+                    can_invite: false,
+                    can_expel: false,
+                },
+            )
+            .is_none()
+        );
     }
 
     #[test]

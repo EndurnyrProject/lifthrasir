@@ -175,11 +175,12 @@ mod tests {
         app.world_mut().write_message(vanished(7));
         app.update();
 
-        assert!(!app
-            .world()
-            .resource::<FloorItemRegistry>()
-            .0
-            .contains_key(&7));
+        assert!(
+            !app.world()
+                .resource::<FloorItemRegistry>()
+                .0
+                .contains_key(&7)
+        );
         assert!(app.world().get_entity(entity).is_err());
     }
 

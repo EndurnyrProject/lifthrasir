@@ -1,5 +1,5 @@
-use super::skill_fx::{spawn_shader_fx, SkillFxMaterial};
 use super::VfxSystems;
+use super::skill_fx::{SkillFxMaterial, spawn_shader_fx};
 use crate::domain::effects::PlayProceduralVfx;
 use crate::infrastructure::effect::ShaderFxCatalog;
 use bevy::light::NotShadowCaster;
@@ -174,7 +174,7 @@ fn spark_effect() -> EffectAsset {
 /// `ParticleEffect` referencing the shared `spark` asset plus an
 /// `EffectProperties` setting `spark_tint` to `tint` for this instance only.
 /// No new `EffectAsset` is built per call.
-pub fn spark_garnish_bundle(assets: &ImpactAssets, tint: Vec4) -> impl Bundle {
+pub fn spark_garnish_bundle(assets: &ImpactAssets, tint: Vec4) -> impl Bundle + use<> {
     (
         ParticleEffect::new(assets.spark.clone()),
         EffectProperties::default()

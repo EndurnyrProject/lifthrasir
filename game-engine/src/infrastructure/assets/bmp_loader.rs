@@ -1,7 +1,7 @@
 use crate::domain::settings::resources::Upscaling;
 use crate::infrastructure::assets::{converters::apply_magenta_transparency, upscale};
 use bevy::{
-    asset::{io::Reader, AssetLoader, LoadContext, RenderAssetUsages},
+    asset::{AssetLoader, LoadContext, RenderAssetUsages, io::Reader},
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };

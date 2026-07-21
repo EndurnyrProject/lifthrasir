@@ -17,7 +17,7 @@ use bevy::ui::RelativeCursorPosition;
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use game_engine::domain::input::{PlayerAction, HOTBAR_ACTIONS};
+use game_engine::domain::input::{HOTBAR_ACTIONS, PlayerAction};
 use game_engine::domain::settings::DisplayMode;
 
 use crate::theme;
@@ -25,11 +25,11 @@ use crate::theme::feathers_theme::{TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WIN
 use crate::widgets::chrome::{chrome_text, ignore_picking, titlebar};
 
 use super::{
+    ApplyButton, AudioChannel, BindSlot, DirtyDot, GraphicsField, Keycap, MuteButton, SegButton,
+    SettingsTab, SettingsTitlebar, SettingsWindowRoot, SliderFill, SliderKnob, SliderPercent,
+    SliderRail, StepDir, StepperArrow, StepperValue, SwitchKnob, SwitchPill, TabBody, TabButton,
     on_apply, on_cancel, on_keycap_click, on_mute_click, on_reset, on_segment_click,
-    on_slider_drag, on_slider_press, on_stepper_click, on_switch_click, on_tab_click, ApplyButton,
-    AudioChannel, BindSlot, DirtyDot, GraphicsField, Keycap, MuteButton, SegButton, SettingsTab,
-    SettingsTitlebar, SettingsWindowRoot, SliderFill, SliderKnob, SliderPercent, SliderRail,
-    StepDir, StepperArrow, StepperValue, SwitchKnob, SwitchPill, TabBody, TabButton,
+    on_slider_drag, on_slider_press, on_stepper_click, on_switch_click, on_tab_click,
 };
 
 const WINDOW_LEFT: f32 = 360.0;

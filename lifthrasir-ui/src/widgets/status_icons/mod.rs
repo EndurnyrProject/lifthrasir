@@ -15,7 +15,7 @@ use game_engine::domain::entities::character::states::status_icons::{ActiveStatu
 use game_engine::infrastructure::status::StatusIconCatalog;
 
 use crate::theme;
-use scene::{blink_alpha, diff_efsts, format_remaining, ICON_SIZE};
+use scene::{ICON_SIZE, blink_alpha, diff_efsts, format_remaining};
 
 /// Marks the absolute-positioned container that holds the icon children.
 #[derive(Component)]

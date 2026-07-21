@@ -22,7 +22,7 @@ use game_engine::domain::entities::markers::LocalPlayer;
 use net_contract::commands::RespawnRequested;
 
 use crate::theme;
-use crate::theme::feathers_theme::{install_norse_theme, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
+use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER, install_norse_theme};
 
 /// Renders over the in-game HUD, but one tier *below* the system dialog
 /// (`i32::MAX - 2`): on the char-select path the server disconnects and the

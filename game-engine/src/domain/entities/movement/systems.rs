@@ -13,7 +13,7 @@ use crate::{
                 events::StatusParameterChanged,
                 states::AnimationState,
             },
-            pathfinding::{find_path, CurrentMapPathfindingGrid, WalkablePath},
+            pathfinding::{CurrentMapPathfindingGrid, WalkablePath, find_path},
         },
         system_sets::MovementSystems,
         world::components::MapLoader,

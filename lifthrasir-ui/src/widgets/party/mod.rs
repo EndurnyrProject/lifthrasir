@@ -13,9 +13,9 @@
 use bevy::prelude::*;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use game_engine::core::state::GameState;
-use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::entities::EntityRegistry;
-use game_engine::domain::input::{ui_unfocused, PlayerAction};
+use game_engine::domain::entities::markers::LocalPlayer;
+use game_engine::domain::input::{PlayerAction, ui_unfocused};
 use game_engine::domain::party::PartyState;
 use game_engine::infrastructure::job::JobSpriteRegistry;
 use leafwing_input_manager::prelude::ActionState;

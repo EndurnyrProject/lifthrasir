@@ -3,7 +3,7 @@ use super::components::{
 };
 use crate::domain::entities::billboard::Billboard;
 use crate::infrastructure::effect::{EffectBlend, LoadedEffectAsset, LoadedFrame, LoadedLayer};
-use crate::presentation::rendering::effect_material::{alpha_mode_for, EffectMaterial};
+use crate::presentation::rendering::effect_material::{EffectMaterial, alpha_mode_for};
 use bevy::asset::RenderAssetUsages;
 use bevy::light::NotShadowCaster;
 use bevy::mesh::{Indices, PrimitiveTopology};

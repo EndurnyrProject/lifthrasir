@@ -1,8 +1,8 @@
 use super::events::*;
 use crate::core::state::GameState;
 use crate::domain::entities::character::components::{
-    visual::{CharacterDirection, CharacterSprite},
     CharacterInfo,
+    visual::{CharacterDirection, CharacterSprite},
 };
 use crate::domain::system_sets::CharacterFlowSystems;
 use crate::infrastructure::job::registry::JobSpriteRegistry;

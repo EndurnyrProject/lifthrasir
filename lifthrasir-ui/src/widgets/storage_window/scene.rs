@@ -861,11 +861,12 @@ mod tests {
             ))
             .unwrap();
         app.update();
-        assert!(app
-            .world_mut()
-            .query::<&Text>()
-            .iter(app.world())
-            .any(|text| text.0 == "Nothing here yet."));
+        assert!(
+            app.world_mut()
+                .query::<&Text>()
+                .iter(app.world())
+                .any(|text| text.0 == "Nothing here yet.")
+        );
     }
 
     #[test]
@@ -910,11 +911,12 @@ mod tests {
             .unwrap();
         app.update();
 
-        assert!(app
-            .world_mut()
-            .query::<(&Text, &TextColor)>()
-            .iter(app.world())
-            .any(|(text, color)| text.0 == "Storage is full." && color.0 == theme::BAD));
+        assert!(
+            app.world_mut()
+                .query::<(&Text, &TextColor)>()
+                .iter(app.world())
+                .any(|(text, color)| text.0 == "Storage is full." && color.0 == theme::BAD)
+        );
         assert_eq!(
             app.world_mut()
                 .query::<&StorageAmountField>()
@@ -959,13 +961,14 @@ mod tests {
             .unwrap();
         app.update();
 
-        assert!(app
-            .world_mut()
-            .query::<(&Text, &TextColor)>()
-            .iter(app.world())
-            .any(
-                |(text, color)| text.0 == "Enter an amount within the available stack."
-                    && color.0 == theme::BAD
-            ));
+        assert!(
+            app.world_mut()
+                .query::<(&Text, &TextColor)>()
+                .iter(app.world())
+                .any(
+                    |(text, color)| text.0 == "Enter an amount within the available stack."
+                        && color.0 == theme::BAD
+                )
+        );
     }
 }

@@ -1,4 +1,4 @@
-use bevy::light::{light_consts::lux, CascadeShadowConfigBuilder};
+use bevy::light::{CascadeShadowConfigBuilder, light_consts::lux};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use std::f32::consts::PI;

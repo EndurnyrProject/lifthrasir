@@ -1,8 +1,8 @@
-use super::impact::{
-    drive_factor, spark_garnish_bundle, FactorMaterial, FactorRamp, ImpactAssets, LightFade,
-    LIGHT_PEAK,
-};
 use super::VfxSystems;
+use super::impact::{
+    FactorMaterial, FactorRamp, ImpactAssets, LIGHT_PEAK, LightFade, drive_factor,
+    spark_garnish_bundle,
+};
 use crate::domain::audio::events::PlaySkillSfx;
 use crate::domain::effects::{PlayProceduralVfx, SightOrbit};
 use crate::infrastructure::effect::{ShaderFxEntry, ShaderFxTravel, TextureFrames};

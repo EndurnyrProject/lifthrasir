@@ -197,7 +197,7 @@ pub(super) fn scene(
 
 /// The Card Slots section: a section label with the `filled/total` counter, and one
 /// row per socket — filled ones name the card, empty ones say so.
-fn card_slots_section(view: &ItemInfoView) -> impl Scene {
+fn card_slots_section(view: &ItemInfoView) -> impl Scene + use<> {
     let counter = format!("{} / {}", view.cards.len(), view.sockets_total);
     let slots: Vec<_> = (0..view.sockets_total)
         .map(|i| card_slot(view.cards.get(i as usize).cloned()))

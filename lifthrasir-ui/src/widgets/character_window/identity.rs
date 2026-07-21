@@ -13,14 +13,14 @@ use game_engine::domain::entities::character::components::core::CharacterData;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::components::EntityName;
 use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::infrastructure::job::player_jobs::is_fourth_job;
 use game_engine::infrastructure::job::JobSpriteRegistry;
+use game_engine::infrastructure::job::player_jobs::is_fourth_job;
 
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, ignore_picking};
 
-use super::meter::meter;
 use super::CharacterIdentityMount;
+use super::meter::meter;
 
 const AVATAR_BG: Color = Color::srgb_u8(0x1f, 0x2b, 0x25);
 
@@ -230,7 +230,7 @@ fn name_text(name: String) -> impl Scene {
     }
 }
 
-fn level_chip(label: &str, level: u32) -> impl Scene {
+fn level_chip(label: &str, level: u32) -> impl Scene + use<> {
     bsn! {
         Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center }
         ignore_picking()
@@ -252,7 +252,7 @@ fn resources_row(zeny: u32, weight: u32, max_weight: u32) -> impl Scene {
     }
 }
 
-fn stat_pair(label: &str, value: String) -> impl Scene {
+fn stat_pair(label: &str, value: String) -> impl Scene + use<> {
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(6), align_items: AlignItems::Center }
         ignore_picking()
@@ -264,7 +264,7 @@ fn stat_pair(label: &str, value: String) -> impl Scene {
 }
 
 /// One labeled meter line: a fixed-width tag ("HP"/"SP") + the [`meter`] bar.
-fn meter_line(tag: &str, ratio: f32, fill: Color, label: String) -> impl Scene {
+fn meter_line(tag: &str, ratio: f32, fill: Color, label: String) -> impl Scene + use<> {
     bsn! {
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(9) }
         ignore_picking()

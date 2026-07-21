@@ -17,8 +17,8 @@
 //! caster cast-circle lifecycle (timer expiry / `CastCancelled`); the caster-anchored
 //! circle in `cast_circle.rs` is left untouched.
 
-use super::cast_circle::{cast_circle_material, element_color};
 use super::VfxSystems;
+use super::cast_circle::{cast_circle_material, element_color};
 use crate::core::state::GameState;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::entities::registry::EntityRegistry;

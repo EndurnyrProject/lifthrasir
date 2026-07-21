@@ -1,5 +1,5 @@
-use bevy::input_focus::tab_navigation::TabIndex;
 use bevy::input_focus::InputFocus;
+use bevy::input_focus::tab_navigation::TabIndex;
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use game_engine::domain::input::UiFocus;

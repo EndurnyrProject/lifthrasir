@@ -87,16 +87,19 @@ pub fn handle_bgm_stop(
     mut audio_instances: ResMut<Assets<AudioInstance>>,
 ) {
     for event in events.read() {
-        if let Some(active_handle) = bgm_manager.take_active_for_fadeout() {
-            if let Some(mut active_instance) = audio_instances.get_mut(&active_handle) {
-                debug!("Stopping BGM with {}s fade-out", event.fade_out_duration);
-                active_instance.stop(AudioTween::linear(std::time::Duration::from_secs_f32(
-                    event.fade_out_duration,
-                )));
-                bgm_manager.add_fading_out(active_handle);
+        match bgm_manager.take_active_for_fadeout() {
+            Some(active_handle) => {
+                if let Some(mut active_instance) = audio_instances.get_mut(&active_handle) {
+                    debug!("Stopping BGM with {}s fade-out", event.fade_out_duration);
+                    active_instance.stop(AudioTween::linear(std::time::Duration::from_secs_f32(
+                        event.fade_out_duration,
+                    )));
+                    bgm_manager.add_fading_out(active_handle);
+                }
             }
-        } else {
-            debug!("StopBgmEvent received but no BGM is playing");
+            _ => {
+                debug!("StopBgmEvent received but no BGM is playing");
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-use super::{sources::CompositeAssetSource, AssetConfig};
+use super::{AssetConfig, sources::CompositeAssetSource};
 use bevy::log::{debug, error};
 
 /// Sets up CompositeAssetSource from configuration, preserving the exact logic

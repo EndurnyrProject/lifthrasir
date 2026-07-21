@@ -179,17 +179,21 @@ mod tests {
     fn is_cart_mounted_reflects_cart_bits() {
         assert!(!UnitState::default().is_cart_mounted());
         for bit in [OPTION_CART1, OPTION_CART2, OPTION_CART3] {
-            assert!(UnitState {
-                effect_state: bit,
+            assert!(
+                UnitState {
+                    effect_state: bit,
+                    ..Default::default()
+                }
+                .is_cart_mounted()
+            );
+        }
+        assert!(
+            !UnitState {
+                effect_state: OPTION_HIDE,
                 ..Default::default()
             }
-            .is_cart_mounted());
-        }
-        assert!(!UnitState {
-            effect_state: OPTION_HIDE,
-            ..Default::default()
-        }
-        .is_cart_mounted());
+            .is_cart_mounted()
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use super::animation::animate_falling_drops;
 use super::components::FloorItemRegistry;
 use super::hover::HoveredFloorItem;
-use super::pickup::{clear_pending_pickups, handle_pickup_result, PendingPickups};
+use super::pickup::{PendingPickups, clear_pending_pickups, handle_pickup_result};
 use super::pickup_anim::{play_pickup_animation, tick_pickup_anim};
 use super::spawn::{clear_floor_item_registry, despawn_floor_items, spawn_floor_items};
 use crate::core::GameState;

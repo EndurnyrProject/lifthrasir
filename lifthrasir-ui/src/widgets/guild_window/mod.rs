@@ -1420,22 +1420,24 @@ mod tests {
             *app.world().entity(root).get::<Visibility>().unwrap(),
             Visibility::Hidden
         );
-        assert!(app
-            .world()
-            .entity(create)
-            .get::<EditableText>()
-            .unwrap()
-            .value()
-            .to_string()
-            .is_empty());
-        assert!(app
-            .world()
-            .entity(invite)
-            .get::<EditableText>()
-            .unwrap()
-            .value()
-            .to_string()
-            .is_empty());
+        assert!(
+            app.world()
+                .entity(create)
+                .get::<EditableText>()
+                .unwrap()
+                .value()
+                .to_string()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .entity(invite)
+                .get::<EditableText>()
+                .unwrap()
+                .value()
+                .to_string()
+                .is_empty()
+        );
         let session = app.world().resource::<GuildUiSession>();
         assert_eq!(session.char_id, 43);
         assert!(session.blocked);

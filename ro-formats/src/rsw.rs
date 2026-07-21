@@ -1,8 +1,8 @@
 use crate::string_utils::parse_korean_string;
 use nom::{
-    bytes::complete::tag,
-    number::complete::{le_f32, le_u32, le_u8},
     IResult, Parser,
+    bytes::complete::tag,
+    number::complete::{le_f32, le_u8, le_u32},
 };
 use thiserror::Error;
 use tracing::{debug, error, warn};

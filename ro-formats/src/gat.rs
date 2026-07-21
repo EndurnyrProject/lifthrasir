@@ -1,9 +1,9 @@
 use crate::CELL_SIZE;
 use glam::Vec3;
 use nom::{
-    bytes::complete::tag,
-    number::complete::{le_f32, le_u32, le_u8},
     IResult,
+    bytes::complete::tag,
+    number::complete::{le_f32, le_u8, le_u32},
 };
 use thiserror::Error;
 use tracing::debug;

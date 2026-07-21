@@ -1,6 +1,6 @@
 use super::{
-    sources::{AssetSource, CompositeAssetSource},
     AssetConfig,
+    sources::{AssetSource, CompositeAssetSource},
 };
 use bevy::log::error;
 use bevy::prelude::*;

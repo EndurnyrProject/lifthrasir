@@ -228,20 +228,23 @@ pub fn finalize_water_loading_system(
             debug!("Water texture loaded, creating mesh and material");
 
             // Fix sampler for tiling
-            if let Some(mut image) = images.get_mut(&loading_state.texture_handle) {
-                // Override sampler to Repeat mode for proper tiling across water surface
-                // Bevy's built-in JPEG loader uses Default (ClampToEdge), but we need Repeat
-                image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-                    address_mode_u: ImageAddressMode::Repeat,
-                    address_mode_v: ImageAddressMode::Repeat,
-                    address_mode_w: ImageAddressMode::Repeat,
-                    mag_filter: ImageFilterMode::Linear,
-                    min_filter: ImageFilterMode::Linear,
-                    mipmap_filter: ImageFilterMode::Linear,
-                    ..Default::default()
-                });
-            } else {
-                warn!("Water texture handle loaded but image data not in Assets<Image>");
+            match images.get_mut(&loading_state.texture_handle) {
+                Some(mut image) => {
+                    // Override sampler to Repeat mode for proper tiling across water surface
+                    // Bevy's built-in JPEG loader uses Default (ClampToEdge), but we need Repeat
+                    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                        address_mode_u: ImageAddressMode::Repeat,
+                        address_mode_v: ImageAddressMode::Repeat,
+                        address_mode_w: ImageAddressMode::Repeat,
+                        mag_filter: ImageFilterMode::Linear,
+                        min_filter: ImageFilterMode::Linear,
+                        mipmap_filter: ImageFilterMode::Linear,
+                        ..Default::default()
+                    });
+                }
+                _ => {
+                    warn!("Water texture handle loaded but image data not in Assets<Image>");
+                }
             }
 
             // Generate procedural normal map for water

@@ -15,7 +15,7 @@ use game_engine::infrastructure::skill::SkillCatalog;
 use net_contract::events::{SkillCastStarted, SkillDamageReceived, SkillEffectShown};
 
 use crate::theme;
-use crate::worldspace::{viewport_to_ui, WorldCameraFilter, WorldspaceFont};
+use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};
 
 const LABEL_WIDTH: f32 = 260.0;
 const LABEL_FONT_SIZE: f32 = 13.0;

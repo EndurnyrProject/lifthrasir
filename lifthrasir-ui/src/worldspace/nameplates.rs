@@ -5,16 +5,16 @@
 
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
+use game_engine::domain::entities::EntityRegistry;
 use game_engine::domain::entities::components::{EntityName, GuildIdentity};
 use game_engine::domain::entities::hover::HoveredEntity;
 use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::entities::EntityRegistry;
 use game_engine::domain::guild::{GuildState, GuildSystems};
 use game_engine::domain::party::PartyState;
 
 use crate::theme;
 use crate::widgets::guild_window::emblem::{EmblemKey, GuildEmblemImages};
-use crate::worldspace::{viewport_to_ui, WorldCameraFilter, WorldspaceFont};
+use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};
 
 const NAMEPLATE_WIDTH: f32 = 220.0;
 const NAMEPLATE_FONT_SIZE: f32 = 13.0;
@@ -330,13 +330,16 @@ fn sync_nameplate_emblems(
         return;
     };
     for (emblem, mut image, mut visibility, mut node) in &mut emblems {
-        if let Some(handle) = images.cached(emblem.key) {
-            image.image = handle;
-            *visibility = Visibility::Inherited;
-            node.display = Display::Flex;
-        } else {
-            *visibility = Visibility::Hidden;
-            node.display = Display::None;
+        match images.cached(emblem.key) {
+            Some(handle) => {
+                image.image = handle;
+                *visibility = Visibility::Inherited;
+                node.display = Display::Flex;
+            }
+            _ => {
+                *visibility = Visibility::Hidden;
+                node.display = Display::None;
+            }
         }
     }
     for (fallback, mut visibility, mut node) in &mut fallbacks {
@@ -597,11 +600,12 @@ mod tests {
 
         app.update();
 
-        assert!(app
-            .world()
-            .resource::<GuildEmblemImages>()
-            .cached(key)
-            .is_none());
+        assert!(
+            app.world()
+                .resource::<GuildEmblemImages>()
+                .cached(key)
+                .is_none()
+        );
         assert!(!app.world().resource::<GuildEmblemImages>().has_queued(key));
     }
 
@@ -680,28 +684,36 @@ mod tests {
 
         app.update();
         let world = app.world_mut();
-        assert!(world
-            .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
-            .iter(world)
-            .all(|visibility| *visibility == Visibility::Inherited));
-        assert!(world
-            .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
-            .iter(world)
-            .all(|visibility| *visibility == Visibility::Hidden));
+        assert!(
+            world
+                .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
+                .iter(world)
+                .all(|visibility| *visibility == Visibility::Inherited)
+        );
+        assert!(
+            world
+                .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
+                .iter(world)
+                .all(|visibility| *visibility == Visibility::Hidden)
+        );
 
         app.world_mut()
             .resource_mut::<GuildEmblemImages>()
             .remove_cached_for_test(key);
         app.update();
         let world = app.world_mut();
-        assert!(world
-            .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
-            .iter(world)
-            .all(|visibility| *visibility == Visibility::Hidden));
-        assert!(world
-            .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
-            .iter(world)
-            .all(|visibility| *visibility == Visibility::Inherited));
+        assert!(
+            world
+                .query_filtered::<&Visibility, With<NameplateGuildEmblem>>()
+                .iter(world)
+                .all(|visibility| *visibility == Visibility::Hidden)
+        );
+        assert!(
+            world
+                .query_filtered::<&Visibility, With<NameplateGuildFallback>>()
+                .iter(world)
+                .all(|visibility| *visibility == Visibility::Inherited)
+        );
     }
 
     #[test]

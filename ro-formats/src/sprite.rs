@@ -1,7 +1,7 @@
 use nom::{
-    bytes::complete::{tag, take},
-    number::complete::{le_i16, le_u16, le_u8},
     IResult,
+    bytes::complete::{tag, take},
+    number::complete::{le_i16, le_u8, le_u16},
 };
 use thiserror::Error;
 

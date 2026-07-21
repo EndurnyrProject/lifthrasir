@@ -36,13 +36,13 @@ use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColo
 use game_engine::domain::entities::billboard::{
     Billboard, EquipmentPreviewCamera, PreviewBillboard,
 };
+use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
 use game_engine::domain::entities::character::components::visual::{
     CharacterDirection, CharacterSprite, Direction,
 };
 use game_engine::domain::entities::character::components::{
     CharacterAppearance, CharacterData, EquipmentItem, EquipmentSet, EquipmentSlot,
 };
-use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::entities::sprite_rendering::EquipmentChangeEvent;
 

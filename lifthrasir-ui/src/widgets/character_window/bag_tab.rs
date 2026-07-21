@@ -274,7 +274,7 @@ fn cell_views(
 }
 
 /// The whole swappable body: tab strip over the item grid.
-fn body(inventory: &Inventory, ui: &BagUi, item_db: Option<&ItemDb>) -> impl Scene {
+fn body(inventory: &Inventory, ui: &BagUi, item_db: Option<&ItemDb>) -> impl Scene + use<> {
     let counts = TABS.map(|(category, _, _)| tab_count(inventory, category));
     let cells = cell_views(inventory, ui.tab, item_db, ui.selected);
 

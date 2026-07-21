@@ -13,7 +13,7 @@ use net_contract::commands::{GuildInviteRequested, PartyInviteRequested};
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};
 
 use crate::theme;
-use crate::widgets::guild_window::{request_invite, GuildUi};
+use crate::widgets::guild_window::{GuildUi, request_invite};
 
 const MENU_Z: i32 = i32::MAX - 5;
 const MENU_WIDTH: f32 = 168.0;

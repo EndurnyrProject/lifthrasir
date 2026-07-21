@@ -74,10 +74,11 @@ mod tests {
 
         app.update();
 
-        assert!(app
-            .world()
-            .resource::<SkillCooldownTracker>()
-            .is_on_cooldown(7));
+        assert!(
+            app.world()
+                .resource::<SkillCooldownTracker>()
+                .is_on_cooldown(7)
+        );
 
         app.world_mut()
             .resource_mut::<Time>()

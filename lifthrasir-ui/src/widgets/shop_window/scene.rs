@@ -21,8 +21,8 @@ use crate::theme::feathers_theme::{
 use crate::widgets::chrome::{body_container, drag_window, glyph_icon, ignore_picking};
 
 use super::{
-    on_shop_button, on_shop_close_button, on_shop_row_secondary_click, Selection, ShopButtonAction,
-    ShopSession, ShopTab, ShopWindowBody, ShopWindowRoot, ShopWindowTitlebar,
+    Selection, ShopButtonAction, ShopSession, ShopTab, ShopWindowBody, ShopWindowRoot,
+    ShopWindowTitlebar, on_shop_button, on_shop_close_button, on_shop_row_secondary_click,
 };
 
 const WINDOW_LEFT: f32 = 340.0;
@@ -404,7 +404,7 @@ pub fn body(
     zeny: u32,
     item_db: Option<&ItemDb>,
     inventory: &Inventory,
-) -> impl Scene {
+) -> impl Scene + use<> {
     let tab = session.tab;
     let buy = tab == ShopTab::Buy;
     let rows = row_views(session, item_db, inventory);
@@ -1341,11 +1341,7 @@ fn total_text(buy: bool, total: u64) -> impl Scene {
 
 fn cta_button(buy: bool, label: String, enabled: bool) -> impl Scene {
     let bg = if enabled {
-        if buy {
-            theme::EMERALD
-        } else {
-            theme::GOLD
-        }
+        if buy { theme::EMERALD } else { theme::GOLD }
     } else {
         theme::FIELD
     };

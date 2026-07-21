@@ -1,7 +1,7 @@
 use crate::des;
 use crate::string_utils::parse_korean_string;
 use flate2::read::ZlibDecoder;
-use nom::{number::complete::le_u32, IResult, Parser};
+use nom::{IResult, Parser, number::complete::le_u32};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
@@ -381,8 +381,8 @@ fn parse_grf_table(input: &[u8]) -> IResult<&[u8], GrfTable> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flate2::write::ZlibEncoder;
     use flate2::Compression;
+    use flate2::write::ZlibEncoder;
     use std::io::Write;
 
     fn zlib(data: &[u8]) -> Vec<u8> {
