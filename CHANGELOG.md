@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.6.0...v0.7.0) (2026-07-22)
+
+
+### Features
+
+* **ui:** add in-game escape menu ([bc04665](https://github.com/EndurnyrProject/lifthrasir/commit/bc04665e79c8525d8c934af4e894eb0e7520562f))
+
+
+### Bug Fixes
+
+* **login:** Allow reconnecting on failure ([cf6841c](https://github.com/EndurnyrProject/lifthrasir/commit/cf6841cbaf9a1cf8274069a64493573a10e0154f))
+
 ## [0.6.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.5.1...v0.6.0) (2026-07-21)
 
 
