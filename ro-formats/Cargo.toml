@@ -6,8 +6,8 @@ edition.workspace = true
 [dependencies]
 nom = "8.0.0"
 flate2 = "1.1"
-encoding_rs = "0.8.35"
+encoding_rs = { workspace = true }
 nalgebra = "0.35"
-thiserror = "2.0"
+thiserror = { workspace = true }
 glam = "0.32"
 tracing = "0.1"

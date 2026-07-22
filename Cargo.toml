@@ -17,18 +17,30 @@ version = "0.0.1"
 edition = "2024"
 
 [workspace.dependencies]
+anyhow = "1.0"
 bevy = { version = "0.19.0", features = [
     "bmp",
     "jpeg",
     "wayland",
     "mesh_picking",
 ] }
+bevy-persistent = { version = "0.11", features = ["ron"] }
+bevy_auto_plugin = "0.11"
 bevy_feathers = { version = "0.19.0", features = ["custom_cursor"] }
-rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
-secrecy = { version = "0.10", features = ["serde"] }
-leafwing-input-manager = "0.21"
+bevy_framepace = "0.22.0"
 bevy_quinnet = "0.21.0"
+clap = { version = "4.5", features = ["derive"] }
+encoding_rs = "0.8.35"
+iyes_progress = "0.17"
+leafwing-input-manager = "0.21"
 prost = "0.14"
+regex = "1.12"
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+ron = "0.12"
+secrecy = { version = "0.10", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"
+toml = "1.1.2"
 
 [profile.dev.package."*"]
 opt-level = 3

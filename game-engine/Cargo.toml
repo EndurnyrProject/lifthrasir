@@ -8,30 +8,30 @@ ro-formats = { path = "../ro-formats" }
 lifthrasir-data = { path = "../lifthrasir-data" }
 net-contract = { path = "../net-contract" }
 bevy = { workspace = true }
-bevy_auto_plugin = "0.11"
+bevy_auto_plugin = { workspace = true }
 bevy_common_assets = { version = "0.17", features = ["toml", "ron"] }
 bevy_asset_loader = "0.27"
-iyes_progress = "0.17"
+iyes_progress = { workspace = true }
 bevy_kira_audio = { version = "0.26", features = ["mp3", "wav", "ogg"] }
-bevy_framepace = "0.22.0"
+bevy_framepace = { workspace = true }
 # default-features off drops the `2d` render path: this project has no 2D
 # particles, and the 2D path double-draws every world effect through the UI
 # Camera2d as fixed screen-space specks. Keep only `3d`.
 bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
-bevy-persistent = { version = "0.11", features = ["ron"] }
+bevy-persistent = { workspace = true }
 dirs = "6"
 leafwing-input-manager = { workspace = true }
 
 # Parsing and data processing
-thiserror = "2.0"
+thiserror = { workspace = true }
 image = "0.25.8"
 xbrz-rs = "0.1"
 resvg = "0.47"
 futures-lite = "2.6.1"
-encoding_rs = "0.8.35"
-serde = { version = "1.0", features = ["derive"] }
-toml = "1.1.2"
-regex = "1.12"
+encoding_rs = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+regex = { workspace = true }
 
 # Security dependencies
 secrecy = { workspace = true }
@@ -43,7 +43,7 @@ moonshine-behavior = "0.5"
 
 # Pathfinding
 pathfinding = "4.15"
-ron = "0.12"
+ron = { workspace = true }
 
 [features]
 default = []
