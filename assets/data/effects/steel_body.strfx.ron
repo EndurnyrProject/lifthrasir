@@ -1,0 +1,49 @@
+// Mental Strength / Steel Body (MO_STEELBODY) - authored STR-style effect.
+//
+// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291) on the caster, STR_WORLD_SCALE 0.2, smaller offset.y =
+// higher; fps 30, linear key lerp, Add = additive.
+//
+// The Monk hardens body and mind to steel. Shape: a pale steel-white flash at
+// the caster, then two concentric guard rings sweep up around them like a
+// tempering shell settling into a protective dome. Cool grey-white, deliberate
+// (~28f). The classic golden sprite tint for the duration is the opt3 aura
+// (id 16), handled by the sprite/status system, not this cast burst.
+(
+    fps: 30,
+    layers: [
+        // Steel flash at the core.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 285.0), quad: (30.0, 30.0),   color: (200, 210, 225, 0) ),
+                ( at: 4,  offset: (319.0, 285.0), quad: (180.0, 180.0), color: (225, 232, 245, 255) ),
+                ( at: 12, offset: (319.0, 285.0), quad: (240.0, 240.0), color: (205, 215, 232, 130) ),
+                ( at: 20, offset: (319.0, 285.0), quad: (280.0, 280.0), color: (190, 200, 220, 0) ),
+            ],
+        ),
+        // Lower guard ring sweeping up around the caster.
+        (
+            textures: ["ro://data/texture/effect/guardk.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2,  offset: (319.0, 300.0), quad: (60.0, 40.0),   color: (200, 212, 230, 0) ),
+                ( at: 10, offset: (319.0, 288.0), quad: (230.0, 170.0), color: (225, 232, 245, 235) ),
+                ( at: 20, offset: (319.0, 275.0), quad: (300.0, 230.0), color: (205, 216, 234, 130) ),
+                ( at: 28, offset: (319.0, 266.0), quad: (330.0, 255.0), color: (190, 202, 222, 0) ),
+            ],
+        ),
+        // Upper guard ring, staggered, forming the dome cap.
+        (
+            textures: ["ro://data/texture/effect/guardk2.tga"],
+            blend: Add,
+            keys: [
+                ( at: 8,  offset: (319.0, 292.0), quad: (50.0, 34.0),   color: (205, 216, 234, 0) ),
+                ( at: 16, offset: (319.0, 280.0), quad: (200.0, 150.0), color: (228, 235, 248, 220) ),
+                ( at: 24, offset: (319.0, 270.0), quad: (270.0, 205.0), color: (208, 218, 236, 120) ),
+                ( at: 30, offset: (319.0, 263.0), quad: (300.0, 228.0), color: (192, 204, 224, 0) ),
+            ],
+        ),
+    ],
+)

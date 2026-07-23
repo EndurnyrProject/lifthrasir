@@ -1,0 +1,85 @@
+// Asura Strike / Guillotine Fist (MO_EXTREMITYFIST) - authored STR-style effect.
+//
+// Convention (see redemptio.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291) on the victim, STR_WORLD_SCALE 0.2, smaller offset.y =
+// higher; fps 30, linear key lerp; Add = additive.
+//
+// The Monk's signature finisher: all spent spirit spheres detonate as one
+// massive blue-white ki blast. Shape: a low charge glow gathers at the impact,
+// a towering blue energy pillar erupts upward, a blinding core flash detonates,
+// and twin shock rings (white then blue) blow outward along the ground while a
+// blue ki swirl rises through the pillar. The largest Monk effect (~45f @ 30fps,
+// pillar reaching ~420px tall).
+(
+    fps: 30,
+    layers: [
+        // Low charge glow gathering at the impact just before the eruption.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (30.0, 20.0),   color: (140, 190, 255, 0) ),
+                ( at: 6,  offset: (319.0, 291.0), quad: (160.0, 90.0),  color: (180, 215, 255, 220) ),
+                ( at: 12, offset: (319.0, 291.0), quad: (240.0, 130.0), color: (200, 228, 255, 255) ),
+                ( at: 18, offset: (319.0, 291.0), quad: (300.0, 150.0), color: (170, 210, 255, 120) ),
+                ( at: 30, offset: (319.0, 291.0), quad: (340.0, 160.0), color: (150, 195, 255, 0) ),
+            ],
+        ),
+        // Towering blue energy pillar erupting upward from the impact.
+        (
+            textures: ["ro://data/texture/effect/cylinder_blue.tga"],
+            blend: Add,
+            keys: [
+                ( at: 10, offset: (319.0, 285.0), quad: (60.0, 40.0),   color: (170, 210, 255, 0) ),
+                ( at: 15, offset: (319.0, 210.0), quad: (120.0, 210.0), color: (210, 232, 255, 255) ),
+                ( at: 22, offset: (319.0, 150.0), quad: (150.0, 340.0), color: (225, 240, 255, 255) ),
+                ( at: 32, offset: (319.0, 120.0), quad: (160.0, 420.0), color: (200, 228, 255, 170) ),
+                ( at: 44, offset: (319.0, 110.0), quad: (140.0, 440.0), color: (180, 215, 255, 0) ),
+            ],
+        ),
+        // Rising blue ki swirl threading through the pillar.
+        (
+            textures: ["ro://data/texture/effect/magic_blue.tga"],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (319.0, 292.0), quad: (60.0, 60.0),   color: (190, 220, 255, 0),   angle: 0.0 ),
+                ( at: 20, offset: (319.0, 230.0), quad: (150.0, 150.0), color: (215, 235, 255, 235), angle: 120.0 ),
+                ( at: 30, offset: (319.0, 185.0), quad: (220.0, 220.0), color: (200, 228, 255, 180), angle: 260.0 ),
+                ( at: 42, offset: (319.0, 160.0), quad: (260.0, 260.0), color: (180, 215, 255, 0),   angle: 400.0 ),
+            ],
+        ),
+        // Blinding core detonation flash.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 14, offset: (319.0, 270.0), quad: (40.0, 40.0),   color: (230, 240, 255, 0) ),
+                ( at: 18, offset: (319.0, 270.0), quad: (360.0, 360.0), color: (255, 255, 255, 255) ),
+                ( at: 24, offset: (319.0, 270.0), quad: (440.0, 440.0), color: (235, 242, 255, 160) ),
+                ( at: 32, offset: (319.0, 270.0), quad: (480.0, 480.0), color: (210, 230, 255, 0) ),
+            ],
+        ),
+        // White shock ring blowing outward along the ground.
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                ( at: 16, offset: (319.0, 291.0), quad: (40.0, 24.0),   color: (255, 255, 255, 0) ),
+                ( at: 22, offset: (319.0, 291.0), quad: (300.0, 175.0), color: (245, 250, 255, 235) ),
+                ( at: 30, offset: (319.0, 291.0), quad: (460.0, 260.0), color: (220, 235, 255, 120) ),
+                ( at: 38, offset: (319.0, 291.0), quad: (560.0, 315.0), color: (200, 225, 255, 0) ),
+            ],
+        ),
+        // Trailing blue shock ring, wider and slower behind the white one.
+        (
+            textures: ["ro://data/texture/effect/ring_blue.tga"],
+            blend: Add,
+            keys: [
+                ( at: 20, offset: (319.0, 291.0), quad: (60.0, 34.0),   color: (150, 200, 255, 0) ),
+                ( at: 28, offset: (319.0, 291.0), quad: (380.0, 215.0), color: (175, 215, 255, 210) ),
+                ( at: 38, offset: (319.0, 291.0), quad: (540.0, 305.0), color: (160, 205, 255, 110) ),
+                ( at: 45, offset: (319.0, 291.0), quad: (620.0, 350.0), color: (150, 200, 255, 0) ),
+            ],
+        ),
+    ],
+)

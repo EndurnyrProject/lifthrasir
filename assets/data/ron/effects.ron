@@ -560,6 +560,113 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Monk (MO_*) -----------------------------------------------------
+        // Classic Monk skills have no native STR in the official client (they
+        // are hardcoded emitters), so the visible ones are authored strfx that
+        // reuse GRF effect textures, matching the Mage-bolt / Acolyte pattern.
+        // Passives (Iron Hand 259, Spirit Recovery 260, Dodge 265) render
+        // nothing and are intentionally absent.
+        261: ( // MO_CALLSPIRITS (Summon Spirit Sphere) -- authored: a quiet blue
+               // ki-gather flourish (the sphere itself is drawn by the separate
+               // spirit-sphere system, not this cast burst).
+            str: Some("call_spirits.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        262: ( // MO_ABSORBSPIRITS (Absorb Spirit Sphere) -- reuses the
+               // call_spirits gather flourish on the caster.
+            str: Some("call_spirits.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        263: ( // MO_TRIPLEATTACK (Raging Trifecta) -- attack-replacement proc;
+               // authored ki_strike flurry of knuckle sparks on the victim.
+            str: Some("ki_strike.strfx.ron"),
+            sound: Some("effect/ef_hit3.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        264: ( // MO_BODYRELOCATION (Snap) -- a forward blink; reuses the teleport
+               // swirl on the caster at the departure cell. No damage/EFST.
+            str: Some("teleport.strfx.ron"),
+            sound: Some("effect/ef_teleportation.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        266: ( // MO_INVESTIGATE (Occult Impaction) -- single heavy defense-
+               // piercing blow; authored ki_impact shockwave on the victim.
+            str: Some("ki_impact.strfx.ron"),
+            sound: Some("effect/ef_bash.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        267: ( // MO_FINGEROFFENSIVE (Throw Spirit Sphere) -- authored: blue ki
+               // spheres streak into the victim and burst.
+            str: Some("spirit_sphere_throw.strfx.ron"),
+            sound: Some("effect/ef_hit2.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        268: ( // MO_STEELBODY (Mental Strength) -- self-buff; authored steel
+               // tempering flash + guard-ring dome. The golden sprite tint for
+               // the duration is the opt3 aura (16), owned by the sprite system.
+            str: Some("steel_body.strfx.ron"),
+            sound: Some("effect/ig_guard_stance.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        269: ( // MO_BLADESTOP (Root) -- self-cast ready stance; authored sharp
+               // focus flash + clamping ring. The paired hold status (EFST
+               // 85/1114) is an icon/opt3 aura, not this cast flash.
+            str: Some("blade_stop.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        270: ( // MO_EXPLOSIONSPIRITS (Fury) -- self-buff; authored red ki cast
+               // burst. The persistent red ki aura for the duration lives in
+               // `statuses:` (EFST 86 -> native kiaura1.str).
+            str: Some("explosion_spirits.strfx.ron"),
+            sound: Some("effect/ag_energy_conversion.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        271: ( // MO_EXTREMITYFIST (Asura Strike / Guillotine Fist) -- the
+               // signature finisher; authored massive blue-white ki blast on the
+               // victim (largest Monk effect).
+            str: Some("asura_strike.strfx.ron"),
+            sound: Some("effect/sr_rampageblaster.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        272: ( // MO_CHAINCOMBO (Raging Quadruple Blow) -- 4-hit combo; reuses the
+               // ki_strike knuckle flurry.
+            str: Some("ki_strike.strfx.ron"),
+            sound: Some("effect/ef_hit4.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        273: ( // MO_COMBOFINISH (Raging Thrust) -- combo finisher; reuses the
+               // ki_impact single heavy blow.
+            str: Some("ki_impact.strfx.ron"),
+            sound: Some("effect/ef_hit5.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         1006: ( // WZ_SIGHTBLASTER -- arms a reactive status on the caster
                 // (aesir wz_sightblaster.ex: damage_type: no_damage, applies
                 // sc_sightblaster); no STR in the official client (only its
@@ -582,6 +689,24 @@
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1015: ( // MO_KITRANSLATION (Ki Translation, quest) -- transfers a spirit
+                // sphere to an ally; reuses the call_spirits flourish on the
+                // recipient.
+            str: Some("call_spirits.strfx.ron"),
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1016: ( // MO_BALKYOUNG (Ki Explosion, quest) -- splash damage + stun;
+                // reuses the ki_impact shockwave, retinted warm orange for the
+                // detonation.
+            str: Some("ki_impact.strfx.ron"),
+            sound: Some("effect/bo_explosive_powder.wav"),
+            placement: Target,
+            color: (1.0, 0.6, 0.3, 1.0),
             repeating: false,
         ),
     },
@@ -645,6 +770,19 @@
         // than the one-shot cast flash in `skills:` above.
         31: (
             str: Some("energycoat.str"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        // 86 EFST_EXPLOSIONSPIRITS (Fury) -- the Monk's persistent red ki aura
+        // for the buff duration, driven by StatusEffectChanged. Uses the native
+        // GRF red-spirit aura (a self-contained spinning ki effect); the cast
+        // burst itself is the one-shot explosion_spirits.strfx.ron in `skills:`
+        // (id 270). Steel Body (87) and Blade Stop (85) render as opt3 sprite
+        // tints, not STR auras, so they are intentionally absent here.
+        86: (
+            str: Some("efst_ros_redspirit/kiaura1.str"),
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),

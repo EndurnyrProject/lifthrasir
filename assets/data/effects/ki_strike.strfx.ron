@@ -1,0 +1,59 @@
+// Ki Strike (MO_TRIPLEATTACK / MO_CHAINCOMBO) - authored STR-style effect.
+//
+// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// mirrors fire_bolt.strfx.ron):
+//   - offset & quad are in STR screen pixels; the runtime maps a point to world
+//     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
+//     STR_WORLD_SCALE = 0.2. offset (319, 291) sits on the anchor (the victim).
+//   - y grows DOWNWARD; a SMALLER offset.y renders HIGHER above the anchor.
+//   - fps 30; keys lerp linearly; texture_index is held (flipbook). Add = additive.
+//
+// Shape: a rapid flurry of white-gold knuckle sparks pops around the target's
+// upper body in quick succession (a punch combo), each a fast lens_w flash, and
+// a small ring shockwave snaps out on the final blow. Reused by Triple Attack
+// (3-hit proc) and Chain Combo (4-hit); kept generic and short (~18f).
+(
+    fps: 30,
+    layers: [
+        // Jab spark 1 (left).
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (304.0, 284.0), quad: (10.0, 10.0), color: (255, 245, 200, 0) ),
+                ( at: 2, offset: (304.0, 284.0), quad: (56.0, 56.0), color: (255, 250, 220, 255) ),
+                ( at: 5, offset: (304.0, 284.0), quad: (30.0, 30.0), color: (255, 240, 190, 0) ),
+            ],
+        ),
+        // Jab spark 2 (right, staggered).
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 4, offset: (334.0, 292.0), quad: (10.0, 10.0), color: (255, 245, 200, 0) ),
+                ( at: 6, offset: (334.0, 292.0), quad: (60.0, 60.0), color: (255, 250, 220, 255) ),
+                ( at: 9, offset: (334.0, 292.0), quad: (32.0, 32.0), color: (255, 240, 190, 0) ),
+            ],
+        ),
+        // Jab spark 3 (center, the finishing blow).
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 8,  offset: (319.0, 280.0), quad: (12.0, 12.0), color: (255, 248, 210, 0) ),
+                ( at: 11, offset: (319.0, 280.0), quad: (78.0, 78.0), color: (255, 252, 230, 255) ),
+                ( at: 15, offset: (319.0, 280.0), quad: (40.0, 40.0), color: (255, 240, 190, 0) ),
+            ],
+        ),
+        // Shockwave ring snapping out on the final hit.
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                ( at: 9,  offset: (319.0, 288.0), quad: (20.0, 12.0),   color: (255, 245, 210, 0) ),
+                ( at: 13, offset: (319.0, 288.0), quad: (120.0, 70.0),  color: (255, 250, 220, 220) ),
+                ( at: 18, offset: (319.0, 288.0), quad: (190.0, 110.0), color: (255, 240, 195, 0) ),
+            ],
+        ),
+    ],
+)

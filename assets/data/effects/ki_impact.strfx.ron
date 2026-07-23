@@ -1,0 +1,49 @@
+// Ki Impact (MO_INVESTIGATE / MO_COMBOFINISH / MO_BALKYOUNG) - authored effect.
+//
+// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30,
+// linear key lerp, Add = additive.
+//
+// Shape: a single heavy focused impact -- a bright core flash detonates on the
+// target, a broad shockwave ring snaps outward along the ground, and a dust
+// burst kicks up. Base is white/gold so the descriptor `color` can retint it:
+// used neutral for Occult Impaction (266) and Combo Finish (273), and orange
+// for Ki Explosion / Balkyoung (1016) via its descriptor tint. ~22f.
+(
+    fps: 30,
+    layers: [
+        // Core detonation flash.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 288.0), quad: (16.0, 16.0),   color: (255, 246, 210, 0) ),
+                ( at: 3, offset: (319.0, 288.0), quad: (150.0, 150.0), color: (255, 252, 230, 255) ),
+                ( at: 8, offset: (319.0, 288.0), quad: (210.0, 210.0), color: (255, 244, 200, 130) ),
+                ( at: 14, offset: (319.0, 288.0), quad: (250.0, 250.0), color: (255, 238, 190, 0) ),
+            ],
+        ),
+        // Ground shockwave ring.
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2,  offset: (319.0, 291.0), quad: (30.0, 18.0),   color: (255, 248, 215, 0) ),
+                ( at: 7,  offset: (319.0, 291.0), quad: (200.0, 115.0), color: (255, 250, 220, 235) ),
+                ( at: 14, offset: (319.0, 291.0), quad: (330.0, 185.0), color: (255, 242, 200, 120) ),
+                ( at: 20, offset: (319.0, 291.0), quad: (400.0, 225.0), color: (255, 236, 190, 0) ),
+            ],
+        ),
+        // Dust kick-up off the impact.
+        (
+            textures: ["ro://data/texture/effect/dust_blast.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 3,  offset: (319.0, 291.0), quad: (40.0, 30.0),   color: (200, 180, 150, 0) ),
+                ( at: 8,  offset: (319.0, 282.0), quad: (150.0, 110.0), color: (220, 200, 165, 180) ),
+                ( at: 15, offset: (319.0, 268.0), quad: (210.0, 150.0), color: (190, 170, 140, 90) ),
+                ( at: 22, offset: (319.0, 255.0), quad: (250.0, 175.0), color: (160, 145, 120, 0) ),
+            ],
+        ),
+    ],
+)

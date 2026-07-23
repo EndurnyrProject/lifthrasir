@@ -1,0 +1,59 @@
+// Fury / Explosion Spirits (MO_EXPLOSIONSPIRITS) - authored STR-style effect.
+//
+// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291) on the caster, STR_WORLD_SCALE 0.2, smaller offset.y =
+// higher; fps 30, linear key lerp, Add = additive.
+//
+// The Monk enrages, spirit spheres flaring into raw ki. Shape: a red core flash
+// erupts at the caster, a red ki ring pulses outward along the ground, and red
+// energy columns lick upward around them. This is the cast burst; the persistent
+// red ki aura for the duration lives in `statuses:` (EFST 86 -> kiaura1.str). ~26f.
+(
+    fps: 30,
+    layers: [
+        // Red core flash at the caster's center.
+        (
+            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 285.0), quad: (30.0, 30.0),   color: (255, 90, 50, 0) ),
+                ( at: 4,  offset: (319.0, 285.0), quad: (200.0, 200.0), color: (255, 130, 70, 255) ),
+                ( at: 12, offset: (319.0, 285.0), quad: (280.0, 280.0), color: (255, 110, 55, 150) ),
+                ( at: 22, offset: (319.0, 285.0), quad: (320.0, 320.0), color: (255, 90, 45, 0) ),
+            ],
+        ),
+        // Red ki ring pulsing outward along the ground.
+        (
+            textures: ["ro://data/texture/effect/firering.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2,  offset: (319.0, 291.0), quad: (40.0, 24.0),   color: (255, 110, 60, 0) ),
+                ( at: 8,  offset: (319.0, 291.0), quad: (240.0, 140.0), color: (255, 140, 75, 235) ),
+                ( at: 16, offset: (319.0, 291.0), quad: (360.0, 205.0), color: (255, 110, 55, 120) ),
+                ( at: 24, offset: (319.0, 291.0), quad: (440.0, 250.0), color: (255, 95, 50, 0) ),
+            ],
+        ),
+        // Red energy licking upward, left column.
+        (
+            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 4,  offset: (292.0, 296.0), quad: (40.0, 60.0),  color: (255, 120, 60, 0) ),
+                ( at: 12, offset: (290.0, 250.0), quad: (60.0, 130.0), color: (255, 140, 75, 200) ),
+                ( at: 20, offset: (288.0, 210.0), quad: (50.0, 150.0), color: (255, 110, 55, 90) ),
+                ( at: 26, offset: (286.0, 185.0), quad: (40.0, 120.0), color: (255, 95, 50, 0) ),
+            ],
+        ),
+        // Red energy licking upward, right column (staggered).
+        (
+            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 8,  offset: (346.0, 296.0), quad: (40.0, 60.0),  color: (255, 120, 60, 0) ),
+                ( at: 16, offset: (348.0, 248.0), quad: (60.0, 130.0), color: (255, 140, 75, 200) ),
+                ( at: 24, offset: (350.0, 208.0), quad: (50.0, 150.0), color: (255, 110, 55, 90) ),
+                ( at: 30, offset: (352.0, 184.0), quad: (40.0, 120.0), color: (255, 95, 50, 0) ),
+            ],
+        ),
+    ],
+)

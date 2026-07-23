@@ -1,0 +1,48 @@
+// Throw Spirit Sphere (MO_FINGEROFFENSIVE) - authored STR-style effect.
+//
+// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291) on the victim, STR_WORLD_SCALE 0.2, smaller offset.y =
+// higher; fps 30, linear key lerp, Add = additive.
+//
+// Shape: a pair of glowing blue ki spheres streak in from the upper side toward
+// the target, staggered, and burst on contact into a small white flash. Anchored
+// on the victim, so the spheres arc down to (319, 291). ~18f.
+(
+    fps: 30,
+    layers: [
+        // Sphere A: streaks in from upper-left, bursts.
+        (
+            textures: ["ro://data/texture/effect/magic_blue.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (250.0, 210.0), quad: (26.0, 26.0), color: (150, 200, 255, 0) ),
+                ( at: 2,  offset: (260.0, 225.0), quad: (30.0, 30.0), color: (170, 215, 255, 255) ),
+                ( at: 8,  offset: (315.0, 288.0), quad: (34.0, 34.0), color: (180, 220, 255, 255) ),
+                ( at: 11, offset: (319.0, 291.0), quad: (60.0, 60.0), color: (210, 235, 255, 200) ),
+                ( at: 14, offset: (319.0, 291.0), quad: (30.0, 30.0), color: (200, 230, 255, 0) ),
+            ],
+        ),
+        // Sphere B: streaks in from upper-right, staggered.
+        (
+            textures: ["ro://data/texture/effect/magic_blue.tga"],
+            blend: Add,
+            keys: [
+                ( at: 3,  offset: (392.0, 214.0), quad: (24.0, 24.0), color: (150, 200, 255, 0) ),
+                ( at: 5,  offset: (382.0, 230.0), quad: (28.0, 28.0), color: (170, 215, 255, 255) ),
+                ( at: 11, offset: (322.0, 289.0), quad: (32.0, 32.0), color: (180, 220, 255, 255) ),
+                ( at: 14, offset: (319.0, 291.0), quad: (58.0, 58.0), color: (210, 235, 255, 200) ),
+                ( at: 17, offset: (319.0, 291.0), quad: (28.0, 28.0), color: (200, 230, 255, 0) ),
+            ],
+        ),
+        // Impact flash where the spheres land.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 10, offset: (319.0, 289.0), quad: (20.0, 20.0),   color: (200, 225, 255, 0) ),
+                ( at: 13, offset: (319.0, 289.0), quad: (120.0, 120.0), color: (220, 238, 255, 235) ),
+                ( at: 18, offset: (319.0, 289.0), quad: (170.0, 170.0), color: (190, 220, 255, 0) ),
+            ],
+        ),
+    ],
+)

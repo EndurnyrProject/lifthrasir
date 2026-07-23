@@ -1,0 +1,37 @@
+// Root / Blade Stop (MO_BLADESTOP) - authored STR-style effect.
+//
+// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291) on the caster, STR_WORLD_SCALE 0.2, smaller offset.y =
+// higher; fps 30, linear key lerp, Add = additive.
+//
+// The Monk roots and readies to catch a blow. Shape: a sharp white focus flash
+// snaps at the caster's hands, and a tight ring clamps inward -- a controlled
+// "seize" rather than a burst. Quick and taut (~14f). The paired hold status
+// (EFST 85/1114) is an icon/opt3 aura on both combatants, not this cast flash.
+(
+    fps: 30,
+    layers: [
+        // Sharp focus flash at the caster's guard.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 286.0), quad: (12.0, 12.0),   color: (235, 240, 250, 0) ),
+                ( at: 2, offset: (319.0, 286.0), quad: (110.0, 110.0), color: (245, 248, 255, 255) ),
+                ( at: 6, offset: (319.0, 286.0), quad: (150.0, 150.0), color: (225, 232, 245, 110) ),
+                ( at: 11, offset: (319.0, 286.0), quad: (170.0, 170.0), color: (210, 220, 238, 0) ),
+            ],
+        ),
+        // Tight ring clamping inward (the seize).
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 288.0), quad: (190.0, 115.0), color: (220, 230, 245, 0) ),
+                ( at: 5,  offset: (319.0, 288.0), quad: (110.0, 66.0),  color: (240, 246, 255, 235) ),
+                ( at: 10, offset: (319.0, 288.0), quad: (46.0, 28.0),   color: (225, 234, 248, 130) ),
+                ( at: 14, offset: (319.0, 288.0), quad: (22.0, 13.0),   color: (210, 222, 240, 0) ),
+            ],
+        ),
+    ],
+)

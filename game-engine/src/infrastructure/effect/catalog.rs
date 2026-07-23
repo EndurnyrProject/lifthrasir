@@ -223,6 +223,21 @@ mod tests {
         );
         assert_eq!(asset.0.skills[&27].placement, EffectPlacement::Ground);
         assert!(asset.0.skills[&27].repeating);
+
+        // id 271 is MO_EXTREMITYFIST (Asura Strike): authored blast on the
+        // victim. id 270 is MO_EXPLOSIONSPIRITS (Fury): caster-anchored cast
+        // burst, with the persistent aura living in `statuses:` (EFST 86).
+        assert_eq!(
+            asset.0.skills[&271].str.as_deref(),
+            Some("asura_strike.strfx.ron")
+        );
+        assert_eq!(asset.0.skills[&271].placement, EffectPlacement::Target);
+        assert_eq!(asset.0.skills[&270].placement, EffectPlacement::Caster);
+        assert_eq!(
+            asset.0.statuses[&86].str.as_deref(),
+            Some("efst_ros_redspirit/kiaura1.str")
+        );
+        assert!(asset.0.statuses[&86].repeating);
     }
 
     #[test]

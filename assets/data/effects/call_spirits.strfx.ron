@@ -1,0 +1,47 @@
+// Summon Spirit Sphere (MO_CALLSPIRITS) - authored STR-style effect.
+//
+// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30,
+// linear key lerp, Add = additive.
+//
+// Shape: ki gathers -- a soft blue glow contracts inward to the caster's core
+// and a thin ring collapses onto it, condensing into a new spirit sphere. Short
+// and quiet (~15f). Also reused for Absorb Spirit Sphere (262) and Ki Translation
+// (1015) as a generic spirit-handling flourish.
+(
+    fps: 30,
+    layers: [
+        // Gathering glow contracting to the caster's core.
+        (
+            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 283.0), quad: (170.0, 170.0), color: (150, 200, 255, 0) ),
+                ( at: 5,  offset: (319.0, 283.0), quad: (110.0, 110.0), color: (190, 220, 255, 220) ),
+                ( at: 10, offset: (319.0, 283.0), quad: (50.0, 50.0),   color: (215, 235, 255, 255) ),
+                ( at: 15, offset: (319.0, 283.0), quad: (24.0, 24.0),   color: (200, 228, 255, 0) ),
+            ],
+        ),
+        // Thin ring collapsing inward.
+        (
+            textures: ["ro://data/texture/effect/ring_blue.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 288.0), quad: (200.0, 120.0), color: (160, 205, 255, 0) ),
+                ( at: 6,  offset: (319.0, 288.0), quad: (120.0, 72.0),  color: (185, 218, 255, 220) ),
+                ( at: 12, offset: (319.0, 288.0), quad: (40.0, 24.0),   color: (200, 228, 255, 120) ),
+                ( at: 15, offset: (319.0, 288.0), quad: (18.0, 11.0),   color: (200, 228, 255, 0) ),
+            ],
+        ),
+        // Sphere condensation flash.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 11, offset: (319.0, 283.0), quad: (14.0, 14.0), color: (220, 235, 255, 0) ),
+                ( at: 14, offset: (319.0, 283.0), quad: (56.0, 56.0), color: (235, 245, 255, 230) ),
+                ( at: 17, offset: (319.0, 283.0), quad: (28.0, 28.0), color: (210, 230, 255, 0) ),
+            ],
+        ),
+    ],
+)
