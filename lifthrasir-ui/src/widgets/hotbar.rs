@@ -31,16 +31,20 @@ use crate::theme;
 use crate::worldspace::viewport_to_ui;
 
 const SLOTS: usize = 12;
-const SLOT_SIZE: f32 = 37.0;
-const ICON_SIZE: f32 = 21.0;
+const SLOT_SIZE: f32 = 44.0;
+const ICON_SIZE: f32 = 32.0;
 const ICON_INSET: f32 = (SLOT_SIZE - ICON_SIZE) / 2.0;
 
 /// The cursor-following drag ghost: a translucent icon shown while a skill/item is
 /// being dragged. Sits above every window (`GHOST_Z`) and is `Pickable::IGNORE` so
 /// it never steals the drop target's hit.
-const GHOST_SIZE: f32 = 30.0;
+const GHOST_SIZE: f32 = 34.0;
 const GHOST_Z: i32 = 2000;
 const GHOST_ALPHA: f32 = 0.85;
+
+/// The hover name toast floats above its slot; lifted over neighbouring cells (but
+/// below the drag ghost) so a wide name is never occluded by the next slot.
+const TOOLTIP_Z: i32 = 1500;
 
 const BAR_BG: Color = Color::srgba(0.043, 0.067, 0.059, 0.78);
 const SLOT_EMPTY_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.28);
@@ -69,6 +73,10 @@ struct HotbarCooldownText(usize);
 /// Marks the stack-count text inside slot `i`.
 #[derive(Component)]
 struct HotbarStackText(usize);
+
+/// Marks the hover name toast spawned above a slot; despawned on pointer-out.
+#[derive(Component)]
+struct HotbarTooltip;
 
 /// The skill/item currently being dragged onto the bar. Set by the source cells
 /// (skill window, inventory, or a filled slot) on `DragStart`, consumed by a
@@ -206,6 +214,33 @@ fn icon_color(display: &SlotDisplay) -> Color {
         alpha
     };
     Color::WHITE.with_alpha(alpha)
+}
+
+/// The name a slot shows on hover: the skill's display name, or the item's
+/// (identified-aware) name. `None` for an empty slot or an id missing from the
+/// catalog/db. Falls back to the identified name for an item no longer held,
+/// mirroring `ghost_icon`.
+fn slot_label(
+    slot: Option<HotbarSlot>,
+    inventory: &Inventory,
+    catalog: Option<&SkillCatalog>,
+    item_db: Option<&ItemDb>,
+) -> Option<String> {
+    match slot? {
+        HotbarSlot::Skill(id) => catalog
+            .and_then(|c| c.get(id))
+            .map(|meta| meta.display_name.clone()),
+        HotbarSlot::Item(item_id) => {
+            let identified = inventory
+                .iter()
+                .find(|it| it.item_id == item_id)
+                .map(|it| it.identified)
+                .unwrap_or(true);
+            item_db
+                .and_then(|db| db.name(item_id, identified))
+                .map(str::to_string)
+        }
+    }
 }
 
 /// Builds the bottom-center bar under `parent`: a centered row of 12 cells, each
@@ -346,6 +381,8 @@ fn spawn_slot(commands: &mut Commands, bar: Entity, i: usize, font: &Handle<Font
     commands.entity(cell).observe(on_slot_click);
     commands.entity(cell).observe(on_slot_drag_start);
     commands.entity(cell).observe(on_slot_drag_drop);
+    commands.entity(cell).observe(on_slot_hover_over);
+    commands.entity(cell).observe(on_slot_hover_out);
 }
 
 /// Reflects the bar state into every cell, writing each node only on change so a
@@ -475,6 +512,70 @@ fn on_slot_click(
             activated.write(HotbarSlotActivated { index: cell.0 });
         }
         _ => {}
+    }
+}
+
+/// Hovering a filled slot spawns a name toast centered above it; empty or
+/// unresolved slots show nothing.
+#[allow(clippy::too_many_arguments)]
+fn on_slot_hover_over(
+    over: On<Pointer<Over>>,
+    cells: Query<&HotbarSlotUi>,
+    hotbar: Res<Hotbar>,
+    inventory: Res<Inventory>,
+    catalog: Option<Res<SkillCatalog>>,
+    item_db: Option<Res<ItemDb>>,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+) {
+    let Ok(cell) = cells.get(over.entity) else {
+        return;
+    };
+    let Some(label) = slot_label(
+        hotbar.get(cell.0),
+        &inventory,
+        catalog.as_deref(),
+        item_db.as_deref(),
+    ) else {
+        return;
+    };
+    let font = asset_server.load(theme::FONT_BODY);
+
+    let tooltip = commands
+        .spawn((
+            HotbarTooltip,
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(SLOT_SIZE + 6.0),
+                left: Val::Percent(50.0),
+                padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(6.0)),
+                ..default()
+            },
+            UiTransform::from_translation(Val2::new(Val::Percent(-50.0), Val::ZERO)),
+            BackgroundColor(theme::GLASS_2),
+            BorderColor::all(theme::GOLD_FAINT),
+            GlobalZIndex(TOOLTIP_Z),
+            Pickable::IGNORE,
+            ChildOf(over.entity),
+        ))
+        .id();
+
+    commands.spawn((
+        theme::label(label, font, 11.0, theme::TEXT),
+        ChildOf(tooltip),
+    ));
+}
+
+/// Leaving a slot despawns any visible name toast (only one is shown at a time).
+fn on_slot_hover_out(
+    _: On<Pointer<Out>>,
+    tooltips: Query<Entity, With<HotbarTooltip>>,
+    mut commands: Commands,
+) {
+    for tooltip in &tooltips {
+        commands.entity(tooltip).despawn();
     }
 }
 
@@ -1090,5 +1191,73 @@ mod tests {
             icon.is_some_and(|path| path.ends_with("RED_POTION.bmp")),
             "item ghost should resolve to the identified icon path"
         );
+    }
+
+    fn skill_catalog() -> SkillCatalog {
+        use lifthrasir_data::{SkillData, SkillMeta};
+        let mut data = SkillData::default();
+        data.skills.insert(
+            5,
+            SkillMeta {
+                name: "SM_BASH".to_string(),
+                display_name: "Bash".to_string(),
+                description: vec![],
+                max_level: 10,
+                sp_cost: vec![8],
+                attack_range: vec![1],
+            },
+        );
+        SkillCatalog::from_skill_data(data)
+    }
+
+    #[test]
+    fn slot_label_empty_is_none() {
+        assert_eq!(slot_label(None, &Inventory::default(), None, None), None);
+    }
+
+    #[test]
+    fn slot_label_skill_uses_display_name() {
+        let catalog = skill_catalog();
+        let label = slot_label(
+            Some(HotbarSlot::Skill(5)),
+            &Inventory::default(),
+            Some(&catalog),
+            None,
+        );
+        assert_eq!(label.as_deref(), Some("Bash"));
+    }
+
+    #[test]
+    fn slot_label_skill_without_catalog_is_none() {
+        let label = slot_label(
+            Some(HotbarSlot::Skill(5)),
+            &Inventory::default(),
+            None,
+            None,
+        );
+        assert_eq!(label, None);
+    }
+
+    #[test]
+    fn slot_label_item_resolves_name() {
+        let db = ghost_db();
+        let label = slot_label(
+            Some(HotbarSlot::Item(501)),
+            &inventory_with(501, 3),
+            None,
+            Some(&db),
+        );
+        assert_eq!(label.as_deref(), Some("Red Potion"));
+    }
+
+    #[test]
+    fn slot_label_item_without_db_is_none() {
+        let label = slot_label(
+            Some(HotbarSlot::Item(501)),
+            &inventory_with(501, 3),
+            None,
+            None,
+        );
+        assert_eq!(label, None);
     }
 }
