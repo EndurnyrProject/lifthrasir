@@ -22,7 +22,7 @@ pub struct Warping;
 /// `MapSpawnContext` is guaranteed present in-game (the entry path inserts it), so
 /// a missing resource here fails loudly per the critical-systems guideline.
 #[auto_add_system(
-    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    plugin = crate::domain::world::WorldDomainPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
@@ -56,7 +56,7 @@ pub fn handle_map_change(
 /// to reuse the standard stop cleanup (drops the target/path, resets to Idle) — a no-op
 /// when the player wasn't moving.
 #[auto_add_system(
-    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    plugin = crate::domain::world::WorldDomainPlugin,
     schedule = OnEnter(GameState::InGame)
 )]
 pub fn reposition_local_player(

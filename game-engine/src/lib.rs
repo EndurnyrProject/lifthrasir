@@ -3,12 +3,13 @@ pub mod app;
 pub mod core;
 pub mod domain;
 pub mod infrastructure;
-pub mod plugins;
 pub mod presentation;
 pub mod utils;
 
 // Re-export commonly used types
-pub use app::{AuthenticationPlugin, LifthrasirPlugin, MapPlugin, NativeInputPlugin};
+pub use app::{
+    AudioPlugin, AuthenticationPlugin, InputPlugin, LifthrasirPlugin, MapPlugin, NativeInputPlugin,
+};
 pub use domain::camera::CameraPlugin;
 pub use domain::cart::CartPlugin;
 pub use domain::character::CharacterDomainPlugin;
@@ -26,7 +27,9 @@ pub use domain::party::PartyPlugin;
 pub use domain::settings::SettingsPlugin;
 pub use domain::skill_units::SkillUnitsPlugin;
 pub use domain::storage::StoragePlugin;
+pub use domain::world::WorldDomainPlugin;
 pub use infrastructure::accessory::{AccessoryDb, AccessoryDbPlugin};
+pub use infrastructure::assets::AssetsPlugin;
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
 pub use infrastructure::effect::EffectsPlugin;
 pub use infrastructure::item::{ItemDb, ItemDbPlugin};
@@ -34,7 +37,6 @@ pub use infrastructure::job::JobSystemPlugin;
 pub use infrastructure::skill::SkillSystemPlugin;
 pub use infrastructure::status::StatusIconPlugin;
 pub use infrastructure::weapon::{WeaponDb, WeaponDbPlugin};
-pub use plugins::{AssetsPlugin, AudioPlugin, InputPlugin, WorldPlugin};
 pub use presentation::rendering::VfxPlugin;
 pub use presentation::ui::fps_counter::FpsCounterPlugin;
 
@@ -65,7 +67,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(EntitySpawningPlugin)
             .add(CharacterDomainPlugin)
             .add(AuthenticationPlugin)
-            .add(WorldPlugin)
+            .add(WorldDomainPlugin)
             .add(MovementPlugin)
             .add(EntityHoverPlugin)
             .add(CombatPlugin)

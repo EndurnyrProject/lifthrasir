@@ -50,7 +50,7 @@ const TERRAIN_ALPHA_THRESHOLD: f32 = 0.5;
 /// the anisotropy setting can be re-applied to them live without reloading the
 /// map. Stores ids (not strong handles) to avoid pinning textures in memory.
 #[derive(Resource, Default)]
-#[auto_init_resource(plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin)]
+#[auto_init_resource(plugin = crate::domain::world::WorldDomainPlugin)]
 struct TerrainTextureIds(HashSet<AssetId<Image>>);
 
 /// Mesh data grouped by texture index for terrain generation
@@ -139,7 +139,7 @@ fn apply_terrain_texture_filtering(
 /// Re-apply the anisotropy setting to every already-loaded terrain texture when
 /// settings are applied. Only touches the sampler, so the mip chain is reused.
 #[auto_add_system(
-    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    plugin = crate::domain::world::WorldDomainPlugin,
     schedule = Update
 )]
 fn reapply_terrain_anisotropy(
@@ -509,7 +509,7 @@ fn calculate_smooth_normals(
 }
 
 #[auto_add_system(
-    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    plugin = crate::domain::world::WorldDomainPlugin,
     schedule = Update,
     config(in_set = WorldLoadingSystems::TerrainMeshGeneration)
 )]
@@ -621,7 +621,7 @@ type TerrainLoadingQuery<'w, 's> = Query<
 /// System that waits for textures to load, then generates terrain meshes
 #[allow(clippy::too_many_arguments)]
 #[auto_add_system(
-    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    plugin = crate::domain::world::WorldDomainPlugin,
     schedule = Update,
     config(in_set = WorldLoadingSystems::TerrainTextureApplication)
 )]

@@ -20,7 +20,7 @@ pub struct MapScoped;
 /// (model nodes, meshes, etc.). Map sounds keep their own teardown
 /// (`teardown_map_sounds`) and are intentionally not `MapScoped`.
 #[auto_add_system(
-    plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin,
+    plugin = crate::domain::world::WorldDomainPlugin,
     schedule = OnExit(GameState::InGame)
 )]
 pub fn despawn_map_scoped(

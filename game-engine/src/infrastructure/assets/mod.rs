@@ -1,5 +1,6 @@
 pub mod animation_processing_system;
 pub mod animation_processor;
+pub mod assets_plugin;
 pub mod bgm_name_table_loader;
 pub mod bmp_loader;
 pub mod config;
@@ -21,6 +22,7 @@ pub use animation_processing_system::{
     AnimationProcessingPlugin, PendingAnimation, PendingAnimations,
 };
 pub use animation_processor::{RoAnimationProcessor, calculate_attach_offset};
+pub use assets_plugin::AssetsPlugin;
 pub use config::*;
 pub use converters::*;
 pub use hierarchical_manager::*;

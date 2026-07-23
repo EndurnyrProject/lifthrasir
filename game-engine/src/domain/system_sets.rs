@@ -173,13 +173,12 @@ pub enum CharacterFlowSystems {
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[auto_configure_system_set(
-    plugin = crate::WorldPlugin,
+    plugin = crate::domain::world::WorldDomainPlugin,
     schedule = Update,
     chain,
     config(run_if = in_state(GameState::Loading))
 )]
 pub enum WorldLoadingSystems {
-    StateMonitoring,
     LoaderSetup,
     AssetExtraction,
     AssetFailureDetection,
@@ -210,7 +209,7 @@ pub enum AuthenticationSystems {
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[auto_configure_system_set(
-    plugin = crate::plugins::rendering_plugin::RenderingPlugin,
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
     schedule = Update,
     chain
 )]
@@ -223,7 +222,7 @@ pub enum ModelRenderingSystems {
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[auto_configure_system_set(
-    plugin = crate::plugins::rendering_plugin::RenderingPlugin,
+    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
     schedule = Update,
     chain
 )]
@@ -234,12 +233,7 @@ pub enum WaterRenderingSystems {
 }
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[auto_configure_system_set(
-    plugin = crate::plugins::rendering_plugin::RenderingPlugin,
-    schedule = Update
-)]
 pub enum MiscRenderingSystems {
     LightingSetup,
     LightingCleanup,
-    BillboardUpdate,
 }

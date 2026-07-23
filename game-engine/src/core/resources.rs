@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
 #[derive(Resource)]
-#[auto_init_resource(plugin = crate::plugins::world_domain_plugin::WorldDomainPlugin)]
+#[auto_init_resource(plugin = crate::domain::world::WorldDomainPlugin)]
 pub struct GameSettings {
     pub render_distance: f32,
     pub terrain_quality: u8,
