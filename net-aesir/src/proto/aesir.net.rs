@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -332,6 +332,14 @@ pub mod envelope {
         /// 162: caster-only reason for a rejected skill cast
         #[prost(message, tag = "162")]
         SkillCastFailed(super::SkillCastFailed),
+        /// 163: authoritative absolute spirit-sphere state
+        #[prost(message, tag = "163")]
+        SpiritSphereUpdate(super::SpiritSphereUpdate),
+        /// 164-165: peco mount (client intent + server->client outcome)
+        #[prost(message, tag = "164")]
+        MountRequest(super::MountRequest),
+        #[prost(message, tag = "165")]
+        MountResult(super::MountResult),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -763,6 +771,20 @@ pub struct UnitSpawn {
     pub guild_name: ::prost::alloc::string::String,
     #[prost(uint32, tag = "35")]
     pub emblem_id: u32,
+    #[prost(uint32, tag = "36")]
+    pub spirit_sphere_count: u32,
+    #[prost(uint64, tag = "37")]
+    pub spirit_sphere_revision: u64,
+}
+/// Server -> client, authoritative absolute spirit-sphere state for a unit.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SpiritSphereUpdate {
+    #[prost(uint32, tag = "1")]
+    pub unit_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub count: u32,
+    #[prost(uint64, tag = "3")]
+    pub revision: u64,
 }
 /// Server -> client, an entity left view (replaces RO ZC_NOTIFY_VANISH 0x0080).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1334,6 +1356,18 @@ pub struct CartMountRequest {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CartMountResult {
     #[prost(enumeration = "CartMountResultCode", tag = "1")]
+    pub result: i32,
+}
+/// Client -> server, mount (true) or unmount (false) a Peco. Gated on Ride learned.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct MountRequest {
+    #[prost(bool, tag = "1")]
+    pub mount: bool,
+}
+/// Server -> client, outcome of a Peco mount attempt.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct MountResult {
+    #[prost(enumeration = "MountResultCode", tag = "1")]
     pub result: i32,
 }
 /// Client -> server, move an inventory item into the cart.
@@ -2519,6 +2553,43 @@ impl CartMountResultCode {
             "CART_OK" => Some(Self::CartOk),
             "CART_SKILL_NOT_LEARNED" => Some(Self::CartSkillNotLearned),
             "CART_ALREADY_MOUNTED" => Some(Self::CartAlreadyMounted),
+            _ => None,
+        }
+    }
+}
+/// Outcome of a Peco mount attempt. Values are prefixed because proto3 enum
+/// constants share the package namespace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum MountResultCode {
+    MountOk = 0,
+    MountSkillNotLearned = 1,
+    MountAlreadyMounted = 2,
+    MountNotMounted = 3,
+    MountDead = 4,
+}
+impl MountResultCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::MountOk => "MOUNT_OK",
+            Self::MountSkillNotLearned => "MOUNT_SKILL_NOT_LEARNED",
+            Self::MountAlreadyMounted => "MOUNT_ALREADY_MOUNTED",
+            Self::MountNotMounted => "MOUNT_NOT_MOUNTED",
+            Self::MountDead => "MOUNT_DEAD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "MOUNT_OK" => Some(Self::MountOk),
+            "MOUNT_SKILL_NOT_LEARNED" => Some(Self::MountSkillNotLearned),
+            "MOUNT_ALREADY_MOUNTED" => Some(Self::MountAlreadyMounted),
+            "MOUNT_NOT_MOUNTED" => Some(Self::MountNotMounted),
+            "MOUNT_DEAD" => Some(Self::MountDead),
             _ => None,
         }
     }

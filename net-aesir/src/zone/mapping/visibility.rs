@@ -17,6 +17,8 @@ pub fn unit_spawn(s: net::UnitSpawn) -> UnitEntered {
         body_state: s.body_state,
         health_state: s.health_state,
         effect_state: s.effect_state,
+        virtue: s.virtue,
+        spirit_sphere_count: s.spirit_sphere_count,
         head: s.head,
         weapon: s.weapon,
         shield: s.shield,
@@ -87,7 +89,9 @@ mod tests {
             dst_x: 0,
             dst_y: 0,
             move_start_time: 0,
-            virtue: 0,
+            virtue: 16,
+            spirit_sphere_count: 5,
+            spirit_sphere_revision: 3,
         }
     }
 
@@ -136,6 +140,8 @@ mod tests {
         assert_eq!(entered.body_state, 1);
         assert_eq!(entered.health_state, 2);
         assert_eq!(entered.effect_state, 3);
+        assert_eq!(entered.virtue, 16);
+        assert_eq!(entered.spirit_sphere_count, 5);
         assert_eq!(entered.head, 12);
         assert_eq!(entered.weapon, 13);
         assert_eq!(entered.shield, 2);

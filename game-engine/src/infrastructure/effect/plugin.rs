@@ -1,11 +1,13 @@
 use super::catalog::{process_loaded_effect_data, start_loading_effect_data};
 use crate::domain::effects::{
-    EffectLayer, EffectSpriteAssets, PendingBodyStates, PendingEffectStates, PlayProceduralVfx,
-    advance_effect_timers, apply_body_state_tint, body_state_visuals, despawn_finished_effects,
-    efst_auras, finalize_frozen_ice_assets, follow_effect_anchor, initialize_effect_layers,
-    load_frozen_ice_assets, on_ground_skill, on_skill_damage, on_skill_effect, on_special_effect,
-    option_visuals, orbit_sight_visuals, order_effect_layers_by_depth, rebuild_effect_layers,
-    spawn_effect_sprites, sync_effect_sprites, sync_frozen_overlays,
+    EffectLayer, EffectSpriteAssets, PendingBodyStates, PendingEffectStates, PendingSpiritSpheres,
+    PendingVirtues, PlayProceduralVfx, advance_effect_timers, apply_body_state_tint,
+    body_state_visuals, despawn_finished_effects, efst_auras, finalize_frozen_ice_assets,
+    follow_effect_anchor, initialize_effect_layers, load_frozen_ice_assets, on_ground_skill,
+    on_skill_damage, on_skill_effect, on_special_effect, option_visuals, orbit_sight_visuals,
+    orbit_spirit_spheres, order_effect_layers_by_depth, rebuild_effect_layers,
+    spawn_effect_sprites, spirit_sphere_visuals, sync_effect_sprites, sync_frozen_overlays,
+    virtue_visuals,
 };
 use crate::domain::system_sets::EntityLifecycleSystems;
 use crate::presentation::rendering::effect_material::EffectMaterial;
@@ -22,6 +24,8 @@ impl Plugin for EffectsPlugin {
             .add_message::<PlayProceduralVfx>()
             .init_resource::<PendingBodyStates>()
             .init_resource::<PendingEffectStates>()
+            .init_resource::<PendingVirtues>()
+            .init_resource::<PendingSpiritSpheres>()
             .init_resource::<EffectSpriteAssets>()
             .add_systems(Startup, (start_loading_effect_data, load_frozen_ice_assets))
             .add_systems(
@@ -63,16 +67,21 @@ impl Plugin for EffectsPlugin {
             )
             // Runs after entity spawning so a `UnitEntered` unit is registered
             // before we resolve it; `apply_body_state_tint` rides the per-frame
-            // layer material write. `option_visuals` and `efst_auras` follow the
-            // same ordering for the same reason; `orbit_sight_visuals` has no
-            // registry dependency and just animates existing orbit children.
+            // layer material write and folds the opt1 (`body_state_visuals`) and
+            // opt3 (`virtue_visuals`) tints together. `option_visuals` and
+            // `efst_auras` follow the same ordering for the same reason;
+            // `orbit_sight_visuals` has no registry dependency and just animates
+            // existing orbit children.
             .add_systems(
                 Update,
                 (
                     body_state_visuals.after(EntityLifecycleSystems::Spawning),
+                    virtue_visuals.after(EntityLifecycleSystems::Spawning),
                     apply_body_state_tint,
                     option_visuals.after(EntityLifecycleSystems::Spawning),
                     orbit_sight_visuals,
+                    spirit_sphere_visuals.after(EntityLifecycleSystems::Spawning),
+                    orbit_spirit_spheres,
                     efst_auras.after(EntityLifecycleSystems::Spawning),
                 ),
             );

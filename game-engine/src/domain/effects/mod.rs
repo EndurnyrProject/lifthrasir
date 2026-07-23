@@ -1,6 +1,7 @@
 pub mod components;
 pub mod events;
 pub mod map_effects;
+pub mod spirit_spheres;
 pub mod sprite_effects;
 pub mod status_visuals;
 pub mod systems;
@@ -11,14 +12,17 @@ pub use components::{
 };
 pub use events::PlayProceduralVfx;
 pub use map_effects::{MapEffectsSpawned, spawn_map_effects};
+pub use spirit_spheres::{
+    PendingSpiritSpheres, SpiritSphereOrbit, orbit_spirit_spheres, spirit_sphere_visuals,
+};
 pub use sprite_effects::{
     EffectSprite, EffectSpriteAssets, EffectSpritePart, spawn_effect_sprites, sync_effect_sprites,
 };
 pub use status_visuals::{
-    AnimationPaused, BodyStateTint, FrozenIceAssets, FrozenOverlay, PendingBodyStates,
-    PendingEffectStates, SightOrbit, StatusAura, apply_body_state_tint, body_state_visuals,
-    efst_auras, finalize_frozen_ice_assets, load_frozen_ice_assets, option_visuals,
-    orbit_sight_visuals, sync_frozen_overlays,
+    AnimationPaused, BodyStateTint, FrozenIceAssets, FrozenOverlay, Opt3Tint, PendingBodyStates,
+    PendingEffectStates, PendingVirtues, SightOrbit, StatusAura, apply_body_state_tint,
+    body_state_visuals, efst_auras, finalize_frozen_ice_assets, load_frozen_ice_assets,
+    option_visuals, orbit_sight_visuals, sync_frozen_overlays, virtue_visuals,
 };
 pub use systems::{
     RenderFrame, STR_WORLD_SCALE, advance_effect_timers, despawn_finished_effects,

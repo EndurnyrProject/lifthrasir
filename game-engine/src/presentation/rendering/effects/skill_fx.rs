@@ -4,7 +4,7 @@ use super::impact::{
     spark_garnish_bundle,
 };
 use crate::domain::audio::events::PlaySkillSfx;
-use crate::domain::effects::{PlayProceduralVfx, SightOrbit};
+use crate::domain::effects::{PlayProceduralVfx, SightOrbit, SpiritSphereOrbit};
 use crate::infrastructure::effect::{ShaderFxEntry, ShaderFxTravel, TextureFrames};
 use bevy::light::NotShadowCaster;
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -206,6 +206,49 @@ pub fn dress_sight_orbits(
         if let Some(flipbook) = flipbook {
             quad.insert(flipbook);
         }
+    }
+}
+
+/// The soft blue orb glow the monk's spirit spheres reuse — the same texture
+/// the authored `call_spirits` / `spirit_sphere_throw` strfx effects billboard,
+/// so the persistent ring matches the cast/throw visual language.
+const SPIRIT_SPHERE_TEXTURE: &str = "data/texture/effect/magic_blue.tga";
+/// Uniform world-space scale of one ki-ball billboard. The orb art fills most
+/// of its frame, so the quad is close to the intended ~1-unit ball size next
+/// to a ~5-unit-tall character.
+const SPIRIT_SPHERE_SCALE: f32 = 2.2;
+
+/// Dress every freshly spawned [`SpiritSphereOrbit`] anchor (domain spawns it
+/// bare — see `spirit_spheres.rs`) with a blue ki-ball billboard on the
+/// projectile fragment (kind 100 — steady glow with its built-in subtle
+/// pulse). The anchor's despawn (count change, unit gone) takes the child
+/// quad with it.
+pub fn dress_spirit_sphere_orbits(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    assets: Res<ImpactAssets>,
+    mut materials: ResMut<Assets<SkillFxMaterial>>,
+    orbits: Query<Entity, Added<SpiritSphereOrbit>>,
+) {
+    for orbit in &orbits {
+        let material = materials.add(SkillFxMaterial {
+            params: SkillFxParams {
+                kind: PROJECTILE_KIND,
+                primary: Vec4::new(1.4, 1.9, 2.6, 1.0),
+                secondary: Vec4::new(0.7, 1.1, 2.2, 1.0),
+                shape: Vec4::ZERO,
+                factor: 0.0,
+            },
+            texture: Some(asset_server.load(format!("ro://{SPIRIT_SPHERE_TEXTURE}"))),
+        });
+
+        commands.spawn((
+            Mesh3d(assets.quad.clone()),
+            MeshMaterial3d(material),
+            Transform::from_scale(Vec3::splat(SPIRIT_SPHERE_SCALE)),
+            NotShadowCaster,
+            ChildOf(orbit),
+        ));
     }
 }
 
@@ -472,6 +515,7 @@ impl Plugin for SkillFxPlugin {
                     advance_traveling_vfx,
                     animate_flipbook,
                     dress_sight_orbits,
+                    dress_spirit_sphere_orbits,
                 )
                     .in_set(VfxSystems),
             );

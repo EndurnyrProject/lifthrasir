@@ -752,7 +752,7 @@
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
-            repeating: true,
+            repeating: false,
         ),
         // 22 EFST_LEX_AETERNA (aesir Efst.id(:lexaeterna)) -- Lex Aeterna's
         // persistent danger mark hovering above the marked unit (player or
@@ -773,7 +773,7 @@
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
-            repeating: true,
+            repeating: false,
         ),
         // 86 EFST_EXPLOSIONSPIRITS (Fury) -- the Monk's persistent red ki aura
         // for the buff duration, driven by StatusEffectChanged. Uses the native
@@ -786,7 +786,7 @@
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
-            repeating: true,
+            repeating: false,
         ),
     },
     shader_fx: {

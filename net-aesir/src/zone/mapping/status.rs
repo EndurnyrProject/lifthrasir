@@ -1,5 +1,5 @@
 use crate::proto::aesir::net;
-use net_contract::events::{StatusEffectChanged, UnitStateChanged};
+use net_contract::events::{SpiritSphereChanged, StatusEffectChanged, UnitStateChanged};
 
 pub fn status_change(s: net::StatusChange) -> StatusEffectChanged {
     StatusEffectChanged {
@@ -21,9 +21,28 @@ pub fn unit_state_change(s: net::UnitStateChange) -> UnitStateChanged {
     }
 }
 
+pub fn spirit_sphere_update(s: net::SpiritSphereUpdate) -> SpiritSphereChanged {
+    SpiritSphereChanged {
+        unit_id: s.unit_id,
+        count: s.count,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spirit_sphere_update_maps_unit_and_count() {
+        let changed = spirit_sphere_update(net::SpiritSphereUpdate {
+            unit_id: 150001,
+            count: 4,
+            revision: 7,
+        });
+
+        assert_eq!(changed.unit_id, 150001);
+        assert_eq!(changed.count, 4);
+    }
 
     #[test]
     fn status_change_maps_efst_and_toggle() {

@@ -627,6 +627,8 @@ mod tests {
             body_state: 0,
             health_state: 0,
             effect_state: 0,
+            virtue: 0,
+            spirit_sphere_count: 0,
             head: 12,
             weapon: 0,
             shield: 0,

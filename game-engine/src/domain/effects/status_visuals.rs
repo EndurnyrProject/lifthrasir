@@ -181,20 +181,28 @@ fn apply_body_state(
 }
 
 /// Multiplies each sprite layer's material `base_color` by its parent unit's
-/// [`BodyStateTint`], or resets it to white when the unit has none. This rides
-/// the same per-frame path as the layer texture write, because those materials
-/// are rewritten unconditionally every frame (retained-phase re-queue) — a
-/// one-shot tint write would be lost. Covers every layer uniformly (body, head,
-/// weapon, headgear, cart) since they are all `RenderLayer` children of the unit.
+/// tint — the combination of its [`BodyStateTint`] (opt1 freeze/stone) and
+/// [`Opt3Tint`] (opt3 Fury/Steel Body), multiplied together so both can apply at
+/// once — or resets it to white when the unit has neither. This rides the same
+/// per-frame path as the layer texture write, because those materials are
+/// rewritten unconditionally every frame (retained-phase re-queue) — a one-shot
+/// tint write would be lost. Covers every layer uniformly (body, head, weapon,
+/// headgear, cart) since they are all `RenderLayer` children of the unit.
 pub fn apply_body_state_tint(
     mut materials: ResMut<Assets<StandardMaterial>>,
     layers: Query<(&MeshMaterial3d<StandardMaterial>, &ChildOf), With<RenderLayer>>,
     tints: Query<&BodyStateTint>,
+    opt3_tints: Query<&Opt3Tint>,
 ) {
     for (material_handle, child_of) in &layers {
-        let desired = tints
-            .get(child_of.parent())
-            .map_or(Color::WHITE, |tint| tint.0);
+        let parent = child_of.parent();
+        let body = tints.get(parent).ok().map(|t| t.0);
+        let opt3 = opt3_tints.get(parent).ok().map(|t| t.0);
+        let desired = match (body, opt3) {
+            (None, None) => Color::WHITE,
+            (Some(c), None) | (None, Some(c)) => c,
+            (Some(a), Some(b)) => multiply_colors(a, b),
+        };
 
         // Read before mutating: `get_mut` marks the material changed (a retained-
         // phase re-queue) every call, so touch it only when the colour actually
@@ -208,6 +216,103 @@ pub fn apply_body_state_tint(
             continue;
         };
         material.base_color = desired;
+    }
+}
+
+/// aesir `OPT3_*` (`virtue`) sprite-recolor bits (`Aesir.ZoneServer.Mmo.Opt3`,
+/// the rAthena `e_sc_opt3` table). Unlike `body_state`/opt1 this is a *bitmask*:
+/// `UnitStateChanged.virtue` is the bitwise-OR of every active opt3 status on the
+/// unit, so more than one bit can be set at once. Only the Monk states that
+/// recolour the sprite are handled; Blade Stop (32) is an icon-only pose with no
+/// recolour, and the other bits (quicken, overthrust, ...) carry no tint here.
+const OPT3_EXPLOSIONSPIRITS: u32 = 8;
+const OPT3_STEELBODY: u32 = 16;
+
+/// Fury (Explosion Spirits) tint: an enraged red flush.
+const FURY_RED: Color = Color::srgb(1.0, 0.5, 0.42);
+/// Mental Strength (Steel Body) tint: the iconic golden metal body.
+const STEEL_GOLD: Color = Color::srgb(1.0, 0.8, 0.28);
+
+/// Colour multiplied into a unit's sprite layers for its active opt3 (`virtue`)
+/// bits, combined multiplicatively with [`BodyStateTint`] by
+/// [`apply_body_state_tint`]. Absent means no opt3 recolour.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct Opt3Tint(pub Color);
+
+/// Latest `virtue` bitmask for units whose entity has not registered yet, keyed
+/// by unit_id. Mirrors [`PendingBodyStates`] for the opt3 channel: the spawn-time
+/// self-sync can arrive before the entity registers.
+#[derive(Resource, Default)]
+pub struct PendingVirtues(HashMap<u32, u32>);
+
+/// Channel-wise sRGB multiply of two tints (white is the identity), matching how
+/// `base_color` multiplies into the sprite texture.
+fn multiply_colors(a: Color, b: Color) -> Color {
+    let a = a.to_srgba();
+    let b = b.to_srgba();
+    Color::srgb(a.red * b.red, a.green * b.green, a.blue * b.blue)
+}
+
+/// Folds an opt3 (`virtue`) bitmask into a single sprite tint by multiplying the
+/// tint of every recognised bit, or `None` when no tint-bearing bit is set (e.g.
+/// Blade Stop alone). Fury (8) + Steel Body (16) yields red × gold.
+fn virtue_tint(virtue: u32) -> Option<Color> {
+    [
+        (OPT3_EXPLOSIONSPIRITS, FURY_RED),
+        (OPT3_STEELBODY, STEEL_GOLD),
+    ]
+    .into_iter()
+    .filter(|(bit, _)| virtue & bit != 0)
+    .fold(None, |acc, (_, color)| {
+        Some(acc.map_or(color, |a| multiply_colors(a, color)))
+    })
+}
+
+/// Reconciles a unit's opt3 (`virtue`) sprite recolour with its current bitmask:
+/// insert [`Opt3Tint`] with the combined tint of the active bits, remove it when
+/// none apply. Consumes both channels carrying `virtue` — live `UnitStateChanged`
+/// toggles and the spawn-time `UnitEntered` for units that enter view already
+/// buffed — so it is ordered after entity spawning, mirroring [`body_state_visuals`].
+pub fn virtue_visuals(
+    mut state_changes: MessageReader<UnitStateChanged>,
+    mut entered: MessageReader<UnitEntered>,
+    registry: Res<EntityRegistry>,
+    mut pending: ResMut<PendingVirtues>,
+    mut commands: Commands,
+) {
+    for event in state_changes.read() {
+        match registry.get_entity(event.unit_id) {
+            Some(entity) => apply_virtue(&mut commands, entity, event.virtue),
+            None => {
+                pending.0.insert(event.unit_id, event.virtue);
+            }
+        }
+    }
+
+    for event in entered.read() {
+        let Some(entity) = registry.get_entity(event.gid) else {
+            continue;
+        };
+        apply_virtue(&mut commands, entity, event.virtue);
+    }
+
+    pending.0.retain(|&unit_id, &mut virtue| {
+        let Some(entity) = registry.get_entity(unit_id) else {
+            return true;
+        };
+        apply_virtue(&mut commands, entity, virtue);
+        false
+    });
+}
+
+fn apply_virtue(commands: &mut Commands, entity: Entity, virtue: u32) {
+    match virtue_tint(virtue) {
+        Some(color) => {
+            commands.entity(entity).insert(Opt3Tint(color));
+        }
+        None => {
+            commands.entity(entity).remove::<Opt3Tint>();
+        }
     }
 }
 
@@ -666,9 +771,10 @@ mod tests {
             .add_message::<UnitEntered>()
             .init_resource::<EntityRegistry>()
             .init_resource::<PendingBodyStates>()
+            .init_resource::<PendingVirtues>()
             .init_asset::<Mesh>()
             .init_asset::<StandardMaterial>()
-            .add_systems(Update, body_state_visuals);
+            .add_systems(Update, (body_state_visuals, virtue_visuals));
 
         let mesh = app
             .world_mut()
@@ -709,44 +815,54 @@ mod tests {
         app.update();
     }
 
+    fn entered_stub() -> UnitEntered {
+        UnitEntered {
+            gid: 0,
+            aid: 0,
+            object_type: 0,
+            job: 0,
+            x: 0,
+            y: 0,
+            dir: 0,
+            speed: 0,
+            hp: 0,
+            max_hp: 0,
+            clevel: 0,
+            body_state: 0,
+            health_state: 0,
+            effect_state: 0,
+            virtue: 0,
+            spirit_sphere_count: 0,
+            head: 0,
+            weapon: 0,
+            shield: 0,
+            accessory: 0,
+            accessory2: 0,
+            accessory3: 0,
+            head_palette: 0,
+            body_palette: 0,
+            head_dir: 0,
+            robe: 0,
+            guild_id: 0,
+            guild_name: String::new(),
+            emblem_id: 0,
+            sex: 0,
+            is_boss: false,
+            name: String::new(),
+            moving: false,
+            dst_x: 0,
+            dst_y: 0,
+            move_start_time: 0,
+        }
+    }
+
     fn emit_entered(app: &mut App, gid: u32, body_state: u32) {
         app.world_mut()
             .resource_mut::<Messages<UnitEntered>>()
             .write(UnitEntered {
                 gid,
-                aid: 0,
-                object_type: 0,
-                job: 0,
-                x: 0,
-                y: 0,
-                dir: 0,
-                speed: 0,
-                hp: 0,
-                max_hp: 0,
-                clevel: 0,
                 body_state,
-                health_state: 0,
-                effect_state: 0,
-                head: 0,
-                weapon: 0,
-                shield: 0,
-                accessory: 0,
-                accessory2: 0,
-                accessory3: 0,
-                head_palette: 0,
-                body_palette: 0,
-                head_dir: 0,
-                robe: 0,
-                guild_id: 0,
-                guild_name: String::new(),
-                emblem_id: 0,
-                sex: 0,
-                is_boss: false,
-                name: String::new(),
-                moving: false,
-                dst_x: 0,
-                dst_y: 0,
-                move_start_time: 0,
+                ..entered_stub()
             });
         app.update();
     }
@@ -804,6 +920,133 @@ mod tests {
         emit_state(&mut app, 7, 0);
         assert!(app.world().get::<BodyStateTint>(unit).is_none());
         assert!(app.world().get::<AnimationPaused>(unit).is_none());
+    }
+
+    fn emit_virtue(app: &mut App, unit_id: u32, virtue: u32) {
+        app.world_mut()
+            .resource_mut::<Messages<UnitStateChanged>>()
+            .write(UnitStateChanged {
+                unit_id,
+                body_state: 0,
+                health_state: 0,
+                effect_state: 0,
+                virtue,
+            });
+        app.update();
+    }
+
+    #[test]
+    fn fury_inserts_red_tint() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_virtue(&mut app, 7, OPT3_EXPLOSIONSPIRITS);
+
+        assert_eq!(app.world().get::<Opt3Tint>(unit), Some(&Opt3Tint(FURY_RED)));
+    }
+
+    #[test]
+    fn steel_body_inserts_gold_tint() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_virtue(&mut app, 7, OPT3_STEELBODY);
+
+        assert_eq!(
+            app.world().get::<Opt3Tint>(unit),
+            Some(&Opt3Tint(STEEL_GOLD))
+        );
+    }
+
+    #[test]
+    fn blade_stop_alone_inserts_no_tint() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        // Blade Stop (32) is an icon-only pose with no sprite recolour.
+        emit_virtue(&mut app, 7, 32);
+
+        assert!(app.world().get::<Opt3Tint>(unit).is_none());
+    }
+
+    #[test]
+    fn fury_and_steel_body_combine_multiplicatively() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        // Bitmask OR of Fury (8) + Steel Body (16) = 24.
+        emit_virtue(&mut app, 7, OPT3_EXPLOSIONSPIRITS | OPT3_STEELBODY);
+
+        assert_eq!(
+            app.world().get::<Opt3Tint>(unit),
+            Some(&Opt3Tint(multiply_colors(FURY_RED, STEEL_GOLD)))
+        );
+    }
+
+    #[test]
+    fn clearing_virtue_removes_tint() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_virtue(&mut app, 7, OPT3_STEELBODY);
+        assert!(app.world().get::<Opt3Tint>(unit).is_some());
+
+        emit_virtue(&mut app, 7, 0);
+        assert!(app.world().get::<Opt3Tint>(unit).is_none());
+    }
+
+    #[test]
+    fn entered_with_virtue_tints_spawn_time() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        // A unit that walks into view already under Steel Body carries opt3 on
+        // its spawn packet, so the tint applies without a follow-up state change.
+        app.world_mut()
+            .resource_mut::<Messages<UnitEntered>>()
+            .write(UnitEntered {
+                gid: 7,
+                virtue: OPT3_STEELBODY,
+                ..entered_stub()
+            });
+        app.update();
+
+        assert_eq!(
+            app.world().get::<Opt3Tint>(unit),
+            Some(&Opt3Tint(STEEL_GOLD))
+        );
+    }
+
+    #[test]
+    fn virtue_before_registration_is_buffered_then_applied() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+
+        // opt3 arrives before the entity registers (map-load self-sync race).
+        emit_virtue(&mut app, 7, OPT3_STEELBODY);
+        register(&mut app, 7, unit);
+        app.update();
+
+        assert_eq!(
+            app.world().get::<Opt3Tint>(unit),
+            Some(&Opt3Tint(STEEL_GOLD))
+        );
+    }
+
+    #[test]
+    fn virtue_tint_folds_only_recognised_bits() {
+        assert_eq!(virtue_tint(0), None);
+        assert_eq!(virtue_tint(32), None); // Blade Stop only.
+        assert_eq!(virtue_tint(OPT3_EXPLOSIONSPIRITS), Some(FURY_RED));
+        assert_eq!(virtue_tint(OPT3_STEELBODY), Some(STEEL_GOLD));
+        // Unknown high bits alongside a known one are ignored.
+        assert_eq!(virtue_tint(OPT3_STEELBODY | 1024), Some(STEEL_GOLD));
     }
 
     #[test]

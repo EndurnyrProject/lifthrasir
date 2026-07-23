@@ -61,6 +61,8 @@ pub struct UnitEntered {
     pub body_state: u32,
     pub health_state: u32,
     pub effect_state: u32,
+    pub virtue: u32,
+    pub spirit_sphere_count: u32,
     pub head: u32,
     pub weapon: u32,
     pub shield: u32,
@@ -175,6 +177,14 @@ pub struct UnitStateChanged {
     pub health_state: u32,
     pub effect_state: u32,
     pub virtue: u32,
+}
+
+/// Authoritative absolute spirit-sphere count for a unit.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SpiritSphereChanged {
+    pub unit_id: u32,
+    pub count: u32,
 }
 
 /// A parameter changed (collapses ZC_PAR_CHANGE u16 + ZC_LONGPAR_CHANGE u32).
