@@ -1,0 +1,42 @@
+// Fury / Explosion Spirits (EFST 86) persistent crackle - authored STR-style
+// effect, looped for the buff duration (repeating status entry).
+//
+// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291) on the buffed unit, STR_WORLD_SCALE 0.2, smaller offset.y
+// = higher; fps 30, linear key lerp, Add = additive.
+//
+// The classic thundershock: brief red lightning arcs (native elec_y_03.bmp,
+// black-backed so additive-safe) snap on and off at different spots around the
+// body, one after another, so the sprite crackles while Fury is up. ~18f loop.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/elec_y_03.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (295.0, 255.0), quad: (70.0, 70.0), color: (255, 220, 210, 0),   angle: -15.0 ),
+                ( at: 2,  offset: (293.0, 253.0), quad: (74.0, 74.0), color: (255, 230, 220, 255), angle: -15.0 ),
+                ( at: 5,  offset: (291.0, 251.0), quad: (78.0, 78.0), color: (255, 220, 210, 0),   angle: -15.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/elec_y_03.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 6,  offset: (345.0, 235.0), quad: (60.0, 60.0), color: (255, 220, 210, 0),   angle: 20.0 ),
+                ( at: 8,  offset: (347.0, 233.0), quad: (64.0, 64.0), color: (255, 230, 220, 255), angle: 20.0 ),
+                ( at: 11, offset: (349.0, 231.0), quad: (68.0, 68.0), color: (255, 220, 210, 0),   angle: 20.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/elec_y_03.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (317.0, 275.0), quad: (66.0, 66.0), color: (255, 220, 210, 0),   angle: 40.0 ),
+                ( at: 14, offset: (319.0, 273.0), quad: (70.0, 70.0), color: (255, 230, 220, 255), angle: 40.0 ),
+                ( at: 17, offset: (321.0, 271.0), quad: (74.0, 74.0), color: (255, 220, 210, 0),   angle: 40.0 ),
+            ],
+        ),
+    ],
+)

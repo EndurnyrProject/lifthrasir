@@ -599,27 +599,30 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        266: ( // MO_INVESTIGATE (Occult Impaction) -- single heavy defense-
-               // piercing blow; authored ki_impact shockwave on the victim.
+        266: ( // MO_INVESTIGATE (Occult Impaction, 침투경) -- single heavy
+               // defense-piercing blow; authored ki_impact shockwave on the
+               // victim. Dedicated native wav.
             str: Some("ki_impact.strfx.ron"),
-            sound: Some("effect/ef_bash.wav"),
+            sound: Some("effect/mon_침투경.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        267: ( // MO_FINGEROFFENSIVE (Throw Spirit Sphere) -- authored: blue ki
-               // spheres streak into the victim and burst.
+        267: ( // MO_FINGEROFFENSIVE (Throw Spirit Sphere, 탄지신통) -- authored:
+               // blue ki spheres streak into the victim and burst. Dedicated
+               // native wav.
             str: Some("spirit_sphere_throw.strfx.ron"),
-            sound: Some("effect/ef_hit2.wav"),
+            sound: Some("effect/mon_탄지신통.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        268: ( // MO_STEELBODY (Mental Strength) -- self-buff; authored steel
-               // tempering flash + guard-ring dome. The golden sprite tint for
-               // the duration is the opt3 aura (16), owned by the sprite system.
+        268: ( // MO_STEELBODY (Mental Strength, 금강불괴) -- self-buff; authored
+               // steel tempering flash + guard-ring dome. The golden sprite tint
+               // for the duration is the opt3 aura (16), owned by the sprite
+               // system. Dedicated native wav.
             str: Some("steel_body.strfx.ron"),
-            sound: Some("effect/ig_guard_stance.wav"),
+            sound: Some("effect/mon_금강불괴.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -633,36 +636,38 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        270: ( // MO_EXPLOSIONSPIRITS (Fury) -- self-buff; authored red ki cast
-               // burst. The persistent red ki aura for the duration lives in
+        270: ( // MO_EXPLOSIONSPIRITS (Fury) -- self-buff; authored cast burst
+               // from the native 폭기.tga starburst emblem. Dedicated native
+               // wav. The persistent red ki aura for the duration lives in
                // `statuses:` (EFST 86 -> native kiaura1.str).
             str: Some("explosion_spirits.strfx.ron"),
-            sound: Some("effect/ag_energy_conversion.wav"),
+            sound: Some("effect/mon_폭기.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         271: ( // MO_EXTREMITYFIST (Asura Strike / Guillotine Fist) -- the
-               // signature finisher; authored massive blue-white ki blast on the
-               // victim (largest Monk effect).
+               // signature finisher; authored classic look: the six skill-name
+               // kanji (asura1-6/asura11-16.tga) flash on in an arc and slam
+               // into the victim. Kanji only, no blast. Dedicated native wav.
             str: Some("asura_strike.strfx.ron"),
-            sound: Some("effect/sr_rampageblaster.wav"),
+            sound: Some("effect/mon_아수라 패황권.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        272: ( // MO_CHAINCOMBO (Raging Quadruple Blow) -- 4-hit combo; reuses the
-               // ki_strike knuckle flurry.
+        272: ( // MO_CHAINCOMBO (Raging Quadruple Blow, 연환격) -- 4-hit combo;
+               // reuses the ki_strike knuckle flurry. Dedicated native wav.
             str: Some("ki_strike.strfx.ron"),
-            sound: Some("effect/ef_hit4.wav"),
+            sound: Some("effect/mon_연환.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        273: ( // MO_COMBOFINISH (Raging Thrust) -- combo finisher; reuses the
-               // ki_impact single heavy blow.
+        273: ( // MO_COMBOFINISH (Raging Thrust, 맹룡과강) -- combo finisher;
+               // reuses the ki_impact single heavy blow. Dedicated native wav.
             str: Some("ki_impact.strfx.ron"),
-            sound: Some("effect/ef_hit5.wav"),
+            sound: Some("effect/mon_맹룡과강.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -775,18 +780,18 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        // 86 EFST_EXPLOSIONSPIRITS (Fury) -- the Monk's persistent red ki aura
-        // for the buff duration, driven by StatusEffectChanged. Uses the native
-        // GRF red-spirit aura (a self-contained spinning ki effect); the cast
-        // burst itself is the one-shot explosion_spirits.strfx.ron in `skills:`
-        // (id 270). Steel Body (87) and Blade Stop (85) render as opt3 sprite
-        // tints, not STR auras, so they are intentionally absent here.
+        // 86 EFST_EXPLOSIONSPIRITS (Fury) -- the classic thundershock: brief
+        // red lightning arcs (native elec_y_03.bmp) crackling around the
+        // sprite for the buff duration, looped, on top of the opt3 red tint.
+        // The cast burst is the one-shot explosion_spirits.strfx.ron in
+        // `skills:` (id 270). Steel Body (87) and Blade Stop (85) render as
+        // opt3 sprite tints only, so they are intentionally absent here.
         86: (
-            str: Some("efst_ros_redspirit/kiaura1.str"),
+            str: Some("fury_sparks.strfx.ron"),
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
-            repeating: false,
+            repeating: true,
         ),
     },
     shader_fx: {

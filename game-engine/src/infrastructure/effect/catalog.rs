@@ -226,7 +226,8 @@ mod tests {
 
         // id 271 is MO_EXTREMITYFIST (Asura Strike): authored blast on the
         // victim. id 270 is MO_EXPLOSIONSPIRITS (Fury): caster-anchored cast
-        // burst, with the persistent aura living in `statuses:` (EFST 86).
+        // burst, with the persistent thundershock crackle looping via the
+        // `statuses:` entry (EFST 86).
         assert_eq!(
             asset.0.skills[&271].str.as_deref(),
             Some("asura_strike.strfx.ron")
@@ -235,7 +236,7 @@ mod tests {
         assert_eq!(asset.0.skills[&270].placement, EffectPlacement::Caster);
         assert_eq!(
             asset.0.statuses[&86].str.as_deref(),
-            Some("efst_ros_redspirit/kiaura1.str")
+            Some("fury_sparks.strfx.ron")
         );
         assert!(asset.0.statuses[&86].repeating);
     }
@@ -339,14 +340,14 @@ mod tests {
         // MG_ENERGYCOAT *skill* id, a different namespace with no status entry.
         let energy_coat = catalog.get(31).expect("EFST_ENERGYCOAT descriptor");
         assert_eq!(energy_coat.str.as_deref(), Some("energycoat.str"));
-        assert!(energy_coat.repeating);
+        assert!(!energy_coat.repeating);
         assert!(catalog.get(157).is_none());
 
         // 19 is EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's barrier
         // shimmer aura, a leaner GRF variant than the one-shot cast STR.
         let kyrie = catalog.get(19).expect("EFST_KYRIE descriptor");
         assert_eq!(kyrie.str.as_deref(), Some("kyrie_min.str"));
-        assert!(kyrie.repeating);
+        assert!(!kyrie.repeating);
 
         // 22 is EFST_LEX_AETERNA (aesir Efst.id(:lexaeterna)) -- the pulsing
         // mark hovering above the marked unit while the status is active.
