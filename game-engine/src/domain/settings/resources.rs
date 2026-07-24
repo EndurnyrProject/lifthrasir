@@ -57,7 +57,7 @@ fn cycle_prev<T: Copy + PartialEq>(all: &[T], value: T) -> T {
     all[i.saturating_sub(1)]
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum DisplayMode {
     Windowed,
     BorderlessFullscreen,
@@ -95,7 +95,7 @@ impl DisplayMode {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum AntiAliasing {
     Off,
     Fxaa,
@@ -148,7 +148,7 @@ impl AntiAliasing {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum Anisotropy {
     Off,
     X2,
@@ -244,7 +244,7 @@ impl Upscaling {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
 pub enum DlssMode {
     #[default]
     Off,
@@ -302,7 +302,7 @@ impl DlssMode {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
 pub enum Ssao {
     #[default]
     Off,
@@ -351,7 +351,7 @@ impl Ssao {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum FpsCap {
     F30,
     F60,
@@ -403,7 +403,7 @@ impl FpsCap {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
 pub enum UiScaling {
     P80,
     #[default]
@@ -460,10 +460,7 @@ impl UiScaling {
     }
 }
 
-#[derive(
-    Resource, SettingsGroup, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug,
-)]
-#[serde(default)]
+#[derive(Resource, SettingsGroup, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 #[reflect(Resource, SettingsGroup, Default)]
 #[settings_group(group = "graphics")]
 pub struct GraphicsSettings {
@@ -509,11 +506,8 @@ impl Default for GraphicsSettings {
     }
 }
 
-/// Persisted mirror of the runtime `AudioSettings` fields.
-#[derive(
-    Resource, SettingsGroup, Serialize, Deserialize, Clone, Copy, PartialEq, Reflect, Debug,
-)]
-#[serde(default)]
+/// User-facing mirror of the runtime `AudioSettings` fields.
+#[derive(Resource, SettingsGroup, Clone, Copy, PartialEq, Reflect, Debug)]
 #[reflect(Resource, SettingsGroup, Default)]
 #[settings_group(group = "audio")]
 pub struct AudioConfig {
@@ -538,9 +532,8 @@ impl Default for AudioConfig {
     }
 }
 
-/// A held modifier in a key chord. Serde-only mirror of leafwing's `ModifierKey`;
-/// Task 4 owns the conversion.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+/// A held modifier in a key chord, mirrored from leafwing's `ModifierKey`.
+#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug)]
 pub enum Modifier {
     Alt,
     Control,
@@ -574,7 +567,7 @@ fn key_code_from_name(name: &str) -> Option<KeyCode> {
 
 /// A single bound key, optionally modified. `key` is a `KeyCode` name
 /// (e.g. "Insert", "KeyA"); Task 4 parses it back into a `KeyCode`.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug)]
+#[derive(Clone, PartialEq, Eq, Reflect, Debug)]
 pub struct KeyBind {
     pub key: String,
     pub modifier: Option<Modifier>,
@@ -618,7 +611,7 @@ impl KeyBind {
 }
 
 /// Primary + secondary slot for one action.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Reflect, Debug, Default)]
 pub struct ActionBinds {
     pub primary: Option<KeyBind>,
     pub secondary: Option<KeyBind>,
@@ -635,9 +628,7 @@ impl ActionBinds {
     }
 }
 
-/// Default binds for the twelve hotbar slots: F1..F12, unmodified. Used both as
-/// `Keybinds::default().hotbar` and as the `serde(default)` for the field, so an
-/// old `settings.ron` lacking `hotbar` loads the working F-keys, not empty binds.
+/// Default binds for the twelve hotbar slots: F1..F12, unmodified.
 fn default_hotbar_binds() -> [ActionBinds; 12] {
     std::array::from_fn(|i| ActionBinds {
         primary: Some(KeyBind::new(format!("F{}", i + 1))),
@@ -645,10 +636,8 @@ fn default_hotbar_binds() -> [ActionBinds; 12] {
     })
 }
 
-/// Serde-only keybinds for the existing `PlayerAction`s. No leafwing coupling
-/// here; Task 4 adds `to_input_map` / `from_input_map`.
-#[derive(Resource, SettingsGroup, Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug)]
-#[serde(default)]
+/// Reflected keybinds for the existing `PlayerAction`s.
+#[derive(Resource, SettingsGroup, Clone, PartialEq, Eq, Reflect, Debug)]
 #[reflect(Resource, SettingsGroup, Default)]
 #[settings_group(group = "keybinds")]
 pub struct Keybinds {
@@ -661,7 +650,6 @@ pub struct Keybinds {
     pub party: ActionBinds,
     pub guild: ActionBinds,
     pub emote: ActionBinds,
-    #[serde(default = "default_hotbar_binds")]
     pub hotbar: [ActionBinds; 12],
 }
 
@@ -874,26 +862,6 @@ mod tests {
     }
 
     #[test]
-    fn keybinds_without_hotbar_field_fill_f_key_defaults() {
-        let legacy = r#"(
-            sit: (primary: Some((key: "Insert", modifier: None)), secondary: Some((key: "Help", modifier: None))),
-            status: (primary: Some((key: "KeyA", modifier: Some(Alt))), secondary: None),
-            inventory: (primary: Some((key: "KeyE", modifier: Some(Alt))), secondary: None),
-            skills: (primary: Some((key: "KeyS", modifier: Some(Alt))), secondary: None),
-        )"#;
-
-        let decoded: Keybinds = ron::from_str(legacy).expect("legacy keybinds should load");
-        assert_eq!(decoded.hotbar, Keybinds::default().hotbar);
-        assert_eq!(
-            decoded.hotbar[0].primary,
-            Some(KeyBind::new("F1")),
-            "hotbar must default to F-keys, not empty binds"
-        );
-        assert_eq!(decoded.hotbar[11].primary, Some(KeyBind::new("F12")));
-        assert!(decoded.hotbar.iter().all(|b| b.primary.is_some()));
-    }
-
-    #[test]
     fn antialiasing_cycles_and_clamps() {
         assert_eq!(AntiAliasing::Off.next(), AntiAliasing::Fxaa);
         assert_eq!(AntiAliasing::MsaaX4.next(), AntiAliasing::MsaaX4);
@@ -911,13 +879,6 @@ mod tests {
         assert_eq!(FpsCap::F30.prev(), FpsCap::F30);
         assert_eq!(FpsCap::F144.label(), "144");
         assert_eq!(FpsCap::Unlimited.label(), "Unlimited");
-    }
-
-    #[test]
-    fn graphics_without_ui_scaling_defaults_to_100() {
-        let legacy = "(display_mode:Fullscreen,resolution:(1280,720),antialiasing:Off,vsync:false,fps_cap:F120)";
-        let decoded: GraphicsSettings = ron::from_str(legacy).expect("deserialize legacy graphics");
-        assert_eq!(decoded.ui_scaling, UiScaling::P100);
     }
 
     #[test]
@@ -962,15 +923,6 @@ mod tests {
     }
 
     #[test]
-    fn upscaling_serde_round_trips_every_variant() {
-        for variant in Upscaling::ALL {
-            let encoded = ron::to_string(&variant).expect("serialize");
-            let decoded: Upscaling = ron::from_str(&encoded).expect("deserialize");
-            assert_eq!(variant, decoded);
-        }
-    }
-
-    #[test]
     fn upscaling_factor_mapping() {
         assert_eq!(Upscaling::Off.factor(), None);
         assert_eq!(Upscaling::X2.factor(), Some(2));
@@ -994,15 +946,6 @@ mod tests {
     fn dlss_mode_default_is_off() {
         assert_eq!(DlssMode::default(), DlssMode::Off);
         assert_eq!(GraphicsSettings::default().dlss, DlssMode::Off);
-    }
-
-    #[test]
-    fn dlss_mode_serde_round_trips_every_variant() {
-        for variant in DlssMode::ALL {
-            let encoded = ron::to_string(&variant).expect("serialize");
-            let decoded: DlssMode = ron::from_str(&encoded).expect("deserialize");
-            assert_eq!(variant, decoded);
-        }
     }
 
     #[test]
@@ -1046,35 +989,12 @@ mod tests {
     }
 
     #[test]
-    fn ssao_serde_round_trips_every_variant() {
-        for variant in Ssao::ALL {
-            let encoded = ron::to_string(&variant).expect("serialize");
-            let decoded: Ssao = ron::from_str(&encoded).expect("deserialize");
-            assert_eq!(variant, decoded);
-        }
-    }
-
-    #[test]
-    fn graphics_without_ssao_field_defaults_to_off() {
-        let legacy = "(display_mode:Fullscreen,resolution:(1280,720),antialiasing:Off,vsync:false,fps_cap:F120)";
-        let decoded: GraphicsSettings = ron::from_str(legacy).expect("deserialize legacy graphics");
-        assert_eq!(decoded.ssao, Ssao::Off);
-    }
-
-    #[test]
     fn antialiasing_taa_maps_to_no_msaa_no_fxaa() {
         assert_eq!(AntiAliasing::Taa.to_msaa_fxaa(), (Msaa::Off, false));
         assert_eq!(AntiAliasing::Taa.label(), "TAA");
         assert_eq!(AntiAliasing::Fxaa.next(), AntiAliasing::Taa);
         assert_eq!(AntiAliasing::Taa.next(), AntiAliasing::MsaaX2);
         assert_eq!(AntiAliasing::Taa.prev(), AntiAliasing::Fxaa);
-    }
-
-    #[test]
-    fn graphics_without_dlss_field_defaults_to_off() {
-        let legacy = "(display_mode:Fullscreen,resolution:(1280,720),antialiasing:Off,vsync:false,fps_cap:F120)";
-        let decoded: GraphicsSettings = ron::from_str(legacy).expect("deserialize legacy graphics");
-        assert_eq!(decoded.dlss, DlssMode::Off);
     }
 
     #[cfg(feature = "dlss")]

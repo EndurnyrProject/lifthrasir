@@ -217,16 +217,16 @@ persistence boundary.
 
 **Acceptance criteria:**
 
-- [ ] Production and test source contains no `Persistent<Settings>`,
+- [x] Production and test source contains no `Persistent<Settings>`,
   `settings_path`, custom settings loader, aggregate `Settings` resource, or
   settings-specific legacy RON compatibility path.
-- [ ] No workspace or crate manifest depends on `bevy-persistent`, and the
+- [x] No workspace or crate manifest depends on `bevy-persistent`, and the
   lockfile is updated.
-- [ ] `dirs` remains in `game-engine` and is used by the unchanged hotbar
+- [x] `dirs` remains in `game-engine` and is used by the unchanged hotbar
   persistence boundary; RON and Serde remain available for non-settings uses.
-- [ ] The old `settings.ron` is not read, migrated, rewritten, or deleted.
-- [ ] `cargo fmt --all --check` passes.
-- [ ] `cargo check --workspace` passes.
+- [x] The old `settings.ron` is not read, migrated, rewritten, or deleted.
+- [x] `cargo fmt --all --check` passes.
+- [x] `cargo check --workspace` passes.
 - [ ] `cargo test --workspace` passes.
 - [ ] Manual smoke verification confirms defaults on first launch; Apply
   updates graphics, audio, and input; a restart reloads all three groups from

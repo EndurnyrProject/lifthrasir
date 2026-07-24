@@ -6,7 +6,6 @@ edition.workspace = true
 [dependencies]
 bevy = { workspace = true }
 bevy_feathers = { workspace = true }
-bevy-persistent = { workspace = true }
 game-engine = { path = "../game-engine" }
 iyes_progress = { workspace = true }
 net-contract = { path = "../net-contract" }
