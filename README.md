@@ -2,8 +2,7 @@
   <img width="300" height="300" src="https://iili.io/KbXkCeR.md.png">
 </p>
 
-<br>`[![](https://dcbadge.limes.pink/api/server/https://discord.gg/xGq832HYey)](https://discord.gg/xGq832HYey)`
-
+[![](https://dcbadge.limes.pink/api/server/https://discord.gg/xGq832HYey)](https://discord.gg/xGq832HYey)
 
 # Lifthrasir
 
