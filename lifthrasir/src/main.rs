@@ -58,10 +58,19 @@ fn main() {
     app.add_plugins(bevy_framepace::FramepacePlugin);
 
     #[cfg(feature = "dev")]
-    app.add_plugins((
-        bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
-        bevy_brp_extras::BrpExtrasPlugin::default(),
-    ));
+    {
+        use bevy::dev_tools::diagnostics_overlay::{
+            DiagnosticsOverlay, DiagnosticsOverlayPlugin,
+        };
+        app.add_plugins((
+            bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
+            DiagnosticsOverlayPlugin,
+            bevy_brp_extras::BrpExtrasPlugin::default(),
+        ));
+        app.add_systems(Startup, |mut commands: Commands| {
+            commands.spawn(DiagnosticsOverlay::fps());
+        });
+    }
 
     app.add_plugins(game_engine::MapPlugin);
     app.add_plugins(game_engine::CoreGamePlugins);

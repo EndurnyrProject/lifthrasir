@@ -38,7 +38,6 @@ pub use infrastructure::skill::SkillSystemPlugin;
 pub use infrastructure::status::StatusIconPlugin;
 pub use infrastructure::weapon::{WeaponDb, WeaponDbPlugin};
 pub use presentation::rendering::{MapPlugin, VfxPlugin};
-pub use presentation::ui::fps_counter::FpsCounterPlugin;
 
 use bevy::app::PluginGroupBuilder;
 use bevy::prelude::*;
@@ -81,6 +80,5 @@ impl PluginGroup for CoreGamePlugins {
             .add(EquipmentPlugin)
             .add(InputPlugin)
             .add(NativeInputPlugin)
-            .add(FpsCounterPlugin)
     }
 }
