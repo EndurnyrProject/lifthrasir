@@ -374,4 +374,143 @@ mod tests {
         assert_eq!(lex_aeterna.str.as_deref(), Some("lex_mark.strfx.ron"));
         assert!(lex_aeterna.repeating);
     }
+
+    #[test]
+    fn crusader_skill_effects_ron_deserialize_into_catalog() {
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
+        let catalog = EffectCatalog::from_skill_effect_data(asset.0.skills);
+
+        // The approved Crusader skill table (249-258 + quest 1002): exact
+        // native/authored assets, placements, and the three verified
+        // dedicated sounds. Every entry is a non-repeating one-shot.
+        let expected: [(u32, &str, EffectPlacement, Option<&str>); 11] = [
+            (249, "kyrie.str", EffectPlacement::Caster, None),
+            (250, "shield_charge.str", EffectPlacement::Target, None),
+            (
+                251,
+                "shield_boomerang.strfx.ron",
+                EffectPlacement::Target,
+                Some("effect/cru_shield boomerang.wav"),
+            ),
+            (
+                252,
+                "reflect_shield.strfx.ron",
+                EffectPlacement::Caster,
+                None,
+            ),
+            (
+                253,
+                "holy_cross.str",
+                EffectPlacement::Target,
+                Some("effect/cru_holy cross.wav"),
+            ),
+            (
+                254,
+                "grand_cross.strfx.ron",
+                EffectPlacement::Ground,
+                Some("effect/cru_grand cross.wav"),
+            ),
+            (255, "devotion.str", EffectPlacement::Target, None),
+            (256, "providence.str", EffectPlacement::Target, None),
+            (257, "defense.str", EffectPlacement::Caster, None),
+            (
+                258,
+                "spear_quicken.strfx.ron",
+                EffectPlacement::Caster,
+                None,
+            ),
+            (1002, "shrink.strfx.ron", EffectPlacement::Caster, None),
+        ];
+        for (skill_id, asset_name, placement, sound) in expected {
+            let descriptor = catalog
+                .get(skill_id)
+                .unwrap_or_else(|| panic!("skill {skill_id} descriptor"));
+            assert_eq!(
+                descriptor.str.as_deref(),
+                Some(asset_name),
+                "skill {skill_id}"
+            );
+            assert_eq!(descriptor.placement, placement, "skill {skill_id}");
+            assert_eq!(descriptor.sound.as_deref(), sound, "skill {skill_id}");
+            assert!(!descriptor.repeating, "skill {skill_id}");
+        }
+
+        // CR_FAITH (248) is a passive with no cast event: deliberately absent.
+        assert!(catalog.get(248).is_none());
+    }
+
+    #[test]
+    fn crusader_map_effects_ron_deserialize_into_catalog() {
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
+        let catalog = MapEffectCatalog::from_effect_data(asset.0.map);
+
+        // EF_REFLECTSHIELD (252): Reflect Shield's reactive proc flash on the
+        // reflecting unit; reuses the authored skill-252 asset.
+        let reflect = catalog.get(252).expect("EF_REFLECTSHIELD descriptor");
+        assert_eq!(reflect.str.as_deref(), Some("reflect_shield.strfx.ron"));
+        assert_eq!(reflect.sound, None);
+        assert_eq!(reflect.placement, EffectPlacement::Ground);
+        assert!(!reflect.repeating);
+
+        // EF_GUARD (336): Auto Guard's reactive proc flash on the guarding
+        // unit, using the native kyrie STR.
+        let guard = catalog.get(336).expect("EF_GUARD descriptor");
+        assert_eq!(guard.str.as_deref(), Some("kyrie.str"));
+        assert_eq!(guard.sound, None);
+        assert_eq!(guard.placement, EffectPlacement::Ground);
+        assert!(!guard.repeating);
+    }
+
+    #[test]
+    fn crusader_status_effects_ron_deserialize_into_catalog() {
+        let ron = include_str!("../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("deserialize");
+        let catalog = StatusEffectCatalog::from_status_effect_data(asset.0.statuses);
+
+        // Persistent auras: shared shield family (58/59/62), shared holy
+        // family (60/61), dedicated Spear Quicken (68) and Shrink (197)
+        // loops. All repeating, all soundless.
+        let expected: [(u32, &str); 7] = [
+            (58, "crusader_shield_aura.strfx.ron"),
+            (59, "crusader_shield_aura.strfx.ron"),
+            (60, "crusader_holy_aura.strfx.ron"),
+            (61, "crusader_holy_aura.strfx.ron"),
+            (62, "crusader_shield_aura.strfx.ron"),
+            (68, "spear_quicken_aura.strfx.ron"),
+            (197, "shrink_aura.strfx.ron"),
+        ];
+        for (efst_id, asset_name) in expected {
+            let descriptor = catalog
+                .get(efst_id)
+                .unwrap_or_else(|| panic!("EFST {efst_id} descriptor"));
+            assert_eq!(
+                descriptor.str.as_deref(),
+                Some(asset_name),
+                "EFST {efst_id}"
+            );
+            assert!(descriptor.repeating, "EFST {efst_id}");
+            assert_eq!(descriptor.sound, None, "EFST {efst_id}");
+            assert_eq!(
+                descriptor.placement,
+                EffectPlacement::Caster,
+                "EFST {efst_id}"
+            );
+            assert!(descriptor.color[3] < 1.0, "EFST {efst_id}");
+        }
+
+        // Statuses sharing an aura family stay visually distinct through
+        // their descriptor tint.
+        let auto_guard = catalog.get(58).expect("EFST_AUTOGUARD").color;
+        let reflect_shield = catalog.get(59).expect("EFST_REFLECTSHIELD").color;
+        let defender = catalog.get(62).expect("EFST_DEFENDER").color;
+        assert_ne!(auto_guard, reflect_shield);
+        assert_ne!(auto_guard, defender);
+        assert_ne!(reflect_shield, defender);
+        assert_ne!(
+            catalog.get(60).expect("EFST_DEVOTION").color,
+            catalog.get(61).expect("EFST_PROVIDENCE").color
+        );
+    }
 }

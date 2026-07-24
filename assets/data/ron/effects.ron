@@ -624,6 +624,97 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Crusader (CR_*) ------------------------------------------------
+        // 248 CR_FAITH is a passive with no cast event and is intentionally
+        // absent. Reflect Shield (252) doubles as the reactive map effect
+        // (EF_REFLECTSHIELD, `map:` id 252); Grand Cross (254) renders once
+        // from GroundSkillPlaced and its Ground placement suppresses the
+        // per-tick SkillDamage duplicate.
+        249: ( // CR_AUTOGUARD -- native kyrie guard flash on the caster. The
+               // proc flash is the reactive map effect (EF_GUARD, `map:` id
+               // 336), not this cast entry.
+            str: Some("kyrie.str"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        250: ( // CR_SHIELDCHARGE -- native shield-charge strike on the victim.
+            str: Some("shield_charge.str"),
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        251: ( // CR_SHIELDBOOMERANG -- authored spinning-shield approach and
+               // impact on the victim (hardcoded emitter in the official
+               // client, no native STR). Dedicated native wav.
+            str: Some("shield_boomerang.strfx.ron"),
+            sound: Some("effect/cru_shield boomerang.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        252: ( // CR_REFLECTSHIELD -- authored reflective ring on the caster;
+               // the same asset serves the reactive proc (EF_REFLECTSHIELD,
+               // `map:` id 252).
+            str: Some("reflect_shield.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        253: ( // CR_HOLYCROSS -- native holy-cross strike on the victim.
+               // Dedicated native wav.
+            str: Some("holy_cross.str"),
+            sound: Some("effect/cru_holy cross.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        254: ( // CR_GRANDCROSS -- self-cast (aesir cr_grandcross.ex places
+               // its timed ground group at the caster cell); one authored
+               // luminous cross burst from GroundSkillPlaced. Ground
+               // placement suppresses the per-tick SkillDamage visual.
+               // Dedicated native wav.
+            str: Some("grand_cross.strfx.ron"),
+            sound: Some("effect/cru_grand cross.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        255: ( // CR_DEVOTION -- native devotion STR on the target (the
+               // protected ally).
+            str: Some("devotion.str"),
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        256: ( // CR_PROVIDENCE -- native providence STR on the target.
+            str: Some("providence.str"),
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        257: ( // CR_DEFENDER -- native defense STR guard-up flash on the
+               // caster.
+            str: Some("defense.str"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        258: ( // CR_SPEARQUICKEN -- authored caster flourish (no native STR
+               // in the official client). The persistent loop lives in
+               // `statuses:` (EFST 68).
+            str: Some("spear_quicken.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         // --- Monk (MO_*) -----------------------------------------------------
         // Classic Monk skills have no native STR in the official client (they
         // are hardcoded emitters), so the visible ones are authored strfx that
@@ -753,6 +844,15 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        1002: ( // CR_SHRINK (Shrink, quest) -- authored caster flash. The
+                // persistent loop lives in `statuses:` (EFST 197). Dormant:
+                // aesir has no Shrink skill implementation yet.
+            str: Some("shrink.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         1006: ( // WZ_SIGHTBLASTER -- arms a reactive status on the caster
                 // (aesir wz_sightblaster.ex: damage_type: no_damage, applies
                 // sc_sightblaster); no STR in the official client (only its
@@ -819,6 +919,23 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
+        252: ( // EF_REFLECTSHIELD -- Reflect Shield's reactive proc flash on
+               // the reflecting unit (aesir Unit.SpecialEffect); reuses the
+               // authored skill-252 asset.
+            str: Some("reflect_shield.strfx.ron"),
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        336: ( // EF_GUARD -- Auto Guard's reactive proc flash on the guarding
+               // unit, using the native kyrie STR.
+            str: Some("kyrie.str"),
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         974: ( // EF_EMITTER — non-STR, procedural (params-driven generic emitter).
             str: None,
             vfx: Some("emitter"),
@@ -872,6 +989,62 @@
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        // --- Crusader auras --------------------------------------------------
+        // Shared aura families (shield for 58/59/62, holy for 60/61) plus
+        // dedicated Spear Quicken (68) and Shrink (197) loops, each kept
+        // distinct through its restrained descriptor tint (architecture:
+        // alpha/intensity below one-shot values, finalized in the visual
+        // pass). The cast bursts live in `skills:` above.
+        58: ( // EFST_AUTOGUARD -- cool blue shield loop.
+            str: Some("crusader_shield_aura.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (0.55, 0.75, 1.0, 0.55),
+            repeating: true,
+        ),
+        59: ( // EFST_REFLECTSHIELD -- warm gold shield loop.
+            str: Some("crusader_shield_aura.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 0.85, 0.5, 0.55),
+            repeating: true,
+        ),
+        60: ( // EFST_DEVOTION -- blue-white holy loop.
+            str: Some("crusader_holy_aura.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (0.75, 0.85, 1.0, 0.55),
+            repeating: true,
+        ),
+        61: ( // EFST_PROVIDENCE -- gold-white holy loop.
+            str: Some("crusader_holy_aura.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 0.92, 0.65, 0.55),
+            repeating: true,
+        ),
+        62: ( // EFST_DEFENDER -- pale cyan shield loop.
+            str: Some("crusader_shield_aura.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (0.7, 0.95, 0.95, 0.55),
+            repeating: true,
+        ),
+        68: ( // EFST_SPEARQUICKEN -- warm haste spear loop.
+            str: Some("spear_quicken_aura.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (1.0, 0.9, 0.6, 0.55),
+            repeating: true,
+        ),
+        197: ( // EFST_SHRINK (cr_shrink) -- pale violet defensive loop.
+               // Dormant: aesir has no Shrink skill implementation yet.
+            str: Some("shrink_aura.strfx.ron"),
+            sound: None,
+            placement: Caster,
+            color: (0.9, 0.9, 1.0, 0.55),
             repeating: true,
         ),
     },
