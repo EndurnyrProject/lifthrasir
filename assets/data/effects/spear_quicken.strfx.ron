@@ -1,0 +1,15 @@
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/spear.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (319.0, 255.0), quad: (88.0, 88.0),   color: (255, 245, 200, 0),   angle: 0.0 ),
+                ( at: 3,  offset: (319.0, 250.0), quad: (118.0, 118.0), color: (255, 250, 215, 240), angle: 384.0 ),
+                ( at: 8,  offset: (319.0, 245.0), quad: (138.0, 138.0), color: (255, 245, 200, 210), angle: 896.0 ),
+                ( at: 14, offset: (319.0, 240.0), quad: (150.0, 150.0), color: (255, 235, 180, 0),   angle: 1408.0 ),
+            ],
+        ),
+    ],
+)
