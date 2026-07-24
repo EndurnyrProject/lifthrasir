@@ -5,7 +5,7 @@ use super::cursor::CursorType;
 
 /// Message requesting a cursor change
 #[derive(Message, Debug, Clone, Copy)]
-#[auto_add_message(plugin = crate::app::input_plugin::InputPlugin)]
+#[auto_add_message(plugin = crate::domain::input::plugin::InputPlugin)]
 pub struct CursorChangeRequest {
     pub cursor_type: CursorType,
 }

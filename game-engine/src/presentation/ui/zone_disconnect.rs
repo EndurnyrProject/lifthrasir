@@ -12,7 +12,7 @@ fn disconnect_message(reason: &str) -> String {
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::ZoneEntry)
 )]

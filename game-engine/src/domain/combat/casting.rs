@@ -29,7 +29,7 @@ pub struct CastTimer {
 const CAST_START_SFX: &str = "effect/ef_beginspell.wav";
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::ProcessActions)
 )]
@@ -78,7 +78,7 @@ pub fn start_cast_pose(
 }
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::UpdateTimers)
 )]
@@ -104,7 +104,7 @@ pub fn update_cast_timers(
 }
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::ProcessActions)
 )]

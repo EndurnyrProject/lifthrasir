@@ -131,7 +131,7 @@ fn sync_sprite_direction_impl<T: ActionLayout>(
 }
 
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationSync)
 )]
@@ -140,7 +140,7 @@ pub fn sync_player_sprite_action(time: Res<Time>, mut query: SpriteActionQuery<P
 }
 
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationSync, after = sync_player_sprite_action)
 )]
@@ -156,7 +156,7 @@ pub fn sync_player_sprite_direction(
 }
 
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationSync)
 )]
@@ -165,7 +165,7 @@ pub fn sync_mob_sprite_action(time: Res<Time>, mut query: SpriteActionQuery<MobL
 }
 
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationSync, after = sync_mob_sprite_action)
 )]

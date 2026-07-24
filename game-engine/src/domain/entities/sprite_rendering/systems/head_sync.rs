@@ -75,7 +75,7 @@ fn body_idle_attach(
 /// offset would be foreshortened by the camera pitch, while distances inside
 /// the quad textures are not, detaching the head from the neck.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::TransformUpdate, after = crate::domain::entities::sprite_rendering::systems::body_sync::sync_player_body_layer)
 )]

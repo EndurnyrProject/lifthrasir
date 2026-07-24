@@ -114,7 +114,7 @@ fn sync_body_layer_impl<T: ActionLayout>(
 }
 
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::TransformUpdate)
 )]
@@ -138,7 +138,7 @@ pub fn sync_player_body_layer(
 }
 
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::TransformUpdate)
 )]

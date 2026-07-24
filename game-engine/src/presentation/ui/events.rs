@@ -6,8 +6,8 @@ use secrecy::SecretString;
 
 #[derive(Message, Clone, Reflect)]
 #[reflect(opaque)]
-#[auto_register_type(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
-#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_register_type(plugin = crate::domain::authentication::plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::domain::authentication::plugin::AuthenticationPlugin)]
 pub struct LoginAttemptEvent {
     pub username: String,
     #[reflect(ignore)]
@@ -15,7 +15,7 @@ pub struct LoginAttemptEvent {
 }
 
 #[derive(Message, Clone)]
-#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::domain::authentication::plugin::AuthenticationPlugin)]
 pub struct ServerSelectedEvent {
     pub server: ServerInfo,
 }
@@ -46,7 +46,7 @@ pub enum SystemDialogKind {
 /// secondary button; `confirm_state` is the screen the primary button navigates
 /// to (`None` simply dismisses).
 #[derive(Message, Clone)]
-#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::domain::authentication::plugin::AuthenticationPlugin)]
 pub struct ShowSystemDialog {
     pub severity: DialogSeverity,
     pub kind: SystemDialogKind,
@@ -66,7 +66,7 @@ pub struct ShowSystemDialog {
 /// `kind` and `correlation` echo the raising [`ShowSystemDialog`] so a consumer claims
 /// only its own dialog's choice.
 #[derive(Message, Clone)]
-#[auto_add_message(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_add_message(plugin = crate::domain::authentication::plugin::AuthenticationPlugin)]
 pub struct SystemDialogChoice {
     pub primary: bool,
     pub kind: SystemDialogKind,

@@ -3,7 +3,7 @@ use bevy_auto_plugin::prelude::auto_init_resource;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Resource)]
-#[auto_init_resource(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_init_resource(plugin = crate::domain::authentication::plugin::AuthenticationPlugin)]
 pub struct ServerConfiguration {
     pub login_server_address: String,
     pub client_version: u32,
@@ -21,7 +21,7 @@ impl Default for ServerConfiguration {
 }
 
 #[derive(Debug, Clone, Default, Resource)]
-#[auto_init_resource(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_init_resource(plugin = crate::domain::authentication::plugin::AuthenticationPlugin)]
 pub struct AuthenticationContext {
     pub server_config: ServerConfiguration,
 }

@@ -6,19 +6,19 @@ use crate::core::state::GameState;
 use crate::domain::inventory::Inventory;
 
 #[derive(Message, Debug, Clone)]
-#[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct EquipItemRequested {
     pub index: u16,
 }
 
 #[derive(Message, Debug, Clone)]
-#[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct UnequipItemRequested {
     pub index: u16,
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
@@ -44,7 +44,7 @@ pub fn handle_equip_item_send(
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]

@@ -33,7 +33,7 @@ type LocalPlayerFilter = (With<LocalPlayer>, With<Children>);
 /// remote `SpriteChange` route, never depends on the self-targeted broadcast
 /// round-tripping. An item with view id 0 (no sprite) maps to `None`.
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn sync_local_player_equipment(

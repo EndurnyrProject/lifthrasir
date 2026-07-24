@@ -22,7 +22,7 @@ impl MapLoadingTimer {
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::MapLoadStart)
 )]
@@ -37,7 +37,7 @@ pub fn start_map_loading_timer(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::MapLoadTimeout)
 )]
@@ -75,7 +75,7 @@ pub fn detect_map_loading_timeout(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::MapLoadDetect)
 )]

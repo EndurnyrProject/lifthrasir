@@ -1,5 +1,4 @@
 // Public exports for the game engine
-pub mod app;
 pub mod core;
 pub mod domain;
 pub mod infrastructure;
@@ -7,9 +6,9 @@ pub mod presentation;
 pub mod utils;
 
 // Re-export commonly used types
-pub use app::{
-    AudioPlugin, AuthenticationPlugin, InputPlugin, LifthrasirPlugin, MapPlugin, NativeInputPlugin,
-};
+pub use core::plugin::LifthrasirPlugin;
+pub use domain::audio::AudioPlugin;
+pub use domain::authentication::AuthenticationPlugin;
 pub use domain::camera::CameraPlugin;
 pub use domain::cart::CartPlugin;
 pub use domain::character::CharacterDomainPlugin;
@@ -21,6 +20,7 @@ pub use domain::entities::movement::MovementPlugin;
 pub use domain::entities::spawning::EntitySpawningPlugin;
 pub use domain::equipment::EquipmentPlugin;
 pub use domain::guild::GuildPlugin;
+pub use domain::input::{InputPlugin, NativeInputPlugin};
 pub use domain::inventory::InventoryPlugin;
 pub use domain::item_drop::ItemDropPlugin;
 pub use domain::party::PartyPlugin;
@@ -37,7 +37,7 @@ pub use infrastructure::job::JobSystemPlugin;
 pub use infrastructure::skill::SkillSystemPlugin;
 pub use infrastructure::status::StatusIconPlugin;
 pub use infrastructure::weapon::{WeaponDb, WeaponDbPlugin};
-pub use presentation::rendering::VfxPlugin;
+pub use presentation::rendering::{MapPlugin, VfxPlugin};
 pub use presentation::ui::fps_counter::FpsCounterPlugin;
 
 use bevy::app::PluginGroupBuilder;

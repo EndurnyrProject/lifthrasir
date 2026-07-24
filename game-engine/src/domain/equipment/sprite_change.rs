@@ -31,7 +31,7 @@ fn view_to_option(val: u32) -> Option<u16> {
 /// depends on the self-targeted broadcast round-tripping. `val == 0` means the slot
 /// cleared, mapped to `view_id: None`. Non-headgear look types are skipped.
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn apply_sprite_changes(

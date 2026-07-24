@@ -10,7 +10,7 @@ use crate::domain::world::map::MapData;
 /// The adapter latches this and drives its own map-load handshake; the domain no
 /// longer touches the zone phase machine.
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn notify_map_loaded(
@@ -27,7 +27,7 @@ pub fn notify_map_loaded(
 /// Fires once on spawn via `Added<LocalPlayer>`; the adapter latches it, so its
 /// order relative to the map-load signal does not matter.
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn notify_player_ready(

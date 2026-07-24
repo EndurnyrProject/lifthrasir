@@ -18,3 +18,10 @@ impl Plugin for WorldDomainPlugin {
         app.add_plugins(MapLoadProgressPlugin);
     }
 }
+
+/// Auto-plugin for zone gameplay logic (QUIC zone flow, skills, hotbar,
+/// equipment); systems register themselves via `auto_*` attributes across
+/// `domain/skill/*`, `domain/hotbar/*`, `domain/equipment/*`, and friends.
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct ZoneDomainAutoPlugin;

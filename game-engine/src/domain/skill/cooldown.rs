@@ -9,7 +9,7 @@ use net_contract::events::SkillCooldownSet;
 /// down with `Time`. `resolve_skill_cast` gates on this; Spec B's cooldown
 /// sweep reads `remaining_secs`.
 #[derive(Resource, Default)]
-#[auto_init_resource(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_init_resource(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct SkillCooldownTracker {
     remaining: HashMap<u32, Timer>,
 }
@@ -25,7 +25,7 @@ impl SkillCooldownTracker {
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn apply_skill_cooldown(
@@ -41,7 +41,7 @@ pub fn apply_skill_cooldown(
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn tick_skill_cooldowns(time: Res<Time>, mut tracker: ResMut<SkillCooldownTracker>) {

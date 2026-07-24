@@ -1,4 +1,3 @@
-use crate::app::movement_plugin::MovementDomainPlugin;
 use bevy::prelude::*;
 
 /// Movement Plugin (Wrapper)
@@ -49,3 +48,9 @@ mod tests {
         app.update();
     }
 }
+
+/// Auto-plugin collecting movement observers and systems; they register
+/// themselves via `auto_*` attributes in `domain/entities/movement/*`.
+#[derive(bevy_auto_plugin::prelude::AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct MovementDomainPlugin;

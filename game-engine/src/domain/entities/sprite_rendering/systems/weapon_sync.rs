@@ -60,7 +60,7 @@ fn is_weapon_slot(slot: EquipmentSlot) -> bool {
 /// weapon/shield reuse the same camera-rotated billboard-space delta math against
 /// it (not the head anchor headgear uses).
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::TransformUpdate, after = crate::domain::entities::sprite_rendering::systems::body_sync::sync_player_body_layer)
 )]

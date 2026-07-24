@@ -42,7 +42,7 @@ pub struct MapData<'w, 's> {
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(
         in_set = InputSystems::Cursor,
@@ -99,7 +99,7 @@ pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(
         in_set = InputSystems::Click,
@@ -207,7 +207,7 @@ pub fn handle_terrain_click(
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(
         in_set = InputSystems::Click,
@@ -233,7 +233,7 @@ pub fn update_cursor_for_terrain(
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(
         in_set = InputSystems::Click,
@@ -258,7 +258,7 @@ pub fn handle_sit_toggle(
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
@@ -275,7 +275,7 @@ pub fn handle_stat_increase_requests(
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
@@ -291,7 +291,7 @@ pub fn handle_learn_skill_requests(
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = OnEnter(GameState::Login)
 )]
 pub fn set_default_cursor_for_login(mut cursor_messages: MessageWriter<CursorChangeRequest>) {
@@ -299,7 +299,7 @@ pub fn set_default_cursor_for_login(mut cursor_messages: MessageWriter<CursorCha
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = OnEnter(GameState::ServerSelection)
 )]
 pub fn set_default_cursor_for_server_selection(
@@ -309,7 +309,7 @@ pub fn set_default_cursor_for_server_selection(
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = OnEnter(GameState::CharacterSelection)
 )]
 pub fn set_default_cursor_for_character_selection(

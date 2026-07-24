@@ -23,7 +23,7 @@ fn cast_failure_message(reason: SkillCastFailureReason) -> &'static str {
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn report_skill_cast_failure(
@@ -39,7 +39,7 @@ pub fn report_skill_cast_failure(
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn report_learn_skill_reject(

@@ -14,7 +14,7 @@ use net_contract::events::{ZoneEntered, ZoneServerInfoReceived};
 use net_contract::state::{UserSession, ZoneSession};
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::ZoneServerInfo)
 )]
@@ -47,7 +47,7 @@ pub fn handle_zone_server_info(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::ZoneConnection)
 )]
@@ -81,7 +81,7 @@ type ZoneSessionEntities = Or<(With<LocalPlayer>, With<MapScoped>)>;
 
 /// Clears all client-side zone state when returning to login.
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = OnEnter(GameState::Login)
 )]
 pub fn teardown_zone_session_on_login(

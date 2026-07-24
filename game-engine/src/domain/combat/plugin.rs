@@ -1,4 +1,3 @@
-use crate::app::combat_plugin::CombatDomainPlugin;
 use bevy::prelude::*;
 
 /// Combat Plugin
@@ -43,3 +42,9 @@ impl Plugin for CombatPlugin {
         debug!("CombatPlugin initialized");
     }
 }
+
+/// Auto-plugin collecting combat systems; they register themselves via
+/// `auto_*` attributes in `domain/combat/*`.
+#[derive(bevy_auto_plugin::prelude::AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct CombatDomainPlugin;

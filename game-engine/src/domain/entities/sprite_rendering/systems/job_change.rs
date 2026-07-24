@@ -27,7 +27,7 @@ type BodyLayerQuery<'w, 's> = Query<'w, 's, (Entity, &'static RenderLayer)>;
 /// that have no attachment, so without this the head would stop following the
 /// body.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::HierarchySpawn, before = super::spawn::finalize_render_layers)
 )]

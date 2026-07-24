@@ -58,7 +58,7 @@ fn is_headgear_slot(slot: EquipmentSlot) -> bool {
 /// The head publishes its resolved attach point + frame via `HeadAttachPoint`; the
 /// headgear reuses the same camera-rotated billboard-space delta math against it.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::TransformUpdate, after = crate::domain::entities::sprite_rendering::systems::head_sync::sync_player_head_layer)
 )]

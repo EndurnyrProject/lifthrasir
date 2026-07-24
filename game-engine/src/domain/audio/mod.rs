@@ -9,3 +9,5 @@ pub use events::{
 };
 pub use map_sounds::{MapSound, MapSoundSource, MapSoundState, MapSoundsSpawned, map_sound_path};
 pub use resources::{AmbienceChannel, AudioSettings, BgmManager, SfxChannel};
+pub mod plugin;
+pub use plugin::AudioPlugin;

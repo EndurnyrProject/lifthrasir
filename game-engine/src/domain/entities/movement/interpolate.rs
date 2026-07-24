@@ -112,7 +112,7 @@ pub fn sample_at(samples: &VecDeque<SnapshotSample>, render_ms: i64) -> Option<I
 /// Writes `Transform.translation.x/.z` only (terrain owns `.y`, like
 /// [`super::systems::interpolate_movement_system`]). Skips the local player.
 #[auto_add_system(
-    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
     schedule = Update,
     config(
         in_set = MovementSystems::Interpolate,

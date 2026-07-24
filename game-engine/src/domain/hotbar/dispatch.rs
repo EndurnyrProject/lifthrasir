@@ -11,13 +11,13 @@ use crate::domain::skill::SkillCastRequested;
 use net_contract::events::ChatHeard;
 
 #[derive(Message, Debug, Clone)]
-#[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct HotbarSlotActivated {
     pub index: usize,
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame).and_then(ui_unfocused))
 )]
@@ -36,7 +36,7 @@ pub fn activate_from_keys(
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn dispatch_hotbar_activation(

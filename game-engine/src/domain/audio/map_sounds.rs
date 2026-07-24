@@ -38,7 +38,7 @@ pub fn map_sound_path(name: &str) -> String {
     format!("ro://data/wav/{}", name.replace('\\', "/"))
 }
 
-#[auto_add_system(plugin = crate::app::audio_plugin::AudioPlugin, schedule = Update)]
+#[auto_add_system(plugin = crate::domain::audio::plugin::AudioPlugin, schedule = Update)]
 pub fn spawn_map_sounds(
     mut commands: Commands,
     world_assets: Res<Assets<RoWorldAsset>>,
@@ -138,7 +138,7 @@ fn distance_gain(dist: f32, range: f32) -> f32 {
     (1.0 - dist / range).clamp(0.0, 1.0)
 }
 
-#[auto_add_system(plugin = crate::app::audio_plugin::AudioPlugin, schedule = Update)]
+#[auto_add_system(plugin = crate::domain::audio::plugin::AudioPlugin, schedule = Update)]
 pub fn drive_map_sound_cycle(
     mut sources: Query<(&mut MapSoundSource, &GlobalTransform)>,
     listener: Query<&GlobalTransform, With<LocalPlayer>>,
@@ -193,7 +193,7 @@ pub fn drive_map_sound_cycle(
 }
 
 #[derive(Resource)]
-#[auto_init_resource(plugin = crate::app::audio_plugin::AudioPlugin)]
+#[auto_init_resource(plugin = crate::domain::audio::plugin::AudioPlugin)]
 pub struct MapSoundUpdateTimer(Timer);
 
 impl Default for MapSoundUpdateTimer {
@@ -202,7 +202,7 @@ impl Default for MapSoundUpdateTimer {
     }
 }
 
-#[auto_add_system(plugin = crate::app::audio_plugin::AudioPlugin, schedule = Update)]
+#[auto_add_system(plugin = crate::domain::audio::plugin::AudioPlugin, schedule = Update)]
 pub fn update_map_sound_volume(
     mut throttle: ResMut<MapSoundUpdateTimer>,
     time: Res<Time>,
@@ -259,7 +259,7 @@ pub fn update_map_sound_volume(
 /// `despawn_map_scoped` in this same schedule — so the marker dies with it and
 /// the next map's fresh loader respawns sounds. Removing it here would just race
 /// that despawn and panic on a recycled entity.
-#[auto_add_system(plugin = crate::app::audio_plugin::AudioPlugin, schedule = OnExit(GameState::InGame))]
+#[auto_add_system(plugin = crate::domain::audio::plugin::AudioPlugin, schedule = OnExit(GameState::InGame))]
 pub fn teardown_map_sounds(
     mut commands: Commands,
     sources: Query<(Entity, &MapSoundSource), With<MapSound>>,

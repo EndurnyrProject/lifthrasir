@@ -28,7 +28,7 @@ impl CursorType {
 
 /// Resource tracking the current cursor type
 #[derive(Resource, Debug)]
-#[auto_init_resource(plugin = crate::app::input_plugin::InputPlugin)]
+#[auto_init_resource(plugin = crate::domain::input::plugin::InputPlugin)]
 pub struct CurrentCursorType {
     cursor_type: CursorType,
 }
@@ -65,7 +65,7 @@ impl Default for CurrentCursorType {
 
 /// System to handle cursor change requests
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(after = crate::domain::input::systems::update_cursor_for_terrain)
 )]

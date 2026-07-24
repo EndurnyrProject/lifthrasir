@@ -1,5 +1,4 @@
 use super::events::{PendingSpawnBuffer, RequestEntityVanish, SpawnEntity};
-use crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin;
 use bevy::prelude::*;
 
 /// Entity Spawning Plugin (Wrapper)
@@ -35,3 +34,9 @@ impl Plugin for EntitySpawningPlugin {
         debug!("EntitySpawningPlugin initialized");
     }
 }
+
+/// Auto-plugin collecting spawn/despawn observers and systems; they register
+/// themselves via `auto_*` attributes in `domain/entities/spawning/*`.
+#[derive(bevy_auto_plugin::prelude::AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct EntitySpawningDomainPlugin;

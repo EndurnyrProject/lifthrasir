@@ -14,7 +14,7 @@ use bevy_auto_plugin::prelude::*;
 use net_contract::commands::NameRequested;
 use net_contract::events::EntityNamed;
 
-#[auto_observer(plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin)]
+#[auto_observer(plugin = crate::domain::entities::hover_plugin::EntityHoverDomainPlugin)]
 pub fn name_request_observer(
     trigger: On<EntityHoverEntered>,
     mut name_requests: MessageWriter<NameRequested>,
@@ -25,7 +25,7 @@ pub fn name_request_observer(
 }
 
 #[auto_add_system(
-    plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin,
+    plugin = crate::domain::entities::hover_plugin::EntityHoverDomainPlugin,
     schedule = Update,
     config(
         in_set = EntityInteractionSystems::Naming,

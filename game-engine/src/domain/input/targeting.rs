@@ -14,7 +14,7 @@ use super::terrain_raycast::TerrainRaycastCache;
 /// RO's press-then-click targeting state machine: `resolve_skill_cast` arms it
 /// for entity/ground skills, and the click handlers below consume it.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
-#[auto_init_resource(plugin = crate::app::input_plugin::InputPlugin)]
+#[auto_init_resource(plugin = crate::domain::input::plugin::InputPlugin)]
 pub enum TargetingMode {
     #[default]
     Idle,
@@ -29,7 +29,7 @@ pub enum TargetingMode {
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(
         in_set = InputSystems::Click,
@@ -72,7 +72,7 @@ pub fn targeting_click(
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
@@ -89,7 +89,7 @@ pub fn cancel_targeting(
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(
         run_if = in_state(GameState::InGame),
@@ -109,7 +109,7 @@ pub fn targeting_cursor(
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = OnExit(GameState::InGame)
 )]
 pub fn disarm_on_exit(mut targeting: ResMut<TargetingMode>) {

@@ -96,7 +96,7 @@ impl From<&UnitEntered> for SpawnFields {
 
 /// Spawn network entities from UnitEntered events
 #[auto_add_system(
-    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin,
     schedule = Update,
     config(
         in_set = EntityLifecycleSystems::Spawning,
@@ -399,7 +399,7 @@ fn create_equipment_item(
 ///
 /// Handles DespawnEntity observer events and despawns the entity.
 /// This observer is triggered when an entity needs to be removed from the game world.
-#[auto_observer(plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin)]
+#[auto_observer(plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin)]
 pub fn on_despawn_entity(
     trigger: On<DespawnEntity>,
     mut commands: Commands,
@@ -417,7 +417,7 @@ pub fn on_despawn_entity(
 
 /// Cleanup system: Remove entities from registry when they despawn
 #[auto_add_system(
-    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin,
     schedule = Update,
     config(in_set = EntityLifecycleSystems::Despawning)
 )]
@@ -439,7 +439,7 @@ pub fn cleanup_despawned_entities_system(
 /// looks up the corresponding entity from EntityRegistry, and triggers
 /// EntityVanishRequested observer events.
 #[auto_add_system(
-    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin,
     schedule = Update,
     config(in_set = EntityLifecycleSystems::Vanishing)
 )]
@@ -479,7 +479,7 @@ pub fn bridge_vanish_requests_system(
 /// When an entity vanishes (moves out of range, dies, logs out, or teleports),
 /// death (vanish_type 1) is deferred via PendingDespawn so combat::handle_death can
 /// play the death animation; every other vanish despawns immediately.
-#[auto_observer(plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin)]
+#[auto_observer(plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin)]
 pub fn on_entity_vanish_request(trigger: On<EntityVanishRequested>, mut commands: Commands) {
     let event = trigger.event();
     let entity = trigger.entity;
@@ -524,7 +524,7 @@ pub fn on_entity_vanish_request(trigger: On<EntityVanishRequested>, mut commands
 /// they stay on screen for their death animation and despawn when the timeout elapses. The
 /// DespawnEntity observer despawns the whole entity, so there is no component to remove here.
 #[auto_add_system(
-    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin,
     schedule = Update,
     config(in_set = EntityLifecycleSystems::Spawning)
 )]
@@ -555,7 +555,7 @@ pub fn check_pending_despawns_system(
 /// that arrive before the game is ready to process them. The events are stored
 /// in PendingSpawnBuffer and replayed when entering InGame state.
 #[auto_add_system(
-    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin,
     schedule = Update,
     config(
         run_if = not(in_state(GameState::InGame))
@@ -580,7 +580,7 @@ pub fn buffer_spawn_events_system(
 /// It replays all buffered spawn events so entities that appeared
 /// during Connecting/Loading states are properly spawned.
 #[auto_add_system(
-    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin,
     schedule = OnEnter(GameState::InGame)
 )]
 pub fn drain_spawn_buffer_system(

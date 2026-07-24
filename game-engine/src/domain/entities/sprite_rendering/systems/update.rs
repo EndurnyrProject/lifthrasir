@@ -5,7 +5,7 @@ use bevy_auto_plugin::prelude::*;
 
 /// Cleanup orphaned render layer children when parent despawns.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::OrphanCleanup)
 )]

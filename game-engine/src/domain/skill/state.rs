@@ -8,7 +8,7 @@ use net_contract::events::SkillListReceived;
 /// Authoritative client mirror of the server skill tree, rebuilt wholesale on
 /// every `SkillListReceived` (the server resends the full tree each time).
 #[derive(Resource, Default)]
-#[auto_init_resource(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_init_resource(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct SkillTreeState {
     pub skills: HashMap<u32, SkillNode>,
 }
@@ -28,7 +28,7 @@ pub struct SkillNode {
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn apply_skill_list(

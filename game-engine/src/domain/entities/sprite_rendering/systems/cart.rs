@@ -48,7 +48,7 @@ type CartOwnerQuery<'w, 's> = Query<'w, 's, (Entity, &'static ChildOf), With<Car
 /// The presence of a `CartLayer` child is the parent's mount state, so a repeat
 /// event that still has the bit set does not respawn it.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(
         in_set = SpriteRenderingSystems::AnimationEvents,
@@ -191,7 +191,7 @@ fn spawn_cart_layer(
 /// drainers (`finalize_render_layers`, `finalize_equipment_layers`) that
 /// consumed the cart's completion, leaving the layer permanently hidden.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AssetPopulation)
 )]
@@ -268,7 +268,7 @@ fn cart_behind_offset(direction: Direction) -> Vec2 {
 /// Positions like the body (raw layer position, world up is -Y), then pulls
 /// the quad behind the character on the ground plane.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::TransformUpdate)
 )]

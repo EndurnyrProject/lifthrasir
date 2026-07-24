@@ -14,3 +14,7 @@ pub use resources::{ForwardedCursorPosition, ForwardedMouseClick, LockedTarget};
 pub use targeting::TargetingMode;
 pub use terrain_raycast::TerrainRaycastCache;
 pub use ui_focus::{UiFocus, ui_unfocused};
+pub mod native;
+pub mod plugin;
+pub use native::NativeInputPlugin;
+pub use plugin::InputPlugin;

@@ -19,7 +19,7 @@ use crate::domain::entities::markers::LocalPlayer;
 
 /// Emitted by the UI when the player submits a chat line.
 #[derive(Message, Debug, Clone)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct ChatSendRequested {
     pub message: String,
 }
@@ -30,7 +30,7 @@ pub fn format_chat_message(character_name: &str, message: &str) -> String {
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]

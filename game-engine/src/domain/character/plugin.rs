@@ -1,8 +1,7 @@
-use crate::app::character_domain_plugin::CharacterDomainAutoPlugin;
-use crate::app::zone_domain_plugin::ZoneDomainAutoPlugin;
 use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
 use crate::domain::entities::character::states::setup_character_state_machines;
 use crate::domain::entities::sprite_rendering::plugin::GenericSpriteRenderingPlugin;
+use crate::domain::world::plugin::ZoneDomainAutoPlugin;
 use bevy::prelude::*;
 
 /// Character Domain Plugin
@@ -32,3 +31,9 @@ impl Plugin for CharacterDomainPlugin {
         debug!("CharacterDomainPlugin initialized");
     }
 }
+
+/// Auto-plugin collecting character domain logic; systems register themselves
+/// via `auto_*` attributes in `domain/character/*`.
+#[derive(bevy_auto_plugin::prelude::AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct CharacterDomainAutoPlugin;

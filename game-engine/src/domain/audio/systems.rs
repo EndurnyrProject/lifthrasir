@@ -14,7 +14,7 @@ use bevy_kira_audio::{Audio, AudioChannel, AudioInstance, AudioSource, AudioTwee
 /// System to handle BGM change requests with crossfading
 /// Listens for PlayBgmEvent and manages track transitions
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn handle_bgm_change(
@@ -78,7 +78,7 @@ pub fn handle_bgm_change(
 /// System to handle BGM stop requests
 /// Fades out and stops the current track
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn handle_bgm_stop(
@@ -107,7 +107,7 @@ pub fn handle_bgm_stop(
 /// System to handle BGM volume changes
 /// Applies volume immediately to active and fading tracks
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn handle_volume_change(
@@ -143,7 +143,7 @@ pub fn handle_volume_change(
 /// System to handle BGM mute/unmute requests
 /// Instantly mutes or unmutes all BGM
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn handle_mute_change(
@@ -177,7 +177,7 @@ pub fn handle_mute_change(
 /// System to cleanup stopped fading-out BGM instances
 /// Runs every frame to remove completed fade-outs
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn cleanup_fading_bgm(
@@ -196,7 +196,7 @@ pub fn cleanup_fading_bgm(
 /// System to load the BGM name table from mp3nametable.txt
 /// Runs once at startup to load the table asset
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Startup
 )]
 pub fn load_bgm_name_table(
@@ -214,7 +214,7 @@ pub fn load_bgm_name_table(
 /// Reads map name from MapRequestLoader and looks up BGM path from mp3nametable.txt
 /// Runs every frame and checks if we need to start BGM
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn handle_map_bgm(
@@ -287,7 +287,7 @@ pub(super) fn amplitude_to_decibels(amplitude: f32) -> f32 {
 }
 
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn play_mob_sfx(
@@ -313,7 +313,7 @@ pub fn play_mob_sfx(
 /// lacks one, since effect anchors (the spawned effect entity, or a player
 /// caster) are not guaranteed to carry one.
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn play_skill_sfx(
@@ -340,7 +340,7 @@ pub fn play_skill_sfx(
 }
 
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Startup
 )]
 pub fn apply_initial_sfx_volume(
@@ -351,7 +351,7 @@ pub fn apply_initial_sfx_volume(
 }
 
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn handle_sfx_volume_change(
@@ -366,7 +366,7 @@ pub fn handle_sfx_volume_change(
 }
 
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn handle_sfx_mute_change(
@@ -381,7 +381,7 @@ pub fn handle_sfx_mute_change(
 }
 
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn handle_ambience_volume_change(
@@ -398,7 +398,7 @@ pub fn handle_ambience_volume_change(
 }
 
 #[auto_add_system(
-    plugin = crate::app::audio_plugin::AudioPlugin,
+    plugin = crate::domain::audio::plugin::AudioPlugin,
     schedule = Update
 )]
 pub fn handle_ambience_mute_change(

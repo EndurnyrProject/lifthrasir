@@ -5,8 +5,8 @@ use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 
 use net_contract::state::ZoneSession;
 
-use crate::app::zone_domain_plugin::ZoneDomainAutoPlugin;
 use crate::core::state::GameState;
+use crate::domain::world::plugin::ZoneDomainAutoPlugin;
 
 use super::model::Hotbar;
 

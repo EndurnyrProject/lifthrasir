@@ -24,7 +24,7 @@ fn form_to_create_character(form: &CharacterCreationForm) -> CreateCharacter {
 
 /// Bridges a UI character selection onto the outbound `SelectCharacter` command.
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update
 )]
 pub fn char_send_select(
@@ -42,7 +42,7 @@ pub fn char_send_select(
 ///
 /// Validates and flattens the form before writing; invalid forms are dropped.
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update
 )]
 pub fn char_send_create(
@@ -60,7 +60,7 @@ pub fn char_send_create(
 
 /// Bridges a UI deletion request onto the outbound `DeleteCharacter` command.
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update
 )]
 pub fn char_send_delete(
@@ -76,7 +76,7 @@ pub fn char_send_delete(
 
 /// Bridges a UI refresh request onto the outbound `RefreshCharacterList` command.
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update
 )]
 pub fn char_send_refresh(

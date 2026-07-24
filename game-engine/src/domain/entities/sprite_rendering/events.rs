@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
 #[derive(Message)]
-#[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
+#[auto_add_message(plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin)]
 pub struct SpawnSpriteEvent {
     pub entity: Entity,
     pub position: Vec3,

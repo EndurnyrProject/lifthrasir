@@ -10,7 +10,7 @@ use net_contract::events::ChatHeard;
 use super::{Form, SkillCooldownTracker, SkillTreeState, Target, form, target};
 
 #[derive(Message, Debug, Clone)]
-#[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct SkillCastRequested {
     pub skill_id: u32,
 }
@@ -22,7 +22,7 @@ pub enum CastTarget {
 }
 
 #[derive(Message, Debug, Clone)]
-#[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct SkillCastResolved {
     pub skill_id: u32,
     pub level: u32,
@@ -30,7 +30,7 @@ pub struct SkillCastResolved {
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
@@ -68,7 +68,7 @@ fn reject(chat: &mut MessageWriter<ChatHeard>, message: &str) {
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn resolve_skill_cast(

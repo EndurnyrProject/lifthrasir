@@ -153,7 +153,7 @@ pub enum EffectType {
 }
 
 #[derive(Resource)]
-#[auto_init_resource(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
+#[auto_init_resource(plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin)]
 pub struct SpriteHierarchyConfig {
     pub default_z_spacing: f32,
     pub effect_z_offset: f32,

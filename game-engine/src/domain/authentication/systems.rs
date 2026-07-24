@@ -24,7 +24,7 @@ use net_contract::state::UserSession;
 /// The response (success/failure) is handled by other systems that listen
 /// to LoginAccepted and LoginRefused protocol events.
 #[auto_add_system(
-    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    plugin = crate::domain::authentication::plugin::AuthenticationPlugin,
     schedule = Update,
     config(in_set = AuthenticationSystems::LoginAttempt)
 )]
@@ -65,7 +65,7 @@ pub fn handle_login_attempts(
 /// 2. Inserts it as a resource
 /// 3. Transitions to ServerSelection state
 #[auto_add_system(
-    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    plugin = crate::domain::authentication::plugin::AuthenticationPlugin,
     schedule = Update,
     config(in_set = AuthenticationSystems::LoginResponse)
 )]
@@ -101,7 +101,7 @@ pub fn handle_login_accepted(
 /// 2. Emits a LoginFailureEvent for UI feedback
 /// 3. Returns to Login state
 #[auto_add_system(
-    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    plugin = crate::domain::authentication::plugin::AuthenticationPlugin,
     schedule = Update,
     config(in_set = AuthenticationSystems::LoginResponse)
 )]
@@ -138,12 +138,12 @@ struct ClientConfigHandle(Handle<ClientConfig>);
 
 /// Resource to track if config is already loaded
 #[derive(Resource, Default)]
-#[auto_init_resource(plugin = crate::app::authentication_plugin::AuthenticationPlugin)]
+#[auto_init_resource(plugin = crate::domain::authentication::plugin::AuthenticationPlugin)]
 struct ConfigLoaded(bool);
 
 /// System to load client configuration (runs only once)
 #[auto_add_system(
-    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    plugin = crate::domain::authentication::plugin::AuthenticationPlugin,
     schedule = Update,
     config(in_set = AuthenticationSystems::ConfigLoading)
 )]
@@ -161,7 +161,7 @@ fn load_client_config(
 
 /// System to check if config is loaded and apply it
 #[auto_add_system(
-    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    plugin = crate::domain::authentication::plugin::AuthenticationPlugin,
     schedule = Update,
     config(in_set = AuthenticationSystems::ConfigLoading)
 )]
@@ -203,7 +203,7 @@ fn check_client_config_loaded(
 ///
 /// Updates the session and connects to character server
 #[auto_add_system(
-    plugin = crate::app::authentication_plugin::AuthenticationPlugin,
+    plugin = crate::domain::authentication::plugin::AuthenticationPlugin,
     schedule = Update,
     config(in_set = AuthenticationSystems::ServerSelection)
 )]

@@ -1,4 +1,3 @@
-use crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin;
 use crate::domain::entities::billboard::BillboardPlugin;
 use bevy::prelude::*;
 
@@ -16,3 +15,10 @@ impl Plugin for GenericSpriteRenderingPlugin {
         debug!("GenericSpriteRenderingPlugin initialized with Billboard system");
     }
 }
+
+/// Auto-plugin collecting sprite rendering resources, events, and systems;
+/// they register themselves via `auto_*` attributes in
+/// `domain/entities/sprite_rendering/*`.
+#[derive(bevy_auto_plugin::prelude::AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct SpriteRenderingDomainPlugin;

@@ -5,7 +5,7 @@ use bevy_auto_plugin::prelude::*;
 pub struct HoveredEntity;
 
 #[derive(Resource, Default)]
-#[auto_init_resource(plugin = crate::app::entity_hover_plugin::EntityHoverDomainPlugin)]
+#[auto_init_resource(plugin = crate::domain::entities::hover_plugin::EntityHoverDomainPlugin)]
 pub struct CurrentlyHoveredEntity {
     pub entity: Option<Entity>,
 }

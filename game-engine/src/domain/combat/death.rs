@@ -37,7 +37,7 @@ type LocalDeathQuery<'w, 's> = Query<
 >;
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::HandleDeath)
 )]
@@ -88,7 +88,7 @@ type LocalReviveQuery<'w, 's> = Query<
 >;
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::HandleDeath)
 )]

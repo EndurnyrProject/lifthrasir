@@ -13,11 +13,11 @@ pub struct CharacterInfoWithJobName {
 }
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct RequestCharacterListEvent;
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct CharacterListReceivedEvent {
     pub characters: Vec<Option<CharacterInfoWithJobName>>,
     pub max_slots: u8,
@@ -27,47 +27,47 @@ pub struct CharacterListReceivedEvent {
 }
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct SelectCharacterEvent {
     pub slot: u8,
 }
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct CreateCharacterRequestEvent {
     pub form: CharacterCreationForm,
 }
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct CharacterCreatedEvent;
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct CharacterCreationFailedEvent {
     pub error: String,
 }
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct DeleteCharacterRequestEvent {
     pub character_id: u32,
 }
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct RefreshCharacterListEvent;
 
 // Zone Server Connection Events
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct MapLoadingStarted {
     pub map_name: String,
 }
 
 #[derive(Message, Debug)]
-#[auto_add_message(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct MapLoadCompleted {
     pub map_name: String,
 }

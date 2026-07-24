@@ -1,7 +1,4 @@
-use crate::{
-    app::entity_hover_plugin::EntityHoverDomainPlugin,
-    domain::system_sets::{EntityInteractionSystems, EntityLifecycleSystems},
-};
+use crate::domain::system_sets::{EntityInteractionSystems, EntityLifecycleSystems};
 use bevy::prelude::*;
 
 /// Entity Hover Plugin (Wrapper)
@@ -37,3 +34,9 @@ impl Plugin for EntityHoverPlugin {
         debug!("EntityHoverPlugin initialized");
     }
 }
+
+/// Auto-plugin owning the name-request side of hover; hover detection itself
+/// runs through the `bevy_picking` observers in `entities::picking`.
+#[derive(bevy_auto_plugin::prelude::AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct EntityHoverDomainPlugin;

@@ -23,7 +23,7 @@ use net_contract::state::UserSession;
 /// Completes the selected character entity when the first map has loaded.
 #[allow(clippy::too_many_arguments)]
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = OnEnter(GameState::InGame)
 )]
 pub fn spawn_character_sprite_on_game_start(

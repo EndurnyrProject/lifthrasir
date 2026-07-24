@@ -113,7 +113,7 @@ pub enum EntityInteractionSystems {
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[auto_configure_system_set(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     chain,
     config(run_if = in_state(GameState::InGame))
@@ -209,7 +209,7 @@ pub enum AuthenticationSystems {
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[auto_configure_system_set(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     chain
 )]
@@ -222,7 +222,7 @@ pub enum ModelRenderingSystems {
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[auto_configure_system_set(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     chain
 )]

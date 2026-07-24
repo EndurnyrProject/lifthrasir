@@ -114,7 +114,7 @@ pub struct WaterLoadingState {
 }
 
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     config(in_set = WaterRenderingSystems::WaterLoading)
 )]
@@ -210,7 +210,7 @@ const WATER_TILE_SUBDIVISIONS: usize = 8;
 
 /// System to finalize water loading once textures are ready
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     config(in_set = WaterRenderingSystems::WaterFinalization)
 )]
@@ -331,7 +331,7 @@ pub fn finalize_water_loading_system(
 }
 
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     config(in_set = WaterRenderingSystems::WaterAnimation)
 )]

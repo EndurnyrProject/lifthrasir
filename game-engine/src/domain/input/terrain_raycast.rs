@@ -17,7 +17,7 @@ type GameCameraFilter = (
 
 #[derive(Resource, Default, Reflect)]
 #[reflect(Resource, Default)]
-#[auto_init_resource(plugin = crate::app::input_plugin::InputPlugin)]
+#[auto_init_resource(plugin = crate::domain::input::plugin::InputPlugin)]
 pub struct TerrainRaycastCache {
     pub cell_coords: Option<(u16, u16)>,
     pub world_position: Option<Vec3>,
@@ -39,7 +39,7 @@ impl TerrainRaycastCache {
 }
 
 #[auto_add_system(
-    plugin = crate::app::input_plugin::InputPlugin,
+    plugin = crate::domain::input::plugin::InputPlugin,
     schedule = Update,
     config(in_set = InputSystems::Raycast)
 )]

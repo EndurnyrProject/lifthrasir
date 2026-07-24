@@ -44,7 +44,7 @@ pub fn weapon_shield_view_ids(equipment: &EquipmentSet) -> Vec<(EquipmentSlot, u
 /// remote spawns carry an `EquipmentSet`, so the local player is excluded by the
 /// query without an explicit marker.
 #[auto_add_system(
-    plugin = crate::app::entity_spawning_plugin::EntitySpawningDomainPlugin,
+    plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin,
     schedule = Update,
     config(in_set = EntityLifecycleSystems::Spawning)
 )]

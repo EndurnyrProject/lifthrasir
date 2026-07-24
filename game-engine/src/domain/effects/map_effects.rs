@@ -33,7 +33,7 @@ use crate::utils::get_map_dimensions_from_ground;
 pub struct MapEffectsSpawned;
 
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update
 )]
 pub fn spawn_map_effects(

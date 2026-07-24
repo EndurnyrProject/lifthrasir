@@ -26,7 +26,7 @@ const BUFFER_CAPACITY: usize = 6;
 ///
 /// Latest snapshot wins — no smoothing for v1.
 #[derive(Resource, Default, Debug)]
-#[auto_init_resource(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
+#[auto_init_resource(plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin)]
 pub struct ServerClock {
     /// `server_tick - client_now_ms` from the most recent snapshot.
     pub offset_ms: i64,
@@ -86,7 +86,7 @@ impl SnapshotBuffer {
 /// the [`ServerClock`] offset. Skips the local player and not-yet-spawned entities.
 /// Does not touch `Transform`.
 #[auto_add_system(
-    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]

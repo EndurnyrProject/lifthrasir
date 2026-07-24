@@ -34,7 +34,7 @@ use net_contract::events::{SelfMoved, UnitMoveStopped};
 // Entity now has Transform component directly (no child hierarchy).
 // =============================================================================
 
-#[auto_observer(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
+#[auto_observer(plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin)]
 pub fn send_movement_requests_observer(
     trigger: On<MovementRequested>,
     mut moves: MessageWriter<MoveRequested>,
@@ -62,7 +62,7 @@ struct MovementConfirmedFields {
 }
 
 #[auto_add_system(
-    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
     schedule = Update,
     config(
         in_set = MovementSystems::Confirm,
@@ -260,7 +260,7 @@ pub fn handle_movement_confirmed_system(
 }
 
 #[auto_add_system(
-    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
     schedule = Update,
     config(
         in_set = MovementSystems::Interpolate,
@@ -314,7 +314,7 @@ pub fn interpolate_movement_system(
 }
 
 #[auto_add_system(
-    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
     schedule = Update,
     config(
         in_set = MovementSystems::Stop,
@@ -362,7 +362,7 @@ pub fn handle_server_stop_system(
 /// drifts behind (or ahead of) the authoritative walk whenever a status
 /// changes the speed (cart weight, Agi buffs, Quagmire, Free Cast).
 #[auto_add_system(
-    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
@@ -392,7 +392,7 @@ pub fn sync_walk_speed_from_params(
 /// the current position instead of teleporting; the server's authoritative
 /// stop (`handle_server_stop_system`) corrects the exact cell.
 #[auto_add_system(
-    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
     schedule = Update,
     config(
         in_set = MovementSystems::Stop,
@@ -429,7 +429,7 @@ pub fn cancel_movement_on_attack(
     }
 }
 
-#[auto_observer(plugin = crate::app::movement_plugin::MovementDomainPlugin)]
+#[auto_observer(plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin)]
 pub fn handle_movement_stopped_observer(
     trigger: On<MovementStopped>,
     mut commands: Commands,
@@ -479,7 +479,7 @@ pub fn handle_movement_stopped_observer(
 }
 
 #[auto_add_system(
-    plugin = crate::app::movement_plugin::MovementDomainPlugin,
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
     schedule = Update,
     config(
         in_set = MovementSystems::TerrainAlignment,

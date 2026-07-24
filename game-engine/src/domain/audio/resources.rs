@@ -7,7 +7,7 @@ use bevy_kira_audio::AudioInstance;
 /// Tracks active and fading out audio instances for crossfading
 #[derive(Resource, Debug, Default, Reflect)]
 #[reflect(Resource, Debug)]
-#[auto_init_resource(plugin = crate::app::audio_plugin::AudioPlugin)]
+#[auto_init_resource(plugin = crate::domain::audio::plugin::AudioPlugin)]
 pub struct BgmManager {
     /// The currently active BGM instance (playing or fading in)
     #[reflect(ignore)]
@@ -56,7 +56,7 @@ impl BgmManager {
 /// Resource that stores audio settings (volume, mute state)
 #[derive(Resource, Debug, Reflect)]
 #[reflect(Resource, Debug)]
-#[auto_init_resource(plugin = crate::app::audio_plugin::AudioPlugin)]
+#[auto_init_resource(plugin = crate::domain::audio::plugin::AudioPlugin)]
 pub struct AudioSettings {
     /// BGM volume (0.0 to 1.0)
     pub bgm_volume: f32,
@@ -115,7 +115,7 @@ pub struct AmbienceChannel;
 /// Resource that holds the BGM name table asset handle
 /// This table maps map names to BGM file paths from mp3nametable.txt
 #[derive(Resource, Debug, Default)]
-#[auto_init_resource(plugin = crate::app::audio_plugin::AudioPlugin)]
+#[auto_init_resource(plugin = crate::domain::audio::plugin::AudioPlugin)]
 pub struct BgmNameTable {
     pub table_handle: Option<Handle<BgmNameTableAsset>>,
 }

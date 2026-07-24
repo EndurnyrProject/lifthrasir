@@ -11,7 +11,7 @@ const UNEQUIP_RESULT_OK: u32 = 0;
 /// inventory acks: the server always sends `view_id: 0` here and drives the
 /// rendered appearance through a separate `SpriteChange` (see `sprite_change.rs`).
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update
 )]
 pub fn apply_equip_results(

@@ -21,7 +21,7 @@ use moonshine_tag::Tag;
 /// Adds PlayerSprite/MobSprite and optional PlayerAppearance to entities,
 /// then requests animation asset loading.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::HierarchySpawn)
 )]
@@ -240,7 +240,7 @@ type PendingRenderLayerQuery<'w, 's> = Query<
 /// System that finalizes render layers when animation assets are loaded.
 /// Spawns child entities with Mesh3d + MeshMaterial3d + RenderLayer components.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::HierarchySpawn, after = crate::infrastructure::assets::animation_processing_system::process_pending_animations)
 )]
@@ -462,7 +462,7 @@ type UnlinkedHeadQuery<'w, 's> =
 /// System that links HeadLayer entities to their body siblings via HeadAttachment.
 /// Runs after render layers are spawned and finds unlinked heads.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::HierarchySpawn, after = finalize_render_layers)
 )]
@@ -497,7 +497,7 @@ pub fn link_head_to_body(
 }
 
 /// Observer for sprite spawn requests
-#[auto_observer(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
+#[auto_observer(plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin)]
 pub fn on_request_sprite_spawn(
     trigger: On<RequestSpriteSpawn>,
     mut sprite_spawn_writer: MessageWriter<SpawnSpriteEvent>,

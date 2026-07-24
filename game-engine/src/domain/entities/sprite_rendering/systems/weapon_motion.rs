@@ -35,7 +35,7 @@ fn resolve_attack(anim: &RoAnimationAsset) -> ActionType {
 /// their `CombatMotion` so they fall back to the unarmed attack. Mobs never carry a
 /// weapon layer, so they are never touched.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationSync)
 )]

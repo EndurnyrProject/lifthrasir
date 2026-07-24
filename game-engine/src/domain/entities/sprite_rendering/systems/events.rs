@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
 #[derive(Message)]
-#[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
+#[auto_add_message(plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin)]
 pub struct EquipmentChangeEvent {
     pub character: Entity,
     pub slot: EquipmentSlot,
@@ -61,7 +61,7 @@ fn resolve_shield_paths(job_name: &str, gender: Gender, view_id: u16) -> (String
 }
 
 #[derive(Message)]
-#[auto_add_message(plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin)]
+#[auto_add_message(plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin)]
 pub struct StatusEffectVisualEvent {
     pub character: Entity,
     pub effect_type: EffectType,
@@ -70,7 +70,7 @@ pub struct StatusEffectVisualEvent {
 
 /// Handle equipment changes by updating PlayerAppearance and spawning/despawning render layers.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationEvents)
 )]
@@ -214,7 +214,7 @@ fn resolve_job_name<'a>(
 
 /// Finalize equipment render layers when animations are loaded.
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationEvents, after = handle_equipment_changes)
 )]
@@ -329,7 +329,7 @@ fn tag_to_equipment_slot(tag: moonshine_tag::Tag) -> Option<EquipmentSlot> {
 /// Placeholder for status effect visual handling.
 /// Effects are handled by a separate system (not sprite layers).
 #[auto_add_system(
-    plugin = crate::app::sprite_rendering_domain_plugin::SpriteRenderingDomainPlugin,
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AnimationEvents)
 )]

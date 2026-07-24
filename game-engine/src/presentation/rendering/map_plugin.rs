@@ -1,8 +1,15 @@
-use crate::{
-    app::map_domain_plugin::MapDomainPlugin,
-    presentation::rendering::{lighting::EnhancedLightingPlugin, water::WaterMaterial},
-};
+use crate::presentation::rendering::{lighting::EnhancedLightingPlugin, water::WaterMaterial};
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
+
+/// Map Domain Plugin
+///
+/// Handles map model rendering, RSM assets, and water systems. Systems
+/// register themselves via `auto_*` attributes in `presentation/rendering/*`
+/// and `domain/effects/map_effects.rs`.
+#[derive(AutoPlugin)]
+#[auto_plugin(impl_plugin_trait)]
+pub struct MapDomainPlugin;
 
 /// Map Plugin
 ///
@@ -19,7 +26,5 @@ impl Plugin for MapPlugin {
             EnhancedLightingPlugin,
             MapDomainPlugin,
         ));
-
-        debug!("MapPlugin initialized");
     }
 }

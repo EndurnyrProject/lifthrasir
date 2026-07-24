@@ -14,7 +14,7 @@ use net_contract::events::{
 
 /// Domain-owned snapshot of the character-select roster.
 #[derive(Resource, Default)]
-#[auto_init_resource(plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin)]
+#[auto_init_resource(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct DomainCharacterRoster {
     pub characters: Vec<net_contract::dto::CharacterInfo>,
     pub max_slots: u8,
@@ -74,7 +74,7 @@ fn build_character_list_event(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::CharacterList)
 )]
@@ -90,7 +90,7 @@ pub fn handle_request_character_list(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::CharServerConnection)
 )]
@@ -107,7 +107,7 @@ pub fn handle_character_server_connected(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::CharacterList)
 )]
@@ -127,7 +127,7 @@ pub fn handle_character_roster_changed(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::CharacterCreation)
 )]
@@ -141,7 +141,7 @@ pub fn handle_character_created_protocol(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::CharacterDeletion)
 )]
@@ -155,7 +155,7 @@ pub fn handle_character_deleted_protocol(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::CharacterCreation)
 )]
@@ -178,7 +178,7 @@ pub fn handle_character_creation_failed_protocol(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::CharacterSelection)
 )]
@@ -217,7 +217,7 @@ pub fn handle_select_character(
 }
 
 #[auto_add_system(
-    plugin = crate::app::character_domain_plugin::CharacterDomainAutoPlugin,
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
     config(in_set = CharacterFlowSystems::CharacterCreation)
 )]

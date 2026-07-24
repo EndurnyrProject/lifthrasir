@@ -6,13 +6,13 @@ use crate::core::state::GameState;
 use net_contract::events::{ChatHeard, ItemUseFailed};
 
 #[derive(Message, Debug, Clone)]
-#[auto_add_message(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_add_message(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct UseItemRequested {
     pub index: u32,
 }
 
 #[auto_add_system(
-    plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin,
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
     schedule = Update,
     config(run_if = in_state(GameState::InGame))
 )]
@@ -33,7 +33,7 @@ fn use_failure_message(reason: u32) -> &'static str {
     }
 }
 
-#[auto_add_system(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin, schedule = Update)]
+#[auto_add_system(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin, schedule = Update)]
 pub fn report_item_use_failure(
     mut failures: MessageReader<ItemUseFailed>,
     mut chat: MessageWriter<ChatHeard>,

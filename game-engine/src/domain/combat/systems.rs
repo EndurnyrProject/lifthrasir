@@ -20,7 +20,7 @@ use moonshine_behavior::prelude::*;
 use net_contract::events::{DamageReceived, UnitLeft};
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::ProcessActions)
 )]
@@ -199,7 +199,7 @@ pub(crate) fn start_attack_animation(
 /// shows the damage number and plays the target's flinch with the
 /// server-provided damage motion duration.
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::HandleReactions)
 )]
@@ -273,7 +273,7 @@ type UntimedHitQuery<'w, 's> = Query<
 >;
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::HandleReactions)
 )]
@@ -286,7 +286,7 @@ pub fn start_untimed_hit_stun(mut commands: Commands, hit_entities: UntimedHitQu
 }
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::UpdateTimers)
 )]
@@ -317,7 +317,7 @@ pub fn update_attack_timers(
 }
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::UpdateTimers, before = update_attack_timers)
 )]
@@ -346,7 +346,7 @@ pub fn drive_combat_ready_pose(
 }
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::UpdateTimers)
 )]
@@ -373,7 +373,7 @@ pub fn update_hit_stun(
 }
 
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::HandleDeath)
 )]
@@ -431,7 +431,7 @@ fn play_death(
 /// Expire held deaths whose killing blow never arrived (skill kills and
 /// off-screen damage report no melee swing): play the death animation now.
 #[auto_add_system(
-    plugin = crate::app::combat_plugin::CombatDomainPlugin,
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
     schedule = Update,
     config(in_set = CombatSystems::UpdateTimers)
 )]

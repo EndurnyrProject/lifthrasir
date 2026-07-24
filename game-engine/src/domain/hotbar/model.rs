@@ -9,7 +9,7 @@ pub enum HotbarSlot {
 }
 
 #[derive(Resource, Serialize, Deserialize, Default, Clone, PartialEq, Debug)]
-#[auto_init_resource(plugin = crate::app::zone_domain_plugin::ZoneDomainAutoPlugin)]
+#[auto_init_resource(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct Hotbar {
     pub slots: [Option<HotbarSlot>; 12],
 }

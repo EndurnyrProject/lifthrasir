@@ -77,7 +77,7 @@ type ModelMeshUpdateQuery<'w, 's> = Query<
 >;
 
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     config(in_set = ModelRenderingSystems::ModelLoading)
 )]
@@ -139,7 +139,7 @@ pub fn log_loaded_world_data(
 }
 
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     config(in_set = ModelRenderingSystems::ModelLoading)
 )]
@@ -228,7 +228,7 @@ pub fn spawn_map_models(
 }
 
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     config(in_set = ModelRenderingSystems::ModelLoading)
 )]
@@ -252,7 +252,7 @@ pub fn load_rsm_assets(
 }
 
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     config(in_set = ModelRenderingSystems::ModelMeshUpdate)
 )]
@@ -389,7 +389,7 @@ pub fn update_model_meshes(
 }
 
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     config(in_set = ModelRenderingSystems::ModelMaterialUpdate)
 )]
@@ -825,7 +825,7 @@ fn node_has_animation(node: &crate::infrastructure::ro_formats::rsm::Node) -> bo
 
 /// Update RSM animation components each frame
 #[auto_add_system(
-    plugin = crate::app::map_domain_plugin::MapDomainPlugin,
+    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
     schedule = Update,
     config(in_set = ModelRenderingSystems::ModelAnimation)
 )]
