@@ -6,7 +6,7 @@ pub mod presentation;
 pub mod utils;
 
 // Re-export commonly used types
-pub use core::plugin::LifthrasirPlugin;
+pub use core::state::LifthrasirPlugin;
 pub use domain::audio::AudioPlugin;
 pub use domain::authentication::AuthenticationPlugin;
 pub use domain::camera::CameraPlugin;
