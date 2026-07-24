@@ -1,0 +1,32 @@
+(
+    fps: 20,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/ring_b.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 282.0), quad: (82.0, 41.0),  color: (255, 255, 255, 48) ),
+                ( at: 10, offset: (319.0, 282.0), quad: (104.0, 52.0), color: (255, 255, 255, 68) ),
+                ( at: 20, offset: (319.0, 282.0), quad: (82.0, 41.0),  color: (255, 255, 255, 48) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/shield.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (319.0, 250.0), quad: (44.0, 44.0), color: (255, 255, 255, 48), angle: 0.0 ),
+                ( at: 10, offset: (319.0, 246.0), quad: (56.0, 56.0), color: (255, 255, 255, 72), angle: 96.0 ),
+                ( at: 20, offset: (319.0, 250.0), quad: (44.0, 44.0), color: (255, 255, 255, 48), angle: 0.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/thunder_pang.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (342.0, 254.0), quad: (22.0, 22.0), color: (255, 255, 255, 24), angle: 0.0 ),
+                ( at: 10, offset: (346.0, 248.0), quad: (30.0, 30.0), color: (255, 255, 255, 48), angle: 128.0 ),
+                ( at: 20, offset: (342.0, 254.0), quad: (22.0, 22.0), color: (255, 255, 255, 24), angle: 0.0 ),
+            ],
+        ),
+    ],
+)

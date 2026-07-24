@@ -1,0 +1,23 @@
+(
+    fps: 20,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/alpha_center.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 252.0), quad: (36.0, 36.0), color: (255, 255, 255, 30) ),
+                ( at: 10, offset: (319.0, 252.0), quad: (52.0, 52.0), color: (255, 255, 255, 54) ),
+                ( at: 20, offset: (319.0, 252.0), quad: (36.0, 36.0), color: (255, 255, 255, 30) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/ring_yellow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 285.0), quad: (60.0, 30.0), color: (255, 255, 255, 36) ),
+                ( at: 10, offset: (319.0, 285.0), quad: (84.0, 42.0), color: (255, 255, 255, 60) ),
+                ( at: 20, offset: (319.0, 285.0), quad: (60.0, 30.0), color: (255, 255, 255, 36) ),
+            ],
+        ),
+    ],
+)
