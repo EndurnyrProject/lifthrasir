@@ -67,6 +67,14 @@ impl EntityName {
     }
 }
 
+/// Server-authoritative HP of a non-player unit, seeded from its visibility
+/// spawn and kept fresh by `UnitHpChanged` (aesir broadcasts `UnitHp` for mobs).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct UnitHealth {
+    pub hp: u32,
+    pub max_hp: u32,
+}
+
 /// Guild identity supplied with a remote player's visibility spawn.
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct GuildIdentity {

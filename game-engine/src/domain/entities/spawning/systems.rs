@@ -10,7 +10,9 @@ use crate::{
                 },
                 states::{AnimationState, StatusEffects},
             },
-            components::{GuildIdentity, NetworkEntity, PendingDespawn, SpawnGuildIdentityKnown},
+            components::{
+                GuildIdentity, NetworkEntity, PendingDespawn, SpawnGuildIdentityKnown, UnitHealth,
+            },
             markers::*,
             movement::components::{MovementSpeed, MovementState},
             registry::EntityRegistry,
@@ -29,7 +31,7 @@ use crate::{
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::SpatialAudioEmitter;
-use net_contract::events::{UnitEntered, UnitLeft};
+use net_contract::events::{UnitEntered, UnitHpChanged, UnitLeft};
 
 /// Legacy-shaped view of a `UnitEntered`, so the spawn body keeps its original
 /// field names/types after the move/stand/new-entry collapse onto one event.
@@ -119,6 +121,12 @@ pub fn spawn_network_entity_system(
             // by snapshot interpolation, so we no longer forward a per-step destination here.
             let mut entity = commands.entity(existing_entity);
             entity.remove::<PendingDespawn>();
+            if event.object_type == crate::domain::entities::types::ObjectType::Mob {
+                entity.insert(UnitHealth {
+                    hp: event.hp,
+                    max_hp: event.max_hp,
+                });
+            }
             if event.object_type == crate::domain::entities::types::ObjectType::Pc {
                 entity.insert(SpawnGuildIdentityKnown);
                 if event.guild_id != 0 {
@@ -265,7 +273,14 @@ pub fn spawn_network_entity_system(
                 debug!("Spawned NPC: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Mob => {
-                entity_cmd.insert((Mob, SpatialAudioEmitter::default()));
+                entity_cmd.insert((
+                    Mob,
+                    SpatialAudioEmitter::default(),
+                    UnitHealth {
+                        hp: event.hp,
+                        max_hp: event.max_hp,
+                    },
+                ));
                 debug!("Spawned mob: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Homunculus => {
@@ -430,6 +445,33 @@ pub fn cleanup_despawned_entities_system(
             entity_registry.unregister_entity(entity);
             debug!("Cleaned up despawned entity from registry: AID {}", aid);
         }
+    }
+}
+
+/// Applies server `UnitHpChanged` broadcasts to the unit's `UnitHealth`. Updates
+/// for gids not yet in the registry are dropped; aesir re-broadcasts on every hit.
+#[auto_add_system(
+    plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin,
+    schedule = Update,
+    config(
+        in_set = EntityLifecycleSystems::Spawning,
+        run_if = in_state(GameState::InGame)
+    )
+)]
+pub fn apply_unit_hp_system(
+    mut hp_events: MessageReader<UnitHpChanged>,
+    entity_registry: Res<EntityRegistry>,
+    mut units: Query<&mut UnitHealth>,
+) {
+    for event in hp_events.read() {
+        let Some(entity) = entity_registry.get_entity(event.gid) else {
+            continue;
+        };
+        let Ok(mut health) = units.get_mut(entity) else {
+            continue;
+        };
+        health.hp = event.hp;
+        health.max_hp = event.max_hp.max(1);
     }
 }
 
@@ -668,6 +710,53 @@ mod tests {
                 ),
             );
         app
+    }
+
+    #[test]
+    fn mob_spawn_seeds_unit_health_and_hp_broadcasts_apply() {
+        let mut app = app();
+        app.add_message::<UnitHpChanged>();
+        app.add_systems(
+            Update,
+            apply_unit_hp_system.after(EntityLifecycleSystems::Spawning),
+        );
+
+        let mut mob = unit(0, "", 0);
+        mob.object_type = 5;
+        app.world_mut().write_message(mob);
+        app.update();
+
+        let mut query = app.world_mut().query::<&UnitHealth>();
+        let health = query.single(app.world()).unwrap();
+        assert_eq!((health.hp, health.max_hp), (4_000, 4_200));
+
+        app.world_mut().write_message(UnitHpChanged {
+            gid: 150_001,
+            hp: 1_500,
+            max_hp: 4_200,
+        });
+        app.update();
+
+        let mut query = app.world_mut().query::<&UnitHealth>();
+        let health = query.single(app.world()).unwrap();
+        assert_eq!((health.hp, health.max_hp), (1_500, 4_200));
+    }
+
+    #[test]
+    fn hp_broadcast_for_unknown_gid_is_a_noop() {
+        let mut app = app();
+        app.add_message::<UnitHpChanged>();
+        app.add_systems(Update, apply_unit_hp_system);
+
+        app.world_mut().write_message(UnitHpChanged {
+            gid: 999,
+            hp: 1,
+            max_hp: 2,
+        });
+        app.update();
+
+        let mut query = app.world_mut().query::<&UnitHealth>();
+        assert_eq!(query.iter(app.world()).count(), 0);
     }
 
     #[test]

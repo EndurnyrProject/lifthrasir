@@ -14,6 +14,7 @@ use crate::theme;
 
 pub mod damage_numbers;
 pub mod floor_item_labels;
+pub mod mob_health_bars;
 pub mod nameplates;
 pub mod skill_cast_labels;
 
@@ -43,6 +44,7 @@ impl Plugin for WorldspaceUiPlugin {
             nameplates::NameplatePlugin,
             damage_numbers::DamageNumberPlugin,
             floor_item_labels::FloorItemLabelPlugin,
+            mob_health_bars::MobHealthBarPlugin,
             skill_cast_labels::SkillCastLabelPlugin,
         ));
     }
