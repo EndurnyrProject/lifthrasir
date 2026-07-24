@@ -293,6 +293,55 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        56: ( // KN_PIERCE — no dedicated wav in the GRF; spear attack sound.
+            str: Some("pierce.str"),
+            sound: Some("attack_spear.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        57: ( // KN_BRANDISHSPEAR — directional fan swing, anchored on the caster.
+            str: Some("brandish.str"),
+            sound: Some("effect/knight_brandish_spear.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        58: ( // KN_SPEARSTAB — no dedicated wav in the GRF; spear attack sound.
+            str: Some("spearstab.str"),
+            sound: Some("attack_spear.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        59: ( // KN_SPEARBOOMERANG
+            str: Some("spearboomerang.str"),
+            sound: Some("effect/knight_spear_boomerang.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        60: ( // KN_TWOHANDQUICKEN
+            str: Some("twohand.str"),
+            sound: Some("effect/knight_twohandquicken.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        61: ( // KN_AUTOCOUNTER
+            str: Some("autocounter.str"),
+            sound: Some("effect/knight_autocounter.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        62: ( // KN_BOWLINGBASH
+            str: Some("bowling.str"),
+            sound: Some("effect/knight_bowling_bash.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         66: ( // PR_IMPOSITIO (Impositio Manus)
             str: Some("impositio.str"),
             sound: Some("effect/priest_impositio.wav"),
@@ -683,6 +732,23 @@
                // reuses the ki_impact single heavy blow. Dedicated native wav.
             str: Some("ki_impact.strfx.ron"),
             sound: Some("effect/mon_맹룡과강.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        495: ( // KN_ONEHAND (One-Hand Quicken) -- no STR of its own; the classic
+               // client reuses the Two-Hand Quicken flash and wav.
+            str: Some("twohand.str"),
+            sound: Some("effect/knight_twohandquicken.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1001: ( // KN_CHARGEATK (Charge Attack) -- hardcoded in the official
+                // client, no native STR; authored rush impact on the target.
+                // No dedicated wav in the GRF; generic effect hit sound.
+            str: Some("charge_attack.strfx.ron"),
+            sound: Some("effect/ef_hit4.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,

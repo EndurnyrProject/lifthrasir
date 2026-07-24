@@ -144,6 +144,16 @@ mod tests {
             Some("effect/ef_bash.wav")
         );
 
+        // Knight: native STRs for 56-62, One-Hand Quicken (495) reuses the
+        // Two-Hand Quicken STR, Charge Attack (1001) is authored.
+        assert_eq!(asset.0.skills[&56].str.as_deref(), Some("pierce.str"));
+        assert_eq!(asset.0.skills[&60].str.as_deref(), Some("twohand.str"));
+        assert_eq!(asset.0.skills[&495].str.as_deref(), Some("twohand.str"));
+        assert_eq!(
+            asset.0.skills[&1001].str.as_deref(),
+            Some("charge_attack.strfx.ron")
+        );
+
         // ids 7/8 are SM_MAGNUM and SM_ENDURE: authored caster effects.
         assert_eq!(
             asset.0.skills[&7].str.as_deref(),
