@@ -4,7 +4,6 @@ use bevy::reflect::enums::DynamicEnum;
 use bevy::reflect::{TypeInfo, Typed};
 use bevy::settings::{ReflectSettingsGroup, SettingsGroup};
 use bevy::window::{MonitorSelection, VideoModeSelection, WindowMode};
-use bevy_auto_plugin::prelude::auto_register_type;
 use bevy_framepace::Limiter;
 use leafwing_input_manager::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -736,16 +735,6 @@ impl Keybinds {
     }
 }
 
-#[derive(Resource, Serialize, Deserialize, Clone, PartialEq, Reflect, Debug, Default)]
-#[serde(default)]
-#[reflect(Resource)]
-#[auto_register_type(plugin = super::SettingsPlugin)]
-pub struct Settings {
-    pub graphics: GraphicsSettings,
-    pub audio: AudioConfig,
-    pub keybinds: Keybinds,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -763,14 +752,6 @@ mod tests {
     }
 
     #[test]
-    fn default_settings_round_trips_through_ron() {
-        let settings = Settings::default();
-        let encoded = ron::to_string(&settings).expect("serialize");
-        let decoded: Settings = ron::from_str(&encoded).expect("deserialize");
-        assert_eq!(settings, decoded);
-    }
-
-    #[test]
     fn default_equipment_bind_is_alt_q() {
         assert_eq!(
             Keybinds::default().equipment,
@@ -782,44 +763,24 @@ mod tests {
     }
 
     #[test]
-    fn settings_load_with_missing_fields_filled_from_defaults() {
-        // A settings.ron written before `keybinds.skills` (and before the
-        // graphics/audio sections) existed. `#[serde(default)]` must fill every
-        // gap from Default rather than failing to deserialize.
-        let partial = r#"(
-            keybinds: (
-                sit: (primary: Some((key: "Insert", modifier: None)), secondary: Some((key: "Help", modifier: None))),
-                status: (primary: Some((key: "KeyA", modifier: Some(Alt))), secondary: None),
-                inventory: (primary: Some((key: "KeyE", modifier: Some(Alt))), secondary: None),
-            ),
-        )"#;
-
-        let decoded: Settings = ron::from_str(partial).expect("partial settings should load");
-        let defaults = Settings::default();
-
-        assert_eq!(decoded.keybinds.skills, defaults.keybinds.skills);
-        assert_eq!(decoded.graphics, defaults.graphics);
-        assert_eq!(decoded.audio, defaults.audio);
-        assert_eq!(decoded.keybinds.sit.primary, Some(KeyBind::new("Insert")));
-    }
-
-    #[test]
     fn default_settings_match_the_mockup() {
-        let s = Settings::default();
-        assert_eq!(s.graphics.display_mode, DisplayMode::BorderlessFullscreen);
-        assert_eq!(s.graphics.resolution, (1920, 1080));
-        assert_eq!(s.graphics.antialiasing, AntiAliasing::Fxaa);
-        assert!(s.graphics.vsync);
-        assert_eq!(s.graphics.fps_cap, FpsCap::F60);
-        assert_eq!(s.graphics.ui_scaling, UiScaling::P100);
-        assert!(s.graphics.bloom);
-        assert!(s.graphics.shadows);
-        assert_eq!(s.audio.bgm_volume, 0.70);
-        assert_eq!(s.audio.sfx_volume, 0.85);
-        assert_eq!(s.audio.ambient_volume, 0.55);
-        assert!(!s.audio.bgm_muted);
-        assert!(!s.audio.sfx_muted);
-        assert!(!s.audio.ambient_muted);
+        let graphics = GraphicsSettings::default();
+        assert_eq!(graphics.display_mode, DisplayMode::BorderlessFullscreen);
+        assert_eq!(graphics.resolution, (1920, 1080));
+        assert_eq!(graphics.antialiasing, AntiAliasing::Fxaa);
+        assert!(graphics.vsync);
+        assert_eq!(graphics.fps_cap, FpsCap::F60);
+        assert_eq!(graphics.ui_scaling, UiScaling::P100);
+        assert!(graphics.bloom);
+        assert!(graphics.shadows);
+
+        let audio = AudioConfig::default();
+        assert_eq!(audio.bgm_volume, 0.70);
+        assert_eq!(audio.sfx_volume, 0.85);
+        assert_eq!(audio.ambient_volume, 0.55);
+        assert!(!audio.bgm_muted);
+        assert!(!audio.sfx_muted);
+        assert!(!audio.ambient_muted);
     }
 
     #[test]

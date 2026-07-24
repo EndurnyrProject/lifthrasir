@@ -1,7 +1,7 @@
 use crate::domain::entities::systems::{
     AnimatedTransform, AnimationType, RsmAnimationController, RsmNodeAnimation,
 };
-use crate::domain::settings::Settings;
+use crate::domain::settings::GraphicsSettings;
 use crate::domain::system_sets::ModelRenderingSystems;
 use crate::domain::world::components::MapLoader;
 use crate::domain::world::map_scoped::MapScoped;
@@ -14,7 +14,6 @@ use bevy::math::{Mat4, Vec4};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
-use bevy_persistent::prelude::Persistent;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -261,9 +260,9 @@ pub fn update_model_meshes(
     model_query: ModelMeshUpdateQuery,
     asset_server: Res<AssetServer>,
     rsm_assets: Res<Assets<RsmAsset>>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
 ) {
-    let factor = settings.graphics.upscaling;
+    let factor = settings.upscaling;
     for (entity, map_model, rsm_loading, anim_type, anim_speed) in model_query.iter() {
         if map_model.filename.is_empty() {
             continue;

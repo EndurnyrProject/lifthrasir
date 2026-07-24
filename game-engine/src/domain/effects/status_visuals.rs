@@ -3,7 +3,6 @@ use std::f32::consts::TAU;
 
 use bevy::asset::LoadState;
 use bevy::prelude::*;
-use bevy_persistent::prelude::Persistent;
 use net_contract::events::{StatusEffectChanged, UnitEntered, UnitStateChanged};
 
 use super::components::EffectAnchor;
@@ -14,7 +13,7 @@ use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::components::RenderLayer;
-use crate::domain::settings::resources::Settings;
+use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::{
     LAYER_EFFECT, Z_OFFSET_PER_LAYER, layer_depth_bias, layer_order,
 };
@@ -382,7 +381,7 @@ pub fn finalize_frozen_ice_assets(
     actions: Res<Assets<RoActAsset>>,
     mut animations: ResMut<Assets<RoAnimationAsset>>,
     mut images: ResMut<Assets<Image>>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
 ) {
     let Some(pending) = pending else {
         return;
@@ -411,7 +410,7 @@ pub fn finalize_frozen_ice_assets(
         &action.action,
         LAYER_EFFECT,
         &mut images,
-        settings.graphics.upscaling,
+        settings.upscaling,
     );
 
     commands.insert_resource(FrozenIceAssets {

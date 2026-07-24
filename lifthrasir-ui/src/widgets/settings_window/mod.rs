@@ -2,22 +2,23 @@
 //!
 //! The chrome (titlebar, tab rail, fixed-height scrollable content pane, and
 //! footer) is authored declaratively with `bsn!` in [`scene`]; Feathers supplies
-//! the buttons and the scrollbar. The window edits a draft `Settings` clone held
-//! in `SettingsUi`; nothing touches the live world until Apply, which persists
-//! the draft and emits `ApplySettings`. The tree is static — the `refresh_*`
+//! the buttons and the scrollbar. The window edits a `SettingsDraft` held in
+//! `SettingsUi`; nothing touches the live world until Apply, which commits the
+//! draft, queues a Bevy settings save, and emits `ApplySettings`. The tree is
+//! static — the `refresh_*`
 //! systems project the draft onto the controls via their marker components.
 //! Spawned hidden at `Startup` so it survives state changes and is reachable
 //! from the title screen and in-game.
 
 use bevy::prelude::*;
+use bevy::settings::SaveSettings;
 use bevy::ui::RelativeCursorPosition;
 use bevy::ui_widgets::Activate;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use bevy_persistent::prelude::Persistent;
 use game_engine::domain::input::PlayerAction;
 use game_engine::domain::settings::{
-    ActionBinds, ApplySettings, DisplayMode, GraphicsSettings, KeyBind, Modifier, Settings,
-    resolution_label, resolution_next, resolution_prev,
+    ActionBinds, ApplySettings, AudioConfig, DisplayMode, GraphicsSettings, KeyBind, Keybinds,
+    Modifier, resolution_label, resolution_next, resolution_prev,
 };
 
 use crate::theme;
@@ -42,18 +43,37 @@ pub enum SettingsTab {
     Input,
 }
 
-/// UI-side draft state for the settings window.
-///
-/// `draft` is the edited copy; `committed` is the last applied value. `Apply`
-/// persists `draft` and sets `committed = draft`; the "unsaved changes" dot
-/// shows whenever they differ. `listening` is the pending rebind capture target
-/// (Task 8 consumes it).
-#[derive(Resource, Default)]
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct SettingsDraft {
+    pub graphics: GraphicsSettings,
+    pub audio: AudioConfig,
+    pub keybinds: Keybinds,
+}
+
+/// UI-side draft state for the settings window. The active resources are only
+/// mutated when Apply commits `draft`.
+#[derive(Resource)]
 pub struct SettingsUi {
-    pub draft: Settings,
-    pub committed: Settings,
+    pub draft: SettingsDraft,
+    pub committed: SettingsDraft,
     pub tab: SettingsTab,
     pub listening: Option<(PlayerAction, BindSlot)>,
+}
+
+impl FromWorld for SettingsUi {
+    fn from_world(world: &mut World) -> Self {
+        let draft = SettingsDraft {
+            graphics: *world.resource::<GraphicsSettings>(),
+            audio: *world.resource::<AudioConfig>(),
+            keybinds: world.resource::<Keybinds>().clone(),
+        };
+        Self {
+            committed: draft.clone(),
+            draft,
+            tab: default(),
+            listening: None,
+        }
+    }
 }
 
 impl SettingsUi {
@@ -70,21 +90,32 @@ impl SettingsUi {
 
     /// Resets the draft to the built-in defaults.
     pub fn reset(&mut self) {
-        self.draft = Settings::default();
+        self.draft = SettingsDraft::default();
     }
 }
 
-/// Apply core: when the draft is dirty, persist it and mark it committed.
-/// Returns `true` if it applied (the caller should then emit `ApplySettings`),
-/// `false` when clean or when persistence failed.
-fn apply_draft(ui: &mut SettingsUi, persistent: &mut Persistent<Settings>) -> bool {
+/// Commits a dirty draft into the native resources without marking unchanged
+/// groups changed.
+fn commit_draft(
+    ui: &mut SettingsUi,
+    graphics: &mut ResMut<GraphicsSettings>,
+    audio: &mut ResMut<AudioConfig>,
+    keybinds: &mut ResMut<Keybinds>,
+) -> bool {
     if !ui.dirty() {
         return false;
     }
-    if let Err(error) = persistent.set(ui.draft.clone()) {
-        error!("failed to persist settings: {error}");
-        return false;
+
+    if **graphics != ui.draft.graphics {
+        **graphics = ui.draft.graphics;
     }
+    if **audio != ui.draft.audio {
+        **audio = ui.draft.audio;
+    }
+    if **keybinds != ui.draft.keybinds {
+        **keybinds = ui.draft.keybinds.clone();
+    }
+
     ui.committed = ui.draft.clone();
     true
 }
@@ -128,7 +159,6 @@ impl Plugin for SettingsWindowPlugin {
         app.add_systems(
             Update,
             (
-                seed_from_persistent.run_if(resource_added::<Persistent<Settings>>),
                 capture_rebind.run_if(listening_active),
                 refresh_tabs.run_if(resource_changed::<SettingsUi>),
                 refresh_footer.run_if(resource_changed::<SettingsUi>),
@@ -138,14 +168,6 @@ impl Plugin for SettingsWindowPlugin {
             ),
         );
     }
-}
-
-/// Seeds the draft/committed from the loaded persisted settings, once the
-/// engine has inserted `Persistent<Settings>` (its insert runs at `Startup`,
-/// so this fires on the first `Update` after the resource appears).
-fn seed_from_persistent(persistent: Res<Persistent<Settings>>, mut ui: ResMut<SettingsUi>) {
-    ui.draft = (**persistent).clone();
-    ui.committed = (**persistent).clone();
 }
 
 /// Spawns the (hidden) window as a top-level BSN scene so it survives state
@@ -162,17 +184,23 @@ fn on_tab_click(click: On<Pointer<Click>>, tabs: Query<&TabButton>, mut ui: ResM
     ui.tab = tab.0;
 }
 
-/// Apply: persist the draft, mark it committed, and request a live re-apply.
+/// Apply: commit the draft, queue persistence, and request a live re-apply.
 /// No-op when the draft is clean.
 fn on_apply(
     _: On<Pointer<Click>>,
     mut ui: ResMut<SettingsUi>,
-    mut persistent: ResMut<Persistent<Settings>>,
+    mut graphics: ResMut<GraphicsSettings>,
+    mut audio: ResMut<AudioConfig>,
+    mut keybinds: ResMut<Keybinds>,
+    mut commands: Commands,
     mut writer: MessageWriter<ApplySettings>,
 ) {
-    if apply_draft(&mut ui, &mut persistent) {
-        writer.write(ApplySettings);
+    if !commit_draft(&mut ui, &mut graphics, &mut audio, &mut keybinds) {
+        return;
     }
+
+    commands.queue(SaveSettings::IfChanged);
+    writer.write(ApplySettings);
 }
 
 /// Cancel: discard pending edits and any in-progress rebind capture.
@@ -869,8 +897,7 @@ fn refresh_input(
 mod tests {
     use super::*;
     use bevy::asset::AssetPlugin;
-    use bevy_persistent::prelude::StorageFormat;
-    use game_engine::domain::settings::{AntiAliasing, FpsCap, Keybinds};
+    use game_engine::domain::settings::{AntiAliasing, FpsCap};
 
     /// Spawns the entire window tree (titlebar + all three tab bodies) so a
     /// malformed bundle — e.g. a duplicate `Pickable` — panics here at
@@ -898,30 +925,94 @@ mod tests {
         assert_eq!(roots, 1);
     }
 
-    fn persistent_settings(slug: &str, settings: Settings) -> Persistent<Settings> {
-        let path = std::env::temp_dir().join(format!(
-            "lifthrasir-settings-ui-{}-{slug}.ron",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_file(&path);
-        Persistent::<Settings>::builder()
-            .name("settings")
-            .format(StorageFormat::Ron)
-            .path(path)
-            .default(settings)
-            .build()
-            .expect("build persistent settings")
+    fn settings_ui() -> SettingsUi {
+        let mut world = World::new();
+        world.insert_resource(GraphicsSettings::default());
+        world.insert_resource(AudioConfig::default());
+        world.insert_resource(Keybinds::default());
+        SettingsUi::from_world(&mut world)
     }
 
     fn dirtied_ui() -> SettingsUi {
-        let mut ui = SettingsUi::default();
+        let mut ui = settings_ui();
         ui.draft.graphics.fps_cap = FpsCap::F120;
         ui
     }
 
+    #[derive(Resource, Default)]
+    struct CommitResult(bool);
+
+    #[derive(Resource, Default)]
+    struct ChangedGroups {
+        graphics: bool,
+        audio: bool,
+        keybinds: bool,
+    }
+
+    fn commit_once(
+        mut ui: ResMut<SettingsUi>,
+        mut graphics: ResMut<GraphicsSettings>,
+        mut audio: ResMut<AudioConfig>,
+        mut keybinds: ResMut<Keybinds>,
+        mut result: ResMut<CommitResult>,
+    ) {
+        result.0 = commit_draft(&mut ui, &mut graphics, &mut audio, &mut keybinds);
+    }
+
+    fn record_changed_groups(
+        graphics: Res<GraphicsSettings>,
+        audio: Res<AudioConfig>,
+        keybinds: Res<Keybinds>,
+        mut changed: ResMut<ChangedGroups>,
+    ) {
+        changed.graphics = graphics.is_changed();
+        changed.audio = audio.is_changed();
+        changed.keybinds = keybinds.is_changed();
+    }
+
+    fn commit_test_app(ui: SettingsUi) -> App {
+        let mut app = App::new();
+        app.insert_resource(GraphicsSettings::default());
+        app.insert_resource(AudioConfig::default());
+        app.insert_resource(Keybinds::default());
+        app.insert_resource(ui);
+        app.init_resource::<CommitResult>();
+        app.init_resource::<ChangedGroups>();
+        app.add_systems(Update, (commit_once, record_changed_groups).chain());
+        app
+    }
+
+    #[test]
+    fn settings_ui_snapshots_loaded_resources() {
+        let graphics = GraphicsSettings {
+            fps_cap: FpsCap::F120,
+            ..default()
+        };
+        let audio = AudioConfig {
+            bgm_volume: 0.25,
+            ..default()
+        };
+        let keybinds = Keybinds {
+            sit: ActionBinds::default(),
+            ..default()
+        };
+
+        let mut world = World::new();
+        world.insert_resource(graphics);
+        world.insert_resource(audio);
+        world.insert_resource(keybinds.clone());
+
+        let ui = <SettingsUi as FromWorld>::from_world(&mut world);
+
+        assert_eq!(ui.draft.graphics, graphics);
+        assert_eq!(ui.draft.audio, audio);
+        assert_eq!(ui.draft.keybinds, keybinds);
+        assert_eq!(ui.committed, ui.draft);
+    }
+
     #[test]
     fn editing_the_draft_makes_it_dirty() {
-        let clean = SettingsUi::default();
+        let clean = settings_ui();
         assert!(!clean.dirty());
 
         let dirty = dirtied_ui();
@@ -942,39 +1033,126 @@ mod tests {
 
     #[test]
     fn reset_sets_the_draft_to_defaults() {
-        let mut ui = SettingsUi::default();
+        let mut ui = settings_ui();
         ui.draft.graphics.antialiasing = AntiAliasing::MsaaX4;
         ui.committed.graphics.antialiasing = AntiAliasing::MsaaX4;
         assert!(!ui.dirty());
 
         ui.reset();
 
-        assert_eq!(ui.draft, Settings::default());
+        assert_eq!(ui.draft, SettingsDraft::default());
         assert!(ui.dirty());
     }
 
-    /// Apply persists the draft into `Persistent<Settings>`, marks it committed
-    /// (dirty clears), and reports that the caller should emit `ApplySettings`.
     #[test]
-    fn apply_persists_commits_and_signals_emit() {
-        let mut ui = dirtied_ui();
-        let mut persistent = persistent_settings("apply", Settings::default());
+    fn dirty_draft_commits_into_native_resources() {
+        let mut app = commit_test_app(settings_ui());
+        app.update();
+        app.world_mut()
+            .resource_mut::<SettingsUi>()
+            .draft
+            .graphics
+            .fps_cap = FpsCap::F120;
+        app.world_mut().clear_trackers();
 
-        let emitted = apply_draft(&mut ui, &mut persistent);
+        app.update();
 
-        assert!(emitted);
-        assert!(!ui.dirty());
-        assert_eq!(ui.committed.graphics.fps_cap, FpsCap::F120);
-        assert_eq!(persistent.graphics.fps_cap, FpsCap::F120);
+        assert!(app.world().resource::<CommitResult>().0);
+        assert_eq!(
+            app.world().resource::<GraphicsSettings>().fps_cap,
+            FpsCap::F120
+        );
+        assert!(!app.world().resource::<SettingsUi>().dirty());
+        let changed = app.world().resource::<ChangedGroups>();
+        assert!(changed.graphics);
+        assert!(!changed.audio);
+        assert!(!changed.keybinds);
     }
 
     #[test]
     fn apply_is_a_noop_when_clean() {
-        let mut ui = SettingsUi::default();
-        let mut persistent = persistent_settings("clean", Settings::default());
+        let mut app = commit_test_app(settings_ui());
+        app.update();
+        app.world_mut().clear_trackers();
 
-        assert!(!apply_draft(&mut ui, &mut persistent));
-        assert_eq!(persistent.graphics.fps_cap, FpsCap::F60);
+        app.update();
+
+        assert!(!app.world().resource::<CommitResult>().0);
+        assert_eq!(
+            app.world().resource::<GraphicsSettings>().fps_cap,
+            FpsCap::F60
+        );
+        assert!(!app.world().resource::<SettingsUi>().dirty());
+        let changed = app.world().resource::<ChangedGroups>();
+        assert!(!changed.graphics);
+        assert!(!changed.audio);
+        assert!(!changed.keybinds);
+    }
+
+    fn click_event(target: Entity, window: Entity) -> Pointer<Click> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            Click {
+                button: PointerButton::Primary,
+                hit: HitData::new(target, 0.0, None, None),
+                duration: std::time::Duration::ZERO,
+                count: 1,
+            },
+            target,
+        )
+    }
+
+    fn apply_observer_test_app(ui: SettingsUi) -> (App, Entity, Entity) {
+        let mut app = App::new();
+        app.insert_resource(GraphicsSettings::default());
+        app.insert_resource(AudioConfig::default());
+        app.insert_resource(Keybinds::default());
+        app.insert_resource(ui);
+        app.add_message::<ApplySettings>();
+        let button = app.world_mut().spawn_empty().observe(on_apply).id();
+        let window = app.world_mut().spawn_empty().id();
+        (app, button, window)
+    }
+
+    #[test]
+    fn dirty_apply_observer_commits_and_emits_once() {
+        let (mut app, button, window) = apply_observer_test_app(dirtied_ui());
+
+        app.world_mut().trigger(click_event(button, window));
+        app.world_mut().flush();
+
+        assert_eq!(
+            app.world().resource::<GraphicsSettings>().fps_cap,
+            FpsCap::F120
+        );
+        assert!(!app.world().resource::<SettingsUi>().dirty());
+        assert_eq!(app.world().resource::<Messages<ApplySettings>>().len(), 1);
+    }
+
+    #[test]
+    fn clean_apply_observer_does_nothing() {
+        let (mut app, button, window) = apply_observer_test_app(settings_ui());
+
+        app.world_mut().trigger(click_event(button, window));
+        app.world_mut().flush();
+
+        assert_eq!(
+            app.world().resource::<GraphicsSettings>().fps_cap,
+            FpsCap::F60
+        );
+        assert!(!app.world().resource::<SettingsUi>().dirty());
+        assert!(app.world().resource::<Messages<ApplySettings>>().is_empty());
     }
 
     #[test]
@@ -1004,7 +1182,7 @@ mod tests {
 
     #[test]
     fn audio_channel_reads_and_edits_the_matching_fields() {
-        let mut ui = SettingsUi::default();
+        let mut ui = settings_ui();
 
         AudioChannel::Sfx.set_volume(&mut ui.draft.audio, 0.25);
         assert_eq!(AudioChannel::Sfx.read(&ui.draft.audio), (0.25, false));

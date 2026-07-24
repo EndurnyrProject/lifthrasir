@@ -9,7 +9,7 @@ use crate::domain::entities::components::{EntityName, NetworkEntity};
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::types::ObjectType;
-use crate::domain::settings::Settings;
+use crate::domain::settings::Keybinds;
 use crate::domain::world::components::MapLoader;
 use crate::domain::world::spawn_context::MapSpawnContext;
 use crate::infrastructure::assets::loaders::RoGroundAsset;
@@ -17,7 +17,6 @@ use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::{SpatialAudioEmitter, SpatialAudioReceiver};
-use bevy_persistent::prelude::Persistent;
 use net_contract::state::UserSession;
 
 /// Completes the selected character entity when the first map has loaded.
@@ -36,7 +35,7 @@ pub fn spawn_character_sprite_on_game_start(
     map_loaders: Query<&MapLoader>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     existing_player: Query<(), With<LocalPlayer>>,
-    settings: Res<Persistent<Settings>>,
+    keybinds: Res<Keybinds>,
 ) {
     // Warps preserve the local player; the warp path only needs repositioning.
     if !existing_player.is_empty() {
@@ -65,7 +64,7 @@ pub fn spawn_character_sprite_on_game_start(
         EntityName::new(character.name.clone()),
         SpatialAudioReceiver,
         SpatialAudioEmitter::default(),
-        settings.keybinds.to_input_map(),
+        keybinds.to_input_map(),
     ));
     entity_registry.set_local_player(character_entity, char_id);
 

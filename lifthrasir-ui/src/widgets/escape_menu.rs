@@ -212,6 +212,7 @@ mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
     use game_engine::domain::input::targeting::TargetingMode;
+    use game_engine::domain::settings::{AudioConfig, GraphicsSettings, Keybinds};
     use game_engine::presentation::ui::events::{
         DialogSeverity, ShowSystemDialog, SystemDialogKind,
     };
@@ -222,6 +223,9 @@ mod tests {
         app.init_asset::<Image>();
         app.init_asset::<Font>();
         app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<GraphicsSettings>();
+        app.init_resource::<AudioConfig>();
+        app.init_resource::<Keybinds>();
         app.init_resource::<SettingsUi>();
         app.init_resource::<TargetingMode>();
         app.add_message::<RespawnRequested>();

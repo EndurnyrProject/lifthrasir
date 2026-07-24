@@ -16,7 +16,7 @@ Apply/Cancel/Reset and runtime synchronization behavior.
 ## Progress
 
 - [x] Task 1: Establish native Bevy settings groups and bootstrap
-- [ ] Task 2: Cut runtime and UI behavior over to native resources
+- [x] Task 2: Cut runtime and UI behavior over to native resources
 - [ ] Task 3: Delete the legacy settings persistence stack
 
 ---
@@ -156,29 +156,29 @@ module is no longer compiled or installed.
 
 **Acceptance criteria:**
 
-- [ ] Production code outside the now-orphaned
+- [x] Production code outside the now-orphaned
   `game-engine/src/domain/settings/persistence.rs` contains no
   `Persistent<Settings>` or `bevy_persistent` use.
-- [ ] Graphics consumers read only `GraphicsSettings`, audio synchronization
+- [x] Graphics consumers read only `GraphicsSettings`, audio synchronization
   reads only `AudioConfig`, and input consumers read only `Keybinds`.
-- [ ] `SettingsRuntimePlugin` still emits the initial `ApplySettings` message,
+- [x] `SettingsRuntimePlugin` still emits the initial `ApplySettings` message,
   applies window/render/audio/input state, and retains late camera/light hooks.
-- [ ] `SettingsUi::from_world` initializes `draft` and `committed` from the
+- [x] `SettingsUi::from_world` initializes `draft` and `committed` from the
   three already-loaded resources; the first-Update persistence seeding system
   is gone.
-- [ ] A dirty Apply assigns only groups whose values differ, updates
+- [x] A dirty Apply assigns only groups whose values differ, updates
   `committed`, queues `SaveSettings::IfChanged`, and writes one
   `ApplySettings`; a clean Apply performs none of those actions.
-- [ ] Apply comparisons occur before mutable dereferencing so unchanged groups
+- [x] Apply comparisons occur before mutable dereferencing so unchanged groups
   are not falsely marked changed.
-- [ ] Cancel restores the committed draft and clears key capture; Reset changes
+- [x] Cancel restores the committed draft and clears key capture; Reset changes
   only the draft until Apply; closing without Apply leaves active resources
   unchanged.
-- [ ] Tests cover `SettingsUi::from_world`, dirty and clean Apply, Cancel,
+- [x] Tests cover `SettingsUi::from_world`, dirty and clean Apply, Cancel,
   Reset, graphics/audio/keybind draft controls, audio synchronization, and
   retained graphics mapping behavior.
-- [ ] `cargo test -p game-engine -p lifthrasir-ui` passes.
-- [ ] `cargo check -p lifthrasir` passes.
+- [x] `cargo test -p game-engine -p lifthrasir-ui` passes.
+- [x] `cargo check -p lifthrasir` passes.
 
 **Depends on:** Task 1
 

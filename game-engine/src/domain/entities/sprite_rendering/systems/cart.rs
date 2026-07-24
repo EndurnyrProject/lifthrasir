@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
-use bevy_persistent::prelude::Persistent;
 use net_contract::events::{UnitEntered, UnitStateChanged};
 
 use crate::domain::assets::patterns;
@@ -10,7 +9,7 @@ use crate::domain::entities::character::systems::CART_MASK;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::components::{CartLayer, PlayerSprite, RenderLayer};
 use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
-use crate::domain::settings::resources::Settings;
+use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::{
     LAYER_CART, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER, layer_depth_bias, layer_order,
 };
@@ -201,7 +200,7 @@ pub fn finalize_cart_layer(
     actions: Res<Assets<RoActAsset>>,
     mut animations: ResMut<Assets<RoAnimationAsset>>,
     mut images: ResMut<Assets<Image>>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
     mut cart_layers: Query<(Entity, &CartAnimationPending, &mut RenderLayer), With<CartLayer>>,
 ) {
     for (entity, pending, mut render_layer) in &mut cart_layers {
@@ -215,7 +214,7 @@ pub fn finalize_cart_layer(
             &action.action,
             LAYER_CART,
             &mut images,
-            settings.graphics.upscaling,
+            settings.upscaling,
         );
 
         render_layer.textures = animation.textures.clone();

@@ -1,8 +1,7 @@
 use bevy::prelude::*;
-use bevy_persistent::prelude::Persistent;
 
 use crate::domain::assets::patterns;
-use crate::domain::settings::resources::Settings;
+use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::LAYER_BODY;
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
@@ -51,7 +50,7 @@ pub fn finalize_emote_assets(
     actions: Res<Assets<RoActAsset>>,
     mut animations: ResMut<Assets<RoAnimationAsset>>,
     mut images: ResMut<Assets<Image>>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
 ) {
     let Some(pending) = pending else {
         return;
@@ -66,7 +65,7 @@ pub fn finalize_emote_assets(
         &action.action,
         LAYER_BODY,
         &mut images,
-        settings.graphics.upscaling,
+        settings.upscaling,
     );
 
     let thumbnails = action_thumbnails(&animation);

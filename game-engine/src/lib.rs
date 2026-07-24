@@ -24,7 +24,7 @@ pub use domain::input::{InputPlugin, NativeInputPlugin};
 pub use domain::inventory::InventoryPlugin;
 pub use domain::item_drop::ItemDropPlugin;
 pub use domain::party::PartyPlugin;
-pub use domain::settings::SettingsPlugin;
+pub use domain::settings::SettingsRuntimePlugin;
 pub use domain::skill_units::SkillUnitsPlugin;
 pub use domain::storage::StoragePlugin;
 pub use domain::world::WorldDomainPlugin;
@@ -51,7 +51,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(net_contract::NetContractPlugin)
             .add(RoDiagnosticsPlugin)
             .add(LifthrasirPlugin)
-            .add(SettingsPlugin)
+            .add(SettingsRuntimePlugin)
             .add(CameraPlugin)
             .add(AssetsPlugin)
             .add(JobSystemPlugin)

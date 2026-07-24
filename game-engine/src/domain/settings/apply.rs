@@ -9,12 +9,11 @@ use bevy::window::{
 };
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_framepace::FramepaceSettings;
-use bevy_persistent::prelude::Persistent;
 
 use leafwing_input_manager::prelude::InputMap;
 
 use super::events::ApplySettings;
-use super::resources::{AntiAliasing, DisplayMode, Settings, Ssao};
+use super::resources::{AntiAliasing, AudioConfig, DisplayMode, GraphicsSettings, Keybinds, Ssao};
 use crate::domain::audio::{
     AudioSettings, MuteAmbienceEvent, MuteBgmEvent, MuteSfxEvent, SetAmbienceVolumeEvent,
     SetBgmVolumeEvent, SetSfxVolumeEvent,
@@ -55,11 +54,11 @@ fn nearest_video_mode(modes: &[VideoMode], target: (u32, u32)) -> Option<VideoMo
     nearest_mode_index(&sizes, target).map(|i| modes[i])
 }
 
-#[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
+#[auto_add_system(plugin = super::SettingsRuntimePlugin, schedule = Update)]
 #[allow(clippy::too_many_arguments)]
 pub fn apply_graphics(
     mut messages: MessageReader<ApplySettings>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
     monitors: Query<&Monitor>,
     mut framepace: ResMut<FramepaceSettings>,
@@ -73,7 +72,7 @@ pub fn apply_graphics(
         return;
     }
 
-    let graphics = settings.graphics;
+    let graphics = &*settings;
 
     #[cfg(feature = "dlss")]
     let dlss_active = dlss_supported.is_some() && graphics.dlss != DlssMode::Off;
@@ -114,14 +113,14 @@ pub fn apply_graphics(
     framepace.limiter = graphics.fps_cap.to_limiter();
 
     for camera in &cameras {
-        apply_camera_effects(&mut commands, camera, &settings, dlss_active);
+        apply_camera_effects(&mut commands, camera, graphics, dlss_active);
     }
 
     // The UI camera shares the window target with the world camera, so their
     // MSAA sample counts and HDR must match or the world pass fails to
     // composite. FXAA stays world-only.
-    let ui_msaa = effective_msaa(&settings, dlss_active);
-    let ui_hdr = needs_hdr(&settings, dlss_active);
+    let ui_msaa = effective_msaa(graphics, dlss_active);
+    let ui_hdr = needs_hdr(graphics, dlss_active);
     for ui_camera in &ui_cameras {
         let mut entity = commands.entity(ui_camera);
         entity.insert(ui_msaa);
@@ -135,14 +134,14 @@ pub fn apply_graphics(
     commands.insert_resource(UiScale(graphics.ui_scaling.to_scale_factor()));
 }
 
-/// Mirrors the persisted `Settings.audio` into the live `AudioSettings` resource
+/// Mirrors `AudioConfig` into the live `AudioSettings` resource
 /// and emits the existing volume/mute events so kira updates playback live.
 /// `ambient` (config) maps to `ambience` (runtime); `sfx` maps straight across.
-#[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
+#[auto_add_system(plugin = super::SettingsRuntimePlugin, schedule = Update)]
 #[allow(clippy::too_many_arguments)]
 pub fn apply_audio(
     mut messages: MessageReader<ApplySettings>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<AudioConfig>,
     mut audio: ResMut<AudioSettings>,
     mut set_bgm: MessageWriter<SetBgmVolumeEvent>,
     mut set_sfx: MessageWriter<SetSfxVolumeEvent>,
@@ -155,7 +154,7 @@ pub fn apply_audio(
         return;
     }
 
-    let config = settings.audio;
+    let config = *settings;
 
     audio.bgm_volume = config.bgm_volume;
     audio.bgm_muted = config.bgm_muted;
@@ -187,10 +186,10 @@ pub fn apply_audio(
 /// Rebuilds the local player's `InputMap<PlayerAction>` from the persisted
 /// keybinds on `ApplySettings`. No-op when the player has not spawned yet (the
 /// spawn site already seeds the map from settings).
-#[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
+#[auto_add_system(plugin = super::SettingsRuntimePlugin, schedule = Update)]
 pub fn apply_input(
     mut messages: MessageReader<ApplySettings>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<Keybinds>,
     mut player: Query<&mut InputMap<PlayerAction>, With<LocalPlayer>>,
 ) {
     if messages.read().count() == 0 {
@@ -199,21 +198,21 @@ pub fn apply_input(
     let Ok(mut input_map) = player.single_mut() else {
         return;
     };
-    *input_map = settings.keybinds.to_input_map();
+    *input_map = settings.to_input_map();
 }
 
 /// Applies the current graphics settings to a freshly-spawned world camera, since
 /// the startup `ApplySettings` fires before the camera (which only spawns on
 /// entering InGame) exists.
-#[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
+#[auto_add_system(plugin = super::SettingsRuntimePlugin, schedule = Update)]
 pub fn apply_camera_effects_on_spawn(
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
     cameras: Query<Entity, Added<CameraFollowTarget>>,
     mut commands: Commands,
     #[cfg(feature = "dlss")] dlss_supported: Option<Res<DlssSuperResolutionSupported>>,
 ) {
     #[cfg(feature = "dlss")]
-    let dlss_active = dlss_supported.is_some() && settings.graphics.dlss != DlssMode::Off;
+    let dlss_active = dlss_supported.is_some() && settings.dlss != DlssMode::Off;
     #[cfg(not(feature = "dlss"))]
     let dlss_active = false;
     for camera in &cameras {
@@ -224,12 +223,12 @@ pub fn apply_camera_effects_on_spawn(
 /// Applies the shadow setting to a freshly-spawned directional light, since the
 /// map's sun is spawned (with shadows on) per map load, after the last
 /// `ApplySettings`.
-#[auto_add_system(plugin = super::SettingsPlugin, schedule = Update)]
+#[auto_add_system(plugin = super::SettingsRuntimePlugin, schedule = Update)]
 pub fn apply_shadows_on_spawn(
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
     mut lights: Query<&mut DirectionalLight, Added<DirectionalLight>>,
 ) {
-    let shadows = settings.graphics.shadows;
+    let shadows = settings.shadows;
     for mut light in &mut lights {
         if light.shadow_maps_enabled != shadows {
             light.shadow_maps_enabled = shadows;
@@ -239,15 +238,14 @@ pub fn apply_shadows_on_spawn(
 
 /// Whether the world camera needs the HDR pipeline: bloom reads it and DLSS
 /// requires it. The UI camera must match (it shares the window render target).
-fn needs_hdr(settings: &Settings, dlss_active: bool) -> bool {
-    settings.graphics.bloom || dlss_active
+fn needs_hdr(graphics: &GraphicsSettings, dlss_active: bool) -> bool {
+    graphics.bloom || dlss_active
 }
 
 /// The world camera's effective MSAA. DLSS, TAA, and SSAO each rely on the
 /// depth/normal prepass, which is incompatible with MSAA, so any of them forces
 /// it off. The UI camera must match (it shares the window render target).
-fn effective_msaa(settings: &Settings, dlss_active: bool) -> Msaa {
-    let graphics = &settings.graphics;
+fn effective_msaa(graphics: &GraphicsSettings, dlss_active: bool) -> Msaa {
     if dlss_active || graphics.antialiasing == AntiAliasing::Taa || graphics.ssao != Ssao::Off {
         Msaa::Off
     } else {
@@ -258,17 +256,16 @@ fn effective_msaa(settings: &Settings, dlss_active: bool) -> Msaa {
 fn apply_camera_effects(
     commands: &mut Commands,
     camera: Entity,
-    settings: &Settings,
+    graphics: &GraphicsSettings,
     dlss_active: bool,
 ) {
-    let graphics = &settings.graphics;
     let wants_taa = !dlss_active && graphics.antialiasing == AntiAliasing::Taa;
     let ssao_level = graphics.ssao.to_quality_level();
     let ssao_on = graphics.ssao != Ssao::Off;
     // DLSS and TAA are both temporal antialiasers sharing the same prepass set.
     let temporal = dlss_active || wants_taa;
 
-    let msaa = effective_msaa(settings, dlss_active);
+    let msaa = effective_msaa(graphics, dlss_active);
     // FXAA is post-process (no prepass), so it coexists with SSAO; DLSS and TAA
     // are themselves the antialiaser and suppress it.
     let has_fxaa = !temporal && graphics.antialiasing == AntiAliasing::Fxaa;
@@ -319,7 +316,7 @@ fn apply_camera_effects(
         entity.remove::<NormalPrepass>();
     }
 
-    if needs_hdr(settings, dlss_active) {
+    if needs_hdr(graphics, dlss_active) {
         entity.insert(Hdr);
     } else {
         entity.remove::<Hdr>();
@@ -333,30 +330,13 @@ fn apply_camera_effects(
 
 #[cfg(test)]
 mod tests {
-    use super::super::resources::AudioConfig;
     use super::*;
-    use bevy_persistent::prelude::StorageFormat;
 
-    fn persistent_settings(slug: &str, settings: Settings) -> Persistent<Settings> {
-        let path = std::env::temp_dir().join(format!(
-            "lifthrasir-apply-audio-{}-{slug}.ron",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_file(&path);
-        Persistent::<Settings>::builder()
-            .name("settings")
-            .format(StorageFormat::Ron)
-            .path(path)
-            .default(settings)
-            .build()
-            .expect("build persistent settings")
-    }
-
-    fn audio_test_app(slug: &str, settings: Settings) -> App {
+    fn audio_test_app(config: AudioConfig) -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.init_resource::<AudioSettings>();
-        app.insert_resource(persistent_settings(slug, settings));
+        app.insert_resource(config);
         app.add_message::<ApplySettings>();
         app.add_message::<SetBgmVolumeEvent>();
         app.add_message::<SetSfxVolumeEvent>();
@@ -370,22 +350,18 @@ mod tests {
 
     #[test]
     fn apply_audio_syncs_settings_into_runtime_resource() {
-        let settings = Settings {
-            audio: AudioConfig {
-                bgm_volume: 0.1,
-                bgm_muted: true,
-                sfx_volume: 0.2,
-                sfx_muted: false,
-                ambient_volume: 0.3,
-                ambient_muted: true,
-            },
-            ..Default::default()
+        let config = AudioConfig {
+            bgm_volume: 0.1,
+            bgm_muted: true,
+            sfx_volume: 0.2,
+            sfx_muted: false,
+            ambient_volume: 0.3,
+            ambient_muted: true,
         };
-        let mut app = audio_test_app("sync", settings);
+        let mut app = audio_test_app(config);
         app.world_mut().write_message(ApplySettings);
         app.update();
 
-        let config = app.world().resource::<Persistent<Settings>>().audio;
         let audio = app.world().resource::<AudioSettings>();
         assert_eq!(audio.bgm_volume, config.bgm_volume);
         assert_eq!(audio.bgm_muted, config.bgm_muted);
@@ -397,7 +373,7 @@ mod tests {
 
     #[test]
     fn apply_audio_emits_the_six_audio_messages() {
-        let mut app = audio_test_app("messages", Settings::default());
+        let mut app = audio_test_app(AudioConfig::default());
         app.world_mut().write_message(ApplySettings);
         app.update();
 
@@ -425,12 +401,14 @@ mod tests {
 
     #[test]
     fn hdr_follows_bloom_and_dlss() {
-        let mut settings = Settings::default();
-        settings.graphics.bloom = false;
-        assert!(!needs_hdr(&settings, false));
-        assert!(needs_hdr(&settings, true));
-        settings.graphics.bloom = true;
-        assert!(needs_hdr(&settings, false));
+        let mut graphics = GraphicsSettings {
+            bloom: false,
+            ..default()
+        };
+        assert!(!needs_hdr(&graphics, false));
+        assert!(needs_hdr(&graphics, true));
+        graphics.bloom = true;
+        assert!(needs_hdr(&graphics, false));
     }
 
     #[test]

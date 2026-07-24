@@ -1,7 +1,7 @@
 use crate::{
     domain::{
         entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid},
-        settings::{ApplySettings, Settings},
+        settings::{ApplySettings, GraphicsSettings},
         system_sets::WorldLoadingSystems,
         world::{
             components::MapLoader, map::MapData, map_loader::MapRequestLoader,
@@ -23,7 +23,6 @@ use bevy::{
     prelude::*,
 };
 use bevy_auto_plugin::prelude::*;
-use bevy_persistent::prelude::Persistent;
 use std::collections::{HashMap, HashSet};
 
 /// Type alias for mesh data grouped by texture index.
@@ -144,7 +143,7 @@ fn apply_terrain_texture_filtering(
 )]
 fn reapply_terrain_anisotropy(
     mut messages: MessageReader<ApplySettings>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
     mut images: ResMut<Assets<Image>>,
     texture_ids: Res<TerrainTextureIds>,
 ) {
@@ -152,7 +151,7 @@ fn reapply_terrain_anisotropy(
         return;
     }
 
-    let anisotropy = settings.graphics.anisotropy.to_clamp();
+    let anisotropy = settings.anisotropy.to_clamp();
     for id in &texture_ids.0 {
         if let Some(mut image) = images.get_mut(*id) {
             apply_anisotropic_sampler(&mut image, anisotropy);
@@ -517,10 +516,10 @@ pub fn generate_terrain_mesh(
     mut commands: Commands,
     ground_assets: Res<Assets<RoGroundAsset>>,
     asset_server: Res<AssetServer>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
     query: TerrainGenerationQuery,
 ) {
-    let factor = settings.graphics.upscaling;
+    let factor = settings.upscaling;
     for (entity, map_loader, map_request) in query.iter() {
         debug!(
             "generate_terrain_mesh: Processing MapLoader for map '{}'",
@@ -631,7 +630,7 @@ fn apply_loaded_terrain_textures(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut texture_ids: ResMut<TerrainTextureIds>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
     asset_server: Res<AssetServer>,
@@ -725,7 +724,7 @@ fn apply_loaded_terrain_textures(
         apply_terrain_texture_filtering(
             &textures_loading.texture_handles,
             &mut images,
-            settings.graphics.anisotropy.to_clamp(),
+            settings.anisotropy.to_clamp(),
             &mut texture_ids,
         );
 

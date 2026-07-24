@@ -1,29 +1,25 @@
 pub mod apply;
 pub mod events;
-pub mod persistence;
 pub mod resources;
 
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{AutoPlugin, auto_add_system};
 
 pub use events::ApplySettings;
-pub use persistence::settings_path;
 pub use resources::{
     ActionBinds, Anisotropy, AntiAliasing, AudioConfig, DisplayMode, FpsCap, GraphicsSettings,
-    KeyBind, Keybinds, Modifier, RESOLUTIONS, Settings, UiScaling, resolution_label,
-    resolution_next, resolution_prev,
+    KeyBind, Keybinds, Modifier, RESOLUTIONS, UiScaling, resolution_label, resolution_next,
+    resolution_prev,
 };
 
-/// Owns the persisted `Settings` resource: loads `settings.ron` (or writes
-/// defaults) on startup, then applies it to the live world.
+/// Synchronizes loaded or newly committed settings resources with live runtime
+/// state that Bevy's settings framework does not configure itself.
 #[derive(AutoPlugin)]
 #[auto_plugin(impl_plugin_trait)]
-pub struct SettingsPlugin;
+pub struct SettingsRuntimePlugin;
 
-/// Applies the loaded settings once on boot. `PostStartup` runs after the
-/// `Startup` insert command has been flushed, so the resource exists; the
-/// message is then read by the apply systems on the first `Update`.
-#[auto_add_system(plugin = SettingsPlugin, schedule = PostStartup)]
+/// Applies the settings loaded by Bevy once on boot.
+#[auto_add_system(plugin = SettingsRuntimePlugin, schedule = PostStartup)]
 fn emit_initial_apply(mut messages: MessageWriter<ApplySettings>) {
     messages.write(ApplySettings);
 }

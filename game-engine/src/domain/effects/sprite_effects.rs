@@ -13,11 +13,10 @@ use std::collections::HashMap;
 
 use bevy::asset::LoadState;
 use bevy::prelude::*;
-use bevy_persistent::prelude::Persistent;
 
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
-use crate::domain::settings::resources::Settings;
+use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::{
     LAYER_EFFECT, Z_OFFSET_PER_LAYER, layer_depth_bias, layer_order,
 };
@@ -108,7 +107,7 @@ pub fn spawn_effect_sprites(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_quad: Option<Res<SharedSpriteQuad>>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
     requests: Query<(Entity, &EffectSprite)>,
 ) {
     let Some(shared_quad) = shared_quad else {
@@ -193,7 +192,7 @@ fn resolve_animation(
     actions: &Assets<RoActAsset>,
     animations: &mut Assets<RoAnimationAsset>,
     images: &mut Assets<Image>,
-    settings: &Persistent<Settings>,
+    settings: &GraphicsSettings,
     commands: &mut Commands,
     entity: Entity,
     path: &str,
@@ -223,7 +222,7 @@ fn resolve_animation(
         &action.action,
         LAYER_EFFECT,
         images,
-        settings.graphics.upscaling,
+        settings.upscaling,
     ));
 
     assets.pending.remove(path);

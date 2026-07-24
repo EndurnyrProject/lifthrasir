@@ -1,11 +1,10 @@
 use bevy::prelude::*;
-use bevy_persistent::prelude::Persistent;
 use moonshine_tag::Tag;
 
 use super::animation_processor::RoAnimationProcessor;
 use super::loaders::{RoActAsset, RoSpriteAsset};
 use super::ro_animation_asset::RoAnimationAsset;
-use crate::domain::settings::resources::Settings;
+use crate::domain::settings::GraphicsSettings;
 
 /// A pending animation request waiting for SPR+ACT to load.
 #[derive(Debug, Clone)]
@@ -84,9 +83,9 @@ pub fn process_pending_animations(
     actions: Res<Assets<RoActAsset>>,
     mut animations: ResMut<Assets<RoAnimationAsset>>,
     mut images: ResMut<Assets<Image>>,
-    settings: Res<Persistent<Settings>>,
+    settings: Res<GraphicsSettings>,
 ) {
-    let upscaling = settings.graphics.upscaling;
+    let upscaling = settings.upscaling;
     let mut still_pending = Vec::new();
     let mut newly_completed = Vec::new();
 
