@@ -59,9 +59,7 @@ fn main() {
 
     #[cfg(feature = "dev")]
     {
-        use bevy::dev_tools::diagnostics_overlay::{
-            DiagnosticsOverlay, DiagnosticsOverlayPlugin,
-        };
+        use bevy::dev_tools::diagnostics_overlay::{DiagnosticsOverlay, DiagnosticsOverlayPlugin};
         app.add_plugins((
             bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
             DiagnosticsOverlayPlugin,

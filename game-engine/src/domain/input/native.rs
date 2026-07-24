@@ -37,29 +37,41 @@ fn forward_mouse_click(
     buttons: Res<ButtonInput<MouseButton>>,
     cursor: Res<ForwardedCursorPosition>,
     hover_map: Res<HoverMap>,
-    windows: Query<(), With<Window>>,
+    blockers: PickBlockers,
     mut click: ResMut<ForwardedMouseClick>,
 ) {
     if !buttons.just_pressed(MouseButton::Left) {
         return;
     }
-    if pointer_over_pickable(&hover_map, &windows) {
+    if pointer_over_pickable(&hover_map, &blockers) {
         return;
     }
     click.position = cursor.position;
 }
+
+/// Hover-map entities that can swallow a world click: everything except the
+/// pointer's own `Window`. A missing `Pickable` means the default, which blocks.
+type PickBlockers<'w, 's> = Query<'w, 's, Option<&'static Pickable>, Without<Window>>;
 
 /// Whether the mouse pointer is over a pickable entity that should swallow the
 /// raw world click, so it only fires on empty ground. Picked sprite bodies (mesh
 /// picking) and windows that opt into picking enter the hover map; `Pickable::IGNORE`
 /// elements (the always-on HUD) and the terrain (no `Pickable`) never do.
 ///
-/// The pointer's own `Window` entity is always present in the hover map, so it is
-/// excluded here — otherwise every world click would be suppressed.
-fn pointer_over_pickable(hover_map: &HoverMap, windows: &Query<(), With<Window>>) -> bool {
-    hover_map
-        .get(&PointerId::Mouse)
-        .is_some_and(|hits| hits.keys().any(|entity| !windows.contains(*entity)))
+/// Two hover-map entries must not count as a block:
+/// - The pointer's own `Window` entity, which is always present — otherwise every
+///   world click would be suppressed.
+/// - Entities with `should_block_lower: false`, which explicitly pass picks through
+///   to what is underneath. Bevy's dev-only diagnostics overlay installs exactly such
+///   a full-screen plane, and treating it as a block killed all click-to-move.
+fn pointer_over_pickable(hover_map: &HoverMap, blockers: &PickBlockers) -> bool {
+    hover_map.get(&PointerId::Mouse).is_some_and(|hits| {
+        hits.keys().any(|entity| {
+            blockers
+                .get(*entity)
+                .is_ok_and(|pickable| pickable.is_none_or(|p| p.should_block_lower))
+        })
+    })
 }
 
 #[auto_add_system(
@@ -205,6 +217,42 @@ mod tests {
         let window = app.world_mut().spawn(Window::default()).id();
         let mut hits = EntityHashMap::default();
         hits.insert(window, HitData::new(Entity::PLACEHOLDER, 0.0, None, None));
+        app.world_mut()
+            .resource_mut::<HoverMap>()
+            .insert(PointerId::Mouse, hits);
+        app.world_mut()
+            .resource_mut::<ForwardedCursorPosition>()
+            .position = Some(Vec2::new(33.0, 44.0));
+        app.world_mut()
+            .resource_mut::<ButtonInput<MouseButton>>()
+            .press(MouseButton::Left);
+        app.update();
+
+        let click = app.world().resource::<ForwardedMouseClick>();
+        assert_eq!(click.position, Some(Vec2::new(33.0, 44.0)));
+    }
+
+    #[test]
+    fn click_forwarded_through_non_blocking_overlay() {
+        use bevy::ecs::entity::EntityHashMap;
+        use bevy::picking::backend::HitData;
+
+        // Bevy's dev diagnostics overlay spawns a full-screen node with
+        // `should_block_lower: false`. It is always in the hover map, so counting it
+        // as a block suppressed every terrain click (click-to-move went dead).
+        let mut app = test_app();
+        let plane = app
+            .world_mut()
+            .spawn((
+                Node::default(),
+                Pickable {
+                    should_block_lower: false,
+                    ..default()
+                },
+            ))
+            .id();
+        let mut hits = EntityHashMap::default();
+        hits.insert(plane, HitData::new(Entity::PLACEHOLDER, 0.0, None, None));
         app.world_mut()
             .resource_mut::<HoverMap>()
             .insert(PointerId::Mouse, hits);
