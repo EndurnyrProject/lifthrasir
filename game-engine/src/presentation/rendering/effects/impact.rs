@@ -2,14 +2,7 @@ use super::VfxSystems;
 use super::skill_fx::{SkillFxMaterial, spawn_shader_fx};
 use crate::domain::effects::PlayProceduralVfx;
 use crate::infrastructure::effect::ShaderFxCatalog;
-use bevy::light::NotShadowCaster;
-use bevy::mesh::MeshVertexBufferLayoutRef;
-use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
-use bevy::render::render_resource::{
-    AsBindGroup, RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
-};
-use bevy::shader::ShaderRef;
 use bevy_hanabi::{
     Attribute, ColorBlendMode, ColorOverLifetimeModifier, EffectAsset, EffectProperties,
     ExprWriter, Gradient, LinearDragModifier, ParticleEffect, SetAttributeModifier,
@@ -86,11 +79,10 @@ pub fn drive_factor<M: FactorMaterial + Material>(
 
 /// Shared assets for procedural impact effects. Holds a single unit-quad mesh
 /// reused by every billboard layer (camera-facing is done in the vertex shader)
-/// and the one-shot hanabi dust/spark burst, both built once.
+/// and the one-shot hanabi spark garnish, both built once.
 #[derive(Resource)]
 pub struct ImpactAssets {
     pub quad: Handle<Mesh>,
-    pub burst: Handle<EffectAsset>,
     /// Single tintable one-shot spark garnish, shared by every shader-fx
     /// caller. Color is not baked in: each spawn supplies its own tint via the
     /// `spark_tint` hanabi property (see `spark_garnish_bundle`).
@@ -103,9 +95,8 @@ impl FromWorld for ImpactAssets {
             .resource_mut::<Assets<Mesh>>()
             .add(Mesh::from(Rectangle::from_size(Vec2::ONE)));
         let mut effects = world.resource_mut::<Assets<EffectAsset>>();
-        let burst = effects.add(bash_burst_effect());
         let spark = effects.add(spark_effect());
-        Self { quad, burst, spark }
+        Self { quad, spark }
     }
 }
 
@@ -182,147 +173,6 @@ pub fn spark_garnish_bundle(assets: &ImpactAssets, tint: Vec4) -> impl Bundle + 
     )
 }
 
-/// One-shot radial dust/spark burst: ~10 particles fired outward from the impact
-/// point, dragged to a quick stop, fading warm-white to orange as they shrink.
-fn bash_burst_effect() -> EffectAsset {
-    let writer = ExprWriter::new();
-
-    let init_pos = SetPositionSphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
-        radius: writer.lit(0.5).expr(),
-        dimension: ShapeDimension::Volume,
-    };
-    let init_vel = SetVelocitySphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
-        speed: writer.lit(6.0).uniform(writer.lit(12.0)).expr(),
-    };
-    let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.0).expr());
-    let init_lifetime = SetAttributeModifier::new(
-        Attribute::LIFETIME,
-        writer.lit(0.25).uniform(writer.lit(0.4)).expr(),
-    );
-    let update_drag = LinearDragModifier::new(writer.lit(5.0).expr());
-
-    let mut color = Gradient::new();
-    color.add_key(0.0, Vec4::new(3.0, 2.0, 0.6, 1.0));
-    color.add_key(1.0, Vec4::new(2.0, 0.6, 0.1, 0.0));
-
-    let mut size = Gradient::new();
-    size.add_key(0.0, Vec3::splat(1.0));
-    size.add_key(1.0, Vec3::splat(0.0));
-
-    EffectAsset::new(16, SpawnerSettings::once(10.0.into()), writer.finish())
-        .with_name("bash_burst")
-        .init(init_pos)
-        .init(init_vel)
-        .init(init_age)
-        .init(init_lifetime)
-        .update(update_drag)
-        .render(ColorOverLifetimeModifier::new(color))
-        .render(SizeOverLifetimeModifier {
-            gradient: size,
-            screen_space_size: false,
-        })
-}
-
-/// Unlit radial hit-flash material. Grows and streaks with `params.factor`,
-/// camera-facing done in the vertex stage. See `assets/data/effects/impact_core.wgsl`.
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-pub struct ImpactCoreMaterial {
-    #[uniform(0)]
-    pub params: ImpactParams,
-}
-
-/// Packed impact-core parameters. Field order and types must match the
-/// `ImpactParams` struct in `impact_core.wgsl`.
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub struct ImpactParams {
-    pub primary_color: Vec4,
-    pub secondary_color: Vec4,
-    /// x=emission y=streak_amount z=edge_hardness w=edge_position
-    pub shape: Vec4,
-    pub factor: f32,
-}
-
-impl Material for ImpactCoreMaterial {
-    fn vertex_shader() -> ShaderRef {
-        "ro://effects/impact_core.wgsl".into()
-    }
-
-    fn fragment_shader() -> ShaderRef {
-        "ro://effects/impact_core.wgsl".into()
-    }
-
-    fn alpha_mode(&self) -> AlphaMode {
-        AlphaMode::Blend
-    }
-
-    fn specialize(
-        _pipeline: &MaterialPipeline,
-        descriptor: &mut RenderPipelineDescriptor,
-        _layout: &MeshVertexBufferLayoutRef,
-        _key: MaterialPipelineKey<Self>,
-    ) -> Result<(), SpecializedMeshPipelineError> {
-        descriptor.primitive.cull_mode = None;
-        Ok(())
-    }
-}
-
-impl FactorMaterial for ImpactCoreMaterial {
-    fn set_factor(&mut self, factor: f32) {
-        self.params.factor = factor;
-    }
-}
-
-/// Unlit additive four-point glint material. Fades with `params.factor`,
-/// camera-facing done in the vertex stage. See `assets/data/effects/four_point_star.wgsl`.
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-pub struct StarMaterial {
-    #[uniform(0)]
-    pub params: StarParams,
-}
-
-/// Packed four-point-star parameters. Field order and types must match the
-/// `StarParams` struct in `four_point_star.wgsl`.
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub struct StarParams {
-    pub primary_color: Vec4,
-    pub secondary_color: Vec4,
-    /// x=emission y=star_shape z=star_smoothness
-    pub shape: Vec4,
-    pub factor: f32,
-}
-
-impl Material for StarMaterial {
-    fn vertex_shader() -> ShaderRef {
-        "ro://effects/four_point_star.wgsl".into()
-    }
-
-    fn fragment_shader() -> ShaderRef {
-        "ro://effects/four_point_star.wgsl".into()
-    }
-
-    fn alpha_mode(&self) -> AlphaMode {
-        AlphaMode::Add
-    }
-
-    fn specialize(
-        _pipeline: &MaterialPipeline,
-        descriptor: &mut RenderPipelineDescriptor,
-        _layout: &MeshVertexBufferLayoutRef,
-        _key: MaterialPipelineKey<Self>,
-    ) -> Result<(), SpecializedMeshPipelineError> {
-        descriptor.primitive.cull_mode = None;
-        Ok(())
-    }
-}
-
-impl FactorMaterial for StarMaterial {
-    fn set_factor(&mut self, factor: f32) {
-        self.params.factor = factor;
-    }
-}
-
 /// Peak intensity of the impact point-light pop, in lumens.
 pub(super) const LIGHT_PEAK: f32 = 130_000.0;
 
@@ -351,174 +201,47 @@ pub fn fade_light(time: Res<Time>, mut lights: Query<(&mut LightFade, &mut Point
     }
 }
 
-/// Palette and shape tuning for one composite flash tree (`spawn_flash_burst`).
-/// Star glint scales derive from `scale` with Bash's original 7:2.5 proportions.
-struct FlashStyle {
-    primary: Vec4,
-    secondary: Vec4,
-    /// Streak count of the radial core; higher reads as jagged/electric.
-    streaks: f32,
-    scale: f32,
-    ramp: f32,
-    light_color: Color,
-    light_peak: f32,
-}
-
-/// Bash's original tuning: caster-tinted core with a warm orange fringe.
-fn bash_style(color: Color) -> FlashStyle {
-    let c = color.to_linear();
-    FlashStyle {
-        primary: Vec4::new(c.red, c.green, c.blue, 1.0),
-        secondary: Vec4::new(1.0, 0.5, 0.15, 1.0),
-        streaks: 8.0,
-        scale: 6.0,
-        ramp: 0.35,
-        light_color: color,
-        light_peak: LIGHT_PEAK,
-    }
-}
-
-/// Spawn a composite impact flash: a `FactorRamp` parent at `position` carrying
-/// an impact-core flash, two non-uniformly-scaled star glints (the in-shader
-/// billboard ignores rotation, so the stars are differentiated by scale), a
-/// fading point light, and a hanabi spark burst. The tree self-despawns when
-/// the ramp finishes (design §6).
-fn spawn_flash_burst(
-    commands: &mut Commands,
-    core_materials: &mut Assets<ImpactCoreMaterial>,
-    star_materials: &mut Assets<StarMaterial>,
-    assets: &ImpactAssets,
-    particles: Handle<EffectAsset>,
-    position: Vec3,
-    style: FlashStyle,
-) {
-    let core = core_materials.add(ImpactCoreMaterial {
-        params: ImpactParams {
-            primary_color: style.primary,
-            secondary_color: style.secondary,
-            shape: Vec4::new(2.0, style.streaks, 0.6, 0.5),
-            factor: 0.0,
-        },
-    });
-    let star = |mats: &mut Assets<StarMaterial>| {
-        mats.add(StarMaterial {
-            params: StarParams {
-                primary_color: style.primary,
-                secondary_color: style.secondary,
-                shape: Vec4::new(3.0, 6.0, 0.7, 0.0),
-                factor: 0.0,
-            },
-        })
-    };
-    let star_wide = star(star_materials);
-    let star_tall = star(star_materials);
-    let long = style.scale * 7.0 / 6.0;
-    let short = style.scale * 2.5 / 6.0;
-
-    commands
-        .spawn((
-            FactorRamp::new(style.ramp),
-            Transform::from_translation(position),
-            Visibility::default(),
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Mesh3d(assets.quad.clone()),
-                MeshMaterial3d(core),
-                Transform::from_scale(Vec3::splat(style.scale)),
-                NotShadowCaster,
-            ));
-            parent.spawn((
-                Mesh3d(assets.quad.clone()),
-                MeshMaterial3d(star_wide),
-                Transform::from_scale(Vec3::new(long, short, 1.0)),
-                NotShadowCaster,
-            ));
-            parent.spawn((
-                Mesh3d(assets.quad.clone()),
-                MeshMaterial3d(star_tall),
-                Transform::from_scale(Vec3::new(short, long, 1.0)),
-                NotShadowCaster,
-            ));
-            parent.spawn((
-                PointLight {
-                    color: style.light_color,
-                    intensity: style.light_peak,
-                    range: 40.0,
-                    shadow_maps_enabled: false,
-                    ..default()
-                },
-                LightFade::new(0.15, style.light_peak),
-            ));
-            parent.spawn(ParticleEffect::new(particles));
-        });
-}
-
-/// Read `PlayProceduralVfx` and dispatch to the matching burst spawner. Unknown
+/// Read `PlayProceduralVfx` and dispatch to the shader-fx catalog. Unknown
 /// keys are logged and ignored (design §D6, non-critical).
-#[allow(clippy::too_many_arguments)]
 pub fn on_play_procedural_vfx(
     mut reader: MessageReader<PlayProceduralVfx>,
     mut commands: Commands,
-    mut core_materials: ResMut<Assets<ImpactCoreMaterial>>,
-    mut star_materials: ResMut<Assets<StarMaterial>>,
     mut skill_fx_materials: ResMut<Assets<SkillFxMaterial>>,
     shader_fx: Option<Res<ShaderFxCatalog>>,
     asset_server: Res<AssetServer>,
     assets: Res<ImpactAssets>,
 ) {
     for msg in reader.read() {
-        if let Some(entry) = shader_fx.as_ref().and_then(|catalog| catalog.get(&msg.key)) {
-            spawn_shader_fx(
-                &mut commands,
-                &mut skill_fx_materials,
-                &asset_server,
-                &assets,
-                entry,
-                msg.position,
-                msg.source,
-                msg.hits,
-                msg.sound.clone(),
-                &msg.key,
-                msg.color,
-            );
+        let Some(entry) = shader_fx.as_ref().and_then(|catalog| catalog.get(&msg.key)) else {
+            debug!("unknown procedural vfx key {}", msg.key);
             continue;
-        }
-
-        match msg.key.as_str() {
-            "bash" => spawn_flash_burst(
-                &mut commands,
-                &mut core_materials,
-                &mut star_materials,
-                &assets,
-                assets.burst.clone(),
-                msg.position,
-                bash_style(msg.color),
-            ),
-            key => debug!("unknown procedural vfx key {key}"),
-        }
+        };
+        spawn_shader_fx(
+            &mut commands,
+            &mut skill_fx_materials,
+            &asset_server,
+            &assets,
+            entry,
+            msg.position,
+            msg.source,
+            msg.hits,
+            msg.sound.clone(),
+            &msg.key,
+            msg.color,
+        );
     }
 }
 
-/// Registers the impact `MaterialPlugin`s, the shared assets, and the driver +
-/// dispatch systems. `HanabiPlugin` is owned by the parent `VfxPlugin`, not here.
+/// Registers the shared assets and the driver + dispatch systems.
+/// `HanabiPlugin` is owned by the parent `VfxPlugin`, not here.
 pub struct ImpactVfxPlugin;
 
 impl Plugin for ImpactVfxPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<ImpactCoreMaterial>::default())
-            .add_plugins(MaterialPlugin::<StarMaterial>::default())
-            .init_resource::<ImpactAssets>()
+        app.init_resource::<ImpactAssets>()
             .add_systems(
                 Update,
-                (
-                    advance_ramps,
-                    drive_factor::<ImpactCoreMaterial>,
-                    drive_factor::<StarMaterial>,
-                    fade_light,
-                )
-                    .chain()
-                    .in_set(VfxSystems),
+                (advance_ramps, fade_light).chain().in_set(VfxSystems),
             )
             .add_systems(Update, on_play_procedural_vfx.in_set(VfxSystems));
     }
@@ -593,33 +316,6 @@ mod tests {
     }
 
     #[test]
-    fn factor_materials_write_factor() {
-        let bank = Vec4::ONE;
-        let mut core = ImpactCoreMaterial {
-            params: ImpactParams {
-                primary_color: bank,
-                secondary_color: bank,
-                shape: bank,
-                factor: 0.0,
-            },
-        };
-        let mut star = StarMaterial {
-            params: StarParams {
-                primary_color: bank,
-                secondary_color: bank,
-                shape: bank,
-                factor: 0.0,
-            },
-        };
-
-        core.set_factor(0.5);
-        star.set_factor(0.5);
-
-        assert_eq!(core.params.factor, 0.5);
-        assert_eq!(star.params.factor, 0.5);
-    }
-
-    #[test]
     fn spark_garnish_bundle_carries_its_own_tint() {
         let mut world = World::new();
         world.init_resource::<Assets<Mesh>>();
@@ -643,8 +339,6 @@ mod tests {
             .add_plugins(bevy::asset::AssetPlugin::default())
             .init_asset::<Mesh>()
             .init_asset::<EffectAsset>()
-            .init_asset::<ImpactCoreMaterial>()
-            .init_asset::<StarMaterial>()
             .init_asset::<SkillFxMaterial>()
             .init_resource::<ImpactAssets>()
             .add_message::<PlayProceduralVfx>()
@@ -657,21 +351,6 @@ mod tests {
             .query::<&FactorRamp>()
             .iter(app.world())
             .count()
-    }
-
-    #[test]
-    fn bash_key_spawns_one_ramp() {
-        let mut app = dispatch_app();
-        app.world_mut().write_message(PlayProceduralVfx {
-            key: "bash".into(),
-            position: Vec3::new(1.0, 2.0, 3.0),
-            source: None,
-            hits: 1,
-            sound: None,
-            color: Color::WHITE,
-        });
-        app.update();
-        assert_eq!(ramp_count(&mut app), 1, "bash spawns exactly one ramp tree");
     }
 
     #[test]

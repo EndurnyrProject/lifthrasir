@@ -136,13 +136,22 @@ mod tests {
         assert_eq!(asset.0.skills[&12].ground_anchor, GroundAnchor::Cell);
         assert!(asset.0.skills[&12].repeating);
 
-        // id 5 is SM_BASH: sound-only, no STR effect, procedural vfx key "bash".
-        assert_eq!(asset.0.skills[&5].str, None);
-        assert_eq!(asset.0.skills[&5].vfx.as_deref(), Some("bash"));
+        // id 5 is SM_BASH: authored slash effect, no procedural vfx.
+        assert_eq!(asset.0.skills[&5].str.as_deref(), Some("bash.strfx.ron"));
+        assert_eq!(asset.0.skills[&5].vfx, None);
         assert_eq!(
             asset.0.skills[&5].sound.as_deref(),
             Some("effect/ef_bash.wav")
         );
+
+        // ids 7/8 are SM_MAGNUM and SM_ENDURE: authored caster effects.
+        assert_eq!(
+            asset.0.skills[&7].str.as_deref(),
+            Some("magnum_break.strfx.ron")
+        );
+        assert_eq!(asset.0.skills[&7].placement, EffectPlacement::Caster);
+        assert_eq!(asset.0.skills[&8].str.as_deref(), Some("endure.strfx.ron"));
+        assert_eq!(asset.0.skills[&8].placement, EffectPlacement::Caster);
 
         // id 28 is AL_HEAL: omits `vfx`, must default to None.
         assert_eq!(asset.0.skills[&28].vfx, None);

@@ -1,0 +1,44 @@
+// Endure (SM_ENDURE) - authored effect.
+//
+// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30,
+// linear key lerp, Add = additive.
+//
+// Shape: a brief golden resolve pulse on the caster -- a warm body flash, tall
+// golden streaks sweeping up the body, and a small ring pulse at the feet.
+// Hardcoded in the official client, no native STR. ~16f.
+(
+    fps: 30,
+    layers: [
+        // Warm golden body flash.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 250.0), quad: (20.0, 20.0),   color: (255, 220, 140, 0) ),
+                ( at: 4,  offset: (319.0, 250.0), quad: (150.0, 150.0), color: (255, 226, 150, 220) ),
+                ( at: 12, offset: (319.0, 250.0), quad: (190.0, 190.0), color: (255, 210, 130, 0) ),
+            ],
+        ),
+        // Golden streaks rising along the body.
+        (
+            textures: ["ro://data/texture/effect/lens_y.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 270.0), quad: (60.0, 120.0), color: (255, 230, 150, 0) ),
+                ( at: 5,  offset: (319.0, 235.0), quad: (80.0, 170.0), color: (255, 235, 160, 200) ),
+                ( at: 14, offset: (319.0, 202.0), quad: (90.0, 200.0), color: (255, 220, 140, 0) ),
+            ],
+        ),
+        // Ground ring pulse at the feet.
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (30.0, 18.0),   color: (255, 215, 140, 0) ),
+                ( at: 5,  offset: (319.0, 291.0), quad: (140.0, 80.0),  color: (255, 220, 150, 170) ),
+                ( at: 12, offset: (319.0, 291.0), quad: (190.0, 110.0), color: (255, 205, 130, 0) ),
+            ],
+        ),
+    ],
+)

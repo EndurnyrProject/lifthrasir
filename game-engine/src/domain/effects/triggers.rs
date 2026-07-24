@@ -1064,11 +1064,26 @@ mod tests {
         let mut app = test_app();
         app.add_systems(Update, on_skill_damage);
 
+        // No shipped skill is sound-only anymore; seed a synthetic descriptor.
+        let descriptor = lifthrasir_data::EffectDescriptor {
+            str: None,
+            vfx: None,
+            sprite: None,
+            sound: Some("effect/ef_bash.wav".to_string()),
+            placement: lifthrasir_data::EffectPlacement::Target,
+            color: [1.0, 1.0, 1.0, 1.0],
+            repeating: false,
+            ..Default::default()
+        };
+        app.insert_resource(EffectCatalog::from_skill_effect_data(
+            [(9999, descriptor)].into(),
+        ));
+
         let target = spawn_unit(&mut app, 200);
         let _src = spawn_unit(&mut app, 100);
 
         app.world_mut().write_message(SkillDamageReceived {
-            skill_id: 5, // SM_BASH — sound-only, no STR effect
+            skill_id: 9999,
             level: 1,
             src_id: 100,
             target_id: 200,
@@ -1111,7 +1126,7 @@ mod tests {
         let _src = spawn_unit(&mut app, 100);
 
         app.world_mut().write_message(SkillDamageReceived {
-            skill_id: 5, // SM_BASH — procedural vfx "bash", no STR effect
+            skill_id: 11, // MG_NAPALMBEAT — procedural vfx "napalm_beat", no STR effect
             level: 1,
             src_id: 100,
             target_id: 200,
@@ -1137,7 +1152,7 @@ mod tests {
         let mut cursor = vfx.get_cursor();
         let emitted: Vec<_> = cursor.read(&vfx).collect();
         assert_eq!(emitted.len(), 1, "one procedural vfx emitted");
-        assert_eq!(emitted[0].key, "bash");
+        assert_eq!(emitted[0].key, "napalm_beat");
         assert_eq!(
             emitted[0].position,
             target_pos + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0)

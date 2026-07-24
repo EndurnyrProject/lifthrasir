@@ -32,9 +32,8 @@
 // `repeating` matter.
 (
     skills: {
-        5: ( // SM_BASH — procedural impact burst (no STR in the official client).
-            str: None,
-            vfx: Some("bash"),
+        5: ( // SM_BASH — hardcoded in the official client, no native STR; authored slash.
+            str: Some("bash.strfx.ron"),
             sound: Some("effect/ef_bash.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -44,6 +43,22 @@
             str: Some("provoke.str"),
             sound: Some("effect/swordman_provoke.wav"),
             placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        7: ( // SM_MAGNUM — hardcoded in the official client, no native STR; authored
+             // fire explosion around the caster.
+            str: Some("magnum_break.strfx.ron"),
+            sound: Some("effect/ef_magnumbreak.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        8: ( // SM_ENDURE — hardcoded in the official client, no native STR; authored
+             // golden resolve pulse on the caster.
+            str: Some("endure.strfx.ron"),
+            sound: Some("effect/ef_endure.wav"),
+            placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),

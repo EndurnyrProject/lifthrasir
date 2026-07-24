@@ -1,0 +1,63 @@
+// Magnum Break (SM_MAGNUM) - authored effect.
+//
+// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
+// anchor at (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30,
+// linear key lerp, Add = additive.
+//
+// Shape: the classic fire explosion around the caster -- a flattened fire ring
+// snaps outward along the ground, a fire burst (animated fire_000N frames)
+// climbs off the caster, a red core flash pops, and a second orange shockwave
+// ring chases the first. Hardcoded in the official client, no native STR. ~24f.
+(
+    fps: 30,
+    layers: [
+        // Ground fire ring, expanding.
+        (
+            textures: ["ro://data/texture/effect/firering.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (40.0, 20.0),   color: (255, 210, 140, 0) ),
+                ( at: 3,  offset: (319.0, 291.0), quad: (190.0, 95.0),  color: (255, 215, 145, 255) ),
+                ( at: 10, offset: (319.0, 291.0), quad: (360.0, 180.0), color: (255, 190, 115, 160) ),
+                ( at: 16, offset: (319.0, 291.0), quad: (440.0, 220.0), color: (255, 170, 95, 0) ),
+            ],
+        ),
+        // Rising fire burst on the caster, cycling the fire frames.
+        (
+            textures: [
+                "ro://data/texture/effect/fire_0001.bmp",
+                "ro://data/texture/effect/fire_0002.bmp",
+                "ro://data/texture/effect/fire_0003.bmp",
+                "ro://data/texture/effect/fire_0004.bmp",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 285.0), quad: (70.0, 70.0),   color: (255, 220, 160, 0),   texture_index: 0 ),
+                ( at: 3,  offset: (319.0, 258.0), quad: (150.0, 150.0), color: (255, 225, 165, 235), texture_index: 1 ),
+                ( at: 7,  offset: (319.0, 240.0), quad: (185.0, 185.0), color: (255, 210, 145, 200), texture_index: 2 ),
+                ( at: 12, offset: (319.0, 222.0), quad: (205.0, 205.0), color: (255, 190, 125, 120), texture_index: 3 ),
+                ( at: 18, offset: (319.0, 206.0), quad: (225.0, 225.0), color: (255, 170, 105, 0),   texture_index: 3 ),
+            ],
+        ),
+        // Red core detonation flash.
+        (
+            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 255.0), quad: (20.0, 20.0),   color: (255, 140, 100, 0) ),
+                ( at: 3,  offset: (319.0, 255.0), quad: (200.0, 200.0), color: (255, 150, 105, 220) ),
+                ( at: 12, offset: (319.0, 255.0), quad: (260.0, 260.0), color: (255, 120, 80, 0) ),
+            ],
+        ),
+        // Trailing orange shockwave ring.
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                ( at: 4,  offset: (319.0, 291.0), quad: (60.0, 34.0),   color: (255, 160, 90, 0) ),
+                ( at: 9,  offset: (319.0, 291.0), quad: (300.0, 170.0), color: (255, 165, 95, 180) ),
+                ( at: 16, offset: (319.0, 291.0), quad: (420.0, 240.0), color: (255, 145, 75, 0) ),
+            ],
+        ),
+    ],
+)
