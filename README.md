@@ -2,7 +2,7 @@
   <img width="300" height="300" src="https://iili.io/KbXkCeR.md.png">
 </p>
 
-[Discord Link](https://discord.gg/mcae5Gh6Wg)
+<br>`[![](https://dcbadge.limes.pink/api/server/https://discord.gg/xGq832HYey)](https://discord.gg/xGq832HYey)`
 
 
 # Lifthrasir
