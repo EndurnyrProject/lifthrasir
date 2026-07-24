@@ -532,7 +532,7 @@ pub fn on_special_effect(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::effects::components::ActiveEffect;
+    use crate::domain::effects::components::{ActiveEffect, EffectLifetime};
     use crate::domain::effects::systems::despawn_finished_effects;
     use crate::domain::entities::components::NetworkEntity;
     use crate::domain::entities::types::ObjectType;
@@ -1021,6 +1021,95 @@ mod tests {
     }
 
     #[test]
+    fn grand_cross_ground_event_spawns_one_effect_and_damage_ticks_add_nothing() {
+        let mut app = test_app();
+        app.add_systems(Update, (on_ground_skill, on_skill_damage));
+
+        let src = spawn_unit(&mut app, 100);
+        let target = spawn_unit(&mut app, 200);
+
+        app.world_mut().write_message(GroundSkillPlaced {
+            skill_id: 254, // CR_GRANDCROSS (seeded Ground, repeating: false)
+            src_id: 100,
+            level: 10,
+            x: 40,
+            y: 50,
+            server_tick: 0,
+        });
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            1,
+            "one visual from the single ground event"
+        );
+        let expected = spawn_coords_to_world_position(40, 50, 0, 0);
+        assert_eq!(position_anchored(&mut app), vec![expected]);
+
+        // The three timed ticks across victims: damage numbers and caster
+        // motion only, because Ground placement defers the visual to the
+        // GroundSkillPlaced above.
+        for tick in 0..3u64 {
+            app.world_mut().write_message(SkillDamageReceived {
+                skill_id: 254,
+                level: 10,
+                src_id: 100,
+                target_id: 200,
+                server_tick: tick,
+                damage: 120,
+                div: 1,
+                type_: 0,
+                src_delay: 0,
+                dst_delay: 0,
+            });
+        }
+        app.update();
+
+        assert_eq!(
+            active_effects(&mut app),
+            1,
+            "damage ticks spawn no additional visual"
+        );
+
+        let effect_handle = {
+            let world = app.world_mut();
+            let mut query = world.query::<&ActiveEffect>();
+            query
+                .single(world)
+                .expect("one Grand Cross effect")
+                .effect
+                .clone()
+        };
+        let path = app
+            .world()
+            .resource::<AssetServer>()
+            .get_path(effect_handle.id())
+            .expect("Grand Cross effect has an asset path");
+        assert_eq!(path.to_string(), "data/effects/grand_cross.strfx.ron");
+
+        let numbers = app
+            .world_mut()
+            .resource_mut::<Messages<DisplayDamageNumber>>();
+        let mut cursor = numbers.get_cursor();
+        let emitted: Vec<_> = cursor.read(&numbers).collect();
+        assert_eq!(emitted.len(), 3, "one damage number per tick");
+        assert!(
+            emitted
+                .iter()
+                .all(|e| e.entity == target && e.amount == 120)
+        );
+
+        let sfx = app.world_mut().resource_mut::<Messages<PlaySkillSfx>>();
+        let mut sfx_cursor = sfx.get_cursor();
+        let sounds: Vec<_> = sfx_cursor.read(&sfx).collect();
+        assert_eq!(sounds.len(), 1, "only the landing sound; ticks are silent");
+        assert_eq!(
+            sounds[0].emitter, src,
+            "landing sound anchors to the caster"
+        );
+    }
+
+    #[test]
     fn unknown_skill_id_shows_damage_without_effect() {
         let mut app = test_app();
         app.add_systems(Update, on_skill_damage);
@@ -1226,6 +1315,60 @@ mod tests {
             positions[0],
             source_pos + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0)
         );
+    }
+
+    #[test]
+    fn special_effect_reflect_shield_spawns_one_finite_effect_at_source() {
+        assert_finite_special_effect_at_source(252, "data/effects/reflect_shield.strfx.ron");
+    }
+
+    #[test]
+    fn special_effect_guard_spawns_one_finite_effect_at_source() {
+        assert_finite_special_effect_at_source(336, "ro://data/texture/effect/kyrie.str");
+    }
+
+    /// One `SpecialEffectShown` for a known Crusader proc id spawns exactly one
+    /// non-repeating visual (no despawn timer) anchored at the resolved source
+    /// body position.
+    fn assert_finite_special_effect_at_source(effect_id: u32, expected_path: &str) {
+        let mut app = test_app();
+        app.insert_resource(seeded_map_catalog());
+        app.add_systems(Update, on_special_effect);
+
+        let source_pos = Vec3::new(5.0, 0.0, 9.0);
+        let source = spawn_unit(&mut app, 100);
+        app.world_mut()
+            .entity_mut(source)
+            .insert(Transform::from_translation(source_pos));
+
+        app.world_mut().write_message(SpecialEffectShown {
+            source_id: 100,
+            effect_id,
+        });
+        app.update();
+
+        let positions = position_anchored(&mut app);
+        assert_eq!(positions.len(), 1, "one position-anchored effect spawned");
+        assert_eq!(
+            positions[0],
+            source_pos + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0)
+        );
+
+        let (repeating, has_lifetime, effect_handle) = {
+            let world = app.world_mut();
+            let mut query = world.query::<(&ActiveEffect, Option<&EffectLifetime>)>();
+            let (active, lifetime) = query.single(world).expect("one special effect");
+            (active.repeating, lifetime.is_some(), active.effect.clone())
+        };
+        assert!(!repeating, "proc flash must not repeat");
+        assert!(!has_lifetime, "finite effect carries no despawn timer");
+
+        let path = app
+            .world()
+            .resource::<AssetServer>()
+            .get_path(effect_handle.id())
+            .expect("special effect has an asset path");
+        assert_eq!(path.to_string(), expected_path);
     }
 
     #[test]
