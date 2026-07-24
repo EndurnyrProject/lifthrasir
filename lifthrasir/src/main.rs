@@ -39,6 +39,9 @@ fn main() {
                 ..default()
             }),
     );
+    app.add_plugins(bevy::settings::SettingsPlugin::new(
+        "com.github.endurnyrproject.lifthrasir",
+    ));
 
     info!("Lifthrasir {VERSION}");
 

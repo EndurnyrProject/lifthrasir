@@ -15,7 +15,7 @@ Apply/Cancel/Reset and runtime synchronization behavior.
 
 ## Progress
 
-- [ ] Task 1: Establish native Bevy settings groups and bootstrap
+- [x] Task 1: Establish native Bevy settings groups and bootstrap
 - [ ] Task 2: Cut runtime and UI behavior over to native resources
 - [ ] Task 3: Delete the legacy settings persistence stack
 
@@ -69,21 +69,21 @@ plugin after `DefaultPlugins`.
 
 **Acceptance criteria:**
 
-- [ ] `GraphicsSettings`, `AudioConfig`, and `Keybinds` each derive `Resource`,
+- [x] `GraphicsSettings`, `AudioConfig`, and `Keybinds` each derive `Resource`,
   `SettingsGroup`, and `Reflect`, and register `Resource`, `SettingsGroup`, and
   `Default` reflection metadata.
-- [ ] Their explicit group names are exactly `graphics`, `audio`, and
+- [x] Their explicit group names are exactly `graphics`, `audio`, and
   `keybinds`, and all three use Bevy's default `settings.toml` source.
-- [ ] Existing manual `Default` implementations and user-visible values are
+- [x] Existing manual `Default` implementations and user-visible values are
   unchanged.
-- [ ] The native plugin uses the stable application identifier
+- [x] The native plugin uses the stable application identifier
   `com.github.endurnyrproject.lifthrasir` and is added after `DefaultPlugins`
   but before `MapPlugin`, `CoreGamePlugins`, the network adapter, and
   `LifthrasirUiPlugin`.
-- [ ] No direct `bevy-settings` dependency or Lifthrasir registration wrapper is
+- [x] No direct `bevy-settings` dependency or Lifthrasir registration wrapper is
   introduced.
-- [ ] `cargo test -p game-engine domain::settings::resources` passes.
-- [ ] `cargo check -p lifthrasir` passes.
+- [x] `cargo test -p game-engine domain::settings::resources` passes.
+- [x] `cargo check -p lifthrasir` passes.
 
 **Depends on:** none
 

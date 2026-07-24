@@ -2,6 +2,7 @@ use bevy::pbr::ScreenSpaceAmbientOcclusionQualityLevel;
 use bevy::prelude::*;
 use bevy::reflect::enums::DynamicEnum;
 use bevy::reflect::{TypeInfo, Typed};
+use bevy::settings::{ReflectSettingsGroup, SettingsGroup};
 use bevy::window::{MonitorSelection, VideoModeSelection, WindowMode};
 use bevy_auto_plugin::prelude::auto_register_type;
 use bevy_framepace::Limiter;
@@ -460,8 +461,12 @@ impl UiScaling {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+#[derive(
+    Resource, SettingsGroup, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Reflect, Debug,
+)]
 #[serde(default)]
+#[reflect(Resource, SettingsGroup, Default)]
+#[settings_group(group = "graphics")]
 pub struct GraphicsSettings {
     pub display_mode: DisplayMode,
     pub resolution: (u32, u32),
@@ -506,8 +511,12 @@ impl Default for GraphicsSettings {
 }
 
 /// Persisted mirror of the runtime `AudioSettings` fields.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Reflect, Debug)]
+#[derive(
+    Resource, SettingsGroup, Serialize, Deserialize, Clone, Copy, PartialEq, Reflect, Debug,
+)]
 #[serde(default)]
+#[reflect(Resource, SettingsGroup, Default)]
+#[settings_group(group = "audio")]
 pub struct AudioConfig {
     pub bgm_volume: f32,
     pub bgm_muted: bool,
@@ -639,8 +648,10 @@ fn default_hotbar_binds() -> [ActionBinds; 12] {
 
 /// Serde-only keybinds for the existing `PlayerAction`s. No leafwing coupling
 /// here; Task 4 adds `to_input_map` / `from_input_map`.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug)]
+#[derive(Resource, SettingsGroup, Serialize, Deserialize, Clone, PartialEq, Eq, Reflect, Debug)]
 #[serde(default)]
+#[reflect(Resource, SettingsGroup, Default)]
+#[settings_group(group = "keybinds")]
 pub struct Keybinds {
     pub sit: ActionBinds,
     pub status: ActionBinds,
@@ -738,6 +749,18 @@ pub struct Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::settings::SettingsGroup;
+
+    #[test]
+    fn app_settings_groups_use_named_sections_in_default_file() {
+        assert_eq!(GraphicsSettings::settings_group_name(), "graphics");
+        assert_eq!(AudioConfig::settings_group_name(), "audio");
+        assert_eq!(Keybinds::settings_group_name(), "keybinds");
+
+        assert_eq!(GraphicsSettings::settings_source(), None);
+        assert_eq!(AudioConfig::settings_source(), None);
+        assert_eq!(Keybinds::settings_source(), None);
+    }
 
     #[test]
     fn default_settings_round_trips_through_ron() {
