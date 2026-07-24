@@ -493,9 +493,9 @@ mod tests {
         );
         assert!(stormgust.repeating);
 
-        // SM_BASH is sound-only: no STR effect, but it still plays its sound.
+        // SM_BASH uses an authored slash because the official effect is hardcoded.
         let bash = data.skills.get(&5).expect("SM_BASH entry");
-        assert_eq!(bash.str, None);
+        assert_eq!(bash.str.as_deref(), Some("bash.strfx.ron"));
         assert_eq!(bash.sound.as_deref(), Some("effect/ef_bash.wav"));
 
         let map_stormgust = data.map.get(&89).expect("EF_STORMGUST entry");
@@ -512,7 +512,7 @@ mod tests {
         // `skills:` (157 there stays as the one-shot cast flash).
         let energy_coat_aura = data.statuses.get(&31).expect("EFST_ENERGYCOAT entry");
         assert_eq!(energy_coat_aura.str.as_deref(), Some("energycoat.str"));
-        assert!(energy_coat_aura.repeating);
+        assert!(!energy_coat_aura.repeating);
 
         let energy_coat_cast = data.skills.get(&157).expect("MG_ENERGYCOAT entry");
         assert_eq!(energy_coat_cast.str.as_deref(), Some("energycoat.str"));

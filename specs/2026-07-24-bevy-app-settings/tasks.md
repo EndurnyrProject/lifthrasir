@@ -227,7 +227,7 @@ persistence boundary.
 - [x] The old `settings.ron` is not read, migrated, rewritten, or deleted.
 - [x] `cargo fmt --all --check` passes.
 - [x] `cargo check --workspace` passes.
-- [ ] `cargo test --workspace` passes.
+- [x] `cargo test --workspace` passes.
 - [ ] Manual smoke verification confirms defaults on first launch; Apply
   updates graphics, audio, and input; a restart reloads all three groups from
   Bevy's TOML; Cancel/Reset/dirty-state still work; and late-created cameras,
