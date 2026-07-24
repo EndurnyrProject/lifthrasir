@@ -9,15 +9,20 @@
 
 A modern, cross-platform Ragnarok Online client implementation built with Rust and Bevy.
 
-## Overview
+## Overview and Objective
 
 I always wanted to build this stuff, and since i wanted to learn Rust, why not? Will this ever be fully playable? Probably not,
 maybe, who knows?
 
-### Project Architecture
+The objetive here is most fun, i don't want to build a 1-to-1 ragnarok client copy, i want some liberty to add new stuff, redo some stuff
+i didn't like, while trying to keep the same feeling.
 
-The architecture is fairly simple, everything is build following the Entity Component System (ECS) paradigm using Bevy as the game engine.
-The UI is built natively with Bevy.
+## Project Architecture and Functionalities
+
+I'm trying to keep it as close to the Bevy ECS recommended architecture, the basic concepts are: 
+
+1. Follow the ECS pattern, where systems operate on components attached to entities.
+2. Keep the network and game logic separate, albeit i don't want to build compatibility for other servers, do not keep people from doing it.
 
 ## Prerequisites
 
@@ -30,44 +35,23 @@ This client requires Ragnarok Online data files, which are proprietary to Gravit
 
 ## Getting Started
 
-### 1. Clone the Repository
-
 ```bash
 git clone git@github.com:EndurnyrProject/lifthrasir.git
-cd lifthrasir
-```
-
-### 2. Install Dependencies
-
-```bash
-cargo build
-```
-
-### 3. Add Your GRF Files
-
-Place your Ragnarok Online GRF files in the `assets/` directory as described above.
-
-### 4. Generate Derived Assets
-
-```bash
+# Add your data.grf to the assets folder, configure the loader.toml
+# Then convert the stuff
 cargo run -p ro-to-lifthrasir-cli -- convert
+
+# Run the app on dev mode
+cargo run -p lifthrasir --features dev
 ```
 
-### 5. Run
+## Server Side
 
-```bash
-cargo run -p lifthrasir
-```
+### Does it work with rAthena?
 
-## Building for Distribution
-
-```bash
-cargo build --release
-```
-
-## Server
-
-For now, its working only with [Aesir](https://github.com/EndurnyrProject/aesir)
+Nope, and its not my plan to make it work, only with [Aesir](https://github.com/EndurnyrProject/aesir), the
+engine protocol is agnostic though, feel free to implement the protocol
+for rAthena if you want.
 
 ## Contributing
 
