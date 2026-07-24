@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.6.0...v0.7.0) (2026-07-24)
+
+
+### Features
+
+* **hotbar:** larger icons and hover name toast ([c640124](https://github.com/EndurnyrProject/lifthrasir/commit/c640124af2a7c9dd889841d858695c8185d84207))
+* **knight-skills:** Wire native STRs and authored charge attack ([6f473aa](https://github.com/EndurnyrProject/lifthrasir/commit/6f473aaac10e4f2a1cf001512df805d70b0acd77))
+* **monk-skills:** Monk Skill effects ([31ae9ba](https://github.com/EndurnyrProject/lifthrasir/commit/31ae9ba00db4f3b82d1d6f5557ff6b1e5418612b))
+* **monk-skills:** Native asura/fury effects and monk wavs ([b4c1cfa](https://github.com/EndurnyrProject/lifthrasir/commit/b4c1cfa8faacda02f724fff90b9ca2cc639f0232))
+* **monk-skills:** Spirit sphere rendering ([0023d11](https://github.com/EndurnyrProject/lifthrasir/commit/0023d112fcb5631886449daeb85e0edf016332aa))
+* **settings:** register native Bevy settings groups ([0aa7fd5](https://github.com/EndurnyrProject/lifthrasir/commit/0aa7fd51cce32b71c96a6892ba95344425274912))
+* **skill:** RO-like cursor toast while targeting a skill ([0e7ebea](https://github.com/EndurnyrProject/lifthrasir/commit/0e7ebeacf8a0c3747a4dc33113451fa77c2668e3))
+* **swordsman-skills:** Authored bash/magnum break/endure effects ([b542c3a](https://github.com/EndurnyrProject/lifthrasir/commit/b542c3a80eb9a549c04ca62e4b227dd69b27b976))
+* **ui:** add in-game escape menu ([bc04665](https://github.com/EndurnyrProject/lifthrasir/commit/bc04665e79c8525d8c934af4e894eb0e7520562f))
+
+
+### Bug Fixes
+
+* **login:** Allow reconnecting on failure ([cf6841c](https://github.com/EndurnyrProject/lifthrasir/commit/cf6841cbaf9a1cf8274069a64493573a10e0154f))
+
 ## [0.6.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.5.1...v0.6.0) (2026-07-21)
 
 
