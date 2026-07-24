@@ -20,6 +20,7 @@ pub mod guild_window;
 pub mod hotbar;
 pub mod info_modal;
 pub mod minimap;
+pub mod mount;
 pub mod npc_dialog;
 pub mod party;
 pub mod placeholder;

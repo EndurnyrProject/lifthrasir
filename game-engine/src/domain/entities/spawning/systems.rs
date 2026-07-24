@@ -61,6 +61,7 @@ struct SpawnFields {
     guild_id: u32,
     guild_name: String,
     emblem_id: u32,
+    riding: bool,
 }
 
 impl From<&UnitEntered> for SpawnFields {
@@ -92,6 +93,8 @@ impl From<&UnitEntered> for SpawnFields {
             guild_id: e.guild_id,
             guild_name: e.guild_name.clone(),
             emblem_id: e.emblem_id,
+            riding: e.effect_state & crate::domain::entities::character::systems::OPTION_RIDING
+                != 0,
         }
     }
 }
@@ -331,6 +334,7 @@ pub fn spawn_network_entity_system(
                     job_id: event.job,
                     gender: Gender::from(event.gender),
                     head: event.head,
+                    riding: event.riding,
                 };
 
                 let sprite_info = EntitySpriteInfo { sprite_data };

@@ -6,6 +6,7 @@ pub mod ground;
 pub mod guild;
 pub mod inventory;
 pub mod lifecycle;
+pub mod mount;
 pub mod movement;
 pub mod npc;
 pub mod party;

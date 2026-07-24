@@ -3,66 +3,68 @@ use bevy_auto_plugin::prelude::*;
 
 use super::super::components::{HeadAttachment, PendingRenderLayers, RenderLayer};
 use crate::domain::entities::character::components::{CharacterData, Gender};
+use crate::domain::entities::character::systems::OPTION_RIDING;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::sprite::tags::LAYER_BODY;
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
 use crate::infrastructure::job::registry::JobSpriteRegistry;
-use net_contract::events::UnitSpriteChanged;
+use net_contract::events::UnitStateChanged;
 
-/// `LOOK_BASE`: the job/class look slot. The server broadcasts it to the
-/// changing player *and* to nearby players, so this runs for the local player
-/// too, unlike the equipment look types in `domain::equipment::sprite_change`.
-const LOOK_BASE: u32 = 0;
+/// The unit's body currently renders its mounted (Peco) sprite. Presence of the
+/// marker *is* the rendered mount state, so repeated `effect_state` broadcasts
+/// with the bit unchanged don't rebuild the body.
+#[derive(Component)]
+pub struct RidingPeco;
 
 type BodyLayerQuery<'w, 's> = Query<'w, 's, (Entity, &'static RenderLayer)>;
 
-/// Rebuild the body sprite when the server changes a unit's base look (a job
-/// change). The body layer child is despawned and its animation re-requested
-/// from the new job's SPR/ACT; `finalize_render_layers` spawns the replacement,
-/// which is why `PendingRenderLayers` goes back on the unit.
+/// Swaps a unit's body sprite between its normal and mounted (Peco) body when
+/// the `OPTION_RIDING` bit of `effect_state` toggles, mirroring the rebuild in
+/// `apply_base_look_changes`.
 ///
-/// The head layer's `HeadAttachment` is dropped at the same time: it points at
-/// the despawned body layer entity, and `link_head_to_body` only links heads
-/// that have no attachment, so without this the head would stop following the
-/// body.
+/// Only `UnitStateChanged` is consumed: a unit already mounted on entry gets
+/// the mounted body directly from the spawn path (`riding` on
+/// `EntitySpriteData::Character`), so there is no spawn/swap race to reconcile.
+/// A queued-but-unfinished body request (login restore arriving while the
+/// spawn-time body still loads) is superseded via
+/// [`PendingAnimations::discard_for`].
+///
+/// Jobs without a mounted body sprite (`get_riding_body_sprite_path` is `None`)
+/// keep their normal body and never get the marker, so a later unmount is a
+/// no-op too.
 #[auto_add_system(
     plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
     config(in_set = SpriteRenderingSystems::HierarchySpawn, before = super::spawn::finalize_render_layers)
 )]
 #[allow(clippy::too_many_arguments)]
-pub fn apply_base_look_changes(
+pub fn apply_peco_mount(
     mut commands: Commands,
-    mut sprite_changes: MessageReader<UnitSpriteChanged>,
+    mut state_changes: MessageReader<UnitStateChanged>,
     registry: Res<EntityRegistry>,
-    mut characters: Query<(&mut CharacterData, &Gender, &Children)>,
+    characters: Query<(&CharacterData, &Gender, &Children)>,
+    riding_markers: Query<(), With<RidingPeco>>,
     layers: BodyLayerQuery,
     heads: Query<Entity, With<HeadAttachment>>,
     asset_server: Res<AssetServer>,
     mut pending_animations: ResMut<PendingAnimations>,
     job_registry: Option<Res<JobSpriteRegistry>>,
 ) {
-    for change in sprite_changes.read() {
-        if change.type_ != LOOK_BASE {
-            continue;
-        }
+    for event in state_changes.read() {
+        let desired = event.effect_state & OPTION_RIDING != 0;
 
-        let Some(entity) = registry.get_entity(change.gid) else {
+        let Some(entity) = registry.get_entity(event.unit_id) else {
             continue;
         };
-
-        let Ok((mut character, gender, children)) = characters.get_mut(entity) else {
-            continue;
-        };
-
-        let job_id = change.val as u16;
-        if character.job_id == job_id {
+        if riding_markers.contains(entity) == desired {
             continue;
         }
-
+        let Ok((character, gender, children)) = characters.get(entity) else {
+            continue;
+        };
         let Some(job_registry) = job_registry.as_deref() else {
-            warn!("apply_base_look_changes: JobSpriteRegistry not available");
+            warn!("apply_peco_mount: JobSpriteRegistry not available");
             continue;
         };
 
@@ -70,18 +72,24 @@ pub fn apply_base_look_changes(
             Gender::Male => 1u8,
             Gender::Female => 0u8,
         };
+        let job_id = character.job_id as u32;
 
-        let Some(body_spr_path) = job_registry.get_body_sprite_path(job_id as u32, gender_byte)
-        else {
-            warn!(
-                "apply_base_look_changes: Unknown job_id {} for entity {:?}",
-                job_id, entity
-            );
-            continue;
+        let body_spr_path = if desired {
+            let Some(path) = job_registry.get_riding_body_sprite_path(job_id, gender_byte) else {
+                continue;
+            };
+            path
+        } else {
+            let Some(path) = job_registry.get_body_sprite_path(job_id, gender_byte) else {
+                warn!(
+                    "apply_peco_mount: Unknown job_id {} for entity {:?}",
+                    job_id, entity
+                );
+                continue;
+            };
+            path
         };
         let body_act_path = body_spr_path.replace(".spr", ".act");
-
-        character.job_id = job_id;
 
         for child in children.iter() {
             if layers
@@ -97,21 +105,24 @@ pub fn apply_base_look_changes(
             }
         }
 
+        pending_animations.discard_for(entity, LAYER_BODY);
         pending_animations.request(
             asset_server.load(&body_spr_path),
             asset_server.load(&body_act_path),
             LAYER_BODY,
             Some(entity),
         );
-        // The rebuild uses the new job's normal body, so a mounted-body marker
-        // from `apply_peco_mount` would go stale.
-        commands
-            .entity(entity)
-            .insert(PendingRenderLayers)
-            .remove::<super::riding::RidingPeco>();
+
+        let mut entity_commands = commands.entity(entity);
+        entity_commands.insert(PendingRenderLayers);
+        if desired {
+            entity_commands.insert(RidingPeco);
+        } else {
+            entity_commands.remove::<RidingPeco>();
+        }
 
         debug!(
-            "apply_base_look_changes: Rebuilding body ({}) for entity {:?}",
+            "apply_peco_mount: Rebuilding body ({}) for entity {:?}",
             body_spr_path, entity
         );
     }
@@ -125,8 +136,8 @@ mod tests {
     use bevy::asset::AssetPlugin;
 
     const GID: u32 = 150_001;
+    const KNIGHT: u16 = 7;
     const NOVICE: u16 = 0;
-    const SWORDMAN: u16 = 1;
 
     struct Fixture {
         app: App,
@@ -163,7 +174,7 @@ mod tests {
             .id()
     }
 
-    fn setup() -> Fixture {
+    fn setup(job_id: u16) -> Fixture {
         let mut app = App::new();
         app.add_plugins((TaskPoolPlugin::default(), AssetPlugin::default()))
             .init_asset::<crate::infrastructure::assets::loaders::RoSpriteAsset>()
@@ -173,8 +184,8 @@ mod tests {
             .insert_resource(JobSpriteRegistry::from_job_data(
                 lifthrasir_data::JobData::default(),
             ))
-            .add_message::<UnitSpriteChanged>()
-            .add_systems(Update, apply_base_look_changes);
+            .add_message::<UnitStateChanged>()
+            .add_systems(Update, apply_peco_mount);
 
         let body_layer = layer(&mut app, LAYER_BODY);
         let head_layer = layer(&mut app, LAYER_HEAD);
@@ -186,7 +197,7 @@ mod tests {
 
         let character = app
             .world_mut()
-            .spawn((character_data(NOVICE), Gender::Male))
+            .spawn((character_data(job_id), Gender::Male))
             .add_children(&[body_layer, head_layer])
             .id();
 
@@ -202,69 +213,82 @@ mod tests {
         }
     }
 
-    fn send(app: &mut App, type_: u32, val: u32) {
+    fn send(app: &mut App, effect_state: u32) {
         app.world_mut()
-            .resource_mut::<Messages<UnitSpriteChanged>>()
-            .write(UnitSpriteChanged {
-                gid: GID,
-                type_,
-                val,
-                val2: 0,
+            .resource_mut::<Messages<UnitStateChanged>>()
+            .write(UnitStateChanged {
+                unit_id: GID,
+                body_state: 0,
+                health_state: 0,
+                effect_state,
+                virtue: 0,
             });
         app.update();
     }
 
     #[test]
-    fn base_look_change_rebuilds_body_and_unlinks_head() {
-        let mut f = setup();
-        send(&mut f.app, LOOK_BASE, SWORDMAN as u32);
+    fn riding_bit_rebuilds_body_and_marks_unit() {
+        let mut f = setup(KNIGHT);
+        send(&mut f.app, OPTION_RIDING);
 
         let world = f.app.world();
-        assert_eq!(
-            world.get::<CharacterData>(f.character).unwrap().job_id,
-            SWORDMAN
-        );
         assert!(world.get_entity(f.body_layer).is_err());
         assert!(world.get::<HeadAttachment>(f.head_layer).is_none());
+        assert!(world.get::<RidingPeco>(f.character).is_some());
         assert!(world.get::<PendingRenderLayers>(f.character).is_some());
         assert!(world.resource::<PendingAnimations>().has_pending());
     }
 
     #[test]
-    fn same_job_is_a_no_op() {
-        let mut f = setup();
-        send(&mut f.app, LOOK_BASE, NOVICE as u32);
+    fn repeat_riding_bit_does_not_rebuild_again() {
+        let mut f = setup(KNIGHT);
+        send(&mut f.app, OPTION_RIDING);
+        // Simulate the finalized rebuild: a fresh body layer exists again.
+        let new_body = layer(&mut f.app, LAYER_BODY);
+        f.app
+            .world_mut()
+            .entity_mut(f.character)
+            .add_children(&[new_body]);
+
+        send(&mut f.app, OPTION_RIDING | 0x02);
+
+        assert!(f.app.world().get_entity(new_body).is_ok());
+    }
+
+    #[test]
+    fn clearing_riding_bit_restores_normal_body() {
+        let mut f = setup(KNIGHT);
+        send(&mut f.app, OPTION_RIDING);
+        let new_body = layer(&mut f.app, LAYER_BODY);
+        f.app
+            .world_mut()
+            .entity_mut(f.character)
+            .add_children(&[new_body]);
+
+        send(&mut f.app, 0);
+
+        let world = f.app.world();
+        assert!(world.get_entity(new_body).is_err());
+        assert!(world.get::<RidingPeco>(f.character).is_none());
+    }
+
+    #[test]
+    fn job_without_mounted_body_is_untouched() {
+        let mut f = setup(NOVICE);
+        send(&mut f.app, OPTION_RIDING);
 
         let world = f.app.world();
         assert!(world.get_entity(f.body_layer).is_ok());
-        assert!(world.get::<HeadAttachment>(f.head_layer).is_some());
+        assert!(world.get::<RidingPeco>(f.character).is_none());
         assert!(!world.resource::<PendingAnimations>().has_pending());
     }
 
     #[test]
-    fn equipment_look_types_are_ignored() {
-        let mut f = setup();
-        send(&mut f.app, 4, SWORDMAN as u32);
+    fn unmount_without_marker_is_a_no_op() {
+        let mut f = setup(KNIGHT);
+        send(&mut f.app, 0);
 
         let world = f.app.world();
-        assert_eq!(
-            world.get::<CharacterData>(f.character).unwrap().job_id,
-            NOVICE
-        );
-        assert!(world.get_entity(f.body_layer).is_ok());
-        assert!(!world.resource::<PendingAnimations>().has_pending());
-    }
-
-    #[test]
-    fn unknown_job_leaves_the_sprite_alone() {
-        let mut f = setup();
-        send(&mut f.app, LOOK_BASE, 999_999);
-
-        let world = f.app.world();
-        assert_eq!(
-            world.get::<CharacterData>(f.character).unwrap().job_id,
-            NOVICE
-        );
         assert!(world.get_entity(f.body_layer).is_ok());
         assert!(!world.resource::<PendingAnimations>().has_pending());
     }

@@ -5,6 +5,7 @@ pub mod ground;
 pub mod guild;
 pub mod handshake;
 pub mod inventory;
+pub mod mount;
 pub mod movement;
 pub mod npc;
 pub mod party;

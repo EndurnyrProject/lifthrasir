@@ -39,6 +39,17 @@ impl PendingAnimations {
         });
     }
 
+    /// Drop every queued or completed request for `entity`'s `layer` that hasn't
+    /// been claimed by a finalizer yet. Used when a body rebuild supersedes a
+    /// still-loading request (e.g. the riding swap arriving while the spawn-time
+    /// body is in flight), which would otherwise finalize a second stale layer.
+    pub fn discard_for(&mut self, entity: Entity, layer: Tag) {
+        let stale =
+            |p: &PendingAnimation| p.callback_entity == Some(entity) && p.layer_tag == layer;
+        self.pending.retain(|p| !stale(p));
+        self.completed.retain(|(p, _)| !stale(p));
+    }
+
     /// Take only the completed animations whose layer satisfies `pred`, leaving
     /// the rest queued. The queue is shared by the body/head, cart, and equipment
     /// finalizers; each MUST claim only its own layers — a finalizer that drains

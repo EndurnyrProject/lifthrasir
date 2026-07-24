@@ -17,7 +17,16 @@ const OPTION_CART2: u32 = 0x80;
 const OPTION_CART3: u32 = 0x100;
 pub(crate) const CART_MASK: u32 = OPTION_CART1 | OPTION_CART2 | OPTION_CART3;
 
+/// Peco Peco riding bit (rAthena `OPTION_RIDING`).
+pub(crate) const OPTION_RIDING: u32 = 0x20;
+
 impl UnitState {
+    /// Whether the riding bit is set in `effect_state`. Consumed by
+    /// `apply_peco_mount` in the sprite-rendering domain for the body swap.
+    pub fn is_riding(&self) -> bool {
+        self.effect_state & OPTION_RIDING != 0
+    }
+
     /// Whether any pushcart tier bit is set in `effect_state`. The UI reads this
     /// off the local player to decide between the mount prompt and the mounted
     /// body; it is the same test the cart render layer uses.
@@ -193,6 +202,25 @@ mod tests {
                 ..Default::default()
             }
             .is_cart_mounted()
+        );
+    }
+
+    #[test]
+    fn is_riding_reflects_riding_bit() {
+        assert!(!UnitState::default().is_riding());
+        assert!(
+            UnitState {
+                effect_state: OPTION_RIDING,
+                ..Default::default()
+            }
+            .is_riding()
+        );
+        assert!(
+            !UnitState {
+                effect_state: OPTION_CART1,
+                ..Default::default()
+            }
+            .is_riding()
         );
     }
 

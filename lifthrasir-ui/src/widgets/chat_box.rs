@@ -13,11 +13,13 @@ use bevy::text::EditableText;
 use game_engine::core::state::GameState;
 use game_engine::domain::character::chat::ChatSendRequested;
 use game_engine::domain::emote::EmoteRequested;
+use net_contract::commands::MountPeco;
 use net_contract::events::ChatHeard;
 
 use crate::rich_text::spawn_colored_text;
 use crate::theme;
 use crate::widgets::emote::slash::parse_emote_slash;
+use crate::widgets::mount::parse_mount_slash;
 use crate::widgets::party::slash::{PartySlashSubmitted, parse_party_slash};
 use crate::widgets::placeholder::Placeholder;
 
@@ -52,7 +54,12 @@ impl Plugin for ChatBoxPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (append_incoming_chat, chat_input_control).run_if(in_state(GameState::InGame)),
+            (
+                append_incoming_chat,
+                chat_input_control,
+                crate::widgets::mount::ingest_mount_feedback,
+            )
+                .run_if(in_state(GameState::InGame)),
         );
     }
 }
@@ -417,7 +424,8 @@ fn append_incoming_chat(
 /// - Focused + Enter submits: a non-empty message is sent and the field cleared and
 ///   unfocused; an empty submit (e.g. the Enter that opened the chat) leaves it focused.
 ///   A recognized emote slash (`parse_emote_slash`) is tried first and writes
-///   `EmoteRequested`; otherwise a recognized party slash command
+///   `EmoteRequested`; then `/mount`//`/unmount` (`parse_mount_slash`) writes
+///   `MountPeco`; otherwise a recognized party slash command
 ///   (`parse_party_slash`) is queued as `PartySlashSubmitted`; otherwise it is sent as
 ///   a normal chat message.
 ///
@@ -427,6 +435,7 @@ fn chat_input_control(
     mut writer: MessageWriter<ChatSendRequested>,
     mut slash_writer: MessageWriter<PartySlashSubmitted>,
     mut emote_writer: MessageWriter<EmoteRequested>,
+    mut mount_writer: MessageWriter<MountPeco>,
     mut input_focus: ResMut<InputFocus>,
 ) {
     let Ok((entity, mut field)) = chat_input.single_mut() else {
@@ -452,6 +461,8 @@ fn chat_input_control(
         if !message.is_empty() {
             if let Some(emote_type) = parse_emote_slash(message) {
                 emote_writer.write(EmoteRequested { emote_type });
+            } else if let Some(mount) = parse_mount_slash(message) {
+                mount_writer.write(MountPeco { mount });
             } else if let Some(slash) = parse_party_slash(message) {
                 slash_writer.write(PartySlashSubmitted(slash));
             } else {
@@ -512,6 +523,7 @@ mod tests {
         app.add_message::<ChatSendRequested>();
         app.add_message::<PartySlashSubmitted>();
         app.add_message::<EmoteRequested>();
+        app.add_message::<MountPeco>();
         app.add_systems(Update, chat_input_control);
         let chat = app
             .world_mut()

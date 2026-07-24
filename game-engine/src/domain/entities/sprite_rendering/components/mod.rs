@@ -121,6 +121,9 @@ pub enum EntitySpriteData {
         job_id: u16,
         gender: Gender,
         head: u16,
+        /// Riding bit already set on entry, so the spawn requests the mounted
+        /// body directly instead of racing a post-spawn swap.
+        riding: bool,
     },
     Mob {
         sprite_name: String,

@@ -65,6 +65,14 @@ impl JobSpriteRegistry {
         Some(patterns::body_sprite_path(gender_enum, sprite_name))
     }
 
+    /// Mounted body sprite path for a job, or `None` when the job has no
+    /// dedicated mounted body (the normal body keeps rendering in that case).
+    pub fn get_riding_body_sprite_path(&self, jt_id: u32, gender: u8) -> Option<String> {
+        let sprite_name = super::player_jobs::riding_sprite_name(self.get_sprite_name(jt_id)?)?;
+        let gender_enum = Gender::from(gender);
+        Some(patterns::body_sprite_path(gender_enum, sprite_name))
+    }
+
     pub fn get_hair_sprite_path(&self, hair_id: u16, gender: u8) -> String {
         let gender_enum = Gender::from(gender);
         patterns::hair_sprite_path(gender_enum, hair_id)

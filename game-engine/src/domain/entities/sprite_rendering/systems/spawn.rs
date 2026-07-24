@@ -48,12 +48,14 @@ pub fn spawn_sprite_hierarchy(
                 job_id,
                 gender,
                 head,
+                riding,
             } => {
                 spawn_character_components(
                     &mut entity_commands,
                     *job_id,
                     *gender,
                     *head,
+                    *riding,
                     &asset_server,
                     &mut pending_animations,
                     job_registry.as_deref(),
@@ -92,11 +94,13 @@ pub fn spawn_sprite_hierarchy(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_character_components(
     entity_commands: &mut EntityCommands,
     job_id: u16,
     gender: crate::domain::entities::character::components::Gender,
     head_id: u16,
+    riding: bool,
     asset_server: &AssetServer,
     pending_animations: &mut PendingAnimations,
     job_registry: Option<&JobSpriteRegistry>,
@@ -115,7 +119,15 @@ fn spawn_character_components(
         return;
     };
 
-    let Some(body_spr_path) = registry.get_body_sprite_path(job_id as u32, gender_byte) else {
+    let riding_path = if riding {
+        registry.get_riding_body_sprite_path(job_id as u32, gender_byte)
+    } else {
+        None
+    };
+    let riding = riding_path.is_some();
+    let Some(body_spr_path) =
+        riding_path.or_else(|| registry.get_body_sprite_path(job_id as u32, gender_byte))
+    else {
         warn!(
             "spawn_character_components: Unknown job_id {} for entity {:?}",
             job_id, entity
@@ -141,6 +153,10 @@ fn spawn_character_components(
         PendingRenderLayers,
         gender,
     ));
+
+    if riding {
+        entity_commands.insert(super::riding::RidingPeco);
+    }
 
     debug!(
         "spawn_character_components: Requested body ({}) and head animations for entity {:?}",

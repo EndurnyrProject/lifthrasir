@@ -237,6 +237,13 @@ pub struct MountCart {
     pub mount: bool,
 }
 
+/// Request to mount (`mount == true`) or unmount the Peco Peco.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct MountPeco {
+    pub mount: bool,
+}
+
 /// Request to move `amount` of the inventory item at `inventory_index` into the cart.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

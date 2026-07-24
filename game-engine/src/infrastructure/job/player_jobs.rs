@@ -110,6 +110,19 @@ pub fn get_player_job_sprite_mapping() -> HashMap<u32, &'static str> {
     map
 }
 
+/// Mounted (Peco Peco / Grand Peco) body sprite name for a base body sprite
+/// name. Only the jobs with a dedicated mounted body in the GRF map; everything
+/// else keeps its normal body while the riding bit is set.
+pub fn riding_sprite_name(base: &str) -> Option<&'static str> {
+    match base {
+        "기사" => Some("페코페코_기사"),
+        "크루세이더" => Some("신페코크루세이더"),
+        "로드나이트" => Some("로드페코"),
+        "팔라딘" => Some("페코팔라딘"),
+        _ => None,
+    }
+}
+
 pub fn is_player_job(job_id: u32) -> bool {
     (job_id <= 150)
         || (4001..=4300).contains(&job_id)

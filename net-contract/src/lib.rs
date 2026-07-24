@@ -73,6 +73,14 @@ mod tests {
         );
         assert!(
             app.world()
+                .contains_resource::<Messages<events::PecoMountResult>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::MountPeco>>()
+        );
+        assert!(
+            app.world()
                 .contains_resource::<Messages<commands::MoveToCart>>()
         );
         assert!(
