@@ -1,0 +1,26 @@
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/shield_boomerang.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (425.0, 185.0), quad: (54.0, 54.0),   color: (255, 255, 255, 0),   angle: 0.0 ),
+                ( at: 3,  offset: (405.0, 200.0), quad: (58.0, 58.0),   color: (255, 255, 255, 255), angle: 512.0 ),
+                ( at: 8,  offset: (365.0, 235.0), quad: (64.0, 64.0),   color: (255, 255, 255, 255), angle: 1024.0 ),
+                ( at: 12, offset: (325.0, 270.0), quad: (70.0, 70.0),   color: (255, 255, 255, 255), angle: 1536.0 ),
+                ( at: 15, offset: (319.0, 260.0), quad: (96.0, 96.0),   color: (255, 255, 255, 160), angle: 2048.0 ),
+                ( at: 18, offset: (319.0, 260.0), quad: (120.0, 120.0), color: (255, 255, 255, 0),   angle: 2560.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/shield_boomerang.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (319.0, 260.0), quad: (40.0, 40.0),   color: (255, 245, 210, 0),   angle: 1536.0 ),
+                ( at: 15, offset: (319.0, 260.0), quad: (105.0, 105.0), color: (255, 245, 210, 220), angle: 2048.0 ),
+                ( at: 19, offset: (319.0, 260.0), quad: (150.0, 150.0), color: (255, 245, 210, 0),   angle: 2560.0 ),
+            ],
+        ),
+    ],
+)
