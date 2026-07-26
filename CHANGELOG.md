@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.7.0...v0.8.0) (2026-07-26)
+
+
+### Features
+
+* **combat:** show health bars over engaged mobs ([1dedba1](https://github.com/EndurnyrProject/lifthrasir/commit/1dedba14e18cbc2fcfc4a254c6106b86e178479d))
+* **crusader-vfx:** author holy and stance effects ([9c30034](https://github.com/EndurnyrProject/lifthrasir/commit/9c300349a69609a54d86714db7bb56222e1facad))
+* **crusader-vfx:** author shield skill effects ([253d52a](https://github.com/EndurnyrProject/lifthrasir/commit/253d52a3a6679d00fe74f0a11a8b9759b64b8630))
+* **crusader-vfx:** author status aura families ([cc48fec](https://github.com/EndurnyrProject/lifthrasir/commit/cc48fec04fa01265067ff963cca4038f26ff581c))
+* **crusader-vfx:** map skills sounds and auras ([ace8e01](https://github.com/EndurnyrProject/lifthrasir/commit/ace8e01eaab52c015b34358fd74baed49b57f151))
+* **diagnostics:** replace custom FPS counter with dev-only diagnostics overlay ([e281464](https://github.com/EndurnyrProject/lifthrasir/commit/e2814640d9160e581449d76ae2cf5c3f5322eb2d))
+* **mount:** Peco Peco riding with /mount and /unmount commands ([67d8509](https://github.com/EndurnyrProject/lifthrasir/commit/67d8509c28cbd0347236cef3305980385826368d))
+
+
+### Bug Fixes
+
+* **click:** Fixed clickthrough when the diagnostic thing is turned on ([ebaaa4e](https://github.com/EndurnyrProject/lifthrasir/commit/ebaaa4e6804db9bc9bb70fb3c1f1d734f34982c7))
+
 ## [0.7.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.6.0...v0.7.0) (2026-07-24)
 
 
