@@ -46,7 +46,7 @@ const GHOST_ALPHA: f32 = 0.85;
 /// below the drag ghost) so a wide name is never occluded by the next slot.
 const TOOLTIP_Z: i32 = 1500;
 
-const BAR_BG: Color = Color::srgba(0.043, 0.067, 0.059, 0.78);
+const BAR_BG: Color = Color::srgb(0.043, 0.067, 0.059);
 const SLOT_EMPTY_BG: Color = Color::srgba(0.0, 0.0, 0.0, 0.28);
 const SLOT_SKILL_BG: Color = Color::srgba(0.02, 0.078, 0.051, 0.5);
 const SLOT_ITEM_BG: Color = Color::srgba(0.086, 0.063, 0.012, 0.45);

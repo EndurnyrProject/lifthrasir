@@ -103,7 +103,7 @@ pub fn spawn_status_frame(commands: &mut Commands, parent: Entity, asset_server:
                 border_radius: BorderRadius::all(Val::Px(13.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.043, 0.067, 0.059, 0.93)),
+            BackgroundColor(Color::srgb(0.043, 0.067, 0.059)),
             BorderColor {
                 left: theme::EMERALD_DEEP,
                 top: theme::GOLD_FAINT,
