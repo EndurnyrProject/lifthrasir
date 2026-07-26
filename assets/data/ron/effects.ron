@@ -1,46 +1,167 @@
-// Unified effect catalog: skill-effect and map-effect descriptors.
+// Unified effect catalog. Four sections, three of them descriptor tables keyed
+// by DISTINCT id namespaces that overlap numerically but mean different things
+// (86 is the WZ_WATERBALL *skill* and the EFST_EXPLOSIONSPIRITS *status*; 89 is
+// the WZ_STORMGUST *skill* and the EF_STORMGUST *special effect*) -- a flat
+// merged map would silently collide.
 //
-// `skills` is keyed by rAthena skill id and drives the skill-effect runtime
-// (`domain/effects/triggers.rs`).
+//   `efsts`    -- keyed by EFST id. Persistent status auras attached/detached
+//                 by `StatusEffectChanged` (`domain/effects/status_visuals.rs`),
+//                 and the recipe table `Efst(id)` composition splices from.
+//                 `placement`/`ground_anchor` are ignored here.
+//   `skills`   -- keyed by rAthena skill id; drives the skill-effect runtime
+//                 (`domain/effects/triggers.rs`).
+//   `special`  -- the rAthena `e_special_effects` (EF_*) namespace, serving BOTH
+//                 the RSW `EFFECT` object's `effect_type` (`spawn_map_effects`,
+//                 persistent position-anchored) and aesir's `SpecialEffect`
+//                 packets (`on_special_effect`, fire-and-forget at the source
+//                 unit); see aesir `Aesir.ZoneServer.Mmo.EffectId`. `placement`
+//                 is ignored -- these always anchor at their own position.
+//   `shader_fx`-- name-keyed procedural burst table the `Shader(key)` layers
+//                 resolve against.
 //
-// `map` is keyed by the RSW `EFFECT` object's `effect_type`, which is the
-// rAthena `e_special_effects` (EF_*) id -- the same id space aesir's
-// `SpecialEffect` packet uses (see aesir `Aesir.ZoneServer.Mmo.EffectId`).
-// `spawn_map_effects` looks each one up and plays it as a persistent,
-// position-anchored STR effect. `placement` is ignored for map effects (they
-// always anchor at the RSW position); only `str`, `sound`, `color`, and
-// `repeating` matter.
+// Every descriptor carries an ordered `visuals: [...]` list; the rest of its
+// fields (`sound`, `placement`, `color`, `repeating`, `ground_anchor`) apply to
+// the entry as a whole. The layer vocabulary:
 //
-// The two sections stay distinct even though the id spaces overlap (e.g. 89
-// is both the WZ_STORMGUST *skill* and the EF_STORMGUST *effect*) -- a flat
-// merged map would silently collide on ids that happen to mean different
-// things.
+//   Str("x.str" | "x.strfx.ron")  native GRF STR or authored strfx asset.
+//   Sprite("이팩트/firewall")       looping SPR/ACT stem under `data/sprite/`.
+//   Shader("fire_bolt")           key into `shader_fx` below; validated at load.
+//   Bespoke("ice_wall")           key dispatched to code (ice_wall/smoke/
+//                                 emitter); never looked up in `shader_fx`.
+//   Efst(31)                      splice EFST 31's recipe layers in here.
 //
-// Caveats (map section):
-//   - Only effects backed by an STR file (or a procedural `vfx` key) can play
-//     here. Many classic ambient effects (firefly=45, sandwind=46, torch=47,
-//     ...) are hardcoded particle systems in the original client with no STR
-//     -- leave them unmapped; they need bespoke emitters, not this path.
+// `Efst(id)` is COMPOSITION, not triggering: it copies the referenced `efsts`
+// entry's visual layers into this entry at catalog build time and nothing else
+// -- all other fields stay local (this entry's `placement`, `repeating`,
+// `color`, `sound` win). It never makes the server apply a status; status
+// visuals are driven independently by `StatusEffectChanged` keyed on the EFST
+// id. One level deep only: an `efsts` recipe may not itself contain `Efst`
+// layers. The catalog build rejects, loudly, a dangling `Efst` ref, a nested
+// one, an unknown `Shader` key, and more than one layer of the same kind in a
+// resolved descriptor.
+//
+// Caveats (`special` section):
+//   - Only effects backed by an STR asset (or a `Bespoke`/`Shader` layer) can
+//     play here. Many classic ambient effects (firefly=45, sandwind=46,
+//     torch=47, ...) are hardcoded particle systems in the original client with
+//     no STR -- leave them unmapped; they need bespoke emitters, not this path.
 //   - Unmapped `effect_type`s are logged by `spawn_map_effects`; use those
 //     logs to discover which ids real maps actually reference, then add them
 //     here.
-//
-// `statuses` is keyed by EFST id and will drive persistent status auras (e.g.
-// Energy Coat) attached/detached on `StatusEffectChanged` once the efst_auras
-// system lands, independent of the skill cast that applied them.
-// `placement`/`ground_anchor` are ignored; only `str`, `sound`, `color`, and
-// `repeating` matter.
 (
+    efsts: {
+        // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
+        // barrier shimmer, driven by StatusEffectChanged(on=true/false). Uses
+        // the leaner "_min" GRF variant, not the full one-shot cast STR (id 73
+        // in `skills:` below already plays the cast sound, so no sound here).
+        19: (
+            visuals: [Str("kyrie_min.str")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        // 22 EFST_LEX_AETERNA (aesir Efst.id(:lexaeterna)) -- Lex Aeterna's
+        // persistent danger mark hovering above the marked unit (player or
+        // mob), driven by StatusEffectChanged rather than the one-shot cast
+        // flash in `skills:` below (id 78, `lexaeterna.str`).
+        22: (
+            visuals: [Str("lex_mark.strfx.ron")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        // 31 EFST_ENERGYCOAT (aesir Efst.id(:energycoat)) -- Energy Coat's
+        // persistent aura, driven by StatusEffectChanged(on=true/false) rather
+        // than the one-shot cast flash in `skills:` below.
+        31: (
+            visuals: [Str("energycoat.str")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        // 86 EFST_EXPLOSIONSPIRITS (Fury) -- the classic thundershock: brief
+        // red lightning arcs (native elec_y_03.bmp) crackling around the
+        // sprite for the buff duration, looped, on top of the opt3 red tint.
+        // The cast burst is the one-shot explosion_spirits.strfx.ron in
+        // `skills:` (id 270). Steel Body (87) and Blade Stop (85) render as
+        // opt3 sprite tints only, so they are intentionally absent here.
+        86: (
+            visuals: [Str("fury_sparks.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        // --- Crusader auras --------------------------------------------------
+        // Shared aura families (shield for 58/59/62, holy for 60/61) plus
+        // dedicated Spear Quicken (68) and Shrink (197) loops, each kept
+        // distinct through its restrained descriptor tint (architecture:
+        // alpha/intensity below one-shot values, finalized in the visual
+        // pass). The cast bursts live in `skills:` below.
+        58: ( // EFST_AUTOGUARD -- cool blue shield loop.
+            visuals: [Str("crusader_shield_aura.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (0.55, 0.75, 1.0, 0.55),
+            repeating: true,
+        ),
+        59: ( // EFST_REFLECTSHIELD -- warm gold shield loop.
+            visuals: [Str("crusader_shield_aura.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 0.85, 0.5, 0.55),
+            repeating: true,
+        ),
+        60: ( // EFST_DEVOTION -- blue-white holy loop.
+            visuals: [Str("crusader_holy_aura.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (0.75, 0.85, 1.0, 0.55),
+            repeating: true,
+        ),
+        61: ( // EFST_PROVIDENCE -- gold-white holy loop.
+            visuals: [Str("crusader_holy_aura.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 0.92, 0.65, 0.55),
+            repeating: true,
+        ),
+        62: ( // EFST_DEFENDER -- pale cyan shield loop.
+            visuals: [Str("crusader_shield_aura.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (0.7, 0.95, 0.95, 0.55),
+            repeating: true,
+        ),
+        68: ( // EFST_SPEARQUICKEN -- warm haste spear loop.
+            visuals: [Str("spear_quicken_aura.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 0.9, 0.6, 0.55),
+            repeating: true,
+        ),
+        197: ( // EFST_SHRINK (cr_shrink) -- pale violet defensive loop.
+               // Dormant: aesir has no Shrink skill implementation yet.
+            visuals: [Str("shrink_aura.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (0.9, 0.9, 1.0, 0.55),
+            repeating: true,
+        ),
+    },
     skills: {
         5: ( // SM_BASH — hardcoded in the official client, no native STR; authored slash.
-            str: Some("bash.strfx.ron"),
+            visuals: [Str("bash.strfx.ron")],
             sound: Some("effect/ef_bash.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         6: ( // SM_PROVOKE
-            str: Some("provoke.str"),
+            visuals: [Str("provoke.str")],
             sound: Some("effect/swordman_provoke.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -48,7 +169,7 @@
         ),
         7: ( // SM_MAGNUM — hardcoded in the official client, no native STR; authored
              // fire explosion around the caster.
-            str: Some("magnum_break.strfx.ron"),
+            visuals: [Str("magnum_break.strfx.ron")],
             sound: Some("effect/ef_magnumbreak.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -56,7 +177,7 @@
         ),
         8: ( // SM_ENDURE — hardcoded in the official client, no native STR; authored
              // golden resolve pulse on the caster.
-            str: Some("endure.strfx.ron"),
+            visuals: [Str("endure.strfx.ron")],
             sound: Some("effect/ef_endure.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -65,8 +186,7 @@
         10: ( // MG_SIGHT — cast flash only; the persistent orbiting fireball is
               // driven by the sight option bit (status_visuals + dress_sight_orbits),
               // not this one-shot. No STR in the official client, hardcoded there.
-            str: None,
-            vfx: Some("sight"),
+            visuals: [Shader("sight")],
             sound: Some("effect/ef_sight.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -74,8 +194,7 @@
         ),
         11: ( // MG_NAPALMBEAT — no STR in the official client, hardcoded there —
               // procedural hit burst.
-            str: None,
-            vfx: Some("napalm_beat"),
+            visuals: [Shader("napalm_beat")],
             sound: Some("effect/ef_napalmbeat.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -84,7 +203,7 @@
         12: ( // MG_SAFETYWALL -- a single-cell persistent field. Anchor the
               // native safetywall.str to its visible unit cell, matching the
               // other wall skills instead of relying on the group fallback.
-            str: Some("safetywall.str"),
+            visuals: [Str("safetywall.str")],
             sound: Some("effect/ef_glasswall.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -94,8 +213,7 @@
         13: ( // MG_SOULSTRIKE — no STR in the official client; classic visual is
               // a legacy ACT sprite (soule.spr, not usable via `str`) — procedural
               // hit burst.
-            str: None,
-            vfx: Some("soul_strike"),
+            visuals: [Shader("soul_strike")],
             sound: Some("effect/ef_soulstrike.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -104,8 +222,7 @@
         14: ( // MG_COLDBOLT — no STR in the official client, hardcoded there —
               // now an authored strfx asset. No dedicated ef_coldbolt in the GRF;
               // the ice projectile sound is the classic element match.
-            str: Some("cold_bolt.strfx.ron"),
-            vfx: None,
+            visuals: [Str("cold_bolt.strfx.ron")],
             sound: Some("effect/ef_icearrow.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -113,15 +230,14 @@
         ),
         15: ( // MG_FROSTDIVER — no STR in the official client, hardcoded there —
               // procedural hit burst.
-            str: None,
-            vfx: Some("frost_diver"),
+            visuals: [Shader("frost_diver")],
             sound: Some("effect/ef_frostdiver.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         16: ( // MG_STONECURSE
-            str: Some("stonecurse.str"),
+            visuals: [Str("stonecurse.str")],
             sound: Some("effect/ef_stonecurse.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -130,8 +246,7 @@
         17: ( // MG_FIREBALL — no STR in the official client; classic visual is a
               // legacy ACT sprite (fireball.spr, not usable via `str`) — procedural
               // hit burst.
-            str: None,
-            vfx: Some("fireball"),
+            visuals: [Shader("fireball")],
             sound: Some("effect/ef_fireball.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -142,8 +257,7 @@
               // (이팩트/firewall.spr/.act, 8 frames), NOT as firewall.str -- that
               // STR is the pre-renewal full-wall stamp and renders as one blob at
               // the group centre. Cell-anchored so every wall segment burns.
-            str: None,
-            sprite: Some("이팩트/firewall"),
+            visuals: [Sprite("이팩트/firewall")],
             sound: Some("effect/ef_firewall.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -153,8 +267,7 @@
         19: ( // MG_FIREBOLT — no STR in the official client, hardcoded there —
               // now an authored strfx asset. No dedicated ef_firebolt in the GRF;
               // the fire hit sound is the classic element match.
-            str: Some("fire_bolt.strfx.ron"),
-            vfx: None,
+            visuals: [Str("fire_bolt.strfx.ron")],
             sound: Some("effect/ef_firehit.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -162,15 +275,14 @@
         ),
         20: ( // MG_LIGHTNINGBOLT — no STR in the official client, hardcoded there —
               // now an authored strfx asset.
-            str: Some("lightning_bolt.strfx.ron"),
-            vfx: None,
+            visuals: [Str("lightning_bolt.strfx.ron")],
             sound: Some("effect/ef_lightbolt.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         21: ( // MG_THUNDERSTORM
-            str: Some("thunderstorm.str"),
+            visuals: [Str("thunderstorm.str")],
             sound: Some("effect/ef_thunderstorm.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -178,14 +290,14 @@
         ),
         24: ( // AL_RUWACH -- authored effect (ruwach.strfx.ron): magenta-pink
               // pulse shell expanding around the caster.
-            str: Some("ruwach.strfx.ron"),
+            visuals: [Str("ruwach.strfx.ron")],
             sound: Some("effect/ef_ruwach.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         25: ( // AL_PNEUMA
-            str: Some("pneuma1.str"),
+            visuals: [Str("pneuma1.str")],
             sound: None,
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -196,7 +308,7 @@
               // server broadcasts this SkillEffect at the pre-warp position
               // (fix landed in Task 2), so it plays where the caster stood, not
               // where they arrive.
-            str: Some("teleport.strfx.ron"),
+            visuals: [Str("teleport.strfx.ron")],
             sound: Some("effect/ef_teleportation.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -209,7 +321,7 @@
               // cast-circle descriptor (architecture decision). Sound is the
               // classic open-portal cue (ef_readyportal.wav is the charging
               // stage; this is the opened gate).
-            str: Some("warp_portal.strfx.ron"),
+            visuals: [Str("warp_portal.strfx.ron")],
             sound: Some("effect/ef_portal.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -217,7 +329,7 @@
         ),
         28: ( // AL_HEAL -- authored effect (heal.strfx.ron), replaces the dead
               // GRF heal.str; establishes the local-texture path convention.
-            str: Some("heal.strfx.ron"),
+            visuals: [Str("heal.strfx.ron")],
             sound: Some("_heal_effect.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -225,7 +337,7 @@
         ),
         29: ( // AL_INCAGI (Increase AGI) -- authored effect (inc_agi.strfx.ron):
               // rising blue-white arrow column.
-            str: Some("inc_agi.strfx.ron"),
+            visuals: [Str("inc_agi.strfx.ron")],
             sound: Some("effect/ef_incagility.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -233,7 +345,7 @@
         ),
         30: ( // AL_DECAGI (Decrease AGI) -- authored effect (dec_agi.strfx.ron):
               // sinking red-orange arrow column, mirror of AL_INCAGI.
-            str: Some("dec_agi.strfx.ron"),
+            visuals: [Str("dec_agi.strfx.ron")],
             sound: Some("effect/ef_decagility.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -242,23 +354,23 @@
         31: ( // AL_HOLYWATER (Aqua Benedicta) -- authored effect
               // (aqua_benedicta.strfx.ron): blue water shimmer/splash over the
               // caster.
-            str: Some("aqua_benedicta.strfx.ron"),
+            visuals: [Str("aqua_benedicta.strfx.ron")],
             sound: Some("effect/ef_aqua.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        32: ( // AL_CRUCIS (Signum Crucis) -- str is a filename-based candidate,
+        32: ( // AL_CRUCIS (Signum Crucis) -- the STR is a filename-based candidate,
               // UNVERIFIED visually; eyeball in the Task 15 acceptance pass and
               // replace with an authored effect if wrong.
-            str: Some("cross.str"),
+            visuals: [Str("cross.str")],
             sound: Some("effect/ef_signum.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         33: ( // AL_ANGELUS
-            str: Some("angelus.str"),
+            visuals: [Str("angelus.str")],
             sound: Some("effect/ef_angelus.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -266,105 +378,105 @@
         ),
         34: ( // AL_BLESSING -- authored effect (blessing.strfx.ron): three small
               // golden-white crosses fading in around the target's upper body.
-            str: Some("blessing.strfx.ron"),
+            visuals: [Str("blessing.strfx.ron")],
             sound: Some("effect/ef_blessing.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         35: ( // AL_CURE
-            str: Some("cure.str"),
+            visuals: [Str("cure.str")],
             sound: Some("effect/acolyte_cure.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         45: ( // AC_CONCENTRATION (Improve Concentration)
-            str: Some("ac_concentration.str"),
+            visuals: [Str("ac_concentration.str")],
             sound: Some("effect/ac_concentration.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         54: ( // ALL_RESURRECTION
-            str: Some("resurrection.str"),
+            visuals: [Str("resurrection.str")],
             sound: Some("effect/priest_resurrection.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         56: ( // KN_PIERCE — no dedicated wav in the GRF; spear attack sound.
-            str: Some("pierce.str"),
+            visuals: [Str("pierce.str")],
             sound: Some("attack_spear.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         57: ( // KN_BRANDISHSPEAR — directional fan swing, anchored on the caster.
-            str: Some("brandish.str"),
+            visuals: [Str("brandish.str")],
             sound: Some("effect/knight_brandish_spear.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         58: ( // KN_SPEARSTAB — no dedicated wav in the GRF; spear attack sound.
-            str: Some("spearstab.str"),
+            visuals: [Str("spearstab.str")],
             sound: Some("attack_spear.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         59: ( // KN_SPEARBOOMERANG
-            str: Some("spearboomerang.str"),
+            visuals: [Str("spearboomerang.str")],
             sound: Some("effect/knight_spear_boomerang.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         60: ( // KN_TWOHANDQUICKEN
-            str: Some("twohand.str"),
+            visuals: [Str("twohand.str")],
             sound: Some("effect/knight_twohandquicken.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         61: ( // KN_AUTOCOUNTER
-            str: Some("autocounter.str"),
+            visuals: [Str("autocounter.str")],
             sound: Some("effect/knight_autocounter.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         62: ( // KN_BOWLINGBASH
-            str: Some("bowling.str"),
+            visuals: [Str("bowling.str")],
             sound: Some("effect/knight_bowling_bash.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         66: ( // PR_IMPOSITIO (Impositio Manus)
-            str: Some("impositio.str"),
+            visuals: [Str("impositio.str")],
             sound: Some("effect/priest_impositio.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         67: ( // PR_SUFFRAGIUM
-            str: Some("suffragium.str"),
+            visuals: [Str("suffragium.str")],
             sound: Some("effect/priest_suffragium.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         68: ( // PR_ASPERSIO
-            str: Some("aspersio.str"),
+            visuals: [Str("aspersio.str")],
             sound: Some("effect/priest_aspersio.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         69: ( // PR_BENEDICTIO (Magnus Exorcismus's precursor blessing, aka B.S. Sacramenti)
-            str: Some("benedictio.str"),
+            visuals: [Str("benedictio.str")],
             sound: Some("effect/priest_benedictio.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -374,51 +486,51 @@
               // one STR at the field center, matching WZ_STORMGUST's convention).
               // The skill-unit child visual spawns on SkillUnitSpawn and despawns
               // with the group; repeating entries spawn nothing extra on trigger.
-            str: Some("sanctuary.str"),
+            visuals: [Str("sanctuary.str")],
             sound: Some("effect/priest_sanctuary.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
         71: ( // PR_SLOWPOISON
-            str: Some("slowp.str"),
+            visuals: [Str("slowp.str")],
             sound: Some("effect/priest_slowpoison.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         72: ( // PR_STRECOVERY (Status Recovery)
-            str: Some("recovery.str"),
+            visuals: [Str("recovery.str")],
             sound: Some("effect/priest_recovery.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         73: ( // PR_KYRIE (Kyrie Eleison) -- cast-moment flash only; the persistent
-              // barrier shimmer (kyrie_min.str, repeating) lives in `statuses:`
+              // barrier shimmer (kyrie_min.str, repeating) lives in `efsts:`
               // keyed by EFST_KYRIE, driven by StatusEffectChanged.
-            str: Some("kyrie.str"),
+            visuals: [Str("kyrie.str")],
             sound: Some("effect/priest_kyrie_eleison_a.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         74: ( // PR_MAGNIFICAT
-            str: Some("magnificat.str"),
+            visuals: [Str("magnificat.str")],
             sound: Some("effect/priest_magnificat.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         75: ( // PR_GLORIA
-            str: Some("gloria.str"),
+            visuals: [Str("gloria.str")],
             sound: Some("effect/priest_gloria.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         76: ( // PR_LEXDIVINA
-            str: Some("lexdivina.str"),
+            visuals: [Str("lexdivina.str")],
             sound: Some("effect/priest_lexdivina.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -426,16 +538,16 @@
         ),
         77: ( // PR_TURNUNDEAD -- holy exorcism burst on the victim, arrives via
               // the SkillDamage path (instant-kill or damage outcomes).
-            str: Some("turn_undead.strfx.ron"),
+            visuals: [Str("turn_undead.strfx.ron")],
             sound: Some("effect/priest_turn_undead.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         78: ( // PR_LEXAETERNA -- cast-moment flash only; the persistent mark
-              // (lex_mark.strfx.ron, repeating) lives in `statuses:` keyed by
+              // (lex_mark.strfx.ron, repeating) lives in `efsts:` keyed by
               // EFST_LEX_AETERNA, driven by StatusEffectChanged.
-            str: Some("lexaeterna.str"),
+            visuals: [Str("lexaeterna.str")],
             sound: Some("effect/priest_lexaeterna.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -444,9 +556,9 @@
         79: ( // PR_MAGNUS (Magnus Exorcismus) -- persistent ground field,
               // Group-anchored (default). Damage ticks arrive via SkillDamage
               // and spawn nothing extra since this entry is repeating; the
-              // map: section's 113 EF_MAGNUS entry is a separate id space and
+              // special: section's 113 EF_MAGNUS entry is a separate id space and
               // is left untouched here.
-            str: Some("magnus.str"),
+            visuals: [Str("magnus.str")],
             sound: Some("effect/priest_magnus.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -458,8 +570,7 @@
               // scale and -53px lift that stands the flame on the cell), not
               // firepillar.str -- that STR is the detonation (meteo_comet /
               // lord_blast layers), a future landing-effect addition.
-            str: None,
-            sprite: Some("이팩트/화염진"),
+            visuals: [Sprite("이팩트/화염진")],
             sound: Some("effect/wizard_fire_pillar_a.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -469,8 +580,7 @@
         81: ( // WZ_SIGHTRASHER -- self-centered 15x15 Fire burst (aesir
               // target_type: :self); no STR in the official client, hardcoded
               // there -- procedural burst.
-            str: None,
-            vfx: Some("sightrasher"),
+            visuals: [Shader("sightrasher")],
             sound: Some("effect/wizard_sightrasher.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -480,8 +590,7 @@
               // their affected targets; its short-lived skill-unit group is only
               // administrative. Target placement therefore plays the native STR
               // once per reported impact without stamping the harmless center.
-            str: Some("meteor1.str"),
-            vfx: None,
+            visuals: [Str("meteor1.str")],
             sound: Some("effect/wizard_meteor.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -490,8 +599,7 @@
         84: ( // WZ_JUPITEL (Jupitel Thunder) -- no STR in the official client,
               // hardcoded there -- procedural hit burst. No dedicated ef_jupitel in
               // the GRF; the light-bolt sound is the classic electric match.
-            str: None,
-            vfx: Some("jupitel_thunder"),
+            visuals: [Shader("jupitel_thunder")],
             sound: Some("effect/ef_lightbolt.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -501,7 +609,7 @@
               // (aesir wz_vermilion.ex: Layout.square(center, 6)); one STR at
               // the field center, not per cell. No dedicated wav in the GRF;
               // the thunderstorm rumble is the classic thunder-family match.
-            str: Some("lord_of_vermillion/lord_of_vermillion.str"),
+            visuals: [Str("lord_of_vermillion/lord_of_vermillion.str")],
             sound: Some("effect/ef_thunderstorm.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -514,8 +622,7 @@
               // it, only periodic SkillDamage. No STR in the official client
               // (the legacy waterball.act/.spr predates the STR pipeline) --
               // procedural hit burst.
-            str: None,
-            vfx: Some("water_ball"),
+            visuals: [Shader("water_ball")],
             sound: Some("effect/wizard_waterball_chulung.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -523,13 +630,12 @@
         ),
         87: ( // WZ_ICEWALL -- five-cell directional wall (aesir wz_icewall.ex:
               // Layout.line); no STR in the official client (rendered as
-              // terrain geometry there) -- the vfx-only descriptor spawns a
+              // terrain geometry there) -- the Bespoke-only descriptor spawns a
               // persistent ice-crystal cluster per visible cell (skill_units::
               // visuals::spawn_vfx_crystal, textured with ice.tga). Cell HP decay
               // arrives as SkillUnitUpdated, not SkillDamage -- no risk of the
               // Meteor/Storm-Gust-style per-hit duplicate here.
-            str: None,
-            vfx: Some("ice_wall"),
+            visuals: [Bespoke("ice_wall")],
             sound: Some("effect/wizard_icewall.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -542,8 +648,7 @@
               // jack_frost* files belong to the unrelated Jack Frost
               // mob/hyper-novice skill); ef_frostdiver2 is the classic
               // freeze-shatter companion sound.
-            str: None,
-            vfx: Some("frost_nova"),
+            visuals: [Shader("frost_nova")],
             sound: Some("effect/ef_frostdiver2.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -555,7 +660,7 @@
               // not left implicit by accident). GRF also has a byte-identical
               // "storm gust.str" (space) duplicate and a lower-detail
               // storm_min.str; both unused.
-            str: Some("stormgust.str"),
+            visuals: [Str("stormgust.str")],
             sound: Some("effect/wizard_stormgust.wav"),
             placement: Ground,
             color: (0.6, 0.7, 1.0, 1.0),
@@ -563,8 +668,7 @@
         ),
         90: ( // WZ_EARTHSPIKE -- no STR in the official client, hardcoded
               // there -- procedural hit burst.
-            str: None,
-            vfx: Some("earth_spike"),
+            visuals: [Shader("earth_spike")],
             sound: Some("effect/wizard_earthspike.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -580,8 +684,7 @@
               // rising stones there) -- authored from the classic stone-1/2/3
               // + dust textures. No dedicated wav in the GRF; the earthspike
               // strike is the classic earth-family match.
-            str: Some("heavens_drive.strfx.ron"),
-            vfx: None,
+            visuals: [Str("heavens_drive.strfx.ron")],
             sound: Some("effect/wizard_earthspike.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -591,7 +694,7 @@
               // wz_quagmire.ex: Layout.square(center, 1)); Group-anchored, one
               // flat overlay across the area (the root quagmire.str, not the
               // smaller quagmire/quagmire.str duplicate).
-            str: Some("quagmire.str"),
+            visuals: [Str("quagmire.str")],
             sound: Some("effect/wizard_quagmire.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -605,20 +708,23 @@
         // catalog miss here logs a harmless warn! and plays no visual, which is
         // correct for a skill that genuinely has none.
         156: ( // AL_HOLYLIGHT (Holy Light) -- damage skill, arrives via the
-              // SkillDamage path. str is a filename-based candidate, UNVERIFIED
+              // SkillDamage path. The STR is a filename-based candidate, UNVERIFIED
               // visually; eyeball in the Task 15 acceptance pass and replace
               // with an authored effect if wrong. No plausible dedicated wav
               // found in the GRF.
-            str: Some("holyhit.str"),
+            visuals: [Str("holyhit.str")],
             sound: None,
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         157: ( // MG_ENERGYCOAT -- cast-moment flash only; the persistent glow
-               // (energycoat.str, repeating) now lives in `statuses:` keyed by
-               // EFST_ENERGYCOAT (31), driven by StatusEffectChanged.
-            str: Some("energycoat.str"),
+               // (energycoat.str, repeating) now lives in `efsts:` keyed by
+               // EFST_ENERGYCOAT (31), driven by StatusEffectChanged. The
+               // composition example: the cast flash reuses that recipe's
+               // layers via Efst(31) instead of naming energycoat.str twice,
+               // while keeping its own one-shot placement/repeating.
+            visuals: [Efst(31)],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -627,20 +733,20 @@
         // --- Crusader (CR_*) ------------------------------------------------
         // 248 CR_FAITH is a passive with no cast event and is intentionally
         // absent. Reflect Shield (252) doubles as the reactive map effect
-        // (EF_REFLECTSHIELD, `map:` id 252); Grand Cross (254) renders once
+        // (EF_REFLECTSHIELD, `special:` id 252); Grand Cross (254) renders once
         // from GroundSkillPlaced and its Ground placement suppresses the
         // per-tick SkillDamage duplicate.
         249: ( // CR_AUTOGUARD -- native kyrie guard flash on the caster. The
-               // proc flash is the reactive map effect (EF_GUARD, `map:` id
+               // proc flash is the reactive map effect (EF_GUARD, `special:` id
                // 336), not this cast entry.
-            str: Some("kyrie.str"),
+            visuals: [Str("kyrie.str")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         250: ( // CR_SHIELDCHARGE -- native shield-charge strike on the victim.
-            str: Some("shield_charge.str"),
+            visuals: [Str("shield_charge.str")],
             sound: None,
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -649,7 +755,7 @@
         251: ( // CR_SHIELDBOOMERANG -- authored spinning-shield approach and
                // impact on the victim (hardcoded emitter in the official
                // client, no native STR). Dedicated native wav.
-            str: Some("shield_boomerang.strfx.ron"),
+            visuals: [Str("shield_boomerang.strfx.ron")],
             sound: Some("effect/cru_shield boomerang.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -657,8 +763,8 @@
         ),
         252: ( // CR_REFLECTSHIELD -- authored reflective ring on the caster;
                // the same asset serves the reactive proc (EF_REFLECTSHIELD,
-               // `map:` id 252).
-            str: Some("reflect_shield.strfx.ron"),
+               // `special:` id 252).
+            visuals: [Str("reflect_shield.strfx.ron")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -666,7 +772,7 @@
         ),
         253: ( // CR_HOLYCROSS -- native holy-cross strike on the victim.
                // Dedicated native wav.
-            str: Some("holy_cross.str"),
+            visuals: [Str("holy_cross.str")],
             sound: Some("effect/cru_holy cross.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -677,7 +783,7 @@
                // luminous cross burst from GroundSkillPlaced. Ground
                // placement suppresses the per-tick SkillDamage visual.
                // Dedicated native wav.
-            str: Some("grand_cross.strfx.ron"),
+            visuals: [Str("grand_cross.strfx.ron")],
             sound: Some("effect/cru_grand cross.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -685,14 +791,14 @@
         ),
         255: ( // CR_DEVOTION -- native devotion STR on the target (the
                // protected ally).
-            str: Some("devotion.str"),
+            visuals: [Str("devotion.str")],
             sound: None,
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         256: ( // CR_PROVIDENCE -- native providence STR on the target.
-            str: Some("providence.str"),
+            visuals: [Str("providence.str")],
             sound: None,
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -700,7 +806,7 @@
         ),
         257: ( // CR_DEFENDER -- native defense STR guard-up flash on the
                // caster.
-            str: Some("defense.str"),
+            visuals: [Str("defense.str")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -708,8 +814,8 @@
         ),
         258: ( // CR_SPEARQUICKEN -- authored caster flourish (no native STR
                // in the official client). The persistent loop lives in
-               // `statuses:` (EFST 68).
-            str: Some("spear_quicken.strfx.ron"),
+               // `efsts:` (EFST 68).
+            visuals: [Str("spear_quicken.strfx.ron")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -724,7 +830,7 @@
         261: ( // MO_CALLSPIRITS (Summon Spirit Sphere) -- authored: a quiet blue
                // ki-gather flourish (the sphere itself is drawn by the separate
                // spirit-sphere system, not this cast burst).
-            str: Some("call_spirits.strfx.ron"),
+            visuals: [Str("call_spirits.strfx.ron")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -732,7 +838,7 @@
         ),
         262: ( // MO_ABSORBSPIRITS (Absorb Spirit Sphere) -- reuses the
                // call_spirits gather flourish on the caster.
-            str: Some("call_spirits.strfx.ron"),
+            visuals: [Str("call_spirits.strfx.ron")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -740,7 +846,7 @@
         ),
         263: ( // MO_TRIPLEATTACK (Raging Trifecta) -- attack-replacement proc;
                // authored ki_strike flurry of knuckle sparks on the victim.
-            str: Some("ki_strike.strfx.ron"),
+            visuals: [Str("ki_strike.strfx.ron")],
             sound: Some("effect/ef_hit3.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -748,7 +854,7 @@
         ),
         264: ( // MO_BODYRELOCATION (Snap) -- a forward blink; reuses the teleport
                // swirl on the caster at the departure cell. No damage/EFST.
-            str: Some("teleport.strfx.ron"),
+            visuals: [Str("teleport.strfx.ron")],
             sound: Some("effect/ef_teleportation.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -757,7 +863,7 @@
         266: ( // MO_INVESTIGATE (Occult Impaction, 침투경) -- single heavy
                // defense-piercing blow; authored ki_impact shockwave on the
                // victim. Dedicated native wav.
-            str: Some("ki_impact.strfx.ron"),
+            visuals: [Str("ki_impact.strfx.ron")],
             sound: Some("effect/mon_침투경.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -766,7 +872,7 @@
         267: ( // MO_FINGEROFFENSIVE (Throw Spirit Sphere, 탄지신통) -- authored:
                // blue ki spheres streak into the victim and burst. Dedicated
                // native wav.
-            str: Some("spirit_sphere_throw.strfx.ron"),
+            visuals: [Str("spirit_sphere_throw.strfx.ron")],
             sound: Some("effect/mon_탄지신통.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -776,7 +882,7 @@
                // steel tempering flash + guard-ring dome. The golden sprite tint
                // for the duration is the opt3 aura (16), owned by the sprite
                // system. Dedicated native wav.
-            str: Some("steel_body.strfx.ron"),
+            visuals: [Str("steel_body.strfx.ron")],
             sound: Some("effect/mon_금강불괴.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -785,7 +891,7 @@
         269: ( // MO_BLADESTOP (Root) -- self-cast ready stance; authored sharp
                // focus flash + clamping ring. The paired hold status (EFST
                // 85/1114) is an icon/opt3 aura, not this cast flash.
-            str: Some("blade_stop.strfx.ron"),
+            visuals: [Str("blade_stop.strfx.ron")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -794,8 +900,8 @@
         270: ( // MO_EXPLOSIONSPIRITS (Fury) -- self-buff; authored cast burst
                // from the native 폭기.tga starburst emblem. Dedicated native
                // wav. The persistent red ki aura for the duration lives in
-               // `statuses:` (EFST 86 -> native kiaura1.str).
-            str: Some("explosion_spirits.strfx.ron"),
+               // `efsts:` (EFST 86 -> native kiaura1.str).
+            visuals: [Str("explosion_spirits.strfx.ron")],
             sound: Some("effect/mon_폭기.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -805,7 +911,7 @@
                // signature finisher; authored classic look: the six skill-name
                // kanji (asura1-6/asura11-16.tga) flash on in an arc and slam
                // into the victim. Kanji only, no blast. Dedicated native wav.
-            str: Some("asura_strike.strfx.ron"),
+            visuals: [Str("asura_strike.strfx.ron")],
             sound: Some("effect/mon_아수라 패황권.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -813,7 +919,7 @@
         ),
         272: ( // MO_CHAINCOMBO (Raging Quadruple Blow, 연환격) -- 4-hit combo;
                // reuses the ki_strike knuckle flurry. Dedicated native wav.
-            str: Some("ki_strike.strfx.ron"),
+            visuals: [Str("ki_strike.strfx.ron")],
             sound: Some("effect/mon_연환.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -821,7 +927,7 @@
         ),
         273: ( // MO_COMBOFINISH (Raging Thrust, 맹룡과강) -- combo finisher;
                // reuses the ki_impact single heavy blow. Dedicated native wav.
-            str: Some("ki_impact.strfx.ron"),
+            visuals: [Str("ki_impact.strfx.ron")],
             sound: Some("effect/mon_맹룡과강.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -829,7 +935,7 @@
         ),
         495: ( // KN_ONEHAND (One-Hand Quicken) -- no STR of its own; the classic
                // client reuses the Two-Hand Quicken flash and wav.
-            str: Some("twohand.str"),
+            visuals: [Str("twohand.str")],
             sound: Some("effect/knight_twohandquicken.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -838,16 +944,16 @@
         1001: ( // KN_CHARGEATK (Charge Attack) -- hardcoded in the official
                 // client, no native STR; authored rush impact on the target.
                 // No dedicated wav in the GRF; generic effect hit sound.
-            str: Some("charge_attack.strfx.ron"),
+            visuals: [Str("charge_attack.strfx.ron")],
             sound: Some("effect/ef_hit4.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         1002: ( // CR_SHRINK (Shrink, quest) -- authored caster flash. The
-                // persistent loop lives in `statuses:` (EFST 197). Dormant:
+                // persistent loop lives in `efsts:` (EFST 197). Dormant:
                 // aesir has no Shrink skill implementation yet.
-            str: Some("shrink.strfx.ron"),
+            visuals: [Str("shrink.strfx.ron")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -859,8 +965,7 @@
                 // status icon i_sightblaster.tga exists) -- procedural cast
                 // flash. No dedicated wav in the GRF; it arms the same sight
                 // orb, so ef_sight is the classic match.
-            str: None,
-            vfx: Some("sight_blaster"),
+            visuals: [Shader("sight_blaster")],
             sound: Some("effect/ef_sight.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -871,7 +976,7 @@
                 // sacrifice). No plausible dedicated wav found in the GRF
                 // (only priest_resurrection.wav, which belongs to
                 // ALL_RESURRECTION); sound intentionally omitted.
-            str: Some("redemptio.strfx.ron"),
+            visuals: [Str("redemptio.strfx.ron")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -880,7 +985,7 @@
         1015: ( // MO_KITRANSLATION (Ki Translation, quest) -- transfers a spirit
                 // sphere to an ally; reuses the call_spirits flourish on the
                 // recipient.
-            str: Some("call_spirits.strfx.ron"),
+            visuals: [Str("call_spirits.strfx.ron")],
             sound: None,
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -889,31 +994,30 @@
         1016: ( // MO_BALKYOUNG (Ki Explosion, quest) -- splash damage + stun;
                 // reuses the ki_impact shockwave, retinted warm orange for the
                 // detonation.
-            str: Some("ki_impact.strfx.ron"),
+            visuals: [Str("ki_impact.strfx.ron")],
             sound: Some("effect/bo_explosive_powder.wav"),
             placement: Target,
             color: (1.0, 0.6, 0.3, 1.0),
             repeating: false,
         ),
     },
-    map: {
+    special: {
         44: ( // EF_SMOKE — non-STR, procedural (rising/fading smoke column).
-            str: None,
-            vfx: Some("smoke"),
+            visuals: [Bespoke("smoke")],
             sound: None,
             placement: Ground,
             color: (0.5, 0.5, 0.5, 0.6),
             repeating: true,
         ),
         89: ( // EF_STORMGUST
-            str: Some("stormgust.str"),
+            visuals: [Str("stormgust.str")],
             sound: None,
             placement: Ground,
             color: (0.6, 0.7, 1.0, 1.0),
             repeating: true,
         ),
         113: ( // EF_MAGNUS
-            str: Some("magnus.str"),
+            visuals: [Str("magnus.str")],
             sound: None,
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -922,7 +1026,7 @@
         252: ( // EF_REFLECTSHIELD -- Reflect Shield's reactive proc flash on
                // the reflecting unit (aesir Unit.SpecialEffect); reuses the
                // authored skill-252 asset.
-            str: Some("reflect_shield.strfx.ron"),
+            visuals: [Str("reflect_shield.strfx.ron")],
             sound: None,
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -930,121 +1034,17 @@
         ),
         336: ( // EF_GUARD -- Auto Guard's reactive proc flash on the guarding
                // unit, using the native kyrie STR.
-            str: Some("kyrie.str"),
+            visuals: [Str("kyrie.str")],
             sound: None,
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         974: ( // EF_EMITTER — non-STR, procedural (params-driven generic emitter).
-            str: None,
-            vfx: Some("emitter"),
+            visuals: [Bespoke("emitter")],
             sound: None,
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
-            repeating: true,
-        ),
-    },
-    statuses: {
-        // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
-        // barrier shimmer, driven by StatusEffectChanged(on=true/false). Uses
-        // the leaner "_min" GRF variant, not the full one-shot cast STR (id 73
-        // in `skills:` above already plays the cast sound, so no sound here).
-        19: (
-            str: Some("kyrie_min.str"),
-            sound: None,
-            placement: Caster,
-            color: (1.0, 1.0, 1.0, 1.0),
-            repeating: false,
-        ),
-        // 22 EFST_LEX_AETERNA (aesir Efst.id(:lexaeterna)) -- Lex Aeterna's
-        // persistent danger mark hovering above the marked unit (player or
-        // mob), driven by StatusEffectChanged rather than the one-shot cast
-        // flash in `skills:` above (id 78, `lexaeterna.str`).
-        22: (
-            str: Some("lex_mark.strfx.ron"),
-            sound: None,
-            placement: Target,
-            color: (1.0, 1.0, 1.0, 1.0),
-            repeating: true,
-        ),
-        // 31 EFST_ENERGYCOAT (aesir Efst.id(:energycoat)) -- Energy Coat's
-        // persistent aura, driven by StatusEffectChanged(on=true/false) rather
-        // than the one-shot cast flash in `skills:` above.
-        31: (
-            str: Some("energycoat.str"),
-            sound: None,
-            placement: Caster,
-            color: (1.0, 1.0, 1.0, 1.0),
-            repeating: false,
-        ),
-        // 86 EFST_EXPLOSIONSPIRITS (Fury) -- the classic thundershock: brief
-        // red lightning arcs (native elec_y_03.bmp) crackling around the
-        // sprite for the buff duration, looped, on top of the opt3 red tint.
-        // The cast burst is the one-shot explosion_spirits.strfx.ron in
-        // `skills:` (id 270). Steel Body (87) and Blade Stop (85) render as
-        // opt3 sprite tints only, so they are intentionally absent here.
-        86: (
-            str: Some("fury_sparks.strfx.ron"),
-            sound: None,
-            placement: Caster,
-            color: (1.0, 1.0, 1.0, 1.0),
-            repeating: true,
-        ),
-        // --- Crusader auras --------------------------------------------------
-        // Shared aura families (shield for 58/59/62, holy for 60/61) plus
-        // dedicated Spear Quicken (68) and Shrink (197) loops, each kept
-        // distinct through its restrained descriptor tint (architecture:
-        // alpha/intensity below one-shot values, finalized in the visual
-        // pass). The cast bursts live in `skills:` above.
-        58: ( // EFST_AUTOGUARD -- cool blue shield loop.
-            str: Some("crusader_shield_aura.strfx.ron"),
-            sound: None,
-            placement: Caster,
-            color: (0.55, 0.75, 1.0, 0.55),
-            repeating: true,
-        ),
-        59: ( // EFST_REFLECTSHIELD -- warm gold shield loop.
-            str: Some("crusader_shield_aura.strfx.ron"),
-            sound: None,
-            placement: Caster,
-            color: (1.0, 0.85, 0.5, 0.55),
-            repeating: true,
-        ),
-        60: ( // EFST_DEVOTION -- blue-white holy loop.
-            str: Some("crusader_holy_aura.strfx.ron"),
-            sound: None,
-            placement: Caster,
-            color: (0.75, 0.85, 1.0, 0.55),
-            repeating: true,
-        ),
-        61: ( // EFST_PROVIDENCE -- gold-white holy loop.
-            str: Some("crusader_holy_aura.strfx.ron"),
-            sound: None,
-            placement: Caster,
-            color: (1.0, 0.92, 0.65, 0.55),
-            repeating: true,
-        ),
-        62: ( // EFST_DEFENDER -- pale cyan shield loop.
-            str: Some("crusader_shield_aura.strfx.ron"),
-            sound: None,
-            placement: Caster,
-            color: (0.7, 0.95, 0.95, 0.55),
-            repeating: true,
-        ),
-        68: ( // EFST_SPEARQUICKEN -- warm haste spear loop.
-            str: Some("spear_quicken_aura.strfx.ron"),
-            sound: None,
-            placement: Caster,
-            color: (1.0, 0.9, 0.6, 0.55),
-            repeating: true,
-        ),
-        197: ( // EFST_SHRINK (cr_shrink) -- pale violet defensive loop.
-               // Dormant: aesir has no Shrink skill implementation yet.
-            str: Some("shrink_aura.strfx.ron"),
-            sound: None,
-            placement: Caster,
-            color: (0.9, 0.9, 1.0, 0.55),
             repeating: true,
         ),
     },

@@ -171,7 +171,7 @@ fn spawn_group(
         cell_entities.push((cell_entity, cell));
     }
 
-    let Some(descriptor) = catalog.and_then(|c| c.get(group.skill_id)) else {
+    let Some(descriptor) = catalog.and_then(|c| c.skill(group.skill_id)) else {
         warn!(
             "No effect catalog entry for skill-unit skill {}; group {} spawned without visuals",
             group.skill_id, group.group_id

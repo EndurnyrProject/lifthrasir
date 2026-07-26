@@ -2,14 +2,6 @@
 //! systems run together in a minimal app, exercised purely via the four
 //! lifecycle messages, mirroring how the server drives them.
 
-use bevy::prelude::*;
-use lifthrasir_data::{EffectDescriptor, EffectPlacement, GroundAnchor};
-use net_contract::dto::{SkillUnitCellFlags, SkillUnitCellState, SkillUnitGroupState};
-use net_contract::events::{
-    SkillUnitDespawned, SkillUnitSnapshotReceived, SkillUnitSpawned, SkillUnitUpdated,
-};
-use std::collections::BTreeMap;
-
 use super::components::{SkillUnitCell, SkillUnitGroup};
 use super::lifecycle::{despawn_skill_units, update_skill_units};
 use super::spawn::spawn_skill_units;
@@ -18,6 +10,12 @@ use crate::domain::effects::components::ActiveEffect;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset, LoadedEffectAsset};
 use crate::utils::coordinates::spawn_coords_to_world_position;
+use bevy::prelude::*;
+use lifthrasir_data::{EffectData, EffectDescriptor, EffectPlacement, GroundAnchor, Visual};
+use net_contract::dto::{SkillUnitCellFlags, SkillUnitCellState, SkillUnitGroupState};
+use net_contract::events::{
+    SkillUnitDespawned, SkillUnitSnapshotReceived, SkillUnitSpawned, SkillUnitUpdated,
+};
 
 fn targetable_cell(cell_id: u32, x: i32, y: i32, visible: bool) -> SkillUnitCellState {
     SkillUnitCellState {
@@ -40,65 +38,42 @@ const STORM_GUST: u32 = 89; // seeded Ground/Group anchor with an STR.
 fn seeded_catalog() -> EffectCatalog {
     let ron = include_str!("../../../../assets/data/ron/effects.ron");
     let asset = ron::from_str::<EffectDataAsset>(ron).expect("seed RON");
-    EffectCatalog::from_skill_effect_data(asset.0.skills)
+    EffectCatalog::build(&asset.0).expect("seed catalog builds")
+}
+
+/// A single-skill catalog holding a cell-anchored persistent descriptor with
+/// exactly `visual` as its only layer.
+fn cell_anchored_catalog_with(skill_id: u32, visual: Visual) -> EffectCatalog {
+    let mut data = EffectData::default();
+    data.skills.insert(
+        skill_id,
+        EffectDescriptor {
+            visuals: vec![visual],
+            sound: None,
+            placement: EffectPlacement::Ground,
+            color: [1.0, 1.0, 1.0, 1.0],
+            repeating: true,
+            ground_anchor: GroundAnchor::Cell,
+        },
+    );
+    EffectCatalog::build(&data).expect("catalog builds")
 }
 
 fn cell_anchored_catalog(skill_id: u32) -> EffectCatalog {
-    let mut skills = BTreeMap::new();
-    skills.insert(
-        skill_id,
-        EffectDescriptor {
-            str: Some("icewall.str".into()),
-            sprite: None,
-            vfx: None,
-            sound: None,
-            placement: EffectPlacement::Ground,
-            color: [1.0, 1.0, 1.0, 1.0],
-            repeating: true,
-            ground_anchor: GroundAnchor::Cell,
-        },
-    );
-    EffectCatalog::from_skill_effect_data(skills)
+    cell_anchored_catalog_with(skill_id, Visual::Str("icewall.str".into()))
 }
 
-/// Cell-anchored descriptor with a `vfx` key and NO STR (the Ice Wall shape):
-/// spawns a persistent crystal cluster per visible cell instead of an STR.
+/// Cell-anchored descriptor with a `Bespoke` layer and NO STR (the Ice Wall
+/// shape): spawns a persistent crystal cluster per visible cell instead of an
+/// STR.
 fn cell_anchored_vfx_catalog(skill_id: u32) -> EffectCatalog {
-    let mut skills = BTreeMap::new();
-    skills.insert(
-        skill_id,
-        EffectDescriptor {
-            str: None,
-            sprite: None,
-            vfx: Some("ice_wall".into()),
-            sound: None,
-            placement: EffectPlacement::Ground,
-            color: [1.0, 1.0, 1.0, 1.0],
-            repeating: true,
-            ground_anchor: GroundAnchor::Cell,
-        },
-    );
-    EffectCatalog::from_skill_effect_data(skills)
+    cell_anchored_catalog_with(skill_id, Visual::Bespoke("ice_wall".into()))
 }
 
-/// Cell-anchored descriptor with a `sprite` stem and NO STR (the Fire Wall /
+/// Cell-anchored descriptor with a `Sprite` layer and NO STR (the Fire Wall /
 /// Fire Pillar shape): each visible cell gets a looping SPR/ACT animation.
 fn cell_anchored_sprite_catalog(skill_id: u32) -> EffectCatalog {
-    let mut skills = BTreeMap::new();
-    skills.insert(
-        skill_id,
-        EffectDescriptor {
-            str: None,
-            sprite: Some("이팩트/firewall".into()),
-            vfx: None,
-            sound: None,
-            placement: EffectPlacement::Ground,
-            color: [1.0, 1.0, 1.0, 1.0],
-            repeating: true,
-            ground_anchor: GroundAnchor::Cell,
-        },
-    );
-    EffectCatalog::from_skill_effect_data(skills)
+    cell_anchored_catalog_with(skill_id, Visual::Sprite("이팩트/firewall".into()))
 }
 
 fn test_app(catalog: EffectCatalog) -> App {
@@ -568,15 +543,15 @@ fn cell_anchored_sprite_requests_one_animation_per_visible_cell() {
 fn seeded_firewall_and_firepillar_are_cell_anchored_sprites() {
     let catalog = seeded_catalog();
     for skill_id in [18, 80] {
-        let descriptor = catalog.get(skill_id).expect("seeded descriptor");
+        let descriptor = catalog.skill(skill_id).expect("seeded descriptor");
         assert_eq!(descriptor.ground_anchor, GroundAnchor::Cell);
         assert!(
-            descriptor.sprite.is_some(),
-            "skill {skill_id} needs a sprite"
+            descriptor.sprite_stem().is_some(),
+            "skill {skill_id} needs a Sprite layer"
         );
         assert!(
-            descriptor.str.is_none(),
-            "skill {skill_id} must not also STR"
+            descriptor.str_name().is_none(),
+            "skill {skill_id} must not also carry a Str layer"
         );
     }
 }

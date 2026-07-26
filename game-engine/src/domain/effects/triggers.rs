@@ -4,8 +4,8 @@
 //! `DisplayDamageNumber`.
 //!
 //! Gameplay feedback (the target's damage number and the caster's attack motion)
-//! plays for every skill, independent of the catalog: most skills have no `.str`
-//! entry, and gating feedback on one would leave e.g. Bash with no number and no
+//! plays for every skill, independent of the catalog: most skills have no `Str`
+//! layer, and gating feedback on one would leave e.g. Bash with no number and no
 //! swing. Only the STR visual effect and its sound are catalog-gated.
 //!
 //! Effects are non-critical (design D6): the visual portion early-returns on a
@@ -26,9 +26,7 @@ use crate::domain::entities::character::states::AnimationState;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::world::components::MapLoader;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
-use crate::infrastructure::effect::{
-    EffectCatalog, LoadedEffectAsset, MapEffectCatalog, ShaderFxCatalog,
-};
+use crate::infrastructure::effect::{EffectCatalog, LoadedEffectAsset, ShaderFxCatalog};
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use net_contract::events::{
     GroundSkillPlaced, SkillDamageReceived, SkillEffectShown, SpecialEffectShown,
@@ -83,7 +81,7 @@ fn split_hits(damage: i32, div: u32) -> Vec<i32> {
         .collect()
 }
 
-/// Write a `PlayProceduralVfx` for a descriptor's procedural key, anchored to the
+/// Write a `PlayProceduralVfx` for a descriptor's `Shader` layer, anchored to the
 /// resolved unit's body center. Non-critical (design §D6): skips with a `debug!`
 /// when the unit has no transform, never inventing a default position.
 #[allow(clippy::too_many_arguments)]
@@ -96,7 +94,7 @@ fn emit_procedural_vfx(
     source: Option<Entity>,
     hits: u32,
 ) {
-    let Some(key) = &descriptor.vfx else {
+    let Some(key) = descriptor.shader_key() else {
         return;
     };
     let Ok(transform) = transforms.get(anchor) else {
@@ -118,7 +116,7 @@ fn emit_procedural_vfx(
         .then(|| descriptor.sound.clone())
         .flatten();
     proc_vfx.write(PlayProceduralVfx {
-        key: key.clone(),
+        key: key.to_string(),
         position: transform.translation + center,
         source,
         hits: hits.max(1),
@@ -127,8 +125,8 @@ fn emit_procedural_vfx(
     });
 }
 
-/// Whether `key`'s shader-fx entry declares `travel`. `false` when the catalog is
-/// still loading or the key is not a shader effect (e.g. a hanabi-only vfx).
+/// Whether `key`'s shader-fx entry declares `travel`. `false` while the catalog
+/// is still loading; every `Shader` key is validated to exist once it is loaded.
 fn travels(shader_fx: Option<&ShaderFxCatalog>, key: &str) -> bool {
     shader_fx
         .and_then(|catalog| catalog.get(key))
@@ -145,8 +143,7 @@ fn play_procedural_sound(
     emitter: Entity,
 ) {
     let travels = descriptor
-        .vfx
-        .as_deref()
+        .shader_key()
         .is_some_and(|key| travels(shader_fx, key));
     if !travels {
         play_sound(sfx, descriptor, emitter);
@@ -165,7 +162,7 @@ pub(crate) fn descriptor_tint(descriptor: &EffectDescriptor) -> Color {
     Color::srgba(r, g, b, a)
 }
 
-/// Resolves an effect descriptor's `str` name to its asset path: authored
+/// Resolves a `Str` layer's asset name to its asset path: authored
 /// `.strfx.ron` effects load from the default filesystem source, GRF `.str`
 /// effects keep the `ro://` GRF source.
 fn effect_asset_path(name: &str) -> String {
@@ -177,14 +174,13 @@ fn effect_asset_path(name: &str) -> String {
 }
 
 /// Load the descriptor's STR effect through the registered `.str`/`.strfx.ron`
-/// loader. `None` for sound-only descriptors (no `str`), which spawn no visual.
+/// loader. `None` for descriptors with no `Str` layer, which spawn no STR visual.
 pub(crate) fn load_effect(
     asset_server: &AssetServer,
     descriptor: &EffectDescriptor,
 ) -> Option<Handle<LoadedEffectAsset>> {
     descriptor
-        .str
-        .as_ref()
+        .str_name()
         .map(|name| asset_server.load(effect_asset_path(name)))
 }
 
@@ -250,7 +246,7 @@ pub fn on_skill_effect(
             start_attack_animation(&mut commands, &mut behaviors, &transforms, src, target, 0);
         }
 
-        let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.skill_id)) else {
+        let Some(descriptor) = catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
             warn!("No effect catalog entry for skill {}", event.skill_id);
             continue;
         };
@@ -345,7 +341,7 @@ pub fn on_skill_damage(
             );
         }
 
-        let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.skill_id)) else {
+        let Some(descriptor) = catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
             warn!("No effect catalog entry for skill {}", event.skill_id);
             continue;
         };
@@ -433,7 +429,7 @@ pub fn on_ground_skill(
             start_attack_animation(&mut commands, &mut behaviors, &transforms, src, None, 0);
         }
 
-        let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.skill_id)) else {
+        let Some(descriptor) = catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
             warn!(
                 "No effect catalog entry for ground skill {}",
                 event.skill_id
@@ -441,7 +437,7 @@ pub fn on_ground_skill(
             continue;
         };
 
-        // A sound-only ground skill (no `str`), or a repeating one whose visual
+        // A ground skill with no `Str` layer, or a repeating one whose visual
         // now belongs to the skill unit, has no spawned effect to anchor to, so
         // its sound anchors to the caster if present.
         let ground_effect =
@@ -476,13 +472,13 @@ pub fn on_ground_skill(
 }
 
 /// `SpecialEffectShown` — a fire-and-forget visual effect keyed by an rAthena
-/// `EF_*` id, spawned at the source unit's position via the same catalog map
-/// effects use. Non-critical (design D6): `debug!` + skip on an unresolved
+/// `EF_*` id, spawned at the source unit's position from the same `special`
+/// table map effects use. Non-critical (design D6): `debug!` + skip on an unresolved
 /// source, missing transform, or unmapped effect id.
 pub fn on_special_effect(
     mut events: MessageReader<SpecialEffectShown>,
     mut commands: Commands,
-    catalog: Option<Res<MapEffectCatalog>>,
+    catalog: Option<Res<EffectCatalog>>,
     asset_server: Res<AssetServer>,
     registry: Res<EntityRegistry>,
     transforms: Query<&Transform>,
@@ -498,16 +494,19 @@ pub fn on_special_effect(
             continue;
         };
 
-        let Some(descriptor) = catalog.as_ref().and_then(|c| c.get(event.effect_id)) else {
-            debug!("No map effect catalog entry for effect {}", event.effect_id);
+        let Some(descriptor) = catalog.as_ref().and_then(|c| c.special(event.effect_id)) else {
+            debug!(
+                "No special effect catalog entry for effect {}",
+                event.effect_id
+            );
             continue;
         };
 
-        // ponytail: vfx-only descriptors (e.g. EF_SMOKE, EF_EMITTER) are
-        // intentionally unhandled here — a looping ambient vfx doesn't fit a
-        // fire-and-forget SpecialEffect, and the MapAmbientVfx bridge
-        // `spawn_map_effects` uses is out of scope for this event. Add if a
-        // vfx-only EF_* id needs to render from SpecialEffect.
+        // ponytail: descriptors whose only layer is `Bespoke`/`Shader` (e.g.
+        // EF_SMOKE, EF_EMITTER) are intentionally unhandled here — a looping
+        // ambient vfx doesn't fit a fire-and-forget SpecialEffect, and the
+        // MapAmbientVfx bridge `spawn_map_effects` uses is out of scope for this
+        // event. Add if such an EF_* id needs to render from SpecialEffect.
         let Some(effect) = load_effect(&asset_server, descriptor) else {
             debug!("Special effect {} has no STR; skipping", event.effect_id);
             continue;
@@ -543,13 +542,15 @@ mod tests {
     fn seeded_catalog() -> EffectCatalog {
         let ron = include_str!("../../../../assets/data/ron/effects.ron");
         let asset = ron::from_str::<EffectDataAsset>(ron).expect("seed RON");
-        EffectCatalog::from_skill_effect_data(asset.0.skills)
+        EffectCatalog::build(&asset.0).expect("seed catalog builds")
     }
 
-    fn seeded_map_catalog() -> MapEffectCatalog {
-        let ron = include_str!("../../../../assets/data/ron/effects.ron");
-        let asset = ron::from_str::<EffectDataAsset>(ron).expect("seed RON");
-        MapEffectCatalog::from_effect_data(asset.0.map)
+    /// A single-entry `skills` catalog, for the paths no shipped descriptor
+    /// exercises (a non-repeating Ground landing flash, a sound-only entry).
+    fn skill_catalog(skill_id: u32, descriptor: EffectDescriptor) -> EffectCatalog {
+        let mut data = lifthrasir_data::EffectData::default();
+        data.skills.insert(skill_id, descriptor);
+        EffectCatalog::build(&data).expect("catalog builds")
     }
 
     fn test_app() -> App {
@@ -891,18 +892,15 @@ mod tests {
         // No non-repeating Ground skill is seeded in effects.ron today, so this
         // fabricates one to exercise the landing-flash path (e.g. Thunder Storm's
         // strike).
-        app.insert_resource(EffectCatalog::from_skill_effect_data(
-            std::collections::BTreeMap::from([(
-                900_001,
-                EffectDescriptor {
-                    str: Some("stonecurse.str".to_string()),
-                    sprite: None,
-                    placement: EffectPlacement::Ground,
-                    color: [1.0, 1.0, 1.0, 1.0],
-                    repeating: false,
-                    ..Default::default()
-                },
-            )]),
+        app.insert_resource(skill_catalog(
+            900_001,
+            EffectDescriptor {
+                visuals: vec![lifthrasir_data::Visual::Str("stonecurse.str".to_string())],
+                placement: EffectPlacement::Ground,
+                color: [1.0, 1.0, 1.0, 1.0],
+                repeating: false,
+                ..Default::default()
+            },
         ));
         app.add_systems(Update, on_ground_skill);
 
@@ -1154,19 +1152,15 @@ mod tests {
         app.add_systems(Update, on_skill_damage);
 
         // No shipped skill is sound-only anymore; seed a synthetic descriptor.
-        let descriptor = lifthrasir_data::EffectDescriptor {
-            str: None,
-            vfx: None,
-            sprite: None,
+        let descriptor = EffectDescriptor {
+            visuals: Vec::new(),
             sound: Some("effect/ef_bash.wav".to_string()),
-            placement: lifthrasir_data::EffectPlacement::Target,
+            placement: EffectPlacement::Target,
             color: [1.0, 1.0, 1.0, 1.0],
             repeating: false,
             ..Default::default()
         };
-        app.insert_resource(EffectCatalog::from_skill_effect_data(
-            [(9999, descriptor)].into(),
-        ));
+        app.insert_resource(skill_catalog(9999, descriptor));
 
         let target = spawn_unit(&mut app, 200);
         let _src = spawn_unit(&mut app, 100);
@@ -1293,7 +1287,6 @@ mod tests {
     #[test]
     fn special_effect_spawns_at_source_position() {
         let mut app = test_app();
-        app.insert_resource(seeded_map_catalog());
         app.add_systems(Update, on_special_effect);
 
         let source_pos = Vec3::new(5.0, 0.0, 9.0);
@@ -1332,7 +1325,6 @@ mod tests {
     /// body position.
     fn assert_finite_special_effect_at_source(effect_id: u32, expected_path: &str) {
         let mut app = test_app();
-        app.insert_resource(seeded_map_catalog());
         app.add_systems(Update, on_special_effect);
 
         let source_pos = Vec3::new(5.0, 0.0, 9.0);
@@ -1374,7 +1366,7 @@ mod tests {
     #[test]
     fn special_effect_repeating_effect_despawns_after_lifetime() {
         let mut app = test_app();
-        app.insert_resource(seeded_map_catalog()).add_systems(
+        app.add_systems(
             Update,
             (on_special_effect, despawn_finished_effects).chain(),
         );
@@ -1423,7 +1415,6 @@ mod tests {
     #[test]
     fn special_effect_unknown_effect_id_is_noop() {
         let mut app = test_app();
-        app.insert_resource(seeded_map_catalog());
         app.add_systems(Update, on_special_effect);
 
         let source = spawn_unit(&mut app, 100);
@@ -1448,7 +1439,6 @@ mod tests {
     #[test]
     fn special_effect_unresolved_source_is_noop() {
         let mut app = test_app();
-        app.insert_resource(seeded_map_catalog());
         app.add_systems(Update, on_special_effect);
 
         // No units spawned: source_id resolves to nothing.

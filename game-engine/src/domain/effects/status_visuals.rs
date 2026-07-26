@@ -20,7 +20,7 @@ use crate::domain::sprite::tags::{
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
-use crate::infrastructure::effect::StatusEffectCatalog;
+use crate::infrastructure::effect::EffectCatalog;
 
 /// aesir `OPT1_*` body-state wire ids (`Aesir.ZoneServer.Mmo.Opt1`, the rAthena
 /// `e_sc_opt1` table). Single-valued: `UnitStateChanged.body_state` carries at
@@ -690,7 +690,7 @@ pub struct StatusAura {
     pub efst: u32,
 }
 
-/// Attaches/detaches a `StatusEffectCatalog`-mapped repeating STR as a child
+/// Attaches/detaches an `efsts`-mapped repeating STR as a child
 /// of the unit named by `StatusEffectChanged.unit_id`. Most EFSTs have no
 /// catalog entry (only auras like Energy Coat do), so a catalog miss is a
 /// silent no-op, not a warning — the sparse catalog is by design.
@@ -705,7 +705,7 @@ pub struct StatusAura {
 pub fn efst_auras(
     mut events: MessageReader<StatusEffectChanged>,
     registry: Res<EntityRegistry>,
-    catalog: Option<Res<StatusEffectCatalog>>,
+    catalog: Option<Res<EffectCatalog>>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
     children_query: Query<&Children>,
@@ -739,7 +739,7 @@ pub fn efst_auras(
             continue;
         }
 
-        let Some(descriptor) = catalog.as_deref().and_then(|c| c.get(event.efst)) else {
+        let Some(descriptor) = catalog.as_deref().and_then(|c| c.efst(event.efst)) else {
             continue;
         };
         let Some(handle) = load_effect(&asset_server, descriptor) else {
@@ -1277,16 +1277,16 @@ mod tests {
         );
     }
 
-    fn seeded_status_catalog() -> StatusEffectCatalog {
+    fn seeded_catalog() -> EffectCatalog {
         let ron = include_str!("../../../../assets/data/ron/effects.ron");
         let asset =
             ron::from_str::<crate::infrastructure::effect::EffectDataAsset>(ron).expect("seed RON");
-        StatusEffectCatalog::from_status_effect_data(asset.0.statuses)
+        EffectCatalog::build(&asset.0).expect("seed catalog builds")
     }
 
     const EFST_ENERGYCOAT: u32 = 31; // aesir Efst.id(:energycoat).
 
-    fn aura_app(catalog: StatusEffectCatalog) -> App {
+    fn aura_app(catalog: EffectCatalog) -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .add_plugins(bevy::asset::AssetPlugin::default())
@@ -1326,7 +1326,7 @@ mod tests {
 
     #[test]
     fn efst_on_with_catalog_hit_attaches_aura_child() {
-        let mut app = aura_app(seeded_status_catalog());
+        let mut app = aura_app(seeded_catalog());
         let unit = app.world_mut().spawn_empty().id();
         register(&mut app, 7, unit);
 
@@ -1337,7 +1337,7 @@ mod tests {
 
     #[test]
     fn efst_off_detaches_aura_child() {
-        let mut app = aura_app(seeded_status_catalog());
+        let mut app = aura_app(seeded_catalog());
         let unit = app.world_mut().spawn_empty().id();
         register(&mut app, 7, unit);
 
@@ -1350,7 +1350,7 @@ mod tests {
 
     #[test]
     fn efst_on_without_catalog_entry_is_a_noop() {
-        let mut app = aura_app(seeded_status_catalog());
+        let mut app = aura_app(seeded_catalog());
         let unit = app.world_mut().spawn_empty().id();
         register(&mut app, 7, unit);
 
@@ -1361,7 +1361,7 @@ mod tests {
 
     #[test]
     fn efst_repeated_on_does_not_stack_children() {
-        let mut app = aura_app(seeded_status_catalog());
+        let mut app = aura_app(seeded_catalog());
         let unit = app.world_mut().spawn_empty().id();
         register(&mut app, 7, unit);
 
@@ -1373,7 +1373,7 @@ mod tests {
 
     #[test]
     fn efst_on_for_unresolved_unit_is_warn_and_skip() {
-        let mut app = aura_app(seeded_status_catalog());
+        let mut app = aura_app(seeded_catalog());
 
         // No entity registered for unit_id 7: must not panic, and there is
         // nothing to attach the aura to.

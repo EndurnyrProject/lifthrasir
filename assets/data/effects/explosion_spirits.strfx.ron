@@ -5,7 +5,7 @@
 // higher; fps 30, linear key lerp, Add = additive.
 //
 // One pop of the native 폭기.tga starburst emblem on the chest, in and out.
-// The persistent red ki aura for the duration lives in `statuses:` (EFST 86 ->
+// The persistent red ki aura for the duration lives in `efsts:` (EFST 86 ->
 // kiaura1.str). ~14f.
 (
     fps: 30,

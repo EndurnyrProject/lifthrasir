@@ -36,16 +36,16 @@ const CRYSTAL_SHARD_TILT: f32 = 0.28;
 
 /// Spawn the descriptor's persistent visual as a child of `parent` (root or
 /// cell), at the parent's origin. Preference order:
-///   1. a looping SPR/ACT sprite when the descriptor has one — Fire Wall and
-///      Fire Pillar are sprite effects in the classic client, not STR ones;
-///   2. an STR effect when the descriptor has one;
-///   3. otherwise, for a `vfx`-only descriptor (e.g. Ice Wall, which the classic
-///      client hardcodes and no STR exists for), a persistent ice-crystal
-///      cluster tinted by the descriptor — `PlayProceduralVfx` is fire-and-forget
-///      and cannot back a persistent wall cell, so the wall lives here as a child
-///      that despawns with the group/cell.
+///   1. a looping SPR/ACT sprite for a `Sprite` layer — Fire Wall and Fire
+///      Pillar are sprite effects in the classic client, not STR ones;
+///   2. an STR effect for a `Str` layer;
+///   3. otherwise, for a `Bespoke`-only descriptor (e.g. Ice Wall, which the
+///      classic client hardcodes and no STR exists for), a persistent
+///      ice-crystal cluster tinted by the descriptor — `PlayProceduralVfx` is
+///      fire-and-forget and cannot back a persistent wall cell, so the wall
+///      lives here as a child that despawns with the group/cell.
 ///
-/// A descriptor with none spawns nothing; the group is still
+/// A descriptor with none of those layers spawns nothing; the group is still
 /// gameplay-relevant, so that is not an error.
 pub(super) fn spawn_effect_child(
     commands: &mut Commands,
@@ -55,10 +55,10 @@ pub(super) fn spawn_effect_child(
     descriptor: &EffectDescriptor,
     parent: Entity,
 ) {
-    if let Some(path) = &descriptor.sprite {
+    if let Some(stem) = descriptor.sprite_stem() {
         commands.spawn((
             EffectSprite {
-                path: path.clone(),
+                path: stem.to_string(),
                 tint: descriptor_tint(descriptor),
             },
             Transform::default(),
@@ -81,7 +81,7 @@ pub(super) fn spawn_effect_child(
         return;
     }
 
-    if descriptor.vfx.is_some() {
+    if descriptor.bespoke_key().is_some() {
         spawn_vfx_crystal(
             commands,
             asset_server,
@@ -93,7 +93,7 @@ pub(super) fn spawn_effect_child(
     }
 }
 
-/// Spawn the persistent visual for a `vfx`-only ground descriptor: a faceted
+/// Spawn the persistent visual for a `Bespoke`-only ground descriptor: a faceted
 /// ice-crystal cluster — one tall spike plus three shorter shards merged into a
 /// single mesh — wrapped in the classic client's `ice.tga` and tinted by the
 /// descriptor. The parent entity index seeds a per-cell yaw so adjacent wall

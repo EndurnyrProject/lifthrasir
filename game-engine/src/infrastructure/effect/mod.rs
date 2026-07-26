@@ -13,8 +13,7 @@ pub use authored::{
     AuthoredEffectLoaderError, AuthoredKey, AuthoredLayer, convert_authored_effect,
 };
 pub use catalog::{
-    EffectCatalog, EffectDataAsset, MapEffectCatalog, StatusEffectCatalog,
-    process_loaded_effect_data, start_loading_effect_data,
+    EffectCatalog, EffectDataAsset, process_loaded_effect_data, start_loading_effect_data,
 };
 pub use loader::StrEffectLoader;
 pub use plugin::EffectsPlugin;
