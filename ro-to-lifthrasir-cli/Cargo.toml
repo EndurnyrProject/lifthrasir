@@ -33,8 +33,6 @@ gltf-json = { version = "1.4.1", features = [
     "names",
     "KHR_lights_punctual",
 ] }
-
-[dev-dependencies]
 gltf = { version = "1.4.1", features = [
     "extensions",
     "extras",

@@ -112,6 +112,11 @@ fn apply_magenta_transparency(image: &mut RgbaImage) {
 /// whole relative path (directory components included) flattened into one
 /// component, so distinct source paths with the same basename (e.g.
 /// `floor\dirt.bmp` vs `wall\dirt.bmp`) never sanitize to the same output.
+///
+/// Roughly half the GRF texture namespace is Korean; those names lose every
+/// character to the ASCII filter, so a short digest of the source name is
+/// appended to keep them apart. `assign_unique_sanitized_names` stays the
+/// loud backstop.
 fn sanitize_name(name: &str) -> String {
     let stem = name.rsplit_once('.').map_or(name, |(base, _)| base);
 
@@ -127,11 +132,19 @@ fn sanitize_name(name: &str) -> String {
         })
         .collect();
 
-    if sanitized.is_empty() {
+    let sanitized = if sanitized.is_empty() {
         "texture".to_string()
     } else {
         sanitized
+    };
+
+    if stem.is_ascii() {
+        return sanitized;
     }
+    format!(
+        "{sanitized}_{}",
+        &blake3::hash(name.as_bytes()).to_hex()[..8]
+    )
 }
 
 #[cfg(test)]
@@ -209,6 +222,21 @@ mod tests {
         assert_ne!(sanitized[0], sanitized[1]);
         assert_eq!(sanitized[0], "floor_dirt");
         assert_eq!(sanitized[1], "wall_dirt");
+    }
+
+    /// Half the GRF texture namespace is EUC-KR; stripping the non-ASCII
+    /// characters alone collapses distinct names onto the same underscore run.
+    #[test]
+    fn distinct_korean_names_produce_distinct_sanitized_names() {
+        let names = vec![
+            "필드바닥\\prt_초원04.bmp".to_string(),
+            "필드바닥\\prt_언덕04.bmp".to_string(),
+        ];
+
+        let sanitized = assign_unique_sanitized_names(&names).expect("no collision");
+
+        assert_ne!(sanitized[0], sanitized[1]);
+        assert!(sanitized[0].is_ascii(), "{}", sanitized[0]);
     }
 
     #[test]

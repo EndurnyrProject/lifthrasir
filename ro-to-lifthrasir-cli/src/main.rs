@@ -26,6 +26,14 @@ enum Command {
         #[arg(long)]
         only: Option<String>,
     },
+    ConvertMap {
+        #[arg(long)]
+        map: String,
+        #[arg(long, default_value = "assets/convert.toml")]
+        loader: PathBuf,
+        #[arg(long, default_value = "assets/data/maps")]
+        out: PathBuf,
+    },
     GenProto {
         #[arg(long)]
         src: PathBuf,
@@ -42,6 +50,12 @@ fn main() -> anyhow::Result<()> {
             let grfs = config.grfs_by_priority();
             let vfs = grf_vfs::GrfVfs::open(&grfs)?;
             converters::run(only.as_deref(), &vfs, &out)?;
+        }
+        Command::ConvertMap { map, loader, out } => {
+            let config = config::LoaderConfig::from_path(&loader)?;
+            let grfs = config.grfs_by_priority();
+            let vfs = grf_vfs::GrfVfs::open(&grfs)?;
+            converters::map::run(&vfs, &map, &out)?;
         }
         Command::GenProto { src, out } => {
             proto_gen::run(&src, &out)?;

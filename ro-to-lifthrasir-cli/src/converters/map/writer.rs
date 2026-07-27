@@ -23,7 +23,9 @@ use glam::{Mat3, Quat, Vec3};
 use gltf_json as json;
 use json::validation::{Checked::Valid, USize64};
 use lifthrasir_data::lif;
-use ro_formats::{RoAltitude, RoGround, RoWorld, RswLight, RswLightObj, RswModel, RswObject};
+use ro_formats::{
+    RoAltitude, RoGround, RoWorld, RswEffect, RswLight, RswLightObj, RswModel, RswObject, RswSound,
+};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -71,7 +73,7 @@ fn to_gltf_quat(q: Quat) -> Quat {
 }
 
 /// Port of `game-engine/src/utils/coordinates.rs::rsw_position_to_bevy`.
-fn rsw_position_to_world(position: [f32; 3], map_width: f32, map_height: f32) -> Vec3 {
+pub fn rsw_position_to_world(position: [f32; 3], map_width: f32, map_height: f32) -> Vec3 {
     Vec3::new(
         position[0] + (map_width * 5.0),
         position[1],
@@ -81,7 +83,7 @@ fn rsw_position_to_world(position: [f32; 3], map_width: f32, map_height: f32) ->
 
 /// Port of `game-engine/src/utils/coordinates.rs::rsw_to_bevy_transform`
 /// (mat4.rotateZ, then rotateX, then rotateY).
-fn rsw_model_rotation(model: &RswModel) -> Quat {
+pub fn rsw_model_rotation(model: &RswModel) -> Quat {
     Quat::from_rotation_z(model.rotation[2].to_radians())
         * Quat::from_rotation_x(model.rotation[0].to_radians())
         * Quat::from_rotation_y(model.rotation[1].to_radians())
@@ -530,12 +532,46 @@ fn build_point_light_node(
     )
 }
 
-/// Lights, sound/effect emitters and prop references, in RSW order.
+/// The RSW objects that become nodes, in RSW order.
 ///
 /// Rangeless/fileless sounds and models with no filename are dropped, exactly
 /// as `map_sounds.rs::spawn_map_sounds` and `models.rs::load_rsm_assets` drop
 /// them at runtime; emitting them would only create nodes the runtime has to
-/// ignore again.
+/// ignore again. Validation walks the very same list.
+pub fn emitted_objects(world: &RoWorld) -> impl Iterator<Item = &RswObject> {
+    world.objects.iter().filter(|object| match object {
+        RswObject::Sound(sound) => sound.range > 0.0 && !sound.wav_file.is_empty(),
+        RswObject::Model(model) => !model.filename.is_empty(),
+        _ => true,
+    })
+}
+
+pub fn lif_audio(sound: &RswSound) -> lif::LifAudio {
+    lif::LifAudio {
+        name: sound.name.clone(),
+        file: format!("ro://data/wav/{}", to_forward_slashes(&sound.wav_file)),
+        volume: sound.volume,
+        range: sound.range,
+        cycle: sound.cycle,
+    }
+}
+
+pub fn lif_effect(effect: &RswEffect) -> lif::LifEffect {
+    lif::LifEffect {
+        name: effect.name.clone(),
+        effect_type: effect.effect_type,
+        emit_speed: effect.emit_speed,
+        params: effect.params,
+    }
+}
+
+pub fn lif_prop(model: &RswModel) -> lif::LifProp {
+    lif::LifProp {
+        model: format!("ro://data/model/{}", to_forward_slashes(&model.filename)),
+    }
+}
+
+/// Lights, sound/effect emitters and prop references, in RSW order.
 fn build_object_nodes(
     root: &mut json::Root,
     world: &RoWorld,
@@ -544,53 +580,22 @@ fn build_object_nodes(
 ) -> anyhow::Result<Vec<json::Index<json::Node>>> {
     let mut nodes = Vec::new();
 
-    for object in &world.objects {
+    for object in emitted_objects(world) {
         let node = match object {
             RswObject::Light(light) => build_point_light_node(root, light, map_width, map_height),
-            RswObject::Sound(sound) => {
-                if sound.range <= 0.0 || sound.wav_file.is_empty() {
-                    continue;
-                }
-                let extras = extras_for(
-                    lif::EXTRAS_AUDIO,
-                    &lif::LifAudio {
-                        name: sound.name.clone(),
-                        file: format!("ro://data/wav/{}", to_forward_slashes(&sound.wav_file)),
-                        volume: sound.volume,
-                        range: sound.range,
-                        cycle: sound.cycle,
-                    },
-                )?;
-                emitter_node(
-                    root,
-                    &sound.name,
-                    rsw_position_to_world(sound.position, map_width, map_height),
-                    extras,
-                )
-            }
-            RswObject::Effect(effect) => {
-                let extras = extras_for(
-                    lif::EXTRAS_EFFECT,
-                    &lif::LifEffect {
-                        name: effect.name.clone(),
-                        effect_type: effect.effect_type,
-                        emit_speed: effect.emit_speed,
-                        params: effect.params,
-                    },
-                )?;
-                emitter_node(
-                    root,
-                    &effect.name,
-                    rsw_position_to_world(effect.position, map_width, map_height),
-                    extras,
-                )
-            }
-            RswObject::Model(model) => {
-                if model.filename.is_empty() {
-                    continue;
-                }
-                build_prop_node(root, model, map_width, map_height)?
-            }
+            RswObject::Sound(sound) => emitter_node(
+                root,
+                &sound.name,
+                rsw_position_to_world(sound.position, map_width, map_height),
+                extras_for(lif::EXTRAS_AUDIO, &lif_audio(sound))?,
+            ),
+            RswObject::Effect(effect) => emitter_node(
+                root,
+                &effect.name,
+                rsw_position_to_world(effect.position, map_width, map_height),
+                extras_for(lif::EXTRAS_EFFECT, &lif_effect(effect))?,
+            ),
+            RswObject::Model(model) => build_prop_node(root, model, map_width, map_height)?,
         };
         nodes.push(node);
     }
@@ -625,12 +630,7 @@ fn build_prop_node(
 ) -> anyhow::Result<json::Index<json::Node>> {
     let translation = to_gltf_vec(rsw_position_to_world(model.position, map_width, map_height));
     let rotation = to_gltf_quat(rsw_model_rotation(model));
-    let extras = extras_for(
-        lif::EXTRAS_PROP,
-        &lif::LifProp {
-            model: format!("ro://data/model/{}", to_forward_slashes(&model.filename)),
-        },
-    )?;
+    let extras = extras_for(lif::EXTRAS_PROP, &lif_prop(model))?;
 
     Ok(json::Index::push(
         &mut root.nodes,
@@ -773,7 +773,7 @@ fn build_root_extensions(
     Ok(())
 }
 
-fn hash_hex(bytes: &[u8]) -> String {
+pub fn hash_hex(bytes: &[u8]) -> String {
     blake3::hash(bytes).to_hex().to_string()
 }
 
@@ -816,181 +816,12 @@ fn glb_container(json_bytes: &[u8], bin: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::converters::map::fixtures::{
+        TEXTURE, mini_ground, mini_world, raw_gat, textures, write_fixture, write_fixture_png,
+    };
     use crate::converters::map::terrain::build_terrain;
-    use image::{ImageFormat, RgbaImage};
-    use ro_formats::{CELL_SIZE, GndSurface, GndTile, RswEffect, RswGround, RswSound, RswWater};
+    use ro_formats::CELL_SIZE;
     use std::f32::consts::PI;
-    use std::io::Cursor;
-
-    const TEXTURE: &str = "grass01.bmp";
-
-    fn mini_ground() -> RoGround {
-        let tile = GndTile {
-            u1: 0.0,
-            u2: 1.0,
-            u3: 0.0,
-            u4: 1.0,
-            v1: 0.0,
-            v2: 0.0,
-            v3: 1.0,
-            v4: 1.0,
-            texture: 0,
-            color: [255, 255, 255, 255],
-        };
-        let surface = GndSurface {
-            height: [-10.0, -10.0, -10.0, -10.0],
-            tile_up: 0,
-            tile_front: -1,
-            tile_right: -1,
-        };
-
-        RoGround {
-            version: "1.7".into(),
-            width: 2,
-            height: 2,
-            textures: vec![TEXTURE.into()],
-            texture_indexes: vec![0],
-            tiles: vec![tile],
-            surfaces: vec![surface.clone(), surface.clone(), surface.clone(), surface],
-        }
-    }
-
-    fn write_fixture_png(dir: &Path, relative: &str) {
-        let path = dir.join(relative);
-        std::fs::create_dir_all(path.parent().expect("tex dir")).expect("create tex dir");
-        let mut bytes = Vec::new();
-        RgbaImage::new(1, 1)
-            .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
-            .expect("encode png");
-        std::fs::write(path, bytes).expect("write png");
-    }
-
-    fn textures() -> Vec<TextureOut> {
-        vec![TextureOut {
-            source_name: TEXTURE.to_string(),
-            relative_path: "tex/grass01.png".to_string(),
-        }]
-    }
-
-    fn mini_world() -> RoWorld {
-        RoWorld {
-            version: "2.2".into(),
-            ini_file: String::new(),
-            gnd_file: "mini.gnd".into(),
-            gat_file: "mini.gat".into(),
-            src_file: None,
-            water: RswWater {
-                level: 12.5,
-                water_type: 3,
-                wave_height: 0.6,
-                wave_speed: 1.25,
-                wave_pitch: 45.0,
-                anim_speed: 4,
-            },
-            light: RswLight {
-                longitude: 45,
-                latitude: 30,
-                diffuse: [0.9, 0.8, 0.7],
-                ambient: [0.25, 0.3, 0.35],
-                opacity: 0.5,
-            },
-            ground: RswGround::default(),
-            objects: vec![
-                RswObject::Light(RswLightObj {
-                    name: "torch".into(),
-                    position: [10.0, -5.0, 20.0],
-                    color: [1.0, 0.5, 0.25],
-                    range: 40.0,
-                }),
-                RswObject::Sound(RswSound {
-                    name: "water".into(),
-                    wav_file: "effect\\water.wav".into(),
-                    position: [1.0, -2.0, 3.0],
-                    volume: 0.75,
-                    width: 1,
-                    height: 1,
-                    range: 30.0,
-                    cycle: 4.5,
-                }),
-                RswObject::Effect(RswEffect {
-                    name: "steam".into(),
-                    position: [4.0, -6.0, 8.0],
-                    effect_type: 12,
-                    emit_speed: 0.25,
-                    params: [1.0, 2.0, 3.0, 4.0],
-                }),
-                RswObject::Model(RswModel {
-                    name: "tree".into(),
-                    anim_type: 0,
-                    anim_speed: 1.0,
-                    block_type: 0,
-                    filename: "prontera\\tree01.rsm".into(),
-                    node_name: String::new(),
-                    position: [7.0, -8.0, 9.0],
-                    rotation: [10.0, 20.0, 30.0],
-                    scale: [1.0, 2.0, 3.0],
-                }),
-            ],
-        }
-    }
-
-    fn raw_gat(width: u32, height: u32) -> Vec<u8> {
-        let mut buffer = Vec::new();
-        buffer.extend_from_slice(b"GRAT");
-        buffer.push(1);
-        buffer.push(2);
-        buffer.extend_from_slice(&width.to_le_bytes());
-        buffer.extend_from_slice(&height.to_le_bytes());
-        for i in 0..(width * height) {
-            for offset in 0..4 {
-                buffer.extend_from_slice(&((i + offset) as f32).to_le_bytes());
-            }
-            buffer.extend_from_slice(&1u32.to_le_bytes());
-        }
-        buffer
-    }
-
-    struct Fixture {
-        _dir: tempfile::TempDir,
-        path: std::path::PathBuf,
-        ground: RoGround,
-        world: RoWorld,
-        gat: Vec<u8>,
-    }
-
-    fn write_fixture() -> Fixture {
-        let dir = tempfile::tempdir().expect("tempdir");
-        write_fixture_png(dir.path(), "tex/grass01.png");
-
-        let ground = mini_ground();
-        let world = mini_world();
-        let gat = raw_gat(ground.width * 2, ground.height * 2);
-        let primitives = build_terrain(&ground).expect("terrain");
-        let path = dir.path().join("mini.glb");
-
-        write_glb(
-            &path,
-            &MapGlbInputs {
-                map_name: "mini",
-                ground: &ground,
-                world: &world,
-                primitives: &primitives,
-                textures: &textures(),
-                gat_bytes: &gat,
-                gnd_bytes: b"gnd-bytes",
-                rsw_bytes: b"rsw-bytes",
-            },
-        )
-        .expect("write glb");
-
-        Fixture {
-            _dir: dir,
-            path,
-            ground,
-            world,
-            gat,
-        }
-    }
 
     #[test]
     fn writes_a_glb_that_reimports_with_the_expected_terrain_attributes() {
