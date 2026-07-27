@@ -4,3 +4,4 @@
 
 pub mod terrain;
 pub mod textures;
+pub mod writer;

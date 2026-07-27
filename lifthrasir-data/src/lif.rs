@@ -5,6 +5,28 @@
 use ro_formats::{GatError, RoAltitude, RswWater};
 use serde::{Deserialize, Serialize};
 
+/// Format version written by the current converter and required by the
+/// runtime handler.
+pub const FORMAT_VERSION: u32 = 1;
+
+/// glTF root-extension key for [`LifMap`].
+pub const EXTENSION_MAP: &str = "LIF_map";
+
+/// glTF root-extension key for [`LifWater`].
+pub const EXTENSION_WATER: &str = "LIF_water";
+
+/// glTF root-extension key for [`LifGat`].
+pub const EXTENSION_GAT: &str = "LIF_gat";
+
+/// Node-extras key for [`LifAudio`].
+pub const EXTRAS_AUDIO: &str = "lif_audio";
+
+/// Node-extras key for [`LifEffect`].
+pub const EXTRAS_EFFECT: &str = "lif_effect";
+
+/// Node-extras key for [`LifProp`].
+pub const EXTRAS_PROP: &str = "lif_prop";
+
 /// Root extension `LIF_map`: format identity, source-file provenance, and the
 /// ambient light that has no `KHR_lights_punctual` equivalent.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
