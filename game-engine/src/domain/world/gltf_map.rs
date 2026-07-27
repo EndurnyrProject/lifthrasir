@@ -12,8 +12,10 @@
 //! [`LifMapData`]. Consumers must treat a root without `LifMapData` as a failed
 //! map load; there is no partial-map fallback.
 
+use crate::domain::entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid};
 use crate::domain::system_sets::WorldLoadingSystems;
 use crate::domain::world::components::MapLoader;
+use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
 use crate::domain::world::map_scoped::MapScoped;
 use crate::domain::world::systems::extract_map_from_unified_assets;
@@ -25,7 +27,7 @@ use bevy::gltf::GltfLoaderSettings;
 use bevy::gltf::extensions::{
     ErasedGltfExtensionHandler, GltfExtensionHandler, GltfExtensionHandlers,
 };
-use bevy::light::CascadeShadowConfigBuilder;
+use bevy::light::{CascadeShadowConfigBuilder, light_consts::lux};
 use bevy::prelude::*;
 use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
 use lifthrasir_data::lif::{self, LifAudio, LifEffect, LifGat, LifMap, LifProp, LifWater};
@@ -125,7 +127,7 @@ impl Plugin for GltfMapPlugin {
                 .in_set(WorldLoadingSystems::AssetExtraction)
                 .before(extract_map_from_unified_assets),
         );
-        app.add_observer(enforce_gltf_map_loaded);
+        app.add_observer(adopt_gltf_map_scene);
     }
 }
 
@@ -174,11 +176,17 @@ pub fn spawn_gltf_map(
     }
 }
 
+/// Hands the map data a ready glb scene carries to the systems that consume it
+/// on the native path: the walkability grid, the ambient light, and `MapData`
+/// on the loader entity -- which is what makes `detect_map_load_complete`
+/// report the map as loaded, exactly as it does for `.gnd`/`.gat`/`.rsw`.
+///
 /// A glb map that imported badly is a hard failure: bevy's extension hooks
 /// cannot fail a load, so a broken `LIF_*` payload still reports `Loaded` and
 /// would otherwise spawn a map missing its altitude, water and metadata.
-fn enforce_gltf_map_loaded(
+fn adopt_gltf_map_scene(
     ready: On<WorldInstanceReady>,
+    mut commands: Commands,
     roots: Query<&GltfMapLoader>,
     children: Query<&Children>,
     errors: Query<&LifMapLoadError>,
@@ -197,11 +205,35 @@ fn enforce_gltf_map_loaded(
         panic!("map glb for '{map_name}' is unusable: {}", error.0);
     }
 
-    if children
+    let Some(data) = children
         .iter_descendants(ready.entity)
-        .all(|entity| map_data.get(entity).is_err())
-    {
+        .find_map(|entity| map_data.get(entity).ok())
+    else {
         panic!("map glb for '{map_name}' carries no LIF_map data");
+    };
+
+    commands.insert_resource(CurrentMapPathfindingGrid(PathfindingGrid::from_gat(
+        &data.altitude,
+    )));
+    commands.insert_resource(ambient_light(&data.meta));
+    commands.entity(ready.entity).insert(MapData {
+        name: map_name.clone(),
+        width: data.altitude.width,
+        height: data.altitude.height,
+    });
+}
+
+/// Mirrors `presentation/rendering/lighting.rs::setup_ambient_light`: the RSW
+/// ambient colour as-is, kept dim so the sun and point lights keep contrast.
+fn ambient_light(meta: &LifMap) -> GlobalAmbientLight {
+    GlobalAmbientLight {
+        color: Color::srgb(
+            meta.ambient_color[0],
+            meta.ambient_color[1],
+            meta.ambient_color[2],
+        ),
+        brightness: lux::OFFICE,
+        affects_lightmapped_meshes: false,
     }
 }
 
@@ -463,6 +495,10 @@ fn parse_extras<T: serde::de::DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::character::events::MapLoadCompleted;
+    use crate::domain::character::map_loading::detect_map_load_complete;
+    use crate::domain::entities::pathfinding::PathfindingGrid;
+    use crate::domain::world::spawn_context::MapSpawnContext;
     use crate::infrastructure::assets::hierarchical_reader::HierarchicalAssetReader;
     use crate::infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset, RoWorldAsset};
     use crate::infrastructure::assets::sources::{CompositeAssetSource, DataFolderSource};
@@ -731,10 +767,31 @@ mod tests {
             .init_asset::<RoAltitudeAsset>()
             .init_asset::<RoWorldAsset>();
         app.insert_resource(SharedCompositeAssetSource(composite));
-        app.add_systems(Update, extract_map_from_unified_assets);
+        // The completion flow the adapter feeds: `MapData` on the loader entity
+        // is what turns a finished map into `MapLoadCompleted`.
+        app.add_message::<MapLoadCompleted>();
+        app.insert_resource(MapSpawnContext::new("mini_map".to_string(), 0, 0, 1));
+        app.add_systems(
+            Update,
+            (extract_map_from_unified_assets, detect_map_load_complete),
+        );
         app.finish();
         app.cleanup();
         app
+    }
+
+    /// The `LifMapData` the handler put on the instantiated scene root.
+    fn scene_map_data(app: &App, entity: Entity) -> LifMapData {
+        let world = app.world();
+        let scene_root = world
+            .entity(entity)
+            .get::<Children>()
+            .expect("scene instance")[0];
+        world
+            .entity(scene_root)
+            .get::<LifMapData>()
+            .expect("LifMapData on the scene root")
+            .clone()
     }
 
     fn request_map(app: &mut App, map: &str) -> Entity {
@@ -814,6 +871,84 @@ mod tests {
             0,
             "a healthy map must not report a load error"
         );
+    }
+
+    #[test]
+    fn a_ready_glb_map_publishes_the_pathfinding_grid() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+        let entity = request_map(&mut app, "mini_map");
+
+        app.update();
+        wait_for_scene(&mut app, entity);
+
+        let expected = PathfindingGrid::from_gat(&scene_map_data(&app, entity).altitude);
+        let grid = app
+            .world()
+            .resource::<CurrentMapPathfindingGrid>()
+            .0
+            .clone();
+
+        assert_eq!(
+            (grid.width(), grid.height()),
+            (expected.width(), expected.height())
+        );
+        for y in 0..expected.height() as u16 {
+            for x in 0..expected.width() as u16 {
+                assert_eq!(
+                    grid.is_walkable(x, y),
+                    expected.is_walkable(x, y),
+                    "walkability differs at ({x}, {y})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_ready_glb_map_completes_the_map_load_like_the_native_path() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+        let entity = request_map(&mut app, "mini_map.gat");
+
+        app.update();
+        wait_for_scene(&mut app, entity);
+
+        let altitude = scene_map_data(&app, entity).altitude;
+        let map_data = app
+            .world()
+            .entity(entity)
+            .get::<MapData>()
+            .expect("MapData on the map loader entity");
+        assert_eq!(map_data.name, "mini_map");
+        assert_eq!(
+            (map_data.width, map_data.height),
+            (altitude.width, altitude.height)
+        );
+
+        app.update();
+
+        let completed: Vec<String> = app
+            .world_mut()
+            .resource_mut::<Messages<MapLoadCompleted>>()
+            .drain()
+            .map(|message| message.map_name)
+            .collect();
+        assert_eq!(completed, vec!["mini_map".to_string()]);
+    }
+
+    #[test]
+    fn a_ready_glb_map_publishes_the_rsw_ambient_light() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+        let entity = request_map(&mut app, "mini_map");
+
+        app.update();
+        wait_for_scene(&mut app, entity);
+
+        let ambient = app.world().resource::<GlobalAmbientLight>();
+        assert_eq!(ambient.color, Color::srgb(0.25, 0.3, 0.35));
+        assert_eq!(ambient.brightness, lux::OFFICE);
+        assert!(!ambient.affects_lightmapped_meshes);
     }
 
     #[test]
