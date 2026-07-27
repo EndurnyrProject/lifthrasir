@@ -12,12 +12,12 @@ ro-formats = { path = "../ro-formats" }
 clap = { workspace = true }
 anyhow = { workspace = true }
 indicatif = "0.18"
-zip = { version = "8.6.0", default-features = false, features = ["zstd"] }
+zip = { workspace = true }
 toml = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }
 
 [profile.release]
 strip = true

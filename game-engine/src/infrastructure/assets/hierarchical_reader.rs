@@ -84,6 +84,12 @@ impl HierarchicalAssetReader {
                     format!("GRF error: {}", grf_error),
                 )))
             }
+            AssetSourceError::Archive(archive_error) => {
+                AssetReaderError::Io(Arc::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Archive error: {}", archive_error),
+                )))
+            }
         }
     }
 }

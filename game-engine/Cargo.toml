@@ -31,6 +31,7 @@ encoding_rs = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 regex = { workspace = true }
+zip = { workspace = true }
 
 # Security dependencies
 secrecy = { workspace = true }
@@ -50,6 +51,7 @@ dynamic = ["bevy/dynamic_linking"]
 dlss = ["bevy/dlss"]
 
 [dev-dependencies]
+tempfile = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = ["xbrz-rs"]

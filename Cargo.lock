@@ -3622,9 +3622,11 @@ dependencies = [
  "ron 0.12.2",
  "secrecy",
  "serde",
+ "tempfile",
  "thiserror 2.0.18",
  "toml",
  "xbrz-rs",
+ "zip",
 ]
 
 [[package]]

@@ -1,6 +1,7 @@
 pub mod composite;
 pub mod data_folder;
 pub mod grf_source;
+pub mod pak_source;
 
 use thiserror::Error;
 
@@ -12,6 +13,8 @@ pub enum AssetSourceError {
     Io(#[from] std::io::Error),
     #[error("GRF error: {0}")]
     Grf(String),
+    #[error("Archive error: {0}")]
+    Archive(String),
 }
 
 pub trait AssetSource: Send + Sync {
@@ -36,3 +39,4 @@ impl std::fmt::Debug for dyn AssetSource {
 pub use composite::*;
 pub use data_folder::*;
 pub use grf_source::*;
+pub use pak_source::*;

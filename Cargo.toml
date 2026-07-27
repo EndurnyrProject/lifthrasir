@@ -39,8 +39,10 @@ rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 ron = "0.12"
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
+tempfile = "3"
 thiserror = "2.0"
 toml = "1.1.2"
+zip = { version = "8.6.0", default-features = false, features = ["zstd"] }
 
 [profile.dev.package."*"]
 opt-level = 3
