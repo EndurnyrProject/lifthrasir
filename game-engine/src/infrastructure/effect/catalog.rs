@@ -154,7 +154,7 @@ fn validate_descriptor(
 pub struct EffectDataHandle(Handle<EffectDataAsset>);
 
 pub fn start_loading_effect_data(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let handle = asset_server.load("data/ron/effects.ron");
+    let handle = asset_server.load("ro://ron/effects.ron");
     commands.insert_resource(EffectDataHandle(handle));
     debug!("Loading effect data RON");
 }
@@ -169,7 +169,7 @@ pub fn process_loaded_effect_data(
 
     if let LoadState::Failed(err) = asset_server.load_state(&handle.0) {
         error!(
-            "Failed to load data/ron/effects.ron: {:?}. It is hand-authored at assets/data/ron/effects.ron.",
+            "Failed to load ro://ron/effects.ron: {:?}. It is hand-authored at assets/data/ron/effects.ron.",
             err
         );
         commands.remove_resource::<EffectDataHandle>();
@@ -184,7 +184,7 @@ pub fn process_loaded_effect_data(
         Ok(catalog) => catalog,
         Err(message) => {
             error!(
-                "Invalid data/ron/effects.ron: {message}. It is hand-authored at assets/data/ron/effects.ron; no effect catalog is available."
+                "Invalid ro://ron/effects.ron: {message}. It is hand-authored at assets/data/ron/effects.ron; no effect catalog is available."
             );
             commands.remove_resource::<EffectDataHandle>();
             return;

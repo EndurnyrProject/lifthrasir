@@ -389,7 +389,7 @@ fn stepper_value(field: GraphicsField) -> impl Scene {
         template_value(StepperValue(field))
         Text("")
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(13.0)},
         }
         TextColor(theme::TEXT)
@@ -528,7 +528,7 @@ fn percent_readout(channel: AudioChannel) -> impl Scene {
         template_value(SliderPercent(channel))
         Text("")
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(13.0)},
         }
         TextColor(theme::TEXT_DIM)

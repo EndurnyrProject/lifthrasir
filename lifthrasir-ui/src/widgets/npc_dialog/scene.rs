@@ -94,7 +94,7 @@ fn titlebar(title: String) -> impl Scene {
                 NpcDialogTitle
                 Text(title)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
                     font_size: {FontSize::Px(13.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
@@ -136,7 +136,7 @@ fn input_field() -> impl Scene {
         NpcInputField
         EditableText
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(13.0)},
         }
         ThemeTextColor({TOKEN_TEXT})
@@ -161,7 +161,7 @@ fn dialog_text(text: String) -> impl Scene {
         Typewriter { full: text }
         Text(String::new())
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(13.0)},
         }
         TextColor(theme::TEXT)
@@ -174,7 +174,7 @@ pub(super) fn text_span(content: String, color: Color) -> impl Scene {
     bsn! {
         TextSpan(content)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(13.0)},
         }
         TextColor(color)
@@ -320,7 +320,7 @@ fn chrome_text(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(11.0)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})

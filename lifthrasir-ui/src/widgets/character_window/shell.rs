@@ -88,7 +88,7 @@ fn titlebar_row() -> impl Scene {
             (
                 Text({"Character".to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
                     font_size: {FontSize::Px(15.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})

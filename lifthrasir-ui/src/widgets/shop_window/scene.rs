@@ -70,7 +70,7 @@ fn titlebar(title: String) -> impl Scene {
             (
                 Text(title)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
                     font_size: {FontSize::Px(13.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
@@ -515,7 +515,7 @@ fn pane_head(label: String, count: String) -> impl Scene {
             (
                 Text(label)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
                     font_size: {FontSize::Px(13.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
@@ -525,7 +525,7 @@ fn pane_head(label: String, count: String) -> impl Scene {
             (
                 Text(count)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(10.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT_DIM})
@@ -691,7 +691,7 @@ fn row_name(name: String) -> impl Scene {
     bsn! {
         Text(name)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(12.5)},
         }
         ThemeTextColor({TOKEN_TEXT})
@@ -703,7 +703,7 @@ fn row_sub(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(9.5)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
@@ -716,7 +716,7 @@ fn row_price(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(12.0)},
         }
         ThemeTextColor({TOKEN_ACCENT})
@@ -731,7 +731,7 @@ fn cart_pill(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(9.5)},
         }
         TextColor(theme::EMERALD_INK)
@@ -767,7 +767,7 @@ fn card_pip(filled: bool) -> impl Scene {
     bsn! {
         Text({"\u{25C6}".to_string()})
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(9.0)},
         }
         TextColor(color)
@@ -871,7 +871,7 @@ fn detail_content(view: DetailView) -> impl Scene {
                     (
                         Text({view.name})
                         TextFont {
-                            font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                            font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
                             font_size: {FontSize::Px(14.0)},
                         }
                         ThemeTextColor({TOKEN_TEXT})
@@ -915,7 +915,7 @@ fn stat_box(label: String, value: String) -> impl Scene {
             (
                 Text(label)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(8.5)},
                 }
                 ThemeTextColor({TOKEN_TEXT_DIM})
@@ -924,7 +924,7 @@ fn stat_box(label: String, value: String) -> impl Scene {
             (
                 Text(value)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(13.0)},
                 }
                 ThemeTextColor({TOKEN_ACCENT})
@@ -983,7 +983,7 @@ fn stepper_value(qty: u32) -> impl Scene {
     bsn! {
         Text({qty.to_string()})
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(12.0)},
         }
         ThemeTextColor({TOKEN_TEXT})
@@ -1019,7 +1019,7 @@ fn meta_row(label: String, value: String) -> impl Scene {
             (
                 Text(label)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(10.5)},
                 }
                 ThemeTextColor({TOKEN_TEXT_DIM})
@@ -1028,7 +1028,7 @@ fn meta_row(label: String, value: String) -> impl Scene {
             (
                 Text(value)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(11.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
@@ -1042,7 +1042,7 @@ fn muted_text(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(11.0)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
@@ -1113,7 +1113,7 @@ fn basket_head(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(9.5)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
@@ -1137,7 +1137,7 @@ fn subtotal_row(label: String, total: u64) -> impl Scene {
             (
                 Text(label)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(9.5)},
                 }
                 ThemeTextColor({TOKEN_TEXT_DIM})
@@ -1146,7 +1146,7 @@ fn subtotal_row(label: String, total: u64) -> impl Scene {
             (
                 Text({format!("{total}z")})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(14.0)},
                 }
                 ThemeTextColor({TOKEN_ACCENT})
@@ -1175,7 +1175,7 @@ fn cart_line(view: CartLineView) -> impl Scene {
             (
                 Text({view.name})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(11.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
@@ -1186,7 +1186,7 @@ fn cart_line(view: CartLineView) -> impl Scene {
             (
                 Text({view.qty.to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(11.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
@@ -1197,7 +1197,7 @@ fn cart_line(view: CartLineView) -> impl Scene {
             (
                 Text({format!("{total}z")})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(11.0)},
                 }
                 ThemeTextColor({TOKEN_ACCENT})
@@ -1259,7 +1259,7 @@ fn zeny_display(zeny: u32) -> impl Scene {
                     (
                         Text({"YOUR ZENY".to_string()})
                         TextFont {
-                            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                             font_size: {FontSize::Px(9.0)},
                         }
                         ThemeTextColor({TOKEN_TEXT_DIM})
@@ -1268,7 +1268,7 @@ fn zeny_display(zeny: u32) -> impl Scene {
                     (
                         Text({format!("{zeny}z")})
                         TextFont {
-                            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                             font_size: {FontSize::Px(13.0)},
                         }
                         TextColor(theme::GOLD)
@@ -1293,7 +1293,7 @@ fn warning_text() -> impl Scene {
             (
                 Text({"Not enough zeny".to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(12.0)},
                 }
                 TextColor(theme::BAD)
@@ -1320,7 +1320,7 @@ fn total_text(buy: bool, total: u64) -> impl Scene {
             (
                 Text({label.to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(10.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT_DIM})
@@ -1329,7 +1329,7 @@ fn total_text(buy: bool, total: u64) -> impl Scene {
             (
                 Text({format!("{sign}{total}z")})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(13.0)},
                 }
                 TextColor(color)
@@ -1358,7 +1358,7 @@ fn chrome_text(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(11.0)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
@@ -1420,7 +1420,7 @@ fn confirm_card(title: String, lines: Vec<CartLineView>, total: u64, buy: bool) 
             (
                 Text(title)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
                     font_size: {FontSize::Px(15.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
@@ -1446,7 +1446,7 @@ fn confirm_line(view: CartLineView) -> impl Scene {
             (
                 Text({format!("{} x{}", view.name, view.qty)})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(11.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
@@ -1455,7 +1455,7 @@ fn confirm_line(view: CartLineView) -> impl Scene {
             (
                 Text({format!("{total}z")})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(11.0)},
                 }
                 ThemeTextColor({TOKEN_ACCENT})

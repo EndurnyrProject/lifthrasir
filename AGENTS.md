@@ -108,18 +108,33 @@ entry (`format_version`, `content_version`). `assets/loader.toml` lists the
 archives (`[[assets.archive]]`, resolved against `assets/`) plus the loose
 `data_folder` override, which always wins for development.
 
+That `data_folder` (`assets/data`) is the **root of the `ro://` namespace**, and
+everything the client loads at runtime goes through it — retail content under
+`ro://data/...` (from the GRFs) and Lifthrasir's own content beside it:
+`ro://fonts/…`, `ro://shaders/…`, `ro://ui/icons/…`, `ro://config/clientinfo.toml`,
+`ro://ron/…`, `ro://effects/…`, `ro://textures/…`. Nothing loads from Bevy's
+default `assets/` source. The only files read straight off disk are
+`assets/loader.toml` (the bootstrap config, read before the source exists) and
+the hotbar save file.
+
 Produce the pak once from retail GRFs (GRF parsing lives only in the offline
 tooling):
 
 ```bash
 cargo run --release -p grf-utils -- pack \
   --grf assets/en.grf --grf assets/data.grf \
+  --content-dir assets/data \
   --out assets/lifthrasir.pak --content-version 1
 ```
 
-Earlier `--grf` flags win on duplicate paths; `--data-folder` (optional) wins
-over all GRFs. Apply a patch pak (game must be closed; the patch file is
-consumed, the main pak is atomically replaced and compacted):
+Earlier `--grf` flags win on duplicate paths. `--content-dir` (repeatable) packs
+a folder **at the pak root**, mirroring the runtime's `data_folder`, and is what
+ships the client's own fonts/shaders/ui/ron content; `--data-folder` (optional)
+packs a retail loose `data` folder **under its own name**, so it shadows the
+GRFs' `data/...` entries. Both win over all GRFs.
+
+Apply a patch pak (game must be closed; the patch file is consumed, the main pak
+is atomically replaced and compacted):
 
 ```bash
 cargo run --release -p grf-utils -- merge \

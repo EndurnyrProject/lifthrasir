@@ -379,7 +379,7 @@ fn title_text(text: String, size: f32, color: Color) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
             font_size: {FontSize::Px(size)},
         }
         TextColor(color)

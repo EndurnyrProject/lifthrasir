@@ -46,9 +46,16 @@ enum Commands {
         #[arg(long = "grf")]
         grf: Vec<PathBuf>,
 
-        /// Loose data folder overriding same-path GRF entries
+        /// Loose RO data folder overriding same-path GRF entries (kept under its
+        /// own name, so `.../data` shadows the GRFs' `data/...` entries)
         #[arg(long)]
         data_folder: Option<PathBuf>,
+
+        /// Lifthrasir content folder mounted at the pak root (repeatable), e.g.
+        /// `assets/data`, whose `fonts/`, `shaders/`, `ui/`, `ron/` … land at the
+        /// root of the `ro://` namespace
+        #[arg(long = "content-dir")]
+        content_dir: Vec<PathBuf>,
 
         /// Output pak path
         #[arg(long)]
@@ -109,6 +116,7 @@ fn run() -> Result<()> {
         Commands::Pack {
             grf,
             data_folder,
+            content_dir,
             out,
             content_version,
             zstd_level,
@@ -117,6 +125,7 @@ fn run() -> Result<()> {
             pack_command(
                 &grf,
                 data_folder.as_deref(),
+                &content_dir,
                 &out,
                 content_version,
                 zstd_level,
@@ -134,13 +143,14 @@ fn run() -> Result<()> {
 fn pack_command(
     grf_paths: &[PathBuf],
     data_folder: Option<&Path>,
+    content_dirs: &[PathBuf],
     out: &Path,
     content_version: u64,
     zstd_level: Option<i32>,
     jobs: Option<usize>,
 ) -> Result<()> {
     println!("Scanning sources...");
-    let (entries, skipped) = pak::collect_entries(grf_paths, data_folder);
+    let (entries, skipped) = pak::collect_entries(grf_paths, data_folder, content_dirs);
 
     let jobs = jobs
         .or_else(|| std::thread::available_parallelism().ok().map(|n| n.get()))

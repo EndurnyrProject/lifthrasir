@@ -427,7 +427,7 @@ fn amount_badge(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(9.0)},
         }
         TextColor(theme::TEXT)
@@ -441,7 +441,7 @@ fn refine_badge(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(9.0)},
         }
         TextColor(theme::GOLD)
@@ -454,7 +454,7 @@ fn muted_text(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(12.0)},
         }
         TextColor(theme::TEXT_FAINT)

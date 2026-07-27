@@ -16,7 +16,7 @@ impl Plugin for JobSystemPlugin {
 }
 
 fn start_loading_job_data(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let handle = asset_server.load("data/ron/job_data.ron");
+    let handle = asset_server.load("ro://ron/job_data.ron");
     commands.insert_resource(JobDataHandle(handle));
     debug!("Loading job data RON");
 }
@@ -31,7 +31,7 @@ fn process_loaded_job_data(
 
     if let LoadState::Failed(err) = asset_server.load_state(&handle.0) {
         error!(
-            "Failed to load data/ron/job_data.ron: {:?}. Run `cargo run -p ro-to-lifthrasir-cli -- convert` to regenerate it.",
+            "Failed to load ro://ron/job_data.ron: {:?}. Run `cargo run -p ro-to-lifthrasir-cli -- convert` to regenerate it.",
             err
         );
         commands.remove_resource::<JobDataHandle>();

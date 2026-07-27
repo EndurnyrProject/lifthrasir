@@ -495,7 +495,7 @@ fn amount_badge(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(9.0)},
         }
         TextColor(theme::TEXT)
@@ -509,7 +509,7 @@ fn refine_badge(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(9.0)},
         }
         TextColor(theme::GOLD)
@@ -612,7 +612,7 @@ fn stepper_value(qty: u16) -> impl Scene {
     bsn! {
         Text({qty.to_string()})
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(12.0)},
         }
         TextColor(theme::TEXT)
@@ -731,7 +731,7 @@ fn zeny_display(zeny: u32) -> impl Scene {
             (
                 Text({format!("{zeny}z")})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(12.0)},
                 }
                 TextColor(theme::GOLD)
@@ -745,7 +745,7 @@ fn muted_text(text: String) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(12.0)},
         }
         TextColor(theme::TEXT_FAINT)

@@ -138,9 +138,7 @@ pub fn on_sprite_click(
     if is_attackable {
         if let Some(net) = net {
             attacks.write(AttackRequested { target_id: net.gid });
-            *locked = LockedTarget {
-                gid: Some(net.gid),
-            };
+            *locked = LockedTarget { gid: Some(net.gid) };
         }
         return;
     }

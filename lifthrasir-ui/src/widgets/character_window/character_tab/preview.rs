@@ -144,7 +144,7 @@ fn rotate_row() -> impl Scene {
             (
                 Text({"Rotate".to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(10.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT_DIM})

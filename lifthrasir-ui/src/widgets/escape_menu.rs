@@ -191,7 +191,7 @@ fn title(text: &'static str) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
             font_size: {FontSize::Px(19.0)},
         }
         TextColor({theme::DISPLAY_GOLD})

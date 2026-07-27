@@ -53,7 +53,7 @@ pub fn meter(ratio: f32, fill: Color, label: String) -> impl Scene {
             (
                 Text(label)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(11.0)},
                 }
                 TextColor(theme::TEXT_DIM)

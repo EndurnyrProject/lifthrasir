@@ -220,7 +220,7 @@ fn head(text: &'static str) -> impl Scene {
     bsn! {
         Text({text.to_string()})
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(11.0)},
         }
         TextColor(theme::GOLD)
@@ -279,7 +279,7 @@ fn bank() -> impl Scene {
             (
                 Text({"0".to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(13.0)},
                 }
                 TextColor(theme::GOLD)
@@ -308,7 +308,7 @@ fn stat_row(stat: StatusParameter) -> impl Scene {
                 template_value(CharStatValue(stat))
                 Text({"0".to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(13.0)},
                 }
                 TextColor(theme::TEXT)
@@ -321,7 +321,7 @@ fn stat_row(stat: StatusParameter) -> impl Scene {
                 template_value(CharCostLabel(stat))
                 Text({"".to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(10.5)},
                 }
                 TextColor(theme::TEXT_FAINT)
@@ -387,7 +387,7 @@ fn combat_cell(label: &'static str, cell: CharCombatCell) -> impl Scene {
                 template_value(cell)
                 Text({"0".to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(12.0)},
                 }
                 TextColor(theme::TEXT)

@@ -34,13 +34,13 @@ pub const RARITY_FINE: Color = EMERALD_BRI;
 pub const RARITY_RARE: Color = GOLD;
 pub const RARITY_MAGIC: Color = Color::srgb_u8(0x6f, 0xc4, 0xec);
 
-pub const FONT_TITLE: &str = "fonts/cinzel.ttf";
-pub const FONT_BODY: &str = "fonts/manrope.ttf";
+pub const FONT_TITLE: &str = "ro://fonts/cinzel.ttf";
+pub const FONT_BODY: &str = "ro://fonts/manrope.ttf";
 
 /// Asset directory for the SVG glyph icons extracted from the Endurnir mockups.
-pub const ICON_DIR: &str = "ui/icons/";
+pub const ICON_DIR: &str = "ro://ui/icons/";
 
-/// A square UI icon loaded from `assets/ui/icons/<name>.svg`. The icons ship as white
+/// A square UI icon loaded from `assets/data/ui/icons/<name>.svg`. The icons ship as white
 /// glyphs, so `color` is what sets their final tint (emerald play, crimson trash, …).
 /// `Pickable::IGNORE` keeps the glyph from swallowing clicks on its host button.
 pub fn icon(assets: &AssetServer, name: &str, size: f32, color: Color) -> impl Bundle + use<> {
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn fonts_point_at_vendored_ttf() {
-        assert_eq!(FONT_BODY, "fonts/manrope.ttf");
-        assert_eq!(FONT_TITLE, "fonts/cinzel.ttf");
+        assert_eq!(FONT_BODY, "ro://fonts/manrope.ttf");
+        assert_eq!(FONT_TITLE, "ro://fonts/cinzel.ttf");
     }
 }

@@ -222,7 +222,7 @@ fn slot_well(spec: SlotSpec) -> impl Scene {
                 #Refine
                 Text("")
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(9.0)},
                 }
                 TextColor({theme::GOLD})

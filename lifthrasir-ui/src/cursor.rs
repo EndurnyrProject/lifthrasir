@@ -18,8 +18,8 @@ use bevy::window::{CustomCursor, CustomCursorImage};
 use bevy_feathers::cursor::{EntityCursor, OverrideCursor};
 use game_engine::domain::input::{CurrentCursorType, CursorType};
 
-/// `AssetServer` path (relative to `assets/`) holding the extracted cursor PNGs.
-const CURSOR_DIR: &str = "data/textures/ui/cursors";
+/// `ro://` directory holding the extracted cursor PNGs.
+const CURSOR_DIR: &str = "ro://textures/ui/cursors";
 
 pub struct NativeCursorPlugin;
 

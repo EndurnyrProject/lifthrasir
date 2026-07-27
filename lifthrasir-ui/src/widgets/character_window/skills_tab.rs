@@ -893,7 +893,7 @@ fn muted_text(text: String) -> impl Scene {
 }
 
 fn body_font() -> bevy::text::FontSourceTemplate {
-    bevy::text::FontSourceTemplate::Handle("fonts/manrope.ttf".into())
+    bevy::text::FontSourceTemplate::Handle("ro://fonts/manrope.ttf".into())
 }
 
 /// Footer: "Skill Points" label + value, plus the Reset/Apply buttons (dimmed when

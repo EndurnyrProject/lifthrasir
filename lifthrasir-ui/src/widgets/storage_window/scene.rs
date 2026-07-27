@@ -795,7 +795,7 @@ mod tests {
         let mut app = test_app();
         let selected = StorageCellView {
             selection: StorageSelection::Bag(7),
-            icon: "ui/icons/bag.svg".to_string(),
+            icon: "ro://ui/icons/bag.svg".to_string(),
             name: "Red Potion".to_string(),
             category: "Use",
             amount: 3,

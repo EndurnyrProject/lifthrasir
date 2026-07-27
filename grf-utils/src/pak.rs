@@ -75,6 +75,13 @@ fn scan_dir_recursive(dir: &Path, root: &Path, out: &mut SourceEntries) {
     for entry in read_dir.flatten() {
         let path = entry.path();
 
+        // Skip dotfiles (`.DS_Store`, editor droppings): no RO or Lifthrasir asset
+        // path starts with a dot, and the pak's own `.lifthrasir/` entries are
+        // written separately.
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+
         if path.is_dir() {
             scan_dir_recursive(&path, root, out);
             continue;
@@ -102,6 +109,16 @@ pub fn scan_data_folder(data_folder: &Path) -> SourceEntries {
     let root = data_folder.parent().unwrap_or(Path::new(""));
     let mut entries = Vec::new();
     scan_dir_recursive(data_folder, root, &mut entries);
+    entries
+}
+
+/// Recursively scans a Lifthrasir content folder into normalized (path, bytes)
+/// entries. Unlike [`scan_data_folder`], paths are taken relative to the folder
+/// itself, so the folder *is* the pak root — this mirrors the runtime, where the
+/// configured `data_folder` is the root of the `ro://` namespace.
+pub fn scan_content_folder(content_folder: &Path) -> SourceEntries {
+    let mut entries = Vec::new();
+    scan_dir_recursive(content_folder, content_folder, &mut entries);
     entries
 }
 
@@ -140,10 +157,14 @@ fn scan_grf(path: &Path, skipped: &mut usize) -> Result<SourceEntries> {
 pub fn collect_entries(
     grf_paths: &[PathBuf],
     data_folder: Option<&Path>,
+    content_folders: &[PathBuf],
 ) -> (SourceEntries, usize) {
     let mut tiers: Vec<SourceEntries> = Vec::new();
     if let Some(folder) = data_folder {
         tiers.push(scan_data_folder(folder));
+    }
+    for folder in content_folders {
+        tiers.push(scan_content_folder(folder));
     }
 
     let mut skipped = 0usize;
@@ -664,6 +685,30 @@ mod tests {
         assert_eq!(as_map["data/c.txt"], b"from-second-grf-c");
     }
 
+    /// A content folder is the pak root: its own name is dropped, so the runtime
+    /// finds `assets/data/fonts/x.ttf` at `ro://fonts/x.ttf`. The data folder keeps
+    /// its name instead, which is what lets it shadow the GRFs' `data/...` entries.
+    #[test]
+    fn content_folder_mounts_at_pak_root_unlike_data_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = dir.path().join("data");
+        fs::create_dir_all(content.join("fonts")).unwrap();
+        fs::write(content.join("fonts/Manrope.ttf"), b"ttf-bytes").unwrap();
+
+        let (entries, skipped) = collect_entries(&[], None, std::slice::from_ref(&content));
+        assert_eq!(skipped, 0);
+        assert_eq!(
+            entries,
+            vec![("fonts/manrope.ttf".to_string(), b"ttf-bytes".to_vec())]
+        );
+
+        let (as_data_folder, _) = collect_entries(&[], Some(&content), &[]);
+        assert_eq!(
+            as_data_folder,
+            vec![("data/fonts/manrope.ttf".to_string(), b"ttf-bytes".to_vec())]
+        );
+    }
+
     #[test]
     fn pack_produces_zip_openable_by_plain_zip_archive() {
         let dir = tempfile::tempdir().unwrap();
@@ -677,7 +722,7 @@ mod tests {
         )
         .unwrap();
 
-        let (entries, skipped) = collect_entries(&[], Some(&data_folder));
+        let (entries, skipped) = collect_entries(&[], Some(&data_folder), &[]);
         assert_eq!(skipped, 0);
 
         let out_path = dir.path().join("out.pak");
@@ -742,7 +787,7 @@ mod tests {
         }
         fs::write(data_folder.join("sound.ogg"), b"ogg-bytes").unwrap();
 
-        let (entries, skipped) = collect_entries(&[], Some(&data_folder));
+        let (entries, skipped) = collect_entries(&[], Some(&data_folder), &[]);
         assert_eq!(skipped, 0);
 
         let sequential_path = dir.path().join("sequential.pak");
@@ -793,7 +838,7 @@ mod tests {
             fs::write(data_folder.join(format!("file{i}.txt")), b"payload").unwrap();
         }
 
-        let (entries, _) = collect_entries(&[], Some(&data_folder));
+        let (entries, _) = collect_entries(&[], Some(&data_folder), &[]);
         let out_path = dir.path().join("out.pak");
 
         write_pak_parallel(&entries, &out_path, 1, None, 3, |_| {}).unwrap();

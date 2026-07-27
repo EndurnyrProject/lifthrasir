@@ -43,6 +43,7 @@ cargo run -p ro-to-lifthrasir-cli -- convert
 # Then, generate your pak file
 cargo run --release -p grf-utils -- pack \
   --grf assets/en.grf --grf assets/data.grf \
+  --content-dir assets/data \
   --out assets/lifthrasir.pak --content-version 1
 
 # Run the app on dev mode

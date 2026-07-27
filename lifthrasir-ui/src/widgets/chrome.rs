@@ -44,7 +44,7 @@ pub fn chrome_text(text: String, size: f32, color: Color) -> impl Scene {
     bsn! {
         Text(text)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(size)},
         }
         TextColor(color)
@@ -79,7 +79,7 @@ where
             (
                 Text(title)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
                     font_size: {FontSize::Px(15.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})

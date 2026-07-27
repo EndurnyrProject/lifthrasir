@@ -162,12 +162,12 @@ pub(crate) fn descriptor_tint(descriptor: &EffectDescriptor) -> Color {
     Color::srgba(r, g, b, a)
 }
 
-/// Resolves a `Str` layer's asset name to its asset path: authored
-/// `.strfx.ron` effects load from the default filesystem source, GRF `.str`
-/// effects keep the `ro://` archive source.
+/// Resolves a `Str` layer's asset name to its `ro://` asset path: authored
+/// `.strfx.ron` effects live under `effects/`, GRF `.str` effects under the
+/// archive's `data/texture/effect/`.
 fn effect_asset_path(name: &str) -> String {
     if name.ends_with(".strfx.ron") {
-        format!("data/effects/{name}")
+        format!("ro://effects/{name}")
     } else {
         format!("ro://data/texture/effect/{name}")
     }
@@ -766,7 +766,7 @@ mod tests {
     fn effect_asset_path_resolves_authored_names_to_the_filesystem_source() {
         assert_eq!(
             effect_asset_path("fire_bolt.strfx.ron"),
-            "data/effects/fire_bolt.strfx.ron"
+            "ro://effects/fire_bolt.strfx.ron"
         );
     }
 
@@ -1083,7 +1083,7 @@ mod tests {
             .resource::<AssetServer>()
             .get_path(effect_handle.id())
             .expect("Grand Cross effect has an asset path");
-        assert_eq!(path.to_string(), "data/effects/grand_cross.strfx.ron");
+        assert_eq!(path.to_string(), "ro://effects/grand_cross.strfx.ron");
 
         let numbers = app
             .world_mut()
@@ -1312,7 +1312,7 @@ mod tests {
 
     #[test]
     fn special_effect_reflect_shield_spawns_one_finite_effect_at_source() {
-        assert_finite_special_effect_at_source(252, "data/effects/reflect_shield.strfx.ron");
+        assert_finite_special_effect_at_source(252, "ro://effects/reflect_shield.strfx.ron");
     }
 
     #[test]

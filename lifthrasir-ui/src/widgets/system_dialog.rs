@@ -86,7 +86,7 @@ pub fn severity_accent(severity: DialogSeverity) -> Color {
     }
 }
 
-/// The line-icon name (in `assets/ui/icons/`) for a severity.
+/// The line-icon name (in `assets/data/ui/icons/`) for a severity.
 fn severity_icon(severity: DialogSeverity) -> &'static str {
     match severity {
         DialogSeverity::Error => "bang",

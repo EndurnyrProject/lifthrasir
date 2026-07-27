@@ -79,7 +79,7 @@ fn titlebar() -> impl Scene {
             (
                 Text("Emotes")
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
                     font_size: {FontSize::Px(15.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})

@@ -208,7 +208,7 @@ fn avatar_box(letter: String) -> impl Scene {
             (
                 Text(letter)
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
                     font_size: {FontSize::Px(18.0)},
                 }
                 TextColor(theme::GOLD)
@@ -222,7 +222,7 @@ fn name_text(name: String) -> impl Scene {
     bsn! {
         Text(name)
         TextFont {
-            font: FontSourceTemplate::Handle("fonts/cinzel.ttf"),
+            font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
             font_size: {FontSize::Px(16.0)},
         }
         TextColor(theme::EMERALD_BRI)
@@ -272,7 +272,7 @@ fn meter_line(tag: &str, ratio: f32, fill: Color, label: String) -> impl Scene +
             (
                 Text({tag.to_string()})
                 TextFont {
-                    font: FontSourceTemplate::Handle("fonts/manrope.ttf"),
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
                     font_size: {FontSize::Px(10.5)},
                 }
                 TextColor(theme::TEXT_FAINT)
