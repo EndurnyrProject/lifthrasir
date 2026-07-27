@@ -19,7 +19,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     Convert {
-        #[arg(long, default_value = "assets/loader.toml")]
+        #[arg(long, default_value = "assets/convert.toml")]
         loader: PathBuf,
         #[arg(long, default_value = "assets/data/ron")]
         out: PathBuf,

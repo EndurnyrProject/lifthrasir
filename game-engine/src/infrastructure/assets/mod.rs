@@ -28,10 +28,9 @@ pub use converters::*;
 pub use hierarchical_manager::*;
 pub use indoor_map_table_loader::{IndoorMapTableAsset, IndoorMapTableLoader};
 pub use loaders::{
-    BgmNameTableAsset, BgmNameTableLoader, GrfAsset, GrfLoader, RoActAsset, RoActLoader,
-    RoAltitudeAsset, RoAltitudeLoader, RoGroundAsset, RoGroundLoader, RoPaletteAsset,
-    RoPaletteLoader, RoSpriteAsset, RoSpriteLoader, RoWorldAsset, RoWorldLoader, RsmAsset,
-    RsmLoader,
+    BgmNameTableAsset, BgmNameTableLoader, RoActAsset, RoActLoader, RoAltitudeAsset,
+    RoAltitudeLoader, RoGroundAsset, RoGroundLoader, RoPaletteAsset, RoPaletteLoader,
+    RoSpriteAsset, RoSpriteLoader, RoWorldAsset, RoWorldLoader, RsmAsset, RsmLoader,
 };
 pub use ro_animation_asset::{ActionData, FrameData, FramePart, RoAnimationAsset};
 pub use ro_assets_plugin::SharedCompositeAssetSource;

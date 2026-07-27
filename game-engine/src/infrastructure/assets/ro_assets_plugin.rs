@@ -40,8 +40,8 @@ impl RoAssetsPlugin {
             .map_err(|e| format!("Failed to parse config file '{}': {}", config_path, e))?;
 
         info!(
-            "Successfully loaded asset configuration with {} GRF sources",
-            config.assets.grf.len()
+            "Successfully loaded asset configuration with {} archive sources",
+            config.assets.archive.len()
         );
         Ok(config)
     }
@@ -59,7 +59,7 @@ impl Plugin for RoAssetsPlugin {
             );
 
             let composite_source = setup_composite_source_from_config(&config).expect(
-                "Failed to create composite asset source - check GRF files and configuration",
+                "Failed to create composite asset source - check archive files and configuration",
             );
 
             let composite_arc = Arc::new(RwLock::new(composite_source));

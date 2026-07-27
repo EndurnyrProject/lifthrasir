@@ -1,0 +1,10 @@
+[assets]
+data_folder = "assets/data"
+
+[[assets.grf]]
+path = "data.grf"
+priority = 1
+
+[[assets.grf]]
+path = "en.grf"
+priority = 0

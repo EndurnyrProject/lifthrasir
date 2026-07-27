@@ -119,3 +119,58 @@ impl AssetSource for CompositeAssetSource {
         unique_files
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::assets::sources::{DataFolderSource, PakSource};
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::{Path, PathBuf};
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipWriter};
+
+    fn build_fixture_pak(dir: &Path, name: &str) -> PathBuf {
+        let path = dir.join(name);
+        let file = File::create(&path).unwrap();
+        let mut writer = ZipWriter::new(file);
+
+        writer
+            .start_file(
+                "data/sprite/x.spr",
+                SimpleFileOptions::default().compression_method(CompressionMethod::Zstd),
+            )
+            .unwrap();
+        writer.write_all(b"pak-bytes").unwrap();
+
+        writer
+            .start_file(
+                ".lifthrasir/manifest.toml",
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored),
+            )
+            .unwrap();
+        writer
+            .write_all(b"format_version = 1\ncontent_version = 1\ncreated_unix = 0\n")
+            .unwrap();
+
+        writer.finish().unwrap();
+        path
+    }
+
+    #[test]
+    fn data_folder_entry_overrides_pak_entry_for_same_path() {
+        let pak_dir = tempfile::tempdir().unwrap();
+        let pak_path = build_fixture_pak(pak_dir.path(), "fixture.pak");
+
+        let data_dir = tempfile::tempdir().unwrap();
+        let loose_file = data_dir.path().join("data/sprite/x.spr");
+        std::fs::create_dir_all(loose_file.parent().unwrap()).unwrap();
+        std::fs::write(&loose_file, b"loose-bytes").unwrap();
+
+        let mut composite = CompositeAssetSource::new();
+        composite.add_source(Box::new(PakSource::new(&pak_path, 1).unwrap()));
+        composite.add_source(Box::new(DataFolderSource::new(data_dir.path())));
+
+        assert_eq!(composite.load("data/sprite/x.spr").unwrap(), b"loose-bytes");
+    }
+}

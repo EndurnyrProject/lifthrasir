@@ -1,12 +1,12 @@
 use super::{AssetConfig, sources::CompositeAssetSource};
-use bevy::log::{debug, error};
+use bevy::log::debug;
 
 /// Sets up CompositeAssetSource from configuration, preserving the exact logic
 /// from HierarchicalAssetManager for compatibility.
 pub fn setup_composite_source_from_config(
     config: &AssetConfig,
 ) -> Result<CompositeAssetSource, Box<dyn std::error::Error>> {
-    use super::sources::{DataFolderSource, GrfSource};
+    use super::sources::{DataFolderSource, PakSource};
     use std::path::Path;
 
     let mut composite = CompositeAssetSource::new();
@@ -24,47 +24,99 @@ pub fn setup_composite_source_from_config(
         );
     }
 
-    // Add GRF sources sorted by priority
-    let grf_files = config.grf_files_by_priority();
-    for grf_config in grf_files {
-        let grf_path = Path::new(&grf_config.path);
+    // Add pak sources sorted by priority
+    let archives = config.archives_by_priority();
+    for archive_config in archives {
+        let archive_path = Path::new(&archive_config.path);
 
         // Try absolute path first, then relative to assets directory
         let potential_paths = vec![
-            grf_path.to_path_buf(),
-            Path::new("assets").join(grf_path),
+            archive_path.to_path_buf(),
+            Path::new("assets").join(archive_path),
             std::env::current_dir()
                 .unwrap()
                 .join("assets")
-                .join(grf_path),
+                .join(archive_path),
         ];
 
-        let mut grf_loaded = false;
-        for potential_path in potential_paths {
+        let mut archive_loaded = false;
+        let mut last_error = None;
+        for potential_path in &potential_paths {
             if potential_path.exists() {
-                match GrfSource::new(potential_path.clone(), grf_config.priority + 1) {
+                match PakSource::new(potential_path.clone(), archive_config.priority + 1) {
                     // +1 to ensure data folder has priority 0
-                    Ok(grf_source) => {
+                    Ok(pak_source) => {
                         debug!(
-                            "Loaded GRF: {} (priority: {})",
+                            "Loaded pak: {} (priority: {})",
                             potential_path.display(),
-                            grf_config.priority + 1
+                            archive_config.priority + 1
                         );
-                        composite.add_source(Box::new(grf_source));
-                        grf_loaded = true;
+                        composite.add_source(Box::new(pak_source));
+                        archive_loaded = true;
                         break;
                     }
                     Err(e) => {
-                        error!("Failed to load GRF {}: {}", potential_path.display(), e);
+                        last_error = Some(e.to_string());
                     }
                 }
             }
         }
 
-        if !grf_loaded {
-            error!("Could not find or load GRF file: {}", grf_config.path);
+        if !archive_loaded {
+            let attempted = potential_paths
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let reason = last_error.map(|e| format!(": {e}")).unwrap_or_default();
+            return Err(format!(
+                "Could not find or load pak file '{}' (tried: {attempted}){reason}",
+                archive_config.path
+            )
+            .into());
         }
     }
 
     Ok(composite)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::assets::{ArchiveConfig, AssetsSection};
+
+    fn config_with_archive(path: String) -> AssetConfig {
+        AssetConfig {
+            assets: AssetsSection {
+                data_folder: "/nonexistent-data-folder-xyz".to_string(),
+                archive: vec![ArchiveConfig { path, priority: 0 }],
+            },
+        }
+    }
+
+    #[test]
+    fn missing_archive_file_fails_loudly() {
+        let config = config_with_archive("/nonexistent-archive-xyz.pak".to_string());
+
+        let err = match setup_composite_source_from_config(&config) {
+            Ok(_) => panic!("missing archive must not silently degrade"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("nonexistent-archive-xyz.pak"));
+    }
+
+    #[test]
+    fn corrupt_archive_file_fails_loudly_with_pak_source_reason() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("corrupt.pak");
+        std::fs::write(&path, b"not a zip file").unwrap();
+
+        let config = config_with_archive(path.display().to_string());
+
+        let err = match setup_composite_source_from_config(&config) {
+            Ok(_) => panic!("corrupt archive must not silently degrade"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("grf-utils pack"));
+    }
 }

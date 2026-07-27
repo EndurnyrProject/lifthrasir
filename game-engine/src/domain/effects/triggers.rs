@@ -164,7 +164,7 @@ pub(crate) fn descriptor_tint(descriptor: &EffectDescriptor) -> Color {
 
 /// Resolves a `Str` layer's asset name to its asset path: authored
 /// `.strfx.ron` effects load from the default filesystem source, GRF `.str`
-/// effects keep the `ro://` GRF source.
+/// effects keep the `ro://` archive source.
 fn effect_asset_path(name: &str) -> String {
     if name.ends_with(".strfx.ron") {
         format!("data/effects/{name}")

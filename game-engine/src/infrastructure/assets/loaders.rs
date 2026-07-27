@@ -6,9 +6,9 @@ use bevy::{
 use thiserror::Error;
 
 use crate::infrastructure::ro_formats::{
-    ActError, GatError, GndError, GrfError, GrfFile, RoAction as ParsedRoAction, RoAltitude,
-    RoGround, RoSprite as ParsedRoSprite, RoWorld, RsmError, RsmFile, RswError, SpriteError,
-    parse_act, parse_spr as parse_sprite,
+    ActError, GatError, GndError, RoAction as ParsedRoAction, RoAltitude, RoGround,
+    RoSprite as ParsedRoSprite, RoWorld, RsmError, RsmFile, RswError, SpriteError, parse_act,
+    parse_spr as parse_sprite,
 };
 
 // Re-export BGM name table types
@@ -46,11 +46,6 @@ pub struct RsmAsset {
     pub model: RsmFile,
 }
 
-#[derive(Asset, TypePath, Debug)]
-pub struct GrfAsset {
-    pub grf: GrfFile,
-}
-
 #[derive(Asset, TypePath, Debug, Clone)]
 pub struct RoPaletteAsset {
     pub colors: Vec<[u8; 4]>, // RGBA
@@ -73,9 +68,6 @@ pub struct RoAltitudeLoader;
 
 #[derive(Default, TypePath)]
 pub struct RsmLoader;
-
-#[derive(Default, TypePath)]
-pub struct GrfLoader;
 
 #[derive(Default, TypePath)]
 pub struct RoPaletteLoader;
@@ -126,14 +118,6 @@ pub enum RsmLoaderError {
     Io(#[from] std::io::Error),
     #[error("Could not parse RSM: {0}")]
     Parse(#[from] RsmError),
-}
-
-#[derive(Debug, Error)]
-pub enum GrfLoaderError {
-    #[error("Could not load GRF: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Could not parse GRF: {0}")]
-    Parse(#[from] GrfError),
 }
 
 #[derive(Debug, Error)]
@@ -282,40 +266,6 @@ impl AssetLoader for RsmLoader {
 
     fn extensions(&self) -> &[&str] {
         &["rsm"]
-    }
-}
-
-impl AssetLoader for GrfLoader {
-    type Asset = GrfAsset;
-    type Settings = ();
-    type Error = GrfLoaderError;
-
-    async fn load(
-        &self,
-        _reader: &mut dyn Reader,
-        _settings: &Self::Settings,
-        load_context: &mut LoadContext<'_>,
-    ) -> Result<Self::Asset, Self::Error> {
-        // Get the file path from the load context
-        let path = load_context.path().path();
-        debug!("Loading GRF metadata from: {:?}", path);
-
-        // Convert to absolute path by resolving against the assets directory
-        let assets_dir = std::env::current_dir().unwrap().join("assets");
-        let full_path = assets_dir.join(path);
-
-        // Use the new path-based approach for lazy loading
-        let grf = GrfFile::from_path(full_path)?;
-        debug!(
-            "GRF metadata loaded successfully: {} files",
-            grf.entries.len()
-        );
-
-        Ok(GrfAsset { grf })
-    }
-
-    fn extensions(&self) -> &[&str] {
-        &["grf"]
     }
 }
 

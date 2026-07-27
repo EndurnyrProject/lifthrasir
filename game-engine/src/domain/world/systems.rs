@@ -175,7 +175,7 @@ fn check_map_asset_load<A: Asset>(
     match asset_server.load_state(handle) {
         LoadState::Failed(err) => {
             panic!(
-                "Failed to load {lower} asset ({extension}) for map '{}': {:?}. File not found in GRF or data folder.",
+                "Failed to load {lower} asset ({extension}) for map '{}': {:?}. File not found in archive or data folder.",
                 map_name, err
             );
         }

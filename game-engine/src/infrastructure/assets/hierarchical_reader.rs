@@ -12,11 +12,11 @@ use std::{
 /// AssetReader implementation that integrates with our hierarchical asset source system.
 ///
 /// This reader bridges the existing CompositeAssetSource (which handles priority-based
-/// resolution between data folder and GRF files) with Bevy's async AssetReader trait.
+/// resolution between data folder and pak archives) with Bevy's async AssetReader trait.
 ///
 /// Features:
-/// - Preserves priority-based asset resolution (data folder > GRF files)
-/// - Converts synchronous GRF operations to async using IoTaskPool
+/// - Preserves priority-based asset resolution (data folder > pak archives)
+/// - Converts synchronous archive operations to async using IoTaskPool
 /// - Maintains existing caching behavior
 /// - Supports all existing asset formats
 pub struct HierarchicalAssetReader {
@@ -78,12 +78,6 @@ impl HierarchicalAssetReader {
         match error {
             AssetSourceError::NotFound(path) => AssetReaderError::NotFound(PathBuf::from(path)),
             AssetSourceError::Io(io_error) => AssetReaderError::Io(Arc::new(io_error)),
-            AssetSourceError::Grf(grf_error) => {
-                AssetReaderError::Io(Arc::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("GRF error: {}", grf_error),
-                )))
-            }
             AssetSourceError::Archive(archive_error) => {
                 AssetReaderError::Io(Arc::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,

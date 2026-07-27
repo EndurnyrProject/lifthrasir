@@ -1,6 +1,5 @@
 pub mod composite;
 pub mod data_folder;
-pub mod grf_source;
 pub mod pak_source;
 
 use thiserror::Error;
@@ -11,8 +10,6 @@ pub enum AssetSourceError {
     NotFound(String),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("GRF error: {0}")]
-    Grf(String),
     #[error("Archive error: {0}")]
     Archive(String),
 }
@@ -38,5 +35,4 @@ impl std::fmt::Debug for dyn AssetSource {
 
 pub use composite::*;
 pub use data_folder::*;
-pub use grf_source::*;
 pub use pak_source::*;

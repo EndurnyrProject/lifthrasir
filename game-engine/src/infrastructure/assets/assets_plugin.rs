@@ -34,8 +34,6 @@ impl Plugin for AssetsPlugin {
             .init_asset_loader::<RoAltitudeLoader>()
             .init_asset::<RsmAsset>()
             .init_asset_loader::<RsmLoader>()
-            .init_asset::<GrfAsset>()
-            .init_asset_loader::<GrfLoader>()
             .init_asset::<RoPaletteAsset>()
             .init_asset_loader::<RoPaletteLoader>()
             .init_asset::<LoadedEffectAsset>()
