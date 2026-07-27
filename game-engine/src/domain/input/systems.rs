@@ -8,12 +8,9 @@ use crate::{
             pathfinding::{CurrentMapPathfindingGrid, WalkablePath, find_path},
         },
         system_sets::InputSystems,
-        world::components::MapLoader,
     },
-    infrastructure::assets::loaders::RoGroundAsset,
     utils::coordinates::world_position_to_spawn_coords,
 };
-use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use leafwing_input_manager::prelude::ActionState;
@@ -33,13 +30,6 @@ use super::{
 // =============================================================================
 // Removed SpriteObjectTree dependency - queries entity Transform directly.
 // =============================================================================
-
-#[derive(SystemParam)]
-pub struct MapData<'w, 's> {
-    map_loader_query: Query<'w, 's, &'static MapLoader>,
-    ground_assets: Res<'w, Assets<RoGroundAsset>>,
-    pathfinding_grid: Option<Res<'w, CurrentMapPathfindingGrid>>,
-}
 
 #[auto_add_system(
     plugin = crate::domain::input::plugin::InputPlugin,
@@ -111,7 +101,7 @@ pub fn handle_terrain_click(
     mut mouse_click: ResMut<ForwardedMouseClick>,
     targeting: Res<TargetingMode>,
     cache: Res<TerrainRaycastCache>,
-    map_data: MapData,
+    pathfinding_grid: Option<Res<CurrentMapPathfindingGrid>>,
     player_query: Query<(Entity, &Transform), With<LocalPlayer>>,
     mut locked_target: ResMut<LockedTarget>,
 ) {
@@ -133,29 +123,15 @@ pub fn handle_terrain_click(
         return;
     };
 
-    let Ok(map_loader) = map_data.map_loader_query.single() else {
-        warn!("No map loaded, ignoring terrain click");
-        return;
-    };
-
-    let Some(ground_asset) = map_data.ground_assets.get(&map_loader.ground) else {
-        warn!("Ground asset not loaded, ignoring terrain click");
-        return;
-    };
-
     let Ok((player_entity, transform)) = player_query.single() else {
         warn!("No player character found for movement request");
         return;
     };
 
     let current_pos = transform.translation;
-    let (current_x, current_y) = world_position_to_spawn_coords(
-        current_pos,
-        ground_asset.ground.width,
-        ground_asset.ground.height,
-    );
+    let (current_x, current_y) = world_position_to_spawn_coords(current_pos);
 
-    let Some(grid) = map_data.pathfinding_grid else {
+    let Some(grid) = pathfinding_grid else {
         warn!("Pathfinding grid not yet loaded, ignoring terrain click");
         return;
     };

@@ -110,7 +110,7 @@ pub fn handle_movement_confirmed_system(
         let (actual_src_x, actual_src_y, src_world_pos) = if existing_target.is_some() {
             let current_pos = transform.translation;
             let (current_x, current_y) =
-                crate::utils::coordinates::world_position_to_spawn_coords(current_pos, 0, 0);
+                crate::utils::coordinates::world_position_to_spawn_coords(current_pos);
             let current_world_pos = Vec3::new(current_pos.x, 0.0, current_pos.z);
 
             debug!(
@@ -410,7 +410,7 @@ pub fn cancel_movement_on_attack(
             continue;
         }
 
-        let (cell_x, cell_y) = world_position_to_spawn_coords(transform.translation, 0, 0);
+        let (cell_x, cell_y) = world_position_to_spawn_coords(transform.translation);
         let remaining_cells = target
             .dest_x
             .abs_diff(cell_x)

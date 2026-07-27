@@ -1,9 +1,6 @@
 use crate::{
-    domain::{
-        system_sets::InputSystems,
-        world::components::{CurrentMapAltitude, MapLoader},
-    },
-    infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
+    domain::{system_sets::InputSystems, world::components::CurrentMapAltitude},
+    infrastructure::assets::loaders::RoAltitudeAsset,
     utils::coordinates::world_position_to_spawn_coords,
 };
 use bevy::prelude::*;
@@ -50,9 +47,7 @@ pub fn update_terrain_raycast_cache(
     mut cache: ResMut<TerrainRaycastCache>,
     cursor_pos: Res<ForwardedCursorPosition>,
     camera_query: Query<(&Camera, &GlobalTransform), GameCameraFilter>,
-    map_loader_query: Query<&MapLoader>,
     map_altitude: Option<Res<CurrentMapAltitude>>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
 ) {
     let Some(cursor_position) = cursor_pos.position else {
@@ -68,16 +63,6 @@ pub fn update_terrain_raycast_cache(
     if cache.last_input == Some((cursor_position, *camera_transform)) {
         return;
     }
-
-    let Ok(map_loader) = map_loader_query.single() else {
-        cache.clear();
-        return;
-    };
-
-    let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
-        cache.clear();
-        return;
-    };
 
     let Some(map_altitude) = map_altitude else {
         cache.clear();
@@ -149,17 +134,13 @@ pub fn update_terrain_raycast_cache(
     }
     let world_pos = (lo + hi) * 0.5;
 
-    let (raw_x, raw_y) = world_position_to_spawn_coords(
-        world_pos,
-        ground_asset.ground.width,
-        ground_asset.ground.height,
-    );
+    let (raw_x, raw_y) = world_position_to_spawn_coords(world_pos);
 
     // The raycast resolves one grid cell off from the cursor's true cell (-1 X, +1 Y).
     // Correct at this single source so the gizmo, walkability, and click-to-move agree.
-    // No upper clamp: cells are in GAT space, while ground.{width,height} are GND-resolution
-    // (half), so clamping against them froze the gizmo mid-map. is_walkable bounds-checks
-    // internally and the ray-march already returns None past the true map edge.
+    // No upper clamp: cells are in GAT space, so clamping against the GND-resolution
+    // (half) map dimensions froze the gizmo mid-map. is_walkable bounds-checks internally
+    // and the ray-march already returns None past the true map edge.
     let cell_x = raw_x.saturating_sub(1);
     let cell_y = raw_y + 1;
 

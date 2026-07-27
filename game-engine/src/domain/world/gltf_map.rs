@@ -539,6 +539,10 @@ mod tests {
     use crate::domain::effects::components::{ActiveEffect, MapAmbientVfx};
     use crate::domain::entities::pathfinding::PathfindingGrid;
     use crate::domain::entities::systems::AnimationType;
+    use crate::domain::input::resources::ForwardedCursorPosition;
+    use crate::domain::input::terrain_raycast::{
+        TerrainRaycastCache, update_terrain_raycast_cache,
+    };
     use crate::domain::world::spawn_context::MapSpawnContext;
     use crate::infrastructure::assets::hierarchical_reader::HierarchicalAssetReader;
     use crate::infrastructure::assets::loaders::{
@@ -548,8 +552,10 @@ mod tests {
     use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset};
     use crate::presentation::rendering::models::{AnimationSpeed, MapModel, RsmLoading};
     use crate::presentation::rendering::water::WaterLoadingState;
+    use crate::utils::coordinates::world_position_to_spawn_coords;
     use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
     use bevy::asset::{AssetApp, AssetPlugin};
+    use bevy::ecs::system::RunSystemOnce;
     use bevy::gltf::GltfPlugin;
     use bevy::image::{CompressedImageFormats, ImageLoader, ImagePlugin};
     use bevy::light::CascadeShadowConfig;
@@ -982,6 +988,96 @@ mod tests {
         assert_eq!(published.cells[0].height, [0.0, 1.0, 2.0, 3.0]);
         assert_eq!(published.cells[15].height, [15.0, 16.0, 17.0, 18.0]);
         assert!(!published.cells[7].cell_type.is_walkable());
+    }
+
+    /// Ground picking on the glb path: the ray marches the GAT heightfield
+    /// `CurrentMapAltitude` publishes, and lands on the same grid cell
+    /// `world_position_to_spawn_coords` gives the click handler -- with no
+    /// `.gnd` anywhere in the app.
+    #[test]
+    fn a_ready_glb_map_supports_terrain_ground_picking() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+        let entity = request_map(&mut app, "mini_map");
+
+        app.update();
+        wait_for_scene(&mut app, entity);
+
+        app.init_resource::<TerrainRaycastCache>();
+        app.insert_resource(ForwardedCursorPosition {
+            position: Some(VIEWPORT * 0.5),
+        });
+        // World up is -Y, so a camera above the terrain looks along +Y.
+        let transform = Transform::from_xyz(7.0, -100.0, 7.0).looking_to(Vec3::Y, Vec3::Z);
+        app.world_mut().spawn((
+            Camera3d::default(),
+            headless_camera(),
+            transform,
+            GlobalTransform::from(transform),
+        ));
+
+        app.world_mut()
+            .run_system_once(update_terrain_raycast_cache)
+            .expect("raycast system runs");
+
+        let cache = app.world().resource::<TerrainRaycastCache>();
+        let world_position = cache.world_position.expect("the ray must hit the terrain");
+        // Fixture GAT cell (1, 1) is `[5, 6, 7, 8]`; bilinear at 40% into the
+        // cell is 6.6, and the GAT lookup drops the usual 1.5.
+        assert!(
+            (world_position.y - 5.1).abs() < 0.02,
+            "{world_position} is not the fixture terrain height"
+        );
+        assert!(
+            world_position.xz().abs_diff_eq(Vec2::splat(7.0), 0.05),
+            "{world_position} drifted off the camera axis"
+        );
+
+        // 7.0 world units is 1.4 GAT cells, and the cache applies the -1 X /
+        // +1 Y correction on top.
+        assert_eq!(
+            world_position_to_spawn_coords(world_position),
+            (1, 1),
+            "the picked position must convert with GAT-resolution cells"
+        );
+        let (cell_x, cell_y) = cache.cell_coords.expect("the ray must resolve a cell");
+        assert_eq!((cell_x, cell_y), (0, 2));
+        // Every fixture cell carries raw type 1, which is not walkable.
+        assert!(!cache.is_walkable);
+
+        // Click-to-move pathfinds on the GAT-resolution grid, so the picked
+        // cell has to be addressable there.
+        let grid = &app.world().resource::<CurrentMapPathfindingGrid>().0;
+        assert!(
+            u32::from(cell_x) < grid.width() && u32::from(cell_y) < grid.height(),
+            "picked cell ({cell_x}, {cell_y}) is outside the {}x{} walkability grid",
+            grid.width(),
+            grid.height()
+        );
+    }
+
+    /// Logical viewport size for [`headless_camera`].
+    const VIEWPORT: Vec2 = Vec2::new(1600.0, 900.0);
+
+    /// A camera with the fields `Camera::viewport_to_world` needs, which
+    /// nothing computes without the render app.
+    fn headless_camera() -> Camera {
+        let viewport = bevy::camera::Viewport {
+            physical_size: VIEWPORT.as_uvec2(),
+            ..default()
+        };
+        let mut camera = Camera {
+            viewport: Some(viewport.clone()),
+            ..default()
+        };
+        camera.computed.target_info = Some(bevy::camera::RenderTargetInfo {
+            physical_size: viewport.physical_size,
+            scale_factor: 1.0,
+        });
+        let mut projection = Projection::default();
+        projection.update(VIEWPORT.x, VIEWPORT.y);
+        camera.computed.clip_from_view = projection.get_clip_from_view();
+        camera
     }
 
     #[test]

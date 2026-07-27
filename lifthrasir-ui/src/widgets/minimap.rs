@@ -262,7 +262,7 @@ fn update_minimap_marker(
         return;
     };
 
-    let (gx, gy) = world_position_to_spawn_coords(transform.translation, 0, 0);
+    let (gx, gy) = world_position_to_spawn_coords(transform.translation);
     let (left, top) = grid_to_frame_px(
         gx,
         gy,
@@ -295,7 +295,7 @@ fn update_minimap_coords(
         return;
     };
 
-    let (gx, gy) = world_position_to_spawn_coords(transform.translation, 0, 0);
+    let (gx, gy) = world_position_to_spawn_coords(transform.translation);
     let value = format!("{} {}, {}", minimap_state.name, gx, gy);
     set_text(&mut text, value);
 }
