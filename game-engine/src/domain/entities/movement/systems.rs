@@ -16,7 +16,7 @@ use crate::{
             pathfinding::{CurrentMapPathfindingGrid, WalkablePath, find_path},
         },
         system_sets::MovementSystems,
-        world::components::MapLoader,
+        world::components::CurrentMapAltitude,
     },
     infrastructure::assets::loaders::RoAltitudeAsset,
     utils::coordinates::{spawn_coords_to_world_position, world_position_to_spawn_coords},
@@ -487,7 +487,7 @@ pub fn handle_movement_stopped_observer(
     )
 )]
 pub fn update_entity_altitude_system(
-    map_loader_query: Query<&MapLoader>,
+    map_altitude: Option<Res<CurrentMapAltitude>>,
     altitude_assets: Option<Res<Assets<RoAltitudeAsset>>>,
     mut grounded_entities: Query<&mut Transform, With<Grounded>>,
 ) {
@@ -495,15 +495,11 @@ pub fn update_entity_altitude_system(
         return;
     };
 
-    let Ok(map_loader) = map_loader_query.single() else {
+    let Some(map_altitude) = map_altitude else {
         return;
     };
 
-    let Some(altitude_handle) = &map_loader.altitude else {
-        return;
-    };
-
-    let Some(altitude_asset) = altitude_assets.get(altitude_handle) else {
+    let Some(altitude_asset) = altitude_assets.get(&map_altitude.0) else {
         return;
     };
 
@@ -592,6 +588,54 @@ mod tests {
         app.update();
 
         assert!(app.world().get::<MovementTarget>(entity).is_some());
+    }
+
+    #[test]
+    fn grounded_entities_snap_to_the_published_map_altitude() {
+        use crate::domain::world::components::CurrentMapAltitude;
+        use crate::infrastructure::ro_formats::{GatCell, GatCellType, RoAltitude};
+
+        const CORNER_HEIGHT: f32 = 8.0;
+
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.init_asset::<RoAltitudeAsset>();
+        app.add_systems(Update, update_entity_altitude_system);
+
+        let handle = app
+            .world_mut()
+            .resource_mut::<Assets<RoAltitudeAsset>>()
+            .add(RoAltitudeAsset {
+                altitude: RoAltitude {
+                    version: "1.2".to_string(),
+                    width: 20,
+                    height: 20,
+                    cells: (0..400)
+                        .map(|_| GatCell {
+                            height: [CORNER_HEIGHT; 4],
+                            cell_type: GatCellType::from(0u32),
+                        })
+                        .collect(),
+                },
+            });
+        app.insert_resource(CurrentMapAltitude(handle));
+
+        let entity = app
+            .world_mut()
+            .spawn((
+                Transform::from_translation(spawn_coords_to_world_position(5, 5, 0, 0)),
+                Grounded,
+            ))
+            .id();
+
+        app.update();
+
+        // Uniform corner heights make the bilinear blend collapse to the corner
+        // value, less the format's fixed 1.5 offset.
+        assert_eq!(
+            app.world().get::<Transform>(entity).unwrap().translation.y,
+            CORNER_HEIGHT - 1.5
+        );
     }
 
     #[test]

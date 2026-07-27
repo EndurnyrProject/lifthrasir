@@ -24,7 +24,7 @@ use crate::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
 use crate::domain::combat::systems::start_attack_animation;
 use crate::domain::entities::character::states::AnimationState;
 use crate::domain::entities::registry::EntityRegistry;
-use crate::domain::world::components::MapLoader;
+use crate::domain::world::components::CurrentMapAltitude;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use crate::infrastructure::effect::{EffectCatalog, LoadedEffectAsset, ShaderFxCatalog};
 use crate::utils::coordinates::spawn_coords_to_world_position;
@@ -389,16 +389,13 @@ pub fn on_skill_damage(
 fn ground_world_position(
     x: u16,
     y: u16,
-    map_loader: &Query<&MapLoader>,
+    map_altitude: Option<&CurrentMapAltitude>,
     altitude_assets: Option<&Assets<RoAltitudeAsset>>,
 ) -> Vec3 {
     let world = spawn_coords_to_world_position(x, y, 0, 0);
-    map_loader
-        .single()
-        .ok()
-        .and_then(|loader| loader.altitude.as_ref())
+    map_altitude
         .zip(altitude_assets)
-        .and_then(|(handle, assets)| assets.get(handle))
+        .and_then(|(map_altitude, assets)| assets.get(&map_altitude.0))
         .and_then(|asset| asset.altitude.get_terrain_height_at_position(world))
         .map_or(world, |height| Vec3::new(world.x, height, world.z))
 }
@@ -420,7 +417,7 @@ pub fn on_ground_skill(
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     transforms: Query<&Transform>,
     mut sfx: MessageWriter<PlaySkillSfx>,
-    map_loader_query: Query<&MapLoader>,
+    map_altitude: Option<Res<CurrentMapAltitude>>,
     altitude_assets: Option<Res<Assets<RoAltitudeAsset>>>,
 ) {
     for event in events.read() {
@@ -447,7 +444,7 @@ pub fn on_ground_skill(
                 let position = ground_world_position(
                     event.x as u16,
                     event.y as u16,
-                    &map_loader_query,
+                    map_altitude.as_deref(),
                     altitude_assets.as_deref(),
                 );
                 load_effect(&asset_server, descriptor).map(|effect| {

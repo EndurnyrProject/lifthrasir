@@ -25,7 +25,7 @@ use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::input::targeting::TargetingMode;
 use crate::domain::input::terrain_raycast::TerrainRaycastCache;
 use crate::domain::skill::state::SkillTreeState;
-use crate::domain::world::components::MapLoader;
+use crate::domain::world::components::CurrentMapAltitude;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::light::NotShadowCaster;
@@ -118,7 +118,7 @@ fn update_aoe_preview(
     cache: Res<TerrainRaycastCache>,
     tree: Res<SkillTreeState>,
     assets: Res<AoePreviewAssets>,
-    map_loader_query: Query<&MapLoader>,
+    map_altitude: Option<Res<CurrentMapAltitude>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
     existing: Query<Entity, With<AoePreviewQuad>>,
     mut key: ResMut<AoePreviewKey>,
@@ -144,11 +144,9 @@ fn update_aoe_preview(
         return;
     };
 
-    let Some(altitude) = map_loader_query
-        .single()
-        .ok()
-        .and_then(|loader| loader.altitude.as_ref())
-        .and_then(|handle| altitude_assets.get(handle))
+    let Some(altitude) = map_altitude
+        .as_ref()
+        .and_then(|map_altitude| altitude_assets.get(&map_altitude.0))
     else {
         // Terrain not resolved yet; stay hidden and retry next frame.
         key.0 = None;
@@ -225,7 +223,7 @@ fn spawn_area_rings(
     registry: Res<EntityRegistry>,
     locals: Query<(), With<LocalPlayer>>,
     tree: Res<SkillTreeState>,
-    map_loader_query: Query<&MapLoader>,
+    map_altitude: Option<Res<CurrentMapAltitude>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
     existing: Query<(Entity, &CastAreaRing)>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -243,11 +241,9 @@ fn spawn_area_rings(
             continue;
         }
 
-        let Some(altitude) = map_loader_query
-            .single()
-            .ok()
-            .and_then(|loader| loader.altitude.as_ref())
-            .and_then(|handle| altitude_assets.get(handle))
+        let Some(altitude) = map_altitude
+            .as_ref()
+            .and_then(|map_altitude| altitude_assets.get(&map_altitude.0))
         else {
             continue;
         };
@@ -438,17 +434,18 @@ mod tests {
         }
     }
 
-    /// Install a flat GAT + `MapLoader` and arm a ground cast hovering `cell`.
-    fn arm_ground_over(app: &mut App, skill_id: u32, cell: (u16, u16)) {
+    /// Publish a flat GAT as the current map altitude, the way both map paths do.
+    fn publish_flat_altitude(app: &mut App) {
         let handle = app
             .world_mut()
             .resource_mut::<Assets<RoAltitudeAsset>>()
             .add(flat_altitude(20));
-        app.world_mut().spawn(MapLoader {
-            ground: Handle::default(),
-            altitude: Some(handle),
-            world: None,
-        });
+        app.insert_resource(CurrentMapAltitude(handle));
+    }
+
+    /// Install a flat GAT and arm a ground cast hovering `cell`.
+    fn arm_ground_over(app: &mut App, skill_id: u32, cell: (u16, u16)) {
+        publish_flat_altitude(app);
         app.world_mut()
             .resource_mut::<TerrainRaycastCache>()
             .cell_coords = Some(cell);
@@ -572,15 +569,7 @@ mod tests {
                 )
                     .chain(),
             );
-        let handle = app
-            .world_mut()
-            .resource_mut::<Assets<RoAltitudeAsset>>()
-            .add(flat_altitude(20));
-        app.world_mut().spawn(MapLoader {
-            ground: Handle::default(),
-            altitude: Some(handle),
-            world: None,
-        });
+        publish_flat_altitude(&mut app);
         app
     }
 
@@ -663,13 +652,7 @@ mod tests {
         // the assertion pins the -Y lift relationship, not a hardcoded magic value.
         let expected = spawn_coords_to_world_position(3, 7, 0, 0);
         let world = app.world_mut();
-        let handle = world
-            .query::<&MapLoader>()
-            .single(world)
-            .unwrap()
-            .altitude
-            .clone()
-            .unwrap();
+        let handle = world.resource::<CurrentMapAltitude>().0.clone();
         let terrain_height = world
             .resource::<Assets<RoAltitudeAsset>>()
             .get(&handle)

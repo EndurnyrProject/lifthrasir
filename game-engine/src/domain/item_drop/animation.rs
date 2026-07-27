@@ -1,5 +1,5 @@
 use crate::domain::entities::character::components::core::Grounded;
-use crate::domain::world::components::MapLoader;
+use crate::domain::world::components::CurrentMapAltitude;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use bevy::prelude::*;
 
@@ -36,14 +36,13 @@ fn falling_offset(elapsed: f32) -> Option<f32> {
 /// (`game-engine/src/domain/entities/movement/systems.rs`); falls back to the
 /// entity's current height when no map altitude data is loaded.
 fn ground_height_at(
-    map_loader_query: &Query<&MapLoader>,
+    map_altitude: &Option<Res<CurrentMapAltitude>>,
     altitude_assets: &Option<Res<Assets<RoAltitudeAsset>>>,
     world_pos: Vec3,
 ) -> Option<f32> {
     let altitude_assets = altitude_assets.as_ref()?;
-    let map_loader = map_loader_query.single().ok()?;
-    let altitude_handle = map_loader.altitude.as_ref()?;
-    let altitude_asset = altitude_assets.get(altitude_handle)?;
+    let map_altitude = map_altitude.as_ref()?;
+    let altitude_asset = altitude_assets.get(&map_altitude.0)?;
     altitude_asset
         .altitude
         .get_terrain_height_at_position(world_pos)
@@ -51,7 +50,7 @@ fn ground_height_at(
 
 pub fn animate_falling_drops(
     time: Res<Time>,
-    map_loader_query: Query<&MapLoader>,
+    map_altitude: Option<Res<CurrentMapAltitude>>,
     altitude_assets: Option<Res<Assets<RoAltitudeAsset>>>,
     mut falling: Query<(Entity, &mut Transform, &mut FallingDrop)>,
     mut commands: Commands,
@@ -59,7 +58,7 @@ pub fn animate_falling_drops(
     for (entity, mut transform, mut falling_drop) in &mut falling {
         falling_drop.elapsed += time.delta_secs();
 
-        let ground = ground_height_at(&map_loader_query, &altitude_assets, transform.translation)
+        let ground = ground_height_at(&map_altitude, &altitude_assets, transform.translation)
             .unwrap_or(transform.translation.y);
 
         match falling_offset(falling_drop.elapsed) {

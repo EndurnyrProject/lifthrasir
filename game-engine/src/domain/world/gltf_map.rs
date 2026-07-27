@@ -16,12 +16,13 @@ use crate::domain::audio::map_sounds::spawn_gltf_map_sounds;
 use crate::domain::effects::map_effects::spawn_gltf_map_effects;
 use crate::domain::entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid};
 use crate::domain::system_sets::WorldLoadingSystems;
-use crate::domain::world::components::MapLoader;
+use crate::domain::world::components::{CurrentMapAltitude, MapLoader};
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
 use crate::domain::world::map_scoped::MapScoped;
 use crate::domain::world::systems::extract_map_from_unified_assets;
 use crate::infrastructure::assets::SharedCompositeAssetSource;
+use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use crate::infrastructure::assets::sources::AssetSource;
 use crate::presentation::rendering::models::spawn_gltf_map_props;
 use crate::presentation::rendering::water::begin_gltf_map_water;
@@ -195,7 +196,9 @@ pub fn spawn_gltf_map(
 }
 
 /// Hands the map data a ready glb scene carries to the systems that consume it
-/// on the native path: the walkability grid, the ambient light, the water
+/// on the native path: the walkability grid, the heightfield
+/// ([`CurrentMapAltitude`], which the native path publishes from its `.gat`
+/// handle), the ambient light, the water
 /// surface, and `MapData` on the loader entity -- which is what makes
 /// `detect_map_load_complete` report the map as loaded, exactly as it does for
 /// `.gnd`/`.gat`/`.rsw`.
@@ -203,10 +206,12 @@ pub fn spawn_gltf_map(
 /// A glb map that imported badly is a hard failure: bevy's extension hooks
 /// cannot fail a load, so a broken `LIF_*` payload still reports `Loaded` and
 /// would otherwise spawn a map missing its altitude, water and metadata.
+#[allow(clippy::too_many_arguments)]
 fn adopt_gltf_map_scene(
     ready: On<WorldInstanceReady>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut altitudes: ResMut<Assets<RoAltitudeAsset>>,
     roots: Query<&GltfMapLoader>,
     children: Query<&Children>,
     errors: Query<&LifMapLoadError>,
@@ -235,6 +240,9 @@ fn adopt_gltf_map_scene(
     commands.insert_resource(CurrentMapPathfindingGrid(PathfindingGrid::from_gat(
         &data.altitude,
     )));
+    commands.insert_resource(CurrentMapAltitude(altitudes.add(RoAltitudeAsset {
+        altitude: data.altitude.clone(),
+    })));
     commands.insert_resource(ambient_light(&data.meta));
     commands.entity(ready.entity).insert(MapData {
         name: map_name.clone(),
@@ -943,6 +951,34 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_ready_glb_map_publishes_the_map_altitude() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+        let entity = request_map(&mut app, "mini_map");
+
+        app.update();
+        wait_for_scene(&mut app, entity);
+
+        let expected = scene_map_data(&app, entity).altitude;
+        let handle = app.world().resource::<CurrentMapAltitude>().0.clone();
+        let published = &app
+            .world()
+            .resource::<Assets<RoAltitudeAsset>>()
+            .get(&handle)
+            .expect("the published handle must resolve to the decoded altitude")
+            .altitude;
+
+        assert_eq!(
+            (published.width, published.height),
+            (expected.width, expected.height)
+        );
+        assert_eq!(published.cells.len(), expected.cells.len());
+        assert_eq!(published.cells[0].height, [0.0, 1.0, 2.0, 3.0]);
+        assert_eq!(published.cells[15].height, [15.0, 16.0, 17.0, 18.0]);
+        assert!(!published.cells[7].cell_type.is_walkable());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use crate::core::GameState;
 use crate::domain::system_sets::WorldLoadingSystems;
-use crate::domain::world::components::MapLoader;
+use crate::domain::world::components::{CurrentMapAltitude, MapLoader};
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
 use crate::domain::world::map_scoped::MapScoped;
@@ -54,6 +54,7 @@ pub fn extract_map_from_unified_assets(
         );
 
         // Create MapLoader with the asset handles from AssetServer
+        commands.insert_resource(CurrentMapAltitude(altitude_handle.clone()));
         commands.entity(entity).insert(MapLoader {
             ground: ground_handle,
             altitude: Some(altitude_handle),
@@ -233,5 +234,63 @@ pub fn detect_asset_load_failures(
                 ".rsw",
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::world::components::CurrentMapAltitude;
+
+    fn extraction_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.init_asset::<RoGroundAsset>()
+            .init_asset::<RoAltitudeAsset>()
+            .init_asset::<RoWorldAsset>();
+        app.add_systems(Update, extract_map_from_unified_assets);
+        app
+    }
+
+    #[test]
+    fn extraction_publishes_the_altitude_handle_as_a_resource() {
+        let mut app = extraction_app();
+        app.world_mut()
+            .spawn(MapRequestLoader::new("mini_map.gat".to_string()));
+
+        app.update();
+
+        let world = app.world_mut();
+        let loader_altitude = world
+            .query::<&MapLoader>()
+            .single(world)
+            .unwrap()
+            .altitude
+            .clone()
+            .expect("native path loads a .gat handle");
+        assert_eq!(
+            world.resource::<CurrentMapAltitude>().0,
+            loader_altitude,
+            "consumers must reach the same altitude asset the loader holds"
+        );
+    }
+
+    #[test]
+    fn a_second_map_overwrites_the_altitude_resource() {
+        let mut app = extraction_app();
+        app.world_mut()
+            .spawn(MapRequestLoader::new("mini_map.gat".to_string()));
+        app.update();
+        let first = app.world().resource::<CurrentMapAltitude>().0.clone();
+
+        app.world_mut()
+            .spawn(MapRequestLoader::new("prontera.gat".to_string()));
+        app.update();
+
+        assert_ne!(
+            app.world().resource::<CurrentMapAltitude>().0,
+            first,
+            "a map switch must repoint the resource at the new map's altitude"
+        );
     }
 }

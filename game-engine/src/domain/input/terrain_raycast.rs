@@ -1,5 +1,8 @@
 use crate::{
-    domain::{system_sets::InputSystems, world::components::MapLoader},
+    domain::{
+        system_sets::InputSystems,
+        world::components::{CurrentMapAltitude, MapLoader},
+    },
     infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset},
     utils::coordinates::world_position_to_spawn_coords,
 };
@@ -48,6 +51,7 @@ pub fn update_terrain_raycast_cache(
     cursor_pos: Res<ForwardedCursorPosition>,
     camera_query: Query<(&Camera, &GlobalTransform), GameCameraFilter>,
     map_loader_query: Query<&MapLoader>,
+    map_altitude: Option<Res<CurrentMapAltitude>>,
     ground_assets: Res<Assets<RoGroundAsset>>,
     altitude_assets: Res<Assets<RoAltitudeAsset>>,
 ) {
@@ -75,12 +79,12 @@ pub fn update_terrain_raycast_cache(
         return;
     };
 
-    let Some(altitude_handle) = map_loader.altitude.as_ref() else {
+    let Some(map_altitude) = map_altitude else {
         cache.clear();
         return;
     };
 
-    let Some(altitude_asset) = altitude_assets.get(altitude_handle) else {
+    let Some(altitude_asset) = altitude_assets.get(&map_altitude.0) else {
         cache.clear();
         return;
     };
