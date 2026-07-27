@@ -5,6 +5,10 @@
 //! and `ProgressPlugin` owns the `Loading -> InGame` transition once
 //! everything reports done (i.e. `MapData` exists). The timeout path in
 //! `map_loading.rs` still bails to `CharacterSelection` directly.
+//!
+//! A map served by a converted glb has none of those stages -- no `MapLoader`,
+//! no `TerrainTexturesLoading` -- so it is tracked by its own coarse steps
+//! instead; see [`GLTF_MAP_STEPS`].
 
 use crate::core::state::GameState;
 use crate::domain::world::components::MapLoader;
@@ -12,6 +16,11 @@ use crate::domain::world::map::MapData;
 use crate::domain::world::terrain::TerrainTexturesLoading;
 use bevy::prelude::*;
 use iyes_progress::prelude::*;
+
+#[cfg(feature = "map-gltf")]
+use crate::domain::world::gltf_map::GltfMapLoader;
+#[cfg(feature = "map-gltf")]
+use bevy::world_serialization::WorldAssetRoot;
 
 pub struct MapLoadProgressPlugin;
 
@@ -34,12 +43,32 @@ impl Plugin for MapLoadProgressPlugin {
 /// mesh stage reached.
 const BASE_STEPS: u32 = 5;
 
-fn track_map_load_progress(
+/// Steps on the glb path: the glb document itself parsed, its textures (the
+/// scene's asset dependencies) loaded, and the scene adapted into `MapData`.
+/// bevy exposes no finer granularity than "loaded / loaded with dependencies"
+/// for a scene handle, so this is as detailed as the glb path gets.
+#[cfg(feature = "map-gltf")]
+pub(crate) const GLTF_MAP_STEPS: u32 = 3;
+
+pub(crate) fn track_map_load_progress(
     asset_server: Res<AssetServer>,
     loaders: Query<&MapLoader>,
     textures: Query<&TerrainTexturesLoading>,
     maps: Query<(), With<MapData>>,
+    #[cfg(feature = "map-gltf")] gltf_roots: Query<&WorldAssetRoot, With<GltfMapLoader>>,
 ) -> Progress {
+    #[cfg(feature = "map-gltf")]
+    if let Some(root) = gltf_roots.iter().next() {
+        let scene = root.0.id();
+        let done = u32::from(asset_server.is_loaded(scene))
+            + u32::from(asset_server.is_loaded_with_dependencies(scene))
+            + u32::from(!maps.is_empty());
+        return Progress {
+            done,
+            total: GLTF_MAP_STEPS,
+        };
+    }
+
     let texture_total = textures
         .iter()
         .next()

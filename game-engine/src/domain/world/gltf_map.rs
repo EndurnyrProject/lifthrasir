@@ -543,6 +543,7 @@ mod tests {
     use crate::domain::input::terrain_raycast::{
         TerrainRaycastCache, update_terrain_raycast_cache,
     };
+    use crate::domain::world::loading_progress::{GLTF_MAP_STEPS, track_map_load_progress};
     use crate::domain::world::spawn_context::MapSpawnContext;
     use crate::infrastructure::assets::hierarchical_reader::HierarchicalAssetReader;
     use crate::infrastructure::assets::loaders::{
@@ -1110,6 +1111,46 @@ mod tests {
             .map(|message| message.map_name)
             .collect();
         assert_eq!(completed, vec!["mini_map".to_string()]);
+    }
+
+    /// The native tracker keys off `MapLoader`, which the glb path never
+    /// spawns -- so without its own entry the loading screen reads 0/N for the
+    /// whole load and then jumps straight to done.
+    #[test]
+    fn a_loading_glb_map_reports_progress_of_its_own() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+        let entity = request_map(&mut app, "mini_map");
+
+        app.update();
+
+        let tracked = |app: &mut App| {
+            app.world_mut()
+                .run_system_once(track_map_load_progress)
+                .expect("map load progress")
+        };
+
+        assert_eq!(
+            tracked(&mut app).total,
+            GLTF_MAP_STEPS,
+            "a glb map load must be tracked by the glb steps, not the native ones"
+        );
+
+        wait_for_scene(&mut app, entity);
+
+        let done = tracked(&mut app);
+        assert_eq!(
+            (done.done, done.total),
+            (GLTF_MAP_STEPS, GLTF_MAP_STEPS),
+            "an adapted glb map is a finished map load"
+        );
+
+        app.world_mut().entity_mut(entity).remove::<MapData>();
+        assert_eq!(
+            tracked(&mut app).done,
+            GLTF_MAP_STEPS - 1,
+            "the loaded glb and its textures must count before MapData lands"
+        );
     }
 
     #[test]
