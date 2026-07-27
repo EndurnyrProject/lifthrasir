@@ -62,6 +62,17 @@ enum Commands {
         #[arg(long)]
         zstd_level: Option<i32>,
     },
+    /// Merge a patch pak into a main pak in place. Run this only while the game is closed:
+    /// the swap replaces the main pak file, which the running client may hold open.
+    Merge {
+        /// Path to the main pak to update
+        #[arg(long)]
+        main: PathBuf,
+
+        /// Path to the patch pak to apply
+        #[arg(long)]
+        patch: PathBuf,
+    },
 }
 
 fn main() {
@@ -106,6 +117,9 @@ fn run() -> Result<()> {
                 zstd_level,
             )?;
         }
+        Commands::Merge { main, patch } => {
+            merge_command(&main, &patch)?;
+        }
     }
 
     Ok(())
@@ -142,6 +156,36 @@ fn pack_command(
     if skipped > 0 {
         println!("  Skipped: {}", skipped);
     }
+
+    Ok(())
+}
+
+fn merge_command(main: &Path, patch: &Path) -> Result<()> {
+    for leftover in pak::detect_leftovers(main) {
+        eprintln!(
+            "Warning: found leftover '{}' from a previous interrupted merge; \
+             it will be overwritten or replaced by this run",
+            leftover.display()
+        );
+    }
+
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.green} [{elapsed_precise}] {msg}")
+            .unwrap(),
+    );
+
+    let mut count = 0u64;
+    pak::merge_paks(main, patch, |entry| {
+        count += 1;
+        pb.set_message(entry.to_string());
+        pb.tick();
+    })?;
+
+    pb.finish_with_message("Merge complete");
+    println!("\nSummary:");
+    println!("  Entries written: {}", count);
 
     Ok(())
 }
