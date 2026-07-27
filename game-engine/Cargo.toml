@@ -44,11 +44,20 @@ moonshine-behavior = "0.5"
 pathfinding = "4.15"
 ron = { workspace = true }
 
+# map-gltf: naming the extension-handler hook types and parsing LIF_* payloads.
+# Pinned to the same gltf release bevy_gltf uses so cargo unifies them.
+gltf = { version = "1.4", optional = true, default-features = false, features = [
+    "extensions",
+    "extras",
+    "names",
+] }
+serde_json = { version = "1.0", optional = true }
+
 [features]
 default = []
 dynamic = ["bevy/dynamic_linking"]
 dlss = ["bevy/dlss"]
-map-gltf = ["bevy/bevy_gltf", "bevy/png"]
+map-gltf = ["bevy/bevy_gltf", "bevy/png", "dep:gltf", "dep:serde_json"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

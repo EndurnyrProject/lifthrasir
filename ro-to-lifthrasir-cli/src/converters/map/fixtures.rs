@@ -6,6 +6,7 @@ use crate::converters::map::terrain::{TerrainPrimitive, build_terrain};
 use crate::converters::map::textures::TextureOut;
 use crate::converters::map::writer::{MapGlbInputs, write_glb};
 use image::{ImageFormat, RgbaImage};
+use lifthrasir_data::lif;
 use ro_formats::{
     GndSurface, GndTile, RoGround, RoWorld, RswEffect, RswGround, RswLight, RswLightObj, RswModel,
     RswObject, RswSound, RswWater,
@@ -195,4 +196,99 @@ pub fn write_fixture() -> Fixture {
     };
     write_glb(&fixture.path, &fixture.inputs()).expect("write glb");
     fixture
+}
+
+/// Regenerates the binary fixtures that `game-engine`'s `LIF_*` extension
+/// handler is tested against. They are committed because the runtime crate has
+/// no way to build a glb (this converter is a binary, not a library), and this
+/// helper is what documents where they came from.
+///
+/// ```text
+/// cargo test -p ro-to-lifthrasir-cli -- --ignored regenerate_game_engine_fixtures
+/// ```
+#[test]
+#[ignore = "rewrites committed fixtures under game-engine/tests/fixtures"]
+fn regenerate_game_engine_fixtures() {
+    let out = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root")
+        .join("game-engine/tests/fixtures");
+    std::fs::create_dir_all(&out).expect("create fixtures dir");
+    write_fixture_png(&out, "tex/grass01.png");
+
+    let ground = mini_ground();
+    let world = mini_world();
+    let gat = raw_gat(ground.width * 2, ground.height * 2);
+    let primitives = build_terrain(&ground).expect("terrain");
+    let good = out.join("mini_map.glb");
+
+    write_glb(
+        &good,
+        &MapGlbInputs {
+            map_name: "mini_map",
+            ground: &ground,
+            world: &world,
+            primitives: &primitives,
+            textures: &textures(),
+            gat_bytes: &gat,
+            gnd_bytes: b"gnd-bytes",
+            rsw_bytes: b"rsw-bytes",
+        },
+    )
+    .expect("write mini_map.glb");
+
+    // The same document declaring a format the runtime does not support.
+    let version = patched_glb(
+        &good,
+        &format!("\"format_version\":{}", lif::FORMAT_VERSION),
+        &format!("\"format_version\":{}", lif::FORMAT_VERSION + 1),
+    );
+    std::fs::write(out.join("bad_version.glb"), version).expect("write bad_version.glb");
+
+    // The same document with a `lif_audio` field renamed out from under the
+    // runtime's schema.
+    let extras = patched_glb(&good, "\"volume\"", "\"volumr\"");
+    std::fs::write(out.join("bad_extras.glb"), extras).expect("write bad_extras.glb");
+
+    // The same document with every `LIF_` prefix renamed away: a perfectly
+    // ordinary glTF that the runtime's handler must not touch at all.
+    let plain = patched_glb(&good, "LIF_", "XIF_");
+    std::fs::write(out.join("plain.glb"), plain).expect("write plain.glb");
+}
+
+/// Rewrites every occurrence of `needle` in a glb's JSON chunk. Only
+/// equal-length replacements are allowed, so the chunk lengths stay valid
+/// without re-serializing the document; the binary chunk is left alone so a
+/// short needle cannot corrupt embedded data.
+fn patched_glb(source: &Path, needle: &str, replacement: &str) -> Vec<u8> {
+    assert_eq!(
+        needle.len(),
+        replacement.len(),
+        "glb patches must not change length: '{needle}' -> '{replacement}'"
+    );
+
+    let mut bytes = std::fs::read(source).expect("read glb");
+    // GLB layout: a 12-byte header, then an 8-byte chunk header before the JSON.
+    let json_length =
+        u32::from_le_bytes(bytes[12..16].try_into().expect("json chunk length")) as usize;
+    let json_end = 20 + json_length;
+
+    let mut hits = 0;
+    let mut at = 20;
+    while at + needle.len() <= json_end {
+        if &bytes[at..at + needle.len()] == needle.as_bytes() {
+            bytes[at..at + needle.len()].copy_from_slice(replacement.as_bytes());
+            hits += 1;
+            at += needle.len();
+            continue;
+        }
+        at += 1;
+    }
+    assert!(
+        hits > 0,
+        "'{needle}' not found in the JSON chunk of {}",
+        source.display()
+    );
+
+    bytes
 }
