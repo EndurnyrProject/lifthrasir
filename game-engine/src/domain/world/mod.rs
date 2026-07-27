@@ -1,4 +1,6 @@
 pub mod components;
+#[cfg(feature = "map-gltf")]
+pub mod gltf_map;
 pub mod loading_progress;
 pub mod map;
 pub mod map_loader;
@@ -10,6 +12,8 @@ pub mod terrain;
 pub mod warp;
 pub mod zone_readiness;
 
+#[cfg(feature = "map-gltf")]
+pub use gltf_map::GltfMapPlugin;
 pub use map_scoped::MapScoped;
 pub use plugin::WorldDomainPlugin;
 pub use warp::Warping;

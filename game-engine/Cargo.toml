@@ -48,6 +48,7 @@ ron = { workspace = true }
 default = []
 dynamic = ["bevy/dynamic_linking"]
 dlss = ["bevy/dlss"]
+map-gltf = ["bevy/bevy_gltf", "bevy/png"]
 
 [dev-dependencies]
 tempfile = { workspace = true }
