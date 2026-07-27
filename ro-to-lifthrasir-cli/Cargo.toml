@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 ro-formats = { path = "../ro-formats" }
+glam = "0.32"
 lifthrasir-data = { path = "../lifthrasir-data" }
 clap = { workspace = true }
 anyhow = { workspace = true }
