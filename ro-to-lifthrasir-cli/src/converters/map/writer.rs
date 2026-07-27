@@ -568,6 +568,8 @@ pub fn lif_effect(effect: &RswEffect) -> lif::LifEffect {
 pub fn lif_prop(model: &RswModel) -> lif::LifProp {
     lif::LifProp {
         model: format!("ro://data/model/{}", to_forward_slashes(&model.filename)),
+        anim_type: model.anim_type,
+        anim_speed: model.anim_speed,
     }
 }
 
@@ -1147,6 +1149,8 @@ mod tests {
             serde_json::from_value(extras_value(&node).expect("extras")[lif::EXTRAS_PROP].clone())
                 .expect("lif_prop");
         assert_eq!(prop.model, "ro://data/model/prontera/tree01.rsm");
+        assert_eq!(prop.anim_type, 1);
+        assert_eq!(prop.anim_speed, 2.0);
 
         let (translation, rotation, scale) = node.transform().decomposed();
         assert_close(

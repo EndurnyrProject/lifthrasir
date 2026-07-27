@@ -131,10 +131,22 @@ pub struct LifEffect {
     pub params: [f32; 4],
 }
 
-/// Node extras: a prop reference to a native RSM model.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Node extras: a prop reference to a native RSM model, mirroring
+/// `RswModel::anim_type`/`anim_speed` for props that animate in place (e.g.
+/// windmills). `#[serde(default)]` keeps older glbs (no animation fields)
+/// deserializing as static props, same as today.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LifProp {
     pub model: String,
+    #[serde(default)]
+    pub anim_type: u32,
+    #[serde(default = "default_anim_speed")]
+    pub anim_speed: f32,
+}
+
+/// `RswModel::anim_speed`'s neutral value -- normal playback speed.
+fn default_anim_speed() -> f32 {
+    1.0
 }
 
 #[cfg(test)]
@@ -309,11 +321,23 @@ mod tests {
     fn lif_prop_serde_round_trip() {
         let original = LifProp {
             model: "ro://data/model/prontera/tree.rsm".to_string(),
+            anim_type: 1,
+            anim_speed: 2.0,
         };
 
         let json = serde_json::to_string(&original).expect("serialize");
         let deserialized: LifProp = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn lif_prop_defaults_anim_fields_for_older_glbs() {
+        let json = r#"{"model":"ro://data/model/prontera/tree.rsm"}"#;
+
+        let deserialized: LifProp = serde_json::from_str(json).expect("deserialize");
+
+        assert_eq!(deserialized.anim_type, 0);
+        assert_eq!(deserialized.anim_speed, 1.0);
     }
 }

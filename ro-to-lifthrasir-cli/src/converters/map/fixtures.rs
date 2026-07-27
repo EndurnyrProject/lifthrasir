@@ -96,8 +96,8 @@ pub fn mini_world() -> RoWorld {
             }),
             RswObject::Model(RswModel {
                 name: "tree".into(),
-                anim_type: 0,
-                anim_speed: 1.0,
+                anim_type: 1,
+                anim_speed: 2.0,
                 block_type: 0,
                 filename: "prontera\\tree01.rsm".into(),
                 node_name: String::new(),

@@ -538,6 +538,7 @@ mod tests {
     use crate::domain::character::map_loading::detect_map_load_complete;
     use crate::domain::effects::components::{ActiveEffect, MapAmbientVfx};
     use crate::domain::entities::pathfinding::PathfindingGrid;
+    use crate::domain::entities::systems::AnimationType;
     use crate::domain::world::spawn_context::MapSpawnContext;
     use crate::infrastructure::assets::hierarchical_reader::HierarchicalAssetReader;
     use crate::infrastructure::assets::loaders::{
@@ -545,7 +546,7 @@ mod tests {
     };
     use crate::infrastructure::assets::sources::{CompositeAssetSource, DataFolderSource};
     use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset};
-    use crate::presentation::rendering::models::{MapModel, RsmLoading};
+    use crate::presentation::rendering::models::{AnimationSpeed, MapModel, RsmLoading};
     use crate::presentation::rendering::water::WaterLoadingState;
     use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
     use bevy::asset::{AssetApp, AssetPlugin};
@@ -690,6 +691,8 @@ mod tests {
                 single::<LifPropRef>(world).0,
                 LifProp {
                     model: "ro://data/model/prontera/tree01.rsm".to_string(),
+                    anim_type: 1,
+                    anim_speed: 2.0,
                 }
             );
         });
@@ -1195,6 +1198,8 @@ mod tests {
             &RsmLoading,
             &Transform,
             &GlobalTransform,
+            &AnimationType,
+            &AnimationSpeed,
         )>();
         let props: Vec<_> = query.iter(world).collect();
         assert_eq!(
@@ -1203,12 +1208,17 @@ mod tests {
             "one map model per glb prop node, however many frames run"
         );
 
-        let (prop, model, loading, transform, global) = props[0];
+        let (prop, model, loading, transform, global, anim_type, anim_speed) = props[0];
         assert_eq!(model.filename, prop.0.model);
         assert_eq!(
             loading.handle.path().expect("RSM asset path").to_string(),
             "ro://data/model/prontera/tree01.rsm"
         );
+        // Fixture's RSW anim_type 1 (Loop), anim_speed 2.0 -- same conversion
+        // as spawn_map_models applies on the native path.
+        assert_eq!(prop.0.anim_type, 1);
+        assert_eq!(*anim_type, AnimationType::Loop);
+        assert_eq!(anim_speed.0, 2.0);
 
         // RSW position [7, -8, 9], rotation [10, 20, 30] and scale [1, 2, 3] on
         // a 2x2 ground, baked by the converter into the node's own transform.

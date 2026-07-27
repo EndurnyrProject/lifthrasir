@@ -180,18 +180,7 @@ pub fn spawn_map_models(
                 }
 
                 let transform = rsw_to_bevy_transform(model, map_width, map_height);
-
-                // Convert RSW animation type to our enum
-                // Most RO models should loop by default for continuous animation
-                let anim_type = match model.anim_type {
-                    0 => AnimationType::None, // Explicitly no animation
-                    1 => AnimationType::Loop, // Loop animation
-                    2 => AnimationType::Loop, // Default to Loop instead of Once to prevent stopping
-                    _ => {
-                        // Default to Loop for any unknown animation types
-                        AnimationType::Loop
-                    }
-                };
+                let anim_type = rsw_anim_type_to_animation_type(model.anim_type);
 
                 let model_entity = commands
                     .spawn((
@@ -228,6 +217,17 @@ pub fn spawn_map_models(
     }
 }
 
+/// Converts RSW's `anim_type` field to our enum. Most RO models should loop
+/// by default for continuous animation.
+fn rsw_anim_type_to_animation_type(anim_type: u32) -> AnimationType {
+    match anim_type {
+        0 => AnimationType::None, // Explicitly no animation
+        1 => AnimationType::Loop, // Loop animation
+        2 => AnimationType::Loop, // Default to Loop instead of Once to prevent stopping
+        _ => AnimationType::Loop, // Default to Loop for any unknown animation types
+    }
+}
+
 /// The glb counterpart of [`spawn_map_models`]: the converter baked the whole
 /// RSW placement into the prop node's own transform, so the model is attached
 /// to that node instead of spawned at a converted one -- applying
@@ -252,6 +252,7 @@ pub fn spawn_gltf_map_props(
 ) {
     for (entity, prop) in props.iter() {
         let handle: Handle<RsmAsset> = asset_server.load(&prop.0.model);
+        let anim_type = rsw_anim_type_to_animation_type(prop.0.anim_type);
 
         commands.entity(entity).insert((
             MapModel {
@@ -260,6 +261,12 @@ pub fn spawn_gltf_map_props(
             },
             RsmLoading { handle },
         ));
+
+        if anim_type != AnimationType::None {
+            commands
+                .entity(entity)
+                .insert((anim_type, AnimationSpeed(prop.0.anim_speed)));
+        }
     }
 }
 
