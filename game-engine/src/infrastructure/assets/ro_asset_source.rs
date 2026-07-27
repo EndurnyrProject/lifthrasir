@@ -1,8 +1,7 @@
 use super::{AssetConfig, sources::CompositeAssetSource};
 use bevy::log::debug;
 
-/// Sets up CompositeAssetSource from configuration, preserving the exact logic
-/// from HierarchicalAssetManager for compatibility.
+/// Sets up CompositeAssetSource from configuration.
 pub fn setup_composite_source_from_config(
     config: &AssetConfig,
 ) -> Result<CompositeAssetSource, Box<dyn std::error::Error>> {

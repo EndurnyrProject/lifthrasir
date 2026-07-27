@@ -20,7 +20,6 @@ pub struct AssetsPlugin;
 impl Plugin for AssetsPlugin {
     fn build(&self, app: &mut App) {
         app.init_asset::<ClientConfig>()
-            .init_asset::<AssetConfig>()
             .init_asset::<RoSpriteAsset>()
             .init_asset_loader::<RoSpriteLoader>()
             .init_asset::<RoActAsset>()
@@ -47,7 +46,6 @@ impl Plugin for AssetsPlugin {
             .init_asset_loader::<TgaLoader>()
             .init_asset_loader::<SvgLoader>()
             .add_plugins((
-                TomlAssetPlugin::<AssetConfig>::new(&["data.toml"]),
                 TomlAssetPlugin::<ClientConfig>::new(&["client.toml"]),
                 RonAssetPlugin::<JobDataAsset>::new(&["ron"]),
                 RonAssetPlugin::<ItemDataAsset>::new(&["ron"]),

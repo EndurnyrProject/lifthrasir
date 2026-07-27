@@ -1,8 +1,7 @@
-use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Asset, TypePath, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AssetConfig {
     pub assets: AssetsSection,
@@ -61,30 +60,6 @@ path = "lifthrasir.pak"
 priority = 0
 "#
         .to_string()
-    }
-
-    pub fn save_default_config(
-        config_path: &std::path::Path,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        use std::fs;
-        let content = Self::generate_default_config_content();
-        fs::write(config_path, content)?;
-        Ok(())
-    }
-}
-
-#[derive(Resource, Debug)]
-pub struct AssetConfigHandle {
-    pub handle: Handle<AssetConfig>,
-    pub loaded: bool,
-}
-
-impl AssetConfigHandle {
-    pub fn new(handle: Handle<AssetConfig>) -> Self {
-        Self {
-            handle,
-            loaded: false,
-        }
     }
 }
 

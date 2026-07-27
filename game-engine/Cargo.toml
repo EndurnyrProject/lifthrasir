@@ -10,7 +10,6 @@ net-contract = { path = "../net-contract" }
 bevy = { workspace = true }
 bevy_auto_plugin = { workspace = true }
 bevy_common_assets = { version = "0.17", features = ["toml", "ron"] }
-bevy_asset_loader = "0.27"
 iyes_progress = { workspace = true }
 bevy_kira_audio = { version = "0.26", features = ["mp3", "wav", "ogg"] }
 bevy_framepace = { workspace = true }
