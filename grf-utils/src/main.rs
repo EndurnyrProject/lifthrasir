@@ -61,6 +61,10 @@ enum Commands {
         /// zstd compression level (crate default if omitted)
         #[arg(long)]
         zstd_level: Option<i32>,
+
+        /// Worker threads for compression (default: available CPU parallelism)
+        #[arg(long)]
+        jobs: Option<usize>,
     },
     /// Merge a patch pak into a main pak in place. Run this only while the game is closed:
     /// the swap replaces the main pak file, which the running client may hold open.
@@ -108,6 +112,7 @@ fn run() -> Result<()> {
             out,
             content_version,
             zstd_level,
+            jobs,
         } => {
             pack_command(
                 &grf,
@@ -115,6 +120,7 @@ fn run() -> Result<()> {
                 &out,
                 content_version,
                 zstd_level,
+                jobs,
             )?;
         }
         Commands::Merge { main, patch } => {
@@ -131,11 +137,16 @@ fn pack_command(
     out: &Path,
     content_version: u64,
     zstd_level: Option<i32>,
+    jobs: Option<usize>,
 ) -> Result<()> {
     println!("Scanning sources...");
     let (entries, skipped) = pak::collect_entries(grf_paths, data_folder);
 
-    println!("Packing {} entries...", entries.len());
+    let jobs = jobs
+        .or_else(|| std::thread::available_parallelism().ok().map(|n| n.get()))
+        .unwrap_or(1);
+
+    println!("Packing {} entries across {jobs} job(s)...", entries.len());
     let pb = ProgressBar::new(entries.len() as u64);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -144,7 +155,7 @@ fn pack_command(
             .progress_chars("#>-"),
     );
 
-    pak::write_pak(&entries, out, content_version, zstd_level, |path| {
+    pak::write_pak_parallel(&entries, out, content_version, zstd_level, jobs, |path| {
         pb.set_message(path.to_string());
         pb.inc(1);
     })?;

@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -169,20 +170,14 @@ fn now_unix() -> u64 {
         .unwrap_or(0)
 }
 
-/// Writes entries plus the `.lifthrasir/manifest.toml` (written last, uncompressed)
-/// to a zip64 pak at `out_path`. `on_entry` is called with each normalized path
-/// as it is written, for caller-driven progress reporting.
-pub fn write_pak(
-    entries: &SourceEntries,
-    out_path: &Path,
-    content_version: u64,
+/// Writes `entries` into `writer` in order, calling `on_entry` with each normalized
+/// path as it is written. Shared by the sequential and sharded pack writers.
+fn write_entries(
+    writer: &mut ZipWriter<fs::File>,
+    entries: &[(String, Vec<u8>)],
     zstd_level: Option<i32>,
     mut on_entry: impl FnMut(&str),
 ) -> Result<()> {
-    let file = fs::File::create(out_path)
-        .with_context(|| format!("Failed to create pak file: {}", out_path.display()))?;
-    let mut writer = ZipWriter::new(file);
-
     for (path, data) in entries {
         on_entry(path);
 
@@ -205,6 +200,11 @@ pub fn write_pak(
             .with_context(|| format!("Failed to write pak entry '{path}'"))?;
     }
 
+    Ok(())
+}
+
+/// Writes the `.lifthrasir/manifest.toml` entry, always last and uncompressed.
+fn write_manifest(writer: &mut ZipWriter<fs::File>, content_version: u64) -> Result<()> {
     let manifest = PakManifest {
         format_version: FORMAT_VERSION,
         content_version,
@@ -223,7 +223,157 @@ pub fn write_pak(
         .write_all(manifest_toml.as_bytes())
         .context("Failed to write manifest entry")?;
 
+    Ok(())
+}
+
+/// Writes entries plus the `.lifthrasir/manifest.toml` (written last, uncompressed)
+/// to a zip64 pak at `out_path`. `on_entry` is called with each normalized path
+/// as it is written, for caller-driven progress reporting.
+pub fn write_pak(
+    entries: &SourceEntries,
+    out_path: &Path,
+    content_version: u64,
+    zstd_level: Option<i32>,
+    on_entry: impl FnMut(&str),
+) -> Result<()> {
+    let file = fs::File::create(out_path)
+        .with_context(|| format!("Failed to create pak file: {}", out_path.display()))?;
+    let mut writer = ZipWriter::new(file);
+
+    write_entries(&mut writer, entries, zstd_level, on_entry)?;
+    write_manifest(&mut writer, content_version)?;
     writer.finish().context("Failed to finalize pak")?;
+
+    Ok(())
+}
+
+/// Writes one shard to its own part-pak (no manifest): same codec policy as `write_pak`,
+/// just a plain zip of that shard's entries.
+fn write_shard(
+    shard: &[(String, Vec<u8>)],
+    part_path: &Path,
+    zstd_level: Option<i32>,
+    on_entry: &(impl Fn(&str) + Sync),
+) -> Result<()> {
+    let file = fs::File::create(part_path)
+        .with_context(|| format!("Failed to create pak shard: {}", part_path.display()))?;
+    let mut writer = ZipWriter::new(file);
+
+    write_entries(&mut writer, shard, zstd_level, |path| on_entry(path))?;
+    writer.finish().context("Failed to finalize pak shard")?;
+
+    Ok(())
+}
+
+/// Compresses `entries` across `jobs` worker threads (one part-pak per shard, no manifest),
+/// then concatenates the parts in shard order via `raw_copy_file` (IO-bound, no
+/// recompression) plus a fresh manifest, into `out_path`. Part files are always cleaned
+/// up, on success or failure.
+fn write_pak_sharded(
+    entries: &SourceEntries,
+    out_path: &Path,
+    content_version: u64,
+    zstd_level: Option<i32>,
+    jobs: usize,
+    on_entry: &(impl Fn(&str) + Sync),
+) -> Result<()> {
+    let chunk_size = entries.len().div_ceil(jobs).max(1);
+    let shards: Vec<&[(String, Vec<u8>)]> = entries.chunks(chunk_size).collect();
+    let part_paths: Vec<PathBuf> = (0..shards.len())
+        .map(|i| suffixed(out_path, &format!(".part{i}")))
+        .collect();
+
+    let shard_results: Vec<Result<()>> = thread::scope(|scope| {
+        let handles: Vec<_> = shards
+            .iter()
+            .zip(part_paths.iter())
+            .map(|(shard, part_path)| {
+                scope.spawn(|| write_shard(shard, part_path, zstd_level, on_entry))
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    let cleanup_parts = || {
+        for part_path in &part_paths {
+            fs::remove_file(part_path).ok();
+        }
+    };
+
+    if let Some(err) = shard_results.into_iter().find_map(|r| r.err()) {
+        cleanup_parts();
+        return Err(err);
+    }
+
+    let concat_result = (|| -> Result<()> {
+        let file = fs::File::create(out_path)
+            .with_context(|| format!("Failed to create pak file: {}", out_path.display()))?;
+        let mut writer = ZipWriter::new(file);
+
+        for part_path in &part_paths {
+            let mut part_archive = open_pak(part_path)?;
+            let names: Vec<String> = part_archive.file_names().map(String::from).collect();
+            for name in &names {
+                let part_entry = part_archive
+                    .by_name(name)
+                    .with_context(|| format!("Failed to read shard entry '{name}'"))?;
+                writer
+                    .raw_copy_file(part_entry)
+                    .with_context(|| format!("Failed to copy shard entry '{name}'"))?;
+            }
+        }
+
+        write_manifest(&mut writer, content_version)?;
+        writer.finish().context("Failed to finalize pak")?;
+        Ok(())
+    })();
+
+    cleanup_parts();
+    concat_result
+}
+
+/// Parallel counterpart to `write_pak`: shards `entries` across `jobs` worker threads for
+/// the CPU-bound compression step, then concatenates the results. Falls back to the
+/// sequential path for `jobs <= 1` or a single entry. Writes to `<out_path>.tmp` and
+/// renames onto `out_path` at the end, so a crash never leaves a partial pak at the
+/// final path.
+pub fn write_pak_parallel(
+    entries: &SourceEntries,
+    out_path: &Path,
+    content_version: u64,
+    zstd_level: Option<i32>,
+    jobs: usize,
+    on_entry: impl Fn(&str) + Sync,
+) -> Result<()> {
+    let tmp_path = tmp_path_for(out_path);
+    let jobs = jobs.max(1);
+
+    let write_result = if jobs == 1 || entries.len() <= 1 {
+        write_pak(entries, &tmp_path, content_version, zstd_level, |path| {
+            on_entry(path)
+        })
+    } else {
+        write_pak_sharded(
+            entries,
+            &tmp_path,
+            content_version,
+            zstd_level,
+            jobs,
+            &on_entry,
+        )
+    };
+
+    if write_result.is_err() {
+        fs::remove_file(&tmp_path).ok();
+        return write_result;
+    }
+
+    if out_path.exists() {
+        fs::remove_file(out_path)
+            .with_context(|| format!("Failed to remove existing pak: {}", out_path.display()))?;
+    }
+    fs::rename(&tmp_path, out_path)
+        .with_context(|| format!("Failed to install pak at '{}'", out_path.display()))?;
 
     Ok(())
 }
@@ -560,6 +710,110 @@ mod tests {
         let manifest: PakManifest = toml::from_str(&manifest_contents).unwrap();
         assert_eq!(manifest.format_version, 1);
         assert_eq!(manifest.content_version, 7);
+    }
+
+    fn read_all_entries(path: &Path) -> std::collections::HashMap<String, Vec<u8>> {
+        let file = fs::File::open(path).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        let names: Vec<String> = archive.file_names().map(String::from).collect();
+
+        names
+            .into_iter()
+            .map(|name| {
+                let mut entry = archive.by_name(&name).unwrap();
+                let mut contents = Vec::new();
+                entry.read_to_end(&mut contents).unwrap();
+                (name, contents)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn parallel_pack_matches_sequential_pack_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let data_folder = dir.path().join("data");
+        fs::create_dir_all(&data_folder).unwrap();
+        for i in 0..7 {
+            fs::write(
+                data_folder.join(format!("file{i}.txt")),
+                vec![b'a' + i as u8; 64],
+            )
+            .unwrap();
+        }
+        fs::write(data_folder.join("sound.ogg"), b"ogg-bytes").unwrap();
+
+        let (entries, skipped) = collect_entries(&[], Some(&data_folder));
+        assert_eq!(skipped, 0);
+
+        let sequential_path = dir.path().join("sequential.pak");
+        write_pak(&entries, &sequential_path, 3, None, |_| {}).unwrap();
+
+        let parallel_path = dir.path().join("parallel.pak");
+        write_pak_parallel(&entries, &parallel_path, 3, None, 4, |_| {}).unwrap();
+
+        let sequential_entries = read_all_entries(&sequential_path);
+        let parallel_entries = read_all_entries(&parallel_path);
+
+        let sequential_names: HashSet<&String> = sequential_entries.keys().collect();
+        let parallel_names: HashSet<&String> = parallel_entries.keys().collect();
+        assert_eq!(sequential_names, parallel_names);
+
+        for name in sequential_names {
+            if name == MANIFEST_ENTRY {
+                continue;
+            }
+            assert_eq!(
+                sequential_entries[name], parallel_entries[name],
+                "entry '{name}' differs between sequential and parallel pack"
+            );
+        }
+
+        let sequential_manifest: PakManifest =
+            toml::from_str(std::str::from_utf8(&sequential_entries[MANIFEST_ENTRY]).unwrap())
+                .unwrap();
+        let parallel_manifest: PakManifest =
+            toml::from_str(std::str::from_utf8(&parallel_entries[MANIFEST_ENTRY]).unwrap())
+                .unwrap();
+        assert_eq!(
+            sequential_manifest.format_version,
+            parallel_manifest.format_version
+        );
+        assert_eq!(
+            sequential_manifest.content_version,
+            parallel_manifest.content_version
+        );
+    }
+
+    #[test]
+    fn parallel_pack_leaves_no_tmp_or_part_files_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let data_folder = dir.path().join("data");
+        fs::create_dir_all(&data_folder).unwrap();
+        for i in 0..5 {
+            fs::write(data_folder.join(format!("file{i}.txt")), b"payload").unwrap();
+        }
+
+        let (entries, _) = collect_entries(&[], Some(&data_folder));
+        let out_path = dir.path().join("out.pak");
+
+        write_pak_parallel(&entries, &out_path, 1, None, 3, |_| {}).unwrap();
+
+        assert!(out_path.exists());
+        assert!(!tmp_path_for(&out_path).exists());
+
+        let leftover_parts: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains(".part"))
+            .collect();
+        assert!(
+            leftover_parts.is_empty(),
+            "leftover part files: {leftover_parts:?}"
+        );
+
+        let file = fs::File::open(&out_path).unwrap();
+        zip::ZipArchive::new(file).unwrap();
     }
 
     fn write_test_pak(
