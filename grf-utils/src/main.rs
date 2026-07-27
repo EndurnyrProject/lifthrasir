@@ -1,3 +1,5 @@
+mod pak;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -38,6 +40,28 @@ enum Commands {
         /// Path to the GRF file
         grf_file: PathBuf,
     },
+    /// Pack GRF archives (and an optional loose data folder) into a Lifthrasir pak
+    Pack {
+        /// Path to a GRF file (repeatable; earlier flags win on path collisions)
+        #[arg(long = "grf")]
+        grf: Vec<PathBuf>,
+
+        /// Loose data folder overriding same-path GRF entries
+        #[arg(long)]
+        data_folder: Option<PathBuf>,
+
+        /// Output pak path
+        #[arg(long)]
+        out: PathBuf,
+
+        /// Monotonic content version stamped into the pak manifest
+        #[arg(long)]
+        content_version: u64,
+
+        /// zstd compression level (crate default if omitted)
+        #[arg(long)]
+        zstd_level: Option<i32>,
+    },
 }
 
 fn main() {
@@ -67,6 +91,56 @@ fn run() -> Result<()> {
             let grf = load_grf(&grf_file)?;
             show_info(&grf);
         }
+        Commands::Pack {
+            grf,
+            data_folder,
+            out,
+            content_version,
+            zstd_level,
+        } => {
+            pack_command(
+                &grf,
+                data_folder.as_deref(),
+                &out,
+                content_version,
+                zstd_level,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn pack_command(
+    grf_paths: &[PathBuf],
+    data_folder: Option<&Path>,
+    out: &Path,
+    content_version: u64,
+    zstd_level: Option<i32>,
+) -> Result<()> {
+    println!("Scanning sources...");
+    let (entries, skipped) = pak::collect_entries(grf_paths, data_folder);
+
+    println!("Packing {} entries...", entries.len());
+    let pb = ProgressBar::new(entries.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) - {msg}")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+
+    pak::write_pak(&entries, out, content_version, zstd_level, |path| {
+        pb.set_message(path.to_string());
+        pb.inc(1);
+    })?;
+
+    pb.finish_with_message("Pack complete");
+
+    println!("\nSummary:");
+    println!("  Packed:  {}", entries.len());
+    if skipped > 0 {
+        println!("  Skipped: {}", skipped);
     }
 
     Ok(())
