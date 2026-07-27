@@ -250,6 +250,11 @@ fn regenerate_game_engine_fixtures() {
     let extras = patched_glb(&good, "\"volume\"", "\"volumr\"");
     std::fs::write(out.join("bad_extras.glb"), extras).expect("write bad_extras.glb");
 
+    // The same document with only its water extension renamed away: a map that
+    // simply has no water.
+    let dry = patched_glb(&good, lif::EXTENSION_WATER, "XIF_water");
+    std::fs::write(out.join("no_water.glb"), dry).expect("write no_water.glb");
+
     // The same document with every `LIF_` prefix renamed away: a perfectly
     // ordinary glTF that the runtime's handler must not touch at all.
     let plain = patched_glb(&good, "LIF_", "XIF_");

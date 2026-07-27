@@ -8,6 +8,7 @@ use bevy::{
     shader::ShaderRef,
 };
 use bevy_auto_plugin::prelude::*;
+use ro_formats::RswWater;
 
 use crate::{
     domain::{
@@ -103,14 +104,14 @@ type MapsReadyForWater<'w, 's> = Query<
 /// Temporary component to track water texture loading state
 #[derive(Component)]
 pub struct WaterLoadingState {
-    texture_handle: Handle<Image>,
-    water_tiles: Vec<(usize, usize)>,
-    wave_height: f32,
-    water_level: f32,
-    wave_height_param: f32,
-    wave_speed: f32,
-    wave_pitch: f32,
-    animation_speed: f32,
+    pub(crate) texture_handle: Handle<Image>,
+    pub(crate) water_tiles: Vec<(usize, usize)>,
+    pub(crate) wave_height: f32,
+    pub(crate) water_level: f32,
+    pub(crate) wave_height_param: f32,
+    pub(crate) wave_speed: f32,
+    pub(crate) wave_pitch: f32,
+    pub(crate) animation_speed: f32,
 }
 
 #[auto_add_system(
@@ -138,65 +139,100 @@ pub fn load_water_system(
             continue;
         };
 
-        let water = &world_asset.world.water;
-
-        if water.level == 0.0 {
-            continue;
-        }
-
-        debug!(
-            "Creating water surface at level: {}, wave_height: {}, wave_speed: {}, wave_pitch: {}, anim_speed: {}",
-            water.level, water.wave_height, water.wave_speed, water.wave_pitch, water.anim_speed
-        );
-
-        // Implement per-tile water detection logic (based on GRF Editor)
-        let wave_height = water.level - water.wave_height;
         let ground = &ground_asset.ground;
         let width = ground.width as usize;
-        let height = ground.height as usize;
-        let mut water_tiles = Vec::new();
 
-        // Check each terrain cell for water presence
-        for y in 0..height {
-            for x in 0..width {
-                let surface = &ground.surfaces[y * width + x];
-
-                // Water covers any cell below the wave height, including deep cells
-                // with no ground tile (tile_up == -1) which the terrain mesh skips.
-                let heights = &surface.height;
-                let has_water = heights[0] > wave_height
-                    || heights[1] > wave_height
-                    || heights[2] > wave_height
-                    || heights[3] > wave_height;
-
-                if has_water {
-                    water_tiles.push((x, y));
-                }
-            }
-        }
-
-        if water_tiles.is_empty() {
-            debug!("No water tiles detected for this map");
-            continue;
-        }
-
-        debug!("Detected {} water tiles, creating mesh", water_tiles.len());
-
-        // Start loading water texture using AssetServer (async)
-        let water_texture = load_water_texture(water.water_type, 0, &asset_server);
-
-        // Add loading state component to track async texture loading
-        commands.entity(entity).insert(WaterLoadingState {
-            texture_handle: water_texture,
-            water_tiles,
-            wave_height,
-            water_level: water.level,
-            wave_height_param: water.wave_height,
-            wave_speed: water.wave_speed,
-            wave_pitch: water.wave_pitch,
-            animation_speed: water.anim_speed as f32,
-        });
+        begin_water_loading(
+            &mut commands,
+            &asset_server,
+            entity,
+            &world_asset.world.water,
+            (width, ground.height as usize),
+            |x, y| {
+                let heights = ground.surfaces[y * width + x].height;
+                heights[0].max(heights[1]).max(heights[2]).max(heights[3])
+            },
+        );
     }
+}
+
+/// Queues the water surface of one map: picks the submerged tiles, starts the
+/// texture load and leaves a [`WaterLoadingState`] behind for
+/// [`finalize_water_loading_system`].
+///
+/// Tiles are ground cells addressed `(x, y)` over `grid`, `CELL_SIZE` wide, and
+/// `tile_top` gives the highest of a tile's four corners. RO heights grow
+/// downwards, so a corner above the wave plane is under water -- including
+/// deep cells with no ground tile (`tile_up == -1`), which the terrain mesh
+/// skips.
+fn begin_water_loading(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    entity: Entity,
+    water: &RswWater,
+    grid: (usize, usize),
+    tile_top: impl Fn(usize, usize) -> f32,
+) {
+    if water.level == 0.0 {
+        return;
+    }
+
+    debug!(
+        "Creating water surface at level: {}, wave_height: {}, wave_speed: {}, wave_pitch: {}, anim_speed: {}",
+        water.level, water.wave_height, water.wave_speed, water.wave_pitch, water.anim_speed
+    );
+
+    // Per-tile water detection logic (based on GRF Editor)
+    let wave_height = water.level - water.wave_height;
+    let (width, height) = grid;
+    let water_tiles: Vec<(usize, usize)> = (0..height)
+        .flat_map(|y| (0..width).map(move |x| (x, y)))
+        .filter(|&(x, y)| tile_top(x, y) > wave_height)
+        .collect();
+
+    if water_tiles.is_empty() {
+        debug!("No water tiles detected for this map");
+        return;
+    }
+
+    debug!("Detected {} water tiles, creating mesh", water_tiles.len());
+
+    commands.entity(entity).insert(WaterLoadingState {
+        texture_handle: load_water_texture(water.water_type, 0, asset_server),
+        water_tiles,
+        wave_height,
+        water_level: water.level,
+        wave_height_param: water.wave_height,
+        wave_speed: water.wave_speed,
+        wave_pitch: water.wave_pitch,
+        animation_speed: water.anim_speed as f32,
+    });
+}
+
+/// Queues the water surface of a map served by a converted glb, which carries
+/// no GND surfaces: the tile heights come from the GAT instead.
+///
+/// The GAT grid is twice the resolution the water mesh is tiled at, so a tile
+/// takes the highest corner of the four GAT cells covering it. That is a
+/// superset of the GND corners the native path sees -- it can only flood a
+/// tile the terrain already dips below the wave plane in.
+#[cfg(feature = "map-gltf")]
+pub fn begin_gltf_map_water(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    entity: Entity,
+    water: &RswWater,
+    altitude: &ro_formats::RoAltitude,
+) {
+    let grid = (altitude.width as usize / 2, altitude.height as usize / 2);
+
+    begin_water_loading(commands, asset_server, entity, water, grid, |x, y| {
+        [(0, 0), (1, 0), (0, 1), (1, 1)]
+            .into_iter()
+            .filter_map(|(dx, dy)| altitude.get_cell(x * 2 + dx, y * 2 + dy))
+            .flat_map(|cell| cell.height)
+            .fold(f32::MIN, f32::max)
+    });
 }
 
 // Maximum water parameter values to prevent excessive movement in some maps
