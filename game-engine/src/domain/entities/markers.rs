@@ -1,10 +1,10 @@
-use bevy::prelude::Component;
+use bevy::prelude::{Component, Reflect};
 
 /// Marker for the entity controlled by the local player
 ///
 /// Only ONE entity in the world should have this marker.
 /// Used by camera system and input systems.
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy, Reflect)]
 pub struct LocalPlayer;
 
 /// Marker for other players' entities

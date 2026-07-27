@@ -95,7 +95,7 @@ pub fn sync_player_head_layer(
         head_query.iter_mut()
     {
         let Ok((body_attach, body_render_layer, body_transform)) =
-            body_query.get(attachment.body_entity)
+            body_query.get(attachment.body_entity.entity())
         else {
             continue;
         };

@@ -139,7 +139,6 @@ pub fn on_sprite_click(
         if let Some(net) = net {
             attacks.write(AttackRequested { target_id: net.gid });
             *locked = LockedTarget {
-                entity: Some(root),
                 gid: Some(net.gid),
             };
         }

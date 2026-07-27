@@ -1,6 +1,7 @@
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use moonshine_kind::Instance;
 
 use super::components::{CameraFollowSettings, CameraFollowTarget};
 use super::resources::{ActiveCameraProfile, CameraRotationDelta, IndoorMapTable};
@@ -78,7 +79,7 @@ fn apply_camera_profile(settings: &mut CameraFollowSettings, indoor: bool) {
 // =============================================================================
 
 /// Type alias for player query - matches local player with Transform
-type PlayerReadyQuery<'w, 's> = Query<'w, 's, (Entity, &'static Transform), With<LocalPlayer>>;
+type PlayerReadyQuery<'w, 's> = Query<'w, 's, (Instance<LocalPlayer>, &'static Transform)>;
 
 /// Resource to track if the camera has been spawned.
 #[derive(Resource, Debug, Clone, Copy, Default)]
@@ -160,7 +161,7 @@ pub fn update_camera_target_cache(
     target_query: Query<&Transform, With<LocalPlayer>>,
 ) {
     for mut follow_target in camera_query.iter_mut() {
-        if let Ok(target_transform) = target_query.get(follow_target.target_entity) {
+        if let Ok(target_transform) = target_query.get(follow_target.target_entity.entity()) {
             follow_target.cached_position = target_transform.translation;
         } else {
             warn!(

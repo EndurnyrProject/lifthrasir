@@ -1,4 +1,7 @@
 use bevy::prelude::*;
+use moonshine_kind::Instance;
+
+use crate::domain::entities::markers::LocalPlayer;
 
 /// Component that links a camera to a follow target (the player character).
 /// Caches the target's position to avoid querying it multiple times per frame.
@@ -16,7 +19,7 @@ use bevy::prelude::*;
 #[reflect(Component)]
 pub struct CameraFollowTarget {
     /// The entity this camera is following
-    pub target_entity: Entity,
+    pub target_entity: Instance<LocalPlayer>,
     /// Cached position of the target from the previous frame
     /// Updated by `update_camera_target_cache` system
     pub cached_position: Vec3,
@@ -31,7 +34,7 @@ impl CameraFollowTarget {
     /// # Arguments
     /// - `target_entity`: The entity to follow (player character)
     /// - `initial_position`: Starting position of the target
-    pub fn new(target_entity: Entity, initial_position: Vec3) -> Self {
+    pub fn new(target_entity: Instance<LocalPlayer>, initial_position: Vec3) -> Self {
         Self {
             target_entity,
             cached_position: initial_position,

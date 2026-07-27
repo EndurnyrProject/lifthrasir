@@ -15,6 +15,7 @@ use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::infrastructure::job::registry::JobSpriteRegistry;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use moonshine_kind::Instance;
 use moonshine_tag::Tag;
 
 /// Spawn system that handles sprite spawn events.
@@ -485,7 +486,7 @@ type UnlinkedHeadQuery<'w, 's> =
 pub fn link_head_to_body(
     mut commands: Commands,
     unlinked_heads: UnlinkedHeadQuery,
-    body_layers: Query<Entity, With<BodyAttachPoint>>,
+    body_layers: Query<Instance<BodyAttachPoint>>,
     children_query: Query<&Children>,
 ) {
     for (head_entity, child_of) in unlinked_heads.iter() {
@@ -495,7 +496,9 @@ pub fn link_head_to_body(
             continue;
         };
 
-        let body_entity = children.iter().find(|child| body_layers.contains(*child));
+        let body_entity = children
+            .iter()
+            .find_map(|child| body_layers.get(child).ok());
 
         let Some(body_entity) = body_entity else {
             continue;

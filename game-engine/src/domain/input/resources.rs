@@ -21,6 +21,5 @@ pub struct ForwardedMouseClick {
 #[derive(Resource, Default)]
 #[auto_init_resource(plugin = crate::domain::input::plugin::InputPlugin)]
 pub struct LockedTarget {
-    pub entity: Option<Entity>,
     pub gid: Option<u32>,
 }

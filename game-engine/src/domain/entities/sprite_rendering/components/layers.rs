@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use moonshine_kind::Instance;
 
 /// Marker component for head sprite layers.
 #[derive(Component, Default)]
@@ -41,5 +42,5 @@ pub struct HeadAttachPoint {
 /// Used to calculate head positioning relative to body.
 #[derive(Component)]
 pub struct HeadAttachment {
-    pub body_entity: Entity,
+    pub body_entity: Instance<BodyAttachPoint>,
 }

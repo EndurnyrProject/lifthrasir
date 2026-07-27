@@ -159,6 +159,13 @@ pub struct BillboardPlugin;
 mod tests {
     use super::*;
     use crate::domain::camera::components::CameraFollowTarget;
+    use crate::domain::entities::markers::LocalPlayer;
+    use moonshine_kind::Instance;
+
+    fn spawn_player(app: &mut App) -> Instance<LocalPlayer> {
+        let player = app.world_mut().spawn(LocalPlayer).id();
+        Instance::from_entity(app.world().entity(player)).unwrap()
+    }
 
     fn rot_a() -> Quat {
         Quat::from_rotation_y(0.7)
@@ -177,7 +184,7 @@ mod tests {
         let mut app = App::new();
         app.add_systems(Update, billboard_rotation_system);
 
-        let player = app.world_mut().spawn_empty().id();
+        let player = spawn_player(&mut app);
 
         // Primary follow camera with rotation A.
         app.world_mut().spawn((
@@ -304,7 +311,7 @@ mod tests {
         let mut app = App::new();
         app.add_systems(Update, billboard_rotation_system);
 
-        let player = app.world_mut().spawn_empty().id();
+        let player = spawn_player(&mut app);
         app.world_mut().spawn((
             Camera3d::default(),
             Transform::from_rotation(rot_a()),

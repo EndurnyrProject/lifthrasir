@@ -132,6 +132,7 @@ pub fn apply_peco_mount(
 mod tests {
     use super::*;
     use crate::domain::entities::character::components::CharacterStats;
+    use crate::domain::entities::sprite_rendering::components::BodyAttachPoint;
     use crate::domain::sprite::tags::LAYER_HEAD;
     use bevy::asset::AssetPlugin;
 
@@ -190,9 +191,14 @@ mod tests {
         let body_layer = layer(&mut app, LAYER_BODY);
         let head_layer = layer(&mut app, LAYER_HEAD);
         app.world_mut()
+            .entity_mut(body_layer)
+            .insert(BodyAttachPoint::default());
+        let body_instance =
+            moonshine_kind::Instance::from_entity(app.world().entity(body_layer)).unwrap();
+        app.world_mut()
             .entity_mut(head_layer)
             .insert(HeadAttachment {
-                body_entity: body_layer,
+                body_entity: body_instance,
             });
 
         let character = app
