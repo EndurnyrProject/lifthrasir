@@ -38,6 +38,7 @@ _opam/
 # GRF
 en.grf
 data.grf
+*.pak
 
 # Generated assets
 assets/data/ron/*

@@ -100,6 +100,37 @@ cargo build --release
 cargo run -p lifthrasir
 ```
 
+### Game assets (Lifthrasir pak)
+
+The runtime does **not** read GRF archives. All game content loads from a
+"pak" — a plain zip64 archive with normalized paths (forward-slash, lowercase,
+UTF-8), per-entry zstd/Stored compression, and a `.lifthrasir/manifest.toml`
+entry (`format_version`, `content_version`). `assets/loader.toml` lists the
+archives (`[[assets.archive]]`, resolved against `assets/`) plus the loose
+`data_folder` override, which always wins for development.
+
+Produce the pak once from retail GRFs (GRF parsing lives only in the offline
+tooling):
+
+```bash
+cargo run --release -p grf-utils -- pack \
+  --grf assets/en.grf --grf assets/data.grf \
+  --out assets/lifthrasir.pak --content-version 1
+```
+
+Earlier `--grf` flags win on duplicate paths; `--data-folder` (optional) wins
+over all GRFs. Apply a patch pak (game must be closed; the patch file is
+consumed, the main pak is atomically replaced and compacted):
+
+```bash
+cargo run --release -p grf-utils -- merge \
+  --main assets/lifthrasir.pak --patch patch.pak
+```
+
+A missing or invalid pak fails startup loudly by design. Any zip tool can
+inspect a pak. `ro-to-lifthrasir-cli` still reads raw GRFs for offline
+conversion via its own `assets/convert.toml`.
+
 ### DLSS Super Resolution (optional, NVIDIA / Windows / Linux)
 
 DLSS is an **opt-in, off-by-default** Cargo feature. It is absent from default builds and **cannot compile on macOS** (it requires the Vulkan backend and an NVIDIA RTX GPU). Build and run it only on Windows or Linux with an RTX card:
