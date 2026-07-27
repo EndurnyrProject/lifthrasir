@@ -1,6 +1,8 @@
 use crate::core::GameState;
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::world::components::MapLoader;
+#[cfg(feature = "map-gltf")]
+use crate::domain::world::gltf_map::LifAudioEmitter;
 use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset};
 use crate::infrastructure::ro_formats::RswObject;
 use crate::utils::{get_map_dimensions_from_ground, rsw_position_to_bevy};
@@ -36,6 +38,32 @@ pub struct MapSoundSource {
 
 pub fn map_sound_path(name: &str) -> String {
     format!("ro://data/wav/{}", name.replace('\\', "/"))
+}
+
+/// One map sound source at an already world-space position. Both the RSW path
+/// (which converts the RSW coordinates first) and the glb path (whose emitter
+/// nodes carry the final world transform) spawn this.
+fn map_sound_bundle(
+    translation: Vec3,
+    handle_path: String,
+    base_volume: f32,
+    range: f32,
+    cycle: f32,
+) -> impl Bundle {
+    (
+        MapSound,
+        MapSoundSource {
+            handle_path,
+            base_volume,
+            range,
+            cycle: Duration::from_secs_f32(cycle),
+            instance: None,
+            state: MapSoundState::Silent {
+                timer: Timer::new(Duration::ZERO, TimerMode::Once),
+            },
+        },
+        Transform::from_translation(translation),
+    )
 }
 
 #[auto_add_system(plugin = crate::domain::audio::plugin::AudioPlugin, schedule = Update)]
@@ -75,21 +103,12 @@ pub fn spawn_map_sounds(
                 continue;
             }
 
-            let translation = rsw_position_to_bevy(sound.position, map_width, map_height);
-
-            commands.spawn((
-                MapSound,
-                MapSoundSource {
-                    handle_path: map_sound_path(&sound.wav_file),
-                    base_volume: sound.volume,
-                    range: sound.range,
-                    cycle: Duration::from_secs_f32(sound.cycle),
-                    instance: None,
-                    state: MapSoundState::Silent {
-                        timer: Timer::new(Duration::ZERO, TimerMode::Once),
-                    },
-                },
-                Transform::from_translation(translation),
+            commands.spawn(map_sound_bundle(
+                rsw_position_to_bevy(sound.position, map_width, map_height),
+                map_sound_path(&sound.wav_file),
+                sound.volume,
+                sound.range,
+                sound.cycle,
             ));
 
             spawned += 1;
@@ -98,6 +117,41 @@ pub fn spawn_map_sounds(
         commands.entity(entity).insert(MapSoundsSpawned);
 
         debug!("Spawned {} map sounds", spawned);
+    }
+}
+
+/// Marks a glb audio-emitter node whose [`MapSound`] has been spawned. The node
+/// is a scene child of the `MapScoped` loader entity, so the marker dies with
+/// the map and the next one's emitters spawn afresh -- exactly how
+/// [`MapSoundsSpawned`] behaves on the RSW path.
+#[cfg(feature = "map-gltf")]
+#[derive(Component)]
+pub struct GltfMapSoundSpawned;
+
+/// The glb counterpart of [`spawn_map_sounds`]: emitter nodes carry their final
+/// world position in `GlobalTransform`, so this must run after transform
+/// propagation ([`GltfMapPlugin`] schedules it there).
+///
+/// Rangeless and fileless sounds never reach a glb -- the converter drops them
+/// while emitting nodes, mirroring the guard on the RSW path.
+///
+/// [`GltfMapPlugin`]: crate::domain::world::GltfMapPlugin
+#[cfg(feature = "map-gltf")]
+pub fn spawn_gltf_map_sounds(
+    mut commands: Commands,
+    emitters: Query<(Entity, &LifAudioEmitter, &GlobalTransform), Without<GltfMapSoundSpawned>>,
+) {
+    for (entity, emitter, transform) in emitters.iter() {
+        let audio = &emitter.0;
+
+        commands.spawn(map_sound_bundle(
+            transform.translation(),
+            audio.file.clone(),
+            audio.volume,
+            audio.range,
+            audio.cycle,
+        ));
+        commands.entity(entity).insert(GltfMapSoundSpawned);
     }
 }
 

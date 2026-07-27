@@ -20,6 +20,8 @@ use super::components::{EffectAnchor, MapAmbientVfx};
 use super::systems::spawn_effect;
 use super::triggers::{descriptor_tint, load_effect};
 use crate::domain::world::components::MapLoader;
+#[cfg(feature = "map-gltf")]
+use crate::domain::world::gltf_map::LifEffectEmitter;
 use crate::domain::world::map_scoped::MapScoped;
 use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset};
 use crate::infrastructure::effect::EffectCatalog;
@@ -68,53 +70,127 @@ pub fn spawn_map_effects(
                 continue;
             };
 
-            let Some(descriptor) = catalog.special(effect.effect_type) else {
-                *unmapped.entry(effect.effect_type).or_default() += 1;
-                continue;
-            };
-
-            let position = rsw_position_to_bevy(effect.position, map_width, map_height);
-
-            if let Some(handle) = load_effect(&asset_server, descriptor) {
-                let spawned = spawn_effect(
-                    &mut commands,
-                    handle,
-                    EffectAnchor::Position(position),
-                    true,
-                    descriptor_tint(descriptor),
-                    None,
-                );
-                commands.entity(spawned).insert(MapScoped);
-                continue;
-            }
-
-            let Some(key) = descriptor.bespoke_key() else {
-                debug!(
-                    "Map effect {} has neither a Str nor a Bespoke layer; skipping",
-                    effect.effect_type
-                );
-                continue;
-            };
-
-            commands.spawn((
-                Transform::from_translation(position),
-                MapScoped,
-                MapAmbientVfx {
-                    key: key.to_string(),
-                    emit_speed: effect.emit_speed,
-                    params: effect.params,
-                },
-            ));
-        }
-
-        for (effect_type, count) in unmapped {
-            warn!(
-                "No map effect mapping for effect_type {effect_type} ({count} objects); skipping"
+            let spawned = spawn_map_effect(
+                &mut commands,
+                &asset_server,
+                &catalog,
+                rsw_position_to_bevy(effect.position, map_width, map_height),
+                effect.effect_type,
+                effect.emit_speed,
+                effect.params,
             );
+
+            if !spawned {
+                *unmapped.entry(effect.effect_type).or_default() += 1;
+            }
         }
+
+        warn_unmapped(unmapped);
 
         commands.entity(entity).insert(MapEffectsSpawned);
     }
+}
+
+/// One map effect at an already world-space position. Both the RSW path (which
+/// converts the RSW coordinates first) and the glb path (whose emitter nodes
+/// carry the final world transform) go through here.
+///
+/// Returns `false` when the catalog has no descriptor for `effect_type`, so
+/// callers can warn once per distinct id instead of once per object.
+fn spawn_map_effect(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    catalog: &EffectCatalog,
+    position: Vec3,
+    effect_type: u32,
+    emit_speed: f32,
+    params: [f32; 4],
+) -> bool {
+    let Some(descriptor) = catalog.special(effect_type) else {
+        return false;
+    };
+
+    if let Some(handle) = load_effect(asset_server, descriptor) {
+        let spawned = spawn_effect(
+            commands,
+            handle,
+            EffectAnchor::Position(position),
+            true,
+            descriptor_tint(descriptor),
+            None,
+        );
+        commands.entity(spawned).insert(MapScoped);
+        return true;
+    }
+
+    let Some(key) = descriptor.bespoke_key() else {
+        debug!("Map effect {effect_type} has neither a Str nor a Bespoke layer; skipping");
+        return true;
+    };
+
+    commands.spawn((
+        Transform::from_translation(position),
+        MapScoped,
+        MapAmbientVfx {
+            key: key.to_string(),
+            emit_speed,
+            params,
+        },
+    ));
+
+    true
+}
+
+fn warn_unmapped(unmapped: BTreeMap<u32, usize>) {
+    for (effect_type, count) in unmapped {
+        warn!("No map effect mapping for effect_type {effect_type} ({count} objects); skipping");
+    }
+}
+
+/// Marks a glb effect-emitter node whose effect has been spawned. The node is a
+/// scene child of the `MapScoped` loader entity, so the marker dies with the map
+/// -- exactly how [`MapEffectsSpawned`] behaves on the RSW path.
+#[cfg(feature = "map-gltf")]
+#[derive(Component)]
+pub struct GltfMapEffectSpawned;
+
+/// The glb counterpart of [`spawn_map_effects`]: emitter nodes carry their final
+/// world position in `GlobalTransform`, so this must run after transform
+/// propagation ([`GltfMapPlugin`] schedules it there).
+///
+/// [`GltfMapPlugin`]: crate::domain::world::GltfMapPlugin
+#[cfg(feature = "map-gltf")]
+pub fn spawn_gltf_map_effects(
+    mut commands: Commands,
+    catalog: Option<Res<EffectCatalog>>,
+    asset_server: Res<AssetServer>,
+    emitters: Query<(Entity, &LifEffectEmitter, &GlobalTransform), Without<GltfMapEffectSpawned>>,
+) {
+    let Some(catalog) = catalog else { return };
+
+    let mut unmapped: BTreeMap<u32, usize> = BTreeMap::new();
+
+    for (entity, emitter, transform) in emitters.iter() {
+        let effect = &emitter.0;
+
+        let spawned = spawn_map_effect(
+            &mut commands,
+            &asset_server,
+            &catalog,
+            transform.translation(),
+            effect.effect_type,
+            effect.emit_speed,
+            effect.params,
+        );
+
+        if !spawned {
+            *unmapped.entry(effect.effect_type).or_default() += 1;
+        }
+
+        commands.entity(entity).insert(GltfMapEffectSpawned);
+    }
+
+    warn_unmapped(unmapped);
 }
 
 #[cfg(test)]
