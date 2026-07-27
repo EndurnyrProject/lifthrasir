@@ -4,6 +4,8 @@ use crate::domain::entities::systems::{
 use crate::domain::settings::GraphicsSettings;
 use crate::domain::system_sets::ModelRenderingSystems;
 use crate::domain::world::components::MapLoader;
+#[cfg(feature = "map-gltf")]
+use crate::domain::world::gltf_map::LifPropRef;
 use crate::domain::world::map_scoped::MapScoped;
 use crate::infrastructure::assets::bmp_loader::BmpLoaderSettings;
 use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset, RsmAsset};
@@ -223,6 +225,41 @@ pub fn spawn_map_models(
 
         // Mark this MapLoader entity as having models spawned
         commands.entity(entity).insert(ModelsSpawned);
+    }
+}
+
+/// The glb counterpart of [`spawn_map_models`]: the converter baked the whole
+/// RSW placement into the prop node's own transform, so the model is attached
+/// to that node instead of spawned at a converted one -- applying
+/// `rsw_to_bevy_transform` here would place every prop twice.
+///
+/// Component parity with [`spawn_map_models`] is by construction rather than by
+/// a shared spawner: Bevy's glTF loader already gives every node the transform
+/// and visibility components that path adds by hand, and the node is a scene
+/// descendant of the `MapScoped` map-loader entity, so it needs no `MapScoped`
+/// of its own. That leaves [`MapModel`], plus the RSM request that
+/// [`load_rsm_assets`] makes on the RSW path -- made here instead because
+/// `lif_prop` carries a full `ro://` asset path, not a GRF-relative filename.
+/// `load_rsm_assets` skips these nodes for exactly that reason, and
+/// [`update_model_meshes`] takes over from there untouched.
+///
+/// [`MapModel`] doubles as the once-only marker: every [`LifPropRef`] gets one.
+#[cfg(feature = "map-gltf")]
+pub fn spawn_gltf_map_props(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    props: Query<(Entity, &LifPropRef), Without<MapModel>>,
+) {
+    for (entity, prop) in props.iter() {
+        let handle: Handle<RsmAsset> = asset_server.load(&prop.0.model);
+
+        commands.entity(entity).insert((
+            MapModel {
+                filename: prop.0.model.clone(),
+                node_name: String::new(),
+            },
+            RsmLoading { handle },
+        ));
     }
 }
 

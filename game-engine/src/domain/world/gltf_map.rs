@@ -23,6 +23,7 @@ use crate::domain::world::map_scoped::MapScoped;
 use crate::domain::world::systems::extract_map_from_unified_assets;
 use crate::infrastructure::assets::SharedCompositeAssetSource;
 use crate::infrastructure::assets::sources::AssetSource;
+use crate::presentation::rendering::models::spawn_gltf_map_props;
 use crate::presentation::rendering::water::begin_gltf_map_water;
 use bevy::asset::LoadContext;
 use bevy::gltf::GltfAssetLabel;
@@ -137,7 +138,12 @@ impl Plugin for GltfMapPlugin {
         // them.
         app.add_systems(
             PostUpdate,
-            (spawn_gltf_map_sounds, spawn_gltf_map_effects).after(TransformSystems::Propagate),
+            (
+                spawn_gltf_map_sounds,
+                spawn_gltf_map_effects,
+                spawn_gltf_map_props,
+            )
+                .after(TransformSystems::Propagate),
         );
         app.add_observer(adopt_gltf_map_scene);
     }
@@ -526,9 +532,12 @@ mod tests {
     use crate::domain::entities::pathfinding::PathfindingGrid;
     use crate::domain::world::spawn_context::MapSpawnContext;
     use crate::infrastructure::assets::hierarchical_reader::HierarchicalAssetReader;
-    use crate::infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset, RoWorldAsset};
+    use crate::infrastructure::assets::loaders::{
+        RoAltitudeAsset, RoGroundAsset, RoWorldAsset, RsmAsset,
+    };
     use crate::infrastructure::assets::sources::{CompositeAssetSource, DataFolderSource};
     use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset};
+    use crate::presentation::rendering::models::{MapModel, RsmLoading};
     use crate::presentation::rendering::water::WaterLoadingState;
     use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
     use bevy::asset::{AssetApp, AssetPlugin};
@@ -796,7 +805,8 @@ mod tests {
         app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
         app.init_asset::<RoGroundAsset>()
             .init_asset::<RoAltitudeAsset>()
-            .init_asset::<RoWorldAsset>();
+            .init_asset::<RoWorldAsset>()
+            .init_asset::<RsmAsset>();
         app.insert_resource(SharedCompositeAssetSource(composite));
         // The completion flow the adapter feeds: `MapData` on the loader entity
         // is what turns a finished map into `MapLoadCompleted`.
@@ -1126,6 +1136,75 @@ mod tests {
         let world = app.world_mut();
         let count = world.query::<&MapSound>().iter(world).count();
         assert_eq!(count, 1, "the emitter must only spawn its sound once");
+    }
+
+    /// The converter bakes the whole RSW placement into the prop node, so the
+    /// runtime attaches the model to that node and applies nothing on top --
+    /// running `rsw_to_bevy_transform` here would place every prop twice.
+    #[test]
+    fn a_glb_prop_node_requests_its_rsm_at_the_baked_placement() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+        let entity = request_map(&mut app, "mini_map");
+
+        app.update();
+        wait_for_scene(&mut app, entity);
+        app.update();
+        app.update();
+
+        let world = app.world_mut();
+        let mut query = world.query::<(
+            &LifPropRef,
+            &MapModel,
+            &RsmLoading,
+            &Transform,
+            &GlobalTransform,
+        )>();
+        let props: Vec<_> = query.iter(world).collect();
+        assert_eq!(
+            props.len(),
+            1,
+            "one map model per glb prop node, however many frames run"
+        );
+
+        let (prop, model, loading, transform, global) = props[0];
+        assert_eq!(model.filename, prop.0.model);
+        assert_eq!(
+            loading.handle.path().expect("RSM asset path").to_string(),
+            "ro://data/model/prontera/tree01.rsm"
+        );
+
+        // RSW position [7, -8, 9], rotation [10, 20, 30] and scale [1, 2, 3] on
+        // a 2x2 ground, baked by the converter into the node's own transform.
+        assert!(
+            transform
+                .translation
+                .abs_diff_eq(Vec3::new(17.0, 8.0, -19.0), 1e-4),
+            "{}",
+            transform.translation
+        );
+        assert!(
+            transform.scale.abs_diff_eq(Vec3::new(1.0, 2.0, 3.0), 1e-4),
+            "{}",
+            transform.scale
+        );
+
+        let (scale, rotation, translation) = global.to_scale_rotation_translation();
+        assert!(
+            translation.abs_diff_eq(Vec3::new(17.0, -8.0, 19.0), 1e-4),
+            "{translation}"
+        );
+        assert!(scale.abs_diff_eq(Vec3::new(1.0, 2.0, 3.0), 1e-4), "{scale}");
+
+        let expected = Quat::from_rotation_z(30f32.to_radians())
+            * Quat::from_rotation_x(10f32.to_radians())
+            * Quat::from_rotation_y(20f32.to_radians());
+        for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+            assert!(
+                (rotation * axis).abs_diff_eq(expected * axis, 1e-4),
+                "{rotation} is not the baked RSW rotation {expected}"
+            );
+        }
     }
 
     #[test]
