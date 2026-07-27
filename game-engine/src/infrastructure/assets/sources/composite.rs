@@ -173,4 +173,36 @@ mod tests {
 
         assert_eq!(composite.load("data/sprite/x.spr").unwrap(), b"loose-bytes");
     }
+
+    #[test]
+    fn exists_true_for_pak_entry_true_for_data_folder_entry_false_for_missing() {
+        let pak_dir = tempfile::tempdir().unwrap();
+        let pak_path = build_fixture_pak(pak_dir.path(), "fixture.pak");
+
+        let data_dir = tempfile::tempdir().unwrap();
+        let loose_file = data_dir.path().join("ro/config/clientinfo.toml");
+        std::fs::create_dir_all(loose_file.parent().unwrap()).unwrap();
+        std::fs::write(&loose_file, b"loose-config").unwrap();
+
+        let mut composite = CompositeAssetSource::new();
+        composite.add_source(Box::new(PakSource::new(&pak_path, 1).unwrap()));
+        composite.add_source(Box::new(DataFolderSource::new(data_dir.path())));
+
+        assert!(composite.exists("data/sprite/x.spr"));
+        assert!(composite.exists("ro/config/clientinfo.toml"));
+        assert!(!composite.exists("data/does/not/exist.spr"));
+    }
+
+    #[test]
+    fn exists_agrees_with_load_on_path_normalization() {
+        let pak_dir = tempfile::tempdir().unwrap();
+        let pak_path = build_fixture_pak(pak_dir.path(), "fixture.pak");
+
+        let mut composite = CompositeAssetSource::new();
+        composite.add_source(Box::new(PakSource::new(&pak_path, 1).unwrap()));
+
+        let mixed_case_path = "DATA\\Sprite\\X.SPR";
+        assert!(composite.exists(mixed_case_path));
+        assert_eq!(composite.load(mixed_case_path).unwrap(), b"pak-bytes");
+    }
 }
