@@ -6753,6 +6753,7 @@ dependencies = [
  "encoding_rs",
  "gag",
  "glam 0.32.1",
+ "image",
  "lifthrasir-data",
  "luadec",
  "mlua",
