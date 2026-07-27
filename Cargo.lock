@@ -4642,8 +4642,10 @@ dependencies = [
 name = "lifthrasir-data"
 version = "0.0.1"
 dependencies = [
+ "ro-formats",
  "ron 0.12.2",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
