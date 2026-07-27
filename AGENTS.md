@@ -24,8 +24,8 @@
 ## Technology Stack
 
 ### Core Technologies
-- **Rust (Edition 2021)**: Primary programming language for game engine
-- **Bevy 0.18.1**: ECS-based game engine for rendering, game logic, and UI
+- **Rust**: Primary programming language for game engine
+- **Bevy 0.19.0**: ECS-based game engine for rendering, game logic, and UI
 
 ### Key Paradigms
 - **Entity Component System (ECS)**: Bevy's core architecture pattern
@@ -76,8 +76,7 @@ The adapter is wired at the binary, not in `game-engine`: the `lifthrasir` binar
 depends only on `net-contract`, write the inbound event Messages from incoming
 packets, read the outbound command Messages and translate them to outgoing packets,
 expose a plugin, and add that plugin in `main.rs`. The contract, `game-engine`, and
-`lifthrasir-ui` stay untouched. See
-`specs/2026-06-30-network-decoupling/design.md`.
+`lifthrasir-ui` stay untouched.
 
 
 ### Building

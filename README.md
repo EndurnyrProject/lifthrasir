@@ -28,7 +28,7 @@ I'm trying to keep it as close to the Bevy ECS recommended architecture, the bas
 - **Rust** (latest stable)
 - **Ragnarok Online GRF Files** - You must provide your own legitimate GRF data files
 
-### Required GRF Files
+### Required Files
 
 This client requires Ragnarok Online data files, which are proprietary to Gravity Co., Ltd. and are **NOT included** in this repository.
 
@@ -36,9 +36,14 @@ This client requires Ragnarok Online data files, which are proprietary to Gravit
 
 ```bash
 git clone git@github.com:EndurnyrProject/lifthrasir.git
-# Add your data.grf to the assets folder, configure the loader.toml
+# Add your *.grf to the assets folder, configure the loader.toml
 # Then convert the stuff
 cargo run -p ro-to-lifthrasir-cli -- convert
+
+# Then, generate your pak file
+cargo run --release -p grf-utils -- pack \
+  --grf assets/en.grf --grf assets/data.grf \
+  --out assets/lifthrasir.pak --content-version 1
 
 # Run the app on dev mode
 cargo run -p lifthrasir --features dev
