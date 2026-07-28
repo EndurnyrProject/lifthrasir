@@ -110,6 +110,25 @@ pub struct GltfMapLoader {
     pub map_name: String,
 }
 
+/// The glb scene of the map currently loaded, held so that tearing the map down
+/// cannot unload it.
+///
+/// `MapScoped` reaps the map root on every warp -- including a warp back to the
+/// map you are standing on. Without this handle that teardown drops the last
+/// reference to the glb, and the reload that immediately follows restores it
+/// unevenly: meshes come back as brand new assets, while the textures are
+/// resurrected in place with no asset event at all. A render world that dropped
+/// them on the way out gets its geometry back and never hears about the
+/// textures again -- untextured terrain.
+///
+/// Loading any other map drops the entry, and with it the previous map's
+/// assets: another glb map replaces it, a natively served one removes it.
+#[derive(Resource)]
+struct LoadedMapScene {
+    map_name: String,
+    scene: Handle<WorldAsset>,
+}
+
 /// Runtime plugin for the `map-gltf` pipeline (unified per-map glb loading).
 pub struct GltfMapPlugin;
 
@@ -159,10 +178,11 @@ impl Plugin for GltfMapPlugin {
 ///
 /// The scene is rooted on the map-loader entity itself, so it inherits the
 /// entity's `MapScoped` teardown and is where the native path puts `MapData`.
-pub fn spawn_gltf_map(
+fn spawn_gltf_map(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     source: Res<SharedCompositeAssetSource>,
+    loaded: Option<Res<LoadedMapScene>>,
     mut requests: Query<(Entity, &mut MapRequestLoader), Without<MapLoader>>,
 ) {
     for (entity, mut request) in requests.iter_mut() {
@@ -179,15 +199,25 @@ pub fn spawn_gltf_map(
             .expect("composite asset source lock is poisoned")
             .exists(&path)
         {
+            // This map is served by the native path, so whatever glb we were
+            // holding for the map we came from is now dead weight.
+            commands.remove_resource::<LoadedMapScene>();
             continue;
         }
 
         info!("Loading map '{map_name}' from {path}");
 
+        let scene = match loaded.as_deref() {
+            Some(current) if current.map_name == map_name => current.scene.clone(),
+            _ => asset_server.load(GltfAssetLabel::Scene(0).from_asset(format!("ro://{path}"))),
+        };
+
+        commands.insert_resource(LoadedMapScene {
+            map_name: map_name.clone(),
+            scene: scene.clone(),
+        });
         commands.entity(entity).insert((
-            WorldAssetRoot(
-                asset_server.load(GltfAssetLabel::Scene(0).from_asset(format!("ro://{path}"))),
-            ),
+            WorldAssetRoot(scene),
             Transform::from_rotation(ROOT_FIX),
             MapScoped,
             GltfMapLoader { map_name },
@@ -559,7 +589,7 @@ mod tests {
     use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
     use bevy::asset::{AssetApp, AssetPlugin};
     use bevy::ecs::system::RunSystemOnce;
-    use bevy::gltf::GltfPlugin;
+    use bevy::gltf::{GltfMaterial, GltfPlugin};
     use bevy::image::{CompressedImageFormats, ImageLoader, ImagePlugin};
     use bevy::light::CascadeShadowConfig;
     use bevy::mesh::MeshPlugin;
@@ -780,6 +810,13 @@ mod tests {
     /// [`spawn_gltf_map`] looks for it -- inside a throwaway `ro://` root.
     fn stage_map(map: &str, fixture: &str) -> tempfile::TempDir {
         let root = tempfile::tempdir().unwrap();
+        stage_map_into(&root, map, fixture);
+        root
+    }
+
+    /// Adds another map to an existing `ro://` root, for the tests that need
+    /// two maps to warp between.
+    fn stage_map_into(root: &tempfile::TempDir, map: &str, fixture: &str) {
         let map_dir = root.path().join(format!("data/maps/{map}"));
         std::fs::create_dir_all(map_dir.join("tex")).unwrap();
         std::fs::copy(
@@ -792,7 +829,6 @@ mod tests {
             map_dir.join("tex/grass01.png"),
         )
         .unwrap();
-        root
     }
 
     /// A headless app whose `ro://` source is `root`, running both the glb
@@ -822,11 +858,21 @@ mod tests {
             GltfPlugin::default(),
             GltfMapPlugin,
         ));
+        app.world_mut()
+            .resource_mut::<GltfExtensionHandlers>()
+            .0
+            .write_blocking()
+            .push(Box::new(StandardMaterialHandler));
         app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
         app.init_asset::<RoGroundAsset>()
             .init_asset::<RoAltitudeAsset>()
             .init_asset::<RoWorldAsset>()
-            .init_asset::<RsmAsset>();
+            .init_asset::<RsmAsset>()
+            // `PbrPlugin`'s job in the real app; the terrain materials the glb
+            // carries have nowhere to land without it, and the scene spawner
+            // refuses to clone a component it cannot reflect.
+            .init_asset::<StandardMaterial>()
+            .register_type::<MeshMaterial3d<StandardMaterial>>();
         app.insert_resource(SharedCompositeAssetSource(composite));
         // The completion flow the adapter feeds: `MapData` on the loader entity
         // is what turns a finished map into `MapLoadCompleted`.
@@ -871,6 +917,239 @@ mod tests {
             std::thread::sleep(Duration::from_millis(2));
         }
         app.update();
+    }
+
+    /// The slice of `PbrPlugin` this file cares about: the glTF material turned
+    /// into a `StandardMaterial` sub-asset, and the `MeshMaterial3d` pointing a
+    /// spawned primitive at it. `PbrPlugin` itself needs a render app, and
+    /// without this the scene holds no material handle at all -- so the texture
+    /// lifetime a warp exercises would be invisible here.
+    #[derive(Clone, Default)]
+    struct StandardMaterialHandler;
+
+    impl GltfExtensionHandler for StandardMaterialHandler {
+        fn dyn_clone(&self) -> Box<dyn ErasedGltfExtensionHandler> {
+            Box::new(self.clone())
+        }
+
+        fn on_material(
+            &mut self,
+            load_context: &mut LoadContext<'_>,
+            _gltf_material: &gltf::Material,
+            _material: Handle<GltfMaterial>,
+            material_asset: &GltfMaterial,
+            material_label: &str,
+        ) {
+            load_context.add_labeled_asset(
+                format!("{material_label}/std"),
+                StandardMaterial {
+                    base_color_texture: material_asset.base_color_texture.clone(),
+                    ..default()
+                },
+            );
+        }
+
+        fn on_spawn_mesh_and_material(
+            &mut self,
+            load_context: &mut LoadContext<'_>,
+            _primitive: &gltf::Primitive,
+            _mesh: &gltf::Mesh,
+            _material: &gltf::Material,
+            entity: &mut EntityWorldMut,
+            material_label: &str,
+        ) {
+            entity.insert(MeshMaterial3d(
+                load_context.get_label_handle::<StandardMaterial>(format!("{material_label}/std")),
+            ));
+        }
+    }
+
+    /// Mimics `despawn_map_scoped`: a warp reaps every map-scoped entity, and
+    /// the glb loader entity -- scene instance and all -- is one of them.
+    fn warp_away(app: &mut App) {
+        let world = app.world_mut();
+        let scoped: Vec<Entity> = world
+            .query_filtered::<Entity, With<MapScoped>>()
+            .iter(world)
+            .collect();
+        for entity in scoped {
+            world.entity_mut(entity).despawn();
+        }
+    }
+
+    fn descendants(world: &World, root: Entity) -> Vec<Entity> {
+        let mut found = Vec::new();
+        let mut stack = vec![root];
+        while let Some(entity) = stack.pop() {
+            found.push(entity);
+            if let Some(children) = world.entity(entity).get::<Children>() {
+                stack.extend(children.iter());
+            }
+        }
+        found
+    }
+
+    /// The terrain material of the instance rooted at `entity`, which is the
+    /// only textured mesh the fixture carries.
+    fn terrain_material(world: &World, entity: Entity, stage: &str) -> Handle<StandardMaterial> {
+        descendants(world, entity)
+            .into_iter()
+            .find_map(|descendant| world.get::<MeshMaterial3d<StandardMaterial>>(descendant))
+            .unwrap_or_else(|| panic!("{stage}: no terrain mesh under the map root"))
+            .0
+            .clone()
+    }
+
+    /// Terrain geometry is worthless without its texture: the material must
+    /// still be a live asset, and so must the image it samples.
+    fn assert_terrain_texture_is_live(app: &mut App, entity: Entity, stage: &str) {
+        let material = terrain_material(app.world(), entity, stage);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let image = app
+                .world()
+                .resource::<Assets<StandardMaterial>>()
+                .get(&material)
+                .unwrap_or_else(|| panic!("{stage}: the terrain material asset is gone"))
+                .base_color_texture
+                .clone()
+                .unwrap_or_else(|| panic!("{stage}: the terrain material has no base colour map"));
+
+            let state = app.world().resource::<AssetServer>().load_state(&image);
+            assert!(!state.is_failed(), "{stage}: terrain texture {state:?}");
+            if state.is_loaded()
+                && app
+                    .world()
+                    .resource::<Assets<Image>>()
+                    .get(&image)
+                    .is_some()
+            {
+                return;
+            }
+
+            assert!(
+                Instant::now() < deadline,
+                "{stage}: the terrain texture never became a live asset ({state:?})"
+            );
+            app.update();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    /// Every mesh asset the instance rooted at `entity` renders, sorted so two
+    /// instances of the same map compare equal.
+    fn terrain_meshes(world: &World, entity: Entity) -> Vec<AssetId<Mesh>> {
+        let mut ids: Vec<AssetId<Mesh>> = descendants(world, entity)
+            .into_iter()
+            .filter_map(|descendant| world.get::<Mesh3d>(descendant))
+            .map(|mesh| mesh.0.id())
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    /// Warping to the map you are already standing on tears the map root down
+    /// and asks for the very same glb again. That teardown must not unload the
+    /// map's assets, because the reload that follows restores them unevenly:
+    /// the meshes come back as brand new assets, while the textures are
+    /// resurrected in place without a single asset event. A render world that
+    /// dropped them on the way out therefore gets its geometry back and never
+    /// hears about the textures again.
+    #[test]
+    fn warping_to_the_same_map_keeps_the_map_assets_loaded() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+
+        let first = request_map(&mut app, "mini_map");
+        app.update();
+        wait_for_scene(&mut app, first);
+        assert_terrain_texture_is_live(&mut app, first, "first load");
+
+        let meshes = terrain_meshes(app.world(), first);
+        assert!(!meshes.is_empty(), "the fixture map has terrain geometry");
+
+        warp_away(&mut app);
+        for _ in 0..5 {
+            app.update();
+        }
+
+        for mesh in &meshes {
+            assert!(
+                app.world().resource::<Assets<Mesh>>().contains(*mesh),
+                "the warp unloaded the map's terrain mesh, so the whole glb has to be reloaded"
+            );
+        }
+
+        let second = request_map(&mut app, "mini_map");
+        app.update();
+        wait_for_scene(&mut app, second);
+        assert_terrain_texture_is_live(&mut app, second, "after warp");
+        assert_eq!(
+            terrain_meshes(app.world(), second),
+            meshes,
+            "the second instance must reuse the assets the first one loaded"
+        );
+    }
+
+    /// The other half of holding the map's scene: it is held for the *current*
+    /// map only, so leaving for another one still lets the old map go.
+    #[test]
+    fn warping_to_another_map_releases_the_previous_one() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        stage_map_into(&root, "no_water", "no_water.glb");
+        let mut app = map_app(&root);
+
+        let first = request_map(&mut app, "mini_map");
+        app.update();
+        wait_for_scene(&mut app, first);
+        let meshes = terrain_meshes(app.world(), first);
+
+        warp_away(&mut app);
+        let second = request_map(&mut app, "no_water");
+        app.update();
+        wait_for_scene(&mut app, second);
+        for _ in 0..5 {
+            app.update();
+        }
+
+        for mesh in &meshes {
+            assert!(
+                !app.world().resource::<Assets<Mesh>>().contains(*mesh),
+                "the map we warped away from is still holding its assets"
+            );
+        }
+    }
+
+    /// Same release, but for the warp that is still the common one: leaving a
+    /// glb map for a natively served one. Nothing about the native path would
+    /// ever drop the held scene, so the glb branch has to let go itself.
+    #[test]
+    fn warping_from_a_glb_map_to_a_native_one_releases_the_glb() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+
+        let first = request_map(&mut app, "mini_map");
+        app.update();
+        wait_for_scene(&mut app, first);
+        let meshes = terrain_meshes(app.world(), first);
+        assert!(!meshes.is_empty(), "the fixture map has terrain geometry");
+
+        warp_away(&mut app);
+        let second = request_map(&mut app, "prontera.gat");
+        for _ in 0..5 {
+            app.update();
+        }
+
+        assert!(
+            app.world().get::<MapLoader>(second).is_some(),
+            "a map with no glb must still load through the native path"
+        );
+        for mesh in &meshes {
+            assert!(
+                !app.world().resource::<Assets<Mesh>>().contains(*mesh),
+                "the glb map we warped away from is still holding its assets"
+            );
+        }
     }
 
     #[test]
