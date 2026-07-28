@@ -120,7 +120,7 @@ pub struct Face {
     pub smooth_group: i32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PosKeyframe {
     pub frame: i32,
     pub px: f32,
@@ -128,7 +128,7 @@ pub struct PosKeyframe {
     pub pz: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RotKeyframe {
     pub frame: i32,
     pub q: [f32; 4],

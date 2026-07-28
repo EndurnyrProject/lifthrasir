@@ -3,6 +3,7 @@ pub mod gltf_out;
 pub mod item;
 pub mod job;
 pub mod map;
+pub mod model;
 pub mod skill;
 pub mod status_icon;
 pub mod weapon;
