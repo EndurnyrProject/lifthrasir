@@ -17,6 +17,7 @@ use crate::domain::effects::map_effects::spawn_gltf_map_effects;
 use crate::domain::entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid};
 use crate::domain::system_sets::WorldLoadingSystems;
 use crate::domain::world::components::{CurrentMapAltitude, MapLoader};
+use crate::domain::world::gltf_prop::PropAnim;
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
 use crate::domain::world::map_scoped::MapScoped;
@@ -119,6 +120,7 @@ impl Plugin for GltfMapPlugin {
             .register_type::<LifAudioEmitter>()
             .register_type::<LifEffectEmitter>()
             .register_type::<LifPropRef>()
+            .register_type::<PropAnim>()
             .register_type::<GltfMapLoader>();
 
         app.world_mut()

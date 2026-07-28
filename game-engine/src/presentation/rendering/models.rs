@@ -219,7 +219,7 @@ pub fn spawn_map_models(
 
 /// Converts RSW's `anim_type` field to our enum. Most RO models should loop
 /// by default for continuous animation.
-fn rsw_anim_type_to_animation_type(anim_type: u32) -> AnimationType {
+pub(crate) fn rsw_anim_type_to_animation_type(anim_type: u32) -> AnimationType {
     match anim_type {
         0 => AnimationType::None, // Explicitly no animation
         1 => AnimationType::Loop, // Loop animation

@@ -1,6 +1,8 @@
 pub mod components;
 #[cfg(feature = "map-gltf")]
 pub mod gltf_map;
+#[cfg(feature = "map-gltf")]
+pub mod gltf_prop;
 pub mod loading_progress;
 pub mod map;
 pub mod map_loader;
