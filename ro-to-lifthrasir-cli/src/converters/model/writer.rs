@@ -225,14 +225,25 @@ fn build_nodes(
 
     for node in &model.nodes {
         let mesh = build_mesh(root, bin, node, materials)?;
+        let (matrix, translation, rotation, scale) = if let Some(matrix) = node.matrix {
+            (Some(matrix), None, None, None)
+        } else {
+            (
+                None,
+                Some(node.translation),
+                Some(json::scene::UnitQuaternion(node.rotation)),
+                Some(node.scale),
+            )
+        };
         indices.push(json::Index::push(
             &mut root.nodes,
             json::Node {
                 mesh,
                 name: Some(node.name.clone()),
-                translation: Some(node.translation),
-                rotation: Some(json::scene::UnitQuaternion(node.rotation)),
-                scale: Some(node.scale),
+                matrix,
+                translation,
+                rotation,
+                scale,
                 ..Default::default()
             },
         ));

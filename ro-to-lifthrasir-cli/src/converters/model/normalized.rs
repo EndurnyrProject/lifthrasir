@@ -23,6 +23,7 @@ pub struct NormalizedNode {
     pub translation: [f32; 3],
     pub rotation: [f32; 4],
     pub scale: [f32; 3],
+    pub matrix: Option<[f32; 16]>,
     pub translation_track: NormalizedTrack<[f32; 3]>,
     pub rotation_track: NormalizedTrack<[f32; 4]>,
     pub scale_track: NormalizedTrack<[f32; 3]>,

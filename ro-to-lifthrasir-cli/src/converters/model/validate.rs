@@ -7,7 +7,7 @@ use crate::converters::gltf_out::{EPSILON, ROOT_FIX, ensure_close, root_extensio
 use crate::converters::map::textures::TextureOut;
 use crate::converters::model::normalized::{AlphaMode, NormalizedModel};
 use anyhow::{Context, bail, ensure};
-use glam::{Quat, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use lifthrasir_data::lif;
 use std::fmt;
 use std::path::Path;
@@ -77,6 +77,24 @@ pub(super) fn validate_contract(model: &NormalizedModel) -> anyhow::Result<()> {
             "node '{}' has non-finite base TRS",
             node.name
         );
+        if let Some(matrix) = node.matrix {
+            let matrix = Mat4::from_cols_array(&matrix);
+            ensure!(
+                matrix.is_finite() && matrix.determinant().abs() > f32::EPSILON,
+                "node '{}' has an invalid matrix",
+                node.name
+            );
+            ensure!(
+                node.translation == [0.0; 3]
+                    && node.rotation == [0.0, 0.0, 0.0, 1.0]
+                    && node.scale == [1.0; 3]
+                    && node.translation_track.keys.is_empty()
+                    && node.rotation_track.keys.is_empty()
+                    && node.scale_track.keys.is_empty(),
+                "matrix node '{}' must have identity TRS and no animation",
+                node.name
+            );
+        }
         if let Some(parent) = node.parent {
             ensure!(
                 parent < model.nodes.len(),
@@ -319,12 +337,28 @@ fn validate_nodes<'a>(
             node.name,
             expected_parent.name().unwrap_or("<unnamed>")
         );
-        let (translation, rotation, scale) = resolved[index].transform().decomposed();
-        ensure!(
-            translation == node.translation && rotation == node.rotation && scale == node.scale,
-            "node '{}' local TRS disagrees with normalized data",
-            node.name
-        );
+        if let Some(expected) = node.matrix {
+            let actual = match resolved[index].transform() {
+                gltf::scene::Transform::Matrix { matrix } => {
+                    Mat4::from_cols_array_2d(&matrix).to_cols_array()
+                }
+                gltf::scene::Transform::Decomposed { .. } => {
+                    bail!("node '{}' lost its normalized matrix", node.name)
+                }
+            };
+            ensure!(
+                actual == expected,
+                "node '{}' matrix disagrees with normalized data",
+                node.name
+            );
+        } else {
+            let (translation, rotation, scale) = resolved[index].transform().decomposed();
+            ensure!(
+                translation == node.translation && rotation == node.rotation && scale == node.scale,
+                "node '{}' local TRS disagrees with normalized data",
+                node.name
+            );
+        }
     }
 
     Ok(resolved)
@@ -726,6 +760,39 @@ mod tests {
             counts.to_string(),
             "2 nodes, 3 primitives, 9 vertices, 0 animation channels"
         );
+    }
+
+    #[test]
+    fn a_matrix_node_round_trips_and_validates() {
+        let dir = fixture_dir();
+        let path = dir.path().join("matrix.glb");
+        let mut build = build_model(&animated_rsm(), "hash").expect("build");
+        let node = &mut build.nodes[0];
+        node.translation = [0.0; 3];
+        node.rotation = [0.0, 0.0, 0.0, 1.0];
+        node.scale = [1.0; 3];
+        node.matrix = Some(
+            Mat4::from_cols(
+                Vec3::X.extend(0.0),
+                Vec3::new(0.5, 1.0, 0.0).extend(0.0),
+                Vec3::Z.extend(0.0),
+                Vec3::ZERO.extend(1.0),
+            )
+            .to_cols_array(),
+        );
+        node.translation_track = NormalizedTrack::default();
+        node.rotation_track = NormalizedTrack::default();
+        node.scale_track = NormalizedTrack::default();
+        write_model_glb(&path, &build, &textures()).expect("write glb");
+
+        validate(&path, &build, &textures()).expect("matrix validation passes");
+
+        build.nodes[0].scale_track.keys = vec![NormalizedKey {
+            time_ms: build.duration_ms,
+            value: [1.0; 3],
+        }];
+        let error = validate_contract(&build).expect_err("matrix animation must fail");
+        assert!(error.to_string().contains("identity TRS and no animation"));
     }
 
     #[test]

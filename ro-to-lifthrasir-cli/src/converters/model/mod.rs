@@ -7,6 +7,7 @@ pub mod corpus;
 pub mod fixtures;
 pub mod mesh;
 pub mod normalized;
+pub mod rsm2;
 pub mod validate;
 pub mod writer;
 

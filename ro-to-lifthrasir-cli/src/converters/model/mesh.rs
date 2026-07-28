@@ -99,6 +99,7 @@ pub fn build_model(rsm: &Rsm, source_hash: &str) -> anyhow::Result<NormalizedMod
                 translation,
                 rotation,
                 scale,
+                matrix: None,
                 translation_track: track(
                     &names[idx],
                     "translation",
