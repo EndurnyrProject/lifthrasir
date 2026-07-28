@@ -19,20 +19,22 @@ use crate::converters::gltf_out::{
     push_image_and_texture, to_gltf_quat,
 };
 use crate::converters::map::textures::TextureOut;
-use crate::converters::model::mesh::{ModelBuild, ModelNode, ModelPrimitive};
+use crate::converters::model::normalized::{
+    AlphaMode, NormalizedMaterial, NormalizedModel, NormalizedNode, NormalizedPrimitive,
+    NormalizedTrack,
+};
 use anyhow::{Context, bail};
 use glam::{Quat, Vec3};
 use gltf_json as json;
 use json::validation::{Checked::Valid, USize64};
 use lifthrasir_data::lif;
-use ro_formats::Rsm;
-use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 /// Native model material constants, mirrored from
 /// `game-engine/src/presentation/rendering/models.rs::create_model_materials_from_loaded_textures`.
 const MODEL_ROUGHNESS: f32 = 1.0;
 const MODEL_METALLIC: f32 = 0.0;
+#[cfg(test)]
 const MODEL_ALPHA_CUTOFF: f32 = 0.01;
 
 /// The single animation a prop glb carries; the runtime plays
@@ -45,11 +47,10 @@ const ANIMATION_NAME: &str = "anim";
 /// the PNGs and computing each `relative_path` from the glb's own directory.
 pub fn write_model_glb(
     out_path: &Path,
-    rsm: &Rsm,
-    rsm_hash: &str,
-    build: &ModelBuild,
+    model: &NormalizedModel,
     textures: &[TextureOut],
 ) -> anyhow::Result<()> {
+    super::validate::validate_contract(model)?;
     let model_name = out_path
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -66,17 +67,20 @@ pub fn write_model_glb(
     };
     let mut bin = BinChunk::default();
 
-    let materials = build_materials(&mut root, rsm, build, textures)?;
-    let nodes = build_nodes(&mut root, &mut bin, build, &materials)?;
-    build_animation(&mut root, &mut bin, rsm, build, &nodes)?;
+    let materials = build_materials(&mut root, model, textures)?;
+    let nodes = build_nodes(&mut root, &mut bin, model, &materials)?;
+    build_animation(&mut root, &mut bin, model, &nodes)?;
 
-    let children = build
-        .nodes
+    let children = model
+        .roots
         .iter()
-        .enumerate()
-        .filter(|(_, node)| node.parent.is_none())
-        .map(|(index, _)| nodes[index])
-        .collect();
+        .map(|index| {
+            nodes
+                .get(*index)
+                .copied()
+                .with_context(|| format!("model root index {index} is out of range"))
+        })
+        .collect::<anyhow::Result<_>>()?;
 
     let scene_root = json::Index::push(
         &mut root.nodes,
@@ -100,7 +104,7 @@ pub fn write_model_glb(
     );
     root.scene = Some(scene);
 
-    build_root_extensions(&mut root, rsm_hash)?;
+    build_root_extensions(&mut root, &model.provenance.source_hash)?;
 
     root.buffers.push(json::Buffer {
         byte_length: USize64::from(bin.data.len()),
@@ -138,42 +142,39 @@ pub fn write_model_glb(
 /// into the shipped asset.
 fn build_materials(
     root: &mut json::Root,
-    rsm: &Rsm,
-    build: &ModelBuild,
+    model: &NormalizedModel,
     textures: &[TextureOut],
-) -> anyhow::Result<BTreeMap<i32, json::Index<json::Material>>> {
-    if textures.len() != rsm.textures.len() {
+) -> anyhow::Result<Vec<json::Index<json::Material>>> {
+    if textures.len() != model.textures.len() {
         bail!(
             "model declares {} texture(s) but {} were exported",
-            rsm.textures.len(),
+            model.textures.len(),
             textures.len()
         );
     }
 
-    let referenced: BTreeSet<i32> = build
-        .nodes
+    model
+        .materials
         .iter()
-        .flat_map(|node| node.primitives.iter().map(|primitive| primitive.texture_id))
-        .collect();
-
-    referenced
-        .into_iter()
-        .map(|texture_id| {
-            let source = match usize::try_from(texture_id) {
-                Ok(index) => Some(textures.get(index).with_context(|| {
-                    format!(
-                        "model geometry references texture index {texture_id} but only {} were exported",
-                        textures.len()
-                    )
-                })?),
-                Err(_) => None,
-            };
-
-            let base_color_texture = source.map(|texture| push_image_and_texture(root, texture, None));
+        .map(|material| {
+            let source = material
+                .texture
+                .map(|index| {
+                    textures.get(index).with_context(|| {
+                        format!(
+                            "model geometry references texture index {index} but only {} were exported",
+                            textures.len()
+                        )
+                    })
+                })
+                .transpose()?;
+            let base_color_texture =
+                source.map(|texture| push_image_and_texture(root, texture, None));
             let name = source.map(|texture| texture.source_name.clone());
-            let material = json::Index::push(&mut root.materials, model_material(name, base_color_texture, rsm.alpha));
-
-            Ok((texture_id, material))
+            Ok(json::Index::push(
+                &mut root.materials,
+                model_material(name, base_color_texture, material),
+            ))
         })
         .collect()
 }
@@ -181,18 +182,20 @@ fn build_materials(
 fn model_material(
     name: Option<String>,
     base_color_texture: Option<json::texture::Info>,
-    alpha: f32,
+    material: &NormalizedMaterial,
 ) -> json::Material {
-    let translucent = alpha < 1.0;
+    let (alpha_mode, alpha_cutoff) = match material.alpha {
+        AlphaMode::Mask { cutoff } => (
+            json::material::AlphaMode::Mask,
+            Some(json::material::AlphaCutoff(cutoff)),
+        ),
+        AlphaMode::Blend => (json::material::AlphaMode::Blend, None),
+    };
 
     json::Material {
-        alpha_cutoff: (!translucent).then_some(json::material::AlphaCutoff(MODEL_ALPHA_CUTOFF)),
-        alpha_mode: Valid(if translucent {
-            json::material::AlphaMode::Blend
-        } else {
-            json::material::AlphaMode::Mask
-        }),
-        double_sided: true,
+        alpha_cutoff,
+        alpha_mode: Valid(alpha_mode),
+        double_sided: material.two_sided,
         name,
         pbr_metallic_roughness: json::material::PbrMetallicRoughness {
             // Native keeps `base_color: Color::WHITE` even when `rsm.alpha < 1`
@@ -215,12 +218,12 @@ fn model_material(
 fn build_nodes(
     root: &mut json::Root,
     bin: &mut BinChunk,
-    build: &ModelBuild,
-    materials: &BTreeMap<i32, json::Index<json::Material>>,
+    model: &NormalizedModel,
+    materials: &[json::Index<json::Material>],
 ) -> anyhow::Result<Vec<json::Index<json::Node>>> {
-    let mut indices = Vec::with_capacity(build.nodes.len());
+    let mut indices = Vec::with_capacity(model.nodes.len());
 
-    for node in &build.nodes {
+    for node in &model.nodes {
         let mesh = build_mesh(root, bin, node, materials)?;
         indices.push(json::Index::push(
             &mut root.nodes,
@@ -235,12 +238,15 @@ fn build_nodes(
         ));
     }
 
-    for (index, node) in build.nodes.iter().enumerate() {
+    for (index, node) in model.nodes.iter().enumerate() {
         let Some(parent) = node.parent else {
             continue;
         };
         let child = indices[index];
-        root.nodes[indices[parent].value()]
+        let parent = *indices
+            .get(parent)
+            .with_context(|| format!("node '{}' has an out-of-range parent", node.name))?;
+        root.nodes[parent.value()]
             .children
             .get_or_insert_with(Default::default)
             .push(child);
@@ -252,8 +258,8 @@ fn build_nodes(
 fn build_mesh(
     root: &mut json::Root,
     bin: &mut BinChunk,
-    node: &ModelNode,
-    materials: &BTreeMap<i32, json::Index<json::Material>>,
+    node: &NormalizedNode,
+    materials: &[json::Index<json::Material>],
 ) -> anyhow::Result<Option<json::Index<json::Mesh>>> {
     if node.primitives.is_empty() {
         return Ok(None);
@@ -281,11 +287,11 @@ fn build_primitive(
     root: &mut json::Root,
     bin: &mut BinChunk,
     node_name: &str,
-    primitive: &ModelPrimitive,
-    materials: &BTreeMap<i32, json::Index<json::Material>>,
+    primitive: &NormalizedPrimitive,
+    materials: &[json::Index<json::Material>],
 ) -> anyhow::Result<json::mesh::Primitive> {
     let material = *materials
-        .get(&primitive.texture_id)
+        .get(primitive.material)
         .with_context(|| format!("node '{node_name}' has no material for its geometry"))?;
 
     let positions: Vec<Vec3> = primitive.positions.iter().map(|p| Vec3::from(*p)).collect();
@@ -294,12 +300,12 @@ fn build_primitive(
     push_geometry_primitive(
         root,
         bin,
-        &format!("node '{node_name}' texture {}", primitive.texture_id),
+        &format!("node '{node_name}' material {}", primitive.material),
         &GeometryAttributes {
             positions: &positions,
             normals: &normals,
             colors: None,
-            uvs: &primitive.uvs,
+            uvs: &primitive.uv0,
             indices: &primitive.indices,
         },
         material,
@@ -316,109 +322,99 @@ fn build_primitive(
 fn build_animation(
     root: &mut json::Root,
     bin: &mut BinChunk,
-    rsm: &Rsm,
-    build: &ModelBuild,
+    model: &NormalizedModel,
     nodes: &[json::Index<json::Node>],
 ) -> anyhow::Result<()> {
-    if rsm.anim_len <= 0 {
+    if model.duration_ms <= 0.0 {
         return Ok(());
     }
 
     let mut samplers = Vec::new();
     let mut channels = Vec::new();
 
-    for (index, node) in build.nodes.iter().enumerate() {
-        if !node.pos_keyframes.is_empty() {
-            let frames: Vec<i32> = node.pos_keyframes.iter().map(|kf| kf.frame).collect();
-            let times = channel_seconds(&node.name, "translation", &frames, rsm.anim_len)?;
-            let values = node
-                .pos_keyframes
-                .iter()
-                .flat_map(|kf| [kf.px, kf.py, kf.pz]);
-            let sampler = push_sampler(
-                root,
-                bin,
-                &mut samplers,
-                &times,
-                values,
-                json::accessor::Type::Vec3,
-            );
-            channels.push(channel(
-                sampler,
-                nodes[index],
-                json::animation::Property::Translation,
-            ));
-        }
-
-        if !node.rot_keyframes.is_empty() {
-            let frames: Vec<i32> = node.rot_keyframes.iter().map(|kf| kf.frame).collect();
-            let times = channel_seconds(&node.name, "rotation", &frames, rsm.anim_len)?;
-            let values = node.rot_keyframes.iter().flat_map(|kf| kf.q);
-            let sampler = push_sampler(
-                root,
-                bin,
-                &mut samplers,
-                &times,
-                values,
-                json::accessor::Type::Vec4,
-            );
-            channels.push(channel(
-                sampler,
-                nodes[index],
-                json::animation::Property::Rotation,
-            ));
-        }
+    for (index, node) in model.nodes.iter().enumerate() {
+        let mut writer = TrackWriter {
+            root,
+            bin,
+            samplers: &mut samplers,
+            channels: &mut channels,
+            node_name: &node.name,
+            node: nodes[index],
+        };
+        writer.push(
+            &node.translation_track,
+            json::animation::Property::Translation,
+            json::accessor::Type::Vec3,
+            |value| value.to_vec(),
+        )?;
+        writer.push(
+            &node.rotation_track,
+            json::animation::Property::Rotation,
+            json::accessor::Type::Vec4,
+            |value| value.to_vec(),
+        )?;
+        writer.push(
+            &node.scale_track,
+            json::animation::Property::Scale,
+            json::accessor::Type::Vec3,
+            |value| value.to_vec(),
+        )?;
     }
 
-    if channels.is_empty() {
-        return Ok(());
+    if !channels.is_empty() {
+        root.animations.push(json::Animation {
+            channels,
+            samplers,
+            name: Some(ANIMATION_NAME.to_string()),
+            extensions: None,
+            extras: Default::default(),
+        });
     }
-
-    root.animations.push(json::Animation {
-        channels,
-        samplers,
-        name: Some(ANIMATION_NAME.to_string()),
-        extensions: None,
-        extras: Default::default(),
-    });
 
     Ok(())
 }
 
-/// glTF requires sampler input times to be strictly increasing, so repeated or
-/// unsorted RSM frame numbers -- which the native interpolator merely steps
-/// over -- would produce a glb no conformant loader accepts. Refuse instead.
-fn channel_seconds(
-    node_name: &str,
-    property: &str,
-    frames: &[i32],
-    anim_len: i32,
-) -> anyhow::Result<Vec<f32>> {
-    let times = keyframe_seconds(frames, anim_len);
-    if times.windows(2).any(|pair| pair[1] <= pair[0]) {
-        bail!("node '{node_name}' has non-increasing {property} keyframes: {frames:?}");
-    }
-
-    Ok(times)
+struct TrackWriter<'a> {
+    root: &'a mut json::Root,
+    bin: &'a mut BinChunk,
+    samplers: &'a mut Vec<json::animation::Sampler>,
+    channels: &'a mut Vec<json::animation::Channel>,
+    node_name: &'a str,
+    node: json::Index<json::Node>,
 }
 
-/// Mirrors the native frame-to-time mapping in
-/// `domain/entities/systems.rs::RsmNodeAnimation`: playback time sweeps
-/// `0..anim_len` milliseconds while the channel's frame sweeps `0..max_frame`,
-/// so keyframe `f` lands at `(f / max_frame) * anim_len` ms. The rescale is
-/// per channel -- position and rotation of the same node may end on different
-/// frame numbers and still both span the full animation.
-fn keyframe_seconds(frames: &[i32], anim_len: i32) -> Vec<f32> {
-    let max_frame = frames.iter().copied().max().unwrap_or(0);
-    if max_frame == 0 {
-        return vec![0.0; frames.len()];
-    }
+impl TrackWriter<'_> {
+    fn push<T>(
+        &mut self,
+        track: &NormalizedTrack<T>,
+        property: json::animation::Property,
+        type_: json::accessor::Type,
+        values: impl Fn(&T) -> Vec<f32>,
+    ) -> anyhow::Result<()> {
+        if track.keys.is_empty() {
+            return Ok(());
+        }
 
-    let duration = anim_len as f32 / 1000.0;
-    frames
-        .iter()
-        .map(|frame| *frame as f32 / max_frame as f32 * duration)
-        .collect()
+        let times: Vec<f32> = track.keys.iter().map(|key| key.time_ms / 1000.0).collect();
+        if times.iter().any(|time| !time.is_finite())
+            || times.windows(2).any(|pair| pair[1] <= pair[0])
+        {
+            bail!(
+                "node '{}' has non-increasing or non-finite {property:?} keyframes",
+                self.node_name
+            );
+        }
+        let sampler = push_sampler(
+            self.root,
+            self.bin,
+            self.samplers,
+            &times,
+            track.keys.iter().flat_map(|key| values(&key.value)),
+            type_,
+        );
+        self.channels.push(channel(sampler, self.node, property));
+        Ok(())
+    }
 }
 
 fn push_sampler(
@@ -561,7 +557,7 @@ mod tests {
         let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
         let imported: Vec<[f32; 3]> = reader.read_positions().expect("positions").collect();
 
-        let native = &fixture.build.nodes[0].primitives[0].positions;
+        let native = &fixture.model.nodes[0].primitives[0].positions;
         assert_eq!(imported.len(), native.len());
         for (imported, native) in imported.iter().zip(native) {
             assert_close(
@@ -573,7 +569,7 @@ mod tests {
         let normals: Vec<[f32; 3]> = reader.read_normals().expect("normals").collect();
         for (imported, native) in normals
             .iter()
-            .zip(&fixture.build.nodes[0].primitives[0].normals)
+            .zip(&fixture.model.nodes[0].primitives[0].normals)
         {
             assert_close(
                 ROOT_FIX * (root_rotation * Vec3::from(*imported)),
@@ -591,8 +587,8 @@ mod tests {
         let child = node_named(&document, "child");
 
         for (node, built) in [
-            (&main, &fixture.build.nodes[0]),
-            (&child, &fixture.build.nodes[1]),
+            (&main, &fixture.model.nodes[0]),
+            (&child, &fixture.model.nodes[1]),
         ] {
             let (translation, rotation, scale) = node.transform().decomposed();
             assert_eq!(translation, built.translation);
@@ -640,7 +636,7 @@ mod tests {
 
         let reader = primitives[0].reader(|buffer| Some(&buffers[buffer.index()]));
         let indices: Vec<u32> = reader.read_indices().expect("indices").into_u32().collect();
-        assert_eq!(indices, fixture.build.nodes[0].primitives[0].indices);
+        assert_eq!(indices, fixture.model.nodes[0].primitives[0].indices);
     }
 
     #[test]
@@ -673,9 +669,9 @@ mod tests {
         let path = dir.path().join("ghost.glb");
         let mut rsm = textured_rsm();
         rsm.alpha = 0.25;
-        let build = build_model(&rsm).expect("build");
+        let build = build_model(&rsm, "hash").expect("build");
 
-        write_model_glb(&path, &rsm, "hash", &build, &textures()).expect("write glb");
+        write_model_glb(&path, &build, &textures()).expect("write glb");
 
         let (document, _, _) = gltf::import(&path).expect("reimport");
         let material = node_named(&document, "main")
@@ -725,9 +721,9 @@ mod tests {
         let dir = fixture_dir();
         let path = dir.path().join("windmill.glb");
         let rsm = animated_rsm();
-        let build = build_model(&rsm).expect("build");
+        let build = build_model(&rsm, "hash").expect("build");
 
-        write_model_glb(&path, &rsm, "hash", &build, &textures()).expect("write glb");
+        write_model_glb(&path, &build, &textures()).expect("write glb");
 
         let (document, buffers, _) = gltf::import(&path).expect("reimport");
         let animations: Vec<_> = document.animations().collect();
@@ -783,9 +779,9 @@ mod tests {
         let path = dir.path().join("still.glb");
         let mut rsm = animated_rsm();
         rsm.anim_len = 0;
-        let build = build_model(&rsm).expect("build");
+        let build = build_model(&rsm, "hash").expect("build");
 
-        write_model_glb(&path, &rsm, "hash", &build, &textures()).expect("write glb");
+        write_model_glb(&path, &build, &textures()).expect("write glb");
 
         let (document, _, _) = gltf::import(&path).expect("reimport");
         assert_eq!(document.animations().count(), 0);
@@ -812,9 +808,9 @@ mod tests {
     fn the_phase_2_rsm1_glb_matches_its_pinned_digest() {
         let dir = fixture_dir();
         let rsm = animated_rsm();
-        let build = build_model(&rsm).expect("build");
+        let build = build_model(&rsm, "hash").expect("build");
         let path = dir.path().join("phase2-rsm1.glb");
-        write_model_glb(&path, &rsm, "hash", &build, &textures()).expect("write");
+        write_model_glb(&path, &build, &textures()).expect("write");
 
         let digest = blake3::hash(&std::fs::read(path).expect("read"));
 
@@ -828,15 +824,15 @@ mod tests {
     fn the_same_model_written_twice_is_byte_identical() {
         let dir = fixture_dir();
         let rsm = animated_rsm();
-        let build = build_model(&rsm).expect("build");
+        let build = build_model(&rsm, "hash").expect("build");
 
         let again = dir.path().join("again");
         std::fs::create_dir(&again).expect("mkdir");
 
         let first = dir.path().join("windmill.glb");
         let second = again.join("windmill.glb");
-        write_model_glb(&first, &rsm, "hash", &build, &textures()).expect("write first");
-        write_model_glb(&second, &rsm, "hash", &build, &textures()).expect("write second");
+        write_model_glb(&first, &build, &textures()).expect("write first");
+        write_model_glb(&second, &build, &textures()).expect("write second");
 
         assert_eq!(
             std::fs::read(&first).expect("read"),
@@ -846,19 +842,9 @@ mod tests {
 
     #[test]
     fn repeated_keyframe_numbers_fail_loudly() {
-        let dir = fixture_dir();
         let mut rsm = animated_rsm();
         rsm.nodes[0].pos_keyframes[2].frame = 4;
-        let build = build_model(&rsm).expect("build");
-
-        let err = write_model_glb(
-            &dir.path().join("broken.glb"),
-            &rsm,
-            "hash",
-            &build,
-            &textures(),
-        )
-        .expect_err("repeated keyframes must fail");
+        let err = build_model(&rsm, "hash").expect_err("repeated keyframes must fail");
 
         assert!(
             err.to_string().contains("non-increasing translation"),
@@ -870,9 +856,9 @@ mod tests {
     fn a_texture_count_mismatch_fails_loudly() {
         let dir = fixture_dir();
         let rsm = textured_rsm();
-        let build = build_model(&rsm).expect("build");
+        let build = build_model(&rsm, "hash").expect("build");
 
-        let err = write_model_glb(&dir.path().join("bad.glb"), &rsm, "hash", &build, &[])
+        let err = write_model_glb(&dir.path().join("bad.glb"), &build, &[])
             .expect_err("missing textures must fail");
 
         assert!(

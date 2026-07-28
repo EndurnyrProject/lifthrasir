@@ -1,35 +1,21 @@
-use anyhow::bail;
+use crate::converters::model::normalized::{
+    AlphaMode, ModelProvenance, NormalizedKey, NormalizedMaterial, NormalizedModel, NormalizedNode,
+    NormalizedPrimitive, NormalizedTrack, ShadingPolicy,
+};
+use anyhow::{bail, ensure};
 use glam::{Mat4, Quat, Vec3, Vec4};
-use ro_formats::{Node, PosKeyframe, RotKeyframe, Rsm};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use ro_formats::{Node, Rsm, ShadingType};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-/// One RSM node, flattened for the glb writer.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ModelNode {
-    pub name: String,
-    pub parent: Option<usize>,
-    pub translation: [f32; 3],
-    pub rotation: [f32; 4],
-    pub scale: [f32; 3],
-    pub pos_keyframes: Vec<PosKeyframe>,
-    pub rot_keyframes: Vec<RotKeyframe>,
-    pub primitives: Vec<ModelPrimitive>,
-}
-
-/// The geometry of one node batched under a single resolved RSM texture id
-/// (`-1` when the face referenced a texture slot the node does not have).
-#[derive(Debug, Clone, PartialEq)]
-pub struct ModelPrimitive {
-    pub texture_id: i32,
-    pub positions: Vec<[f32; 3]>,
-    pub normals: Vec<[f32; 3]>,
-    pub uvs: Vec<[f32; 2]>,
-    pub indices: Vec<u32>,
-}
+const RSM1_ALPHA_CUTOFF: f32 = 0.01;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ModelBuild {
-    pub nodes: Vec<ModelNode>,
+struct Rsm1Primitive {
+    texture_id: i32,
+    positions: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
+    uvs: Vec<[f32; 2]>,
+    indices: Vec<u32>,
 }
 
 /// Build the renderable form of an RSM, bevy-free.
@@ -51,29 +37,15 @@ pub struct ModelBuild {
 /// Node names are uniquified because glTF animation channels target nodes by
 /// name: an empty name becomes `node_<index>`, and a name already taken by an
 /// earlier node becomes `<name>_<index>`.
-pub fn build_model(rsm: &Rsm) -> anyhow::Result<ModelBuild> {
+pub fn build_model(rsm: &Rsm, source_hash: &str) -> anyhow::Result<NormalizedModel> {
     let names = uniquify_names(rsm);
-
-    let nodes: Vec<ModelNode> = rsm
+    let raw_primitives: Vec<Vec<Rsm1Primitive>> = rsm
         .nodes
         .iter()
-        .enumerate()
-        .map(|(idx, node)| {
-            let (translation, rotation, scale) = node_trs(rsm, node, idx);
-            ModelNode {
-                name: names[idx].clone(),
-                parent: find_parent_node_index(rsm, node),
-                translation,
-                rotation,
-                scale,
-                pos_keyframes: node.pos_keyframes.clone(),
-                rot_keyframes: node.rot_keyframes.clone(),
-                primitives: extract_node_primitives(rsm, node),
-            }
-        })
+        .map(|node| extract_node_primitives(rsm, node))
         .collect();
 
-    if nodes.iter().all(|n| n.primitives.is_empty()) {
+    if raw_primitives.iter().all(Vec::is_empty) {
         bail!(
             "RSM produced no geometry: {} node(s), main node {:?}",
             rsm.nodes.len(),
@@ -81,7 +53,138 @@ pub fn build_model(rsm: &Rsm) -> anyhow::Result<ModelBuild> {
         );
     }
 
-    Ok(ModelBuild { nodes })
+    let texture_ids: BTreeSet<i32> = raw_primitives
+        .iter()
+        .flatten()
+        .map(|primitive| primitive.texture_id)
+        .collect();
+    let material_by_texture: BTreeMap<i32, usize> = texture_ids
+        .iter()
+        .enumerate()
+        .map(|(material, texture)| (*texture, material))
+        .collect();
+    let alpha = if rsm.alpha < 1.0 {
+        AlphaMode::Blend
+    } else {
+        AlphaMode::Mask {
+            cutoff: RSM1_ALPHA_CUTOFF,
+        }
+    };
+    let shading = match rsm.shade_type {
+        // Phase 2 rendered every RSM1 material lit; preserve that boundary.
+        // RSM2's true no-shade policy is normalized by its own adapter.
+        ShadingType::None | ShadingType::Flat => ShadingPolicy::Flat,
+        ShadingType::Smooth => ShadingPolicy::Smooth,
+    };
+    let materials = texture_ids
+        .into_iter()
+        .map(|texture| NormalizedMaterial {
+            texture: usize::try_from(texture).ok(),
+            alpha,
+            two_sided: true,
+            shading,
+        })
+        .collect();
+
+    let duration_ms = rsm.anim_len.max(0) as f32;
+    let nodes: Vec<NormalizedNode> = rsm
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(idx, node)| {
+            let (translation, rotation, scale) = node_trs(rsm, node, idx);
+            Ok(NormalizedNode {
+                name: names[idx].clone(),
+                parent: find_parent_node_index(rsm, node),
+                translation,
+                rotation,
+                scale,
+                translation_track: track(
+                    &names[idx],
+                    "translation",
+                    duration_ms,
+                    node.pos_keyframes
+                        .iter()
+                        .map(|key| (key.frame, [key.px, key.py, key.pz])),
+                )?,
+                rotation_track: track(
+                    &names[idx],
+                    "rotation",
+                    duration_ms,
+                    node.rot_keyframes.iter().map(|key| (key.frame, key.q)),
+                )?,
+                scale_track: NormalizedTrack::default(),
+                primitives: raw_primitives[idx]
+                    .iter()
+                    .map(|primitive| NormalizedPrimitive {
+                        material: material_by_texture[&primitive.texture_id],
+                        positions: primitive.positions.clone(),
+                        normals: primitive.normals.clone(),
+                        uv0: primitive.uvs.clone(),
+                        uv1: None,
+                        indices: primitive.indices.clone(),
+                        uv_animation: None,
+                    })
+                    .collect(),
+            })
+        })
+        .collect::<anyhow::Result<_>>()?;
+    let roots = nodes
+        .iter()
+        .enumerate()
+        .filter_map(|(index, node)| node.parent.is_none().then_some(index))
+        .collect();
+
+    Ok(NormalizedModel {
+        duration_ms,
+        textures: rsm.textures.clone(),
+        roots,
+        nodes,
+        materials,
+        provenance: ModelProvenance {
+            source_version: format!("{:.1}", rsm.version),
+            source_hash: source_hash.to_string(),
+        },
+    })
+}
+
+fn track<T: Clone>(
+    node_name: &str,
+    property: &str,
+    duration_ms: f32,
+    source: impl IntoIterator<Item = (i32, T)>,
+) -> anyhow::Result<NormalizedTrack<T>> {
+    if duration_ms <= 0.0 {
+        return Ok(NormalizedTrack::default());
+    }
+
+    let source: Vec<_> = source.into_iter().collect();
+    let max_frame = source.iter().map(|(frame, _)| *frame).max().unwrap_or(0);
+    let duration_seconds = duration_ms / 1000.0;
+    let mut keys = source
+        .into_iter()
+        .map(|(frame, value)| NormalizedKey {
+            time_ms: if max_frame == 0 {
+                0.0
+            } else {
+                frame as f32 / max_frame as f32 * duration_seconds * 1000.0
+            },
+            value,
+        })
+        .collect::<Vec<_>>();
+    ensure!(
+        !keys
+            .windows(2)
+            .any(|pair| pair[1].time_ms <= pair[0].time_ms),
+        "node '{node_name}' has non-increasing {property} keyframes"
+    );
+    if keys.len() == 1 && keys[0].time_ms == 0.0 {
+        keys.push(NormalizedKey {
+            time_ms: duration_ms,
+            value: keys[0].value.clone(),
+        });
+    }
+    Ok(NormalizedTrack { keys })
 }
 
 /// Mirrors `models.rs::mat3_to_mat4` - the RSM `mat3` is column-major.
@@ -95,7 +198,7 @@ fn mat3_to_mat4(mat3: &[f32; 9]) -> Mat4 {
 }
 
 /// Mirrors `models.rs::extract_node_meshes`.
-fn extract_node_primitives(rsm: &Rsm, node: &Node) -> Vec<ModelPrimitive> {
+fn extract_node_primitives(rsm: &Rsm, node: &Node) -> Vec<Rsm1Primitive> {
     if node.vertices.is_empty() || node.faces.is_empty() {
         return Vec::new();
     }
@@ -121,7 +224,7 @@ fn extract_node_primitives(rsm: &Rsm, node: &Node) -> Vec<ModelPrimitive> {
 }
 
 /// Mirrors `models.rs::generate_meshes_from_vertices_and_faces`.
-fn generate_primitives(node: &Node, transformed: &[[f32; 3]]) -> Vec<ModelPrimitive> {
+fn generate_primitives(node: &Node, transformed: &[[f32; 3]]) -> Vec<Rsm1Primitive> {
     let mut faces_by_texture: BTreeMap<i32, Vec<usize>> = BTreeMap::new();
     for (idx, face) in node.faces.iter().enumerate() {
         let texture_id = node
@@ -163,7 +266,7 @@ fn build_primitive(
     face_normals: &[[f32; 3]],
     texture_id: i32,
     face_indices: &[usize],
-) -> Option<ModelPrimitive> {
+) -> Option<Rsm1Primitive> {
     let mut positions: Vec<[f32; 3]> = Vec::new();
     let mut normals: Vec<[f32; 3]> = Vec::new();
     let mut uvs: Vec<[f32; 2]> = Vec::new();
@@ -209,7 +312,7 @@ fn build_primitive(
         return None;
     }
 
-    Some(ModelPrimitive {
+    Some(Rsm1Primitive {
         texture_id,
         positions,
         normals,
@@ -275,7 +378,7 @@ fn uniquify_names(rsm: &Rsm) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ro_formats::{BoundingBox, Face, ShadingType, TextureVertex};
+    use ro_formats::{BoundingBox, Face, PosKeyframe, RotKeyframe, ShadingType, TextureVertex};
 
     fn face(vertex_ids: [u16; 3], texture_vertex_ids: [u16; 3]) -> Face {
         Face {
@@ -333,15 +436,16 @@ mod tests {
         n.offset = [10.0, 20.0, 30.0];
         n.mat3 = [2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0];
 
-        let build = build_model(&rsm(vec![n])).expect("model must build");
+        let build = build_model(&rsm(vec![n]), "hash").expect("model must build");
 
         let prim = &build.nodes[0].primitives[0];
-        assert_eq!(prim.texture_id, 3);
+        assert_eq!(prim.material, 0);
+        assert_eq!(build.materials[prim.material].texture, Some(3));
         assert_eq!(
             prim.positions,
             vec![[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [0.0, 2.0, 0.0]]
         );
-        assert_eq!(prim.uvs, vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]);
+        assert_eq!(prim.uv0, vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]);
         assert_eq!(prim.normals, vec![[0.0, 0.0, 1.0]; 3]);
     }
 
@@ -356,7 +460,7 @@ mod tests {
         child.vertices = Vec::new();
         child.faces = Vec::new();
 
-        let build = build_model(&rsm(vec![main, child])).expect("model must build");
+        let build = build_model(&rsm(vec![main, child]), "hash").expect("model must build");
 
         assert_eq!(
             build.nodes[0].primitives[0].positions,
@@ -383,7 +487,7 @@ mod tests {
         ];
         n.faces = vec![face([0, 1, 2], [0, 1, 2]), face([2, 1, 3], [2, 4, 3])];
 
-        let build = build_model(&rsm(vec![n])).expect("model must build");
+        let build = build_model(&rsm(vec![n]), "hash").expect("model must build");
         let prim = &build.nodes[0].primitives[0];
 
         assert_eq!(
@@ -397,7 +501,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            prim.uvs,
+            prim.uv0,
             vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [0.5, 0.5], [1.0, 1.0]]
         );
 
@@ -420,7 +524,7 @@ mod tests {
         let mut n = node("main");
         n.faces = vec![face([0, 1, 5], [0, 9, 2]), face([0, 1, 2], [0, 1, 2])];
 
-        let build = build_model(&rsm(vec![n])).expect("model must build");
+        let build = build_model(&rsm(vec![n]), "hash").expect("model must build");
         let prim = &build.nodes[0].primitives[0];
 
         assert_eq!(
@@ -433,7 +537,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            prim.uvs,
+            prim.uv0,
             vec![[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
         );
         assert_eq!(
@@ -464,14 +568,22 @@ mod tests {
             },
         ];
 
-        let build = build_model(&rsm(vec![n])).expect("model must build");
+        let build = build_model(&rsm(vec![n]), "hash").expect("model must build");
 
-        let ids: Vec<i32> = build.nodes[0]
-            .primitives
+        let ids: Vec<Option<usize>> = build
+            .materials
             .iter()
-            .map(|p| p.texture_id)
+            .map(|material| material.texture)
             .collect();
-        assert_eq!(ids, vec![-1, 2, 7]);
+        assert_eq!(ids, vec![None, Some(2), Some(7)]);
+        assert_eq!(
+            build.nodes[0]
+                .primitives
+                .iter()
+                .map(|primitive| primitive.material)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
     }
 
     #[test]
@@ -497,7 +609,7 @@ mod tests {
             range: [2.0, 2.5, 3.0],
         });
 
-        let build = build_model(&model).expect("model must build");
+        let build = build_model(&model, "hash").expect("model must build");
 
         assert_eq!(build.nodes[0].translation, [9.0, 5.0, 7.0]);
         assert_eq!(
@@ -520,7 +632,7 @@ mod tests {
         n.rot_angle = 1.0;
         n.rot_axis = [0.0, 0.0, 0.0];
 
-        let build = build_model(&rsm(vec![n])).expect("model must build");
+        let build = build_model(&rsm(vec![n]), "hash").expect("model must build");
 
         assert_eq!(build.nodes[0].rotation, Quat::IDENTITY.to_array());
     }
@@ -532,7 +644,8 @@ mod tests {
         let mut third = node("");
         third.parent_name = "dup".into();
 
-        let build = build_model(&rsm(vec![node("dup"), second, third])).expect("model must build");
+        let build =
+            build_model(&rsm(vec![node("dup"), second, third]), "hash").expect("model must build");
 
         let names: Vec<&str> = build.nodes.iter().map(|n| n.name.as_str()).collect();
         assert_eq!(names, vec!["dup", "dup_1", "node_2"]);
@@ -545,12 +658,39 @@ mod tests {
         let mut n = node("main");
         n.faces = Vec::new();
 
-        let err = build_model(&rsm(vec![n])).expect_err("geometry-less model must fail");
+        let err = build_model(&rsm(vec![n]), "hash").expect_err("geometry-less model must fail");
 
         assert!(
             err.to_string().contains("no geometry"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn one_time_zero_key_covers_duration_and_rsm1_none_stays_lit() {
+        let mut source_node = node("main");
+        source_node.pos_keyframes.push(PosKeyframe {
+            frame: 0,
+            px: 1.0,
+            py: 2.0,
+            pz: 3.0,
+        });
+        let mut source = rsm(vec![source_node]);
+        source.anim_len = 1_000;
+        source.shade_type = ShadingType::None;
+
+        let model = build_model(&source, "hash").unwrap();
+
+        assert_eq!(
+            model.nodes[0]
+                .translation_track
+                .keys
+                .iter()
+                .map(|key| key.time_ms)
+                .collect::<Vec<_>>(),
+            vec![0.0, 1_000.0]
+        );
+        assert_eq!(model.materials[0].shading, ShadingPolicy::Flat);
     }
 
     #[test]
@@ -578,13 +718,22 @@ mod tests {
             frame: 5,
             q: [0.0, 0.0, 0.0, 1.0],
         }];
-        let model = rsm(vec![n]);
+        let mut model = rsm(vec![n]);
+        model.anim_len = 1000;
 
-        let first = build_model(&model).expect("model must build");
-        let second = build_model(&model).expect("model must build");
+        let first = build_model(&model, "hash").expect("model must build");
+        let second = build_model(&model, "hash").expect("model must build");
 
         assert_eq!(first, second);
-        assert_eq!(first.nodes[0].pos_keyframes, model.nodes[0].pos_keyframes);
-        assert_eq!(first.nodes[0].rot_keyframes, model.nodes[0].rot_keyframes);
+        assert_eq!(first.nodes[0].translation_track.keys[0].time_ms, 1000.0);
+        assert_eq!(
+            first.nodes[0].translation_track.keys[0].value,
+            [1.0, 2.0, 3.0]
+        );
+        assert_eq!(first.nodes[0].rotation_track.keys[0].time_ms, 1000.0);
+        assert_eq!(
+            first.nodes[0].rotation_track.keys[0].value,
+            [0.0, 0.0, 0.0, 1.0]
+        );
     }
 }

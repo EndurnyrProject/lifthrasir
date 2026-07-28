@@ -6,6 +6,7 @@ pub mod corpus;
 #[cfg(test)]
 pub mod fixtures;
 pub mod mesh;
+pub mod normalized;
 pub mod validate;
 pub mod writer;
 
@@ -90,10 +91,10 @@ pub fn convert_model(
 
     let rsm =
         Rsm::from_bytes(&bytes).with_context(|| format!("parsing RSM model: {source_path}"))?;
-    let build = mesh::build_model(&rsm)
-        .with_context(|| format!("building meshes of model: {source_path}"))?;
+    let model = mesh::build_model(&rsm, &hash_hex(&bytes))
+        .with_context(|| format!("normalizing RSM1 model: {source_path}"))?;
 
-    let textures = export_textures(vfs, &rsm, &relative, pool)
+    let textures = export_textures(vfs, &model.textures, &relative, pool)
         .with_context(|| format!("exporting textures of model: {source_path}"))?;
 
     let parent = out_path
@@ -101,11 +102,10 @@ pub fn convert_model(
         .with_context(|| format!("model output path has no parent: {}", out_path.display()))?;
     std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
 
-    let written = writer::write_model_glb(&out_path, &rsm, &hash_hex(&bytes), &build, &textures)
-        .and_then(|()| {
-            validate::validate(&out_path, &build, rsm.anim_len)
-                .with_context(|| format!("validating {}", out_path.display()))
-        });
+    let written = writer::write_model_glb(&out_path, &model, &textures).and_then(|()| {
+        validate::validate(&out_path, &model, &textures)
+            .with_context(|| format!("validating {}", out_path.display()))
+    });
     if let Err(error) = written {
         // A half-written or invalid glb left behind would be taken for a good
         // one -- and skipped -- by the next run.
@@ -120,13 +120,13 @@ pub fn convert_model(
 /// pool path rewritten relative to the glb's own directory.
 fn export_textures(
     vfs: &impl AssetRead,
-    rsm: &Rsm,
+    texture_names: &[String],
     relative_glb_path: &str,
     pool: &mut TexturePool,
 ) -> anyhow::Result<Vec<TextureOut>> {
     let up = "../".repeat(relative_glb_path.matches('/').count());
 
-    rsm.textures
+    texture_names
         .iter()
         .map(|name| {
             let texture = pool.export(vfs, name)?;

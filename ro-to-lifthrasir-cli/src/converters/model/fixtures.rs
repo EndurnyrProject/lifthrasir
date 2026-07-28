@@ -5,7 +5,8 @@
 
 use crate::converters::map::fixtures::write_fixture_png;
 use crate::converters::map::textures::TextureOut;
-use crate::converters::model::mesh::{ModelBuild, build_model};
+use crate::converters::model::mesh::build_model;
+use crate::converters::model::normalized::NormalizedModel;
 use crate::converters::model::writer::write_model_glb;
 use crate::grf_vfs::AssetRead;
 use image::{ImageFormat, RgbaImage};
@@ -248,8 +249,7 @@ fn extend_f32(bytes: &mut Vec<u8>, values: &[f32]) {
 pub struct ModelFixture {
     pub _dir: tempfile::TempDir,
     pub path: PathBuf,
-    pub rsm: Rsm,
-    pub build: ModelBuild,
+    pub model: NormalizedModel,
 }
 
 impl ModelFixture {
@@ -261,14 +261,13 @@ pub fn write_fixture() -> ModelFixture {
     let dir = fixture_dir();
     let path = dir.path().join("tree01.glb");
     let rsm = textured_rsm();
-    let build = build_model(&rsm).expect("model must build");
+    let model = build_model(&rsm, ModelFixture::RSM_HASH).expect("model must build");
 
-    write_model_glb(&path, &rsm, ModelFixture::RSM_HASH, &build, &textures()).expect("write glb");
+    write_model_glb(&path, &model, &textures()).expect("write glb");
 
     ModelFixture {
         _dir: dir,
         path,
-        rsm,
-        build,
+        model,
     }
 }
