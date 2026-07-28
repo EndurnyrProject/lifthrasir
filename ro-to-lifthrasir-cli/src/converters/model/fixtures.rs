@@ -7,7 +7,12 @@ use crate::converters::map::fixtures::write_fixture_png;
 use crate::converters::map::textures::TextureOut;
 use crate::converters::model::mesh::{ModelBuild, build_model};
 use crate::converters::model::writer::write_model_glb;
+use crate::grf_vfs::AssetRead;
+use image::{ImageFormat, RgbaImage};
 use ro_formats::{Face, Node, PosKeyframe, RotKeyframe, Rsm, ShadingType, TextureVertex};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::io::Cursor;
 use std::path::PathBuf;
 
 pub const TEXTURES: [&str; 2] = ["bark.bmp", "leaf.bmp"];
@@ -121,6 +126,123 @@ pub fn fixture_dir() -> tempfile::TempDir {
         write_fixture_png(dir.path(), &texture.relative_path);
     }
     dir
+}
+
+/// In-memory stand-in for `GrfVfs`, counting reads so the texture pool's
+/// write-once behaviour is observable.
+#[derive(Default)]
+pub struct FakeVfs {
+    files: HashMap<String, Vec<u8>>,
+    reads: RefCell<HashMap<String, usize>>,
+}
+
+impl FakeVfs {
+    pub fn with(files: &[(&str, Vec<u8>)]) -> Self {
+        Self {
+            files: files
+                .iter()
+                .map(|(path, bytes)| ((*path).to_string(), bytes.clone()))
+                .collect(),
+            reads: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn reads(&self, logical_path: &str) -> usize {
+        self.reads.borrow().get(logical_path).copied().unwrap_or(0)
+    }
+}
+
+impl AssetRead for FakeVfs {
+    fn read_asset(&self, logical_path: &str) -> Option<Vec<u8>> {
+        *self
+            .reads
+            .borrow_mut()
+            .entry(logical_path.to_string())
+            .or_default() += 1;
+        self.files.get(logical_path).cloned()
+    }
+}
+
+/// A 1x1 opaque BMP of `color`, the smallest thing the texture pool can
+/// normalize. Distinct colors give distinct pooled PNGs, which is what the
+/// pool's cross-run collision check compares.
+pub fn bmp_bytes(color: [u8; 4]) -> Vec<u8> {
+    let mut image = RgbaImage::new(1, 1);
+    image.put_pixel(0, 0, image::Rgba(color));
+
+    let mut bytes = Vec::new();
+    image
+        .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Bmp)
+        .expect("encode bmp");
+    bytes
+}
+
+/// Encodes an RSM the `ro_formats` parser reads back: one node drawing a
+/// triangle per declared texture. `version` is written verbatim so unsupported
+/// revisions can be exercised without a real RSM2 body.
+pub fn encode_rsm(version: (u8, u8), textures: &[&str]) -> Vec<u8> {
+    let (major, minor) = version;
+    let mut bytes = b"GRSM".to_vec();
+    bytes.extend([major, minor]);
+    bytes.extend(0i32.to_le_bytes());
+    bytes.extend(2i32.to_le_bytes());
+    bytes.push(255);
+    bytes.extend([0u8; 16]);
+
+    bytes.extend((textures.len() as i32).to_le_bytes());
+    for texture in textures {
+        bytes.extend(fixed_string(texture));
+    }
+    bytes.extend(fixed_string("main"));
+    bytes.extend(1i32.to_le_bytes());
+
+    bytes.extend(fixed_string("main"));
+    bytes.extend(fixed_string(""));
+    bytes.extend((textures.len() as i32).to_le_bytes());
+    for index in 0..textures.len() {
+        bytes.extend((index as i32).to_le_bytes());
+    }
+    extend_f32(&mut bytes, &[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+    extend_f32(&mut bytes, &[0.0, 0.0, 0.0]);
+    extend_f32(&mut bytes, &[0.0, 0.0, 0.0]);
+    extend_f32(&mut bytes, &[0.0]);
+    extend_f32(&mut bytes, &[0.0, 1.0, 0.0]);
+    extend_f32(&mut bytes, &[1.0, 1.0, 1.0]);
+
+    bytes.extend(3i32.to_le_bytes());
+    extend_f32(&mut bytes, &[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]);
+
+    bytes.extend(3i32.to_le_bytes());
+    for (u, v) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)] {
+        bytes.extend([255, 255, 255, 255]);
+        extend_f32(&mut bytes, &[u, v]);
+    }
+
+    bytes.extend((textures.len() as i32).to_le_bytes());
+    for tex_id in 0..textures.len() as u16 {
+        for value in [0u16, 1, 2, 0, 1, 2, tex_id, 0] {
+            bytes.extend(value.to_le_bytes());
+        }
+        bytes.extend(0i32.to_le_bytes());
+        bytes.extend(0i32.to_le_bytes());
+    }
+
+    bytes.extend(0i32.to_le_bytes());
+    bytes.extend(0i32.to_le_bytes());
+    bytes.extend(0i32.to_le_bytes());
+    bytes
+}
+
+fn fixed_string(value: &str) -> [u8; 40] {
+    let mut field = [0u8; 40];
+    field[..value.len()].copy_from_slice(value.as_bytes());
+    field
+}
+
+fn extend_f32(bytes: &mut Vec<u8>, values: &[f32]) {
+    for value in values {
+        bytes.extend(value.to_le_bytes());
+    }
 }
 
 pub struct ModelFixture {

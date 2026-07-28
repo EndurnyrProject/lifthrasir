@@ -23,8 +23,22 @@ pub(crate) fn first_hit(sources: &[impl GrfReadable], logical: &str) -> Option<V
     sources.iter().find_map(|s| s.get(&normalized))
 }
 
+/// Logical-path read access to the game content. `GrfVfs` is the only
+/// production implementation; converters generic over it are unit-testable
+/// against an in-memory source instead of the retail GRFs.
+#[allow(dead_code)]
+pub trait AssetRead {
+    fn read_asset(&self, logical_path: &str) -> Option<Vec<u8>>;
+}
+
 pub struct GrfVfs {
     grfs: Vec<GrfFile>,
+}
+
+impl AssetRead for GrfVfs {
+    fn read_asset(&self, logical_path: &str) -> Option<Vec<u8>> {
+        self.read(logical_path)
+    }
 }
 
 impl GrfVfs {

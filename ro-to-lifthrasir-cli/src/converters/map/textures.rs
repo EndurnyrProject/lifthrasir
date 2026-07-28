@@ -80,7 +80,7 @@ fn normalize_one(
     })
 }
 
-fn bmp_bytes_to_keyed_png(bmp_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+pub fn bmp_bytes_to_keyed_png(bmp_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
     let mut image = image::load_from_memory_with_format(bmp_bytes, ImageFormat::Bmp)
         .context("decoding BMP")?
         .to_rgba8();
@@ -117,7 +117,7 @@ fn apply_magenta_transparency(image: &mut RgbaImage) {
 /// character to the ASCII filter, so a short digest of the source name is
 /// appended to keep them apart. `assign_unique_sanitized_names` stays the
 /// loud backstop.
-fn sanitize_name(name: &str) -> String {
+pub fn sanitize_name(name: &str) -> String {
     let stem = name.rsplit_once('.').map_or(name, |(base, _)| base);
 
     let sanitized: String = stem
