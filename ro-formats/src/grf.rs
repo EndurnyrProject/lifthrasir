@@ -319,28 +319,25 @@ impl GrfFile {
 
     pub fn get_file(&self, filename: &str) -> Option<Vec<u8>> {
         let entry_index = *self.entry_map.get(&filename.to_ascii_lowercase())?;
-        let entry = &self.entries[entry_index];
+        self.get_entry(entry_index)
+    }
 
-        // Check if it's actually a file (not a directory)
+    /// Reads one physical table entry without resolving its filename through
+    /// `entry_map`, preserving duplicate logical names for corpus inspection.
+    pub fn get_entry(&self, entry_index: usize) -> Option<Vec<u8>> {
+        let entry = self.entries.get(entry_index)?;
         if (entry.file_type & FILELIST_TYPE_FILE) == 0 {
             return None;
         }
 
-        // Open the GRF file and seek to the file's location
         let mut file = File::open(&self.file_path).ok()?;
-
-        // Calculate absolute offset in the GRF file
-        let absolute_offset = entry.offset + HEADER_SIZE;
-
-        // Seek to the file location
         use std::io::Seek;
-        file.seek(std::io::SeekFrom::Start(absolute_offset)).ok()?;
+        file.seek(std::io::SeekFrom::Start(entry.offset + HEADER_SIZE))
+            .ok()?;
 
-        // Read the compressed data
         let mut file_data = vec![0u8; entry.length_aligned as usize];
         file.read_exact(&mut file_data).ok()?;
 
-        // Handle decryption if needed
         let was_encrypted = if entry.file_type & FILELIST_TYPE_ENCRYPT_MIXED != 0 {
             des::decode_full(&mut file_data, entry.length_aligned, entry.pack_size);
             true
@@ -351,15 +348,11 @@ impl GrfFile {
             false
         };
 
-        // If file was encrypted OR is compressed, decompress it
-        // Encrypted files are always compressed before encryption
         if was_encrypted || entry.real_size != entry.pack_size {
             let mut decoder = ZlibDecoder::new(&file_data[..]);
             let mut decompressed = Vec::new();
-            match decoder.read_to_end(&mut decompressed) {
-                Ok(_) => Some(decompressed),
-                Err(_) => None,
-            }
+            decoder.read_to_end(&mut decompressed).ok()?;
+            Some(decompressed)
         } else {
             Some(file_data)
         }
@@ -391,40 +384,45 @@ mod tests {
         encoder.finish().unwrap()
     }
 
-    /// Builds a minimal, single-entry v0x300 GRF in memory: 46-byte header,
-    /// the zlib payload right after the header, then the table section
-    /// (4-byte skip + compressed/real sizes + zlib'd 21-byte entry).
-    fn build_v300_grf(magic: &str, filename: &str, content: &[u8]) -> Vec<u8> {
-        let payload = zlib(content);
-
-        let mut entry = Vec::new();
-        entry.extend_from_slice(filename.as_bytes());
-        entry.push(0);
-        entry.extend_from_slice(&(payload.len() as u32).to_le_bytes());
-        entry.extend_from_slice(&(payload.len() as u32).to_le_bytes());
-        entry.extend_from_slice(&(content.len() as u32).to_le_bytes());
-        entry.push(FILELIST_TYPE_FILE);
-        // payload sits at byte 46, so the stored offset (relative to the header) is 0.
-        entry.extend_from_slice(&0i64.to_le_bytes());
-        let table_comp = zlib(&entry);
-
+    /// Builds a minimal v0x300 GRF in memory: 46-byte header, zlib payloads,
+    /// then the table section (4-byte skip + compressed/real sizes + table).
+    fn build_v300_grf_entries(magic: &str, files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut buf = vec![0u8; HEADER_SIZE as usize];
         buf[0..magic.len()].copy_from_slice(magic.as_bytes());
         for i in 0..14 {
             buf[15 + i] = (i + 1) as u8;
         }
-        buf.extend_from_slice(&payload);
+
+        let mut table = Vec::new();
+        for (filename, content) in files {
+            let payload = zlib(content);
+            let offset = buf.len() as u64 - HEADER_SIZE;
+            buf.extend_from_slice(&payload);
+
+            table.extend_from_slice(filename.as_bytes());
+            table.push(0);
+            table.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+            table.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+            table.extend_from_slice(&(content.len() as u32).to_le_bytes());
+            table.push(FILELIST_TYPE_FILE);
+            table.extend_from_slice(&(offset as i64).to_le_bytes());
+        }
+        let table_comp = zlib(&table);
 
         let file_table_offset = buf.len() as u64 - HEADER_SIZE;
         buf.extend_from_slice(&0u32.to_le_bytes());
         buf.extend_from_slice(&(table_comp.len() as u32).to_le_bytes());
-        buf.extend_from_slice(&(entry.len() as u32).to_le_bytes());
+        buf.extend_from_slice(&(table.len() as u32).to_le_bytes());
         buf.extend_from_slice(&table_comp);
 
         buf[30..38].copy_from_slice(&file_table_offset.to_le_bytes());
-        buf[38..42].copy_from_slice(&1u32.to_le_bytes());
+        buf[38..42].copy_from_slice(&(files.len() as u32).to_le_bytes());
         buf[42..46].copy_from_slice(&0x300u32.to_le_bytes());
         buf
+    }
+
+    fn build_v300_grf(magic: &str, filename: &str, content: &[u8]) -> Vec<u8> {
+        build_v300_grf_entries(magic, &[(filename, content)])
     }
 
     fn roundtrip(magic: &str, name: &str, filename: &str, content: &[u8]) {
@@ -460,6 +458,26 @@ mod tests {
             "data\\brand.txt",
             &content,
         );
+    }
+
+    #[test]
+    fn indexed_reads_preserve_duplicate_filenames() {
+        let bytes = build_v300_grf_entries(
+            "Master of Magic",
+            &[("data\\same.rsm", b"first"), ("data\\same.rsm", b"second")],
+        );
+        let path = std::env::temp_dir().join("lifthrasir_grf_duplicate_entries.grf");
+        std::fs::write(&path, bytes).unwrap();
+
+        let grf = GrfFile::from_path(path.clone()).unwrap();
+        assert_eq!(grf.get_entry(0).as_deref(), Some(b"first" as &[u8]));
+        assert_eq!(grf.get_entry(1).as_deref(), Some(b"second" as &[u8]));
+        assert_eq!(
+            grf.get_file("data\\same.rsm").as_deref(),
+            Some(b"second" as &[u8])
+        );
+
+        std::fs::remove_file(path).ok();
     }
 
     #[test]
