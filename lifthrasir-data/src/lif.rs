@@ -18,6 +18,9 @@ pub const EXTENSION_WATER: &str = "LIF_water";
 /// glTF root-extension key for [`LifGat`].
 pub const EXTENSION_GAT: &str = "LIF_gat";
 
+/// glTF root-extension key for [`LifModel`].
+pub const EXTENSION_MODEL: &str = "LIF_model";
+
 /// Node-extras key for [`LifAudio`].
 pub const EXTRAS_AUDIO: &str = "lif_audio";
 
@@ -37,6 +40,14 @@ pub struct LifMap {
     pub gat_hash: String,
     /// Mirrors `RswLight::ambient` (RGB, no alpha).
     pub ambient_color: [f32; 3],
+}
+
+/// Root extension `LIF_model`: format identity and source-file provenance
+/// for a converted prop glb.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LifModel {
+    pub format_version: u32,
+    pub rsm_hash: String,
 }
 
 /// Root extension `LIF_gat`: GAT dims plus the bufferView index into the glb
@@ -229,6 +240,19 @@ mod tests {
 
         let json = serde_json::to_string(&original).expect("serialize");
         let deserialized: LifMap = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn lif_model_serde_round_trip() {
+        let original = LifModel {
+            format_version: 1,
+            rsm_hash: "abc123".to_string(),
+        };
+
+        let json = serde_json::to_string(&original).expect("serialize");
+        let deserialized: LifModel = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(original, deserialized);
     }
