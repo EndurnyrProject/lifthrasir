@@ -327,6 +327,14 @@ fn validate_map_extension(root: &gltf_json::Root, inputs: &MapGlbInputs) -> anyh
         map.ambient_color,
         inputs.world.light.ambient
     );
+    let expected_tint = lif::no_shade_tint(inputs.world.light.ambient, inputs.world.light.diffuse);
+    ensure!(
+        map.no_shade_tint == expected_tint,
+        "{} no-shade tint {:?} differs from the RSW-derived {:?}",
+        lif::EXTENSION_MAP,
+        map.no_shade_tint,
+        expected_tint
+    );
     Ok(())
 }
 

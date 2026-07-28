@@ -553,6 +553,7 @@ fn build_root_extensions(
         gnd_hash: hash_hex(inputs.gnd_bytes),
         gat_hash: hash_hex(inputs.gat_bytes),
         ambient_color: inputs.world.light.ambient,
+        no_shade_tint: lif::no_shade_tint(inputs.world.light.ambient, inputs.world.light.diffuse),
     };
     let gat = lif::LifGat {
         width: altitude.width,

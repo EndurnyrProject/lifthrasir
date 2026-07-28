@@ -30,6 +30,9 @@ pub const EXTRAS_EFFECT: &str = "lif_effect";
 /// Node-extras key for [`LifProp`].
 pub const EXTRAS_PROP: &str = "lif_prop";
 
+pub const EXTRAS_UV_ANIMATION: &str = "lif_uv_animation";
+pub const EXTRAS_NO_SHADE: &str = "lif_no_shade";
+
 /// Root extension `LIF_map`: format identity, source-file provenance, and the
 /// ambient light that has no `KHR_lights_punctual` equivalent.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,6 +43,20 @@ pub struct LifMap {
     pub gat_hash: String,
     /// Mirrors `RswLight::ambient` (RGB, no alpha).
     pub ambient_color: [f32; 3],
+    #[serde(default = "white_tint")]
+    pub no_shade_tint: [f32; 3],
+}
+
+fn white_tint() -> [f32; 3] {
+    [1.0; 3]
+}
+
+pub fn no_shade_tint(ambient: [f32; 3], diffuse: [f32; 3]) -> [f32; 3] {
+    std::array::from_fn(|index| {
+        let low = ambient[index].min(diffuse[index]);
+        let high = ambient[index].max(diffuse[index]);
+        (high + (1.0 - high) * low).min(1.0)
+    })
 }
 
 /// Root extension `LIF_model`: format identity and source-file provenance
@@ -48,6 +65,131 @@ pub struct LifMap {
 pub struct LifModel {
     pub format_version: u32,
     pub rsm_hash: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LifUvAnimation {
+    pub duration_ms: u32,
+    pub channels: Vec<LifUvChannel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LifUvChannel {
+    pub property: LifUvProperty,
+    pub keys: Vec<LifScalarKey>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LifUvProperty {
+    TranslateU,
+    TranslateV,
+    ScaleU,
+    ScaleV,
+    Rotate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct LifScalarKey {
+    pub time_ms: u32,
+    pub value: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LifUvSample {
+    pub translation: [f32; 2],
+    pub scale: [f32; 2],
+    pub rotation: f32,
+}
+
+impl Default for LifUvSample {
+    fn default() -> Self {
+        Self {
+            translation: [0.0; 2],
+            scale: [1.0; 2],
+            rotation: 0.0,
+        }
+    }
+}
+
+impl LifUvSample {
+    /// Row-major `T(center + translation) × Scale × Rotation × T(-center)`.
+    pub fn matrix3(self) -> [f32; 9] {
+        let (sin, cos) = self.rotation.sin_cos();
+        let (sx, sy) = (self.scale[0], self.scale[1]);
+        let (a, b, c, d) = (sx * cos, -sx * sin, sy * sin, sy * cos);
+        let tx = 0.5 + self.translation[0] - 0.5 * (a + b);
+        let ty = 0.5 + self.translation[1] - 0.5 * (c + d);
+        [a, b, tx, c, d, ty, 0.0, 0.0, 1.0]
+    }
+}
+
+impl LifUvAnimation {
+    pub fn validate(&self) -> Result<(), String> {
+        let mut properties = std::collections::HashSet::new();
+        for channel in &self.channels {
+            if !properties.insert(channel.property) {
+                return Err(format!("duplicate UV channel: {:?}", channel.property));
+            }
+            let mut previous = None;
+            for key in &channel.keys {
+                if !key.value.is_finite() {
+                    return Err(format!("non-finite UV key: {:?}", channel.property));
+                }
+                if key.time_ms > self.duration_ms
+                    || previous.is_some_and(|time| key.time_ms <= time)
+                {
+                    return Err(format!("invalid UV key time: {:?}", channel.property));
+                }
+                previous = Some(key.time_ms);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn sample(&self, time_ms: u32, repeat: bool) -> Result<LifUvSample, String> {
+        self.validate()?;
+        let tick = if repeat {
+            time_ms % self.duration_ms.max(1)
+        } else {
+            time_ms.min(self.duration_ms)
+        };
+        let mut sample = LifUvSample::default();
+        for channel in &self.channels {
+            if channel.keys.is_empty() {
+                continue;
+            }
+            let value = sample_channel(channel, tick, self.duration_ms);
+            match channel.property {
+                LifUvProperty::TranslateU => sample.translation[0] += value,
+                LifUvProperty::TranslateV => sample.translation[1] += value,
+                LifUvProperty::ScaleU => sample.scale[0] = value,
+                LifUvProperty::ScaleV => sample.scale[1] = value,
+                LifUvProperty::Rotate => sample.rotation = value,
+            }
+        }
+        Ok(sample)
+    }
+}
+
+fn sample_channel(channel: &LifUvChannel, tick: u32, duration: u32) -> f32 {
+    let next = channel.keys.partition_point(|key| tick >= key.time_ms);
+    if next == channel.keys.len() {
+        return channel.keys.last().expect("non-empty channel").value;
+    }
+    let (previous_time, previous_value) = if next == 0 {
+        (0, 0.0)
+    } else {
+        let key = channel.keys[next - 1];
+        (key.time_ms, key.value)
+    };
+    let next_key = channel.keys[next];
+    let next_time = next_key.time_ms.min(duration);
+    if next_time == previous_time {
+        return next_key.value;
+    }
+    let factor = (tick - previous_time) as f32 / (next_time - previous_time) as f32;
+    previous_value + factor * (next_key.value - previous_value)
 }
 
 /// Root extension `LIF_gat`: GAT dims plus the bufferView index into the glb
@@ -236,6 +378,7 @@ mod tests {
             gnd_hash: "def456".to_string(),
             gat_hash: "ghi789".to_string(),
             ambient_color: [0.3, 0.3, 0.4],
+            no_shade_tint: [0.5, 0.6, 0.7],
         };
 
         let json = serde_json::to_string(&original).expect("serialize");
@@ -353,6 +496,111 @@ mod tests {
         let deserialized: LifProp = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn uv_animation_samples_browedit_defaults_interpolation_and_wrap() {
+        let animation = LifUvAnimation {
+            duration_ms: 1_000,
+            channels: vec![
+                LifUvChannel {
+                    property: LifUvProperty::TranslateU,
+                    keys: vec![
+                        LifScalarKey {
+                            time_ms: 200,
+                            value: 1.0,
+                        },
+                        LifScalarKey {
+                            time_ms: 600,
+                            value: 3.0,
+                        },
+                    ],
+                },
+                LifUvChannel {
+                    property: LifUvProperty::ScaleU,
+                    keys: vec![LifScalarKey {
+                        time_ms: 200,
+                        value: 2.0,
+                    }],
+                },
+            ],
+        };
+
+        let before = animation.sample(100, false).unwrap();
+        let middle = animation.sample(400, false).unwrap();
+        let wrapped = animation.sample(1_400, true).unwrap();
+
+        assert_eq!(before.translation[0], 0.5);
+        assert_eq!(before.scale[0], 1.0);
+        assert_eq!(middle.translation[0], 2.0);
+        assert_eq!(wrapped, middle);
+        assert_eq!(middle.scale[1], 1.0);
+    }
+
+    #[test]
+    fn uv_schema_round_trips_and_composes_around_texture_center() {
+        let animation = LifUvAnimation {
+            duration_ms: 1_000,
+            channels: vec![LifUvChannel {
+                property: LifUvProperty::Rotate,
+                keys: vec![LifScalarKey {
+                    time_ms: 0,
+                    value: 1.0,
+                }],
+            }],
+        };
+        let json = serde_json::to_string(&animation).unwrap();
+        let decoded: LifUvAnimation = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, animation);
+        assert_eq!(EXTRAS_UV_ANIMATION, "lif_uv_animation");
+        assert_eq!(EXTRAS_NO_SHADE, "lif_no_shade");
+
+        let matrix = LifUvSample {
+            translation: [0.1, -0.2],
+            scale: [2.0, 3.0],
+            rotation: std::f32::consts::FRAC_PI_2,
+        }
+        .matrix3();
+        let transformed = [
+            matrix[0] + matrix[1] * 0.5 + matrix[2],
+            matrix[3] + matrix[4] * 0.5 + matrix[5],
+        ];
+        assert!((transformed[0] - 0.6).abs() < 1e-6);
+        assert!((transformed[1] - 1.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn uv_animation_validates_and_holds_terminal_values() {
+        let animation = LifUvAnimation {
+            duration_ms: 0,
+            channels: vec![LifUvChannel {
+                property: LifUvProperty::Rotate,
+                keys: vec![LifScalarKey {
+                    time_ms: 0,
+                    value: 2.0,
+                }],
+            }],
+        };
+        assert_eq!(animation.sample(500, true).unwrap().rotation, 2.0);
+        assert_eq!(animation.sample(500, false).unwrap().rotation, 2.0);
+
+        let mut invalid = animation.clone();
+        invalid.channels[0].keys[0].value = f32::NAN;
+        assert!(invalid.validate().is_err());
+        invalid.channels[0].keys[0].value = 1.0;
+        invalid.channels.push(invalid.channels[0].clone());
+        assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn no_shade_tint_matches_formula_and_old_maps_default_white() {
+        let tint = no_shade_tint([0.2, 0.4, 0.8], [0.6, 0.3, 0.5]);
+        for (actual, expected) in tint.into_iter().zip([0.68, 0.58, 0.9]) {
+            assert!((actual - expected).abs() < 1e-6);
+        }
+        let old = r#"{"format_version":1,"rsw_hash":"a","gnd_hash":"b","gat_hash":"c","ambient_color":[0.3,0.3,0.4]}"#;
+        let map: LifMap = serde_json::from_str(old).unwrap();
+        assert_eq!(map.no_shade_tint, [1.0; 3]);
     }
 
     #[test]
