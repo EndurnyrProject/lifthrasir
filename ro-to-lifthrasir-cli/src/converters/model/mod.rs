@@ -2,4 +2,7 @@
 // written yet; drop this allow once it calls into `mesh`.
 #![allow(dead_code)]
 
+#[cfg(test)]
+pub mod fixtures;
 pub mod mesh;
+pub mod writer;
