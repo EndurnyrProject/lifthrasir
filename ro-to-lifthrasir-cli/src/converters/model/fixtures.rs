@@ -6,10 +6,11 @@
 use crate::converters::map::fixtures::write_fixture_png;
 use crate::converters::map::textures::TextureOut;
 use crate::converters::model::mesh::build_model;
-use crate::converters::model::normalized::NormalizedModel;
+use crate::converters::model::normalized::{NormalizedModel, ShadingPolicy};
 use crate::converters::model::writer::write_model_glb;
 use crate::grf_vfs::AssetRead;
 use image::{ImageFormat, RgbaImage};
+use lifthrasir_data::lif::{LifScalarKey, LifUvAnimation, LifUvChannel, LifUvProperty};
 use ro_formats::{Face, Node, PosKeyframe, RotKeyframe, Rsm, ShadingType, TextureVertex};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -121,6 +122,53 @@ pub fn animated_rsm() -> Rsm {
 
 /// A tempdir with the fixture PNGs already exported beside where the glb goes,
 /// so a written glb reimports with its images resolved.
+pub fn uv_only_model(scale: [f32; 2], rotation: f32) -> NormalizedModel {
+    let mut model = build_model(&textured_rsm(), ModelFixture::RSM_HASH).expect("model must build");
+    model.duration_ms = 1000.0;
+    let animation = LifUvAnimation {
+        duration_ms: 1000,
+        channels: vec![
+            LifUvChannel {
+                property: LifUvProperty::ScaleU,
+                keys: vec![LifScalarKey {
+                    time_ms: 0,
+                    value: scale[0],
+                }],
+            },
+            LifUvChannel {
+                property: LifUvProperty::ScaleV,
+                keys: vec![LifScalarKey {
+                    time_ms: 0,
+                    value: scale[1],
+                }],
+            },
+            LifUvChannel {
+                property: LifUvProperty::Rotate,
+                keys: vec![LifScalarKey {
+                    time_ms: 0,
+                    value: rotation,
+                }],
+            },
+        ],
+    };
+    let primitive = &mut model.nodes[0].primitives[0];
+    let source = primitive.uv0.clone();
+    let matrix = animation.sample(0, false).unwrap().matrix3();
+    primitive.uv0 = source
+        .iter()
+        .map(|uv| {
+            [
+                matrix[0] * uv[0] + matrix[1] * uv[1] + matrix[2],
+                matrix[3] * uv[0] + matrix[4] * uv[1] + matrix[5],
+            ]
+        })
+        .collect();
+    primitive.uv1 = Some(source);
+    primitive.uv_animation = Some(animation);
+    model.materials[primitive.material].shading = ShadingPolicy::None;
+    model
+}
+
 pub fn fixture_dir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("tempdir");
     for texture in textures() {

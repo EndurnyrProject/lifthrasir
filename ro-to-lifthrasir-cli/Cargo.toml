@@ -32,10 +32,12 @@ gltf-json = { version = "1.4.1", features = [
     "extras",
     "names",
     "KHR_lights_punctual",
+    "KHR_materials_unlit",
 ] }
 gltf = { version = "1.4.1", features = [
     "extensions",
     "extras",
     "names",
     "KHR_lights_punctual",
+    "KHR_materials_unlit",
 ] }

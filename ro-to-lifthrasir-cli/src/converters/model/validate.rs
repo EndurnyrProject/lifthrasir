@@ -5,7 +5,7 @@
 
 use crate::converters::gltf_out::{EPSILON, ROOT_FIX, ensure_close, root_extension, scene_root};
 use crate::converters::map::textures::TextureOut;
-use crate::converters::model::normalized::{AlphaMode, NormalizedModel};
+use crate::converters::model::normalized::{AlphaMode, NormalizedModel, ShadingPolicy};
 use anyhow::{Context, bail, ensure};
 use glam::{Mat4, Quat, Vec3};
 use lifthrasir_data::lif;
@@ -125,6 +125,38 @@ pub(super) fn validate_contract(model: &NormalizedModel) -> anyhow::Result<()> {
             ancestor = parent;
         }
         for primitive in &node.primitives {
+            if let Some(animation) = &primitive.uv_animation {
+                animation.validate().map_err(anyhow::Error::msg)?;
+                ensure!(
+                    model.duration_ms == animation.duration_ms as f32 && model.duration_ms > 0.0,
+                    "node '{}' UV duration disagrees with model duration",
+                    node.name
+                );
+                ensure!(
+                    primitive.uv1.is_some(),
+                    "node '{}' animated primitive has no UV1",
+                    node.name
+                );
+                let sample = animation.sample(0, false).map_err(anyhow::Error::msg)?;
+                let matrix = sample.matrix3();
+                for (uv0, uv1) in primitive.uv0.iter().zip(primitive.uv1.as_ref().unwrap()) {
+                    let expected = [
+                        matrix[0] * uv1[0] + matrix[1] * uv1[1] + matrix[2],
+                        matrix[3] * uv1[0] + matrix[4] * uv1[1] + matrix[5],
+                    ];
+                    ensure!(
+                        *uv0 == expected,
+                        "node '{}' animated UV0 is not the time-zero UV1 transform",
+                        node.name
+                    );
+                }
+            } else {
+                ensure!(
+                    primitive.uv1.is_none(),
+                    "node '{}' static primitive unexpectedly has UV1",
+                    node.name
+                );
+            }
             ensure!(
                 primitive.material < model.materials.len(),
                 "node '{}' has invalid material {}",
@@ -420,6 +452,63 @@ fn validate_primitives(
                 "node '{}' primitive UV0 disagrees with normalized data",
                 node.name
             );
+            let uv1 = reader
+                .read_tex_coords(1)
+                .map(|values| values.into_f32().collect::<Vec<_>>());
+            ensure!(
+                uv1.as_ref() == expected.uv1.as_ref(),
+                "node '{}' primitive UV1 disagrees with normalized data",
+                node.name
+            );
+            let extras = primitive
+                .extras()
+                .as_ref()
+                .map(|raw| serde_json::from_str::<serde_json::Value>(raw.get()))
+                .transpose()
+                .context("parsing primitive extras")?;
+            let actual_animation = extras
+                .as_ref()
+                .and_then(|value| value.get(lif::EXTRAS_UV_ANIMATION))
+                .map(|value| serde_json::from_value::<lif::LifUvAnimation>(value.clone()))
+                .transpose()
+                .context("decoding UV animation extras")?;
+            ensure!(
+                actual_animation.as_ref() == expected.uv_animation.as_ref(),
+                "node '{}' primitive UV extras disagree",
+                node.name
+            );
+            let no_shade = build.materials[expected.material].shading == ShadingPolicy::None;
+            let marker = extras
+                .as_ref()
+                .and_then(|value| value.get(lif::EXTRAS_NO_SHADE));
+            ensure!(
+                matches!(
+                    (marker, no_shade),
+                    (Some(serde_json::Value::Bool(true)), true) | (None, false)
+                ),
+                "node '{}' primitive no-shade marker disagrees",
+                node.name
+            );
+            if expected.uv_animation.is_some() {
+                let info = primitive
+                    .material()
+                    .pbr_metallic_roughness()
+                    .base_color_texture()
+                    .context("animated primitive material has no texture")?;
+                ensure!(
+                    info.extensions()
+                        .is_none_or(|extensions| !extensions.contains_key("KHR_texture_transform")),
+                    "node '{}' animated texture unexpectedly uses KHR_texture_transform",
+                    node.name
+                );
+                let texture = info.texture();
+                ensure!(
+                    texture.sampler().wrap_s() == gltf::texture::WrappingMode::Repeat
+                        && texture.sampler().wrap_t() == gltf::texture::WrappingMode::Repeat,
+                    "node '{}' animated texture sampler is not repeating",
+                    node.name
+                );
+            }
             let indices: Vec<u32> = reader
                 .read_indices()
                 .with_context(|| format!("node '{}' primitive has no indices", node.name))?
@@ -452,7 +541,7 @@ fn validate_animation(
     build: &NormalizedModel,
     resolved: &[gltf::Node],
 ) -> anyhow::Result<usize> {
-    let expected_channels: usize = build
+    let ordinary_channels: usize = build
         .nodes
         .iter()
         .map(|node| {
@@ -461,6 +550,12 @@ fn validate_animation(
                 + usize::from(!node.scale_track.keys.is_empty())
         })
         .sum();
+    let has_uv = build
+        .nodes
+        .iter()
+        .flat_map(|node| &node.primitives)
+        .any(|primitive| primitive.uv_animation.is_some());
+    let expected_channels = ordinary_channels + usize::from(ordinary_channels == 0 && has_uv);
 
     let animations: Vec<gltf::Animation> = document.animations().collect();
     if expected_channels == 0 {
@@ -484,6 +579,14 @@ fn validate_animation(
     );
 
     let mut expected = Vec::new();
+    if ordinary_channels == 0 && has_uv {
+        expected.push((
+            scene_root(document)?.index(),
+            gltf::animation::Property::Translation,
+            vec![0.0, build.duration_ms / 1000.0],
+            vec![0.0; 6],
+        ));
+    }
     for (index, node) in build.nodes.iter().enumerate() {
         if !node.translation_track.keys.is_empty() {
             expected.push((
@@ -598,6 +701,10 @@ fn validate_materials(
         ensure!(
             material.double_sided() == expected.two_sided,
             "material '{name}' two-sidedness disagrees with normalized data"
+        );
+        ensure!(
+            material.unlit() == (expected.shading == ShadingPolicy::None),
+            "material '{name}' unlit policy disagrees with normalized data"
         );
         match expected.alpha {
             AlphaMode::Mask { cutoff } => {
@@ -729,13 +836,28 @@ fn validate_root_extensions(
         model.rsm_hash == expected.provenance.source_hash,
         "LIF_model source hash disagrees with normalized provenance"
     );
+    let expects_unlit = expected
+        .materials
+        .iter()
+        .any(|material| material.shading == ShadingPolicy::None);
+    ensure!(
+        root.extensions_used
+            .contains(&lif::EXTENSION_MODEL.to_string())
+            && root
+                .extensions_used
+                .contains(&"KHR_materials_unlit".to_string())
+                == expects_unlit,
+        "glb extension declarations disagree with normalized materials"
+    );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::converters::model::fixtures::{animated_rsm, fixture_dir, textures, write_fixture};
+    use crate::converters::model::fixtures::{
+        animated_rsm, fixture_dir, textures, uv_only_model, write_fixture,
+    };
     use crate::converters::model::mesh::build_model;
     use crate::converters::model::normalized::{NormalizedKey, NormalizedTrack};
     use crate::converters::model::writer::write_model_glb;
@@ -917,6 +1039,107 @@ mod tests {
         fixture.model.nodes[0].primitives[0].positions[0][0] += 5.0;
 
         assert_fails(&fixture, "positions disagree");
+    }
+
+    #[test]
+    fn uv_only_nonuniform_rotated_and_singular_models_round_trip() {
+        for (name, scale, rotation) in [
+            ("nonuniform", [2.0, 3.0], 0.7),
+            ("singular", [0.0, 2.0], 0.4),
+        ] {
+            let dir = fixture_dir();
+            let path = dir.path().join(format!("{name}.glb"));
+            let model = uv_only_model(scale, rotation);
+            write_model_glb(&path, &model, &textures()).expect("write UV-only model");
+            let counts = validate(&path, &model, &textures()).expect("validate UV-only model");
+            assert_eq!(counts.animation_channels, 1);
+
+            let gltf::Gltf { document, .. } = gltf::Gltf::open(&path).unwrap();
+            let channel = document
+                .animations()
+                .next()
+                .unwrap()
+                .channels()
+                .next()
+                .unwrap();
+            assert_eq!(
+                channel.target().node().index(),
+                scene_root(&document).unwrap().index()
+            );
+            assert_eq!(
+                channel.target().property(),
+                gltf::animation::Property::Translation
+            );
+            let primitive = document
+                .meshes()
+                .next()
+                .unwrap()
+                .primitives()
+                .next()
+                .unwrap();
+            assert!(primitive.get(&gltf::Semantic::TexCoords(1)).is_some());
+            assert!(primitive.material().unlit());
+        }
+    }
+
+    fn replace_once(bytes: &mut [u8], needle: &[u8], replacement: &[u8]) {
+        assert_eq!(needle.len(), replacement.len());
+        let offset = bytes
+            .windows(needle.len())
+            .position(|window| window == needle)
+            .unwrap_or_else(|| {
+                panic!(
+                    "missing GLB JSON pattern: {}",
+                    String::from_utf8_lossy(needle)
+                )
+            });
+        bytes[offset..offset + needle.len()].copy_from_slice(replacement);
+    }
+
+    #[test]
+    fn uv_metadata_corruption_fails_validation() {
+        let dir = fixture_dir();
+        let path = dir.path().join("uv.glb");
+        let model = uv_only_model([2.0, 3.0], 0.7);
+        write_model_glb(&path, &model, &textures()).unwrap();
+        let original = std::fs::read(&path).unwrap();
+
+        for (needle, replacement, expected) in [
+            (&b"TEXCOORD_1"[..], &b"TEXCOORD_9"[..], "UV1"),
+            (
+                &b"lif_uv_animation"[..],
+                &b"bad_uv_animation"[..],
+                "UV extras",
+            ),
+            (
+                &b"\"duration_ms\":1000"[..],
+                &b"\"duration_ms\":999 "[..],
+                "UV extras",
+            ),
+            (
+                &b"\"lif_no_shade\":true"[..],
+                &b"\"lif_no_shade\":null"[..],
+                "no-shade",
+            ),
+            (
+                &b"\"node\":2,\"path\":\"translation\""[..],
+                &b"\"node\":0,\"path\":\"translation\""[..],
+                "wrong node",
+            ),
+            (&b"10497"[..], &b"33071"[..], "not repeating"),
+        ] {
+            let mut bytes = original.clone();
+            replace_once(&mut bytes, needle, replacement);
+            std::fs::write(&path, bytes).unwrap();
+            let message = validate(&path, &model, &textures())
+                .unwrap_err()
+                .to_string();
+            assert!(
+                message.contains(expected),
+                "expected '{expected}' after corrupting {}, got: {message}",
+                String::from_utf8_lossy(needle)
+            );
+        }
     }
 
     #[test]

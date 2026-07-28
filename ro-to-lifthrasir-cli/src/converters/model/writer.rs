@@ -69,7 +69,6 @@ pub fn write_model_glb(
 
     let materials = build_materials(&mut root, model, textures)?;
     let nodes = build_nodes(&mut root, &mut bin, model, &materials)?;
-    build_animation(&mut root, &mut bin, model, &nodes)?;
 
     let children = model
         .roots
@@ -104,7 +103,8 @@ pub fn write_model_glb(
     );
     root.scene = Some(scene);
 
-    build_root_extensions(&mut root, &model.provenance.source_hash)?;
+    build_animation(&mut root, &mut bin, model, &nodes, scene_root)?;
+    build_root_extensions(&mut root, model)?;
 
     root.buffers.push(json::Buffer {
         byte_length: USize64::from(bin.data.len()),
@@ -131,9 +131,9 @@ pub fn write_model_glb(
 /// alpha -- `BLEND` with that alpha in `baseColorFactor`. `reflectance: 0.0`
 /// has no glTF field and is left to the runtime observer.
 ///
-/// The sampler is deliberately left unset: the glTF default is Bevy's default
-/// image sampler, which is what the native path gets loading the BMP through
-/// the asset server.
+/// Static materials leave the sampler unset to preserve Phase 2 bytes. A
+/// material targeted by UV animation gets an explicit repeat sampler. Sharing
+/// it with a static primitive is safe because glTF's omitted sampler also repeats.
 ///
 /// A `-1` texture id means the face referenced a slot the node does not have.
 /// The native path answers that with a debug-colored fallback material; here it
@@ -153,10 +153,29 @@ fn build_materials(
         );
     }
 
+    let animated_materials: std::collections::BTreeSet<usize> = model
+        .nodes
+        .iter()
+        .flat_map(|node| &node.primitives)
+        .filter(|primitive| primitive.uv_animation.is_some())
+        .map(|primitive| primitive.material)
+        .collect();
+    let repeat_sampler = (!animated_materials.is_empty()).then(|| {
+        json::Index::push(
+            &mut root.samplers,
+            json::texture::Sampler {
+                wrap_s: Valid(json::texture::WrappingMode::Repeat),
+                wrap_t: Valid(json::texture::WrappingMode::Repeat),
+                ..Default::default()
+            },
+        )
+    });
+
     model
         .materials
         .iter()
-        .map(|material| {
+        .enumerate()
+        .map(|(index, material)| {
             let source = material
                 .texture
                 .map(|index| {
@@ -168,8 +187,9 @@ fn build_materials(
                     })
                 })
                 .transpose()?;
+            let sampler = animated_materials.contains(&index).then_some(repeat_sampler).flatten();
             let base_color_texture =
-                source.map(|texture| push_image_and_texture(root, texture, None));
+                source.map(|texture| push_image_and_texture(root, texture, sampler));
             let name = source.map(|texture| texture.source_name.clone());
             Ok(json::Index::push(
                 &mut root.materials,
@@ -192,6 +212,13 @@ fn model_material(
         AlphaMode::Blend => (json::material::AlphaMode::Blend, None),
     };
 
+    let extensions = (material.shading
+        == crate::converters::model::normalized::ShadingPolicy::None)
+        .then(|| json::extensions::material::Material {
+            unlit: Some(json::extensions::material::Unlit {}),
+            ..Default::default()
+        });
+
     json::Material {
         alpha_cutoff,
         alpha_mode: Valid(alpha_mode),
@@ -208,6 +235,7 @@ fn model_material(
             roughness_factor: json::material::StrengthFactor(MODEL_ROUGHNESS),
             ..Default::default()
         },
+        extensions,
         ..Default::default()
     }
 }
@@ -308,7 +336,7 @@ fn build_primitive(
     let positions: Vec<Vec3> = primitive.positions.iter().map(|p| Vec3::from(*p)).collect();
     let normals: Vec<Vec3> = primitive.normals.iter().map(|n| Vec3::from(*n)).collect();
 
-    push_geometry_primitive(
+    let mut output = push_geometry_primitive(
         root,
         bin,
         &format!("node '{node_name}' material {}", primitive.material),
@@ -317,24 +345,45 @@ fn build_primitive(
             normals: &normals,
             colors: None,
             uvs: &primitive.uv0,
+            uv1: primitive.uv1.as_deref(),
             indices: &primitive.indices,
         },
         material,
-    )
+    )?;
+    let no_shade = root.materials[primitive.material]
+        .extensions
+        .as_ref()
+        .is_some_and(|extensions| extensions.unlit.is_some());
+    if primitive.uv_animation.is_some() || no_shade {
+        let mut extras = serde_json::Map::new();
+        if let Some(animation) = &primitive.uv_animation {
+            extras.insert(
+                lif::EXTRAS_UV_ANIMATION.to_string(),
+                serde_json::to_value(animation)?,
+            );
+        }
+        if no_shade {
+            extras.insert(
+                lif::EXTRAS_NO_SHADE.to_string(),
+                serde_json::Value::Bool(true),
+            );
+        }
+        output.extras = Some(serde_json::value::RawValue::from_string(
+            serde_json::to_string(&extras)?,
+        )?);
+    }
+    Ok(output)
 }
 
-/// The single `"anim"` animation: a linear translation and/or rotation channel
-/// per keyframed node, with the native per-channel frame rescale baked into
-/// the sampler input times.
-///
-/// A model with no keyframes at all, or one whose `anim_len` is zero, gets no
-/// animation -- the runtime observer then finds no `AnimationPlayer` and
-/// leaves the prop static, matching the native path.
+/// The single `"anim"` animation: linear TRS channels from normalized tracks.
+/// UV-only models receive one identity translation channel on the synthetic
+/// root so standard loaders expose the same duration clock to the runtime.
 fn build_animation(
     root: &mut json::Root,
     bin: &mut BinChunk,
     model: &NormalizedModel,
     nodes: &[json::Index<json::Node>],
+    scene_root: json::Index<json::Node>,
 ) -> anyhow::Result<()> {
     if model.duration_ms <= 0.0 {
         return Ok(());
@@ -370,6 +419,23 @@ fn build_animation(
             json::accessor::Type::Vec3,
             |value| value.to_vec(),
         )?;
+    }
+
+    if channels.is_empty() && model_has_uv_animation(model) {
+        let times = [0.0, model.duration_ms / 1000.0];
+        let sampler = push_sampler(
+            root,
+            bin,
+            &mut samplers,
+            &times,
+            [0.0; 6],
+            json::accessor::Type::Vec3,
+        );
+        channels.push(channel(
+            sampler,
+            scene_root,
+            json::animation::Property::Translation,
+        ));
     }
 
     if !channels.is_empty() {
@@ -494,10 +560,21 @@ fn channel(
     }
 }
 
-fn build_root_extensions(root: &mut json::Root, rsm_hash: &str) -> anyhow::Result<()> {
+fn model_has_uv_animation(model: &NormalizedModel) -> bool {
+    model
+        .nodes
+        .iter()
+        .flat_map(|node| &node.primitives)
+        .any(|primitive| primitive.uv_animation.is_some())
+}
+
+fn build_root_extensions(
+    root: &mut json::Root,
+    normalized: &NormalizedModel,
+) -> anyhow::Result<()> {
     let model = lif::LifModel {
         format_version: lif::FORMAT_VERSION,
-        rsm_hash: rsm_hash.to_string(),
+        rsm_hash: normalized.provenance.source_hash.clone(),
     };
 
     root.extensions
@@ -508,6 +585,11 @@ fn build_root_extensions(root: &mut json::Root, rsm_hash: &str) -> anyhow::Resul
             serde_json::to_value(&model)?,
         );
     root.extensions_used = vec![lif::EXTENSION_MODEL.to_string()];
+    if normalized.materials.iter().any(|material| {
+        material.shading == crate::converters::model::normalized::ShadingPolicy::None
+    }) {
+        root.extensions_used.push("KHR_materials_unlit".to_string());
+    }
 
     Ok(())
 }

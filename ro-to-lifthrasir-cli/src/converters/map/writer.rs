@@ -194,6 +194,7 @@ fn build_primitive(
             normals: &normals,
             colors: Some(&primitive.colors),
             uvs: &primitive.uvs,
+            uv1: None,
             indices: &primitive.indices,
         },
         material,

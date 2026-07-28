@@ -123,6 +123,7 @@ pub struct GeometryAttributes<'a> {
     pub normals: &'a [Vec3],
     pub colors: Option<&'a [[f32; 4]]>,
     pub uvs: &'a [[f32; 2]],
+    pub uv1: Option<&'a [[f32; 2]]>,
     pub indices: &'a [u32],
 }
 
@@ -139,6 +140,7 @@ pub fn push_geometry_primitive(
     let count = geometry.positions.len();
     if geometry.normals.len() != count
         || geometry.uvs.len() != count
+        || geometry.uv1.is_some_and(|uv1| uv1.len() != count)
         || geometry.colors.is_some_and(|colors| colors.len() != count)
     {
         bail!(
@@ -231,6 +233,22 @@ pub fn push_geometry_primitive(
         attributes.insert(Valid(json::mesh::Semantic::Colors(0)), colors_accessor);
     }
     attributes.insert(Valid(json::mesh::Semantic::TexCoords(0)), uvs_accessor);
+    if let Some(uv1) = geometry.uv1 {
+        let view = bin.push_view(
+            &f32_bytes(uv1.iter().flatten().copied()),
+            Some(json::buffer::Target::ArrayBuffer),
+        );
+        let accessor = json::Index::push(
+            &mut root.accessors,
+            accessor(
+                view,
+                count,
+                json::accessor::ComponentType::F32,
+                json::accessor::Type::Vec2,
+            ),
+        );
+        attributes.insert(Valid(json::mesh::Semantic::TexCoords(1)), accessor);
+    }
 
     Ok(json::mesh::Primitive {
         attributes,
