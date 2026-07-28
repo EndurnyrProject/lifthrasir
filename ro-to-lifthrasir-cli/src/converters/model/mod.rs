@@ -2,10 +2,6 @@
 //! glb mirroring its GRF path under `<models_dir>`, with every texture exported
 //! once into the run-wide `<models_dir>/tex/` pool.
 
-// NOTE: nothing calls `convert_model` yet -- the map conversion closure that
-// does is the next commit; drop this allow (and the one on `AssetRead`) there.
-#![allow(dead_code)]
-
 #[cfg(test)]
 pub mod fixtures;
 pub mod mesh;

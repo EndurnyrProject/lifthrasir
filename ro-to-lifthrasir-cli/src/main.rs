@@ -33,6 +33,10 @@ enum Command {
         loader: PathBuf,
         #[arg(long, default_value = "assets/data/maps")]
         out: PathBuf,
+        #[arg(long, default_value = "assets/data/models")]
+        models_dir: PathBuf,
+        #[arg(long)]
+        force_models: bool,
     },
     GenProto {
         #[arg(long)]
@@ -51,11 +55,17 @@ fn main() -> anyhow::Result<()> {
             let vfs = grf_vfs::GrfVfs::open(&grfs)?;
             converters::run(only.as_deref(), &vfs, &out)?;
         }
-        Command::ConvertMap { map, loader, out } => {
+        Command::ConvertMap {
+            map,
+            loader,
+            out,
+            models_dir,
+            force_models,
+        } => {
             let config = config::LoaderConfig::from_path(&loader)?;
             let grfs = config.grfs_by_priority();
             let vfs = grf_vfs::GrfVfs::open(&grfs)?;
-            converters::map::run(&vfs, &map, &out)?;
+            converters::map::run(&vfs, &map, &out, &models_dir, force_models)?;
         }
         Command::GenProto { src, out } => {
             proto_gen::run(&src, &out)?;

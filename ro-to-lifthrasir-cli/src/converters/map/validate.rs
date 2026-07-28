@@ -126,7 +126,11 @@ fn validate_nodes(root: &gltf::Node, blob: &[u8], inputs: &MapGlbInputs) -> anyh
                 counts.effects += 1;
             }
             RswObject::Model(model) => {
-                validate_extras(node, lif::EXTRAS_PROP, &writer::lif_prop(model))?;
+                validate_extras(
+                    node,
+                    lif::EXTRAS_PROP,
+                    &writer::lif_prop(model, inputs.converted_models),
+                )?;
                 ensure_position(node, model.position, map_width, map_height, &model.name)?;
                 counts.props += 1;
             }

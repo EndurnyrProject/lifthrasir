@@ -11,6 +11,7 @@ use ro_formats::{
     GndSurface, GndTile, RoGround, RoWorld, RswEffect, RswGround, RswLight, RswLightObj, RswModel,
     RswObject, RswSound, RswWater,
 };
+use std::collections::HashSet;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
@@ -154,6 +155,7 @@ pub struct Fixture {
     pub rsw_bytes: Vec<u8>,
     pub primitives: Vec<TerrainPrimitive>,
     pub textures: Vec<TextureOut>,
+    pub converted_models: HashSet<String>,
 }
 
 impl Fixture {
@@ -167,6 +169,7 @@ impl Fixture {
             gat_bytes: &self.gat,
             gnd_bytes: &self.gnd_bytes,
             rsw_bytes: &self.rsw_bytes,
+            converted_models: &self.converted_models,
         }
     }
 }
@@ -193,6 +196,7 @@ pub fn write_fixture() -> Fixture {
         rsw_bytes: b"rsw-bytes".to_vec(),
         primitives,
         textures: textures(),
+        converted_models: HashSet::new(),
     };
     write_glb(&fixture.path, &fixture.inputs()).expect("write glb");
     fixture
@@ -233,6 +237,7 @@ fn regenerate_game_engine_fixtures() {
             gat_bytes: &gat,
             gnd_bytes: b"gnd-bytes",
             rsw_bytes: b"rsw-bytes",
+            converted_models: &HashSet::new(),
         },
     )
     .expect("write mini_map.glb");

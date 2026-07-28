@@ -30,7 +30,7 @@ use lifthrasir_data::lif;
 use ro_formats::{
     RoAltitude, RoGround, RoWorld, RswEffect, RswLight, RswLightObj, RswModel, RswObject, RswSound,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 pub use crate::converters::gltf_out::{ROOT_FIX, hash_hex};
@@ -58,6 +58,10 @@ pub struct MapGlbInputs<'a> {
     pub gat_bytes: &'a [u8],
     pub gnd_bytes: &'a [u8],
     pub rsw_bytes: &'a [u8],
+    /// `RswModel::filename`s the per-map closure already converted to a
+    /// library glb (Converted or Skipped) -- what `lif_prop` flips to
+    /// `ro://models/...` instead of the native `ro://data/model/...` ref.
+    pub converted_models: &'a HashSet<String>,
 }
 
 /// Port of `game-engine/src/utils/coordinates.rs::rsw_position_to_bevy`.
@@ -478,9 +482,20 @@ pub fn lif_effect(effect: &RswEffect) -> lif::LifEffect {
     }
 }
 
-pub fn lif_prop(model: &RswModel) -> lif::LifProp {
+/// `converted` holds the models the per-map closure already turned into a
+/// library glb; a member gets the `ro://models/...` ref, everyone else keeps
+/// the native `.rsm` ref.
+pub fn lif_prop(model: &RswModel, converted: &HashSet<String>) -> lif::LifProp {
+    let model_ref = if converted.contains(&model.filename) {
+        format!(
+            "ro://models/{}",
+            crate::converters::model::glb_relative_path(&model.filename)
+        )
+    } else {
+        format!("ro://data/model/{}", to_forward_slashes(&model.filename))
+    };
     lif::LifProp {
-        model: format!("ro://data/model/{}", to_forward_slashes(&model.filename)),
+        model: model_ref,
         anim_type: model.anim_type,
         anim_speed: model.anim_speed,
     }
@@ -492,6 +507,7 @@ fn build_object_nodes(
     world: &RoWorld,
     map_width: f32,
     map_height: f32,
+    converted_models: &HashSet<String>,
 ) -> anyhow::Result<Vec<json::Index<json::Node>>> {
     let mut nodes = Vec::new();
 
@@ -510,7 +526,9 @@ fn build_object_nodes(
                 rsw_position_to_world(effect.position, map_width, map_height),
                 extras_for(lif::EXTRAS_EFFECT, &lif_effect(effect))?,
             ),
-            RswObject::Model(model) => build_prop_node(root, model, map_width, map_height)?,
+            RswObject::Model(model) => {
+                build_prop_node(root, model, map_width, map_height, converted_models)?
+            }
         };
         nodes.push(node);
     }
@@ -542,10 +560,11 @@ fn build_prop_node(
     model: &RswModel,
     map_width: f32,
     map_height: f32,
+    converted_models: &HashSet<String>,
 ) -> anyhow::Result<json::Index<json::Node>> {
     let translation = to_gltf_vec(rsw_position_to_world(model.position, map_width, map_height));
     let rotation = to_gltf_quat(rsw_model_rotation(model));
-    let extras = extras_for(lif::EXTRAS_PROP, &lif_prop(model))?;
+    let extras = extras_for(lif::EXTRAS_PROP, &lif_prop(model, converted_models))?;
 
     Ok(json::Index::push(
         &mut root.nodes,
@@ -589,6 +608,7 @@ pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
         inputs.world,
         map_width,
         map_height,
+        inputs.converted_models,
     )?);
 
     let scene_root = json::Index::push(
@@ -883,6 +903,7 @@ mod tests {
                 gat_bytes: &raw_gat(4, 4),
                 gnd_bytes: b"gnd",
                 rsw_bytes: b"rsw",
+                converted_models: &HashSet::new(),
             },
         )
         .expect("write glb");
@@ -1039,6 +1060,33 @@ mod tests {
     }
 
     #[test]
+    fn lif_prop_flips_to_the_library_glb_ref_when_the_model_was_converted() {
+        let world = mini_world();
+        let model = world
+            .objects
+            .iter()
+            .find_map(|object| match object {
+                RswObject::Model(model) => Some(model),
+                _ => None,
+            })
+            .expect("model object");
+
+        let native = lif_prop(model, &HashSet::new());
+        assert_eq!(native.model, "ro://data/model/prontera/tree01.rsm");
+
+        let mut converted = HashSet::new();
+        converted.insert(model.filename.clone());
+        let flipped = lif_prop(model, &converted);
+        assert_eq!(
+            flipped.model,
+            format!(
+                "ro://models/{}",
+                crate::converters::model::glb_relative_path(&model.filename)
+            )
+        );
+    }
+
+    #[test]
     fn a_primitive_referencing_an_unexported_texture_fails_loudly() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ground = mini_ground();
@@ -1054,6 +1102,7 @@ mod tests {
                 gat_bytes: &raw_gat(4, 4),
                 gnd_bytes: b"gnd",
                 rsw_bytes: b"rsw",
+                converted_models: &HashSet::new(),
             },
         )
         .expect_err("missing texture must fail");
