@@ -809,6 +809,22 @@ mod tests {
     }
 
     #[test]
+    fn the_phase_2_rsm1_glb_matches_its_pinned_digest() {
+        let dir = fixture_dir();
+        let rsm = animated_rsm();
+        let build = build_model(&rsm).expect("build");
+        let path = dir.path().join("phase2-rsm1.glb");
+        write_model_glb(&path, &rsm, "hash", &build, &textures()).expect("write");
+
+        let digest = blake3::hash(&std::fs::read(path).expect("read"));
+
+        assert_eq!(
+            digest.to_hex().as_str(),
+            "6b2cf1a22e709fdd4af7523dbff656a9183964c2acf7da0f32b26ee535301d6c"
+        );
+    }
+
+    #[test]
     fn the_same_model_written_twice_is_byte_identical() {
         let dir = fixture_dir();
         let rsm = animated_rsm();
