@@ -66,6 +66,18 @@ enum ModelCorpusCommand {
         #[arg(long, default_value = "target/rsm2-corpus/preflight-report.json")]
         report: PathBuf,
     },
+    Convert {
+        #[arg(long, default_value = "assets/convert.toml")]
+        loader: PathBuf,
+        #[arg(long, default_value = "target/rsm2-corpus/extracted")]
+        extracted: PathBuf,
+        #[arg(long, default_value = "target/rsm2-corpus/converted")]
+        out: PathBuf,
+        #[arg(long, default_value = "target/rsm2-corpus/report.json")]
+        report: PathBuf,
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -119,6 +131,34 @@ fn main() -> anyhow::Result<()> {
                     "RSM2 corpus preflight gates: {}; blockers: {}; full report: {}",
                     preflight.gate_message(),
                     preflight.blocking_paths(10).join(", "),
+                    report.display()
+                );
+            }
+            ModelCorpusCommand::Convert {
+                loader,
+                extracted,
+                out,
+                report,
+                force,
+            } => {
+                let config = config::LoaderConfig::from_path(&loader)?;
+                let grfs = config.grfs_by_priority();
+                let vfs = grf_vfs::GrfVfs::open(&grfs)?;
+                let corpus = converters::model::corpus::convert_corpus(
+                    &vfs, &extracted, &out, &report, force,
+                )?;
+                println!(
+                    "models: {}, supported RSM2: {} ({} well-formed), placements: {}, blockers: {}",
+                    corpus.totals.physical_models,
+                    corpus.totals.supported_rsm2,
+                    corpus.totals.well_formed_rsm2,
+                    corpus.totals.placements,
+                    corpus.blockers.len(),
+                );
+                anyhow::ensure!(
+                    !corpus.has_blockers(),
+                    "RSM corpus conversion blocked by: {}; full report: {}",
+                    corpus.blocking_paths(10).join(", "),
                     report.display()
                 );
             }

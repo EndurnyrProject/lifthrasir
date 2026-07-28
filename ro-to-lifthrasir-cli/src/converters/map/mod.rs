@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn convert_props_aborts_on_unsupported_or_malformed_rsm2_with_context() {
-        use crate::converters::model::fixtures::{FakeVfs, encode_rsm2};
+        use crate::converters::model::fixtures::FakeVfs;
 
         for (filename, bytes, version, stage) in [
             (
@@ -401,12 +401,6 @@ mod tests {
                 b"GRSM\x02\x03".to_vec(),
                 "2.3",
                 "stage parse RSM2",
-            ),
-            (
-                "prontera\\missing_texture.rsm2",
-                encode_rsm2(2, "missing.bmp"),
-                "2.2",
-                "stage export textures",
             ),
         ] {
             let path = format!("data/model/{}", filename.replace('\\', "/"));
@@ -423,5 +417,29 @@ mod tests {
             assert!(message.contains(stage), "{message}");
             assert!(!out.path().join(model::glb_relative_path(filename)).exists());
         }
+    }
+
+    #[test]
+    fn convert_props_uses_the_rsm2_missing_texture_fallback() {
+        use crate::converters::model::fixtures::{FakeVfs, encode_rsm2};
+
+        let filename = "prontera\\missing_texture.rsm2";
+        let path = format!("data/model/{}", filename.replace('\\', "/"));
+        let vfs = FakeVfs::with(&[(path.as_str(), encode_rsm2(2, "missing.bmp"))]);
+        let world = props_world(vec![model_object("fallback", filename)]);
+        let out = tempfile::tempdir().expect("tempdir");
+
+        convert_props(&vfs, "test_map", &world, out.path(), false).unwrap();
+
+        let glb = out.path().join(model::glb_relative_path(filename));
+        assert!(glb.is_file());
+        let (_, _, images) = gltf::import(glb).unwrap();
+        assert_eq!(images.len(), 1);
+        assert_eq!(
+            images[0].pixels,
+            [
+                255, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 255, 255,
+            ]
+        );
     }
 }

@@ -16,7 +16,7 @@ use crate::converters::map::textures::{TextureOut, sanitize_name, texture_bytes_
 use crate::grf_vfs::AssetRead;
 use anyhow::{Context, anyhow, bail, ensure};
 use ro_formats::{Rsm, Rsm2};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// RSM1 revisions the mesh builder and writer understand. RSM2 (`2.x`) is a
@@ -146,10 +146,14 @@ pub fn convert_model_bytes(
         ModelFormat::Unsupported { .. } => unreachable!("unsupported format passed dispatch"),
     };
 
-    let textures =
-        export_textures(texture_source, &model.textures, &relative, pool).with_context(|| {
-            format!("model {logical_path}, version {version}, stage export textures")
-        })?;
+    let textures = export_textures(
+        texture_source,
+        &model.textures,
+        &relative,
+        pool,
+        matches!(format, ModelFormat::Rsm2 { .. }),
+    )
+    .with_context(|| format!("model {logical_path}, version {version}, stage export textures"))?;
     let parent = out_path
         .parent()
         .with_context(|| format!("model output path has no parent: {}", out_path.display()))?;
@@ -198,13 +202,18 @@ fn export_textures(
     texture_names: &[String],
     relative_glb_path: &str,
     pool: &mut TexturePool,
+    allow_missing_or_bik_fallback: bool,
 ) -> anyhow::Result<Vec<TextureOut>> {
     let up = "../".repeat(relative_glb_path.matches('/').count());
 
     texture_names
         .iter()
         .map(|name| {
-            let texture = pool.export(vfs, name)?;
+            let texture = if allow_missing_or_bik_fallback {
+                pool.export_with_fallback(vfs, name)?
+            } else {
+                pool.export(vfs, name)?
+            };
             Ok(TextureOut {
                 relative_path: format!("{up}{}", texture.relative_path),
                 ..texture
@@ -214,7 +223,19 @@ fn export_textures(
 }
 
 /// Reads the `GRSM` magic and exact version without parsing the body.
-pub fn classify_header(bytes: &[u8]) -> anyhow::Result<ModelFormat> {
+pub fn fallback_texture_png() -> anyhow::Result<Vec<u8>> {
+    let pixels = vec![
+        255, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 255, 255,
+    ];
+    let image = image::RgbaImage::from_raw(2, 2, pixels).expect("fixed fallback image dimensions");
+    let mut output = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut output, image::ImageFormat::Png)
+        .context("encoding fallback texture")?;
+    Ok(output.into_inner())
+}
+
+fn classify_header(bytes: &[u8]) -> anyhow::Result<ModelFormat> {
     let header = bytes
         .get(..6)
         .context("file is shorter than an RSM header")?;
@@ -227,6 +248,7 @@ pub fn classify_header(bytes: &[u8]) -> anyhow::Result<ModelFormat> {
     })
 }
 
+#[cfg(test)]
 pub fn is_supported_version(bytes: &[u8]) -> anyhow::Result<bool> {
     Ok(matches!(
         classify_header(bytes)?,
@@ -246,6 +268,7 @@ pub struct TexturePool {
     tex_dir: PathBuf,
     /// Sanitized filename stem -> the source name that claimed it.
     claimed: HashMap<String, String>,
+    fallback_claims: HashSet<String>,
 }
 
 impl TexturePool {
@@ -253,6 +276,7 @@ impl TexturePool {
         Self {
             tex_dir: models_dir.join("tex"),
             claimed: HashMap::new(),
+            fallback_claims: HashSet::new(),
         }
     }
 
@@ -262,23 +286,47 @@ impl TexturePool {
         vfs: &impl AssetRead,
         source_name: &str,
     ) -> anyhow::Result<TextureOut> {
+        self.export_with_policy(vfs, source_name, false)
+    }
+
+    fn export_with_fallback(
+        &mut self,
+        vfs: &impl AssetRead,
+        source_name: &str,
+    ) -> anyhow::Result<TextureOut> {
+        self.export_with_policy(vfs, source_name, true)
+    }
+
+    fn export_with_policy(
+        &mut self,
+        vfs: &impl AssetRead,
+        source_name: &str,
+        allow_missing_or_bik_fallback: bool,
+    ) -> anyhow::Result<TextureOut> {
         let sanitized = sanitize_name(source_name);
         let texture = TextureOut {
             source_name: source_name.to_string(),
             relative_path: format!("tex/{sanitized}.png"),
         };
-
         match self.claimed.get(&sanitized) {
-            Some(previous) if previous == source_name => return Ok(texture),
+            Some(previous) if previous == source_name => {
+                if !allow_missing_or_bik_fallback && self.fallback_claims.contains(&sanitized) {
+                    self.write_png(vfs, source_name, &sanitized, false)?;
+                }
+                return Ok(texture);
+            }
             Some(previous) => bail!(
                 "texture name collision: '{source_name}' and '{previous}' both sanitize to '{sanitized}.png'"
             ),
             None => {}
         }
-
-        self.write_png(vfs, source_name, &sanitized)?;
-        self.claimed.insert(sanitized, source_name.to_string());
-
+        let used_fallback =
+            self.write_png(vfs, source_name, &sanitized, allow_missing_or_bik_fallback)?;
+        self.claimed
+            .insert(sanitized.clone(), source_name.to_string());
+        if used_fallback {
+            self.fallback_claims.insert(sanitized);
+        }
         Ok(texture)
     }
 
@@ -287,13 +335,22 @@ impl TexturePool {
         vfs: &impl AssetRead,
         source_name: &str,
         sanitized: &str,
-    ) -> anyhow::Result<()> {
+        allow_missing_or_bik_fallback: bool,
+    ) -> anyhow::Result<bool> {
         let logical_path = format!("data/texture/{source_name}");
-        let source_bytes = vfs
-            .read_asset(&logical_path)
-            .with_context(|| format!("texture not found in GRFs: {logical_path}"))?;
-        let png_bytes = texture_bytes_to_png(source_name, &source_bytes)
-            .with_context(|| format!("converting texture: {logical_path}"))?;
+        let is_bik = source_name
+            .rsplit_once('.')
+            .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("bik"));
+        let (png_bytes, used_fallback) = match vfs.read_asset(&logical_path) {
+            Some(_) if allow_missing_or_bik_fallback && is_bik => (fallback_texture_png()?, true),
+            Some(source_bytes) => (
+                texture_bytes_to_png(source_name, &source_bytes)
+                    .with_context(|| format!("converting texture: {logical_path}"))?,
+                false,
+            ),
+            None if allow_missing_or_bik_fallback => (fallback_texture_png()?, true),
+            None => bail!("texture not found in GRFs: {logical_path}"),
+        };
 
         let dest = self.tex_dir.join(format!("{sanitized}.png"));
         if dest.is_file() {
@@ -304,12 +361,13 @@ impl TexturePool {
                 "texture name collision: '{source_name}' sanitizes to '{sanitized}.png', already pooled from a different source at {}",
                 dest.display()
             );
-            return Ok(());
+            return Ok(used_fallback);
         }
 
         std::fs::create_dir_all(&self.tex_dir)
             .with_context(|| format!("creating {}", self.tex_dir.display()))?;
-        std::fs::write(&dest, &png_bytes).with_context(|| format!("writing {}", dest.display()))
+        std::fs::write(&dest, &png_bytes).with_context(|| format!("writing {}", dest.display()))?;
+        Ok(used_fallback)
     }
 }
 
@@ -501,24 +559,40 @@ mod tests {
     #[test]
     fn forced_failure_removes_stale_glb_before_parse_or_texture_export() {
         let source = encode_rsm2(2, "bark.bmp");
-        let vfs = vfs(&[], &["data/texture/bark.bmp"]);
+        let source_vfs = vfs(&[], &["data/texture/bark.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
         let mut pool = TexturePool::new(out.path());
         let glb = out.path().join(glb_relative_path(TREE));
 
-        convert_model_bytes(&vfs, TREE, &source, out.path(), &mut pool, false).unwrap();
+        convert_model_bytes(&source_vfs, TREE, &source, out.path(), &mut pool, false).unwrap();
         assert!(glb.is_file());
         assert!(
-            convert_model_bytes(&vfs, TREE, b"GRSM\x02\x03", out.path(), &mut pool, true,).is_err()
+            convert_model_bytes(
+                &source_vfs,
+                TREE,
+                b"GRSM\x02\x03",
+                out.path(),
+                &mut pool,
+                true,
+            )
+            .is_err()
         );
         assert!(!glb.exists());
 
-        convert_model_bytes(&vfs, TREE, &source, out.path(), &mut pool, false).unwrap();
+        convert_model_bytes(&source_vfs, TREE, &source, out.path(), &mut pool, false).unwrap();
         assert!(glb.is_file());
-        let missing_texture = encode_rsm2(2, "missing.bmp");
+        let unsupported_texture = encode_rsm2(2, "broken.webp");
+        let broken_vfs = vfs(&[], &["data/texture/broken.webp"]);
         assert!(
-            convert_model_bytes(&vfs, TREE, &missing_texture, out.path(), &mut pool, true,)
-                .is_err()
+            convert_model_bytes(
+                &broken_vfs,
+                TREE,
+                &unsupported_texture,
+                out.path(),
+                &mut pool,
+                true,
+            )
+            .is_err()
         );
         assert!(!glb.exists());
     }
@@ -568,6 +642,37 @@ mod tests {
             format!("{err:#}").contains("data/texture/bark.bmp"),
             "unexpected error: {err:#}"
         );
+    }
+
+    #[test]
+    fn rsm2_missing_and_bik_textures_use_the_pinned_fallback() {
+        for (source_name, include_source) in [("missing.bmp", false), ("screen.bik", true)] {
+            let model = encode_rsm2(3, source_name);
+            let textures = include_source
+                .then_some(source_name)
+                .into_iter()
+                .collect::<Vec<_>>();
+            let vfs = vfs(&[("data/model/fallback.rsm2", model)], &textures);
+            let out = tempfile::tempdir().expect("tempdir");
+            let mut pool = TexturePool::new(out.path());
+
+            assert_eq!(
+                convert_model(&vfs, "fallback.rsm2", out.path(), &mut pool, false,).unwrap(),
+                ConvertOutcome::Converted
+            );
+            let png = std::fs::read(
+                out.path()
+                    .join(format!("tex/{}.png", sanitize_name(source_name))),
+            )
+            .unwrap();
+            let image = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
+                .unwrap()
+                .to_rgba8();
+            assert_eq!(image.dimensions(), (2, 2));
+            assert_eq!(image.get_pixel(0, 0).0, [255, 0, 255, 255]);
+            assert_eq!(image.get_pixel(1, 0).0, [0, 0, 0, 255]);
+            assert!(pool.export(&vfs, source_name).is_err());
+        }
     }
 
     #[test]
