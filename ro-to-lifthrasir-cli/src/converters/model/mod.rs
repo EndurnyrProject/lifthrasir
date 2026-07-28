@@ -14,8 +14,8 @@ pub mod writer;
 use crate::converters::gltf_out::{hash_hex, to_forward_slashes};
 use crate::converters::map::textures::{TextureOut, sanitize_name, texture_bytes_to_png};
 use crate::grf_vfs::AssetRead;
-use anyhow::{Context, bail, ensure};
-use ro_formats::Rsm;
+use anyhow::{Context, anyhow, bail, ensure};
+use ro_formats::{Rsm, Rsm2};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -73,48 +73,122 @@ pub fn convert_model(
     pool: &mut TexturePool,
     force: bool,
 ) -> anyhow::Result<ConvertOutcome> {
-    let relative = glb_relative_path(filename);
-    let out_path = models_dir.join(&relative);
+    let out_path = models_dir.join(glb_relative_path(filename));
     if !force && out_path.is_file() {
         return Ok(ConvertOutcome::Skipped);
+    }
+    if force {
+        remove_existing_glb(&out_path)?;
     }
 
     let source_path = format!("data/model/{}", to_forward_slashes(filename));
     let bytes = vfs
         .read_asset(&source_path)
         .with_context(|| format!("model not found in GRFs: {source_path}"))?;
+    convert_model_bytes(vfs, filename, &bytes, models_dir, pool, force)
+}
 
-    let supported = is_supported_version(&bytes)
-        .with_context(|| format!("reading RSM header of {source_path}"))?;
-    if !supported {
-        return Ok(ConvertOutcome::UnsupportedVersion);
+/// Convert supplied physical model bytes while resolving texture dependencies
+/// through the overlay `texture_source`.
+pub fn convert_model_bytes(
+    texture_source: &impl AssetRead,
+    logical_path: &str,
+    source_bytes: &[u8],
+    models_dir: &Path,
+    pool: &mut TexturePool,
+    force: bool,
+) -> anyhow::Result<ConvertOutcome> {
+    let logical_path = to_forward_slashes(logical_path);
+    let relative = glb_relative_path(&logical_path);
+    let out_path = models_dir.join(&relative);
+    if !force && out_path.is_file() {
+        return Ok(ConvertOutcome::Skipped);
+    }
+    if force {
+        remove_existing_glb(&out_path)?;
     }
 
-    let rsm =
-        Rsm::from_bytes(&bytes).with_context(|| format!("parsing RSM model: {source_path}"))?;
-    let model = mesh::build_model(&rsm, &hash_hex(&bytes))
-        .with_context(|| format!("normalizing RSM1 model: {source_path}"))?;
+    let format = classify_header(source_bytes)
+        .with_context(|| format!("model {logical_path}, stage header"))?;
+    let (major, minor) = format.version();
+    let version = format!("{major}.{minor}");
+    match format {
+        ModelFormat::Unsupported { major: 1, .. } => {
+            return Ok(ConvertOutcome::UnsupportedVersion);
+        }
+        ModelFormat::Unsupported { major: 2, .. } => bail!(
+            "model {logical_path}, version {version}, stage dispatch: unsupported RSM2 version"
+        ),
+        ModelFormat::Unsupported { .. } => bail!(
+            "model {logical_path}, version {version}, stage dispatch: unsupported model family"
+        ),
+        ModelFormat::Rsm1 { .. } | ModelFormat::Rsm2 { .. } => {}
+    }
 
-    let textures = export_textures(vfs, &model.textures, &relative, pool)
-        .with_context(|| format!("exporting textures of model: {source_path}"))?;
+    let source_hash = hash_hex(source_bytes);
+    let model = match format {
+        ModelFormat::Rsm1 { .. } => {
+            let source = Rsm::from_bytes(source_bytes).with_context(|| {
+                format!("model {logical_path}, version {version}, stage parse RSM1")
+            })?;
+            mesh::build_model(&source, &source_hash).with_context(|| {
+                format!("model {logical_path}, version {version}, stage normalize RSM1")
+            })?
+        }
+        ModelFormat::Rsm2 { .. } => {
+            let source = Rsm2::from_bytes(source_bytes).with_context(|| {
+                format!("model {logical_path}, version {version}, stage parse RSM2")
+            })?;
+            rsm2::build_model(&source, &source_hash).with_context(|| {
+                format!("model {logical_path}, version {version}, stage normalize RSM2")
+            })?
+        }
+        ModelFormat::Unsupported { .. } => unreachable!("unsupported format passed dispatch"),
+    };
 
+    let textures =
+        export_textures(texture_source, &model.textures, &relative, pool).with_context(|| {
+            format!("model {logical_path}, version {version}, stage export textures")
+        })?;
     let parent = out_path
         .parent()
         .with_context(|| format!("model output path has no parent: {}", out_path.display()))?;
-    std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    std::fs::create_dir_all(parent).with_context(|| {
+        format!("model {logical_path}, version {version}, stage create output directory")
+    })?;
 
-    let written = writer::write_model_glb(&out_path, &model, &textures).and_then(|()| {
-        validate::validate(&out_path, &model, &textures)
-            .with_context(|| format!("validating {}", out_path.display()))
-    });
+    let written = writer::write_model_glb(&out_path, &model, &textures)
+        .with_context(|| format!("model {logical_path}, version {version}, stage write GLB"))
+        .and_then(|()| {
+            validate::validate(&out_path, &model, &textures).with_context(|| {
+                format!("model {logical_path}, version {version}, stage validate GLB")
+            })
+        });
     if let Err(error) = written {
-        // A half-written or invalid glb left behind would be taken for a good
-        // one -- and skipped -- by the next run.
-        std::fs::remove_file(&out_path).ok();
-        return Err(error);
+        return Err(remove_partial_glb(&out_path, error));
     }
 
     Ok(ConvertOutcome::Converted)
+}
+
+fn remove_existing_glb(out_path: &Path) -> anyhow::Result<()> {
+    match std::fs::remove_file(out_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error)
+            .with_context(|| format!("removing stale model output {}", out_path.display())),
+    }
+}
+
+fn remove_partial_glb(out_path: &Path, error: anyhow::Error) -> anyhow::Error {
+    match std::fs::remove_file(out_path) {
+        Ok(()) => error,
+        Err(cleanup) if cleanup.kind() == std::io::ErrorKind::NotFound => error,
+        Err(cleanup) => anyhow!(
+            "{error:#}; additionally failed to remove partial GLB {}: {cleanup}",
+            out_path.display()
+        ),
+    }
 }
 
 /// Index-aligned with `rsm.textures`, as `write_model_glb` requires, with each
@@ -154,7 +228,10 @@ pub fn classify_header(bytes: &[u8]) -> anyhow::Result<ModelFormat> {
 }
 
 pub fn is_supported_version(bytes: &[u8]) -> anyhow::Result<bool> {
-    Ok(matches!(classify_header(bytes)?, ModelFormat::Rsm1 { .. }))
+    Ok(matches!(
+        classify_header(bytes)?,
+        ModelFormat::Rsm1 { .. } | ModelFormat::Rsm2 { .. }
+    ))
 }
 
 /// The `<models_dir>/tex/` PNG pool shared by every model in one run.
@@ -239,7 +316,8 @@ impl TexturePool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::converters::model::fixtures::{FakeVfs, bmp_bytes, encode_rsm};
+    use crate::converters::model::fixtures::{FakeVfs, bmp_bytes, encode_rsm, encode_rsm2};
+    use lifthrasir_data::lif;
 
     const TREE: &str = "prontera\\Tree01.rsm";
     const BUSH: &str = "prontera\\Bush01.rsm";
@@ -343,18 +421,119 @@ mod tests {
     }
 
     #[test]
-    fn rsm2_is_reported_as_unsupported_not_an_error() {
-        let models = vec![(
-            "data/model/prontera/Tree01.rsm",
-            encode_rsm((2, 2), &["bark.bmp"]),
-        )];
-        let vfs = vfs(&models, &["data/texture/bark.bmp"]);
+    fn converts_rsm2_2_2_and_2_3_by_header_with_pooled_textures() {
+        for (minor, logical_path) in [(2, "prontera\\Tree01.rsm2"), (3, TREE)] {
+            let source = encode_rsm2(minor, "bark.bmp");
+            let vfs = vfs(&[], &["data/texture/bark.bmp"]);
+            let out = tempfile::tempdir().expect("tempdir");
+            let mut pool = TexturePool::new(out.path());
+
+            let outcome =
+                convert_model_bytes(&vfs, logical_path, &source, out.path(), &mut pool, false)
+                    .expect("convert RSM2");
+
+            assert_eq!(outcome, ConvertOutcome::Converted);
+            let glb = out.path().join(glb_relative_path(logical_path));
+            assert!(glb.is_file());
+            assert!(out.path().join("tex/bark_bmp.png").is_file());
+            let (document, _, _) = gltf::import(glb).expect("reimport");
+            let root = document.into_json();
+            let provenance: lif::LifModel = serde_json::from_value(
+                root.extensions.as_ref().expect("extensions").others[lif::EXTENSION_MODEL].clone(),
+            )
+            .expect("LIF_model");
+            assert_eq!(provenance.rsm_hash, hash_hex(&source));
+        }
+    }
+
+    #[test]
+    fn physical_bytes_win_over_overlay_model_and_skip_is_idempotent() {
+        let physical = encode_rsm2(2, "bark.bmp");
+        let overlay = encode_rsm2(3, "other.bmp");
+        let vfs = vfs(
+            &[("data/model/prontera/Tree01.rsm", overlay)],
+            &["data/texture/bark.bmp"],
+        );
         let out = tempfile::tempdir().expect("tempdir");
         let mut pool = TexturePool::new(out.path());
 
-        let outcome = convert_model(&vfs, TREE, out.path(), &mut pool, false).expect("no error");
+        assert_eq!(
+            convert_model_bytes(&vfs, TREE, &physical, out.path(), &mut pool, false).unwrap(),
+            ConvertOutcome::Converted
+        );
+        assert_eq!(vfs.reads("data/model/prontera/Tree01.rsm"), 0);
+        assert_eq!(
+            convert_model_bytes(&vfs, TREE, b"ignored", out.path(), &mut pool, false).unwrap(),
+            ConvertOutcome::Skipped
+        );
+        assert_eq!(
+            convert_model_bytes(&vfs, TREE, &physical, out.path(), &mut pool, true).unwrap(),
+            ConvertOutcome::Converted
+        );
+    }
 
-        assert_eq!(outcome, ConvertOutcome::UnsupportedVersion);
+    #[test]
+    fn only_unsupported_legacy_rsm1_falls_back() {
+        let vfs = FakeVfs::default();
+        let out = tempfile::tempdir().expect("tempdir");
+        let mut pool = TexturePool::new(out.path());
+        let legacy = b"GRSM\x01\x06";
+        assert_eq!(
+            convert_model_bytes(&vfs, TREE, legacy, out.path(), &mut pool, false).unwrap(),
+            ConvertOutcome::UnsupportedVersion
+        );
+
+        for bytes in [b"GRSM\x02\x04".as_slice(), b"GRSM\x03\x00".as_slice()] {
+            let error = convert_model_bytes(&vfs, TREE, bytes, out.path(), &mut pool, false)
+                .expect_err("must fail");
+            let message = format!("{error:#}");
+            assert!(
+                message.contains("prontera/Tree01.rsm"),
+                "unexpected error: {message}"
+            );
+            assert!(
+                message.contains("stage dispatch"),
+                "unexpected error: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn forced_failure_removes_stale_glb_before_parse_or_texture_export() {
+        let source = encode_rsm2(2, "bark.bmp");
+        let vfs = vfs(&[], &["data/texture/bark.bmp"]);
+        let out = tempfile::tempdir().expect("tempdir");
+        let mut pool = TexturePool::new(out.path());
+        let glb = out.path().join(glb_relative_path(TREE));
+
+        convert_model_bytes(&vfs, TREE, &source, out.path(), &mut pool, false).unwrap();
+        assert!(glb.is_file());
+        assert!(
+            convert_model_bytes(&vfs, TREE, b"GRSM\x02\x03", out.path(), &mut pool, true,).is_err()
+        );
+        assert!(!glb.exists());
+
+        convert_model_bytes(&vfs, TREE, &source, out.path(), &mut pool, false).unwrap();
+        assert!(glb.is_file());
+        let missing_texture = encode_rsm2(2, "missing.bmp");
+        assert!(
+            convert_model_bytes(&vfs, TREE, &missing_texture, out.path(), &mut pool, true,)
+                .is_err()
+        );
+        assert!(!glb.exists());
+    }
+
+    #[test]
+    fn malformed_rsm2_is_fatal_with_version_and_stage() {
+        let vfs = FakeVfs::default();
+        let out = tempfile::tempdir().expect("tempdir");
+        let mut pool = TexturePool::new(out.path());
+        let error = convert_model_bytes(&vfs, TREE, b"GRSM\x02\x03", out.path(), &mut pool, false)
+            .expect_err("must fail");
+        let message = format!("{error:#}");
+        assert!(message.contains("prontera/Tree01.rsm"));
+        assert!(message.contains("version 2.3"));
+        assert!(message.contains("stage parse RSM2"));
         assert!(!out.path().join("prontera/tree01.glb").exists());
     }
 

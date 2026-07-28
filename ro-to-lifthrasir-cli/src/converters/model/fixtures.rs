@@ -282,6 +282,61 @@ pub fn encode_rsm(version: (u8, u8), textures: &[&str]) -> Vec<u8> {
     bytes
 }
 
+pub fn encode_rsm2(minor: u8, texture: &str) -> Vec<u8> {
+    assert!(matches!(minor, 2 | 3));
+    let mut bytes = b"GRSM".to_vec();
+    bytes.extend([2, minor]);
+    bytes.extend(0i32.to_le_bytes());
+    bytes.extend(2i32.to_le_bytes());
+    bytes.push(255);
+    bytes.extend(30.0f32.to_le_bytes());
+    if minor == 2 {
+        bytes.extend(1i32.to_le_bytes());
+        dynamic_string(&mut bytes, texture);
+    }
+    bytes.extend(1i32.to_le_bytes());
+    dynamic_string(&mut bytes, "main");
+    bytes.extend(1i32.to_le_bytes());
+    dynamic_string(&mut bytes, "main");
+    dynamic_string(&mut bytes, "");
+    bytes.extend(1i32.to_le_bytes());
+    if minor == 2 {
+        bytes.extend(0i32.to_le_bytes());
+    } else {
+        dynamic_string(&mut bytes, texture);
+    }
+    extend_f32(&mut bytes, &[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+    extend_f32(&mut bytes, &[0.0, 0.0, 0.0]);
+    bytes.extend(3i32.to_le_bytes());
+    extend_f32(&mut bytes, &[0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]);
+    bytes.extend(3i32.to_le_bytes());
+    for (u, v) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)] {
+        extend_f32(&mut bytes, &[0.0, u, v]);
+    }
+    bytes.extend(1i32.to_le_bytes());
+    bytes.extend(32i32.to_le_bytes());
+    for value in [0u16, 1, 2, 0, 1, 2, 0, 0] {
+        bytes.extend(value.to_le_bytes());
+    }
+    bytes.extend(0i32.to_le_bytes());
+    for value in [1i32, 1, 1] {
+        bytes.extend(value.to_le_bytes());
+    }
+    bytes.extend(0i32.to_le_bytes());
+    bytes.extend(0i32.to_le_bytes());
+    bytes.extend(0i32.to_le_bytes());
+    if minor == 3 {
+        bytes.extend(0i32.to_le_bytes());
+    }
+    bytes.extend(0i32.to_le_bytes());
+    bytes
+}
+
+fn dynamic_string(bytes: &mut Vec<u8>, value: &str) {
+    bytes.extend((value.len() as i32).to_le_bytes());
+    bytes.extend(value.as_bytes());
+}
+
 fn fixed_string(value: &str) -> [u8; 40] {
     let mut field = [0u8; 40];
     field[..value.len()].copy_from_slice(value.as_bytes());
