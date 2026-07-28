@@ -9,7 +9,7 @@ pub mod validate;
 pub mod writer;
 
 use crate::converters::gltf_out::{hash_hex, to_forward_slashes};
-use crate::converters::map::textures::{TextureOut, bmp_bytes_to_keyed_png, sanitize_name};
+use crate::converters::map::textures::{TextureOut, sanitize_name, texture_bytes_to_png};
 use crate::grf_vfs::AssetRead;
 use anyhow::{Context, bail, ensure};
 use ro_formats::Rsm;
@@ -64,9 +64,9 @@ pub fn convert_model(
         .read_asset(&source_path)
         .with_context(|| format!("model not found in GRFs: {source_path}"))?;
 
-    let (major, minor) =
-        rsm_version(&bytes).with_context(|| format!("reading RSM header of {source_path}"))?;
-    if major != SUPPORTED_MAJOR || !SUPPORTED_MINORS.contains(&minor) {
+    let supported = is_supported_version(&bytes)
+        .with_context(|| format!("reading RSM header of {source_path}"))?;
+    if !supported {
         return Ok(ConvertOutcome::UnsupportedVersion);
     }
 
@@ -122,12 +122,12 @@ fn export_textures(
 
 /// Reads the `GRSM` magic and version bytes without parsing the body, so a
 /// model the parser cannot read can still be classified by version.
-fn rsm_version(bytes: &[u8]) -> anyhow::Result<(u8, u8)> {
+pub fn is_supported_version(bytes: &[u8]) -> anyhow::Result<bool> {
     let header = bytes
         .get(..6)
         .context("file is shorter than an RSM header")?;
     ensure!(&header[..4] == b"GRSM", "bad RSM magic: {:?}", &header[..4]);
-    Ok((header[4], header[5]))
+    Ok(header[4] == SUPPORTED_MAJOR && SUPPORTED_MINORS.contains(&header[5]))
 }
 
 /// The `<models_dir>/tex/` PNG pool shared by every model in one run.
@@ -185,10 +185,10 @@ impl TexturePool {
         sanitized: &str,
     ) -> anyhow::Result<()> {
         let logical_path = format!("data/texture/{source_name}");
-        let bmp_bytes = vfs
+        let source_bytes = vfs
             .read_asset(&logical_path)
             .with_context(|| format!("texture not found in GRFs: {logical_path}"))?;
-        let png_bytes = bmp_bytes_to_keyed_png(&bmp_bytes)
+        let png_bytes = texture_bytes_to_png(source_name, &source_bytes)
             .with_context(|| format!("converting texture: {logical_path}"))?;
 
         let dest = self.tex_dir.join(format!("{sanitized}.png"));
@@ -256,7 +256,7 @@ mod tests {
 
         assert_eq!(outcome, ConvertOutcome::Converted);
         assert!(out.path().join("prontera/tree01.glb").is_file());
-        assert!(out.path().join("tex/bark.png").is_file());
+        assert!(out.path().join("tex/bark_bmp.png").is_file());
     }
 
     /// The glb sits one directory below `models_dir`, so its image URIs have to
@@ -278,7 +278,7 @@ mod tests {
                 gltf::image::Source::View { .. } => None,
             })
             .collect();
-        assert_eq!(uris, ["../tex/bark.png"]);
+        assert_eq!(uris, ["../tex/bark_bmp.png"]);
     }
 
     #[test]
@@ -384,7 +384,7 @@ mod tests {
             false,
         )
         .expect("first run");
-        let pooled = std::fs::read(out.path().join("tex/bark.png")).expect("pooled png");
+        let pooled = std::fs::read(out.path().join("tex/bark_bmp.png")).expect("pooled png");
 
         let outcome = convert_model(
             &vfs,
@@ -397,7 +397,7 @@ mod tests {
 
         assert_eq!(outcome, ConvertOutcome::Converted);
         assert_eq!(
-            std::fs::read(out.path().join("tex/bark.png")).expect("pooled png"),
+            std::fs::read(out.path().join("tex/bark_bmp.png")).expect("pooled png"),
             pooled
         );
     }
@@ -439,7 +439,10 @@ mod tests {
         .expect_err("must collide");
 
         let message = format!("{err:#}");
-        assert!(message.contains("a_b.png"), "unexpected error: {message}");
+        assert!(
+            message.contains("a_b_bmp.png"),
+            "unexpected error: {message}"
+        );
         assert!(message.contains("a_b.bmp"), "unexpected error: {message}");
     }
 

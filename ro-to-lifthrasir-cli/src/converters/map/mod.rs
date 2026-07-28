@@ -142,12 +142,10 @@ mod tests {
     use super::*;
     use crate::config::{GrfEntry, LoaderConfig};
 
-    /// End-to-end against the retail GRFs: convert a real map and let the
-    /// validator judge the output. Ignored by default because it needs
-    /// `assets/*.grf`, which are not in the repo.
-    #[test]
-    #[ignore = "requires the retail GRFs in assets/"]
-    fn converts_a_real_map_and_validates_the_output() {
+    /// The Phase 1 pilot map, and the one the prop closure is proven on.
+    const PILOT_MAP: &str = "izlude";
+
+    fn open_retail_grfs() -> GrfVfs {
         let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("workspace root");
@@ -165,7 +163,33 @@ mod tests {
                 priority: entry.priority,
             })
             .collect();
-        let vfs = GrfVfs::open(&entries.iter().collect::<Vec<_>>()).expect("open GRFs");
+        GrfVfs::open(&entries.iter().collect::<Vec<_>>()).expect("open GRFs")
+    }
+
+    /// The `lif_prop.model` ref of every prop node in a written map glb.
+    fn prop_model_refs(glb_path: &Path) -> Vec<String> {
+        let gltf::Gltf { document, .. } = gltf::Gltf::open(glb_path).expect("reopen map glb");
+        document
+            .nodes()
+            .filter_map(|node| {
+                let raw = node.extras().as_ref()?;
+                let extras: serde_json::Value =
+                    serde_json::from_str(raw.get()).expect("parsing node extras");
+                let prop = extras.get(lifthrasir_data::lif::EXTRAS_PROP)?;
+                let prop: lifthrasir_data::lif::LifProp =
+                    serde_json::from_value(prop.clone()).expect("decoding lif_prop");
+                Some(prop.model)
+            })
+            .collect()
+    }
+
+    /// End-to-end against the retail GRFs: convert a real map and let the
+    /// validator judge the output. Ignored by default because it needs
+    /// `assets/*.grf`, which are not in the repo.
+    #[test]
+    #[ignore = "requires the retail GRFs in assets/"]
+    fn converts_a_real_map_and_validates_the_output() {
+        let vfs = open_retail_grfs();
         let out = tempfile::tempdir().expect("tempdir");
         let models_dir = out.path().join("models");
 
@@ -176,6 +200,64 @@ mod tests {
             .expect("tex dir")
             .count();
         assert!(textures > 0, "no textures exported");
+    }
+
+    /// The prop closure on real data: every prop the pilot map references
+    /// resolves to a library glb that exists on disk, and the only refs left on
+    /// the native `.rsm` path are models the converter reports as an
+    /// unsupported RSM version.
+    #[test]
+    #[ignore = "requires the retail GRFs in assets/"]
+    fn the_pilot_map_prop_refs_close_over_the_glb_library() {
+        let vfs = open_retail_grfs();
+        let out = tempfile::tempdir().expect("tempdir");
+        let models_dir = out.path().join("models");
+
+        run(&vfs, PILOT_MAP, out.path(), &models_dir, false).expect("convert pilot map");
+
+        let refs = prop_model_refs(&out.path().join(format!("{PILOT_MAP}/{PILOT_MAP}.glb")));
+        assert!(!refs.is_empty(), "{PILOT_MAP} referenced no props");
+
+        let mut library = HashSet::new();
+        for model_ref in &refs {
+            if let Some(relative) = model_ref.strip_prefix("ro://models/") {
+                assert!(
+                    models_dir.join(relative).is_file(),
+                    "prop ref '{model_ref}' has no glb under {}",
+                    models_dir.display()
+                );
+                library.insert(relative.to_string());
+                continue;
+            }
+
+            let native = model_ref
+                .strip_prefix("ro://data/model/")
+                .unwrap_or_else(|| panic!("unexpected prop ref '{model_ref}'"));
+            let bytes = vfs
+                .read_asset(&format!("data/model/{native}"))
+                .unwrap_or_else(|| panic!("prop '{native}' not in the GRFs"));
+            assert!(
+                !model::is_supported_version(&bytes).expect("RSM header"),
+                "prop '{native}' kept its native ref at a supported RSM version"
+            );
+        }
+        assert!(!library.is_empty(), "{PILOT_MAP} produced no library glbs");
+
+        // `gltf::import` resolves the `../tex/` image URIs off disk and decodes
+        // every PNG, which `Gltf::open` (what the converter's own validator
+        // uses) does not.
+        let animated = library
+            .iter()
+            .map(|relative| {
+                let path = models_dir.join(relative);
+                let (document, _, images) =
+                    gltf::import(&path).unwrap_or_else(|error| panic!("{relative}: {error}"));
+                assert!(!images.is_empty(), "{relative} resolved no images");
+                document.animations().count()
+            })
+            .filter(|count| *count > 0)
+            .count();
+        assert!(animated > 0, "{PILOT_MAP} produced no animated prop glbs");
     }
 
     fn props_world(objects: Vec<RswObject>) -> RoWorld {

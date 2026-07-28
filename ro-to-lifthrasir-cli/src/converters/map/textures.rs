@@ -64,10 +64,10 @@ fn normalize_one(
     tex_dir: &Path,
 ) -> anyhow::Result<TextureOut> {
     let logical_path = format!("data/texture/{name}");
-    let bmp_bytes = vfs
+    let source_bytes = vfs
         .read(&logical_path)
         .with_context(|| format!("texture not found in GRFs: {logical_path}"))?;
-    let png_bytes = bmp_bytes_to_keyed_png(&bmp_bytes)
+    let png_bytes = texture_bytes_to_png(name, &source_bytes)
         .with_context(|| format!("converting texture: {logical_path}"))?;
 
     let file_name = format!("{sanitized}.png");
@@ -80,12 +80,40 @@ fn normalize_one(
     })
 }
 
+/// Normalizes one GRF texture into RGBA PNG the way the runtime loaders would.
+///
+/// The extension picks the semantics, mirroring the asset-server dispatch:
+/// BMPs are magenta-keyed (`bmp_loader.rs`), TGAs carry real 8-bit alpha and
+/// are taken verbatim (`tga_loader.rs`). RSM props reference both; GND ground
+/// textures are BMP only.
+pub fn texture_bytes_to_png(source_name: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let extension = source_name
+        .rsplit_once('.')
+        .map_or(String::new(), |(_, ext)| ext.to_ascii_lowercase());
+
+    match extension.as_str() {
+        "bmp" => bmp_bytes_to_keyed_png(bytes),
+        "tga" => decoded_to_png(
+            image::load_from_memory_with_format(bytes, ImageFormat::Tga).context("decoding TGA")?,
+        ),
+        other => bail!("unsupported texture format '{other}' for '{source_name}'"),
+    }
+}
+
 pub fn bmp_bytes_to_keyed_png(bmp_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
     let mut image = image::load_from_memory_with_format(bmp_bytes, ImageFormat::Bmp)
         .context("decoding BMP")?
         .to_rgba8();
     apply_magenta_transparency(&mut image);
 
+    encode_png(&image)
+}
+
+fn decoded_to_png(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
+    encode_png(&image.to_rgba8())
+}
+
+fn encode_png(image: &RgbaImage) -> anyhow::Result<Vec<u8>> {
     let mut png_bytes = Vec::new();
     image
         .write_to(&mut Cursor::new(&mut png_bytes), ImageFormat::Png)
@@ -108,19 +136,20 @@ fn apply_magenta_transparency(image: &mut RgbaImage) {
     }
 }
 
-/// Lowercase ASCII, path-safe filename for a GND texture name. Keeps the
+/// Lowercase ASCII, path-safe filename for a GRF texture name. Keeps the
 /// whole relative path (directory components included) flattened into one
 /// component, so distinct source paths with the same basename (e.g.
 /// `floor\dirt.bmp` vs `wall\dirt.bmp`) never sanitize to the same output.
+/// The extension is part of that name -- retail props reference
+/// `izlude\iz_rookie_06.bmp` and `izlude\iz_rookie_06.tga`, two different
+/// images -- so it is folded in like any other character rather than stripped.
 ///
 /// Roughly half the GRF texture namespace is Korean; those names lose every
 /// character to the ASCII filter, so a short digest of the source name is
 /// appended to keep them apart. `assign_unique_sanitized_names` stays the
 /// loud backstop.
 pub fn sanitize_name(name: &str) -> String {
-    let stem = name.rsplit_once('.').map_or(name, |(base, _)| base);
-
-    let sanitized: String = stem
+    let sanitized: String = name
         .chars()
         .map(|c| {
             let lower = c.to_ascii_lowercase();
@@ -138,7 +167,7 @@ pub fn sanitize_name(name: &str) -> String {
         sanitized
     };
 
-    if stem.is_ascii() {
+    if name.is_ascii() {
         return sanitized;
     }
     format!(
@@ -193,6 +222,38 @@ mod tests {
         assert_eq!(decoded.get_pixel(0, 0).0, [0, 0, 0, 0]);
     }
 
+    /// RSM props reference TGAs, which carry real alpha and are never
+    /// magenta-keyed by the runtime loader.
+    #[test]
+    fn tga_alpha_survives_and_magenta_is_not_keyed_out() {
+        let magenta = [255, 0, 255, 255];
+        let translucent = [10, 200, 10, 64];
+        let mut image = RgbaImage::new(2, 1);
+        image.put_pixel(0, 0, Rgba(magenta));
+        image.put_pixel(1, 0, Rgba(translucent));
+        let mut tga = Vec::new();
+        image
+            .write_to(&mut Cursor::new(&mut tga), ImageFormat::Tga)
+            .expect("encode synthetic tga");
+
+        let png_bytes = texture_bytes_to_png("iz_rookie_06.tga", &tga).expect("convert");
+        let decoded = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png)
+            .expect("decode png")
+            .to_rgba8();
+
+        assert_eq!(decoded.get_pixel(0, 0).0, magenta);
+        assert_eq!(decoded.get_pixel(1, 0).0, translucent);
+    }
+
+    #[test]
+    fn an_unknown_texture_extension_fails_loudly() {
+        let err = texture_bytes_to_png("weird.dds", &[0u8; 8]).expect_err("must fail");
+
+        let message = err.to_string();
+        assert!(message.contains("weird.dds"), "unexpected error: {message}");
+        assert!(message.contains("dds"), "unexpected error: {message}");
+    }
+
     #[test]
     fn missing_texture_in_vfs_fails_loudly() {
         let vfs = GrfVfs::open(&[] as &[&GrfEntry]).expect("empty vfs opens");
@@ -208,9 +269,26 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_name_flattens_directories_strips_extension_and_non_ascii() {
-        assert_eq!(sanitize_name("grass01.bmp"), "grass01");
-        assert_eq!(sanitize_name("sub\\dir\\Grass 01.bmp"), "sub_dir_grass_01");
+    fn sanitize_name_flattens_directories_and_non_ascii() {
+        assert_eq!(sanitize_name("grass01.bmp"), "grass01_bmp");
+        assert_eq!(
+            sanitize_name("sub\\dir\\Grass 01.bmp"),
+            "sub_dir_grass_01_bmp"
+        );
+    }
+
+    /// Two retail props reference `iz_rookie_06.bmp` and `iz_rookie_06.tga`:
+    /// different images, so they must not share a pooled PNG.
+    #[test]
+    fn the_same_stem_under_two_extensions_stays_distinct() {
+        let names = vec![
+            "izlude\\iz_rookie_06.bmp".to_string(),
+            "izlude\\iz_rookie_06.tga".to_string(),
+        ];
+
+        let sanitized = assign_unique_sanitized_names(&names).expect("no collision");
+
+        assert_ne!(sanitized[0], sanitized[1]);
     }
 
     #[test]
@@ -220,8 +298,8 @@ mod tests {
         let sanitized = assign_unique_sanitized_names(&names).expect("no collision");
 
         assert_ne!(sanitized[0], sanitized[1]);
-        assert_eq!(sanitized[0], "floor_dirt");
-        assert_eq!(sanitized[1], "wall_dirt");
+        assert_eq!(sanitized[0], "floor_dirt_bmp");
+        assert_eq!(sanitized[1], "wall_dirt_bmp");
     }
 
     /// Half the GRF texture namespace is EUC-KR; stripping the non-ASCII
