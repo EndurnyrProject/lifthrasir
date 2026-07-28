@@ -5,16 +5,22 @@ use crate::domain::settings::GraphicsSettings;
 use crate::domain::system_sets::ModelRenderingSystems;
 use crate::domain::world::components::MapLoader;
 #[cfg(feature = "map-gltf")]
-use crate::domain::world::gltf_map::LifPropRef;
+use crate::domain::world::gltf_map::{LifPropRef, ROOT_FIX};
+#[cfg(feature = "map-gltf")]
+use crate::domain::world::gltf_prop::{PropAnim, wire_prop_scene};
 use crate::domain::world::map_scoped::MapScoped;
 use crate::infrastructure::assets::bmp_loader::BmpLoaderSettings;
 use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset, RsmAsset};
 use crate::infrastructure::ro_formats::{RsmFile, RswObject};
 use crate::utils::{get_map_dimensions_from_ground, rsw_to_bevy_transform};
 use bevy::asset::RenderAssetUsages;
+#[cfg(feature = "map-gltf")]
+use bevy::gltf::GltfAssetLabel;
 use bevy::math::{Mat4, Vec4};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
+#[cfg(feature = "map-gltf")]
+use bevy::world_serialization::WorldAssetRoot;
 use bevy_auto_plugin::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -244,6 +250,12 @@ pub(crate) fn rsw_anim_type_to_animation_type(anim_type: u32) -> AnimationType {
 /// [`update_model_meshes`] takes over from there untouched.
 ///
 /// [`MapModel`] doubles as the once-only marker: every [`LifPropRef`] gets one.
+///
+/// Dispatches on the `lif_prop` path extension -- the converter's whole
+/// contract with this function. `.rsm` keeps the native loading path above
+/// untouched; `.glb` spawns a child carrying the converted prop scene. Any
+/// other extension is a converter bug: it is logged loudly and left alone
+/// rather than panicking a frame system.
 #[cfg(feature = "map-gltf")]
 pub fn spawn_gltf_map_props(
     mut commands: Commands,
@@ -251,21 +263,51 @@ pub fn spawn_gltf_map_props(
     props: Query<(Entity, &LifPropRef), Without<MapModel>>,
 ) {
     for (entity, prop) in props.iter() {
-        let handle: Handle<RsmAsset> = asset_server.load(&prop.0.model);
-        let anim_type = rsw_anim_type_to_animation_type(prop.0.anim_type);
+        let path = &prop.0.model;
 
-        commands.entity(entity).insert((
-            MapModel {
+        if path.ends_with(".rsm") {
+            let handle: Handle<RsmAsset> = asset_server.load(path);
+            let anim_type = rsw_anim_type_to_animation_type(prop.0.anim_type);
+
+            commands.entity(entity).insert((
+                MapModel {
+                    filename: prop.0.model.clone(),
+                    node_name: String::new(),
+                },
+                RsmLoading { handle },
+            ));
+
+            if anim_type != AnimationType::None {
+                commands
+                    .entity(entity)
+                    .insert((anim_type, AnimationSpeed(prop.0.anim_speed)));
+            }
+        } else if path.ends_with(".glb") {
+            commands.entity(entity).insert(MapModel {
                 filename: prop.0.model.clone(),
                 node_name: String::new(),
-            },
-            RsmLoading { handle },
-        ));
+            });
 
-        if anim_type != AnimationType::None {
             commands
-                .entity(entity)
-                .insert((anim_type, AnimationSpeed(prop.0.anim_speed)));
+                .spawn((
+                    Transform::from_rotation(ROOT_FIX),
+                    WorldAssetRoot(
+                        asset_server.load(GltfAssetLabel::Scene(0).from_asset(path.clone())),
+                    ),
+                    PropAnim {
+                        model: prop.0.model.clone(),
+                        anim_type: prop.0.anim_type,
+                        anim_speed: prop.0.anim_speed,
+                    },
+                ))
+                .observe(wire_prop_scene)
+                .insert(ChildOf(entity));
+        } else {
+            error!("lif_prop ref '{path}' has neither a .rsm nor a .glb extension");
+            commands.entity(entity).insert(MapModel {
+                filename: prop.0.model.clone(),
+                node_name: String::new(),
+            });
         }
     }
 }
@@ -905,5 +947,131 @@ pub fn update_rsm_animations(
         if transform.rotation != new_rotation {
             transform.rotation = new_rotation;
         }
+    }
+}
+
+#[cfg(all(test, feature = "map-gltf"))]
+mod gltf_prop_dispatch_tests {
+    use super::*;
+    use bevy::asset::AssetPlugin;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::world_serialization::WorldSerializationPlugin;
+    use lifthrasir_data::lif::LifProp;
+
+    fn test_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            WorldSerializationPlugin,
+        ))
+        .init_asset::<RsmAsset>();
+        app
+    }
+
+    fn spawn_prop(app: &mut App, model: &str) -> Entity {
+        app.world_mut()
+            .spawn(LifPropRef(LifProp {
+                model: model.to_string(),
+                anim_type: 1,
+                anim_speed: 2.0,
+            }))
+            .id()
+    }
+
+    #[test]
+    fn rsm_ref_keeps_the_native_loading_path() {
+        let mut app = test_app();
+        let entity = spawn_prop(&mut app, "ro://data/model/prontera/tree01.rsm");
+
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+
+        let world = app.world();
+        assert_eq!(
+            world.get::<MapModel>(entity).unwrap().filename,
+            "ro://data/model/prontera/tree01.rsm"
+        );
+        assert!(world.get::<RsmLoading>(entity).is_some());
+        assert_eq!(
+            *world.get::<AnimationType>(entity).unwrap(),
+            AnimationType::Loop
+        );
+        assert_eq!(world.get::<AnimationSpeed>(entity).unwrap().0, 2.0);
+        assert!(
+            world.get::<Children>(entity).is_none(),
+            "the .rsm branch spawns no child"
+        );
+    }
+
+    #[test]
+    fn glb_ref_spawns_a_child_gltf_scene() {
+        let mut app = test_app();
+        let entity = spawn_prop(&mut app, "ro://models/prontera/tree01.glb");
+
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+
+        let world = app.world();
+        assert_eq!(
+            world.get::<MapModel>(entity).unwrap().filename,
+            "ro://models/prontera/tree01.glb"
+        );
+        assert!(
+            world.get::<RsmLoading>(entity).is_none(),
+            "the .glb branch never requests an RsmAsset"
+        );
+
+        let children = world.get::<Children>(entity).expect("one child spawned");
+        assert_eq!(children.len(), 1);
+        let child = children[0];
+
+        assert_eq!(world.get::<Transform>(child).unwrap().rotation, ROOT_FIX);
+        assert!(world.get::<WorldAssetRoot>(child).is_some());
+
+        let anim = world.get::<PropAnim>(child).expect("PropAnim on the child");
+        assert_eq!(anim.model, "ro://models/prontera/tree01.glb");
+        assert_eq!(anim.anim_type, 1);
+        assert_eq!(anim.anim_speed, 2.0);
+    }
+
+    #[test]
+    fn an_entity_is_only_dispatched_once() {
+        let mut app = test_app();
+        let entity = spawn_prop(&mut app, "ro://models/prontera/tree01.glb");
+
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+
+        let world = app.world();
+        assert_eq!(
+            world.get::<Children>(entity).unwrap().len(),
+            1,
+            "MapModel must stop the query from matching this entity again"
+        );
+    }
+
+    #[test]
+    fn an_unrecognized_extension_is_logged_and_skipped() {
+        let mut app = test_app();
+        let entity = spawn_prop(&mut app, "ro://models/prontera/tree01.rsm2");
+
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+
+        let world = app.world();
+        assert!(
+            world.get::<MapModel>(entity).is_some(),
+            "bad refs get the once-only marker so the error logs once, not every frame"
+        );
+        assert!(world.get::<RsmLoading>(entity).is_none());
+        assert!(world.get::<Children>(entity).is_none());
     }
 }
