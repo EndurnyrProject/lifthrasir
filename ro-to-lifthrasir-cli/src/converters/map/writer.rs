@@ -16,6 +16,10 @@
 //! This assumes Bevy's experimental `GltfLoaderSettings::convert_coordinates`
 //! stays at its default (off); enabling it would add a second rotation.
 
+use crate::converters::gltf_out::{
+    BinChunk, accessor, bounds, extras_for, f32_bytes, glb_container, to_forward_slashes,
+    to_gltf_quat, to_gltf_vec,
+};
 use crate::converters::map::terrain::TerrainPrimitive;
 use crate::converters::map::textures::TextureOut;
 use anyhow::{Context, bail};
@@ -26,9 +30,10 @@ use lifthrasir_data::lif;
 use ro_formats::{
     RoAltitude, RoGround, RoWorld, RswEffect, RswLight, RswLightObj, RswModel, RswObject, RswSound,
 };
-use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::Path;
+
+pub use crate::converters::gltf_out::{ROOT_FIX, hash_hex};
 
 /// Native terrain material constants, mirrored from
 /// `game-engine/src/domain/world/terrain.rs`.
@@ -53,23 +58,6 @@ pub struct MapGlbInputs<'a> {
     pub gat_bytes: &'a [u8],
     pub gnd_bytes: &'a [u8],
     pub rsw_bytes: &'a [u8],
-}
-
-/// The runtime root fix: 180 degrees about X, mapping glTF Y-up onto the
-/// engine's -Y-up world. Written in exact components (`Quat::from_rotation_x`
-/// leaves a 1e-7 residue in the Z term) and self-inverse, so the converter
-/// applies the very same rotation to go the other way.
-pub const ROOT_FIX: Quat = Quat::from_xyzw(1.0, 0.0, 0.0, 0.0);
-
-/// Native world position -> glTF position; `ROOT_FIX * v`, spelled out so the
-/// round trip is bit-exact.
-fn to_gltf_vec(v: Vec3) -> Vec3 {
-    Vec3::new(v.x, -v.y, -v.z)
-}
-
-/// Native world rotation -> glTF node rotation.
-fn to_gltf_quat(q: Quat) -> Quat {
-    ROOT_FIX.inverse() * q
 }
 
 /// Port of `game-engine/src/utils/coordinates.rs::rsw_position_to_bevy`.
@@ -125,74 +113,6 @@ fn sun_illuminance(light: &RswLight) -> f32 {
 fn point_light_candela(light: &RswLightObj) -> f32 {
     let half_range = 0.5 * light.range;
     POINT_LIGHT_LUX_AT_HALF_RANGE * half_range * half_range
-}
-
-/// Bin chunk under construction: raw bytes plus the bufferViews addressing
-/// them. Every view starts 4-byte aligned.
-#[derive(Default)]
-struct BinChunk {
-    data: Vec<u8>,
-    views: Vec<json::buffer::View>,
-}
-
-impl BinChunk {
-    fn push_view(
-        &mut self,
-        bytes: &[u8],
-        target: Option<json::buffer::Target>,
-    ) -> json::Index<json::buffer::View> {
-        while !self.data.len().is_multiple_of(4) {
-            self.data.push(0);
-        }
-        let offset = self.data.len();
-        self.data.extend_from_slice(bytes);
-
-        let view = json::buffer::View {
-            buffer: json::Index::new(0),
-            byte_length: USize64::from(bytes.len()),
-            byte_offset: Some(USize64::from(offset)),
-            byte_stride: None,
-            name: None,
-            target: target.map(Valid),
-            extensions: None,
-            extras: Default::default(),
-        };
-        json::Index::push(&mut self.views, view)
-    }
-}
-
-fn f32_bytes(values: impl IntoIterator<Item = f32>) -> Vec<u8> {
-    values.into_iter().flat_map(f32::to_le_bytes).collect()
-}
-
-fn accessor(
-    view: json::Index<json::buffer::View>,
-    count: usize,
-    component_type: json::accessor::ComponentType,
-    type_: json::accessor::Type,
-) -> json::Accessor {
-    json::Accessor {
-        buffer_view: Some(view),
-        byte_offset: Some(USize64(0)),
-        count: USize64::from(count),
-        component_type: Valid(json::accessor::GenericComponentType(component_type)),
-        type_: Valid(type_),
-        min: None,
-        max: None,
-        name: None,
-        normalized: false,
-        sparse: None,
-        extensions: None,
-        extras: Default::default(),
-    }
-}
-
-fn extras_for<T: Serialize>(key: &str, value: &T) -> anyhow::Result<json::Extras> {
-    let mut map = serde_json::Map::new();
-    map.insert(key.to_string(), serde_json::to_value(value)?);
-    let raw = serde_json::value::RawValue::from_string(serde_json::to_string(&map)?)
-        .context("encoding node extras")?;
-    Ok(Some(raw))
 }
 
 /// Emits the terrain mesh (one primitive per ground texture) and returns its
@@ -363,13 +283,6 @@ fn build_primitive(
         extensions: None,
         extras: Default::default(),
     })
-}
-
-fn bounds(positions: &[Vec3]) -> (Vec3, Vec3) {
-    positions.iter().fold(
-        (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
-        |(min, max), p| (min.min(*p), max.max(*p)),
-    )
 }
 
 /// One image + texture + material per exported ground texture, keyed by the
@@ -647,11 +560,6 @@ fn build_prop_node(
     ))
 }
 
-/// GRF paths are backslash-separated; the `ro://` namespace is not.
-fn to_forward_slashes(path: &str) -> String {
-    path.replace('\\', "/")
-}
-
 /// Assemble and write `<out_path>` as a binary glTF.
 pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
     let mut root = json::Root {
@@ -773,46 +681,6 @@ fn build_root_extensions(
     }
 
     Ok(())
-}
-
-pub fn hash_hex(bytes: &[u8]) -> String {
-    blake3::hash(bytes).to_hex().to_string()
-}
-
-const GLB_MAGIC: u32 = 0x4654_6C67;
-const GLB_VERSION: u32 = 2;
-const CHUNK_TYPE_JSON: u32 = 0x4E4F_534A;
-const CHUNK_TYPE_BIN: u32 = 0x004E_4942;
-
-/// Wrap the JSON and binary payloads in the GLB container. Both chunks are
-/// padded to a 4-byte boundary, JSON with spaces and BIN with zeroes, as the
-/// spec requires.
-fn glb_container(json_bytes: &[u8], bin: &[u8]) -> Vec<u8> {
-    let json_padding = (4 - json_bytes.len() % 4) % 4;
-    let bin_padding = (4 - bin.len() % 4) % 4;
-    let json_len = json_bytes.len() + json_padding;
-    let bin_len = bin.len() + bin_padding;
-
-    let total = 12 + 8 + json_len + if bin_len == 0 { 0 } else { 8 + bin_len };
-    let mut out = Vec::with_capacity(total);
-
-    out.extend_from_slice(&GLB_MAGIC.to_le_bytes());
-    out.extend_from_slice(&GLB_VERSION.to_le_bytes());
-    out.extend_from_slice(&(total as u32).to_le_bytes());
-
-    out.extend_from_slice(&(json_len as u32).to_le_bytes());
-    out.extend_from_slice(&CHUNK_TYPE_JSON.to_le_bytes());
-    out.extend_from_slice(json_bytes);
-    out.extend(std::iter::repeat_n(b' ', json_padding));
-
-    if bin_len > 0 {
-        out.extend_from_slice(&(bin_len as u32).to_le_bytes());
-        out.extend_from_slice(&CHUNK_TYPE_BIN.to_le_bytes());
-        out.extend_from_slice(bin);
-        out.extend(std::iter::repeat_n(0u8, bin_padding));
-    }
-
-    out
 }
 
 #[cfg(test)]

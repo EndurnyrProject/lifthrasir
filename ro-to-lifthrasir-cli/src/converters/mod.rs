@@ -1,4 +1,5 @@
 pub mod accessory;
+pub mod gltf_out;
 pub mod item;
 pub mod job;
 pub mod map;
