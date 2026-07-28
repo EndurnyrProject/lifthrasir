@@ -392,7 +392,7 @@ fn ground_world_position(
     map_altitude: Option<&CurrentMapAltitude>,
     altitude_assets: Option<&Assets<RoAltitudeAsset>>,
 ) -> Vec3 {
-    let world = spawn_coords_to_world_position(x, y, 0, 0);
+    let world = spawn_coords_to_world_position(x, y);
     map_altitude
         .zip(altitude_assets)
         .and_then(|(map_altitude, assets)| assets.get(&map_altitude.0))
@@ -916,7 +916,7 @@ mod tests {
 
         let positions = position_anchored(&mut app);
         assert_eq!(positions.len(), 1, "one landing effect spawned at the cell");
-        assert_eq!(positions[0], spawn_coords_to_world_position(40, 50, 0, 0));
+        assert_eq!(positions[0], spawn_coords_to_world_position(40, 50));
     }
 
     #[test]
@@ -965,7 +965,7 @@ mod tests {
             1,
             "one authored eruption at the announced cell"
         );
-        let expected = spawn_coords_to_world_position(40, 50, 0, 0);
+        let expected = spawn_coords_to_world_position(40, 50);
         assert_eq!(position_anchored(&mut app), vec![expected]);
     }
 
@@ -1038,7 +1038,7 @@ mod tests {
             1,
             "one visual from the single ground event"
         );
-        let expected = spawn_coords_to_world_position(40, 50, 0, 0);
+        let expected = spawn_coords_to_world_position(40, 50);
         assert_eq!(position_anchored(&mut app), vec![expected]);
 
         // The three timed ticks across victims: damage numbers and caster

@@ -5,6 +5,7 @@
 //! for the sun, against the native lighting math). Any mismatch is an error --
 //! a truncated or silently wrong map must never reach the pak.
 
+use crate::converters::gltf_out::{ensure_close, root_extension, scene_root};
 use crate::converters::map::terrain::TerrainPrimitive;
 use crate::converters::map::writer::{self, MapGlbInputs, ROOT_FIX};
 use anyhow::{Context, bail, ensure};
@@ -13,10 +14,6 @@ use lifthrasir_data::lif;
 use ro_formats::{RswLight, RswLightObj, RswObject};
 use std::fmt;
 use std::path::Path;
-
-/// Tolerance for values that survive a f32 encode/decode and a quaternion
-/// round trip.
-const EPSILON: f32 = 1e-4;
 
 /// What the validated glb contains; printed as the conversion summary so a
 /// truncated map is visible at a glance.
@@ -52,19 +49,6 @@ pub fn validate(glb_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<Counts
     validate_root_extensions(&document.into_json(), &blob, inputs)?;
 
     Ok(counts)
-}
-
-fn scene_root<'a>(document: &'a gltf::Document) -> anyhow::Result<gltf::Node<'a>> {
-    let scene = document
-        .default_scene()
-        .context("glb has no default scene")?;
-    let roots: Vec<gltf::Node<'a>> = scene.nodes().collect();
-    ensure!(
-        roots.len() == 1,
-        "glb scene must have exactly one root node, found {}",
-        roots.len()
-    );
-    Ok(roots.into_iter().next().expect("checked length"))
 }
 
 /// The scene root's children are, in order: the terrain node (when the map has
@@ -283,14 +267,6 @@ fn node_name(node: &gltf::Node) -> String {
     node.name().unwrap_or("<unnamed>").to_string()
 }
 
-fn ensure_close(label: &str, actual: Vec3, expected: Vec3) -> anyhow::Result<()> {
-    ensure!(
-        (actual - expected).length() < EPSILON,
-        "{label}: expected {expected:?}, got {actual:?}"
-    );
-    Ok(())
-}
-
 fn validate_root_extensions(
     root: &gltf_json::Root,
     blob: &[u8],
@@ -380,18 +356,6 @@ fn validate_water_extension(root: &gltf_json::Root, inputs: &MapGlbInputs) -> an
         lif::EXTENSION_WATER
     );
     Ok(())
-}
-
-fn root_extension<T: serde::de::DeserializeOwned>(
-    root: &gltf_json::Root,
-    key: &str,
-) -> anyhow::Result<T> {
-    let value = root
-        .extensions
-        .as_ref()
-        .and_then(|extensions| extensions.others.get(key))
-        .with_context(|| format!("glb has no {key} root extension"))?;
-    serde_json::from_value(value.clone()).with_context(|| format!("decoding {key}"))
 }
 
 fn gat_bytes<'a>(

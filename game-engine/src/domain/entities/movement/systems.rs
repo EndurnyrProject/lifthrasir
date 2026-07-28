@@ -120,11 +120,11 @@ pub fn handle_movement_confirmed_system(
 
             (current_x, current_y, current_world_pos)
         } else {
-            let pos = spawn_coords_to_world_position(event.src_x, event.src_y, 0, 0);
+            let pos = spawn_coords_to_world_position(event.src_x, event.src_y);
             (event.src_x, event.src_y, pos)
         };
 
-        let dest_world_pos = spawn_coords_to_world_position(event.dest_x, event.dest_y, 0, 0);
+        let dest_world_pos = spawn_coords_to_world_position(event.dest_x, event.dest_y);
 
         let path_to_use = walkable_path
             .filter(|path| {
@@ -182,7 +182,7 @@ pub fn handle_movement_confirmed_system(
             let waypoint_world_positions: Vec<Vec3> = path
                 .waypoints
                 .iter()
-                .map(|(x, y)| spawn_coords_to_world_position(*x, *y, 0, 0))
+                .map(|(x, y)| spawn_coords_to_world_position(*x, *y))
                 .collect();
 
             let waypoint_cell_coords = path.waypoints.clone();
@@ -342,7 +342,7 @@ pub fn handle_server_stop_system(
         );
 
         if let Ok(mut transform) = transforms.get_mut(entity) {
-            let final_pos = spawn_coords_to_world_position(stop_x, stop_y, 0, 0);
+            let final_pos = spawn_coords_to_world_position(stop_x, stop_y);
             transform.translation.x = final_pos.x;
             transform.translation.z = final_pos.z;
         }
@@ -524,14 +524,14 @@ mod tests {
     }
 
     fn moving_entity(app: &mut App, cell: (u16, u16), dest: (u16, u16)) -> Entity {
-        let pos = spawn_coords_to_world_position(cell.0, cell.1, 0, 0);
+        let pos = spawn_coords_to_world_position(cell.0, cell.1);
         let target = MovementTarget::new(
             cell.0,
             cell.1,
             dest.0,
             dest.1,
             pos,
-            spawn_coords_to_world_position(dest.0, dest.1, 0, 0),
+            spawn_coords_to_world_position(dest.0, dest.1),
             0,
         );
 
@@ -552,7 +552,7 @@ mod tests {
 
         app.update();
 
-        let expected = spawn_coords_to_world_position(12, 10, 0, 0);
+        let expected = spawn_coords_to_world_position(12, 10);
         let transform = app.world().get::<Transform>(entity).unwrap();
         assert_eq!(transform.translation.x, expected.x);
         assert_eq!(transform.translation.z, expected.z);
@@ -570,7 +570,7 @@ mod tests {
 
         app.update();
 
-        let expected = spawn_coords_to_world_position(10, 10, 0, 0);
+        let expected = spawn_coords_to_world_position(10, 10);
         let transform = app.world().get::<Transform>(entity).unwrap();
         assert_eq!(transform.translation.x, expected.x);
         assert_eq!(transform.translation.z, expected.z);
@@ -623,7 +623,7 @@ mod tests {
         let entity = app
             .world_mut()
             .spawn((
-                Transform::from_translation(spawn_coords_to_world_position(5, 5, 0, 0)),
+                Transform::from_translation(spawn_coords_to_world_position(5, 5)),
                 Grounded,
             ))
             .id();

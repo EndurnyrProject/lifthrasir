@@ -3,17 +3,13 @@
 //! writer's in-memory state -- the file is parsed back from disk and every
 //! value is compared against `ModelBuild`. Any mismatch is a loud error.
 
-use crate::converters::gltf_out::ROOT_FIX;
+use crate::converters::gltf_out::{EPSILON, ROOT_FIX, ensure_close, root_extension, scene_root};
 use crate::converters::model::mesh::ModelBuild;
 use anyhow::{Context, ensure};
 use glam::{Quat, Vec3};
 use lifthrasir_data::lif;
 use std::fmt;
 use std::path::Path;
-
-/// Tolerance for values that survive a f32 encode/decode and a quaternion
-/// round trip.
-const EPSILON: f32 = 1e-4;
 
 /// What the validated glb contains; printed as the conversion summary.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -68,19 +64,6 @@ pub fn validate(glb_path: &Path, build: &ModelBuild, anim_len_ms: i32) -> anyhow
     validate_root_extensions(&document.into_json())?;
 
     Ok(counts)
-}
-
-fn scene_root(document: &gltf::Document) -> anyhow::Result<gltf::Node<'_>> {
-    let scene = document
-        .default_scene()
-        .context("glb has no default scene")?;
-    let roots: Vec<gltf::Node> = scene.nodes().collect();
-    ensure!(
-        roots.len() == 1,
-        "glb scene must have exactly one root node, found {}",
-        roots.len()
-    );
-    Ok(roots.into_iter().next().expect("checked length"))
 }
 
 /// Resolve each `ModelBuild` node to its glTF node by name, in build order,
@@ -326,22 +309,15 @@ fn validate_root_fix(
         .with_context(|| format!("node '{}' primitive has no vertices", node.name))?;
 
     let actual = ROOT_FIX * (root_rotation * Vec3::from(imported));
-    ensure!(
-        (actual - expected).length() < EPSILON,
-        "ROOT_FIX round trip on node '{}': expected {expected:?}, got {actual:?}",
-        node.name
-    );
-    Ok(())
+    ensure_close(
+        &format!("ROOT_FIX round trip on node '{}'", node.name),
+        actual,
+        expected,
+    )
 }
 
 fn validate_root_extensions(root: &gltf_json::Root) -> anyhow::Result<()> {
-    let value = root
-        .extensions
-        .as_ref()
-        .and_then(|extensions| extensions.others.get(lif::EXTENSION_MODEL))
-        .context("glb has no LIF_model root extension")?;
-    let model: lif::LifModel =
-        serde_json::from_value(value.clone()).context("decoding LIF_model")?;
+    let model: lif::LifModel = root_extension(root, lif::EXTENSION_MODEL)?;
     ensure!(
         model.format_version == lif::FORMAT_VERSION,
         "LIF_model format_version is {}, this converter writes {}",

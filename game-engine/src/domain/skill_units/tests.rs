@@ -170,7 +170,7 @@ fn spawn_creates_root_and_cells_at_world_positions() {
 
     // Root sits at the group center; each cell is a child positioned so its
     // world transform (root + local) lands on the cell's world coordinate.
-    let center = spawn_coords_to_world_position(40, 50, 0, 0);
+    let center = spawn_coords_to_world_position(40, 50);
     let mut root_query = app.world_mut().query::<(Entity, &Transform)>();
     let root = root_query
         .iter(app.world())
@@ -187,7 +187,7 @@ fn spawn_creates_root_and_cells_at_world_positions() {
         assert_eq!(child_of.parent(), root.0, "cell is a child of the root");
         let world = root.1.translation + transform.translation;
         let cell_x = if cell.cell_id == 100 { 40 } else { 41 };
-        let want = spawn_coords_to_world_position(cell_x, 50, 0, 0);
+        let want = spawn_coords_to_world_position(cell_x, 50);
         assert_eq!(world, want, "cell {} world position", cell.cell_id);
         seen += 1;
     }

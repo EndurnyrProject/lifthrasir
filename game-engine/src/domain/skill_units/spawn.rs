@@ -113,7 +113,7 @@ fn spawn_group(
         );
         return;
     };
-    let center = spawn_coords_to_world_position(cx, cy, 0, 0);
+    let center = spawn_coords_to_world_position(cx, cy);
 
     let root = commands
         .spawn((
@@ -142,7 +142,7 @@ fn spawn_group(
             );
             continue;
         };
-        let cell_world = spawn_coords_to_world_position(cell_x, cell_y, 0, 0);
+        let cell_world = spawn_coords_to_world_position(cell_x, cell_y);
         let cell_entity = commands
             .spawn((
                 SkillUnitCell {

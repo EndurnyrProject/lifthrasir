@@ -1,6 +1,8 @@
-//! Format-agnostic glb assembly core shared by the map and model writers:
-//! the bin-chunk/accessor plumbing, the GLB container, the runtime root-fix
-//! rotation and its coordinate helpers, and small path/hash utilities.
+//! Format-agnostic glb core shared by the map and model converters:
+//! the bin-chunk/accessor plumbing, geometry-primitive and image/texture
+//! assembly, the GLB container, the runtime root-fix rotation and its
+//! coordinate helpers, small path/hash utilities, and the re-read helpers
+//! both validators lean on.
 //!
 //! # Coordinate convention
 //!
@@ -16,11 +18,14 @@
 //! This assumes Bevy's experimental `GltfLoaderSettings::convert_coordinates`
 //! stays at its default (off); enabling it would add a second rotation.
 
-use anyhow::Context;
+use crate::converters::map::textures::TextureOut;
+use anyhow::{Context, bail, ensure};
 use glam::{Quat, Vec3};
 use gltf_json as json;
 use json::validation::{Checked::Valid, USize64};
 use serde::Serialize;
+use serde::de::DeserializeOwned;
+use std::collections::BTreeMap;
 
 /// The runtime root fix: 180 degrees about X, mapping glTF Y-up onto the
 /// engine's -Y-up world. Written in exact components (`Quat::from_rotation_x`
@@ -109,6 +114,205 @@ pub fn bounds(positions: &[Vec3]) -> (Vec3, Vec3) {
         (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
         |(min, max), p| (min.min(*p), max.max(*p)),
     )
+}
+
+/// Vertex data for one mesh primitive, already in glTF space -- callers apply
+/// `to_gltf_vec` (or not, for raw-local model geometry) before handing it over.
+pub struct GeometryAttributes<'a> {
+    pub positions: &'a [Vec3],
+    pub normals: &'a [Vec3],
+    pub colors: Option<&'a [[f32; 4]]>,
+    pub uvs: &'a [[f32; 2]],
+    pub indices: &'a [u32],
+}
+
+/// Push one triangle primitive's views and accessors (positions with min/max
+/// bounds, normals, optional vertex colors, uvs, indices) and return the
+/// assembled `Primitive`. `label` names the primitive in error messages.
+pub fn push_geometry_primitive(
+    root: &mut json::Root,
+    bin: &mut BinChunk,
+    label: &str,
+    geometry: &GeometryAttributes,
+    material: json::Index<json::Material>,
+) -> anyhow::Result<json::mesh::Primitive> {
+    let count = geometry.positions.len();
+    if geometry.normals.len() != count
+        || geometry.uvs.len() != count
+        || geometry.colors.is_some_and(|colors| colors.len() != count)
+    {
+        bail!(
+            "{label} has mismatched attribute counts: {count} positions, {} normals, {} colors, {} uvs",
+            geometry.normals.len(),
+            geometry.colors.map_or(count, <[_]>::len),
+            geometry.uvs.len()
+        );
+    }
+
+    let (min, max) = bounds(geometry.positions);
+    let positions_view = bin.push_view(
+        &f32_bytes(geometry.positions.iter().flat_map(|p| p.to_array())),
+        Some(json::buffer::Target::ArrayBuffer),
+    );
+    let mut positions_accessor = accessor(
+        positions_view,
+        count,
+        json::accessor::ComponentType::F32,
+        json::accessor::Type::Vec3,
+    );
+    positions_accessor.min = Some(serde_json::json!(min.to_array()));
+    positions_accessor.max = Some(serde_json::json!(max.to_array()));
+    let positions_accessor = json::Index::push(&mut root.accessors, positions_accessor);
+
+    let normals_view = bin.push_view(
+        &f32_bytes(geometry.normals.iter().flat_map(|n| n.to_array())),
+        Some(json::buffer::Target::ArrayBuffer),
+    );
+    let normals_accessor = json::Index::push(
+        &mut root.accessors,
+        accessor(
+            normals_view,
+            count,
+            json::accessor::ComponentType::F32,
+            json::accessor::Type::Vec3,
+        ),
+    );
+
+    let colors_accessor = geometry.colors.map(|colors| {
+        let view = bin.push_view(
+            &f32_bytes(colors.iter().flatten().copied()),
+            Some(json::buffer::Target::ArrayBuffer),
+        );
+        json::Index::push(
+            &mut root.accessors,
+            accessor(
+                view,
+                count,
+                json::accessor::ComponentType::F32,
+                json::accessor::Type::Vec4,
+            ),
+        )
+    });
+
+    let uvs_view = bin.push_view(
+        &f32_bytes(geometry.uvs.iter().flatten().copied()),
+        Some(json::buffer::Target::ArrayBuffer),
+    );
+    let uvs_accessor = json::Index::push(
+        &mut root.accessors,
+        accessor(
+            uvs_view,
+            count,
+            json::accessor::ComponentType::F32,
+            json::accessor::Type::Vec2,
+        ),
+    );
+
+    let index_bytes: Vec<u8> = geometry
+        .indices
+        .iter()
+        .flat_map(|i| i.to_le_bytes())
+        .collect();
+    let indices_view = bin.push_view(&index_bytes, Some(json::buffer::Target::ElementArrayBuffer));
+    let indices_accessor = json::Index::push(
+        &mut root.accessors,
+        accessor(
+            indices_view,
+            geometry.indices.len(),
+            json::accessor::ComponentType::U32,
+            json::accessor::Type::Scalar,
+        ),
+    );
+
+    let mut attributes = BTreeMap::new();
+    attributes.insert(Valid(json::mesh::Semantic::Positions), positions_accessor);
+    attributes.insert(Valid(json::mesh::Semantic::Normals), normals_accessor);
+    if let Some(colors_accessor) = colors_accessor {
+        attributes.insert(Valid(json::mesh::Semantic::Colors(0)), colors_accessor);
+    }
+    attributes.insert(Valid(json::mesh::Semantic::TexCoords(0)), uvs_accessor);
+
+    Ok(json::mesh::Primitive {
+        attributes,
+        indices: Some(indices_accessor),
+        material: Some(material),
+        mode: Valid(json::mesh::Mode::Triangles),
+        targets: None,
+        extensions: None,
+        extras: Default::default(),
+    })
+}
+
+/// Push one exported texture's image and texture entries and return the
+/// `texture::Info` a material's `base_color_texture` wants.
+pub fn push_image_and_texture(
+    root: &mut json::Root,
+    texture: &TextureOut,
+    sampler: Option<json::Index<json::texture::Sampler>>,
+) -> json::texture::Info {
+    let image = json::Index::push(
+        &mut root.images,
+        json::Image {
+            buffer_view: None,
+            mime_type: Some(json::image::MimeType("image/png".to_string())),
+            uri: Some(texture.relative_path.clone()),
+            name: Some(texture.source_name.clone()),
+            extensions: None,
+            extras: Default::default(),
+        },
+    );
+    let gltf_texture = json::Index::push(
+        &mut root.textures,
+        json::Texture {
+            sampler,
+            source: image,
+            name: Some(texture.source_name.clone()),
+            extensions: None,
+            extras: Default::default(),
+        },
+    );
+
+    json::texture::Info {
+        index: gltf_texture,
+        tex_coord: 0,
+        extensions: None,
+        extras: Default::default(),
+    }
+}
+
+/// Tolerance for values that survive a f32 encode/decode and a quaternion
+/// round trip.
+pub const EPSILON: f32 = 1e-4;
+
+pub fn ensure_close(label: &str, actual: Vec3, expected: Vec3) -> anyhow::Result<()> {
+    ensure!(
+        (actual - expected).length() < EPSILON,
+        "{label}: expected {expected:?}, got {actual:?}"
+    );
+    Ok(())
+}
+
+/// The single root node every Lifthrasir glb hangs its scene under.
+pub fn scene_root(document: &gltf::Document) -> anyhow::Result<gltf::Node<'_>> {
+    let scene = document
+        .default_scene()
+        .context("glb has no default scene")?;
+    let roots: Vec<gltf::Node> = scene.nodes().collect();
+    ensure!(
+        roots.len() == 1,
+        "glb scene must have exactly one root node, found {}",
+        roots.len()
+    );
+    Ok(roots.into_iter().next().expect("checked length"))
+}
+
+pub fn root_extension<T: DeserializeOwned>(root: &json::Root, key: &str) -> anyhow::Result<T> {
+    let value = root
+        .extensions
+        .as_ref()
+        .and_then(|extensions| extensions.others.get(key))
+        .with_context(|| format!("glb has no {key} root extension"))?;
+    serde_json::from_value(value.clone()).with_context(|| format!("decoding {key}"))
 }
 
 pub fn extras_for<T: Serialize>(key: &str, value: &T) -> anyhow::Result<json::Extras> {

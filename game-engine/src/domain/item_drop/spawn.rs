@@ -28,7 +28,7 @@ pub fn spawn_floor_items(
             continue;
         }
 
-        let mut pos = spawn_coords_to_world_position(ev.x, ev.y, 0, 0);
+        let mut pos = spawn_coords_to_world_position(ev.x, ev.y);
         pos.x += sub_cell_offset(ev.sub_x);
         pos.z += sub_cell_offset(ev.sub_y);
 

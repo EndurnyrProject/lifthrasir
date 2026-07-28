@@ -173,7 +173,7 @@ pub fn get_map_dimensions_from_ground(
 /// Convert RO spawn coordinates to Bevy world position
 /// RO coordinates use 5.0 units per cell, while Bevy uses 10.0 (CELL_SIZE)
 /// This is because CELL_SIZE is 2x RO's native scale for rendering
-pub fn spawn_coords_to_world_position(x: u16, y: u16, _map_width: u32, _map_height: u32) -> Vec3 {
+pub fn spawn_coords_to_world_position(x: u16, y: u16) -> Vec3 {
     // RO uses 5.0 units per cell in its native coordinate system
     // Bevy's CELL_SIZE (10.0) is 2x this for scaled rendering
     const RO_UNITS_PER_CELL: f32 = 5.0;

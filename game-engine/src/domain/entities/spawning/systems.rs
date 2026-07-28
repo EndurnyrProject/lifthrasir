@@ -215,7 +215,7 @@ pub fn spawn_network_entity_system(
             accessories: [None, None],
         };
 
-        let world_pos = spawn_coords_to_world_position(event.position.0, event.position.1, 0, 0);
+        let world_pos = spawn_coords_to_world_position(event.position.0, event.position.1);
 
         let mut entity_cmd = commands.spawn((
             NetworkEntity::new(event.aid, event.gid, event.object_type),

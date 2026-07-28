@@ -15,7 +15,8 @@
 //! well would rotate them twice.
 
 use crate::converters::gltf_out::{
-    BinChunk, accessor, bounds, f32_bytes, glb_container, to_gltf_quat,
+    BinChunk, GeometryAttributes, accessor, f32_bytes, glb_container, push_geometry_primitive,
+    push_image_and_texture, to_gltf_quat,
 };
 use crate::converters::map::textures::TextureOut;
 use crate::converters::model::mesh::{ModelBuild, ModelNode, ModelPrimitive};
@@ -168,44 +169,13 @@ fn build_materials(
                 Err(_) => None,
             };
 
-            let base_color_texture = source.map(|texture| push_texture(root, texture));
+            let base_color_texture = source.map(|texture| push_image_and_texture(root, texture, None));
             let name = source.map(|texture| texture.source_name.clone());
             let material = json::Index::push(&mut root.materials, model_material(name, base_color_texture, rsm.alpha));
 
             Ok((texture_id, material))
         })
         .collect()
-}
-
-fn push_texture(root: &mut json::Root, texture: &TextureOut) -> json::texture::Info {
-    let image = json::Index::push(
-        &mut root.images,
-        json::Image {
-            buffer_view: None,
-            mime_type: Some(json::image::MimeType("image/png".to_string())),
-            uri: Some(texture.relative_path.clone()),
-            name: Some(texture.source_name.clone()),
-            extensions: None,
-            extras: Default::default(),
-        },
-    );
-    let gltf_texture = json::Index::push(
-        &mut root.textures,
-        json::Texture {
-            sampler: None,
-            source: image,
-            name: Some(texture.source_name.clone()),
-            extensions: None,
-            extras: Default::default(),
-        },
-    );
-
-    json::texture::Info {
-        index: gltf_texture,
-        tex_coord: 0,
-        extensions: None,
-        extras: Default::default(),
-    }
 }
 
 fn model_material(
@@ -314,95 +284,26 @@ fn build_primitive(
     primitive: &ModelPrimitive,
     materials: &BTreeMap<i32, json::Index<json::Material>>,
 ) -> anyhow::Result<json::mesh::Primitive> {
-    let count = primitive.positions.len();
-    if primitive.normals.len() != count || primitive.uvs.len() != count {
-        bail!(
-            "node '{node_name}' texture {} has mismatched attribute counts: {count} positions, {} normals, {} uvs",
-            primitive.texture_id,
-            primitive.normals.len(),
-            primitive.uvs.len()
-        );
-    }
-
-    let positions: Vec<Vec3> = primitive.positions.iter().map(|p| Vec3::from(*p)).collect();
-    let (min, max) = bounds(&positions);
-
-    let positions_view = bin.push_view(
-        &f32_bytes(primitive.positions.iter().flatten().copied()),
-        Some(json::buffer::Target::ArrayBuffer),
-    );
-    let mut positions_accessor = accessor(
-        positions_view,
-        count,
-        json::accessor::ComponentType::F32,
-        json::accessor::Type::Vec3,
-    );
-    positions_accessor.min = Some(serde_json::json!(min.to_array()));
-    positions_accessor.max = Some(serde_json::json!(max.to_array()));
-    let positions_accessor = json::Index::push(&mut root.accessors, positions_accessor);
-
-    let normals_view = bin.push_view(
-        &f32_bytes(primitive.normals.iter().flatten().copied()),
-        Some(json::buffer::Target::ArrayBuffer),
-    );
-    let normals_accessor = json::Index::push(
-        &mut root.accessors,
-        accessor(
-            normals_view,
-            count,
-            json::accessor::ComponentType::F32,
-            json::accessor::Type::Vec3,
-        ),
-    );
-
-    let uvs_view = bin.push_view(
-        &f32_bytes(primitive.uvs.iter().flatten().copied()),
-        Some(json::buffer::Target::ArrayBuffer),
-    );
-    let uvs_accessor = json::Index::push(
-        &mut root.accessors,
-        accessor(
-            uvs_view,
-            count,
-            json::accessor::ComponentType::F32,
-            json::accessor::Type::Vec2,
-        ),
-    );
-
-    let index_bytes: Vec<u8> = primitive
-        .indices
-        .iter()
-        .flat_map(|i| i.to_le_bytes())
-        .collect();
-    let indices_view = bin.push_view(&index_bytes, Some(json::buffer::Target::ElementArrayBuffer));
-    let indices_accessor = json::Index::push(
-        &mut root.accessors,
-        accessor(
-            indices_view,
-            primitive.indices.len(),
-            json::accessor::ComponentType::U32,
-            json::accessor::Type::Scalar,
-        ),
-    );
-
     let material = *materials
         .get(&primitive.texture_id)
         .with_context(|| format!("node '{node_name}' has no material for its geometry"))?;
 
-    let mut attributes = BTreeMap::new();
-    attributes.insert(Valid(json::mesh::Semantic::Positions), positions_accessor);
-    attributes.insert(Valid(json::mesh::Semantic::Normals), normals_accessor);
-    attributes.insert(Valid(json::mesh::Semantic::TexCoords(0)), uvs_accessor);
+    let positions: Vec<Vec3> = primitive.positions.iter().map(|p| Vec3::from(*p)).collect();
+    let normals: Vec<Vec3> = primitive.normals.iter().map(|n| Vec3::from(*n)).collect();
 
-    Ok(json::mesh::Primitive {
-        attributes,
-        indices: Some(indices_accessor),
-        material: Some(material),
-        mode: Valid(json::mesh::Mode::Triangles),
-        targets: None,
-        extensions: None,
-        extras: Default::default(),
-    })
+    push_geometry_primitive(
+        root,
+        bin,
+        &format!("node '{node_name}' texture {}", primitive.texture_id),
+        &GeometryAttributes {
+            positions: &positions,
+            normals: &normals,
+            colors: None,
+            uvs: &primitive.uvs,
+            indices: &primitive.indices,
+        },
+        material,
+    )
 }
 
 /// The single `"anim"` animation: a linear translation and/or rotation channel

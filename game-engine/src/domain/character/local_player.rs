@@ -10,9 +10,7 @@ use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::types::ObjectType;
 use crate::domain::settings::Keybinds;
-use crate::domain::world::components::MapLoader;
 use crate::domain::world::spawn_context::MapSpawnContext;
-use crate::infrastructure::assets::loaders::RoGroundAsset;
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
@@ -32,8 +30,6 @@ pub fn spawn_character_sprite_on_game_start(
     mut entity_registry: ResMut<EntityRegistry>,
     user_session: Res<UserSession>,
     characters: Query<(Entity, &CharacterMeta, &CharacterData)>,
-    map_loaders: Query<&MapLoader>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
     existing_player: Query<(), With<LocalPlayer>>,
     keybinds: Res<Keybinds>,
 ) {
@@ -68,18 +64,8 @@ pub fn spawn_character_sprite_on_game_start(
     ));
     entity_registry.set_local_player(character_entity, char_id);
 
-    let map_loader = map_loaders
-        .single()
-        .expect("MapLoader must exist before entering the game");
-    let ground = ground_assets
-        .get(&map_loader.ground)
-        .expect("ground asset must be loaded before entering the game");
-    let world_position = spawn_coords_to_world_position(
-        spawn_context.spawn_x,
-        spawn_context.spawn_y,
-        ground.ground.width,
-        ground.ground.height,
-    );
+    let world_position =
+        spawn_coords_to_world_position(spawn_context.spawn_x, spawn_context.spawn_y);
 
     commands.entity(character_entity).insert((
         Transform::from_translation(world_position),

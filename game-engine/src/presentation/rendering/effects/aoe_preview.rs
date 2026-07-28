@@ -163,7 +163,7 @@ fn update_aoe_preview(
     );
 
     for (cx, cy) in affected_cells(cell, radius, dims) {
-        let world = spawn_coords_to_world_position(cx, cy, 0, 0);
+        let world = spawn_coords_to_world_position(cx, cy);
         let Some(height) = altitude.altitude.get_terrain_height_at_position(world) else {
             continue;
         };
@@ -248,7 +248,7 @@ fn spawn_area_rings(
             continue;
         };
 
-        let world = spawn_coords_to_world_position(event.x as u16, event.y as u16, 0, 0);
+        let world = spawn_coords_to_world_position(event.x as u16, event.y as u16);
         let Some(height) = altitude.altitude.get_terrain_height_at_position(world) else {
             continue;
         };
@@ -650,7 +650,7 @@ mod tests {
 
         // Deterministic flat-GAT height sampled the same way the system does, so
         // the assertion pins the -Y lift relationship, not a hardcoded magic value.
-        let expected = spawn_coords_to_world_position(3, 7, 0, 0);
+        let expected = spawn_coords_to_world_position(3, 7);
         let world = app.world_mut();
         let handle = world.resource::<CurrentMapAltitude>().0.clone();
         let terrain_height = world

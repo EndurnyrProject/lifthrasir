@@ -71,7 +71,7 @@ pub fn reposition_local_player(
 
     match players.single_mut() {
         Ok((entity, mut transform)) => {
-            transform.translation = spawn_coords_to_world_position(ctx.spawn_x, ctx.spawn_y, 0, 0);
+            transform.translation = spawn_coords_to_world_position(ctx.spawn_x, ctx.spawn_y);
             commands.trigger(MovementStopped {
                 entity,
                 x: ctx.spawn_x,
@@ -144,7 +144,7 @@ mod tests {
             .set(GameState::InGame);
         app.update();
 
-        let expected = spawn_coords_to_world_position(50, 60, 0, 0);
+        let expected = spawn_coords_to_world_position(50, 60);
         assert_eq!(
             app.world().get::<Transform>(player).unwrap().translation,
             expected

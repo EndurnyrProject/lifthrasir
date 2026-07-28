@@ -17,12 +17,12 @@
 //! stays at its default (off); enabling it would add a second rotation.
 
 use crate::converters::gltf_out::{
-    BinChunk, accessor, bounds, extras_for, f32_bytes, glb_container, to_forward_slashes,
-    to_gltf_quat, to_gltf_vec,
+    BinChunk, GeometryAttributes, extras_for, glb_container, push_geometry_primitive,
+    push_image_and_texture, to_forward_slashes, to_gltf_quat, to_gltf_vec,
 };
 use crate::converters::map::terrain::TerrainPrimitive;
 use crate::converters::map::textures::TextureOut;
-use anyhow::{Context, bail};
+use anyhow::Context;
 use glam::{Mat3, Quat, Vec3};
 use gltf_json as json;
 use json::validation::{Checked::Valid, USize64};
@@ -167,104 +167,6 @@ fn build_primitive(
     primitive: &TerrainPrimitive,
     materials: &BTreeMap<String, json::Index<json::Material>>,
 ) -> anyhow::Result<json::mesh::Primitive> {
-    let count = primitive.positions.len();
-    if primitive.normals.len() != count
-        || primitive.colors.len() != count
-        || primitive.uvs.len() != count
-    {
-        bail!(
-            "terrain primitive '{}' has mismatched attribute counts: {count} positions, {} normals, {} colors, {} uvs",
-            primitive.texture,
-            primitive.normals.len(),
-            primitive.colors.len(),
-            primitive.uvs.len()
-        );
-    }
-
-    let positions: Vec<Vec3> = primitive
-        .positions
-        .iter()
-        .map(|p| to_gltf_vec(Vec3::from(*p)))
-        .collect();
-    let (min, max) = bounds(&positions);
-
-    let positions_view = bin.push_view(
-        &f32_bytes(positions.iter().flat_map(|p| p.to_array())),
-        Some(json::buffer::Target::ArrayBuffer),
-    );
-    let mut positions_accessor = accessor(
-        positions_view,
-        count,
-        json::accessor::ComponentType::F32,
-        json::accessor::Type::Vec3,
-    );
-    positions_accessor.min = Some(serde_json::json!(min.to_array()));
-    positions_accessor.max = Some(serde_json::json!(max.to_array()));
-    let positions_accessor = json::Index::push(&mut root.accessors, positions_accessor);
-
-    let normals_view = bin.push_view(
-        &f32_bytes(
-            primitive
-                .normals
-                .iter()
-                .flat_map(|n| to_gltf_vec(Vec3::from(*n)).to_array()),
-        ),
-        Some(json::buffer::Target::ArrayBuffer),
-    );
-    let normals_accessor = json::Index::push(
-        &mut root.accessors,
-        accessor(
-            normals_view,
-            count,
-            json::accessor::ComponentType::F32,
-            json::accessor::Type::Vec3,
-        ),
-    );
-
-    let colors_view = bin.push_view(
-        &f32_bytes(primitive.colors.iter().flatten().copied()),
-        Some(json::buffer::Target::ArrayBuffer),
-    );
-    let colors_accessor = json::Index::push(
-        &mut root.accessors,
-        accessor(
-            colors_view,
-            count,
-            json::accessor::ComponentType::F32,
-            json::accessor::Type::Vec4,
-        ),
-    );
-
-    let uvs_view = bin.push_view(
-        &f32_bytes(primitive.uvs.iter().flatten().copied()),
-        Some(json::buffer::Target::ArrayBuffer),
-    );
-    let uvs_accessor = json::Index::push(
-        &mut root.accessors,
-        accessor(
-            uvs_view,
-            count,
-            json::accessor::ComponentType::F32,
-            json::accessor::Type::Vec2,
-        ),
-    );
-
-    let index_bytes: Vec<u8> = primitive
-        .indices
-        .iter()
-        .flat_map(|i| i.to_le_bytes())
-        .collect();
-    let indices_view = bin.push_view(&index_bytes, Some(json::buffer::Target::ElementArrayBuffer));
-    let indices_accessor = json::Index::push(
-        &mut root.accessors,
-        accessor(
-            indices_view,
-            primitive.indices.len(),
-            json::accessor::ComponentType::U32,
-            json::accessor::Type::Scalar,
-        ),
-    );
-
     let material = *materials.get(&primitive.texture).with_context(|| {
         format!(
             "terrain primitive references texture '{}' with no exported PNG",
@@ -272,21 +174,30 @@ fn build_primitive(
         )
     })?;
 
-    let mut attributes = BTreeMap::new();
-    attributes.insert(Valid(json::mesh::Semantic::Positions), positions_accessor);
-    attributes.insert(Valid(json::mesh::Semantic::Normals), normals_accessor);
-    attributes.insert(Valid(json::mesh::Semantic::Colors(0)), colors_accessor);
-    attributes.insert(Valid(json::mesh::Semantic::TexCoords(0)), uvs_accessor);
+    let positions: Vec<Vec3> = primitive
+        .positions
+        .iter()
+        .map(|p| to_gltf_vec(Vec3::from(*p)))
+        .collect();
+    let normals: Vec<Vec3> = primitive
+        .normals
+        .iter()
+        .map(|n| to_gltf_vec(Vec3::from(*n)))
+        .collect();
 
-    Ok(json::mesh::Primitive {
-        attributes,
-        indices: Some(indices_accessor),
-        material: Some(material),
-        mode: Valid(json::mesh::Mode::Triangles),
-        targets: None,
-        extensions: None,
-        extras: Default::default(),
-    })
+    push_geometry_primitive(
+        root,
+        bin,
+        &format!("terrain primitive '{}'", primitive.texture),
+        &GeometryAttributes {
+            positions: &positions,
+            normals: &normals,
+            colors: Some(&primitive.colors),
+            uvs: &primitive.uvs,
+            indices: &primitive.indices,
+        },
+        material,
+    )
 }
 
 /// One image + texture + material per exported ground texture, keyed by the
@@ -319,27 +230,7 @@ fn build_materials(
     textures
         .iter()
         .map(|texture| {
-            let image = json::Index::push(
-                &mut root.images,
-                json::Image {
-                    buffer_view: None,
-                    mime_type: Some(json::image::MimeType("image/png".to_string())),
-                    uri: Some(texture.relative_path.clone()),
-                    name: Some(texture.source_name.clone()),
-                    extensions: None,
-                    extras: Default::default(),
-                },
-            );
-            let gltf_texture = json::Index::push(
-                &mut root.textures,
-                json::Texture {
-                    sampler: Some(sampler),
-                    source: image,
-                    name: Some(texture.source_name.clone()),
-                    extensions: None,
-                    extras: Default::default(),
-                },
-            );
+            let base_color_texture = push_image_and_texture(root, texture, Some(sampler));
             let material = json::Index::push(
                 &mut root.materials,
                 json::Material {
@@ -348,12 +239,7 @@ fn build_materials(
                     double_sided: true,
                     name: Some(texture.source_name.clone()),
                     pbr_metallic_roughness: json::material::PbrMetallicRoughness {
-                        base_color_texture: Some(json::texture::Info {
-                            index: gltf_texture,
-                            tex_coord: 0,
-                            extensions: None,
-                            extras: Default::default(),
-                        }),
+                        base_color_texture: Some(base_color_texture),
                         metallic_factor: json::material::StrengthFactor(TERRAIN_METALLIC),
                         roughness_factor: json::material::StrengthFactor(TERRAIN_ROUGHNESS),
                         ..Default::default()
