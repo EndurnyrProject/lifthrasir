@@ -15,9 +15,9 @@ use std::path::Path;
 
 /// Convert one map's RSW/GND/GAT into `<out_dir>/<map_name>/<map_name>.glb`
 /// plus its `tex/*.png`, then validate the written file against the sources.
-/// Every RSM1 prop the RSW references is converted into `<models_dir>` first
-/// (`--force-models` re-converts even a prop already on disk), and the map
-/// glb's `lif_prop` refs point at the resulting library glbs.
+/// Every supported prop the RSW references is converted into `<models_dir>`
+/// first (`--force-models` re-converts even a prop already on disk), and the
+/// map glb's `lif_prop` refs point at the resulting library glbs.
 pub fn run(
     vfs: &GrfVfs,
     map_name: &str,
@@ -36,8 +36,8 @@ pub fn run(
     let primitives = terrain::build_terrain(&ground)
         .with_context(|| format!("building terrain of map '{map_name}'"))?;
 
-    let (converted_models, prop_counts) = convert_props(vfs, &world, models_dir, force_models)
-        .with_context(|| format!("converting props of map '{map_name}'"))?;
+    let (converted_models, prop_counts) =
+        convert_props(vfs, map_name, &world, models_dir, force_models)?;
 
     let map_dir = out_dir.join(map_name);
     std::fs::create_dir_all(&map_dir).with_context(|| format!("creating {}", map_dir.display()))?;
@@ -92,15 +92,15 @@ impl fmt::Display for PropCounts {
     }
 }
 
-/// Converts every distinct RSM1 the RSW references (`emitted_objects` is the
-/// same list the writer emits, so a prop dropped there never reaches the
-/// converter either) and returns the filenames now backed by a library glb --
-/// Converted this run or already Skipped -- for the writer to flip refs
-/// against. Unsupported RSM versions are counted but left on the native ref;
-/// any other failure aborts the whole map (`convert_model`'s own context names
-/// the offending file).
+/// Converts every distinct supported model the RSW references
+/// (`emitted_objects` is the same list the writer emits, so a prop dropped
+/// there never reaches the converter either) and returns the filenames now
+/// backed by a library glb -- Converted this run or already Skipped -- for the
+/// writer to flip refs against. Only unsupported legacy RSM1 versions are
+/// counted and left on the native ref; every other failure aborts the map.
 fn convert_props(
     vfs: &impl AssetRead,
+    map_name: &str,
     world: &RoWorld,
     models_dir: &Path,
     force_models: bool,
@@ -120,7 +120,7 @@ fn convert_props(
         }
 
         let outcome = model::convert_model(vfs, filename, models_dir, &mut pool, force_models)
-            .with_context(|| format!("converting prop model '{filename}'"))?;
+            .with_context(|| format!("map '{map_name}', converting prop model '{filename}'"))?;
         match outcome {
             ConvertOutcome::Converted => {
                 counts.converted += 1;
@@ -204,8 +204,7 @@ mod tests {
 
     /// The prop closure on real data: every prop the pilot map references
     /// resolves to a library glb that exists on disk, and the only refs left on
-    /// the native `.rsm` path are models the converter reports as an
-    /// unsupported RSM version.
+    /// the native `.rsm` path are unsupported legacy RSM1 models.
     #[test]
     #[ignore = "requires the retail GRFs in assets/"]
     fn the_pilot_map_prop_refs_close_over_the_glb_library() {
@@ -289,8 +288,8 @@ mod tests {
     }
 
     #[test]
-    fn convert_props_dedupes_filenames_and_counts_the_unsupported_fallback() {
-        use crate::converters::model::fixtures::{FakeVfs, bmp_bytes, encode_rsm};
+    fn convert_props_closes_supported_models_dedupes_and_counts_legacy_fallback() {
+        use crate::converters::model::fixtures::{FakeVfs, bmp_bytes, encode_rsm, encode_rsm2};
 
         let vfs = FakeVfs::with(&[
             (
@@ -298,49 +297,131 @@ mod tests {
                 encode_rsm((1, 4), &["bark.bmp"]),
             ),
             (
+                "data/model/prontera/sign22.rsm2",
+                encode_rsm2(2, "bark.bmp"),
+            ),
+            ("data/model/prontera/sign23.rsm", encode_rsm2(3, "bark.bmp")),
+            (
                 "data/model/prontera/relic01.rsm",
-                encode_rsm((2, 2), &["bark.bmp"]),
+                encode_rsm((1, 6), &["bark.bmp"]),
             ),
             ("data/texture/bark.bmp", bmp_bytes([255, 255, 255, 255])),
         ]);
         let world = props_world(vec![
             model_object("tree_a", "prontera\\tree01.rsm"),
             model_object("tree_b", "prontera\\tree01.rsm"),
+            model_object("sign22_a", "prontera\\sign22.rsm2"),
+            model_object("sign22_b", "prontera\\sign22.rsm2"),
+            model_object("sign23", "prontera\\sign23.rsm"),
             model_object("relic", "prontera\\relic01.rsm"),
         ]);
         let out = tempfile::tempdir().expect("tempdir");
 
         let (converted_models, counts) =
-            convert_props(&vfs, &world, out.path(), false).expect("convert props");
+            convert_props(&vfs, "synthetic", &world, out.path(), false).expect("convert props");
 
-        assert_eq!(counts.converted, 1);
+        assert_eq!(counts.converted, 3);
         assert_eq!(counts.skipped, 0);
         assert_eq!(counts.fallback, 1);
         assert_eq!(vfs.reads("data/model/prontera/tree01.rsm"), 1);
-        assert!(converted_models.contains("prontera\\tree01.rsm"));
+        assert_eq!(vfs.reads("data/model/prontera/sign22.rsm2"), 1);
+        for filename in [
+            "prontera\\tree01.rsm",
+            "prontera\\sign22.rsm2",
+            "prontera\\sign23.rsm",
+        ] {
+            assert!(converted_models.contains(filename));
+            assert!(
+                out.path()
+                    .join(model::glb_relative_path(filename))
+                    .is_file()
+            );
+            let object = model_object("prop", filename);
+            let RswObject::Model(model) = &object else {
+                unreachable!();
+            };
+            let prop = writer::lif_prop(model, &converted_models);
+            assert_eq!(
+                prop.model,
+                format!("ro://models/{}", model::glb_relative_path(filename))
+            );
+        }
         assert!(!converted_models.contains("prontera\\relic01.rsm"));
     }
 
     #[test]
-    fn convert_props_counts_skips_on_a_rerun() {
-        use crate::converters::model::fixtures::{FakeVfs, bmp_bytes, encode_rsm};
+    fn convert_props_counts_skips_stably_on_a_rerun() {
+        use crate::converters::model::fixtures::{FakeVfs, bmp_bytes, encode_rsm, encode_rsm2};
 
         let vfs = FakeVfs::with(&[
             (
                 "data/model/prontera/tree01.rsm",
                 encode_rsm((1, 4), &["bark.bmp"]),
             ),
+            (
+                "data/model/prontera/sign22.rsm2",
+                encode_rsm2(2, "bark.bmp"),
+            ),
             ("data/texture/bark.bmp", bmp_bytes([255, 255, 255, 255])),
         ]);
-        let world = props_world(vec![model_object("tree_a", "prontera\\tree01.rsm")]);
+        let world = props_world(vec![
+            model_object("tree_a", "prontera\\tree01.rsm"),
+            model_object("tree_b", "prontera\\tree01.rsm"),
+            model_object("sign_a", "prontera\\sign22.rsm2"),
+            model_object("sign_b", "prontera\\sign22.rsm2"),
+        ]);
         let out = tempfile::tempdir().expect("tempdir");
 
-        convert_props(&vfs, &world, out.path(), false).expect("first run");
+        convert_props(&vfs, "synthetic", &world, out.path(), false).expect("first run");
         let (converted_models, counts) =
-            convert_props(&vfs, &world, out.path(), false).expect("second run");
+            convert_props(&vfs, "synthetic", &world, out.path(), false).expect("second run");
 
         assert_eq!(counts.converted, 0);
-        assert_eq!(counts.skipped, 1);
+        assert_eq!(counts.skipped, 2);
+        assert_eq!(counts.fallback, 0);
+        assert_eq!(vfs.reads("data/model/prontera/tree01.rsm"), 1);
+        assert_eq!(vfs.reads("data/model/prontera/sign22.rsm2"), 1);
         assert!(converted_models.contains("prontera\\tree01.rsm"));
+        assert!(converted_models.contains("prontera\\sign22.rsm2"));
+    }
+
+    #[test]
+    fn convert_props_aborts_on_unsupported_or_malformed_rsm2_with_context() {
+        use crate::converters::model::fixtures::{FakeVfs, encode_rsm2};
+
+        for (filename, bytes, version, stage) in [
+            (
+                "prontera\\future.rsm2",
+                b"GRSM\x02\x04".to_vec(),
+                "2.4",
+                "stage dispatch",
+            ),
+            (
+                "prontera\\broken.rsm2",
+                b"GRSM\x02\x03".to_vec(),
+                "2.3",
+                "stage parse RSM2",
+            ),
+            (
+                "prontera\\missing_texture.rsm2",
+                encode_rsm2(2, "missing.bmp"),
+                "2.2",
+                "stage export textures",
+            ),
+        ] {
+            let path = format!("data/model/{}", filename.replace('\\', "/"));
+            let vfs = FakeVfs::with(&[(path.as_str(), bytes)]);
+            let world = props_world(vec![model_object("bad", filename)]);
+            let out = tempfile::tempdir().expect("tempdir");
+
+            let error = convert_props(&vfs, "test_map", &world, out.path(), false)
+                .expect_err("RSM2 must abort map conversion");
+            let message = format!("{error:#}");
+            assert!(message.contains("map 'test_map'"), "{message}");
+            assert!(message.contains(filename), "{message}");
+            assert!(message.contains(&format!("version {version}")), "{message}");
+            assert!(message.contains(stage), "{message}");
+            assert!(!out.path().join(model::glb_relative_path(filename)).exists());
+        }
     }
 }
