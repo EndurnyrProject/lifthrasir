@@ -5,4 +5,5 @@
 #[cfg(test)]
 pub mod fixtures;
 pub mod mesh;
+pub mod validate;
 pub mod writer;
