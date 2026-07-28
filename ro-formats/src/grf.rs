@@ -325,12 +325,22 @@ impl GrfFile {
     /// Reads one physical table entry without resolving its filename through
     /// `entry_map`, preserving duplicate logical names for corpus inspection.
     pub fn get_entry(&self, entry_index: usize) -> Option<Vec<u8>> {
+        self.entry_reader()?.get_entry(entry_index)
+    }
+
+    pub fn entry_reader(&self) -> Option<GrfEntryReader<'_>> {
+        Some(GrfEntryReader {
+            archive: self,
+            file: File::open(&self.file_path).ok()?,
+        })
+    }
+
+    fn read_entry_from(&self, entry_index: usize, file: &mut File) -> Option<Vec<u8>> {
         let entry = self.entries.get(entry_index)?;
         if (entry.file_type & FILELIST_TYPE_FILE) == 0 {
             return None;
         }
 
-        let mut file = File::open(&self.file_path).ok()?;
         use std::io::Seek;
         file.seek(std::io::SeekFrom::Start(entry.offset + HEADER_SIZE))
             .ok()?;
@@ -356,6 +366,17 @@ impl GrfFile {
         } else {
             Some(file_data)
         }
+    }
+}
+
+pub struct GrfEntryReader<'a> {
+    archive: &'a GrfFile,
+    file: File,
+}
+
+impl GrfEntryReader<'_> {
+    pub fn get_entry(&mut self, entry_index: usize) -> Option<Vec<u8>> {
+        self.archive.read_entry_from(entry_index, &mut self.file)
     }
 }
 
@@ -476,6 +497,9 @@ mod tests {
             grf.get_file("data\\same.rsm").as_deref(),
             Some(b"second" as &[u8])
         );
+        let mut reader = grf.entry_reader().unwrap();
+        assert_eq!(reader.get_entry(0).as_deref(), Some(b"first" as &[u8]));
+        assert_eq!(reader.get_entry(1).as_deref(), Some(b"second" as &[u8]));
 
         std::fs::remove_file(path).ok();
     }

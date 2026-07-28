@@ -38,11 +38,33 @@ enum Command {
         #[arg(long)]
         force_models: bool,
     },
+    ModelCorpus {
+        #[command(subcommand)]
+        action: ModelCorpusCommand,
+    },
     GenProto {
         #[arg(long)]
         src: PathBuf,
         #[arg(long)]
         out: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum ModelCorpusCommand {
+    Extract {
+        #[arg(long, default_value = "assets/convert.toml")]
+        loader: PathBuf,
+        #[arg(long, default_value = "target/rsm2-corpus/extracted")]
+        out: PathBuf,
+    },
+    Scan {
+        #[arg(long, default_value = "assets/convert.toml")]
+        loader: PathBuf,
+        #[arg(long, default_value = "target/rsm2-corpus/extracted")]
+        extracted: PathBuf,
+        #[arg(long, default_value = "target/rsm2-corpus/preflight-report.json")]
+        report: PathBuf,
     },
 }
 
@@ -67,6 +89,40 @@ fn main() -> anyhow::Result<()> {
             let vfs = grf_vfs::GrfVfs::open(&grfs)?;
             converters::map::run(&vfs, &map, &out, &models_dir, force_models)?;
         }
+        Command::ModelCorpus { action } => match action {
+            ModelCorpusCommand::Extract { loader, out } => {
+                let config = config::LoaderConfig::from_path(&loader)?;
+                let grfs = config.grfs_by_priority();
+                let vfs = grf_vfs::GrfVfs::open(&grfs)?;
+                let count = converters::model::corpus::extract(&vfs, &out)?;
+                println!("extracted {count} corpus files to {}", out.display());
+            }
+            ModelCorpusCommand::Scan {
+                loader,
+                extracted,
+                report,
+            } => {
+                let config = config::LoaderConfig::from_path(&loader)?;
+                let grfs = config.grfs_by_priority();
+                let vfs = grf_vfs::GrfVfs::open(&grfs)?;
+                let preflight =
+                    converters::model::corpus::write_preflight(&vfs, &report, &extracted)?;
+                println!(
+                    "models: {} physical / {} effective, placements: {}, errors: {}",
+                    preflight.summary.physical_models,
+                    preflight.summary.effective_models,
+                    preflight.summary.placements,
+                    preflight.summary.inventory_errors,
+                );
+                anyhow::ensure!(
+                    !preflight.has_gates(),
+                    "RSM2 corpus preflight gates: {}; blockers: {}; full report: {}",
+                    preflight.gate_message(),
+                    preflight.blocking_paths(10).join(", "),
+                    report.display()
+                );
+            }
+        },
         Command::GenProto { src, out } => {
             proto_gen::run(&src, &out)?;
         }

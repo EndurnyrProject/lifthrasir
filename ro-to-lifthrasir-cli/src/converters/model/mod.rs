@@ -2,6 +2,7 @@
 //! glb mirroring its GRF path under `<models_dir>`, with every texture exported
 //! once into the run-wide `<models_dir>/tex/` pool.
 
+pub mod corpus;
 #[cfg(test)]
 pub mod fixtures;
 pub mod mesh;
@@ -18,8 +19,25 @@ use std::path::{Path, PathBuf};
 
 /// RSM1 revisions the mesh builder and writer understand. RSM2 (`2.x`) is a
 /// different container the native path does not read either.
-const SUPPORTED_MAJOR: u8 = 1;
-const SUPPORTED_MINORS: std::ops::RangeInclusive<u8> = 2..=5;
+const SUPPORTED_RSM1_MINORS: std::ops::RangeInclusive<u8> = 2..=5;
+const SUPPORTED_RSM2_MINORS: std::ops::RangeInclusive<u8> = 2..=3;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelFormat {
+    Rsm1 { minor: u8 },
+    Rsm2 { minor: u8 },
+    Unsupported { major: u8, minor: u8 },
+}
+
+impl ModelFormat {
+    pub fn version(self) -> (u8, u8) {
+        match self {
+            Self::Rsm1 { minor } => (1, minor),
+            Self::Rsm2 { minor } => (2, minor),
+            Self::Unsupported { major, minor } => (major, minor),
+        }
+    }
+}
 
 /// What `convert_model` did with one model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,14 +138,22 @@ fn export_textures(
         .collect()
 }
 
-/// Reads the `GRSM` magic and version bytes without parsing the body, so a
-/// model the parser cannot read can still be classified by version.
-pub fn is_supported_version(bytes: &[u8]) -> anyhow::Result<bool> {
+/// Reads the `GRSM` magic and exact version without parsing the body.
+pub fn classify_header(bytes: &[u8]) -> anyhow::Result<ModelFormat> {
     let header = bytes
         .get(..6)
         .context("file is shorter than an RSM header")?;
     ensure!(&header[..4] == b"GRSM", "bad RSM magic: {:?}", &header[..4]);
-    Ok(header[4] == SUPPORTED_MAJOR && SUPPORTED_MINORS.contains(&header[5]))
+    let (major, minor) = (header[4], header[5]);
+    Ok(match major {
+        1 if SUPPORTED_RSM1_MINORS.contains(&minor) => ModelFormat::Rsm1 { minor },
+        2 if SUPPORTED_RSM2_MINORS.contains(&minor) => ModelFormat::Rsm2 { minor },
+        _ => ModelFormat::Unsupported { major, minor },
+    })
+}
+
+pub fn is_supported_version(bytes: &[u8]) -> anyhow::Result<bool> {
+    Ok(matches!(classify_header(bytes)?, ModelFormat::Rsm1 { .. }))
 }
 
 /// The `<models_dir>/tex/` PNG pool shared by every model in one run.
@@ -297,6 +323,22 @@ mod tests {
         let forced = convert_model(&vfs, TREE, out.path(), &mut pool, true).expect("forced");
         assert_eq!(forced, ConvertOutcome::Converted);
         assert_eq!(vfs.reads("data/model/prontera/Tree01.rsm"), reads + 1);
+    }
+
+    #[test]
+    fn classifies_exact_rsm_families_and_versions() {
+        assert_eq!(
+            classify_header(b"GRSM\x01\x04").unwrap(),
+            ModelFormat::Rsm1 { minor: 4 }
+        );
+        assert_eq!(
+            classify_header(b"GRSM\x02\x03").unwrap(),
+            ModelFormat::Rsm2 { minor: 3 }
+        );
+        assert_eq!(
+            classify_header(b"GRSM\x02\x04").unwrap(),
+            ModelFormat::Unsupported { major: 2, minor: 4 }
+        );
     }
 
     #[test]

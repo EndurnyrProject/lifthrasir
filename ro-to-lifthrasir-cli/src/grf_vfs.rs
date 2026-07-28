@@ -114,6 +114,28 @@ impl GrfVfs {
             .grf
             .get_entry(asset.entry_index)
     }
+
+    pub(crate) fn visit_physical<'a>(
+        &'a self,
+        assets: impl IntoIterator<Item = &'a PhysicalAsset>,
+        mut visit: impl FnMut(&'a PhysicalAsset, Option<Vec<u8>>),
+    ) {
+        let mut current_source = None;
+        let mut reader = None;
+        for asset in assets {
+            if current_source != Some(asset.source_index) {
+                current_source = Some(asset.source_index);
+                reader = self
+                    .sources
+                    .get(asset.source_index)
+                    .and_then(|source| source.grf.entry_reader());
+            }
+            let bytes = reader
+                .as_mut()
+                .and_then(|reader| reader.get_entry(asset.entry_index));
+            visit(asset, bytes);
+        }
+    }
 }
 
 #[cfg(test)]
