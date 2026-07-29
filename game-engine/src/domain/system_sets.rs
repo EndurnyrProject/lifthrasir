@@ -213,19 +213,6 @@ pub enum AuthenticationSystems {
     schedule = Update,
     chain
 )]
-pub enum ModelRenderingSystems {
-    ModelLoading,
-    ModelMeshUpdate,
-    ModelMaterialUpdate,
-    ModelAnimation,
-}
-
-#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[auto_configure_system_set(
-    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
-    schedule = Update,
-    chain
-)]
 pub enum WaterRenderingSystems {
     WaterLoading,
     WaterFinalization,

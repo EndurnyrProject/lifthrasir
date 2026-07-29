@@ -11,16 +11,67 @@
 //! spawner, not registered globally -- every other glb the app loads must stay
 //! untouched.
 
-use super::gltf_map::CurrentMapNoShadeTint;
+use super::gltf_map::{CurrentMapNoShadeTint, LifPropRef, ROOT_FIX};
 use crate::domain::entities::systems::AnimationType;
-use crate::presentation::rendering::models::rsw_anim_type_to_animation_type;
 use bevy::animation::RepeatAnimation;
 use bevy::gltf::{GltfAssetLabel, GltfExtras};
 use bevy::math::Affine2;
 use bevy::mesh::UvChannel;
 use bevy::prelude::*;
-use bevy::world_serialization::WorldInstanceReady;
+use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
 use lifthrasir_data::lif::{EXTRAS_NO_SHADE, EXTRAS_UV_ANIMATION, LifUvAnimation, LifUvSample};
+
+#[derive(Component)]
+pub struct MapModel {
+    pub filename: String,
+    pub node_name: String,
+}
+
+/// Converts RSW's `anim_type` field to our enum. Most RO models should loop
+/// by default for continuous animation.
+pub(crate) fn rsw_anim_type_to_animation_type(anim_type: u32) -> AnimationType {
+    match anim_type {
+        0 => AnimationType::None,
+        1 => AnimationType::Loop,
+        2 => AnimationType::Once,
+        _ => AnimationType::Loop,
+    }
+}
+
+/// Attaches each converted prop scene to its map node once.
+pub fn spawn_gltf_map_props(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    props: Query<(Entity, &LifPropRef), Without<MapModel>>,
+) {
+    for (entity, prop) in props.iter() {
+        let path = &prop.0.model;
+
+        commands.entity(entity).insert(MapModel {
+            filename: path.clone(),
+            node_name: String::new(),
+        });
+
+        if path.ends_with(".glb") {
+            commands
+                .spawn((
+                    Transform::from_rotation(ROOT_FIX),
+                    WorldAssetRoot(
+                        asset_server.load(GltfAssetLabel::Scene(0).from_asset(path.clone())),
+                    ),
+                    PropAnim {
+                        model: path.clone(),
+                        anim_type: prop.0.anim_type,
+                        anim_speed: prop.0.anim_speed,
+                    },
+                ))
+                .observe(wire_prop_scene)
+                .insert(ChildOf(entity));
+        } else {
+            error!("lif_prop ref '{path}' does not have a .glb extension");
+        }
+    }
+}
 
 /// On the `WorldAssetRoot` entity of a prop glb, carrying the RSW placement's
 /// animation intent plus the asset path the glb was spawned from.
@@ -284,6 +335,7 @@ fn prop_repeat_mode(anim_type: u32) -> Option<RepeatAnimation> {
 mod tests {
     use super::*;
     use bevy::asset::{AssetPlugin, LoadContext};
+    use bevy::ecs::system::RunSystemOnce;
     use bevy::gltf::extensions::{
         ErasedGltfExtensionHandler, GltfExtensionHandler, GltfExtensionHandlers,
     };
@@ -291,18 +343,33 @@ mod tests {
     use bevy::image::ImagePlugin;
     use bevy::mesh::{Mesh, MeshPlugin, VertexAttributeValues};
     use bevy::world_serialization::{WorldAsset, WorldSerializationPlugin};
+    use lifthrasir_data::lif::LifProp;
     use std::time::{Duration, Instant};
 
     const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
 
     fn test_app() -> App {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
-            .init_asset::<StandardMaterial>()
-            .init_asset::<AnimationClip>()
-            .init_asset::<AnimationGraph>()
-            .init_resource::<CurrentMapNoShadeTint>();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            WorldSerializationPlugin,
+        ))
+        .init_asset::<StandardMaterial>()
+        .init_asset::<AnimationClip>()
+        .init_asset::<AnimationGraph>()
+        .init_resource::<CurrentMapNoShadeTint>();
         app
+    }
+
+    fn spawn_lif_prop(app: &mut App, model: &str) -> Entity {
+        app.world_mut()
+            .spawn(LifPropRef(LifProp {
+                model: model.to_string(),
+                anim_type: 1,
+                anim_speed: 2.0,
+            }))
+            .id()
     }
 
     #[derive(Clone, Default)]
@@ -410,6 +477,74 @@ mod tests {
             .get(&handle.unwrap().0)
             .unwrap()
             .reflectance
+    }
+
+    #[test]
+    fn rsm_ref_is_logged_and_skipped() {
+        let mut app = test_app();
+        let entity = spawn_lif_prop(&mut app, "ro://data/model/prontera/tree01.rsm");
+
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+
+        let world = app.world();
+        assert!(world.get::<MapModel>(entity).is_some());
+        assert!(world.get::<Children>(entity).is_none());
+    }
+
+    #[test]
+    fn glb_ref_spawns_a_child_gltf_scene() {
+        let mut app = test_app();
+        let entity = spawn_lif_prop(&mut app, "ro://models/prontera/tree01.glb");
+
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+
+        let world = app.world();
+        assert_eq!(
+            world.get::<MapModel>(entity).unwrap().filename,
+            "ro://models/prontera/tree01.glb"
+        );
+        let children = world.get::<Children>(entity).expect("one child spawned");
+        assert_eq!(children.len(), 1);
+        let child = children[0];
+        assert_eq!(world.get::<Transform>(child).unwrap().rotation, ROOT_FIX);
+        assert!(world.get::<WorldAssetRoot>(child).is_some());
+        let anim = world.get::<PropAnim>(child).expect("PropAnim on the child");
+        assert_eq!(anim.model, "ro://models/prontera/tree01.glb");
+        assert_eq!(anim.anim_type, 1);
+        assert_eq!(anim.anim_speed, 2.0);
+    }
+
+    #[test]
+    fn an_entity_is_only_dispatched_once() {
+        let mut app = test_app();
+        let entity = spawn_lif_prop(&mut app, "ro://models/prontera/tree01.glb");
+
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+
+        assert_eq!(app.world().get::<Children>(entity).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn an_unrecognized_extension_is_logged_and_skipped() {
+        let mut app = test_app();
+        let entity = spawn_lif_prop(&mut app, "ro://models/prontera/tree01.rsm2");
+
+        app.world_mut()
+            .run_system_once(spawn_gltf_map_props)
+            .unwrap();
+
+        let world = app.world();
+        assert!(world.get::<MapModel>(entity).is_some());
+        assert!(world.get::<Children>(entity).is_none());
     }
 
     #[test]

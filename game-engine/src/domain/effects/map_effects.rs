@@ -22,8 +22,7 @@ use crate::domain::world::gltf_map::LifEffectEmitter;
 use crate::domain::world::map_scoped::MapScoped;
 use crate::infrastructure::effect::EffectCatalog;
 
-/// Marks a `MapLoader` whose RSW effect objects have been spawned, so we do it
-/// once per map load (mirrors `ModelsSpawned`).
+/// Marks a map whose effect objects have been spawned, so we do it once per load.
 #[derive(Component)]
 pub struct MapEffectsSpawned;
 

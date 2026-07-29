@@ -17,12 +17,11 @@ use crate::domain::effects::map_effects::spawn_gltf_map_effects;
 use crate::domain::entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid};
 use crate::domain::system_sets::WorldLoadingSystems;
 use crate::domain::world::components::CurrentMapAltitude;
-use crate::domain::world::gltf_prop::{PropAnim, play_prop_uv_animation};
+use crate::domain::world::gltf_prop::{PropAnim, play_prop_uv_animation, spawn_gltf_map_props};
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
 use crate::domain::world::map_scoped::MapScoped;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
-use crate::presentation::rendering::models::spawn_gltf_map_props;
 use crate::presentation::rendering::water::begin_water_loading;
 use bevy::app::AnimationSystems;
 use bevy::asset::LoadContext;
@@ -583,20 +582,17 @@ mod tests {
     use crate::domain::character::map_loading::detect_map_load_complete;
     use crate::domain::effects::components::{ActiveEffect, MapAmbientVfx};
     use crate::domain::entities::pathfinding::PathfindingGrid;
-    use crate::domain::entities::systems::AnimationType;
     use crate::domain::input::resources::ForwardedCursorPosition;
     use crate::domain::input::terrain_raycast::{
         TerrainRaycastCache, update_terrain_raycast_cache,
     };
+    use crate::domain::world::gltf_prop::MapModel;
     use crate::domain::world::loading_progress::{GLTF_MAP_STEPS, track_map_load_progress};
     use crate::domain::world::spawn_context::MapSpawnContext;
     use crate::infrastructure::assets::hierarchical_reader::HierarchicalAssetReader;
-    use crate::infrastructure::assets::loaders::{
-        RoAltitudeAsset, RoGroundAsset, RoWorldAsset, RsmAsset,
-    };
+    use crate::infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset, RoWorldAsset};
     use crate::infrastructure::assets::sources::{CompositeAssetSource, DataFolderSource};
     use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset};
-    use crate::presentation::rendering::models::{AnimationSpeed, MapModel, RsmLoading};
     use crate::presentation::rendering::water::WaterLoadingState;
     use crate::utils::coordinates::world_position_to_spawn_coords;
     use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
@@ -751,7 +747,7 @@ mod tests {
             assert_eq!(
                 single::<LifPropRef>(world).0,
                 LifProp {
-                    model: "ro://data/model/prontera/tree01.rsm".to_string(),
+                    model: "ro://data/model/prontera/tree01.glb".to_string(),
                     anim_type: 1,
                     anim_speed: 2.0,
                 }
@@ -889,7 +885,6 @@ mod tests {
         app.init_asset::<RoGroundAsset>()
             .init_asset::<RoAltitudeAsset>()
             .init_asset::<RoWorldAsset>()
-            .init_asset::<RsmAsset>()
             // `PbrPlugin`'s job in the real app; the terrain materials the glb
             // carries have nowhere to land without it, and the scene spawner
             // refuses to clone a component it cannot reflect.
@@ -1580,10 +1575,9 @@ mod tests {
     }
 
     /// The converter bakes the whole RSW placement into the prop node, so the
-    /// runtime attaches the model to that node and applies nothing on top --
-    /// running `rsw_to_bevy_transform` here would place every prop twice.
+    /// runtime attaches the converted scene there and applies nothing on top.
     #[test]
-    fn a_glb_prop_node_requests_its_rsm_at_the_baked_placement() {
+    fn a_glb_prop_scene_uses_the_baked_placement() {
         let root = stage_map("mini_map", "mini_map.glb");
         let mut app = map_app(&root);
         let entity = request_map(&mut app, "mini_map");
@@ -1597,11 +1591,9 @@ mod tests {
         let mut query = world.query::<(
             &LifPropRef,
             &MapModel,
-            &RsmLoading,
             &Transform,
             &GlobalTransform,
-            &AnimationType,
-            &AnimationSpeed,
+            &Children,
         )>();
         let props: Vec<_> = query.iter(world).collect();
         assert_eq!(
@@ -1610,17 +1602,18 @@ mod tests {
             "one map model per glb prop node, however many frames run"
         );
 
-        let (prop, model, loading, transform, global, anim_type, anim_speed) = props[0];
+        let (prop, model, transform, global, children) = props[0];
         assert_eq!(model.filename, prop.0.model);
-        assert_eq!(
-            loading.handle.path().expect("RSM asset path").to_string(),
-            "ro://data/model/prontera/tree01.rsm"
-        );
-        // Fixture's RSW anim_type 1 (Loop), anim_speed 2.0 -- same conversion
-        // as spawn_map_models applies on the native path.
+        assert!(prop.0.model.ends_with(".glb"));
         assert_eq!(prop.0.anim_type, 1);
-        assert_eq!(*anim_type, AnimationType::Loop);
-        assert_eq!(anim_speed.0, 2.0);
+        assert_eq!(prop.0.anim_speed, 2.0);
+        assert_eq!(children.len(), 1);
+        let scene = world.entity(children[0]);
+        assert!(scene.contains::<WorldAssetRoot>());
+        let anim = scene.get::<PropAnim>().expect("PropAnim on prop scene");
+        assert_eq!(anim.model, prop.0.model);
+        assert_eq!(anim.anim_type, prop.0.anim_type);
+        assert_eq!(anim.anim_speed, prop.0.anim_speed);
 
         // RSW position [7, -8, 9], rotation [10, 20, 30] and scale [1, 2, 3] on
         // a 2x2 ground, baked by the converter into the node's own transform.
