@@ -13,8 +13,11 @@
 **Lifthrasir** is a Ragnarok Online client implementation written in Rust using the Bevy game engine with a native Bevy UI. The project aims to recreate the classic MMORPG client while leveraging modern technologies for cross-platform compatibility, performance, and maintainability.
 
 ### Key Features
-- Full support for Ragnarok Online file formats (GRF, GND, GAT, RSW, RSM, SPR, ACT)
-- 3D terrain rendering with proper coordinate system translation
+- Support for Ragnarok Online file formats (GRF, GND, GAT, RSW, RSM/RSM2, SPR, ACT).
+  **Map and model formats are read by the offline tooling only** — see "Map
+  runtime boundary" below. At runtime the client reads SPR/ACT sprites, STR
+  effects, palettes, and glTF.
+- 3D terrain rendering from converted glTF, with proper coordinate system translation
 - Character rendering with equipment and animation systems
 - Authentication and character management
 - Native UI built with Bevy
@@ -79,6 +82,38 @@ expose a plugin, and add that plugin in `main.rs`. The contract, `game-engine`, 
 `lifthrasir-ui` stay untouched.
 
 
+### Map runtime boundary
+
+Maps are **converted offline to glTF and never parsed at runtime.** The client
+contains no GND, GAT, RSW, RSM or RSM2 reader; a map is a single
+`data/maps/<map>/<map>.glb` produced by `ro-to-lifthrasir-cli convert-maps`,
+carrying terrain meshes, baked `KHR_lights_punctual` lighting and ambient,
+sound and effect emitters, prop references, water parameters **plus its baked
+water tile mask**, and the original `.gat` bytes verbatim in the binary chunk.
+
+Consequences worth knowing before changing map code:
+
+- **A missing or invalid map glb is a hard failure**, not a fallback. There is
+  no second loading path to degrade into. `spawn_gltf_map` is the sole claimer
+  of a map request and `detect_gltf_map_load_failure` panics naming the
+  expected path.
+- **`ro-formats`' GAT parser is still a runtime dependency.** `LIF_gat` stores
+  raw `.gat` bytes that the runtime decodes into `CurrentMapPathfindingGrid`
+  and `CurrentMapAltitude`. Only the GND/RSW/RSM/RSM2 parsers are offline-only.
+  Do not "move all format parsing offline" — it will break walkability,
+  grounding and terrain raycast.
+- **Water tile selection happens in the converter, not the runtime.** The
+  runtime has no GND, and GND and GAT heights are independent fields with no
+  transform between them, so selection cannot be recomputed at load. The
+  converter bakes a tile bitmask into `LIF_water`.
+- **Props resolve only to `.glb`.** Conversion fails loudly on a prop it could
+  not convert, so a written map glb is loadable by construction.
+- Adding a map feature means extending the **converter schema**
+  (`lifthrasir-data/src/lif.rs`) and the glb writer, not adding a runtime
+  parser. Bump `lif::FORMAT_VERSION` when the schema changes — note it is
+  shared by `LifMap` and `LifModel`, so bumping it invalidates converted
+  **models** as well as maps.
+
 ### Building
 
 ```bash
@@ -117,7 +152,22 @@ default `assets/` source. The only files read straight off disk are
 `assets/loader.toml` (the bootstrap config, read before the source exists) and
 the hotbar save file.
 
-Produce the pak once from retail GRFs (GRF parsing lives only in the offline
+Convert the maps first — **`pack` never converts anything**, it only archives
+what is already on disk, and the runtime cannot load an unconverted map:
+
+```bash
+cargo run --release -p ro-to-lifthrasir-cli -- convert-maps --force-models
+```
+
+This writes `assets/data/maps/<map>/<map>.glb` plus `tex/*.png`, and the props
+they reference into `assets/data/models`. It processes maps in sorted order,
+logs and continues past failures, and exits non-zero if any map failed; writes
+are atomic so a failed map leaves no partial glb. `--force-models` re-converts
+props that already exist on disk — required after any `lif::FORMAT_VERSION`
+bump, since cached props are otherwise skipped and the runtime rejects stale
+ones. Single map: `convert-map --map <name>`.
+
+Then produce the pak from retail GRFs (GRF parsing lives only in the offline
 tooling):
 
 ```bash
@@ -126,6 +176,12 @@ cargo run --release -p grf-utils -- pack \
   --content-dir assets/data \
   --out assets/lifthrasir.pak --content-version 1
 ```
+
+`pack` **excludes `.rsm`, `.rsm2`, `.gnd`, `.gat` and `.rsw`** from the archive:
+nothing reads them at runtime, and each map glb already embeds its `.gat` bytes.
+The filter is applied after the precedence tiers are merged, so no tier can
+reintroduce them; the summary reports an `Excluded:` count. `--content-version`
+is enforced monotonic, so bump it on every rebuild.
 
 Earlier `--grf` flags win on duplicate paths. `--content-dir` (repeatable) packs
 a folder **at the pak root**, mirroring the runtime's `data_folder`, and is what
