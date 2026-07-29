@@ -19,6 +19,7 @@ pub const FORMAT_VERSION: u32 = 1;
 
 const GRF_FILE_TYPE_FILE: u8 = 0x01;
 const STORED_EXTENSIONS: [&str; 4] = ["ogg", "mp3", "jpg", "png"];
+const EXCLUDED_EXTENSIONS: [&str; 5] = ["rsm", "rsm2", "gnd", "gat", "rsw"];
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PakManifest {
@@ -51,6 +52,16 @@ pub fn codec_for(normalized_path: &str) -> CompressionMethod {
     }
 }
 
+fn is_excluded_path(normalized_path: &str) -> bool {
+    let extension = Path::new(normalized_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+
+    EXCLUDED_EXTENSIONS.contains(&extension.as_str())
+}
+
 /// Merges precedence tiers into a flat entry list. Earlier tiers win on path collisions.
 pub fn union_entries(sources: Vec<SourceEntries>) -> SourceEntries {
     let mut seen = HashSet::new();
@@ -65,6 +76,20 @@ pub fn union_entries(sources: Vec<SourceEntries>) -> SourceEntries {
     }
 
     result
+}
+
+fn exclude_source_formats(entries: SourceEntries) -> (SourceEntries, usize) {
+    let mut excluded = 0;
+    let entries = entries
+        .into_iter()
+        .filter(|(path, _)| {
+            let exclude = is_excluded_path(path);
+            excluded += usize::from(exclude);
+            !exclude
+        })
+        .collect();
+
+    (entries, excluded)
 }
 
 fn scan_dir_recursive(dir: &Path, root: &Path, out: &mut SourceEntries) {
@@ -158,7 +183,7 @@ pub fn collect_entries(
     grf_paths: &[PathBuf],
     data_folder: Option<&Path>,
     content_folders: &[PathBuf],
-) -> (SourceEntries, usize) {
+) -> (SourceEntries, usize, usize) {
     let mut tiers: Vec<SourceEntries> = Vec::new();
     if let Some(folder) = data_folder {
         tiers.push(scan_data_folder(folder));
@@ -181,7 +206,8 @@ pub fn collect_entries(
         }
     }
 
-    (union_entries(tiers), skipped)
+    let (entries, excluded) = exclude_source_formats(union_entries(tiers));
+    (entries, skipped, excluded)
 }
 
 fn now_unix() -> u64 {
@@ -645,9 +671,7 @@ mod tests {
 
     #[test]
     fn codec_policy_zstd_for_everything_else() {
-        for ext in [
-            "spr", "act", "gnd", "gat", "rsw", "rsm", "bmp", "tga", "wav", "txt", "lub",
-        ] {
+        for ext in ["spr", "act", "bmp", "tga", "wav", "txt", "lub"] {
             assert_eq!(
                 codec_for(&format!("data/model/x.{ext}")),
                 CompressionMethod::Zstd,
@@ -685,6 +709,25 @@ mod tests {
         assert_eq!(as_map["data/c.txt"], b"from-second-grf-c");
     }
 
+    #[test]
+    fn exclusion_applies_after_all_precedence_tiers_are_unioned() {
+        let data_folder = vec![("data/loose.gnd".to_string(), b"loose".to_vec())];
+        let content_folder = vec![("maps/content.rsw".to_string(), b"content".to_vec())];
+        let grf = vec![
+            ("data/model/grf.rsm2".to_string(), b"grf".to_vec()),
+            ("data/sprite/grf.spr".to_string(), b"sprite".to_vec()),
+        ];
+
+        let (entries, excluded) =
+            exclude_source_formats(union_entries(vec![data_folder, content_folder, grf]));
+
+        assert_eq!(excluded, 3);
+        assert_eq!(
+            entries,
+            vec![("data/sprite/grf.spr".to_string(), b"sprite".to_vec())]
+        );
+    }
+
     /// A content folder is the pak root: its own name is dropped, so the runtime
     /// finds `assets/data/fonts/x.ttf` at `ro://fonts/x.ttf`. The data folder keeps
     /// its name instead, which is what lets it shadow the GRFs' `data/...` entries.
@@ -695,14 +738,14 @@ mod tests {
         fs::create_dir_all(content.join("fonts")).unwrap();
         fs::write(content.join("fonts/Manrope.ttf"), b"ttf-bytes").unwrap();
 
-        let (entries, skipped) = collect_entries(&[], None, std::slice::from_ref(&content));
+        let (entries, skipped, _) = collect_entries(&[], None, std::slice::from_ref(&content));
         assert_eq!(skipped, 0);
         assert_eq!(
             entries,
             vec![("fonts/manrope.ttf".to_string(), b"ttf-bytes".to_vec())]
         );
 
-        let (as_data_folder, _) = collect_entries(&[], Some(&content), &[]);
+        let (as_data_folder, _, _) = collect_entries(&[], Some(&content), &[]);
         assert_eq!(
             as_data_folder,
             vec![("data/fonts/manrope.ttf".to_string(), b"ttf-bytes".to_vec())]
@@ -722,7 +765,7 @@ mod tests {
         )
         .unwrap();
 
-        let (entries, skipped) = collect_entries(&[], Some(&data_folder), &[]);
+        let (entries, skipped, _) = collect_entries(&[], Some(&data_folder), &[]);
         assert_eq!(skipped, 0);
 
         let out_path = dir.path().join("out.pak");
@@ -757,6 +800,35 @@ mod tests {
         assert_eq!(manifest.content_version, 7);
     }
 
+    #[test]
+    fn pack_excludes_map_and_model_source_formats_from_loose_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let data_folder = dir.path().join("data");
+        fs::create_dir_all(&data_folder).unwrap();
+        for extension in ["rsm", "gnd", "gat", "rsw", "act", "spr", "png", "ogg"] {
+            fs::write(data_folder.join(format!("asset.{extension}")), b"bytes").unwrap();
+        }
+
+        let (entries, skipped, excluded) = collect_entries(&[], Some(&data_folder), &[]);
+        assert_eq!(skipped, 0);
+        assert_eq!(excluded, 4);
+
+        let out_path = dir.path().join("out.pak");
+        write_pak(&entries, &out_path, 1, None, |_| {}).unwrap();
+        let archive_entries = read_all_entries(&out_path);
+        let names: HashSet<&str> = archive_entries.keys().map(String::as_str).collect();
+        assert_eq!(
+            names,
+            HashSet::from([
+                "data/asset.act",
+                "data/asset.spr",
+                "data/asset.png",
+                "data/asset.ogg",
+                MANIFEST_ENTRY,
+            ])
+        );
+    }
+
     fn read_all_entries(path: &Path) -> std::collections::HashMap<String, Vec<u8>> {
         let file = fs::File::open(path).unwrap();
         let mut archive = zip::ZipArchive::new(file).unwrap();
@@ -787,7 +859,7 @@ mod tests {
         }
         fs::write(data_folder.join("sound.ogg"), b"ogg-bytes").unwrap();
 
-        let (entries, skipped) = collect_entries(&[], Some(&data_folder), &[]);
+        let (entries, skipped, _) = collect_entries(&[], Some(&data_folder), &[]);
         assert_eq!(skipped, 0);
 
         let sequential_path = dir.path().join("sequential.pak");
@@ -838,7 +910,7 @@ mod tests {
             fs::write(data_folder.join(format!("file{i}.txt")), b"payload").unwrap();
         }
 
-        let (entries, _) = collect_entries(&[], Some(&data_folder), &[]);
+        let (entries, _, _) = collect_entries(&[], Some(&data_folder), &[]);
         let out_path = dir.path().join("out.pak");
 
         write_pak_parallel(&entries, &out_path, 1, None, 3, |_| {}).unwrap();

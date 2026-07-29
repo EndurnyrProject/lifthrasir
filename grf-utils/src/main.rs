@@ -150,7 +150,7 @@ fn pack_command(
     jobs: Option<usize>,
 ) -> Result<()> {
     println!("Scanning sources...");
-    let (entries, skipped) = pak::collect_entries(grf_paths, data_folder, content_dirs);
+    let (entries, skipped, excluded) = pak::collect_entries(grf_paths, data_folder, content_dirs);
 
     let jobs = jobs
         .or_else(|| std::thread::available_parallelism().ok().map(|n| n.get()))
@@ -173,9 +173,10 @@ fn pack_command(
     pb.finish_with_message("Pack complete");
 
     println!("\nSummary:");
-    println!("  Packed:  {}", entries.len());
+    println!("  Packed:   {}", entries.len());
+    println!("  Excluded: {excluded}");
     if skipped > 0 {
-        println!("  Skipped: {}", skipped);
+        println!("  Skipped:  {skipped}");
     }
 
     Ok(())
