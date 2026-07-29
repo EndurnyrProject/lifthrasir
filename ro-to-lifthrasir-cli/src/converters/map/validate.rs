@@ -339,8 +339,8 @@ fn validate_map_extension(root: &gltf_json::Root, inputs: &MapGlbInputs) -> anyh
     Ok(())
 }
 
-/// `level == 0.0` is how RSW says "no water"; the writer omits the extension
-/// then, and a glb that carries one anyway is wrong.
+/// The writer omits this extension when every resolved zone has level zero;
+/// a glb that carries one anyway is wrong.
 fn validate_water_extension(
     root: &gltf_json::Root,
     blob: &[u8],
@@ -352,31 +352,21 @@ fn validate_water_extension(
         .and_then(|extensions| extensions.others.get(lif::EXTENSION_WATER))
         .is_some();
 
-    if inputs.world.water.level == 0.0 {
+    let mut expected = water::resolve_water(inputs.ground, &inputs.world.water)?;
+    if expected.zones.iter().all(|zone| zone.level == 0.0) {
         ensure!(
             !declared,
-            "glb declares {} but the RSW has no water level",
+            "glb declares {} but the resolved water zones have no water level",
             lif::EXTENSION_WATER
         );
         return Ok(());
     }
 
     let water: lif::LifWater = root_extension(root, lif::EXTENSION_WATER)?;
-    let params = &inputs.world.water;
-    let expected = lif::LifWater {
-        level: params.level,
-        water_type: params.water_type,
-        wave_height: params.wave_height,
-        wave_speed: params.wave_speed,
-        wave_pitch: params.wave_pitch,
-        anim_speed: params.anim_speed,
-        width: water.width,
-        height: water.height,
-        buffer_view: water.buffer_view,
-    };
+    expected.buffer_view = water.buffer_view;
     ensure!(
         water == expected,
-        "{} {water:?} differs from the RSW {expected:?}",
+        "{} {water:?} differs from the resolved source water {expected:?}",
         lif::EXTENSION_WATER
     );
 
@@ -392,7 +382,7 @@ fn validate_water_extension(
         inputs.ground.height
     );
     let embedded = water_mask_bytes(root, blob, &water)?;
-    let expected = water::select_water_tiles(inputs.ground, &inputs.world.water);
+    let expected_tiles = water::select_water_tiles(inputs.ground, &expected);
     ensure!(
         embedded.len() == (width * height).div_ceil(8),
         "{} bufferView holds {} bytes, expected {} for {width}x{height}",
@@ -401,7 +391,7 @@ fn validate_water_extension(
         (width * height).div_ceil(8)
     );
     ensure!(
-        lif::decode_water_mask(embedded, width, height) == expected,
+        lif::decode_water_mask(embedded, width, height) == expected_tiles,
         "{} mask differs from the GND-corner selection",
         lif::EXTENSION_WATER
     );

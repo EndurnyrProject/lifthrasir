@@ -2,7 +2,7 @@
 //! pipeline. Depended on by the offline converter (`ro-to-lifthrasir-cli`)
 //! and the runtime (`game-engine`); knows nothing about either.
 
-use ro_formats::{GatError, RoAltitude, RswWater};
+use ro_formats::{GatError, RoAltitude};
 use serde::{Deserialize, Serialize};
 
 /// Format version written by the current converter and required by the
@@ -226,20 +226,47 @@ impl LifGat {
     }
 }
 
-/// Root extension `LIF_water`: mirrors `RswWater` plus GND tile dimensions
-/// and a bufferView index into the glb bin chunk. The bufferView carries a
-/// row-major, LSB-first bitmask of selected water tiles.
+/// Parameters for one cell of a [`LifWater`] zone grid.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct LifWater {
+pub struct LifWaterZone {
     pub level: f32,
     pub water_type: u32,
     pub wave_height: f32,
     pub wave_speed: f32,
     pub wave_pitch: f32,
     pub anim_speed: u32,
+}
+
+/// Root extension `LIF_water`: a row-major zone grid plus GND tile dimensions
+/// and a bufferView index into the glb bin chunk. The bufferView carries a
+/// row-major, LSB-first bitmask of selected water tiles.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LifWater {
+    pub split_width: u32,
+    pub split_height: u32,
+    pub zones: Vec<LifWaterZone>,
     pub width: u32,
     pub height: u32,
     pub buffer_view: usize,
+}
+
+impl LifWater {
+    pub fn zone_at(&self, x: usize, y: usize) -> &LifWaterZone {
+        &self.zones[self.zone_index_at(x, y)]
+    }
+
+    pub fn zone_index_at(&self, x: usize, y: usize) -> usize {
+        let zone_x = zone_index(x, self.width, self.split_width);
+        let zone_y = zone_index(y, self.height, self.split_height);
+        zone_y * self.split_width as usize + zone_x
+    }
+}
+
+fn zone_index(cell: usize, cells: u32, splits: u32) -> usize {
+    if cells == 0 || splits == 0 {
+        return 0;
+    }
+    ((cell * splits as usize) / cells as usize).min(splits as usize - 1)
 }
 
 pub fn encode_water_mask(tiles: &[(usize, usize)], width: usize, height: usize) -> Vec<u8> {
@@ -268,19 +295,6 @@ pub fn decode_water_mask(bytes: &[u8], width: usize, height: usize) -> Vec<(usiz
         .filter(|&index| bytes[index / 8] & (1 << (index % 8)) != 0)
         .map(|index| (index % width, index / width))
         .collect()
-}
-
-impl From<LifWater> for RswWater {
-    fn from(water: LifWater) -> Self {
-        Self {
-            level: water.level,
-            water_type: water.water_type,
-            wave_height: water.wave_height,
-            wave_speed: water.wave_speed,
-            wave_pitch: water.wave_pitch,
-            anim_speed: water.anim_speed,
-        }
-    }
 }
 
 /// Node extras: audio emitter params mirroring `RswSound` (position lives in
@@ -437,12 +451,26 @@ mod tests {
     #[test]
     fn lif_water_serde_round_trip() {
         let original = LifWater {
-            level: 5.0,
-            water_type: 2,
-            wave_height: 0.5,
-            wave_speed: 1.5,
-            wave_pitch: 40.0,
-            anim_speed: 4,
+            split_width: 2,
+            split_height: 1,
+            zones: vec![
+                LifWaterZone {
+                    level: 5.0,
+                    water_type: 2,
+                    wave_height: 0.5,
+                    wave_speed: 1.5,
+                    wave_pitch: 40.0,
+                    anim_speed: 4,
+                },
+                LifWaterZone {
+                    level: 8.0,
+                    water_type: 3,
+                    wave_height: 0.25,
+                    wave_speed: 2.0,
+                    wave_pitch: 30.0,
+                    anim_speed: 6,
+                },
+            ],
             width: 100,
             height: 80,
             buffer_view: 3,
@@ -452,6 +480,8 @@ mod tests {
         let deserialized: LifWater = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(original, deserialized);
+        assert_eq!(deserialized.zone_at(0, 0), &deserialized.zones[0]);
+        assert_eq!(deserialized.zone_at(99, 79), &deserialized.zones[1]);
     }
 
     #[test]

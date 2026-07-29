@@ -224,7 +224,9 @@ fn regenerate_game_engine_fixtures() {
     std::fs::create_dir_all(&out).expect("create fixtures dir");
     write_fixture_png(&out, "tex/grass01.png");
 
-    let ground = mini_ground();
+    let mut ground = mini_ground();
+    ground.surfaces[1].height = [12.0; 4];
+    ground.surfaces[2].height = [12.0; 4];
     let world = mini_world();
     let gat = raw_gat(ground.width * 2, ground.height * 2);
     let primitives = build_terrain(&ground).expect("terrain");
@@ -263,6 +265,15 @@ fn regenerate_game_engine_fixtures() {
     // simply has no water.
     let dry = patched_glb(&good, lif::EXTENSION_WATER, "XIF_water");
     std::fs::write(out.join("no_water.glb"), dry).expect("write no_water.glb");
+
+    // Keep the one-byte mask but declare water dimensions that require three.
+    let bad_water_mask = patched_glb(
+        &good,
+        "\"split_width\":1,\"width\":2",
+        "\"split_width\":1,\"width\":9",
+    );
+    std::fs::write(out.join("bad_water_mask.glb"), bad_water_mask)
+        .expect("write bad_water_mask.glb");
 
     // The same document with every `LIF_` prefix renamed away: a perfectly
     // ordinary glTF that the runtime's handler must not touch at all.

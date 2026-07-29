@@ -540,9 +540,8 @@ pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
 }
 
 /// Root extensions: `LIF_map` always, `LIF_gat` with the source `.gat` bytes
-/// embedded verbatim in the bin chunk, and `LIF_water` only when the RSW
-/// declares a water level (`level == 0.0` is how RSW says "no water" -- the
-/// same test `water.rs::load_water_system` makes).
+/// embedded verbatim in the bin chunk, and `LIF_water` when any resolved zone
+/// declares a non-zero water level.
 fn build_root_extensions(
     root: &mut json::Root,
     bin: &mut BinChunk,
@@ -580,33 +579,22 @@ fn build_root_extensions(
         lif::EXTENSION_GAT.to_string(),
     ];
 
-    if inputs.world.water.level != 0.0 {
+    let mut resolved_water = water::resolve_water(inputs.ground, &inputs.world.water)?;
+    if resolved_water.zones.iter().any(|zone| zone.level != 0.0) {
         let width = inputs.ground.width as usize;
         let height = inputs.ground.height as usize;
         let mask = lif::encode_water_mask(
-            &water::select_water_tiles(inputs.ground, &inputs.world.water),
+            &water::select_water_tiles(inputs.ground, &resolved_water),
             width,
             height,
         );
-        let mask_view = bin.push_view(&mask, None);
-        let params = &inputs.world.water;
-        let water = lif::LifWater {
-            level: params.level,
-            water_type: params.water_type,
-            wave_height: params.wave_height,
-            wave_speed: params.wave_speed,
-            wave_pitch: params.wave_pitch,
-            anim_speed: params.anim_speed,
-            width: inputs.ground.width,
-            height: inputs.ground.height,
-            buffer_view: mask_view.value() as usize,
-        };
+        resolved_water.buffer_view = bin.push_view(&mask, None).value() as usize;
         root.extensions
             .get_or_insert_with(Default::default)
             .others
             .insert(
                 lif::EXTENSION_WATER.to_string(),
-                serde_json::to_value(water)?,
+                serde_json::to_value(resolved_water)?,
             );
         root.extensions_used.push(lif::EXTENSION_WATER.to_string());
     }
@@ -782,12 +770,12 @@ mod tests {
         assert_eq!(water.width, fixture.ground.width);
         assert_eq!(water.height, fixture.ground.height);
         assert_eq!(embedded.len(), (width * height).div_ceil(8));
+        let resolved =
+            crate::converters::map::water::resolve_water(&fixture.ground, &fixture.world.water)
+                .expect("resolve water");
         assert_eq!(
             lif::decode_water_mask(embedded, width, height),
-            crate::converters::map::water::select_water_tiles(
-                &fixture.ground,
-                &fixture.world.water
-            )
+            crate::converters::map::water::select_water_tiles(&fixture.ground, &resolved)
         );
     }
 
@@ -810,12 +798,14 @@ mod tests {
         let water: lif::LifWater =
             serde_json::from_value(extensions.others[lif::EXTENSION_WATER].clone())
                 .expect("LIF_water");
-        assert_eq!(water.level, fixture.world.water.level);
-        assert_eq!(water.water_type, fixture.world.water.water_type);
-        assert_eq!(water.wave_height, fixture.world.water.wave_height);
-        assert_eq!(water.wave_speed, fixture.world.water.wave_speed);
-        assert_eq!(water.wave_pitch, fixture.world.water.wave_pitch);
-        assert_eq!(water.anim_speed, fixture.world.water.anim_speed);
+        assert_eq!((water.split_width, water.split_height), (1, 1));
+        let zone = water.zone_at(0, 0);
+        assert_eq!(zone.level, fixture.world.water.level);
+        assert_eq!(zone.water_type, fixture.world.water.water_type);
+        assert_eq!(zone.wave_height, fixture.world.water.wave_height);
+        assert_eq!(zone.wave_speed, fixture.world.water.wave_speed);
+        assert_eq!(zone.wave_pitch, fixture.world.water.wave_pitch);
+        assert_eq!(zone.anim_speed, fixture.world.water.anim_speed);
 
         for name in [
             "KHR_lights_punctual",

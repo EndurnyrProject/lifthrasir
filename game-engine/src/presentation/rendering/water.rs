@@ -77,9 +77,13 @@ impl Default for WaterExtension {
     }
 }
 
-/// Temporary component to track water texture loading state
+/// Temporary component to track every water zone texture loading state.
 #[derive(Component)]
 pub struct WaterLoadingState {
+    pub(crate) zones: Vec<WaterZoneLoadingState>,
+}
+
+pub(crate) struct WaterZoneLoadingState {
     pub(crate) texture_handle: Handle<Image>,
     pub(crate) water_tiles: Vec<(usize, usize)>,
     pub(crate) wave_height: f32,
@@ -90,8 +94,8 @@ pub struct WaterLoadingState {
     pub(crate) animation_speed: f32,
 }
 
-/// Queues a map's selected water tiles, starts the texture load and leaves a
-/// [`WaterLoadingState`] behind for [`finalize_water_loading_system`].
+/// Queues a map's selected water tiles by zone, starts every texture load and
+/// leaves a [`WaterLoadingState`] for [`finalize_water_loading_system`].
 pub(crate) fn begin_water_loading(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -99,34 +103,54 @@ pub(crate) fn begin_water_loading(
     water: &LifWater,
     water_tiles: Vec<(usize, usize)>,
 ) {
-    if water.level == 0.0 {
-        return;
-    }
+    let zones: Vec<_> = water
+        .zones
+        .iter()
+        .zip(group_water_tiles(water, water_tiles))
+        .filter_map(|(zone, water_tiles)| {
+            if zone.level == 0.0 || water_tiles.is_empty() {
+                return None;
+            }
 
-    debug!(
-        "Creating water surface at level: {}, wave_height: {}, wave_speed: {}, wave_pitch: {}, anim_speed: {}",
-        water.level, water.wave_height, water.wave_speed, water.wave_pitch, water.anim_speed
-    );
+            debug!(
+                "Queueing {} water tiles at level {}, type {}",
+                water_tiles.len(),
+                zone.level,
+                zone.water_type
+            );
+            Some(WaterZoneLoadingState {
+                texture_handle: load_water_texture(zone.water_type, 0, asset_server),
+                water_tiles,
+                wave_height: zone.level - zone.wave_height,
+                water_level: zone.level,
+                wave_height_param: zone.wave_height,
+                wave_speed: zone.wave_speed,
+                wave_pitch: zone.wave_pitch,
+                animation_speed: zone.anim_speed as f32,
+            })
+        })
+        .collect();
 
-    let wave_height = water.level - water.wave_height;
-
-    if water_tiles.is_empty() {
+    if zones.is_empty() {
         debug!("No water tiles detected for this map");
         return;
     }
 
-    debug!("Detected {} water tiles, creating mesh", water_tiles.len());
+    commands.entity(entity).insert(WaterLoadingState { zones });
+}
 
-    commands.entity(entity).insert(WaterLoadingState {
-        texture_handle: load_water_texture(water.water_type, 0, asset_server),
-        water_tiles,
-        wave_height,
-        water_level: water.level,
-        wave_height_param: water.wave_height,
-        wave_speed: water.wave_speed,
-        wave_pitch: water.wave_pitch,
-        animation_speed: water.anim_speed as f32,
-    });
+fn group_water_tiles(
+    water: &LifWater,
+    water_tiles: Vec<(usize, usize)>,
+) -> Vec<Vec<(usize, usize)>> {
+    let mut tiles_by_zone = vec![Vec::new(); water.zones.len()];
+    for (x, y) in water_tiles {
+        if water.zone_at(x, y).level == 0.0 {
+            continue;
+        }
+        tiles_by_zone[water.zone_index_at(x, y)].push((x, y));
+    }
+    tiles_by_zone
 }
 
 // Maximum water parameter values to prevent excessive movement in some maps
@@ -153,111 +177,105 @@ pub fn finalize_water_loading_system(
     query: Query<(Entity, &WaterLoadingState)>,
 ) {
     for (entity, loading_state) in query.iter() {
-        // Check if texture is loaded
-        if asset_server.is_loaded_with_dependencies(&loading_state.texture_handle) {
-            debug!("Water texture loaded, creating mesh and material");
-
-            // Fix sampler for tiling
-            match images.get_mut(&loading_state.texture_handle) {
-                Some(mut image) => {
-                    // Override sampler to Repeat mode for proper tiling across water surface
-                    // Bevy's built-in JPEG loader uses Default (ClampToEdge), but we need Repeat
-                    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-                        address_mode_u: ImageAddressMode::Repeat,
-                        address_mode_v: ImageAddressMode::Repeat,
-                        address_mode_w: ImageAddressMode::Repeat,
-                        mag_filter: ImageFilterMode::Linear,
-                        min_filter: ImageFilterMode::Linear,
-                        mipmap_filter: ImageFilterMode::Linear,
-                        ..Default::default()
-                    });
-                }
-                _ => {
-                    warn!("Water texture handle loaded but image data not in Assets<Image>");
-                }
-            }
-
-            // Generate procedural normal map for water
-            let normal_map = generate_water_normal_map(&mut images);
-
-            // Create single mesh containing all water tiles
-            let water_mesh =
-                create_water_tiles_mesh(&loading_state.water_tiles, loading_state.wave_height);
-            let mesh_handle = meshes.add(water_mesh);
-
-            // Calculate texture scale based on map size
-            let texture_scale = 0.125;
-
-            // Pre-scale wave_height for Gerstner wave formula (a = amplitude / k)
-            // This makes the final amplitude match the wave_height parameter
-            let wave_pitch = loading_state
-                .wave_pitch
-                .clamp(MIN_WAVE_PITCH, MAX_WAVE_PITCH);
-            let k = 2.0 * std::f32::consts::PI / wave_pitch;
-            let scaled_wave_height =
-                (loading_state.wave_height_param.min(MAX_WAVE_HEIGHT) * k).min(MAX_WAVE_HEIGHT);
-
-            // Create a single material for all water with loaded texture
-            let water_extension = WaterExtension {
-                water_data: WaterData {
-                    wave_params: Vec4::new(
-                        scaled_wave_height,
-                        loading_state.wave_speed.min(MAX_WAVE_SPEED),
-                        wave_pitch,
-                        0.0,
-                    ),
-                    animation_params: Vec4::ZERO,
-                    tile_coords: Vec4::new(0.0, 0.0, texture_scale, 0.0),
-                },
-                water_texture: loading_state.texture_handle.clone(),
-                normal_map,
-            };
-
-            let water_material = WaterMaterial {
-                base: StandardMaterial {
-                    base_color: Color::srgba(1.0, 1.0, 1.0, 0.05),
-                    alpha_mode: AlphaMode::Blend,
-                    perceptual_roughness: 0.1,
-                    metallic: 0.0,
-                    reflectance: 0.9,
-                    ..default()
-                },
-                extension: water_extension,
-            };
-
-            let material_handle = materials.add(water_material);
-
-            // Spawn single entity with all water
-            commands.spawn((
-                Mesh3d(mesh_handle.clone()),
-                MeshMaterial3d(material_handle.clone()),
-                Transform::IDENTITY,
-                MapScoped,
-            ));
-
-            // Add water surface component to the main entity and remove loading state
-            commands
-                .entity(entity)
-                .insert((
-                    WaterSurface {
-                        water_level: loading_state.water_level,
-                        wave_height: loading_state.wave_height_param,
-                        wave_speed: loading_state.wave_speed,
-                        wave_pitch: loading_state.wave_pitch,
-                        animation_speed: loading_state.animation_speed,
-                        mesh_handle,
-                        material_handle,
-                    },
-                    WaterAnimation {
-                        time: 0.0,
-                        uv_offset: Vec2::ZERO,
-                    },
-                ))
-                .remove::<WaterLoadingState>();
-
-            debug!("Water rendering setup complete");
+        if !loading_state
+            .zones
+            .iter()
+            .all(|zone| asset_server.is_loaded_with_dependencies(&zone.texture_handle))
+        {
+            continue;
         }
+
+        debug!("Water textures loaded, creating zone meshes and materials");
+        for zone in &loading_state.zones {
+            configure_water_sampler(&mut images, &zone.texture_handle);
+        }
+        let normal_map = generate_water_normal_map(&mut images);
+        for zone in &loading_state.zones {
+            spawn_water_zone(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                zone,
+                normal_map.clone(),
+            );
+        }
+        commands.entity(entity).remove::<WaterLoadingState>();
+        debug!("Water rendering setup complete");
     }
+}
+
+fn configure_water_sampler(images: &mut Assets<Image>, texture_handle: &Handle<Image>) {
+    let Some(mut image) = images.get_mut(texture_handle) else {
+        warn!("Water texture handle loaded but image data not in Assets<Image>");
+        return;
+    };
+
+    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        address_mode_u: ImageAddressMode::Repeat,
+        address_mode_v: ImageAddressMode::Repeat,
+        address_mode_w: ImageAddressMode::Repeat,
+        mag_filter: ImageFilterMode::Linear,
+        min_filter: ImageFilterMode::Linear,
+        mipmap_filter: ImageFilterMode::Linear,
+        ..Default::default()
+    });
+}
+
+fn spawn_water_zone(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<WaterMaterial>,
+    zone: &WaterZoneLoadingState,
+    normal_map: Handle<Image>,
+) {
+    let mesh_handle = meshes.add(create_water_tiles_mesh(&zone.water_tiles, zone.wave_height));
+    let wave_pitch = zone.wave_pitch.clamp(MIN_WAVE_PITCH, MAX_WAVE_PITCH);
+    let k = 2.0 * std::f32::consts::PI / wave_pitch;
+    let scaled_wave_height = (zone.wave_height_param.min(MAX_WAVE_HEIGHT) * k).min(MAX_WAVE_HEIGHT);
+    let material_handle = materials.add(WaterMaterial {
+        base: StandardMaterial {
+            base_color: Color::srgba(1.0, 1.0, 1.0, 0.05),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 0.1,
+            metallic: 0.0,
+            reflectance: 0.9,
+            ..default()
+        },
+        extension: WaterExtension {
+            water_data: WaterData {
+                wave_params: Vec4::new(
+                    scaled_wave_height,
+                    zone.wave_speed.min(MAX_WAVE_SPEED),
+                    wave_pitch,
+                    0.0,
+                ),
+                animation_params: Vec4::ZERO,
+                tile_coords: Vec4::new(0.0, 0.0, 0.125, 0.0),
+            },
+            water_texture: zone.texture_handle.clone(),
+            normal_map,
+        },
+    });
+
+    commands.spawn((
+        Mesh3d(mesh_handle.clone()),
+        MeshMaterial3d(material_handle.clone()),
+        Transform::IDENTITY,
+        MapScoped,
+        WaterSurface {
+            water_level: zone.water_level,
+            wave_height: zone.wave_height_param,
+            wave_speed: zone.wave_speed,
+            wave_pitch: zone.wave_pitch,
+            animation_speed: zone.animation_speed,
+            mesh_handle,
+            material_handle,
+        },
+        WaterAnimation {
+            time: 0.0,
+            uv_offset: Vec2::ZERO,
+        },
+    ));
 }
 
 #[auto_add_system(
@@ -444,4 +462,38 @@ fn generate_water_normal_map(images: &mut ResMut<Assets<Image>>) -> Handle<Image
     );
 
     images.add(normal_image)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lifthrasir_data::lif::LifWaterZone;
+
+    #[test]
+    fn groups_selected_tiles_by_their_evenly_tiled_zone() {
+        let water = LifWater {
+            split_width: 2,
+            split_height: 1,
+            zones: vec![water_zone(5.0), water_zone(8.0)],
+            width: 4,
+            height: 2,
+            buffer_view: 0,
+        };
+
+        assert_eq!(
+            group_water_tiles(&water, vec![(0, 0), (3, 0), (1, 1), (2, 1)]),
+            vec![vec![(0, 0), (1, 1)], vec![(3, 0), (2, 1)]]
+        );
+    }
+
+    fn water_zone(level: f32) -> LifWaterZone {
+        LifWaterZone {
+            level,
+            water_type: 1,
+            wave_height: 0.5,
+            wave_speed: 1.0,
+            wave_pitch: 20.0,
+            anim_speed: 3,
+        }
+    }
 }

@@ -478,8 +478,27 @@ fn decode_root(gltf: &gltf::Gltf) -> Result<LifMapData, String> {
     let water = root_extension::<LifWater>(gltf, lif::EXTENSION_WATER)?;
     let water_tiles = match water.as_ref() {
         Some(water) => {
+            let zone_count = water
+                .split_width
+                .checked_mul(water.split_height)
+                .ok_or_else(|| format!("{} zone dimensions overflow", lif::EXTENSION_WATER))?
+                as usize;
+            if water.split_width == 0 || water.split_height == 0 || water.zones.len() != zone_count
+            {
+                return Err(format!(
+                    "{} declares a {}x{} zone grid but carries {} zones",
+                    lif::EXTENSION_WATER,
+                    water.split_width,
+                    water.split_height,
+                    water.zones.len()
+                ));
+            }
+
             let mask = buffer_view_bytes(gltf, water.buffer_view, lif::EXTENSION_WATER)?;
-            let expected_mask_len = (water.width as usize * water.height as usize).div_ceil(8);
+            let cell_count = (water.width as usize)
+                .checked_mul(water.height as usize)
+                .ok_or_else(|| format!("{} mask dimensions overflow", lif::EXTENSION_WATER))?;
+            let expected_mask_len = cell_count.div_ceil(8);
             if mask.len() != expected_mask_len {
                 return Err(format!(
                     "{} mask has {} bytes but {}x{} dimensions require {expected_mask_len}",
@@ -698,12 +717,14 @@ mod tests {
         with_scene_world(&mut test_app(), "mini_map.glb", |world| {
             let water = single::<LifMapData>(world).water.expect("LIF_water");
 
-            assert_eq!(water.level, 12.5);
-            assert_eq!(water.water_type, 3);
-            assert_eq!(water.wave_height, 0.6);
-            assert_eq!(water.wave_speed, 1.25);
-            assert_eq!(water.wave_pitch, 45.0);
-            assert_eq!(water.anim_speed, 4);
+            assert_eq!((water.split_width, water.split_height), (1, 1));
+            let zone = water.zone_at(0, 0);
+            assert_eq!(zone.level, 12.5);
+            assert_eq!(zone.water_type, 3);
+            assert_eq!(zone.wave_height, 0.6);
+            assert_eq!(zone.wave_speed, 1.25);
+            assert_eq!(zone.wave_pitch, 45.0);
+            assert_eq!(zone.anim_speed, 4);
             assert_eq!((water.width, water.height), (2, 2));
         });
     }
@@ -745,7 +766,7 @@ mod tests {
             assert_eq!(
                 single::<LifPropRef>(world).0,
                 LifProp {
-                    model: "ro://data/model/prontera/tree01.glb".to_string(),
+                    model: "ro://models/prontera/tree01.glb".to_string(),
                     anim_type: 1,
                     anim_speed: 2.0,
                 }
@@ -1439,18 +1460,20 @@ mod tests {
             .get::<WaterLoadingState>()
             .expect("water queued on the map loader entity");
 
-        assert_eq!(water.water_level, 12.5);
-        assert_eq!(water.wave_height_param, 0.6);
-        assert_eq!(water.wave_speed, 1.25);
-        assert_eq!(water.wave_pitch, 45.0);
-        assert_eq!(water.animation_speed, 4.0);
+        assert_eq!(water.zones.len(), 1);
+        let zone = &water.zones[0];
+        assert_eq!(zone.water_level, 12.5);
+        assert_eq!(zone.wave_height_param, 0.6);
+        assert_eq!(zone.wave_speed, 1.25);
+        assert_eq!(zone.wave_pitch, 45.0);
+        assert_eq!(zone.animation_speed, 4.0);
         assert!(
-            (water.wave_height - 11.9).abs() < 1e-4,
+            (zone.wave_height - 11.9).abs() < 1e-4,
             "{}",
-            water.wave_height
+            zone.wave_height
         );
         // The fixture's baked 2x2 mask selects these two tiles.
-        assert_eq!(water.water_tiles, vec![(1, 0), (0, 1)]);
+        assert_eq!(zone.water_tiles, vec![(1, 0), (0, 1)]);
     }
 
     #[test]
