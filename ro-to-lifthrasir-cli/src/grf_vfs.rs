@@ -1,5 +1,6 @@
 use anyhow::Context;
 use ro_formats::grf::{GrfEntry as ArchiveEntry, GrfFile};
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::config::GrfEntry as ConfigGrfEntry;
@@ -16,6 +17,23 @@ impl GrfReadable for GrfFile {
 
 pub(crate) fn normalize_path(p: &str) -> String {
     p.replace('/', "\\")
+}
+
+pub(crate) fn effective_entries(assets: &[PhysicalAsset]) -> HashSet<(usize, usize)> {
+    let mut winners = BTreeMap::<String, (usize, usize)>::new();
+    for asset in assets {
+        let key = normalize_path(&asset.entry.filename).to_ascii_lowercase();
+        let candidate = (asset.source_index, asset.entry_index);
+        winners
+            .entry(key)
+            .and_modify(|winner| {
+                if candidate.0 < winner.0 || candidate.0 == winner.0 && candidate.1 > winner.1 {
+                    *winner = candidate;
+                }
+            })
+            .or_insert(candidate);
+    }
+    winners.into_values().collect()
 }
 
 pub(crate) fn first_hit(sources: &[impl GrfReadable], logical: &str) -> Option<Vec<u8>> {

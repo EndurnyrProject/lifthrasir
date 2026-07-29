@@ -1,6 +1,6 @@
 use super::{ConvertOutcome, ModelFormat, TexturePool, classify_header, convert_model_bytes};
 use crate::converters::gltf_out::hash_hex;
-use crate::grf_vfs::{GrfVfs, PhysicalAsset, normalize_path};
+use crate::grf_vfs::{GrfVfs, PhysicalAsset, effective_entries};
 use ro_formats::{RoWorld, Rsm2, Rsm2NodeTextures, Rsm2TextureChannelType, RswObject};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -70,23 +70,6 @@ fn inspect_placements(
             _ => None,
         })
         .collect()
-}
-
-fn effective_entries(assets: &[PhysicalAsset]) -> HashSet<(usize, usize)> {
-    let mut winners = BTreeMap::<String, (usize, usize)>::new();
-    for asset in assets {
-        let key = normalize_path(&asset.entry.filename).to_ascii_lowercase();
-        let candidate = (asset.source_index, asset.entry_index);
-        winners
-            .entry(key)
-            .and_modify(|winner| {
-                if candidate.0 < winner.0 || candidate.0 == winner.0 && candidate.1 > winner.1 {
-                    *winner = candidate;
-                }
-            })
-            .or_insert(candidate);
-    }
-    winners.into_values().collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
