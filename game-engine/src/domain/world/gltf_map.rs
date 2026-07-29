@@ -17,7 +17,9 @@ use crate::domain::effects::map_effects::spawn_gltf_map_effects;
 use crate::domain::entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid};
 use crate::domain::system_sets::WorldLoadingSystems;
 use crate::domain::world::components::CurrentMapAltitude;
-use crate::domain::world::gltf_prop::{PropAnim, play_prop_uv_animation, spawn_gltf_map_props};
+use crate::domain::world::gltf_prop::{
+    PropAnim, play_prop_uv_animation, spawn_gltf_map_props, wire_pending_prop_scenes,
+};
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
 use crate::domain::world::map_scoped::MapScoped;
@@ -171,6 +173,7 @@ impl Plugin for GltfMapPlugin {
                 spawn_gltf_map_sounds,
                 spawn_gltf_map_effects,
                 spawn_gltf_map_props,
+                wire_pending_prop_scenes,
             )
                 .after(TransformSystems::Propagate),
         );

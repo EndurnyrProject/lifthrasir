@@ -15,6 +15,7 @@
 use super::gltf_map::{CurrentMapNoShadeTint, LifPropRef, ROOT_FIX};
 use crate::domain::entities::systems::AnimationType;
 use bevy::animation::RepeatAnimation;
+use bevy::asset::RecursiveDependencyLoadState;
 use bevy::gltf::{GltfAssetLabel, GltfExtras};
 use bevy::math::Affine2;
 use bevy::mesh::UvChannel;
@@ -99,14 +100,46 @@ pub(crate) struct PropUvAnimation {
     model: String,
 }
 
-/// Wires a freshly spawned prop scene: pure-lambert materials always, plus the
-/// baked animation when the RSW asked for one.
+/// The spawned scene instance is ready, but the glb's *assets* (materials,
+/// textures) may still be loading -- scene spawn only needs the handles.
+/// Wiring mutates the shared material assets, so running it against a
+/// not-yet-loaded material silently does nothing and the model keeps glTF's
+/// `double_sided: true` for the whole session -- which inverts lighting on
+/// RO's CW-wound meshes (see [`apply_ro_shading`]). Which models lost that
+/// race depended on load timing, so a different set broke on every login.
+#[derive(Component)]
+pub(crate) struct PropWiringPending;
+
+/// Marks a freshly spawned prop scene for wiring once its assets exist.
+pub fn wire_prop_scene(ready: On<WorldInstanceReady>, mut commands: Commands) {
+    commands.entity(ready.entity).insert(PropWiringPending);
+}
+
+/// Wires pending prop scenes whose glb dependencies have finished loading:
+/// pure-lambert materials always, plus the baked animation when the RSW asked
+/// for one.
 ///
 /// A prop whose RSW says "animate" but whose glb has no animation (the RSM had
 /// no keyframes) simply has no `AnimationPlayer` descendant -- the common case,
 /// and not worth a warning.
-pub fn wire_prop_scene(ready: On<WorldInstanceReady>, mut commands: Commands) {
-    commands.run_system_cached_with(wire_prop_instance, ready.entity);
+pub(crate) fn wire_pending_prop_scenes(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    pending: Query<(Entity, &WorldAssetRoot, &PropAnim), With<PropWiringPending>>,
+) {
+    for (entity, scene, prop) in &pending {
+        match asset_server.recursive_dependency_load_state(scene.0.id()) {
+            RecursiveDependencyLoadState::Loaded => {}
+            RecursiveDependencyLoadState::Failed(error) => {
+                error!(model = %prop.model, %error, "prop glb dependencies failed to load; wiring whatever is available");
+            }
+            RecursiveDependencyLoadState::NotLoaded | RecursiveDependencyLoadState::Loading => {
+                continue;
+            }
+        }
+        commands.entity(entity).remove::<PropWiringPending>();
+        commands.run_system_cached_with(wire_prop_instance, entity);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -674,6 +707,58 @@ mod tests {
             .unwrap()
             .uv_transform;
         assert_eq!(transform.translation, Vec2::new(0.5, 0.0));
+    }
+
+    /// The race this guards: scene instances become ready before the glb's
+    /// material assets exist, so eager wiring silently skipped the material
+    /// mutation and the model kept glTF's `double_sided: true` all session.
+    #[test]
+    fn pending_wiring_defers_until_dependencies_load_then_applies_ro_shading() {
+        let mut app = loader_app();
+        let scene: Handle<WorldAsset> = app
+            .world()
+            .resource::<AssetServer>()
+            .load(GltfAssetLabel::Scene(0).from_asset("uv_prop.glb"));
+        let root = app
+            .world_mut()
+            .spawn((
+                WorldAssetRoot(scene),
+                PropAnim {
+                    model: "uv_prop.glb".to_string(),
+                    anim_type: 0,
+                    anim_speed: 1.0,
+                },
+                PropWiringPending,
+            ))
+            .id();
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            app.update();
+            app.world_mut()
+                .run_system_once(wire_pending_prop_scenes)
+                .unwrap();
+            app.world_mut().flush();
+            if app.world().get::<PropWiringPending>(root).is_none() {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "prop wiring never ran: dependencies never finished loading"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+
+        let handle = {
+            let world = app.world_mut();
+            let mut query = world.query::<&MeshMaterial3d<StandardMaterial>>();
+            query.single(world).unwrap().0.clone()
+        };
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle).expect("material asset loaded");
+        assert_eq!(material.reflectance, 0.0);
+        assert!(!material.double_sided);
+        assert_eq!(material.cull_mode, None);
     }
 
     #[test]
