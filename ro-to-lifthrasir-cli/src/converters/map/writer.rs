@@ -22,6 +22,7 @@ use crate::converters::gltf_out::{
 };
 use crate::converters::map::terrain::TerrainPrimitive;
 use crate::converters::map::textures::TextureOut;
+use crate::converters::map::water;
 use anyhow::Context;
 use glam::{Mat3, Quat, Vec3};
 use gltf_json as json;
@@ -577,7 +578,26 @@ fn build_root_extensions(
     ];
 
     if inputs.world.water.level != 0.0 {
-        let water = lif::LifWater::from(&inputs.world.water);
+        let width = inputs.ground.width as usize;
+        let height = inputs.ground.height as usize;
+        let mask = lif::encode_water_mask(
+            &water::select_water_tiles(inputs.ground, &inputs.world.water),
+            width,
+            height,
+        );
+        let mask_view = bin.push_view(&mask, None);
+        let params = &inputs.world.water;
+        let water = lif::LifWater {
+            level: params.level,
+            water_type: params.water_type,
+            wave_height: params.wave_height,
+            wave_speed: params.wave_speed,
+            wave_pitch: params.wave_pitch,
+            anim_speed: params.anim_speed,
+            width: inputs.ground.width,
+            height: inputs.ground.height,
+            buffer_view: mask_view.value() as usize,
+        };
         root.extensions
             .get_or_insert_with(Default::default)
             .others
@@ -737,6 +757,38 @@ mod tests {
     }
 
     #[test]
+    fn lif_water_buffer_view_holds_the_selected_gnd_mask() {
+        let mut fixture = write_fixture();
+        fixture.ground.surfaces[0].height = [12.0; 4];
+        write_glb(&fixture.path, &fixture.inputs()).expect("rewrite glb");
+
+        let (document, buffers, _) = gltf::import(&fixture.path).expect("reimport");
+        let root_json = document.into_json();
+        let extensions = root_json.extensions.as_ref().expect("root extensions");
+        let water: lif::LifWater =
+            serde_json::from_value(extensions.others[lif::EXTENSION_WATER].clone())
+                .expect("LIF_water");
+
+        let view = &root_json.buffer_views[water.buffer_view];
+        let start = view.byte_offset.expect("byte offset").0 as usize;
+        let end = start + view.byte_length.0 as usize;
+        let embedded = &buffers[0][start..end];
+        let width = fixture.ground.width as usize;
+        let height = fixture.ground.height as usize;
+
+        assert_eq!(water.width, fixture.ground.width);
+        assert_eq!(water.height, fixture.ground.height);
+        assert_eq!(embedded.len(), (width * height).div_ceil(8));
+        assert_eq!(
+            lif::decode_water_mask(embedded, width, height),
+            crate::converters::map::water::select_water_tiles(
+                &fixture.ground,
+                &fixture.world.water
+            )
+        );
+    }
+
+    #[test]
     fn root_extensions_carry_map_and_water_metadata() {
         let fixture = write_fixture();
 
@@ -755,7 +807,12 @@ mod tests {
         let water: lif::LifWater =
             serde_json::from_value(extensions.others[lif::EXTENSION_WATER].clone())
                 .expect("LIF_water");
-        assert_eq!(water, lif::LifWater::from(&fixture.world.water));
+        assert_eq!(water.level, fixture.world.water.level);
+        assert_eq!(water.water_type, fixture.world.water.water_type);
+        assert_eq!(water.wave_height, fixture.world.water.wave_height);
+        assert_eq!(water.wave_speed, fixture.world.water.wave_speed);
+        assert_eq!(water.wave_pitch, fixture.world.water.wave_pitch);
+        assert_eq!(water.anim_speed, fixture.world.water.anim_speed);
 
         for name in [
             "KHR_lights_punctual",

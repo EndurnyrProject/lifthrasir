@@ -7,6 +7,7 @@
 
 use crate::converters::gltf_out::{ensure_close, root_extension, scene_root};
 use crate::converters::map::terrain::TerrainPrimitive;
+use crate::converters::map::water;
 use crate::converters::map::writer::{self, MapGlbInputs, ROOT_FIX};
 use anyhow::{Context, bail, ensure};
 use glam::{Quat, Vec3};
@@ -274,7 +275,7 @@ fn validate_root_extensions(
 ) -> anyhow::Result<()> {
     validate_gat_extension(root, blob, inputs.gat_bytes)?;
     validate_map_extension(root, inputs)?;
-    validate_water_extension(root, inputs)
+    validate_water_extension(root, blob, inputs)
 }
 
 /// The strongest guarantee of the format: the bin chunk still holds the
@@ -340,7 +341,11 @@ fn validate_map_extension(root: &gltf_json::Root, inputs: &MapGlbInputs) -> anyh
 
 /// `level == 0.0` is how RSW says "no water"; the writer omits the extension
 /// then, and a glb that carries one anyway is wrong.
-fn validate_water_extension(root: &gltf_json::Root, inputs: &MapGlbInputs) -> anyhow::Result<()> {
+fn validate_water_extension(
+    root: &gltf_json::Root,
+    blob: &[u8],
+    inputs: &MapGlbInputs,
+) -> anyhow::Result<()> {
     let declared = root
         .extensions
         .as_ref()
@@ -357,13 +362,72 @@ fn validate_water_extension(root: &gltf_json::Root, inputs: &MapGlbInputs) -> an
     }
 
     let water: lif::LifWater = root_extension(root, lif::EXTENSION_WATER)?;
-    let expected = lif::LifWater::from(&inputs.world.water);
+    let params = &inputs.world.water;
+    let expected = lif::LifWater {
+        level: params.level,
+        water_type: params.water_type,
+        wave_height: params.wave_height,
+        wave_speed: params.wave_speed,
+        wave_pitch: params.wave_pitch,
+        anim_speed: params.anim_speed,
+        width: water.width,
+        height: water.height,
+        buffer_view: water.buffer_view,
+    };
     ensure!(
         water == expected,
         "{} {water:?} differs from the RSW {expected:?}",
         lif::EXTENSION_WATER
     );
+
+    let width = inputs.ground.width as usize;
+    let height = inputs.ground.height as usize;
+    ensure!(
+        water.width == inputs.ground.width && water.height == inputs.ground.height,
+        "{} dimensions {}x{} differ from the GND {}x{}",
+        lif::EXTENSION_WATER,
+        water.width,
+        water.height,
+        inputs.ground.width,
+        inputs.ground.height
+    );
+    let embedded = water_mask_bytes(root, blob, &water)?;
+    let expected = water::select_water_tiles(inputs.ground, &inputs.world.water);
+    ensure!(
+        embedded.len() == (width * height).div_ceil(8),
+        "{} bufferView holds {} bytes, expected {} for {width}x{height}",
+        lif::EXTENSION_WATER,
+        embedded.len(),
+        (width * height).div_ceil(8)
+    );
+    ensure!(
+        lif::decode_water_mask(embedded, width, height) == expected,
+        "{} mask differs from the GND-corner selection",
+        lif::EXTENSION_WATER
+    );
     Ok(())
+}
+
+fn water_mask_bytes<'a>(
+    root: &gltf_json::Root,
+    blob: &'a [u8],
+    water: &lif::LifWater,
+) -> anyhow::Result<&'a [u8]> {
+    let view = root.buffer_views.get(water.buffer_view).with_context(|| {
+        format!(
+            "LIF_water points at missing bufferView {}",
+            water.buffer_view
+        )
+    })?;
+    let start = view.byte_offset.map_or(0, |offset| offset.0 as usize);
+    let end = start + view.byte_length.0 as usize;
+    if end > blob.len() {
+        bail!(
+            "LIF_water bufferView spans {start}..{end}, past the {} byte BIN chunk",
+            blob.len()
+        );
+    }
+    Ok(&blob[start..end])
 }
 
 fn gat_bytes<'a>(
@@ -444,6 +508,14 @@ mod tests {
         fixture.world.water.wave_height += 1.0;
 
         assert_fails(&fixture, lif::EXTENSION_WATER);
+    }
+
+    #[test]
+    fn a_water_mask_that_disagrees_with_the_gnd_selection_fails() {
+        let mut fixture = write_fixture();
+        fixture.ground.surfaces[0].height = [12.0; 4];
+
+        assert_fails(&fixture, "mask differs");
     }
 
     #[test]

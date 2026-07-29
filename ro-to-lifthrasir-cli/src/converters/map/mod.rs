@@ -3,6 +3,7 @@ pub mod fixtures;
 pub mod terrain;
 pub mod textures;
 pub mod validate;
+pub mod water;
 pub mod writer;
 
 use crate::converters::model::{self, ConvertOutcome, TexturePool};
