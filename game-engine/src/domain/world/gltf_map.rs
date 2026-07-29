@@ -37,9 +37,8 @@ use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
 use lifthrasir_data::lif::{self, LifAudio, LifEffect, LifGat, LifMap, LifProp, LifWater};
 use ro_formats::RoAltitude;
 
-/// Native directional-light tuning, mirrored from
-/// `presentation/rendering/lighting.rs::setup_directional_light`. Colour and
-/// illuminance already arrive through `KHR_lights_punctual`.
+/// Map directional-light tuning. Colour and illuminance already arrive through
+/// `KHR_lights_punctual`.
 const SUN_SHADOW_DEPTH_BIAS: f32 = 0.02;
 const SUN_SHADOW_NORMAL_BIAS: f32 = 1.8;
 const SUN_CASCADES: usize = 3;
@@ -47,9 +46,8 @@ const SUN_FIRST_CASCADE_FAR_BOUND: f32 = 200.0;
 const SUN_MAXIMUM_DISTANCE: f32 = 1500.0;
 const SUN_OVERLAP_PROPORTION: f32 = 0.2;
 
-/// Native point-light tuning, mirrored from
-/// `presentation/rendering/lighting.rs::spawn_point_light`: a wide emitter
-/// surface that softens the inverse-square hot spot near the source.
+/// Map point-light tuning: a wide emitter surface that softens the
+/// inverse-square hot spot near the source.
 const POINT_LIGHT_RADIUS: f32 = 1.5;
 
 /// The one transform the runtime applies to a map glb: glTF is Y-up, the
@@ -291,8 +289,8 @@ fn adopt_gltf_map_scene(
     }
 }
 
-/// Mirrors `presentation/rendering/lighting.rs::setup_ambient_light`: the RSW
-/// ambient colour as-is, kept dim so the sun and point lights keep contrast.
+/// Applies the RSW ambient colour as-is, kept dim so the sun and point lights
+/// keep contrast.
 fn ambient_light(meta: &LifMap) -> GlobalAmbientLight {
     GlobalAmbientLight {
         color: Color::srgb(
@@ -756,7 +754,7 @@ mod tests {
     }
 
     #[test]
-    fn lights_get_the_native_shadow_tuning() {
+    fn map_lights_get_shadow_tuning() {
         with_scene_world(&mut test_app(), "mini_map.glb", |world| {
             let sun = single::<DirectionalLight>(world);
             assert!(sun.shadow_maps_enabled);
