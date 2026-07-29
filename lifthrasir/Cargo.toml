@@ -8,15 +8,19 @@ default = ["net-aesir"]
 # Aesir QUIC network adapter. On by default; disable to build the client
 # without the aesir protocol wired in (e.g. to swap in a different adapter).
 net-aesir = ["dep:net-aesir"]
-# Profiling and live-inspection tooling. Opt-in via `--features dev`; normal
-# builds (and distribution) stay clean of Tracy/remote-inspection overhead.
+# Live-inspection tooling (BRP, diagnostics overlay). Opt-in via
+# `--features dev`; normal builds (and distribution) stay clean of it.
 dev = [
-    "bevy/trace",
-    "bevy/trace_tracy",
     "bevy/bevy_remote",
     "bevy/bevy_dev_tools",
     "dep:bevy_brp_extras",
 ]
+# Tracy profiling. Deliberately split from `dev`: tracy-client is not built
+# in on-demand mode, so it buffers every profiling zone in memory from
+# startup until a Tracy profiler attaches and drains it -- running with this
+# feature and no profiler attached grows memory without bound. Enable only
+# while actually profiling: `--features dev,tracy`.
+tracy = ["bevy/trace", "bevy/trace_tracy"]
 dlss = ["bevy/dlss", "game-engine/dlss", "lifthrasir-ui/dlss"]
 
 [dependencies]
