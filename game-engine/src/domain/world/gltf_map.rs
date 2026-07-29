@@ -192,7 +192,7 @@ fn spawn_gltf_map(
         }
 
         let map_name = request.map_name.trim_end_matches(".gat").to_lowercase();
-        let path = format!("data/maps/{map_name}/{map_name}.glb");
+        let path = format!("maps/{map_name}/{map_name}.glb");
         info!("Loading map '{map_name}' from {path}");
 
         let scene = match loaded.as_deref() {
@@ -222,7 +222,7 @@ fn detect_gltf_map_load_failure(
     for (root, map) in maps.iter() {
         if let bevy::asset::LoadState::Failed(error) = asset_server.load_state(&root.0) {
             let map_name = &map.map_name;
-            panic!("failed to load map glb 'data/maps/{map_name}/{map_name}.glb': {error:?}");
+            panic!("failed to load map glb 'maps/{map_name}/{map_name}.glb': {error:?}");
         }
     }
 }
@@ -854,7 +854,7 @@ mod tests {
     /// Adds another map to an existing `ro://` root, for the tests that need
     /// two maps to warp between.
     fn stage_map_into(root: &tempfile::TempDir, map: &str, fixture: &str) {
-        let map_dir = root.path().join(format!("data/maps/{map}"));
+        let map_dir = root.path().join(format!("maps/{map}"));
         std::fs::create_dir_all(map_dir.join("tex")).unwrap();
         std::fs::copy(
             format!("{FIXTURES}/{fixture}"),
@@ -1169,7 +1169,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "data/maps/prontera/prontera.glb")]
+    #[should_panic(expected = "maps/prontera/prontera.glb")]
     fn a_map_without_a_glb_panics_with_the_expected_path() {
         let root = stage_map("mini_map", "mini_map.glb");
         let mut app = map_app(&root);
