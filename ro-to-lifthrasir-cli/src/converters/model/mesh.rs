@@ -104,9 +104,8 @@ pub fn build_model(rsm: &Rsm, source_hash: &str) -> anyhow::Result<NormalizedMod
                 // keyframes only exist from RSM2 onwards, and `rsm2.rs`
                 // handles those.
                 translation_track: NormalizedTrack::default(),
-                rotation_track: track(
+                rotation_track: rotation_track(
                     &names[idx],
-                    "rotation",
                     duration_ms,
                     node.rot_keyframes.iter().map(|key| (key.frame, key.q)),
                 )?,
@@ -145,12 +144,11 @@ pub fn build_model(rsm: &Rsm, source_hash: &str) -> anyhow::Result<NormalizedMod
     })
 }
 
-fn track<T: Clone>(
+fn rotation_track(
     node_name: &str,
-    property: &str,
     duration_ms: f32,
-    source: impl IntoIterator<Item = (i32, T)>,
-) -> anyhow::Result<NormalizedTrack<T>> {
+    source: impl IntoIterator<Item = (i32, [f32; 4])>,
+) -> anyhow::Result<NormalizedTrack<[f32; 4]>> {
     if duration_ms <= 0.0 {
         return Ok(NormalizedTrack::default());
     }
@@ -158,7 +156,7 @@ fn track<T: Clone>(
     let source: Vec<_> = source.into_iter().collect();
     let max_frame = source.iter().map(|(frame, _)| *frame).max().unwrap_or(0);
     let duration_seconds = duration_ms / 1000.0;
-    let mut keys = source
+    let keys = source
         .into_iter()
         .map(|(frame, value)| NormalizedKey {
             time_ms: if max_frame == 0 {
@@ -173,15 +171,70 @@ fn track<T: Clone>(
         !keys
             .windows(2)
             .any(|pair| pair[1].time_ms <= pair[0].time_ms),
-        "node '{node_name}' has non-increasing {property} keyframes"
+        "node '{node_name}' has non-increasing rotation keyframes"
     );
+    let mut keys = fold_pre_roll(node_name, keys)?;
     if keys.len() == 1 && keys[0].time_ms == 0.0 {
         keys.push(NormalizedKey {
             time_ms: duration_ms,
-            value: keys[0].value.clone(),
+            value: keys[0].value,
         });
     }
     Ok(NormalizedTrack { keys })
+}
+
+/// Collapses keyframes placed before the start of the animation onto a single
+/// key at `t = 0`.
+///
+/// A handful of retail RSM1 nodes (`아인브로크\용광로06.rsm`'s `Object01`
+/// opens at frame -160) carry pre-roll keys. Playback time never goes
+/// negative, so those keys only ever act as the interpolation source for the
+/// first stretch of the loop -- which is exactly the pose this reproduces,
+/// while glTF, which forbids negative key times, gets a track it accepts.
+fn fold_pre_roll(
+    node_name: &str,
+    keys: Vec<NormalizedKey<[f32; 4]>>,
+) -> anyhow::Result<Vec<NormalizedKey<[f32; 4]>>> {
+    let played_from = keys.iter().position(|key| key.time_ms >= 0.0);
+    let Some(played_from) = played_from else {
+        // Times are strictly increasing, so this means every key precedes the
+        // animation and the node has no pose to play at all.
+        ensure!(
+            keys.is_empty(),
+            "node '{node_name}' has only pre-roll rotation keyframes"
+        );
+        return Ok(keys);
+    };
+    if played_from == 0 {
+        return Ok(keys);
+    }
+
+    let last_pre_roll = &keys[played_from - 1];
+    let first_played = &keys[played_from];
+    let start = if first_played.time_ms == 0.0 {
+        first_played.value
+    } else {
+        let span = first_played.time_ms - last_pre_roll.time_ms;
+        let factor = -last_pre_roll.time_ms / span;
+        // The t=0 pose is synthesized, so unlike the source keys -- which pass
+        // through verbatim -- it is normalized: `slerp` is only defined on unit
+        // quaternions and returns NaN outside them.
+        Quat::from_array(last_pre_roll.value)
+            .normalize()
+            .slerp(Quat::from_array(first_played.value).normalize(), factor)
+            .to_array()
+    };
+
+    let mut folded = vec![NormalizedKey {
+        time_ms: 0.0,
+        value: start,
+    }];
+    folded.extend(
+        keys.into_iter()
+            .skip(played_from)
+            .filter(|key| key.time_ms > 0.0),
+    );
+    Ok(folded)
 }
 
 /// Mirrors `models.rs::mat3_to_mat4` - the RSM `mat3` is column-major.
@@ -686,6 +739,82 @@ mod tests {
             vec![0.0, 1_000.0]
         );
         assert_eq!(model.materials[0].shading, ShadingPolicy::Flat);
+    }
+
+    /// `아인브로크\용광로06.rsm`'s `Object01` opens at frame -160 of a 25600ms
+    /// animation. Playback never reaches a negative time, and glTF forbids
+    /// one, so the pre-roll collapses into the pose it interpolates to at t=0.
+    #[test]
+    fn pre_roll_keyframes_collapse_into_the_pose_at_time_zero() {
+        let quarter_turn = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+        let mut source_node = node("main");
+        source_node.rot_keyframes = vec![
+            RotKeyframe {
+                frame: -500,
+                q: Quat::IDENTITY.to_array(),
+            },
+            RotKeyframe {
+                frame: 500,
+                q: quarter_turn.to_array(),
+            },
+            RotKeyframe {
+                frame: 1_000,
+                q: Quat::IDENTITY.to_array(),
+            },
+        ];
+        let mut source = rsm(vec![source_node]);
+        source.anim_len = 1_000;
+
+        let keys = build_model(&source, "hash").unwrap().nodes[0]
+            .rotation_track
+            .keys
+            .clone();
+
+        assert_eq!(
+            keys.iter().map(|key| key.time_ms).collect::<Vec<_>>(),
+            vec![0.0, 500.0, 1_000.0]
+        );
+        let expected = Quat::IDENTITY.slerp(quarter_turn, 0.5);
+        assert!(
+            Quat::from_array(keys[0].value).abs_diff_eq(expected, 1e-6),
+            "t=0 must be the pre-roll interpolated forward, got {:?}",
+            keys[0].value
+        );
+    }
+
+    /// A pre-roll key landing exactly on t=0 is already the played pose, so it
+    /// replaces the pre-roll rather than being interpolated against.
+    #[test]
+    fn a_pre_roll_key_meeting_time_zero_keeps_the_time_zero_pose() {
+        let quarter_turn = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
+        let mut source_node = node("main");
+        source_node.rot_keyframes = vec![
+            RotKeyframe {
+                frame: -500,
+                q: Quat::IDENTITY.to_array(),
+            },
+            RotKeyframe {
+                frame: 0,
+                q: quarter_turn.to_array(),
+            },
+            RotKeyframe {
+                frame: 1_000,
+                q: Quat::IDENTITY.to_array(),
+            },
+        ];
+        let mut source = rsm(vec![source_node]);
+        source.anim_len = 1_000;
+
+        let keys = build_model(&source, "hash").unwrap().nodes[0]
+            .rotation_track
+            .keys
+            .clone();
+
+        assert_eq!(
+            keys.iter().map(|key| key.time_ms).collect::<Vec<_>>(),
+            vec![0.0, 1_000.0]
+        );
+        assert_eq!(keys[0].value, quarter_turn.to_array());
     }
 
     #[test]
