@@ -371,22 +371,20 @@ pub fn lif_effect(effect: &RswEffect) -> lif::LifEffect {
 }
 
 /// `converted` holds the models the per-map closure already turned into a
-/// library glb; a member gets the `ro://models/...` ref, everyone else keeps
-/// the native `.rsm` ref.
-pub fn lif_prop(model: &RswModel, converted: &HashSet<String>) -> lif::LifProp {
-    let model_ref = if converted.contains(&model.filename) {
-        format!(
+/// library glb. Every returned reference ends in `.glb`; a native fallback is
+/// rejected rather than emitted.
+pub fn lif_prop(model: &RswModel, converted: &HashSet<String>) -> anyhow::Result<lif::LifProp> {
+    if !converted.contains(&model.filename) {
+        anyhow::bail!("prop '{}' was not converted to a .glb", model.filename);
+    }
+    Ok(lif::LifProp {
+        model: format!(
             "ro://models/{}",
             crate::converters::model::glb_relative_path(&model.filename)
-        )
-    } else {
-        format!("ro://data/model/{}", to_forward_slashes(&model.filename))
-    };
-    lif::LifProp {
-        model: model_ref,
+        ),
         anim_type: model.anim_type,
         anim_speed: model.anim_speed,
-    }
+    })
 }
 
 /// Lights, sound/effect emitters and prop references, in RSW order.
@@ -452,7 +450,7 @@ fn build_prop_node(
 ) -> anyhow::Result<json::Index<json::Node>> {
     let translation = to_gltf_vec(rsw_position_to_world(model.position, map_width, map_height));
     let rotation = to_gltf_quat(rsw_model_rotation(model));
-    let extras = extras_for(lif::EXTRAS_PROP, &lif_prop(model, converted_models))?;
+    let extras = extras_for(lif::EXTRAS_PROP, &lif_prop(model, converted_models)?)?;
 
     Ok(json::Index::push(
         &mut root.nodes,
@@ -491,13 +489,18 @@ pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
     let map_width = inputs.ground.width as f32;
     let map_height = inputs.ground.height as f32;
     children.push(build_sun_node(&mut root, &inputs.world.light));
-    children.extend(build_object_nodes(
-        &mut root,
-        inputs.world,
-        map_width,
-        map_height,
-        inputs.converted_models,
-    )?);
+    children.extend(
+        build_object_nodes(
+            &mut root,
+            inputs.world,
+            map_width,
+            map_height,
+            inputs.converted_models,
+        )
+        .map_err(|error| {
+            anyhow::anyhow!("building props for map '{}': {error}", inputs.map_name)
+        })?,
+    );
 
     let scene_root = json::Index::push(
         &mut root.nodes,
@@ -848,7 +851,7 @@ mod tests {
                 gat_bytes: &raw_gat(4, 4),
                 gnd_bytes: b"gnd",
                 rsw_bytes: b"rsw",
-                converted_models: &HashSet::new(),
+                converted_models: &HashSet::from(["prontera\\tree01.rsm".to_string()]),
             },
         )
         .expect("write glb");
@@ -982,7 +985,7 @@ mod tests {
         let prop: lif::LifProp =
             serde_json::from_value(extras_value(&node).expect("extras")[lif::EXTRAS_PROP].clone())
                 .expect("lif_prop");
-        assert_eq!(prop.model, "ro://data/model/prontera/tree01.rsm");
+        assert_eq!(prop.model, "ro://models/prontera/tree01.glb");
         assert_eq!(prop.anim_type, 1);
         assert_eq!(prop.anim_speed, 2.0);
 
@@ -1005,6 +1008,38 @@ mod tests {
     }
 
     #[test]
+    fn an_unconverted_prop_fails_naming_the_model_and_map() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ground = mini_ground();
+        let world = mini_world();
+
+        let err = write_glb(
+            &dir.path().join("mini.glb"),
+            &MapGlbInputs {
+                map_name: "mini",
+                ground: &ground,
+                world: &world,
+                primitives: &build_terrain(&ground).expect("terrain"),
+                textures: &textures(),
+                gat_bytes: &raw_gat(4, 4),
+                gnd_bytes: b"gnd",
+                rsw_bytes: b"rsw",
+                converted_models: &HashSet::new(),
+            },
+        )
+        .expect_err("a native prop reference must fail");
+
+        assert!(
+            err.to_string().contains("prontera\\tree01.rsm"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            err.to_string().contains("map 'mini'"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
     fn lif_prop_flips_to_the_library_glb_ref_when_the_model_was_converted() {
         let world = mini_world();
         let model = world
@@ -1016,12 +1051,9 @@ mod tests {
             })
             .expect("model object");
 
-        let native = lif_prop(model, &HashSet::new());
-        assert_eq!(native.model, "ro://data/model/prontera/tree01.rsm");
-
         let mut converted = HashSet::new();
         converted.insert(model.filename.clone());
-        let flipped = lif_prop(model, &converted);
+        let flipped = lif_prop(model, &converted).expect("converted prop ref");
         assert_eq!(
             flipped.model,
             format!(

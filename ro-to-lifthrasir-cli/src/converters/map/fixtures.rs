@@ -196,7 +196,7 @@ pub fn write_fixture() -> Fixture {
         rsw_bytes: b"rsw-bytes".to_vec(),
         primitives,
         textures: textures(),
-        converted_models: HashSet::new(),
+        converted_models: HashSet::from(["prontera\\tree01.rsm".to_string()]),
     };
     write_glb(&fixture.path, &fixture.inputs()).expect("write glb");
     fixture
@@ -237,7 +237,7 @@ fn regenerate_game_engine_fixtures() {
             gat_bytes: &gat,
             gnd_bytes: b"gnd-bytes",
             rsw_bytes: b"rsw-bytes",
-            converted_models: &HashSet::new(),
+            converted_models: &HashSet::from(["prontera\\tree01.rsm".to_string()]),
         },
     )
     .expect("write mini_map.glb");

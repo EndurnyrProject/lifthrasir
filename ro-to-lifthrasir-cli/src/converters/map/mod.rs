@@ -341,7 +341,7 @@ mod tests {
             let RswObject::Model(model) = &object else {
                 unreachable!();
             };
-            let prop = writer::lif_prop(model, &converted_models);
+            let prop = writer::lif_prop(model, &converted_models).expect("converted prop ref");
             assert_eq!(
                 prop.model,
                 format!("ro://models/{}", model::glb_relative_path(filename))
