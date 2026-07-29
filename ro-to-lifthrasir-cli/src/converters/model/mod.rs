@@ -12,7 +12,9 @@ pub mod validate;
 pub mod writer;
 
 use crate::converters::gltf_out::{hash_hex, to_forward_slashes};
-use crate::converters::map::textures::{TextureOut, sanitize_name, texture_bytes_to_png};
+use crate::converters::map::textures::{
+    TextureOut, canonical_name, sanitize_name, texture_bytes_to_png,
+};
 use crate::grf_vfs::AssetRead;
 use anyhow::{Context, anyhow, bail, ensure};
 use ro_formats::{Rsm, Rsm2};
@@ -309,7 +311,7 @@ impl TexturePool {
             relative_path: format!("tex/{sanitized}.png"),
         };
         match self.claimed.get(&sanitized) {
-            Some(previous) if previous == source_name => {
+            Some(previous) if canonical_name(previous) == canonical_name(source_name) => {
                 // A BIK stand-in written for an RSM2 consumer is replaced by the
                 // real texture once a consumer that keeps BIK asks for it.
                 if !replace_bik && self.fallback_claims.contains(&sanitized) {
@@ -779,6 +781,25 @@ mod tests {
             "unexpected error: {message}"
         );
         assert!(message.contains("a_b.bmp"), "unexpected error: {message}");
+    }
+
+    /// `verus\danger03.rsm` names one texture twice, once `.BMP` and once
+    /// `.bmp`. GRF lookup is case-insensitive, so both reads hit the same
+    /// entry and the pool must claim it once instead of reporting a collision.
+    #[test]
+    fn case_only_spelling_differences_share_one_pooled_texture() {
+        let models = vec![(
+            "data/model/prontera/Tree01.rsm",
+            encode_rsm((1, 4), &["ver_h_03.BMP", "ver_h_03.bmp"]),
+        )];
+        let vfs = vfs(&models, &["data/texture/ver_h_03.bmp"]);
+        let out = tempfile::tempdir().expect("tempdir");
+        let mut pool = TexturePool::new(out.path());
+
+        convert_model(&vfs, TREE, out.path(), &mut pool, false)
+            .expect("one file spelled two ways is not a collision");
+
+        assert!(out.path().join("tex/ver_h_03_bmp.png").is_file());
     }
 
     #[test]

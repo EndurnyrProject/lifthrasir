@@ -1,5 +1,5 @@
 use crate::grf_vfs::GrfVfs;
-use anyhow::{Context, bail};
+use anyhow::{Context, bail, ensure};
 use image::{ImageFormat, RgbaImage};
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -47,7 +47,8 @@ fn assign_unique_sanitized_names(texture_names: &[String]) -> anyhow::Result<Vec
     for name in texture_names {
         let sanitized = sanitize_name(name);
         if let Some(previous) = seen.insert(sanitized.clone(), name) {
-            bail!(
+            ensure!(
+                canonical_name(previous) == canonical_name(name),
                 "texture name collision: '{name}' and '{previous}' both sanitize to '{sanitized}.png'"
             );
         }
@@ -105,6 +106,16 @@ pub fn texture_bytes_to_png(source_name: &str, bytes: &[u8]) -> anyhow::Result<V
         "tga" => decoded_to_png(
             image::load_from_memory_with_format(bytes, ImageFormat::Tga).context("decoding TGA")?,
         ),
+        // Everything else reaches Bevy's stock `ImageLoader` at runtime, which
+        // keys nothing: JPEG cannot carry an exact key colour through lossy
+        // compression, and PNG carries its own alpha.
+        "jpg" | "jpeg" => decoded_to_png(
+            image::load_from_memory_with_format(bytes, ImageFormat::Jpeg)
+                .context("decoding JPEG")?,
+        ),
+        "png" => decoded_to_png(
+            image::load_from_memory_with_format(bytes, ImageFormat::Png).context("decoding PNG")?,
+        ),
         other => bail!("unsupported texture format '{other}' for '{source_name}'"),
     }
 }
@@ -145,6 +156,13 @@ fn apply_magenta_transparency(image: &mut RgbaImage) {
     }
 }
 
+/// Case and path separators are folded out, mirroring GRF lookup: a name is
+/// resolved case-insensitively with `/` and `\` alike, so two spellings that
+/// differ only that way address one file and must pool as one texture.
+pub fn canonical_name(name: &str) -> String {
+    name.replace('/', "\\").to_ascii_lowercase()
+}
+
 /// Lowercase ASCII, path-safe filename for a GRF texture name. Keeps the
 /// whole relative path (directory components included) flattened into one
 /// component, so distinct source paths with the same basename (e.g.
@@ -181,7 +199,7 @@ pub fn sanitize_name(name: &str) -> String {
     }
     format!(
         "{sanitized}_{}",
-        &blake3::hash(name.as_bytes()).to_hex()[..8]
+        &blake3::hash(canonical_name(name).as_bytes()).to_hex()[..8]
     )
 }
 
@@ -331,6 +349,49 @@ mod tests {
 
         assert_ne!(sanitized[0], sanitized[1]);
         assert!(sanitized[0].is_ascii(), "{}", sanitized[0]);
+    }
+
+    /// `verus\danger03.rsm` names one texture as both `ver_h_03.BMP` and
+    /// `ver_h_03.bmp`. GRF lookup is case-insensitive, so those are the same
+    /// file and must pool as one PNG rather than read as a collision.
+    #[test]
+    fn case_only_spelling_differences_are_one_texture() {
+        let names = vec![
+            "verus\\ver_h_03.BMP".to_string(),
+            "verus\\ver_h_03.bmp".to_string(),
+            "필드바닥\\PRT_초원04.bmp".to_string(),
+            "필드바닥\\prt_초원04.bmp".to_string(),
+        ];
+
+        let sanitized = assign_unique_sanitized_names(&names).expect("same file, not a collision");
+
+        assert_eq!(sanitized[0], sanitized[1]);
+        assert_eq!(sanitized[2], sanitized[3]);
+    }
+
+    /// Water textures are JPEG and some maps use them as ground textures.
+    /// Bevy's stock loader keys nothing, so neither does the converter.
+    #[test]
+    fn jpeg_and_png_decode_without_magenta_keying() {
+        let mut image = image::RgbImage::new(1, 1);
+        image.put_pixel(0, 0, image::Rgb([255, 0, 255]));
+
+        for (name, format) in [
+            ("워터\\water810.jpg", ImageFormat::Jpeg),
+            ("x.png", ImageFormat::Png),
+        ] {
+            let mut bytes = Vec::new();
+            image
+                .write_to(&mut Cursor::new(&mut bytes), format)
+                .expect("encode source");
+
+            let png_bytes = texture_bytes_to_png(name, &bytes).expect("convert");
+            let decoded = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png)
+                .expect("decode png")
+                .to_rgba8();
+
+            assert_eq!(decoded.get_pixel(0, 0).0[3], 255, "{name} must stay opaque");
+        }
     }
 
     #[test]

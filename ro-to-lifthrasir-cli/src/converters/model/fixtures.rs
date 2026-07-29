@@ -4,7 +4,7 @@
 //! rotation channels deliberately end on different frame numbers.
 
 use crate::converters::map::fixtures::write_fixture_png;
-use crate::converters::map::textures::TextureOut;
+use crate::converters::map::textures::{TextureOut, canonical_name};
 use crate::converters::model::mesh::build_model;
 use crate::converters::model::normalized::{NormalizedModel, ShadingPolicy};
 use crate::converters::model::writer::write_model_glb;
@@ -195,25 +195,28 @@ impl FakeVfs {
         Self {
             files: files
                 .iter()
-                .map(|(path, bytes)| ((*path).to_string(), bytes.clone()))
+                .map(|(path, bytes)| (canonical_name(path), bytes.clone()))
                 .collect(),
             reads: RefCell::new(HashMap::new()),
         }
     }
 
     pub fn reads(&self, logical_path: &str) -> usize {
-        self.reads.borrow().get(logical_path).copied().unwrap_or(0)
+        self.reads
+            .borrow()
+            .get(&canonical_name(logical_path))
+            .copied()
+            .unwrap_or(0)
     }
 }
 
+/// Keyed like the real GRF: lookups ignore case and separator spelling, so a
+/// texture named `X.BMP` in one place and `x.bmp` in another reads once.
 impl AssetRead for FakeVfs {
     fn read_asset(&self, logical_path: &str) -> Option<Vec<u8>> {
-        *self
-            .reads
-            .borrow_mut()
-            .entry(logical_path.to_string())
-            .or_default() += 1;
-        self.files.get(logical_path).cloned()
+        let key = canonical_name(logical_path);
+        *self.reads.borrow_mut().entry(key.clone()).or_default() += 1;
+        self.files.get(&key).cloned()
     }
 }
 
