@@ -1,11 +1,12 @@
 //! Runtime side of the converted prop library: what a spawned prop glb needs
 //! that glTF itself cannot express.
 //!
-//! Two things: the RSM materials are pure lambert (`reflectance = 0.0`), which
-//! has no glTF equivalent and is therefore re-applied here on the loaded
-//! asset, and the RSW-level animation intent (`anim_type`/`anim_speed`, which
-//! lives in the map, not in the model) that decides how the glb's single baked
-//! animation plays.
+//! Two things: the RSM materials use the classic client's fixed-function
+//! shading (pure lambert, no culling, no backface normal flip -- see
+//! [`apply_ro_shading`]), which has no glTF equivalent and is therefore
+//! re-applied here on the loaded asset, and the RSW-level animation intent
+//! (`anim_type`/`anim_speed`, which lives in the map, not in the model) that
+//! decides how the glb's single baked animation plays.
 //!
 //! [`wire_prop_scene`] is attached per prop with `.observe(...)` by the
 //! spawner, not registered globally -- every other glb the app loads must stay
@@ -179,7 +180,7 @@ pub(crate) fn wire_prop_instance(
 
         if !needs_clone {
             if let Some(mut material) = materials.get_mut(&material_handle.0) {
-                material.reflectance = 0.0;
+                apply_ro_shading(&mut material);
             }
             continue;
         }
@@ -188,7 +189,7 @@ pub(crate) fn wire_prop_instance(
             error!(entity = ?descendant, model = %prop.model, "prop primitive target material asset is unavailable; retaining baked appearance");
             continue;
         };
-        material.reflectance = 0.0;
+        apply_ro_shading(&mut material);
         if no_shade {
             material.unlit = true;
             material.base_color = tinted(material.base_color, tint.0);
@@ -213,6 +214,26 @@ pub(crate) fn wire_prop_instance(
             });
         }
     }
+}
+
+/// The classic client's fixed-function model shading: pure lambert
+/// (`reflectance = 0.0`), no backface culling, and a surface lit identically
+/// from both sides.
+///
+/// `double_sided: false` is deliberate and load-bearing, and must stay split
+/// from `cull_mode: None`. glTF's `doubleSided` sets both, but Bevy's
+/// `double_sided` flag additionally negates the normal on back faces -- and
+/// mirrored RSW placements (negative-determinant transforms, e.g. scale
+/// `[-1, 1, 1]`) flip triangle winding, so on those instances *every* visible
+/// face rasterizes as a back face and the flip inverts their lighting. The
+/// inverse-transpose normal is already correct under a mirror; with the flip
+/// disabled, mirrored and unmirrored instances shade identically, matching
+/// the original client (whose per-vertex lighting never depended on the
+/// viewing side).
+fn apply_ro_shading(material: &mut StandardMaterial) {
+    material.reflectance = 0.0;
+    material.double_sided = false;
+    material.cull_mode = None;
 }
 
 #[derive(Default)]
@@ -444,11 +465,14 @@ mod tests {
     }
 
     fn spawn_prop(app: &mut App, anim_type: u32, with_player: bool) -> (Entity, Entity, Entity) {
+        // Mimic what Bevy's glTF loader produces for a `doubleSided` material.
         let material = app
             .world_mut()
             .resource_mut::<Assets<StandardMaterial>>()
             .add(StandardMaterial {
                 reflectance: 0.5,
+                double_sided: true,
+                cull_mode: None,
                 ..default()
             });
 
@@ -672,6 +696,30 @@ mod tests {
         assert_eq!(reflectance_of(&app, mesh), 0.0);
     }
 
+    /// Mirrored RSW placements flip triangle winding; Bevy's `double_sided`
+    /// backface normal flip would invert their lighting, so RO shading must
+    /// keep culling off while clearing `double_sided`.
+    #[test]
+    fn ro_shading_disables_double_sided_flip_but_keeps_culling_off() {
+        let mut app = test_app();
+        let (root, mesh, _) = spawn_prop(&mut app, 0, false);
+
+        app.world_mut()
+            .run_system_cached_with(wire_prop_instance, root)
+            .unwrap();
+
+        let handle = app
+            .world()
+            .get::<MeshMaterial3d<StandardMaterial>>(mesh)
+            .unwrap()
+            .0
+            .clone();
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        let material = materials.get(&handle).unwrap();
+        assert!(!material.double_sided);
+        assert_eq!(material.cull_mode, None);
+    }
+
     #[test]
     fn plays_the_baked_animation_when_the_rsw_asks_for_one() {
         let mut app = test_app();
@@ -792,6 +840,8 @@ mod tests {
             .add(StandardMaterial {
                 base_color: Color::linear_rgba(0.8, 0.4, 0.2, 0.75),
                 reflectance: 0.5,
+                double_sided: true,
+                cull_mode: None,
                 ..default()
             });
         let source_value = app
@@ -823,6 +873,8 @@ mod tests {
         );
         let clone = materials.get(&rebound.0).unwrap();
         assert_eq!(clone.reflectance, 0.0);
+        assert!(!clone.double_sided);
+        assert_eq!(clone.cull_mode, None);
         assert!(clone.unlit);
         assert_eq!(clone.base_color_channel, UvChannel::Uv1);
         assert_eq!(
