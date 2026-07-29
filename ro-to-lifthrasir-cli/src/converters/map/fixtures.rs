@@ -39,18 +39,22 @@ pub fn mini_ground() -> RoGround {
 
     RoGround {
         version: "1.7".into(),
+        raw_version: 0x0107,
         width: 2,
         height: 2,
         textures: vec![TEXTURE.into()],
         texture_indexes: vec![0],
         tiles: vec![tile],
         surfaces: vec![surface.clone(), surface.clone(), surface.clone(), surface],
+        water: None,
     }
 }
 
 pub fn mini_world() -> RoWorld {
     RoWorld {
         version: "2.2".into(),
+        raw_version: 0x0202,
+        build_number: 0,
         ini_file: String::new(),
         gnd_file: "mini.gnd".into(),
         gat_file: "mini.gat".into(),

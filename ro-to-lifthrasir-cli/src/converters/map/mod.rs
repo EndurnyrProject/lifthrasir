@@ -304,6 +304,8 @@ mod tests {
     fn props_world(objects: Vec<RswObject>) -> RoWorld {
         RoWorld {
             version: "2.2".into(),
+            raw_version: 0x0202,
+            build_number: 0,
             ini_file: String::new(),
             gnd_file: String::new(),
             gat_file: String::new(),

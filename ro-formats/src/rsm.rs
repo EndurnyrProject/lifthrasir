@@ -11,7 +11,29 @@ use thiserror::Error;
 pub enum RsmError {
     #[error("Failed to parse RSM file: {0}")]
     ParseError(String),
+    #[error(
+        "RSM version {version} left {actual} unconsumed byte(s), expected {expected}; \
+         the layout is out of sync with the file"
+    )]
+    TrailingBytes {
+        version: String,
+        actual: usize,
+        expected: usize,
+    },
 }
+
+/// Encoded `major << 8 | minor`, mirroring BrowEdit's `0x0104`-style constants.
+///
+/// The version is compared as an integer rather than through the `f32` field:
+/// `1.6` is not exactly representable, so float comparisons around the version
+/// gates are not trustworthy.
+type Version = u16;
+
+const V1_2: Version = 0x0102;
+const V1_3: Version = 0x0103;
+const V1_4: Version = 0x0104;
+const V1_5: Version = 0x0105;
+const V1_6: Version = 0x0106;
 
 pub type RsmFile = Rsm;
 
@@ -57,13 +79,20 @@ impl BoundingBox {
 #[derive(Debug, Clone)]
 pub struct Rsm {
     pub version: f32,
+    /// `major << 8 | minor`, the form the version gates are compared against.
+    pub raw_version: Version,
     pub anim_len: i32,
     pub shade_type: ShadingType,
     pub alpha: f32,
     pub textures: Vec<String>,
     pub main_node_name: String,
     pub nodes: Vec<Node>,
-    pub pos_keyframes: Vec<PosKeyframe>,
+    /// Model-wide scale keyframes, present only below version 1.6.
+    ///
+    /// These are *scale* frames, not position frames: `int frame; vec3 scale;
+    /// float data` (20 bytes). Nothing consumes them yet, but they must be read
+    /// to reach the volume boxes.
+    pub scale_keyframes: Vec<ScaleKeyframe>,
     pub volume_boxes: Vec<VolumeBox>,
     pub bounding_box: Option<BoundingBox>,
 }
@@ -99,7 +128,10 @@ pub struct Node {
     pub vertices: Vec<[f32; 3]>,
     pub texture_vertices: Vec<TextureVertex>,
     pub faces: Vec<Face>,
-    pub pos_keyframes: Vec<PosKeyframe>,
+    /// RSM1 nodes carry rotation keyframes only.
+    ///
+    /// Per-node *position* keyframes are an RSM2 (>= 2.2) feature and must not
+    /// be read here; doing so desynchronises every following field.
     pub rot_keyframes: Vec<RotKeyframe>,
 }
 
@@ -121,11 +153,10 @@ pub struct Face {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PosKeyframe {
+pub struct ScaleKeyframe {
     pub frame: i32,
-    pub px: f32,
-    pub py: f32,
-    pub pz: f32,
+    pub scale: [f32; 3],
+    pub data: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -144,13 +175,23 @@ pub struct VolumeBox {
 
 impl Rsm {
     pub fn from_bytes(data: &[u8]) -> Result<Self, RsmError> {
-        match parse_rsm(data) {
-            Ok((_, mut rsm)) => {
-                rsm.calculate_bounding_box();
-                Ok(rsm)
-            }
-            Err(e) => Err(RsmError::ParseError(format!("{e:?}"))),
+        let (remaining, mut rsm) =
+            parse_rsm(data).map_err(|e| RsmError::ParseError(format!("{e:?}")))?;
+
+        // A layout that is out of sync usually still "parses" - it just stops in
+        // the wrong place. Requiring the parse to land on the end of the file is
+        // what turns a silent mis-parse into a loud failure.
+        let expected = expected_trailing_bytes(rsm.raw_version);
+        if remaining.len() != expected {
+            return Err(RsmError::TrailingBytes {
+                version: format!("{:.1}", rsm.version),
+                actual: remaining.len(),
+                expected,
+            });
         }
+
+        rsm.calculate_bounding_box();
+        Ok(rsm)
     }
 
     pub fn calculate_bounding_box(&mut self) {
@@ -260,16 +301,30 @@ impl Rsm {
     }
 }
 
-fn parse_header(input: &[u8]) -> IResult<&[u8], (f32, i32, i32, f32)> {
+/// Read a non-negative element count.
+///
+/// The counts are stored as signed 32-bit integers. `for _ in 0..count` is an
+/// *empty* range when `count` is negative, so a desynchronised parse that lands
+/// on garbage silently yields an empty list and "succeeds" instead of failing.
+/// Rejecting negative counts turns that class of corruption into a hard error.
+fn parse_count(input: &[u8]) -> IResult<&[u8], usize> {
+    let (input, count) = le_i32(input)?;
+    let count = usize::try_from(count).map_err(|_| {
+        nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Verify))
+    })?;
+    Ok((input, count))
+}
+
+fn parse_header(input: &[u8]) -> IResult<&[u8], (Version, i32, i32, f32)> {
     let (input, _) = tag(&b"GRSM"[..])(input)?;
     let (input, major) = le_u8(input)?;
     let (input, minor) = le_u8(input)?;
-    let version = major as f32 + minor as f32 / 10.0;
+    let version = ((major as Version) << 8) | minor as Version;
 
     let (input, anim_len) = le_i32(input)?;
     let (input, shade_type) = le_i32(input)?;
 
-    let (input, alpha) = if version >= 1.4 {
+    let (input, alpha) = if version >= V1_4 {
         let (input, a) = le_u8(input)?;
         (input, a as f32 / 255.0)
     } else {
@@ -282,9 +337,9 @@ fn parse_header(input: &[u8]) -> IResult<&[u8], (f32, i32, i32, f32)> {
 }
 
 fn parse_textures(input: &[u8]) -> IResult<&[u8], Vec<String>> {
-    let (input, tex_count) = le_i32(input)?;
+    let (input, tex_count) = parse_count(input)?;
     let mut remaining = input;
-    let mut textures = Vec::new();
+    let mut textures = Vec::with_capacity(tex_count);
 
     for _ in 0..tex_count {
         let (new_remaining, texture) = parse_korean_string(remaining, 40)?;
@@ -295,8 +350,8 @@ fn parse_textures(input: &[u8]) -> IResult<&[u8], Vec<String>> {
     Ok((remaining, textures))
 }
 
-fn parse_texture_vertex(input: &[u8], version: f32) -> IResult<&[u8], TextureVertex> {
-    let (input, color) = if version >= 1.2 {
+fn parse_texture_vertex(input: &[u8], version: Version) -> IResult<&[u8], TextureVertex> {
+    let (input, color) = if version >= V1_2 {
         let (input, r) = le_u8(input)?;
         let (input, g) = le_u8(input)?;
         let (input, b) = le_u8(input)?;
@@ -315,7 +370,7 @@ fn parse_texture_vertex(input: &[u8], version: f32) -> IResult<&[u8], TextureVer
     Ok((input, TextureVertex { color, u, v }))
 }
 
-fn parse_face(input: &[u8], version: f32) -> IResult<&[u8], Face> {
+fn parse_face(input: &[u8], version: Version) -> IResult<&[u8], Face> {
     let (input, v0) = le_u16(input)?;
     let (input, v1) = le_u16(input)?;
     let (input, v2) = le_u16(input)?;
@@ -326,7 +381,7 @@ fn parse_face(input: &[u8], version: f32) -> IResult<&[u8], Face> {
     let (input, padding) = le_u16(input)?;
     let (input, two_side) = le_i32(input)?;
 
-    let (input, smooth_group) = if version >= 1.2 {
+    let (input, smooth_group) = if version >= V1_2 {
         le_i32(input)?
     } else {
         (input, 0)
@@ -345,13 +400,12 @@ fn parse_face(input: &[u8], version: f32) -> IResult<&[u8], Face> {
     ))
 }
 
-fn parse_pos_keyframe(input: &[u8]) -> IResult<&[u8], PosKeyframe> {
+fn parse_scale_keyframe(input: &[u8]) -> IResult<&[u8], ScaleKeyframe> {
     let (input, frame) = le_i32(input)?;
-    let (input, px) = le_f32(input)?;
-    let (input, py) = le_f32(input)?;
-    let (input, pz) = le_f32(input)?;
+    let (input, scale) = parse_float_array::<3>(input)?;
+    let (input, data) = le_f32(input)?;
 
-    Ok((input, PosKeyframe { frame, px, py, pz }))
+    Ok((input, ScaleKeyframe { frame, scale, data }))
 }
 
 fn parse_rot_keyframe(input: &[u8]) -> IResult<&[u8], RotKeyframe> {
@@ -383,12 +437,12 @@ fn parse_float_array<const N: usize>(input: &[u8]) -> IResult<&[u8], [f32; N]> {
     Ok((remaining, array))
 }
 
-fn parse_node(input: &[u8], version: f32, _is_only: bool) -> IResult<&[u8], Node> {
+fn parse_node(input: &[u8], version: Version, _is_only: bool) -> IResult<&[u8], Node> {
     let (input, name) = parse_korean_string(input, 40)?;
     let (input, parent_name) = parse_korean_string(input, 40)?;
 
-    let (input, tex_count) = le_i32(input)?;
-    let mut texture_ids = Vec::new();
+    let (input, tex_count) = parse_count(input)?;
+    let mut texture_ids = Vec::with_capacity(tex_count);
     let mut remaining = input;
 
     for _ in 0..tex_count {
@@ -404,9 +458,9 @@ fn parse_node(input: &[u8], version: f32, _is_only: bool) -> IResult<&[u8], Node
     let (remaining, rot_angle) = le_f32(remaining)?;
     let (remaining, rot_axis) = parse_float_array::<3>(remaining)?;
     let (remaining, scale) = parse_float_array::<3>(remaining)?;
-    let (remaining, vert_count) = le_i32(remaining)?;
+    let (remaining, vert_count) = parse_count(remaining)?;
 
-    let mut vertices = Vec::new();
+    let mut vertices = Vec::with_capacity(vert_count);
     let mut rem = remaining;
 
     for _ in 0..vert_count {
@@ -415,8 +469,8 @@ fn parse_node(input: &[u8], version: f32, _is_only: bool) -> IResult<&[u8], Node
         rem = new_rem;
     }
 
-    let (rem, tvert_count) = le_i32(rem)?;
-    let mut texture_vertices = Vec::new();
+    let (rem, tvert_count) = parse_count(rem)?;
+    let mut texture_vertices = Vec::with_capacity(tvert_count);
     let mut remaining = rem;
 
     for _ in 0..tvert_count {
@@ -425,8 +479,8 @@ fn parse_node(input: &[u8], version: f32, _is_only: bool) -> IResult<&[u8], Node
         remaining = new_remaining;
     }
 
-    let (remaining, face_count) = le_i32(remaining)?;
-    let mut faces = Vec::new();
+    let (remaining, face_count) = parse_count(remaining)?;
+    let mut faces = Vec::with_capacity(face_count);
     let mut rem = remaining;
 
     for _ in 0..face_count {
@@ -435,51 +489,27 @@ fn parse_node(input: &[u8], version: f32, _is_only: bool) -> IResult<&[u8], Node
         rem = new_rem;
     }
 
-    let (rem, pos_keyframes) = if version >= 1.5 {
-        let (rem, kf_count) = le_i32(rem)?;
-        let mut keyframes = Vec::new();
-        let mut remaining = rem;
+    // Rotation keyframes are present in every RSM1 node, at every version.
+    //
+    // There is no per-node *position* keyframe block here: that field was added
+    // in RSM2 (>= 2.2) and is parsed by `rsm2.rs`. Reading one at 1.5 shifts
+    // every subsequent field and silently corrupts the rest of the file.
+    let (rem, rot_count) = parse_count(rem)?;
+    let mut rot_keyframes = Vec::with_capacity(rot_count);
+    let mut remaining = rem;
 
-        for _ in 0..kf_count {
-            let (new_remaining, kf) = parse_pos_keyframe(remaining)?;
-            keyframes.push(kf);
-            remaining = new_remaining;
-        }
+    for _ in 0..rot_count {
+        let (new_remaining, kf) = parse_rot_keyframe(remaining)?;
+        rot_keyframes.push(kf);
+        remaining = new_remaining;
+    }
 
-        debug_assert!(
-            keyframes.windows(2).all(|w| w[0].frame <= w[1].frame),
-            "Position keyframes must be sorted by frame number"
-        );
+    debug_assert!(
+        rot_keyframes.windows(2).all(|w| w[0].frame <= w[1].frame),
+        "Rotation keyframes must be sorted by frame number"
+    );
 
-        (remaining, keyframes)
-    } else {
-        (rem, Vec::new())
-    };
-
-    // For version 1.5, rotation keyframes are NOT present in nodes
-    // They're stored separately at the RSM level
-    let (rem, rot_keyframes) = if version < 1.5 {
-        // For older versions, rotation keyframes are in each node
-        let (rem2, rot_count) = le_i32(rem)?;
-        let mut rot_keyframes = Vec::new();
-        let mut remaining = rem2;
-
-        for _ in 0..rot_count {
-            let (new_remaining, kf) = parse_rot_keyframe(remaining)?;
-            rot_keyframes.push(kf);
-            remaining = new_remaining;
-        }
-
-        debug_assert!(
-            rot_keyframes.windows(2).all(|w| w[0].frame <= w[1].frame),
-            "Rotation keyframes must be sorted by frame number"
-        );
-
-        (remaining, rot_keyframes)
-    } else {
-        // For version 1.5+, rotation keyframes are not in individual nodes
-        (rem, Vec::new())
-    };
+    let rem = remaining;
 
     Ok((
         rem,
@@ -496,18 +526,17 @@ fn parse_node(input: &[u8], version: f32, _is_only: bool) -> IResult<&[u8], Node
             vertices,
             texture_vertices,
             faces,
-            pos_keyframes,
             rot_keyframes,
         },
     ))
 }
 
-fn parse_volume_box(input: &[u8], version: f32) -> IResult<&[u8], VolumeBox> {
+fn parse_volume_box(input: &[u8], version: Version) -> IResult<&[u8], VolumeBox> {
     let (input, size) = parse_float_array::<3>(input)?;
     let (input, pos) = parse_float_array::<3>(input)?;
     let (input, rot) = parse_float_array::<3>(input)?;
 
-    let (input, flag) = if version >= 1.3 {
+    let (input, flag) = if version >= V1_3 {
         le_i32(input)?
     } else {
         (input, 0)
@@ -529,10 +558,10 @@ pub fn parse_rsm(input: &[u8]) -> IResult<&[u8], Rsm> {
     let (input, textures) = parse_textures(input)?;
 
     let (input, main_node_name) = parse_korean_string(input, 40)?;
-    let (input, node_count) = le_i32(input)?;
+    let (input, node_count) = parse_count(input)?;
 
     let is_only = node_count == 1;
-    let mut nodes = Vec::new();
+    let mut nodes = Vec::with_capacity(node_count);
     let mut remaining = input;
 
     for _ in 0..node_count {
@@ -541,14 +570,18 @@ pub fn parse_rsm(input: &[u8]) -> IResult<&[u8], Rsm> {
         remaining = new_remaining;
     }
 
-    // Parse global position keyframes (version < 1.5)
-    let (remaining, pos_keyframes) = if version < 1.5 {
-        let (rem, kf_count) = le_i32(remaining)?;
-        let mut keyframes = Vec::new();
+    // Model-wide *scale* keyframes, below version 1.6.
+    //
+    // Each entry is `int frame; vec3 scale; float data` (20 bytes). This block
+    // used to be read as 16-byte position keyframes, which overran the volume
+    // box section and ran the parser off the end of the file.
+    let (remaining, scale_keyframes) = if version < V1_6 {
+        let (rem, kf_count) = parse_count(remaining)?;
+        let mut keyframes = Vec::with_capacity(kf_count);
         let mut remaining = rem;
 
         for _ in 0..kf_count {
-            let (new_remaining, kf) = parse_pos_keyframe(remaining)?;
+            let (new_remaining, kf) = parse_scale_keyframe(remaining)?;
             keyframes.push(kf);
             remaining = new_remaining;
         }
@@ -559,8 +592,8 @@ pub fn parse_rsm(input: &[u8]) -> IResult<&[u8], Rsm> {
     };
 
     // Parse volume boxes
-    let (remaining, vol_count) = le_i32(remaining)?;
-    let mut volume_boxes = Vec::new();
+    let (remaining, vol_count) = parse_count(remaining)?;
+    let mut volume_boxes = Vec::with_capacity(vol_count);
     let mut rem = remaining;
 
     for _ in 0..vol_count {
@@ -572,16 +605,30 @@ pub fn parse_rsm(input: &[u8]) -> IResult<&[u8], Rsm> {
     Ok((
         rem,
         Rsm {
-            version,
+            version: version_to_f32(version),
+            raw_version: version,
             anim_len,
             shade_type: ShadingType::from(shade_type),
             alpha,
             textures,
             main_node_name,
             nodes,
-            pos_keyframes,
+            scale_keyframes,
             volume_boxes,
             bounding_box: None,
         },
     ))
+}
+
+fn version_to_f32(version: Version) -> f32 {
+    (version >> 8) as f32 + (version & 0xff) as f32 / 10.0
+}
+
+/// Bytes the format legitimately leaves behind after the volume boxes.
+///
+/// Version 1.5 files carry four trailing bytes that no known implementation
+/// reads (BrowEdit stops before them too). Every other version ends exactly on
+/// the last volume box.
+fn expected_trailing_bytes(version: Version) -> usize {
+    if version >= V1_5 { 4 } else { 0 }
 }

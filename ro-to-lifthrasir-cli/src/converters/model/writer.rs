@@ -831,22 +831,28 @@ mod tests {
             reader.read_inputs().expect("inputs").collect::<Vec<f32>>()
         };
 
-        // anim_len 4000 ms; positions top out at frame 8, rotations at frame 2.
-        let translation = channels
+        // anim_len 4000 ms; main's rotations top out at frame 8, child's at frame 2.
+        let main_rotation = channels
             .iter()
-            .find(|channel| channel.target().property() == gltf::animation::Property::Translation)
-            .expect("translation channel");
-        assert_eq!(translation.target().node().name(), Some("main"));
-        assert_eq!(read(translation), vec![0.0, 2.0, 4.0]);
+            .find(|channel| channel.target().node().name() == Some("main"))
+            .expect("main rotation channel");
+        assert_eq!(
+            main_rotation.target().property(),
+            gltf::animation::Property::Rotation
+        );
+        assert_eq!(read(main_rotation), vec![0.0, 2.0, 4.0]);
 
-        let rotation = channels
+        let child_rotation = channels
             .iter()
-            .find(|channel| channel.target().property() == gltf::animation::Property::Rotation)
-            .expect("rotation channel");
-        assert_eq!(rotation.target().node().name(), Some("child"));
-        assert_eq!(read(rotation), vec![0.0, 4.0]);
+            .find(|channel| channel.target().node().name() == Some("child"))
+            .expect("child rotation channel");
+        assert_eq!(
+            child_rotation.target().property(),
+            gltf::animation::Property::Rotation
+        );
+        assert_eq!(read(child_rotation), vec![0.0, 4.0]);
 
-        let reader = rotation.reader(|buffer| Some(&buffers[buffer.index()]));
+        let reader = child_rotation.reader(|buffer| Some(&buffers[buffer.index()]));
         let gltf::animation::util::ReadOutputs::Rotations(rotations) =
             reader.read_outputs().expect("outputs")
         else {
@@ -909,7 +915,7 @@ mod tests {
 
         assert_eq!(
             digest.to_hex().as_str(),
-            "2a5eeb9924dfd62c24a333a86217fd77cc0f2530e01776f5b97c24198adc1c65"
+            "6b4cfb6f366594932b616486f9abe4f53b901fd6476c442025f2774660ec8b58"
         );
     }
 
@@ -936,11 +942,11 @@ mod tests {
     #[test]
     fn repeated_keyframe_numbers_fail_loudly() {
         let mut rsm = animated_rsm();
-        rsm.nodes[0].pos_keyframes[2].frame = 4;
+        rsm.nodes[0].rot_keyframes[2].frame = 4;
         let err = build_model(&rsm, "hash").expect_err("repeated keyframes must fail");
 
         assert!(
-            err.to_string().contains("non-increasing translation"),
+            err.to_string().contains("non-increasing rotation"),
             "unexpected error: {err}"
         );
     }

@@ -989,8 +989,8 @@ mod tests {
 
         let message = format!("{err:#}");
         assert!(
-            message.contains("invalid translation track times"),
-            "expected a translation-duration error, got: {message}"
+            message.contains("invalid rotation track times"),
+            "expected a rotation-duration error, got: {message}"
         );
     }
 

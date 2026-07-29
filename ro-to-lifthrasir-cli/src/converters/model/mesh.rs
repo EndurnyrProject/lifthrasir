@@ -100,14 +100,10 @@ pub fn build_model(rsm: &Rsm, source_hash: &str) -> anyhow::Result<NormalizedMod
                 rotation,
                 scale,
                 matrix: None,
-                translation_track: track(
-                    &names[idx],
-                    "translation",
-                    duration_ms,
-                    node.pos_keyframes
-                        .iter()
-                        .map(|key| (key.frame, [key.px, key.py, key.pz])),
-                )?,
+                // RSM1 has no per-node translation animation - position
+                // keyframes only exist from RSM2 onwards, and `rsm2.rs`
+                // handles those.
+                translation_track: NormalizedTrack::default(),
                 rotation_track: track(
                     &names[idx],
                     "rotation",
@@ -379,7 +375,7 @@ fn uniquify_names(rsm: &Rsm) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ro_formats::{BoundingBox, Face, PosKeyframe, RotKeyframe, ShadingType, TextureVertex};
+    use ro_formats::{BoundingBox, Face, RotKeyframe, ShadingType, TextureVertex};
 
     fn face(vertex_ids: [u16; 3], texture_vertex_ids: [u16; 3]) -> Face {
         Face {
@@ -410,7 +406,6 @@ mod tests {
             vertices: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
             texture_vertices: vec![uv(0.0, 0.0), uv(1.0, 0.0), uv(0.0, 1.0)],
             faces: vec![face([0, 1, 2], [0, 1, 2])],
-            pos_keyframes: Vec::new(),
             rot_keyframes: Vec::new(),
         }
     }
@@ -419,13 +414,14 @@ mod tests {
         let main_node_name = nodes[0].name.clone();
         Rsm {
             version: 1.4,
+            raw_version: 0x0104,
             anim_len: 0,
             shade_type: ShadingType::Smooth,
             alpha: 1.0,
             textures: vec!["a.bmp".into(), "b.bmp".into()],
             main_node_name,
             nodes,
-            pos_keyframes: Vec::new(),
+            scale_keyframes: Vec::new(),
             volume_boxes: Vec::new(),
             bounding_box: None,
         }
@@ -670,11 +666,9 @@ mod tests {
     #[test]
     fn one_time_zero_key_covers_duration_and_rsm1_none_stays_lit() {
         let mut source_node = node("main");
-        source_node.pos_keyframes.push(PosKeyframe {
+        source_node.rot_keyframes.push(RotKeyframe {
             frame: 0,
-            px: 1.0,
-            py: 2.0,
-            pz: 3.0,
+            q: [0.0, 0.0, 0.0, 1.0],
         });
         let mut source = rsm(vec![source_node]);
         source.anim_len = 1_000;
@@ -684,7 +678,7 @@ mod tests {
 
         assert_eq!(
             model.nodes[0]
-                .translation_track
+                .rotation_track
                 .keys
                 .iter()
                 .map(|key| key.time_ms)
@@ -709,14 +703,8 @@ mod tests {
                 ..face([1, 2, 0], [1, 2, 0])
             },
         ];
-        n.pos_keyframes = vec![PosKeyframe {
-            frame: 3,
-            px: 1.0,
-            py: 2.0,
-            pz: 3.0,
-        }];
         n.rot_keyframes = vec![RotKeyframe {
-            frame: 5,
+            frame: 3,
             q: [0.0, 0.0, 0.0, 1.0],
         }];
         let mut model = rsm(vec![n]);
@@ -726,11 +714,6 @@ mod tests {
         let second = build_model(&model, "hash").expect("model must build");
 
         assert_eq!(first, second);
-        assert_eq!(first.nodes[0].translation_track.keys[0].time_ms, 1000.0);
-        assert_eq!(
-            first.nodes[0].translation_track.keys[0].value,
-            [1.0, 2.0, 3.0]
-        );
         assert_eq!(first.nodes[0].rotation_track.keys[0].time_ms, 1000.0);
         assert_eq!(
             first.nodes[0].rotation_track.keys[0].value,

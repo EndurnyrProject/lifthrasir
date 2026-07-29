@@ -331,12 +331,14 @@ mod tests {
     fn out_of_range_texture_slot_fails_loudly() {
         let ground = RoGround {
             version: "1.7".into(),
+            raw_version: 0x0107,
             width: 1,
             height: 1,
             textures: vec!["a.bmp".into()],
             texture_indexes: vec![0],
             tiles: vec![tile(7)],
             surfaces: vec![flat_surface(0)],
+            water: None,
         };
 
         let err = build_terrain(&ground).expect_err("out of range slot must fail");
@@ -350,6 +352,7 @@ mod tests {
     fn steep_transition_emits_a_wall_quad_in_the_wall_tile_batch() {
         let ground = RoGround {
             version: "1.7".into(),
+            raw_version: 0x0107,
             width: 2,
             height: 2,
             textures: vec!["a.bmp".into(), "b.bmp".into()],
@@ -376,6 +379,7 @@ mod tests {
                     tile_right: -1,
                 },
             ],
+            water: None,
         };
 
         let primitives = build_terrain(&ground).expect("build");
@@ -410,6 +414,7 @@ mod tests {
     fn flat_ground_has_uniform_up_normals() {
         let ground = RoGround {
             version: "1.7".into(),
+            raw_version: 0x0107,
             width: 2,
             height: 2,
             textures: vec!["a.bmp".into()],
@@ -421,6 +426,7 @@ mod tests {
                 flat_surface(0),
                 flat_surface(0),
             ],
+            water: None,
         };
 
         let primitives = build_terrain(&ground).expect("build");

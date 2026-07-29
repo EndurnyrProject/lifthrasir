@@ -1387,6 +1387,8 @@ mod tests {
     fn placement_rows_report_negative_model_speed() {
         let mut world = RoWorld {
             version: "1.9".to_string(),
+            raw_version: 0x0109,
+            build_number: 0,
             ini_file: String::new(),
             gnd_file: String::new(),
             gat_file: String::new(),

@@ -1,7 +1,7 @@
 //! Synthetic prop fixtures shared by the model writer and validator tests: a
 //! two-node RSM whose main node spans two textures and whose child references
-//! a texture slot it does not have, plus an animated variant whose position
-//! and rotation channels deliberately end on different frame numbers.
+//! a texture slot it does not have, plus an animated variant whose nodes'
+//! rotation channels deliberately end on different frame numbers.
 
 use crate::converters::map::fixtures::write_fixture_png;
 use crate::converters::map::textures::TextureOut;
@@ -11,7 +11,7 @@ use crate::converters::model::writer::write_model_glb;
 use crate::grf_vfs::AssetRead;
 use image::{ImageFormat, RgbaImage};
 use lifthrasir_data::lif::{LifScalarKey, LifUvAnimation, LifUvChannel, LifUvProperty};
-use ro_formats::{Face, Node, PosKeyframe, RotKeyframe, Rsm, ShadingType, TextureVertex};
+use ro_formats::{Face, Node, RotKeyframe, Rsm, ShadingType, TextureVertex};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -58,7 +58,6 @@ fn triangle_node(name: &str, texture_ids: Vec<i32>, faces: Vec<Face>) -> Node {
         vertices: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
         texture_vertices: vec![uv(0.0, 0.0), uv(1.0, 0.0), uv(0.0, 1.0)],
         faces,
-        pos_keyframes: Vec::new(),
         rot_keyframes: Vec::new(),
     }
 }
@@ -78,34 +77,40 @@ pub fn textured_rsm() -> Rsm {
 
     Rsm {
         version: 1.4,
+        raw_version: 0x0104,
         anim_len: 0,
         shade_type: ShadingType::Smooth,
         alpha: 1.0,
         textures: TEXTURES.iter().map(|name| (*name).to_string()).collect(),
         main_node_name: "main".to_string(),
         nodes: vec![main, child],
-        pos_keyframes: Vec::new(),
+        scale_keyframes: Vec::new(),
         volume_boxes: Vec::new(),
         bounding_box: None,
     }
 }
 
-/// The same prop animated over 4 seconds, with the position channel ending on
-/// frame 8 and the rotation channel on frame 2 so the per-channel rescale is
-/// observable.
+/// The same prop animated over 4 seconds, with the first node's rotation
+/// channel ending on frame 8 and the second's on frame 2 so the per-channel
+/// rescale is observable.
 pub fn animated_rsm() -> Rsm {
     let mut rsm = textured_rsm();
     rsm.anim_len = 4000;
 
-    rsm.nodes[0].pos_keyframes = [0, 4, 8]
-        .into_iter()
-        .map(|frame| PosKeyframe {
-            frame,
-            px: frame as f32,
-            py: 0.0,
-            pz: 0.0,
-        })
-        .collect();
+    rsm.nodes[0].rot_keyframes = vec![
+        RotKeyframe {
+            frame: 0,
+            q: [0.0, 0.0, 0.0, 1.0],
+        },
+        RotKeyframe {
+            frame: 4,
+            q: [0.0, 0.707_106_77, 0.0, 0.707_106_77],
+        },
+        RotKeyframe {
+            frame: 8,
+            q: [0.0, 1.0, 0.0, 0.0],
+        },
+    ];
     rsm.nodes[1].rot_keyframes = vec![
         RotKeyframe {
             frame: 0,
