@@ -26,7 +26,7 @@ use crate::infrastructure::assets::SharedCompositeAssetSource;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use crate::infrastructure::assets::sources::AssetSource;
 use crate::presentation::rendering::models::spawn_gltf_map_props;
-use crate::presentation::rendering::water::begin_gltf_map_water;
+use crate::presentation::rendering::water::begin_water_loading;
 use bevy::app::AnimationSystems;
 use bevy::asset::LoadContext;
 use bevy::gltf::GltfAssetLabel;
@@ -39,7 +39,7 @@ use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
 use lifthrasir_data::lif::{self, LifAudio, LifEffect, LifGat, LifMap, LifProp, LifWater};
-use ro_formats::{RoAltitude, RswWater};
+use ro_formats::RoAltitude;
 
 /// Native directional-light tuning, mirrored from
 /// `presentation/rendering/lighting.rs::setup_directional_light`. Colour and
@@ -71,7 +71,8 @@ pub const ROOT_FIX: Quat = Quat::from_xyzw(1.0, 0.0, 0.0, 0.0);
 #[reflect(Component, Debug, Clone)]
 pub struct LifMapData {
     pub altitude: RoAltitude,
-    pub water: Option<RswWater>,
+    pub water: Option<LifWater>,
+    pub water_tiles: Vec<(usize, usize)>,
     pub meta: LifMap,
 }
 
@@ -297,12 +298,12 @@ fn adopt_gltf_map_scene(
     });
 
     if let Some(water) = data.water.as_ref() {
-        begin_gltf_map_water(
+        begin_water_loading(
             &mut commands,
             &asset_server,
             ready.entity,
             water,
-            &data.altitude,
+            data.water_tiles.clone(),
         );
     }
 }
@@ -477,7 +478,7 @@ fn decode_root(gltf: &gltf::Gltf) -> Result<LifMapData, String> {
 
     let gat: LifGat = root_extension(gltf, lif::EXTENSION_GAT)?
         .ok_or_else(|| format!("missing root extension {}", lif::EXTENSION_GAT))?;
-    let raw = gat_bytes(gltf, &gat)?;
+    let raw = buffer_view_bytes(gltf, gat.buffer_view as usize, lif::EXTENSION_GAT)?;
     let altitude = LifGat::decode(raw)
         .map_err(|error| format!("decoding the {} bufferView: {error}", lif::EXTENSION_GAT))?;
     // `LifGat::validate` re-parses the whole grid; the check is two
@@ -493,11 +494,29 @@ fn decode_root(gltf: &gltf::Gltf) -> Result<LifMapData, String> {
         ));
     }
 
-    let water = root_extension::<LifWater>(gltf, lif::EXTENSION_WATER)?.map(RswWater::from);
+    let water = root_extension::<LifWater>(gltf, lif::EXTENSION_WATER)?;
+    let water_tiles = match water.as_ref() {
+        Some(water) => {
+            let mask = buffer_view_bytes(gltf, water.buffer_view, lif::EXTENSION_WATER)?;
+            let expected_mask_len = (water.width as usize * water.height as usize).div_ceil(8);
+            if mask.len() != expected_mask_len {
+                return Err(format!(
+                    "{} mask has {} bytes but {}x{} dimensions require {expected_mask_len}",
+                    lif::EXTENSION_WATER,
+                    mask.len(),
+                    water.width,
+                    water.height,
+                ));
+            }
+            lif::decode_water_mask(mask, water.width as usize, water.height as usize)
+        }
+        None => Vec::new(),
+    };
 
     Ok(LifMapData {
         altitude,
         water,
+        water_tiles,
         meta,
     })
 }
@@ -515,37 +534,33 @@ fn root_extension<T: serde::de::DeserializeOwned>(
         .map_err(|error| format!("root extension {key} is malformed: {error}"))
 }
 
-/// The `LIF_gat` bufferView, resolved against the GLB binary chunk. The
-/// converter always embeds the GAT there, so a URI-backed buffer means the
-/// file was rewritten by something that did not preserve the contract.
-fn gat_bytes<'a>(gltf: &'a gltf::Gltf, gat: &LifGat) -> Result<&'a [u8], String> {
-    let view = gltf.views().nth(gat.buffer_view as usize).ok_or_else(|| {
-        format!(
-            "{} points at missing bufferView {}",
-            lif::EXTENSION_GAT,
-            gat.buffer_view
-        )
-    })?;
+/// Resolves a `LIF_*` bufferView against the GLB binary chunk.
+fn buffer_view_bytes<'a>(
+    gltf: &'a gltf::Gltf,
+    buffer_view: usize,
+    extension: &str,
+) -> Result<&'a [u8], String> {
+    let view = gltf
+        .views()
+        .nth(buffer_view)
+        .ok_or_else(|| format!("{extension} points at missing bufferView {buffer_view}"))?;
 
     if !matches!(view.buffer().source(), gltf::buffer::Source::Bin) {
         return Err(format!(
-            "{} bufferView {} is not backed by the GLB binary chunk",
-            lif::EXTENSION_GAT,
-            gat.buffer_view
+            "{extension} bufferView {buffer_view} is not backed by the GLB binary chunk"
         ));
     }
 
     let blob = gltf
         .blob
         .as_deref()
-        .ok_or_else(|| "glb has no binary chunk to read the GAT from".to_string())?;
+        .ok_or_else(|| format!("glb has no binary chunk to read {extension} from"))?;
     let start = view.offset();
     let end = start + view.length();
 
     blob.get(start..end).ok_or_else(|| {
         format!(
-            "{} bufferView {start}..{end} is outside the {}-byte binary chunk",
-            lif::EXTENSION_GAT,
+            "{extension} bufferView {start}..{end} is outside the {}-byte binary chunk",
             blob.len()
         )
     })
@@ -716,7 +731,20 @@ mod tests {
             assert_eq!(water.wave_speed, 1.25);
             assert_eq!(water.wave_pitch, 45.0);
             assert_eq!(water.anim_speed, 4);
+            assert_eq!((water.width, water.height), (2, 2));
         });
+    }
+
+    #[test]
+    fn a_water_mask_with_incompatible_dimensions_fails_root_decode() {
+        let bytes = std::fs::read(format!("{FIXTURES}/bad_water_mask.glb")).unwrap();
+        let gltf = gltf::Gltf::from_slice(&bytes).unwrap();
+
+        assert!(
+            decode_root(&gltf)
+                .unwrap_err()
+                .contains("LIF_water mask has 1 bytes but 9x2 dimensions require 3")
+        );
     }
 
     #[test]
@@ -1493,9 +1521,8 @@ mod tests {
             "{}",
             water.wave_height
         );
-        // The fixture GAT climbs with its cell index, so only the two GND tiles
-        // covering its bottom half reach past the wave plane.
-        assert_eq!(water.water_tiles, vec![(0, 1), (1, 1)]);
+        // The fixture's baked 2x2 mask selects these two tiles.
+        assert_eq!(water.water_tiles, vec![(1, 0), (0, 1)]);
     }
 
     #[test]

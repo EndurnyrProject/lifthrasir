@@ -8,7 +8,7 @@ use bevy::{
     shader::ShaderRef,
 };
 use bevy_auto_plugin::prelude::*;
-use ro_formats::RswWater;
+use lifthrasir_data::lif::LifWater;
 
 use crate::{
     domain::{
@@ -142,36 +142,40 @@ pub fn load_water_system(
         let ground = &ground_asset.ground;
         let width = ground.width as usize;
 
-        begin_water_loading(
-            &mut commands,
-            &asset_server,
-            entity,
-            &world_asset.world.water,
-            (width, ground.height as usize),
-            |x, y| {
+        let water = &world_asset.world.water;
+        let water_tiles = (0..ground.height as usize)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .filter(|&(x, y)| {
                 let heights = ground.surfaces[y * width + x].height;
                 heights[0].max(heights[1]).max(heights[2]).max(heights[3])
-            },
-        );
+                    > water.level - water.wave_height
+            })
+            .collect();
+        let water = LifWater {
+            level: water.level,
+            water_type: water.water_type,
+            wave_height: water.wave_height,
+            wave_speed: water.wave_speed,
+            wave_pitch: water.wave_pitch,
+            anim_speed: water.anim_speed,
+            width: ground.width,
+            height: ground.height,
+            buffer_view: 0,
+        };
+
+        begin_water_loading(&mut commands, &asset_server, entity, &water, water_tiles);
     }
 }
 
-/// Queues the water surface of one map: picks the submerged tiles, starts the
-/// texture load and leaves a [`WaterLoadingState`] behind for
-/// [`finalize_water_loading_system`].
+/// Queues a map's selected water tiles, starts the texture load and leaves a
+/// [`WaterLoadingState`] behind for [`finalize_water_loading_system`].
 ///
-/// Tiles are ground cells addressed `(x, y)` over `grid`, `CELL_SIZE` wide, and
-/// `tile_top` gives the highest of a tile's four corners. RO heights grow
-/// downwards, so a corner above the wave plane is under water -- including
-/// deep cells with no ground tile (`tile_up == -1`), which the terrain mesh
-/// skips.
-fn begin_water_loading(
+pub(crate) fn begin_water_loading(
     commands: &mut Commands,
     asset_server: &AssetServer,
     entity: Entity,
-    water: &RswWater,
-    grid: (usize, usize),
-    tile_top: impl Fn(usize, usize) -> f32,
+    water: &LifWater,
+    water_tiles: Vec<(usize, usize)>,
 ) {
     if water.level == 0.0 {
         return;
@@ -182,13 +186,7 @@ fn begin_water_loading(
         water.level, water.wave_height, water.wave_speed, water.wave_pitch, water.anim_speed
     );
 
-    // Per-tile water detection logic (based on GRF Editor)
     let wave_height = water.level - water.wave_height;
-    let (width, height) = grid;
-    let water_tiles: Vec<(usize, usize)> = (0..height)
-        .flat_map(|y| (0..width).map(move |x| (x, y)))
-        .filter(|&(x, y)| tile_top(x, y) > wave_height)
-        .collect();
 
     if water_tiles.is_empty() {
         debug!("No water tiles detected for this map");
@@ -206,32 +204,6 @@ fn begin_water_loading(
         wave_speed: water.wave_speed,
         wave_pitch: water.wave_pitch,
         animation_speed: water.anim_speed as f32,
-    });
-}
-
-/// Queues the water surface of a map served by a converted glb, which carries
-/// no GND surfaces: the tile heights come from the GAT instead.
-///
-/// The GAT grid is twice the resolution the water mesh is tiled at, so a tile
-/// takes the highest corner of the four GAT cells covering it. That is a
-/// superset of the GND corners the native path sees -- it can only flood a
-/// tile the terrain already dips below the wave plane in.
-#[cfg(feature = "map-gltf")]
-pub fn begin_gltf_map_water(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    entity: Entity,
-    water: &RswWater,
-    altitude: &ro_formats::RoAltitude,
-) {
-    let grid = (altitude.width as usize / 2, altitude.height as usize / 2);
-
-    begin_water_loading(commands, asset_server, entity, water, grid, |x, y| {
-        [(0, 0), (1, 0), (0, 1), (1, 1)]
-            .into_iter()
-            .filter_map(|(dx, dy)| altitude.get_cell(x * 2 + dx, y * 2 + dy))
-            .flat_map(|cell| cell.height)
-            .fold(f32::MIN, f32::max)
     });
 }
 
