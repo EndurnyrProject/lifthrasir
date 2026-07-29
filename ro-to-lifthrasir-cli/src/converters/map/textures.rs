@@ -64,11 +64,20 @@ fn normalize_one(
     tex_dir: &Path,
 ) -> anyhow::Result<TextureOut> {
     let logical_path = format!("data/texture/{name}");
-    let source_bytes = vfs
-        .read(&logical_path)
-        .with_context(|| format!("texture not found in GRFs: {logical_path}"))?;
-    let png_bytes = texture_bytes_to_png(name, &source_bytes)
-        .with_context(|| format!("converting texture: {logical_path}"))?;
+
+    // Some maps reference a texture that is in none of the archives. The map is
+    // otherwise complete, so it gets an obviously wrong stand-in rather than
+    // failing the whole conversion - but every substitution is reported, so a
+    // missing texture cannot pass unnoticed.
+    let png_bytes = match vfs.read(&logical_path) {
+        Some(source_bytes) => texture_bytes_to_png(name, &source_bytes)
+            .with_context(|| format!("converting texture: {logical_path}"))?,
+        None => {
+            println!("  missing texture, using a placeholder: {logical_path}");
+            crate::converters::model::fallback_texture_png()
+                .with_context(|| format!("building placeholder for {logical_path}"))?
+        }
+    };
 
     let file_name = format!("{sanitized}.png");
     let dest = tex_dir.join(&file_name);
@@ -254,17 +263,24 @@ mod tests {
         assert!(message.contains("dds"), "unexpected error: {message}");
     }
 
+    /// Some maps name a ground texture the archives do not contain. The map is
+    /// otherwise complete, so it converts with an obviously wrong stand-in.
     #[test]
-    fn missing_texture_in_vfs_fails_loudly() {
+    fn a_missing_texture_becomes_a_placeholder() {
         let vfs = GrfVfs::open(&[] as &[&GrfEntry]).expect("empty vfs opens");
         let out = tempfile::tempdir().expect("tempdir");
 
-        let err = normalize_textures(&vfs, &["grass01.bmp".to_string()], out.path())
-            .expect_err("missing texture must fail");
+        let textures = normalize_textures(&vfs, &["grass01.bmp".to_string()], out.path())
+            .expect("a missing texture must not fail the map");
 
-        assert!(
-            err.to_string().contains("grass01.bmp"),
-            "unexpected error: {err}"
+        assert_eq!(textures.len(), 1);
+        assert_eq!(textures[0].relative_path, "tex/grass01_bmp.png");
+
+        let written = std::fs::read(out.path().join("tex/grass01_bmp.png")).expect("placeholder");
+        assert_eq!(
+            written,
+            crate::converters::model::fallback_texture_png().expect("placeholder"),
+            "a missing texture must use the shared placeholder"
         );
     }
 

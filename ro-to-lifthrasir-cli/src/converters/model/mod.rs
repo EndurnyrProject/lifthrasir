@@ -202,14 +202,14 @@ fn export_textures(
     texture_names: &[String],
     relative_glb_path: &str,
     pool: &mut TexturePool,
-    allow_missing_or_bik_fallback: bool,
+    replace_bik: bool,
 ) -> anyhow::Result<Vec<TextureOut>> {
     let up = "../".repeat(relative_glb_path.matches('/').count());
 
     texture_names
         .iter()
         .map(|name| {
-            let texture = if allow_missing_or_bik_fallback {
+            let texture = if replace_bik {
                 pool.export_with_fallback(vfs, name)?
             } else {
                 pool.export(vfs, name)?
@@ -301,7 +301,7 @@ impl TexturePool {
         &mut self,
         vfs: &impl AssetRead,
         source_name: &str,
-        allow_missing_or_bik_fallback: bool,
+        replace_bik: bool,
     ) -> anyhow::Result<TextureOut> {
         let sanitized = sanitize_name(source_name);
         let texture = TextureOut {
@@ -310,7 +310,9 @@ impl TexturePool {
         };
         match self.claimed.get(&sanitized) {
             Some(previous) if previous == source_name => {
-                if !allow_missing_or_bik_fallback && self.fallback_claims.contains(&sanitized) {
+                // A BIK stand-in written for an RSM2 consumer is replaced by the
+                // real texture once a consumer that keeps BIK asks for it.
+                if !replace_bik && self.fallback_claims.contains(&sanitized) {
                     self.write_png(vfs, source_name, &sanitized, false)?;
                 }
                 return Ok(texture);
@@ -320,8 +322,7 @@ impl TexturePool {
             ),
             None => {}
         }
-        let used_fallback =
-            self.write_png(vfs, source_name, &sanitized, allow_missing_or_bik_fallback)?;
+        let used_fallback = self.write_png(vfs, source_name, &sanitized, replace_bik)?;
         self.claimed
             .insert(sanitized.clone(), source_name.to_string());
         if used_fallback {
@@ -335,21 +336,26 @@ impl TexturePool {
         vfs: &impl AssetRead,
         source_name: &str,
         sanitized: &str,
-        allow_missing_or_bik_fallback: bool,
+        replace_bik: bool,
     ) -> anyhow::Result<bool> {
         let logical_path = format!("data/texture/{source_name}");
         let is_bik = source_name
             .rsplit_once('.')
             .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("bik"));
         let (png_bytes, used_fallback) = match vfs.read_asset(&logical_path) {
-            Some(_) if allow_missing_or_bik_fallback && is_bik => (fallback_texture_png()?, true),
+            Some(_) if replace_bik && is_bik => (fallback_texture_png()?, true),
             Some(source_bytes) => (
                 texture_bytes_to_png(source_name, &source_bytes)
                     .with_context(|| format!("converting texture: {logical_path}"))?,
                 false,
             ),
-            None if allow_missing_or_bik_fallback => (fallback_texture_png()?, true),
-            None => bail!("texture not found in GRFs: {logical_path}"),
+            // A texture the archives simply do not contain gets an obviously
+            // wrong stand-in rather than failing the model, but the
+            // substitution is reported so it cannot pass unnoticed.
+            None => {
+                println!("  missing texture, using a placeholder: {logical_path}");
+                (fallback_texture_png()?, true)
+            }
         };
 
         let dest = self.tex_dir.join(format!("{sanitized}.png"));
@@ -630,18 +636,21 @@ mod tests {
         );
     }
 
+    /// A texture the archives do not contain is stood in for rather than
+    /// failing the model - for RSM1 just as for RSM2.
     #[test]
-    fn missing_texture_fails_loudly() {
+    fn a_missing_rsm1_texture_becomes_a_placeholder() {
         let vfs = vfs(&one_texture_model(), &[]);
         let out = tempfile::tempdir().expect("tempdir");
         let mut pool = TexturePool::new(out.path());
 
-        let err = convert_model(&vfs, TREE, out.path(), &mut pool, false).expect_err("must fail");
-
-        assert!(
-            format!("{err:#}").contains("data/texture/bark.bmp"),
-            "unexpected error: {err:#}"
+        assert_eq!(
+            convert_model(&vfs, TREE, out.path(), &mut pool, false).expect("must convert"),
+            ConvertOutcome::Converted
         );
+
+        let written = std::fs::read(out.path().join("tex/bark_bmp.png")).expect("placeholder");
+        assert_eq!(written, fallback_texture_png().expect("placeholder"));
     }
 
     #[test]
@@ -671,7 +680,6 @@ mod tests {
             assert_eq!(image.dimensions(), (2, 2));
             assert_eq!(image.get_pixel(0, 0).0, [255, 0, 255, 255]);
             assert_eq!(image.get_pixel(1, 0).0, [0, 0, 0, 255]);
-            assert!(pool.export(&vfs, source_name).is_err());
         }
     }
 
