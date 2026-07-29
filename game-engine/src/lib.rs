@@ -27,7 +27,6 @@ pub use domain::party::PartyPlugin;
 pub use domain::settings::SettingsRuntimePlugin;
 pub use domain::skill_units::SkillUnitsPlugin;
 pub use domain::storage::StoragePlugin;
-#[cfg(feature = "map-gltf")]
 pub use domain::world::GltfMapPlugin;
 pub use domain::world::WorldDomainPlugin;
 pub use infrastructure::accessory::{AccessoryDb, AccessoryDbPlugin};

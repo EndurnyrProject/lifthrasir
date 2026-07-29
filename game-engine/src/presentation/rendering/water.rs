@@ -11,14 +11,7 @@ use bevy_auto_plugin::prelude::*;
 use lifthrasir_data::lif::LifWater;
 
 use crate::{
-    domain::{
-        system_sets::WaterRenderingSystems,
-        world::{
-            components::MapLoader, map::MapData, map_loader::MapRequestLoader,
-            map_scoped::MapScoped,
-        },
-    },
-    infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
+    domain::{system_sets::WaterRenderingSystems, world::map_scoped::MapScoped},
     utils::constants::CELL_SIZE,
 };
 
@@ -84,23 +77,6 @@ impl Default for WaterExtension {
     }
 }
 
-/// Type alias for maps ready for water loading
-type MapsReadyForWater<'w, 's> = Query<
-    'w,
-    's,
-    (
-        Entity,
-        &'static MapLoader,
-        &'static MapRequestLoader,
-        &'static MapData,
-    ),
-    (
-        Without<WaterSurface>,
-        Without<WaterLoadingState>,
-        With<MapData>,
-    ),
->;
-
 /// Temporary component to track water texture loading state
 #[derive(Component)]
 pub struct WaterLoadingState {
@@ -114,62 +90,8 @@ pub struct WaterLoadingState {
     pub(crate) animation_speed: f32,
 }
 
-#[auto_add_system(
-    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
-    schedule = Update,
-    config(in_set = WaterRenderingSystems::WaterLoading)
-)]
-pub fn load_water_system(
-    mut commands: Commands,
-    world_assets: Res<Assets<RoWorldAsset>>,
-    asset_server: Res<AssetServer>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
-    query: MapsReadyForWater,
-) {
-    for (entity, map_loader, _map_request, _) in query.iter() {
-        let Some(world_handle) = map_loader.world.as_ref() else {
-            continue;
-        };
-
-        let Some(world_asset) = world_assets.get(world_handle) else {
-            continue;
-        };
-
-        let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
-            continue;
-        };
-
-        let ground = &ground_asset.ground;
-        let width = ground.width as usize;
-
-        let water = &world_asset.world.water;
-        let water_tiles = (0..ground.height as usize)
-            .flat_map(|y| (0..width).map(move |x| (x, y)))
-            .filter(|&(x, y)| {
-                let heights = ground.surfaces[y * width + x].height;
-                heights[0].max(heights[1]).max(heights[2]).max(heights[3])
-                    > water.level - water.wave_height
-            })
-            .collect();
-        let water = LifWater {
-            level: water.level,
-            water_type: water.water_type,
-            wave_height: water.wave_height,
-            wave_speed: water.wave_speed,
-            wave_pitch: water.wave_pitch,
-            anim_speed: water.anim_speed,
-            width: ground.width,
-            height: ground.height,
-            buffer_view: 0,
-        };
-
-        begin_water_loading(&mut commands, &asset_server, entity, &water, water_tiles);
-    }
-}
-
 /// Queues a map's selected water tiles, starts the texture load and leaves a
 /// [`WaterLoadingState`] behind for [`finalize_water_loading_system`].
-///
 pub(crate) fn begin_water_loading(
     commands: &mut Commands,
     asset_server: &AssetServer,

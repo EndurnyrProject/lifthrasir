@@ -11,7 +11,7 @@ pub use components::{
     ActiveEffect, EffectAnchor, EffectFrameTimer, EffectLayer, EffectLifetime, MapAmbientVfx,
 };
 pub use events::PlayProceduralVfx;
-pub use map_effects::{MapEffectsSpawned, spawn_map_effects};
+pub use map_effects::MapEffectsSpawned;
 pub use spirit_spheres::{
     PendingSpiritSpheres, SpiritSphereOrbit, orbit_spirit_spheres, spirit_sphere_visuals,
 };

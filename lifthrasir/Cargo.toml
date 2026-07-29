@@ -18,7 +18,6 @@ dev = [
     "dep:bevy_brp_extras",
 ]
 dlss = ["bevy/dlss", "game-engine/dlss", "lifthrasir-ui/dlss"]
-map-gltf = ["game-engine/map-gltf"]
 
 [dependencies]
 bevy = { workspace = true }

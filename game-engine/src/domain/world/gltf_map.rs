@@ -1,4 +1,4 @@
-//! Runtime side of the `map-gltf` pipeline: the `LIF_*` glTF extension
+//! Runtime side of the GLB map pipeline: the `LIF_*` glTF extension
 //! handler that turns a converted per-map glb back into engine data.
 //!
 //! The handler is registered globally, so it sees every glb the app loads. A
@@ -16,15 +16,12 @@ use crate::domain::audio::map_sounds::spawn_gltf_map_sounds;
 use crate::domain::effects::map_effects::spawn_gltf_map_effects;
 use crate::domain::entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid};
 use crate::domain::system_sets::WorldLoadingSystems;
-use crate::domain::world::components::{CurrentMapAltitude, MapLoader};
+use crate::domain::world::components::CurrentMapAltitude;
 use crate::domain::world::gltf_prop::{PropAnim, play_prop_uv_animation};
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
 use crate::domain::world::map_scoped::MapScoped;
-use crate::domain::world::systems::extract_map_from_unified_assets;
-use crate::infrastructure::assets::SharedCompositeAssetSource;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
-use crate::infrastructure::assets::sources::AssetSource;
 use crate::presentation::rendering::models::spawn_gltf_map_props;
 use crate::presentation::rendering::water::begin_water_loading;
 use bevy::app::AnimationSystems;
@@ -140,7 +137,7 @@ struct LoadedMapScene {
     scene: Handle<WorldAsset>,
 }
 
-/// Runtime plugin for the `map-gltf` pipeline (unified per-map glb loading).
+/// Runtime plugin for the GLB map pipeline (unified per-map glb loading).
 pub struct GltfMapPlugin;
 
 impl Plugin for GltfMapPlugin {
@@ -162,9 +159,10 @@ impl Plugin for GltfMapPlugin {
 
         app.add_systems(
             Update,
-            spawn_gltf_map
-                .in_set(WorldLoadingSystems::AssetExtraction)
-                .before(extract_map_from_unified_assets),
+            (
+                spawn_gltf_map.in_set(WorldLoadingSystems::AssetExtraction),
+                detect_gltf_map_load_failure.in_set(WorldLoadingSystems::AssetFailureDetection),
+            ),
         );
         // Emitter nodes are positioned by the scene hierarchy, so their world
         // position only exists once transforms have propagated -- which happens
@@ -184,19 +182,12 @@ impl Plugin for GltfMapPlugin {
     }
 }
 
-/// Claims a map load whose glb exists, ahead of the native
-/// [`extract_map_from_unified_assets`]: the scene replaces the `.gnd`/`.gat`/
-/// `.rsw` triple, and marking the request loaded is what keeps the native
-/// system from also running for this map.
-///
-/// The scene is rooted on the map-loader entity itself, so it inherits the
-/// entity's `MapScoped` teardown and is where the native path puts `MapData`.
+/// Claims every map request and loads its converted glb scene.
 fn spawn_gltf_map(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    source: Res<SharedCompositeAssetSource>,
     loaded: Option<Res<LoadedMapScene>>,
-    mut requests: Query<(Entity, &mut MapRequestLoader), Without<MapLoader>>,
+    mut requests: Query<(Entity, &mut MapRequestLoader), Without<GltfMapLoader>>,
 ) {
     for (entity, mut request) in requests.iter_mut() {
         if request.loaded {
@@ -205,20 +196,6 @@ fn spawn_gltf_map(
 
         let map_name = request.map_name.trim_end_matches(".gat").to_lowercase();
         let path = format!("data/maps/{map_name}/{map_name}.glb");
-
-        if !source
-            .0
-            .read()
-            .expect("composite asset source lock is poisoned")
-            .exists(&path)
-        {
-            // This map is served by the native path, so whatever glb we were
-            // holding for the map we came from is now dead weight.
-            commands.remove_resource::<LoadedMapScene>();
-            commands.insert_resource(CurrentMapNoShadeTint::default());
-            continue;
-        }
-
         info!("Loading map '{map_name}' from {path}");
 
         let scene = match loaded.as_deref() {
@@ -241,13 +218,20 @@ fn spawn_gltf_map(
     }
 }
 
-/// Hands the map data a ready glb scene carries to the systems that consume it
-/// on the native path: the walkability grid, the heightfield
-/// ([`CurrentMapAltitude`], which the native path publishes from its `.gat`
-/// handle), the ambient light, the water
-/// surface, and `MapData` on the loader entity -- which is what makes
-/// `detect_map_load_complete` report the map as loaded, exactly as it does for
-/// `.gnd`/`.gat`/`.rsw`.
+fn detect_gltf_map_load_failure(
+    asset_server: Res<AssetServer>,
+    maps: Query<(&WorldAssetRoot, &GltfMapLoader)>,
+) {
+    for (root, map) in maps.iter() {
+        if let bevy::asset::LoadState::Failed(error) = asset_server.load_state(&root.0) {
+            let map_name = &map.map_name;
+            panic!("failed to load map glb 'data/maps/{map_name}/{map_name}.glb': {error:?}");
+        }
+    }
+}
+
+/// Publishes the ready glb scene's walkability grid, heightfield, ambient
+/// light, water surface, and `MapData` on the loader entity.
 ///
 /// A glb map that imported badly is a hard failure: bevy's extension hooks
 /// cannot fail a load, so a broken `LIF_*` payload still reports `Loaded` and
@@ -646,11 +630,6 @@ mod tests {
         ));
         app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
         app.init_asset::<StandardMaterial>();
-        // `spawn_gltf_map` requires it, and requiring it is the point: without a
-        // composite source there is no way to tell a glb map from a native one.
-        app.insert_resource(SharedCompositeAssetSource(Arc::new(RwLock::new(
-            CompositeAssetSource::new(),
-        ))));
         // `GltfPlugin` only registers the real loader in `finish`, which
         // `App::update` never calls on its own.
         app.finish();
@@ -916,15 +895,11 @@ mod tests {
             // refuses to clone a component it cannot reflect.
             .init_asset::<StandardMaterial>()
             .register_type::<MeshMaterial3d<StandardMaterial>>();
-        app.insert_resource(SharedCompositeAssetSource(composite));
         // The completion flow the adapter feeds: `MapData` on the loader entity
         // is what turns a finished map into `MapLoadCompleted`.
         app.add_message::<MapLoadCompleted>();
         app.insert_resource(MapSpawnContext::new("mini_map".to_string(), 0, 0, 1));
-        app.add_systems(
-            Update,
-            (extract_map_from_unified_assets, detect_map_load_complete),
-        );
+        app.add_systems(Update, detect_map_load_complete);
         app.finish();
         app.cleanup();
         app
@@ -1163,40 +1138,8 @@ mod tests {
         }
     }
 
-    /// Same release, but for the warp that is still the common one: leaving a
-    /// glb map for a natively served one. Nothing about the native path would
-    /// ever drop the held scene, so the glb branch has to let go itself.
     #[test]
-    fn warping_from_a_glb_map_to_a_native_one_releases_the_glb() {
-        let root = stage_map("mini_map", "mini_map.glb");
-        let mut app = map_app(&root);
-
-        let first = request_map(&mut app, "mini_map");
-        app.update();
-        wait_for_scene(&mut app, first);
-        let meshes = terrain_meshes(app.world(), first);
-        assert!(!meshes.is_empty(), "the fixture map has terrain geometry");
-
-        warp_away(&mut app);
-        let second = request_map(&mut app, "prontera.gat");
-        for _ in 0..5 {
-            app.update();
-        }
-
-        assert!(
-            app.world().get::<MapLoader>(second).is_some(),
-            "a map with no glb must still load through the native path"
-        );
-        for mesh in &meshes {
-            assert!(
-                !app.world().resource::<Assets<Mesh>>().contains(*mesh),
-                "the glb map we warped away from is still holding its assets"
-            );
-        }
-    }
-
-    #[test]
-    fn a_map_with_a_glb_spawns_the_scene_instead_of_the_native_triple() {
+    fn a_map_request_spawns_its_glb_scene() {
         let root = stage_map("mini_map", "mini_map.glb");
         let mut app = map_app(&root);
         let entity = request_map(&mut app, "mini_map.gat");
@@ -1204,10 +1147,6 @@ mod tests {
         app.update();
 
         let world = app.world();
-        assert!(
-            world.get::<MapLoader>(entity).is_none(),
-            "the native .gnd/.gat/.rsw path must not run for a map with a glb"
-        );
         assert!(world.get::<MapRequestLoader>(entity).unwrap().loaded);
         assert_eq!(
             world.get::<GltfMapLoader>(entity).unwrap().map_name,
@@ -1219,19 +1158,21 @@ mod tests {
     }
 
     #[test]
-    fn a_map_without_a_glb_falls_through_to_the_native_path() {
+    #[should_panic(expected = "data/maps/prontera/prontera.glb")]
+    fn a_map_without_a_glb_panics_with_the_expected_path() {
         let root = stage_map("mini_map", "mini_map.glb");
         let mut app = map_app(&root);
-        let entity = request_map(&mut app, "prontera.gat");
+        request_map(&mut app, "prontera.gat");
+        let deadline = Instant::now() + Duration::from_secs(10);
 
-        app.update();
-
-        let world = app.world();
-        assert!(world.get::<GltfMapLoader>(entity).is_none());
-        assert!(
-            world.get::<MapLoader>(entity).is_some(),
-            "a map with no glb must still load through the native path"
-        );
+        loop {
+            app.update();
+            assert!(
+                Instant::now() < deadline,
+                "missing map glb did not fail before timeout"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
     }
 
     #[test]
@@ -1410,7 +1351,7 @@ mod tests {
     }
 
     #[test]
-    fn a_ready_glb_map_completes_the_map_load_like_the_native_path() {
+    fn a_ready_glb_map_completes_the_map_load() {
         let root = stage_map("mini_map", "mini_map.glb");
         let mut app = map_app(&root);
         let entity = request_map(&mut app, "mini_map.gat");
@@ -1441,9 +1382,6 @@ mod tests {
         assert_eq!(completed, vec!["mini_map".to_string()]);
     }
 
-    /// The native tracker keys off `MapLoader`, which the glb path never
-    /// spawns -- so without its own entry the loading screen reads 0/N for the
-    /// whole load and then jumps straight to done.
     #[test]
     fn a_loading_glb_map_reports_progress_of_its_own() {
         let root = stage_map("mini_map", "mini_map.glb");

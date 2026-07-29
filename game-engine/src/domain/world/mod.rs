@@ -1,7 +1,5 @@
 pub mod components;
-#[cfg(feature = "map-gltf")]
 pub mod gltf_map;
-#[cfg(feature = "map-gltf")]
 pub mod gltf_prop;
 pub mod loading_progress;
 pub mod map;
@@ -10,11 +8,9 @@ pub mod map_scoped;
 pub mod plugin;
 pub mod spawn_context;
 pub mod systems;
-pub mod terrain;
 pub mod warp;
 pub mod zone_readiness;
 
-#[cfg(feature = "map-gltf")]
 pub use gltf_map::GltfMapPlugin;
 pub use map_scoped::MapScoped;
 pub use plugin::WorldDomainPlugin;

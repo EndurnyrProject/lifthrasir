@@ -3,23 +3,16 @@ use crate::domain::entities::systems::{
 };
 use crate::domain::settings::GraphicsSettings;
 use crate::domain::system_sets::ModelRenderingSystems;
-use crate::domain::world::components::MapLoader;
-#[cfg(feature = "map-gltf")]
 use crate::domain::world::gltf_map::{LifPropRef, ROOT_FIX};
-#[cfg(feature = "map-gltf")]
 use crate::domain::world::gltf_prop::{PropAnim, wire_prop_scene};
-use crate::domain::world::map_scoped::MapScoped;
 use crate::infrastructure::assets::bmp_loader::BmpLoaderSettings;
-use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset, RsmAsset};
-use crate::infrastructure::ro_formats::{RsmFile, RswObject};
-use crate::utils::{get_map_dimensions_from_ground, rsw_to_bevy_transform};
+use crate::infrastructure::assets::loaders::RsmAsset;
+use crate::infrastructure::ro_formats::RsmFile;
 use bevy::asset::RenderAssetUsages;
-#[cfg(feature = "map-gltf")]
 use bevy::gltf::GltfAssetLabel;
 use bevy::math::{Mat4, Vec4};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-#[cfg(feature = "map-gltf")]
 use bevy::world_serialization::WorldAssetRoot;
 use bevy_auto_plugin::prelude::*;
 use std::collections::HashMap;
@@ -83,146 +76,6 @@ type ModelMeshUpdateQuery<'w, 's> = Query<
     ),
 >;
 
-#[auto_add_system(
-    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
-    schedule = Update,
-    config(in_set = ModelRenderingSystems::ModelLoading)
-)]
-pub fn log_loaded_world_data(
-    world_assets: Res<Assets<RoWorldAsset>>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
-    query: Query<&MapLoader, Changed<MapLoader>>,
-) {
-    for map_loader in query.iter() {
-        if let Some(world) = map_loader.world.as_ref()
-            && let Some(world_asset) = world_assets.get(world)
-        {
-            let model_count = world_asset
-                .world
-                .objects
-                .iter()
-                .filter(|o| matches!(o, RswObject::Model(_)))
-                .count();
-            let light_count = world_asset
-                .world
-                .objects
-                .iter()
-                .filter(|o| matches!(o, RswObject::Light(_)))
-                .count();
-            let sound_count = world_asset
-                .world
-                .objects
-                .iter()
-                .filter(|o| matches!(o, RswObject::Sound(_)))
-                .count();
-            let effect_count = world_asset
-                .world
-                .objects
-                .iter()
-                .filter(|o| matches!(o, RswObject::Effect(_)))
-                .count();
-
-            debug!("World data loaded:");
-            debug!("  Version: {}", world_asset.world.version);
-            debug!("  GND file: {}", world_asset.world.gnd_file);
-            debug!("  GAT file: {}", world_asset.world.gat_file);
-            debug!("  Water level: {}", world_asset.world.water.level);
-            debug!("  Total objects: {}", world_asset.world.objects.len());
-            debug!("    Models: {}", model_count);
-            debug!("    Lights: {}", light_count);
-            debug!("    Sounds: {}", sound_count);
-            debug!("    Effects: {}", effect_count);
-        }
-
-        if let Some(ground_asset) = ground_assets.get(&map_loader.ground) {
-            debug!("Ground data loaded:");
-            debug!(
-                "  Size: {}x{}",
-                ground_asset.ground.width, ground_asset.ground.height
-            );
-            debug!("  Textures: {}", ground_asset.ground.textures.len());
-        }
-    }
-}
-
-#[auto_add_system(
-    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
-    schedule = Update,
-    config(in_set = ModelRenderingSystems::ModelLoading)
-)]
-pub fn spawn_map_models(
-    mut commands: Commands,
-    world_assets: Res<Assets<RoWorldAsset>>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
-    query: Query<(Entity, &MapLoader), Without<ModelsSpawned>>,
-) {
-    for (entity, map_loader) in query.iter() {
-        let Some(world_handle) = &map_loader.world else {
-            continue;
-        };
-
-        let Some(world_asset) = world_assets.get(world_handle) else {
-            continue;
-        };
-
-        let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
-            continue;
-        };
-
-        let (map_width, map_height) = get_map_dimensions_from_ground(&ground_asset.ground);
-
-        let mut empty_count = 0;
-
-        for obj in &world_asset.world.objects {
-            if let RswObject::Model(model) = obj {
-                if model.filename.is_empty() {
-                    empty_count += 1;
-                    if empty_count <= 5 {
-                        debug!(
-                            "Empty filename model #{}: name='{}', node='{}', pos={:?}",
-                            empty_count, model.name, model.node_name, model.position
-                        );
-                    }
-                }
-
-                let transform = rsw_to_bevy_transform(model, map_width, map_height);
-                let anim_type = rsw_anim_type_to_animation_type(model.anim_type);
-
-                let model_entity = commands
-                    .spawn((
-                        Transform::from_translation(transform.translation)
-                            .with_rotation(transform.rotation)
-                            .with_scale(transform.scale),
-                        GlobalTransform::default(),
-                        Visibility::default(),
-                        ViewVisibility::default(),
-                        InheritedVisibility::default(),
-                        MapModel {
-                            filename: model.filename.clone(),
-                            node_name: model.node_name.clone(),
-                        },
-                        MapScoped,
-                    ))
-                    .id();
-
-                // Store animation data for later processing in update_model_meshes
-                if anim_type != AnimationType::None {
-                    commands
-                        .entity(model_entity)
-                        .insert((anim_type, AnimationSpeed(model.anim_speed)));
-                }
-            }
-        }
-
-        if empty_count > 0 {
-            warn!("{} models have empty filenames", empty_count);
-        }
-
-        // Mark this MapLoader entity as having models spawned
-        commands.entity(entity).insert(ModelsSpawned);
-    }
-}
-
 /// Converts RSW's `anim_type` field to our enum. Most RO models should loop
 /// by default for continuous animation.
 pub(crate) fn rsw_anim_type_to_animation_type(anim_type: u32) -> AnimationType {
@@ -256,7 +109,6 @@ pub(crate) fn rsw_anim_type_to_animation_type(anim_type: u32) -> AnimationType {
 /// untouched; `.glb` spawns a child carrying the converted prop scene. Any
 /// other extension is a converter bug: it is logged loudly and left alone
 /// rather than panicking a frame system.
-#[cfg(feature = "map-gltf")]
 pub fn spawn_gltf_map_props(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -950,7 +802,7 @@ pub fn update_rsm_animations(
     }
 }
 
-#[cfg(all(test, feature = "map-gltf"))]
+#[cfg(test)]
 mod gltf_prop_dispatch_tests {
     use super::*;
     use bevy::asset::AssetPlugin;

@@ -73,7 +73,6 @@ fn main() {
     app.add_plugins(game_engine::MapPlugin);
     app.add_plugins(game_engine::CoreGamePlugins);
 
-    #[cfg(feature = "map-gltf")]
     app.add_plugins(game_engine::GltfMapPlugin);
 
     #[cfg(feature = "net-aesir")]

@@ -15,12 +15,12 @@ const POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 500.0;
 
 use crate::{
     domain::system_sets::MiscRenderingSystems,
-    domain::world::components::MapLoader,
     domain::world::map_scoped::MapScoped,
     infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset},
     infrastructure::ro_formats::{RswLight, RswLightObj, RswObject},
     utils::{get_map_dimensions_from_ground, rsw_position_to_bevy},
 };
+
 
 /// Enhanced Lighting Plugin that creates realistic lighting from RSW data
 #[derive(AutoPlugin)]
@@ -31,39 +31,6 @@ pub struct EnhancedLightingPlugin;
 pub struct MapLight;
 
 /// System to setup enhanced map lighting based on RSW data
-#[auto_add_system(
-    plugin = crate::presentation::rendering::lighting::EnhancedLightingPlugin,
-    schedule = Update,
-    config(in_set = MiscRenderingSystems::LightingSetup)
-)]
-pub fn setup_enhanced_map_lighting(
-    mut commands: Commands,
-    world_assets: Res<Assets<RoWorldAsset>>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
-    query: Query<(Entity, &MapLoader), Without<MapLight>>,
-) {
-    for (entity, map_loader) in query.iter() {
-        let Some(world_handle) = &map_loader.world else {
-            continue;
-        };
-        let Some(world_asset) = world_assets.get(world_handle) else {
-            continue;
-        };
-        let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
-            continue;
-        };
-
-        let world = &world_asset.world;
-        let (map_width, map_height) = get_map_dimensions_from_ground(&ground_asset.ground);
-
-        setup_directional_light(&mut commands, &world.light);
-        setup_ambient_light(&mut commands, &world.light);
-        spawn_enhanced_point_lights(&mut commands, &world.objects, map_width, map_height);
-
-        commands.entity(entity).insert(MapLight);
-    }
-}
-
 /// Setup directional light (sun/moon) from RSW global lighting
 fn setup_directional_light(commands: &mut Commands, rsw_light: &RswLight) {
     // RSW coordinates: longitude 0-360°, latitude 0-180°

@@ -1,11 +1,6 @@
 use crate::core::GameState;
 use crate::domain::entities::markers::LocalPlayer;
-use crate::domain::world::components::MapLoader;
-#[cfg(feature = "map-gltf")]
 use crate::domain::world::gltf_map::LifAudioEmitter;
-use crate::infrastructure::assets::loaders::{RoGroundAsset, RoWorldAsset};
-use crate::infrastructure::ro_formats::RswObject;
-use crate::utils::{get_map_dimensions_from_ground, rsw_position_to_bevy};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::AudioControl;
@@ -66,65 +61,10 @@ fn map_sound_bundle(
     )
 }
 
-#[auto_add_system(plugin = crate::domain::audio::plugin::AudioPlugin, schedule = Update)]
-pub fn spawn_map_sounds(
-    mut commands: Commands,
-    world_assets: Res<Assets<RoWorldAsset>>,
-    ground_assets: Res<Assets<RoGroundAsset>>,
-    query: Query<(Entity, &MapLoader), Without<MapSoundsSpawned>>,
-) {
-    for (entity, map_loader) in query.iter() {
-        let Some(world_handle) = &map_loader.world else {
-            continue;
-        };
-
-        let Some(world_asset) = world_assets.get(world_handle) else {
-            continue;
-        };
-
-        let Some(ground_asset) = ground_assets.get(&map_loader.ground) else {
-            continue;
-        };
-
-        let (map_width, map_height) = get_map_dimensions_from_ground(&ground_asset.ground);
-
-        let mut spawned = 0;
-
-        for obj in &world_asset.world.objects {
-            let RswObject::Sound(sound) = obj else {
-                continue;
-            };
-
-            if sound.range <= 0.0 || sound.wav_file.is_empty() {
-                debug!(
-                    "Skipping map sound '{}' (range={}, wav_file='{}')",
-                    sound.name, sound.range, sound.wav_file
-                );
-                continue;
-            }
-
-            commands.spawn(map_sound_bundle(
-                rsw_position_to_bevy(sound.position, map_width, map_height),
-                map_sound_path(&sound.wav_file),
-                sound.volume,
-                sound.range,
-                sound.cycle,
-            ));
-
-            spawned += 1;
-        }
-
-        commands.entity(entity).insert(MapSoundsSpawned);
-
-        debug!("Spawned {} map sounds", spawned);
-    }
-}
-
 /// Marks a glb audio-emitter node whose [`MapSound`] has been spawned. The node
 /// is a scene child of the `MapScoped` loader entity, so the marker dies with
 /// the map and the next one's emitters spawn afresh -- exactly how
 /// [`MapSoundsSpawned`] behaves on the RSW path.
-#[cfg(feature = "map-gltf")]
 #[derive(Component)]
 pub struct GltfMapSoundSpawned;
 
@@ -136,7 +76,6 @@ pub struct GltfMapSoundSpawned;
 /// while emitting nodes, mirroring the guard on the RSW path.
 ///
 /// [`GltfMapPlugin`]: crate::domain::world::GltfMapPlugin
-#[cfg(feature = "map-gltf")]
 pub fn spawn_gltf_map_sounds(
     mut commands: Commands,
     emitters: Query<(Entity, &LifAudioEmitter, &GlobalTransform), Without<GltfMapSoundSpawned>>,

@@ -1,4 +1,4 @@
-use crate::presentation::rendering::{lighting::EnhancedLightingPlugin, water::WaterMaterial};
+use crate::presentation::rendering::water::WaterMaterial;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
@@ -15,16 +15,11 @@ pub struct MapDomainPlugin;
 ///
 /// Composes map rendering functionality with proper dependency order:
 /// 1. Material plugins (infrastructure-level)
-/// 2. EnhancedLightingPlugin (sub-plugin)
-/// 3. MapDomainPlugin (auto-plugin with systems)
+/// 2. MapDomainPlugin (auto-plugin with systems)
 pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
-            MaterialPlugin::<WaterMaterial>::default(),
-            EnhancedLightingPlugin,
-            MapDomainPlugin,
-        ));
+        app.add_plugins((MaterialPlugin::<WaterMaterial>::default(), MapDomainPlugin));
     }
 }

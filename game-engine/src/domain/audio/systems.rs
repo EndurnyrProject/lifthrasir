@@ -219,20 +219,12 @@ pub fn load_bgm_name_table(
 )]
 pub fn handle_map_bgm(
     mut events: MessageWriter<PlayBgmEvent>,
-    query: Query<(
-        &crate::domain::world::components::MapLoader,
-        &crate::domain::world::map_loader::MapRequestLoader,
-    )>,
+    query: Query<&crate::domain::world::map::MapData>,
     bgm_name_table: Res<BgmNameTable>,
     bgm_table_assets: Res<Assets<BgmNameTableAsset>>,
     bgm_manager: Res<BgmManager>,
 ) {
-    for (_map_loader, map_request) in query.iter() {
-        // Skip if map is not loaded yet
-        if !map_request.loaded {
-            continue;
-        }
-
+    for map in query.iter() {
         // Get the BGM name table asset
         let Some(table_handle) = &bgm_name_table.table_handle else {
             debug!("BGM name table not loaded yet");
@@ -247,7 +239,7 @@ pub fn handle_map_bgm(
         // Normalize map name for BGM table lookup
         // Strip .gat extension and lowercase to match table keys
         // Table has keys like "aldebaran" (from "aldebaran.rsw")
-        let map_name = map_request.map_name.trim_end_matches(".gat").to_lowercase();
+        let map_name = map.name.to_lowercase();
 
         if let Some(bgm_path) = bgm_table_asset.table.get(&map_name) {
             let full_bgm_path = format!("ro://{}", bgm_path);
@@ -259,7 +251,7 @@ pub fn handle_map_bgm(
 
             debug!(
                 "Map '{}' has BGM: {} -> {}",
-                map_request.map_name, bgm_path, full_bgm_path
+                map.name, bgm_path, full_bgm_path
             );
             events.write(PlayBgmEvent::new(full_bgm_path));
         } else {
