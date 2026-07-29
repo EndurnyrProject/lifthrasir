@@ -314,3 +314,7 @@ designs/
 
 assets/data/maps/
 assets/data/models/
+
+# Pix Agent
+.pi/
+.pi-lens/
