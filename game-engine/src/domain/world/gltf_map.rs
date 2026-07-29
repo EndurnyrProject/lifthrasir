@@ -588,7 +588,7 @@ mod tests {
     use crate::domain::world::loading_progress::{GLTF_MAP_STEPS, track_map_load_progress};
     use crate::domain::world::spawn_context::MapSpawnContext;
     use crate::infrastructure::assets::hierarchical_reader::HierarchicalAssetReader;
-    use crate::infrastructure::assets::loaders::{RoAltitudeAsset, RoGroundAsset, RoWorldAsset};
+    use crate::infrastructure::assets::loaders::RoAltitudeAsset;
     use crate::infrastructure::assets::sources::{CompositeAssetSource, DataFolderSource};
     use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset};
     use crate::presentation::rendering::water::WaterLoadingState;
@@ -847,8 +847,7 @@ mod tests {
         .unwrap();
     }
 
-    /// A headless app whose `ro://` source is `root`, running both the glb
-    /// branch and the native extraction system it has to win against.
+    /// A headless app whose `ro://` source is `root`, running the GLB map path.
     fn map_app(root: &tempfile::TempDir) -> App {
         let mut composite = CompositeAssetSource::new();
         composite.add_source(Box::new(DataFolderSource::new(root.path())));
@@ -880,9 +879,7 @@ mod tests {
             .write_blocking()
             .push(Box::new(StandardMaterialHandler));
         app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
-        app.init_asset::<RoGroundAsset>()
-            .init_asset::<RoAltitudeAsset>()
-            .init_asset::<RoWorldAsset>()
+        app.init_asset::<RoAltitudeAsset>()
             // `PbrPlugin`'s job in the real app; the terrain materials the glb
             // carries have nowhere to land without it, and the scene spawner
             // refuses to clone a component it cannot reflect.

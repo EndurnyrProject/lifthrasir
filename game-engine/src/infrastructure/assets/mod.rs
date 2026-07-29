@@ -26,8 +26,7 @@ pub use converters::*;
 pub use indoor_map_table_loader::{IndoorMapTableAsset, IndoorMapTableLoader};
 pub use loaders::{
     BgmNameTableAsset, BgmNameTableLoader, RoActAsset, RoActLoader, RoAltitudeAsset,
-    RoAltitudeLoader, RoGroundAsset, RoGroundLoader, RoPaletteAsset, RoPaletteLoader,
-    RoSpriteAsset, RoSpriteLoader, RoWorldAsset, RoWorldLoader, RsmAsset, RsmLoader,
+    RoPaletteAsset, RoPaletteLoader, RoSpriteAsset, RoSpriteLoader,
 };
 pub use ro_animation_asset::{ActionData, FrameData, FramePart, RoAnimationAsset};
 pub use ro_assets_plugin::SharedCompositeAssetSource;

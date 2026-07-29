@@ -6,9 +6,8 @@ use bevy::{
 use thiserror::Error;
 
 use crate::infrastructure::ro_formats::{
-    ActError, GatError, GndError, RoAction as ParsedRoAction, RoAltitude, RoGround,
-    RoSprite as ParsedRoSprite, RoWorld, RsmError, RsmFile, RswError, SpriteError, parse_act,
-    parse_spr as parse_sprite,
+    ActError, RoAction as ParsedRoAction, RoAltitude, RoSprite as ParsedRoSprite, SpriteError,
+    parse_act, parse_spr as parse_sprite,
 };
 
 // Re-export BGM name table types
@@ -27,23 +26,8 @@ pub struct RoActAsset {
 }
 
 #[derive(Asset, TypePath, Debug, Clone)]
-pub struct RoWorldAsset {
-    pub world: RoWorld,
-}
-
-#[derive(Asset, TypePath, Debug, Clone)]
-pub struct RoGroundAsset {
-    pub ground: RoGround,
-}
-
-#[derive(Asset, TypePath, Debug, Clone)]
 pub struct RoAltitudeAsset {
     pub altitude: RoAltitude,
-}
-
-#[derive(Asset, TypePath, Debug, Clone)]
-pub struct RsmAsset {
-    pub model: RsmFile,
 }
 
 #[derive(Asset, TypePath, Debug, Clone)]
@@ -56,18 +40,6 @@ pub struct RoSpriteLoader;
 
 #[derive(Default, TypePath)]
 pub struct RoActLoader;
-
-#[derive(Default, TypePath)]
-pub struct RoWorldLoader;
-
-#[derive(Default, TypePath)]
-pub struct RoGroundLoader;
-
-#[derive(Default, TypePath)]
-pub struct RoAltitudeLoader;
-
-#[derive(Default, TypePath)]
-pub struct RsmLoader;
 
 #[derive(Default, TypePath)]
 pub struct RoPaletteLoader;
@@ -86,38 +58,6 @@ pub enum RoActLoaderError {
     Io(#[from] std::io::Error),
     #[error("Could not parse action: {0}")]
     Parse(#[from] ActError),
-}
-
-#[derive(Debug, Error)]
-pub enum RoWorldLoaderError {
-    #[error("Could not load world: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Could not parse world: {0}")]
-    Parse(#[from] RswError),
-}
-
-#[derive(Debug, Error)]
-pub enum RoGroundLoaderError {
-    #[error("Could not load ground: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Could not parse ground: {0}")]
-    Parse(#[from] GndError),
-}
-
-#[derive(Debug, Error)]
-pub enum RoAltitudeLoaderError {
-    #[error("Could not load altitude: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Could not parse altitude: {0}")]
-    Parse(#[from] GatError),
-}
-
-#[derive(Debug, Error)]
-pub enum RsmLoaderError {
-    #[error("Could not load RSM: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Could not parse RSM: {0}")]
-    Parse(#[from] RsmError),
 }
 
 #[derive(Debug, Error)]
@@ -169,103 +109,6 @@ impl AssetLoader for RoActLoader {
 
     fn extensions(&self) -> &[&str] {
         &["act"]
-    }
-}
-
-impl AssetLoader for RoWorldLoader {
-    type Asset = RoWorldAsset;
-    type Settings = ();
-    type Error = RoWorldLoaderError;
-
-    async fn load(
-        &self,
-        reader: &mut dyn Reader,
-        _settings: &Self::Settings,
-        _load_context: &mut LoadContext<'_>,
-    ) -> Result<Self::Asset, Self::Error> {
-        let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes).await?;
-        let world = RoWorld::from_bytes(&bytes)?;
-        Ok(RoWorldAsset { world })
-    }
-
-    fn extensions(&self) -> &[&str] {
-        &["rsw"]
-    }
-}
-
-impl AssetLoader for RoGroundLoader {
-    type Asset = RoGroundAsset;
-    type Settings = ();
-    type Error = RoGroundLoaderError;
-
-    async fn load(
-        &self,
-        reader: &mut dyn Reader,
-        _settings: &Self::Settings,
-        _load_context: &mut LoadContext<'_>,
-    ) -> Result<Self::Asset, Self::Error> {
-        let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes).await?;
-        debug!("GND file loaded, size: {} bytes", bytes.len());
-        let ground = RoGround::from_bytes(&bytes)?;
-        debug!(
-            "📐 GND Dimensions: width={}, height={}",
-            ground.width, ground.height
-        );
-        Ok(RoGroundAsset { ground })
-    }
-
-    fn extensions(&self) -> &[&str] {
-        &["gnd"]
-    }
-}
-
-impl AssetLoader for RoAltitudeLoader {
-    type Asset = RoAltitudeAsset;
-    type Settings = ();
-    type Error = RoAltitudeLoaderError;
-
-    async fn load(
-        &self,
-        reader: &mut dyn Reader,
-        _settings: &Self::Settings,
-        _load_context: &mut LoadContext<'_>,
-    ) -> Result<Self::Asset, Self::Error> {
-        let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes).await?;
-        let altitude = RoAltitude::from_bytes(&bytes)?;
-        debug!(
-            "📐 GAT Dimensions: width={}, height={}",
-            altitude.width, altitude.height
-        );
-        Ok(RoAltitudeAsset { altitude })
-    }
-
-    fn extensions(&self) -> &[&str] {
-        &["gat"]
-    }
-}
-
-impl AssetLoader for RsmLoader {
-    type Asset = RsmAsset;
-    type Settings = ();
-    type Error = RsmLoaderError;
-
-    async fn load(
-        &self,
-        reader: &mut dyn Reader,
-        _settings: &Self::Settings,
-        _load_context: &mut LoadContext<'_>,
-    ) -> Result<Self::Asset, Self::Error> {
-        let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes).await?;
-        let model = RsmFile::from_bytes(&bytes)?;
-        Ok(RsmAsset { model })
-    }
-
-    fn extensions(&self) -> &[&str] {
-        &["rsm"]
     }
 }
 
