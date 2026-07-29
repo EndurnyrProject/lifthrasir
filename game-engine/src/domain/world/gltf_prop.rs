@@ -11,12 +11,16 @@
 //! spawner, not registered globally -- every other glb the app loads must stay
 //! untouched.
 
+use super::gltf_map::CurrentMapNoShadeTint;
 use crate::domain::entities::systems::AnimationType;
 use crate::presentation::rendering::models::rsw_anim_type_to_animation_type;
 use bevy::animation::RepeatAnimation;
-use bevy::gltf::GltfAssetLabel;
+use bevy::gltf::{GltfAssetLabel, GltfExtras};
+use bevy::math::Affine2;
+use bevy::mesh::UvChannel;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
+use lifthrasir_data::lif::{EXTRAS_NO_SHADE, EXTRAS_UV_ANIMATION, LifUvAnimation, LifUvSample};
 
 /// On the `WorldAssetRoot` entity of a prop glb, carrying the RSW placement's
 /// animation intent plus the asset path the glb was spawned from.
@@ -34,6 +38,15 @@ pub struct PropAnim {
     pub anim_speed: f32,
 }
 
+#[derive(Component, Debug, Clone)]
+pub(crate) struct PropUvAnimation {
+    animation: LifUvAnimation,
+    material: Handle<StandardMaterial>,
+    player: Entity,
+    node: AnimationNodeIndex,
+    model: String,
+}
+
 /// Wires a freshly spawned prop scene: pure-lambert materials always, plus the
 /// baked animation when the RSW asked for one.
 ///
@@ -49,48 +62,212 @@ pub(crate) fn wire_prop_instance(
     root: In<Entity>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    tint: Res<CurrentMapNoShadeTint>,
     children: Query<&Children>,
-    mesh_materials: Query<&MeshMaterial3d<StandardMaterial>>,
+    primitives: Query<(
+        Option<&GltfExtras>,
+        Option<&MeshMaterial3d<StandardMaterial>>,
+    )>,
     props: Query<&PropAnim>,
     mut players: Query<&mut AnimationPlayer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
+    let Ok(prop) = props.get(*root) else {
+        error!(entity = ?*root, "prop scene root has no PropAnim metadata");
+        return;
+    };
+    let repeat = prop_repeat_mode(prop.anim_type);
+    let player_entity = repeat.and_then(|_| {
+        children
+            .iter_descendants(*root)
+            .find(|entity| players.contains(*entity))
+    });
+    let animation_target = player_entity.and_then(|entity| {
+        let Ok(mut player) = players.get_mut(entity) else {
+            error!(entity = ?entity, model = %prop.model, "prop animation player disappeared during scene wiring");
+            return None;
+        };
+        let clip = asset_server.load(GltfAssetLabel::Animation(0).from_asset(prop.model.clone()));
+        let (graph, node) = AnimationGraph::from_clip(clip);
+        player
+            .play(node)
+            .set_repeat(repeat.expect("player is only selected for animated props"))
+            .set_speed(prop.anim_speed);
+        commands
+            .entity(entity)
+            .insert(AnimationGraphHandle(graphs.add(graph)));
+        Some((entity, node))
+    });
+
     for descendant in children.iter_descendants(*root) {
-        let Ok(handle) = mesh_materials.get(descendant) else {
+        let Ok((extras, material_handle)) = primitives.get(descendant) else {
             continue;
         };
-        let Some(mut material) = materials.get_mut(&handle.0) else {
+        let metadata =
+            extras.and_then(|extras| parse_primitive_extras(descendant, &prop.model, extras));
+        let no_shade = metadata.as_ref().is_some_and(|metadata| metadata.no_shade);
+        let uv = metadata.and_then(|metadata| metadata.uv);
+        let active_uv = repeat.is_some() && uv.is_some();
+
+        if active_uv && animation_target.is_none() {
+            error!(entity = ?descendant, model = %prop.model, "animated UV primitive has no descendant AnimationPlayer and graph node; retaining baked UV0");
+        }
+        let active_uv = active_uv
+            .then_some(uv)
+            .flatten()
+            .filter(|_| animation_target.is_some());
+        let needs_clone = no_shade || active_uv.is_some();
+
+        let Some(material_handle) = material_handle else {
+            if needs_clone {
+                error!(entity = ?descendant, model = %prop.model, "prop primitive metadata has no target StandardMaterial; retaining baked appearance");
+            }
+            continue;
+        };
+
+        if !needs_clone {
+            if let Some(mut material) = materials.get_mut(&material_handle.0) {
+                material.reflectance = 0.0;
+            }
+            continue;
+        }
+
+        let Some(mut material) = materials.get(&material_handle.0).cloned() else {
+            error!(entity = ?descendant, model = %prop.model, "prop primitive target material asset is unavailable; retaining baked appearance");
             continue;
         };
         material.reflectance = 0.0;
+        if no_shade {
+            material.unlit = true;
+            material.base_color = tinted(material.base_color, tint.0);
+        }
+        if let Some(animation) = active_uv.as_ref() {
+            material.base_color_channel = UvChannel::Uv1;
+            material.uv_transform =
+                affine(animation.sample(0, false).expect("validated UV metadata"));
+        }
+
+        let material = materials.add(material);
+        commands
+            .entity(descendant)
+            .insert(MeshMaterial3d(material.clone()));
+        if let (Some(animation), Some((player, node))) = (active_uv, animation_target) {
+            commands.entity(descendant).insert(PropUvAnimation {
+                animation,
+                material,
+                player,
+                node,
+                model: prop.model.clone(),
+            });
+        }
     }
+}
 
-    let Ok(prop) = props.get(*root) else {
-        return;
+#[derive(Default)]
+struct PrimitiveMetadata {
+    uv: Option<LifUvAnimation>,
+    no_shade: bool,
+}
+
+fn parse_primitive_extras(
+    entity: Entity,
+    model: &str,
+    extras: &GltfExtras,
+) -> Option<PrimitiveMetadata> {
+    let value: serde_json::Value = match serde_json::from_str(&extras.value) {
+        Ok(value) => value,
+        Err(error) => {
+            error!(?entity, %model, %error, "malformed prop primitive extras; retaining baked appearance");
+            return None;
+        }
     };
-    let Some(repeat) = prop_repeat_mode(prop.anim_type) else {
-        return;
-    };
-    let Some(player_entity) = children
-        .iter_descendants(*root)
-        .find(|entity| players.contains(*entity))
-    else {
-        return;
-    };
-    let Ok(mut player) = players.get_mut(player_entity) else {
-        return;
+    let Some(object) = value.as_object() else {
+        error!(?entity, %model, "prop primitive extras are not a JSON object; retaining baked appearance");
+        return None;
     };
 
-    let clip = asset_server.load(GltfAssetLabel::Animation(0).from_asset(prop.model.clone()));
-    let (graph, node) = AnimationGraph::from_clip(clip);
-    player
-        .play(node)
-        .set_repeat(repeat)
-        .set_speed(prop.anim_speed);
-    commands
-        .entity(player_entity)
-        .insert(AnimationGraphHandle(graphs.add(graph)));
+    let uv = object.get(EXTRAS_UV_ANIMATION).and_then(|value| {
+        let animation: LifUvAnimation = match serde_json::from_value(value.clone()) {
+            Ok(animation) => animation,
+            Err(error) => {
+                error!(?entity, %model, %error, "malformed prop UV animation metadata; retaining baked UV0");
+                return None;
+            }
+        };
+        if let Err(error) = animation.validate() {
+            error!(?entity, %model, %error, "invalid prop UV animation metadata; retaining baked UV0");
+            return None;
+        }
+        Some(animation)
+    });
+
+    let no_shade = match object.get(EXTRAS_NO_SHADE) {
+        None => false,
+        Some(value) => match value.as_bool() {
+            Some(value) => value,
+            None => {
+                error!(?entity, %model, "malformed prop no-shade metadata; retaining baked shading");
+                false
+            }
+        },
+    };
+    Some(PrimitiveMetadata { uv, no_shade })
+}
+
+fn tinted(color: Color, tint: [f32; 3]) -> Color {
+    let color = color.to_linear();
+    Color::linear_rgba(
+        color.red * tint[0],
+        color.green * tint[1],
+        color.blue * tint[2],
+        color.alpha,
+    )
+}
+
+fn affine(sample: LifUvSample) -> Affine2 {
+    let [a, b, tx, c, d, ty, _, _, _] = sample.matrix3();
+    Affine2::from_cols(Vec2::new(a, c), Vec2::new(b, d), Vec2::new(tx, ty))
+}
+
+pub(crate) fn play_prop_uv_animation(
+    animations: Query<&PropUvAnimation>,
+    players: Query<&AnimationPlayer>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for animation in &animations {
+        let Ok(player) = players.get(animation.player) else {
+            error!(entity = ?animation.player, model = %animation.model, "prop UV animation lost its AnimationPlayer");
+            continue;
+        };
+        let Some(active) = player.animation(animation.node) else {
+            error!(entity = ?animation.player, model = %animation.model, "prop UV animation lost its graph node");
+            continue;
+        };
+        let Some(mut material) = materials.get_mut(&animation.material) else {
+            error!(entity = ?animation.player, model = %animation.model, "prop UV animation lost its cloned material");
+            continue;
+        };
+        let time_ms = seconds_to_millis(active.seek_time());
+        let repeat = match active.repeat_mode() {
+            RepeatAnimation::Forever => true,
+            RepeatAnimation::Count(_) => !active.is_finished(),
+            RepeatAnimation::Never => false,
+        };
+        match animation.animation.sample(time_ms, repeat) {
+            Ok(sample) => material.uv_transform = affine(sample),
+            Err(error) => {
+                error!(entity = ?animation.player, model = %animation.model, %error, "prop UV animation became invalid")
+            }
+        }
+    }
+}
+
+fn seconds_to_millis(seconds: f32) -> u32 {
+    if !seconds.is_finite() || seconds <= 0.0 {
+        return 0;
+    }
+    ((seconds as f64 * 1000.0).min(u32::MAX as f64)) as u32
 }
 
 /// How the glb's baked animation should repeat, or `None` when the RSW says
@@ -106,13 +283,96 @@ fn prop_repeat_mode(anim_type: u32) -> Option<RepeatAnimation> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::asset::{AssetPlugin, LoadContext};
+    use bevy::gltf::extensions::{
+        ErasedGltfExtensionHandler, GltfExtensionHandler, GltfExtensionHandlers,
+    };
+    use bevy::gltf::{GltfMaterial, GltfPlugin};
+    use bevy::image::ImagePlugin;
+    use bevy::mesh::{Mesh, MeshPlugin, VertexAttributeValues};
+    use bevy::world_serialization::{WorldAsset, WorldSerializationPlugin};
+    use std::time::{Duration, Instant};
+
+    const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
 
     fn test_app() -> App {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, AssetPlugin::default()))
             .init_asset::<StandardMaterial>()
             .init_asset::<AnimationClip>()
-            .init_asset::<AnimationGraph>();
+            .init_asset::<AnimationGraph>()
+            .init_resource::<CurrentMapNoShadeTint>();
+        app
+    }
+
+    #[derive(Clone, Default)]
+    struct StandardMaterialHandler;
+
+    impl GltfExtensionHandler for StandardMaterialHandler {
+        fn dyn_clone(&self) -> Box<dyn ErasedGltfExtensionHandler> {
+            Box::new(self.clone())
+        }
+
+        fn on_material(
+            &mut self,
+            load_context: &mut LoadContext<'_>,
+            _gltf_material: &gltf::Material,
+            _material: Handle<GltfMaterial>,
+            source: &GltfMaterial,
+            material_label: &str,
+        ) {
+            load_context.add_labeled_asset(
+                format!("{material_label}/std"),
+                StandardMaterial {
+                    base_color: source.base_color,
+                    base_color_channel: source.base_color_channel.clone(),
+                    base_color_texture: source.base_color_texture.clone(),
+                    unlit: source.unlit,
+                    ..default()
+                },
+            );
+        }
+
+        fn on_spawn_mesh_and_material(
+            &mut self,
+            load_context: &mut LoadContext<'_>,
+            _primitive: &gltf::Primitive,
+            _mesh: &gltf::Mesh,
+            _material: &gltf::Material,
+            entity: &mut EntityWorldMut,
+            material_label: &str,
+        ) {
+            entity.insert(MeshMaterial3d(
+                load_context.get_label_handle::<StandardMaterial>(format!("{material_label}/std")),
+            ));
+        }
+    }
+
+    fn loader_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin {
+                file_path: FIXTURES.to_string(),
+                ..default()
+            },
+            ImagePlugin::default(),
+            MeshPlugin,
+            WorldSerializationPlugin,
+            GltfPlugin::default(),
+        ));
+        app.world_mut()
+            .resource_mut::<GltfExtensionHandlers>()
+            .0
+            .write_blocking()
+            .push(Box::new(StandardMaterialHandler));
+        app.init_asset::<StandardMaterial>()
+            .register_type::<MeshMaterial3d<StandardMaterial>>()
+            .init_asset::<AnimationClip>()
+            .init_asset::<AnimationGraph>()
+            .init_resource::<CurrentMapNoShadeTint>();
+        app.finish();
+        app.cleanup();
         app
     }
 
@@ -153,9 +413,115 @@ mod tests {
     }
 
     #[test]
+    fn real_glb_imports_primitive_extras_uv1_and_drives_the_cloned_material() {
+        let mut app = loader_app();
+        app.world_mut().resource_mut::<CurrentMapNoShadeTint>().0 = [0.5, 1.0, 1.0];
+        let scene: Handle<WorldAsset> = app
+            .world()
+            .resource::<AssetServer>()
+            .load(GltfAssetLabel::Scene(0).from_asset("uv_prop.glb"));
+        let scene_state = scene.clone();
+        let root = app
+            .world_mut()
+            .spawn((
+                WorldAssetRoot(scene),
+                PropAnim {
+                    model: "uv_prop.glb".to_string(),
+                    anim_type: 1,
+                    anim_speed: 1.0,
+                },
+            ))
+            .id();
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            app.update();
+            let state = app
+                .world()
+                .resource::<AssetServer>()
+                .load_state(&scene_state);
+            let world = app.world_mut();
+            let extras = world.query::<&GltfExtras>().iter(world).count();
+            let players = world.query::<&AnimationPlayer>().iter(world).count();
+            let meshes = world.query::<&Mesh3d>().iter(world).count();
+            if state.is_loaded() && extras == 1 && players == 1 && meshes == 1 {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "uv_prop.glb never spawned: {state:?}, extras={extras}, players={players}, meshes={meshes}"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let source_handle = {
+            let world = app.world_mut();
+            let mut query = world.query::<&MeshMaterial3d<StandardMaterial>>();
+            query.single(world).unwrap().0.clone()
+        };
+        app.world_mut()
+            .run_system_cached_with(wire_prop_instance, root)
+            .unwrap();
+        app.world_mut().flush();
+
+        let (animation, extras, mesh_handle, material_handle) = {
+            let world = app.world_mut();
+            let mut query = world.query::<(
+                &PropUvAnimation,
+                &GltfExtras,
+                &Mesh3d,
+                &MeshMaterial3d<StandardMaterial>,
+            )>();
+            let mut found = query.iter(world);
+            let (animation, extras, mesh, material) = found.next().expect("animated primitive");
+            assert!(found.next().is_none());
+            (
+                animation.clone(),
+                extras.value.clone(),
+                mesh.0.clone(),
+                material.0.clone(),
+            )
+        };
+        assert!(extras.contains(EXTRAS_UV_ANIMATION));
+        let meshes = app.world().resource::<Assets<Mesh>>();
+        let uv1 = meshes
+            .get(&mesh_handle)
+            .and_then(|mesh| mesh.attribute(Mesh::ATTRIBUTE_UV_1))
+            .expect("TEXCOORD_1 imported");
+        assert!(matches!(uv1, VertexAttributeValues::Float32x2(values) if values.len() == 3));
+
+        {
+            let materials = app.world().resource::<Assets<StandardMaterial>>();
+            let source = materials.get(&source_handle).expect("source material");
+            let clone = materials.get(&material_handle).expect("cloned material");
+            assert_ne!(source_handle, material_handle);
+            assert_eq!(source.base_color_channel, UvChannel::Uv0);
+            assert_eq!(clone.base_color_channel, UvChannel::Uv1);
+            assert_eq!(clone.uv_transform, Affine2::IDENTITY);
+        }
+
+        app.world_mut()
+            .get_mut::<AnimationPlayer>(animation.player)
+            .unwrap()
+            .animation_mut(animation.node)
+            .unwrap()
+            .set_seek_time(0.5);
+        app.world_mut()
+            .run_system_cached(play_prop_uv_animation)
+            .unwrap();
+        let transform = app
+            .world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(&material_handle)
+            .unwrap()
+            .uv_transform;
+        assert_eq!(transform.translation, Vec2::new(0.5, 0.0));
+    }
+
+    #[test]
     fn maps_rsw_anim_types_to_repeat_modes() {
         assert_eq!(prop_repeat_mode(0), None);
         assert_eq!(prop_repeat_mode(1), Some(RepeatAnimation::Forever));
+        assert_eq!(prop_repeat_mode(2), Some(RepeatAnimation::Never));
         assert_eq!(prop_repeat_mode(99), Some(RepeatAnimation::Forever));
     }
 
@@ -224,5 +590,261 @@ mod tests {
             .unwrap();
 
         assert_eq!(reflectance_of(&app, mesh), 0.0);
+    }
+
+    fn uv_animation() -> LifUvAnimation {
+        use lifthrasir_data::lif::{LifScalarKey, LifUvChannel, LifUvProperty};
+
+        LifUvAnimation {
+            duration_ms: 1_000,
+            channels: vec![LifUvChannel {
+                property: LifUvProperty::TranslateU,
+                keys: vec![
+                    LifScalarKey {
+                        time_ms: 0,
+                        value: 0.25,
+                    },
+                    LifScalarKey {
+                        time_ms: 1_000,
+                        value: 1.25,
+                    },
+                ],
+            }],
+        }
+    }
+
+    fn target_extras(no_shade: bool) -> GltfExtras {
+        GltfExtras {
+            value: serde_json::json!({
+                EXTRAS_UV_ANIMATION: uv_animation(),
+                EXTRAS_NO_SHADE: no_shade,
+            })
+            .to_string(),
+        }
+    }
+
+    fn spawn_target(
+        app: &mut App,
+        source: Handle<StandardMaterial>,
+        anim_type: u32,
+        no_shade: bool,
+    ) -> (Entity, Entity) {
+        let primitive = app
+            .world_mut()
+            .spawn((MeshMaterial3d(source), target_extras(no_shade)))
+            .id();
+        let player = app.world_mut().spawn(AnimationPlayer::default()).id();
+        let root = app
+            .world_mut()
+            .spawn(PropAnim {
+                model: "ro://models/uv_prop.glb".to_string(),
+                anim_type,
+                anim_speed: 1.0,
+            })
+            .id();
+        app.world_mut().entity_mut(primitive).insert(ChildOf(root));
+        app.world_mut().entity_mut(player).insert(ChildOf(root));
+        (root, primitive)
+    }
+
+    #[test]
+    fn combined_uv_and_no_shade_clone_once_without_mutating_source() {
+        let mut app = test_app();
+        app.insert_resource(CurrentMapNoShadeTint([0.5, 0.25, 1.0]));
+        let source = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial {
+                base_color: Color::linear_rgba(0.8, 0.4, 0.2, 0.75),
+                reflectance: 0.5,
+                ..default()
+            });
+        let source_value = app
+            .world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(&source)
+            .unwrap()
+            .clone();
+        let (root, primitive) = spawn_target(&mut app, source.clone(), 1, true);
+
+        app.world_mut()
+            .run_system_cached_with(wire_prop_instance, root)
+            .unwrap();
+
+        let rebound = app
+            .world()
+            .get::<MeshMaterial3d<StandardMaterial>>(primitive)
+            .unwrap();
+        assert_ne!(rebound.0, source);
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        assert_eq!(materials.len(), 2, "UV + no-shade must share one clone");
+        assert_eq!(
+            materials.get(&source).unwrap().reflectance,
+            source_value.reflectance
+        );
+        assert_eq!(
+            materials.get(&source).unwrap().base_color,
+            source_value.base_color
+        );
+        let clone = materials.get(&rebound.0).unwrap();
+        assert_eq!(clone.reflectance, 0.0);
+        assert!(clone.unlit);
+        assert_eq!(clone.base_color_channel, UvChannel::Uv1);
+        assert_eq!(
+            clone.uv_transform,
+            affine(uv_animation().sample(0, false).unwrap())
+        );
+        assert_eq!(clone.base_color, Color::linear_rgba(0.4, 0.1, 0.2, 0.75));
+        assert!(app.world().get::<PropUvAnimation>(primitive).is_some());
+    }
+
+    #[test]
+    fn static_uv_metadata_keeps_baked_uv0_and_does_not_clone() {
+        let mut app = test_app();
+        let source = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let (root, primitive) = spawn_target(&mut app, source.clone(), 0, false);
+
+        app.world_mut()
+            .run_system_cached_with(wire_prop_instance, root)
+            .unwrap();
+
+        assert_eq!(
+            app.world()
+                .get::<MeshMaterial3d<StandardMaterial>>(primitive)
+                .unwrap()
+                .0,
+            source
+        );
+        let materials = app.world().resource::<Assets<StandardMaterial>>();
+        assert_eq!(materials.len(), 1);
+        let material = materials.get(&source).unwrap();
+        assert_eq!(material.base_color_channel, UvChannel::Uv0);
+        assert_eq!(material.uv_transform, Affine2::IDENTITY);
+        assert!(app.world().get::<PropUvAnimation>(primitive).is_none());
+    }
+
+    #[test]
+    fn two_instances_get_independent_materials() {
+        let mut app = test_app();
+        let source = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let (first_root, first) = spawn_target(&mut app, source.clone(), 1, false);
+        let (second_root, second) = spawn_target(&mut app, source, 1, false);
+        app.world_mut()
+            .run_system_cached_with(wire_prop_instance, first_root)
+            .unwrap();
+        app.world_mut()
+            .run_system_cached_with(wire_prop_instance, second_root)
+            .unwrap();
+
+        let first = app
+            .world()
+            .get::<MeshMaterial3d<StandardMaterial>>(first)
+            .unwrap();
+        let second = app
+            .world()
+            .get::<MeshMaterial3d<StandardMaterial>>(second)
+            .unwrap();
+        assert_ne!(first.0, second.0);
+    }
+
+    fn playback_app(repeat: RepeatAnimation, seek_time: f32) -> (App, Handle<StandardMaterial>) {
+        let mut app = test_app();
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let (_, node) = AnimationGraph::from_clip(Handle::default());
+        let mut player = AnimationPlayer::default();
+        player
+            .play(node)
+            .set_repeat(repeat)
+            .set_seek_time(seek_time);
+        let player = app.world_mut().spawn(player).id();
+        app.world_mut().spawn(PropUvAnimation {
+            animation: uv_animation(),
+            material: material.clone(),
+            player,
+            node,
+            model: "ro://models/uv_prop.glb".to_string(),
+        });
+        (app, material)
+    }
+
+    #[test]
+    fn playback_uses_loop_phase_and_once_terminal_hold() {
+        let (mut looping, loop_material) = playback_app(RepeatAnimation::Forever, 1.0);
+        looping
+            .world_mut()
+            .run_system_cached(play_prop_uv_animation)
+            .unwrap();
+        assert_eq!(
+            looping
+                .world()
+                .resource::<Assets<StandardMaterial>>()
+                .get(&loop_material)
+                .unwrap()
+                .uv_transform,
+            affine(uv_animation().sample(0, false).unwrap())
+        );
+
+        let (mut once, once_material) = playback_app(RepeatAnimation::Never, 1.0);
+        once.world_mut()
+            .run_system_cached(play_prop_uv_animation)
+            .unwrap();
+        assert_eq!(
+            once.world()
+                .resource::<Assets<StandardMaterial>>()
+                .get(&once_material)
+                .unwrap()
+                .uv_transform,
+            affine(uv_animation().sample(1_000, false).unwrap())
+        );
+    }
+
+    #[test]
+    fn paused_and_zero_speed_players_hold_their_authoritative_seek_time() {
+        let (mut app, material) = playback_app(RepeatAnimation::Forever, 0.4);
+        let state = {
+            let world = app.world_mut();
+            let mut query = world.query::<&PropUvAnimation>();
+            query.single(world).unwrap().clone()
+        };
+        app.world_mut()
+            .get_mut::<AnimationPlayer>(state.player)
+            .unwrap()
+            .animation_mut(state.node)
+            .unwrap()
+            .pause()
+            .set_speed(0.0);
+
+        app.world_mut()
+            .run_system_cached(play_prop_uv_animation)
+            .unwrap();
+        let expected = affine(uv_animation().sample(400, true).unwrap());
+        assert_eq!(
+            app.world()
+                .resource::<Assets<StandardMaterial>>()
+                .get(&material)
+                .unwrap()
+                .uv_transform,
+            expected
+        );
+        app.world_mut()
+            .run_system_cached(play_prop_uv_animation)
+            .unwrap();
+        assert_eq!(
+            app.world()
+                .resource::<Assets<StandardMaterial>>()
+                .get(&material)
+                .unwrap()
+                .uv_transform,
+            expected
+        );
     }
 }

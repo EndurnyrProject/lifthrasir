@@ -229,7 +229,7 @@ pub(crate) fn rsw_anim_type_to_animation_type(anim_type: u32) -> AnimationType {
     match anim_type {
         0 => AnimationType::None, // Explicitly no animation
         1 => AnimationType::Loop, // Loop animation
-        2 => AnimationType::Loop, // Default to Loop instead of Once to prevent stopping
+        2 => AnimationType::Once, // Play once and hold the terminal pose
         _ => AnimationType::Loop, // Default to Loop for any unknown animation types
     }
 }

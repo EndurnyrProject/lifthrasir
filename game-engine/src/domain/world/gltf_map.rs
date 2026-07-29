@@ -17,7 +17,7 @@ use crate::domain::effects::map_effects::spawn_gltf_map_effects;
 use crate::domain::entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid};
 use crate::domain::system_sets::WorldLoadingSystems;
 use crate::domain::world::components::{CurrentMapAltitude, MapLoader};
-use crate::domain::world::gltf_prop::PropAnim;
+use crate::domain::world::gltf_prop::{PropAnim, play_prop_uv_animation};
 use crate::domain::world::map::MapData;
 use crate::domain::world::map_loader::MapRequestLoader;
 use crate::domain::world::map_scoped::MapScoped;
@@ -27,6 +27,7 @@ use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use crate::infrastructure::assets::sources::AssetSource;
 use crate::presentation::rendering::models::spawn_gltf_map_props;
 use crate::presentation::rendering::water::begin_gltf_map_water;
+use bevy::app::AnimationSystems;
 use bevy::asset::LoadContext;
 use bevy::gltf::GltfAssetLabel;
 use bevy::gltf::GltfLoaderSettings;
@@ -72,6 +73,15 @@ pub struct LifMapData {
     pub altitude: RoAltitude,
     pub water: Option<RswWater>,
     pub meta: LifMap,
+}
+
+#[derive(Resource, Debug, Clone, Copy)]
+pub(crate) struct CurrentMapNoShadeTint(pub [f32; 3]);
+
+impl Default for CurrentMapNoShadeTint {
+    fn default() -> Self {
+        Self([1.0; 3])
+    }
 }
 
 /// On the scene root when the `LIF_*` payload could not be read. Mutually
@@ -134,7 +144,8 @@ pub struct GltfMapPlugin;
 
 impl Plugin for GltfMapPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<LifMapData>()
+        app.init_resource::<CurrentMapNoShadeTint>()
+            .register_type::<LifMapData>()
             .register_type::<LifMapLoadError>()
             .register_type::<LifAudioEmitter>()
             .register_type::<LifEffectEmitter>()
@@ -167,6 +178,7 @@ impl Plugin for GltfMapPlugin {
             )
                 .after(TransformSystems::Propagate),
         );
+        app.add_systems(PostUpdate, play_prop_uv_animation.after(AnimationSystems));
         app.add_observer(adopt_gltf_map_scene);
     }
 }
@@ -202,6 +214,7 @@ fn spawn_gltf_map(
             // This map is served by the native path, so whatever glb we were
             // holding for the map we came from is now dead weight.
             commands.remove_resource::<LoadedMapScene>();
+            commands.insert_resource(CurrentMapNoShadeTint::default());
             continue;
         }
 
@@ -269,6 +282,7 @@ fn adopt_gltf_map_scene(
         panic!("map glb for '{map_name}' carries no LIF_map data");
     };
 
+    commands.insert_resource(CurrentMapNoShadeTint(data.meta.no_shade_tint));
     commands.insert_resource(CurrentMapPathfindingGrid(PathfindingGrid::from_gat(
         &data.altitude,
     )));
@@ -616,6 +630,7 @@ mod tests {
             GltfMapPlugin,
         ));
         app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
+        app.init_asset::<StandardMaterial>();
         // `spawn_gltf_map` requires it, and requiring it is the point: without a
         // composite source there is no way to tell a glb map from a native one.
         app.insert_resource(SharedCompositeAssetSource(Arc::new(RwLock::new(
@@ -1205,7 +1220,11 @@ mod tests {
             .entity(entity)
             .get::<Children>()
             .expect("scene instance")[0];
-        assert!(world.entity(scene_root).get::<LifMapData>().is_some());
+        let map_data = world.entity(scene_root).get::<LifMapData>().unwrap();
+        assert_eq!(
+            world.resource::<CurrentMapNoShadeTint>().0,
+            map_data.meta.no_shade_tint
+        );
         assert_eq!(
             world.query::<&LifMapLoadError>().iter(world).count(),
             0,
