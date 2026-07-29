@@ -170,8 +170,6 @@ pub enum Rsm2Error {
     },
     #[error("unknown texture animation channel type {value} in {field}")]
     UnknownTextureChannel { field: String, value: i32 },
-    #[error("duplicate node name {name:?}")]
-    DuplicateNode { name: String },
     #[error("duplicate declared root {name:?}")]
     DuplicateRoot { name: String },
     #[error("declared root {name:?} is not a root node")]
@@ -212,7 +210,7 @@ impl Rsm2 {
         let global_textures = if version == Rsm2Version::V2_2 {
             let count = cursor.count("global texture count", MAX_GLOBAL_TEXTURES)?;
             (0..count)
-                .map(|index| cursor.dynamic_string(&format!("global texture {index}"), false))
+                .map(|index| cursor.dynamic_string(&format!("global texture {index}")))
                 .collect::<Result<Vec<_>, _>>()?
         } else {
             Vec::new()
@@ -220,7 +218,10 @@ impl Rsm2 {
 
         let root_count = cursor.count("root count", MAX_RECORDS)?;
         let roots = (0..root_count)
-            .map(|index| cursor.dynamic_string(&format!("root {index}"), true))
+            // A couple of retail models declare an empty root name. BrowEdit
+            // falls back to its first mesh when it cannot locate the named
+            // root, so an unresolvable name is recoverable rather than fatal.
+            .map(|index| cursor.dynamic_string(&format!("root {index}")))
             .collect::<Result<Vec<_>, _>>()?;
         let node_count = cursor.count("node count", MAX_RECORDS)?;
         let mut nodes = Vec::new();
@@ -278,8 +279,11 @@ fn parse_node(
     global_texture_count: usize,
     node_index: usize,
 ) -> Result<Rsm2Node, Rsm2Error> {
-    let name = cursor.dynamic_string(&format!("node {node_index} name"), true)?;
-    let parent_name = cursor.dynamic_string(&format!("node {name} parent"), false)?;
+    // Retail models carry the odd unnamed node. The name is only an addressing
+    // handle - the hierarchy is resolved by index - so the converter gives it a
+    // generated one rather than rejecting the model.
+    let name = cursor.dynamic_string(&format!("node {node_index} name"))?;
+    let parent_name = cursor.dynamic_string(&format!("node {name} parent"))?;
     let texture_count = cursor.count(&format!("node {name} texture count"), MAX_RECORDS)?;
     let textures = match version {
         Rsm2Version::V2_2 => {
@@ -294,7 +298,7 @@ fn parse_node(
         }
         Rsm2Version::V2_3 => Rsm2NodeTextures::Names(
             (0..texture_count)
-                .map(|index| cursor.dynamic_string(&format!("node {name} texture {index}"), false))
+                .map(|index| cursor.dynamic_string(&format!("node {name} texture {index}")))
                 .collect::<Result<Vec<_>, _>>()?,
         ),
     };
@@ -535,22 +539,84 @@ fn parse_texture_animations(
     Ok(animations)
 }
 
-fn validate_hierarchy(roots: &[String], nodes: &[Rsm2Node]) -> Result<(), Rsm2Error> {
-    let mut node_indices = HashMap::with_capacity(nodes.len());
+/// Index of the first node bearing each name.
+///
+/// Node names are not unique in retail data: some models carry two sibling
+/// nodes with the same name and their own geometry, and others give a child the
+/// root's name. BrowEdit keys its mesh map by name, so one of the two silently
+/// replaces the other and its geometry is lost. Resolving every reference to the
+/// *first* node with the name keeps all of them and stays deterministic.
+pub fn first_node_by_name(nodes: &[Rsm2Node]) -> HashMap<&str, usize> {
+    let mut indices = HashMap::with_capacity(nodes.len());
     for (index, node) in nodes.iter().enumerate() {
-        if node_indices.insert(node.name.as_str(), index).is_some() {
-            return Err(Rsm2Error::DuplicateNode {
-                name: node.name.clone(),
-            });
-        }
+        indices.entry(node.name.as_str()).or_insert(index);
+    }
+    indices
+}
+
+/// The nodes the hierarchy hangs off, as indices.
+///
+/// Declared roots win. A declaration that names nothing - including the empty
+/// name a couple of models carry - is ignored, and if that leaves none, every
+/// parentless node is a root.
+pub fn root_indices(roots: &[String], nodes: &[Rsm2Node]) -> Vec<usize> {
+    let by_name = first_node_by_name(nodes);
+    let declared: Vec<usize> = roots
+        .iter()
+        .filter_map(|root| by_name.get(root.as_str()).copied())
+        .filter(|&index| nodes[index].parent_name.is_empty())
+        .collect();
+
+    if !declared.is_empty() {
+        return declared;
     }
 
-    let mut declared_roots = HashSet::with_capacity(roots.len());
-    for root in roots {
-        if !declared_roots.insert(root.as_str()) {
+    nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| node.parent_name.is_empty())
+        .map(|(index, _)| index)
+        .collect()
+}
+
+/// Resolve each node's parent to an index, or `None` for a root.
+///
+/// A node naming itself as its parent resolves to `None` rather than to itself;
+/// BrowEdit likewise refuses to make a node its own child.
+pub fn parent_indices(nodes: &[Rsm2Node]) -> Result<Vec<Option<usize>>, Rsm2Error> {
+    let by_name = first_node_by_name(nodes);
+
+    nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| {
+            if node.parent_name.is_empty() {
+                return Ok(None);
+            }
+            match by_name.get(node.parent_name.as_str()) {
+                Some(&parent) if parent == index => Ok(None),
+                Some(&parent) => Ok(Some(parent)),
+                None => Err(Rsm2Error::MissingParent {
+                    node: node.name.clone(),
+                    parent: node.parent_name.clone(),
+                }),
+            }
+        })
+        .collect()
+}
+
+fn validate_hierarchy(roots: &[String], nodes: &[Rsm2Node]) -> Result<(), Rsm2Error> {
+    let by_name = first_node_by_name(nodes);
+    let mut declared = HashSet::with_capacity(roots.len());
+
+    // An empty root name is a known retail quirk and is recovered from below. A
+    // name that points at nothing is not: that is the shape a desynchronised
+    // read produces, so it still fails.
+    for root in roots.iter().filter(|root| !root.is_empty()) {
+        if !declared.insert(root.as_str()) {
             return Err(Rsm2Error::DuplicateRoot { name: root.clone() });
         }
-        let Some(&index) = node_indices.get(root.as_str()) else {
+        let Some(&index) = by_name.get(root.as_str()) else {
             return Err(Rsm2Error::MissingRoot { name: root.clone() });
         };
         if !nodes[index].parent_name.is_empty() {
@@ -558,35 +624,34 @@ fn validate_hierarchy(roots: &[String], nodes: &[Rsm2Node]) -> Result<(), Rsm2Er
         }
     }
 
-    for node in nodes {
-        if node.parent_name.is_empty() {
-            if !declared_roots.contains(node.name.as_str()) {
-                return Err(Rsm2Error::OrphanNode {
-                    name: node.name.clone(),
-                });
-            }
-        } else if !node_indices.contains_key(node.parent_name.as_str()) {
-            return Err(Rsm2Error::MissingParent {
-                node: node.name.clone(),
-                parent: node.parent_name.clone(),
-            });
-        }
+    let parents = parent_indices(nodes)?;
+    let roots = root_indices(roots, nodes);
+    if nodes.is_empty() {
+        return Ok(());
+    }
+    if roots.is_empty() {
+        return Err(Rsm2Error::OrphanNode {
+            name: nodes[0].name.clone(),
+        });
     }
 
-    for node in nodes {
-        let mut path = HashSet::new();
-        let mut current = node;
-        while !current.parent_name.is_empty() {
-            if !path.insert(current.name.as_str()) {
+    // Walk to a root by index: with duplicate names, a name is no longer enough
+    // to tell two nodes apart on the path.
+    let root_set: HashSet<usize> = roots.into_iter().collect();
+    for start in 0..nodes.len() {
+        let mut seen = HashSet::new();
+        let mut current = start;
+        while let Some(parent) = parents[current] {
+            if !seen.insert(current) {
                 return Err(Rsm2Error::NodeCycle {
-                    name: current.name.clone(),
+                    name: nodes[current].name.clone(),
                 });
             }
-            current = &nodes[node_indices[current.parent_name.as_str()]];
+            current = parent;
         }
-        if !declared_roots.contains(current.name.as_str()) {
+        if !root_set.contains(&current) {
             return Err(Rsm2Error::OrphanNode {
-                name: node.name.clone(),
+                name: nodes[start].name.clone(),
             });
         }
     }
@@ -673,7 +738,11 @@ impl<'a> Cursor<'a> {
         Ok(value as usize)
     }
 
-    fn dynamic_string(&mut self, field: &str, nonempty: bool) -> Result<String, Rsm2Error> {
+    /// A length-prefixed string.
+    ///
+    /// Empty is allowed: retail models carry unnamed nodes and blank root
+    /// declarations, and the hierarchy is resolved by index rather than by name.
+    fn dynamic_string(&mut self, field: &str) -> Result<String, Rsm2Error> {
         let length = self.i32(&format!("{field} length"))?;
         if !(0..=MAX_STRING_LENGTH).contains(&length) {
             return Err(Rsm2Error::InvalidStringLength {
@@ -686,11 +755,6 @@ impl<'a> Cursor<'a> {
             parse_korean_string(bytes, bytes.len()).map_err(|_| Rsm2Error::InvalidString {
                 field: field.to_owned(),
             })?;
-        if nonempty && value.is_empty() {
-            return Err(Rsm2Error::InvalidString {
-                field: field.to_owned(),
-            });
-        }
         Ok(value)
     }
 
@@ -1078,14 +1142,21 @@ mod tests {
             Rsm2::from_bytes(&invalid),
             Err(Rsm2Error::InvalidStringLength { length: 1025, .. })
         ));
+    }
 
-        let empty_fixture = fixture(Rsm2Version::V2_2);
-        let mut empty = empty_fixture.bytes;
-        put_i32(&mut empty, empty_fixture.offsets.first_node_name_length, 0);
-        assert!(matches!(
-            Rsm2::from_bytes(&empty),
-            Err(Rsm2Error::InvalidString { .. })
-        ));
+    /// Some retail nodes have no name at all. The name is only an addressing
+    /// handle, so the model still loads and the converter generates one.
+    #[test]
+    fn tolerates_an_unnamed_node() {
+        let bytes = hierarchy_fixture(&[b"root", b""], &[b"", b"root"], &[b"root"]);
+        let model = Rsm2::from_bytes(&bytes).expect("an unnamed node must parse");
+
+        assert_eq!(model.nodes.len(), 2);
+        assert!(model.nodes[1].name.is_empty());
+        assert_eq!(
+            parent_indices(&model.nodes).expect("parents"),
+            vec![None, Some(0)]
+        );
     }
 
     #[test]
@@ -1162,12 +1233,6 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_missing_orphaned_and_cyclic_nodes() {
-        let duplicate = hierarchy_fixture(&[b"root", b"root"], &[b"", b""], &[b"root"]);
-        assert!(matches!(
-            Rsm2::from_bytes(&duplicate),
-            Err(Rsm2Error::DuplicateNode { .. })
-        ));
-
         let missing = hierarchy_fixture(&[b"root"], &[b""], &[b"missing"]);
         assert!(matches!(
             Rsm2::from_bytes(&missing),
@@ -1196,6 +1261,46 @@ mod tests {
             Rsm2::from_bytes(&cycle),
             Err(Rsm2Error::NodeCycle { .. })
         ));
+    }
+
+    /// Retail models really do repeat a node name, in two shapes. Both must keep
+    /// every node: BrowEdit keys its mesh map by name and silently loses one.
+    #[test]
+    fn keeps_every_node_when_a_name_repeats() {
+        // Two siblings sharing a name, each with its own geometry
+        // (`gevent/botmorocc_s_01.rsm2` has two `waterpond_s_01`).
+        let siblings = hierarchy_fixture(
+            &[b"root", b"pond", b"pond"],
+            &[b"", b"root", b"root"],
+            &[b"root"],
+        );
+        let model = Rsm2::from_bytes(&siblings).expect("duplicate siblings must parse");
+        assert_eq!(model.nodes.len(), 3);
+        assert_eq!(
+            parent_indices(&model.nodes).expect("parents"),
+            vec![None, Some(0), Some(0)]
+        );
+
+        // A child carrying the root's name and naming it as its parent
+        // (`gevent/paper_s_01.rsm2`). It must attach to the root, not to itself.
+        let self_named = hierarchy_fixture(&[b"paper", b"paper"], &[b"", b"paper"], &[b"paper"]);
+        let model = Rsm2::from_bytes(&self_named).expect("self-named child must parse");
+        assert_eq!(model.nodes.len(), 2);
+        assert_eq!(
+            parent_indices(&model.nodes).expect("parents"),
+            vec![None, Some(0)]
+        );
+        assert_eq!(root_indices(&model.roots, &model.nodes), vec![0]);
+    }
+
+    /// A couple of models declare an empty root name; BrowEdit falls back to its
+    /// first mesh rather than giving up.
+    #[test]
+    fn falls_back_to_the_parentless_nodes_when_the_declared_root_is_empty() {
+        let bytes = hierarchy_fixture(&[b"root", b"child"], &[b"", b"root"], &[b""]);
+        let model = Rsm2::from_bytes(&bytes).expect("an empty root name must parse");
+
+        assert_eq!(root_indices(&model.roots, &model.nodes), vec![0]);
     }
 
     fn hierarchy_fixture(names: &[&[u8]], parents: &[&[u8]], roots: &[&[u8]]) -> Vec<u8> {

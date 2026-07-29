@@ -61,37 +61,11 @@ pub fn build_model(source: &Rsm2, source_hash: &str) -> anyhow::Result<Normalize
     };
 
     let (textures, node_textures) = resolve_textures(source)?;
-    let name_to_index: HashMap<&str, usize> = source
-        .nodes
-        .iter()
-        .enumerate()
-        .map(|(index, node)| (node.name.as_str(), index))
-        .collect();
-    let parents: Vec<Option<usize>> = source
-        .nodes
-        .iter()
-        .map(|node| {
-            if node.parent_name.is_empty() {
-                Ok(None)
-            } else {
-                name_to_index
-                    .get(node.parent_name.as_str())
-                    .copied()
-                    .map(Some)
-                    .with_context(|| format!("missing parent '{}'", node.parent_name))
-            }
-        })
-        .collect::<anyhow::Result<_>>()?;
-    let roots = source
-        .roots
-        .iter()
-        .map(|root| {
-            name_to_index
-                .get(root.as_str())
-                .copied()
-                .with_context(|| format!("missing declared root '{root}'"))
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
+    // Names are not unique in retail data, so the hierarchy is resolved by index
+    // using the same first-match rule the parser validated against.
+    let parents =
+        ro_formats::parent_indices(&source.nodes).context("resolving the node hierarchy")?;
+    let roots = ro_formats::root_indices(&source.roots, &source.nodes);
 
     let mut raw_nodes = Vec::with_capacity(source.nodes.len());
     let mut material_keys = BTreeMap::<MaterialKey, usize>::new();
@@ -173,14 +147,14 @@ pub fn build_model(source: &Rsm2, source_hash: &str) -> anyhow::Result<Normalize
         tail_indices.push(node_count - 1);
     }
 
-    let mut used_names = source
-        .nodes
-        .iter()
-        .map(|node| node.name.clone())
-        .collect::<HashSet<_>>();
+    // Retail models repeat node names, but glTF animation channels target a node
+    // by name, so the normalized model requires them to be unique. The hierarchy
+    // was already resolved by index above, so renaming here changes nothing
+    // structural - it only keeps every node addressable.
+    let names = uniquify_node_names(&source.nodes);
+    let mut used_names = names.iter().cloned().collect::<HashSet<_>>();
     let mut nodes = Vec::with_capacity(node_count);
     for (index, primitives) in normalized_primitives.into_iter().enumerate() {
-        let node = &source.nodes[index];
         let transforms = &raw_nodes[index].0;
         let parent = parents[index].map(|parent| tail_indices[parent]);
         if let Some(matrix) = transforms.matrix {
@@ -189,7 +163,7 @@ pub fn build_model(source: &Rsm2, source_hash: &str) -> anyhow::Result<Normalize
                 "matrix helper cannot carry rotation animation"
             );
             nodes.push(NormalizedNode {
-                name: node.name.clone(),
+                name: names[index].clone(),
                 parent,
                 translation: transforms.translation,
                 rotation: Quat::IDENTITY.to_array(),
@@ -233,7 +207,7 @@ pub fn build_model(source: &Rsm2, source_hash: &str) -> anyhow::Result<Normalize
             }
         } else {
             nodes.push(NormalizedNode {
-                name: node.name.clone(),
+                name: names[index].clone(),
                 parent,
                 translation: transforms.translation,
                 rotation: transforms.rotation,
@@ -265,6 +239,35 @@ pub fn build_model(source: &Rsm2, source_hash: &str) -> anyhow::Result<Normalize
     };
     super::validate::validate_contract(&model)?;
     Ok(model)
+}
+
+/// Give every node a unique, non-empty name, mirroring the RSM1 rule: an empty
+/// name becomes `node_<index>`, and a name an earlier node already took becomes
+/// `<name>_<index>`.
+fn uniquify_node_names(nodes: &[ro_formats::Rsm2Node]) -> Vec<String> {
+    let mut taken: HashSet<String> = HashSet::new();
+    nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| {
+            let base = if node.name.is_empty() {
+                format!("node_{index}")
+            } else {
+                node.name.clone()
+            };
+            let mut candidate = base.clone();
+            let mut attempt = 0;
+            while taken.contains(&candidate) {
+                attempt += 1;
+                candidate = match attempt {
+                    1 => format!("{base}_{index}"),
+                    n => format!("{base}_{index}_{n}"),
+                };
+            }
+            taken.insert(candidate.clone());
+            candidate
+        })
+        .collect()
 }
 
 fn helper_name(used: &mut HashSet<String>, index: usize, role: &str) -> String {
