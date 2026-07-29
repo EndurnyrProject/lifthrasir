@@ -37,6 +37,8 @@ pub fn run(
     let primitives = terrain::build_terrain(&ground)
         .with_context(|| format!("building terrain of map '{map_name}'"))?;
 
+    report_dropped_objects(&world);
+
     let (converted_models, prop_counts) =
         convert_props(vfs, map_name, &world, models_dir, force_models)?;
 
@@ -64,6 +66,27 @@ pub fn run(
     );
 
     Ok(())
+}
+
+/// Names every object `writer::emitted_objects` drops for carrying a number
+/// glTF cannot express, so corrupt retail records cannot pass unnoticed.
+fn report_dropped_objects(world: &RoWorld) {
+    world
+        .objects
+        .iter()
+        .filter(|object| !writer::is_representable(object))
+        .for_each(|object| {
+            println!(
+                "  not a finite placement, dropping {}: '{}'",
+                match object {
+                    RswObject::Model(_) => "prop",
+                    RswObject::Light(_) => "light",
+                    RswObject::Sound(_) => "sound",
+                    RswObject::Effect(_) => "effect",
+                },
+                writer::object_name(object)
+            );
+        });
 }
 
 fn read_source(vfs: &GrfVfs, map_name: &str, extension: &str) -> anyhow::Result<Vec<u8>> {

@@ -344,11 +344,74 @@ fn build_point_light_node(
 /// them at runtime; emitting them would only create nodes the runtime has to
 /// ignore again. Validation walks the very same list.
 pub fn emitted_objects(world: &RoWorld) -> impl Iterator<Item = &RswObject> {
-    world.objects.iter().filter(|object| match object {
-        RswObject::Sound(sound) => sound.range > 0.0 && !sound.wav_file.is_empty(),
-        RswObject::Model(model) => !model.filename.is_empty(),
-        _ => true,
-    })
+    world
+        .objects
+        .iter()
+        .filter(|object| match object {
+            RswObject::Sound(sound) => sound.range > 0.0 && !sound.wav_file.is_empty(),
+            RswObject::Model(model) => !model.filename.is_empty(),
+            _ => true,
+        })
+        .filter(|object| is_representable(object))
+}
+
+/// Whether every number this object contributes to the glb is a real number.
+///
+/// Retail data is not always sane. `t_garden.rsw` places four
+/// `ilusion\waterpond_s_01.rsm2` props whose position, rotation and scale are
+/// literal NaN; `gl_step.rsw` has a light at a NaN height; `ecl_in01.rsw` has
+/// three nameless lights of range 7.2e22, whose candela overflows to infinity.
+/// None of that describes anything the runtime could place, and glTF cannot
+/// even carry it -- JSON has no NaN or infinity, so `serde_json` writes `null`
+/// where a number belongs and the file no longer parses as glTF.
+///
+/// So such an object is dropped like the other unplaceable records above. The
+/// check covers the values actually written, derived ones included, rather
+/// than the raw fields alone: `ecl_in01`'s ranges are finite, and only the
+/// candela computed from them is not.
+pub fn is_representable(object: &RswObject) -> bool {
+    let numbers: Vec<f32> = match object {
+        RswObject::Model(model) => model
+            .position
+            .iter()
+            .chain(&model.rotation)
+            .chain(&model.scale)
+            .copied()
+            .chain([model.anim_speed])
+            .collect(),
+        RswObject::Light(light) => light
+            .position
+            .iter()
+            .chain(&light.color)
+            .copied()
+            .chain([light.range, point_light_candela(light)])
+            .collect(),
+        RswObject::Sound(sound) => sound
+            .position
+            .iter()
+            .copied()
+            .chain([sound.volume, sound.range, sound.cycle])
+            .collect(),
+        RswObject::Effect(effect) => effect
+            .position
+            .iter()
+            .chain(&effect.params)
+            .copied()
+            .chain([effect.emit_speed])
+            .collect(),
+    };
+
+    numbers.iter().all(|value| value.is_finite())
+}
+
+/// The RSW name of an object, for reporting.
+pub fn object_name(object: &RswObject) -> &str {
+    match object {
+        RswObject::Model(model) => &model.name,
+        RswObject::Light(light) => &light.name,
+        RswObject::Sound(sound) => &sound.name,
+        RswObject::Effect(effect) => &effect.name,
+    }
 }
 
 pub fn lif_audio(sound: &RswSound) -> lif::LifAudio {
@@ -611,6 +674,73 @@ mod tests {
     use crate::converters::map::terrain::build_terrain;
     use ro_formats::CELL_SIZE;
     use std::f32::consts::PI;
+
+    /// Retail RSWs carry numbers glTF has no way to express: `t_garden`'s
+    /// props are placed at NaN, `gl_step` has a light at a NaN height. JSON
+    /// would spell them `null`, which is not a number at all, so they never
+    /// reach the writer.
+    #[test]
+    fn an_object_with_a_non_finite_number_is_not_emitted() {
+        // Each corruption hits one object kind and reports whether it applied.
+        let corruptions: Vec<fn(&mut RswObject) -> bool> = vec![
+            |object| set_model(object, |model| model.position[1] = f32::NAN),
+            |object| set_model(object, |model| model.rotation[0] = f32::NAN),
+            |object| set_model(object, |model| model.scale[2] = f32::NEG_INFINITY),
+            |object| set_model(object, |model| model.anim_speed = f32::NAN),
+            |object| set_light(object, |light| light.position[1] = f32::NAN),
+            |object| set_light(object, |light| light.color[0] = f32::NAN),
+            |object| set_light(object, |light| light.range = f32::NAN),
+            // `ecl_in01`'s three junk lights: a finite range whose candela is
+            // not, which checking the raw fields alone would let through.
+            |object| set_light(object, |light| light.range = 7.155_544e22),
+            |object| set_sound(object, |sound| sound.range = f32::NAN),
+            |object| set_effect(object, |effect| effect.params[3] = f32::NAN),
+        ];
+
+        for corrupt in corruptions {
+            let mut world = mini_world();
+            let before = emitted_objects(&world).count();
+
+            assert!(
+                world.objects.iter_mut().any(corrupt),
+                "fixture must hold an object of every kind"
+            );
+
+            assert_eq!(emitted_objects(&world).count(), before - 1);
+        }
+    }
+
+    fn set_model(object: &mut RswObject, edit: impl FnOnce(&mut RswModel)) -> bool {
+        let RswObject::Model(model) = object else {
+            return false;
+        };
+        edit(model);
+        true
+    }
+
+    fn set_light(object: &mut RswObject, edit: impl FnOnce(&mut RswLightObj)) -> bool {
+        let RswObject::Light(light) = object else {
+            return false;
+        };
+        edit(light);
+        true
+    }
+
+    fn set_sound(object: &mut RswObject, edit: impl FnOnce(&mut RswSound)) -> bool {
+        let RswObject::Sound(sound) = object else {
+            return false;
+        };
+        edit(sound);
+        true
+    }
+
+    fn set_effect(object: &mut RswObject, edit: impl FnOnce(&mut RswEffect)) -> bool {
+        let RswObject::Effect(effect) = object else {
+            return false;
+        };
+        edit(effect);
+        true
+    }
 
     #[test]
     fn writes_a_glb_that_reimports_with_the_expected_terrain_attributes() {
