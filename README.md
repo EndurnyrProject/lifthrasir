@@ -37,18 +37,52 @@ This client requires Ragnarok Online data files, which are proprietary to Gravit
 ```bash
 git clone git@github.com:EndurnyrProject/lifthrasir.git
 # Add your *.grf to the assets folder, configure the loader.toml
-# Then convert the stuff
-cargo run -p ro-to-lifthrasir-cli -- convert
 
-# Then, generate your pak file
-cargo run --release -p grf-utils -- pack \
+# Build the offline tooling once -- release is dramatically faster here
+cargo build --release -p ro-to-lifthrasir-cli -p grf-utils
+
+# 1. Convert the data tables (jobs, items, skills, ...)
+./target/release/ro-to-lifthrasir-cli convert
+
+# 2. Convert every map to glb. REQUIRED -- the client loads maps only from
+#    converted glbs, so an unconverted map is a hard startup failure.
+#    Takes a while: it converts each map's terrain, lighting, water and props.
+./target/release/ro-to-lifthrasir-cli convert-maps --force-models
+
+# 3. Generate your pak file. Bump --content-version on every rebuild; it is
+#    enforced monotonic. Writing to .new first keeps a failed pack from
+#    destroying a working pak.
+./target/release/grf-utils pack \
   --grf assets/en.grf --grf assets/data.grf \
   --content-dir assets/data \
-  --out assets/lifthrasir.pak --content-version 1
+  --out assets/lifthrasir.pak.new --content-version 1
+mv assets/lifthrasir.pak.new assets/lifthrasir.pak
 
-# Run the app on dev mode
+# 4. Run the app on dev mode
 cargo run -p lifthrasir --features dev
 ```
+
+### Notes on the asset pipeline
+
+- **Map conversion is not optional.** The runtime has no Ragnarok map reader:
+  it does not parse GND, GAT, RSW, RSM or RSM2. Maps load exclusively from
+  `data/maps/<map>/<map>.glb`, produced by `convert-maps`. Requesting a map
+  that has not been converted fails loudly rather than degrading.
+- **`--force-models` matters when the glb format version changes.** Props are
+  cached in `assets/data/models` and skipped if already present, so after a
+  format bump you must force a reconvert or your maps will reference stale
+  models the runtime rejects.
+- **`convert-maps` continues past failures.** It logs each failing map with its
+  error, converts the rest, prints converted/failed counts and exits non-zero
+  if anything failed. Writes are atomic, so a failed map leaves no partial glb.
+  To (re)convert a single map, use `convert-map --map <name>`.
+- **`pack` never converts anything.** It only archives what is already on disk,
+  so always convert before packing. It skips Ragnarok's native map and model
+  formats (`.rsm`, `.gnd`, `.gat`, `.rsw`) since nothing reads them at runtime,
+  and reports how many entries it excluded.
+- **Patching an existing install:** build a patch pak the same way, then
+  `grf-utils merge --main assets/lifthrasir.pak --patch patch.pak` with the game
+  closed. The patch file is consumed and the main pak atomically replaced.
 
 ## Server Side
 
