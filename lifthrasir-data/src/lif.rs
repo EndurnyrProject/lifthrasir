@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Format version written by the current converter and required by the
 /// runtime handler.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 /// glTF root-extension key for [`LifMap`].
 pub const EXTENSION_MAP: &str = "LIF_map";
@@ -226,7 +226,9 @@ impl LifGat {
     }
 }
 
-/// Root extension `LIF_water`: mirrors `RswWater` verbatim.
+/// Root extension `LIF_water`: mirrors `RswWater` plus GND tile dimensions
+/// and a bufferView index into the glb bin chunk. The bufferView carries a
+/// row-major, LSB-first bitmask of selected water tiles.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct LifWater {
     pub level: f32,
@@ -235,19 +237,37 @@ pub struct LifWater {
     pub wave_speed: f32,
     pub wave_pitch: f32,
     pub anim_speed: u32,
+    pub width: u32,
+    pub height: u32,
+    pub buffer_view: usize,
 }
 
-impl From<&RswWater> for LifWater {
-    fn from(water: &RswWater) -> Self {
-        Self {
-            level: water.level,
-            water_type: water.water_type,
-            wave_height: water.wave_height,
-            wave_speed: water.wave_speed,
-            wave_pitch: water.wave_pitch,
-            anim_speed: water.anim_speed,
-        }
+pub fn encode_water_mask(tiles: &[(usize, usize)], width: usize, height: usize) -> Vec<u8> {
+    let cell_count = width
+        .checked_mul(height)
+        .expect("water mask dimensions overflow");
+    let mut bytes = vec![0; cell_count.div_ceil(8)];
+    for &(x, y) in tiles {
+        assert!(x < width && y < height, "water tile is outside the mask");
+        let index = y * width + x;
+        bytes[index / 8] |= 1 << (index % 8);
     }
+    bytes
+}
+
+pub fn decode_water_mask(bytes: &[u8], width: usize, height: usize) -> Vec<(usize, usize)> {
+    let cell_count = width
+        .checked_mul(height)
+        .expect("water mask dimensions overflow");
+    assert_eq!(
+        bytes.len(),
+        cell_count.div_ceil(8),
+        "water mask length does not match its dimensions"
+    );
+    (0..cell_count)
+        .filter(|&index| bytes[index / 8] & (1 << (index % 8)) != 0)
+        .map(|index| (index % width, index / width))
+        .collect()
 }
 
 impl From<LifWater> for RswWater {
@@ -423,6 +443,9 @@ mod tests {
             wave_speed: 1.5,
             wave_pitch: 40.0,
             anim_speed: 4,
+            width: 100,
+            height: 80,
+            buffer_view: 3,
         };
 
         let json = serde_json::to_string(&original).expect("serialize");
@@ -432,25 +455,18 @@ mod tests {
     }
 
     #[test]
-    fn lif_water_converts_from_and_to_rsw_water() {
-        let rsw_water = RswWater {
-            level: 5.0,
-            water_type: 2,
-            wave_height: 0.5,
-            wave_speed: 1.5,
-            wave_pitch: 40.0,
-            anim_speed: 4,
-        };
+    fn water_mask_round_trips_in_row_major_order() {
+        let tiles = [(0, 0), (2, 1), (3, 1), (4, 2)];
+        let bytes = encode_water_mask(&tiles, 5, 3);
 
-        let lif_water = LifWater::from(&rsw_water);
-        let round_tripped = RswWater::from(lif_water);
+        assert_eq!(bytes, [0b1000_0001, 0b0100_0001]);
+        assert_eq!(decode_water_mask(&bytes, 5, 3), tiles);
 
-        assert_eq!(round_tripped.level, rsw_water.level);
-        assert_eq!(round_tripped.water_type, rsw_water.water_type);
-        assert_eq!(round_tripped.wave_height, rsw_water.wave_height);
-        assert_eq!(round_tripped.wave_speed, rsw_water.wave_speed);
-        assert_eq!(round_tripped.wave_pitch, rsw_water.wave_pitch);
-        assert_eq!(round_tripped.anim_speed, rsw_water.anim_speed);
+        let unordered = [(4, 2), (3, 1), (2, 1), (0, 0)];
+        assert_eq!(
+            decode_water_mask(&encode_water_mask(&unordered, 5, 3), 5, 3),
+            tiles
+        );
     }
 
     #[test]
@@ -593,13 +609,13 @@ mod tests {
     }
 
     #[test]
-    fn no_shade_tint_matches_formula_and_old_maps_default_white() {
+    fn no_shade_tint_matches_formula_and_current_maps_default_white() {
         let tint = no_shade_tint([0.2, 0.4, 0.8], [0.6, 0.3, 0.5]);
         for (actual, expected) in tint.into_iter().zip([0.68, 0.58, 0.9]) {
             assert!((actual - expected).abs() < 1e-6);
         }
-        let old = r#"{"format_version":1,"rsw_hash":"a","gnd_hash":"b","gat_hash":"c","ambient_color":[0.3,0.3,0.4]}"#;
-        let map: LifMap = serde_json::from_str(old).unwrap();
+        let current = r#"{"format_version":2,"rsw_hash":"a","gnd_hash":"b","gat_hash":"c","ambient_color":[0.3,0.3,0.4]}"#;
+        let map: LifMap = serde_json::from_str(current).unwrap();
         assert_eq!(map.no_shade_tint, [1.0; 3]);
     }
 
