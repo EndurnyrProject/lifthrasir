@@ -2,6 +2,7 @@ pub mod action_sync;
 pub mod body_sync;
 pub mod cart;
 pub mod events;
+pub mod falcon;
 pub mod head_sync;
 pub mod headgear_sync;
 pub mod job_change;
@@ -21,6 +22,7 @@ pub use events::{
     EquipmentChangeEvent, StatusEffectVisualEvent, handle_equipment_changes,
     handle_status_effect_visuals,
 };
+pub use falcon::{apply_falcon_mount, finalize_falcon_layer};
 pub use head_sync::sync_player_head_layer;
 pub use headgear_sync::sync_headgear_layer;
 pub use job_change::apply_base_look_changes;
