@@ -198,8 +198,15 @@ cargo run --release -p grf-utils -- merge \
 ```
 
 A missing or invalid pak fails startup loudly by design. Any zip tool can
-inspect a pak. `ro-to-lifthrasir-cli` still reads raw GRFs for offline
-conversion via its own `assets/convert.toml`.
+inspect a pak. Validate all effect-catalog asset references against a built pak
+with:
+
+```bash
+cargo test -p game-engine --test effect_assets -- --ignored
+```
+
+`ro-to-lifthrasir-cli` still reads raw GRFs for offline conversion via its own
+`assets/convert.toml`.
 
 ### DLSS Super Resolution (optional, NVIDIA / Windows / Linux)
 
