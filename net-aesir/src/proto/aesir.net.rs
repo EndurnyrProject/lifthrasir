@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -340,23 +340,62 @@ pub mod envelope {
         MountRequest(super::MountRequest),
         #[prost(message, tag = "165")]
         MountResult(super::MountResult),
+        /// 166-167: staged skill text input
+        #[prost(message, tag = "166")]
+        SkillTextInputRequest(super::SkillTextInputRequest),
+        #[prost(message, tag = "167")]
+        SkillTextInputReply(super::SkillTextInputReply),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
+/// Capabilities are optional and do not change the protocol-version baseline.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Hello {
     #[prost(uint32, tag = "1")]
     pub protocol_version: u32,
     #[prost(string, tag = "2")]
     pub build: ::prost::alloc::string::String,
+    #[prost(enumeration = "FeatureCapability", repeated, tag = "3")]
+    pub capabilities: ::prost::alloc::vec::Vec<i32>,
 }
-/// Server -> client, response to Hello.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+/// Server -> client, response to Hello with the negotiated capability intersection.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HelloAck {
     #[prost(uint32, tag = "1")]
     pub protocol_version: u32,
     #[prost(bool, tag = "2")]
     pub accepted: bool,
+    #[prost(enumeration = "FeatureCapability", repeated, tag = "3")]
+    pub capabilities: ::prost::alloc::vec::Vec<i32>,
+}
+/// Server -> client prompt for one skill text value. request_id correlates its reply.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SkillTextInputRequest {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(uint32, tag = "2")]
+    pub skill_id: u32,
+    /// Maximum UTF-8 byte length accepted for text.
+    #[prost(uint32, tag = "3")]
+    pub max_utf8_bytes: u32,
+}
+/// Client -> server reply for the pending request_id. Cancel abandons it without text.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SkillTextInputReply {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(oneof = "skill_text_input_reply::Outcome", tags = "2, 3")]
+    pub outcome: ::core::option::Option<skill_text_input_reply::Outcome>,
+}
+/// Nested message and enum types in `SkillTextInputReply`.
+pub mod skill_text_input_reply {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Outcome {
+        #[prost(string, tag = "2")]
+        Text(::prost::alloc::string::String),
+        #[prost(bool, tag = "3")]
+        Cancel(bool),
+    }
 }
 /// Client -> server, account login request (replaces RO CA_LOGIN).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2359,6 +2398,8 @@ pub struct SkillUnitGroupState {
     pub expires_tick: u64,
     #[prost(message, repeated, tag = "10")]
     pub cells: ::prost::alloc::vec::Vec<SkillUnitCellState>,
+    #[prost(enumeration = "SkillUnitPhase", tag = "11")]
+    pub phase: i32,
 }
 /// Server -> client, an authoritative replacement for the observer's complete
 /// active visible skill-unit set.
@@ -2525,6 +2566,33 @@ pub struct SkillCastFailed {
     pub skill_id: u32,
     #[prost(enumeration = "SkillCastFailureReason", tag = "2")]
     pub reason: i32,
+}
+/// Optional features advertised in Hello; HelloAck returns the negotiated intersection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FeatureCapability {
+    Unspecified = 0,
+    SkillTextInput = 1,
+}
+impl FeatureCapability {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "FEATURE_CAPABILITY_UNSPECIFIED",
+            Self::SkillTextInput => "FEATURE_CAPABILITY_SKILL_TEXT_INPUT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FEATURE_CAPABILITY_UNSPECIFIED" => Some(Self::Unspecified),
+            "FEATURE_CAPABILITY_SKILL_TEXT_INPUT" => Some(Self::SkillTextInput),
+            _ => None,
+        }
+    }
 }
 /// Outcome of a cart mount attempt. Values are prefixed because proto3 enum
 /// constants share the package namespace.
@@ -2898,6 +2966,40 @@ impl SkillUnitOwnerType {
             "SKILL_UNIT_OWNER_TYPE_PLAYER" => Some(Self::Player),
             "SKILL_UNIT_OWNER_TYPE_MOB" => Some(Self::Mob),
             "SKILL_UNIT_OWNER_TYPE_NPC" => Some(Self::Npc),
+            _ => None,
+        }
+    }
+}
+/// Lifecycle state: active normally operates; used/sprung are visible inert states;
+/// captured is visible and inert while linked to a captured target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SkillUnitPhase {
+    Active = 0,
+    Used = 1,
+    Sprung = 2,
+    Captured = 3,
+}
+impl SkillUnitPhase {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Active => "SKILL_UNIT_PHASE_ACTIVE",
+            Self::Used => "SKILL_UNIT_PHASE_USED",
+            Self::Sprung => "SKILL_UNIT_PHASE_SPRUNG",
+            Self::Captured => "SKILL_UNIT_PHASE_CAPTURED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SKILL_UNIT_PHASE_ACTIVE" => Some(Self::Active),
+            "SKILL_UNIT_PHASE_USED" => Some(Self::Used),
+            "SKILL_UNIT_PHASE_SPRUNG" => Some(Self::Sprung),
+            "SKILL_UNIT_PHASE_CAPTURED" => Some(Self::Captured),
             _ => None,
         }
     }
