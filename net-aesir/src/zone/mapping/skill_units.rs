@@ -179,6 +179,7 @@ mod tests {
             center_y: 150,
             created_tick: 1000,
             expires_tick: 9000,
+            phase: net::SkillUnitPhase::Active as i32,
             cells,
         }
     }

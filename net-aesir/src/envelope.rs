@@ -36,6 +36,7 @@ mod tests {
         let body = Body::Hello(Hello {
             protocol_version: 1,
             build: "test-build".into(),
+            capabilities: Vec::new(),
         });
         let env = roundtrip(42, body.clone());
         assert_eq!(env.seq, 42);

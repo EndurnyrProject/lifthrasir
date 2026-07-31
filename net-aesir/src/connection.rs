@@ -78,6 +78,7 @@ mod tests {
         let body0 = Body::Hello(Hello {
             protocol_version: 1,
             build: "test".into(),
+            capabilities: Vec::new(),
         });
         let body1 = Body::LoginRequest(LoginRequest {
             username: "user".into(),
