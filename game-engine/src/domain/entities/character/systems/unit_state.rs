@@ -17,6 +17,12 @@ const OPTION_CART2: u32 = 0x80;
 const OPTION_CART3: u32 = 0x100;
 pub(crate) const CART_MASK: u32 = OPTION_CART1 | OPTION_CART2 | OPTION_CART3;
 
+/// Falcon companion bit mirroring rAthena/Aesir `OPTION_FALCON`
+/// (`aesir .../mmo/constants/option.ex:15`, `:falcon => 16`).
+// Consumed by `apply_falcon_mount` once the falcon system lands.
+#[allow(dead_code)]
+pub(crate) const OPTION_FALCON: u32 = 0x10;
+
 /// Peco Peco riding bit (rAthena `OPTION_RIDING`).
 pub(crate) const OPTION_RIDING: u32 = 0x20;
 
@@ -222,6 +228,11 @@ mod tests {
             }
             .is_riding()
         );
+    }
+
+    #[test]
+    fn falcon_option_matches_aesir() {
+        assert_eq!(OPTION_FALCON, 0x10);
     }
 
     #[test]

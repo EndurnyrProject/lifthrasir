@@ -18,6 +18,7 @@ moonshine_tag::tags! {
     pub LAYER_HEAD_BOTTOM,
     pub LAYER_EFFECT,
     pub LAYER_CART,
+    pub LAYER_FALCON,
     pub FRAME_ATTACK,
     pub FRAME_SOUND,
 }
@@ -34,6 +35,7 @@ pub fn layer_order(tag: Tag) -> u8 {
         t if t == LAYER_HEAD_BOTTOM => 60,
         t if t == LAYER_HEAD_MID => 70,
         t if t == LAYER_HEAD_TOP => 80,
+        t if t == LAYER_FALCON => 85,
         t if t == LAYER_EFFECT => 90,
         _ => 100,
     }
@@ -61,8 +63,9 @@ pub fn layer_depth_bias(tag: Tag) -> f32 {
         t if t == LAYER_HEAD_BOTTOM => 7,
         t if t == LAYER_HEAD_MID => 8,
         t if t == LAYER_HEAD_TOP => 9,
-        t if t == LAYER_EFFECT => 10,
-        _ => 11,
+        t if t == LAYER_FALCON => 10,
+        t if t == LAYER_EFFECT => 11,
+        _ => 12,
     };
     rank as f32 * 0.05
 }
@@ -87,5 +90,11 @@ mod tests {
     #[test]
     fn cart_layer_orders_behind_body() {
         assert_eq!(layer_order(LAYER_CART), 15);
+    }
+
+    #[test]
+    fn falcon_layer_orders_between_body_and_effect() {
+        assert!(layer_order(LAYER_FALCON) > layer_order(LAYER_BODY));
+        assert!(layer_order(LAYER_FALCON) < layer_order(LAYER_EFFECT));
     }
 }

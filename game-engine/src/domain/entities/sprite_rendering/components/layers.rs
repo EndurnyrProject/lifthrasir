@@ -19,6 +19,15 @@ pub struct CartLayer {
     pub part: usize,
 }
 
+/// One quad of the falcon sprite layer.
+///
+/// `part` selects the ACT layer this quad renders. The presence of these
+/// children on a player is that player's falcon state (no separate flag needed).
+#[derive(Component, Default)]
+pub struct FalconLayer {
+    pub part: usize,
+}
+
 /// Body publishes its attach point, frame index, and layer position each frame for head to read.
 /// Head uses the same frame index to get its attach point for synchronized positioning.
 #[derive(Component, Default, PartialEq)]

@@ -154,6 +154,16 @@ pub fn cart_action_path() -> String {
     cart_sprite_path().replace(".spr", ".act")
 }
 
+/// Generate the falcon sprite path.
+pub fn falcon_sprite_path() -> String {
+    mob_sprite_path("매")
+}
+
+/// Generate the falcon action path.
+pub fn falcon_action_path() -> String {
+    mob_action_path("매")
+}
+
 /// Generate the shared emote sprite path. `emotion.spr` carries every emote's
 /// animation and an embedded palette (no external `.pal`).
 pub fn emotion_sprite_path() -> String {
@@ -268,6 +278,16 @@ mod tests {
     #[test]
     fn cart_action_path_builds_correct_url() {
         assert_eq!(cart_action_path(), "ro://data/sprite/이팩트/손수레.act");
+    }
+
+    #[test]
+    fn falcon_sprite_path_builds_correct_url() {
+        assert_eq!(falcon_sprite_path(), "ro://data/sprite/몬스터/매.spr");
+    }
+
+    #[test]
+    fn falcon_action_path_builds_correct_url() {
+        assert_eq!(falcon_action_path(), "ro://data/sprite/몬스터/매.act");
     }
 
     #[test]
