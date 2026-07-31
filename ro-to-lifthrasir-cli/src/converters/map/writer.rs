@@ -205,9 +205,8 @@ fn build_primitive(
 /// One image + texture + material per exported ground texture, keyed by the
 /// GND texture name the primitives reference.
 ///
-/// The sampler mirrors the runtime's terrain sampling
-/// (`utils/mipmap.rs::apply_anisotropic_sampler`: linear min/mag/mipmap,
-/// clamp-to-edge). Two native `StandardMaterial` fields have no glTF core
+/// The sampler complements the baked mip chain from `ktx2_out.rs`: linear
+/// min/mag/mipmap, clamp-to-edge. Two native `StandardMaterial` fields have no glTF core
 /// equivalent and are left to the runtime handler: `reflectance: 0.0` (glTF
 /// pins F0 at 4%) and the anisotropic filtering level. `doubleSided` is the
 /// closest expression of the native `cull_mode: None`, and additionally turns
