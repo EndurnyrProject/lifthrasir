@@ -2,7 +2,6 @@ pub mod accessory;
 pub mod gltf_out;
 pub mod item;
 pub mod job;
-#[allow(dead_code)]
 pub mod ktx2_out;
 pub mod map;
 pub mod maps;

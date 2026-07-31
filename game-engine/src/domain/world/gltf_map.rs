@@ -865,8 +865,8 @@ mod tests {
         )
         .unwrap();
         std::fs::copy(
-            format!("{FIXTURES}/tex/grass01.png"),
-            map_dir.join("tex/grass01.png"),
+            format!("{FIXTURES}/tex/grass01.ktx2"),
+            map_dir.join("tex/grass01.ktx2"),
         )
         .unwrap();
     }

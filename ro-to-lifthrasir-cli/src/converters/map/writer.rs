@@ -170,7 +170,7 @@ fn build_primitive(
 ) -> anyhow::Result<json::mesh::Primitive> {
     let material = *materials.get(&primitive.texture).with_context(|| {
         format!(
-            "terrain primitive references texture '{}' with no exported PNG",
+            "terrain primitive references texture '{}' with no exported KTX2",
             primitive.texture
         )
     })?;
@@ -669,7 +669,7 @@ fn build_root_extensions(
 mod tests {
     use super::*;
     use crate::converters::map::fixtures::{
-        TEXTURE, mini_ground, mini_world, raw_gat, textures, write_fixture, write_fixture_png,
+        TEXTURE, mini_ground, mini_world, raw_gat, textures, write_fixture, write_fixture_ktx2,
     };
     use crate::converters::map::terrain::build_terrain;
     use ro_formats::CELL_SIZE;
@@ -746,10 +746,10 @@ mod tests {
     fn writes_a_glb_that_reimports_with_the_expected_terrain_attributes() {
         let fixture = write_fixture();
 
-        let (document, buffers, images) = gltf::import(&fixture.path).expect("reimport");
+        let (document, buffers) = reopen(&fixture.path);
 
         assert_eq!(buffers.len(), 1);
-        assert_eq!(images.len(), 1);
+        assert_eq!(document.images().count(), 1);
 
         let scene = document.default_scene().expect("default scene");
         let roots: Vec<_> = scene.nodes().collect();
@@ -793,6 +793,11 @@ mod tests {
         [0.0, 0.0, 0.0, 1.0],
     ];
 
+    fn reopen(path: impl AsRef<std::path::Path>) -> (gltf::Document, Vec<Vec<u8>>) {
+        let gltf::Gltf { document, blob } = gltf::Gltf::open(path).expect("reopen");
+        (document, vec![blob.expect("embedded buffer")])
+    }
+
     fn scene_root(document: &gltf::Document) -> gltf::Node<'_> {
         document
             .default_scene()
@@ -833,7 +838,7 @@ mod tests {
         let fixture = write_fixture();
         let native = build_terrain(&fixture.ground).expect("terrain").remove(0);
 
-        let (document, buffers, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, buffers) = reopen(&fixture.path);
         let root = scene_root(&document);
         let mesh = root
             .children()
@@ -860,7 +865,7 @@ mod tests {
     fn lif_gat_buffer_view_holds_the_source_gat_bytes_verbatim() {
         let fixture = write_fixture();
 
-        let (document, buffers, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, buffers) = reopen(&fixture.path);
         let root_json = document.into_json();
         let extensions = root_json.extensions.as_ref().expect("root extensions");
         let gat: lif::LifGat =
@@ -883,7 +888,7 @@ mod tests {
         fixture.ground.surfaces[0].height = [12.0; 4];
         write_glb(&fixture.path, &fixture.inputs()).expect("rewrite glb");
 
-        let (document, buffers, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, buffers) = reopen(&fixture.path);
         let root_json = document.into_json();
         let extensions = root_json.extensions.as_ref().expect("root extensions");
         let water: lif::LifWater =
@@ -913,7 +918,7 @@ mod tests {
     fn root_extensions_carry_map_and_water_metadata() {
         let fixture = write_fixture();
 
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
         let root_json = document.into_json();
         let extensions = root_json.extensions.as_ref().expect("root extensions");
 
@@ -954,7 +959,7 @@ mod tests {
     #[test]
     fn a_map_without_water_has_no_water_extension() {
         let dir = tempfile::tempdir().expect("tempdir");
-        write_fixture_png(dir.path(), "tex/grass01.png");
+        write_fixture_ktx2(dir.path(), "tex/grass01.ktx2");
         let ground = mini_ground();
         let mut world = mini_world();
         world.water.level = 0.0;
@@ -976,7 +981,7 @@ mod tests {
         )
         .expect("write glb");
 
-        let (document, _, _) = gltf::import(&path).expect("reimport");
+        let (document, _) = reopen(&path);
         let root_json = document.into_json();
         let extensions = root_json.extensions.as_ref().expect("root extensions");
 
@@ -993,7 +998,7 @@ mod tests {
     fn the_sun_node_points_where_the_native_directional_light_does() {
         let fixture = write_fixture();
 
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
         let root = scene_root(&document);
         let (node, light) = root
             .children()
@@ -1020,7 +1025,7 @@ mod tests {
     fn point_lights_keep_their_native_placement_and_lumens() {
         let fixture = write_fixture();
 
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
         let root = scene_root(&document);
         let (node, light) = root
             .children()
@@ -1051,7 +1056,7 @@ mod tests {
     fn sound_and_effect_nodes_carry_their_params_at_baked_positions() {
         let fixture = write_fixture();
 
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
         let root = scene_root(&document);
 
         let audio_node = node_with_extras(&root, lif::EXTRAS_AUDIO);
@@ -1098,7 +1103,7 @@ mod tests {
     fn prop_nodes_bake_the_full_rsw_placement() {
         let fixture = write_fixture();
 
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
         let root = scene_root(&document);
         let node = node_with_extras(&root, lif::EXTRAS_PROP);
 

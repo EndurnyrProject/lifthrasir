@@ -15,7 +15,7 @@ use std::fmt;
 use std::path::Path;
 
 /// Convert one map's RSW/GND/GAT into `<out_dir>/<map_name>/<map_name>.glb`
-/// plus its `tex/*.png`, then validate the written file against the sources.
+/// plus its `tex/*.ktx2`, then validate the written file against the sources.
 /// Every supported prop the RSW references is converted into `<models_dir>`
 /// first (`--force-models` re-converts even a prop already on disk), and the
 /// map glb's `lif_prop` refs point at the resulting library glbs.
@@ -307,16 +307,16 @@ mod tests {
         }
         assert!(!library.is_empty(), "{PILOT_MAP} produced no library glbs");
 
-        // `gltf::import` resolves the `../tex/` image URIs off disk and decodes
-        // every PNG, which `Gltf::open` (what the converter's own validator
-        // uses) does not.
         let animated = library
             .iter()
             .map(|relative| {
                 let path = models_dir.join(relative);
-                let (document, _, images) =
-                    gltf::import(&path).unwrap_or_else(|error| panic!("{relative}: {error}"));
-                assert!(!images.is_empty(), "{relative} resolved no images");
+                let gltf::Gltf { document, .. } =
+                    gltf::Gltf::open(&path).unwrap_or_else(|error| panic!("{relative}: {error}"));
+                assert!(
+                    document.images().next().is_some(),
+                    "{relative} has no images"
+                );
                 document.animations().count()
             })
             .filter(|count| *count > 0)
@@ -500,10 +500,18 @@ mod tests {
 
         let glb = out.path().join(model::glb_relative_path(filename));
         assert!(glb.is_file());
-        let (_, _, images) = gltf::import(glb).unwrap();
-        assert_eq!(images.len(), 1);
+        let texture = std::fs::read(out.path().join("tex/missing_bmp.ktx2")).unwrap();
+        let reader = ktx2::Reader::new(&texture).unwrap();
         assert_eq!(
-            images[0].pixels,
+            (reader.header().pixel_width, reader.header().pixel_height),
+            (2, 2)
+        );
+        assert_eq!(reader.header().format, Some(ktx2::Format::R8G8B8A8_SRGB));
+        let level = reader.levels().next().expect("base level");
+        let pixels = zstd::bulk::decompress(level.data, level.uncompressed_byte_length as usize)
+            .expect("decompress base level");
+        assert_eq!(
+            pixels,
             [
                 255, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 255, 255,
             ]

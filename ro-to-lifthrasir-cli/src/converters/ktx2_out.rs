@@ -252,7 +252,12 @@ mod tests {
             (2, 1, 0)
         );
         let basic_dfd = reader.basic_dfd().unwrap();
-        assert_eq!(basic_dfd.texel_block_dimensions.map(|dimension| dimension.get()), [1; 4]);
+        assert_eq!(
+            basic_dfd
+                .texel_block_dimensions
+                .map(|dimension| dimension.get()),
+            [1; 4]
+        );
         assert_eq!(basic_dfd.bytes_planes, [4, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(
             decoded_levels(&bytes),

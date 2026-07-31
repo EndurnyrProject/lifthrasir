@@ -1,8 +1,8 @@
+use crate::converters::ktx2_out::encode_ktx2;
 use crate::grf_vfs::GrfVfs;
 use anyhow::{Context, bail, ensure};
 use image::{ImageFormat, RgbaImage};
 use std::collections::HashMap;
-use std::io::Cursor;
 use std::path::Path;
 
 /// Runtime magenta-key thresholds, mirrored from
@@ -10,8 +10,8 @@ use std::path::Path;
 const MAGENTA_THRESHOLD: u8 = 240;
 const GREEN_THRESHOLD: u8 = 15;
 
-/// A GND texture name mapped to the alpha PNG written for it, relative to the
-/// map's output directory (e.g. `tex/grass01.png`).
+/// A GND texture name mapped to the KTX2 written for it, relative to the
+/// map's output directory (e.g. `tex/grass01.ktx2`).
 #[derive(Debug, Clone)]
 pub struct TextureOut {
     pub source_name: String,
@@ -19,7 +19,7 @@ pub struct TextureOut {
 }
 
 /// Reads every GND-referenced texture through `vfs`, keys out magenta to real
-/// alpha, and writes `tex/<sanitized-name>.png` under `out_dir`.
+/// alpha, and writes `tex/<sanitized-name>.ktx2` under `out_dir`.
 pub fn normalize_textures(
     vfs: &GrfVfs,
     texture_names: &[String],
@@ -39,7 +39,7 @@ pub fn normalize_textures(
 
 /// Sanitizes every texture name up front and fails loudly if two distinct
 /// source names collide on the same sanitized output filename, so a
-/// collision can never silently overwrite an already-written PNG.
+/// collision can never silently overwrite an already-written KTX2.
 fn assign_unique_sanitized_names(texture_names: &[String]) -> anyhow::Result<Vec<String>> {
     let mut seen: HashMap<String, &str> = HashMap::new();
     let mut sanitized_names = Vec::with_capacity(texture_names.len());
@@ -49,7 +49,7 @@ fn assign_unique_sanitized_names(texture_names: &[String]) -> anyhow::Result<Vec
         if let Some(previous) = seen.insert(sanitized.clone(), name) {
             ensure!(
                 canonical_name(previous) == canonical_name(name),
-                "texture name collision: '{name}' and '{previous}' both sanitize to '{sanitized}.png'"
+                "texture name collision: '{name}' and '{previous}' both sanitize to '{sanitized}.ktx2'"
             );
         }
         sanitized_names.push(sanitized);
@@ -70,19 +70,19 @@ fn normalize_one(
     // otherwise complete, so it gets an obviously wrong stand-in rather than
     // failing the whole conversion - but every substitution is reported, so a
     // missing texture cannot pass unnoticed.
-    let png_bytes = match vfs.read(&logical_path) {
-        Some(source_bytes) => texture_bytes_to_png(name, &source_bytes)
+    let ktx2_bytes = match vfs.read(&logical_path) {
+        Some(source_bytes) => texture_bytes_to_ktx2(name, &source_bytes)
             .with_context(|| format!("converting texture: {logical_path}"))?,
         None => {
             println!("  missing texture, using a placeholder: {logical_path}");
-            crate::converters::model::fallback_texture_png()
+            crate::converters::model::fallback_texture_ktx2()
                 .with_context(|| format!("building placeholder for {logical_path}"))?
         }
     };
 
-    let file_name = format!("{sanitized}.png");
+    let file_name = format!("{sanitized}.ktx2");
     let dest = tex_dir.join(&file_name);
-    std::fs::write(&dest, &png_bytes).with_context(|| format!("writing {}", dest.display()))?;
+    std::fs::write(&dest, &ktx2_bytes).with_context(|| format!("writing {}", dest.display()))?;
 
     Ok(TextureOut {
         source_name: name.to_string(),
@@ -90,55 +90,47 @@ fn normalize_one(
     })
 }
 
-/// Normalizes one GRF texture into RGBA PNG the way the runtime loaders would.
+/// Normalizes one GRF texture into RGBA KTX2 the way the runtime loaders would.
 ///
 /// The extension picks the semantics, mirroring the asset-server dispatch:
 /// BMPs are magenta-keyed (`bmp_loader.rs`), TGAs carry real 8-bit alpha and
 /// are taken verbatim (`tga_loader.rs`). RSM props reference both; GND ground
 /// textures are BMP only.
-pub fn texture_bytes_to_png(source_name: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+pub fn texture_bytes_to_ktx2(source_name: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
     let extension = source_name
         .rsplit_once('.')
         .map_or(String::new(), |(_, ext)| ext.to_ascii_lowercase());
 
     match extension.as_str() {
-        "bmp" => bmp_bytes_to_keyed_png(bytes),
-        "tga" => decoded_to_png(
+        "bmp" => bmp_bytes_to_keyed_ktx2(bytes),
+        "tga" => decoded_to_ktx2(
             image::load_from_memory_with_format(bytes, ImageFormat::Tga).context("decoding TGA")?,
         ),
         // Everything else reaches Bevy's stock `ImageLoader` at runtime, which
         // keys nothing: JPEG cannot carry an exact key colour through lossy
         // compression, and PNG carries its own alpha.
-        "jpg" | "jpeg" => decoded_to_png(
+        "jpg" | "jpeg" => decoded_to_ktx2(
             image::load_from_memory_with_format(bytes, ImageFormat::Jpeg)
                 .context("decoding JPEG")?,
         ),
-        "png" => decoded_to_png(
+        "png" => decoded_to_ktx2(
             image::load_from_memory_with_format(bytes, ImageFormat::Png).context("decoding PNG")?,
         ),
         other => bail!("unsupported texture format '{other}' for '{source_name}'"),
     }
 }
 
-pub fn bmp_bytes_to_keyed_png(bmp_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+pub fn bmp_bytes_to_keyed_ktx2(bmp_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
     let mut image = image::load_from_memory_with_format(bmp_bytes, ImageFormat::Bmp)
         .context("decoding BMP")?
         .to_rgba8();
     apply_magenta_transparency(&mut image);
 
-    encode_png(&image)
+    encode_ktx2(&image, true)
 }
 
-fn decoded_to_png(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
-    encode_png(&image.to_rgba8())
-}
-
-fn encode_png(image: &RgbaImage) -> anyhow::Result<Vec<u8>> {
-    let mut png_bytes = Vec::new();
-    image
-        .write_to(&mut Cursor::new(&mut png_bytes), ImageFormat::Png)
-        .context("encoding PNG")?;
-    Ok(png_bytes)
+fn decoded_to_ktx2(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
+    encode_ktx2(&image.to_rgba8(), true)
 }
 
 /// Zeroes RGB and alpha on magenta-keyed pixels, alpha 255 everywhere else.
@@ -208,6 +200,7 @@ mod tests {
     use super::*;
     use crate::config::GrfEntry;
     use image::Rgba;
+    use std::io::Cursor;
 
     fn encode_bmp(pixels: &[[u8; 4]], width: u32, height: u32) -> Vec<u8> {
         let mut image = RgbaImage::new(width, height);
@@ -221,16 +214,22 @@ mod tests {
         bytes
     }
 
+    fn decode_base_level(bytes: &[u8]) -> RgbaImage {
+        let reader = ktx2::Reader::new(bytes).expect("parse KTX2");
+        let header = reader.header();
+        let level = reader.levels().next().expect("base level");
+        let pixels = zstd::bulk::decompress(level.data, level.uncompressed_byte_length as usize)
+            .expect("decompress base level");
+        RgbaImage::from_raw(header.pixel_width, header.pixel_height, pixels).expect("RGBA pixels")
+    }
+
     #[test]
     fn magenta_pixels_become_transparent_others_stay_opaque() {
         let magenta = [255, 0, 255, 255];
         let green = [10, 200, 10, 255];
         let bmp = encode_bmp(&[magenta, green], 2, 1);
 
-        let png_bytes = bmp_bytes_to_keyed_png(&bmp).expect("convert");
-        let decoded = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png)
-            .expect("decode png")
-            .to_rgba8();
+        let decoded = decode_base_level(&bmp_bytes_to_keyed_ktx2(&bmp).expect("convert"));
 
         assert_eq!(decoded.get_pixel(0, 0).0, [0, 0, 0, 0]);
         assert_eq!(decoded.get_pixel(1, 0).0, [10, 200, 10, 255]);
@@ -241,10 +240,7 @@ mod tests {
         let near_magenta = [245, 10, 250, 255];
         let bmp = encode_bmp(&[near_magenta], 1, 1);
 
-        let png_bytes = bmp_bytes_to_keyed_png(&bmp).expect("convert");
-        let decoded = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png)
-            .expect("decode png")
-            .to_rgba8();
+        let decoded = decode_base_level(&bmp_bytes_to_keyed_ktx2(&bmp).expect("convert"));
 
         assert_eq!(decoded.get_pixel(0, 0).0, [0, 0, 0, 0]);
     }
@@ -263,18 +259,18 @@ mod tests {
             .write_to(&mut Cursor::new(&mut tga), ImageFormat::Tga)
             .expect("encode synthetic tga");
 
-        let png_bytes = texture_bytes_to_png("iz_rookie_06.tga", &tga).expect("convert");
-        let decoded = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png)
-            .expect("decode png")
-            .to_rgba8();
+        let ktx2_bytes = texture_bytes_to_ktx2("iz_rookie_06.tga", &tga).expect("convert");
+        let reader = ktx2::Reader::new(&ktx2_bytes).expect("parse KTX2");
+        let decoded = decode_base_level(&ktx2_bytes);
 
+        assert_eq!(reader.header().format, Some(ktx2::Format::R8G8B8A8_SRGB));
         assert_eq!(decoded.get_pixel(0, 0).0, magenta);
         assert_eq!(decoded.get_pixel(1, 0).0, translucent);
     }
 
     #[test]
     fn an_unknown_texture_extension_fails_loudly() {
-        let err = texture_bytes_to_png("weird.dds", &[0u8; 8]).expect_err("must fail");
+        let err = texture_bytes_to_ktx2("weird.dds", &[0u8; 8]).expect_err("must fail");
 
         let message = err.to_string();
         assert!(message.contains("weird.dds"), "unexpected error: {message}");
@@ -292,12 +288,12 @@ mod tests {
             .expect("a missing texture must not fail the map");
 
         assert_eq!(textures.len(), 1);
-        assert_eq!(textures[0].relative_path, "tex/grass01_bmp.png");
+        assert_eq!(textures[0].relative_path, "tex/grass01_bmp.ktx2");
 
-        let written = std::fs::read(out.path().join("tex/grass01_bmp.png")).expect("placeholder");
+        let written = std::fs::read(out.path().join("tex/grass01_bmp.ktx2")).expect("placeholder");
         assert_eq!(
             written,
-            crate::converters::model::fallback_texture_png().expect("placeholder"),
+            crate::converters::model::fallback_texture_ktx2().expect("placeholder"),
             "a missing texture must use the shared placeholder"
         );
     }
@@ -312,7 +308,7 @@ mod tests {
     }
 
     /// Two retail props reference `iz_rookie_06.bmp` and `iz_rookie_06.tga`:
-    /// different images, so they must not share a pooled PNG.
+    /// different images, so they must not share a pooled KTX2.
     #[test]
     fn the_same_stem_under_two_extensions_stays_distinct() {
         let names = vec![
@@ -353,7 +349,7 @@ mod tests {
 
     /// `verus\danger03.rsm` names one texture as both `ver_h_03.BMP` and
     /// `ver_h_03.bmp`. GRF lookup is case-insensitive, so those are the same
-    /// file and must pool as one PNG rather than read as a collision.
+    /// file and must pool as one KTX2 rather than read as a collision.
     #[test]
     fn case_only_spelling_differences_are_one_texture() {
         let names = vec![
@@ -385,10 +381,7 @@ mod tests {
                 .write_to(&mut Cursor::new(&mut bytes), format)
                 .expect("encode source");
 
-            let png_bytes = texture_bytes_to_png(name, &bytes).expect("convert");
-            let decoded = image::load_from_memory_with_format(&png_bytes, ImageFormat::Png)
-                .expect("decode png")
-                .to_rgba8();
+            let decoded = decode_base_level(&texture_bytes_to_ktx2(name, &bytes).expect("convert"));
 
             assert_eq!(decoded.get_pixel(0, 0).0[3], 255, "{name} must stay opaque");
         }

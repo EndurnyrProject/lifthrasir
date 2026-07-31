@@ -3,7 +3,7 @@
 //! a texture slot it does not have, plus an animated variant whose nodes'
 //! rotation channels deliberately end on different frame numbers.
 
-use crate::converters::map::fixtures::write_fixture_png;
+use crate::converters::map::fixtures::write_fixture_ktx2;
 use crate::converters::map::textures::{TextureOut, canonical_name};
 use crate::converters::model::mesh::build_model;
 use crate::converters::model::normalized::{NormalizedModel, ShadingPolicy};
@@ -24,7 +24,7 @@ pub fn textures() -> Vec<TextureOut> {
         .iter()
         .map(|name| TextureOut {
             source_name: (*name).to_string(),
-            relative_path: format!("tex/{}.png", name.trim_end_matches(".bmp")),
+            relative_path: format!("tex/{}.ktx2", name.trim_end_matches(".bmp")),
         })
         .collect()
 }
@@ -125,7 +125,7 @@ pub fn animated_rsm() -> Rsm {
     rsm
 }
 
-/// A tempdir with the fixture PNGs already exported beside where the glb goes,
+/// A tempdir with the fixture KTX2 files already exported beside where the glb goes,
 /// so a written glb reimports with its images resolved.
 pub fn uv_only_model(scale: [f32; 2], rotation: f32) -> NormalizedModel {
     let mut model = build_model(&textured_rsm(), ModelFixture::RSM_HASH).expect("model must build");
@@ -177,7 +177,7 @@ pub fn uv_only_model(scale: [f32; 2], rotation: f32) -> NormalizedModel {
 pub fn fixture_dir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("tempdir");
     for texture in textures() {
-        write_fixture_png(dir.path(), &texture.relative_path);
+        write_fixture_ktx2(dir.path(), &texture.relative_path);
     }
     dir
 }
@@ -221,7 +221,7 @@ impl AssetRead for FakeVfs {
 }
 
 /// A 1x1 opaque BMP of `color`, the smallest thing the texture pool can
-/// normalize. Distinct colors give distinct pooled PNGs, which is what the
+/// normalize. Distinct colors give distinct pooled KTX2 files, which is what the
 /// pool's cross-run collision check compares.
 pub fn bmp_bytes(color: [u8; 4]) -> Vec<u8> {
     let mut image = RgbaImage::new(1, 1);

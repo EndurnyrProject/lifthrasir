@@ -2,17 +2,17 @@
 //! ground with one texture, an RSW carrying one of every object kind, and a
 //! raw GAT buffer in the real on-disk layout.
 
+use crate::converters::ktx2_out::encode_ktx2;
 use crate::converters::map::terrain::{TerrainPrimitive, build_terrain};
 use crate::converters::map::textures::TextureOut;
 use crate::converters::map::writer::{MapGlbInputs, write_glb};
-use image::{ImageFormat, RgbaImage};
+use image::RgbaImage;
 use lifthrasir_data::lif;
 use ro_formats::{
     GndSurface, GndTile, RoGround, RoWorld, RswEffect, RswGround, RswLight, RswLightObj, RswModel,
     RswObject, RswSound, RswWater,
 };
 use std::collections::HashSet;
-use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 pub const TEXTURE: &str = "grass01.bmp";
@@ -135,18 +135,15 @@ pub fn raw_gat(width: u32, height: u32) -> Vec<u8> {
 pub fn textures() -> Vec<TextureOut> {
     vec![TextureOut {
         source_name: TEXTURE.to_string(),
-        relative_path: "tex/grass01.png".to_string(),
+        relative_path: "tex/grass01.ktx2".to_string(),
     }]
 }
 
-pub fn write_fixture_png(dir: &Path, relative: &str) {
+pub fn write_fixture_ktx2(dir: &Path, relative: &str) {
     let path = dir.join(relative);
     std::fs::create_dir_all(path.parent().expect("tex dir")).expect("create tex dir");
-    let mut bytes = Vec::new();
-    RgbaImage::new(1, 1)
-        .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
-        .expect("encode png");
-    std::fs::write(path, bytes).expect("write png");
+    let bytes = encode_ktx2(&RgbaImage::new(1, 1), true).expect("encode KTX2");
+    std::fs::write(path, bytes).expect("write KTX2");
 }
 
 pub struct Fixture {
@@ -178,11 +175,11 @@ impl Fixture {
     }
 }
 
-/// Writes `mini.glb` (plus its texture PNG) into a temp dir and hands back
+/// Writes `mini.glb` (plus its texture KTX2) into a temp dir and hands back
 /// everything it was built from.
 pub fn write_fixture() -> Fixture {
     let dir = tempfile::tempdir().expect("tempdir");
-    write_fixture_png(dir.path(), "tex/grass01.png");
+    write_fixture_ktx2(dir.path(), "tex/grass01.ktx2");
 
     let ground = mini_ground();
     let world = mini_world();
@@ -222,7 +219,7 @@ fn regenerate_game_engine_fixtures() {
         .expect("workspace root")
         .join("game-engine/tests/fixtures");
     std::fs::create_dir_all(&out).expect("create fixtures dir");
-    write_fixture_png(&out, "tex/grass01.png");
+    write_fixture_ktx2(&out, "tex/grass01.ktx2");
 
     let mut ground = mini_ground();
     ground.surfaces[1].height = [12.0; 4];

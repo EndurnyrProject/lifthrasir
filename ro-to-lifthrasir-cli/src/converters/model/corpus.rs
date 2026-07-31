@@ -1618,7 +1618,7 @@ mod tests {
         assert!(first_glb.is_file());
         assert!(second_glb.is_file());
         for (glb, source) in [(first_glb, &sources[0]), (second_glb, &sources[1])] {
-            let document = gltf::import(glb).unwrap().0.into_json();
+            let document = gltf::Gltf::open(glb).unwrap().document.into_json();
             let provenance: lifthrasir_data::lif::LifModel = serde_json::from_value(
                 document.extensions.unwrap().others[lifthrasir_data::lif::EXTENSION_MODEL].clone(),
             )

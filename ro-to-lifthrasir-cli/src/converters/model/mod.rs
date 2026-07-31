@@ -12,8 +12,9 @@ pub mod validate;
 pub mod writer;
 
 use crate::converters::gltf_out::{hash_hex, to_forward_slashes};
+use crate::converters::ktx2_out::encode_ktx2;
 use crate::converters::map::textures::{
-    TextureOut, canonical_name, sanitize_name, texture_bytes_to_png,
+    TextureOut, canonical_name, sanitize_name, texture_bytes_to_ktx2,
 };
 use crate::grf_vfs::AssetRead;
 use anyhow::{Context, anyhow, bail, ensure};
@@ -225,16 +226,12 @@ fn export_textures(
 }
 
 /// Reads the `GRSM` magic and exact version without parsing the body.
-pub fn fallback_texture_png() -> anyhow::Result<Vec<u8>> {
+pub fn fallback_texture_ktx2() -> anyhow::Result<Vec<u8>> {
     let pixels = vec![
         255, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 255, 255,
     ];
     let image = image::RgbaImage::from_raw(2, 2, pixels).expect("fixed fallback image dimensions");
-    let mut output = std::io::Cursor::new(Vec::new());
-    image::DynamicImage::ImageRgba8(image)
-        .write_to(&mut output, image::ImageFormat::Png)
-        .context("encoding fallback texture")?;
-    Ok(output.into_inner())
+    encode_ktx2(&image, true).context("encoding fallback texture")
 }
 
 fn classify_header(bytes: &[u8]) -> anyhow::Result<ModelFormat> {
@@ -258,10 +255,10 @@ pub fn is_supported_version(bytes: &[u8]) -> anyhow::Result<bool> {
     ))
 }
 
-/// The `<models_dir>/tex/` PNG pool shared by every model in one run.
+/// The `<models_dir>/tex/` KTX2 pool shared by every model in one run.
 ///
 /// A texture is read and normalized at most once per run, and rewritten only
-/// when its PNG is not already on disk from an earlier run. Two distinct source
+/// when its KTX2 is not already on disk from an earlier run. Two distinct source
 /// names sanitizing to one filename abort the run, extending the per-map guard
 /// in `map::textures::assign_unique_sanitized_names` to pool scope -- across
 /// runs too, where the earlier source name is gone and the already-pooled bytes
@@ -282,7 +279,7 @@ impl TexturePool {
         }
     }
 
-    /// The pooled PNG for `source_name`, relative to `models_dir`.
+    /// The pooled KTX2 for `source_name`, relative to `models_dir`.
     pub fn export(
         &mut self,
         vfs: &impl AssetRead,
@@ -308,23 +305,23 @@ impl TexturePool {
         let sanitized = sanitize_name(source_name);
         let texture = TextureOut {
             source_name: source_name.to_string(),
-            relative_path: format!("tex/{sanitized}.png"),
+            relative_path: format!("tex/{sanitized}.ktx2"),
         };
         match self.claimed.get(&sanitized) {
             Some(previous) if canonical_name(previous) == canonical_name(source_name) => {
                 // A BIK stand-in written for an RSM2 consumer is replaced by the
                 // real texture once a consumer that keeps BIK asks for it.
                 if !replace_bik && self.fallback_claims.contains(&sanitized) {
-                    self.write_png(vfs, source_name, &sanitized, false)?;
+                    self.write_ktx2(vfs, source_name, &sanitized, false)?;
                 }
                 return Ok(texture);
             }
             Some(previous) => bail!(
-                "texture name collision: '{source_name}' and '{previous}' both sanitize to '{sanitized}.png'"
+                "texture name collision: '{source_name}' and '{previous}' both sanitize to '{sanitized}.ktx2'"
             ),
             None => {}
         }
-        let used_fallback = self.write_png(vfs, source_name, &sanitized, replace_bik)?;
+        let used_fallback = self.write_ktx2(vfs, source_name, &sanitized, replace_bik)?;
         self.claimed
             .insert(sanitized.clone(), source_name.to_string());
         if used_fallback {
@@ -333,7 +330,7 @@ impl TexturePool {
         Ok(texture)
     }
 
-    fn write_png(
+    fn write_ktx2(
         &self,
         vfs: &impl AssetRead,
         source_name: &str,
@@ -344,10 +341,10 @@ impl TexturePool {
         let is_bik = source_name
             .rsplit_once('.')
             .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("bik"));
-        let (png_bytes, used_fallback) = match vfs.read_asset(&logical_path) {
-            Some(_) if replace_bik && is_bik => (fallback_texture_png()?, true),
+        let (ktx2_bytes, used_fallback) = match vfs.read_asset(&logical_path) {
+            Some(_) if replace_bik && is_bik => (fallback_texture_ktx2()?, true),
             Some(source_bytes) => (
-                texture_bytes_to_png(source_name, &source_bytes)
+                texture_bytes_to_ktx2(source_name, &source_bytes)
                     .with_context(|| format!("converting texture: {logical_path}"))?,
                 false,
             ),
@@ -356,17 +353,17 @@ impl TexturePool {
             // substitution is reported so it cannot pass unnoticed.
             None => {
                 println!("  missing texture, using a placeholder: {logical_path}");
-                (fallback_texture_png()?, true)
+                (fallback_texture_ktx2()?, true)
             }
         };
 
-        let dest = self.tex_dir.join(format!("{sanitized}.png"));
+        let dest = self.tex_dir.join(format!("{sanitized}.ktx2"));
         if dest.is_file() {
             let pooled = std::fs::read(&dest)
                 .with_context(|| format!("reading pooled texture: {}", dest.display()))?;
             ensure!(
-                pooled == png_bytes,
-                "texture name collision: '{source_name}' sanitizes to '{sanitized}.png', already pooled from a different source at {}",
+                pooled == ktx2_bytes,
+                "texture name collision: '{source_name}' sanitizes to '{sanitized}.ktx2', already pooled from a different source at {}",
                 dest.display()
             );
             return Ok(used_fallback);
@@ -374,7 +371,8 @@ impl TexturePool {
 
         std::fs::create_dir_all(&self.tex_dir)
             .with_context(|| format!("creating {}", self.tex_dir.display()))?;
-        std::fs::write(&dest, &png_bytes).with_context(|| format!("writing {}", dest.display()))?;
+        std::fs::write(&dest, &ktx2_bytes)
+            .with_context(|| format!("writing {}", dest.display()))?;
         Ok(used_fallback)
     }
 }
@@ -427,7 +425,7 @@ mod tests {
 
         assert_eq!(outcome, ConvertOutcome::Converted);
         assert!(out.path().join("prontera/tree01.glb").is_file());
-        assert!(out.path().join("tex/bark_bmp.png").is_file());
+        assert!(out.path().join("tex/bark_bmp.ktx2").is_file());
     }
 
     /// The glb sits one directory below `models_dir`, so its image URIs have to
@@ -449,7 +447,7 @@ mod tests {
                 gltf::image::Source::View { .. } => None,
             })
             .collect();
-        assert_eq!(uris, ["../tex/bark_bmp.png"]);
+        assert_eq!(uris, ["../tex/bark_bmp.ktx2"]);
     }
 
     #[test]
@@ -501,8 +499,8 @@ mod tests {
             assert_eq!(outcome, ConvertOutcome::Converted);
             let glb = out.path().join(glb_relative_path(logical_path));
             assert!(glb.is_file());
-            assert!(out.path().join("tex/bark_bmp.png").is_file());
-            let (document, _, _) = gltf::import(glb).expect("reimport");
+            assert!(out.path().join("tex/bark_bmp.ktx2").is_file());
+            let gltf::Gltf { document, .. } = gltf::Gltf::open(glb).expect("reimport");
             let root = document.into_json();
             let provenance: lif::LifModel = serde_json::from_value(
                 root.extensions.as_ref().expect("extensions").others[lif::EXTENSION_MODEL].clone(),
@@ -651,8 +649,8 @@ mod tests {
             ConvertOutcome::Converted
         );
 
-        let written = std::fs::read(out.path().join("tex/bark_bmp.png")).expect("placeholder");
-        assert_eq!(written, fallback_texture_png().expect("placeholder"));
+        let written = std::fs::read(out.path().join("tex/bark_bmp.ktx2")).expect("placeholder");
+        assert_eq!(written, fallback_texture_ktx2().expect("placeholder"));
     }
 
     #[test]
@@ -671,17 +669,27 @@ mod tests {
                 convert_model(&vfs, "fallback.rsm2", out.path(), &mut pool, false,).unwrap(),
                 ConvertOutcome::Converted
             );
-            let png = std::fs::read(
+            let ktx2 = std::fs::read(
                 out.path()
-                    .join(format!("tex/{}.png", sanitize_name(source_name))),
+                    .join(format!("tex/{}.ktx2", sanitize_name(source_name))),
             )
             .unwrap();
-            let image = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
-                .unwrap()
-                .to_rgba8();
-            assert_eq!(image.dimensions(), (2, 2));
-            assert_eq!(image.get_pixel(0, 0).0, [255, 0, 255, 255]);
-            assert_eq!(image.get_pixel(1, 0).0, [0, 0, 0, 255]);
+            let reader = ktx2::Reader::new(&ktx2).unwrap();
+            assert_eq!(
+                (reader.header().pixel_width, reader.header().pixel_height),
+                (2, 2)
+            );
+            assert_eq!(reader.header().format, Some(ktx2::Format::R8G8B8A8_SRGB));
+            let level = reader.levels().next().expect("base level");
+            let pixels =
+                zstd::bulk::decompress(level.data, level.uncompressed_byte_length as usize)
+                    .expect("decompress base level");
+            assert_eq!(
+                pixels,
+                [
+                    255, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 255, 255,
+                ]
+            );
         }
     }
 
@@ -708,9 +716,9 @@ mod tests {
         assert!(out.path().join("prontera/bush01.glb").is_file());
     }
 
-    /// A second CLI run over an already-populated `tex/` keeps the pooled PNG.
+    /// A second CLI run over an already-populated `tex/` keeps the pooled KTX2.
     #[test]
-    fn a_png_pooled_by_an_earlier_run_from_the_same_source_is_reused() {
+    fn a_ktx2_pooled_by_an_earlier_run_from_the_same_source_is_reused() {
         let vfs = vfs(&one_texture_model(), &["data/texture/bark.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
         convert_model(
@@ -721,7 +729,7 @@ mod tests {
             false,
         )
         .expect("first run");
-        let pooled = std::fs::read(out.path().join("tex/bark_bmp.png")).expect("pooled png");
+        let pooled = std::fs::read(out.path().join("tex/bark_bmp.ktx2")).expect("pooled KTX2");
 
         let outcome = convert_model(
             &vfs,
@@ -734,16 +742,16 @@ mod tests {
 
         assert_eq!(outcome, ConvertOutcome::Converted);
         assert_eq!(
-            std::fs::read(out.path().join("tex/bark_bmp.png")).expect("pooled png"),
+            std::fs::read(out.path().join("tex/bark_bmp.ktx2")).expect("pooled KTX2"),
             pooled
         );
     }
 
     /// The in-run memo is gone on the next run, so the pooled bytes are the only
-    /// evidence that `tex/a_b.png` belongs to a different source. Reusing it
+    /// evidence that `tex/a_b.ktx2` belongs to a different source. Reusing it
     /// would texture this model with another one's pixels.
     #[test]
-    fn a_png_pooled_by_an_earlier_run_from_a_different_source_fails_loudly() {
+    fn a_ktx2_pooled_by_an_earlier_run_from_a_different_source_fails_loudly() {
         let vfs = FakeVfs::with(&[
             (
                 "data/model/prontera/Tree01.rsm",
@@ -777,7 +785,7 @@ mod tests {
 
         let message = format!("{err:#}");
         assert!(
-            message.contains("a_b_bmp.png"),
+            message.contains("a_b_bmp.ktx2"),
             "unexpected error: {message}"
         );
         assert!(message.contains("a_b.bmp"), "unexpected error: {message}");
@@ -799,7 +807,7 @@ mod tests {
         convert_model(&vfs, TREE, out.path(), &mut pool, false)
             .expect("one file spelled two ways is not a collision");
 
-        assert!(out.path().join("tex/ver_h_03_bmp.png").is_file());
+        assert!(out.path().join("tex/ver_h_03_bmp.ktx2").is_file());
     }
 
     #[test]

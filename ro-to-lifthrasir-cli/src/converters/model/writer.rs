@@ -44,7 +44,7 @@ const ANIMATION_NAME: &str = "anim";
 /// Assemble and write `<out_path>` as a binary glTF.
 ///
 /// `textures` is index-aligned with `rsm.textures`; the caller owns exporting
-/// the PNGs and computing each `relative_path` from the glb's own directory.
+/// the KTX2 files and computing each `relative_path` from the glb's own directory.
 pub fn write_model_glb(
     out_path: &Path,
     model: &NormalizedModel,
@@ -610,6 +610,11 @@ mod tests {
         );
     }
 
+    fn reopen(path: impl AsRef<std::path::Path>) -> (gltf::Document, Vec<Vec<u8>>) {
+        let gltf::Gltf { document, blob } = gltf::Gltf::open(path).expect("reopen");
+        (document, vec![blob.expect("embedded buffer")])
+    }
+
     fn scene_root(document: &gltf::Document) -> gltf::Node<'_> {
         document
             .default_scene()
@@ -629,9 +634,9 @@ mod tests {
     #[test]
     fn the_synthetic_root_undoes_the_runtime_root_fix_for_every_node_below_it() {
         let fixture = write_fixture();
-        let (document, buffers, images) = gltf::import(&fixture.path).expect("reimport");
+        let (document, buffers) = reopen(&fixture.path);
 
-        assert_eq!(images.len(), TEXTURES.len());
+        assert_eq!(document.images().count(), TEXTURES.len());
 
         let root = scene_root(&document);
         assert_eq!(root.name(), Some("tree01"));
@@ -674,7 +679,7 @@ mod tests {
     #[test]
     fn nodes_keep_their_raw_local_trs_and_parent_links() {
         let fixture = write_fixture();
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
 
         let main = node_named(&document, "main");
         let child = node_named(&document, "child");
@@ -700,7 +705,7 @@ mod tests {
     #[test]
     fn one_primitive_per_node_texture_with_the_expected_semantics() {
         let fixture = write_fixture();
-        let (document, buffers, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, buffers) = reopen(&fixture.path);
 
         let main = node_named(&document, "main");
         let primitives: Vec<_> = main.mesh().expect("main mesh").primitives().collect();
@@ -735,7 +740,7 @@ mod tests {
     #[test]
     fn an_opaque_model_masks_at_the_native_cutoff() {
         let fixture = write_fixture();
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
 
         let material = node_named(&document, "main")
             .mesh()
@@ -766,7 +771,7 @@ mod tests {
 
         write_model_glb(&path, &build, &textures()).expect("write glb");
 
-        let (document, _, _) = gltf::import(&path).expect("reimport");
+        let (document, _) = reopen(&path);
         let material = node_named(&document, "main")
             .mesh()
             .expect("mesh")
@@ -788,7 +793,7 @@ mod tests {
     #[test]
     fn a_face_pointing_at_a_missing_texture_slot_gets_an_untextured_material() {
         let fixture = write_fixture();
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
 
         let untextured = node_named(&document, "child")
             .mesh()
@@ -818,7 +823,7 @@ mod tests {
 
         write_model_glb(&path, &build, &textures()).expect("write glb");
 
-        let (document, buffers, _) = gltf::import(&path).expect("reimport");
+        let (document, buffers) = reopen(&path);
         let animations: Vec<_> = document.animations().collect();
         assert_eq!(animations.len(), 1);
         assert_eq!(animations[0].name(), Some(ANIMATION_NAME));
@@ -867,7 +872,7 @@ mod tests {
     #[test]
     fn a_model_without_keyframes_has_no_animation() {
         let fixture = write_fixture();
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
 
         assert_eq!(document.animations().count(), 0);
     }
@@ -882,14 +887,14 @@ mod tests {
 
         write_model_glb(&path, &build, &textures()).expect("write glb");
 
-        let (document, _, _) = gltf::import(&path).expect("reimport");
+        let (document, _) = reopen(&path);
         assert_eq!(document.animations().count(), 0);
     }
 
     #[test]
     fn the_root_carries_the_lif_model_stamp() {
         let fixture = write_fixture();
-        let (document, _, _) = gltf::import(&fixture.path).expect("reimport");
+        let (document, _) = reopen(&fixture.path);
         let root_json = document.into_json();
 
         let extensions = root_json.extensions.as_ref().expect("root extensions");
@@ -915,7 +920,7 @@ mod tests {
 
         assert_eq!(
             digest.to_hex().as_str(),
-            "6b4cfb6f366594932b616486f9abe4f53b901fd6476c442025f2774660ec8b58"
+            "26e1e126464d56d4204d59315e5a47395f17ba5520515cc5ffa15712187709cc"
         );
     }
 

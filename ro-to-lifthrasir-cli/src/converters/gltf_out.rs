@@ -272,7 +272,7 @@ pub fn push_image_and_texture(
         &mut root.images,
         json::Image {
             buffer_view: None,
-            mime_type: Some(json::image::MimeType("image/png".to_string())),
+            mime_type: Some(json::image::MimeType("image/ktx2".to_string())),
             uri: Some(texture.relative_path.clone()),
             name: Some(texture.source_name.clone()),
             extensions: None,

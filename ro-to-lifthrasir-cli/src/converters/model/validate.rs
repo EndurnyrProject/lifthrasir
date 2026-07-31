@@ -1169,7 +1169,8 @@ mod tests {
         let counts = validate(&path, &model, &textures()).expect("validate scale animation");
         assert_eq!(counts.animation_channels, 1);
 
-        let (document, buffers, _) = gltf::import(path).expect("reimport");
+        let gltf::Gltf { document, blob } = gltf::Gltf::open(path).expect("reimport");
+        let buffers = [blob.expect("embedded buffer")];
         let channel = document
             .animations()
             .next()
