@@ -1,5 +1,95 @@
 # Changelog
 
+## [0.9.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.8.0...v0.9.0) (2026-07-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **assets:** delete the rsw, gnd and rsm asset loaders
+* **render:** delete the native rsw lighting plugin
+* **pak:** stop packing map and model source formats
+* **world:** delete the legacy rsm model renderer
+* **world:** delete native map loading, require a map glb
+
+### Features
+
+* **assets:** add PakSource for lifthrasir pak archives ([61448c2](https://github.com/EndurnyrProject/lifthrasir/commit/61448c221a1f0709990d180dbe266515773acd69))
+* carry prop animation through the map glb ([570251a](https://github.com/EndurnyrProject/lifthrasir/commit/570251aa1509918cf3d85a83a7bba95bebf5992f))
+* **cli:** add KTX2 encoder with baked mip chain and zstd supercompression ([26741b1](https://github.com/EndurnyrProject/lifthrasir/commit/26741b1688eca6714b5afdd0623e872a2b0ac7f7))
+* **cli:** add the bulk convert-maps command ([e700928](https://github.com/EndurnyrProject/lifthrasir/commit/e7009287b715c4c9d21416dc95d1e2dd346758ae))
+* **cli:** bevy-free RSM mesh builder ([2793477](https://github.com/EndurnyrProject/lifthrasir/commit/27934772442382a669b6c770e744a0d70699f556))
+* **cli:** bevy-free terrain mesh builder for map conversion ([817ddb9](https://github.com/EndurnyrProject/lifthrasir/commit/817ddb920d976ec2ec9d8741aba9941a15a9ea68))
+* **cli:** convert_model orchestrator with shared texture pool ([2aa7acd](https://github.com/EndurnyrProject/lifthrasir/commit/2aa7acd7834ba6bba6ee3d59ab3964533bb1f1f9))
+* **cli:** convert-map subcommand with output validation ([2e72f4b](https://github.com/EndurnyrProject/lifthrasir/commit/2e72f4b97b9421617aec46ddb979f3d15e41dd05))
+* **cli:** emit ktx2 textures with baked mips instead of png ([486a33d](https://github.com/EndurnyrProject/lifthrasir/commit/486a33dec42036c3dd974e21fd7192868437f903))
+* **client:** enable 16x anisotropic filtering for gltf textures ([93e4194](https://github.com/EndurnyrProject/lifthrasir/commit/93e4194c62c1042baf8a3dc9f9963db266761d38))
+* **cli:** inventory RSM2 corpus blockers ([c965fa7](https://github.com/EndurnyrProject/lifthrasir/commit/c965fa7b1c1cfee20012bb37c7e9ac9767b0fd4c))
+* **cli:** normalize map textures to alpha PNGs ([f887378](https://github.com/EndurnyrProject/lifthrasir/commit/f88737866830de44c4ba1ef0a39315f2cda49316))
+* **cli:** per-map prop closure flips lif_prop refs to glbs ([e03478d](https://github.com/EndurnyrProject/lifthrasir/commit/e03478daf32634bac44a5ef28a7ecbbca2011292))
+* **cli:** pilot map prop closure end to end ([8f3a7f3](https://github.com/EndurnyrProject/lifthrasir/commit/8f3a7f3506c60154c7b77c0219557a94dedcd884))
+* **cli:** prop glb validator ([8e385c8](https://github.com/EndurnyrProject/lifthrasir/commit/8e385c854dc2aab8764ceb45efaa4db957fa0514))
+* **cli:** prove the physical RSM corpus ([19cf8cc](https://github.com/EndurnyrProject/lifthrasir/commit/19cf8cc4c8d93b76f8f62d4a99966d7c9e742213))
+* **cli:** rsm to glb prop writer ([4f0be99](https://github.com/EndurnyrProject/lifthrasir/commit/4f0be991d8770611d7c2bddf52cd606193a8d8fb))
+* **cli:** write unified map glb with LIF_* extensions ([1275afa](https://github.com/EndurnyrProject/lifthrasir/commit/1275afafd2b21e4977554338365e7618fc1852a0))
+* **convert:** bake GND-corner water tile selection into the map glb ([1828acb](https://github.com/EndurnyrProject/lifthrasir/commit/1828acbd99cdba73f0e9667a9567b8d7c51d63f8))
+* **convert:** reject prop references that were not converted to glb ([32e9c38](https://github.com/EndurnyrProject/lifthrasir/commit/32e9c3877ca62d9ba8739bd56695765cf2439012))
+* **convert:** stand in for textures the archives do not contain ([736cca5](https://github.com/EndurnyrProject/lifthrasir/commit/736cca558beace13e4c31028e5eae0f3ddf53a44))
+* **data:** add LIF_* map format schemas ([2d33412](https://github.com/EndurnyrProject/lifthrasir/commit/2d33412fe463fbfe14cd9ea3c44f25cd210f2ff9))
+* **data:** define prop UV animation extras ([1d651d1](https://github.com/EndurnyrProject/lifthrasir/commit/1d651d169d5539e2feee45cc774a94d7f38cd240))
+* **data:** LIF_model provenance extension schema ([289463d](https://github.com/EndurnyrProject/lifthrasir/commit/289463d5fce69351704fcafc9d66abb98fe38839))
+* **engine:** audio and effect emitters from glb maps ([a16bd3c](https://github.com/EndurnyrProject/lifthrasir/commit/a16bd3c8077d6355cef7710fb9f683db1d726bf5))
+* **engine:** glb map scene-root adapters ([5c6c89d](https://github.com/EndurnyrProject/lifthrasir/commit/5c6c89db235522c3a51ff1bf1b10a0adb947dc4e))
+* **engine:** glb prop refs spawn gltf scenes ([3a3560e](https://github.com/EndurnyrProject/lifthrasir/commit/3a3560e554167e94535e343cb4e84851e25dcc15))
+* **engine:** ground picking on the glb map path ([35583bf](https://github.com/EndurnyrProject/lifthrasir/commit/35583bf4e85a47e6d14b2d4d64665cc28bf9058e))
+* **engine:** LIF_* extension handler for map glbs ([7d23619](https://github.com/EndurnyrProject/lifthrasir/commit/7d23619a975c0df936d60da19280270e4ce9722f))
+* **engine:** map-gltf feature flag and plugin scaffold ([ad5a628](https://github.com/EndurnyrProject/lifthrasir/commit/ad5a6283e8a1fc840d328535df3c9ef4d16eed65))
+* **engine:** path-agnostic map altitude access ([ca779dd](https://github.com/EndurnyrProject/lifthrasir/commit/ca779dd3ff8b4ae776a4640d02f777a5a2f25a5e))
+* **engine:** pin ktx2+zstd_rust bevy features with loader regression test ([70de215](https://github.com/EndurnyrProject/lifthrasir/commit/70de215a3a1db5939943750a3bb5cd8c182cb88b))
+* **engine:** prop refs resolve to native RSM models ([d73dd33](https://github.com/EndurnyrProject/lifthrasir/commit/d73dd338554b38aea3d0d80000db941d04d6f9ca))
+* **engine:** prop scene observer for animation and material fixup ([70c802e](https://github.com/EndurnyrProject/lifthrasir/commit/70c802eb4c82d535619635865f18a94ae65e3a8c))
+* **engine:** route map loading through glb when present ([913a369](https://github.com/EndurnyrProject/lifthrasir/commit/913a3694aa086bb6e1c04c7e03bd64c709824444))
+* **engine:** water spawning from glb map data ([d8c8931](https://github.com/EndurnyrProject/lifthrasir/commit/d8c8931bce23f65acf9658554c574be1dbadf78f))
+* **formats:** parse strict RSM2 models ([0d718f7](https://github.com/EndurnyrProject/lifthrasir/commit/0d718f7b2e63da428792701a869013612ae5f575))
+* glb map pipeline pilot ([f16dcac](https://github.com/EndurnyrProject/lifthrasir/commit/f16dcac507ba7e284508f3b024eb64d6c2e2e337))
+* **grf-utils:** add merge subcommand for pak patches ([72092ff](https://github.com/EndurnyrProject/lifthrasir/commit/72092ff96edbbf3c980dfabf28824c42c3b4bdd7))
+* **grf-utils:** add pack subcommand producing lifthrasir pak archives ([351cf0f](https://github.com/EndurnyrProject/lifthrasir/commit/351cf0fa11402bfd9ef631e6788dc3bdc518e998))
+* **lif:** carry the water tile mask in LIF_water ([3693754](https://github.com/EndurnyrProject/lifthrasir/commit/3693754bb9a9025a0bf54f4eac4285d7fd9caa5c))
+* **maps:** take water from the GND per zone, and skip maps missing a source ([1a299b5](https://github.com/EndurnyrProject/lifthrasir/commit/1a299b5393a301d6431367cedf08357f9e738310))
+* **models:** dispatch strict RSM2 conversion ([ff2d750](https://github.com/EndurnyrProject/lifthrasir/commit/ff2d750700c4ae88b485978f20b72e87b1550fcb))
+* **models:** encode UV animation in GLB ([b10425f](https://github.com/EndurnyrProject/lifthrasir/commit/b10425f050d974809fad8e82b23a4ca643f02900))
+* **models:** normalize complete RSM2 semantics ([1776223](https://github.com/EndurnyrProject/lifthrasir/commit/17762236e1a419ee80e6e081eeb46ae3777be368))
+* Moved all assets to the data folder and using the PAK reader ([8f1bb7b](https://github.com/EndurnyrProject/lifthrasir/commit/8f1bb7bc001926cfdd2864224ba0f1656cc441a0))
+* **pak:** stop packing map and model source formats ([509270c](https://github.com/EndurnyrProject/lifthrasir/commit/509270c3f4b9d87b90ef4040109ee49a837b19e0))
+* **world:** drive glb map water from the baked tile mask ([b7b4efb](https://github.com/EndurnyrProject/lifthrasir/commit/b7b4efbeef64a97ab225871185d9f38f0a4510e9))
+* **world:** play per-instance prop UV animation ([091ad3f](https://github.com/EndurnyrProject/lifthrasir/commit/091ad3fe6f9731321c5d2b3c79a54a513f218c6a))
+
+
+### Bug Fixes
+
+* **convert:** read a texture the way the GRF resolves it ([7187c4f](https://github.com/EndurnyrProject/lifthrasir/commit/7187c4f7dd14b97007de49a3a547c3f519f1ad3e))
+* **engine:** keep map glb assets alive across same-map warps ([dd81193](https://github.com/EndurnyrProject/lifthrasir/commit/dd8119398d9c0ce7040f1076685fa305a1e4bab8))
+* **maps:** drop RSW objects carrying numbers glTF cannot express ([3b5ce2f](https://github.com/EndurnyrProject/lifthrasir/commit/3b5ce2fc4e7ab3bdb22a3f3d082c5a4c032b46f5))
+* **maps:** fail closed on unusable RSM2 props ([e8010c5](https://github.com/EndurnyrProject/lifthrasir/commit/e8010c5a9ab1fe43bb2407fac423c626b522930b))
+* **props:** defer prop wiring until the glb's dependencies finish loading ([03c8bcb](https://github.com/EndurnyrProject/lifthrasir/commit/03c8bcb84e8740ea831ccf1cf71031dc91046b1b))
+* **props:** gate prop wiring on material assets existing, not load state ([cceb36a](https://github.com/EndurnyrProject/lifthrasir/commit/cceb36adf880ee793f1c142f7c796e91263bac91))
+* **props:** stop Bevy's double-sided backface normal flip inverting lighting on mirrored placements ([a7afbfd](https://github.com/EndurnyrProject/lifthrasir/commit/a7afbfd13c92fbe327a5ef293eb55ade27fabb19))
+* **ro-formats:** correct RSM1, RSW and GND layouts and fail loudly on desync ([aa6bcf0](https://github.com/EndurnyrProject/lifthrasir/commit/aa6bcf0109035c35a43b50878930956a3d0ba2a2))
+* **rsm1:** fold pre-roll rotation keyframes onto the start of the loop ([565184d](https://github.com/EndurnyrProject/lifthrasir/commit/565184d412948cdbaf1013e604a56b49a9802996))
+* **rsm2:** keep every node when names repeat instead of rejecting the model ([695248a](https://github.com/EndurnyrProject/lifthrasir/commit/695248a83e0a25f42b33d6a1c991d0fa6935a3ef))
+
+
+### Performance Improvements
+
+* **grf-utils:** parallelize pack compression ([5a42ae4](https://github.com/EndurnyrProject/lifthrasir/commit/5a42ae495f1eaba0abfc3bc3f19b096f6659ac8c))
+
+
+### Code Refactoring
+
+* **assets:** delete the rsw, gnd and rsm asset loaders ([f93f81f](https://github.com/EndurnyrProject/lifthrasir/commit/f93f81f72c79d2b13d0c23f8461621017e01b335))
+* **render:** delete the native rsw lighting plugin ([41c8854](https://github.com/EndurnyrProject/lifthrasir/commit/41c8854db6fda205e8aad8d7db5c07003a21e3ad))
+* **world:** delete native map loading, require a map glb ([48a152e](https://github.com/EndurnyrProject/lifthrasir/commit/48a152e2dfdce4abcded8ef9b1061f1e22d8057d))
+* **world:** delete the legacy rsm model renderer ([a62423e](https://github.com/EndurnyrProject/lifthrasir/commit/a62423e5d30f97e26365740c97ba0eaf01da82e8))
+
 ## [0.8.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.7.0...v0.8.0) (2026-07-26)
 
 
