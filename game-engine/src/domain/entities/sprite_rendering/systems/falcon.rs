@@ -1,11 +1,12 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
-use net_contract::events::{UnitEntered, UnitStateChanged};
+use net_contract::events::{SkillEffectShown, UnitEntered, UnitStateChanged};
 
 use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
+use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
 use crate::domain::entities::character::systems::OPTION_FALCON;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::components::{
@@ -49,12 +50,52 @@ pub struct FalconFollow {
     lag: Vec3,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FalconFlightState {
+    Perched,
+    Outbound { origin: Vec3, position: Vec3 },
+    Strike { position: Vec3 },
+    Returning { origin: Vec3, position: Vec3 },
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct FalconFlight {
+    pub state: FalconFlightState,
+    pub target: Option<Entity>,
+    pub elapsed: f32,
+}
+
+impl Default for FalconFlight {
+    fn default() -> Self {
+        Self {
+            state: FalconFlightState::Perched,
+            target: None,
+            elapsed: 0.0,
+        }
+    }
+}
+
+impl FalconFlight {
+    fn position(&self, rest: Vec3) -> Vec3 {
+        match self.state {
+            FalconFlightState::Perched => rest,
+            FalconFlightState::Outbound { position, .. }
+            | FalconFlightState::Strike { position }
+            | FalconFlightState::Returning { position, .. } => position,
+        }
+    }
+}
+
 const FALCON_REST_OFFSET: Vec3 = Vec3::new(
     PIXELS_PER_METRE * 2.0,
     SPRITE_BASE_Y_OFFSET - PIXELS_PER_METRE * 2.0,
     0.0,
 );
 const FALCON_FOLLOW_RATE: f32 = 6.0;
+const FALCON_OUTBOUND_DURATION: f32 = 0.3;
+const FALCON_STRIKE_DURATION: f32 = 0.15;
+const FALCON_RETURN_DURATION: f32 = 0.35;
+const HT_BLITZBEAT: u32 = 129;
 /// Largest trail the falcon may accumulate, in world units.
 ///
 /// Ordinary walking never approaches this. It exists for a same-map teleport
@@ -118,6 +159,55 @@ pub fn apply_falcon_mount(
             &mut commands,
             &asset_server,
         );
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::AnimationEvents)
+)]
+pub fn trigger_falcon_swoop(
+    mut effects: MessageReader<SkillEffectShown>,
+    registry: Res<EntityRegistry>,
+    mut flights: Query<&mut FalconFlight>,
+    follows: Query<(&ChildOf, &FalconFollow)>,
+) {
+    for effect in effects
+        .read()
+        .filter(|effect| effect.skill_id == HT_BLITZBEAT)
+    {
+        let (Some(owner), Some(target)) = (
+            registry.get_entity(effect.src_id),
+            registry.get_entity(effect.target_id),
+        ) else {
+            continue;
+        };
+        let Ok(mut flight) = flights.get_mut(owner) else {
+            continue;
+        };
+        // A perched falcon renders at rest + lag, not at rest, so seeding the
+        // swoop from the bare rest offset would snap it by the whole trail the
+        // instant a moving Hunter casts. Lag is owner-uniform (see
+        // `FalconFollow`), so any one quad's value is the falcon's. Mid-flight
+        // lag is already zero, so only the perched case needs it.
+        let current = match flight.state {
+            FalconFlightState::Perched => {
+                let lag = follows
+                    .iter()
+                    .find(|(child_of, _)| child_of.parent() == owner)
+                    .map(|(_, follow)| follow.lag)
+                    .unwrap_or(Vec3::ZERO);
+                FALCON_REST_OFFSET + lag
+            }
+            _ => flight.position(FALCON_REST_OFFSET),
+        };
+        flight.state = FalconFlightState::Outbound {
+            origin: current,
+            position: current,
+        };
+        flight.target = Some(target);
+        flight.elapsed = 0.0;
     }
 }
 
@@ -220,6 +310,85 @@ pub fn finalize_falcon_layer(
     }
 }
 
+fn advance_falcon_flight(
+    flight: &mut FalconFlight,
+    dt: f32,
+    owner: &GlobalTransform,
+    target: Option<&GlobalTransform>,
+    rest: Vec3,
+) -> Vec3 {
+    flight.elapsed += dt;
+    flight.state = match flight.state {
+        FalconFlightState::Perched => FalconFlightState::Perched,
+        FalconFlightState::Outbound { origin, position } => {
+            let Some(target) = target else {
+                flight.elapsed = 0.0;
+                flight.target = None;
+                return set_returning(flight, position);
+            };
+            let destination = owner
+                .affine()
+                .inverse()
+                .transform_point3(target.translation());
+            let t = (flight.elapsed / FALCON_OUTBOUND_DURATION).min(1.0);
+            let position = origin.lerp(destination, t);
+            if t >= 1.0 {
+                flight.elapsed = 0.0;
+                FalconFlightState::Strike { position }
+            } else {
+                FalconFlightState::Outbound { origin, position }
+            }
+        }
+        FalconFlightState::Strike { position } => {
+            if target.is_none() || flight.elapsed >= FALCON_STRIKE_DURATION {
+                flight.elapsed = 0.0;
+                flight.target = None;
+                FalconFlightState::Returning {
+                    origin: position,
+                    position,
+                }
+            } else {
+                FalconFlightState::Strike { position }
+            }
+        }
+        FalconFlightState::Returning { origin, .. } => {
+            let t = (flight.elapsed / FALCON_RETURN_DURATION).min(1.0);
+            let position = origin.lerp(rest, t);
+            if t >= 1.0 {
+                flight.elapsed = 0.0;
+                FalconFlightState::Perched
+            } else {
+                FalconFlightState::Returning { origin, position }
+            }
+        }
+    };
+    flight.position(rest)
+}
+
+fn set_returning(flight: &mut FalconFlight, position: Vec3) -> Vec3 {
+    flight.state = FalconFlightState::Returning {
+        origin: position,
+        position,
+    };
+    position
+}
+
+fn flight_direction(
+    from: Vec3,
+    to: Vec3,
+    owner_world_facing: Direction,
+    owner_display_facing: Direction,
+) -> Option<Direction> {
+    let movement = to - from;
+    if movement.x.abs() < 0.01 && movement.z.abs() < 0.01 {
+        return None;
+    }
+    let world = Direction::from_movement_vector(movement.x, movement.z);
+    let camera_octant =
+        (owner_display_facing as i16 - owner_world_facing as i16).rem_euclid(8) as u8;
+    Some(Direction::from_u8((world as u8 + camera_octant) % 8))
+}
+
 type FalconLayerQuery<'w, 's> = Query<
     'w,
     's,
@@ -246,23 +415,58 @@ pub fn sync_falcon_layer(
     time: Res<Time>,
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    owner_query: Query<(&PlayerSprite, &Transform), Without<FalconLayer>>,
+    owner_query: Query<(&PlayerSprite, &CharacterDirection, &Transform), Without<FalconLayer>>,
+    mut flight_query: Query<(Entity, &GlobalTransform, &mut FalconFlight)>,
+    target_query: Query<&GlobalTransform>,
     mut falcon_query: FalconLayerQuery,
 ) {
     let game_time_ms = time.elapsed_secs() * 1000.0;
     let damping = (-FALCON_FOLLOW_RATE * time.delta_secs()).exp();
+    let mut flight_offsets = HashMap::new();
+    let mut flying = HashSet::new();
+
+    for (owner_entity, owner_global, mut flight) in &mut flight_query {
+        let target = flight
+            .target
+            .and_then(|entity| target_query.get(entity).ok());
+        let previous = flight.position(FALCON_REST_OFFSET);
+        let offset = advance_falcon_flight(
+            &mut flight,
+            time.delta_secs(),
+            owner_global,
+            target,
+            FALCON_REST_OFFSET,
+        );
+        if flight.state != FalconFlightState::Perched {
+            flying.insert(owner_entity);
+        }
+        flight_offsets.insert(owner_entity, (previous, offset));
+    }
 
     for (layer, falcon, child_of, material_handle, mut follow, mut transform, mut visibility) in
         &mut falcon_query
     {
-        let Ok((owner_sprite, owner_transform)) = owner_query.get(child_of.parent()) else {
+        let owner_entity = child_of.parent();
+        let Ok((owner_sprite, owner_direction, owner_transform)) = owner_query.get(owner_entity)
+        else {
             continue;
         };
         let Some(animation) = animations.get(&layer.animation) else {
             continue;
         };
 
-        let Some(action) = animation.actions.get(owner_sprite.direction as usize) else {
+        let direction = flight_offsets
+            .get(&owner_entity)
+            .and_then(|(previous, offset)| {
+                flight_direction(
+                    *previous,
+                    *offset,
+                    owner_direction.facing,
+                    owner_sprite.direction,
+                )
+            })
+            .unwrap_or(owner_sprite.direction);
+        let Some(action) = animation.actions.get(direction as usize) else {
             visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
@@ -271,12 +475,23 @@ pub fn sync_falcon_layer(
             continue;
         }
 
-        if let Some(previous) = follow.previous_owner_position {
-            follow.lag -= owner_transform.translation - previous;
-            follow.lag = follow.lag.clamp_length_max(FALCON_MAX_LAG);
+        let flight_offset = flight_offsets
+            .get(&owner_entity)
+            .map(|(_, offset)| *offset)
+            .unwrap_or(FALCON_REST_OFFSET);
+        if flying.contains(&owner_entity) {
+            // Flight owns the local offset; bypass and zero follow lag so the two
+            // motion models cannot fight or leave drift when the falcon perches.
+            follow.lag = Vec3::ZERO;
+            follow.previous_owner_position = Some(owner_transform.translation);
+        } else {
+            if let Some(previous) = follow.previous_owner_position {
+                follow.lag -= owner_transform.translation - previous;
+                follow.lag = follow.lag.clamp_length_max(FALCON_MAX_LAG);
+            }
+            follow.previous_owner_position = Some(owner_transform.translation);
+            follow.lag *= damping;
         }
-        follow.previous_owner_position = Some(owner_transform.translation);
-        follow.lag *= damping;
 
         let delay = action.delay_ms.max(1.0);
         let frame_index = (game_time_ms / delay) as usize % action.frames.len();
@@ -300,9 +515,9 @@ pub fn sync_falcon_layer(
         let current = *transform;
         transform.set_if_neq(Transform {
             translation: Vec3::new(
-                part.position.x * SPRITE_WORLD_SCALE + FALCON_REST_OFFSET.x + follow.lag.x,
-                -part.position.y * SPRITE_WORLD_SCALE + FALCON_REST_OFFSET.y + follow.lag.y,
-                part_z + follow.lag.z,
+                part.position.x * SPRITE_WORLD_SCALE + flight_offset.x + follow.lag.x,
+                -part.position.y * SPRITE_WORLD_SCALE + flight_offset.y + follow.lag.y,
+                part_z + flight_offset.z + follow.lag.z,
             ),
             scale: Vec3::new(
                 scale_x,
@@ -331,6 +546,7 @@ fn apply_falcon_state(
 
     match (mounted, existing.is_empty()) {
         (true, true) => {
+            commands.entity(entity).insert(FalconFlight::default());
             commands.spawn((
                 FalconLayer { part: 0 },
                 FalconAnimationPending {
@@ -346,6 +562,7 @@ fn apply_falcon_state(
             ));
         }
         (false, false) => {
+            commands.entity(entity).remove::<FalconFlight>();
             for child in existing {
                 commands.entity(child).despawn();
             }
@@ -359,10 +576,11 @@ mod tests {
     use std::time::Duration;
 
     use bevy::prelude::*;
-    use net_contract::events::{UnitEntered, UnitStateChanged};
+    use net_contract::events::{
+        SkillDamageReceived, SkillEffectShown, UnitEntered, UnitStateChanged,
+    };
 
     use super::*;
-    use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
     use crate::domain::entities::character::systems::OPTION_FALCON;
     use crate::domain::entities::registry::EntityRegistry;
     use crate::domain::entities::sprite_rendering::components::FalconLayer;
@@ -514,6 +732,135 @@ mod tests {
         emit_state(&mut app, 0);
 
         assert!(falcon_children(&mut app, unit).is_empty());
+        assert!(!app.world().entity(unit).contains::<FalconFlight>());
+    }
+
+    fn trigger_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<SkillEffectShown>()
+            .add_message::<SkillDamageReceived>()
+            .init_resource::<EntityRegistry>()
+            .add_systems(Update, trigger_falcon_swoop);
+        app
+    }
+
+    fn emit_blitz(app: &mut App, src_id: u32, target_id: u32) {
+        app.world_mut().write_message(SkillEffectShown {
+            skill_id: HT_BLITZBEAT,
+            level: 5,
+            src_id,
+            target_id,
+            result: 0,
+        });
+        app.update();
+    }
+
+    #[test]
+    fn recast_system_restarts_from_current_position() {
+        let mut app = trigger_app();
+        let current = Vec3::new(9.0, -3.0, 0.0);
+        let owner = app
+            .world_mut()
+            .spawn(FalconFlight {
+                state: FalconFlightState::Strike { position: current },
+                target: None,
+                elapsed: 0.1,
+            })
+            .id();
+        let target = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, owner);
+        register(&mut app, 8, target);
+
+        emit_blitz(&mut app, 7, 8);
+
+        let flight = app.world().get::<FalconFlight>(owner).unwrap();
+        assert_eq!(
+            flight.state,
+            FalconFlightState::Outbound {
+                origin: current,
+                position: current
+            }
+        );
+        assert_eq!(flight.elapsed, 0.0);
+    }
+
+    #[test]
+    fn swoop_from_a_moving_owner_starts_where_the_falcon_is_rendered() {
+        let mut app = trigger_app();
+        let lag = Vec3::new(-4.0, 1.5, 0.0);
+        let owner = app.world_mut().spawn(FalconFlight::default()).id();
+        app.world_mut().spawn((
+            ChildOf(owner),
+            FalconLayer { part: 0 },
+            FalconFollow {
+                previous_owner_position: None,
+                lag,
+            },
+        ));
+        let target = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, owner);
+        register(&mut app, 8, target);
+
+        emit_blitz(&mut app, 7, 8);
+
+        // A trailing falcon must dive from where it is drawn, not snap back to
+        // the rest offset first.
+        let flight = app.world().get::<FalconFlight>(owner).unwrap();
+        assert_eq!(
+            flight.state,
+            FalconFlightState::Outbound {
+                origin: FALCON_REST_OFFSET + lag,
+                position: FALCON_REST_OFFSET + lag,
+            }
+        );
+    }
+
+    #[test]
+    fn damage_packets_do_not_restart_the_cast_swoop() {
+        let mut app = trigger_app();
+        let owner = app.world_mut().spawn(FalconFlight::default()).id();
+        let target = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, owner);
+        register(&mut app, 8, target);
+        emit_blitz(&mut app, 7, 8);
+        app.world_mut()
+            .get_mut::<FalconFlight>(owner)
+            .unwrap()
+            .elapsed = 0.2;
+
+        for _ in 0..3 {
+            app.world_mut().write_message(SkillDamageReceived {
+                skill_id: HT_BLITZBEAT,
+                level: 5,
+                src_id: 7,
+                target_id: 8,
+                server_tick: 0,
+                damage: 100,
+                div: 5,
+                type_: 0,
+                src_delay: 0,
+                dst_delay: 0,
+            });
+            app.update();
+        }
+
+        assert_eq!(app.world().get::<FalconFlight>(owner).unwrap().elapsed, 0.2);
+    }
+
+    #[test]
+    fn unresolved_caster_does_not_trigger_a_swoop() {
+        let mut app = trigger_app();
+        let target = app.world_mut().spawn_empty().id();
+        register(&mut app, 8, target);
+
+        emit_blitz(&mut app, 7, 8);
+
+        assert!(
+            !app.world()
+                .iter_entities()
+                .any(|entity| entity.contains::<FalconFlight>())
+        );
     }
 
     fn sync_app() -> App {
@@ -561,7 +908,12 @@ mod tests {
             .add(StandardMaterial::default());
         let owner = app
             .world_mut()
-            .spawn((PlayerSprite::default(), Transform::default()))
+            .spawn((
+                PlayerSprite::default(),
+                CharacterDirection::default(),
+                Transform::default(),
+                GlobalTransform::default(),
+            ))
             .id();
         let falcon = app
             .world_mut()
@@ -641,6 +993,105 @@ mod tests {
         let second = app.world().get::<Transform>(falcon).unwrap().translation.x;
 
         assert_ne!(first, second);
+    }
+
+    fn global(position: Vec3) -> GlobalTransform {
+        GlobalTransform::from_translation(position)
+    }
+
+    fn outbound(target: Entity) -> FalconFlight {
+        FalconFlight {
+            state: FalconFlightState::Outbound {
+                origin: FALCON_REST_OFFSET,
+                position: FALCON_REST_OFFSET,
+            },
+            target: Some(target),
+            elapsed: 0.0,
+        }
+    }
+
+    #[test]
+    fn swoop_completes_full_cycle_without_drift() {
+        let target_entity = Entity::from_bits(2);
+        let owner = global(Vec3::new(10.0, 0.0, 0.0));
+        let target = global(Vec3::new(20.0, 0.0, 0.0));
+        let mut flight = outbound(target_entity);
+        let mut states = Vec::new();
+
+        for _ in 0..9 {
+            advance_falcon_flight(&mut flight, 0.1, &owner, Some(&target), FALCON_REST_OFFSET);
+            states.push(flight.state);
+        }
+
+        assert!(
+            states
+                .iter()
+                .any(|state| matches!(state, FalconFlightState::Strike { .. }))
+        );
+        assert!(
+            states
+                .iter()
+                .any(|state| matches!(state, FalconFlightState::Returning { .. }))
+        );
+        assert_eq!(flight.state, FalconFlightState::Perched);
+        assert_eq!(flight.position(FALCON_REST_OFFSET), FALCON_REST_OFFSET);
+    }
+
+    #[test]
+    fn lost_target_returns_from_current_position() {
+        let target_entity = Entity::from_bits(2);
+        let owner = global(Vec3::ZERO);
+        let target = global(Vec3::new(20.0, 0.0, 0.0));
+        let mut flight = outbound(target_entity);
+        let current =
+            advance_falcon_flight(&mut flight, 0.1, &owner, Some(&target), FALCON_REST_OFFSET);
+
+        let after_loss = advance_falcon_flight(&mut flight, 0.1, &owner, None, FALCON_REST_OFFSET);
+
+        assert!(matches!(flight.state, FalconFlightState::Returning { .. }));
+        assert_eq!(after_loss, current);
+    }
+
+    #[test]
+    fn outbound_recomputes_moving_target_position() {
+        let target_entity = Entity::from_bits(2);
+        let owner = global(Vec3::ZERO);
+        let mut flight = outbound(target_entity);
+        advance_falcon_flight(
+            &mut flight,
+            0.1,
+            &owner,
+            Some(&global(Vec3::new(10.0, 0.0, 0.0))),
+            FALCON_REST_OFFSET,
+        );
+        let tracked = advance_falcon_flight(
+            &mut flight,
+            0.1,
+            &owner,
+            Some(&global(Vec3::new(20.0, 0.0, 0.0))),
+            FALCON_REST_OFFSET,
+        );
+
+        assert!(tracked.x > 10.0);
+    }
+
+    #[test]
+    fn recast_restarts_outbound_at_current_position() {
+        let target_entity = Entity::from_bits(2);
+        let owner = global(Vec3::ZERO);
+        let target = global(Vec3::new(20.0, 0.0, 0.0));
+        let mut flight = outbound(target_entity);
+        let current =
+            advance_falcon_flight(&mut flight, 0.1, &owner, Some(&target), FALCON_REST_OFFSET);
+
+        flight.state = FalconFlightState::Outbound {
+            origin: current,
+            position: current,
+        };
+        flight.elapsed = 0.0;
+
+        assert_eq!(flight.position(FALCON_REST_OFFSET), current);
+        assert!(matches!(flight.state, FalconFlightState::Outbound { .. }));
     }
 
     #[test]

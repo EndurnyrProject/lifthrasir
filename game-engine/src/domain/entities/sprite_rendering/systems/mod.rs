@@ -22,7 +22,9 @@ pub use events::{
     EquipmentChangeEvent, StatusEffectVisualEvent, handle_equipment_changes,
     handle_status_effect_visuals,
 };
-pub use falcon::{apply_falcon_mount, finalize_falcon_layer, sync_falcon_layer};
+pub use falcon::{
+    apply_falcon_mount, finalize_falcon_layer, sync_falcon_layer, trigger_falcon_swoop,
+};
 pub use head_sync::sync_player_head_layer;
 pub use headgear_sync::sync_headgear_layer;
 pub use job_change::apply_base_look_changes;
