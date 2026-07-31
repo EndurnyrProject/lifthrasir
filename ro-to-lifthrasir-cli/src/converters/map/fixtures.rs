@@ -6,7 +6,7 @@ use crate::converters::ktx2_out::encode_ktx2;
 use crate::converters::map::terrain::{TerrainPrimitive, build_terrain};
 use crate::converters::map::textures::TextureOut;
 use crate::converters::map::writer::{MapGlbInputs, write_glb};
-use image::RgbaImage;
+use image::{Rgba, RgbaImage};
 use lifthrasir_data::lif;
 use ro_formats::{
     GndSurface, GndTile, RoGround, RoWorld, RswEffect, RswGround, RswLight, RswLightObj, RswModel,
@@ -276,6 +276,30 @@ fn regenerate_game_engine_fixtures() {
     // ordinary glTF that the runtime's handler must not touch at all.
     let plain = patched_glb(&good, "LIF_", "XIF_");
     std::fs::write(out.join("plain.glb"), plain).expect("write plain.glb");
+}
+
+/// Regenerates the multi-level KTX2 image used by the runtime loader test.
+///
+/// ```text
+/// cargo test -p ro-to-lifthrasir-cli -- --ignored generate_mip_probe_fixture
+/// ```
+#[test]
+#[ignore = "rewrites committed fixture under game-engine/tests/fixtures"]
+fn generate_mip_probe_fixture() {
+    let out = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root")
+        .join("game-engine/tests/fixtures/tex/mip_probe.ktx2");
+    let image = RgbaImage::from_fn(4, 4, |x, y| match (x < 2, y < 2) {
+        (true, true) => Rgba([255, 0, 0, 255]),
+        (false, true) => Rgba([0, 255, 0, 255]),
+        (true, false) => Rgba([0, 0, 255, 255]),
+        (false, false) => Rgba([255, 255, 255, 255]),
+    });
+    let bytes = encode_ktx2(&image, true).expect("encode mip probe KTX2");
+
+    std::fs::create_dir_all(out.parent().expect("tex dir")).expect("create tex dir");
+    std::fs::write(out, bytes).expect("write mip probe KTX2");
 }
 
 /// Rewrites every occurrence of `needle` in a glb's JSON chunk. Only
