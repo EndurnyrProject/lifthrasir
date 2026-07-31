@@ -8,10 +8,14 @@ use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::systems::OPTION_FALCON;
 use crate::domain::entities::registry::EntityRegistry;
-use crate::domain::entities::sprite_rendering::components::{FalconLayer, RenderLayer};
+use crate::domain::entities::sprite_rendering::components::{
+    FalconLayer, PlayerSprite, RenderLayer,
+};
+use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
 use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::{
-    LAYER_FALCON, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER, layer_depth_bias, layer_order,
+    LAYER_FALCON, PIXELS_PER_METRE, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER, layer_depth_bias,
+    layer_order,
 };
 use crate::domain::system_sets::{EntityLifecycleSystems, SpriteRenderingSystems};
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
@@ -31,6 +35,33 @@ pub struct FalconAnimationPending {
     spr: Handle<RoSpriteAsset>,
     act: Handle<RoActAsset>,
 }
+
+/// Trailing state, held per quad.
+///
+/// Every quad of the falcon integrates the *same* lag from the same owner
+/// motion, so they stay locked together. That only holds while every early
+/// return in `sync_falcon_layer` before the lag update is owner-uniform - one
+/// that skips some quads but not others would let them drift apart and visibly
+/// shear the sprite. Keep per-part bail-outs after the lag update.
+#[derive(Component, Default)]
+pub struct FalconFollow {
+    previous_owner_position: Option<Vec3>,
+    lag: Vec3,
+}
+
+const FALCON_REST_OFFSET: Vec3 = Vec3::new(
+    PIXELS_PER_METRE * 2.0,
+    SPRITE_BASE_Y_OFFSET - PIXELS_PER_METRE * 2.0,
+    0.0,
+);
+const FALCON_FOLLOW_RATE: f32 = 6.0;
+/// Largest trail the falcon may accumulate, in world units.
+///
+/// Ordinary walking never approaches this. It exists for a same-map teleport
+/// (Warp Portal), where the owner's single-frame delta would otherwise fling
+/// the falcon the entire warp distance and glide it back over a second. A
+/// map change despawns the falcon outright, so only the same-map case matters.
+const FALCON_MAX_LAG: f32 = PIXELS_PER_METRE * 8.0;
 
 type FalconOwnerQuery<'w, 's> = Query<'w, 's, (Entity, &'static ChildOf), With<FalconLayer>>;
 
@@ -160,6 +191,7 @@ pub fn finalize_falcon_layer(
                 Billboard,
                 RenderLayer::body(animation.clone(), LAYER_FALCON, textures.clone()),
                 FalconLayer { part },
+                FalconFollow::default(),
                 Transform {
                     translation: Vec3::new(
                         part_data.position.x * SPRITE_WORLD_SCALE,
@@ -185,6 +217,101 @@ pub fn finalize_falcon_layer(
                 commands.spawn(components);
             }
         }
+    }
+}
+
+type FalconLayerQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static RenderLayer,
+        &'static FalconLayer,
+        &'static ChildOf,
+        &'static MeshMaterial3d<StandardMaterial>,
+        &'static mut FalconFollow,
+        &'static mut Transform,
+        &'static mut Visibility,
+    ),
+>;
+
+/// Drives the falcon's idle flap and keeps it hovering beside its owner. Owner
+/// movement first displaces the child by the inverse delta, then exponential
+/// damping returns it to its resting offset without depending on frame rate.
+#[auto_add_system(
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::TransformUpdate)
+)]
+pub fn sync_falcon_layer(
+    time: Res<Time>,
+    animations: Res<Assets<RoAnimationAsset>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    owner_query: Query<(&PlayerSprite, &Transform), Without<FalconLayer>>,
+    mut falcon_query: FalconLayerQuery,
+) {
+    let game_time_ms = time.elapsed_secs() * 1000.0;
+    let damping = (-FALCON_FOLLOW_RATE * time.delta_secs()).exp();
+
+    for (layer, falcon, child_of, material_handle, mut follow, mut transform, mut visibility) in
+        &mut falcon_query
+    {
+        let Ok((owner_sprite, owner_transform)) = owner_query.get(child_of.parent()) else {
+            continue;
+        };
+        let Some(animation) = animations.get(&layer.animation) else {
+            continue;
+        };
+
+        let Some(action) = animation.actions.get(owner_sprite.direction as usize) else {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+        if action.frames.is_empty() {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        }
+
+        if let Some(previous) = follow.previous_owner_position {
+            follow.lag -= owner_transform.translation - previous;
+            follow.lag = follow.lag.clamp_length_max(FALCON_MAX_LAG);
+        }
+        follow.previous_owner_position = Some(owner_transform.translation);
+        follow.lag *= damping;
+
+        let delay = action.delay_ms.max(1.0);
+        let frame_index = (game_time_ms / delay) as usize % action.frames.len();
+        let Some(part) = action.frames[frame_index].parts.get(falcon.part) else {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+
+        if let Some(texture) = animation.textures.get(part.texture_index) {
+            set_layer_texture(&mut materials, &material_handle.0, texture);
+        }
+
+        let scale_x = if part.mirror {
+            -part.scale.x
+        } else {
+            part.scale.x
+        } * part.texture_size.x
+            * SPRITE_WORLD_SCALE;
+        let part_z =
+            layer_order(LAYER_FALCON) as f32 * Z_OFFSET_PER_LAYER + falcon.part as f32 * 0.001;
+        let current = *transform;
+        transform.set_if_neq(Transform {
+            translation: Vec3::new(
+                part.position.x * SPRITE_WORLD_SCALE + FALCON_REST_OFFSET.x + follow.lag.x,
+                -part.position.y * SPRITE_WORLD_SCALE + FALCON_REST_OFFSET.y + follow.lag.y,
+                part_z + follow.lag.z,
+            ),
+            scale: Vec3::new(
+                scale_x,
+                part.scale.y * part.texture_size.y * SPRITE_WORLD_SCALE,
+                1.0,
+            ),
+            ..current
+        });
+        visibility.set_if_neq(Visibility::Inherited);
     }
 }
 
@@ -229,14 +356,18 @@ fn apply_falcon_state(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use bevy::prelude::*;
     use net_contract::events::{UnitEntered, UnitStateChanged};
 
     use super::*;
+    use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
     use crate::domain::entities::character::systems::OPTION_FALCON;
     use crate::domain::entities::registry::EntityRegistry;
     use crate::domain::entities::sprite_rendering::components::FalconLayer;
     use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
+    use crate::infrastructure::assets::ro_animation_asset::{ActionData, FrameData, FramePart};
 
     fn app() -> App {
         let mut app = App::new();
@@ -383,5 +514,156 @@ mod tests {
         emit_state(&mut app, 0);
 
         assert!(falcon_children(&mut app, unit).is_empty());
+    }
+
+    fn sync_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_asset::<StandardMaterial>()
+            .init_asset::<RoAnimationAsset>()
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                Duration::from_millis(100),
+            ))
+            .add_systems(Update, sync_falcon_layer);
+        app
+    }
+
+    fn part(position: Vec2, texture_index: usize) -> FramePart {
+        FramePart {
+            texture_index,
+            transform: Mat4::IDENTITY,
+            position,
+            scale: Vec2::ONE,
+            texture_size: Vec2::ONE,
+            color: Color::WHITE,
+            mirror: false,
+        }
+    }
+
+    fn spawn_synced_falcon(app: &mut App, actions: Vec<ActionData>) -> (Entity, Entity) {
+        let textures = {
+            let mut images = app.world_mut().resource_mut::<Assets<Image>>();
+            vec![images.add(Image::default()), images.add(Image::default())]
+        };
+        let animation = app
+            .world_mut()
+            .resource_mut::<Assets<RoAnimationAsset>>()
+            .add(RoAnimationAsset {
+                textures: textures.clone(),
+                actions,
+                layer: LAYER_FALCON,
+                sounds: Vec::new(),
+            });
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let owner = app
+            .world_mut()
+            .spawn((PlayerSprite::default(), Transform::default()))
+            .id();
+        let falcon = app
+            .world_mut()
+            .spawn((
+                RenderLayer::body(animation, LAYER_FALCON, textures),
+                FalconLayer { part: 0 },
+                FalconFollow::default(),
+                MeshMaterial3d(material),
+                Transform::default(),
+                Visibility::Hidden,
+                ChildOf(owner),
+            ))
+            .id();
+        (owner, falcon)
+    }
+
+    fn idle_actions(frame_positions: &[Vec2]) -> Vec<ActionData> {
+        (0..8)
+            .map(|_| ActionData {
+                frames: frame_positions
+                    .iter()
+                    .enumerate()
+                    .map(|(index, position)| FrameData {
+                        parts: vec![part(*position, index % 2)],
+                        ..default()
+                    })
+                    .collect(),
+                delay_ms: 100.0,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn stationary_falcon_settles_at_resting_offset() {
+        let mut app = sync_app();
+        let (_, falcon) = spawn_synced_falcon(&mut app, idle_actions(&[Vec2::ZERO]));
+
+        app.update();
+
+        let translation = app.world().get::<Transform>(falcon).unwrap().translation;
+        assert_eq!(translation.x, FALCON_REST_OFFSET.x);
+        assert_eq!(translation.y, FALCON_REST_OFFSET.y);
+        assert!(translation.y < 0.0, "world-up hover must use negative Y");
+    }
+
+    #[test]
+    fn falcon_lags_after_owner_moves_then_converges() {
+        let mut app = sync_app();
+        let (owner, falcon) = spawn_synced_falcon(&mut app, idle_actions(&[Vec2::ZERO]));
+        app.update();
+
+        app.world_mut()
+            .get_mut::<Transform>(owner)
+            .unwrap()
+            .translation
+            .x = 10.0;
+        app.update();
+        let lagged_x = app.world().get::<Transform>(falcon).unwrap().translation.x;
+        assert!(lagged_x < FALCON_REST_OFFSET.x);
+
+        for _ in 0..20 {
+            app.update();
+        }
+        let settled_x = app.world().get::<Transform>(falcon).unwrap().translation.x;
+        assert!((settled_x - FALCON_REST_OFFSET.x).abs() < 0.001);
+    }
+
+    #[test]
+    fn falcon_idle_action_advances_frames() {
+        let mut app = sync_app();
+        let (_, falcon) =
+            spawn_synced_falcon(&mut app, idle_actions(&[Vec2::ZERO, Vec2::new(5.0, 0.0)]));
+
+        app.update();
+        let first = app.world().get::<Transform>(falcon).unwrap().translation.x;
+        app.update();
+        let second = app.world().get::<Transform>(falcon).unwrap().translation.x;
+
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn falcon_uses_owners_camera_relative_facing() {
+        let mut app = sync_app();
+        let mut actions = idle_actions(&[Vec2::ZERO]);
+        actions[Direction::West as usize].frames[0].parts[0]
+            .position
+            .x = 7.0;
+        let (owner, falcon) = spawn_synced_falcon(&mut app, actions);
+        app.world_mut()
+            .entity_mut(owner)
+            .insert(CharacterDirection {
+                facing: Direction::South,
+            });
+        app.world_mut()
+            .get_mut::<PlayerSprite>(owner)
+            .unwrap()
+            .direction = Direction::West;
+
+        app.update();
+
+        let x = app.world().get::<Transform>(falcon).unwrap().translation.x;
+        assert_eq!(x, FALCON_REST_OFFSET.x + 7.0 * SPRITE_WORLD_SCALE);
     }
 }
