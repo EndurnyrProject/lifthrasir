@@ -707,6 +707,13 @@
         // no dedicated sound found in the GRF. Intentionally omitted: a
         // catalog miss here logs a harmless warn! and plays no visual, which is
         // correct for a skill that genuinely has none.
+        131: ( // HT_SPRINGTRAP (Spring Trap) -- native target STR and dedicated retail wav.
+            visuals: [Str("spring.str")],
+            sound: Some("effect/hunter_springtrap.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         156: ( // AL_HOLYLIGHT (Holy Light) -- damage skill, arrives via the
               // SkillDamage path. The STR is a filename-based candidate, UNVERIFIED
               // visually; eyeball in the Task 15 acceptance pass and replace
@@ -968,6 +975,13 @@
             visuals: [Shader("sight_blaster")],
             sound: Some("effect/ef_sight.wav"),
             placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1009: ( // HT_PHANTASMIC (Phantasmic Arrow) -- native target STR; no dedicated retail wav.
+            visuals: [Str("arrowshot.str")],
+            sound: None,
+            placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
