@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use net_contract::events::{UnitEntered, UnitStateChanged};
@@ -64,7 +66,15 @@ pub fn apply_cart_mount(
     shared_quad: Res<SharedSpriteQuad>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     cart_layers: CartOwnerQuery,
+    mut handled: Local<HashSet<Entity>>,
 ) {
+    // Per-run only: cleared every update so a later remount is never skipped.
+    // Where both readers carry the same owner in one run the first message
+    // wins, including when they disagree. A frame that both sets and clears
+    // the bit has no correct answer, so this is a deliberate tie-break rather
+    // than an ordering bug to "fix".
+    handled.clear();
+
     for event in state_changes.read() {
         let Some(entity) = registry.get_entity(event.unit_id) else {
             debug!(
@@ -73,6 +83,9 @@ pub fn apply_cart_mount(
             );
             continue;
         };
+        if !handled.insert(entity) {
+            continue;
+        }
         apply_cart_state(
             entity,
             event.effect_state,
@@ -88,6 +101,9 @@ pub fn apply_cart_mount(
         let Some(entity) = registry.get_entity(event.gid) else {
             continue;
         };
+        if !handled.insert(entity) {
+            continue;
+        }
         apply_cart_state(
             entity,
             event.effect_state,
@@ -112,10 +128,6 @@ fn apply_cart_state(
     materials: &mut Assets<StandardMaterial>,
 ) {
     let mounted = effect_state & CART_MASK != 0;
-    // NOTE: the spawn/despawn are deferred commands, so two cart-mount events
-    // for the same unit in a single frame would both see no existing children
-    // and double-spawn. aesir emits discrete per-change state broadcasts, so
-    // this cannot happen in practice; add a per-run dedup set if it ever does.
     let existing: Vec<Entity> = cart_layers
         .iter()
         .filter(|(_, child_of)| child_of.parent() == entity)
@@ -521,6 +533,66 @@ mod tests {
 
         emit_entered(&mut app, 7, OPTION_CART1);
         emit(&mut app, OPTION_CART1);
+
+        assert_eq!(cart_children(&mut app, unit).len(), CART_ACT_PARTS);
+    }
+
+    #[test]
+    fn state_change_and_unit_entered_in_same_frame_spawn_one_cart() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        app.world_mut()
+            .resource_mut::<Messages<UnitStateChanged>>()
+            .write(UnitStateChanged {
+                unit_id: 7,
+                body_state: 0,
+                health_state: 0,
+                effect_state: OPTION_CART1,
+                virtue: 0,
+            });
+        app.world_mut()
+            .resource_mut::<Messages<UnitEntered>>()
+            .write(UnitEntered {
+                gid: 7,
+                aid: 0,
+                object_type: 0,
+                job: 0,
+                x: 0,
+                y: 0,
+                dir: 0,
+                speed: 0,
+                hp: 0,
+                max_hp: 0,
+                clevel: 0,
+                body_state: 0,
+                health_state: 0,
+                effect_state: OPTION_CART1,
+                virtue: 0,
+                spirit_sphere_count: 0,
+                head: 0,
+                weapon: 0,
+                shield: 0,
+                accessory: 0,
+                accessory2: 0,
+                accessory3: 0,
+                head_palette: 0,
+                body_palette: 0,
+                head_dir: 0,
+                robe: 0,
+                guild_id: 0,
+                guild_name: String::new(),
+                emblem_id: 0,
+                sex: 0,
+                is_boss: false,
+                name: String::new(),
+                moving: false,
+                dst_x: 0,
+                dst_y: 0,
+                move_start_time: 0,
+            });
+        app.update();
 
         assert_eq!(cart_children(&mut app, unit).len(), CART_ACT_PARTS);
     }
