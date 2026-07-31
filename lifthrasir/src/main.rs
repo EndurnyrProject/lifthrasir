@@ -1,5 +1,7 @@
 mod assets;
 
+use bevy::gltf::GltfPlugin;
+use bevy::image::ImageSamplerDescriptor;
 use bevy::prelude::*;
 use bevy::window::{Window, WindowPlugin, WindowResolution};
 
@@ -20,6 +22,9 @@ fn main() {
         bevy::asset::uuid::uuid!("45e9d9b0-1a0d-4da9-83d1-cf5f8af1ff17"),
     ));
 
+    let mut gltf_sampler = ImageSamplerDescriptor::linear();
+    gltf_sampler.set_anisotropic_filter(16);
+
     app.add_plugins(
         DefaultPlugins
             .set(WindowPlugin {
@@ -28,6 +33,10 @@ fn main() {
                     resolution: WindowResolution::new(1280, 720),
                     ..default()
                 }),
+                ..default()
+            })
+            .set(GltfPlugin {
+                default_sampler: gltf_sampler,
                 ..default()
             })
             // Silence bevy_hanabi's benign per-load "Failed to find material bind
