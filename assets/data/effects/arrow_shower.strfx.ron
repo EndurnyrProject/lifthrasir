@@ -1,0 +1,63 @@
+// Arrow Shower (AC_SHOWER) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive. Angles are raw STR units (1024 per turn).
+//
+// Shape: four steel-white arrows land across a broad torso-centered spread in
+// quick succession, then a small dust scatter settles under their impacts.
+(
+    fps: 30,
+    layers: [
+        // Back-left arrow, first to land.
+        (
+            textures: ["ro://data/texture/effect/spear.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (275.0, 200.0), quad: (28.0, 7.0),   color: (190, 225, 255, 0),   angle: 128.0 ),
+                ( at: 2, offset: (285.0, 231.0), quad: (108.0, 21.0), color: (215, 240, 255, 230), angle: 128.0 ),
+                ( at: 5, offset: (292.0, 241.0), quad: (124.0, 24.0), color: (185, 220, 250, 0),   angle: 128.0 ),
+            ],
+        ),
+        // Back-right arrow, a beat behind.
+        (
+            textures: ["ro://data/texture/effect/spear.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (363.0, 198.0), quad: (28.0, 7.0),   color: (190, 225, 255, 0),   angle: -128.0 ),
+                ( at: 4, offset: (351.0, 231.0), quad: (108.0, 21.0), color: (215, 240, 255, 230), angle: -128.0 ),
+                ( at: 7, offset: (344.0, 241.0), quad: (124.0, 24.0), color: (185, 220, 250, 0),   angle: -128.0 ),
+            ],
+        ),
+        // Center arrow lands next.
+        (
+            textures: ["ro://data/texture/effect/spear.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 4, offset: (318.0, 190.0), quad: (28.0, 7.0),   color: (195, 230, 255, 0),   angle: 96.0 ),
+                ( at: 6, offset: (319.0, 235.0), quad: (112.0, 22.0), color: (225, 245, 255, 240), angle: 96.0 ),
+                ( at: 9, offset: (319.0, 243.0), quad: (128.0, 25.0), color: (185, 220, 250, 0),   angle: 96.0 ),
+            ],
+        ),
+        // Front-left arrow completes the scattered volley.
+        (
+            textures: ["ro://data/texture/effect/spear.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 6,  offset: (304.0, 204.0), quad: (28.0, 7.0),   color: (190, 225, 255, 0),   angle: 160.0 ),
+                ( at: 8,  offset: (309.0, 240.0), quad: (108.0, 21.0), color: (215, 240, 255, 230), angle: 160.0 ),
+                ( at: 11, offset: (313.0, 247.0), quad: (124.0, 24.0), color: (185, 220, 250, 0),   angle: 160.0 ),
+            ],
+        ),
+        // Light dust scatter settles after the final arrow.
+        (
+            textures: ["ro://data/texture/effect/dust01.bmp", "ro://data/texture/effect/dust02.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 6,  offset: (319.0, 247.0), quad: (72.0, 28.0),   color: (175, 160, 135, 0),   texture_index: 0 ),
+                ( at: 10, offset: (319.0, 250.0), quad: (145.0, 58.0),  color: (195, 180, 150, 105), texture_index: 1 ),
+                ( at: 15, offset: (319.0, 255.0), quad: (190.0, 76.0),  color: (165, 150, 125, 0),   texture_index: 1 ),
+            ],
+        ),
+    ],
+)

@@ -1,0 +1,54 @@
+// Double Strafe (AC_DOUBLE) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive. Angles are raw STR units (1024 per turn).
+//
+// Shape: two cool steel-white arrow strikes snap into the target's torso a few
+// frames apart. The narrow spear texture reads as an arrow at this scale; the
+// restrained flashes keep this distinct from Blitz Beat's warm talon rake.
+(
+    fps: 30,
+    layers: [
+        // First arrow and its short impact flare.
+        (
+            textures: ["ro://data/texture/effect/spear.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (289.0, 224.0), quad: (36.0, 8.0),   color: (190, 225, 255, 0),   angle: 128.0 ),
+                ( at: 2, offset: (313.0, 236.0), quad: (126.0, 24.0), color: (215, 240, 255, 255), angle: 128.0 ),
+                ( at: 5, offset: (328.0, 242.0), quad: (144.0, 28.0), color: (185, 220, 250, 0),   angle: 128.0 ),
+            ],
+        ),
+        // Second arrow, arriving just after the first.
+        (
+            textures: ["ro://data/texture/effect/spear.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 4,  offset: (350.0, 218.0), quad: (36.0, 8.0),   color: (190, 225, 255, 0),   angle: -128.0 ),
+                ( at: 6,  offset: (327.0, 238.0), quad: (126.0, 24.0), color: (225, 245, 255, 255), angle: -128.0 ),
+                ( at: 10, offset: (312.0, 244.0), quad: (144.0, 28.0), color: (185, 220, 250, 0),   angle: -128.0 ),
+            ],
+        ),
+        // First cold-white impact flash.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 1, offset: (319.0, 238.0), quad: (12.0, 12.0), color: (205, 235, 255, 0) ),
+                ( at: 3, offset: (319.0, 238.0), quad: (64.0, 64.0),  color: (220, 245, 255, 190) ),
+                ( at: 5, offset: (319.0, 238.0), quad: (82.0, 82.0),  color: (195, 225, 255, 0) ),
+            ],
+        ),
+        // Second cold-white impact flash.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 5,  offset: (319.0, 240.0), quad: (12.0, 12.0), color: (205, 235, 255, 0) ),
+                ( at: 7,  offset: (319.0, 240.0), quad: (64.0, 64.0),  color: (220, 245, 255, 190) ),
+                ( at: 10, offset: (319.0, 240.0), quad: (82.0, 82.0),  color: (195, 225, 255, 0) ),
+            ],
+        ),
+    ],
+)

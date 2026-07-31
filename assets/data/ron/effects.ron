@@ -398,6 +398,26 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        46: ( // AC_DOUBLE — two authored cool steel-white arrow impacts.
+            visuals: [Str("double_strafe.strfx.ron")],
+            sound: Some("_hit_arrow.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        47: ( // AC_SHOWER — unit-targeted, NOT ground-placed: Aesir
+             // `skills/archer/ac_shower.ex:19` sets `target_type: :target_enemy`
+             // and `:33` receives `{:unit, target_id}`. It is a damaging splash
+             // (`Combat.execute_splash_attack`), so it reaches the client as
+             // SkillDamageReceived per victim rather than SkillEffectShown;
+             // on_skill_damage skips only Ground placement, so Target spawns
+             // the volley anchored on each victim hit.
+            visuals: [Str("arrow_shower.strfx.ron")],
+            sound: Some("arrowstorm.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         54: ( // ALL_RESURRECTION
             visuals: [Str("resurrection.str")],
             sound: Some("effect/priest_resurrection.wav"),
