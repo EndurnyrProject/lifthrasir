@@ -21,7 +21,15 @@ type Batches = BTreeMap<usize, TerrainPrimitive>;
 ///
 /// Ports the runtime terrain mesher: unshared per-cell quads, hard-normal wall
 /// quads on the cells that declare them, smooth vertex normals averaged from
-/// the neighbouring cell normals, and per-tile vertex colors as raw 0-1 floats.
+/// the neighbouring cell normals, and corner-sampled tile colors as raw 0-1
+/// floats.
+///
+/// Tile colors mirror the classic client's per-tile color texture sampled with
+/// bilinear filtering (roBrowser bakes one texel per tile and points the vertex
+/// at grid corner `(x+i, y+j)` to the texel center of tile `(x+i, y+j)`): each
+/// cell corner takes the color of the tile whose texel center it lands on, and
+/// interpolation across the quad reproduces the smooth gradient. Flat per-tile
+/// colors render as hard-edged squares, which the classic look never shows.
 pub fn build_terrain(ground: &RoGround) -> anyhow::Result<Vec<TerrainPrimitive>> {
     let width = ground.width as usize;
     let height = ground.height as usize;
@@ -63,8 +71,16 @@ pub fn build_terrain(ground: &RoGround) -> anyhow::Result<Vec<TerrainPrimitive>>
             batch.normals.push(normals[3].to_array());
             batch.normals.push(normals[0].to_array());
 
-            let tile_color = gnd_tile_color_to_rgba(&tile.color);
-            batch.colors.extend(std::iter::repeat_n(tile_color, 6));
+            let own_color = gnd_tile_color_to_rgba(&tile.color);
+            let corner = |dx: isize, dy: isize| {
+                up_tile_color(ground, x as isize + dx, y as isize + dy).unwrap_or(own_color)
+            };
+            batch.colors.push(own_color);
+            batch.colors.push(corner(1, 0));
+            batch.colors.push(corner(1, 1));
+            batch.colors.push(corner(1, 1));
+            batch.colors.push(corner(0, 1));
+            batch.colors.push(own_color);
 
             batch.uvs.push([tile.u1, tile.v1]);
             batch.uvs.push([tile.u2, tile.v2]);
@@ -191,6 +207,22 @@ fn cell_vertex(x: usize, y: usize, height: f32, offset_x: f32, offset_y: f32) ->
     ]
 }
 
+/// Color of the up-facing tile on the cell at `(x, y)`, when that cell exists.
+/// Out-of-bounds or hole cells yield `None` so callers can fall back to the
+/// current tile's own color instead of bleeding black into map edges.
+fn up_tile_color(ground: &RoGround, x: isize, y: isize) -> Option<[f32; 4]> {
+    let (width, height) = (ground.width as isize, ground.height as isize);
+    if x < 0 || y < 0 || x >= width || y >= height {
+        return None;
+    }
+    let surface = &ground.surfaces[(y * width + x) as usize];
+    if surface.tile_up < 0 {
+        return None;
+    }
+    let tile = ground.tiles.get(surface.tile_up as usize)?;
+    Some(gnd_tile_color_to_rgba(&tile.color))
+}
+
 /// GND stores the per-tile color as BGRA; the alpha byte is the real opacity.
 fn gnd_tile_color_to_rgba(bgra: &[u8; 4]) -> [f32; 4] {
     [
@@ -304,6 +336,10 @@ mod tests {
     use ro_formats::{GndSurface, GndTile};
 
     fn tile(texture: u16) -> GndTile {
+        colored_tile(texture, [255, 255, 255, 255])
+    }
+
+    fn colored_tile(texture: u16, color: [u8; 4]) -> GndTile {
         GndTile {
             u1: 0.0,
             u2: 1.0,
@@ -314,7 +350,7 @@ mod tests {
             v3: 1.0,
             v4: 1.0,
             texture,
-            color: [255, 255, 255, 255],
+            color,
         }
     }
 
@@ -440,5 +476,70 @@ mod tests {
             "expected every normal to point at world up (-Y), got {:?}",
             prim.normals
         );
+    }
+
+    #[test]
+    fn tile_colors_are_corner_sampled_from_neighbouring_tiles() {
+        // BGRA in the GND, so these are red, green, blue and white tiles.
+        let ground = RoGround {
+            version: "1.7".into(),
+            raw_version: 0x0107,
+            width: 2,
+            height: 2,
+            textures: vec!["a.bmp".into()],
+            texture_indexes: vec![0],
+            tiles: vec![
+                colored_tile(0, [0, 0, 255, 255]),
+                colored_tile(0, [0, 255, 0, 255]),
+                colored_tile(0, [255, 0, 0, 255]),
+                colored_tile(0, [255, 255, 255, 255]),
+            ],
+            surfaces: vec![
+                flat_surface(0),
+                flat_surface(1),
+                flat_surface(2),
+                flat_surface(3),
+            ],
+            water: None,
+        };
+
+        let primitives = build_terrain(&ground).expect("build");
+        assert_eq!(primitives.len(), 1);
+        let colors = &primitives[0].colors;
+        assert_eq!(colors.len(), 24);
+
+        let red = [1.0, 0.0, 0.0, 1.0];
+        let green = [0.0, 1.0, 0.0, 1.0];
+        let blue = [0.0, 0.0, 1.0, 1.0];
+        let white = [1.0, 1.0, 1.0, 1.0];
+
+        // Cell (0,0): each corner takes the color of the tile it lands on,
+        // in vertex order (0,0) (1,0) (1,1) (1,1) (0,1) (0,0).
+        assert_eq!(&colors[0..6], &[red, green, white, white, blue, red]);
+
+        // Cell (1,1): every non-own corner is out of bounds and falls back
+        // to the tile's own color.
+        assert_eq!(&colors[18..24], &[white; 6]);
+    }
+
+    #[test]
+    fn corner_sampling_skips_hole_cells() {
+        // Cell (1,0) is a hole: cell (0,0)'s (1,0) corner must fall back to
+        // its own color instead of bleeding black.
+        let ground = RoGround {
+            version: "1.7".into(),
+            raw_version: 0x0107,
+            width: 2,
+            height: 1,
+            textures: vec!["a.bmp".into()],
+            texture_indexes: vec![0],
+            tiles: vec![colored_tile(0, [0, 0, 255, 255])],
+            surfaces: vec![flat_surface(0), flat_surface(-1)],
+            water: None,
+        };
+
+        let primitives = build_terrain(&ground).expect("build");
+        let red = [1.0, 0.0, 0.0, 1.0];
+        assert_eq!(&primitives[0].colors[..], &[red; 6]);
     }
 }
