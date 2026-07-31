@@ -26,6 +26,7 @@ protox = "0.9"
 prost-build = "0.14"
 tempfile = "3"
 image = "0.25.8"
+zstd = "0.13"
 blake3 = "1.8"
 gltf-json = { version = "1.4.1", features = [
     "extensions",
@@ -41,3 +42,6 @@ gltf = { version = "1.4.1", features = [
     "KHR_lights_punctual",
     "KHR_materials_unlit",
 ] }
+
+[dev-dependencies]
+ktx2 = "0.5"

@@ -6768,6 +6768,7 @@ dependencies = [
  "gltf",
  "gltf-json",
  "image",
+ "ktx2",
  "lifthrasir-data",
  "luadec",
  "mlua",
@@ -6780,6 +6781,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
+ "zstd",
 ]
 
 [[package]]
