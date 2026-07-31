@@ -4,7 +4,7 @@ use super::components::{
 use crate::domain::entities::billboard::Billboard;
 use crate::infrastructure::effect::{EffectBlend, LoadedEffectAsset, LoadedFrame, LoadedLayer};
 use crate::presentation::rendering::effect_material::{EffectMaterial, alpha_mode_for};
-use bevy::asset::RenderAssetUsages;
+use bevy::asset::{LoadState, RenderAssetUsages};
 use bevy::light::NotShadowCaster;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -233,6 +233,7 @@ type EffectInitQuery<'w, 's> = Query<'w, 's, (Entity, &'static mut ActiveEffect)
 /// `.str` finishes loading (async asset load).
 pub fn initialize_effect_layers(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut effects: EffectInitQuery,
     loaded: Res<Assets<LoadedEffectAsset>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -243,6 +244,13 @@ pub fn initialize_effect_layers(
             continue;
         }
         let Some(asset) = loaded.get(&effect.effect) else {
+            if let LoadState::Failed(error) = asset_server.load_state(&effect.effect) {
+                let path = asset_server
+                    .get_path(effect.effect.id())
+                    .expect("failed effect asset must have an asset path");
+                error!("Failed to load effect {path}: {error:?}; effect disabled");
+                commands.entity(entity).despawn();
+            }
             continue;
         };
 
@@ -712,7 +720,7 @@ mod tests {
     }
 
     use bevy::time::TimeUpdateStrategy;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     fn stub_effect(layer_count: usize, max_key: u32) -> LoadedEffectAsset {
         let layers = (0..layer_count)
@@ -762,6 +770,52 @@ mod tests {
     fn warm_up(app: &mut App) {
         app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO));
         app.update();
+    }
+
+    #[test]
+    fn failed_effect_asset_despawns_active_effect() {
+        let mut app = test_app();
+        app.add_systems(Update, initialize_effect_layers);
+
+        let handle = app
+            .world()
+            .resource::<AssetServer>()
+            .load("ro://effects/does-not-exist.strfx.ron");
+        let effect = app
+            .world_mut()
+            .spawn(ActiveEffect {
+                effect: handle.clone(),
+                timer: EffectFrameTimer::new(0, 0),
+                repeating: false,
+                tint: Color::WHITE,
+                layers_initialized: false,
+                finished: false,
+            })
+            .id();
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            app.update();
+            if app
+                .world()
+                .resource::<AssetServer>()
+                .load_state(&handle)
+                .is_failed()
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "effect asset never failed to load"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+
+        app.update();
+        assert!(
+            app.world().get_entity(effect).is_err(),
+            "failed effect asset should despawn its ActiveEffect"
+        );
     }
 
     #[test]
