@@ -707,6 +707,20 @@
         // no dedicated sound found in the GRF. Intentionally omitted: a
         // catalog miss here logs a harmless warn! and plays no visual, which is
         // correct for a skill that genuinely has none.
+        129: ( // HT_BLITZBEAT (Blitz Beat) -- authored target talon strikes and dedicated retail wav.
+            visuals: [Str("blitz_beat.strfx.ron")],
+            sound: Some("effect/hunter_blitzbeat.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        130: ( // HT_DETECTING (Detecting) -- authored caster reveal pulse and dedicated retail wav.
+            visuals: [Str("detecting.strfx.ron")],
+            sound: Some("effect/hunter_detecting.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         131: ( // HT_SPRINGTRAP (Spring Trap) -- native target STR and dedicated retail wav.
             visuals: [Str("spring.str")],
             sound: Some("effect/hunter_springtrap.wav"),

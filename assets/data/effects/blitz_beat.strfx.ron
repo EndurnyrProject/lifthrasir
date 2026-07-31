@@ -1,0 +1,43 @@
+// Blitz Beat (HT_BLITZBEAT) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive. Angles are raw STR units (1024 per turn).
+//
+// Shape: three warm white-gold, staccato talon streaks converge on the target's
+// torso over 15 frames. The hardcoded official-client effect has no native STR.
+(
+    fps: 30,
+    layers: [
+        // First diving talon stroke.
+        (
+            textures: ["ro://data/texture/effect/e9_counter_slash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (271.0, 219.0), quad: (34.0, 16.0), color: (255, 245, 210, 0), angle: -192.0 ),
+                ( at: 2, offset: (306.0, 234.0), quad: (170.0, 78.0), color: (255, 250, 225, 255), angle: -192.0 ),
+                ( at: 6, offset: (319.0, 240.0), quad: (220.0, 100.0), color: (255, 228, 165, 0), angle: -192.0 ),
+            ],
+        ),
+        // Second talon stroke, crossing from the opposite side.
+        (
+            textures: ["ro://data/texture/effect/e9_counter_slash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 4,  offset: (367.0, 224.0), quad: (30.0, 14.0), color: (255, 242, 205, 0), angle: 160.0 ),
+                ( at: 6,  offset: (332.0, 236.0), quad: (160.0, 72.0), color: (255, 248, 220, 245), angle: 160.0 ),
+                ( at: 10, offset: (319.0, 241.0), quad: (210.0, 94.0), color: (255, 220, 145, 0), angle: 160.0 ),
+            ],
+        ),
+        // Final short rake across the impact point.
+        (
+            textures: ["ro://data/texture/effect/e9_counter_slash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 8,  offset: (319.0, 263.0), quad: (26.0, 12.0), color: (255, 238, 195, 0), angle: 0.0 ),
+                ( at: 10, offset: (319.0, 244.0), quad: (145.0, 64.0), color: (255, 250, 225, 235), angle: 0.0 ),
+                ( at: 15, offset: (319.0, 239.0), quad: (190.0, 84.0), color: (255, 220, 145, 0), angle: 0.0 ),
+            ],
+        ),
+    ],
+)

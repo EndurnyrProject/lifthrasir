@@ -1,0 +1,24 @@
+// Detecting (HT_DETECTING) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive. Angles are raw STR units (1024 per turn).
+//
+// Shape: one restrained cyan-white ring expands from the caster's feet and
+// fades over 16 frames: a single reveal sweep, not a repeating aura.
+(
+    fps: 30,
+    layers: [
+        // One clean expanding reveal ring at the caster's ground anchor.
+        (
+            textures: ["ro://data/texture/effect/ring.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (24.0, 12.0),   color: (190, 245, 255, 0) ),
+                ( at: 3,  offset: (319.0, 291.0), quad: (100.0, 50.0),  color: (205, 250, 255, 225) ),
+                ( at: 9,  offset: (319.0, 291.0), quad: (230.0, 115.0), color: (180, 238, 255, 145) ),
+                ( at: 16, offset: (319.0, 291.0), quad: (330.0, 165.0), color: (165, 225, 255, 0) ),
+            ],
+        ),
+    ],
+)
