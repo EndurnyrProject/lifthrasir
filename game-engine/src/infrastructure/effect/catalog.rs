@@ -726,6 +726,40 @@ mod tests {
         assert!(catalog.efst(31).is_some());
     }
 
+    /// The ten Hunter traps. Worth asserting per id rather than trusting the
+    /// `effect_assets` guard: that guard only checks references it *finds*, so a
+    /// row silently missing its `on_trigger` would lower the reference count and
+    /// still pass, leaving a trap that arms but never detonates.
+    #[test]
+    fn every_hunter_trap_has_a_prop_and_a_detonation() {
+        let catalog = seeded_catalog();
+
+        for id in [115, 116, 117, 118, 119, 120, 121, 122, 123, 125] {
+            let descriptor = catalog
+                .skill(id)
+                .unwrap_or_else(|| panic!("trap skill {id} has no catalog entry"));
+
+            assert!(
+                descriptor.model_path().is_some(),
+                "trap skill {id} has no Model layer, so no armed prop renders"
+            );
+            assert!(
+                descriptor.on_trigger.is_some(),
+                "trap skill {id} has no on_trigger, so it arms but never detonates"
+            );
+            assert!(
+                descriptor.repeating,
+                "trap skill {id} must be repeating to reach the skill-unit visual path"
+            );
+            assert_eq!(
+                descriptor.ground_anchor,
+                GroundAnchor::Group,
+                "trap skill {id} must anchor at the group centre -- a 3x3 Claymore \
+                 would otherwise draw nine props"
+            );
+        }
+    }
+
     #[test]
     fn crusader_skill_effects_ron_deserialize_into_catalog() {
         let catalog = seeded_catalog();

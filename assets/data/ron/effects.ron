@@ -28,7 +28,13 @@
 //   Shader("fire_bolt")           key into `shader_fx` below; validated at load.
 //   Bespoke("ice_wall")           key dispatched to code (ice_wall/smoke/
 //                                 emitter); never looked up in `shader_fx`.
+//   Model("외부소품/트랩02")       converted glTF prop stem under `data/models/`;
+//                                 persistent repeating ground units only.
 //   Efst(31)                      splice EFST 31's recipe layers in here.
+//
+// `on_trigger: Some((visual, sound))` is an optional one-shot `Str` burst and
+// sound fired when a skill-unit group enters a non-active phase. It is separate
+// from the descriptor's cast-time `sound`.
 //
 // `Efst(id)` is COMPOSITION, not triggering: it copies the referenced `efsts`
 // entry's visual layers into this entry at catalog build time and nothing else
@@ -727,6 +733,130 @@
         // no dedicated sound found in the GRF. Intentionally omitted: a
         // catalog miss here logs a harmless warn! and plays no visual, which is
         // correct for a skill that genuinely has none.
+        115: ( // HT_SKIDTRAP (Skid Trap) -- armed prop, then retail detonation.
+            visuals: [Model("외부소품/트랩02")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("skidtrap.str"),
+                sound: Some("effect/hunter_skidtrap.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
+        116: ( // HT_LANDMINE (Land Mine) -- roBrowser EffectTable.js binds
+              // UNT_LANDMINE to EF_FIREPILLARBOMB (97); landmine.str is bound
+              // to no client effect id.
+            visuals: [Model("외부소품/트랩03")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("firepillarbomb.str"),
+                sound: Some("effect/hunter_landmine.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
+        117: ( // HT_ANKLESNARE (Ankle Snare) -- armed prop, then authored detonation.
+            visuals: [Model("외부소품/트랩01")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("ankle_snare.strfx.ron"),
+                sound: Some("effect/hunter_anklesnare.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
+        118: ( // HT_SHOCKWAVE (Shockwave Trap) -- retail EF_SHOCKWAVE (145)
+              // is a sprite, not an STR; parsed shockwave.str is a flat steady loop.
+            visuals: [Model("외부소품/트랩03_6")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("shockwavehit.str"),
+                sound: Some("effect/hunter_shockwavetrap.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
+        119: ( // HT_SANDMAN (Sandman) -- armed prop, then retail detonation.
+            visuals: [Model("외부소품/트랩03_4")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("sandman.str"),
+                sound: Some("effect/hunter_sandman.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
+        120: ( // HT_FLASHER (Flasher) -- retail EF_FLASHER (99) is a hardcoded
+              // client function with no STR, so this authored effect is required.
+            visuals: [Model("외부소품/트랩03_5")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("flasher.strfx.ron"),
+                sound: Some("effect/hunter_flasher.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
+        121: ( // HT_FREEZINGTRAP (Freezing Trap) -- armed prop, then retail detonation.
+            visuals: [Model("외부소품/트랩03_2")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("freezing.str"),
+                sound: Some("effect/hunter_freezingtrap.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
+        122: ( // HT_BLASTMINE (Blast Mine) -- armed prop, then retail detonation.
+            visuals: [Model("외부소품/트랩03_3")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("blastmine.str"),
+                sound: Some("effect/hunter_blastmine.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
+        123: ( // HT_CLAYMORETRAP (Claymore Trap) -- armed prop, then retail detonation.
+            visuals: [Model("외부소품/트랩04")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("claymore.str"),
+                sound: Some("effect/hunter_claymoretrap.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
+        125: ( // HT_TALKIEBOX (Talkie Box) -- armed prop, then authored detonation.
+            visuals: [Model("외부소품/트랩05")],
+            sound: Some("effect/hunter_trap_on.wav"),
+            on_trigger: Some((
+                visual: Str("talkie_box.strfx.ron"),
+                sound: Some("effect/hunter_talkiebox_a.wav"),
+            )),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+            ground_anchor: Group,
+        ),
         129: ( // HT_BLITZBEAT (Blitz Beat) -- authored target talon strikes and dedicated retail wav.
             visuals: [Str("blitz_beat.strfx.ron")],
             sound: Some("effect/hunter_blitzbeat.wav"),
