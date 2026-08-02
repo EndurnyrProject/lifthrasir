@@ -793,9 +793,9 @@ fn reflect_form_values(
     form: Res<CreationForm>,
     mut server_error: ResMut<NameServerError>,
     names: Query<Ref<EditableText>, With<NameField>>,
-    mut values: Query<(&mut Text, &FormValue)>,
+    mut values: Query<(&mut Text, &FormValue), (Without<NameTrailing>, Without<NameStatus>)>,
     mut swatches: Query<(&HairSwatch, &mut BorderColor, &mut Node)>,
-    mut sex_options: Query<(&SexOption, &mut BackgroundGradient)>,
+    mut sex_options: Query<(&SexOption, &mut BackgroundGradient), Without<CreateButton>>,
     mut trailing: Query<(&mut Text, &mut TextColor), (With<NameTrailing>, Without<NameStatus>)>,
     mut statuses: Query<(&mut Text, &mut TextColor), (With<NameStatus>, Without<NameTrailing>)>,
     mut create_buttons: Query<(&mut Pickable, &mut BackgroundGradient), With<CreateButton>>,
@@ -1015,6 +1015,16 @@ mod tests {
             assert!((HAIR_STYLE_MIN..=HAIR_STYLE_MAX).contains(&style));
             assert!((HAIR_COLOR_MIN..=HAIR_COLOR_MAX).contains(&color));
         }
+    }
+
+    #[test]
+    fn reflect_form_values_has_disjoint_queries() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<CreationForm>();
+        app.init_resource::<NameServerError>();
+        app.add_systems(Update, reflect_form_values);
+        app.update();
     }
 
     #[test]
