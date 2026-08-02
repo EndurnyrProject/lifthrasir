@@ -1,0 +1,19 @@
+// Talkie Box (HT_TALKIEBOX) - authored effect.
+//
+// Shape: a small, brief ground puff. Deliberately minimal because the deferred
+// skill-text-input flow means Talkie Box cannot yet be cast.
+(
+    fps: 30,
+    layers: [
+        // One quiet puff where the box would trigger.
+        (
+            textures: ["ro://data/texture/effect/dust01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (42.0, 21.0),   color: (185, 175, 150, 0) ),
+                ( at: 4,  offset: (319.0, 291.0), quad: (96.0, 48.0),   color: (205, 195, 170, 150) ),
+                ( at: 12, offset: (319.0, 291.0), quad: (142.0, 71.0),  color: (175, 165, 145, 0) ),
+            ],
+        ),
+    ],
+)

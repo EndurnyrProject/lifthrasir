@@ -1,0 +1,40 @@
+// Ankle Snare (HT_ANKLESNARE) - authored effect.
+//
+// Shape: a steel-blue ground ring snaps inward while two short spring arms close
+// on the center, reading as a capture and downward yank rather than an explosion.
+(
+    fps: 30,
+    layers: [
+        // The snare ring collapses tightly around the trapped foot.
+        (
+            textures: ["ro://data/texture/effect/ring.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 291.0), quad: (280.0, 140.0), color: (175, 220, 255, 0) ),
+                ( at: 2,  offset: (319.0, 291.0), quad: (250.0, 125.0), color: (190, 230, 255, 220) ),
+                ( at: 7,  offset: (319.0, 291.0), quad: (76.0, 38.0),   color: (170, 215, 255, 180) ),
+                ( at: 11, offset: (319.0, 291.0), quad: (32.0, 16.0),   color: (155, 205, 250, 0) ),
+            ],
+        ),
+        // Left spring arm snaps into the ring's center.
+        (
+            textures: ["ro://data/texture/effect/e9_counter_slash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 1,  offset: (271.0, 291.0), quad: (58.0, 22.0),  color: (185, 225, 255, 0),   angle: -80.0 ),
+                ( at: 3,  offset: (300.0, 291.0), quad: (126.0, 48.0), color: (210, 240, 255, 225), angle: -80.0 ),
+                ( at: 8,  offset: (319.0, 291.0), quad: (82.0, 31.0),  color: (180, 220, 255, 0),   angle: -80.0 ),
+            ],
+        ),
+        // Right spring arm closes a beat later.
+        (
+            textures: ["ro://data/texture/effect/e9_counter_slash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2,  offset: (367.0, 291.0), quad: (58.0, 22.0),  color: (185, 225, 255, 0),   angle: 80.0 ),
+                ( at: 4,  offset: (338.0, 291.0), quad: (126.0, 48.0), color: (210, 240, 255, 225), angle: 80.0 ),
+                ( at: 9,  offset: (319.0, 291.0), quad: (82.0, 31.0),  color: (180, 220, 255, 0),   angle: 80.0 ),
+            ],
+        ),
+    ],
+)
