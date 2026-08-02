@@ -167,6 +167,18 @@ props that already exist on disk — required after any `lif::FORMAT_VERSION`
 bump, since cached props are otherwise skipped and the runtime rejects stale
 ones. Single map: `convert-map --map <name>`.
 
+Convert standalone props before packing too: **`pack` only archives files
+already on disk; it never converts them.** The default set is the ten Hunter
+trap props:
+
+```bash
+cargo run --release -p ro-to-lifthrasir-cli -- convert-props
+```
+
+These become `assets/data/models/외부소품/트랩*.glb`, which skill ids 115–125
+resolve as armed traps at runtime. A pak built without them leaves Hunter traps
+invisible.
+
 Then produce the pak from retail GRFs (GRF parsing lives only in the offline
 tooling):
 
@@ -181,7 +193,7 @@ cargo run --release -p grf-utils -- pack \
 nothing reads them at runtime, and each map glb already embeds its `.gat` bytes.
 The filter is applied after the precedence tiers are merged, so no tier can
 reintroduce them; the summary reports an `Excluded:` count. `--content-version`
-is enforced monotonic, so bump it on every rebuild.
+is enforced monotonic, so **bump it on every rebuild.**
 
 Earlier `--grf` flags win on duplicate paths. `--content-dir` (repeatable) packs
 a folder **at the pak root**, mirroring the runtime's `data_folder`, and is what
