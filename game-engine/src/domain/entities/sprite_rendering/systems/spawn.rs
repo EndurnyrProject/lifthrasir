@@ -49,6 +49,7 @@ pub fn spawn_sprite_hierarchy(
                 job_id,
                 gender,
                 head,
+                hair_color,
                 riding,
             } => {
                 spawn_character_components(
@@ -56,6 +57,7 @@ pub fn spawn_sprite_hierarchy(
                     *job_id,
                     *gender,
                     *head,
+                    *hair_color,
                     *riding,
                     &asset_server,
                     &mut pending_animations,
@@ -101,6 +103,7 @@ fn spawn_character_components(
     job_id: u16,
     gender: crate::domain::entities::character::components::Gender,
     head_id: u16,
+    hair_color: u16,
     riding: bool,
     asset_server: &AssetServer,
     pending_animations: &mut PendingAnimations,
@@ -144,6 +147,7 @@ fn spawn_character_components(
     let body_act = asset_server.load(&body_act_path);
     let head_spr = asset_server.load(&head_spr_path);
     let head_act = asset_server.load(&head_act_path);
+    let head_palette = head_palette_handle(asset_server, head_id, gender, hair_color);
 
     pending_animations.request(
         body_spr.clone(),
@@ -155,7 +159,7 @@ fn spawn_character_components(
     pending_animations.request(
         head_spr.clone(),
         head_act.clone(),
-        None,
+        head_palette,
         LAYER_HEAD,
         Some(entity),
     );
@@ -175,6 +179,16 @@ fn spawn_character_components(
         "spawn_character_components: Requested body ({}) and head animations for entity {:?}",
         body_spr_path, entity
     );
+}
+
+fn head_palette_handle(
+    asset_server: &AssetServer,
+    hair_style: u16,
+    gender: crate::domain::entities::character::components::Gender,
+    hair_color: u16,
+) -> Option<Handle<crate::infrastructure::assets::loaders::RoPaletteAsset>> {
+    (hair_color > 0)
+        .then(|| asset_server.load(patterns::hair_palette_path(hair_style, gender, hair_color)))
 }
 
 fn spawn_mob_components(
@@ -546,4 +560,43 @@ pub fn on_request_sprite_spawn(
         position: event.position,
         sprite_info: event.sprite_info.clone(),
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::entities::character::components::Gender;
+    use bevy::asset::AssetPlugin;
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins((TaskPoolPlugin::default(), AssetPlugin::default()))
+            .init_asset::<crate::infrastructure::assets::loaders::RoPaletteAsset>();
+        app
+    }
+
+    #[test]
+    fn head_palette_handle_uses_hair_palette_path_for_nonzero_color() {
+        let app = app();
+        let asset_server = app.world().resource::<AssetServer>();
+
+        let handle = head_palette_handle(asset_server, 7, Gender::Male, 3)
+            .expect("nonzero hair color requests a palette");
+        let path = asset_server
+            .get_path(handle.id())
+            .expect("palette handle has an asset path");
+
+        assert_eq!(
+            path.to_string(),
+            patterns::hair_palette_path(7, Gender::Male, 3)
+        );
+    }
+
+    #[test]
+    fn head_palette_handle_omits_palette_for_default_color() {
+        let app = app();
+        let asset_server = app.world().resource::<AssetServer>();
+
+        assert!(head_palette_handle(asset_server, 7, Gender::Female, 0).is_none());
+    }
 }

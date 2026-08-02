@@ -40,6 +40,7 @@ pub fn forward_character_sprite_events(
                     job_id: data.job_id,
                     gender: appearance.gender,
                     head: appearance.hair_style,
+                    hair_color: appearance.hair_color,
                     // The local player's riding restore arrives as a
                     // `UnitStateChanged` after spawn (`apply_peco_mount`).
                     riding: false,

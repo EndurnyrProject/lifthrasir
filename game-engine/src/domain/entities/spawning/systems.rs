@@ -334,6 +334,7 @@ pub fn spawn_network_entity_system(
                     job_id: event.job,
                     gender: Gender::from(event.gender),
                     head: event.head,
+                    hair_color: event.head_palette,
                     riding: event.riding,
                 };
 
