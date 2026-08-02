@@ -1,0 +1,1 @@
+<svg viewBox="0 0 100 300" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.78"/></linearGradient></defs><path fill="url(#beam)" d="M33 0h34l33 300H0z"/></svg>

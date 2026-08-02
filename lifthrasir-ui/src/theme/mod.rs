@@ -36,6 +36,7 @@ pub const RARITY_MAGIC: Color = Color::srgb_u8(0x6f, 0xc4, 0xec);
 
 pub const FONT_TITLE: &str = "ro://fonts/cinzel.ttf";
 pub const FONT_BODY: &str = "ro://fonts/manrope.ttf";
+pub const FONT_MONO: &str = "ro://fonts/space-mono.ttf";
 
 /// Asset directory for the SVG glyph icons extracted from the Endurnir mockups.
 pub const ICON_DIR: &str = "ro://ui/icons/";
@@ -88,5 +89,6 @@ mod tests {
     fn fonts_point_at_vendored_ttf() {
         assert_eq!(FONT_BODY, "ro://fonts/manrope.ttf");
         assert_eq!(FONT_TITLE, "ro://fonts/cinzel.ttf");
+        assert_eq!(FONT_MONO, "ro://fonts/space-mono.ttf");
     }
 }
