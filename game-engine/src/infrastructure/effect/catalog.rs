@@ -110,6 +110,7 @@ fn kind_name(visual: &Visual) -> &'static str {
     match visual {
         Visual::Str(_) => "Str",
         Visual::Sprite(_) => "Sprite",
+        Visual::Model(_) => "Model",
         Visual::Shader(_) => "Shader",
         Visual::Bespoke(_) => "Bespoke",
         Visual::Efst(_) => "Efst",

@@ -121,7 +121,10 @@ fn check_descriptors(
                         );
                     }
                 }
-                Visual::Shader(_) | Visual::Bespoke(_) | Visual::Efst(_) => {}
+                // ponytail: Task 9 replaces this with a `models/<stem>.glb` pak lookup.
+                // Until then a typo'd Model stem passes this guard silently and the trap
+                // renders as nothing at runtime -- the exact hole this test exists to close.
+                Visual::Model(_) | Visual::Shader(_) | Visual::Bespoke(_) | Visual::Efst(_) => {}
             }
         }
 

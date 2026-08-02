@@ -106,6 +106,10 @@ pub enum Visual {
     /// `"이팩트/firewall"`, for the effects the classic client draws as looping
     /// sprites instead of STR sequences (Fire Wall, Fire Pillar).
     Sprite(String),
+    /// Converted glTF prop under `data/models/`, extension-free, e.g.
+    /// `"외부소품/트랩02"`, for persistent ground-unit visuals that are models
+    /// rather than effects.
+    Model(String),
     /// Key into the `shader_fx` table (procedural uber-shader burst). Validated
     /// against that table when the catalog is built.
     Shader(String),
@@ -116,6 +120,14 @@ pub enum Visual {
     /// only, one level deep: an `efsts` recipe may not itself carry `Efst`
     /// layers.
     Efst(u32),
+}
+
+/// One-shot played when a skill unit leaves its ACTIVE phase.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TriggerFx {
+    pub visual: Visual,
+    #[serde(default)]
+    pub sound: Option<String>,
 }
 
 /// Hand-authored effect entry: an ordered list of visual layers plus the
@@ -131,6 +143,8 @@ pub struct EffectDescriptor {
     /// Optional sound path relative to `data/wav`, e.g. "effect/ef_firewall.wav"
     /// or "_heal_effect.wav" (files at the wav root take no `effect/` prefix).
     pub sound: Option<String>,
+    #[serde(default)]
+    pub on_trigger: Option<TriggerFx>,
     pub placement: EffectPlacement,
     /// RGBA tint multiplied onto the STR's per-frame color.
     pub color: [f32; 4],
@@ -155,6 +169,14 @@ impl EffectDescriptor {
     pub fn sprite_stem(&self) -> Option<&str> {
         self.visuals.iter().find_map(|visual| match visual {
             Visual::Sprite(stem) => Some(stem.as_str()),
+            _ => None,
+        })
+    }
+
+    /// First `Model` layer's path stem, if any.
+    pub fn model_path(&self) -> Option<&str> {
+        self.visuals.iter().find_map(|visual| match visual {
+            Visual::Model(stem) => Some(stem.as_str()),
             _ => None,
         })
     }
@@ -430,6 +452,7 @@ mod tests {
             EffectDescriptor {
                 visuals: vec![Visual::Str("heal.str".to_string())],
                 sound: Some("_heal_effect.wav".to_string()),
+                on_trigger: None,
                 placement: EffectPlacement::Target,
                 color: [1.0, 1.0, 1.0, 1.0],
                 repeating: false,
@@ -441,6 +464,7 @@ mod tests {
             EffectDescriptor {
                 visuals: vec![Visual::Str("stormgust.str".to_string())],
                 sound: None,
+                on_trigger: None,
                 placement: EffectPlacement::Ground,
                 color: [0.6, 0.7, 1.0, 1.0],
                 repeating: true,
@@ -452,6 +476,7 @@ mod tests {
             EffectDescriptor {
                 visuals: vec![Visual::Str("energycoat.str".to_string())],
                 sound: None,
+                on_trigger: None,
                 placement: EffectPlacement::Caster,
                 color: [1.0, 1.0, 1.0, 1.0],
                 repeating: true,
@@ -487,6 +512,54 @@ mod tests {
         let deserialized: EffectDescriptor = ron::from_str(&serialized).expect("deserialize");
 
         assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn model_visual_and_trigger_fx_round_trip() {
+        let original = EffectDescriptor {
+            visuals: vec![Visual::Model("외부소품/트랩02".to_string())],
+            on_trigger: Some(TriggerFx {
+                visual: Visual::Str("skidtrap.str".to_string()),
+                sound: Some("effect/hunter_skidtrap.wav".to_string()),
+            }),
+            ..Default::default()
+        };
+
+        let serialized = ron::to_string(&original).expect("serialize");
+        let deserialized: EffectDescriptor = ron::from_str(&serialized).expect("deserialize");
+
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn descriptor_without_on_trigger_deserializes() {
+        let ron = r#"(
+            visuals: [Str("firewall.str")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        )"#;
+
+        let descriptor: EffectDescriptor = ron::from_str(ron).expect("deserialize");
+
+        assert_eq!(descriptor.on_trigger, None);
+    }
+
+    #[test]
+    fn model_path_only_reads_model_layers() {
+        let model_only = EffectDescriptor {
+            visuals: vec![Visual::Model("외부소품/트랩02".to_string())],
+            ..Default::default()
+        };
+        let sprite_only = EffectDescriptor {
+            visuals: vec![Visual::Sprite("이팩트/firewall".to_string())],
+            ..Default::default()
+        };
+
+        assert_eq!(model_only.model_path(), Some("외부소품/트랩02"));
+        assert_eq!(model_only.sprite_stem(), None);
+        assert_eq!(sprite_only.model_path(), None);
     }
 
     #[test]

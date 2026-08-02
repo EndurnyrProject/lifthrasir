@@ -50,6 +50,7 @@ fn cell_anchored_catalog_with(skill_id: u32, visual: Visual) -> EffectCatalog {
         EffectDescriptor {
             visuals: vec![visual],
             sound: None,
+            on_trigger: None,
             placement: EffectPlacement::Ground,
             color: [1.0, 1.0, 1.0, 1.0],
             repeating: true,
