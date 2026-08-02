@@ -22,6 +22,16 @@ pub struct SkillUnitCellState {
     pub flags: SkillUnitCellFlags,
 }
 
+/// Mirrors aesir's `SkillUnitPhase` proto enum, neutrally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SkillUnitPhase {
+    #[default]
+    Active,
+    Used,
+    Sprung,
+    Captured,
+}
+
 /// A server-authoritative skill-unit group (e.g. one Storm Gust cast, one Ice Wall).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkillUnitGroupState {
@@ -31,6 +41,9 @@ pub struct SkillUnitGroupState {
     pub owner_id: u32,
     pub center_x: i32,
     pub center_y: i32,
+    pub phase: SkillUnitPhase,
+    pub created_tick: u64,
+    pub expires_tick: u64,
     pub cells: Vec<SkillUnitCellState>,
 }
 
@@ -100,6 +113,9 @@ mod tests {
             owner_id: 42,
             center_x: 150,
             center_y: 150,
+            phase: SkillUnitPhase::Active,
+            created_tick: 1_000,
+            expires_tick: 9_000,
             cells: vec![SkillUnitCellState {
                 cell_id: 100,
                 x: 150,
@@ -127,6 +143,9 @@ mod tests {
             owner_id: 42,
             center_x: -1,
             center_y: -1,
+            phase: SkillUnitPhase::Active,
+            created_tick: 1_000,
+            expires_tick: 9_000,
             cells: vec![],
         };
 

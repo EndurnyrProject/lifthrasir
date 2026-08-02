@@ -12,7 +12,9 @@ use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset, LoadedEffect
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
 use lifthrasir_data::{EffectData, EffectDescriptor, EffectPlacement, GroundAnchor, Visual};
-use net_contract::dto::{SkillUnitCellFlags, SkillUnitCellState, SkillUnitGroupState};
+use net_contract::dto::{
+    SkillUnitCellFlags, SkillUnitCellState, SkillUnitGroupState, SkillUnitPhase,
+};
 use net_contract::events::{
     SkillUnitDespawned, SkillUnitSnapshotReceived, SkillUnitSpawned, SkillUnitUpdated,
 };
@@ -120,6 +122,9 @@ fn group(group_id: u64, skill_id: u32, cells: Vec<SkillUnitCellState>) -> SkillU
         owner_id: 42,
         center_x: 40,
         center_y: 50,
+        phase: SkillUnitPhase::Active,
+        created_tick: 1_000,
+        expires_tick: 9_000,
         cells,
     }
 }
@@ -193,6 +198,20 @@ fn spawn_creates_root_and_cells_at_world_positions() {
         seen += 1;
     }
     assert_eq!(seen, 2);
+}
+
+#[test]
+fn spawned_root_carries_phase_from_message() {
+    let mut app = test_app(seeded_catalog());
+    let mut spawned = group(1, STORM_GUST, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Sprung;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    let mut query = app.world_mut().query::<&SkillUnitGroup>();
+    let root = query.iter(app.world()).next().expect("group root");
+    assert_eq!(root.phase, SkillUnitPhase::Sprung);
 }
 
 #[test]

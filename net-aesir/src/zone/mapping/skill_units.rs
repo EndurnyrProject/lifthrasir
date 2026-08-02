@@ -1,7 +1,7 @@
 use crate::proto::aesir::net;
 use net_contract::dto::{
     SkillUnitCellFlags, SkillUnitCellState, SkillUnitDespawnReason, SkillUnitGroupState,
-    SkillUnitUpdateReason,
+    SkillUnitPhase, SkillUnitUpdateReason,
 };
 use net_contract::events::{
     SkillUnitDespawned, SkillUnitSnapshotReceived, SkillUnitSpawned, SkillUnitUpdated,
@@ -36,7 +36,19 @@ fn skill_unit_group(g: net::SkillUnitGroupState) -> SkillUnitGroupState {
         owner_id: g.owner_id,
         center_x: g.center_x,
         center_y: g.center_y,
+        phase: skill_unit_phase(g.phase),
+        created_tick: g.created_tick,
+        expires_tick: g.expires_tick,
         cells: g.cells.into_iter().map(skill_unit_cell).collect(),
+    }
+}
+
+fn skill_unit_phase(value: i32) -> SkillUnitPhase {
+    match net::SkillUnitPhase::try_from(value) {
+        Ok(net::SkillUnitPhase::Active) | Err(_) => SkillUnitPhase::Active,
+        Ok(net::SkillUnitPhase::Used) => SkillUnitPhase::Used,
+        Ok(net::SkillUnitPhase::Sprung) => SkillUnitPhase::Sprung,
+        Ok(net::SkillUnitPhase::Captured) => SkillUnitPhase::Captured,
     }
 }
 
@@ -207,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    fn group_state_drops_owner_type_and_tick_fields() {
+    fn group_state_drops_owner_type_and_maps_tick_fields() {
         let mapped = skill_unit_group(sample_group(1, vec![]));
 
         assert_eq!(mapped.group_id, 1);
@@ -216,6 +228,23 @@ mod tests {
         assert_eq!(mapped.owner_id, 42);
         assert_eq!(mapped.center_x, 150);
         assert_eq!(mapped.center_y, 150);
+        assert_eq!(mapped.created_tick, 1000);
+        assert_eq!(mapped.expires_tick, 9000);
+    }
+
+    #[test]
+    fn phase_maps_every_value_and_unknown_defaults_to_active() {
+        let cases = [
+            (net::SkillUnitPhase::Active, SkillUnitPhase::Active),
+            (net::SkillUnitPhase::Used, SkillUnitPhase::Used),
+            (net::SkillUnitPhase::Sprung, SkillUnitPhase::Sprung),
+            (net::SkillUnitPhase::Captured, SkillUnitPhase::Captured),
+        ];
+
+        for (wire, expected) in cases {
+            assert_eq!(skill_unit_phase(wire as i32), expected);
+        }
+        assert_eq!(skill_unit_phase(99), SkillUnitPhase::Active);
     }
 
     #[test]
