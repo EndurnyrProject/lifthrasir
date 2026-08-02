@@ -33,18 +33,28 @@ pub fn update_skill_units(
 }
 
 /// Despawn the listed cells; when the group has no cells left, despawn the root
-/// (recursively removing any remaining visuals). An unknown group is warned and
-/// ignored.
+/// (recursively removing any remaining visuals). An unknown group is retried on
+/// the next run, then warned and ignored.
 pub fn despawn_skill_units(
     mut events: MessageReader<SkillUnitDespawned>,
     mut commands: Commands,
     mut entity_registry: ResMut<EntityRegistry>,
     groups: Query<(Entity, &SkillUnitGroup)>,
     cells: Query<(Entity, &SkillUnitCell)>,
+    mut pending: Local<Vec<SkillUnitDespawned>>,
 ) {
-    for event in events.read() {
+    let retrying = std::mem::take(&mut *pending);
+    for (event, is_retry) in retrying
+        .iter()
+        .map(|event| (event, true))
+        .chain(events.read().map(|event| (event, false)))
+    {
         let Some((root, _)) = groups.iter().find(|(_, g)| g.group_id == event.group_id) else {
-            warn!("SkillUnitDespawned for unknown group {}", event.group_id);
+            if is_retry {
+                warn!("SkillUnitDespawned for unknown group {}", event.group_id);
+            } else {
+                pending.push(event.clone());
+            }
             continue;
         };
 

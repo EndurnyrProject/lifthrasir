@@ -24,13 +24,17 @@ pub struct SkillUnitsPlugin;
 
 impl Plugin for SkillUnitsPlugin {
     fn build(&self, app: &mut App) {
+        // Despawn must run first: the chain's sync points make later systems see
+        // deferred commands, so spawn-first would create the replacement root and
+        // then despawn it by group id, permanently deleting the trap.
         app.add_systems(
             Update,
             (
+                lifecycle::despawn_skill_units,
                 spawn::spawn_skill_units,
                 lifecycle::update_skill_units,
-                lifecycle::despawn_skill_units,
-            ),
+            )
+                .chain(),
         );
     }
 }

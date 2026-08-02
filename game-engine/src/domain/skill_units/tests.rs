@@ -13,7 +13,8 @@ use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
 use lifthrasir_data::{EffectData, EffectDescriptor, EffectPlacement, GroundAnchor, Visual};
 use net_contract::dto::{
-    SkillUnitCellFlags, SkillUnitCellState, SkillUnitGroupState, SkillUnitPhase,
+    SkillUnitCellFlags, SkillUnitCellState, SkillUnitDespawnReason, SkillUnitGroupState,
+    SkillUnitPhase,
 };
 use net_contract::events::{
     SkillUnitDespawned, SkillUnitSnapshotReceived, SkillUnitSpawned, SkillUnitUpdated,
@@ -95,7 +96,7 @@ fn test_app(catalog: EffectCatalog) -> App {
         .insert_resource(catalog)
         .add_systems(
             Update,
-            (spawn_skill_units, update_skill_units, despawn_skill_units),
+            (despawn_skill_units, spawn_skill_units, update_skill_units).chain(),
         );
     app
 }
@@ -255,6 +256,85 @@ fn duplicate_spawn_replaces_and_does_not_stack() {
     assert_eq!(roots(&mut app), 1, "duplicate replaces the root");
     assert_eq!(cell_count(&mut app), 2, "cells did not stack");
     assert_eq!(effects(&mut app), 1, "visual replaced, not stacked");
+}
+
+/// A trap phase change arrives as `SkillUnitDespawn{Destroyed}` + a fresh
+/// `SkillUnitSpawn` carrying the same `group_id`. The replacement deliberately
+/// **reuses the same cell ids**, because a trap changing phase still occupies
+/// the same tiles -- and that is exactly what makes the system order
+/// load-bearing: with the chain reversed (spawn first), the stale despawn
+/// matches every cell of the *new* root, computes `remaining == 0`, and deletes
+/// the trap permanently. Using fresh cell ids here would leave `remaining > 0`
+/// and let a catastrophic ordering pass by luck.
+#[test]
+fn phase_replacement_despawns_before_spawning_the_new_root() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100, 101],
+        reason: SkillUnitDespawnReason::Destroyed,
+    });
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+
+    assert_eq!(roots(&mut app), 1, "replacement leaves one root");
+    assert_eq!(cell_count(&mut app), 2, "only replacement cells survive");
+}
+
+#[test]
+fn same_frame_spawn_then_final_despawn_is_retried() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, STORM_GUST, vec![cell(100, 40, 50, true)]),
+    });
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100],
+        reason: SkillUnitDespawnReason::Destroyed,
+    });
+
+    app.update();
+    assert_eq!(roots(&mut app), 1, "spawn runs after the initial lookup");
+    app.update();
+    assert_eq!(roots(&mut app), 0, "buffered despawn removes the root");
+}
+
+#[test]
+fn unknown_despawn_is_dropped_after_one_retry() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 99,
+        cell_ids: vec![100],
+        reason: SkillUnitDespawnReason::Destroyed,
+    });
+
+    app.update();
+    app.update();
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(99, STORM_GUST, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    assert_eq!(
+        roots(&mut app),
+        1,
+        "despawn was not retained past one retry"
+    );
 }
 
 #[test]
