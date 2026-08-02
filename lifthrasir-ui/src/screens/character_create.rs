@@ -68,6 +68,10 @@ impl Plugin for CharacterCreateScreenPlugin {
         app.add_systems(OnExit(GameState::CharacterCreation), teardown_preview);
         app.add_systems(
             Update,
+            stage::breathe_spot_glow.run_if(in_state(GameState::CharacterCreation)),
+        );
+        app.add_systems(
+            Update,
             (
                 surface_creation_failure,
                 reflect_form_values,

@@ -1,9 +1,27 @@
+use std::f32::consts::TAU;
+
 use bevy::{color::Color, prelude::*, ui::ColorStop};
 
 use crate::{
     screens::character_scene::tokens::{BEAM, RING, RING_THIN},
     theme,
 };
+
+#[derive(Component)]
+pub struct BreathingGlow {
+    elapsed: f32,
+}
+
+pub fn breathe_spot_glow(
+    time: Res<Time>,
+    mut glows: Query<(&mut BreathingGlow, &mut UiTransform)>,
+) {
+    for (mut glow, mut transform) in &mut glows {
+        glow.elapsed += time.delta_secs();
+        let scale = 1.0 + 0.06 * (glow.elapsed * TAU / 6.0).sin();
+        transform.scale = Vec2::splat(scale);
+    }
+}
 
 fn centered_node(width: f32, height: f32, bottom: f32) -> Node {
     Node {
@@ -30,6 +48,8 @@ pub fn spot_glow(hue: Color) -> impl Bundle {
             ..default()
         }),
         Pickable::IGNORE,
+        BreathingGlow { elapsed: 0.0 },
+        UiTransform::default(),
     )
 }
 

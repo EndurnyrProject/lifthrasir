@@ -33,8 +33,18 @@ impl Plugin for CharacterSelectScreenPlugin {
         );
         app.add_systems(
             Update,
-            (receive_character_list, normalize_selection, rebuild_screen)
+            (
+                receive_character_list,
+                normalize_selection,
+                cycle_selected_slot,
+                rebuild_screen,
+            )
                 .chain()
+                .run_if(in_state(GameState::CharacterSelection)),
+        );
+        app.add_systems(
+            Update,
+            (tick_entrances, tick_bar_fills, stage::breathe_spot_glow)
                 .run_if(in_state(GameState::CharacterSelection)),
         );
     }
@@ -60,6 +70,20 @@ struct ScreenRoot;
 
 #[derive(Component)]
 struct SceneContent;
+
+#[derive(Component)]
+struct Entrance {
+    timer: Timer,
+    delay: f32,
+    target_alpha: f32,
+}
+
+#[derive(Component)]
+struct BarFill {
+    timer: Timer,
+    delay: f32,
+    target: f32,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SlotKind {
@@ -135,6 +159,85 @@ fn normalize_selection(
             .unwrap_or(0);
     }
     pending.0 = None;
+}
+
+fn cycle_selected_slot(
+    keys: Res<ButtonInput<KeyCode>>,
+    data: Res<CharacterSelectionData>,
+    mut selected: ResMut<SelectedSlot>,
+    mut pending: ResMut<PendingDeletion>,
+) {
+    let direction = if keys.just_pressed(KeyCode::ArrowLeft) {
+        -1
+    } else if keys.just_pressed(KeyCode::ArrowRight) {
+        1
+    } else {
+        return;
+    };
+    let occupied = data
+        .characters
+        .iter()
+        .take(data.max_slots as usize)
+        .enumerate()
+        .filter_map(|(slot, character)| character.as_ref().map(|_| slot))
+        .collect::<Vec<_>>();
+    let next = cycle_slot(&occupied, selected.0, direction);
+    if next != selected.0 {
+        selected.0 = next;
+        pending.0 = None;
+    }
+}
+
+fn tick_entrances(
+    time: Res<Time>,
+    mut entrances: Query<(&mut Entrance, &mut UiTransform, &mut TextColor)>,
+) {
+    for (mut entrance, mut transform, mut color) in &mut entrances {
+        if entrance.timer.is_finished() {
+            continue;
+        }
+        entrance.timer.tick(time.delta());
+        let progress = ((entrance.timer.elapsed_secs() - entrance.delay) / 0.45).clamp(0.0, 1.0);
+        let eased = ease_out_cubic(progress);
+        transform.translation = Val2::px(0.0, (1.0 - eased) * 10.0);
+        color.0.set_alpha(entrance.target_alpha * eased);
+    }
+}
+
+fn tick_bar_fills(time: Res<Time>, mut fills: Query<(&mut BarFill, &mut Node)>) {
+    for (mut fill, mut node) in &mut fills {
+        if fill.timer.is_finished() {
+            continue;
+        }
+        fill.timer.tick(time.delta());
+        let progress = ((fill.timer.elapsed_secs() - fill.delay) / 0.7).clamp(0.0, 1.0);
+        node.width = percent(ease_out_cubic(progress) * fill.target * 100.0);
+    }
+}
+
+fn entrance(offset_index: u8, color: Color) -> (Entrance, UiTransform) {
+    let delay = offset_index as f32 * 0.05;
+    (
+        Entrance {
+            timer: Timer::from_seconds(0.45 + delay, TimerMode::Once),
+            delay,
+            target_alpha: color.alpha(),
+        },
+        UiTransform::from_translation(Val2::px(0.0, 10.0)),
+    )
+}
+
+fn bar_fill(target: f32, offset_index: u8) -> BarFill {
+    let delay = offset_index as f32 * 0.055;
+    BarFill {
+        timer: Timer::from_seconds(0.7 + delay, TimerMode::Once),
+        delay,
+        target,
+    }
+}
+
+fn ease_out_cubic(progress: f32) -> f32 {
+    1.0 - (1.0 - progress).powi(3)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -291,8 +394,9 @@ fn spawn_identity(
             assets,
             &roster_hint(occupied_count(data), data.max_slots),
             11.0,
-            theme::TEXT_DIM,
+            theme::TEXT_DIM.with_alpha(0.0),
         ),
+        entrance(0, theme::TEXT_DIM),
         Node {
             position_type: PositionType::Absolute,
             left: px(48),
@@ -320,14 +424,17 @@ fn spawn_identity(
                 assets,
                 &tokens::mono_label(&info.job_name),
                 10.0,
-                theme::GOLD,
+                theme::GOLD.with_alpha(0.0),
             ),
+            entrance(1, theme::GOLD),
             ChildOf(block),
         ));
         commands.spawn((
-            title_text(assets, &info.base.name, 58.0, theme::TEXT),
+            title_text(assets, &info.base.name, 58.0, theme::TEXT.with_alpha(0.0)),
+            entrance(2, theme::TEXT),
             ChildOf(block),
         ));
+        let hue = tokens::class_hue(info.base.class);
         commands.spawn((
             mono_text(
                 assets,
@@ -337,17 +444,30 @@ fn spawn_identity(
                     info.base.base_level
                 ),
                 11.0,
-                tokens::class_hue(info.base.class),
+                hue.with_alpha(0.0),
             ),
+            entrance(3, hue),
             ChildOf(block),
         ));
     } else {
         commands.spawn((
-            mono_text(assets, "YOUR STORY AWAITS", 10.0, theme::GOLD),
+            mono_text(
+                assets,
+                "YOUR STORY AWAITS",
+                10.0,
+                theme::GOLD.with_alpha(0.0),
+            ),
+            entrance(1, theme::GOLD),
             ChildOf(block),
         ));
         commands.spawn((
-            title_text(assets, "Forge your first hero", 42.0, theme::TEXT),
+            title_text(
+                assets,
+                "Forge your first hero",
+                42.0,
+                theme::TEXT.with_alpha(0.0),
+            ),
+            entrance(2, theme::TEXT),
             ChildOf(block),
         ));
         commands.spawn((
@@ -355,8 +475,9 @@ fn spawn_identity(
                 assets,
                 "CHOOSE A VACANT SLOT TO BEGIN",
                 11.0,
-                theme::TEXT_DIM,
+                theme::TEXT_DIM.with_alpha(0.0),
             ),
+            entrance(3, theme::TEXT_DIM),
             ChildOf(block),
         ));
     }
@@ -715,15 +836,26 @@ fn spawn_codex(
         rail::section_label(assets, "Attributes"),
         ChildOf(rail_entity),
     ));
-    for (name, value) in [
+    for (index, (name, value)) in [
         ("STR", info.base.str),
         ("AGI", info.base.agi),
         ("VIT", info.base.vit),
         ("INT", info.base.int),
         ("DEX", info.base.dex),
         ("LUK", info.base.luk),
-    ] {
-        spawn_stat(commands, assets, rail_entity, name, value, hue);
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        spawn_stat(
+            commands,
+            assets,
+            rail_entity,
+            name,
+            value,
+            hue,
+            index as u8 + 1,
+        );
     }
     spawn_footer(commands, assets, rail_entity, info, slot, armed);
 }
@@ -868,7 +1000,7 @@ fn spawn_progress(
         mono_text(assets, &format!("{value} / {cap}"), 10.0, theme::GOLD),
         ChildOf(row),
     ));
-    spawn_track(commands, block, job_level_fraction(value, cap), 5.0, hue);
+    spawn_track(commands, block, job_level_fraction(value, cap), 5.0, hue, 0);
 }
 
 fn spawn_stat(
@@ -878,6 +1010,7 @@ fn spawn_stat(
     name: &str,
     value: u8,
     hue: Color,
+    offset_index: u8,
 ) {
     let row = commands
         .spawn((
@@ -912,10 +1045,11 @@ fn spawn_stat(
         .id();
     commands.spawn((
         Node {
-            width: percent((value as f32 / 99.0).clamp(0.0, 1.0) * 100.0),
+            width: percent(0),
             height: percent(100),
             ..default()
         },
+        bar_fill((value as f32 / 99.0).clamp(0.0, 1.0), offset_index),
         BackgroundGradient::from(LinearGradient::to_right(vec![
             ColorStop::new(hue.with_alpha(0.42), percent(0)),
             ColorStop::new(hue, percent(100)),
@@ -933,7 +1067,14 @@ fn spawn_stat(
     ));
 }
 
-fn spawn_track(commands: &mut Commands, parent: Entity, fraction: f32, height: f32, hue: Color) {
+fn spawn_track(
+    commands: &mut Commands,
+    parent: Entity,
+    fraction: f32,
+    height: f32,
+    hue: Color,
+    offset_index: u8,
+) {
     let track = commands
         .spawn((
             Node {
@@ -947,10 +1088,11 @@ fn spawn_track(commands: &mut Commands, parent: Entity, fraction: f32, height: f
         .id();
     commands.spawn((
         Node {
-            width: percent(fraction * 100.0),
+            width: percent(0),
             height: percent(100),
             ..default()
         },
+        bar_fill(fraction, offset_index),
         BackgroundGradient::from(LinearGradient::to_right(vec![
             ColorStop::new(hue.with_alpha(0.45), percent(0)),
             ColorStop::new(hue, percent(100)),
@@ -1169,6 +1311,22 @@ fn arm_delete(pending: &mut Option<u32>, character_id: u32) -> DeleteAction {
     }
 }
 
+fn cycle_slot(occupied: &[usize], current: usize, direction: i32) -> usize {
+    if occupied.is_empty() || direction == 0 {
+        return current;
+    }
+    let current_index = occupied
+        .iter()
+        .position(|&slot| slot == current)
+        .unwrap_or(0);
+    let next_index = if direction > 0 {
+        (current_index + 1) % occupied.len()
+    } else {
+        (current_index + occupied.len() - 1) % occupied.len()
+    };
+    occupied[next_index]
+}
+
 fn roster_hint(occupied: usize, max_slots: u8) -> String {
     format!("ROSTER · {occupied} OF {max_slots} SLOTS")
 }
@@ -1224,6 +1382,15 @@ mod tests {
         assert_eq!(job_level_fraction(25, 50), 0.5);
         assert_eq!(job_level_fraction(80, 50), 1.0);
         assert_eq!(job_level_fraction(1, 0), 0.0);
+    }
+
+    #[test]
+    fn cycle_slot_wraps_and_ignores_empty_or_single_rosters() {
+        assert_eq!(cycle_slot(&[1, 4, 7], 1, 1), 4);
+        assert_eq!(cycle_slot(&[1, 4, 7], 7, 1), 1);
+        assert_eq!(cycle_slot(&[1, 4, 7], 1, -1), 7);
+        assert_eq!(cycle_slot(&[], 3, 1), 3);
+        assert_eq!(cycle_slot(&[4], 4, 1), 4);
     }
 
     fn with_job(name: &str, slot: u8) -> CharacterInfoWithJobName {
