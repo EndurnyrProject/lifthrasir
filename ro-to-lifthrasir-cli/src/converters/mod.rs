@@ -6,6 +6,7 @@ pub mod ktx2_out;
 pub mod map;
 pub mod maps;
 pub mod model;
+pub mod props;
 pub mod skill;
 pub mod status_icon;
 pub mod weapon;

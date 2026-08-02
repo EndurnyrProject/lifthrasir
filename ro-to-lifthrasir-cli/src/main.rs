@@ -48,6 +48,16 @@ enum Command {
         #[arg(long)]
         force_models: bool,
     },
+    ConvertProps {
+        #[arg(long, default_value = "assets/convert.toml")]
+        loader: PathBuf,
+        #[arg(long, default_value = "assets/data/models")]
+        models_dir: PathBuf,
+        #[arg(long)]
+        model: Vec<String>,
+        #[arg(long)]
+        force: bool,
+    },
     ModelCorpus {
         #[command(subcommand)]
         action: ModelCorpusCommand,
@@ -121,6 +131,17 @@ fn main() -> anyhow::Result<()> {
             let grfs = config.grfs_by_priority();
             let vfs = grf_vfs::GrfVfs::open(&grfs)?;
             converters::maps::run(&vfs, &out, &models_dir, force_models)?;
+        }
+        Command::ConvertProps {
+            loader,
+            models_dir,
+            model,
+            force,
+        } => {
+            let config = config::LoaderConfig::from_path(&loader)?;
+            let grfs = config.grfs_by_priority();
+            let vfs = grf_vfs::GrfVfs::open(&grfs)?;
+            converters::props::run(&vfs, &models_dir, &model, force)?;
         }
         Command::ModelCorpus { action } => match action {
             ModelCorpusCommand::Extract { loader, out } => {
