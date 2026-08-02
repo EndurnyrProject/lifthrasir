@@ -1,5 +1,6 @@
 pub mod character_create;
 pub mod character_preview;
+pub mod character_scene;
 pub mod character_select;
 pub mod fade;
 pub mod loading;
