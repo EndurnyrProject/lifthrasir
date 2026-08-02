@@ -68,6 +68,27 @@ pub enum RoPaletteLoaderError {
     InvalidFormat,
 }
 
+fn parse_palette(bytes: &[u8]) -> Result<RoPaletteAsset, RoPaletteLoaderError> {
+    if bytes.len() != 1024 {
+        return Err(RoPaletteLoaderError::InvalidFormat);
+    }
+
+    let colors = bytes
+        .chunks_exact(4)
+        .enumerate()
+        .map(|(index, chunk)| {
+            [
+                chunk[0],
+                chunk[1],
+                chunk[2],
+                if index == 0 { 0 } else { 255 },
+            ]
+        })
+        .collect();
+
+    Ok(RoPaletteAsset { colors })
+}
+
 impl AssetLoader for RoSpriteLoader {
     type Asset = RoSpriteAsset;
     type Settings = ();
@@ -126,20 +147,28 @@ impl AssetLoader for RoPaletteLoader {
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
 
-        // RO palette files are 1024 bytes (256 colors * 4 bytes RGBA)
-        if bytes.len() != 1024 {
-            return Err(RoPaletteLoaderError::InvalidFormat);
-        }
-
-        let mut colors = Vec::with_capacity(256);
-        for chunk in bytes.chunks_exact(4) {
-            colors.push([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        }
-
-        Ok(RoPaletteAsset { colors })
+        parse_palette(&bytes)
     }
 
     fn extensions(&self) -> &[&str] {
         &["pal"]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn palette_alpha_is_normalized_from_reserved_bytes() {
+        let mut bytes = vec![0; 1024];
+        bytes[..8].copy_from_slice(&[10, 20, 30, 40, 50, 60, 70, 80]);
+        bytes[1020..].copy_from_slice(&[90, 100, 110, 120]);
+
+        let palette = parse_palette(&bytes).unwrap();
+
+        assert_eq!(palette.colors[0], [10, 20, 30, 0]);
+        assert_eq!(palette.colors[1], [50, 60, 70, 255]);
+        assert_eq!(palette.colors[255], [90, 100, 110, 255]);
     }
 }

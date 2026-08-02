@@ -73,7 +73,7 @@ pub fn convert_indexed_to_rgba_with_custom_palette(
             let final_color = if index == 0 || is_magenta {
                 [color[0], color[1], color[2], 0] // Transparent
             } else {
-                *color // Opaque (already RGBA with alpha)
+                [color[0], color[1], color[2], 255]
             };
 
             rgba_data.extend_from_slice(&final_color);
@@ -143,5 +143,50 @@ pub fn apply_magenta_transparency(rgba_data: &mut [u8]) {
             pixel[2] = 0; // B
             pixel[3] = 0; // A
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn indexed_frame() -> SpriteFrame {
+        SpriteFrame {
+            width: 2,
+            height: 1,
+            data: vec![0, 1],
+            is_rgba: false,
+        }
+    }
+
+    #[test]
+    fn custom_palette_overrides_embedded_palette() {
+        let embedded_palette = Palette {
+            colors: vec![[1, 2, 3, 4], [5, 6, 7, 8]],
+        };
+        let custom_palette = RoPaletteAsset {
+            colors: vec![[10, 20, 30, 40], [50, 60, 70, 80]],
+        };
+
+        assert_eq!(
+            convert_sprite_frame_to_rgba(
+                &indexed_frame(),
+                Some(&embedded_palette),
+                Some(&custom_palette),
+            ),
+            vec![10, 20, 30, 0, 50, 60, 70, 255]
+        );
+    }
+
+    #[test]
+    fn embedded_palette_is_used_without_custom_palette() {
+        let embedded_palette = Palette {
+            colors: vec![[1, 2, 3, 4], [5, 6, 7, 8]],
+        };
+
+        assert_eq!(
+            convert_sprite_frame_to_rgba(&indexed_frame(), Some(&embedded_palette), None),
+            vec![1, 2, 3, 0, 5, 6, 7, 255]
+        );
     }
 }
