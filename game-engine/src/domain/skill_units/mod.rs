@@ -4,9 +4,11 @@
 //! by the four skill-unit lifecycle messages and carry no client-side timers.
 //! `spawn` builds the group/cell hierarchy and click colliders, `visuals`
 //! attaches the persistent per-group or per-cell visual, `lifecycle` applies
-//! server HP updates and despawns.
+//! server HP updates and despawns, and `detonation` plays a trap's one-shot
+//! burst when its group arrives in any phase other than `Active`.
 
 pub mod components;
+mod detonation;
 mod lifecycle;
 mod spawn;
 mod visuals;
@@ -33,6 +35,7 @@ impl Plugin for SkillUnitsPlugin {
                 lifecycle::despawn_skill_units,
                 spawn::spawn_skill_units,
                 lifecycle::update_skill_units,
+                detonation::spawn_trap_detonation,
             )
                 .chain(),
         );

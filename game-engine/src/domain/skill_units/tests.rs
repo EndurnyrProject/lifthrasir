@@ -3,16 +3,20 @@
 //! lifecycle messages, mirroring how the server drives them.
 
 use super::components::{SkillUnitCell, SkillUnitGroup};
+use super::detonation::spawn_trap_detonation;
 use super::lifecycle::{despawn_skill_units, update_skill_units};
 use super::spawn::spawn_skill_units;
+use crate::domain::audio::events::PlaySkillSfx;
 use crate::domain::effects::EffectSprite;
-use crate::domain::effects::components::ActiveEffect;
+use crate::domain::effects::components::{ActiveEffect, EffectAnchor};
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::world::gltf_map::LifPropRef;
 use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset, LoadedEffectAsset};
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
-use lifthrasir_data::{EffectData, EffectDescriptor, EffectPlacement, GroundAnchor, Visual};
+use lifthrasir_data::{
+    EffectData, EffectDescriptor, EffectPlacement, GroundAnchor, TriggerFx, Visual,
+};
 use net_contract::dto::{
     SkillUnitCellFlags, SkillUnitCellState, SkillUnitDespawnReason, SkillUnitGroupState,
     SkillUnitPhase,
@@ -85,6 +89,26 @@ fn group_anchored_model_catalog(skill_id: u32) -> EffectCatalog {
     EffectCatalog::build(&data).expect("catalog builds")
 }
 
+fn trap_catalog(skill_id: u32) -> EffectCatalog {
+    let mut data = EffectData::default();
+    data.skills.insert(
+        skill_id,
+        EffectDescriptor {
+            visuals: vec![Visual::Model("외부소품/트랩01".into())],
+            sound: None,
+            on_trigger: Some(TriggerFx {
+                visual: Visual::Str("trap_burst.strfx.ron".into()),
+                sound: Some("effect/trap.wav".into()),
+            }),
+            placement: EffectPlacement::Ground,
+            color: [0.25, 0.5, 0.75, 1.0],
+            repeating: true,
+            ground_anchor: GroundAnchor::Group,
+        },
+    );
+    EffectCatalog::build(&data).expect("catalog builds")
+}
+
 /// Cell-anchored descriptor with a `Bespoke` layer and NO STR (the Ice Wall
 /// shape): spawns a persistent crystal cluster per visible cell instead of an
 /// STR.
@@ -111,10 +135,17 @@ fn test_app(catalog: EffectCatalog) -> App {
         .add_message::<SkillUnitSnapshotReceived>()
         .add_message::<SkillUnitUpdated>()
         .add_message::<SkillUnitDespawned>()
+        .add_message::<PlaySkillSfx>()
         .insert_resource(catalog)
         .add_systems(
             Update,
-            (despawn_skill_units, spawn_skill_units, update_skill_units).chain(),
+            (
+                despawn_skill_units,
+                spawn_skill_units,
+                update_skill_units,
+                spawn_trap_detonation,
+            )
+                .chain(),
         );
     app
 }
@@ -848,4 +879,115 @@ fn duplicate_spawn_unregisters_old_targetable_cells() {
         "old cell's registration is dropped on replace"
     );
     assert!(registry.get_entity(200).is_some(), "new cell registers");
+}
+
+#[test]
+fn used_trap_spawns_one_detonation_effect_and_sound_at_group_center() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(trap_catalog(ANKLE_SNARE));
+    let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Used;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    let (effect_entity, effect, anchor, transform) = app
+        .world_mut()
+        .query::<(Entity, &ActiveEffect, &EffectAnchor, &Transform)>()
+        .single(app.world())
+        .expect("one detonation effect");
+    let center = spawn_coords_to_world_position(40, 50);
+    assert!(!effect.repeating);
+    assert!(matches!(anchor, EffectAnchor::Position(position) if *position == center));
+    assert_eq!(transform.translation, center);
+
+    let sfx = app.world().resource::<Messages<PlaySkillSfx>>();
+    let mut cursor = sfx.get_cursor();
+    let sounds: Vec<_> = cursor.read(sfx).collect();
+    assert_eq!(sounds.len(), 1);
+    assert_eq!(sounds[0].emitter, effect_entity);
+    assert_eq!(sounds[0].sound, "effect/trap.wav");
+}
+
+#[test]
+fn active_trap_spawns_no_detonation() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(trap_catalog(ANKLE_SNARE));
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    assert_eq!(effects(&mut app), 0);
+    let sfx = app.world().resource::<Messages<PlaySkillSfx>>();
+    let mut cursor = sfx.get_cursor();
+    assert_eq!(cursor.read(sfx).count(), 0);
+}
+
+#[test]
+fn used_trap_without_trigger_fx_spawns_no_detonation() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(group_anchored_model_catalog(ANKLE_SNARE));
+    let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Used;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    assert_eq!(effects(&mut app), 0);
+    let sfx = app.world().resource::<Messages<PlaySkillSfx>>();
+    let mut cursor = sfx.get_cursor();
+    assert_eq!(cursor.read(sfx).count(), 0);
+}
+
+#[test]
+fn captured_trap_keeps_prop_and_spawns_detonation() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(trap_catalog(ANKLE_SNARE));
+    let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Captured;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    assert_eq!(effects(&mut app), 1);
+    assert_eq!(
+        app.world_mut()
+            .query::<&LifPropRef>()
+            .iter(app.world())
+            .count(),
+        1,
+        "captured trap independently keeps its prop"
+    );
+}
+
+#[test]
+fn non_catalog_skill_in_non_active_phase_is_ignored() {
+    let mut app = test_app(EffectCatalog::build(&EffectData::default()).expect("empty catalog"));
+    let mut spawned = group(1, 999_999, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Used;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    assert_eq!(roots(&mut app), 1);
+    assert_eq!(effects(&mut app), 0);
+}
+
+#[test]
+fn non_active_snapshot_group_spawns_detonation() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(trap_catalog(ANKLE_SNARE));
+    let mut snapshot_group = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    snapshot_group.phase = SkillUnitPhase::Sprung;
+    app.world_mut().write_message(SkillUnitSnapshotReceived {
+        server_tick: 7,
+        groups: vec![snapshot_group],
+    });
+    app.update();
+
+    assert_eq!(effects(&mut app), 1);
+    let sfx = app.world().resource::<Messages<PlaySkillSfx>>();
+    let mut cursor = sfx.get_cursor();
+    assert_eq!(cursor.read(sfx).count(), 1);
 }

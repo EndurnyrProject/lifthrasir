@@ -29,7 +29,7 @@ const CELL_COLLIDER_HALF_SIZE: f32 = 2.5;
 /// RO grid coordinates are non-negative; a negative wire value is malformed.
 /// Reject it (the caller warns and skips) rather than wrapping it into a bogus
 /// cell far off the map.
-fn grid_coord(value: i32) -> Option<u16> {
+pub(super) fn grid_coord(value: i32) -> Option<u16> {
     u16::try_from(value).ok()
 }
 

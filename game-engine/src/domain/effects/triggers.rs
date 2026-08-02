@@ -173,15 +173,20 @@ fn effect_asset_path(name: &str) -> String {
     }
 }
 
-/// Load the descriptor's STR effect through the registered `.str`/`.strfx.ron`
-/// loader. `None` for descriptors with no `Str` layer, which spawn no STR visual.
+/// Load a named STR effect through the registered `.str`/`.strfx.ron` loader.
+pub(crate) fn load_str_effect(asset_server: &AssetServer, name: &str) -> Handle<LoadedEffectAsset> {
+    asset_server.load(effect_asset_path(name))
+}
+
+/// Load the descriptor's STR effect. `None` for descriptors with no `Str`
+/// layer, which spawn no STR visual.
 pub(crate) fn load_effect(
     asset_server: &AssetServer,
     descriptor: &EffectDescriptor,
 ) -> Option<Handle<LoadedEffectAsset>> {
     descriptor
         .str_name()
-        .map(|name| asset_server.load(effect_asset_path(name)))
+        .map(|name| load_str_effect(asset_server, name))
 }
 
 /// Spawn the descriptor's STR effect when it has one, returning the entity the
@@ -386,7 +391,7 @@ pub fn on_skill_damage(
 /// World position of a ground cell with terrain height applied. Effects are
 /// non-critical (design D6): with no altitude data loaded yet the cell stays on
 /// the y=0 grid plane rather than skipping the visual.
-fn ground_world_position(
+pub(crate) fn ground_world_position(
     x: u16,
     y: u16,
     map_altitude: Option<&CurrentMapAltitude>,
