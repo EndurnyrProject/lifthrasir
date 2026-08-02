@@ -101,6 +101,13 @@ fn column_spacing() -> f32 {
     PREVIEW_VIEWPORT_HEIGHT * COLUMN_PX as f32 / ROW_PX as f32
 }
 
+fn target_size(column_count: u32, column_scale: f32) -> (u32, u32) {
+    (
+        ((column_count * COLUMN_PX) as f32 * column_scale) as u32,
+        (ROW_PX as f32 * column_scale) as u32,
+    )
+}
+
 /// Builds an empty RGBA render-target image with the usage flags a camera needs.
 pub fn create_render_target(width: u32, height: u32) -> Image {
     let size = Extent3d {
@@ -118,6 +125,40 @@ pub fn create_render_target(width: u32, height: u32) -> Image {
     image.texture_descriptor.usage =
         TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
     image
+}
+
+/// Spawns the shared preview camera and returns its scaled render target.
+pub fn spawn_preview_diorama(
+    commands: &mut Commands,
+    images: &mut Assets<Image>,
+    column_count: u32,
+    column_scale: f32,
+) -> Handle<Image> {
+    let (width, height) = target_size(column_count, column_scale);
+    let target = images.add(create_render_target(width, height));
+    let row_center_x = (column_count as f32 - 1.0) * column_spacing() / 2.0;
+    let look_at = Vec3::new(row_center_x, LOOK_AT_Y, 0.0);
+
+    commands.spawn((
+        Camera3d::default(),
+        Camera {
+            clear_color: ClearColorConfig::Custom(Color::NONE),
+            order: -1,
+            ..default()
+        },
+        RenderTarget::Image(target.clone().into()),
+        Projection::Orthographic(OrthographicProjection {
+            scaling_mode: ScalingMode::FixedVertical {
+                viewport_height: PREVIEW_VIEWPORT_HEIGHT,
+            },
+            ..OrthographicProjection::default_3d()
+        }),
+        Transform::from_translation(look_at + CAMERA_OFFSET).looking_at(look_at, Vec3::NEG_Y),
+        PreviewCamera,
+        Name::new("CharacterPreviewCamera"),
+    ));
+
+    target
 }
 
 /// Crop rectangle in the shared target for the character in the `col`-th column.
@@ -176,9 +217,7 @@ fn rebuild_diorama(
     }
 
     let count = occupied.len() as u32;
-    let target = images.add(create_render_target(count * COLUMN_PX, ROW_PX));
     let spacing = column_spacing();
-    let row_center_x = (count as f32 - 1.0) * spacing / 2.0;
 
     for (col, (slot, info)) in occupied.iter().enumerate() {
         let position = Vec3::new(col as f32 * spacing, 0.0, 0.0);
@@ -206,27 +245,12 @@ fn rebuild_diorama(
         diorama.columns.insert(*slot, column_rect(col));
     }
 
-    let look_at = Vec3::new(row_center_x, LOOK_AT_Y, 0.0);
-    commands.spawn((
-        Camera3d::default(),
-        Camera {
-            clear_color: ClearColorConfig::Custom(Color::NONE),
-            order: -1,
-            ..default()
-        },
-        RenderTarget::Image(target.clone().into()),
-        Projection::Orthographic(OrthographicProjection {
-            scaling_mode: ScalingMode::FixedVertical {
-                viewport_height: PREVIEW_VIEWPORT_HEIGHT,
-            },
-            ..OrthographicProjection::default_3d()
-        }),
-        Transform::from_translation(look_at + CAMERA_OFFSET).looking_at(look_at, Vec3::NEG_Y),
-        PreviewCamera,
-        Name::new("CharacterPreviewCamera"),
+    diorama.target = Some(spawn_preview_diorama(
+        &mut commands,
+        &mut images,
+        count,
+        1.0,
     ));
-
-    diorama.target = Some(target);
 }
 
 /// Tears the diorama down when leaving the character-selection screen so the
@@ -251,6 +275,12 @@ fn cleanup_diorama(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn target_size_scales_columns() {
+        assert_eq!(target_size(3, 1.0), (3 * COLUMN_PX, ROW_PX));
+        assert_eq!(target_size(1, 2.0), (2 * COLUMN_PX, 2 * ROW_PX));
+    }
 
     #[test]
     fn columns_are_contiguous_and_sized() {
