@@ -1,20 +1,23 @@
-//! Character selection screen.
-//!
-//! A raw `bevy_ui` stage with a hero-panel and a character-grid container. The hero
-//! panel features the selected character with a live diorama crop, name, job/level,
-//! and action buttons. The roster grid shows compact slot cards; clicking a card
-//! updates the selected slot and the hero panel rebuilds.
+//! Character selection screen rendered as a full-width sprite lineup and codex rail.
 
-use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::character::events::{
-    CharacterInfoWithJobName, CharacterListReceivedEvent, DeleteCharacterRequestEvent,
-    RequestCharacterListEvent, SelectCharacterEvent,
+use bevy::{color::Color, prelude::*, ui::ColorStop};
+use game_engine::{
+    core::state::GameState,
+    domain::character::events::{
+        CharacterInfoWithJobName, CharacterListReceivedEvent, DeleteCharacterRequestEvent,
+        RequestCharacterListEvent, SelectCharacterEvent,
+    },
 };
+use net_contract::state::UserSession;
 
-use crate::screens::character_create::CreationSlot;
-use crate::screens::character_preview::{COLUMN_PX, CharacterDiorama, ROW_PX};
-use crate::theme::{self, label};
+use crate::{
+    screens::{
+        character_create::CreationSlot,
+        character_preview::{COLUMN_PX, CharacterDiorama, ROW_PX},
+        character_scene::{backdrop, rail, stage, tokens},
+    },
+    theme,
+};
 
 pub struct CharacterSelectScreenPlugin;
 
@@ -24,882 +27,1113 @@ impl Plugin for CharacterSelectScreenPlugin {
         app.init_resource::<CardsBuilt>();
         app.init_resource::<PendingDeletion>();
         app.init_resource::<SelectedSlot>();
-        app.init_resource::<RosterPage>();
         app.add_systems(
             OnEnter(GameState::CharacterSelection),
             show_character_select_screen,
         );
         app.add_systems(
             Update,
-            (
-                receive_character_list,
-                build_cards,
-                rebuild_hero_panel,
-                update_delete_labels,
-                highlight_selected_cards,
-            )
+            (receive_character_list, normalize_selection, rebuild_screen)
                 .chain()
                 .run_if(in_state(GameState::CharacterSelection)),
         );
     }
 }
 
-/// Latest character list received from the engine, keyed by slot.
 #[derive(Resource, Default)]
 struct CharacterSelectionData {
     characters: Vec<Option<CharacterInfoWithJobName>>,
     max_slots: u8,
-    /// Display pages (3 slots each), from HC_CHARLIST_NOTIFY.
-    display_pages: u8,
 }
 
-/// Character-select roster page currently shown (0-based). The roster is laid
-/// out in pages of 3 slots, matching the RO client when more than one page
-/// exists.
-#[derive(Resource, Default)]
-struct RosterPage(usize);
-
-/// Slots per roster page (RO shows 3 character slots per page).
-const ROSTER_PAGE_SIZE: usize = 3;
-
-/// Marks the page-navigation bar so it is rebuilt alongside the slot cards.
-#[derive(Component)]
-struct RosterNav;
-
-/// Direction a page-nav button moves the roster page (-1 = prev, +1 = next).
-#[derive(Component, Clone, Copy)]
-struct PageNavStep(isize);
-
-/// Guards the one-shot card spawn; reset whenever a fresh list arrives so the grid rebuilds.
 #[derive(Resource, Default)]
 struct CardsBuilt(bool);
 
-/// `char_id` currently armed for deletion (first Delete click arms, second confirms).
 #[derive(Resource, Default)]
 struct PendingDeletion(Option<u32>);
 
-/// Roster slot currently featured in the hero panel.
 #[derive(Resource, Default)]
 struct SelectedSlot(usize);
 
-/// Marks a runtime-spawned slot card so the grid can be cleared on rebuild.
 #[derive(Component)]
-struct CharacterCard;
+struct ScreenRoot;
 
-/// The roster slot a card represents, so the selected card can be highlighted.
 #[derive(Component)]
-struct CardSlot(u8);
+struct SceneContent;
 
-/// A card's Delete button, carrying the character it would delete.
-#[derive(Component)]
-struct DeleteButton {
-    character_id: u32,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SlotKind {
+    Occupied,
+    NewHero,
+    Vacant,
 }
 
-/// Marks the spawned hero-panel content for clean rebuild.
-#[derive(Component)]
-struct HeroContent;
-
-/// Marks the hero panel container (left column of the stage).
-#[derive(Component)]
-struct HeroPanel;
-
-/// Marks the roster grid container that holds the slot cards.
-#[derive(Component)]
-struct CharacterGrid;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DeleteAction {
+    Armed,
+    Confirmed,
+}
 
 fn show_character_select_screen(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
     mut built: ResMut<CardsBuilt>,
     mut pending: ResMut<PendingDeletion>,
     mut selected: ResMut<SelectedSlot>,
-    mut roster_page: ResMut<RosterPage>,
     mut requests: MessageWriter<RequestCharacterListEvent>,
 ) {
     built.0 = false;
     pending.0 = None;
     selected.0 = 0;
-    roster_page.0 = 0;
-
-    let font_body = asset_server.load(theme::FONT_BODY);
-    let font_title = asset_server.load(theme::FONT_TITLE);
 
     let root = commands
         .spawn((
+            ScreenRoot,
             Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
+                width: percent(100),
+                height: percent(100),
                 ..default()
             },
             DespawnOnExit(GameState::CharacterSelection),
         ))
         .id();
-
-    let head = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(60.0),
-                left: Val::Px(0.0),
-                right: Val::Px(0.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            ChildOf(root),
-        ))
-        .id();
-    commands.spawn((
-        label("Endurnir", font_body, 11.0, theme::GOLD.with_alpha(0.55)),
-        ChildOf(head),
-    ));
-    commands.spawn((
-        Text::new("Select Character"),
-        TextFont {
-            font: font_title.into(),
-            font_size: 27.0.into(),
-            ..default()
-        },
-        TextColor(theme::DISPLAY_GOLD),
-        Node {
-            margin: UiRect::top(Val::Px(3.0)),
-            ..default()
-        },
-        ChildOf(head),
-    ));
-
-    let stage = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(0.0),
-                left: Val::Px(0.0),
-                right: Val::Px(0.0),
-                bottom: Val::Px(0.0),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                padding: UiRect::new(Val::Px(64.0), Val::Px(64.0), Val::Px(130.0), Val::Px(38.0)),
-                ..default()
-            },
-            ChildOf(root),
-        ))
-        .id();
-
-    commands.spawn((
-        HeroPanel,
-        Node {
-            width: Val::Px(392.0),
-            margin: UiRect::right(Val::Px(26.0)),
-            ..default()
-        },
-        ChildOf(stage),
-    ));
-    commands.spawn((
-        CharacterGrid,
-        Node {
-            width: Val::Px(700.0),
-            flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            align_content: AlignContent::FlexStart,
-            ..default()
-        },
-        ChildOf(stage),
-    ));
-
+    commands
+        .entity(root)
+        .observe(|_: On<Pointer<Click>>, mut pending: ResMut<PendingDeletion>| pending.0 = None);
     requests.write(RequestCharacterListEvent);
 }
 
-/// Stores the latest character list and arms a card rebuild.
 fn receive_character_list(
     mut events: MessageReader<CharacterListReceivedEvent>,
     mut data: ResMut<CharacterSelectionData>,
     mut built: ResMut<CardsBuilt>,
     mut pending: ResMut<PendingDeletion>,
-    mut roster_page: ResMut<RosterPage>,
 ) {
     let Some(event) = events.read().last() else {
         return;
     };
     data.characters = event.characters.clone();
     data.max_slots = event.max_slots;
-    data.display_pages = event.display_pages.max(1);
     built.0 = false;
     pending.0 = None;
-    roster_page.0 = 0;
 }
 
-/// Builds (or rebuilds) the compact slot cards under the grid container.
-/// Waits for the diorama target when occupied slots exist (hero panel needs it).
-#[allow(clippy::too_many_arguments)]
-fn build_cards(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
+fn normalize_selection(
     data: Res<CharacterSelectionData>,
-    diorama: Res<CharacterDiorama>,
-    page: Res<RosterPage>,
-    mut built: ResMut<CardsBuilt>,
-    container: Query<Entity, With<CharacterGrid>>,
-    existing_cards: Query<Entity, With<CharacterCard>>,
-    existing_nav: Query<Entity, With<RosterNav>>,
+    mut selected: ResMut<SelectedSlot>,
+    mut pending: ResMut<PendingDeletion>,
 ) {
-    if built.0 || data.characters.is_empty() {
+    if !data.is_changed() {
         return;
     }
+    let selection_still_occupied = data.characters.get(selected.0).is_some_and(Option::is_some);
+    if !selection_still_occupied {
+        selected.0 = data
+            .characters
+            .iter()
+            .take(data.max_slots as usize)
+            .position(Option::is_some)
+            .unwrap_or(0);
+    }
+    pending.0 = None;
+}
 
-    let slots = (data.max_slots as usize).min(data.characters.len());
-    let has_occupied = data.characters[..slots].iter().any(Option::is_some);
+#[allow(clippy::too_many_arguments)]
+fn rebuild_screen(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    data: Res<CharacterSelectionData>,
+    diorama: Res<CharacterDiorama>,
+    session: Option<Res<UserSession>>,
+    selected: Res<SelectedSlot>,
+    pending: Res<PendingDeletion>,
+    mut built: ResMut<CardsBuilt>,
+    root: Query<Entity, With<ScreenRoot>>,
+    old_content: Query<Entity, With<SceneContent>>,
+) {
+    if data.max_slots == 0 {
+        return;
+    }
+    let has_occupied = occupied_count(&data) > 0;
     if has_occupied && diorama.target.is_none() {
         return;
     }
-
-    let Ok(container) = container.single() else {
+    if built.0 && !selected.is_changed() && !pending.is_changed() && !diorama.is_changed() {
+        return;
+    }
+    let Ok(root) = root.single() else {
         return;
     };
-
-    for card in &existing_cards {
-        commands.entity(card).despawn();
-    }
-    for nav in &existing_nav {
-        commands.entity(nav).despawn();
+    for entity in &old_content {
+        commands.entity(entity).despawn();
     }
 
-    // Lay the roster out in pages of 3 slots (RO style) when the server
-    // advertised more than one page; otherwise show every slot at once.
-    let total_pages = (data.display_pages as usize).max(1);
-    let page_size = if total_pages > 1 {
-        ROSTER_PAGE_SIZE
-    } else {
-        slots
-    };
-    let page = page.0.min(total_pages.saturating_sub(1));
-    let start = (page * page_size).min(slots);
-    let end = (start + page_size).min(slots);
+    let featured = featured(&data.characters, selected.0);
+    let hue = featured
+        .map(|info| tokens::class_hue(info.base.class))
+        .unwrap_or(theme::EMERALD);
+    let realm = session
+        .as_ref()
+        .and_then(|session| session.selected_server.as_ref())
+        .map(|server| server.name.as_str())
+        .unwrap_or("Endurnir");
 
-    let font_bold = asset_server.load(theme::FONT_BODY);
-    let font_body = asset_server.load(theme::FONT_BODY);
+    let content = commands
+        .spawn((
+            SceneContent,
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                height: percent(100),
+                ..default()
+            },
+            ChildOf(root),
+        ))
+        .id();
+    commands.spawn((backdrop::key_light(hue), ChildOf(content)));
+    commands.spawn((backdrop::gold_rim(), ChildOf(content)));
+    commands.spawn((backdrop::grade(), ChildOf(content)));
+    commands.spawn((backdrop::vignette(), ChildOf(content)));
+    commands.spawn((backdrop::grain(&assets), ChildOf(content)));
 
-    for (offset, entry) in data.characters[start..end].iter().enumerate() {
-        let slot = (start + offset) as u8;
-        match entry {
-            Some(info) => spawn_occupied_card(
-                &mut commands,
-                container,
-                slot,
-                info,
-                font_bold.clone(),
-                font_body.clone(),
-            ),
-            None => spawn_empty_card(
-                &mut commands,
-                &asset_server,
-                container,
-                slot,
-                font_body.clone(),
-            ),
-        }
-    }
-
-    if total_pages > 1 {
-        spawn_page_nav(
-            &mut commands,
-            &asset_server,
-            container,
-            page,
-            total_pages,
-            font_body,
-        );
-    }
-
+    spawn_header(&mut commands, &assets, content);
+    spawn_identity(&mut commands, &assets, content, &data, featured, realm);
+    commands.spawn((stage::horizon_line(), ChildOf(content)));
+    spawn_lineup(&mut commands, &assets, content, &data, &diorama, selected.0);
+    spawn_codex(
+        &mut commands,
+        &assets,
+        content,
+        featured,
+        selected.0 as u8,
+        pending.0,
+        realm,
+        hue,
+    );
     built.0 = true;
 }
 
-/// Spawns the prev/next page bar under the slot cards. Marked `RosterNav` so it
-/// is cleared and rebuilt on every grid rebuild (including page changes).
-fn spawn_page_nav(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    container: Entity,
-    page: usize,
-    total_pages: usize,
-    font: Handle<Font>,
-) {
-    let bar = commands
-        .spawn((
-            RosterNav,
-            Node {
-                width: Val::Px(700.0),
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(16.0),
-                margin: UiRect::top(Val::Px(14.0)),
-                ..default()
-            },
-            ChildOf(container),
-        ))
-        .id();
-
-    if page > 0 {
-        spawn_nav_button(
-            commands,
-            asset_server,
-            bar,
-            "Prev",
-            "chevron-left",
-            PageNavStep(-1),
-            font.clone(),
-        );
-    }
-
-    commands.spawn((
-        label(
-            format!("Page {} / {}", page + 1, total_pages),
-            font.clone(),
-            13.0,
-            theme::TEXT_FAINT,
-        ),
-        ChildOf(bar),
-    ));
-
-    if page + 1 < total_pages {
-        spawn_nav_button(
-            commands,
-            asset_server,
-            bar,
-            "Next",
-            "chevron-right",
-            PageNavStep(1),
-            font,
-        );
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn spawn_nav_button(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    parent: Entity,
-    text: &str,
-    icon: &str,
-    step: PageNavStep,
-    font: Handle<Font>,
-) {
-    let btn = commands
-        .spawn((
-            step,
-            Pickable::default(),
-            Node {
-                padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
-                column_gap: Val::Px(6.0),
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(9.0)),
-                ..default()
-            },
-            BackgroundColor(theme::EMERALD),
-            BorderColor::all(theme::GOLD_FAINT),
-            ChildOf(parent),
-        ))
-        .id();
-    commands.spawn((
-        theme::icon(asset_server, icon, 14.0, theme::EMERALD_INK),
-        ChildOf(btn),
-    ));
-    commands.spawn((
-        label(text.to_string(), font, 13.0, theme::EMERALD_INK),
-        ChildOf(btn),
-    ));
-    commands.entity(btn).observe(
-        move |mut click: On<Pointer<Click>>,
-              data: Res<CharacterSelectionData>,
-              mut page: ResMut<RosterPage>,
-              mut built: ResMut<CardsBuilt>| {
-            click.propagate(false);
-            let total_pages = (data.display_pages as usize).max(1);
-            let next = (page.0 as isize + step.0).clamp(0, total_pages as isize - 1) as usize;
-            if next != page.0 {
-                page.0 = next;
-                built.0 = false;
-            }
-        },
-    );
-}
-
-fn spawn_occupied_card(
-    commands: &mut Commands,
-    container: Entity,
-    slot: u8,
-    info: &CharacterInfoWithJobName,
-    font_bold: Handle<Font>,
-    font_body: Handle<Font>,
-) {
-    let level = format!("Lv {}", info.base.base_level);
-    let glyph = info.base.name.chars().next().unwrap_or('?').to_string();
-
-    let card = commands
-        .spawn((
-            CharacterCard,
-            CardSlot(slot),
-            Pickable::default(),
-            Node {
-                width: Val::Px(214.0),
-                height: Val::Px(66.0),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(13.0),
-                padding: UiRect::all(Val::Px(13.0)),
-                margin: UiRect::all(Val::Px(7.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(11.0)),
-                ..default()
-            },
-            BackgroundColor(theme::GLASS_2),
-            BorderColor::all(theme::STROKE),
-            ChildOf(container),
-        ))
-        .id();
-
-    // Level badge, pinned to the top-right corner of the card.
-    let badge = commands
+fn spawn_header(commands: &mut Commands, assets: &AssetServer, parent: Entity) {
+    let header = commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(9.0),
-                right: Val::Px(9.0),
-                padding: UiRect::axes(Val::Px(7.0), Val::Px(2.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(5.0)),
+                left: px(44),
+                top: px(38),
+                align_items: AlignItems::FlexStart,
+                column_gap: px(22),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.3)),
-            BorderColor::all(theme::STROKE),
-            ChildOf(card),
+            ChildOf(parent),
         ))
         .id();
-    commands.spawn((
-        label(level, font_body.clone(), 10.5, theme::TEXT_DIM),
-        ChildOf(badge),
-    ));
-
-    // Glyph lives as a child so the avatar's flex centering actually centers it
-    // (a node's own Text isn't affected by align/justify).
-    let avatar = commands
+    let back = commands
         .spawn((
+            Pickable::default(),
             Node {
-                width: Val::Px(46.0),
-                height: Val::Px(46.0),
+                height: px(32),
                 align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(9.0)),
+                column_gap: px(8),
+                padding: UiRect::horizontal(px(10)),
+                border: UiRect::all(px(1)),
+                border_radius: BorderRadius::all(px(7)),
                 ..default()
             },
-            BackgroundColor(theme::GLASS),
-            BorderColor::all(theme::GOLD_FAINT),
-            ChildOf(card),
+            BackgroundColor(Color::WHITE.with_alpha(0.04)),
+            BorderColor::all(theme::STROKE),
+            ChildOf(header),
         ))
         .id();
     commands.spawn((
-        label(glyph, font_bold.clone(), 19.0, theme::GOLD),
-        ChildOf(avatar),
+        theme::icon(assets, "back", 15.0, theme::TEXT_DIM),
+        ChildOf(back),
     ));
+    commands.spawn((
+        mono_text(assets, "Realms", 10.0, theme::TEXT_DIM),
+        ChildOf(back),
+    ));
+    commands.entity(back).observe(
+        |mut click: On<Pointer<Click>>, mut next: ResMut<NextState<GameState>>| {
+            click.propagate(false);
+            next.set(GameState::ServerSelection);
+        },
+    );
 
-    let col = commands
+    let title = commands
         .spawn((
             Node {
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(3.0),
+                row_gap: px(4),
                 ..default()
             },
-            ChildOf(card),
+            ChildOf(header),
         ))
         .id();
     commands.spawn((
-        label(info.base.name.clone(), font_bold, 15.0, theme::TEXT),
-        ChildOf(col),
+        mono_text(assets, &tokens::mono_label("Endurnir"), 9.5, theme::GOLD),
+        ChildOf(title),
     ));
     commands.spawn((
-        label(info.job_name.clone(), font_body, 11.5, theme::TEXT_FAINT),
-        ChildOf(col),
+        title_text(assets, "CHOOSE YOUR HERO", 23.0, theme::TEXT),
+        ChildOf(title),
     ));
-
-    let selected_slot = slot as usize;
-    commands.entity(card).observe(
-        move |_: On<Pointer<Click>>, mut sel: ResMut<SelectedSlot>| {
-            sel.0 = selected_slot;
-        },
-    );
 }
 
-fn spawn_empty_card(
+fn spawn_identity(
     commands: &mut Commands,
-    asset_server: &AssetServer,
-    container: Entity,
+    assets: &AssetServer,
+    parent: Entity,
+    data: &CharacterSelectionData,
+    featured: Option<&CharacterInfoWithJobName>,
+    realm: &str,
+) {
+    commands.spawn((
+        mono_text(
+            assets,
+            &roster_hint(occupied_count(data), data.max_slots),
+            11.0,
+            theme::TEXT_DIM,
+        ),
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(48),
+            top: px(170),
+            ..default()
+        },
+        ChildOf(parent),
+    ));
+    let block = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(48),
+                top: px(212),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(7),
+                ..default()
+            },
+            ChildOf(parent),
+        ))
+        .id();
+    if let Some(info) = featured {
+        commands.spawn((
+            mono_text(
+                assets,
+                &tokens::mono_label(&info.job_name),
+                10.0,
+                theme::GOLD,
+            ),
+            ChildOf(block),
+        ));
+        commands.spawn((
+            title_text(assets, &info.base.name, 58.0, theme::TEXT),
+            ChildOf(block),
+        ));
+        commands.spawn((
+            mono_text(
+                assets,
+                &format!(
+                    "{}  ·  LEVEL {}  ·  {realm}",
+                    info.job_name.to_uppercase(),
+                    info.base.base_level
+                ),
+                11.0,
+                tokens::class_hue(info.base.class),
+            ),
+            ChildOf(block),
+        ));
+    } else {
+        commands.spawn((
+            mono_text(assets, "YOUR STORY AWAITS", 10.0, theme::GOLD),
+            ChildOf(block),
+        ));
+        commands.spawn((
+            title_text(assets, "Forge your first hero", 42.0, theme::TEXT),
+            ChildOf(block),
+        ));
+        commands.spawn((
+            mono_text(
+                assets,
+                "CHOOSE A VACANT SLOT TO BEGIN",
+                11.0,
+                theme::TEXT_DIM,
+            ),
+            ChildOf(block),
+        ));
+    }
+}
+
+fn spawn_lineup(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    parent: Entity,
+    data: &CharacterSelectionData,
+    diorama: &CharacterDiorama,
+    selected: usize,
+) {
+    let slots = data.max_slots.max(1);
+    let lineup = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(34),
+                right: px(470),
+                bottom: px(38),
+                height: px(250),
+                display: Display::Grid,
+                grid_template_columns: RepeatedGridTrack::flex(slots as u16, 1.0),
+                column_gap: px(4),
+                align_items: AlignItems::End,
+                ..default()
+            },
+            ChildOf(parent),
+        ))
+        .id();
+    let first_vacant = (0..slots as usize).find(|&slot| featured(&data.characters, slot).is_none());
+    for slot in 0..slots as usize {
+        match slot_kind(data, slot) {
+            SlotKind::Occupied => spawn_occupied_slot(
+                commands,
+                assets,
+                lineup,
+                slot,
+                data.characters[slot]
+                    .as_ref()
+                    .expect("occupied slot has data"),
+                diorama,
+                slot == selected,
+            ),
+            SlotKind::NewHero | SlotKind::Vacant => spawn_vacant_slot(
+                commands,
+                assets,
+                lineup,
+                slot as u8,
+                first_vacant == Some(slot),
+            ),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_occupied_slot(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    parent: Entity,
+    slot: usize,
+    info: &CharacterInfoWithJobName,
+    diorama: &CharacterDiorama,
+    selected: bool,
+) {
+    let hue = tokens::class_hue(info.base.class);
+    let card = commands
+        .spawn((
+            Pickable::default(),
+            Node {
+                min_width: px(0),
+                height: px(250),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::FlexEnd,
+                overflow: Overflow::clip(),
+                ..default()
+            },
+            ChildOf(parent),
+        ))
+        .id();
+    commands.entity(card).observe(
+        move |mut click: On<Pointer<Click>>,
+              mut selected_slot: ResMut<SelectedSlot>,
+              mut pending: ResMut<PendingDeletion>| {
+            click.propagate(false);
+            selected_slot.0 = slot;
+            pending.0 = None;
+        },
+    );
+
+    let decor_visibility = if selected {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    commands.spawn((
+        stage::spot_beam(assets, hue),
+        decor_visibility,
+        ChildOf(card),
+    ));
+    commands.spawn((stage::spot_glow(hue), decor_visibility, ChildOf(card)));
+    commands.spawn((
+        stage::spot_ring(assets, hue),
+        decor_visibility,
+        ChildOf(card),
+    ));
+    commands.spawn((
+        stage::spot_ring_thin(assets, hue),
+        decor_visibility,
+        ChildOf(card),
+    ));
+    commands.spawn((stage::ground_shadow(), ChildOf(card)));
+
+    let pending_delete = info.base.delete_date != 0;
+    let mut image = ImageNode {
+        image: diorama.target.clone().unwrap_or_default(),
+        rect: diorama.columns.get(&(slot as u8)).copied(),
+        ..default()
+    };
+    if pending_delete {
+        image.color = Color::srgba(0.48, 0.52, 0.50, 0.58);
+    }
+    commands.spawn((
+        image,
+        Node {
+            width: px(if selected { COLUMN_PX as f32 } else { 100.0 }),
+            height: px(if selected { ROW_PX as f32 } else { 156.0 }),
+            margin: UiRect::bottom(px(-8)),
+            ..default()
+        },
+        Pickable::IGNORE,
+        ChildOf(card),
+    ));
+    spawn_nameplate(commands, assets, card, info, selected, pending_delete);
+}
+
+fn spawn_nameplate(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    parent: Entity,
+    info: &CharacterInfoWithJobName,
+    selected: bool,
+    pending_delete: bool,
+) {
+    let plate = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                height: px(48),
+                min_width: px(0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                padding: UiRect::top(px(9)),
+                overflow: Overflow::clip(),
+                border_radius: BorderRadius::all(px(8)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.016, 0.031, 0.027, 0.62)),
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((
+        title_text(
+            assets,
+            &info.base.name,
+            13.5,
+            if selected {
+                theme::TEXT
+            } else {
+                theme::TEXT_DIM
+            },
+        ),
+        Node {
+            max_width: percent(100),
+            overflow: Overflow::clip(),
+            ..default()
+        },
+        TextLayout {
+            linebreak: LineBreak::NoWrap,
+            ..default()
+        },
+        ChildOf(plate),
+    ));
+    let caption = if pending_delete {
+        "DELETION PENDING".to_string()
+    } else {
+        format!("LV {}", info.base.base_level)
+    };
+    commands.spawn((
+        mono_text(
+            assets,
+            &caption,
+            10.0,
+            if pending_delete {
+                theme::BAD
+            } else {
+                theme::GOLD
+            },
+        ),
+        ChildOf(plate),
+    ));
+}
+
+fn spawn_vacant_slot(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    parent: Entity,
     slot: u8,
-    font: Handle<Font>,
+    is_new: bool,
 ) {
     let card = commands
         .spawn((
-            CharacterCard,
-            CardSlot(slot),
             Pickable::default(),
             Node {
-                width: Val::Px(214.0),
-                height: Val::Px(66.0),
+                min_width: px(0),
+                height: px(160),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                row_gap: Val::Px(7.0),
-                margin: UiRect::all(Val::Px(7.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(11.0)),
+                justify_content: JustifyContent::FlexEnd,
+                overflow: Overflow::clip(),
                 ..default()
             },
-            BackgroundColor(theme::FIELD),
-            BorderColor::all(theme::STROKE),
-            ChildOf(container),
+            ChildOf(parent),
         ))
         .id();
-    // bevy_ui borders can't be dashed; the plus-ring + dimmer fill carry
-    // the "empty" read instead of the mockup's dashed outline.
-    let ring = commands
-        .spawn((
-            Node {
-                width: Val::Px(32.0),
-                height: Val::Px(32.0),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: UiRect::all(Val::Px(1.5)),
-                border_radius: BorderRadius::all(Val::Px(16.0)),
-                ..default()
-            },
-            BorderColor::all(theme::STROKE_STRONG),
-            ChildOf(card),
-        ))
-        .id();
-    commands.spawn((
-        theme::icon(asset_server, "plus", 18.0, theme::TEXT_FAINT),
-        ChildOf(ring),
-    ));
-    commands.spawn((
-        label("Create", font, 12.0, theme::TEXT_FAINT),
-        ChildOf(card),
-    ));
-
-    let selected_slot = slot as usize;
     commands.entity(card).observe(
-        move |_: On<Pointer<Click>>, mut sel: ResMut<SelectedSlot>| {
-            sel.0 = selected_slot;
-        },
-    );
-}
-
-/// Highlights the selected slot card with an emerald border (mirrors the mockup's
-/// selected state). Runs after a rebuild and whenever the selection changes.
-fn highlight_selected_cards(
-    selected: Res<SelectedSlot>,
-    built: Res<CardsBuilt>,
-    mut cards: Query<(&CardSlot, &mut BorderColor)>,
-) {
-    if !selected.is_changed() && !built.is_changed() {
-        return;
-    }
-    for (slot, mut border) in &mut cards {
-        let color = if slot.0 as usize == selected.0 {
-            theme::EMERALD
-        } else {
-            theme::STROKE
-        };
-        *border = BorderColor::all(color);
-    }
-}
-
-/// Despawns and rebuilds the hero panel content when selection or roster changes.
-#[allow(clippy::too_many_arguments)]
-fn rebuild_hero_panel(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    data: Res<CharacterSelectionData>,
-    diorama: Res<CharacterDiorama>,
-    selected: Res<SelectedSlot>,
-    built: Res<CardsBuilt>,
-    panel: Query<Entity, With<HeroPanel>>,
-    existing: Query<Entity, With<HeroContent>>,
-) {
-    if !built.0 {
-        return;
-    }
-    if !selected.is_changed() && !built.is_changed() {
-        return;
-    }
-    let Ok(panel) = panel.single() else {
-        return;
-    };
-    for e in &existing {
-        commands.entity(e).despawn();
-    }
-
-    let font_title = asset_server.load(theme::FONT_TITLE);
-    let font_body = asset_server.load(theme::FONT_BODY);
-
-    let frame = commands
-        .spawn((
-            HeroContent,
-            Node {
-                width: Val::Px(392.0),
-                height: Val::Px(440.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                row_gap: Val::Px(14.0),
-                padding: UiRect::all(Val::Px(26.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(16.0)),
-                ..default()
-            },
-            BackgroundColor(theme::GLASS),
-            BorderColor::all(theme::GOLD_FAINT),
-            ChildOf(panel),
-        ))
-        .id();
-
-    match featured(&data.characters, selected.0) {
-        Some(info) => {
-            let slot = selected.0 as u8;
-            let mut preview = ImageNode::default();
-            if let Some(target) = &diorama.target {
-                preview.image = target.clone();
-                preview.rect = diorama.columns.get(&slot).copied();
-            }
-            commands.spawn((
-                preview,
-                Node {
-                    width: Val::Px(COLUMN_PX as f32),
-                    height: Val::Px(ROW_PX as f32),
-                    ..default()
-                },
-                ChildOf(frame),
-            ));
-            commands.spawn((
-                label(
-                    info.base.name.clone(),
-                    font_title,
-                    25.0,
-                    theme::DISPLAY_GOLD,
-                ),
-                ChildOf(frame),
-            ));
-            commands.spawn((
-                label(
-                    format!("{}   Lv. {}", info.job_name, info.base.base_level),
-                    font_body.clone(),
-                    13.0,
-                    theme::TEXT_DIM,
-                ),
-                ChildOf(frame),
-            ));
-            let actions = commands
-                .spawn((
-                    Node {
-                        flex_direction: FlexDirection::Row,
-                        column_gap: Val::Px(10.0),
-                        ..default()
-                    },
-                    ChildOf(frame),
-                ))
-                .id();
-            spawn_enter_button(
-                &mut commands,
-                &asset_server,
-                actions,
-                slot,
-                font_body.clone(),
-            );
-            spawn_delete_button(
-                &mut commands,
-                &asset_server,
-                actions,
-                info.base.char_id,
-                font_body,
-            );
-        }
-        None => {
-            commands.spawn((
-                label("Empty Slot", font_title, 20.0, theme::DISPLAY_GOLD),
-                ChildOf(frame),
-            ));
-            commands.spawn((
-                label(
-                    "Forge a new hero.",
-                    font_body.clone(),
-                    13.0,
-                    theme::TEXT_FAINT,
-                ),
-                ChildOf(frame),
-            ));
-            spawn_create_button(
-                &mut commands,
-                &asset_server,
-                frame,
-                selected.0 as u8,
-                font_body,
-            );
-        }
-    }
-}
-
-fn spawn_enter_button(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    parent: Entity,
-    slot: u8,
-    font: Handle<Font>,
-) {
-    let btn = commands
-        .spawn((
-            Pickable::default(),
-            Node {
-                padding: UiRect::axes(Val::Px(18.0), Val::Px(12.0)),
-                column_gap: Val::Px(8.0),
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(11.0)),
-                ..default()
-            },
-            BackgroundColor(theme::EMERALD),
-            BorderColor::all(theme::GOLD_FAINT),
-            ChildOf(parent),
-        ))
-        .id();
-    commands.spawn((
-        theme::icon(asset_server, "play", 15.0, theme::EMERALD_INK),
-        ChildOf(btn),
-    ));
-    commands.spawn((
-        label("Enter Game", font, 15.0, theme::EMERALD_INK),
-        ChildOf(btn),
-    ));
-    commands.entity(btn).observe(
-        move |mut click: On<Pointer<Click>>, mut writer: MessageWriter<SelectCharacterEvent>| {
-            click.propagate(false);
-            writer.write(SelectCharacterEvent { slot });
-        },
-    );
-}
-
-fn spawn_create_button(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    parent: Entity,
-    slot: u8,
-    font: Handle<Font>,
-) {
-    let btn = commands
-        .spawn((
-            Pickable::default(),
-            Node {
-                padding: UiRect::axes(Val::Px(18.0), Val::Px(12.0)),
-                column_gap: Val::Px(8.0),
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(11.0)),
-                ..default()
-            },
-            BackgroundColor(theme::EMERALD),
-            BorderColor::all(theme::GOLD_FAINT),
-            ChildOf(parent),
-        ))
-        .id();
-    commands.spawn((
-        theme::icon(asset_server, "plus", 16.0, theme::EMERALD_INK),
-        ChildOf(btn),
-    ));
-    commands.spawn((
-        label("Create Character", font, 15.0, theme::EMERALD_INK),
-        ChildOf(btn),
-    ));
-    commands.entity(btn).observe(
         move |mut click: On<Pointer<Click>>,
               mut commands: Commands,
+              mut pending: ResMut<PendingDeletion>,
               mut next: ResMut<NextState<GameState>>| {
             click.propagate(false);
+            pending.0 = None;
             commands.insert_resource(CreationSlot(slot));
             next.set(GameState::CharacterCreation);
         },
     );
-}
-
-/// Delete button: first click arms, second click within the armed state confirms.
-/// Label flips Delete<->Confirm? via `update_delete_labels`.
-fn spawn_delete_button(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    parent: Entity,
-    character_id: u32,
-    font: Handle<Font>,
-) {
-    let btn = commands
+    commands.spawn((
+        ImageNode {
+            image: assets.load(tokens::VACANT_PAD),
+            color: if is_new {
+                theme::GOLD.with_alpha(0.5)
+            } else {
+                theme::TEXT_FAINT.with_alpha(0.35)
+            },
+            ..default()
+        },
+        Node {
+            width: px(64),
+            height: px(64),
+            margin: UiRect::bottom(px(6)),
+            ..default()
+        },
+        Pickable::IGNORE,
+        ChildOf(card),
+    ));
+    let plus = commands
         .spawn((
-            DeleteButton { character_id },
-            Pickable::default(),
             Node {
-                padding: UiRect::axes(Val::Px(16.0), Val::Px(12.0)),
-                column_gap: Val::Px(8.0),
+                position_type: PositionType::Absolute,
+                bottom: px(74),
+                width: px(32),
+                height: px(32),
+                justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(11.0)),
+                border: UiRect::all(px(1)),
+                border_radius: BorderRadius::MAX,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.878, 0.384, 0.369, 0.12)),
-            BorderColor::all(theme::BAD),
+            BorderColor::all(if is_new {
+                theme::GOLD_FAINT
+            } else {
+                theme::STROKE
+            }),
+            Pickable::IGNORE,
+            ChildOf(card),
+        ))
+        .id();
+    commands.spawn((
+        theme::icon(
+            assets,
+            "plus",
+            16.0,
+            if is_new {
+                theme::GOLD
+            } else {
+                theme::TEXT_FAINT
+            },
+        ),
+        ChildOf(plus),
+    ));
+    commands.spawn((
+        mono_text(
+            assets,
+            if is_new { "NEW HERO" } else { "EMPTY" },
+            10.5,
+            if is_new {
+                theme::GOLD
+            } else {
+                theme::TEXT_FAINT
+            },
+        ),
+        ChildOf(card),
+    ));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_codex(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    parent: Entity,
+    featured: Option<&CharacterInfoWithJobName>,
+    slot: u8,
+    armed: Option<u32>,
+    realm: &str,
+    hue: Color,
+) {
+    let rail_host = commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(0),
+                top: px(0),
+                width: px(452),
+                height: percent(100),
+                ..default()
+            },
+            ChildOf(parent),
+        ))
+        .id();
+    let rail_entity = commands
+        .spawn((rail::rail_container(), ChildOf(rail_host)))
+        .id();
+    commands.spawn((
+        rail::rail_header(assets, "Hero Codex", realm),
+        ChildOf(rail_entity),
+    ));
+    let Some(info) = featured else {
+        spawn_empty_codex(commands, assets, rail_entity);
+        return;
+    };
+
+    spawn_crest(commands, assets, rail_entity, info, hue);
+    commands.spawn((rail::gold_rule(), ChildOf(rail_entity)));
+    spawn_progress(
+        commands,
+        assets,
+        rail_entity,
+        "JOB LEVEL",
+        info.base.job_level,
+        tokens::job_level_cap(info.base.class),
+        hue,
+    );
+    commands.spawn((
+        rail::section_label(assets, "Attributes"),
+        ChildOf(rail_entity),
+    ));
+    for (name, value) in [
+        ("STR", info.base.str),
+        ("AGI", info.base.agi),
+        ("VIT", info.base.vit),
+        ("INT", info.base.int),
+        ("DEX", info.base.dex),
+        ("LUK", info.base.luk),
+    ] {
+        spawn_stat(commands, assets, rail_entity, name, value, hue);
+    }
+    spawn_footer(commands, assets, rail_entity, info, slot, armed);
+}
+
+fn spawn_empty_codex(commands: &mut Commands, assets: &AssetServer, parent: Entity) {
+    let crest = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: px(14),
+                margin: UiRect::top(px(55)),
+                ..default()
+            },
             ChildOf(parent),
         ))
         .id();
     commands.spawn((
-        theme::icon(asset_server, "trash", 15.0, theme::BAD),
-        ChildOf(btn),
+        title_text(assets, "◇", 54.0, theme::GOLD_FAINT),
+        ChildOf(crest),
     ));
-    commands.spawn((label("Delete", font, 14.0, theme::BAD), ChildOf(btn)));
-    commands.entity(btn).observe(
+    commands.spawn((
+        title_text(assets, "AN EMPTY CHAPTER", 18.0, theme::TEXT_DIM),
+        ChildOf(crest),
+    ));
+    commands.spawn((
+        mono_text(
+            assets,
+            "FORGE A HERO TO FILL THE CODEX",
+            10.0,
+            theme::TEXT_FAINT,
+        ),
+        ChildOf(crest),
+    ));
+}
+
+fn spawn_crest(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    parent: Entity,
+    info: &CharacterInfoWithJobName,
+    hue: Color,
+) {
+    let crest = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: px(10),
+                margin: UiRect::bottom(px(22)),
+                ..default()
+            },
+            ChildOf(parent),
+        ))
+        .id();
+    let mark = commands
+        .spawn((
+            Node {
+                width: px(72),
+                height: px(72),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(px(1)),
+                ..default()
+            },
+            UiTransform {
+                rotation: Rot2::degrees(45.0),
+                ..default()
+            },
+            BackgroundColor(hue.with_alpha(0.06)),
+            BorderColor::all(hue.with_alpha(0.38)),
+            ChildOf(crest),
+        ))
+        .id();
+    let glyph = info
+        .job_name
+        .chars()
+        .next()
+        .unwrap_or('?')
+        .to_uppercase()
+        .to_string();
+    commands.spawn((
+        title_text(assets, &glyph, 36.0, hue),
+        UiTransform {
+            rotation: Rot2::degrees(-45.0),
+            ..default()
+        },
+        ChildOf(mark),
+    ));
+    commands.spawn((
+        title_text(assets, &info.job_name.to_uppercase(), 19.0, theme::TEXT),
+        ChildOf(crest),
+    ));
+    commands.spawn((
+        mono_text(
+            assets,
+            &format!(
+                "BASE LV {}  ·  JOB LV {}",
+                info.base.base_level, info.base.job_level
+            ),
+            10.0,
+            theme::TEXT_DIM,
+        ),
+        ChildOf(crest),
+    ));
+}
+
+fn spawn_progress(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    parent: Entity,
+    label: &str,
+    value: u32,
+    cap: u32,
+    hue: Color,
+) {
+    let block = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(8),
+                ..default()
+            },
+            ChildOf(parent),
+        ))
+        .id();
+    let row = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                justify_content: JustifyContent::SpaceBetween,
+                ..default()
+            },
+            ChildOf(block),
+        ))
+        .id();
+    commands.spawn((mono_text(assets, label, 9.5, theme::TEXT_DIM), ChildOf(row)));
+    commands.spawn((
+        mono_text(assets, &format!("{value} / {cap}"), 10.0, theme::GOLD),
+        ChildOf(row),
+    ));
+    spawn_track(commands, block, job_level_fraction(value, cap), 5.0, hue);
+}
+
+fn spawn_stat(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    parent: Entity,
+    name: &str,
+    value: u8,
+    hue: Color,
+) {
+    let row = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                height: px(25),
+                align_items: AlignItems::Center,
+                column_gap: px(12),
+                ..default()
+            },
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((
+        mono_text(assets, name, 10.0, theme::TEXT_DIM),
+        Node {
+            width: px(34),
+            ..default()
+        },
+        ChildOf(row),
+    ));
+    let track = commands
+        .spawn((
+            Node {
+                flex_grow: 1.0,
+                height: px(4),
+                ..default()
+            },
+            BackgroundColor(Color::WHITE.with_alpha(0.07)),
+            ChildOf(row),
+        ))
+        .id();
+    commands.spawn((
+        Node {
+            width: percent((value as f32 / 99.0).clamp(0.0, 1.0) * 100.0),
+            height: percent(100),
+            ..default()
+        },
+        BackgroundGradient::from(LinearGradient::to_right(vec![
+            ColorStop::new(hue.with_alpha(0.42), percent(0)),
+            ColorStop::new(hue, percent(100)),
+        ])),
+        ChildOf(track),
+    ));
+    commands.spawn((
+        mono_text(assets, &value.to_string(), 11.0, theme::TEXT),
+        Node {
+            width: px(25),
+            justify_content: JustifyContent::FlexEnd,
+            ..default()
+        },
+        ChildOf(row),
+    ));
+}
+
+fn spawn_track(commands: &mut Commands, parent: Entity, fraction: f32, height: f32, hue: Color) {
+    let track = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                height: px(height),
+                ..default()
+            },
+            BackgroundColor(Color::WHITE.with_alpha(0.07)),
+            ChildOf(parent),
+        ))
+        .id();
+    commands.spawn((
+        Node {
+            width: percent(fraction * 100.0),
+            height: percent(100),
+            ..default()
+        },
+        BackgroundGradient::from(LinearGradient::to_right(vec![
+            ColorStop::new(hue.with_alpha(0.45), percent(0)),
+            ColorStop::new(hue, percent(100)),
+        ])),
+        ChildOf(track),
+    ));
+}
+
+fn spawn_footer(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    parent: Entity,
+    info: &CharacterInfoWithJobName,
+    slot: u8,
+    armed: Option<u32>,
+) {
+    let footer = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                margin: UiRect::top(auto()),
+                padding: UiRect::top(px(26)),
+                column_gap: px(10),
+                border: UiRect::top(px(1)),
+                ..default()
+            },
+            BorderColor::all(theme::GOLD_FAINT),
+            ChildOf(parent),
+        ))
+        .id();
+    let deletion_pending = info.base.delete_date != 0;
+    let enter = commands
+        .spawn((
+            Pickable {
+                is_hoverable: !deletion_pending,
+                should_block_lower: true,
+            },
+            Node {
+                height: px(56),
+                flex_grow: 1.0,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                column_gap: px(9),
+                border: UiRect::all(px(1)),
+                border_radius: BorderRadius::all(px(9)),
+                ..default()
+            },
+            BackgroundGradient::from(LinearGradient::to_bottom(vec![
+                ColorStop::new(
+                    if deletion_pending {
+                        theme::GLASS_2
+                    } else {
+                        Color::srgb_u8(0x1f, 0x91, 0x59)
+                    },
+                    percent(0),
+                ),
+                ColorStop::new(
+                    if deletion_pending {
+                        theme::GLASS
+                    } else {
+                        Color::srgb_u8(0x0b, 0x5c, 0x36)
+                    },
+                    percent(100),
+                ),
+            ])),
+            BorderColor::all(if deletion_pending {
+                theme::STROKE
+            } else {
+                theme::GOLD_FAINT
+            }),
+            ChildOf(footer),
+        ))
+        .id();
+    commands.spawn((
+        theme::icon(
+            assets,
+            "play",
+            15.0,
+            if deletion_pending {
+                theme::TEXT_FAINT
+            } else {
+                theme::TEXT
+            },
+        ),
+        ChildOf(enter),
+    ));
+    commands.spawn((
+        mono_text(
+            assets,
+            if deletion_pending {
+                "DELETION PENDING"
+            } else {
+                "ENTER GAME"
+            },
+            12.0,
+            if deletion_pending {
+                theme::TEXT_FAINT
+            } else {
+                theme::TEXT
+            },
+        ),
+        ChildOf(enter),
+    ));
+    if !deletion_pending {
+        commands.entity(enter).observe(
+            move |mut click: On<Pointer<Click>>,
+                  mut writer: MessageWriter<SelectCharacterEvent>| {
+                click.propagate(false);
+                writer.write(SelectCharacterEvent { slot });
+            },
+        );
+    }
+
+    let character_id = info.base.char_id;
+    let is_armed = armed == Some(character_id);
+    let delete = commands
+        .spawn((
+            Pickable::default(),
+            Node {
+                width: px(56),
+                height: px(56),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(px(1)),
+                border_radius: BorderRadius::all(px(9)),
+                ..default()
+            },
+            BackgroundColor(if is_armed {
+                theme::BAD.with_alpha(0.28)
+            } else {
+                theme::BAD.with_alpha(0.10)
+            }),
+            BorderColor::all(theme::BAD),
+            ChildOf(footer),
+        ))
+        .id();
+    if is_armed {
+        commands.spawn((
+            mono_text(assets, "CONFIRM?", 8.0, theme::BAD),
+            ChildOf(delete),
+        ));
+    } else {
+        commands.spawn((
+            theme::icon(assets, "trash", 17.0, theme::BAD),
+            ChildOf(delete),
+        ));
+    }
+    commands.entity(delete).observe(
         move |mut click: On<Pointer<Click>>,
               mut pending: ResMut<PendingDeletion>,
               mut writer: MessageWriter<DeleteCharacterRequestEvent>| {
             click.propagate(false);
-            if pending.0 == Some(character_id) {
+            if arm_delete(&mut pending.0, character_id) == DeleteAction::Confirmed {
                 writer.write(DeleteCharacterRequestEvent { character_id });
-                pending.0 = None;
-            } else {
-                pending.0 = Some(character_id);
             }
         },
     );
 }
 
-/// Reflects the armed-for-deletion state in the Delete button labels.
-fn update_delete_labels(
-    pending: Res<PendingDeletion>,
-    buttons: Query<(&DeleteButton, &Children)>,
-    mut texts: Query<&mut Text>,
-) {
-    if !pending.is_changed() {
-        return;
-    }
-    for (button, children) in &buttons {
-        let text = if pending.0 == Some(button.character_id) {
-            "Confirm?"
-        } else {
-            "Delete"
-        };
-        for child in children.iter() {
-            if let Ok(mut t) = texts.get_mut(child) {
-                *t = Text::new(text);
-            }
-        }
-    }
+fn title_text(assets: &AssetServer, text: &str, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(text.to_string()),
+        TextFont {
+            font: assets.load(theme::FONT_TITLE).into(),
+            font_size: size.into(),
+            ..default()
+        },
+        TextColor(color),
+    )
 }
 
-/// The character to feature in the hero panel for the selected slot, or `None`
-/// if the slot is empty or out of range.
+fn mono_text(assets: &AssetServer, text: &str, size: f32, color: Color) -> impl Bundle {
+    (
+        Text::new(text.to_string()),
+        TextFont {
+            font: assets.load(theme::FONT_MONO).into(),
+            font_size: size.into(),
+            ..default()
+        },
+        TextColor(color),
+    )
+}
+
 fn featured(
     characters: &[Option<CharacterInfoWithJobName>],
     selected: usize,
@@ -907,232 +1141,102 @@ fn featured(
     characters.get(selected).and_then(Option::as_ref)
 }
 
+fn occupied_count(data: &CharacterSelectionData) -> usize {
+    data.characters
+        .iter()
+        .take(data.max_slots as usize)
+        .filter(|entry| entry.is_some())
+        .count()
+}
+
+fn slot_kind(data: &CharacterSelectionData, slot: usize) -> SlotKind {
+    if featured(&data.characters, slot).is_some() {
+        SlotKind::Occupied
+    } else if (0..slot).all(|prior| featured(&data.characters, prior).is_some()) {
+        SlotKind::NewHero
+    } else {
+        SlotKind::Vacant
+    }
+}
+
+fn arm_delete(pending: &mut Option<u32>, character_id: u32) -> DeleteAction {
+    if *pending == Some(character_id) {
+        *pending = None;
+        DeleteAction::Confirmed
+    } else {
+        *pending = Some(character_id);
+        DeleteAction::Armed
+    }
+}
+
+fn roster_hint(occupied: usize, max_slots: u8) -> String {
+    format!("ROSTER · {occupied} OF {max_slots} SLOTS")
+}
+
+fn job_level_fraction(level: u32, cap: u32) -> f32 {
+    if cap == 0 {
+        0.0
+    } else {
+        (level as f32 / cap as f32).clamp(0.0, 1.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use net_contract::dto::CharacterInfo as ProtocolCharacterInfo;
+    use net_contract::dto::CharacterInfo;
 
     #[test]
-    fn featured_returns_occupied_slot() {
-        let chars = vec![Some(with_job("Hero", 1, 0, 50, "Swordman")), None];
-        assert!(featured(&chars, 0).is_some());
-        assert_eq!(featured(&chars, 0).unwrap().base.name, "Hero");
-    }
-
-    #[test]
-    fn featured_empty_slot_is_none() {
-        let chars = vec![Some(with_job("Hero", 1, 0, 50, "Swordman")), None];
-        assert!(featured(&chars, 1).is_none());
-    }
-
-    #[test]
-    fn featured_out_of_range_is_none() {
-        let chars = vec![Some(with_job("Hero", 1, 0, 50, "Swordman"))];
-        assert!(featured(&chars, 9).is_none());
-    }
-
-    fn protocol_char(name: &str, char_id: u32, slot: u8, base_level: u16) -> ProtocolCharacterInfo {
-        ProtocolCharacterInfo {
-            char_id,
-            base_exp: 0,
-            zeny: 0,
-            job_exp: 0,
-            job_level: 1,
-            body_state: 0,
-            health_state: 0,
-            option: 0,
-            karma: 0,
-            manner: 0,
-            status_point: 0,
-            hp: 40,
-            max_hp: 40,
-            sp: 11,
-            max_sp: 11,
-            walk_speed: 150,
-            class: 0,
-            hair: 1,
-            body: 0,
-            weapon: 0,
-            base_level,
-            skill_point: 0,
-            head_bottom: 0,
-            shield: 0,
-            head_top: 0,
-            head_mid: 0,
-            hair_color: 0,
-            clothes_color: 0,
-            name: name.to_string(),
-            str: 1,
-            agi: 1,
-            vit: 1,
-            int: 1,
-            dex: 1,
-            luk: 1,
-            char_num: slot,
-            rename: 0,
-            last_map: "prontera".to_string(),
-            delete_date: 0,
-            robe: 0,
-            char_slot_change: 0,
-            char_rename: 0,
-            sex: 1,
-        }
-    }
-
-    fn with_job(
-        name: &str,
-        char_id: u32,
-        slot: u8,
-        level: u16,
-        job: &str,
-    ) -> CharacterInfoWithJobName {
-        CharacterInfoWithJobName {
-            base: protocol_char(name, char_id, slot, level),
-            job_name: job.to_string(),
-            body_sprite_path: "body.spr".to_string(),
-            hair_sprite_path: "hair.spr".to_string(),
-            hair_palette_path: None,
-        }
-    }
-
-    /// Builds an app with just enough plugins to spawn cards headlessly.
-    fn card_app(data: CharacterSelectionData, diorama: CharacterDiorama) -> App {
-        let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
-        app.init_asset::<Font>();
-        // The cards spawn `theme::icon` handles; register Image so the load doesn't panic
-        // on an unregistered asset type (no SvgLoader here — the handle just stays unloaded).
-        app.init_asset::<Image>();
-        app.add_message::<SelectCharacterEvent>();
-        app.add_message::<DeleteCharacterRequestEvent>();
-        app.init_resource::<CardsBuilt>();
-        app.init_resource::<PendingDeletion>();
-        app.init_resource::<SelectedSlot>();
-        app.init_resource::<RosterPage>();
-        app.insert_resource(data);
-        app.insert_resource(diorama);
-        app.world_mut().spawn(CharacterGrid);
-        app.add_systems(Update, build_cards);
-        app
-    }
-
-    fn occupied_diorama() -> CharacterDiorama {
-        let mut diorama = CharacterDiorama::default();
-        diorama.target = Some(Handle::default());
-        diorama.columns.insert(0, Rect::new(0.0, 0.0, 144.0, 224.0));
-        diorama
-            .columns
-            .insert(2, Rect::new(144.0, 0.0, 288.0, 224.0));
-        diorama
-    }
-
-    fn card_count(app: &mut App) -> usize {
-        app.world_mut()
-            .query_filtered::<Entity, With<CharacterCard>>()
-            .iter(app.world())
-            .count()
-    }
-
-    fn all_texts(app: &mut App) -> Vec<String> {
-        app.world_mut()
-            .query::<&Text>()
-            .iter(app.world())
-            .map(|t| t.0.clone())
-            .collect()
-    }
-
-    #[test]
-    fn builds_one_card_per_slot_with_names() {
+    fn slot_layout_marks_first_vacancy_as_new_hero() {
         let data = CharacterSelectionData {
             characters: vec![
-                Some(with_job("Hero", 1, 0, 50, "Swordman")),
+                Some(with_job("Hero", 0)),
                 None,
-                Some(with_job("Mage", 2, 2, 33, "Magician")),
+                Some(with_job("Mage", 2)),
+                None,
             ],
-            max_slots: 3,
-            display_pages: 1,
+            max_slots: 4,
         };
-        let mut app = card_app(data, occupied_diorama());
-
-        app.update();
-
-        assert_eq!(card_count(&mut app), 3, "one card per slot up to max_slots");
-        let texts = all_texts(&mut app);
-        assert!(texts.iter().any(|t| t == "Hero"));
-        assert!(texts.iter().any(|t| t == "Mage"));
-        assert!(
-            texts.iter().any(|t| t == "Swordman"),
-            "occupied card shows the class name"
-        );
-        assert!(
-            texts.iter().any(|t| t == "Lv 50"),
-            "occupied card shows the level badge"
-        );
-        assert!(
-            texts.iter().any(|t| t == "Create"),
-            "empty slot shows create"
-        );
-        assert!(app.world().resource::<CardsBuilt>().0);
+        assert_eq!(slot_kind(&data, 0), SlotKind::Occupied);
+        assert_eq!(slot_kind(&data, 1), SlotKind::NewHero);
+        assert_eq!(slot_kind(&data, 2), SlotKind::Occupied);
+        assert_eq!(slot_kind(&data, 3), SlotKind::Vacant);
     }
 
     #[test]
-    fn is_idempotent_across_frames() {
-        let data = CharacterSelectionData {
-            characters: vec![Some(with_job("Hero", 1, 0, 50, "Swordman")), None],
-            max_slots: 2,
-            display_pages: 1,
-        };
-        let mut app = card_app(data, occupied_diorama());
-
-        app.update();
-        app.update();
-        app.update();
-
-        assert_eq!(card_count(&mut app), 2);
+    fn delete_arms_confirms_and_rearms_for_another_character() {
+        let mut pending = None;
+        assert_eq!(arm_delete(&mut pending, 7), DeleteAction::Armed);
+        assert_eq!(pending, Some(7));
+        assert_eq!(arm_delete(&mut pending, 8), DeleteAction::Armed);
+        assert_eq!(pending, Some(8));
+        assert_eq!(arm_delete(&mut pending, 8), DeleteAction::Confirmed);
+        assert_eq!(pending, None);
     }
 
     #[test]
-    fn pages_roster_into_threes_with_nav() {
-        let characters = (0..9)
-            .map(|i| Some(with_job("Hero", i as u32 + 1, i as u8, 50, "Swordman")))
-            .collect();
-        let data = CharacterSelectionData {
-            characters,
-            max_slots: 9,
-            display_pages: 3,
-        };
-        let mut app = card_app(data, occupied_diorama());
-
-        app.update();
-
-        assert_eq!(card_count(&mut app), 3, "only one page of 3 slots is shown");
-        let texts = all_texts(&mut app);
-        assert!(
-            texts.iter().any(|t| t == "Page 1 / 3"),
-            "shows the page indicator"
-        );
-        assert!(
-            texts.iter().any(|t| t == "Next"),
-            "shows Next on the first page"
-        );
-        assert!(
-            !texts.iter().any(|t| t == "Prev"),
-            "no Prev on the first page"
-        );
+    fn roster_label_formats_counts() {
+        assert_eq!(roster_hint(3, 12), "ROSTER · 3 OF 12 SLOTS");
     }
 
     #[test]
-    fn waits_for_diorama_before_building_occupied_cards() {
-        let data = CharacterSelectionData {
-            characters: vec![Some(with_job("Hero", 1, 0, 50, "Swordman"))],
-            max_slots: 1,
-            display_pages: 1,
-        };
-        let mut app = card_app(data, CharacterDiorama::default());
+    fn job_level_progress_is_clamped() {
+        assert_eq!(job_level_fraction(25, 50), 0.5);
+        assert_eq!(job_level_fraction(80, 50), 1.0);
+        assert_eq!(job_level_fraction(1, 0), 0.0);
+    }
 
-        app.update();
-
-        assert_eq!(card_count(&mut app), 0);
-        assert!(!app.world().resource::<CardsBuilt>().0);
+    fn with_job(name: &str, slot: u8) -> CharacterInfoWithJobName {
+        CharacterInfoWithJobName {
+            base: CharacterInfo {
+                name: name.into(),
+                char_num: slot,
+                ..default()
+            },
+            job_name: "Novice".into(),
+            body_sprite_path: String::new(),
+            hair_sprite_path: String::new(),
+            hair_palette_path: None,
+        }
     }
 }
