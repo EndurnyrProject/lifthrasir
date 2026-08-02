@@ -130,6 +130,37 @@ fn validate_descriptor(
     descriptor: &EffectDescriptor,
     shader_fx: &BTreeMap<String, ShaderFxEntry>,
 ) -> Result<(), String> {
+    // `Str` only, deliberately narrower than "any one-shot kind": the trigger
+    // spawner resolves its asset through `load_effect`, which handles `Str`
+    // alone. `Sprite` is served by `EffectSprite`, a *persistent* marker with no
+    // one-shot lifetime, so admitting it here would accept data that renders
+    // nothing. Widen this only together with the spawner.
+    if let Some(trigger) = &descriptor.on_trigger
+        && !matches!(&trigger.visual, Visual::Str(_))
+    {
+        return Err(format!(
+            "{section}[{id}] carries on_trigger {} visual; only Str is supported",
+            kind_name(&trigger.visual)
+        ));
+    }
+
+    // Rendering is gated on `repeating` alone -- that is what routes a descriptor
+    // to the skill-unit group path that attaches a persistent visual. The
+    // `placement: Ground` half is an authoring-intent guard, not a rendering
+    // precondition: a model that is not a ground skill unit's prop is a mistake
+    // worth failing on, even though it would technically draw.
+    if descriptor
+        .visuals
+        .iter()
+        .any(|visual| matches!(visual, Visual::Model(_)))
+        && (!descriptor.repeating
+            || descriptor.placement != lifthrasir_data::EffectPlacement::Ground)
+    {
+        return Err(format!(
+            "{section}[{id}] carries a Model layer, which requires repeating: true and placement: Ground"
+        ));
+    }
+
     let mut seen: Vec<&'static str> = Vec::with_capacity(descriptor.visuals.len());
     for visual in &descriptor.visuals {
         if let Visual::Shader(key) = visual
@@ -201,7 +232,7 @@ pub fn process_loaded_effect_data(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lifthrasir_data::{EffectPlacement, GroundAnchor};
+    use lifthrasir_data::{EffectPlacement, GroundAnchor, TriggerFx};
 
     fn seed_data() -> EffectData {
         let ron = include_str!("../../../../assets/data/ron/effects.ron");
@@ -558,6 +589,99 @@ mod tests {
             catalog.skill(87).expect("descriptor").bespoke_key(),
             Some("ice_wall")
         );
+    }
+
+    #[test]
+    fn unsupported_trigger_visual_is_rejected() {
+        for (id, visual) in [
+            (115, Visual::Model("trap".into())),
+            (116, Visual::Efst(31)),
+            (117, Visual::Shader("fire_bolt".into())),
+            (118, Visual::Bespoke("ice_wall".into())),
+            // Sprite is rejected too: it only exists as a persistent marker and
+            // has no one-shot spawner, so a Sprite trigger would render nothing.
+            (119, Visual::Sprite("이팩트/firewall".into())),
+        ] {
+            let mut data = EffectData::default();
+            data.skills.insert(
+                id,
+                EffectDescriptor {
+                    on_trigger: Some(TriggerFx {
+                        visual,
+                        sound: None,
+                    }),
+                    ..Default::default()
+                },
+            );
+
+            let error = EffectCatalog::build(&data).expect_err("trigger visual must fail");
+            assert!(error.contains(&format!("skills[{id}]")), "{error}");
+            assert!(error.contains("only Str is supported"), "{error}");
+        }
+    }
+
+    #[test]
+    fn model_layer_requires_repeating_ground_descriptor() {
+        for (id, repeating, placement) in [
+            (116, false, EffectPlacement::Ground),
+            (117, true, EffectPlacement::Target),
+        ] {
+            let mut data = EffectData::default();
+            data.skills.insert(
+                id,
+                EffectDescriptor {
+                    visuals: vec![Visual::Model("trap".into())],
+                    placement,
+                    repeating,
+                    ..Default::default()
+                },
+            );
+
+            let error = EffectCatalog::build(&data).expect_err("invalid Model layer must fail");
+            assert!(error.contains(&format!("skills[{id}]")), "{error}");
+            assert!(error.contains("Model"), "{error}");
+        }
+    }
+
+    #[test]
+    fn valid_trap_descriptor_builds() {
+        let mut data = EffectData::default();
+        data.skills.insert(
+            119,
+            EffectDescriptor {
+                visuals: vec![Visual::Model("trap".into())],
+                on_trigger: Some(TriggerFx {
+                    visual: Visual::Str("detonation.strfx.ron".into()),
+                    sound: None,
+                }),
+                placement: EffectPlacement::Ground,
+                repeating: true,
+                ..Default::default()
+            },
+        );
+
+        assert!(EffectCatalog::build(&data).is_ok());
+    }
+
+    #[test]
+    fn duplicate_model_layer_kind_is_rejected() {
+        let mut data = EffectData::default();
+        data.skills.insert(
+            120,
+            EffectDescriptor {
+                visuals: vec![
+                    Visual::Model("trap_a".into()),
+                    Visual::Model("trap_b".into()),
+                ],
+                placement: EffectPlacement::Ground,
+                repeating: true,
+                ..Default::default()
+            },
+        );
+
+        let error = EffectCatalog::build(&data).expect_err("duplicate Model kind must fail");
+        assert!(error.contains("skills[120]"), "{error}");
+        assert!(error.contains("Model"), "{error}");
     }
 
     #[test]
