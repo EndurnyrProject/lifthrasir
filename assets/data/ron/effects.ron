@@ -845,6 +845,14 @@
             repeating: true,
             ground_anchor: Group,
         ),
+        124: ( // HT_REMOVETRAP -- aesir ht_removetrap.ex:38-49 casts ground;
+              // skill_handler.ex:1107-1110 suppresses SkillEffect for ground casts.
+            visuals: [Str("remove_trap.strfx.ron")],
+            sound: Some("effect/hunter_removetrap.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         125: ( // HT_TALKIEBOX (Talkie Box) -- armed prop, then authored detonation.
             visuals: [Model("외부소품/트랩05")],
             sound: Some("effect/hunter_trap_on.wav"),

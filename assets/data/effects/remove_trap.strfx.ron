@@ -1,0 +1,17 @@
+// Remove Trap (HT_REMOVETRAP) - authored effect.
+//
+// Shape: a small, quiet beige dust puff at the reclaimed trap cell.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/dust01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 291.0), quad: (30.0, 15.0),  color: (185, 175, 150, 0) ),
+                ( at: 3, offset: (319.0, 291.0), quad: (76.0, 38.0),  color: (185, 175, 150, 110) ),
+                ( at: 9, offset: (319.0, 291.0), quad: (116.0, 58.0), color: (175, 165, 145, 0) ),
+            ],
+        ),
+    ],
+)
