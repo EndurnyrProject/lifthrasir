@@ -117,6 +117,108 @@ fn palette_readiness(
     }
 }
 
+/// System that processes pending SPR+ACT pairs and optional palettes when ready.
+pub fn process_pending_animations(
+    mut pending: ResMut<PendingAnimations>,
+    assets: AnimationSourceAssets,
+    asset_server: Res<AssetServer>,
+    mut animations: ResMut<Assets<RoAnimationAsset>>,
+    mut images: ResMut<Assets<Image>>,
+    settings: Res<GraphicsSettings>,
+) {
+    let (sprites, actions, palettes) = assets;
+    let upscaling = settings.upscaling;
+    let mut still_pending = Vec::new();
+    let mut newly_completed = Vec::new();
+
+    for request in std::mem::take(&mut pending.pending) {
+        let sprite_ready = sprites.get(&request.sprite_handle).is_some();
+        let action_ready = actions.get(&request.action_handle).is_some();
+        let palette_loaded = request
+            .palette_handle
+            .as_ref()
+            .is_some_and(|handle| palettes.get(handle).is_some());
+        let palette_failed = request
+            .palette_handle
+            .as_ref()
+            .is_some_and(|handle| matches!(asset_server.load_state(handle), LoadState::Failed(_)));
+        let palette_state = palette_readiness(
+            request.palette_handle.is_some(),
+            palette_loaded,
+            palette_failed,
+        );
+
+        if !sprite_ready || !action_ready || palette_state == PaletteReadiness::Pending {
+            still_pending.push(request);
+            continue;
+        }
+
+        let custom_palette = match palette_state {
+            PaletteReadiness::ReadyWithCustomPalette => {
+                let handle = request
+                    .palette_handle
+                    .as_ref()
+                    .expect("custom palette readiness requires a palette handle");
+                Some(
+                    palettes
+                        .get(handle)
+                        .expect("ready palette must be present in Assets"),
+                )
+            }
+            PaletteReadiness::ReadyWithEmbeddedPalette => {
+                if palette_failed {
+                    let handle = request
+                        .palette_handle
+                        .as_ref()
+                        .expect("failed palette request must carry a palette handle");
+                    let path = asset_server
+                        .get_path(handle.id())
+                        .expect("failed palette handle must have an asset path");
+                    warn!("Failed to load custom palette {path}; using embedded sprite palette");
+                }
+                None
+            }
+            PaletteReadiness::Pending => unreachable!("pending palette was re-queued"),
+        };
+        let sprite = sprites
+            .get(&request.sprite_handle)
+            .expect("ready sprite must be present in Assets");
+        let action = actions
+            .get(&request.action_handle)
+            .expect("ready action must be present in Assets");
+
+        let animation = RoAnimationProcessor::process(
+            &sprite.sprite,
+            &action.action,
+            custom_palette,
+            request.layer_tag,
+            &mut images,
+            upscaling,
+        );
+
+        let handle = animations.add(animation);
+        newly_completed.push((request, handle));
+    }
+
+    pending.pending = still_pending;
+    pending.completed.extend(newly_completed);
+}
+
+/// Plugin that sets up the animation processing system.
+pub struct AnimationProcessingPlugin;
+
+impl Plugin for AnimationProcessingPlugin {
+    fn build(&self, app: &mut App) {
+        // Gated so the Assets<Image> ResMut access doesn't serialize the
+        // schedule on every frame where nothing is queued (the steady state).
+        app.init_resource::<PendingAnimations>().add_systems(
+            Update,
+            process_pending_animations
+                .run_if(|pending: Res<PendingAnimations>| pending.has_pending()),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,108 +359,6 @@ mod tests {
         assert_eq!(
             palette_readiness(false, false, false),
             PaletteReadiness::ReadyWithEmbeddedPalette
-        );
-    }
-}
-
-/// System that processes pending SPR+ACT pairs and optional palettes when ready.
-pub fn process_pending_animations(
-    mut pending: ResMut<PendingAnimations>,
-    assets: AnimationSourceAssets,
-    asset_server: Res<AssetServer>,
-    mut animations: ResMut<Assets<RoAnimationAsset>>,
-    mut images: ResMut<Assets<Image>>,
-    settings: Res<GraphicsSettings>,
-) {
-    let (sprites, actions, palettes) = assets;
-    let upscaling = settings.upscaling;
-    let mut still_pending = Vec::new();
-    let mut newly_completed = Vec::new();
-
-    for request in std::mem::take(&mut pending.pending) {
-        let sprite_ready = sprites.get(&request.sprite_handle).is_some();
-        let action_ready = actions.get(&request.action_handle).is_some();
-        let palette_loaded = request
-            .palette_handle
-            .as_ref()
-            .is_some_and(|handle| palettes.get(handle).is_some());
-        let palette_failed = request
-            .palette_handle
-            .as_ref()
-            .is_some_and(|handle| matches!(asset_server.load_state(handle), LoadState::Failed(_)));
-        let palette_state = palette_readiness(
-            request.palette_handle.is_some(),
-            palette_loaded,
-            palette_failed,
-        );
-
-        if !sprite_ready || !action_ready || palette_state == PaletteReadiness::Pending {
-            still_pending.push(request);
-            continue;
-        }
-
-        let custom_palette = match palette_state {
-            PaletteReadiness::ReadyWithCustomPalette => {
-                let handle = request
-                    .palette_handle
-                    .as_ref()
-                    .expect("custom palette readiness requires a palette handle");
-                Some(
-                    palettes
-                        .get(handle)
-                        .expect("ready palette must be present in Assets"),
-                )
-            }
-            PaletteReadiness::ReadyWithEmbeddedPalette => {
-                if palette_failed {
-                    let handle = request
-                        .palette_handle
-                        .as_ref()
-                        .expect("failed palette request must carry a palette handle");
-                    let path = asset_server
-                        .get_path(handle.id())
-                        .expect("failed palette handle must have an asset path");
-                    warn!("Failed to load custom palette {path}; using embedded sprite palette");
-                }
-                None
-            }
-            PaletteReadiness::Pending => unreachable!("pending palette was re-queued"),
-        };
-        let sprite = sprites
-            .get(&request.sprite_handle)
-            .expect("ready sprite must be present in Assets");
-        let action = actions
-            .get(&request.action_handle)
-            .expect("ready action must be present in Assets");
-
-        let animation = RoAnimationProcessor::process(
-            &sprite.sprite,
-            &action.action,
-            custom_palette,
-            request.layer_tag,
-            &mut images,
-            upscaling,
-        );
-
-        let handle = animations.add(animation);
-        newly_completed.push((request, handle));
-    }
-
-    pending.pending = still_pending;
-    pending.completed.extend(newly_completed);
-}
-
-/// Plugin that sets up the animation processing system.
-pub struct AnimationProcessingPlugin;
-
-impl Plugin for AnimationProcessingPlugin {
-    fn build(&self, app: &mut App) {
-        // Gated so the Assets<Image> ResMut access doesn't serialize the
-        // schedule on every frame where nothing is queued (the steady state).
-        app.init_resource::<PendingAnimations>().add_systems(
-            Update,
-            process_pending_animations
-                .run_if(|pending: Res<PendingAnimations>| pending.has_pending()),
         );
     }
 }

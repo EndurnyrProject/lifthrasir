@@ -14,9 +14,9 @@ pub static HAIR_ACTION: LazyLock<Regex> = LazyLock::new(|| {
         .expect("Invalid hair action regex")
 });
 
-// Hair palette pattern: data[\\/]palette[\\/]머리[\\/]{id}_{sex}_{color}.pal
+// Hair palette pattern: data[\\/]palette[\\/]머리[\\/]머리{id}_{sex}_{color}.pal
 pub static HAIR_PALETTE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"data[\\/]palette[\\/]머리[\\/](\d+)_(남|여)_(\d+)\.pal")
+    Regex::new(r"data[\\/]palette[\\/]머리[\\/]머리(\d+)_(남|여)_(\d+)\.pal")
         .expect("Invalid hair palette regex")
 });
 
@@ -56,7 +56,7 @@ pub fn hair_palette_path(style_id: u16, gender: Gender, color_id: u16) -> String
         Gender::Female => "여",
     };
     format!(
-        "ro://data/palette/머리/{}_{}_{}.pal",
+        "ro://data/palette/머리/머리{}_{}_{}.pal",
         style_id, sex, color_id
     )
 }
@@ -314,6 +314,14 @@ mod tests {
             frozen_ice_action_path(),
             "ro://data/sprite/이팩트/얼음땡.act"
         );
+    }
+
+    #[test]
+    fn hair_palette_path_matches_retail_filename() {
+        let path = hair_palette_path(1, Gender::Male, 4);
+
+        assert_eq!(path, "ro://data/palette/머리/머리1_남_4.pal");
+        assert!(HAIR_PALETTE.is_match(path.trim_start_matches("ro://")));
     }
 
     #[test]
