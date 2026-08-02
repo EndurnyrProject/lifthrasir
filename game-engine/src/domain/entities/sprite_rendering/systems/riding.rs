@@ -109,6 +109,7 @@ pub fn apply_peco_mount(
         pending_animations.request(
             asset_server.load(&body_spr_path),
             asset_server.load(&body_act_path),
+            None,
             LAYER_BODY,
             Some(entity),
         );

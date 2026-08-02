@@ -100,6 +100,7 @@ pub fn apply_base_look_changes(
         pending_animations.request(
             asset_server.load(&body_spr_path),
             asset_server.load(&body_act_path),
+            None,
             LAYER_BODY,
             Some(entity),
         );

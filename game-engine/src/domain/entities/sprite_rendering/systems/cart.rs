@@ -224,6 +224,7 @@ pub fn finalize_cart_layer(
         let animation = RoAnimationProcessor::process(
             &sprite.sprite,
             &action.action,
+            None,
             LAYER_CART,
             &mut images,
             settings.upscaling,

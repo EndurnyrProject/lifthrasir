@@ -220,6 +220,7 @@ fn resolve_animation(
     let animation = animations.add(RoAnimationProcessor::process(
         &sprite.sprite,
         &action.action,
+        None,
         LAYER_EFFECT,
         images,
         settings.upscaling,

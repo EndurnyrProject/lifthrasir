@@ -237,6 +237,7 @@ pub fn finalize_falcon_layer(
         let animation = RoAnimationProcessor::process(
             &sprite.sprite,
             &action.action,
+            None,
             LAYER_FALCON,
             &mut images,
             settings.upscaling,

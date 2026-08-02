@@ -63,6 +63,7 @@ pub fn finalize_emote_assets(
     let animation = RoAnimationProcessor::process(
         &sprite.sprite,
         &action.action,
+        None,
         LAYER_BODY,
         &mut images,
         settings.upscaling,

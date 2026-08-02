@@ -145,8 +145,20 @@ fn spawn_character_components(
     let head_spr = asset_server.load(&head_spr_path);
     let head_act = asset_server.load(&head_act_path);
 
-    pending_animations.request(body_spr.clone(), body_act.clone(), LAYER_BODY, Some(entity));
-    pending_animations.request(head_spr.clone(), head_act.clone(), LAYER_HEAD, Some(entity));
+    pending_animations.request(
+        body_spr.clone(),
+        body_act.clone(),
+        None,
+        LAYER_BODY,
+        Some(entity),
+    );
+    pending_animations.request(
+        head_spr.clone(),
+        head_act.clone(),
+        None,
+        LAYER_HEAD,
+        Some(entity),
+    );
 
     entity_commands.insert((
         PlayerSprite::default(),
@@ -179,7 +191,7 @@ fn spawn_mob_components(
     let spr = asset_server.load(&spr_path);
     let act = asset_server.load(&act_path);
 
-    pending_animations.request(spr, act, LAYER_BODY, Some(entity));
+    pending_animations.request(spr, act, None, LAYER_BODY, Some(entity));
 
     entity_commands.insert((MobSprite::default(), PendingRenderLayers));
 
@@ -203,7 +215,7 @@ fn spawn_npc_components(
     let spr = asset_server.load(&spr_path);
     let act = asset_server.load(&act_path);
 
-    pending_animations.request(spr, act, LAYER_BODY, Some(entity));
+    pending_animations.request(spr, act, None, LAYER_BODY, Some(entity));
 
     // NPCs are act-driven 8-direction sprites, identical in format to mobs, so they
     // ride the mob render path (`sync_mob_body_layer`). Without a `MobSprite` no
@@ -230,7 +242,7 @@ fn spawn_item_components(
     let spr = asset_server.load(&spr_path);
     let act = asset_server.load(&act_path);
 
-    pending_animations.request(spr, act, LAYER_BODY, Some(entity));
+    pending_animations.request(spr, act, None, LAYER_BODY, Some(entity));
 
     // Ground-drop collection sprites are a single static pose, so they ride the
     // mob render path (`sync_mob_body_layer`) with one body layer like NPCs.

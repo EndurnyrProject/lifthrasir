@@ -435,6 +435,7 @@ pub fn finalize_frozen_ice_assets(
     let animation = RoAnimationProcessor::process(
         &sprite.sprite,
         &action.action,
+        None,
         LAYER_EFFECT,
         &mut images,
         settings.upscaling,

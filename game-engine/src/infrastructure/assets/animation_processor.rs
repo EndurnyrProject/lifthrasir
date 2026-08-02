@@ -8,6 +8,7 @@ use crate::infrastructure::ro_formats::act::{Layer, RoAction};
 use crate::infrastructure::ro_formats::sprite::{Palette, RoSprite, SpriteFrame};
 
 use super::converters::{apply_magenta_transparency, convert_sprite_frame_to_rgba};
+use super::loaders::RoPaletteAsset;
 use super::ro_animation_asset::{ActionData, FrameData, FramePart, RoAnimationAsset};
 use super::upscale;
 
@@ -19,11 +20,12 @@ impl RoAnimationProcessor {
     pub fn process(
         sprite: &RoSprite,
         action: &RoAction,
+        custom_palette: Option<&RoPaletteAsset>,
         layer_tag: Tag,
         images: &mut Assets<Image>,
         upscaling: Upscaling,
     ) -> RoAnimationAsset {
-        let textures = Self::create_textures(sprite, images, upscaling);
+        let textures = Self::create_textures(sprite, custom_palette, images, upscaling);
         let actions = Self::create_actions(action, sprite);
 
         RoAnimationAsset {
@@ -37,6 +39,7 @@ impl RoAnimationProcessor {
     /// Convert all sprite frames to GPU textures once during loading.
     fn create_textures(
         sprite: &RoSprite,
+        custom_palette: Option<&RoPaletteAsset>,
         images: &mut Assets<Image>,
         upscaling: Upscaling,
     ) -> Vec<Handle<Image>> {
@@ -44,7 +47,8 @@ impl RoAnimationProcessor {
             .frames
             .iter()
             .map(|frame| {
-                let image = Self::frame_to_image(frame, sprite.palette.as_ref(), upscaling);
+                let image =
+                    Self::frame_to_image(frame, sprite.palette.as_ref(), custom_palette, upscaling);
                 images.add(image)
             })
             .collect();
@@ -62,9 +66,10 @@ impl RoAnimationProcessor {
     fn frame_to_image(
         frame: &SpriteFrame,
         palette: Option<&Palette>,
+        custom_palette: Option<&RoPaletteAsset>,
         upscaling: Upscaling,
     ) -> Image {
-        let mut rgba_data = convert_sprite_frame_to_rgba(frame, palette, None);
+        let mut rgba_data = convert_sprite_frame_to_rgba(frame, palette, custom_palette);
         apply_magenta_transparency(&mut rgba_data);
 
         let (rgba_data, width, height) = upscale::scale(
@@ -285,7 +290,7 @@ mod tests {
     #[test]
     fn frame_to_image_keeps_extent_when_off() {
         let frame = rgba_frame(2, 2);
-        let image = RoAnimationProcessor::frame_to_image(&frame, None, Upscaling::Off);
+        let image = RoAnimationProcessor::frame_to_image(&frame, None, None, Upscaling::Off);
         assert_eq!(image.texture_descriptor.size.width, 2);
         assert_eq!(image.texture_descriptor.size.height, 2);
     }
@@ -293,9 +298,34 @@ mod tests {
     #[test]
     fn frame_to_image_scales_pixels_but_not_logical_size() {
         let frame = rgba_frame(2, 2);
-        let image = RoAnimationProcessor::frame_to_image(&frame, None, Upscaling::X2);
+        let image = RoAnimationProcessor::frame_to_image(&frame, None, None, Upscaling::X2);
         assert_eq!(image.texture_descriptor.size.width, 4);
         assert_eq!(image.texture_descriptor.size.height, 4);
         assert_eq!((frame.width, frame.height), (2, 2));
+    }
+
+    #[test]
+    fn frame_to_image_uses_custom_palette() {
+        let frame = SpriteFrame {
+            width: 1,
+            height: 1,
+            data: vec![1],
+            is_rgba: false,
+        };
+        let embedded_palette = Palette {
+            colors: vec![[0, 0, 0, 0], [1, 2, 3, 255]],
+        };
+        let custom_palette = super::super::loaders::RoPaletteAsset {
+            colors: vec![[0, 0, 0, 0], [10, 20, 30, 255]],
+        };
+
+        let image = RoAnimationProcessor::frame_to_image(
+            &frame,
+            Some(&embedded_palette),
+            Some(&custom_palette),
+            Upscaling::Off,
+        );
+
+        assert_eq!(image.data.unwrap(), vec![10, 20, 30, 255]);
     }
 }

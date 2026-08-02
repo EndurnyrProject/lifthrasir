@@ -193,7 +193,7 @@ pub fn handle_equipment_changes(
         let spr = asset_server.load(&spr_path);
         let act = asset_server.load(&act_path);
 
-        pending_animations.request(spr, act, layer_tag, Some(entity));
+        pending_animations.request(spr, act, None, layer_tag, Some(entity));
 
         debug!(
             "handle_equipment_changes: Requested animation for entity {:?}, slot {:?}, view id {}",
@@ -426,6 +426,7 @@ mod tests {
                     PendingAnimation {
                         sprite_handle: Handle::default(),
                         action_handle: Handle::default(),
+                        palette_handle: None,
                         layer_tag: tag,
                         callback_entity: Some(entity),
                     },
