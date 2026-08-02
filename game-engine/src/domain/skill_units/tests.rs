@@ -8,6 +8,7 @@ use super::spawn::spawn_skill_units;
 use crate::domain::effects::EffectSprite;
 use crate::domain::effects::components::ActiveEffect;
 use crate::domain::entities::registry::EntityRegistry;
+use crate::domain::world::gltf_map::LifPropRef;
 use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset, LoadedEffectAsset};
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use bevy::prelude::*;
@@ -65,6 +66,23 @@ fn cell_anchored_catalog_with(skill_id: u32, visual: Visual) -> EffectCatalog {
 
 fn cell_anchored_catalog(skill_id: u32) -> EffectCatalog {
     cell_anchored_catalog_with(skill_id, Visual::Str("icewall.str".into()))
+}
+
+fn group_anchored_model_catalog(skill_id: u32) -> EffectCatalog {
+    let mut data = EffectData::default();
+    data.skills.insert(
+        skill_id,
+        EffectDescriptor {
+            visuals: vec![Visual::Model("외부소품/트랩01".into())],
+            sound: None,
+            on_trigger: None,
+            placement: EffectPlacement::Ground,
+            color: [1.0, 1.0, 1.0, 1.0],
+            repeating: true,
+            ground_anchor: GroundAnchor::Group,
+        },
+    );
+    EffectCatalog::build(&data).expect("catalog builds")
 }
 
 /// Cell-anchored descriptor with a `Bespoke` layer and NO STR (the Ice Wall
@@ -515,6 +533,99 @@ fn group_anchor_yields_exactly_one_effect() {
 }
 
 #[test]
+fn active_model_spawns_one_prop_on_root_and_despawns_with_it() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(group_anchored_model_catalog(ANKLE_SNARE));
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            ANKLE_SNARE,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+
+    let props: Vec<(Entity, String, u32, Entity)> = app
+        .world_mut()
+        .query::<(Entity, &LifPropRef, &ChildOf)>()
+        .iter(app.world())
+        .map(|(entity, prop, child_of)| {
+            (
+                entity,
+                prop.0.model.clone(),
+                prop.0.anim_type,
+                child_of.parent(),
+            )
+        })
+        .collect();
+    assert_eq!(props.len(), 1, "one prop for the group, not its cells");
+    let (prop, model, anim_type, parent) = &props[0];
+    assert_eq!(model, "ro://models/외부소품/트랩01.glb");
+    assert_eq!(*anim_type, 0, "trap props do not animate");
+    assert!(
+        app.world().get::<SkillUnitGroup>(*parent).is_some(),
+        "prop is attached directly to the group root"
+    );
+    assert!(
+        app.world().get::<SkillUnitCell>(*parent).is_none(),
+        "prop is not attached to a cell"
+    );
+
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100, 101],
+        reason: Default::default(),
+    });
+    app.update();
+    assert!(
+        app.world().get_entity(*prop).is_err(),
+        "root despawn removes its prop child"
+    );
+}
+
+#[test]
+fn used_and_sprung_models_spawn_no_prop() {
+    const ANKLE_SNARE: u32 = 115;
+    for phase in [SkillUnitPhase::Used, SkillUnitPhase::Sprung] {
+        let mut app = test_app(group_anchored_model_catalog(ANKLE_SNARE));
+        let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+        spawned.phase = phase;
+        app.world_mut()
+            .write_message(SkillUnitSpawned { group: spawned });
+        app.update();
+
+        assert_eq!(
+            app.world_mut()
+                .query::<&LifPropRef>()
+                .iter(app.world())
+                .count(),
+            0,
+            "{phase:?} trap has no physical prop"
+        );
+    }
+}
+
+#[test]
+fn captured_model_keeps_its_prop() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(group_anchored_model_catalog(ANKLE_SNARE));
+    let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Captured;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&LifPropRef>()
+            .iter(app.world())
+            .count(),
+        1,
+        "captured Ankle Snare remains physically present"
+    );
+}
+
+#[test]
 fn safety_wall_attaches_native_str_to_its_visible_cell() {
     let mut app = test_app(seeded_catalog());
     app.world_mut().write_message(SkillUnitSpawned {
@@ -607,17 +718,18 @@ fn non_repeating_skill_unit_spawns_no_persistent_visual() {
 fn cell_anchored_sprite_requests_one_animation_per_visible_cell() {
     const FIRE_WALL: u32 = 18;
     let mut app = test_app(cell_anchored_sprite_catalog(FIRE_WALL));
-    app.world_mut().write_message(SkillUnitSpawned {
-        group: group(
-            1,
-            FIRE_WALL,
-            vec![
-                cell(100, 40, 50, true),
-                cell(101, 41, 50, true),
-                cell(102, 42, 50, false), // not visible: no flame
-            ],
-        ),
-    });
+    let mut spawned = group(
+        1,
+        FIRE_WALL,
+        vec![
+            cell(100, 40, 50, true),
+            cell(101, 41, 50, true),
+            cell(102, 42, 50, false), // not visible: no flame
+        ],
+    );
+    spawned.phase = SkillUnitPhase::Sprung;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
     app.update();
 
     let requests: Vec<EffectSprite> = app

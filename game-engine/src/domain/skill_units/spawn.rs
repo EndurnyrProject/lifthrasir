@@ -191,7 +191,15 @@ fn spawn_group(
 
     match descriptor.ground_anchor {
         GroundAnchor::Group => {
-            spawn_effect_child(commands, asset_server, meshes, materials, descriptor, root);
+            spawn_effect_child(
+                commands,
+                asset_server,
+                meshes,
+                materials,
+                descriptor,
+                group.phase,
+                root,
+            );
         }
         GroundAnchor::Cell => {
             for (cell_entity, cell) in &cell_entities {
@@ -202,6 +210,7 @@ fn spawn_group(
                         meshes,
                         materials,
                         descriptor,
+                        group.phase,
                         *cell_entity,
                     );
                 }

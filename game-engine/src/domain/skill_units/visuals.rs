@@ -10,10 +10,13 @@
 use bevy::mesh::ConeAnchor;
 use bevy::prelude::*;
 use lifthrasir_data::EffectDescriptor;
+use lifthrasir_data::lif::LifProp;
+use net_contract::dto::SkillUnitPhase;
 
 use crate::domain::effects::components::EffectAnchor;
 use crate::domain::effects::triggers::{descriptor_tint, load_effect};
 use crate::domain::effects::{EffectSprite, spawn_effect};
+use crate::domain::world::gltf_map::LifPropRef;
 
 /// The classic client's translucent frosted-ice texture (`ice.tga`) — the same
 /// one it wraps around its hardcoded Ice Wall pillars. Its own alpha channel
@@ -36,10 +39,13 @@ const CRYSTAL_SHARD_TILT: f32 = 0.28;
 
 /// Spawn the descriptor's persistent visual as a child of `parent` (root or
 /// cell), at the parent's origin. Preference order:
-///   1. a looping SPR/ACT sprite for a `Sprite` layer — Fire Wall and Fire
+///   1. a converted glTF prop for a `Model` layer, only while its skill unit is
+///      `Active` or `Captured` — `Used` and `Sprung` traps are no longer
+///      physically on the ground;
+///   2. a looping SPR/ACT sprite for a `Sprite` layer — Fire Wall and Fire
 ///      Pillar are sprite effects in the classic client, not STR ones;
-///   2. an STR effect for a `Str` layer;
-///   3. otherwise, for a `Bespoke`-only descriptor (e.g. Ice Wall, which the
+///   3. an STR effect for a `Str` layer;
+///   4. otherwise, for a `Bespoke`-only descriptor (e.g. Ice Wall, which the
 ///      classic client hardcodes and no STR exists for), a persistent
 ///      ice-crystal cluster tinted by the descriptor — `PlayProceduralVfx` is
 ///      fire-and-forget and cannot back a persistent wall cell, so the wall
@@ -53,8 +59,30 @@ pub(super) fn spawn_effect_child(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     descriptor: &EffectDescriptor,
+    phase: SkillUnitPhase,
     parent: Entity,
 ) {
+    if let Some(model) = descriptor.model_path() {
+        // The armed prop IS the physical trap, so it exists only while the trap is
+        // physically on the ground: ACTIVE (armed) and CAPTURED (an Ankle Snare
+        // still holding its victim). USED and SPRUNG draw nothing -- retail's
+        // UNT_USED_TRAPS (140) has no entry in the client's skill-unit table.
+        if !matches!(phase, SkillUnitPhase::Active | SkillUnitPhase::Captured) {
+            return;
+        }
+        commands.spawn((
+            LifPropRef(LifProp {
+                model: format!("ro://models/{model}.glb"),
+                anim_type: 0,
+                anim_speed: 1.0,
+            }),
+            Transform::default(),
+            Visibility::default(),
+            ChildOf(parent),
+        ));
+        return;
+    }
+
     if let Some(stem) = descriptor.sprite_stem() {
         commands.spawn((
             EffectSprite {
