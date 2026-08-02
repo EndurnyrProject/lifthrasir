@@ -82,65 +82,107 @@ fn check_descriptors(
     for (id, descriptor) in descriptors {
         let source = format!("{section}[{id}]");
         for visual in &descriptor.visuals {
-            match visual {
-                Visual::Str(name) if name.ends_with(".strfx.ron") => {
-                    checked += 1;
-                    let path = format!("ro://effects/{name}");
-                    authored_sources
-                        .entry(name.clone())
-                        .or_default()
-                        .push(source.clone());
-                    if !Path::new(ASSETS_DIR)
-                        .join("data")
-                        .join("effects")
-                        .join(name)
-                        .is_file()
-                    {
-                        missing.push(format!("{source} Str references missing {path}"));
-                    }
-                }
-                Visual::Str(name) => {
-                    checked += 1;
-                    check_pak_entry(
-                        archive,
-                        missing,
-                        &source,
-                        "Str",
-                        &format!("ro://data/texture/effect/{name}"),
-                    );
-                }
-                Visual::Sprite(stem) => {
-                    for extension in ["spr", "act"] {
-                        checked += 1;
-                        check_pak_entry(
-                            archive,
-                            missing,
-                            &source,
-                            "Sprite",
-                            &format!("ro://data/sprite/{stem}.{extension}"),
-                        );
-                    }
-                }
-                // ponytail: Task 9 replaces this with a `models/<stem>.glb` pak lookup.
-                // Until then a typo'd Model stem passes this guard silently and the trap
-                // renders as nothing at runtime -- the exact hole this test exists to close.
-                Visual::Model(_) | Visual::Shader(_) | Visual::Bespoke(_) | Visual::Efst(_) => {}
-            }
+            checked += check_visual(visual, archive, authored_sources, missing, &source);
         }
 
         if let Some(sound) = &descriptor.sound {
-            checked += 1;
-            check_pak_entry(
+            checked += check_sound(sound, archive, missing, &source);
+        }
+
+        if let Some(trigger) = &descriptor.on_trigger {
+            let trigger_source = format!("{source}.on_trigger");
+            checked += check_visual(
+                &trigger.visual,
                 archive,
+                authored_sources,
                 missing,
-                &source,
-                "sound",
-                &format!("ro://data/wav/{sound}"),
+                &trigger_source,
             );
+            if let Some(sound) = &trigger.sound {
+                checked += check_sound(sound, archive, missing, &trigger_source);
+            }
         }
     }
 
     checked
+}
+
+/// Returns the number of asset references checked.
+fn check_visual(
+    visual: &Visual,
+    archive: &mut ZipArchive<File>,
+    authored_sources: &mut BTreeMap<String, Vec<String>>,
+    missing: &mut Vec<String>,
+    source: &str,
+) -> usize {
+    match visual {
+        Visual::Str(name) if name.ends_with(".strfx.ron") => {
+            let path = format!("ro://effects/{name}");
+            authored_sources
+                .entry(name.clone())
+                .or_default()
+                .push(source.to_string());
+            if !Path::new(ASSETS_DIR)
+                .join("data")
+                .join("effects")
+                .join(name)
+                .is_file()
+            {
+                missing.push(format!("{source} Str references missing {path}"));
+            }
+            1
+        }
+        Visual::Str(name) => {
+            check_pak_entry(
+                archive,
+                missing,
+                source,
+                "Str",
+                &format!("ro://data/texture/effect/{name}"),
+            );
+            1
+        }
+        Visual::Sprite(stem) => {
+            for extension in ["spr", "act"] {
+                check_pak_entry(
+                    archive,
+                    missing,
+                    source,
+                    "Sprite",
+                    &format!("ro://data/sprite/{stem}.{extension}"),
+                );
+            }
+            2
+        }
+        Visual::Model(stem) => {
+            check_pak_entry(
+                archive,
+                missing,
+                source,
+                "Model",
+                &format!("ro://models/{stem}.glb"),
+            );
+            1
+        }
+        Visual::Shader(_) | Visual::Bespoke(_) | Visual::Efst(_) => 0,
+    }
+}
+
+/// Returns the number of asset references checked.
+fn check_sound(
+    sound: &str,
+    archive: &mut ZipArchive<File>,
+    missing: &mut Vec<String>,
+    source: &str,
+) -> usize {
+    check_pak_entry(
+        archive,
+        missing,
+        source,
+        "sound",
+        &format!("ro://data/wav/{sound}"),
+    );
+    1
 }
 
 /// Returns the number of layer textures checked.
@@ -220,12 +262,63 @@ fn check_pak_entry(
     kind: &str,
     path: &str,
 ) {
-    let entry = path
-        .strip_prefix("ro://")
-        .expect("pak entries are resolved from ro:// paths")
-        .replace('\\', "/")
-        .to_lowercase();
+    let entry = pak_entry(path);
     if archive.by_name(&entry).is_err() {
         missing.push(format!("{source} {kind} references missing {path}"));
     }
+}
+
+fn pak_entry(path: &str) -> String {
+    path.strip_prefix("ro://")
+        .expect("pak entries are resolved from ro:// paths")
+        .replace('\\', "/")
+        .to_lowercase()
+}
+
+#[test]
+fn model_and_trigger_assets_are_checked() {
+    assert_eq!(
+        pak_entry("ro://MODELS/외부소품\\트랩01.GLB"),
+        "models/외부소품/트랩01.glb"
+    );
+
+    let file = zip::ZipWriter::new(tempfile::tempfile().expect("create temporary pak"))
+        .finish()
+        .expect("finish temporary pak");
+    let mut archive = ZipArchive::new(file).expect("read temporary pak");
+    let descriptors = BTreeMap::from([(
+        42,
+        EffectDescriptor {
+            visuals: vec![Visual::Model("missing-model".to_string())],
+            sound: None,
+            on_trigger: Some(lifthrasir_data::TriggerFx {
+                visual: Visual::Str("missing-trigger.str".to_string()),
+                sound: Some("effect/missing-trigger.wav".to_string()),
+            }),
+            placement: lifthrasir_data::EffectPlacement::Ground,
+            color: [1.0; 4],
+            repeating: true,
+            ground_anchor: lifthrasir_data::GroundAnchor::Group,
+        },
+    )]);
+    let mut authored_sources = BTreeMap::new();
+    let mut missing = Vec::new();
+
+    let checked = check_descriptors(
+        "skills",
+        &descriptors,
+        &mut archive,
+        &mut authored_sources,
+        &mut missing,
+    );
+
+    assert_eq!(checked, 3);
+    assert_eq!(
+        missing,
+        [
+            "skills[42] Model references missing ro://models/missing-model.glb",
+            "skills[42].on_trigger Str references missing ro://data/texture/effect/missing-trigger.str",
+            "skills[42].on_trigger sound references missing ro://data/wav/effect/missing-trigger.wav",
+        ]
+    );
 }
