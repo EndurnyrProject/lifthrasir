@@ -8,7 +8,7 @@ use net_contract::events::{StatusEffectChanged, UnitEntered, UnitStateChanged};
 use super::components::EffectAnchor;
 use super::sprite_effects::apply_animation_part;
 use super::systems::spawn_effect;
-use super::triggers::{descriptor_tint, load_effect};
+use super::triggers::{descriptor_tint, load_effect, load_str_effect};
 use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::registry::EntityRegistry;
@@ -28,6 +28,7 @@ use crate::infrastructure::effect::EffectCatalog;
 /// `:stone`, so both petrify ids render identically.
 const OPT1_STONE: u32 = 1;
 const OPT1_FREEZE: u32 = 2;
+const OPT1_SLEEP: u32 = 4;
 const OPT1_STONEWAIT: u32 = 6;
 
 /// Frozen-solid tint (ice blue), multiplied into every sprite layer material.
@@ -84,10 +85,12 @@ pub fn body_state_visuals(
     registry: Res<EntityRegistry>,
     mut pending: ResMut<PendingBodyStates>,
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     shared_quad: Res<SharedSpriteQuad>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     children_query: Query<&Children>,
-    overlays: Query<Entity, With<FrozenOverlay>>,
+    frozen_overlays: Query<Entity, With<FrozenOverlay>>,
+    sleep_overlays: Query<Entity, With<SleepOverlay>>,
 ) {
     let at_ms = (time.elapsed_secs() * 1000.0) as u32;
 
@@ -101,10 +104,12 @@ pub fn body_state_visuals(
             entity,
             event.body_state,
             at_ms,
+            &asset_server,
             &shared_quad,
             &mut materials,
             &children_query,
-            &overlays,
+            &frozen_overlays,
+            &sleep_overlays,
         );
     }
 
@@ -117,10 +122,12 @@ pub fn body_state_visuals(
             entity,
             event.body_state,
             at_ms,
+            &asset_server,
             &shared_quad,
             &mut materials,
             &children_query,
-            &overlays,
+            &frozen_overlays,
+            &sleep_overlays,
         );
     }
 
@@ -133,10 +140,12 @@ pub fn body_state_visuals(
             entity,
             body_state,
             at_ms,
+            &asset_server,
             &shared_quad,
             &mut materials,
             &children_query,
-            &overlays,
+            &frozen_overlays,
+            &sleep_overlays,
         );
         false
     });
@@ -148,16 +157,30 @@ fn apply_body_state(
     entity: Entity,
     body_state: u32,
     at_ms: u32,
+    asset_server: &AssetServer,
     shared_quad: &SharedSpriteQuad,
     materials: &mut Assets<StandardMaterial>,
     children_query: &Query<&Children>,
-    overlays: &Query<Entity, With<FrozenOverlay>>,
+    frozen_overlays: &Query<Entity, With<FrozenOverlay>>,
+    sleep_overlays: &Query<Entity, With<SleepOverlay>>,
 ) {
+    if body_state == OPT1_SLEEP {
+        spawn_sleep_overlay(
+            commands,
+            entity,
+            asset_server,
+            children_query,
+            sleep_overlays,
+        );
+    } else {
+        despawn_sleep_overlay(commands, entity, children_query, sleep_overlays);
+    }
+
     let Some(color) = body_state_tint(body_state) else {
         commands
             .entity(entity)
             .remove::<(BodyStateTint, AnimationPaused)>();
-        despawn_frozen_overlay(commands, entity, children_query, overlays);
+        despawn_frozen_overlay(commands, entity, children_query, frozen_overlays);
         return;
     };
 
@@ -171,12 +194,12 @@ fn apply_body_state(
             shared_quad,
             materials,
             children_query,
-            overlays,
+            frozen_overlays,
         );
         return;
     }
 
-    despawn_frozen_overlay(commands, entity, children_query, overlays);
+    despawn_frozen_overlay(commands, entity, children_query, frozen_overlays);
 }
 
 /// Multiplies each sprite layer's material `base_color` by its parent unit's
@@ -340,6 +363,10 @@ pub struct FrozenOverlay {
     part: usize,
 }
 
+/// Repeating `sleep.str` effect attached to a sleeping unit.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct SleepOverlay;
+
 /// Shared, processed `얼음땡` (ice-block) overlay animation. Loaded once;
 /// every frozen unit's [`FrozenOverlay`] parts read the same handle,
 /// mirroring `domain::emote::assets::EmoteAssets`.
@@ -417,6 +444,49 @@ pub fn finalize_frozen_ice_assets(
         animation: animations.add(animation),
     });
     commands.remove_resource::<FrozenIceAssetsPending>();
+}
+
+fn spawn_sleep_overlay(
+    commands: &mut Commands,
+    entity: Entity,
+    asset_server: &AssetServer,
+    children_query: &Query<&Children>,
+    overlays: &Query<Entity, With<SleepOverlay>>,
+) {
+    let already_present = children_query
+        .get(entity)
+        .is_ok_and(|children| children.iter().any(|child| overlays.contains(child)));
+    if already_present {
+        return;
+    }
+
+    let overlay = spawn_effect(
+        commands,
+        load_str_effect(asset_server, "sleep.str"),
+        EffectAnchor::Position(Vec3::ZERO),
+        true,
+        Color::WHITE,
+        None,
+    );
+    commands
+        .entity(overlay)
+        .insert((SleepOverlay, ChildOf(entity)));
+}
+
+fn despawn_sleep_overlay(
+    commands: &mut Commands,
+    entity: Entity,
+    children_query: &Query<&Children>,
+    overlays: &Query<Entity, With<SleepOverlay>>,
+) {
+    let Ok(children) = children_query.get(entity) else {
+        return;
+    };
+    for child in children.iter() {
+        if overlays.contains(child) {
+            commands.entity(child).despawn();
+        }
+    }
 }
 
 /// Spawns the [`FROZEN_OVERLAY_PARTS`] part-quad children of the ice-block
@@ -773,6 +843,7 @@ mod tests {
             .init_resource::<PendingVirtues>()
             .init_asset::<Mesh>()
             .init_asset::<StandardMaterial>()
+            .init_asset::<crate::infrastructure::effect::LoadedEffectAsset>()
             .add_systems(Update, (body_state_visuals, virtue_visuals));
 
         let mesh = app
@@ -790,6 +861,18 @@ mod tests {
                 children
                     .iter()
                     .filter(|child| app.world().get::<FrozenOverlay>(*child).is_some())
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
+    fn sleep_overlays(app: &mut App, unit: Entity) -> usize {
+        app.world()
+            .get::<Children>(unit)
+            .map(|children| {
+                children
+                    .iter()
+                    .filter(|child| app.world().get::<SleepOverlay>(*child).is_some())
                     .count()
             })
             .unwrap_or(0)
@@ -877,6 +960,62 @@ mod tests {
         let tint = app.world().get::<BodyStateTint>(unit);
         assert_eq!(tint, Some(&BodyStateTint(ICE_BLUE)));
         assert!(app.world().get::<AnimationPaused>(unit).is_some());
+    }
+
+    #[test]
+    fn sleep_attaches_one_overlay() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_SLEEP);
+
+        assert_eq!(sleep_overlays(&mut app, unit), 1);
+        let child = app
+            .world()
+            .get::<Children>(unit)
+            .unwrap()
+            .iter()
+            .find(|child| app.world().get::<SleepOverlay>(*child).is_some())
+            .unwrap();
+        let effect = app
+            .world()
+            .get::<super::super::components::ActiveEffect>(child)
+            .unwrap();
+        assert!(effect.repeating);
+        assert_eq!(
+            app.world()
+                .resource::<AssetServer>()
+                .get_path(effect.effect.id())
+                .unwrap()
+                .to_string(),
+            "ro://data/texture/effect/sleep.str"
+        );
+    }
+
+    #[test]
+    fn clearing_sleep_removes_overlay() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_SLEEP);
+        assert_eq!(sleep_overlays(&mut app, unit), 1);
+
+        emit_state(&mut app, 7, 0);
+        assert_eq!(sleep_overlays(&mut app, unit), 0);
+    }
+
+    #[test]
+    fn sleep_does_not_tint_or_pause_animation() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_SLEEP);
+
+        assert!(app.world().get::<BodyStateTint>(unit).is_none());
+        assert!(app.world().get::<AnimationPaused>(unit).is_none());
     }
 
     #[test]
@@ -1130,6 +1269,46 @@ mod tests {
     }
 
     #[test]
+    fn freeze_sleep_and_stone_transitions_keep_visuals_distinct() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_FREEZE);
+        assert_eq!(
+            app.world().get::<BodyStateTint>(unit),
+            Some(&BodyStateTint(ICE_BLUE))
+        );
+        assert!(app.world().get::<AnimationPaused>(unit).is_some());
+        assert_eq!(frozen_overlay_parts(&mut app, unit), FROZEN_OVERLAY_PARTS);
+        assert_eq!(sleep_overlays(&mut app, unit), 0);
+
+        emit_state(&mut app, 7, OPT1_SLEEP);
+        assert!(app.world().get::<BodyStateTint>(unit).is_none());
+        assert!(app.world().get::<AnimationPaused>(unit).is_none());
+        assert_eq!(frozen_overlay_parts(&mut app, unit), 0);
+        assert_eq!(sleep_overlays(&mut app, unit), 1);
+
+        emit_state(&mut app, 7, OPT1_FREEZE);
+        assert_eq!(
+            app.world().get::<BodyStateTint>(unit),
+            Some(&BodyStateTint(ICE_BLUE))
+        );
+        assert!(app.world().get::<AnimationPaused>(unit).is_some());
+        assert_eq!(frozen_overlay_parts(&mut app, unit), FROZEN_OVERLAY_PARTS);
+        assert_eq!(sleep_overlays(&mut app, unit), 0);
+
+        emit_state(&mut app, 7, OPT1_STONE);
+        assert_eq!(
+            app.world().get::<BodyStateTint>(unit),
+            Some(&BodyStateTint(STONE_GRAY))
+        );
+        assert!(app.world().get::<AnimationPaused>(unit).is_some());
+        assert_eq!(frozen_overlay_parts(&mut app, unit), 0);
+        assert_eq!(sleep_overlays(&mut app, unit), 0);
+    }
+
+    #[test]
     fn freeze_then_stone_removes_overlay_and_grays_tint() {
         let mut app = app();
         let unit = app.world_mut().spawn_empty().id();
@@ -1157,6 +1336,22 @@ mod tests {
         emit_state(&mut app, 7, OPT1_FREEZE);
 
         assert_eq!(frozen_overlay_parts(&mut app, unit), FROZEN_OVERLAY_PARTS);
+    }
+
+    /// `apply_body_state` is called from three places (state changes,
+    /// `UnitEntered`, and the pending drain), and a slept unit keeps receiving
+    /// `UnitStateChanged` with the same `body_state`, so the spawn guard is
+    /// load-bearing rather than decorative.
+    #[test]
+    fn repeated_sleep_does_not_stack_overlay() {
+        let mut app = app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_state(&mut app, 7, OPT1_SLEEP);
+        emit_state(&mut app, 7, OPT1_SLEEP);
+
+        assert_eq!(sleep_overlays(&mut app, unit), 1);
     }
 
     fn sight_app() -> App {

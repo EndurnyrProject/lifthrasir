@@ -47,7 +47,9 @@ impl UnitState {
 /// - freeze/stone body poses (opt1) render in `domain/effects/status_visuals.rs`
 ///   (`body_state_visuals`): tint + `AnimationPaused`, off the combat
 ///   `AnimationState` machine so the HitStun revert can't fight them.
-/// - stun/sleep body poses (opt1): still stored-only; no visual yet.
+/// - sleep (opt1) renders there too (`SleepOverlay`): a looping `sleep.str`
+///   child, with no tint and no `AnimationPaused`.
+/// - stun body pose (opt1): still stored-only; no visual yet.
 /// - poison/curse/silence tint (health_state/opt2).
 /// - mount/orc-head and the other option bits. (The cart bits are consumed by
 ///   `apply_cart_mount` in the sprite-rendering domain.)
