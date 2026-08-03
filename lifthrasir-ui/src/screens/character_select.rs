@@ -190,9 +190,14 @@ fn cycle_selected_slot(
 
 fn tick_entrances(
     time: Res<Time>,
-    mut entrances: Query<(&mut Entrance, &mut UiTransform, &mut TextColor)>,
+    mut entrances: Query<(
+        &mut Entrance,
+        &mut UiTransform,
+        &mut TextColor,
+        &mut TextShadow,
+    )>,
 ) {
-    for (mut entrance, mut transform, mut color) in &mut entrances {
+    for (mut entrance, mut transform, mut color, mut shadow) in &mut entrances {
         if entrance.timer.is_finished() {
             continue;
         }
@@ -201,6 +206,9 @@ fn tick_entrances(
         let eased = ease_out_cubic(progress);
         transform.translation = Val2::px(0.0, (1.0 - eased) * 10.0);
         color.0.set_alpha(entrance.target_alpha * eased);
+        shadow
+            .color
+            .set_alpha(tokens::SCENIC_TEXT_SHADOW_ALPHA * entrance.target_alpha * eased);
     }
 }
 
@@ -215,8 +223,10 @@ fn tick_bar_fills(time: Res<Time>, mut fills: Query<(&mut BarFill, &mut Node)>) 
     }
 }
 
-fn entrance(offset_index: u8, color: Color) -> (Entrance, UiTransform) {
+fn entrance(offset_index: u8, color: Color) -> (Entrance, UiTransform, TextShadow) {
     let delay = offset_index as f32 * 0.05;
+    let mut shadow = tokens::scenic_text_shadow();
+    shadow.color.set_alpha(0.0);
     (
         Entrance {
             timer: Timer::from_seconds(0.45 + delay, TimerMode::Once),
@@ -224,6 +234,7 @@ fn entrance(offset_index: u8, color: Color) -> (Entrance, UiTransform) {
             target_alpha: color.alpha(),
         },
         UiTransform::from_translation(Val2::px(0.0, 10.0)),
+        shadow,
     )
 }
 
@@ -299,7 +310,7 @@ fn rebuild_screen(
     commands.spawn((backdrop::grain(&assets), ChildOf(content)));
 
     spawn_header(&mut commands, &assets, content);
-    spawn_identity(&mut commands, &assets, content, &data, featured, realm);
+    spawn_identity(&mut commands, &assets, content, featured, realm);
     commands.spawn((stage::horizon_line(), ChildOf(content)));
     spawn_lineup(&mut commands, &assets, content, &data, &diorama, selected.0);
     spawn_codex(
@@ -352,6 +363,7 @@ fn spawn_header(commands: &mut Commands, assets: &AssetServer, parent: Entity) {
     ));
     commands.spawn((
         mono_text(assets, "Realms", 10.0, theme::TEXT_DIM),
+        tokens::scenic_text_shadow(),
         ChildOf(back),
     ));
     commands.entity(back).observe(
@@ -373,10 +385,12 @@ fn spawn_header(commands: &mut Commands, assets: &AssetServer, parent: Entity) {
         .id();
     commands.spawn((
         mono_text(assets, &tokens::mono_label("Endurnir"), 9.5, theme::GOLD),
+        tokens::scenic_text_shadow(),
         ChildOf(title),
     ));
     commands.spawn((
         title_text(assets, "CHOOSE YOUR HERO", 23.0, theme::TEXT),
+        tokens::scenic_text_shadow(),
         ChildOf(title),
     ));
 }
@@ -385,32 +399,15 @@ fn spawn_identity(
     commands: &mut Commands,
     assets: &AssetServer,
     parent: Entity,
-    data: &CharacterSelectionData,
     featured: Option<&CharacterInfoWithJobName>,
     realm: &str,
 ) {
-    commands.spawn((
-        mono_text(
-            assets,
-            &roster_hint(occupied_count(data), data.max_slots),
-            11.0,
-            theme::TEXT_DIM.with_alpha(0.0),
-        ),
-        entrance(0, theme::TEXT_DIM),
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(48),
-            top: px(170),
-            ..default()
-        },
-        ChildOf(parent),
-    ));
     let block = commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
                 left: px(48),
-                top: px(212),
+                top: px(190),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(7),
                 ..default()
@@ -420,18 +417,8 @@ fn spawn_identity(
         .id();
     if let Some(info) = featured {
         commands.spawn((
-            mono_text(
-                assets,
-                &tokens::mono_label(&info.job_name),
-                10.0,
-                theme::GOLD.with_alpha(0.0),
-            ),
-            entrance(1, theme::GOLD),
-            ChildOf(block),
-        ));
-        commands.spawn((
             title_text(assets, &info.base.name, 58.0, theme::TEXT.with_alpha(0.0)),
-            entrance(2, theme::TEXT),
+            entrance(1, theme::TEXT),
             ChildOf(block),
         ));
         let hue = tokens::class_hue(info.base.class);
@@ -446,7 +433,7 @@ fn spawn_identity(
                 11.0,
                 hue.with_alpha(0.0),
             ),
-            entrance(3, hue),
+            entrance(2, hue),
             ChildOf(block),
         ));
     } else {
@@ -781,6 +768,7 @@ fn spawn_vacant_slot(
                 theme::TEXT_FAINT
             },
         ),
+        tokens::scenic_text_shadow(),
         ChildOf(card),
     ));
 }
@@ -1327,10 +1315,6 @@ fn cycle_slot(occupied: &[usize], current: usize, direction: i32) -> usize {
     occupied[next_index]
 }
 
-fn roster_hint(occupied: usize, max_slots: u8) -> String {
-    format!("ROSTER · {occupied} OF {max_slots} SLOTS")
-}
-
 fn job_level_fraction(level: u32, cap: u32) -> f32 {
     if cap == 0 {
         0.0
@@ -1370,11 +1354,6 @@ mod tests {
         assert_eq!(pending, Some(8));
         assert_eq!(arm_delete(&mut pending, 8), DeleteAction::Confirmed);
         assert_eq!(pending, None);
-    }
-
-    #[test]
-    fn roster_label_formats_counts() {
-        assert_eq!(roster_hint(3, 12), "ROSTER · 3 OF 12 SLOTS");
     }
 
     #[test]

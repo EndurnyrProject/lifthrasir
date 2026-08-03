@@ -7,6 +7,14 @@ pub const RING: &str = "ro://ui/ring.svg";
 pub const RING_THIN: &str = "ro://ui/ring-thin.svg";
 pub const VACANT_PAD: &str = "ro://ui/vacant-pad.svg";
 pub const GRAIN: &str = "ro://ui/grain.svg";
+pub const SCENIC_TEXT_SHADOW_ALPHA: f32 = 0.85;
+
+pub fn scenic_text_shadow() -> TextShadow {
+    TextShadow {
+        offset: Vec2::splat(2.0),
+        color: Color::BLACK.with_alpha(SCENIC_TEXT_SHADOW_ALPHA),
+    }
+}
 
 pub fn class_hue(class_id: u16) -> Color {
     const SWORD: Color = Color::srgb_u8(0xd9, 0xa4, 0x41);

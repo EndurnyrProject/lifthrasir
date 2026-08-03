@@ -230,6 +230,7 @@ fn spawn_header(commands: &mut Commands, assets: &AssetServer, parent: Entity) {
     ));
     commands.spawn((
         mono_text(assets, "Characters", 10.0, theme::TEXT_DIM),
+        tokens::scenic_text_shadow(),
         ChildOf(back),
     ));
     commands.entity(back).observe(return_on_click);
@@ -246,10 +247,12 @@ fn spawn_header(commands: &mut Commands, assets: &AssetServer, parent: Entity) {
         .id();
     commands.spawn((
         mono_text(assets, &tokens::mono_label("Endurnir"), 9.5, theme::GOLD),
+        tokens::scenic_text_shadow(),
         ChildOf(title),
     ));
     commands.spawn((
         title_text(assets, "FORGE A HERO", 23.0, theme::TEXT),
+        tokens::scenic_text_shadow(),
         ChildOf(title),
     ));
 }
@@ -314,6 +317,7 @@ fn spawn_stage(
             9.0,
             theme::TEXT_FAINT,
         ),
+        tokens::scenic_text_shadow(),
         ChildOf(preview),
     ));
 }
