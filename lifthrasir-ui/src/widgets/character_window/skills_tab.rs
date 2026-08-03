@@ -34,7 +34,9 @@ use game_engine::domain::entities::character::components::status::CharacterStatu
 use game_engine::domain::entities::character::events::SkillLearnRequested;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::hotbar::HotbarSlot;
-use game_engine::domain::skill::{Placement, SkillCastRequested, SkillTreeState, layout};
+use game_engine::domain::skill::{
+    Placement, SkillCastRequested, SkillTreeState, layout as grid_layout,
+};
 use game_engine::infrastructure::job::registry::JobSpriteRegistry;
 use game_engine::infrastructure::skill::SkillCatalog;
 
@@ -44,6 +46,8 @@ use crate::widgets::hotbar::HotbarDrag;
 use crate::widgets::info_modal::{InfoTarget, ShowInfoModal};
 
 use super::SkillsTabBody;
+
+pub(crate) mod layout;
 
 /// Pixel footprint of one grid cell, matching the old window's `CELL_W`/`CELL_H`.
 const CELL_W: f32 = 62.0;
@@ -605,7 +609,7 @@ fn body(
     catalog: Option<&SkillCatalog>,
     registry: Option<&JobSpriteRegistry>,
 ) -> impl Scene + use<> {
-    let placements = layout(tree);
+    let placements = grid_layout(tree);
     let tabs: Vec<_> = tab_ids(tree)
         .into_iter()
         .enumerate()
