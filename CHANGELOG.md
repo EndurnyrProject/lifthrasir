@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.10.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.9.0...v0.10.0) (2026-08-03)
+
+
+### Features
+
+* **assets:** thread optional hair palettes through animation processing ([33529f6](https://github.com/EndurnyrProject/lifthrasir/commit/33529f6c96263c0366e22f3a2229fddfa407ea91))
+* **character:** apply hair color palettes to head sprites ([e761ccb](https://github.com/EndurnyrProject/lifthrasir/commit/e761ccb3160b8c80b987b47202ab92f22d901921))
+* **cli:** convert standalone rsm props to gltf ([9cbb958](https://github.com/EndurnyrProject/lifthrasir/commit/9cbb958a572b4e1a61ea1a2aceb83a12a173109d))
+* **data:** add model visual and trigger effect to the descriptor ([3104482](https://github.com/EndurnyrProject/lifthrasir/commit/3104482cd738720bd7408216bb640fe407b6d33c))
+* **effects:** author Ankle Snare, Flasher and Talkie Box detonations ([805ba93](https://github.com/EndurnyrProject/lifthrasir/commit/805ba93fcc4007f3be8c98a8f462ce8b3148517d))
+* **effects:** author Blitz Beat and Detecting visuals ([7103616](https://github.com/EndurnyrProject/lifthrasir/commit/7103616437fee09e6483ea51b0b843ac2986662d))
+* **effects:** author Double Strafe and Arrow Shower visuals ([d6b3f4b](https://github.com/EndurnyrProject/lifthrasir/commit/d6b3f4ba7905ebca2bc174e9611e1288b461b82f))
+* **effects:** map Spring Trap and Phantasmic Arrow to retail effects ([c84c9a5](https://github.com/EndurnyrProject/lifthrasir/commit/c84c9a5751b507c2e398a41739b3b50019b7c8d0))
+* **effects:** map the nine Hunter traps and Talkie Box ([21819ef](https://github.com/EndurnyrProject/lifthrasir/commit/21819ef60aeee5d67cd063b2fc8e135682c34166))
+* **effects:** show a sleep overlay for the opt1 sleep body state ([18a108d](https://github.com/EndurnyrProject/lifthrasir/commit/18a108d7fc998cd678aa91c69ae15735243b821f))
+* **effects:** validate model layers and trigger effects ([989f635](https://github.com/EndurnyrProject/lifthrasir/commit/989f6355d88e950ece7262c8ade8b73b16c5b572))
+* **effects:** wire Remove Trap's ground effect ([caf8acf](https://github.com/EndurnyrProject/lifthrasir/commit/caf8acf22c7d273c0677ed78ff28ff3cb6f3cff5))
+* **net:** carry skill-unit phase and ticks through the contract ([928145a](https://github.com/EndurnyrProject/lifthrasir/commit/928145aaa2de011f7705351e43112afac9701354))
+* **skill-units:** play a trap detonation on a non-active phase ([4ac7e6b](https://github.com/EndurnyrProject/lifthrasir/commit/4ac7e6b87b171c7e944e7e9c4d435435bfc6b963))
+* **skill-units:** render the armed trap prop from a model visual ([5a7716b](https://github.com/EndurnyrProject/lifthrasir/commit/5a7716b9ff70375c40d5520f403e5e58b5856933))
+* **sprite:** add falcon layer tag, component and path helpers ([66a64ae](https://github.com/EndurnyrProject/lifthrasir/commit/66a64ae790e654f7cd28157fc2f01f3dc5d725bc))
+* **sprite:** falcon swoop on Blitz Beat ([213e80a](https://github.com/EndurnyrProject/lifthrasir/commit/213e80a3496e97ae1754bfc0fa97f1c645acac6b))
+* **sprite:** hover and follow behaviour for the falcon ([6e55dd8](https://github.com/EndurnyrProject/lifthrasir/commit/6e55dd82b40691a491d4924c568f2cc7c05071d1))
+* **sprite:** spawn the falcon companion from the falcon option bit ([a340af0](https://github.com/EndurnyrProject/lifthrasir/commit/a340af0e56fb73ad094907e70512b266d1e1e919))
+* **ui:** add character_scene shared visual module for the lineup redesign ([c7ac3a0](https://github.com/EndurnyrProject/lifthrasir/commit/c7ac3a087521f6bc3e04ce889544ba1d4b507887))
+* **ui:** add lineup decor SVGs and Space Mono font ([b9b6a4c](https://github.com/EndurnyrProject/lifthrasir/commit/b9b6a4caa206325dfe4e829215a037e6d4063061))
+* **ui:** animate the character lineup and add keyboard navigation ([6126c47](https://github.com/EndurnyrProject/lifthrasir/commit/6126c474e26f762c153dbc9773599cfd664a0a75))
+* **ui:** rebuild character creation as the forge screen with live palette preview ([61e5ce2](https://github.com/EndurnyrProject/lifthrasir/commit/61e5ce253ed48621d8ce7796908a152e4f6ad8b3))
+* **ui:** rebuild character select as the sprite lineup with codex rail ([b570b71](https://github.com/EndurnyrProject/lifthrasir/commit/b570b71f81a6c942e45aa08d1ae376caa55d7ce6))
+
+
+### Bug Fixes
+
+* **assets:** harden palette loading and custom-palette conversion for hair tinting ([b6d602d](https://github.com/EndurnyrProject/lifthrasir/commit/b6d602d75b5dca368a656d9d6e3551b511db23f1))
+* **effects:** fail loudly when an effect asset cannot load ([b482267](https://github.com/EndurnyrProject/lifthrasir/commit/b48226751df8a08c5fc911b9b3e607493d8ab51d))
+* **net:** update net-aesir tests for regenerated protobuf ([a466b3a](https://github.com/EndurnyrProject/lifthrasir/commit/a466b3a238b6aad634d392a6efa660bef5fe1ff8))
+* **skill-units:** order lifecycle systems and retry unknown despawns ([a78db87](https://github.com/EndurnyrProject/lifthrasir/commit/a78db87828a07121808cd213927f9c57fa006720))
+* **sprite:** dedupe cart mount spawns within a frame ([6381d6f](https://github.com/EndurnyrProject/lifthrasir/commit/6381d6fd6895ae08915000e7794e27c1ef46c060))
+
 ## [0.9.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.8.0...v0.9.0) (2026-07-31)
 
 
