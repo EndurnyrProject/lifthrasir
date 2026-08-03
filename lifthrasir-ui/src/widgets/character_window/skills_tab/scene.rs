@@ -34,7 +34,10 @@ pub(super) struct SkillNodeName(pub u32);
 pub(super) struct SkillNodeLevel(pub u32);
 
 #[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillNodeDimmer;
+pub(super) struct SkillNodeDimmer(pub u32);
+
+#[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillNodeControls(pub u32);
 
 #[derive(Component, Clone, Copy, Default)]
 pub(super) struct SkillPanelStagedCount;
@@ -433,12 +436,13 @@ fn skill_cell(view: CellView) -> impl Scene {
                 }
                 BackgroundColor(theme::FIELD)
                 BorderColor::all(theme::STROKE)
+                Outline { width: px(0), offset: px(2), color: Color::NONE }
                 ignore_picking()
                 Children [ {icon} ]
             ),
             skill_name_text(view.skill_id, view.name),
             stepper_row(view.skill_id),
-            dimmer(),
+            dimmer(view.skill_id),
         ]
     }
 }
@@ -453,11 +457,13 @@ fn skill_icon(path: String) -> impl Scene {
 
 fn stepper_row(skill_id: u32) -> impl Scene {
     bsn! {
+        template_value(SkillNodeControls(skill_id))
         Node {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
             column_gap: px(3),
         }
+        Visibility::Hidden
         ignore_picking()
         Children [
             stepper(skill_id, false, false),
@@ -533,9 +539,9 @@ fn stepper_glyph(skill_id: u32, raise: bool, glyph: String, enabled: bool) -> im
     }
 }
 
-fn dimmer() -> impl Scene {
+fn dimmer(skill_id: u32) -> impl Scene {
     bsn! {
-        SkillNodeDimmer
+        template_value(SkillNodeDimmer(skill_id))
         Node {
             position_type: PositionType::Absolute,
             left: px(0), right: px(0), top: px(0), bottom: px(0),
@@ -661,7 +667,11 @@ pub(super) fn project_live(
         Query<(&SkillConnector, &mut Node, &mut BackgroundColor)>,
         Query<(&SkillPanelCommitButton, &mut BackgroundColor, &mut Pickable)>,
     )>,
-    mut frames: Query<(&SkillNodeFrame, &mut BorderColor)>,
+    mut frames: Query<(&SkillNodeFrame, &mut BorderColor, &mut Outline)>,
+    mut focus_nodes: ParamSet<(
+        Query<(&SkillNodeDimmer, &mut Visibility)>,
+        Query<(&SkillNodeControls, &mut Visibility)>,
+    )>,
     mut text_colors: ParamSet<(
         Query<(&SkillNodeName, &mut TextColor)>,
         Query<(&SkillStepperGlyph, &mut TextColor)>,
@@ -684,6 +694,21 @@ pub(super) fn project_live(
             )
         })
     };
+    let focused = ui.hovered.or(ui.selected);
+    let focus = focused.and_then(|skill_id| super::layout::focus(&tree, skill_id));
+    let related_node = |skill_id| {
+        focus.as_ref().is_none_or(|focus| {
+            focus.focused == skill_id
+                || focus.prerequisite_nodes.contains(&skill_id)
+                || focus.unlock_nodes.contains(&skill_id)
+        })
+    };
+    let related_edge = |source, target| {
+        focus.as_ref().is_some_and(|focus| {
+            focus.prerequisite_edges.contains(&(source, target))
+                || focus.unlock_edges.contains(&(source, target))
+        })
+    };
     for (cell, mut background) in &mut backgrounds.p0() {
         let color = if ui.selected == Some(cell.0) {
             theme::EMERALD_INK
@@ -694,7 +719,7 @@ pub(super) fn project_live(
             background.0 = color;
         }
     }
-    for (marker, mut border) in &mut frames {
+    for (marker, mut border, mut outline) in &mut frames {
         let Some(node) = tree.skills.get(&marker.0) else {
             continue;
         };
@@ -710,6 +735,41 @@ pub(super) fn project_live(
         };
         if border.top != color {
             *border = BorderColor::all(color);
+        }
+        let (outline_width, outline_color) = if focused == Some(marker.0) {
+            (px(2), theme::EMERALD_BRI)
+        } else if focus.as_ref().is_some_and(|focus| {
+            focus.prerequisite_nodes.contains(&marker.0) || focus.unlock_nodes.contains(&marker.0)
+        }) {
+            (px(1), theme::GOLD)
+        } else {
+            (px(0), Color::NONE)
+        };
+        if outline.width != outline_width {
+            outline.width = outline_width;
+        }
+        if outline.color != outline_color {
+            outline.color = outline_color;
+        }
+    }
+    for (marker, mut visibility) in &mut focus_nodes.p0() {
+        let next = if related_node(marker.0) {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+        if *visibility != next {
+            *visibility = next;
+        }
+    }
+    for (marker, mut visibility) in &mut focus_nodes.p1() {
+        let next = if focused == Some(marker.0) {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *visibility != next {
+            *visibility = next;
         }
     }
     for (marker, mut color) in &mut text_colors.p0() {
@@ -770,16 +830,24 @@ pub(super) fn project_live(
         }
     }
     for (connector, mut node, mut background) in &mut backgrounds.p2() {
-        if connector.backlink {
-            continue;
-        }
         let met = staging.effective_level(connector.source, &tree) >= connector.minimum_level;
-        let thickness = if met { 2.0 } else { 1.0 };
-        set_connector_thickness(&mut node, connector.horizontal, thickness);
-        let color = if met {
-            theme::EMERALD.with_alpha(0.45)
-        } else {
-            theme::GOLD_FAINT
+        if !connector.backlink {
+            let thickness = if met { 2.0 } else { 1.0 };
+            set_connector_thickness(&mut node, connector.horizontal, thickness);
+        }
+        let color = match (
+            focus.is_some(),
+            related_edge(connector.source, connector.target),
+        ) {
+            (true, true) if connector.backlink => theme::TEXT_FAINT.with_alpha(0.7),
+            (true, true) if met => theme::EMERALD.with_alpha(0.9),
+            (true, true) => theme::GOLD.with_alpha(0.85),
+            (true, false) if connector.backlink => theme::TEXT_FAINT.with_alpha(0.18),
+            (true, false) if met => theme::EMERALD.with_alpha(0.16),
+            (true, false) => theme::GOLD.with_alpha(0.14),
+            (false, _) if connector.backlink => theme::TEXT_FAINT.with_alpha(0.38),
+            (false, _) if met => theme::EMERALD.with_alpha(0.45),
+            (false, _) => theme::GOLD_FAINT,
         };
         if background.0 != color {
             background.0 = color;

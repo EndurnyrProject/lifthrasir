@@ -72,6 +72,15 @@ pub struct Connector {
     pub backlink: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillFocus {
+    pub focused: u32,
+    pub prerequisite_nodes: BTreeSet<u32>,
+    pub prerequisite_edges: BTreeSet<(u32, u32)>,
+    pub unlock_nodes: BTreeSet<u32>,
+    pub unlock_edges: BTreeSet<(u32, u32)>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TreeLayout {
     pub topology: Vec<SkillTopology>,
@@ -104,6 +113,60 @@ impl TreeLayout {
             height,
         }
     }
+}
+
+pub fn focus(tree: &SkillTreeState, focused: u32) -> Option<SkillFocus> {
+    focus_topology(&topology(tree), focused)
+}
+
+fn focus_topology(topology: &[SkillTopology], focused: u32) -> Option<SkillFocus> {
+    let skills: BTreeMap<_, _> = topology
+        .iter()
+        .map(|skill| (skill.skill_id, skill))
+        .collect();
+    skills.get(&focused)?;
+
+    let mut prerequisite_nodes = BTreeSet::new();
+    let mut prerequisite_edges = BTreeSet::new();
+    let mut visited = BTreeSet::from([focused]);
+    let mut pending = vec![focused];
+    while let Some(target) = pending.pop() {
+        for requirement in &skills[&target].requirements {
+            let source = requirement.skill_id;
+            if !skills.contains_key(&source) {
+                continue;
+            }
+            prerequisite_edges.insert((source, target));
+            if source != focused {
+                prerequisite_nodes.insert(source);
+            }
+            if visited.insert(source) {
+                pending.push(source);
+            }
+        }
+    }
+
+    let mut unlock_nodes = BTreeSet::new();
+    let mut unlock_edges = BTreeSet::new();
+    for (&target, skill) in &skills {
+        if target != focused
+            && skill
+                .requirements
+                .iter()
+                .any(|requirement| requirement.skill_id == focused)
+        {
+            unlock_nodes.insert(target);
+            unlock_edges.insert((focused, target));
+        }
+    }
+
+    Some(SkillFocus {
+        focused,
+        prerequisite_nodes,
+        prerequisite_edges,
+        unlock_nodes,
+        unlock_edges,
+    })
 }
 
 fn topology(tree: &SkillTreeState) -> Vec<SkillTopology> {
@@ -380,7 +443,7 @@ mod tests {
 
     use game_engine::domain::skill::{SkillNode, SkillTreeState};
 
-    use super::TreeLayout;
+    use super::{TreeLayout, focus};
 
     fn node(job_id: u32, requires: Vec<(u32, u32)>) -> SkillNode {
         SkillNode {
@@ -613,6 +676,58 @@ mod tests {
         assert_eq!(layout.nodes.len(), skills.len());
         assert_eq!(jobs, std::collections::HashSet::from([1, 2]));
         assert_eq!(skills, std::collections::HashSet::from([10, 20, 30]));
+    }
+
+    #[test]
+    fn focus_contains_transitive_prerequisites_and_only_immediate_unlocks() {
+        let tree = tree(&[
+            (10, node(1, vec![])),
+            (20, node(1, vec![(10, 1)])),
+            (30, node(2, vec![(20, 2)])),
+            (40, node(2, vec![(30, 1)])),
+        ]);
+        let focus = focus(&tree, 30).expect("focused runtime skill");
+
+        assert_eq!(focus.focused, 30);
+        assert_eq!(focus.prerequisite_nodes, [10, 20].into());
+        assert_eq!(focus.prerequisite_edges, [(10, 20), (20, 30)].into());
+        assert_eq!(focus.unlock_nodes, [40].into());
+        assert_eq!(focus.unlock_edges, [(30, 40)].into());
+    }
+
+    #[test]
+    fn focus_skips_missing_nodes_and_disconnected_branches() {
+        let tree = tree(&[
+            (10, node(1, vec![(999, 1)])),
+            (20, node(1, vec![(10, 1)])),
+            (70, node(3, vec![])),
+        ]);
+        let focused = focus(&tree, 20).expect("focused runtime skill");
+
+        assert_eq!(focused.prerequisite_nodes, [10].into());
+        assert_eq!(focused.prerequisite_edges, [(10, 20)].into());
+        assert!(focused.unlock_nodes.is_empty());
+        assert!(focus(&tree, 999).is_none());
+    }
+
+    #[test]
+    fn focus_terminates_deterministically_on_cycles() {
+        let tree = tree(&[
+            (10, node(1, vec![(30, 1)])),
+            (20, node(1, vec![(10, 1)])),
+            (30, node(1, vec![(20, 1)])),
+            (40, node(1, vec![(20, 1)])),
+        ]);
+        let first = focus(&tree, 20).expect("focused runtime skill");
+        let second = focus(&tree, 20).expect("repeat focus");
+        assert_eq!(first, second);
+        assert_eq!(first.prerequisite_nodes, [10, 30].into());
+        assert_eq!(
+            first.prerequisite_edges,
+            [(10, 20), (20, 30), (30, 10)].into()
+        );
+        assert_eq!(first.unlock_nodes, [30, 40].into());
+        assert_eq!(first.unlock_edges, [(20, 30), (20, 40)].into());
     }
 
     #[test]

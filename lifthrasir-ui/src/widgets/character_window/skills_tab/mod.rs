@@ -6,6 +6,8 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use bevy::picking::hover::HoverMap;
+use bevy::picking::pointer::PointerId;
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
@@ -27,10 +29,11 @@ mod scene;
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(300);
 
-/// Persistent skill selection. Hover state is added with focused-chain projection in Task 9.
+/// Persistent skill selection plus temporary pointer focus.
 #[derive(Resource, Default)]
 pub struct SkillPanelUi {
     selected: Option<u32>,
+    hovered: Option<u32>,
 }
 
 /// Last cell click, for the double-click cast window (own copy; see module docs).
@@ -309,6 +312,50 @@ fn reconcile_authoritative_tree(
     if ui.selected.is_some_and(|id| !tree.skills.contains_key(&id)) {
         ui.selected = None;
     }
+    if ui.hovered.is_some_and(|id| !tree.skills.contains_key(&id)) {
+        ui.hovered = None;
+    }
+}
+
+fn sync_hovered_skill(
+    hover_map: Option<Res<HoverMap>>,
+    parents: Query<&ChildOf>,
+    cells: Query<&SkillPanelCell>,
+    mut ui: ResMut<SkillPanelUi>,
+) {
+    let hovered = hover_map
+        .as_deref()
+        .and_then(|hover_map| hover_map.get(&PointerId::Mouse))
+        .and_then(|entities| {
+            entities
+                .iter()
+                .filter_map(|(&entity, hit)| {
+                    let mut current = entity;
+                    let mut distance = 0_u32;
+                    let mut visited = std::collections::HashSet::new();
+                    loop {
+                        if !visited.insert(current) {
+                            return None;
+                        }
+                        if let Ok(cell) = cells.get(current) {
+                            return Some((hit.depth, distance, cell.0, entity.to_bits()));
+                        }
+                        current = parents.get(current).ok()?.parent();
+                        distance += 1;
+                    }
+                })
+                .min_by(|left, right| {
+                    left.0
+                        .total_cmp(&right.0)
+                        .then_with(|| left.1.cmp(&right.1))
+                        .then_with(|| left.2.cmp(&right.2))
+                        .then_with(|| left.3.cmp(&right.3))
+                })
+                .map(|(_, _, skill_id, _)| skill_id)
+        });
+    if ui.hovered != hovered {
+        ui.hovered = hovered;
+    }
 }
 
 fn sync_skill_gates(
@@ -423,6 +470,7 @@ pub(super) fn register(app: &mut App) {
         (
             reconcile_authoritative_tree,
             sync_skill_gates,
+            sync_hovered_skill,
             rebuild_skills_body,
             ApplyDeferred,
             scene::project_live.run_if(should_project_skills),
@@ -492,7 +540,9 @@ fn on_cell_click(
         });
         return;
     }
-    ui.selected = Some(cell.0);
+    if ui.selected != Some(cell.0) {
+        ui.selected = Some(cell.0);
+    }
     let now = time.elapsed();
     if is_cast_double_click(&last, cell.0, now) {
         cast_writer.write(SkillCastRequested { skill_id: cell.0 });
@@ -889,6 +939,7 @@ mod tests {
             (
                 reconcile_authoritative_tree,
                 sync_skill_gates,
+                sync_hovered_skill,
                 rebuild_skills_body,
                 ApplyDeferred,
                 scene::project_live
@@ -931,6 +982,98 @@ mod tests {
     fn node_count(app: &mut App) -> usize {
         let world = app.world_mut();
         world.query::<&Node>().iter(world).count()
+    }
+
+    #[test]
+    fn mouse_hover_resolves_cells_and_pickable_stepper_ancestors_without_flicker() {
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::PointerId;
+
+        let mut app = skills_app();
+        app.insert_resource(HoverMap::default());
+        app.insert_resource(tree(&[(1, node(0, 5, 7)), (2, node(0, 5, 7))]));
+        app.world_mut().spawn((
+            CharacterStatus {
+                skill_point: 2,
+                ..default()
+            },
+            LocalPlayer,
+        ));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        app.world_mut().resource_mut::<SkillPanelUi>().selected = Some(2);
+
+        let (cell, stepper) = {
+            let world = app.world_mut();
+            let cell = world
+                .query::<(Entity, &SkillPanelCell)>()
+                .iter(world)
+                .find_map(|(entity, marker)| (marker.0 == 1).then_some(entity))
+                .expect("first skill cell");
+            let stepper = world
+                .query::<(Entity, &SkillPanelStepper)>()
+                .iter(world)
+                .find_map(|(entity, marker)| {
+                    (marker.skill_id == 1 && marker.raise).then_some(entity)
+                })
+                .expect("first skill raise control");
+            (cell, stepper)
+        };
+        let camera = app.world_mut().spawn_empty().id();
+        let set_hover = |app: &mut App, entity: Option<Entity>| {
+            let mut hover = app.world_mut().resource_mut::<HoverMap>();
+            let mouse = hover.entry(PointerId::Mouse).or_default();
+            mouse.clear();
+            if let Some(entity) = entity {
+                mouse.insert(entity, HitData::new(camera, 0.0, None, None));
+            }
+        };
+
+        set_hover(&mut app, Some(cell));
+        app.update();
+        assert_eq!(app.world().resource::<SkillPanelUi>().hovered, Some(1));
+        let runs = app.world().resource::<ProjectionRunCount>().0;
+
+        set_hover(&mut app, Some(stepper));
+        app.update();
+        assert_eq!(app.world().resource::<SkillPanelUi>().hovered, Some(1));
+        assert_eq!(app.world().resource::<ProjectionRunCount>().0, runs);
+
+        set_hover(&mut app, None);
+        app.update();
+        let ui = app.world().resource::<SkillPanelUi>();
+        assert_eq!(ui.hovered, None);
+        assert_eq!(ui.selected, Some(2));
+        let world = app.world_mut();
+        assert!(
+            world
+                .query::<(&scene::SkillNodeControls, &Visibility)>()
+                .iter(world)
+                .any(|(marker, visibility)| marker.0 == 2 && *visibility == Visibility::Inherited)
+        );
+    }
+
+    #[test]
+    fn absent_or_non_mouse_hover_is_safe_and_deterministic() {
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::PointerId;
+
+        let mut app = App::new();
+        app.init_resource::<SkillPanelUi>();
+        app.add_systems(Update, sync_hovered_skill);
+        let cell = app.world_mut().spawn(SkillPanelCell(7)).id();
+        app.update();
+        assert_eq!(app.world().resource::<SkillPanelUi>().hovered, None);
+
+        let camera = app.world_mut().spawn_empty().id();
+        let mut hover = HoverMap::default();
+        hover
+            .entry(PointerId::Touch(3))
+            .or_default()
+            .insert(cell, HitData::new(camera, 0.0, None, None));
+        app.insert_resource(hover);
+        app.update();
+        assert_eq!(app.world().resource::<SkillPanelUi>().hovered, None);
     }
 
     #[test]
@@ -1194,7 +1337,7 @@ mod tests {
             .find(|(connector, _, _)| connector.source == 1 && connector.segment == 0)
             .unwrap();
         assert_eq!(connector.1.height, px(2));
-        assert_eq!(connector.2.0, theme::EMERALD.with_alpha(0.45));
+        assert_eq!(connector.2.0, theme::EMERALD.with_alpha(0.9));
         assert!(
             world
                 .query::<(&scene::SkillJobPointText, &Text)>()
@@ -1238,6 +1381,134 @@ mod tests {
                 .all(|(_, visibility, pickable)| {
                     *visibility == Visibility::Hidden && *pickable == Pickable::IGNORE
                 })
+        );
+    }
+
+    #[test]
+    fn focus_projects_outlines_dimmers_controls_and_links_without_rebuilding() {
+        use bevy::picking::backend::HitData;
+
+        let mut app = skills_app();
+        app.insert_resource(HoverMap::default());
+        app.insert_resource(tree(&[
+            (1, node(1, 5, 7)),
+            (2, with_requires(node(0, 5, 7), vec![(1, 1)])),
+            (3, with_requires(node(0, 5, 7), vec![(2, 1)])),
+            (4, with_requires(node(0, 5, 9), vec![(999, 1)])),
+            (5, node(5, 5, 9)),
+            (6, with_requires(node(0, 5, 9), vec![(5, 1)])),
+        ]));
+        app.world_mut().spawn((
+            CharacterStatus {
+                skill_point: 3,
+                ..default()
+            },
+            LocalPlayer,
+        ));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        let viewport = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .unwrap();
+        app.world_mut()
+            .entity_mut(viewport)
+            .insert(ScrollPosition(Vec2::new(21.0, 12.0)));
+        app.world_mut().resource_mut::<SkillPanelUi>().selected = Some(2);
+        app.update();
+
+        let visual_state = |app: &mut App| {
+            let world = app.world_mut();
+            let outlines: HashMap<_, _> = world
+                .query::<(&scene::SkillNodeFrame, &Outline)>()
+                .iter(world)
+                .map(|(marker, outline)| (marker.0, (outline.width, outline.color)))
+                .collect();
+            let dimmers: HashMap<_, _> = world
+                .query::<(&scene::SkillNodeDimmer, &Visibility, &Pickable)>()
+                .iter(world)
+                .map(|(marker, visibility, pickable)| (marker.0, (*visibility, *pickable)))
+                .collect();
+            let controls: HashMap<_, _> = world
+                .query::<(&scene::SkillNodeControls, &Visibility)>()
+                .iter(world)
+                .map(|(marker, visibility)| (marker.0, *visibility))
+                .collect();
+            (outlines, dimmers, controls)
+        };
+        let (outlines, dimmers, controls) = visual_state(&mut app);
+        assert_eq!(outlines[&2], (px(2), theme::EMERALD_BRI));
+        let frame_colors: HashMap<_, _> = {
+            let world = app.world_mut();
+            world
+                .query::<(&scene::SkillNodeFrame, &BorderColor)>()
+                .iter(world)
+                .map(|(marker, border)| (marker.0, border.top))
+                .collect()
+        };
+        assert_eq!(frame_colors[&1], theme::EMERALD);
+        assert_eq!(frame_colors[&2], theme::GOLD_FAINT);
+        assert_eq!(frame_colors[&4], theme::STROKE);
+        assert_eq!(frame_colors[&5], theme::GOLD);
+        for id in [1, 3] {
+            assert_eq!(outlines[&id], (px(1), theme::GOLD));
+            assert_eq!(dimmers[&id].0, Visibility::Hidden);
+        }
+        for id in [4, 5, 6] {
+            assert_eq!(dimmers[&id], (Visibility::Inherited, Pickable::IGNORE));
+        }
+        assert_eq!(controls[&2], Visibility::Inherited);
+        assert!(
+            controls
+                .iter()
+                .all(|(&id, visibility)| id == 2 || *visibility == Visibility::Hidden)
+        );
+
+        let connector_colors = |app: &mut App| {
+            let world = app.world_mut();
+            world
+                .query::<(&scene::SkillConnector, &BackgroundColor)>()
+                .iter(world)
+                .filter(|(marker, _)| marker.dash == 0)
+                .map(|(marker, color)| ((marker.source, marker.target), color.0))
+                .collect::<HashMap<_, _>>()
+        };
+        let colors = connector_colors(&mut app);
+        assert_eq!(colors[&(1, 2)], theme::EMERALD.with_alpha(0.9));
+        assert_eq!(colors[&(2, 3)], theme::GOLD.with_alpha(0.85));
+        assert_eq!(colors[&(5, 6)], theme::EMERALD.with_alpha(0.16));
+
+        let hovered_cell = {
+            let world = app.world_mut();
+            world
+                .query::<(Entity, &SkillPanelCell)>()
+                .iter(world)
+                .find_map(|(entity, marker)| (marker.0 == 3).then_some(entity))
+                .unwrap()
+        };
+        let camera = app.world_mut().spawn_empty().id();
+        app.world_mut()
+            .resource_mut::<HoverMap>()
+            .entry(PointerId::Mouse)
+            .or_default()
+            .insert(hovered_cell, HitData::new(camera, 0.0, None, None));
+        app.update();
+
+        let (_, _, controls) = visual_state(&mut app);
+        assert_eq!(controls[&3], Visibility::Inherited);
+        assert_eq!(controls[&2], Visibility::Hidden);
+        assert_eq!(app.world().resource::<SkillPanelUi>().selected, Some(2));
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+                .single(app.world())
+                .unwrap(),
+            viewport
+        );
+        assert_eq!(
+            app.world().get::<ScrollPosition>(viewport).unwrap().0,
+            Vec2::new(21.0, 12.0)
         );
     }
 
@@ -1534,6 +1805,17 @@ mod tests {
             pieces
                 .iter()
                 .all(|(_, color)| *color == theme::TEXT_FAINT.with_alpha(0.38))
+        );
+
+        app.world_mut().resource_mut::<SkillPanelUi>().selected = Some(1);
+        app.update();
+        let world = app.world_mut();
+        assert!(
+            world
+                .query::<(&scene::SkillConnector, &BackgroundColor)>()
+                .iter(world)
+                .filter(|(connector, _)| connector.backlink)
+                .all(|(_, color)| color.0 == theme::TEXT_FAINT.with_alpha(0.7))
         );
     }
 
