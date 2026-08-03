@@ -1140,6 +1140,43 @@ mod tests {
     }
 
     #[test]
+    fn false_upgradable_view_is_enabled_only_after_staging_missing_prerequisites() {
+        let catalog = skill_catalog();
+        let mut t = tree();
+        t.skills.get_mut(&17).unwrap().upgradable = false;
+        let s = status(10, 10, 3);
+        let mut staging = SkillPanelStaging::default();
+
+        assert!(
+            !build_skill_view(17, Some(&catalog), &t, &staging, Some(&s))
+                .unwrap()
+                .can_raise
+        );
+        staging.raise(5, &t, &s, s.skill_point);
+        staging.raise(5, &t, &s, s.skill_point);
+        assert!(
+            build_skill_view(17, Some(&catalog), &t, &staging, Some(&s))
+                .unwrap()
+                .can_raise
+        );
+    }
+
+    #[test]
+    fn unexplained_false_upgradable_view_stays_disabled() {
+        let catalog = skill_catalog();
+        let mut t = tree();
+        t.skills.get_mut(&5).unwrap().upgradable = false;
+        let staging = SkillPanelStaging::default();
+        let s = status(10, 10, 3);
+
+        assert!(
+            !build_skill_view(5, Some(&catalog), &t, &staging, Some(&s))
+                .unwrap()
+                .can_raise
+        );
+    }
+
+    #[test]
     fn can_raise_false_without_a_status() {
         let catalog = skill_catalog();
         let t = tree();

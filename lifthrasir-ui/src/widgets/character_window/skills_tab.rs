@@ -107,8 +107,8 @@ impl SkillPanelStaging {
         base + self.staged(id)
     }
 
-    /// Fully client-evaluated raise gate: a prereq staged earlier in the same batch
-    /// unlocks its dependent immediately.
+    /// Reconciles the server capability with effective local prerequisites while
+    /// preserving every other neutral learning gate.
     pub fn can_raise(
         &self,
         id: u32,
@@ -128,9 +128,18 @@ impl SkillPanelStaging {
         if status.base_level < node.req_base_level || status.job_level < node.req_job_level {
             return false;
         }
-        node.requires
+        let server_prerequisites_met = node.requires.iter().all(|&(req_id, req_lv)| {
+            tree.skills
+                .get(&req_id)
+                .map_or(0, |required| required.level)
+                >= req_lv
+        });
+        let effective_prerequisites_met = node
+            .requires
             .iter()
-            .all(|&(req_id, req_lv)| self.effective_level(req_id, tree) >= req_lv)
+            .all(|&(req_id, req_lv)| self.effective_level(req_id, tree) >= req_lv);
+
+        effective_prerequisites_met && (node.upgradable || !server_prerequisites_met)
     }
 
     pub fn raise(
@@ -145,9 +154,30 @@ impl SkillPanelStaging {
         }
     }
 
-    pub fn lower(&mut self, id: u32) {
+    /// Rejects a staged refund that would break another staged skill's requirements.
+    pub fn can_lower(&self, id: u32, tree: &SkillTreeState) -> bool {
+        if self.staged(id) == 0 {
+            return false;
+        }
+        self.pending.keys().all(|&staged_id| {
+            staged_id == id
+                || tree.skills.get(&staged_id).is_some_and(|node| {
+                    node.requires.iter().all(|&(req_id, req_level)| {
+                        let resulting_level = self
+                            .effective_level(req_id, tree)
+                            .saturating_sub(u32::from(req_id == id));
+                        resulting_level >= req_level
+                    })
+                })
+        })
+    }
+
+    pub fn lower(&mut self, id: u32, tree: &SkillTreeState) {
+        if !self.can_lower(id, tree) {
+            return;
+        }
         let staged = self.staged(id);
-        if staged <= 1 {
+        if staged == 1 {
             self.pending.remove(&id);
         } else {
             self.pending.insert(id, staged - 1);
@@ -388,7 +418,7 @@ fn on_tab_click(
 /// `◄`/`►` observer: stages or unstages a level via [`SkillPanelStaging`]. Reads the
 /// player status so `can_raise`'s point/level gates are evaluated from the source.
 fn on_stepper(
-    click: On<Pointer<Click>>,
+    mut click: On<Pointer<Click>>,
     steppers: Query<&SkillPanelStepper>,
     tree: Res<SkillTreeState>,
     player: Query<&CharacterStatus, With<LocalPlayer>>,
@@ -397,8 +427,12 @@ fn on_stepper(
     let Ok(stepper) = steppers.get(click.entity) else {
         return;
     };
+    if click.button != PointerButton::Primary {
+        return;
+    }
+    click.propagate(false);
     if !stepper.raise {
-        staging.lower(stepper.skill_id);
+        staging.lower(stepper.skill_id, &tree);
         return;
     }
     let Ok(status) = player.single() else {
@@ -531,7 +565,7 @@ fn cell_views(
                 icon_color: cell_icon_color(learned, maxed),
                 can_raise: status
                     .is_some_and(|s| staging.can_raise(skill_id, tree, s, s.skill_point)),
-                can_lower: staging.staged(skill_id) > 0,
+                can_lower: staging.can_lower(skill_id, tree),
                 selected: selected == Some(skill_id),
             })
         })
@@ -875,10 +909,15 @@ fn stepper_arrow(skill_id: u32, raise: bool, enabled: bool) -> impl Scene {
     } else {
         theme::TEXT_FAINT
     };
+    let pickable = if enabled {
+        Pickable::default()
+    } else {
+        Pickable::IGNORE
+    };
     bsn! {
         template_value(SkillPanelStepper { skill_id, raise })
         Node { align_items: AlignItems::Center, justify_content: JustifyContent::Center }
-        Pickable
+        template_value(pickable)
         on(on_stepper)
         Children [ chrome_text(glyph.to_string(), 9.0, color) ]
     }
@@ -1035,6 +1074,11 @@ mod tests {
         n
     }
 
+    fn with_upgradable(mut n: SkillNode, upgradable: bool) -> SkillNode {
+        n.upgradable = upgradable;
+        n
+    }
+
     fn status(base_level: u32, job_level: u32) -> CharacterStatus {
         CharacterStatus {
             base_level,
@@ -1116,21 +1160,108 @@ mod tests {
     }
 
     #[test]
+    fn false_upgradable_is_overridden_only_by_staged_prerequisites() {
+        let t = tree(&[
+            (1, node(0, 5, 7)),
+            (
+                2,
+                with_upgradable(with_requires(node(0, 5, 7), vec![(1, 1)]), false),
+            ),
+        ]);
+        let mut staging = SkillPanelStaging::default();
+
+        assert!(!staging.can_raise(2, &t, &status(100, 50), 99));
+        staging.raise(1, &t, &status(100, 50), 99);
+        assert!(staging.can_raise(2, &t, &status(100, 50), 99));
+    }
+
+    #[test]
+    fn false_upgradable_stays_blocked_when_server_prerequisites_pass() {
+        let t = tree(&[
+            (1, node(1, 5, 7)),
+            (
+                2,
+                with_upgradable(with_requires(node(0, 5, 7), vec![(1, 1)]), false),
+            ),
+        ]);
+
+        assert!(!SkillPanelStaging::default().can_raise(2, &t, &status(100, 50), 99));
+    }
+
+    #[test]
+    fn false_upgradable_does_not_override_other_neutral_gates() {
+        let mut t = tree(&[
+            (1, node(0, 5, 7)),
+            (
+                2,
+                with_upgradable(
+                    with_levels(with_requires(node(0, 5, 7), vec![(1, 1)]), 50, 20),
+                    false,
+                ),
+            ),
+        ]);
+        let mut staging = SkillPanelStaging::default();
+        staging.raise(1, &t, &status(100, 50), 99);
+
+        assert!(!staging.can_raise(2, &t, &status(49, 20), 99));
+        assert!(!staging.can_raise(2, &t, &status(50, 19), 99));
+        assert!(!staging.can_raise(2, &t, &status(50, 20), 1));
+
+        t.skills.get_mut(&2).unwrap().level = 5;
+        assert!(!staging.can_raise(2, &t, &status(50, 20), 99));
+    }
+
+    #[test]
+    fn lowering_a_staged_prerequisite_requires_lowering_dependents_first() {
+        let t = tree(&[
+            (1, node(0, 5, 7)),
+            (
+                2,
+                with_upgradable(with_requires(node(0, 5, 7), vec![(1, 1)]), false),
+            ),
+        ]);
+        let mut staging = SkillPanelStaging::default();
+        staging.raise(1, &t, &status(100, 50), 99);
+        staging.raise(2, &t, &status(100, 50), 99);
+
+        assert!(!staging.can_lower(1, &t));
+        staging.lower(1, &t);
+        assert_eq!(staging.staged(1), 1);
+
+        staging.lower(2, &t);
+        assert!(staging.can_lower(1, &t));
+        staging.lower(1, &t);
+        assert!(staging.is_empty());
+    }
+
+    #[test]
     fn lower_clamps_at_zero_and_removes_entry() {
         let t = tree(&[(1, node(0, 5, 7))]);
         let mut staging = SkillPanelStaging::default();
-        staging.lower(1);
+        staging.lower(1, &t);
         assert_eq!(staging.staged(1), 0);
         assert!(staging.is_empty());
 
         staging.raise(1, &t, &status(100, 50), 99);
         staging.raise(1, &t, &status(100, 50), 99);
         assert_eq!(staging.staged(1), 2);
-        staging.lower(1);
+        staging.lower(1, &t);
         assert_eq!(staging.staged(1), 1);
-        staging.lower(1);
+        staging.lower(1, &t);
         assert_eq!(staging.staged(1), 0);
         assert!(staging.is_empty());
+    }
+
+    #[test]
+    fn lower_never_changes_the_authoritative_level() {
+        let t = tree(&[(1, node(2, 5, 7))]);
+        let mut staging = SkillPanelStaging::default();
+        staging.raise(1, &t, &status(100, 50), 99);
+
+        staging.lower(1, &t);
+
+        assert_eq!(staging.effective_level(1, &t), 2);
+        assert!(!staging.can_lower(1, &t));
     }
 
     #[test]
@@ -1280,6 +1411,173 @@ mod tests {
             },
             target,
         )
+    }
+
+    #[test]
+    fn disabled_stepper_arrows_are_not_pickable() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.world_mut()
+            .spawn_scene(stepper_arrow(1, true, false))
+            .expect("disabled arrow spawns");
+        app.world_mut()
+            .spawn_scene(stepper_arrow(2, true, true))
+            .expect("enabled arrow spawns");
+        app.update();
+
+        let world = app.world_mut();
+        let arrows: HashMap<_, _> = world
+            .query::<(&SkillPanelStepper, &Pickable)>()
+            .iter(world)
+            .map(|(stepper, pickable)| (stepper.skill_id, *pickable))
+            .collect();
+        assert_eq!(arrows[&1], Pickable::IGNORE);
+        assert_eq!(arrows[&2], Pickable::default());
+    }
+
+    #[test]
+    fn secondary_stepper_click_bubbles_to_cell_without_changing_staging() {
+        let mut app = App::new();
+        app.add_message::<SkillCastRequested>();
+        app.add_message::<ShowInfoModal>();
+        app.init_resource::<SkillPanelStaging>();
+        app.init_resource::<SkillPanelUi>();
+        app.init_resource::<LastSkillPanelClick>();
+        app.init_resource::<Time>();
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().resource_mut::<SkillPanelStaging>().pending = HashMap::from([(1, 1)]);
+        let cell = app
+            .world_mut()
+            .spawn(SkillPanelCell(1))
+            .observe(on_cell_click)
+            .id();
+        let stepper = app
+            .world_mut()
+            .spawn((
+                SkillPanelStepper {
+                    skill_id: 1,
+                    raise: false,
+                },
+                ChildOf(cell),
+            ))
+            .observe(on_stepper)
+            .id();
+        let window = app.world_mut().spawn(Window::default()).id();
+        app.world_mut().flush();
+
+        app.world_mut()
+            .trigger(click_event(stepper, window, PointerButton::Secondary));
+
+        assert_eq!(app.world().resource::<SkillPanelStaging>().staged(1), 1);
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        assert!(
+            messages
+                .iter_current_update_messages()
+                .any(|message| message.target == InfoTarget::Skill(1))
+        );
+    }
+
+    #[test]
+    fn primary_stepper_click_changes_staging_without_reaching_the_cell() {
+        let mut app = App::new();
+        app.add_message::<SkillCastRequested>();
+        app.add_message::<ShowInfoModal>();
+        app.init_resource::<SkillPanelStaging>();
+        app.init_resource::<SkillPanelUi>();
+        app.insert_resource(LastSkillPanelClick {
+            skill_id: 1,
+            at: Duration::ZERO,
+        });
+        app.init_resource::<Time>();
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().spawn((
+            CharacterStatus {
+                base_level: 1,
+                job_level: 1,
+                skill_point: 1,
+                ..default()
+            },
+            LocalPlayer,
+        ));
+        let cell = app
+            .world_mut()
+            .spawn(SkillPanelCell(1))
+            .observe(on_cell_click)
+            .id();
+        let stepper = app
+            .world_mut()
+            .spawn((
+                SkillPanelStepper {
+                    skill_id: 1,
+                    raise: true,
+                },
+                ChildOf(cell),
+            ))
+            .observe(on_stepper)
+            .id();
+        let window = app.world_mut().spawn(Window::default()).id();
+        app.world_mut().flush();
+
+        app.world_mut()
+            .trigger(click_event(stepper, window, PointerButton::Primary));
+
+        assert_eq!(app.world().resource::<SkillPanelStaging>().staged(1), 1);
+        assert_eq!(app.world().resource::<SkillPanelUi>().selected, None);
+        assert_eq!(
+            app.world()
+                .resource::<Messages<SkillCastRequested>>()
+                .iter_current_update_messages()
+                .count(),
+            0
+        );
+        assert_eq!(
+            app.world()
+                .resource::<Messages<ShowInfoModal>>()
+                .iter_current_update_messages()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn decrement_observer_rejects_prerequisite_until_dependent_is_removed() {
+        let mut app = App::new();
+        app.init_resource::<SkillPanelStaging>();
+        app.insert_resource(tree(&[
+            (1, node(0, 5, 7)),
+            (2, with_requires(node(0, 5, 7), vec![(1, 1)])),
+        ]));
+        app.world_mut().resource_mut::<SkillPanelStaging>().pending =
+            HashMap::from([(1, 1), (2, 1)]);
+        let prerequisite = app
+            .world_mut()
+            .spawn(SkillPanelStepper {
+                skill_id: 1,
+                raise: false,
+            })
+            .observe(on_stepper)
+            .id();
+        let dependent = app
+            .world_mut()
+            .spawn(SkillPanelStepper {
+                skill_id: 2,
+                raise: false,
+            })
+            .observe(on_stepper)
+            .id();
+        let window = app.world_mut().spawn_empty().id();
+
+        app.world_mut()
+            .trigger(click_event(prerequisite, window, PointerButton::Primary));
+        assert_eq!(app.world().resource::<SkillPanelStaging>().staged(1), 1);
+
+        app.world_mut()
+            .trigger(click_event(dependent, window, PointerButton::Primary));
+        app.world_mut()
+            .trigger(click_event(prerequisite, window, PointerButton::Primary));
+        assert!(app.world().resource::<SkillPanelStaging>().is_empty());
     }
 
     #[test]

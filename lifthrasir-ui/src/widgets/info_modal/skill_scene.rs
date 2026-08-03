@@ -494,6 +494,88 @@ mod tests {
     }
 
     #[test]
+    fn raise_click_uses_reconciled_false_upgradable_gate() {
+        let mut app = raise_test_app();
+        seed_tree(&mut app, 5, 10);
+        app.world_mut()
+            .resource_mut::<SkillTreeState>()
+            .skills
+            .get_mut(&5)
+            .unwrap()
+            .upgradable = false;
+        app.world_mut().spawn((
+            CharacterStatus {
+                base_level: 1,
+                job_level: 1,
+                skill_point: 3,
+                ..Default::default()
+            },
+            LocalPlayer,
+        ));
+        let button = app
+            .world_mut()
+            .spawn(RaiseAction {
+                skill_id: 5,
+                disabled: false,
+            })
+            .observe(on_raise_click)
+            .id();
+
+        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut().flush();
+
+        assert_eq!(app.world().resource::<SkillPanelStaging>().staged(5), 0);
+    }
+
+    #[test]
+    fn raise_click_accepts_false_upgradable_after_staging_its_prerequisite() {
+        let mut app = raise_test_app();
+        seed_tree(&mut app, 1, 10);
+        seed_tree(&mut app, 2, 10);
+        {
+            let mut tree = app.world_mut().resource_mut::<SkillTreeState>();
+            let dependent = tree.skills.get_mut(&2).unwrap();
+            dependent.upgradable = false;
+            dependent.requires = vec![(1, 1)];
+        }
+        app.world_mut().spawn((
+            CharacterStatus {
+                base_level: 1,
+                job_level: 1,
+                skill_point: 3,
+                ..Default::default()
+            },
+            LocalPlayer,
+        ));
+        let prerequisite = app
+            .world_mut()
+            .spawn(RaiseAction {
+                skill_id: 1,
+                disabled: false,
+            })
+            .observe(on_raise_click)
+            .id();
+        let dependent = app
+            .world_mut()
+            .spawn(RaiseAction {
+                skill_id: 2,
+                disabled: false,
+            })
+            .observe(on_raise_click)
+            .id();
+
+        app.world_mut().trigger(Activate {
+            entity: prerequisite,
+        });
+        app.world_mut().trigger(Activate { entity: dependent });
+        app.world_mut().flush();
+
+        let staging = app.world().resource::<SkillPanelStaging>();
+        assert_eq!(staging.staged(1), 1);
+        assert_eq!(staging.staged(2), 1);
+    }
+
+    #[test]
     fn raise_button_carries_disabled_state_when_no_points_left() {
         let mut app = test_app();
         let mut view = full_view();
