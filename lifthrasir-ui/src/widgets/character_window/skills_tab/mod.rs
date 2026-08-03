@@ -819,6 +819,132 @@ mod tests {
     }
 
     #[test]
+    fn renders_same_job_and_cross_job_connector_segments() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[
+            (1, node(1, 5, 7)),
+            (2, with_requires(node(0, 5, 7), vec![(1, 2)])),
+            (3, with_requires(node(0, 5, 9), vec![(2, 1)])),
+        ]));
+        app.world_mut().spawn(SkillsTabBody);
+
+        app.update();
+
+        let world = app.world_mut();
+        let connectors: Vec<_> = world
+            .query::<&scene::SkillConnector>()
+            .iter(world)
+            .copied()
+            .collect();
+        assert_eq!(connectors.len(), 6);
+        for (source, target, minimum_level) in [(1, 2, 2), (2, 3, 1)] {
+            let mut segment_ids: Vec<_> = connectors
+                .iter()
+                .filter(|connector| connector.source == source && connector.target == target)
+                .map(|connector| connector.segment)
+                .collect();
+            segment_ids.sort_unstable();
+            assert_eq!(segment_ids, vec![0, 1, 2]);
+            assert!(connectors.iter().any(|connector| {
+                connector.source == source
+                    && connector.target == target
+                    && connector.minimum_level == minimum_level
+                    && !connector.backlink
+            }));
+        }
+    }
+
+    #[test]
+    fn staged_prerequisite_changes_connector_from_thin_unmet_to_thick_met() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[
+            (1, node(0, 5, 7)),
+            (2, with_requires(node(0, 5, 7), vec![(1, 1)])),
+        ]));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+
+        let connector_style = |app: &mut App| {
+            let world = app.world_mut();
+            world
+                .query::<(&scene::SkillConnector, &Node, &BackgroundColor, &ZIndex)>()
+                .iter(world)
+                .find_map(|(connector, node, color, z)| {
+                    (connector.source == 1 && connector.target == 2 && connector.segment == 0)
+                        .then_some((node.height, color.0, z.0))
+                })
+                .expect("first connector segment")
+        };
+        assert_eq!(connector_style(&mut app), (px(1), theme::GOLD_FAINT, 1));
+
+        app.world_mut().resource_mut::<SkillPanelStaging>().pending = HashMap::from([(1, 1)]);
+        app.update();
+
+        assert_eq!(
+            connector_style(&mut app),
+            (px(2), theme::EMERALD.with_alpha(0.45), 1)
+        );
+        let world = app.world_mut();
+        assert!(
+            world
+                .query_filtered::<&ZIndex, With<SkillPanelCell>>()
+                .iter(world)
+                .all(|z| z.0 > 1)
+        );
+    }
+
+    #[test]
+    fn missing_prerequisite_renders_no_connector_and_stays_unavailable() {
+        let mut app = skills_app();
+        let missing = tree(&[(2, with_requires(node(0, 5, 7), vec![(999, 1)]))]);
+        app.insert_resource(missing);
+        app.world_mut().spawn(SkillsTabBody);
+
+        app.update();
+
+        assert_eq!(
+            app.world_mut()
+                .query::<&scene::SkillConnector>()
+                .iter(app.world())
+                .count(),
+            0
+        );
+        assert!(!app.world().resource::<SkillPanelStaging>().can_raise(
+            2,
+            app.world().resource::<SkillTreeState>(),
+            &status(100, 50),
+            99,
+        ));
+    }
+
+    #[test]
+    fn backward_connector_is_dashed_and_muted() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[
+            (1, with_requires(node(0, 5, 7), vec![(2, 1)])),
+            (2, with_requires(node(0, 5, 7), vec![(1, 1)])),
+        ]));
+        app.world_mut().spawn(SkillsTabBody);
+
+        app.update();
+
+        let world = app.world_mut();
+        let pieces: Vec<_> = world
+            .query::<(&scene::SkillConnector, &BackgroundColor)>()
+            .iter(world)
+            .filter(|(connector, _)| connector.backlink)
+            .map(|(connector, color)| (*connector, color.0))
+            .collect();
+        assert!(pieces.len() > 3, "backlinks render as multiple dash pieces");
+        assert!(pieces.iter().any(|(connector, _)| connector.dash > 0));
+        assert!(
+            pieces
+                .iter()
+                .all(|(_, color)| *color == theme::TEXT_FAINT.with_alpha(0.38))
+        );
+    }
+
+    #[test]
     fn canvas_has_two_scrollbar_orientations_with_one_target() {
         use bevy::ui_widgets::{ControlOrientation, ScrollArea, Scrollbar};
 

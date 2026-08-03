@@ -10,7 +10,7 @@ use game_engine::infrastructure::skill::SkillCatalog;
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, ignore_picking};
 
-use super::layout::{JobBand, TreeLayout};
+use super::layout::{JobBand, Segment, TreeLayout};
 use super::{
     SkillPanelBank, SkillPanelCell, SkillPanelCommitButton, SkillPanelStaging, SkillPanelStepper,
     SkillPanelUi, cell_icon_color, format_level, on_apply, on_cell_click, on_cell_drag_start,
@@ -31,6 +31,16 @@ pub(super) struct SkillCanvasViewport;
 #[derive(Component, Clone, Copy, Default)]
 pub(super) struct SkillEmptyMessage;
 
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct SkillConnector {
+    pub source: u32,
+    pub target: u32,
+    pub minimum_level: u32,
+    pub backlink: bool,
+    pub segment: u8,
+    pub dash: u16,
+}
+
 struct CellView {
     skill_id: u32,
     bounds: super::layout::Bounds,
@@ -45,6 +55,15 @@ struct CellView {
     selected: bool,
 }
 
+struct ConnectorView {
+    marker: SkillConnector,
+    left: f32,
+    top: f32,
+    width: f32,
+    height: f32,
+    color: Color,
+}
+
 pub(super) fn body(
     layout: TreeLayout,
     tree: &SkillTreeState,
@@ -57,13 +76,14 @@ pub(super) fn body(
         .map(|status| staging.points_left(status.skill_point))
         .unwrap_or(0);
     let cells = cell_views(&layout, tree, ui, staging, status, catalog);
+    let connectors = connector_views(&layout, tree, staging);
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         ignore_picking()
         Children [
             toolbar(points_left, staging.is_empty()),
-            canvas(layout, cells),
+            canvas(layout, cells, connectors),
             footer(staging.spent(), staging.is_empty()),
         ]
     }
@@ -104,6 +124,111 @@ fn cell_views(
         .collect()
 }
 
+fn connector_views(
+    layout: &TreeLayout,
+    tree: &SkillTreeState,
+    staging: &SkillPanelStaging,
+) -> Vec<ConnectorView> {
+    let mut views = Vec::new();
+    for connector in &layout.connectors {
+        let met = staging.effective_level(connector.source, tree) >= connector.minimum_level;
+        let (thickness, color) = if connector.backlink {
+            (1.0, theme::TEXT_FAINT.with_alpha(0.38))
+        } else if met {
+            (2.0, theme::EMERALD.with_alpha(0.45))
+        } else {
+            (1.0, theme::GOLD_FAINT)
+        };
+        for (segment, geometry) in connector.segments.iter().enumerate() {
+            for (dash, (left, top, width, height)) in
+                line_pieces(*geometry, thickness, connector.backlink)
+                    .into_iter()
+                    .enumerate()
+            {
+                views.push(ConnectorView {
+                    marker: SkillConnector {
+                        source: connector.source,
+                        target: connector.target,
+                        minimum_level: connector.minimum_level,
+                        backlink: connector.backlink,
+                        segment: segment as u8,
+                        dash: dash as u16,
+                    },
+                    left,
+                    top,
+                    width,
+                    height,
+                    color,
+                });
+            }
+        }
+    }
+    views
+}
+
+fn line_pieces(segment: Segment, thickness: f32, dashed: bool) -> Vec<(f32, f32, f32, f32)> {
+    if !dashed {
+        return vec![line_bounds(segment, thickness)];
+    }
+    const DASH: f32 = 6.0;
+    const GAP: f32 = 4.0;
+    let horizontal =
+        (segment.start.x - segment.end.x).abs() >= (segment.start.y - segment.end.y).abs();
+    let length = if horizontal {
+        (segment.start.x - segment.end.x).abs()
+    } else {
+        (segment.start.y - segment.end.y).abs()
+    };
+    if length == 0.0 {
+        return vec![line_bounds(segment, thickness)];
+    }
+    let mut pieces = Vec::new();
+    let mut offset = 0.0;
+    while offset < length {
+        let dash = DASH.min(length - offset);
+        if horizontal {
+            pieces.push((
+                segment.start.x.min(segment.end.x) + offset,
+                segment.start.y - thickness / 2.0,
+                dash,
+                thickness,
+            ));
+        } else {
+            pieces.push((
+                segment.start.x - thickness / 2.0,
+                segment.start.y.min(segment.end.y) + offset,
+                thickness,
+                dash,
+            ));
+        }
+        offset += DASH + GAP;
+    }
+    let last = pieces.last_mut().expect("a positive line has a dash");
+    if horizontal {
+        last.2 = segment.start.x.max(segment.end.x) - last.0;
+    } else {
+        last.3 = segment.start.y.max(segment.end.y) - last.1;
+    }
+    pieces
+}
+
+fn line_bounds(segment: Segment, thickness: f32) -> (f32, f32, f32, f32) {
+    let left = segment.start.x.min(segment.end.x);
+    let top = segment.start.y.min(segment.end.y);
+    let width = (segment.start.x - segment.end.x).abs();
+    let height = (segment.start.y - segment.end.y).abs();
+    if width >= height {
+        (left, top - thickness / 2.0, width.max(thickness), thickness)
+    } else {
+        (
+            left - thickness / 2.0,
+            top,
+            thickness,
+            height.max(thickness),
+        )
+    }
+}
+
 fn toolbar(points_left: u32, empty: bool) -> impl Scene {
     let reset_bg = theme::FIELD.with_alpha(if empty { 0.3 } else { 1.0 });
     bsn! {
@@ -139,9 +264,10 @@ fn toolbar(points_left: u32, empty: bool) -> impl Scene {
     }
 }
 
-fn canvas(layout: TreeLayout, cells: Vec<CellView>) -> impl Scene {
+fn canvas(layout: TreeLayout, cells: Vec<CellView>, connectors: Vec<ConnectorView>) -> impl Scene {
     let empty = layout.nodes.is_empty();
     let bands: Vec<_> = layout.bands.iter().map(job_band).collect();
+    let connectors: Vec<_> = connectors.into_iter().map(connector_segment).collect();
     let nodes: Vec<_> = cells.into_iter().map(skill_cell).collect();
     let empty_message = empty.then(|| EntityScene(empty_content()));
     let content_width = if empty {
@@ -154,7 +280,14 @@ fn canvas(layout: TreeLayout, cells: Vec<CellView>) -> impl Scene {
     } else {
         px(layout.height)
     };
-    let content = tree_content(content_width, content_height, bands, nodes, empty_message);
+    let content = tree_content(
+        content_width,
+        content_height,
+        bands,
+        connectors,
+        nodes,
+        empty_message,
+    );
 
     bsn! {
         SkillCanvasFrame
@@ -204,6 +337,7 @@ fn tree_content(
     width: Val,
     height: Val,
     bands: Vec<impl Scene>,
+    connectors: Vec<impl Scene>,
     nodes: Vec<impl Scene>,
     empty_message: Option<EntityScene<impl Scene>>,
 ) -> impl Scene {
@@ -215,7 +349,23 @@ fn tree_content(
             flex_shrink: 0.0,
         }
         ignore_picking()
-        Children [ {bands}, {nodes}, {empty_message} ]
+        Children [ {bands}, {connectors}, {nodes}, {empty_message} ]
+    }
+}
+
+fn connector_segment(view: ConnectorView) -> impl Scene {
+    bsn! {
+        template_value(view.marker)
+        Node {
+            position_type: PositionType::Absolute,
+            left: {Val::Px(view.left)},
+            top: {Val::Px(view.top)},
+            width: {Val::Px(view.width)},
+            height: {Val::Px(view.height)},
+        }
+        template_value(BackgroundColor(view.color))
+        ZIndex(1)
+        ignore_picking()
     }
 }
 
@@ -252,6 +402,7 @@ fn job_band(band: &JobBand) -> impl Scene + use<> {
         }
         BackgroundColor({Color::srgba(1.0, 1.0, 1.0, 0.014)})
         BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.05))
+        ZIndex(0)
         ignore_picking()
         Children [
             (
@@ -292,6 +443,7 @@ fn skill_cell(view: CellView) -> impl Scene {
             border_radius: BorderRadius::all(px(8)),
         }
         BackgroundColor(background)
+        ZIndex(2)
         Pickable
         on(on_cell_click)
         on(on_cell_drag_start)
@@ -455,6 +607,67 @@ fn apply_button(background: Color, enabled: bool) -> impl Scene {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dashed_line_pieces_cover_both_endpoints_for_non_aligned_lengths() {
+        let cases = [
+            Segment {
+                start: super::super::layout::Point { x: 2.0, y: 5.0 },
+                end: super::super::layout::Point { x: 20.0, y: 5.0 },
+            },
+            Segment {
+                start: super::super::layout::Point { x: 20.0, y: 5.0 },
+                end: super::super::layout::Point { x: 2.0, y: 5.0 },
+            },
+            Segment {
+                start: super::super::layout::Point { x: 5.0, y: 2.0 },
+                end: super::super::layout::Point { x: 5.0, y: 20.0 },
+            },
+            Segment {
+                start: super::super::layout::Point { x: 5.0, y: 20.0 },
+                end: super::super::layout::Point { x: 5.0, y: 2.0 },
+            },
+        ];
+
+        for segment in cases {
+            let pieces = line_pieces(segment, 1.0, true);
+            assert_eq!(pieces.len(), 2);
+            let horizontal = segment.start.y == segment.end.y;
+            let first_start = if horizontal {
+                pieces.first().expect("first dash").0
+            } else {
+                pieces.first().expect("first dash").1
+            };
+            let last = pieces.last().expect("last dash");
+            let last_end = if horizontal {
+                last.0 + last.2
+            } else {
+                last.1 + last.3
+            };
+            let minimum = if horizontal {
+                segment.start.x.min(segment.end.x)
+            } else {
+                segment.start.y.min(segment.end.y)
+            };
+            let maximum = if horizontal {
+                segment.start.x.max(segment.end.x)
+            } else {
+                segment.start.y.max(segment.end.y)
+            };
+
+            assert_eq!(first_start, minimum);
+            assert_eq!(last_end, maximum);
+            assert!(pieces.windows(2).all(|pair| {
+                let first_end = if horizontal {
+                    pair[0].0 + pair[0].2
+                } else {
+                    pair[0].1 + pair[0].3
+                };
+                let second_start = if horizontal { pair[1].0 } else { pair[1].1 };
+                first_end <= second_start
+            }));
+        }
+    }
 
     #[test]
     fn unresolved_job_label_uses_job_id() {
