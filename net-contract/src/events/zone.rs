@@ -344,6 +344,12 @@ pub struct ZoneSkillInfo {
     pub sp: u32,
     pub range: u32,
     pub name: String,
+    /// Whether the server currently allows this skill to be raised by spending a skill point.
+    ///
+    /// Consumers may treat this only as current server capability, not as a permanent
+    /// classification. `false` means the skill is permanently non-point-learnable or a
+    /// current gate fails: no available skill points, no maximum-level room, unmet
+    /// prerequisites, insufficient base level, or insufficient job level.
     pub upgradable: bool,
     pub max_level: u32,
     /// Prerequisite skills as `(skill_id, level)` pairs.
