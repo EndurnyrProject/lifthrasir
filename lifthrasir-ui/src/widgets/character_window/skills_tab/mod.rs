@@ -1,73 +1,36 @@
-//! The Console's Skills tab: a faithful port of the skill window's body — the
-//! branch/job tab strip, the skill grid with learn steppers, the prereq connector
-//! layer, and the Skill-Points footer with the Reset/Apply commit buttons —
-//! projected into the shell's [`SkillsTabBody`] container instead of a standalone
-//! window. Skill details open in the shared right-click info modal
-//! ([`crate::widgets::info_modal`]).
+//! The Console's Skills tab state, staging rules, and interactions.
 //!
-//! This file is deliberately self-contained: it defines its OWN UI-only types
-//! ([`SkillPanelUi`], [`SkillPanelStaging`], [`SkillPanelTab`], [`SkillPanelCell`],
-//! [`SkillPanelStepper`], [`SkillPanelCommitButton`], [`SkillPanelBank`],
-//! [`LastSkillPanelClick`]) and the UI-only staging/ordering helpers ([`apply_order`],
-//! [`SkillPanelStaging::can_raise`], `tab_ids`, `tab_label`, ...) so `skill_window`
-//! can be deleted wholesale in the integration task with zero dangling references. It
-//! reuses only the shared DOMAIN types + messages (`SkillTreeState`, `SkillNode`,
-//! `SkillCatalog`, `layout`/`Placement`, `SkillCastRequested`,
-//! `SkillLearnRequested`, `JobSpriteRegistry`, `CharacterStatus`,
-//! `HotbarDrag`/`HotbarSlot`, `LocalPlayer`) and the chrome/theme helpers.
-//!
-//! Unlike the old window, the whole body is respawned on tree/ui/staging change (the
-//! Bag-tab idiom), so the tab strip, grid, and connectors are baked from live state
-//! each rebuild; only the footer point-bank / commit-dim stays patched in place by
-//! [`update_skill_footer`] so it tracks `skill_point` between rebuilds. The prereq
-//! connector layer is the one place that keeps imperative geometry (architecture §7):
-//! its orthogonal segments are computed in Rust and embedded as `bsn!` children.
+//! [`scene`] owns the declarative all-job horizontal canvas. The current integration
+//! deliberately rebuilds that scene when tree, selection, or staging state changes;
+//! live in-place projection is introduced by Task 8.
 
 use std::collections::HashMap;
 use std::time::Duration;
 
 use bevy::prelude::*;
-use bevy::scene::EntityScene;
-use bevy::ui_widgets::{ControlOrientation, ScrollArea};
-use bevy_feathers::controls::FeathersScrollbar;
 use game_engine::core::state::GameState;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::character::events::SkillLearnRequested;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::hotbar::HotbarSlot;
-use game_engine::domain::skill::{
-    Placement, SkillCastRequested, SkillTreeState, layout as grid_layout,
-};
+use game_engine::domain::skill::{SkillCastRequested, SkillTreeState};
 use game_engine::infrastructure::job::registry::JobSpriteRegistry;
 use game_engine::infrastructure::skill::SkillCatalog;
 
 use crate::theme;
-use crate::widgets::chrome::{chrome_text, ignore_picking};
 use crate::widgets::hotbar::HotbarDrag;
 use crate::widgets::info_modal::{InfoTarget, ShowInfoModal};
 
 use super::SkillsTabBody;
 
 pub(crate) mod layout;
-
-/// Pixel footprint of one grid cell, matching the old window's `CELL_W`/`CELL_H`.
-const CELL_W: f32 = 62.0;
-const CELL_H: f32 = 82.0;
-/// Icon-centre offset within a cell, used to anchor connector segments.
-const IC_X: f32 = 31.0;
-const IC_Y: f32 = 26.0;
-const TAB_STRIP_W: f32 = 86.0;
-/// Fixed height of the body row so the Console never grows with the tree; the grid
-/// scrolls internally instead.
-const PANE_HEIGHT: f32 = 300.0;
+mod scene;
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(300);
 
-/// Active tab (a `job_id`) and selected skill. The grid, connectors, and info panel
-/// rebuild off changes here.
+/// Persistent skill selection. Hover state is added with focused-chain projection in Task 9.
 #[derive(Resource, Default)]
 pub struct SkillPanelUi {
-    tab: Option<u32>,
     selected: Option<u32>,
 }
 
@@ -242,10 +205,6 @@ fn prereq_depth(
     result
 }
 
-/// Marks a tab button with the `job_id` it selects.
-#[derive(Component, Clone, Copy, Default)]
-pub struct SkillPanelTab(pub u32);
-
 /// Marks a grid cell with the `skill_id` it shows so clicks can select/cast it.
 #[derive(Component, Clone, Copy, Default)]
 pub struct SkillPanelCell(pub u32);
@@ -268,23 +227,6 @@ pub struct SkillPanelBank;
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-tested).
 // ---------------------------------------------------------------------------
-
-/// The distinct `job_id`s present in the tree, ascending — one per tab.
-fn tab_ids(tree: &SkillTreeState) -> Vec<u32> {
-    let mut ids: Vec<u32> = tree.skills.values().map(|n| n.job_id).collect();
-    ids.sort_unstable();
-    ids.dedup();
-    ids
-}
-
-/// Tab label for a `job_id`: the job registry's display name, else an ordinal
-/// `"Tier N"` (1-based by ascending position among the present tabs).
-fn tab_label(job_id: u32, ordinal: usize, registry: Option<&JobSpriteRegistry>) -> String {
-    registry
-        .and_then(|r| r.try_display_name(job_id))
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("Tier {}", ordinal + 1))
-}
 
 /// The `lv/max` text shown under a cell and in the info panel.
 fn format_level(level: u32, max: u32) -> String {
@@ -314,19 +256,6 @@ pub(crate) fn skill_name(skill_id: u32, catalog: Option<&SkillCatalog>) -> Strin
 // Systems.
 // ---------------------------------------------------------------------------
 
-/// Seed the active tab with the first present `job_id` once the tree arrives.
-pub fn ensure_default_tab(tree: Res<SkillTreeState>, mut ui: ResMut<SkillPanelUi>) {
-    if !tree.is_changed() {
-        return;
-    }
-    let ids = tab_ids(&tree);
-    let still_valid = ui.tab.is_some_and(|t| ids.contains(&t));
-    if !still_valid {
-        ui.tab = ids.first().copied();
-        ui.selected = None;
-    }
-}
-
 /// Rebuilds the [`SkillsTabBody`]'s children on every tree/[`SkillPanelUi`]/
 /// [`SkillPanelStaging`] change, and once when the body container is first spawned
 /// (the shell mounts it deferred). Despawns the old children and respawns the projected
@@ -355,14 +284,25 @@ pub fn rebuild_skills_body(
         }
     }
     let status = player.single().ok();
+    let job_labels: HashMap<_, _> = tree
+        .skills
+        .values()
+        .filter_map(|node| {
+            registry
+                .as_deref()
+                .and_then(|registry| registry.try_display_name(node.job_id))
+                .map(|label| (node.job_id, label.to_string()))
+        })
+        .collect();
+    let layout = layout::TreeLayout::new(&tree, &job_labels);
     commands
-        .spawn_scene(body(
+        .spawn_scene(scene::body(
+            layout,
             &tree,
             &ui,
             &staging,
             status,
             catalog.as_deref(),
-            registry.as_deref(),
         ))
         .insert(ChildOf(body_entity));
 }
@@ -401,13 +341,13 @@ pub(super) fn register(app: &mut App) {
     app.init_resource::<LastSkillPanelClick>();
     app.add_systems(
         Update,
-        (ensure_default_tab, rebuild_skills_body, update_skill_footer)
+        (rebuild_skills_body, update_skill_footer)
             .chain()
             .run_if(in_state(GameState::InGame)),
     );
 }
 
-/// Reset to the default tab/selection and discard staging when leaving the game.
+/// Reset selection and discard staging when leaving the game.
 pub fn reset(mut ui: ResMut<SkillPanelUi>, mut staging: ResMut<SkillPanelStaging>) {
     *ui = SkillPanelUi::default();
     staging.clear();
@@ -416,19 +356,6 @@ pub fn reset(mut ui: ResMut<SkillPanelUi>, mut staging: ResMut<SkillPanelStaging
 // ---------------------------------------------------------------------------
 // Observers.
 // ---------------------------------------------------------------------------
-
-/// Tab click: set the active tab and clear the current selection.
-fn on_tab_click(
-    click: On<Pointer<Click>>,
-    tabs: Query<&SkillPanelTab>,
-    mut ui: ResMut<SkillPanelUi>,
-) {
-    let Ok(tab) = tabs.get(click.entity) else {
-        return;
-    };
-    ui.tab = Some(tab.0);
-    ui.selected = None;
-}
 
 /// `◄`/`►` observer: stages or unstages a level via [`SkillPanelStaging`]. Reads the
 /// player status so `can_raise`'s point/level gates are evaluated from the source.
@@ -520,521 +447,10 @@ fn on_apply(
     staging.clear();
 }
 
-// ---------------------------------------------------------------------------
-// Body: tab strip | grid + connectors | info panel, over the footer. Projected from
-// live state; `bsn!` scenes own their data, so every view-model is prepared as owned
-// values before entering a `bsn!` block.
-// ---------------------------------------------------------------------------
-
-/// One grid cell's owned view-model.
-struct CellView {
-    skill_id: u32,
-    col: u32,
-    row: u32,
-    icon: Option<String>,
-    level: u32,
-    max_level: u32,
-    name: String,
-    learned: bool,
-    icon_color: Color,
-    can_raise: bool,
-    can_lower: bool,
-    selected: bool,
-}
-
-/// One prereq connector segment (imperative geometry, architecture §7).
-struct Seg {
-    left: f32,
-    top: f32,
-    width: f32,
-    height: f32,
-    color: Color,
-}
-
-fn cell_views(
-    tab: u32,
-    tree: &SkillTreeState,
-    staging: &SkillPanelStaging,
-    status: Option<&CharacterStatus>,
-    selected: Option<u32>,
-    catalog: Option<&SkillCatalog>,
-    placements: &HashMap<u32, Placement>,
-) -> Vec<CellView> {
-    let mut views: Vec<CellView> = placements
-        .iter()
-        .filter(|(_, p)| p.tab == tab)
-        .filter_map(|(&skill_id, placement)| {
-            let node = tree.skills.get(&skill_id)?;
-            let effective = staging.effective_level(skill_id, tree);
-            let learned = effective > 0;
-            let maxed = effective >= node.max_level && node.max_level > 0;
-            Some(CellView {
-                skill_id,
-                col: placement.col,
-                row: placement.row,
-                icon: catalog.and_then(|c| c.icon_path(skill_id)),
-                level: effective,
-                max_level: node.max_level,
-                name: skill_name(skill_id, catalog),
-                learned,
-                icon_color: cell_icon_color(learned, maxed),
-                can_raise: status
-                    .is_some_and(|s| staging.can_raise(skill_id, tree, s, s.skill_point)),
-                can_lower: staging.can_lower(skill_id, tree),
-                selected: selected == Some(skill_id),
-            })
-        })
-        .collect();
-    views.sort_unstable_by_key(|v| v.skill_id);
-    views
-}
-
-/// `(start, length)` of a 1D span between two coordinates, length clamped to 0.
-fn ordered_span(a: f32, b: f32) -> (f32, f32) {
-    (a.min(b), (a - b).abs())
-}
-
-/// One orthogonal (vertical then horizontal) connector per in-tab `requires` edge,
-/// colored met/unmet from the effective (server + staged) levels.
-fn connector_segments(
-    tab: u32,
-    tree: &SkillTreeState,
-    staging: &SkillPanelStaging,
-    placements: &HashMap<u32, Placement>,
-) -> Vec<Seg> {
-    let mut segs = Vec::new();
-    for (&skill_id, placement) in placements {
-        if placement.tab != tab {
-            continue;
-        }
-        let Some(node) = tree.skills.get(&skill_id) else {
-            continue;
-        };
-        for &(prereq, min_level) in &node.requires {
-            let Some(from) = placements.get(&prereq) else {
-                continue;
-            };
-            if from.tab != tab {
-                continue;
-            }
-            let met = staging.effective_level(prereq, tree) >= min_level;
-            let color = if met {
-                theme::EMERALD.with_alpha(0.32)
-            } else {
-                theme::STROKE
-            };
-            let x1 = from.col as f32 * CELL_W + IC_X;
-            let y1 = from.row as f32 * CELL_H + IC_Y;
-            let x2 = placement.col as f32 * CELL_W + IC_X;
-            let y2 = placement.row as f32 * CELL_H + IC_Y;
-            let (top, height) = ordered_span(y1, y2);
-            segs.push(Seg {
-                left: x1,
-                top,
-                width: 1.0,
-                height,
-                color,
-            });
-            let (left, width) = ordered_span(x1, x2);
-            segs.push(Seg {
-                left,
-                top: y2,
-                width: width.max(1.0),
-                height: 1.0,
-                color,
-            });
-        }
-    }
-    segs
-}
-
-/// The whole swappable body: the tab strip / grid+connectors row over the
-/// Skill-Points footer.
-fn body(
-    tree: &SkillTreeState,
-    ui: &SkillPanelUi,
-    staging: &SkillPanelStaging,
-    status: Option<&CharacterStatus>,
-    catalog: Option<&SkillCatalog>,
-    registry: Option<&JobSpriteRegistry>,
-) -> impl Scene + use<> {
-    let placements = grid_layout(tree);
-    let tabs: Vec<_> = tab_ids(tree)
-        .into_iter()
-        .enumerate()
-        .map(|(ordinal, job_id)| {
-            tab_button(
-                job_id,
-                tab_label(job_id, ordinal, registry),
-                ui.tab == Some(job_id),
-            )
-        })
-        .collect();
-
-    let cells = ui
-        .tab
-        .map(|tab| {
-            cell_views(
-                tab,
-                tree,
-                staging,
-                status,
-                ui.selected,
-                catalog,
-                &placements,
-            )
-        })
-        .unwrap_or_default();
-    let segs = ui
-        .tab
-        .map(|tab| connector_segments(tab, tree, staging, &placements))
-        .unwrap_or_default();
-
-    let points_left = status
-        .map(|s| staging.points_left(s.skill_point))
-        .unwrap_or(0);
-
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
-        ignore_picking()
-        Children [
-            body_row(tabs, cells, segs),
-            footer(points_left, staging.is_empty()),
-        ]
-    }
-}
-
-fn body_row(tabs: Vec<impl Scene>, cells: Vec<CellView>, segs: Vec<Seg>) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, height: px(PANE_HEIGHT) }
-        ignore_picking()
-        Children [ tab_strip(tabs), grid_pane(cells, segs) ]
-    }
-}
-
-fn tab_strip(tabs: Vec<impl Scene>) -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            row_gap: px(2),
-            width: px(TAB_STRIP_W),
-            flex_shrink: 0.0,
-            padding: {UiRect::axes(px(4), px(8))},
-            border: {UiRect { right: Val::Px(1.0), ..default() }},
-        }
-        BorderColor::all(theme::STROKE)
-        ignore_picking()
-        Children [ {tabs} ]
-    }
-}
-
-fn tab_button(job_id: u32, label: String, active: bool) -> impl Scene {
-    let (bg, fg) = if active {
-        (theme::EMERALD_INK, theme::EMERALD_BRI)
-    } else {
-        (Color::NONE, theme::TEXT_FAINT)
-    };
-    bsn! {
-        template_value(SkillPanelTab(job_id))
-        Node {
-            padding: {UiRect::axes(px(5), px(9))},
-            border_radius: BorderRadius::all(px(5)),
-        }
-        BackgroundColor(bg)
-        Pickable
-        on(on_tab_click)
-        Children [ chrome_text(label, 10.0, fg) ]
-    }
-}
-
-/// The bordered grid: a fixed-height, wheel-scrollable viewport whose content canvas is
-/// sized to the tree so scrolling has extent. Connector segments render first (behind)
-/// and cells second (on top). The `#grid` id wires the scrollbar to the viewport.
-fn grid_pane(cells: Vec<CellView>, segs: Vec<Seg>) -> impl Scene {
-    let max_col = cells.iter().map(|c| c.col).max().unwrap_or(0);
-    let max_row = cells.iter().map(|c| c.row).max().unwrap_or(0);
-    let content_w = (max_col as f32 + 1.0) * CELL_W;
-    let content_h = (max_row as f32 + 1.0) * CELL_H;
-    let empty = cells.is_empty();
-    let segments: Vec<_> = segs.into_iter().map(connector).collect();
-    let tiles: Vec<_> = cells.into_iter().map(cell).collect();
-    let empty_msg = empty.then(|| EntityScene(muted_text("No skills.".to_string())));
-    bsn! {
-        Node {
-            flex_grow: 1.0,
-            flex_basis: px(0),
-            min_width: px(0),
-            position_type: PositionType::Relative,
-        }
-        ignore_picking()
-        Children [
-            (
-                #grid
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0), top: px(0), right: px(0), bottom: px(0),
-                    overflow: {Overflow::scroll()},
-                    padding: px(7),
-                }
-                ScrollArea
-                Pickable
-                Children [
-                    (
-                        Node {
-                            position_type: PositionType::Relative,
-                            width: {Val::Px(content_w)},
-                            height: {Val::Px(content_h)},
-                            flex_shrink: 0.0,
-                        }
-                        ignore_picking()
-                        Children [ {segments}, {tiles}, {empty_msg} ]
-                    ),
-                ]
-            ),
-            @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(3),
-                top: px(4),
-                bottom: px(4),
-                width: px(6),
-            }
-        ]
-    }
-}
-
-fn connector(seg: Seg) -> impl Scene {
-    let Seg {
-        left,
-        top,
-        width,
-        height,
-        color,
-    } = seg;
-    bsn! {
-        Node {
-            position_type: PositionType::Absolute,
-            left: {Val::Px(left)},
-            top: {Val::Px(top)},
-            width: {Val::Px(width)},
-            height: {Val::Px(height)},
-        }
-        BackgroundColor(color)
-        ignore_picking()
-    }
-}
-
-/// One grid cell: an absolute-positioned icon well + level badge + name + `◄ lv/max ►`
-/// stepper, carrying the `skill_id` for select/cast/drag.
-fn cell(view: CellView) -> impl Scene {
-    let bg = if view.selected {
-        theme::EMERALD_INK
-    } else {
-        Color::NONE
-    };
-    let icon = view.icon.map(|path| EntityScene(cell_icon(path)));
-    let badge = view
-        .learned
-        .then(|| EntityScene(level_badge(view.level.to_string(), view.icon_color)));
-    bsn! {
-        template_value(SkillPanelCell(view.skill_id))
-        Node {
-            position_type: PositionType::Absolute,
-            left: {Val::Px(view.col as f32 * CELL_W)},
-            top: {Val::Px(view.row as f32 * CELL_H)},
-            width: px(CELL_W),
-            height: px(CELL_H),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            row_gap: px(3),
-            padding: {UiRect::axes(px(1), px(5))},
-            border_radius: BorderRadius::all(px(8)),
-        }
-        BackgroundColor(bg)
-        Pickable
-        on(on_cell_click)
-        on(on_cell_drag_start)
-        Children [
-            (
-                Node {
-                    position_type: PositionType::Relative,
-                    width: px(42),
-                    height: px(42),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(9)),
-                }
-                BackgroundColor(theme::FIELD)
-                BorderColor::all(if view.learned { theme::EMERALD } else { theme::STROKE })
-                ignore_picking()
-                Children [ {icon}, {badge} ]
-            ),
-            chrome_text(view.name, 8.5, view.icon_color),
-            stepper_row(
-                view.skill_id,
-                format_level(view.level, view.max_level),
-                view.can_raise,
-                view.can_lower,
-            ),
-        ]
-    }
-}
-
-fn cell_icon(path: String) -> impl Scene {
-    bsn! {
-        ImageNode { image: {path} }
-        Node { width: px(28), height: px(28) }
-        ignore_picking()
-    }
-}
-
-fn level_badge(text: String, color: Color) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: {body_font()},
-            font_size: {bevy::text::FontSize::Px(9.0)},
-        }
-        TextColor(color)
-        Node { position_type: PositionType::Absolute, right: px(3), bottom: px(2) }
-        ignore_picking()
-    }
-}
-
-/// `◄ lv/max ►` stepper row. The arrows stage/unstage a level; each dims when its
-/// direction is unavailable.
-fn stepper_row(skill_id: u32, level_text: String, can_raise: bool, can_lower: bool) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(1) }
-        ignore_picking()
-        Children [
-            stepper_arrow(skill_id, false, can_lower),
-            chrome_text(level_text, 9.5, theme::TEXT_FAINT),
-            stepper_arrow(skill_id, true, can_raise),
-        ]
-    }
-}
-
-fn stepper_arrow(skill_id: u32, raise: bool, enabled: bool) -> impl Scene {
-    let glyph = if raise { "\u{25BA}" } else { "\u{25C4}" };
-    let color = if enabled {
-        theme::EMERALD_BRI
-    } else {
-        theme::TEXT_FAINT
-    };
-    let pickable = if enabled {
-        Pickable::default()
-    } else {
-        Pickable::IGNORE
-    };
-    bsn! {
-        template_value(SkillPanelStepper { skill_id, raise })
-        Node { align_items: AlignItems::Center, justify_content: JustifyContent::Center }
-        template_value(pickable)
-        on(on_stepper)
-        Children [ chrome_text(glyph.to_string(), 9.0, color) ]
-    }
-}
-
-fn muted_text(text: String) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: {body_font()},
-            font_size: {bevy::text::FontSize::Px(10.5)},
-        }
-        TextColor(theme::TEXT_FAINT)
-        ignore_picking()
-    }
-}
-
-fn body_font() -> bevy::text::FontSourceTemplate {
-    bevy::text::FontSourceTemplate::Handle("ro://fonts/manrope.ttf".into())
-}
-
-/// Footer: "Skill Points" label + value, plus the Reset/Apply buttons (dimmed when
-/// nothing is staged).
-fn footer(points_left: u32, empty: bool) -> impl Scene {
-    let alpha = if empty { 0.3 } else { 1.0 };
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            height: px(42),
-            padding: {UiRect::horizontal(px(14))},
-            column_gap: px(9),
-            border: {UiRect { top: Val::Px(1.0), ..default() }},
-        }
-        BorderColor::all(theme::STROKE)
-        ignore_picking()
-        Children [
-            chrome_text("Skill Points".to_string(), 10.0, theme::TEXT_FAINT),
-            bank_text(points_left.to_string()),
-            (
-                Node {
-                    flex_grow: 1.0,
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::FlexEnd,
-                    column_gap: px(7),
-                }
-                ignore_picking()
-                Children [ reset_button(theme::FIELD.with_alpha(alpha)), apply_button(theme::EMERALD.with_alpha(alpha)) ]
-            ),
-        ]
-    }
-}
-
-fn bank_text(value: String) -> impl Scene {
-    bsn! {
-        SkillPanelBank
-        Text(value)
-        TextFont {
-            font: {body_font()},
-            font_size: {bevy::text::FontSize::Px(16.0)},
-        }
-        TextColor(theme::EMERALD_BRI)
-        ignore_picking()
-    }
-}
-
-fn reset_button(bg: Color) -> impl Scene {
-    bsn! {
-        SkillPanelCommitButton
-        Node {
-            height: px(28),
-            padding: {UiRect::axes(px(15), px(0))},
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::all(px(6)),
-        }
-        BackgroundColor(bg)
-        Pickable
-        on(on_reset)
-        Children [ chrome_text("Reset".to_string(), 11.5, theme::TEXT_DIM) ]
-    }
-}
-
-fn apply_button(bg: Color) -> impl Scene {
-    bsn! {
-        SkillPanelCommitButton
-        Node {
-            height: px(28),
-            padding: {UiRect::axes(px(15), px(0))},
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::all(px(6)),
-        }
-        BackgroundColor(bg)
-        Pickable
-        on(on_apply)
-        Children [ chrome_text("Apply".to_string(), 11.5, theme::EMERALD_INK) ]
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use bevy::scene::ScenePlugin;
     use game_engine::domain::skill::SkillNode;
@@ -1329,18 +745,6 @@ mod tests {
     }
 
     #[test]
-    fn tab_ids_are_sorted_and_deduped() {
-        let t = tree(&[(1, node(0, 5, 9)), (2, node(0, 5, 7)), (3, node(0, 5, 7))]);
-        assert_eq!(tab_ids(&t), vec![7, 9]);
-    }
-
-    #[test]
-    fn tab_label_falls_back_to_ordinal_when_unresolved() {
-        assert_eq!(tab_label(999, 0, None), "Tier 1");
-        assert_eq!(tab_label(999, 2, None), "Tier 3");
-    }
-
-    #[test]
     fn cell_icon_color_tracks_state() {
         assert_eq!(cell_icon_color(false, false), theme::TEXT_FAINT);
         assert_eq!(cell_icon_color(true, false), theme::EMERALD_BRI);
@@ -1354,7 +758,7 @@ mod tests {
         app.init_asset::<Font>();
         app.init_resource::<SkillPanelUi>();
         app.init_resource::<SkillPanelStaging>();
-        app.add_systems(Update, (ensure_default_tab, rebuild_skills_body).chain());
+        app.add_systems(Update, rebuild_skills_body);
         app
     }
 
@@ -1390,7 +794,7 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_renders_one_cell_per_active_tab_skill() {
+    fn rebuild_renders_every_runtime_skill() {
         let mut app = skills_app();
         app.insert_resource(tree(&[
             (1, node(0, 5, 7)),
@@ -1400,19 +804,128 @@ mod tests {
         app.world_mut().spawn(SkillsTabBody);
 
         app.update();
+
+        assert_eq!(cell_count(&mut app), 3);
+
+        let world = app.world_mut();
+        let mut skill_ids: Vec<_> = world
+            .query::<&SkillPanelCell>()
+            .iter(world)
+            .map(|cell| cell.0)
+            .collect();
+        skill_ids.sort_unstable();
+        assert_eq!(skill_ids, vec![1, 2, 3]);
+        assert_eq!(world.query::<&scene::SkillJobBand>().iter(world).count(), 2);
+    }
+
+    #[test]
+    fn canvas_has_two_scrollbar_orientations_with_one_target() {
+        use bevy::ui_widgets::{ControlOrientation, ScrollArea, Scrollbar};
+
+        let mut app = skills_app();
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+
+        let world = app.world_mut();
+        let scroll_areas: Vec<_> = world
+            .query_filtered::<Entity, With<ScrollArea>>()
+            .iter(world)
+            .collect();
+        assert_eq!(scroll_areas.len(), 1);
+        let viewport = scroll_areas[0];
+        let orientations: Vec<_> = world
+            .query::<&Scrollbar>()
+            .iter(world)
+            .map(|scrollbar| {
+                assert_eq!(scrollbar.target, viewport);
+                scrollbar.orientation
+            })
+            .collect();
+        assert_eq!(orientations.len(), 2);
+        assert!(orientations.contains(&ControlOrientation::Horizontal));
+        assert!(orientations.contains(&ControlOrientation::Vertical));
+
+        let frame = world
+            .query_filtered::<&Node, With<scene::SkillCanvasFrame>>()
+            .single(world)
+            .expect("one canvas frame");
+        assert_eq!(frame.height, px(300));
+        let viewport_node = world
+            .query_filtered::<&Node, With<scene::SkillCanvasViewport>>()
+            .single(world)
+            .expect("one canvas viewport");
+        assert_eq!(viewport_node.height, px(300));
+    }
+
+    #[test]
+    fn empty_tree_and_missing_metadata_use_stable_fallbacks() {
+        let mut empty_app = skills_app();
+        empty_app.insert_resource(SkillTreeState::default());
+        empty_app.world_mut().spawn(SkillsTabBody);
+        empty_app.update();
+        let empty_world = empty_app.world_mut();
         assert_eq!(
-            cell_count(&mut app),
-            2,
-            "default tab 7 shows its two skills"
+            empty_world
+                .query_filtered::<(), With<scene::SkillEmptyMessage>>()
+                .iter(empty_world)
+                .count(),
+            1
+        );
+        assert!(
+            empty_world
+                .query::<&Text>()
+                .iter(empty_world)
+                .any(|text| text.0 == "No skills.")
         );
 
-        app.world_mut().resource_mut::<SkillPanelUi>().tab = Some(9);
-        app.update();
+        let mut fallback_app = skills_app();
+        fallback_app.insert_resource(tree(&[(77, node(0, 5, 42))]));
+        fallback_app.world_mut().spawn(SkillsTabBody);
+        fallback_app.update();
+        let fallback_world = fallback_app.world_mut();
+        let texts: HashSet<_> = fallback_world
+            .query::<&Text>()
+            .iter(fallback_world)
+            .map(|text| text.0.clone())
+            .collect();
+        assert!(texts.contains("Job #42"));
+        assert!(texts.contains("#77"));
         assert_eq!(
-            cell_count(&mut app),
-            1,
-            "switching to tab 9 shows its one skill"
+            fallback_world
+                .query::<&ImageNode>()
+                .iter(fallback_world)
+                .count(),
+            0
         );
+    }
+
+    #[test]
+    fn registry_job_name_toolbar_and_footer_are_rendered() {
+        let mut app = skills_app();
+        let mut jobs = lifthrasir_data::JobData::default();
+        jobs.display_names.insert(7, "Knight".to_string());
+        app.insert_resource(JobSpriteRegistry::from_job_data(jobs));
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+
+        let world = app.world_mut();
+        let texts: HashSet<_> = world
+            .query::<&Text>()
+            .iter(world)
+            .map(|text| text.0.clone())
+            .collect();
+        for expected in [
+            "Requirements flow  →  left to right",
+            "Skill Points",
+            "Reset Plan",
+            "0 changes staged",
+            "Apply",
+            "Knight",
+        ] {
+            assert!(texts.contains(expected), "missing {expected:?}");
+        }
     }
 
     fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
@@ -1438,6 +951,96 @@ mod tests {
         )
     }
 
+    fn drag_start_event(target: Entity, window: Entity) -> Pointer<DragStart> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            DragStart {
+                button: PointerButton::Primary,
+                hit: HitData::new(target, 0.0, None, None),
+            },
+            target,
+        )
+    }
+
+    #[test]
+    fn rendered_cell_preserves_cast_modal_and_hotbar_interactions() {
+        let mut app = skills_app();
+        app.add_message::<SkillCastRequested>();
+        app.add_message::<ShowInfoModal>();
+        app.init_resource::<LastSkillPanelClick>();
+        app.init_resource::<Time>();
+        app.init_resource::<HotbarDrag>();
+        app.insert_resource(tree(&[(42, node(1, 5, 7))]));
+        app.world_mut().spawn(SkillsTabBody);
+        let window = app.world_mut().spawn(Window::default()).id();
+        app.update();
+
+        let cell = app
+            .world_mut()
+            .query_filtered::<Entity, With<SkillPanelCell>>()
+            .single(app.world())
+            .expect("one rendered skill cell");
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Primary));
+        assert_eq!(
+            app.world()
+                .resource::<Messages<SkillCastRequested>>()
+                .iter_current_update_messages()
+                .count(),
+            1
+        );
+
+        app.world_mut()
+            .trigger(click_event(cell, window, PointerButton::Secondary));
+        assert!(
+            app.world()
+                .resource::<Messages<ShowInfoModal>>()
+                .iter_current_update_messages()
+                .any(|message| message.target == InfoTarget::Skill(42))
+        );
+
+        app.world_mut().trigger(drag_start_event(cell, window));
+        assert_eq!(
+            app.world().resource::<HotbarDrag>().payload,
+            Some(HotbarSlot::Skill(42))
+        );
+    }
+
+    #[test]
+    fn rendered_reset_plan_discards_staging_without_a_request() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        app.world_mut().resource_mut::<SkillPanelStaging>().pending = HashMap::from([(1, 1)]);
+
+        let reset = {
+            let world = app.world_mut();
+            let mut query = world.query::<(&Text, &ChildOf)>();
+            query
+                .iter(world)
+                .find_map(|(text, parent)| (text.0 == "Reset Plan").then_some(parent.parent()))
+                .expect("rendered Reset Plan button")
+        };
+        let window = app.world_mut().spawn(Window::default()).id();
+        app.world_mut()
+            .trigger(click_event(reset, window, PointerButton::Primary));
+
+        assert!(app.world().resource::<SkillPanelStaging>().is_empty());
+    }
+
     #[test]
     fn disabled_stepper_arrows_are_not_pickable() {
         let mut app = App::new();
@@ -1445,10 +1048,10 @@ mod tests {
         app.init_asset::<Image>();
         app.init_asset::<Font>();
         app.world_mut()
-            .spawn_scene(stepper_arrow(1, true, false))
+            .spawn_scene(scene::stepper(1, true, false))
             .expect("disabled arrow spawns");
         app.world_mut()
-            .spawn_scene(stepper_arrow(2, true, true))
+            .spawn_scene(scene::stepper(2, true, true))
             .expect("enabled arrow spawns");
         app.update();
 
