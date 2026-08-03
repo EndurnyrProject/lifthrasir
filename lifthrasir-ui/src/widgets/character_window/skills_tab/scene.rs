@@ -3,7 +3,6 @@ use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::skill::SkillTreeState;
 use game_engine::infrastructure::skill::SkillCatalog;
 
@@ -12,15 +11,39 @@ use crate::widgets::chrome::{chrome_text, ignore_picking};
 
 use super::layout::{JobBand, Segment, TreeLayout};
 use super::{
-    SkillPanelBank, SkillPanelCell, SkillPanelCommitButton, SkillPanelStaging, SkillPanelStepper,
-    SkillPanelUi, cell_icon_color, format_level, on_apply, on_cell_click, on_cell_drag_start,
-    on_reset, on_stepper, skill_name,
+    SkillGateSnapshot, SkillPanelBank, SkillPanelCell, SkillPanelCommitButton, SkillPanelStaging,
+    SkillPanelStepper, SkillPanelUi, cell_icon_color, format_level, on_apply, on_cell_click,
+    on_cell_drag_start, on_reset, on_stepper, skill_name,
 };
 
 const PANE_HEIGHT: f32 = 300.0;
 
 #[derive(Component, Clone, Copy, Default)]
 pub(super) struct SkillJobBand;
+
+#[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillJobPointText(pub u32);
+
+#[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillNodeFrame(pub u32);
+
+#[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillNodeName(pub u32);
+
+#[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillNodeLevel(pub u32);
+
+#[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillNodeDimmer;
+
+#[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillPanelStagedCount;
+
+#[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillStepperGlyph {
+    skill_id: u32,
+    raise: bool,
+}
 
 #[derive(Component, Clone, Copy, Default)]
 pub(super) struct SkillCanvasFrame;
@@ -39,20 +62,14 @@ pub(super) struct SkillConnector {
     pub backlink: bool,
     pub segment: u8,
     pub dash: u16,
+    pub horizontal: bool,
 }
 
 struct CellView {
     skill_id: u32,
     bounds: super::layout::Bounds,
     icon: Option<String>,
-    level: u32,
-    max_level: u32,
     name: String,
-    learned: bool,
-    icon_color: Color,
-    can_raise: bool,
-    can_lower: bool,
-    selected: bool,
 }
 
 struct ConnectorView {
@@ -64,80 +81,38 @@ struct ConnectorView {
     color: Color,
 }
 
-pub(super) fn body(
-    layout: TreeLayout,
-    tree: &SkillTreeState,
-    ui: &SkillPanelUi,
-    staging: &SkillPanelStaging,
-    status: Option<&CharacterStatus>,
-    catalog: Option<&SkillCatalog>,
-) -> impl Scene + use<> {
-    let points_left = status
-        .map(|status| staging.points_left(status.skill_point))
-        .unwrap_or(0);
-    let cells = cell_views(&layout, tree, ui, staging, status, catalog);
-    let connectors = connector_views(&layout, tree, staging);
+pub(super) fn body(layout: TreeLayout, catalog: Option<&SkillCatalog>) -> impl Scene + use<> {
+    let cells = cell_views(&layout, catalog);
+    let connectors = connector_views(&layout);
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         ignore_picking()
-        Children [
-            toolbar(points_left, staging.is_empty()),
-            canvas(layout, cells, connectors),
-            footer(staging.spent(), staging.is_empty()),
-        ]
+        Children [ toolbar(), canvas(layout, cells, connectors), footer() ]
     }
 }
 
-fn cell_views(
-    layout: &TreeLayout,
-    tree: &SkillTreeState,
-    ui: &SkillPanelUi,
-    staging: &SkillPanelStaging,
-    status: Option<&CharacterStatus>,
-    catalog: Option<&SkillCatalog>,
-) -> Vec<CellView> {
+fn cell_views(layout: &TreeLayout, catalog: Option<&SkillCatalog>) -> Vec<CellView> {
     layout
         .nodes
         .iter()
-        .filter_map(|placement| {
-            let node = tree.skills.get(&placement.skill_id)?;
-            let level = staging.effective_level(placement.skill_id, tree);
-            let learned = level > 0;
-            let maxed = level >= node.max_level && node.max_level > 0;
-            Some(CellView {
-                skill_id: placement.skill_id,
-                bounds: placement.bounds,
-                icon: catalog.and_then(|catalog| catalog.icon_path(placement.skill_id)),
-                level,
-                max_level: node.max_level,
-                name: skill_name(placement.skill_id, catalog),
-                learned,
-                icon_color: cell_icon_color(learned, maxed),
-                can_raise: status.is_some_and(|status| {
-                    staging.can_raise(placement.skill_id, tree, status, status.skill_point)
-                }),
-                can_lower: staging.can_lower(placement.skill_id, tree),
-                selected: ui.selected == Some(placement.skill_id),
-            })
+        .map(|placement| CellView {
+            skill_id: placement.skill_id,
+            bounds: placement.bounds,
+            icon: catalog.and_then(|catalog| catalog.icon_path(placement.skill_id)),
+            name: skill_name(placement.skill_id, catalog),
         })
         .collect()
 }
 
-fn connector_views(
-    layout: &TreeLayout,
-    tree: &SkillTreeState,
-    staging: &SkillPanelStaging,
-) -> Vec<ConnectorView> {
+fn connector_views(layout: &TreeLayout) -> Vec<ConnectorView> {
     let mut views = Vec::new();
     for connector in &layout.connectors {
-        let met = staging.effective_level(connector.source, tree) >= connector.minimum_level;
-        let (thickness, color) = if connector.backlink {
-            (1.0, theme::TEXT_FAINT.with_alpha(0.38))
-        } else if met {
-            (2.0, theme::EMERALD.with_alpha(0.45))
+        let thickness = 1.0;
+        let color = if connector.backlink {
+            theme::TEXT_FAINT.with_alpha(0.38)
         } else {
-            (1.0, theme::GOLD_FAINT)
+            theme::GOLD_FAINT
         };
         for (segment, geometry) in connector.segments.iter().enumerate() {
             for (dash, (left, top, width, height)) in
@@ -153,6 +128,7 @@ fn connector_views(
                         backlink: connector.backlink,
                         segment: segment as u8,
                         dash: dash as u16,
+                        horizontal: geometry.start.y == geometry.end.y,
                     },
                     left,
                     top,
@@ -229,8 +205,7 @@ fn line_bounds(segment: Segment, thickness: f32) -> (f32, f32, f32, f32) {
     }
 }
 
-fn toolbar(points_left: u32, empty: bool) -> impl Scene {
-    let reset_bg = theme::FIELD.with_alpha(if empty { 0.3 } else { 1.0 });
+fn toolbar() -> impl Scene {
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
@@ -256,10 +231,10 @@ fn toolbar(points_left: u32, empty: bool) -> impl Scene {
                 ignore_picking()
                 Children [
                     chrome_text("Skill Points".to_string(), 9.0, theme::TEXT_FAINT),
-                    bank_text(points_left.to_string()),
+                    bank_text(),
                 ]
             ),
-            reset_button(reset_bg, !empty),
+            reset_button(),
         ]
     }
 }
@@ -415,18 +390,16 @@ fn job_band(band: &JobBand) -> impl Scene + use<> {
                 }
                 BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.3)})
                 ignore_picking()
-                Children [ chrome_text(label, 10.5, theme::TEXT_DIM) ]
+                Children [
+                    chrome_text(label, 10.5, theme::TEXT_DIM),
+                    job_point_text(band.job_id),
+                ]
             ),
         ]
     }
 }
 
 fn skill_cell(view: CellView) -> impl Scene {
-    let background = if view.selected {
-        theme::EMERALD_INK
-    } else {
-        Color::NONE
-    };
     let icon = view.icon.map(|path| EntityScene(skill_icon(path)));
     bsn! {
         template_value(SkillPanelCell(view.skill_id))
@@ -442,13 +415,14 @@ fn skill_cell(view: CellView) -> impl Scene {
             padding: {UiRect::vertical(px(3))},
             border_radius: BorderRadius::all(px(8)),
         }
-        BackgroundColor(background)
+        BackgroundColor(Color::NONE)
         ZIndex(2)
         Pickable
         on(on_cell_click)
         on(on_cell_drag_start)
         Children [
             (
+                template_value(SkillNodeFrame(view.skill_id))
                 Node {
                     position_type: PositionType::Relative,
                     width: px(44), height: px(44),
@@ -458,17 +432,13 @@ fn skill_cell(view: CellView) -> impl Scene {
                     border_radius: BorderRadius::all(px(10)),
                 }
                 BackgroundColor(theme::FIELD)
-                BorderColor::all(if view.learned { theme::EMERALD } else { theme::STROKE })
+                BorderColor::all(theme::STROKE)
                 ignore_picking()
                 Children [ {icon} ]
             ),
-            chrome_text(view.name, 8.5, view.icon_color),
-            stepper_row(
-                view.skill_id,
-                format_level(view.level, view.max_level),
-                view.can_raise,
-                view.can_lower,
-            ),
+            skill_name_text(view.skill_id, view.name),
+            stepper_row(view.skill_id),
+            dimmer(),
         ]
     }
 }
@@ -481,7 +451,7 @@ fn skill_icon(path: String) -> impl Scene {
     }
 }
 
-fn stepper_row(skill_id: u32, level: String, can_raise: bool, can_lower: bool) -> impl Scene {
+fn stepper_row(skill_id: u32) -> impl Scene {
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
@@ -490,9 +460,9 @@ fn stepper_row(skill_id: u32, level: String, can_raise: bool, can_lower: bool) -
         }
         ignore_picking()
         Children [
-            stepper(skill_id, false, can_lower),
-            chrome_text(level, 9.0, theme::TEXT_FAINT),
-            stepper(skill_id, true, can_raise),
+            stepper(skill_id, false, false),
+            skill_level_text(skill_id),
+            stepper(skill_id, true, false),
         ]
     }
 }
@@ -520,17 +490,92 @@ pub(super) fn stepper(skill_id: u32, raise: bool, enabled: bool) -> impl Scene {
         BackgroundColor(background)
         template_value(pickable)
         on(on_stepper)
-        Children [ chrome_text(glyph.to_string(), 10.0, if enabled { theme::EMERALD_INK } else { theme::TEXT_FAINT }) ]
+        Children [ stepper_glyph(skill_id, raise, glyph.to_string(), enabled) ]
     }
 }
 
-fn footer(staged: u32, empty: bool) -> impl Scene {
-    let alpha = if empty { 0.3 } else { 1.0 };
-    let staged_text = if staged == 1 {
-        "1 change staged".to_string()
-    } else {
-        format!("{staged} changes staged")
-    };
+fn skill_name_text(skill_id: u32, name: String) -> impl Scene {
+    bsn! {
+        template_value(SkillNodeName(skill_id))
+        Text({name})
+        TextFont {
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+            font_size: {FontSize::Px(8.5)},
+        }
+        TextColor(theme::TEXT_FAINT)
+        ignore_picking()
+    }
+}
+
+fn skill_level_text(skill_id: u32) -> impl Scene {
+    bsn! {
+        template_value(SkillNodeLevel(skill_id))
+        Text("0/0")
+        TextFont {
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+            font_size: {FontSize::Px(9.0)},
+        }
+        TextColor(theme::TEXT_FAINT)
+        ignore_picking()
+    }
+}
+
+fn stepper_glyph(skill_id: u32, raise: bool, glyph: String, enabled: bool) -> impl Scene {
+    bsn! {
+        template_value(SkillStepperGlyph { skill_id, raise })
+        Text({glyph})
+        TextFont {
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+            font_size: {FontSize::Px(10.0)},
+        }
+        TextColor({if enabled { theme::EMERALD_INK } else { theme::TEXT_FAINT }})
+        ignore_picking()
+    }
+}
+
+fn dimmer() -> impl Scene {
+    bsn! {
+        SkillNodeDimmer
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(0), right: px(0), top: px(0), bottom: px(0),
+            border_radius: BorderRadius::all(px(8)),
+        }
+        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.5)})
+        Visibility::Hidden
+        Pickable::IGNORE
+        ZIndex(3)
+    }
+}
+
+fn job_point_text(job_id: u32) -> impl Scene {
+    bsn! {
+        template_value(SkillJobPointText(job_id))
+        Text("0 points")
+        TextFont {
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+            font_size: {FontSize::Px(9.0)},
+        }
+        TextColor(theme::TEXT_FAINT)
+        Node { margin: {UiRect::left(auto())} }
+        ignore_picking()
+    }
+}
+
+fn staged_count_text() -> impl Scene {
+    bsn! {
+        SkillPanelStagedCount
+        Text("0 changes staged")
+        TextFont {
+            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+            font_size: {FontSize::Px(10.0)},
+        }
+        TextColor(theme::TEXT_FAINT)
+        ignore_picking()
+    }
+}
+
+fn footer() -> impl Scene {
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
@@ -543,7 +588,7 @@ fn footer(staged: u32, empty: bool) -> impl Scene {
         BorderColor::all(theme::STROKE)
         ignore_picking()
         Children [
-            chrome_text(staged_text, 10.0, theme::TEXT_FAINT),
+            staged_count_text(),
             (
                 Node {
                     margin: {UiRect::left(auto())},
@@ -551,16 +596,16 @@ fn footer(staged: u32, empty: bool) -> impl Scene {
                     justify_content: JustifyContent::FlexEnd,
                 }
                 ignore_picking()
-                Children [ apply_button(theme::EMERALD.with_alpha(alpha), !empty) ]
+                Children [ apply_button() ]
             ),
         ]
     }
 }
 
-fn bank_text(value: String) -> impl Scene {
+fn bank_text() -> impl Scene {
     bsn! {
         SkillPanelBank
-        Text(value)
+        Text("0")
         TextFont {
             font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(16.0)},
@@ -570,9 +615,9 @@ fn bank_text(value: String) -> impl Scene {
     }
 }
 
-fn reset_button(background: Color, enabled: bool) -> impl Scene {
+fn reset_button() -> impl Scene {
     bsn! {
-        SkillPanelCommitButton
+        SkillPanelCommitButton { apply: false }
         Node {
             height: px(28),
             padding: {UiRect::horizontal(px(13))},
@@ -580,16 +625,16 @@ fn reset_button(background: Color, enabled: bool) -> impl Scene {
             justify_content: JustifyContent::Center,
             border_radius: BorderRadius::all(px(8)),
         }
-        BackgroundColor(background)
-        template_value(if enabled { Pickable::default() } else { Pickable::IGNORE })
+        BackgroundColor({theme::FIELD.with_alpha(0.3)})
+        Pickable::IGNORE
         on(on_reset)
         Children [ chrome_text("Reset Plan".to_string(), 11.0, theme::TEXT_DIM) ]
     }
 }
 
-fn apply_button(background: Color, enabled: bool) -> impl Scene {
+fn apply_button() -> impl Scene {
     bsn! {
-        SkillPanelCommitButton
+        SkillPanelCommitButton { apply: true }
         Node {
             height: px(28),
             padding: {UiRect::horizontal(px(16))},
@@ -597,11 +642,215 @@ fn apply_button(background: Color, enabled: bool) -> impl Scene {
             justify_content: JustifyContent::Center,
             border_radius: BorderRadius::all(px(7)),
         }
-        BackgroundColor(background)
-        template_value(if enabled { Pickable::default() } else { Pickable::IGNORE })
+        BackgroundColor({theme::EMERALD.with_alpha(0.3)})
+        Pickable::IGNORE
         on(on_apply)
         Children [ chrome_text("Apply".to_string(), 11.5, theme::EMERALD_INK) ]
     }
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(super) fn project_live(
+    tree: Res<SkillTreeState>,
+    ui: Res<SkillPanelUi>,
+    staging: Res<SkillPanelStaging>,
+    gates: Res<SkillGateSnapshot>,
+    mut backgrounds: ParamSet<(
+        Query<(&SkillPanelCell, &mut BackgroundColor)>,
+        Query<(&SkillPanelStepper, &mut BackgroundColor, &mut Pickable)>,
+        Query<(&SkillConnector, &mut Node, &mut BackgroundColor)>,
+        Query<(&SkillPanelCommitButton, &mut BackgroundColor, &mut Pickable)>,
+    )>,
+    mut frames: Query<(&SkillNodeFrame, &mut BorderColor)>,
+    mut text_colors: ParamSet<(
+        Query<(&SkillNodeName, &mut TextColor)>,
+        Query<(&SkillStepperGlyph, &mut TextColor)>,
+    )>,
+    mut texts: ParamSet<(
+        Query<(&SkillNodeLevel, &mut Text)>,
+        Query<(&SkillJobPointText, &mut Text)>,
+        Query<&mut Text, With<SkillPanelBank>>,
+        Query<&mut Text, With<SkillPanelStagedCount>>,
+    )>,
+) {
+    let can_raise = |skill_id| {
+        gates.values.is_some_and(|gates| {
+            staging.can_raise_with_gates(
+                skill_id,
+                &tree,
+                gates.base_level,
+                gates.job_level,
+                gates.skill_point,
+            )
+        })
+    };
+    for (cell, mut background) in &mut backgrounds.p0() {
+        let color = if ui.selected == Some(cell.0) {
+            theme::EMERALD_INK
+        } else {
+            Color::NONE
+        };
+        if background.0 != color {
+            background.0 = color;
+        }
+    }
+    for (marker, mut border) in &mut frames {
+        let Some(node) = tree.skills.get(&marker.0) else {
+            continue;
+        };
+        let level = staging.effective_level(marker.0, &tree);
+        let color = if node.max_level > 0 && level >= node.max_level {
+            theme::GOLD
+        } else if level > 0 {
+            theme::EMERALD
+        } else if can_raise(marker.0) {
+            theme::GOLD_FAINT
+        } else {
+            theme::STROKE
+        };
+        if border.top != color {
+            *border = BorderColor::all(color);
+        }
+    }
+    for (marker, mut color) in &mut text_colors.p0() {
+        let Some(node) = tree.skills.get(&marker.0) else {
+            continue;
+        };
+        let level = staging.effective_level(marker.0, &tree);
+        let next = cell_icon_color(level > 0, node.max_level > 0 && level >= node.max_level);
+        if color.0 != next {
+            color.0 = next;
+        }
+    }
+    for (marker, mut text) in &mut texts.p0() {
+        let Some(node) = tree.skills.get(&marker.0) else {
+            continue;
+        };
+        let next = format_level(staging.effective_level(marker.0, &tree), node.max_level);
+        if text.0 != next {
+            text.0 = next;
+        }
+    }
+    for (stepper, mut background, mut pickable) in &mut backgrounds.p1() {
+        let enabled = if stepper.raise {
+            can_raise(stepper.skill_id)
+        } else {
+            staging.can_lower(stepper.skill_id, &tree)
+        };
+        let color = if enabled {
+            theme::EMERALD
+        } else {
+            theme::FIELD
+        };
+        if background.0 != color {
+            background.0 = color;
+        }
+        let next = if enabled {
+            Pickable::default()
+        } else {
+            Pickable::IGNORE
+        };
+        if *pickable != next {
+            *pickable = next;
+        }
+    }
+    for (glyph, mut color) in &mut text_colors.p1() {
+        let enabled = if glyph.raise {
+            can_raise(glyph.skill_id)
+        } else {
+            staging.can_lower(glyph.skill_id, &tree)
+        };
+        let next = if enabled {
+            theme::EMERALD_INK
+        } else {
+            theme::TEXT_FAINT
+        };
+        if color.0 != next {
+            color.0 = next;
+        }
+    }
+    for (connector, mut node, mut background) in &mut backgrounds.p2() {
+        if connector.backlink {
+            continue;
+        }
+        let met = staging.effective_level(connector.source, &tree) >= connector.minimum_level;
+        let thickness = if met { 2.0 } else { 1.0 };
+        set_connector_thickness(&mut node, connector.horizontal, thickness);
+        let color = if met {
+            theme::EMERALD.with_alpha(0.45)
+        } else {
+            theme::GOLD_FAINT
+        };
+        if background.0 != color {
+            background.0 = color;
+        }
+    }
+    let mut totals = std::collections::HashMap::<u32, u32>::new();
+    for (&skill_id, node) in &tree.skills {
+        *totals.entry(node.job_id).or_default() += staging.effective_level(skill_id, &tree);
+    }
+    for (job, mut text) in &mut texts.p1() {
+        let next = format!("{} points", totals.get(&job.0).copied().unwrap_or(0));
+        if text.0 != next {
+            text.0 = next;
+        }
+    }
+    if let Ok(mut text) = texts.p2().single_mut() {
+        let next = gates
+            .values
+            .map(|gates| staging.points_left(gates.skill_point))
+            .unwrap_or(0)
+            .to_string();
+        if text.0 != next {
+            text.0 = next;
+        }
+    }
+    if let Ok(mut text) = texts.p3().single_mut() {
+        let spent = staging.spent();
+        let next = if spent == 1 {
+            "1 change staged".to_string()
+        } else {
+            format!("{spent} changes staged")
+        };
+        if text.0 != next {
+            text.0 = next;
+        }
+    }
+    let enabled = !staging.is_empty();
+    for (button, mut background, mut pickable) in &mut backgrounds.p3() {
+        let color = if button.apply {
+            theme::EMERALD.with_alpha(if enabled { 1.0 } else { 0.3 })
+        } else {
+            theme::FIELD.with_alpha(if enabled { 1.0 } else { 0.3 })
+        };
+        if background.0 != color {
+            background.0 = color;
+        }
+        let next = if enabled {
+            Pickable::default()
+        } else {
+            Pickable::IGNORE
+        };
+        if *pickable != next {
+            *pickable = next;
+        }
+    }
+}
+
+fn set_connector_thickness(node: &mut Node, horizontal: bool, thickness: f32) {
+    let (position, size) = if horizontal {
+        (&mut node.top, &mut node.height)
+    } else {
+        (&mut node.left, &mut node.width)
+    };
+    let (Val::Px(old_position), Val::Px(old_thickness)) = (*position, *size) else {
+        panic!("skill connector geometry must use pixel values");
+    };
+    if old_thickness == thickness {
+        return;
+    }
+    *position = px(old_position + old_thickness / 2.0 - thickness / 2.0);
+    *size = px(thickness);
 }
 
 #[cfg(test)]
@@ -667,6 +916,29 @@ mod tests {
                 first_end <= second_start
             }));
         }
+    }
+
+    #[test]
+    fn connector_thickness_preserves_horizontal_and_vertical_midpoints() {
+        let mut horizontal = Node {
+            top: px(10),
+            height: px(1),
+            ..default()
+        };
+        set_connector_thickness(&mut horizontal, true, 2.0);
+        assert_eq!((horizontal.top, horizontal.height), (px(9.5), px(2)));
+        set_connector_thickness(&mut horizontal, true, 1.0);
+        assert_eq!((horizontal.top, horizontal.height), (px(10), px(1)));
+
+        let mut vertical = Node {
+            left: px(20),
+            width: px(1),
+            ..default()
+        };
+        set_connector_thickness(&mut vertical, false, 2.0);
+        assert_eq!((vertical.left, vertical.width), (px(19.5), px(2)));
+        set_connector_thickness(&mut vertical, false, 1.0);
+        assert_eq!((vertical.left, vertical.width), (px(20), px(1)));
     }
 
     #[test]

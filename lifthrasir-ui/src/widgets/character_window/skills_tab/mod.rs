@@ -1,8 +1,7 @@
 //! The Console's Skills tab state, staging rules, and interactions.
 //!
-//! [`scene`] owns the declarative all-job horizontal canvas. The current integration
-//! deliberately rebuilds that scene when tree, selection, or staging state changes;
-//! live in-place projection is introduced by Task 8.
+//! [`scene`] owns the declarative all-job horizontal canvas and its live projection.
+//! Static entities rebuild only when topology or presentation metadata changes.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -80,6 +79,17 @@ impl SkillPanelStaging {
         status: &CharacterStatus,
         skill_point: u32,
     ) -> bool {
+        self.can_raise_with_gates(id, tree, status.base_level, status.job_level, skill_point)
+    }
+
+    pub(super) fn can_raise_with_gates(
+        &self,
+        id: u32,
+        tree: &SkillTreeState,
+        base_level: u32,
+        job_level: u32,
+        skill_point: u32,
+    ) -> bool {
         let Some(node) = tree.skills.get(&id) else {
             return false;
         };
@@ -89,7 +99,7 @@ impl SkillPanelStaging {
         if self.effective_level(id, tree) >= node.max_level {
             return false;
         }
-        if status.base_level < node.req_base_level || status.job_level < node.req_job_level {
+        if base_level < node.req_base_level || job_level < node.req_job_level {
             return false;
         }
         let server_prerequisites_met = node.requires.iter().all(|&(req_id, req_lv)| {
@@ -216,13 +226,42 @@ pub struct SkillPanelStepper {
     raise: bool,
 }
 
-/// Marks the Reset/Apply footer buttons so their dim-state tracks staging.
-#[derive(Component, Default, Clone)]
-pub struct SkillPanelCommitButton;
+/// Marks Reset/Apply so live projection can update style and pickability.
+#[derive(Component, Default, Clone, Copy)]
+pub struct SkillPanelCommitButton {
+    apply: bool,
+}
 
-/// Marks the "Skill Points" footer value text.
+/// Marks the remaining skill-point value text.
 #[derive(Component, Default, Clone)]
 pub struct SkillPanelBank;
+
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct SkillGateSnapshot {
+    values: Option<SkillGates>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SkillGates {
+    base_level: u32,
+    job_level: u32,
+    skill_point: u32,
+}
+
+#[derive(Resource, Clone, Debug, Default, PartialEq, Eq)]
+struct SkillStructureFingerprint {
+    skills: Vec<SkillStructure>,
+    jobs: Vec<(u32, Option<String>)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SkillStructure {
+    skill_id: u32,
+    job_id: u32,
+    requires: Vec<(u32, u32)>,
+    name: String,
+    icon: Option<String>,
+}
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-tested).
@@ -256,26 +295,107 @@ pub(crate) fn skill_name(skill_id: u32, catalog: Option<&SkillCatalog>) -> Strin
 // Systems.
 // ---------------------------------------------------------------------------
 
-/// Rebuilds the [`SkillsTabBody`]'s children on every tree/[`SkillPanelUi`]/
-/// [`SkillPanelStaging`] change, and once when the body container is first spawned
-/// (the shell mounts it deferred). Despawns the old children and respawns the projected
-/// body scene. Mirrors `skill_window`'s `rebuild_grid`/`rebuild_info_panel`/
-/// `rebuild_tab_strip` collapsed into one respawn (the Bag-tab idiom).
-#[allow(clippy::too_many_arguments)]
-pub fn rebuild_skills_body(
-    mut commands: Commands,
+fn reconcile_authoritative_tree(
+    tree: Res<SkillTreeState>,
+    mut ui: ResMut<SkillPanelUi>,
+    mut staging: ResMut<SkillPanelStaging>,
+) {
+    if !tree.is_changed() {
+        return;
+    }
+    if !staging.is_empty() {
+        staging.clear();
+    }
+    if ui.selected.is_some_and(|id| !tree.skills.contains_key(&id)) {
+        ui.selected = None;
+    }
+}
+
+fn sync_skill_gates(
+    player: Query<&CharacterStatus, With<LocalPlayer>>,
+    mut snapshot: ResMut<SkillGateSnapshot>,
+) {
+    let values = player.single().ok().map(|status| SkillGates {
+        base_level: status.base_level,
+        job_level: status.job_level,
+        skill_point: status.skill_point,
+    });
+    if snapshot.values != values {
+        snapshot.values = values;
+    }
+}
+
+fn job_labels(tree: &SkillTreeState, registry: Option<&JobSpriteRegistry>) -> HashMap<u32, String> {
+    tree.skills
+        .values()
+        .filter_map(|node| {
+            registry
+                .and_then(|registry| registry.try_display_name(node.job_id))
+                .map(|label| (node.job_id, label.to_string()))
+        })
+        .collect()
+}
+
+fn should_project_skills(
     tree: Res<SkillTreeState>,
     ui: Res<SkillPanelUi>,
     staging: Res<SkillPanelStaging>,
-    player: Query<&CharacterStatus, With<LocalPlayer>>,
+    gates: Res<SkillGateSnapshot>,
+    added: Query<(), Added<scene::SkillCanvasViewport>>,
+) -> bool {
+    tree.is_changed()
+        || ui.is_changed()
+        || staging.is_changed()
+        || gates.is_changed()
+        || !added.is_empty()
+}
+
+fn structure_fingerprint(
+    tree: &SkillTreeState,
+    catalog: Option<&SkillCatalog>,
+    labels: &HashMap<u32, String>,
+) -> SkillStructureFingerprint {
+    let mut skills: Vec<_> = tree
+        .skills
+        .iter()
+        .map(|(&skill_id, node)| {
+            let mut requires = node.requires.clone();
+            requires.sort_unstable();
+            SkillStructure {
+                skill_id,
+                job_id: node.job_id,
+                requires,
+                name: skill_name(skill_id, catalog),
+                icon: catalog.and_then(|catalog| catalog.icon_path(skill_id)),
+            }
+        })
+        .collect();
+    skills.sort_unstable_by_key(|skill| skill.skill_id);
+    let mut jobs: Vec<_> = tree
+        .skills
+        .values()
+        .map(|node| (node.job_id, labels.get(&node.job_id).cloned()))
+        .collect();
+    jobs.sort_unstable_by_key(|(job_id, _)| *job_id);
+    jobs.dedup_by_key(|(job_id, _)| *job_id);
+    SkillStructureFingerprint { skills, jobs }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rebuild_skills_body(
+    mut commands: Commands,
+    tree: Res<SkillTreeState>,
     catalog: Option<Res<SkillCatalog>>,
     registry: Option<Res<JobSpriteRegistry>>,
     bodies: Query<(Entity, Option<&Children>, Ref<SkillsTabBody>)>,
+    mut fingerprint: ResMut<SkillStructureFingerprint>,
 ) {
     let Ok((body_entity, children, body_ref)) = bodies.single() else {
         return;
     };
-    if !tree.is_changed() && !ui.is_changed() && !staging.is_changed() && !body_ref.is_added() {
+    let labels = job_labels(&tree, registry.as_deref());
+    let next = structure_fingerprint(&tree, catalog.as_deref(), &labels);
+    if !body_ref.is_added() && *fingerprint == next {
         return;
     }
     if let Some(children) = children {
@@ -283,54 +403,11 @@ pub fn rebuild_skills_body(
             commands.entity(child).despawn();
         }
     }
-    let status = player.single().ok();
-    let job_labels: HashMap<_, _> = tree
-        .skills
-        .values()
-        .filter_map(|node| {
-            registry
-                .as_deref()
-                .and_then(|registry| registry.try_display_name(node.job_id))
-                .map(|label| (node.job_id, label.to_string()))
-        })
-        .collect();
-    let layout = layout::TreeLayout::new(&tree, &job_labels);
+    *fingerprint = next;
+    let layout = layout::TreeLayout::new(&tree, &labels);
     commands
-        .spawn_scene(scene::body(
-            layout,
-            &tree,
-            &ui,
-            &staging,
-            status,
-            catalog.as_deref(),
-        ))
+        .spawn_scene(scene::body(layout, catalog.as_deref()))
         .insert(ChildOf(body_entity));
-}
-
-/// Reflects the remaining skill points (server points minus staged spend) into the
-/// footer value and dims Reset/Apply when nothing is staged. Change-detected writes,
-/// so it tracks `skill_point` even between whole-body rebuilds.
-pub fn update_skill_footer(
-    player: Query<&CharacterStatus, With<LocalPlayer>>,
-    staging: Res<SkillPanelStaging>,
-    mut bank: Query<&mut Text, With<SkillPanelBank>>,
-    mut commit: Query<&mut BackgroundColor, With<SkillPanelCommitButton>>,
-) {
-    let Ok(status) = player.single() else {
-        return;
-    };
-    if let Ok(mut text) = bank.single_mut() {
-        let value = staging.points_left(status.skill_point).to_string();
-        if text.0 != value {
-            *text = Text::new(value);
-        }
-    }
-    let alpha = if staging.is_empty() { 0.3 } else { 1.0 };
-    for mut bg in &mut commit {
-        if bg.0.alpha() != alpha {
-            bg.0.set_alpha(alpha);
-        }
-    }
 }
 
 /// Register the Skills tab's resources and ordered update pipeline into
@@ -339,10 +416,22 @@ pub(super) fn register(app: &mut App) {
     app.init_resource::<SkillPanelUi>();
     app.init_resource::<SkillPanelStaging>();
     app.init_resource::<LastSkillPanelClick>();
+    app.init_resource::<SkillGateSnapshot>();
+    app.init_resource::<SkillStructureFingerprint>();
     app.add_systems(
         Update,
-        (rebuild_skills_body, update_skill_footer)
+        (
+            reconcile_authoritative_tree,
+            sync_skill_gates,
+            rebuild_skills_body,
+            ApplyDeferred,
+            scene::project_live.run_if(should_project_skills),
+        )
             .chain()
+            .after(game_engine::domain::skill::apply_skill_list)
+            .after(
+                game_engine::domain::entities::character::systems::update_character_status_system,
+            )
             .run_if(in_state(GameState::InGame)),
     );
 }
@@ -453,7 +542,11 @@ mod tests {
 
     use super::*;
     use bevy::scene::ScenePlugin;
+    use game_engine::domain::entities::character::events::StatusParameterChanged;
+    use game_engine::domain::entities::character::systems::PendingStatusParams;
+    use game_engine::domain::entities::registry::EntityRegistry;
     use game_engine::domain::skill::SkillNode;
+    use net_contract::events::{ParamChanged, SkillListReceived, ZoneSkillInfo};
 
     #[test]
     fn register_initializes_skills_tab_resources() {
@@ -463,6 +556,8 @@ mod tests {
         assert!(app.world().contains_resource::<SkillPanelUi>());
         assert!(app.world().contains_resource::<SkillPanelStaging>());
         assert!(app.world().contains_resource::<LastSkillPanelClick>());
+        assert!(app.world().contains_resource::<SkillGateSnapshot>());
+        assert!(app.world().contains_resource::<SkillStructureFingerprint>());
     }
 
     fn node(level: u32, max_level: u32, job_id: u32) -> SkillNode {
@@ -518,6 +613,22 @@ mod tests {
     fn with_upgradable(mut n: SkillNode, upgradable: bool) -> SkillNode {
         n.upgradable = upgradable;
         n
+    }
+
+    fn catalog(internal_name: &str, display_name: &str) -> SkillCatalog {
+        let mut data = lifthrasir_data::SkillData::default();
+        data.skills.insert(
+            1,
+            lifthrasir_data::SkillMeta {
+                name: internal_name.to_string(),
+                display_name: display_name.to_string(),
+                description: vec![],
+                max_level: 5,
+                sp_cost: vec![],
+                attack_range: vec![],
+            },
+        );
+        SkillCatalog::from_skill_data(data)
     }
 
     fn status(base_level: u32, job_level: u32) -> CharacterStatus {
@@ -756,10 +867,57 @@ mod tests {
         app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
         app.init_asset::<Image>();
         app.init_asset::<Font>();
+        app.add_message::<SkillListReceived>();
+        app.add_message::<ParamChanged>();
+        app.add_message::<StatusParameterChanged>();
+        app.init_resource::<EntityRegistry>();
+        app.init_resource::<PendingStatusParams>();
         app.init_resource::<SkillPanelUi>();
         app.init_resource::<SkillPanelStaging>();
-        app.add_systems(Update, rebuild_skills_body);
+        app.init_resource::<SkillGateSnapshot>();
+        app.init_resource::<SkillStructureFingerprint>();
+        app.init_resource::<ProjectionRunCount>();
+        app.add_systems(
+            Update,
+            (
+                game_engine::domain::skill::apply_skill_list,
+                game_engine::domain::entities::character::systems::update_character_status_system,
+            ),
+        );
+        app.add_systems(
+            Update,
+            (
+                reconcile_authoritative_tree,
+                sync_skill_gates,
+                rebuild_skills_body,
+                ApplyDeferred,
+                scene::project_live
+                    .pipe(record_projection_run)
+                    .run_if(should_project_skills),
+            )
+                .chain()
+                .after(game_engine::domain::skill::apply_skill_list)
+                .after(
+                    game_engine::domain::entities::character::systems::update_character_status_system,
+                ),
+        );
         app
+    }
+
+    #[derive(Resource, Default)]
+    struct GateChangeCount(u32);
+
+    #[derive(Resource, Default)]
+    struct ProjectionRunCount(u32);
+
+    fn record_gate_changes(snapshot: Res<SkillGateSnapshot>, mut count: ResMut<GateChangeCount>) {
+        if snapshot.is_changed() {
+            count.0 += 1;
+        }
+    }
+
+    fn record_projection_run(_: In<()>, mut count: ResMut<ProjectionRunCount>) {
+        count.0 += 1;
     }
 
     fn cell_count(app: &mut App) -> usize {
@@ -791,6 +949,441 @@ mod tests {
             selected, unselected,
             "the skills tab no longer renders a selection info panel"
         );
+    }
+
+    #[test]
+    fn authoritative_messages_reconcile_and_project_in_the_same_update() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().spawn((
+            CharacterStatus {
+                skill_point: 1,
+                ..default()
+            },
+            LocalPlayer,
+        ));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        app.world_mut()
+            .resource_mut::<SkillPanelStaging>()
+            .pending
+            .insert(1, 1);
+
+        app.world_mut().write_message(SkillListReceived {
+            skills: vec![ZoneSkillInfo {
+                skill_id: 1,
+                type_: 0,
+                level: 2,
+                sp: 0,
+                range: 0,
+                name: "Skill".to_string(),
+                upgradable: true,
+                max_level: 5,
+                requires: vec![],
+                req_base_level: 0,
+                req_job_level: 0,
+                job_id: 7,
+                splash_radius: 0,
+            }],
+        });
+        app.world_mut()
+            .write_message(ParamChanged { var: 12, value: 5 });
+
+        app.update();
+
+        assert!(app.world().resource::<SkillPanelStaging>().is_empty());
+        assert_eq!(app.world().resource::<SkillTreeState>().skills[&1].level, 2);
+        assert_eq!(
+            app.world().resource::<SkillGateSnapshot>().values,
+            Some(SkillGates {
+                base_level: 1,
+                job_level: 1,
+                skill_point: 5,
+            })
+        );
+        let world = app.world_mut();
+        assert!(
+            world
+                .query::<(&scene::SkillNodeLevel, &Text)>()
+                .iter(world)
+                .any(|(marker, text)| marker.0 == 1 && text.0 == "2/5")
+        );
+        assert_eq!(
+            world
+                .query_filtered::<&Text, With<SkillPanelBank>>()
+                .single(world)
+                .unwrap()
+                .0,
+            "5"
+        );
+    }
+
+    #[test]
+    fn unrelated_status_changes_do_not_change_gate_snapshot() {
+        let mut app = skills_app();
+        app.init_resource::<GateChangeCount>();
+        app.add_systems(Update, record_gate_changes.after(sync_skill_gates));
+        let player = app
+            .world_mut()
+            .spawn((CharacterStatus::default(), LocalPlayer))
+            .id();
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        assert_eq!(app.world().resource::<GateChangeCount>().0, 1);
+        assert_eq!(app.world().resource::<ProjectionRunCount>().0, 1);
+        let viewport = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .unwrap();
+        app.world_mut()
+            .entity_mut(viewport)
+            .insert(ScrollPosition(Vec2::new(13.0, 8.0)));
+
+        app.world_mut()
+            .get_mut::<CharacterStatus>(player)
+            .unwrap()
+            .hp -= 1;
+        app.update();
+        assert_eq!(app.world().resource::<GateChangeCount>().0, 1);
+        assert_eq!(app.world().resource::<ProjectionRunCount>().0, 1);
+
+        app.world_mut()
+            .get_mut::<CharacterStatus>(player)
+            .unwrap()
+            .skill_point += 1;
+        app.update();
+        assert_eq!(app.world().resource::<GateChangeCount>().0, 2);
+        assert_eq!(app.world().resource::<ProjectionRunCount>().0, 2);
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+                .single(app.world())
+                .unwrap(),
+            viewport
+        );
+        assert_eq!(
+            app.world().get::<ScrollPosition>(viewport).unwrap().0,
+            Vec2::new(13.0, 8.0)
+        );
+    }
+
+    #[test]
+    fn staging_projects_without_replacing_or_resetting_viewport() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().spawn((
+            CharacterStatus {
+                base_level: 1,
+                job_level: 1,
+                skill_point: 2,
+                ..default()
+            },
+            LocalPlayer,
+        ));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+
+        let viewport = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .expect("one viewport");
+        app.world_mut()
+            .entity_mut(viewport)
+            .insert(ScrollPosition(Vec2::new(23.0, 17.0)));
+        app.world_mut()
+            .resource_mut::<SkillPanelStaging>()
+            .pending
+            .insert(1, 1);
+
+        app.update();
+
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+                .single(app.world())
+                .expect("one viewport"),
+            viewport
+        );
+        assert_eq!(
+            app.world()
+                .get::<ScrollPosition>(viewport)
+                .expect("viewport scroll")
+                .0,
+            Vec2::new(23.0, 17.0)
+        );
+    }
+
+    #[test]
+    fn live_projection_updates_every_dynamic_marker_in_place() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[
+            (1, node(0, 5, 7)),
+            (2, with_requires(node(0, 5, 7), vec![(1, 1)])),
+        ]));
+        app.world_mut().spawn((
+            CharacterStatus {
+                base_level: 10,
+                job_level: 10,
+                skill_point: 2,
+                ..default()
+            },
+            LocalPlayer,
+        ));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        let viewport = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .unwrap();
+
+        app.world_mut().resource_mut::<SkillPanelUi>().selected = Some(1);
+        app.world_mut()
+            .resource_mut::<SkillPanelStaging>()
+            .pending
+            .insert(1, 1);
+        app.update();
+
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+                .single(app.world())
+                .unwrap(),
+            viewport
+        );
+        let world = app.world_mut();
+        let selected_background = world
+            .query::<(&SkillPanelCell, &BackgroundColor)>()
+            .iter(world)
+            .find_map(|(cell, background)| (cell.0 == 1).then_some(background.0))
+            .unwrap();
+        assert_eq!(selected_background, theme::EMERALD_INK);
+        let (level, name_color, frame_color) = (
+            world
+                .query::<(&scene::SkillNodeLevel, &Text)>()
+                .iter(world)
+                .find_map(|(marker, text)| (marker.0 == 1).then_some(text.0.clone()))
+                .unwrap(),
+            world
+                .query::<(&scene::SkillNodeName, &TextColor)>()
+                .iter(world)
+                .find_map(|(marker, color)| (marker.0 == 1).then_some(color.0))
+                .unwrap(),
+            world
+                .query::<(&scene::SkillNodeFrame, &BorderColor)>()
+                .iter(world)
+                .find_map(|(marker, color)| (marker.0 == 1).then_some(color.top))
+                .unwrap(),
+        );
+        assert_eq!(level, "1/5");
+        assert_eq!(name_color, theme::EMERALD_BRI);
+        assert_eq!(frame_color, theme::EMERALD);
+        let controls: HashMap<_, _> = world
+            .query::<(&SkillPanelStepper, &Pickable)>()
+            .iter(world)
+            .map(|(stepper, pickable)| ((stepper.skill_id, stepper.raise), *pickable))
+            .collect();
+        assert_eq!(controls[&(1, false)], Pickable::default());
+        assert_eq!(controls[&(2, true)], Pickable::default());
+        let connector = world
+            .query::<(&scene::SkillConnector, &Node, &BackgroundColor)>()
+            .iter(world)
+            .find(|(connector, _, _)| connector.source == 1 && connector.segment == 0)
+            .unwrap();
+        assert_eq!(connector.1.height, px(2));
+        assert_eq!(connector.2.0, theme::EMERALD.with_alpha(0.45));
+        assert!(
+            world
+                .query::<(&scene::SkillJobPointText, &Text)>()
+                .iter(world)
+                .any(|(_, text)| text.0 == "1 points")
+        );
+        assert_eq!(
+            world
+                .query_filtered::<&Text, With<SkillPanelBank>>()
+                .single(world)
+                .unwrap()
+                .0,
+            "1"
+        );
+        assert_eq!(
+            world
+                .query_filtered::<&Text, With<scene::SkillPanelStagedCount>>()
+                .single(world)
+                .unwrap()
+                .0,
+            "1 change staged"
+        );
+        assert!(
+            world
+                .query::<(&SkillPanelCommitButton, &Pickable, &BackgroundColor)>()
+                .iter(world)
+                .all(|(button, pickable, background)| {
+                    *pickable == Pickable::default()
+                        && background.0.alpha() == 1.0
+                        && if button.apply {
+                            background.0 == theme::EMERALD
+                        } else {
+                            background.0 == theme::FIELD
+                        }
+                })
+        );
+        assert!(
+            world
+                .query::<(&scene::SkillNodeDimmer, &Visibility, &Pickable)>()
+                .iter(world)
+                .all(|(_, visibility, pickable)| {
+                    *visibility == Visibility::Hidden && *pickable == Pickable::IGNORE
+                })
+        );
+    }
+
+    #[test]
+    fn level_only_authority_refresh_preserves_viewport_and_clears_stale_plan() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[(1, node(0, 5, 7)), (2, node(0, 5, 7))]));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        let viewport = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .expect("one viewport");
+        app.world_mut()
+            .entity_mut(viewport)
+            .insert(ScrollPosition(Vec2::new(31.0, 19.0)));
+        app.world_mut().resource_mut::<SkillPanelUi>().selected = Some(1);
+        app.world_mut()
+            .resource_mut::<SkillPanelStaging>()
+            .pending
+            .insert(2, 1);
+
+        {
+            let mut authoritative = app.world_mut().resource_mut::<SkillTreeState>();
+            let first = authoritative.skills.get_mut(&1).unwrap();
+            first.level = 1;
+            first.upgradable = false;
+            first.sp = 12;
+            first.range = 4;
+        }
+        app.update();
+
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+                .single(app.world())
+                .expect("one viewport"),
+            viewport
+        );
+        assert_eq!(
+            app.world().get::<ScrollPosition>(viewport).unwrap().0,
+            Vec2::new(31.0, 19.0)
+        );
+        assert!(app.world().resource::<SkillPanelStaging>().is_empty());
+        assert_eq!(app.world().resource::<SkillPanelUi>().selected, Some(1));
+    }
+
+    #[test]
+    fn topology_changes_replace_viewport_and_clear_only_disappeared_selection() {
+        let mut app = skills_app();
+        app.insert_resource(tree(&[(1, node(0, 5, 7)), (2, node(0, 5, 7))]));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        let first = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .expect("one viewport");
+        app.world_mut().resource_mut::<SkillPanelUi>().selected = Some(1);
+
+        app.world_mut()
+            .resource_mut::<SkillTreeState>()
+            .skills
+            .get_mut(&2)
+            .unwrap()
+            .job_id = 9;
+        app.update();
+        let second = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .unwrap();
+        assert_ne!(second, first);
+        assert_eq!(app.world().resource::<SkillPanelUi>().selected, Some(1));
+
+        app.world_mut()
+            .resource_mut::<SkillTreeState>()
+            .skills
+            .get_mut(&2)
+            .unwrap()
+            .requires = vec![(1, 1)];
+        app.update();
+        let third = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .unwrap();
+        assert_ne!(third, second);
+        assert_eq!(app.world().resource::<SkillPanelUi>().selected, Some(1));
+
+        app.insert_resource(tree(&[(2, node(0, 5, 9))]));
+        app.update();
+        let fourth = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .unwrap();
+        assert_ne!(fourth, third);
+        assert_eq!(app.world().resource::<SkillPanelUi>().selected, None);
+    }
+
+    #[test]
+    fn skill_and_job_presentation_metadata_changes_replace_viewport() {
+        let mut app = skills_app();
+        let mut jobs = lifthrasir_data::JobData::default();
+        jobs.display_names.insert(7, "Knight".to_string());
+        app.insert_resource(JobSpriteRegistry::from_job_data(jobs));
+        app.insert_resource(catalog("SM_BASH", "Bash"));
+        app.insert_resource(tree(&[(1, node(0, 5, 7))]));
+        app.world_mut().spawn(SkillsTabBody);
+        app.update();
+        let first = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .unwrap();
+
+        app.insert_resource(catalog("SM_MAGNUM", "Magnum Break"));
+        app.update();
+        let second = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .unwrap();
+        assert_ne!(second, first);
+        {
+            let world = app.world_mut();
+            assert!(
+                world
+                    .query::<(&scene::SkillNodeLevel, &Text)>()
+                    .iter(world)
+                    .any(|(marker, text)| marker.0 == 1 && text.0 == "0/5")
+            );
+        }
+
+        let mut jobs = lifthrasir_data::JobData::default();
+        jobs.display_names.insert(7, "Lord Knight".to_string());
+        app.insert_resource(JobSpriteRegistry::from_job_data(jobs));
+        app.update();
+        let third = app
+            .world_mut()
+            .query_filtered::<Entity, With<scene::SkillCanvasViewport>>()
+            .single(app.world())
+            .unwrap();
+        assert_ne!(third, second);
     }
 
     #[test]
