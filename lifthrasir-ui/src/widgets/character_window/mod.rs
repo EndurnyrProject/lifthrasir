@@ -107,9 +107,6 @@ impl Plugin for CharacterWindowPlugin {
         app.init_resource::<CharacterWindowState>();
         app.init_resource::<bag_tab::BagUi>();
         app.init_resource::<bag_tab::LastBagClick>();
-        app.init_resource::<skills_tab::SkillPanelUi>();
-        app.init_resource::<skills_tab::SkillPanelStaging>();
-        app.init_resource::<skills_tab::LastSkillPanelClick>();
         character_tab::register(app);
         app.add_systems(
             Update,
@@ -119,16 +116,7 @@ impl Plugin for CharacterWindowPlugin {
             Update,
             bag_tab::rebuild_bag_body.run_if(in_state(GameState::InGame)),
         );
-        app.add_systems(
-            Update,
-            (
-                skills_tab::ensure_default_tab,
-                skills_tab::rebuild_skills_body,
-                skills_tab::update_skill_footer,
-            )
-                .chain()
-                .run_if(in_state(GameState::InGame)),
-        );
+        skills_tab::register(app);
         app.add_systems(
             OnExit(GameState::InGame),
             (bag_tab::reset, skills_tab::reset),

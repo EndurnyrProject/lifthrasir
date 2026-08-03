@@ -30,6 +30,7 @@ use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
+use game_engine::core::state::GameState;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::character::events::SkillLearnRequested;
 use game_engine::domain::entities::markers::LocalPlayer;
@@ -390,6 +391,20 @@ pub fn update_skill_footer(
             bg.0.set_alpha(alpha);
         }
     }
+}
+
+/// Register the Skills tab's resources and ordered update pipeline into
+/// [`CharacterWindowPlugin`](super::CharacterWindowPlugin).
+pub(super) fn register(app: &mut App) {
+    app.init_resource::<SkillPanelUi>();
+    app.init_resource::<SkillPanelStaging>();
+    app.init_resource::<LastSkillPanelClick>();
+    app.add_systems(
+        Update,
+        (ensure_default_tab, rebuild_skills_body, update_skill_footer)
+            .chain()
+            .run_if(in_state(GameState::InGame)),
+    );
 }
 
 /// Reset to the default tab/selection and discard staging when leaving the game.
@@ -1023,6 +1038,16 @@ mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
     use game_engine::domain::skill::SkillNode;
+
+    #[test]
+    fn register_initializes_skills_tab_resources() {
+        let mut app = App::new();
+        register(&mut app);
+
+        assert!(app.world().contains_resource::<SkillPanelUi>());
+        assert!(app.world().contains_resource::<SkillPanelStaging>());
+        assert!(app.world().contains_resource::<LastSkillPanelClick>());
+    }
 
     fn node(level: u32, max_level: u32, job_id: u32) -> SkillNode {
         SkillNode {
