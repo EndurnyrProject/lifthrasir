@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::QuinnetClient;
@@ -69,25 +70,31 @@ pub fn char_send_hello(
     }
 }
 
+/// The char-session event writers `char_drain_control` emits to, grouped so the
+/// drainer takes one parameter instead of eight.
+#[derive(SystemParam)]
+pub struct CharEventWriters<'w> {
+    connected: MessageWriter<'w, CharacterServerConnected>,
+    slot_info: MessageWriter<'w, CharacterSlotInfoReceived>,
+    zone_info: MessageWriter<'w, ZoneServerInfoReceived>,
+    zone_disconnected: MessageWriter<'w, ZoneDisconnected>,
+    created: MessageWriter<'w, CharacterCreated>,
+    create_failed: MessageWriter<'w, CharacterCreationFailed>,
+    deleted: MessageWriter<'w, CharacterDeleted>,
+    deletion_failed: MessageWriter<'w, CharacterDeletionFailed>,
+}
+
 /// Drains the control channel and advances the char-server session.
 #[auto_add_system(
     plugin = crate::AesirNetPlugin,
     schedule = Update,
     config(run_if = client_connected)
 )]
-#[allow(clippy::too_many_arguments)]
 pub fn char_drain_control(
     mut incoming: MessageReader<IncomingMessage>,
     mut client: ResMut<QuinnetClient>,
     mut state: ResMut<QuicCharState>,
-    mut connected: MessageWriter<CharacterServerConnected>,
-    mut slot_info: MessageWriter<CharacterSlotInfoReceived>,
-    mut zone_info: MessageWriter<ZoneServerInfoReceived>,
-    mut zone_disconnected: MessageWriter<ZoneDisconnected>,
-    mut created: MessageWriter<CharacterCreated>,
-    mut create_failed: MessageWriter<CharacterCreationFailed>,
-    mut deleted: MessageWriter<CharacterDeleted>,
-    mut deletion_failed: MessageWriter<CharacterDeletionFailed>,
+    mut out: CharEventWriters,
 ) {
     // The connection is reused for the zone hop, so this drainer keeps seeing
     // control traffic it doesn't own once char selection is done. Bail to avoid
@@ -130,9 +137,9 @@ pub fn char_drain_control(
                 // the domain rebuilds its char-select view; slot info only changes on the
                 // initial list, so keep that initial-only.
                 let initial = state.phase == CharPhase::AuthSent;
-                connected.write(char_list_to_connected(&list));
+                out.connected.write(char_list_to_connected(&list));
                 if initial {
-                    slot_info.write(char_list_to_slot_info(&list));
+                    out.slot_info.write(char_list_to_slot_info(&list));
                 }
                 state.phase = char_list_outcome(state.phase);
             }
@@ -147,31 +154,31 @@ pub fn char_drain_control(
                 }
                 match zone_server_info_to_event(z) {
                     Ok(event) => {
-                        zone_info.write(event);
+                        out.zone_info.write(event);
                         state.phase = CharPhase::Done;
                     }
                     Err(reason) => {
                         error!("invalid zone server address: {reason}");
-                        zone_disconnected.write(ZoneDisconnected { reason });
+                        out.zone_disconnected.write(ZoneDisconnected { reason });
                         state.phase = CharPhase::Failed;
                     }
                 }
             }
             Body::CharCreated(c) => match char_created(c) {
                 Some(ev) => {
-                    created.write(ev);
+                    out.created.write(ev);
                 }
                 None => error!("aesir sent CharCreated with no character"),
             },
             Body::CharCreateFailed(f) => {
-                create_failed.write(char_create_failed(f));
+                out.create_failed.write(char_create_failed(f));
             }
             Body::DeleteCharAck(a) => match delete_ack(a) {
                 Ok(ev) => {
-                    deleted.write(ev);
+                    out.deleted.write(ev);
                 }
                 Err(ev) => {
-                    deletion_failed.write(ev);
+                    out.deletion_failed.write(ev);
                 }
             },
             _ => warn!("unexpected control body on char channel"),

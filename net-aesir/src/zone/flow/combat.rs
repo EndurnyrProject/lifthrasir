@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
@@ -14,6 +15,24 @@ use net_contract::events::{
     SkillListReceived, SpecialEffectShown,
 };
 
+/// The combat/skill event writers `zone_drain_combat` fans incoming bodies out
+/// to, grouped so the drainer takes one parameter instead of twelve.
+#[derive(SystemParam)]
+pub struct CombatEventWriters<'w> {
+    damage: MessageWriter<'w, DamageReceived>,
+    knocked: MessageWriter<'w, KnockedBack>,
+    cast_started: MessageWriter<'w, SkillCastStarted>,
+    skill_dmg: MessageWriter<'w, SkillDamageReceived>,
+    skill_fx: MessageWriter<'w, SkillEffectShown>,
+    cancelled: MessageWriter<'w, CastCancelled>,
+    cooldown: MessageWriter<'w, SkillCooldownSet>,
+    cast_failed: MessageWriter<'w, SkillCastFailed>,
+    ground: MessageWriter<'w, GroundSkillPlaced>,
+    skills: MessageWriter<'w, SkillListReceived>,
+    learn_result: MessageWriter<'w, LearnSkillResultReceived>,
+    special_fx: MessageWriter<'w, SpecialEffectShown>,
+}
+
 /// Drains combat and skill bodies. These span the gameplay, world, and bulk
 /// channels, so the match is on the `Body` variant directly, not the channel.
 #[auto_add_system(
@@ -21,59 +40,47 @@ use net_contract::events::{
     schedule = Update,
     config(run_if = client_connected)
 )]
-#[allow(clippy::too_many_arguments)]
 pub fn zone_drain_combat(
     mut incoming: MessageReader<IncomingMessage>,
-    mut damage: MessageWriter<DamageReceived>,
-    mut knocked: MessageWriter<KnockedBack>,
-    mut cast_started: MessageWriter<SkillCastStarted>,
-    mut skill_dmg: MessageWriter<SkillDamageReceived>,
-    mut skill_fx: MessageWriter<SkillEffectShown>,
-    mut cancelled: MessageWriter<CastCancelled>,
-    mut cooldown: MessageWriter<SkillCooldownSet>,
-    mut cast_failed: MessageWriter<SkillCastFailed>,
-    mut ground: MessageWriter<GroundSkillPlaced>,
-    mut skills: MessageWriter<SkillListReceived>,
-    mut learn_result: MessageWriter<LearnSkillResultReceived>,
-    mut special_fx: MessageWriter<SpecialEffectShown>,
+    mut out: CombatEventWriters,
 ) {
     for msg in incoming.read() {
         match msg.body.clone() {
             Body::DamageDealt(d) => {
-                damage.write(damage_dealt(d));
+                out.damage.write(damage_dealt(d));
             }
             Body::Knockback(k) => {
-                knocked.write(knockback(k));
+                out.knocked.write(knockback(k));
             }
             Body::SkillCasting(s) => {
-                cast_started.write(skill_casting(s));
+                out.cast_started.write(skill_casting(s));
             }
             Body::SkillDamage(s) => {
-                skill_dmg.write(skill_damage(s));
+                out.skill_dmg.write(skill_damage(s));
             }
             Body::SkillEffect(s) => {
-                skill_fx.write(skill_effect(s));
+                out.skill_fx.write(skill_effect(s));
             }
             Body::CastCancel(c) => {
-                cancelled.write(cast_cancel(c));
+                out.cancelled.write(cast_cancel(c));
             }
             Body::SkillCooldown(s) => {
-                cooldown.write(skill_cooldown(s));
+                out.cooldown.write(skill_cooldown(s));
             }
             Body::SkillCastFailed(f) => {
-                cast_failed.write(skill_cast_failed(f));
+                out.cast_failed.write(skill_cast_failed(f));
             }
             Body::GroundSkill(g) => {
-                ground.write(ground_skill(g));
+                out.ground.write(ground_skill(g));
             }
             Body::SkillList(l) => {
-                skills.write(skill_list(l));
+                out.skills.write(skill_list(l));
             }
             Body::LearnSkillResult(r) => {
-                learn_result.write(learn_skill_result(r));
+                out.learn_result.write(learn_skill_result(r));
             }
             Body::SpecialEffect(s) => {
-                special_fx.write(special_effect(s));
+                out.special_fx.write(special_effect(s));
             }
             _ => {}
         }

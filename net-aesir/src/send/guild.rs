@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::{QuinnetClient, client_connected};
@@ -83,34 +84,44 @@ fn guild_emblem_fetch_body(command: &GuildEmblemFetchRequested) -> Body {
     })
 }
 
+/// The full set of outbound guild command queues, grouped so systems that touch
+/// all of them take a single parameter instead of ten.
+#[derive(SystemParam)]
+pub struct GuildCommandQueues<'w> {
+    creates: ResMut<'w, Messages<GuildCreateRequested>>,
+    invites: ResMut<'w, Messages<GuildInviteRequested>>,
+    invite_responses: ResMut<'w, Messages<GuildInviteResponded>>,
+    leaves: ResMut<'w, Messages<GuildLeaveRequested>>,
+    expulsions: ResMut<'w, Messages<GuildExpelRequested>>,
+    position_edits: ResMut<'w, Messages<GuildPositionEditRequested>>,
+    member_positions: ResMut<'w, Messages<GuildMemberPositionRequested>>,
+    notice_edits: ResMut<'w, Messages<GuildNoticeEditRequested>>,
+    emblem_uploads: ResMut<'w, Messages<GuildEmblemUploadRequested>>,
+    emblem_fetches: ResMut<'w, Messages<GuildEmblemFetchRequested>>,
+}
+
+impl GuildCommandQueues<'_> {
+    fn clear_all(&mut self) {
+        self.creates.clear();
+        self.invites.clear();
+        self.invite_responses.clear();
+        self.leaves.clear();
+        self.expulsions.clear();
+        self.position_edits.clear();
+        self.member_positions.clear();
+        self.notice_edits.clear();
+        self.emblem_uploads.clear();
+        self.emblem_fetches.clear();
+    }
+}
+
 #[auto_add_system(
     plugin = crate::AesirNetPlugin,
     schedule = Last,
     config(run_if = not(client_connected))
 )]
-#[allow(clippy::too_many_arguments)]
-pub fn clear_guild_commands_while_disconnected(
-    mut creates: ResMut<Messages<GuildCreateRequested>>,
-    mut invites: ResMut<Messages<GuildInviteRequested>>,
-    mut invite_responses: ResMut<Messages<GuildInviteResponded>>,
-    mut leaves: ResMut<Messages<GuildLeaveRequested>>,
-    mut expulsions: ResMut<Messages<GuildExpelRequested>>,
-    mut position_edits: ResMut<Messages<GuildPositionEditRequested>>,
-    mut member_positions: ResMut<Messages<GuildMemberPositionRequested>>,
-    mut notice_edits: ResMut<Messages<GuildNoticeEditRequested>>,
-    mut emblem_uploads: ResMut<Messages<GuildEmblemUploadRequested>>,
-    mut emblem_fetches: ResMut<Messages<GuildEmblemFetchRequested>>,
-) {
-    creates.clear();
-    invites.clear();
-    invite_responses.clear();
-    leaves.clear();
-    expulsions.clear();
-    position_edits.clear();
-    member_positions.clear();
-    notice_edits.clear();
-    emblem_uploads.clear();
-    emblem_fetches.clear();
+pub fn clear_guild_commands_while_disconnected(mut queues: GuildCommandQueues) {
+    queues.clear_all();
 }
 
 #[auto_add_system(
