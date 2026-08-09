@@ -1,5 +1,6 @@
 use bevy::anti_alias::fxaa::Fxaa;
 use bevy::camera::Hdr;
+use bevy::ecs::system::SystemParam;
 use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 use bevy::ui::IsDefaultUiCamera;
@@ -137,18 +138,24 @@ pub fn apply_graphics(
 /// Mirrors `AudioConfig` into the live `AudioSettings` resource
 /// and emits the existing volume/mute events so kira updates playback live.
 /// `ambient` (config) maps to `ambience` (runtime); `sfx` maps straight across.
+/// The six audio control events `apply_audio` emits so kira updates playback
+/// live, grouped so the system takes one parameter instead of six.
+#[derive(SystemParam)]
+pub struct AudioControlWriters<'w> {
+    set_bgm: MessageWriter<'w, SetBgmVolumeEvent>,
+    set_sfx: MessageWriter<'w, SetSfxVolumeEvent>,
+    set_ambience: MessageWriter<'w, SetAmbienceVolumeEvent>,
+    mute_bgm: MessageWriter<'w, MuteBgmEvent>,
+    mute_sfx: MessageWriter<'w, MuteSfxEvent>,
+    mute_ambience: MessageWriter<'w, MuteAmbienceEvent>,
+}
+
 #[auto_add_system(plugin = super::SettingsRuntimePlugin, schedule = Update)]
-#[allow(clippy::too_many_arguments)]
 pub fn apply_audio(
     mut messages: MessageReader<ApplySettings>,
     settings: Res<AudioConfig>,
     mut audio: ResMut<AudioSettings>,
-    mut set_bgm: MessageWriter<SetBgmVolumeEvent>,
-    mut set_sfx: MessageWriter<SetSfxVolumeEvent>,
-    mut set_ambience: MessageWriter<SetAmbienceVolumeEvent>,
-    mut mute_bgm: MessageWriter<MuteBgmEvent>,
-    mut mute_sfx: MessageWriter<MuteSfxEvent>,
-    mut mute_ambience: MessageWriter<MuteAmbienceEvent>,
+    mut writers: AudioControlWriters,
 ) {
     if messages.read().count() == 0 {
         return;
@@ -163,22 +170,22 @@ pub fn apply_audio(
     audio.ambience_volume = config.ambient_volume;
     audio.ambience_muted = config.ambient_muted;
 
-    set_bgm.write(SetBgmVolumeEvent {
+    writers.set_bgm.write(SetBgmVolumeEvent {
         volume: config.bgm_volume,
     });
-    set_sfx.write(SetSfxVolumeEvent {
+    writers.set_sfx.write(SetSfxVolumeEvent {
         volume: config.sfx_volume,
     });
-    set_ambience.write(SetAmbienceVolumeEvent {
+    writers.set_ambience.write(SetAmbienceVolumeEvent {
         volume: config.ambient_volume,
     });
-    mute_bgm.write(MuteBgmEvent {
+    writers.mute_bgm.write(MuteBgmEvent {
         muted: config.bgm_muted,
     });
-    mute_sfx.write(MuteSfxEvent {
+    writers.mute_sfx.write(MuteSfxEvent {
         muted: config.sfx_muted,
     });
-    mute_ambience.write(MuteAmbienceEvent {
+    writers.mute_ambience.write(MuteAmbienceEvent {
         muted: config.ambient_muted,
     });
 }

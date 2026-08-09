@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::text::EditableText;
@@ -409,18 +410,40 @@ fn amount_validation_message(error: AmountValidationError) -> &'static str {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// The two item stores the storage window reads: the player's bag and the
+/// account vault. Grouped so the storage systems take one parameter for both.
+#[derive(SystemParam)]
+pub(crate) struct StorageData<'w> {
+    inventory: Res<'w, Inventory>,
+    storage: Res<'w, Storage>,
+}
+
+/// The two transfer commands the storage window emits.
+#[derive(SystemParam)]
+pub(crate) struct StorageWriters<'w> {
+    deposit: MessageWriter<'w, DepositStorageItem>,
+    withdraw: MessageWriter<'w, WithdrawStorageItem>,
+}
+
+/// The bag and vault pane host entities plus their spawn-detection queries,
+/// grouped so `rebuild_panes` reaches them through one parameter.
+#[derive(SystemParam)]
+pub(crate) struct StoragePaneHosts<'w, 's> {
+    bag: Query<'w, 's, (Entity, Option<&'static Children>), With<StorageBagHost>>,
+    vault: Query<'w, 's, (Entity, Option<&'static Children>), With<StorageVaultHost>>,
+    new_bag: Query<'w, 's, (), Added<StorageBagHost>>,
+    new_vault: Query<'w, 's, (), Added<StorageVaultHost>>,
+}
+
 pub(crate) fn on_amount_confirm(
     _: On<Activate>,
     fields: Query<(Entity, &EditableText), With<StorageAmountField>>,
-    inventory: Res<Inventory>,
-    storage: Res<Storage>,
+    data: StorageData,
     mut input_focus: ResMut<InputFocus>,
     mut ui: ResMut<StorageUi>,
-    mut deposit: MessageWriter<DepositStorageItem>,
-    mut withdraw: MessageWriter<WithdrawStorageItem>,
+    mut writers: StorageWriters,
 ) {
-    if ui.awaiting_result || !storage.is_open() {
+    if ui.awaiting_result || !data.storage.is_open() {
         return;
     }
     let (Some(source), Ok((field_entity, field))) = (
@@ -430,9 +453,9 @@ pub(crate) fn on_amount_confirm(
         return;
     };
     let input = field.value().to_string();
-    match validate_live_amount(source, &input, &inventory, &storage) {
+    match validate_live_amount(source, &input, &data.inventory, &data.storage) {
         Ok(amount) => {
-            write_transfer(source, amount, &mut deposit, &mut withdraw);
+            write_transfer(source, amount, &mut writers.deposit, &mut writers.withdraw);
             ui.pending_transfer = None;
             ui.awaiting_result = true;
             ui.panel_error = None;
@@ -465,38 +488,33 @@ pub(crate) fn on_amount_cancel(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn rebuild_panes(
     mut commands: Commands,
-    inventory: Res<Inventory>,
-    storage: Res<Storage>,
+    data: StorageData,
     item_db: Res<ItemDb>,
     mut ui: ResMut<StorageUi>,
-    bag_hosts: Query<(Entity, Option<&Children>), With<StorageBagHost>>,
-    vault_hosts: Query<(Entity, Option<&Children>), With<StorageVaultHost>>,
-    new_bag_hosts: Query<(), Added<StorageBagHost>>,
-    new_vault_hosts: Query<(), Added<StorageVaultHost>>,
+    hosts: StoragePaneHosts,
 ) {
-    if !inventory.is_changed()
-        && !storage.is_changed()
+    if !data.inventory.is_changed()
+        && !data.storage.is_changed()
         && !ui.is_changed()
-        && new_bag_hosts.is_empty()
-        && new_vault_hosts.is_empty()
+        && hosts.new_bag.is_empty()
+        && hosts.new_vault.is_empty()
     {
         return;
     }
     let (Ok((bag_host, bag_children)), Ok((vault_host, vault_children))) =
-        (bag_hosts.single(), vault_hosts.single())
+        (hosts.bag.single(), hosts.vault.single())
     else {
         return;
     };
-    let bag_items = bag_projection(&inventory, &item_db, ui.category, ui.query());
-    let vault_items = vault_projection(&storage, &item_db, ui.category, ui.query());
+    let bag_items = bag_projection(&data.inventory, &item_db, ui.category, ui.query());
+    let vault_items = vault_projection(&data.storage, &item_db, ui.category, ui.query());
     let selection = validated_selection(ui.selection, &bag_items, &vault_items);
     if ui.selection != selection {
         ui.selection = selection;
     }
-    let (bag, vault) = scene::pane_views(&inventory, &storage, &ui, &item_db);
+    let (bag, vault) = scene::pane_views(&data.inventory, &data.storage, &ui, &item_db);
 
     for children in [bag_children, vault_children].into_iter().flatten() {
         for child in children.iter() {
@@ -525,16 +543,13 @@ pub(crate) fn on_category_activate(
 /// Cell click: select the item; a double-click begins the transfer via
 /// [`begin_transfer`]. Secondary-click opens the info modal for a filled cell
 /// instead; empty cells are inert on either button.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn on_cell_select(
     click: On<Pointer<Click>>,
     cells: Query<&StorageCell>,
     time: Res<Time>,
-    inventory: Res<Inventory>,
-    storage: Res<Storage>,
+    data: StorageData,
     mut ui: ResMut<StorageUi>,
-    mut deposit: MessageWriter<DepositStorageItem>,
-    mut withdraw: MessageWriter<WithdrawStorageItem>,
+    mut writers: StorageWriters,
     mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
@@ -542,8 +557,8 @@ pub(crate) fn on_cell_select(
     };
     if click.button == PointerButton::Secondary {
         let occupied = match cell.0 {
-            StorageSelection::Bag(index) => inventory.get(index).is_some(),
-            StorageSelection::Vault(index) => storage.get(index).is_some(),
+            StorageSelection::Bag(index) => data.inventory.get(index).is_some(),
+            StorageSelection::Vault(index) => data.storage.get(index).is_some(),
         };
         if occupied {
             info_writer.write(ShowInfoModal {
@@ -565,11 +580,11 @@ pub(crate) fn on_cell_select(
     if double_click {
         begin_transfer(
             cell.0,
-            &inventory,
-            &storage,
+            &data.inventory,
+            &data.storage,
             &mut ui,
-            &mut deposit,
-            &mut withdraw,
+            &mut writers.deposit,
+            &mut writers.withdraw,
         );
     }
 }

@@ -9,11 +9,11 @@ use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
 use crate::domain::entities::character::systems::OPTION_FALCON;
 use crate::domain::entities::registry::EntityRegistry;
+use crate::domain::entities::sprite_rendering::asset_bank::SpriteAssetBank;
 use crate::domain::entities::sprite_rendering::components::{
     FalconLayer, PlayerSprite, RenderLayer,
 };
 use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
-use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::{
     LAYER_FALCON, PIXELS_PER_METRE, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER, layer_depth_bias,
     layer_order,
@@ -216,21 +216,18 @@ pub fn trigger_falcon_swoop(
     schedule = Update,
     config(in_set = SpriteRenderingSystems::AssetPopulation)
 )]
-#[allow(clippy::too_many_arguments)]
 pub fn finalize_falcon_layer(
     mut commands: Commands,
-    sprites: Res<Assets<RoSpriteAsset>>,
-    actions: Res<Assets<RoActAsset>>,
-    mut animations: ResMut<Assets<RoAnimationAsset>>,
-    mut images: ResMut<Assets<Image>>,
+    mut bank: SpriteAssetBank,
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_quad: Res<SharedSpriteQuad>,
-    settings: Res<GraphicsSettings>,
     pending_layers: Query<(Entity, &FalconAnimationPending, &ChildOf), With<FalconLayer>>,
 ) {
     for (entity, pending, child_of) in &pending_layers {
-        let (Some(sprite), Some(action)) = (sprites.get(&pending.spr), actions.get(&pending.act))
-        else {
+        let (Some(sprite), Some(action)) = (
+            bank.sprites.get(&pending.spr),
+            bank.actions.get(&pending.act),
+        ) else {
             continue;
         };
 
@@ -239,8 +236,8 @@ pub fn finalize_falcon_layer(
             &action.action,
             None,
             LAYER_FALCON,
-            &mut images,
-            settings.upscaling,
+            &mut bank.images,
+            bank.settings.upscaling,
         );
         let initial_parts = animation
             .actions
@@ -257,7 +254,7 @@ pub fn finalize_falcon_layer(
         }
 
         let textures = animation.textures.clone();
-        let animation = animations.add(animation);
+        let animation = bank.animations.add(animation);
         let parent = child_of.parent();
 
         for (part, part_data) in initial_parts.iter().enumerate() {

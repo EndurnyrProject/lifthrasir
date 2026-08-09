@@ -17,6 +17,7 @@
 //! duration), so the cooldown render is a darkening overlay plus the rounded-up
 //! seconds rather than a proportional sweep (design D7's accepted fallback).
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use game_engine::core::state::GameState;
@@ -385,16 +386,28 @@ fn spawn_slot(commands: &mut Commands, bar: Entity, i: usize, font: &Handle<Font
     commands.entity(cell).observe(on_slot_hover_out);
 }
 
+/// The item/skill lookup context every hotbar system needs to render a slot:
+/// the inventory (for item stacks), the skill catalog and item db (for icons and
+/// names), and the asset server (to load those icons). Grouped so each of the
+/// three hotbar systems takes one parameter for all four.
+#[derive(SystemParam)]
+struct HotbarItemLookup<'w> {
+    inventory: Res<'w, Inventory>,
+    catalog: Option<Res<'w, SkillCatalog>>,
+    item_db: Option<Res<'w, ItemDb>>,
+    asset_server: Res<'w, AssetServer>,
+}
+
 /// Reflects the bar state into every cell, writing each node only on change so a
 /// cooling-down skill (this system runs each frame) doesn't churn the others.
+// Still eight parameters after the lookup bundle (the five per-element view
+// queries are irreducibly distinct); grouping those purely to satisfy the lint
+// would be an artificial bundle, so the allow stays.
 #[allow(clippy::too_many_arguments)]
 fn update_hotbar(
     hotbar: Res<Hotbar>,
-    inventory: Res<Inventory>,
-    catalog: Option<Res<SkillCatalog>>,
-    item_db: Option<Res<ItemDb>>,
+    lookup: HotbarItemLookup,
     cooldowns: Res<SkillCooldownTracker>,
-    asset_server: Res<AssetServer>,
     mut cells: Query<(&mut BackgroundColor, &mut BorderColor, &HotbarSlotUi)>,
     mut icons: Query<(&mut ImageNode, &HotbarIcon)>,
     mut overlays: Query<(&mut BackgroundColor, &HotbarCooldownOverlay), Without<HotbarSlotUi>>,
@@ -410,9 +423,9 @@ fn update_hotbar(
             };
             slot_display(
                 slot,
-                &inventory,
-                catalog.as_deref(),
-                item_db.as_deref(),
+                &lookup.inventory,
+                lookup.catalog.as_deref(),
+                lookup.item_db.as_deref(),
                 cooldown_secs,
             )
         })
@@ -441,7 +454,7 @@ fn update_hotbar(
             continue;
         };
         if let Some(path) = &display.icon {
-            let handle = asset_server.load(path);
+            let handle = lookup.asset_server.load(path);
             if image.image != handle {
                 image.image = handle;
             }
@@ -517,15 +530,11 @@ fn on_slot_click(
 
 /// Hovering a filled slot spawns a name toast centered above it; empty or
 /// unresolved slots show nothing.
-#[allow(clippy::too_many_arguments)]
 fn on_slot_hover_over(
     over: On<Pointer<Over>>,
     cells: Query<&HotbarSlotUi>,
     hotbar: Res<Hotbar>,
-    inventory: Res<Inventory>,
-    catalog: Option<Res<SkillCatalog>>,
-    item_db: Option<Res<ItemDb>>,
-    asset_server: Res<AssetServer>,
+    lookup: HotbarItemLookup,
     mut commands: Commands,
 ) {
     let Ok(cell) = cells.get(over.entity) else {
@@ -533,13 +542,13 @@ fn on_slot_hover_over(
     };
     let Some(label) = slot_label(
         hotbar.get(cell.0),
-        &inventory,
-        catalog.as_deref(),
-        item_db.as_deref(),
+        &lookup.inventory,
+        lookup.catalog.as_deref(),
+        lookup.item_db.as_deref(),
     ) else {
         return;
     };
-    let font = asset_server.load(theme::FONT_BODY);
+    let font = lookup.asset_server.load(theme::FONT_BODY);
 
     let tooltip = commands
         .spawn((
@@ -661,23 +670,24 @@ fn ghost_icon(
 /// Drives the cursor-following drag ghost: spawns it on the first frame a drag
 /// carries a resolvable icon, tracks the cursor while the drag is live, and
 /// despawns it once the payload clears (or its icon can no longer be resolved).
-#[allow(clippy::too_many_arguments)]
 fn update_drag_ghost(
     mut commands: Commands,
     drag: Res<HotbarDrag>,
     windows: Query<&Window, With<PrimaryWindow>>,
     ui_scale: Res<UiScale>,
-    inventory: Res<Inventory>,
-    catalog: Option<Res<SkillCatalog>>,
-    item_db: Option<Res<ItemDb>>,
-    asset_server: Res<AssetServer>,
+    lookup: HotbarItemLookup,
     mut ghosts: Query<(Entity, &mut Node), With<HotbarDragGhost>>,
 ) {
     let ghost = ghosts.single_mut().ok();
     let cursor = windows.single().ok().and_then(Window::cursor_position);
-    let icon = drag
-        .payload
-        .and_then(|p| ghost_icon(p, &inventory, catalog.as_deref(), item_db.as_deref()));
+    let icon = drag.payload.and_then(|p| {
+        ghost_icon(
+            p,
+            &lookup.inventory,
+            lookup.catalog.as_deref(),
+            lookup.item_db.as_deref(),
+        )
+    });
 
     let (Some(cursor), Some(icon)) = (cursor, icon) else {
         if let Some((entity, _)) = ghost {
@@ -694,7 +704,7 @@ fn update_drag_ghost(
             node.left = left;
             node.top = top;
         }
-        None => spawn_ghost(&mut commands, &asset_server, icon, left, top),
+        None => spawn_ghost(&mut commands, &lookup.asset_server, icon, left, top),
     }
 }
 

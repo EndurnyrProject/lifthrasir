@@ -12,6 +12,7 @@
 //! missing entity or missing catalog entry with a `debug!`, never panicking and
 //! never inventing defaults.
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use lifthrasir_data::{EffectDescriptor, EffectPlacement};
 use moonshine_behavior::prelude::BehaviorMut;
@@ -227,31 +228,46 @@ fn play_sound(
     }
 }
 
+/// The resources and queries the three skill-event triggers share to spawn an
+/// effect: the STR/shader catalog, the asset loader, the gid→entity registry,
+/// the caster-animation behaviors, unit transforms, a command buffer, and the
+/// sound writer. Grouped so each trigger takes one parameter instead of seven.
+#[derive(SystemParam)]
+pub struct EffectSpawnCtx<'w, 's> {
+    commands: Commands<'w, 's>,
+    catalog: Option<Res<'w, EffectCatalog>>,
+    asset_server: Res<'w, AssetServer>,
+    registry: Res<'w, EntityRegistry>,
+    behaviors: Query<'w, 's, BehaviorMut<AnimationState>>,
+    transforms: Query<'w, 's, &'static Transform>,
+    sfx: MessageWriter<'w, PlaySkillSfx>,
+}
+
 /// `SkillEffectShown` — a no-damage skill effect: spawn anchored per placement,
 /// play caster motion on the source, play the sound.
-#[allow(clippy::too_many_arguments)]
 pub fn on_skill_effect(
     mut events: MessageReader<SkillEffectShown>,
-    mut commands: Commands,
-    catalog: Option<Res<EffectCatalog>>,
-    asset_server: Res<AssetServer>,
-    registry: Res<EntityRegistry>,
-    mut behaviors: Query<BehaviorMut<AnimationState>>,
-    transforms: Query<&Transform>,
+    mut ctx: EffectSpawnCtx,
     shader_fx: Option<Res<ShaderFxCatalog>>,
-    mut sfx: MessageWriter<PlaySkillSfx>,
     mut proc_vfx: MessageWriter<PlayProceduralVfx>,
 ) {
     let shader_fx = shader_fx.as_deref();
     for event in events.read() {
-        let src = resolve_gid(&registry, event.src_id);
-        let target = resolve_gid(&registry, event.target_id);
+        let src = resolve_gid(&ctx.registry, event.src_id);
+        let target = resolve_gid(&ctx.registry, event.target_id);
 
         if let Some(src) = src {
-            start_attack_animation(&mut commands, &mut behaviors, &transforms, src, target, 0);
+            start_attack_animation(
+                &mut ctx.commands,
+                &mut ctx.behaviors,
+                &ctx.transforms,
+                src,
+                target,
+                0,
+            );
         }
 
-        let Some(descriptor) = catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
+        let Some(descriptor) = ctx.catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
             warn!("No effect catalog entry for skill {}", event.skill_id);
             continue;
         };
@@ -272,18 +288,18 @@ pub fn on_skill_effect(
         };
 
         let emitter = spawn_str_or_fallback(
-            &mut commands,
-            &asset_server,
+            &mut ctx.commands,
+            &ctx.asset_server,
             descriptor,
             EffectAnchor::Entity(anchor_entity),
             anchor_entity,
             None,
         );
 
-        play_procedural_sound(&mut sfx, shader_fx, descriptor, emitter);
+        play_procedural_sound(&mut ctx.sfx, shader_fx, descriptor, emitter);
         emit_procedural_vfx(
             &mut proc_vfx,
-            &transforms,
+            &ctx.transforms,
             shader_fx,
             descriptor,
             anchor_entity,
@@ -295,24 +311,17 @@ pub fn on_skill_effect(
 
 /// `SkillDamageReceived` — like `on_skill_effect`, plus the existing
 /// `DisplayDamageNumber` for the target.
-#[allow(clippy::too_many_arguments)]
 pub fn on_skill_damage(
     mut events: MessageReader<SkillDamageReceived>,
-    mut commands: Commands,
-    catalog: Option<Res<EffectCatalog>>,
-    asset_server: Res<AssetServer>,
-    registry: Res<EntityRegistry>,
-    mut behaviors: Query<BehaviorMut<AnimationState>>,
-    transforms: Query<&Transform>,
+    mut ctx: EffectSpawnCtx,
     mut damage_display: MessageWriter<DisplayDamageNumber>,
     shader_fx: Option<Res<ShaderFxCatalog>>,
-    mut sfx: MessageWriter<PlaySkillSfx>,
     mut proc_vfx: MessageWriter<PlayProceduralVfx>,
 ) {
     let shader_fx = shader_fx.as_deref();
     for event in events.read() {
-        let src = resolve_gid(&registry, event.src_id);
-        let Some(target) = resolve_gid(&registry, event.target_id) else {
+        let src = resolve_gid(&ctx.registry, event.src_id);
+        let Some(target) = resolve_gid(&ctx.registry, event.target_id) else {
             debug!(
                 "No target entity for skill damage {} (target {})",
                 event.skill_id, event.target_id
@@ -337,16 +346,16 @@ pub fn on_skill_damage(
 
         if let Some(src) = src {
             start_attack_animation(
-                &mut commands,
-                &mut behaviors,
-                &transforms,
+                &mut ctx.commands,
+                &mut ctx.behaviors,
+                &ctx.transforms,
                 src,
                 Some(target),
                 event.src_delay as i32,
             );
         }
 
-        let Some(descriptor) = catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
+        let Some(descriptor) = ctx.catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
             warn!("No effect catalog entry for skill {}", event.skill_id);
             continue;
         };
@@ -367,18 +376,18 @@ pub fn on_skill_damage(
         }
 
         let emitter = spawn_str_or_fallback(
-            &mut commands,
-            &asset_server,
+            &mut ctx.commands,
+            &ctx.asset_server,
             descriptor,
             EffectAnchor::Entity(target),
             target,
             None,
         );
 
-        play_procedural_sound(&mut sfx, shader_fx, descriptor, emitter);
+        play_procedural_sound(&mut ctx.sfx, shader_fx, descriptor, emitter);
         emit_procedural_vfx(
             &mut proc_vfx,
-            &transforms,
+            &ctx.transforms,
             shader_fx,
             descriptor,
             target,
@@ -412,26 +421,26 @@ pub(crate) fn ground_world_position(
 /// no visual here — their persistent effect belongs to the skill-unit group/cell
 /// entities (`domain/skill_units`), which own the whole lifetime and never rely
 /// on a client-side despawn timer.
-#[allow(clippy::too_many_arguments)]
 pub fn on_ground_skill(
     mut events: MessageReader<GroundSkillPlaced>,
-    mut commands: Commands,
-    catalog: Option<Res<EffectCatalog>>,
-    asset_server: Res<AssetServer>,
-    registry: Res<EntityRegistry>,
-    mut behaviors: Query<BehaviorMut<AnimationState>>,
-    transforms: Query<&Transform>,
-    mut sfx: MessageWriter<PlaySkillSfx>,
+    mut ctx: EffectSpawnCtx,
     map_altitude: Option<Res<CurrentMapAltitude>>,
     altitude_assets: Option<Res<Assets<RoAltitudeAsset>>>,
 ) {
     for event in events.read() {
-        let src = resolve_gid(&registry, event.src_id);
+        let src = resolve_gid(&ctx.registry, event.src_id);
         if let Some(src) = src {
-            start_attack_animation(&mut commands, &mut behaviors, &transforms, src, None, 0);
+            start_attack_animation(
+                &mut ctx.commands,
+                &mut ctx.behaviors,
+                &ctx.transforms,
+                src,
+                None,
+                0,
+            );
         }
 
-        let Some(descriptor) = catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
+        let Some(descriptor) = ctx.catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
             warn!(
                 "No effect catalog entry for ground skill {}",
                 event.skill_id
@@ -452,9 +461,9 @@ pub fn on_ground_skill(
                     map_altitude.as_deref(),
                     altitude_assets.as_deref(),
                 );
-                load_effect(&asset_server, descriptor).map(|effect| {
+                load_effect(&ctx.asset_server, descriptor).map(|effect| {
                     spawn_effect(
-                        &mut commands,
+                        &mut ctx.commands,
                         effect,
                         EffectAnchor::Position(position),
                         false,
@@ -468,7 +477,7 @@ pub fn on_ground_skill(
         // exercised spatial-emitter path, and they outlive a short effect (a
         // bare effect entity despawns with the visual, cutting the wav).
         if let Some(emitter) = src.or(ground_effect) {
-            play_sound(&mut sfx, descriptor, emitter);
+            play_sound(&mut ctx.sfx, descriptor, emitter);
         }
     }
 }

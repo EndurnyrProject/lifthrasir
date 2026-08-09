@@ -12,8 +12,8 @@ use super::triggers::{descriptor_tint, load_effect, load_str_effect};
 use crate::domain::assets::patterns;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::registry::EntityRegistry;
+use crate::domain::entities::sprite_rendering::asset_bank::SpriteAssetBank;
 use crate::domain::entities::sprite_rendering::components::RenderLayer;
-use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::{
     LAYER_EFFECT, Z_OFFSET_PER_LAYER, layer_depth_bias, layer_order,
 };
@@ -399,16 +399,11 @@ pub fn load_frozen_ice_assets(mut commands: Commands, asset_server: Res<AssetSer
 /// no overlay and no signal. Guarded here by checking `LoadState::Failed` on
 /// either handle — logs once and drops the pending marker so the freeze
 /// tint/pause still land, just without the ice overlay.
-#[allow(clippy::too_many_arguments)]
 pub fn finalize_frozen_ice_assets(
     mut commands: Commands,
     pending: Option<Res<FrozenIceAssetsPending>>,
     asset_server: Res<AssetServer>,
-    sprites: Res<Assets<RoSpriteAsset>>,
-    actions: Res<Assets<RoActAsset>>,
-    mut animations: ResMut<Assets<RoAnimationAsset>>,
-    mut images: ResMut<Assets<Image>>,
-    settings: Res<GraphicsSettings>,
+    mut bank: SpriteAssetBank,
 ) {
     let Some(pending) = pending else {
         return;
@@ -427,8 +422,10 @@ pub fn finalize_frozen_ice_assets(
         return;
     }
 
-    let (Some(sprite), Some(action)) = (sprites.get(&pending.spr), actions.get(&pending.act))
-    else {
+    let (Some(sprite), Some(action)) = (
+        bank.sprites.get(&pending.spr),
+        bank.actions.get(&pending.act),
+    ) else {
         return;
     };
 
@@ -437,12 +434,12 @@ pub fn finalize_frozen_ice_assets(
         &action.action,
         None,
         LAYER_EFFECT,
-        &mut images,
-        settings.upscaling,
+        &mut bank.images,
+        bank.settings.upscaling,
     );
 
     commands.insert_resource(FrozenIceAssets {
-        animation: animations.add(animation),
+        animation: bank.animations.add(animation),
     });
     commands.remove_resource::<FrozenIceAssetsPending>();
 }

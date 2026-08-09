@@ -15,6 +15,7 @@ use bevy::asset::LoadState;
 use bevy::prelude::*;
 
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
+use crate::domain::entities::sprite_rendering::asset_bank::SpriteAssetBank;
 use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
 use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::{
@@ -96,18 +97,13 @@ pub(super) fn apply_animation_part(
 /// A missing GRF sprite otherwise fails silently (`Assets::get` simply never
 /// returns `Some`), so a `LoadState::Failed` on either handle drops the request
 /// with a warning rather than retrying forever.
-#[allow(clippy::too_many_arguments)]
 pub fn spawn_effect_sprites(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut assets: ResMut<EffectSpriteAssets>,
-    sprites: Res<Assets<RoSpriteAsset>>,
-    actions: Res<Assets<RoActAsset>>,
-    mut animations: ResMut<Assets<RoAnimationAsset>>,
-    mut images: ResMut<Assets<Image>>,
+    mut bank: SpriteAssetBank,
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_quad: Option<Res<SharedSpriteQuad>>,
-    settings: Res<GraphicsSettings>,
     requests: Query<(Entity, &EffectSprite)>,
 ) {
     let Some(shared_quad) = shared_quad else {
@@ -118,11 +114,11 @@ pub fn spawn_effect_sprites(
         let Some(animation) = resolve_animation(
             &asset_server,
             &mut assets,
-            &sprites,
-            &actions,
-            &mut animations,
-            &mut images,
-            &settings,
+            &bank.sprites,
+            &bank.actions,
+            &mut bank.animations,
+            &mut bank.images,
+            &bank.settings,
             &mut commands,
             entity,
             &request.path,
@@ -130,7 +126,8 @@ pub fn spawn_effect_sprites(
             continue;
         };
 
-        let Some(action) = animations
+        let Some(action) = bank
+            .animations
             .get(&animation)
             .and_then(|a| a.actions.get(EFFECT_SPRITE_ACTION))
         else {
