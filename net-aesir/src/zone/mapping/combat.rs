@@ -91,6 +91,8 @@ pub fn skill_cast_failed(f: net::SkillCastFailed) -> SkillCastFailed {
         net::SkillCastFailureReason::NotLearned => SkillCastFailureReason::NotLearned,
         net::SkillCastFailureReason::OutOfRange => SkillCastFailureReason::OutOfRange,
         net::SkillCastFailureReason::Busy => SkillCastFailureReason::Busy,
+        net::SkillCastFailureReason::WrongWeapon => SkillCastFailureReason::WrongWeapon,
+        net::SkillCastFailureReason::VersusMapOnly => SkillCastFailureReason::VersusMapOnly,
     };
 
     SkillCastFailed {

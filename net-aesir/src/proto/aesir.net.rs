@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -345,6 +345,16 @@ pub mod envelope {
         SkillTextInputRequest(super::SkillTextInputRequest),
         #[prost(message, tag = "167")]
         SkillTextInputReply(super::SkillTextInputReply),
+        /// 168: server-authoritative production outcome
+        #[prost(message, tag = "168")]
+        ProductionResult(super::ProductionResult),
+        /// 169-171: owner-private Homunculus commands, results, and state
+        #[prost(message, tag = "169")]
+        HomunculusRequest(super::HomunculusRequest),
+        #[prost(message, tag = "170")]
+        HomunculusResult(super::HomunculusResult),
+        #[prost(message, tag = "171")]
+        HomunculusPrivateState(super::HomunculusPrivateState),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -1008,8 +1018,13 @@ pub struct ActionRequest {
     #[prost(uint32, tag = "2")]
     pub action: u32,
 }
-/// Server -> client, basic-attack damage result (replaces RO ZC_NOTIFY_ACT 0x08C8).
-/// `damage`/`damage2` are signed so negative (heal-as-damage) values survive.
+/// Server -> client, one authoritative basic-attack result (replaces RO ZC_NOTIFY_ACT 0x08C8).
+/// `damage` is the settled primary/right-hand aggregate; `damage2` is the settled
+/// left-hand or Katar secondary aggregate, or zero when absent. Their sum is the
+/// target HP mutation; a Devotion reroute instead zeroes both on the devotee packet
+/// while applying the raw aggregate once to the linked Crusader. Both are signed so
+/// negative (heal-as-damage) values survive. `div` is presentation-only: the number
+/// of equal visual hits for a multi-hit swing, not components or HP mutations.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DamageDealt {
     #[prost(uint32, tag = "1")]
@@ -1878,6 +1893,11 @@ pub struct PartyKickRequest {
 pub struct PartyOptionsRequest {
     #[prost(bool, tag = "1")]
     pub exp_share: bool,
+    /// Leader-only rAthena-style party pickup-share option: party members of an online loot owner
+    /// inherit the owner's pickup window. The client sends the full desired state of both options
+    /// on every request (proto3 false-default).
+    #[prost(bool, tag = "2")]
+    pub item_pickup_share: bool,
 }
 /// Client -> server, leader-only request to transfer leadership to an online,
 /// same-map member.
@@ -1939,6 +1959,9 @@ pub struct PartyInfo {
     pub exp_share: bool,
     #[prost(message, repeated, tag = "5")]
     pub members: ::prost::alloc::vec::Vec<PartyMember>,
+    /// Current party pickup-share setting, mirrored from the party options.
+    #[prost(bool, tag = "6")]
+    pub item_pickup_share: bool,
 }
 /// Server -> client, complete current snapshot for one party member.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2527,6 +2550,8 @@ pub mod skill_menu {
     pub enum Kind {
         Skills = 0,
         Items = 1,
+        /// entry_ids identify inventory slots rather than items.
+        InventorySlots = 2,
     }
     impl Kind {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -2537,6 +2562,7 @@ pub mod skill_menu {
             match self {
                 Self::Skills => "SKILLS",
                 Self::Items => "ITEMS",
+                Self::InventorySlots => "INVENTORY_SLOTS",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2544,6 +2570,7 @@ pub mod skill_menu {
             match value {
                 "SKILLS" => Some(Self::Skills),
                 "ITEMS" => Some(Self::Items),
+                "INVENTORY_SLOTS" => Some(Self::InventorySlots),
                 _ => None,
             }
         }
@@ -2552,12 +2579,25 @@ pub mod skill_menu {
 /// Client -> server, the player's choice from the pending SkillMenu. `src_skill_id`
 /// must match the offer the server is holding and `selected_id` must be one of its
 /// entry_ids; a stale or forged reply is dropped. selected_id 0 cancels the menu.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SkillMenuReply {
     #[prost(uint32, tag = "1")]
     pub src_skill_id: u32,
     #[prost(uint32, tag = "2")]
     pub selected_id: u32,
+    /// Up to three additional catalyst item ids.
+    #[prost(uint32, repeated, tag = "3")]
+    pub extra_ids: ::prost::alloc::vec::Vec<u32>,
+}
+/// Server -> client, the outcome of an item-production attempt.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ProductionResult {
+    /// Whether the attempt produced the item.
+    #[prost(bool, tag = "1")]
+    pub success: bool,
+    /// The recipe's product item id, on either outcome.
+    #[prost(uint32, tag = "2")]
+    pub item_id: u32,
 }
 /// Server -> client, caster-only feedback when an attempted skill cast is rejected.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2566,6 +2606,287 @@ pub struct SkillCastFailed {
     pub skill_id: u32,
     #[prost(enumeration = "SkillCastFailureReason", tag = "2")]
     pub reason: i32,
+}
+/// Client -> server. The authenticated character's sole Homunculus is implicit;
+/// requests intentionally carry no owner or companion selector.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HomunculusRequest {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(
+        oneof = "homunculus_request::Command",
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
+    )]
+    pub command: ::core::option::Option<homunculus_request::Command>,
+}
+/// Nested message and enum types in `HomunculusRequest`.
+pub mod homunculus_request {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Command {
+        #[prost(message, tag = "2")]
+        Inspect(super::HomunculusInspectCommand),
+        #[prost(message, tag = "3")]
+        Move(super::HomunculusMoveCommand),
+        #[prost(message, tag = "4")]
+        Follow(super::HomunculusFollowCommand),
+        #[prost(message, tag = "5")]
+        Attack(super::HomunculusAttackCommand),
+        #[prost(message, tag = "6")]
+        Standby(super::HomunculusStandbyCommand),
+        #[prost(message, tag = "7")]
+        CastSkill(super::HomunculusCastSkillCommand),
+        #[prost(message, tag = "8")]
+        Feed(super::HomunculusFeedCommand),
+        #[prost(message, tag = "9")]
+        Rename(super::HomunculusRenameCommand),
+        #[prost(message, tag = "10")]
+        Rest(super::HomunculusRestCommand),
+        #[prost(message, tag = "11")]
+        Delete(super::HomunculusDeleteCommand),
+        #[prost(message, tag = "12")]
+        ReplaceAi(super::HomunculusReplaceAiCommand),
+        #[prost(message, tag = "13")]
+        LearnSkill(super::HomunculusLearnSkillCommand),
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusInspectCommand {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusMoveCommand {
+    #[prost(int32, tag = "1")]
+    pub x: i32,
+    #[prost(int32, tag = "2")]
+    pub y: i32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusFollowCommand {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusAttackCommand {
+    #[prost(uint32, tag = "1")]
+    pub target_id: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusStandbyCommand {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusCastSkillCommand {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+    #[prost(oneof = "homunculus_cast_skill_command::Target", tags = "3, 4")]
+    pub target: ::core::option::Option<homunculus_cast_skill_command::Target>,
+}
+/// Nested message and enum types in `HomunculusCastSkillCommand`.
+pub mod homunculus_cast_skill_command {
+    #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Target {
+        #[prost(uint32, tag = "3")]
+        TargetId(u32),
+        #[prost(bool, tag = "4")]
+        Self_(bool),
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusFeedCommand {}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusRenameCommand {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusRestCommand {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusDeleteCommand {
+    #[prost(bool, tag = "1")]
+    pub confirmed: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HomunculusReplaceAiCommand {
+    #[prost(message, optional, tag = "1")]
+    pub config: ::core::option::Option<HomunculusAiConfig>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusLearnSkillCommand {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+}
+/// Presence distinguishes an omitted threshold from an explicit zero value;
+/// validation applies the approved percentage boundaries.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusHpThreshold {
+    #[prost(uint32, tag = "1")]
+    pub percent: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusHpRange {
+    #[prost(uint32, tag = "1")]
+    pub min_percent: u32,
+    #[prost(uint32, tag = "2")]
+    pub max_percent: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusAiSkillConfig {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(enumeration = "HomunculusAiSkillMode", tag = "2")]
+    pub mode: i32,
+    #[prost(uint32, tag = "3")]
+    pub priority: u32,
+    #[prost(message, optional, tag = "4")]
+    pub self_hp_threshold: ::core::option::Option<HomunculusHpThreshold>,
+    #[prost(message, optional, tag = "5")]
+    pub owner_hp_threshold: ::core::option::Option<HomunculusHpThreshold>,
+    #[prost(message, optional, tag = "6")]
+    pub target_hp_range: ::core::option::Option<HomunculusHpRange>,
+}
+/// Complete replacement AI configuration. Claim safety is mandatory server-side
+/// and therefore is not configurable on the wire.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HomunculusAiConfig {
+    #[prost(enumeration = "HomunculusAiStance", tag = "1")]
+    pub stance: i32,
+    #[prost(uint32, tag = "2")]
+    pub leash_distance: u32,
+    #[prost(bool, tag = "3")]
+    pub join_owner_target: bool,
+    #[prost(bool, tag = "4")]
+    pub retaliate: bool,
+    #[prost(bool, tag = "5")]
+    pub avoid_bosses: bool,
+    #[prost(uint32, repeated, tag = "6")]
+    pub allowed_mob_class_ids: ::prost::alloc::vec::Vec<u32>,
+    #[prost(uint32, repeated, tag = "7")]
+    pub denied_mob_class_ids: ::prost::alloc::vec::Vec<u32>,
+    #[prost(bool, tag = "8")]
+    pub auto_feed: bool,
+    #[prost(uint32, tag = "9")]
+    pub auto_feed_threshold: u32,
+    #[prost(uint32, tag = "10")]
+    pub auto_cast_sp_reserve_percent: u32,
+    #[prost(message, repeated, tag = "11")]
+    pub skills: ::prost::alloc::vec::Vec<HomunculusAiSkillConfig>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusDisplayedStats {
+    #[prost(uint32, tag = "1")]
+    pub str: u32,
+    #[prost(uint32, tag = "2")]
+    pub agi: u32,
+    #[prost(uint32, tag = "3")]
+    pub vit: u32,
+    #[prost(uint32, tag = "4")]
+    pub int: u32,
+    #[prost(uint32, tag = "5")]
+    pub dex: u32,
+    #[prost(uint32, tag = "6")]
+    pub luk: u32,
+    #[prost(uint32, tag = "7")]
+    pub atk: u32,
+    #[prost(uint32, tag = "8")]
+    pub matk: u32,
+    #[prost(uint32, tag = "9")]
+    pub def: u32,
+    #[prost(uint32, tag = "10")]
+    pub mdef: u32,
+    #[prost(uint32, tag = "11")]
+    pub hit: u32,
+    #[prost(uint32, tag = "12")]
+    pub flee: u32,
+    #[prost(uint32, tag = "13")]
+    pub critical: u32,
+    #[prost(uint32, tag = "14")]
+    pub aspd: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusSkillMetadata {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+    #[prost(uint32, tag = "3")]
+    pub max_level: u32,
+    #[prost(bool, tag = "4")]
+    pub learnable: bool,
+    #[prost(uint32, tag = "5")]
+    pub intimacy_required_hundredths: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HomunculusCooldown {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint64, tag = "2")]
+    pub remaining_ms: u64,
+}
+/// Server -> owner, complete authoritative private companion state.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HomunculusPrivateState {
+    #[prost(uint64, tag = "1")]
+    pub durable_id: u64,
+    #[prost(uint32, tag = "2")]
+    pub world_gid: u32,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(bool, tag = "4")]
+    pub rename_eligible: bool,
+    #[prost(uint32, tag = "5")]
+    pub species_id: u32,
+    #[prost(bool, tag = "6")]
+    pub evolved: bool,
+    #[prost(uint32, tag = "7")]
+    pub appearance_id: u32,
+    #[prost(enumeration = "HomunculusLifecycle", tag = "8")]
+    pub lifecycle: i32,
+    #[prost(enumeration = "HomunculusActivity", tag = "9")]
+    pub activity: i32,
+    #[prost(uint32, tag = "10")]
+    pub current_target_id: u32,
+    #[prost(uint32, tag = "11")]
+    pub level: u32,
+    #[prost(uint64, tag = "12")]
+    pub exp: u64,
+    #[prost(uint64, tag = "13")]
+    pub next_exp: u64,
+    #[prost(uint32, tag = "14")]
+    pub skill_points: u32,
+    #[prost(uint64, tag = "15")]
+    pub hp: u64,
+    #[prost(uint64, tag = "16")]
+    pub max_hp: u64,
+    #[prost(uint64, tag = "17")]
+    pub sp: u64,
+    #[prost(uint64, tag = "18")]
+    pub max_sp: u64,
+    #[prost(message, optional, tag = "19")]
+    pub stats: ::core::option::Option<HomunculusDisplayedStats>,
+    #[prost(uint32, tag = "20")]
+    pub hunger: u32,
+    #[prost(uint32, tag = "21")]
+    pub intimacy_hundredths: u32,
+    #[prost(enumeration = "HomunculusIntimacyGrade", tag = "22")]
+    pub intimacy_grade: i32,
+    #[prost(uint32, tag = "23")]
+    pub food_item_id: u32,
+    #[prost(uint64, tag = "24")]
+    pub active_remaining_ms: u64,
+    #[prost(message, repeated, tag = "25")]
+    pub skills: ::prost::alloc::vec::Vec<HomunculusSkillMetadata>,
+    #[prost(message, repeated, tag = "26")]
+    pub cooldowns: ::prost::alloc::vec::Vec<HomunculusCooldown>,
+    #[prost(message, optional, tag = "27")]
+    pub ai_config: ::core::option::Option<HomunculusAiConfig>,
+}
+/// Server -> owner, correlated outcome and immediate authoritative post-state.
+/// State is absent only when no companion exists or confirmed deletion succeeds.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HomunculusResult {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(bool, tag = "2")]
+    pub success: bool,
+    #[prost(enumeration = "HomunculusError", tag = "3")]
+    pub error: i32,
+    #[prost(message, optional, tag = "4")]
+    pub state: ::core::option::Option<HomunculusPrivateState>,
 }
 /// Optional features advertised in Hello; HelloAck returns the negotiated intersection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -2748,6 +3069,8 @@ pub enum PickupResultCode {
     InventoryFull = 3,
     Gone = 4,
     Failed = 5,
+    /// The item is loot-protected for its owners' pickup windows; retry after the protection lapses.
+    LootProtected = 6,
 }
 impl PickupResultCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2762,6 +3085,7 @@ impl PickupResultCode {
             Self::InventoryFull => "INVENTORY_FULL",
             Self::Gone => "GONE",
             Self::Failed => "FAILED",
+            Self::LootProtected => "LOOT_PROTECTED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2773,6 +3097,7 @@ impl PickupResultCode {
             "INVENTORY_FULL" => Some(Self::InventoryFull),
             "GONE" => Some(Self::Gone),
             "FAILED" => Some(Self::Failed),
+            "LOOT_PROTECTED" => Some(Self::LootProtected),
             _ => None,
         }
     }
@@ -3093,6 +3418,8 @@ pub enum SkillCastFailureReason {
     NotLearned = 7,
     OutOfRange = 8,
     Busy = 9,
+    WrongWeapon = 10,
+    VersusMapOnly = 11,
 }
 impl SkillCastFailureReason {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3111,6 +3438,8 @@ impl SkillCastFailureReason {
             Self::NotLearned => "SKILL_CAST_FAILURE_REASON_NOT_LEARNED",
             Self::OutOfRange => "SKILL_CAST_FAILURE_REASON_OUT_OF_RANGE",
             Self::Busy => "SKILL_CAST_FAILURE_REASON_BUSY",
+            Self::WrongWeapon => "SKILL_CAST_FAILURE_REASON_WRONG_WEAPON",
+            Self::VersusMapOnly => "SKILL_CAST_FAILURE_REASON_VERSUS_MAP_ONLY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3126,6 +3455,271 @@ impl SkillCastFailureReason {
             "SKILL_CAST_FAILURE_REASON_NOT_LEARNED" => Some(Self::NotLearned),
             "SKILL_CAST_FAILURE_REASON_OUT_OF_RANGE" => Some(Self::OutOfRange),
             "SKILL_CAST_FAILURE_REASON_BUSY" => Some(Self::Busy),
+            "SKILL_CAST_FAILURE_REASON_WRONG_WEAPON" => Some(Self::WrongWeapon),
+            "SKILL_CAST_FAILURE_REASON_VERSUS_MAP_ONLY" => Some(Self::VersusMapOnly),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum HomunculusAiStance {
+    Unspecified = 0,
+    Passive = 1,
+    Assist = 2,
+    Aggressive = 3,
+}
+impl HomunculusAiStance {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "HOMUNCULUS_AI_STANCE_UNSPECIFIED",
+            Self::Passive => "HOMUNCULUS_AI_STANCE_PASSIVE",
+            Self::Assist => "HOMUNCULUS_AI_STANCE_ASSIST",
+            Self::Aggressive => "HOMUNCULUS_AI_STANCE_AGGRESSIVE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "HOMUNCULUS_AI_STANCE_UNSPECIFIED" => Some(Self::Unspecified),
+            "HOMUNCULUS_AI_STANCE_PASSIVE" => Some(Self::Passive),
+            "HOMUNCULUS_AI_STANCE_ASSIST" => Some(Self::Assist),
+            "HOMUNCULUS_AI_STANCE_AGGRESSIVE" => Some(Self::Aggressive),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum HomunculusAiSkillMode {
+    Unspecified = 0,
+    Manual = 1,
+    Auto = 2,
+}
+impl HomunculusAiSkillMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "HOMUNCULUS_AI_SKILL_MODE_UNSPECIFIED",
+            Self::Manual => "HOMUNCULUS_AI_SKILL_MODE_MANUAL",
+            Self::Auto => "HOMUNCULUS_AI_SKILL_MODE_AUTO",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "HOMUNCULUS_AI_SKILL_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "HOMUNCULUS_AI_SKILL_MODE_MANUAL" => Some(Self::Manual),
+            "HOMUNCULUS_AI_SKILL_MODE_AUTO" => Some(Self::Auto),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum HomunculusError {
+    None = 0,
+    NoCompanion = 1,
+    MalformedCommand = 2,
+    WrongChannel = 3,
+    InvalidLifecycle = 4,
+    InvalidPosition = 5,
+    InvalidTarget = 6,
+    OutOfRange = 7,
+    SkillNotLearned = 8,
+    InvalidSkillRank = 9,
+    OnCooldown = 10,
+    InsufficientSp = 11,
+    MissingItem = 12,
+    HpGate = 13,
+    RenameNotAllowed = 14,
+    InvalidName = 15,
+    ConfirmationRequired = 16,
+    InvalidAiConfig = 17,
+    InsufficientSkillPoints = 18,
+    PrerequisitesNotMet = 19,
+    Busy = 20,
+}
+impl HomunculusError {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::None => "HOMUNCULUS_ERROR_NONE",
+            Self::NoCompanion => "HOMUNCULUS_ERROR_NO_COMPANION",
+            Self::MalformedCommand => "HOMUNCULUS_ERROR_MALFORMED_COMMAND",
+            Self::WrongChannel => "HOMUNCULUS_ERROR_WRONG_CHANNEL",
+            Self::InvalidLifecycle => "HOMUNCULUS_ERROR_INVALID_LIFECYCLE",
+            Self::InvalidPosition => "HOMUNCULUS_ERROR_INVALID_POSITION",
+            Self::InvalidTarget => "HOMUNCULUS_ERROR_INVALID_TARGET",
+            Self::OutOfRange => "HOMUNCULUS_ERROR_OUT_OF_RANGE",
+            Self::SkillNotLearned => "HOMUNCULUS_ERROR_SKILL_NOT_LEARNED",
+            Self::InvalidSkillRank => "HOMUNCULUS_ERROR_INVALID_SKILL_RANK",
+            Self::OnCooldown => "HOMUNCULUS_ERROR_ON_COOLDOWN",
+            Self::InsufficientSp => "HOMUNCULUS_ERROR_INSUFFICIENT_SP",
+            Self::MissingItem => "HOMUNCULUS_ERROR_MISSING_ITEM",
+            Self::HpGate => "HOMUNCULUS_ERROR_HP_GATE",
+            Self::RenameNotAllowed => "HOMUNCULUS_ERROR_RENAME_NOT_ALLOWED",
+            Self::InvalidName => "HOMUNCULUS_ERROR_INVALID_NAME",
+            Self::ConfirmationRequired => "HOMUNCULUS_ERROR_CONFIRMATION_REQUIRED",
+            Self::InvalidAiConfig => "HOMUNCULUS_ERROR_INVALID_AI_CONFIG",
+            Self::InsufficientSkillPoints => "HOMUNCULUS_ERROR_INSUFFICIENT_SKILL_POINTS",
+            Self::PrerequisitesNotMet => "HOMUNCULUS_ERROR_PREREQUISITES_NOT_MET",
+            Self::Busy => "HOMUNCULUS_ERROR_BUSY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "HOMUNCULUS_ERROR_NONE" => Some(Self::None),
+            "HOMUNCULUS_ERROR_NO_COMPANION" => Some(Self::NoCompanion),
+            "HOMUNCULUS_ERROR_MALFORMED_COMMAND" => Some(Self::MalformedCommand),
+            "HOMUNCULUS_ERROR_WRONG_CHANNEL" => Some(Self::WrongChannel),
+            "HOMUNCULUS_ERROR_INVALID_LIFECYCLE" => Some(Self::InvalidLifecycle),
+            "HOMUNCULUS_ERROR_INVALID_POSITION" => Some(Self::InvalidPosition),
+            "HOMUNCULUS_ERROR_INVALID_TARGET" => Some(Self::InvalidTarget),
+            "HOMUNCULUS_ERROR_OUT_OF_RANGE" => Some(Self::OutOfRange),
+            "HOMUNCULUS_ERROR_SKILL_NOT_LEARNED" => Some(Self::SkillNotLearned),
+            "HOMUNCULUS_ERROR_INVALID_SKILL_RANK" => Some(Self::InvalidSkillRank),
+            "HOMUNCULUS_ERROR_ON_COOLDOWN" => Some(Self::OnCooldown),
+            "HOMUNCULUS_ERROR_INSUFFICIENT_SP" => Some(Self::InsufficientSp),
+            "HOMUNCULUS_ERROR_MISSING_ITEM" => Some(Self::MissingItem),
+            "HOMUNCULUS_ERROR_HP_GATE" => Some(Self::HpGate),
+            "HOMUNCULUS_ERROR_RENAME_NOT_ALLOWED" => Some(Self::RenameNotAllowed),
+            "HOMUNCULUS_ERROR_INVALID_NAME" => Some(Self::InvalidName),
+            "HOMUNCULUS_ERROR_CONFIRMATION_REQUIRED" => Some(Self::ConfirmationRequired),
+            "HOMUNCULUS_ERROR_INVALID_AI_CONFIG" => Some(Self::InvalidAiConfig),
+            "HOMUNCULUS_ERROR_INSUFFICIENT_SKILL_POINTS" => {
+                Some(Self::InsufficientSkillPoints)
+            }
+            "HOMUNCULUS_ERROR_PREREQUISITES_NOT_MET" => Some(Self::PrerequisitesNotMet),
+            "HOMUNCULUS_ERROR_BUSY" => Some(Self::Busy),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum HomunculusLifecycle {
+    Unspecified = 0,
+    Active = 1,
+    Rested = 2,
+    Dead = 3,
+}
+impl HomunculusLifecycle {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "HOMUNCULUS_LIFECYCLE_UNSPECIFIED",
+            Self::Active => "HOMUNCULUS_LIFECYCLE_ACTIVE",
+            Self::Rested => "HOMUNCULUS_LIFECYCLE_RESTED",
+            Self::Dead => "HOMUNCULUS_LIFECYCLE_DEAD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "HOMUNCULUS_LIFECYCLE_UNSPECIFIED" => Some(Self::Unspecified),
+            "HOMUNCULUS_LIFECYCLE_ACTIVE" => Some(Self::Active),
+            "HOMUNCULUS_LIFECYCLE_RESTED" => Some(Self::Rested),
+            "HOMUNCULUS_LIFECYCLE_DEAD" => Some(Self::Dead),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum HomunculusActivity {
+    Unspecified = 0,
+    Idle = 1,
+    Following = 2,
+    Moving = 3,
+    Attacking = 4,
+    Casting = 5,
+    Standby = 6,
+}
+impl HomunculusActivity {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "HOMUNCULUS_ACTIVITY_UNSPECIFIED",
+            Self::Idle => "HOMUNCULUS_ACTIVITY_IDLE",
+            Self::Following => "HOMUNCULUS_ACTIVITY_FOLLOWING",
+            Self::Moving => "HOMUNCULUS_ACTIVITY_MOVING",
+            Self::Attacking => "HOMUNCULUS_ACTIVITY_ATTACKING",
+            Self::Casting => "HOMUNCULUS_ACTIVITY_CASTING",
+            Self::Standby => "HOMUNCULUS_ACTIVITY_STANDBY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "HOMUNCULUS_ACTIVITY_UNSPECIFIED" => Some(Self::Unspecified),
+            "HOMUNCULUS_ACTIVITY_IDLE" => Some(Self::Idle),
+            "HOMUNCULUS_ACTIVITY_FOLLOWING" => Some(Self::Following),
+            "HOMUNCULUS_ACTIVITY_MOVING" => Some(Self::Moving),
+            "HOMUNCULUS_ACTIVITY_ATTACKING" => Some(Self::Attacking),
+            "HOMUNCULUS_ACTIVITY_CASTING" => Some(Self::Casting),
+            "HOMUNCULUS_ACTIVITY_STANDBY" => Some(Self::Standby),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum HomunculusIntimacyGrade {
+    Unspecified = 0,
+    HateWithPassion = 1,
+    Hate = 2,
+    Awkward = 3,
+    Shy = 4,
+    Neutral = 5,
+    Cordial = 6,
+    Loyal = 7,
+}
+impl HomunculusIntimacyGrade {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "HOMUNCULUS_INTIMACY_GRADE_UNSPECIFIED",
+            Self::HateWithPassion => "HOMUNCULUS_INTIMACY_GRADE_HATE_WITH_PASSION",
+            Self::Hate => "HOMUNCULUS_INTIMACY_GRADE_HATE",
+            Self::Awkward => "HOMUNCULUS_INTIMACY_GRADE_AWKWARD",
+            Self::Shy => "HOMUNCULUS_INTIMACY_GRADE_SHY",
+            Self::Neutral => "HOMUNCULUS_INTIMACY_GRADE_NEUTRAL",
+            Self::Cordial => "HOMUNCULUS_INTIMACY_GRADE_CORDIAL",
+            Self::Loyal => "HOMUNCULUS_INTIMACY_GRADE_LOYAL",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "HOMUNCULUS_INTIMACY_GRADE_UNSPECIFIED" => Some(Self::Unspecified),
+            "HOMUNCULUS_INTIMACY_GRADE_HATE_WITH_PASSION" => Some(Self::HateWithPassion),
+            "HOMUNCULUS_INTIMACY_GRADE_HATE" => Some(Self::Hate),
+            "HOMUNCULUS_INTIMACY_GRADE_AWKWARD" => Some(Self::Awkward),
+            "HOMUNCULUS_INTIMACY_GRADE_SHY" => Some(Self::Shy),
+            "HOMUNCULUS_INTIMACY_GRADE_NEUTRAL" => Some(Self::Neutral),
+            "HOMUNCULUS_INTIMACY_GRADE_CORDIAL" => Some(Self::Cordial),
+            "HOMUNCULUS_INTIMACY_GRADE_LOYAL" => Some(Self::Loyal),
             _ => None,
         }
     }

@@ -325,6 +325,8 @@ pub enum SkillCastFailureReason {
     NotLearned,
     OutOfRange,
     Busy,
+    WrongWeapon,
+    VersusMapOnly,
 }
 
 /// A player-initiated skill cast was rejected by the server.
@@ -463,6 +465,8 @@ pub enum PickupOutcome {
     InventoryFull,
     Gone,
     Failed,
+    /// The item is loot-protected for its owners' pickup windows; retry after the protection lapses.
+    LootProtected,
 }
 
 /// An item was removed from the inventory.

@@ -18,6 +18,8 @@ fn cast_failure_message(reason: SkillCastFailureReason) -> &'static str {
         SkillCastFailureReason::NotLearned => "You have not learned this skill.",
         SkillCastFailureReason::OutOfRange => "The target is out of range.",
         SkillCastFailureReason::Busy => "You cannot cast a skill right now.",
+        SkillCastFailureReason::WrongWeapon => "You need a different weapon to cast this skill.",
+        SkillCastFailureReason::VersusMapOnly => "This skill can only be used in versus areas.",
         SkillCastFailureReason::Unspecified => "The skill cast failed.",
     }
 }

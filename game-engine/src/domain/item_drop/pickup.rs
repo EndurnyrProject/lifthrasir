@@ -24,6 +24,7 @@ fn pickup_error_message(outcome: PickupOutcome) -> Option<&'static str> {
         PickupOutcome::Overweight => Some("It's too heavy"),
         PickupOutcome::InventoryFull => Some("Inventory is full"),
         PickupOutcome::Gone => Some("The item is gone"),
+        PickupOutcome::LootProtected => Some("The item is loot-protected"),
         PickupOutcome::Failed => Some("Failed to pick up"),
     }
 }

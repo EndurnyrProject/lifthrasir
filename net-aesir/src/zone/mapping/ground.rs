@@ -35,6 +35,7 @@ pub fn pickup_result(r: net::PickupResult) -> PickupResult {
         Ok(net::PickupResultCode::Overweight) => PickupOutcome::Overweight,
         Ok(net::PickupResultCode::InventoryFull) => PickupOutcome::InventoryFull,
         Ok(net::PickupResultCode::Gone) => PickupOutcome::Gone,
+        Ok(net::PickupResultCode::LootProtected) => PickupOutcome::LootProtected,
         Ok(net::PickupResultCode::Failed) | Err(_) => PickupOutcome::Failed,
     };
     PickupResult {
