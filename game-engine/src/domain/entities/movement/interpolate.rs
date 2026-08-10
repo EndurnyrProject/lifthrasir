@@ -235,10 +235,10 @@ fn drive_walk_animation(
     };
     match next {
         MovementState::Moving if *behavior.current() == AnimationState::Idle => {
-            behavior.start(AnimationState::Walking);
+            let _ = behavior.try_start(AnimationState::Walking);
         }
         MovementState::Idle if *behavior.current() == AnimationState::Walking => {
-            behavior.start(AnimationState::Idle);
+            let _ = behavior.try_start(AnimationState::Idle);
         }
         _ => {}
     }

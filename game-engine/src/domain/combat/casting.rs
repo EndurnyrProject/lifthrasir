@@ -98,7 +98,7 @@ pub fn update_cast_timers(
         if let Ok(mut behavior) = behaviors.get_mut(entity)
             && *behavior.current() == AnimationState::Casting
         {
-            behavior.start(AnimationState::Idle);
+            let _ = behavior.try_start(AnimationState::Idle);
         }
     }
 }
@@ -123,7 +123,7 @@ pub fn cancel_cast_pose(
         if let Ok(mut behavior) = behaviors.get_mut(entity)
             && *behavior.current() == AnimationState::Casting
         {
-            behavior.start(AnimationState::Idle);
+            let _ = behavior.try_start(AnimationState::Idle);
         }
     }
 }

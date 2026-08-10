@@ -244,7 +244,7 @@ pub fn handle_movement_confirmed_system(
             ));
 
             if let Ok(mut behavior) = behaviors.get_mut(entity) {
-                behavior.start(AnimationState::Walking);
+                let _ = behavior.try_start(AnimationState::Walking);
             }
         }
 
@@ -256,6 +256,29 @@ pub fn handle_movement_confirmed_system(
             dest_y: event.dest_y,
             server_tick: event.server_tick,
         });
+    }
+}
+
+/// Level-triggered walk-animation reconciler.
+#[auto_add_system(
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
+    schedule = Update,
+    config(
+        in_set = MovementSystems::Interpolate,
+        run_if = in_state(GameState::InGame)
+    )
+)]
+pub fn reconcile_walk_animation(mut query: Query<(&MovementState, BehaviorMut<AnimationState>)>) {
+    for (state, mut behavior) in query.iter_mut() {
+        if *state != MovementState::Moving {
+            continue;
+        }
+        if matches!(
+            *behavior.current(),
+            AnimationState::Idle | AnimationState::CombatReady
+        ) {
+            let _ = behavior.try_start(AnimationState::Walking);
+        }
     }
 }
 
@@ -474,7 +497,7 @@ pub fn handle_movement_stopped_observer(
     if let Ok(mut behavior) = behaviors.get_mut(event.entity)
         && *behavior.current() == AnimationState::Walking
     {
-        behavior.start(AnimationState::Idle);
+        let _ = behavior.try_start(AnimationState::Idle);
     }
 }
 
@@ -543,6 +566,87 @@ mod tests {
                 MovementState::Moving,
             ))
             .id()
+    }
+
+    /// Regression: click-away during an attack swing. The move-confirm's Walking
+    /// start is dropped (Attacking forbids it), and after the swing recovers to a
+    /// neutral stance the entity is still moving — the reconciler must put it
+    /// into Walking instead of letting it slide in the idle pose.
+    #[test]
+    fn moving_entity_stuck_in_neutral_pose_recovers_to_walking() {
+        let mut app = App::new();
+        app.add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .add_systems(
+                Update,
+                (reconcile_walk_animation, transition::<AnimationState>).chain(),
+            );
+
+        // Walk start was lost: state settled to Idle while still Moving.
+        let idle = app
+            .world_mut()
+            .spawn((AnimationState::Idle, MovementState::Moving))
+            .id();
+        // Attack swing still in progress: must NOT be clobbered.
+        let attacking = app
+            .world_mut()
+            .spawn((AnimationState::Attacking, MovementState::Moving))
+            .id();
+
+        app.update();
+
+        assert_eq!(
+            *app.world().get::<AnimationState>(idle).unwrap(),
+            AnimationState::Walking
+        );
+        assert_eq!(
+            *app.world().get::<AnimationState>(attacking).unwrap(),
+            AnimationState::Attacking
+        );
+    }
+
+    /// Regression: move-to-attack. Combat queues Walking→Attacking, then the
+    /// server's move-stop arrives in the same frame while `current()` still reads
+    /// Walking. The stop must not override the pending Attacking transition.
+    #[test]
+    fn move_stop_does_not_override_pending_attack_transition() {
+        let mut app = App::new();
+        app.add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .add_systems(Update, transition::<AnimationState>)
+            .add_observer(handle_movement_stopped_observer);
+
+        let entity = app
+            .world_mut()
+            .spawn((AnimationState::Idle, MovementState::Moving))
+            .id();
+
+        let mut behaviors = app.world_mut().query::<BehaviorMut<AnimationState>>();
+
+        // Walk, apply it so current() == Walking.
+        behaviors
+            .get_mut(app.world_mut(), entity)
+            .unwrap()
+            .start(AnimationState::Walking);
+        app.update();
+
+        // Combat queues the attack swing (pending, not yet applied)...
+        behaviors
+            .get_mut(app.world_mut(), entity)
+            .unwrap()
+            .start(AnimationState::Attacking);
+
+        // ...and the server's move-stop lands in the same frame.
+        app.world_mut().trigger(MovementStopped {
+            entity,
+            x: 10,
+            y: 10,
+            reason: StopReason::ReachedDestination,
+        });
+        app.update();
+
+        assert_eq!(
+            *app.world().get::<AnimationState>(entity).unwrap(),
+            AnimationState::Attacking
+        );
     }
 
     #[test]

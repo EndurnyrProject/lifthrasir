@@ -310,7 +310,7 @@ pub fn update_attack_timers(
             };
 
             if let Ok(mut behavior) = behaviors.get_mut(entity) {
-                behavior.start(next);
+                let _ = behavior.try_start(next);
             }
         }
     }
@@ -331,7 +331,7 @@ pub fn drive_combat_ready_pose(
 
     if locked_target.gid.is_none() {
         if *behavior.current() == AnimationState::CombatReady {
-            behavior.start(AnimationState::Idle);
+            let _ = behavior.try_start(AnimationState::Idle);
         }
         return;
     }
@@ -341,7 +341,7 @@ pub fn drive_combat_ready_pose(
     }
 
     if *behavior.current() == AnimationState::Idle {
-        behavior.start(AnimationState::CombatReady);
+        let _ = behavior.try_start(AnimationState::CombatReady);
     }
 }
 
@@ -366,7 +366,7 @@ pub fn update_hit_stun(
                 continue;
             };
             if *behavior.current() == AnimationState::Hit {
-                behavior.start(AnimationState::Idle);
+                let _ = behavior.try_start(AnimationState::Idle);
             }
         }
     }
