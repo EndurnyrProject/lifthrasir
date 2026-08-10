@@ -42,7 +42,8 @@ pub enum ItemCategory {
 pub fn item_category(item_type: u32) -> ItemCategory {
     match item_type {
         0 | 2 | 11 | 18 => ItemCategory::Use,
-        4 | 5 | 8 | 12 => ItemCategory::Equip,
+        // 4 armor, 5 weapon, 8 pet armor, 10 ammo (arrows), 12 shadow gear.
+        4 | 5 | 8 | 10 | 12 => ItemCategory::Equip,
         _ => ItemCategory::Etc,
     }
 }
@@ -88,7 +89,7 @@ mod tests {
 
     #[test]
     fn category_equip_types() {
-        for t in [4u8, 5, 8, 12] {
+        for t in [4u8, 5, 8, 10, 12] {
             assert!(
                 matches!(item_with_type(t).category(), ItemCategory::Equip),
                 "item_type {t}"
@@ -98,7 +99,7 @@ mod tests {
 
     #[test]
     fn category_etc_types() {
-        for t in [3u8, 6, 7, 10, 99] {
+        for t in [3u8, 6, 7, 99] {
             assert!(
                 matches!(item_with_type(t).category(), ItemCategory::Etc),
                 "item_type {t}"

@@ -21,7 +21,7 @@ use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
 use game_engine::domain::assets::item_icon_path;
 use game_engine::domain::equipment::UnequipItemRequested;
 use game_engine::domain::equipment::location::{
-    EQP_ARMOR, EQP_GARMENT, EQP_HEAD_LOW, EQP_HEAD_MID, EQP_HEAD_TOP, EQP_LEFT_ACCESSORY,
+    EQP_AMMO, EQP_ARMOR, EQP_GARMENT, EQP_HEAD_LOW, EQP_HEAD_MID, EQP_HEAD_TOP, EQP_LEFT_ACCESSORY,
     EQP_LEFT_HAND, EQP_RIGHT_ACCESSORY, EQP_RIGHT_HAND, EQP_SHOES,
 };
 use game_engine::domain::inventory::{Inventory, Item};
@@ -46,6 +46,7 @@ pub enum CharEquipSlotKind {
     AccessoryRight,
     AccessoryLeft,
     Footgear,
+    Ammo,
 }
 
 impl CharEquipSlotKind {
@@ -61,6 +62,7 @@ impl CharEquipSlotKind {
             CharEquipSlotKind::AccessoryRight => EQP_RIGHT_ACCESSORY,
             CharEquipSlotKind::AccessoryLeft => EQP_LEFT_ACCESSORY,
             CharEquipSlotKind::Footgear => EQP_SHOES,
+            CharEquipSlotKind::Ammo => EQP_AMMO,
         }
     }
 
@@ -77,6 +79,7 @@ impl CharEquipSlotKind {
             CharEquipSlotKind::AccessoryRight => "Accessory",
             CharEquipSlotKind::AccessoryLeft => "Accessory",
             CharEquipSlotKind::Footgear => "Footgear",
+            CharEquipSlotKind::Ammo => "Ammunition",
         }
     }
 }
@@ -117,13 +120,14 @@ pub const LEFT_SLOTS: [SlotSpec; 5] = [
     slot(CharEquipSlotKind::Garment, "garment"),
 ];
 
-/// Right column, top-to-bottom: hands, accessories, footgear.
-pub const RIGHT_SLOTS: [SlotSpec; 5] = [
+/// Right column, top-to-bottom: hands, accessories, footgear, ammunition.
+pub const RIGHT_SLOTS: [SlotSpec; 6] = [
     slot(CharEquipSlotKind::RightHand, "sword"),
     slot(CharEquipSlotKind::LeftHand, "shield"),
     slot(CharEquipSlotKind::AccessoryRight, "ring"),
     slot(CharEquipSlotKind::AccessoryLeft, "ring"),
     slot(CharEquipSlotKind::Footgear, "boot"),
+    slot(CharEquipSlotKind::Ammo, "ammo"),
 ];
 
 // ---------------------------------------------------------------------------
@@ -504,7 +508,7 @@ mod tests {
             .chain(RIGHT_SLOTS.iter())
             .map(|spec| spec.kind)
             .collect();
-        assert_eq!(kinds.len(), 10);
+        assert_eq!(kinds.len(), 11);
         let expected = [
             CharEquipSlotKind::HeadUpper,
             CharEquipSlotKind::HeadMid,
@@ -516,6 +520,7 @@ mod tests {
             CharEquipSlotKind::AccessoryRight,
             CharEquipSlotKind::AccessoryLeft,
             CharEquipSlotKind::Footgear,
+            CharEquipSlotKind::Ammo,
         ];
         for kind in expected {
             assert!(kinds.contains(&kind), "missing {kind:?}");

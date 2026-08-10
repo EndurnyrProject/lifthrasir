@@ -10,6 +10,7 @@ pub const EQP_SHOES: u32 = 0x000040;
 pub const EQP_LEFT_ACCESSORY: u32 = 0x000080;
 pub const EQP_HEAD_TOP: u32 = 0x000100;
 pub const EQP_HEAD_MID: u32 = 0x000200;
+pub const EQP_AMMO: u32 = 0x008000;
 
 const SLOT_BITS: [(u32, EquipmentSlot); 10] = [
     (EQP_HEAD_LOW, EquipmentSlot::HeadBottom),
