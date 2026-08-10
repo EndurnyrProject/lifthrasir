@@ -1,14 +1,15 @@
-use super::components::DeadEntity;
+use super::components::{DeadEntity, DeathGrace};
 use crate::domain::{
     entities::{
         character::components::status::CharacterStatus, character::states::AnimationState,
-        markers::LocalPlayer,
+        markers::LocalPlayer, registry::EntityRegistry,
     },
     system_sets::CombatSystems,
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use moonshine_behavior::prelude::*;
+use net_contract::events::UnitResurrected;
 
 /// Detects the local player's own death.
 ///
@@ -105,6 +106,43 @@ pub fn recover_local_from_hp(mut commands: Commands, mut player: LocalReviveQuer
     behavior.reset();
 }
 
+/// Stands a corpse back up when the server announces its resurrection.
+#[auto_add_system(
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::HandleDeath)
+)]
+pub fn recover_from_resurrect(
+    mut commands: Commands,
+    mut resurrections: MessageReader<UnitResurrected>,
+    registry: Res<EntityRegistry>,
+    mut corpses: Query<(
+        Has<DeadEntity>,
+        Has<DeathGrace>,
+        BehaviorMut<AnimationState>,
+    )>,
+) {
+    for event in resurrections.read() {
+        let Some(entity) = registry.get_entity(event.gid) else {
+            continue;
+        };
+
+        let Ok((dead, grace, mut behavior)) = corpses.get_mut(entity) else {
+            continue;
+        };
+
+        if !dead && !grace {
+            continue;
+        }
+
+        commands.entity(entity).remove::<(DeadEntity, DeathGrace)>();
+
+        if dead {
+            behavior.reset();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,6 +171,76 @@ mod tests {
 
     fn state(app: &App, entity: Entity) -> AnimationState {
         *app.world().get::<AnimationState>(entity).unwrap()
+    }
+
+    fn resurrect_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(BehaviorPlugin::<AnimationState>::default())
+            .add_message::<UnitResurrected>()
+            .init_resource::<EntityRegistry>()
+            .add_systems(
+                Update,
+                (recover_from_resurrect, transition::<AnimationState>).chain(),
+            );
+        app
+    }
+
+    fn resurrect(app: &mut App, gid: u32) {
+        app.world_mut()
+            .write_message(UnitResurrected { gid, type_: 0 });
+        app.update();
+    }
+
+    #[test]
+    fn resurrect_stands_a_remote_corpse_back_up() {
+        let mut app = resurrect_app();
+        let corpse = app
+            .world_mut()
+            .spawn((AnimationState::Idle, DeadEntity))
+            .id();
+        app.world_mut()
+            .resource_mut::<EntityRegistry>()
+            .register_entity(7, corpse);
+
+        // Drive the behavior to its terminal Dead state first.
+        app.update();
+        app.world_mut()
+            .query::<BehaviorMut<AnimationState>>()
+            .get_mut(app.world_mut(), corpse)
+            .unwrap()
+            .start(AnimationState::Dead);
+        app.update();
+        assert_eq!(state(&app, corpse), AnimationState::Dead);
+
+        resurrect(&mut app, 7);
+
+        assert!(app.world().get::<DeadEntity>(corpse).is_none());
+        assert_eq!(state(&app, corpse), AnimationState::Idle);
+    }
+
+    #[test]
+    fn resurrect_during_death_grace_cancels_the_pending_death() {
+        let mut app = resurrect_app();
+        let entity = app
+            .world_mut()
+            .spawn((AnimationState::Idle, DeathGrace::new(0.3)))
+            .id();
+        app.world_mut()
+            .resource_mut::<EntityRegistry>()
+            .register_entity(7, entity);
+        app.update();
+
+        resurrect(&mut app, 7);
+
+        assert!(app.world().get::<DeathGrace>(entity).is_none());
+        assert!(app.world().get::<DeadEntity>(entity).is_none());
+        assert_eq!(state(&app, entity), AnimationState::Idle);
+    }
+
+    #[test]
+    fn resurrect_for_unknown_gid_is_a_noop() {
+        let mut app = resurrect_app();
+        resurrect(&mut app, 999);
     }
 
     #[test]

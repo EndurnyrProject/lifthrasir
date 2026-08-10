@@ -526,7 +526,6 @@ pub struct UnitSpriteChanged {
 }
 
 /// An entity was resurrected.
-// NOTE: no client consumer yet; kept for future implementation.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct UnitResurrected {

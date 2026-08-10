@@ -526,8 +526,17 @@ pub fn bridge_vanish_requests_system(
 /// When an entity vanishes (moves out of range, dies, logs out, or teleports),
 /// death (vanish_type 1) is deferred via PendingDespawn so combat::handle_death can
 /// play the death animation; every other vanish despawns immediately.
+///
+/// Player (Pc) corpses are the exception on death: the server keeps a dead
+/// player spatially present and only sends a follow-up despawn (teleport,
+/// logout, or out-of-sight) once the corpse actually leaves, so the body must
+/// stay on the ground
 #[auto_observer(plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin)]
-pub fn on_entity_vanish_request(trigger: On<EntityVanishRequested>, mut commands: Commands) {
+pub fn on_entity_vanish_request(
+    trigger: On<EntityVanishRequested>,
+    mut commands: Commands,
+    network_entities: Query<&NetworkEntity>,
+) {
     let event = trigger.event();
     let entity = trigger.entity;
 
@@ -543,6 +552,18 @@ pub fn on_entity_vanish_request(trigger: On<EntityVanishRequested>, mut commands
     // receives no further updates to "finish" a move with - deferring on a stale Moving
     // state (its last snapshot was mid-walk) leaves it frozen on screen until the timeout.
     if event.vanish_type == 1 {
+        let is_player = network_entities
+            .get(entity)
+            .is_ok_and(|net| net.object_type == crate::domain::entities::types::ObjectType::Pc);
+
+        if is_player {
+            debug!(
+                "Entity {:?} (AID {}) died — keeping player corpse until a follow-up despawn",
+                entity, event.aid
+            );
+            return;
+        }
+
         debug!(
             "Entity {:?} (AID {}) deferring despawn ({})",
             entity, event.aid, vanish_reason
@@ -777,6 +798,56 @@ mod tests {
         assert_eq!(identity.guild_id, 42);
         assert_eq!(identity.guild_name, "Knights of Midgard");
         assert_eq!(identity.emblem_id, 9);
+    }
+
+    fn vanish_app() -> App {
+        let mut app = App::new();
+        app.add_observer(on_entity_vanish_request);
+        app
+    }
+
+    fn trigger_death_vanish(app: &mut App, entity: Entity) {
+        app.world_mut().trigger(EntityVanishRequested {
+            entity,
+            aid: 1,
+            vanish_type: 1,
+        });
+        app.update();
+    }
+
+    #[test]
+    fn player_death_vanish_keeps_the_corpse() {
+        let mut app = vanish_app();
+        let player = app
+            .world_mut()
+            .spawn(NetworkEntity::new(
+                1,
+                1,
+                crate::domain::entities::types::ObjectType::Pc,
+            ))
+            .id();
+
+        trigger_death_vanish(&mut app, player);
+
+        assert!(app.world().get_entity(player).is_ok());
+        assert!(app.world().get::<PendingDespawn>(player).is_none());
+    }
+
+    #[test]
+    fn mob_death_vanish_defers_despawn() {
+        let mut app = vanish_app();
+        let mob = app
+            .world_mut()
+            .spawn(NetworkEntity::new(
+                1,
+                1,
+                crate::domain::entities::types::ObjectType::Mob,
+            ))
+            .id();
+
+        trigger_death_vanish(&mut app, mob);
+
+        assert!(app.world().get::<PendingDespawn>(mob).is_some());
     }
 
     #[test]
