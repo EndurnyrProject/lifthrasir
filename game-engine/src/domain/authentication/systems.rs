@@ -145,7 +145,10 @@ struct ConfigLoaded(bool);
 #[auto_add_system(
     plugin = crate::domain::authentication::plugin::AuthenticationPlugin,
     schedule = Update,
-    config(in_set = AuthenticationSystems::ConfigLoading)
+    config(
+        in_set = AuthenticationSystems::ConfigLoading,
+        run_if = in_state(GameState::Bootstrapping)
+    )
 )]
 fn load_client_config(
     mut commands: Commands,
@@ -163,7 +166,10 @@ fn load_client_config(
 #[auto_add_system(
     plugin = crate::domain::authentication::plugin::AuthenticationPlugin,
     schedule = Update,
-    config(in_set = AuthenticationSystems::ConfigLoading)
+    config(
+        in_set = AuthenticationSystems::ConfigLoading,
+        run_if = in_state(GameState::Bootstrapping)
+    )
 )]
 fn check_client_config_loaded(
     config_handle: Option<Res<ClientConfigHandle>>,

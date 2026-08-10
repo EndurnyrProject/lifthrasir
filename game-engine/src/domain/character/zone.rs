@@ -79,12 +79,17 @@ pub fn handle_zone_entered(
 
 type ZoneSessionEntities = Or<(With<LocalPlayer>, With<MapScoped>)>;
 
-/// Clears all client-side zone state when returning to login.
+/// Clears all client-side zone state when leaving an active zone session.
 #[auto_add_system(
     plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = OnEnter(GameState::Login)
 )]
-pub fn teardown_zone_session_on_login(
+#[auto_add_system(
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
+    schedule = OnEnter(GameState::CharacterSelection),
+    config(run_if = resource_exists::<MapSpawnContext>)
+)]
+pub fn teardown_zone_session(
     mut commands: Commands,
     mut leave_zone: MessageWriter<LeaveZone>,
     mut registry: ResMut<EntityRegistry>,
@@ -114,7 +119,7 @@ mod tests {
         app.init_resource::<EntityRegistry>();
         app.insert_resource(MapSpawnContext::new("prontera".into(), 100, 100, 42));
         app.insert_resource(MapLoadingTimer::new("prontera".into()));
-        app.add_systems(OnEnter(GameState::Login), teardown_zone_session_on_login);
+        app.add_systems(OnEnter(GameState::Login), teardown_zone_session);
 
         let player = app.world_mut().spawn(LocalPlayer).id();
         let terrain = app.world_mut().spawn(MapScoped).id();
@@ -143,6 +148,60 @@ mod tests {
                 .resource::<EntityRegistry>()
                 .local_player_entity()
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn teardown_on_character_selection_cleans_active_zone_session() {
+        let mut app = App::new();
+        app.add_plugins(bevy::state::app::StatesPlugin);
+        app.init_state::<GameState>();
+        app.add_message::<LeaveZone>();
+        app.init_resource::<EntityRegistry>();
+        app.insert_resource(MapSpawnContext::new("prontera".into(), 100, 100, 42));
+        app.add_systems(
+            OnEnter(GameState::CharacterSelection),
+            teardown_zone_session.run_if(resource_exists::<MapSpawnContext>),
+        );
+
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::CharacterSelection);
+        app.update();
+
+        assert!(app.world().get_resource::<MapSpawnContext>().is_none());
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<LeaveZone>>()
+                .drain()
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn character_selection_without_zone_session_does_not_send_leave() {
+        let mut app = App::new();
+        app.add_plugins(bevy::state::app::StatesPlugin);
+        app.init_state::<GameState>();
+        app.add_message::<LeaveZone>();
+        app.init_resource::<EntityRegistry>();
+        app.add_systems(
+            OnEnter(GameState::CharacterSelection),
+            teardown_zone_session.run_if(resource_exists::<MapSpawnContext>),
+        );
+
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::CharacterSelection);
+        app.update();
+
+        assert_eq!(
+            app.world_mut()
+                .resource_mut::<Messages<LeaveZone>>()
+                .drain()
+                .count(),
+            0
         );
     }
 }

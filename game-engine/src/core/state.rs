@@ -11,6 +11,7 @@ pub struct LifthrasirPlugin;
 #[auto_register_state_type(plugin = crate::core::state::LifthrasirPlugin)]
 pub enum GameState {
     #[default]
+    Bootstrapping,
     Loading,
     Login,
     Connecting,
@@ -18,15 +19,4 @@ pub enum GameState {
     CharacterSelection,
     CharacterCreation,
     InGame,
-    Paused,
-}
-
-#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default, Reflect)]
-#[auto_init_state(plugin = crate::core::state::LifthrasirPlugin)]
-#[auto_register_state_type(plugin = crate::core::state::LifthrasirPlugin)]
-pub enum MapState {
-    #[default]
-    NotLoaded,
-    Loading,
-    Loaded,
 }
