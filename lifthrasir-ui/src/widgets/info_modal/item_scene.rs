@@ -15,7 +15,7 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
-use bevy_feathers::theme::ThemedText;
+use bevy_feathers::theme::{ThemeBorderColor, ThemedText};
 
 use game_engine::domain::equipment::{EquipItemRequested, UnequipItemRequested};
 use game_engine::domain::inventory::{Inventory, ItemCategory, UseItemRequested};
@@ -77,21 +77,49 @@ pub(super) struct FavoriteStar {
     pub lit: bool,
 }
 
-/// Marks the native RO collection illustration in the item details body.
+const ILLUSTRATION_PARCHMENT: Color = Color::srgb_u8(0xe8, 0xdd, 0xc2);
+
+/// Marks the parchment plate holding the native RO collection illustration.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct ItemIllustration;
 
-fn item_illustration(path: String) -> impl Scene {
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ItemIllustrationImage;
+
+fn item_illustration(path: String, edge: shell::EdgeGrade) -> impl Scene {
     bsn! {
         ItemIllustration
-        ImageNode { image: {path} }
         Node {
-            width: px(75),
-            height: px(100),
+            width: percent(100),
+            height: px(176),
             flex_shrink: 0.0,
-            align_self: AlignSelf::Center,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: px(1),
+            border_radius: BorderRadius::all(px(12)),
+            overflow: Overflow::clip(),
         }
+        BackgroundColor(ILLUSTRATION_PARCHMENT)
+        BorderColor::all(theme::STROKE)
         ignore_picking()
+        Children [
+            (
+                ItemIllustrationImage
+                ImageNode { image: {path}, color: {ILLUSTRATION_PARCHMENT} }
+                Node { width: px(75), height: px(100) }
+                ignore_picking()
+            ),
+            (
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(6), right: px(6), top: px(6), bottom: px(6),
+                    border: px(1),
+                    border_radius: BorderRadius::all(px(8)),
+                }
+                ThemeBorderColor({edge.token()})
+                ignore_picking()
+            ),
+        ]
     }
 }
 
@@ -163,7 +191,7 @@ pub(super) fn scene(
     let illustration = view
         .illustration_path
         .clone()
-        .map(|path| EntityScene(item_illustration(path)));
+        .map(|path| EntityScene(item_illustration(path, view.edge)));
 
     let primary_actions = footer_actions(item_ref, item_id, view.identified, category);
     let star = matches!(item_ref, ItemRef::Inventory(_)).then(|| favorite_star(view.favorite));
@@ -449,6 +477,32 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn illustration_uses_parchment_plate_and_warm_tint() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(item_illustration(
+                "items/red_potion_illustration.png".to_string(),
+                shell::EdgeGrade::Fine,
+            ))
+            .expect("scene spawns");
+        app.update();
+
+        let mut plate_query = app
+            .world_mut()
+            .query_filtered::<(&Node, &BackgroundColor), With<ItemIllustration>>();
+        let (plate, background) = plate_query.single(app.world()).expect("one plate");
+        assert_eq!(plate.width, percent(100));
+        assert_eq!(plate.height, px(176));
+        assert_eq!(background.0, ILLUSTRATION_PARCHMENT);
+
+        let mut image_query = app
+            .world_mut()
+            .query_filtered::<&ImageNode, With<ItemIllustrationImage>>();
+        let image = image_query.single(app.world()).expect("one illustration");
+        assert_eq!(image.color, ILLUSTRATION_PARCHMENT);
     }
 
     #[test]
