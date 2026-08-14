@@ -3,12 +3,14 @@ use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
 
 use super::super::mapping::inventory::{
-    equip_result, inventory_list, item_added, item_removed, item_use_result, unequip_result,
+    equip_result, inventory_list, item_added, item_bound, item_removed, item_use_result,
+    unequip_result,
 };
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
 use net_contract::events::{
-    InventoryReceived, ItemAdded, ItemEquipped, ItemRemoved, ItemUnequipped, ItemUseFailed,
+    InventoryReceived, ItemAdded, ItemBound, ItemEquipped, ItemRemoved, ItemUnequipped,
+    ItemUseFailed,
 };
 
 /// Drains inventory bodies. The dump rides the bulk channel and the deltas ride
@@ -23,6 +25,7 @@ pub fn zone_drain_inventory(
     mut received: MessageWriter<InventoryReceived>,
     mut added: MessageWriter<ItemAdded>,
     mut removed: MessageWriter<ItemRemoved>,
+    mut bound: MessageWriter<ItemBound>,
     mut equipped: MessageWriter<ItemEquipped>,
     mut unequipped: MessageWriter<ItemUnequipped>,
     mut use_failed: MessageWriter<ItemUseFailed>,
@@ -37,6 +40,9 @@ pub fn zone_drain_inventory(
             }
             Body::ItemRemoved(r) => {
                 removed.write(item_removed(r));
+            }
+            Body::ItemBound(b) => {
+                bound.write(item_bound(b));
             }
             Body::EquipResult(e) => {
                 equipped.write(equip_result(e));
@@ -64,6 +70,7 @@ mod tests {
             .add_message::<InventoryReceived>()
             .add_message::<ItemAdded>()
             .add_message::<ItemRemoved>()
+            .add_message::<ItemBound>()
             .add_message::<ItemEquipped>()
             .add_message::<ItemUnequipped>()
             .add_message::<ItemUseFailed>()
@@ -104,6 +111,20 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].index, 3);
         assert_eq!(events[0].amount, 5);
+    }
+
+    #[test]
+    fn item_bound_on_gameplay_produces_one_item_bound() {
+        let app = drain(vec![(
+            GAMEPLAY,
+            Body::ItemBound(net::ItemBound { index: 7, bound: 4 }),
+        )]);
+
+        let bound = app.world().resource::<Messages<ItemBound>>();
+        let events: Vec<_> = bound.iter_current_update_messages().collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].index, 7);
+        assert_eq!(events[0].bound, 4);
     }
 
     #[test]

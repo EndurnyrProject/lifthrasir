@@ -1340,8 +1340,8 @@ pub struct InventoryItem {
     pub cards: ::prost::alloc::vec::Vec<u32>,
     #[prost(uint64, tag = "10")]
     pub expire_time: u64,
-    #[prost(uint32, tag = "11")]
-    pub bind_on_equip: u32,
+    #[prost(enumeration = "BoundType", tag = "11")]
+    pub bound: i32,
     #[prost(bool, tag = "12")]
     pub favorite: bool,
     #[prost(uint32, tag = "13")]
@@ -1418,9 +1418,8 @@ pub struct ItemBound {
     /// Client inventory index.
     #[prost(uint32, tag = "1")]
     pub index: u32,
-    /// Bound type (1 = account, 4 = character).
-    #[prost(uint32, tag = "2")]
-    pub bound: u32,
+    #[prost(enumeration = "BoundType", tag = "2")]
+    pub bound: i32,
 }
 /// Server -> client, the full cart dump (sent on mount/login). Mirrors InventoryList
 /// but for the separate cart container. Carries the cart's own weight totals so the
@@ -3117,6 +3116,45 @@ impl CreatorKind {
             "CREATOR_NONE" => Some(Self::CreatorNone),
             "CREATOR_SIGNED" => Some(Self::CreatorSigned),
             "CREATOR_FORGED" => Some(Self::CreatorForged),
+            _ => None,
+        }
+    }
+}
+/// Bound state of an inventory item. Unbound items are BOUND_NONE. The server
+/// currently assigns BOUND_ACCOUNT (on equip of a bind-on-equip item) and
+/// BOUND_CHAR (script/quest-bound); BOUND_GUILD and BOUND_PARTY are reserved for
+/// those transfer scopes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum BoundType {
+    BoundNone = 0,
+    BoundAccount = 1,
+    BoundGuild = 2,
+    BoundParty = 3,
+    BoundChar = 4,
+}
+impl BoundType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::BoundNone => "BOUND_NONE",
+            Self::BoundAccount => "BOUND_ACCOUNT",
+            Self::BoundGuild => "BOUND_GUILD",
+            Self::BoundParty => "BOUND_PARTY",
+            Self::BoundChar => "BOUND_CHAR",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "BOUND_NONE" => Some(Self::BoundNone),
+            "BOUND_ACCOUNT" => Some(Self::BoundAccount),
+            "BOUND_GUILD" => Some(Self::BoundGuild),
+            "BOUND_PARTY" => Some(Self::BoundParty),
+            "BOUND_CHAR" => Some(Self::BoundChar),
             _ => None,
         }
     }

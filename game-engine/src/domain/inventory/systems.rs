@@ -1,7 +1,9 @@
 use super::item::Item;
 use super::resource::Inventory;
 use bevy::prelude::*;
-use net_contract::events::{InventoryReceived, ItemAdded, ItemRemoved, ZoneInventoryItem};
+use net_contract::events::{
+    InventoryReceived, ItemAdded, ItemBound, ItemRemoved, ZoneInventoryItem,
+};
 
 /// Maps a proto-shaped inventory slot onto the domain `Item`.
 ///
@@ -29,6 +31,7 @@ fn to_item(slot: &ZoneInventoryItem) -> Item {
         identified: slot.identified,
         damaged: slot.attribute != 0,
         favorite: slot.favorite,
+        bound: slot.bound as u8,
     }
 }
 
@@ -53,6 +56,11 @@ fn item_from_added(a: &ItemAdded) -> Item {
         identified: a.identified,
         damaged: a.attribute != 0,
         favorite: false,
+        // NOTE: `ItemAdded` has no `bound` field, so a freshly-added slot lands
+        // unbound (0) until the next full dump or an `ItemBound` delta arrives —
+        // the same limitation as `favorite`. If aesir starts carrying `bound` on
+        // `ItemAdded`, map it here instead of defaulting to 0.
+        bound: 0,
     }
 }
 
@@ -72,6 +80,7 @@ pub fn apply_inventory_messages(
 pub fn apply_item_deltas(
     mut added: MessageReader<ItemAdded>,
     mut removed: MessageReader<ItemRemoved>,
+    mut bound: MessageReader<ItemBound>,
     mut inventory: ResMut<Inventory>,
 ) {
     for a in added.read() {
@@ -83,6 +92,9 @@ pub fn apply_item_deltas(
     }
     for r in removed.read() {
         inventory.remove_amount(r.index as u16, r.amount as u16);
+    }
+    for b in bound.read() {
+        inventory.set_bound(b.index as u16, b.bound as u8);
     }
 }
 
@@ -97,7 +109,9 @@ mod tests {
     use crate::domain::inventory::{Inventory, InventoryPlugin};
     use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
-    use net_contract::events::{InventoryReceived, ItemAdded, ItemRemoved, ZoneInventoryItem};
+    use net_contract::events::{
+        InventoryReceived, ItemAdded, ItemBound, ItemRemoved, ZoneInventoryItem,
+    };
 
     fn slot(index: u32, amount: u32) -> ZoneInventoryItem {
         ZoneInventoryItem {
@@ -111,7 +125,7 @@ mod tests {
             refine: 0,
             cards: vec![],
             expire_time: 0,
-            bind_on_equip: 0,
+            bound: 0,
             favorite: false,
             look: 0,
         }
@@ -146,6 +160,7 @@ mod tests {
         app.add_message::<InventoryReceived>();
         app.add_message::<ItemAdded>();
         app.add_message::<ItemRemoved>();
+        app.add_message::<ItemBound>();
         app.add_plugins(InventoryPlugin);
         app
     }
@@ -217,6 +232,7 @@ mod tests {
         app.add_message::<InventoryReceived>();
         app.add_message::<ItemAdded>();
         app.add_message::<ItemRemoved>();
+        app.add_message::<ItemBound>();
         app.add_plugins(InventoryPlugin);
 
         app.world_mut().write_message(dump(vec![slot(2, 5)]));
@@ -348,5 +364,33 @@ mod tests {
         let inventory = app.world().resource::<Inventory>();
         assert!(inventory.get(7).is_none());
         assert_eq!(inventory.len(), 0);
+    }
+
+    fn bound(index: u32, bound: i32) -> ItemBound {
+        ItemBound { index, bound }
+    }
+
+    #[test]
+    fn item_bound_sets_bound_on_slot() {
+        let mut app = app_with_inventory();
+
+        app.world_mut().write_message(dump(vec![slot(7, 1)]));
+        app.update();
+        assert_eq!(app.world().resource::<Inventory>().get(7).unwrap().bound, 0);
+
+        app.world_mut().write_message(bound(7, 4));
+        app.update();
+
+        assert_eq!(app.world().resource::<Inventory>().get(7).unwrap().bound, 4);
+    }
+
+    #[test]
+    fn item_bound_missing_index_is_noop() {
+        let mut app = app_with_inventory();
+
+        app.world_mut().write_message(bound(99, 4));
+        app.update();
+
+        assert_eq!(app.world().resource::<Inventory>().len(), 0);
     }
 }

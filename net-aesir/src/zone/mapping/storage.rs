@@ -96,10 +96,13 @@ mod tests {
                 refine: 7,
                 cards: vec![4001, 4002],
                 expire_time: u32::MAX as u64 + 1,
-                bind_on_equip: 1,
+                bound: 1,
                 favorite: true,
                 look: 9,
                 weight: 15,
+                signer_name: String::new(),
+                creator_id: 0,
+                creator_kind: 0,
             }],
         });
 
@@ -136,6 +139,9 @@ mod tests {
             expire_time: u32::MAX as u64 + 2,
             look: 10,
             weight: 20,
+            signer_name: String::new(),
+            creator_id: 0,
+            creator_kind: 0,
         });
 
         let item = added.item;

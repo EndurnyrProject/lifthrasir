@@ -57,6 +57,13 @@ impl Inventory {
         item.wear_state = mask;
     }
 
+    pub fn set_bound(&mut self, index: u16, bound: u8) {
+        let Some(item) = self.items.get_mut(&index) else {
+            return;
+        };
+        item.bound = bound;
+    }
+
     pub fn remove_amount(&mut self, index: u16, amount: u16) {
         let Some(item) = self.items.get_mut(&index) else {
             return;
@@ -186,6 +193,25 @@ mod tests {
         let mut inv = Inventory::default();
 
         inv.set_wear_state(99, 0x0100);
+
+        assert_eq!(inv.len(), 0);
+    }
+
+    #[test]
+    fn set_bound_updates_existing_item() {
+        let mut inv = Inventory::default();
+        inv.upsert(stackable(5, 1));
+
+        inv.set_bound(5, 4);
+
+        assert_eq!(inv.get(5).unwrap().bound, 4);
+    }
+
+    #[test]
+    fn set_bound_missing_index_is_noop() {
+        let mut inv = Inventory::default();
+
+        inv.set_bound(99, 4);
 
         assert_eq!(inv.len(), 0);
     }

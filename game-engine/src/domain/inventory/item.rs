@@ -22,6 +22,9 @@ pub struct Item {
     pub identified: bool,
     pub damaged: bool,
     pub favorite: bool,
+    /// Bound type (rAthena `BOUND_*`): 0 = none, 1 = account, 2 = guild,
+    /// 3 = party, 4 = character.
+    pub bound: u8,
 }
 
 #[derive(Debug, Clone, Default)]

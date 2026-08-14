@@ -137,6 +137,7 @@ mod tests {
             name: "Vikings".into(),
             leader_char_id: 42,
             exp_share: true,
+            item_pickup_share: false,
             members: vec![
                 net::PartyMember {
                     char_id: 42,

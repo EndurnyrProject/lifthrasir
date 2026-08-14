@@ -1,7 +1,7 @@
 use crate::proto::aesir::net;
 use net_contract::events::{
-    InventoryReceived, ItemAdded, ItemEquipped, ItemRemoved, ItemUnequipped, ItemUseFailed,
-    ZoneInventoryItem,
+    InventoryReceived, ItemAdded, ItemBound, ItemEquipped, ItemRemoved, ItemUnequipped,
+    ItemUseFailed, ZoneInventoryItem,
 };
 
 pub fn inventory_list(l: net::InventoryList) -> InventoryReceived {
@@ -27,7 +27,7 @@ fn inventory_item(i: net::InventoryItem) -> ZoneInventoryItem {
         refine: i.refine,
         cards: i.cards,
         expire_time: i.expire_time,
-        bind_on_equip: i.bind_on_equip,
+        bound: i.bound,
         favorite: i.favorite,
         look: i.look,
     }
@@ -55,6 +55,13 @@ pub fn item_removed(r: net::ItemRemoved) -> ItemRemoved {
         index: r.index,
         amount: r.amount,
         reason: r.reason,
+    }
+}
+
+pub fn item_bound(b: net::ItemBound) -> ItemBound {
+    ItemBound {
+        index: b.index,
+        bound: b.bound,
     }
 }
 
@@ -98,10 +105,13 @@ mod tests {
             refine: 7,
             cards: vec![100, 200],
             expire_time: 0,
-            bind_on_equip: 0,
+            bound: 0,
             favorite: false,
             look: 0,
             weight: 0,
+            signer_name: String::new(),
+            creator_id: 0,
+            creator_kind: 0,
         }
     }
 
@@ -149,6 +159,9 @@ mod tests {
             expire_time: 0,
             look: 0,
             weight: 0,
+            signer_name: String::new(),
+            creator_id: 0,
+            creator_kind: 0,
         });
 
         assert_eq!(added.index, 3);
@@ -170,6 +183,14 @@ mod tests {
         assert_eq!(removed.index, 3);
         assert_eq!(removed.amount, 2);
         assert_eq!(removed.reason, 1);
+    }
+
+    #[test]
+    fn item_bound_maps_index_and_bound() {
+        let bound = item_bound(net::ItemBound { index: 7, bound: 4 });
+
+        assert_eq!(bound.index, 7);
+        assert_eq!(bound.bound, 4);
     }
 
     #[test]

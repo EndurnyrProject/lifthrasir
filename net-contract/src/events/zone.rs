@@ -208,7 +208,9 @@ pub struct ZoneInventoryItem {
     pub refine: u32,
     pub cards: Vec<u32>,
     pub expire_time: u64,
-    pub bind_on_equip: u32,
+    /// Bound type: 0 = none, 1 = account, 2 = guild,
+    /// 3 = party, 4 = character.
+    pub bound: i32,
     pub favorite: bool,
     pub look: u32,
 }
@@ -476,6 +478,17 @@ pub struct ItemRemoved {
     pub index: u32,
     pub amount: u32,
     pub reason: u32,
+}
+
+/// An inventory item's bound status changed.
+///
+/// Carries the authoritative bound type for the slot, using rAthena `BOUND_*`
+/// codes: `0` = none, `1` = account, `2` = guild, `3` = party, `4` = character.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ItemBound {
+    pub index: u32,
+    pub bound: i32,
 }
 
 /// Result of an equip request.

@@ -80,10 +80,13 @@ mod tests {
             refine: 7,
             cards: vec![100, 200],
             expire_time: 0,
-            bind_on_equip: 0,
+            bound: 0,
             favorite: false,
             look: 0,
             weight: 15,
+            signer_name: String::new(),
+            creator_id: 0,
+            creator_kind: 0,
         }
     }
 
@@ -119,6 +122,9 @@ mod tests {
             expire_time: 0,
             look: 0,
             weight: 20,
+            signer_name: String::new(),
+            creator_id: 0,
+            creator_kind: 0,
         });
 
         assert_eq!(added.item.index, 3);
