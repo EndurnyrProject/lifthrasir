@@ -4,7 +4,7 @@
 use bevy::asset::LoadState;
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
-use game_engine::domain::assets::patterns::minimap_path;
+use game_engine::infrastructure::assets::paths::minimap_path;
 use game_engine::domain::entities::character::components::visual::CharacterDirection;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::world::map::MapData;

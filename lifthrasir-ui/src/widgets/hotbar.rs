@@ -21,7 +21,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use game_engine::core::state::GameState;
-use game_engine::domain::assets::item_icon_path;
+use game_engine::infrastructure::assets::item_icon_path;
 use game_engine::domain::hotbar::{Hotbar, HotbarSlot, HotbarSlotActivated};
 use game_engine::domain::inventory::Inventory;
 use game_engine::domain::skill::SkillCooldownTracker;

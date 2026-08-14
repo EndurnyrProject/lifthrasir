@@ -1,4 +1,3 @@
-pub mod assets;
 pub mod audio;
 pub mod authentication;
 pub mod camera;

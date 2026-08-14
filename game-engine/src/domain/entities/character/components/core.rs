@@ -37,6 +37,16 @@ impl From<u8> for Gender {
     }
 }
 
+impl Gender {
+    /// Korean sprite-filename segment: `남` (male) / `여` (female).
+    pub const fn as_korean(self) -> &'static str {
+        match self {
+            Gender::Male => "남",
+            Gender::Female => "여",
+        }
+    }
+}
+
 #[derive(Component, Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterData {
     pub name: String,

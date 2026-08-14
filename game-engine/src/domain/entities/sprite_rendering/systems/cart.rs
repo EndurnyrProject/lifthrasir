@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use net_contract::events::{UnitEntered, UnitStateChanged};
 
-use crate::domain::assets::patterns;
+use crate::infrastructure::assets::paths;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::visual::{ActionType, Direction};
 use crate::domain::entities::character::systems::CART_MASK;
@@ -183,8 +183,8 @@ fn spawn_cart_layer(
             RenderLayer::body(Handle::default(), LAYER_CART, Vec::new()),
             CartLayer { part },
             CartAnimationPending {
-                spr: asset_server.load(patterns::cart_sprite_path()),
-                act: asset_server.load(patterns::cart_action_path()),
+                spr: asset_server.load(paths::cart_sprite_path()),
+                act: asset_server.load(paths::cart_action_path()),
             },
             Transform::from_translation(Vec3::new(0.0, SPRITE_BASE_Y_OFFSET, part_z)),
             GlobalTransform::default(),

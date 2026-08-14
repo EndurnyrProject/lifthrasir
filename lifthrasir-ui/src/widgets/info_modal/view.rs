@@ -9,7 +9,7 @@
 
 use bevy::prelude::Color;
 
-use game_engine::domain::assets::{item_collection_path, item_icon_path};
+use game_engine::infrastructure::assets::{item_collection_path, item_icon_path};
 use game_engine::domain::cart::Cart;
 use game_engine::domain::entities::character::components::equipment::EquipmentSlot;
 use game_engine::domain::entities::character::components::status::CharacterStatus;

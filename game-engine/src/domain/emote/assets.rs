@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::domain::assets::patterns;
+use crate::infrastructure::assets::paths;
 use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::LAYER_BODY;
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
@@ -34,8 +34,8 @@ pub struct EmoteAssetsPending {
 /// Kicks off the shared `emotion.spr`/`emotion.act` loads on entering gameplay.
 pub fn load_emote_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(EmoteAssetsPending {
-        spr: asset_server.load(patterns::emotion_sprite_path()),
-        act: asset_server.load(patterns::emotion_action_path()),
+        spr: asset_server.load(paths::emotion_sprite_path()),
+        act: asset_server.load(paths::emotion_action_path()),
     });
 }
 

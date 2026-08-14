@@ -9,7 +9,7 @@ use super::components::EffectAnchor;
 use super::sprite_effects::apply_animation_part;
 use super::systems::spawn_effect;
 use super::triggers::{descriptor_tint, load_effect, load_str_effect};
-use crate::domain::assets::patterns;
+use crate::infrastructure::assets::paths;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::asset_bank::SpriteAssetBank;
@@ -385,8 +385,8 @@ pub struct FrozenIceAssetsPending {
 /// Kicks off the shared `얼음땡.spr`/`.act` load.
 pub fn load_frozen_ice_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(FrozenIceAssetsPending {
-        spr: asset_server.load(patterns::frozen_ice_sprite_path()),
-        act: asset_server.load(patterns::frozen_ice_action_path()),
+        spr: asset_server.load(paths::frozen_ice_sprite_path()),
+        act: asset_server.load(paths::frozen_ice_action_path()),
     });
 }
 

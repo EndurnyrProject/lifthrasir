@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use net_contract::events::{SkillEffectShown, UnitEntered, UnitStateChanged};
 
-use crate::domain::assets::patterns;
+use crate::infrastructure::assets::paths;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
 use crate::domain::entities::character::systems::OPTION_FALCON;
@@ -548,8 +548,8 @@ fn apply_falcon_state(
             commands.spawn((
                 FalconLayer { part: 0 },
                 FalconAnimationPending {
-                    spr: asset_server.load(patterns::falcon_sprite_path()),
-                    act: asset_server.load(patterns::falcon_action_path()),
+                    spr: asset_server.load(paths::falcon_sprite_path()),
+                    act: asset_server.load(paths::falcon_action_path()),
                 },
                 Transform::from_translation(Vec3::new(
                     0.0,

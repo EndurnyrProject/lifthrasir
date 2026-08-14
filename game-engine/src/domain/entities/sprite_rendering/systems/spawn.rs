@@ -3,7 +3,7 @@ use super::super::components::{
     PendingRenderLayers, PlayerAppearance, PlayerSprite, RenderLayer, SpriteHierarchyConfig,
 };
 use super::super::events::{RequestSpriteSpawn, SpawnSpriteEvent};
-use crate::domain::assets::patterns;
+use crate::infrastructure::assets::paths;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::sprite::tags::{
     LAYER_BODY, LAYER_HEAD, LAYER_SHADOW, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER,
@@ -140,8 +140,8 @@ fn spawn_character_components(
     };
     let body_act_path = body_spr_path.replace(".spr", ".act");
 
-    let head_spr_path = patterns::head_sprite_path(gender, head_id);
-    let head_act_path = patterns::head_action_path(gender, head_id);
+    let head_spr_path = paths::head_sprite_path(gender, head_id);
+    let head_act_path = paths::head_action_path(gender, head_id);
 
     let body_spr = asset_server.load(&body_spr_path);
     let body_act = asset_server.load(&body_act_path);
@@ -188,7 +188,7 @@ fn head_palette_handle(
     hair_color: u16,
 ) -> Option<Handle<crate::infrastructure::assets::loaders::RoPaletteAsset>> {
     (hair_color > 0)
-        .then(|| asset_server.load(patterns::hair_palette_path(hair_style, gender, hair_color)))
+        .then(|| asset_server.load(paths::hair_palette_path(hair_style, gender, hair_color)))
 }
 
 fn spawn_mob_components(
@@ -199,8 +199,8 @@ fn spawn_mob_components(
 ) {
     let entity = entity_commands.id();
 
-    let spr_path = patterns::mob_sprite_path(sprite_name);
-    let act_path = patterns::mob_action_path(sprite_name);
+    let spr_path = paths::mob_sprite_path(sprite_name);
+    let act_path = paths::mob_action_path(sprite_name);
 
     let spr = asset_server.load(&spr_path);
     let act = asset_server.load(&act_path);
@@ -223,8 +223,8 @@ fn spawn_npc_components(
 ) {
     let entity = entity_commands.id();
 
-    let spr_path = patterns::npc_sprite_path(sprite_name);
-    let act_path = patterns::npc_action_path(sprite_name);
+    let spr_path = paths::npc_sprite_path(sprite_name);
+    let act_path = paths::npc_action_path(sprite_name);
 
     let spr = asset_server.load(&spr_path);
     let act = asset_server.load(&act_path);
@@ -250,8 +250,8 @@ fn spawn_item_components(
 ) {
     let entity = entity_commands.id();
 
-    let spr_path = patterns::item_drop_sprite_path(sprite_name);
-    let act_path = patterns::item_drop_action_path(sprite_name);
+    let spr_path = paths::item_drop_sprite_path(sprite_name);
+    let act_path = paths::item_drop_action_path(sprite_name);
 
     let spr = asset_server.load(&spr_path);
     let act = asset_server.load(&act_path);
@@ -588,7 +588,7 @@ mod tests {
 
         assert_eq!(
             path.to_string(),
-            patterns::hair_palette_path(7, Gender::Male, 3)
+            paths::hair_palette_path(7, Gender::Male, 3)
         );
     }
 

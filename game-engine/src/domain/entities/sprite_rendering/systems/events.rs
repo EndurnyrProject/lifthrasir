@@ -1,5 +1,5 @@
 use super::super::components::{EffectType, PlayerAppearance, RenderLayer};
-use crate::domain::assets::patterns;
+use crate::infrastructure::assets::paths;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::Gender;
 use crate::domain::entities::character::components::core::CharacterData;
@@ -30,8 +30,8 @@ fn resolve_headgear_paths(
 ) -> Option<(String, String)> {
     let accname = accessory_db.accname(view_id)?;
     Some((
-        patterns::headgear_sprite_path(gender, accname),
-        patterns::headgear_action_path(gender, accname),
+        paths::headgear_sprite_path(gender, accname),
+        paths::headgear_action_path(gender, accname),
     ))
 }
 
@@ -45,18 +45,29 @@ fn resolve_weapon_paths(
 ) -> Option<(String, String)> {
     let suffix = weapon_db.suffix(view_id)?;
     Some((
-        patterns::weapon_sprite_path(gender, job_name, suffix),
-        patterns::weapon_action_path(gender, job_name, suffix),
+        paths::weapon_sprite_path(gender, job_name, suffix),
+        paths::weapon_action_path(gender, job_name, suffix),
     ))
+}
+
+/// Classic shield view id -> sprite suffix, with a numeric fallback for renewal shields.
+fn shield_suffix(view_id: u16) -> String {
+    match view_id {
+        1 => "가드".to_string(),
+        2 => "쉴드".to_string(),
+        3 => "버클러".to_string(),
+        4 => "미러쉴드".to_string(),
+        other => other.to_string(),
+    }
 }
 
 /// Resolve a shield `view_id` to its SPR/ACT sprite paths via the hardcoded
 /// shield suffix table (classic names + numeric fallback). Never fails.
 fn resolve_shield_paths(job_name: &str, gender: Gender, view_id: u16) -> (String, String) {
-    let suffix = patterns::shield_suffix(view_id);
+    let suffix = shield_suffix(view_id);
     (
-        patterns::shield_sprite_path(gender, job_name, &suffix),
-        patterns::shield_action_path(gender, job_name, &suffix),
+        paths::shield_sprite_path(gender, job_name, &suffix),
+        paths::shield_action_path(gender, job_name, &suffix),
     )
 }
 
@@ -397,6 +408,15 @@ mod tests {
         let (spr, act) = resolve_shield_paths("검사", Gender::Male, 28901);
         assert_eq!(spr, "ro://data/sprite/방패/검사/검사_남_28901_방패.spr");
         assert_eq!(act, "ro://data/sprite/방패/검사/검사_남_28901_방패.act");
+    }
+
+    #[test]
+    fn shield_suffix_maps_classic_ids() {
+        assert_eq!(shield_suffix(1), "가드");
+        assert_eq!(shield_suffix(2), "쉴드");
+        assert_eq!(shield_suffix(3), "버클러");
+        assert_eq!(shield_suffix(4), "미러쉴드");
+        assert_eq!(shield_suffix(28901), "28901");
     }
 
     mod finalize {
