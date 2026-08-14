@@ -24,11 +24,11 @@ pub use animation_processor::{RoAnimationProcessor, calculate_attach_offset};
 pub use assets_plugin::AssetsPlugin;
 pub use config::*;
 pub use converters::*;
-pub use paths::*;
 pub use indoor_map_table_loader::{IndoorMapTableAsset, IndoorMapTableLoader};
 pub use loaders::{
     BgmNameTableAsset, BgmNameTableLoader, RoActAsset, RoActLoader, RoAltitudeAsset,
     RoPaletteAsset, RoPaletteLoader, RoSpriteAsset, RoSpriteLoader,
 };
+pub use paths::*;
 pub use ro_animation_asset::{ActionData, FrameData, FramePart, RoAnimationAsset};
 pub use ro_assets_plugin::SharedCompositeAssetSource;

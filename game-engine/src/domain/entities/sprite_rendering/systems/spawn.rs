@@ -3,7 +3,6 @@ use super::super::components::{
     PendingRenderLayers, PlayerAppearance, PlayerSprite, RenderLayer, SpriteHierarchyConfig,
 };
 use super::super::events::{RequestSpriteSpawn, SpawnSpriteEvent};
-use crate::infrastructure::assets::paths;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::sprite::tags::{
     LAYER_BODY, LAYER_HEAD, LAYER_SHADOW, SPRITE_BASE_Y_OFFSET, Z_OFFSET_PER_LAYER,
@@ -11,6 +10,7 @@ use crate::domain::sprite::tags::{
 };
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
+use crate::infrastructure::assets::paths;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::infrastructure::job::registry::JobSpriteRegistry;
 use bevy::prelude::*;

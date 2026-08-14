@@ -1,5 +1,5 @@
-use crate::infrastructure::assets::paths;
 use crate::domain::entities::character::components::core::Gender;
+use crate::infrastructure::assets::paths;
 use bevy::prelude::*;
 use std::collections::HashMap;
 

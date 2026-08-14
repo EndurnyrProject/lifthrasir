@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-use crate::infrastructure::assets::paths;
 use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::LAYER_BODY;
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
+use crate::infrastructure::assets::paths;
 use crate::infrastructure::assets::ro_animation_asset::{ActionData, RoAnimationAsset};
 
 /// Shared, processed emote animation plus per-action thumbnail images.

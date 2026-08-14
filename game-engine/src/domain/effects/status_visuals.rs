@@ -9,7 +9,6 @@ use super::components::EffectAnchor;
 use super::sprite_effects::apply_animation_part;
 use super::systems::spawn_effect;
 use super::triggers::{descriptor_tint, load_effect, load_str_effect};
-use crate::infrastructure::assets::paths;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::sprite_rendering::asset_bank::SpriteAssetBank;
@@ -19,6 +18,7 @@ use crate::domain::sprite::tags::{
 };
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
+use crate::infrastructure::assets::paths;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::infrastructure::effect::EffectCatalog;
 

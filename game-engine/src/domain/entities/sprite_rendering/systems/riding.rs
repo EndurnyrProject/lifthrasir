@@ -43,7 +43,7 @@ pub fn apply_peco_mount(
     mut commands: Commands,
     mut state_changes: MessageReader<UnitStateChanged>,
     registry: Res<EntityRegistry>,
-    characters: Query<(&CharacterData, &Gender, &Children)>,
+    characters: Query<(&CharacterData, &Gender, Option<&Children>)>,
     riding_markers: Query<(), With<RidingPeco>>,
     layers: BodyLayerQuery,
     heads: Query<Entity, With<HeadAttachment>>,
@@ -91,17 +91,19 @@ pub fn apply_peco_mount(
         };
         let body_act_path = body_spr_path.replace(".spr", ".act");
 
-        for child in children.iter() {
-            if layers
-                .get(child)
-                .is_ok_and(|(_, layer)| layer.layer == LAYER_BODY)
-            {
-                commands.entity(child).despawn();
-                continue;
-            }
+        if let Some(children) = children {
+            for child in children.iter() {
+                if layers
+                    .get(child)
+                    .is_ok_and(|(_, layer)| layer.layer == LAYER_BODY)
+                {
+                    commands.entity(child).despawn();
+                    continue;
+                }
 
-            if heads.contains(child) {
-                commands.entity(child).remove::<HeadAttachment>();
+                if heads.contains(child) {
+                    commands.entity(child).remove::<HeadAttachment>();
+                }
             }
         }
 
@@ -220,6 +222,34 @@ mod tests {
         }
     }
 
+    /// A character that has spawned but whose body/head layers haven't been
+    /// finalized yet (no `Children` component). Mirrors the login window where
+    /// the riding restore can arrive before the spawn-time body finishes loading.
+    fn setup_character_only(job_id: u16) -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins((TaskPoolPlugin::default(), AssetPlugin::default()))
+            .init_asset::<crate::infrastructure::assets::loaders::RoSpriteAsset>()
+            .init_asset::<crate::infrastructure::assets::loaders::RoActAsset>()
+            .init_resource::<EntityRegistry>()
+            .init_resource::<PendingAnimations>()
+            .insert_resource(JobSpriteRegistry::from_job_data(
+                lifthrasir_data::JobData::default(),
+            ))
+            .add_message::<UnitStateChanged>()
+            .add_systems(Update, apply_peco_mount);
+
+        let character = app
+            .world_mut()
+            .spawn((character_data(job_id), Gender::Male))
+            .id();
+
+        app.world_mut()
+            .resource_mut::<EntityRegistry>()
+            .register_entity(GID, character);
+
+        (app, character)
+    }
+
     fn send(app: &mut App, effect_state: u32) {
         app.world_mut()
             .resource_mut::<Messages<UnitStateChanged>>()
@@ -298,5 +328,16 @@ mod tests {
         let world = f.app.world();
         assert!(world.get_entity(f.body_layer).is_ok());
         assert!(!world.resource::<PendingAnimations>().has_pending());
+    }
+
+    #[test]
+    fn riding_bit_before_children_still_requests_mounted_body() {
+        let (mut app, character) = setup_character_only(KNIGHT);
+        send(&mut app, OPTION_RIDING);
+
+        let world = app.world();
+        assert!(world.get::<RidingPeco>(character).is_some());
+        assert!(world.get::<PendingRenderLayers>(character).is_some());
+        assert!(world.resource::<PendingAnimations>().has_pending());
     }
 }

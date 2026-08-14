@@ -1,5 +1,4 @@
 use super::super::components::{EffectType, PlayerAppearance, RenderLayer};
-use crate::infrastructure::assets::paths;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::Gender;
 use crate::domain::entities::character::components::core::CharacterData;
@@ -7,6 +6,7 @@ use crate::domain::entities::character::components::equipment::EquipmentSlot;
 use crate::domain::sprite::tags::{Z_OFFSET_PER_LAYER, equipment_slot_to_tag};
 use crate::domain::system_sets::SpriteRenderingSystems;
 use crate::infrastructure::assets::animation_processing_system::PendingAnimations;
+use crate::infrastructure::assets::paths;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::infrastructure::job::registry::JobSpriteRegistry;
 use crate::{AccessoryDb, WeaponDb};

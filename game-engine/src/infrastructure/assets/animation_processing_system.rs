@@ -1,10 +1,12 @@
+use bevy::tasks::{AsyncComputeTaskPool, Task, futures::check_ready};
 use bevy::{asset::LoadState, prelude::*};
 use moonshine_tag::Tag;
 
-use super::animation_processor::RoAnimationProcessor;
+use super::animation_processor::{ProcessedAnimation, RoAnimationProcessor};
 use super::loaders::{RoActAsset, RoPaletteAsset, RoSpriteAsset};
 use super::ro_animation_asset::RoAnimationAsset;
 use crate::domain::settings::GraphicsSettings;
+use crate::domain::settings::resources::Upscaling;
 
 /// A pending animation request waiting for SPR+ACT and an optional palette to load.
 #[derive(Debug, Clone)]
@@ -16,10 +18,18 @@ pub struct PendingAnimation {
     pub callback_entity: Option<Entity>,
 }
 
+/// A request whose CPU stage is running on [`AsyncComputeTaskPool`].
+/// Dropping the entry cancels the task.
+struct InFlightAnimation {
+    request: PendingAnimation,
+    task: Task<ProcessedAnimation>,
+}
+
 /// Resource tracking pending animation processing requests.
 #[derive(Resource, Default)]
 pub struct PendingAnimations {
     pending: Vec<PendingAnimation>,
+    in_flight: Vec<InFlightAnimation>,
     completed: Vec<(PendingAnimation, Handle<RoAnimationAsset>)>,
 }
 
@@ -50,6 +60,7 @@ impl PendingAnimations {
         let stale =
             |p: &PendingAnimation| p.callback_entity == Some(entity) && p.layer_tag == layer;
         self.pending.retain(|p| !stale(p));
+        self.in_flight.retain(|e| !stale(&e.request));
         self.completed.retain(|(p, _)| !stale(p));
     }
 
@@ -84,9 +95,9 @@ impl PendingAnimations {
         self.completed.extend(items);
     }
 
-    /// Check if there are pending requests.
+    /// Check if there are queued requests or in-flight processing tasks.
     pub fn has_pending(&self) -> bool {
-        !self.pending.is_empty()
+        !self.pending.is_empty() || !self.in_flight.is_empty()
     }
 }
 
@@ -117,7 +128,10 @@ fn palette_readiness(
     }
 }
 
-/// System that processes pending SPR+ACT pairs and optional palettes when ready.
+/// System that dispatches ready SPR+ACT pairs (and optional palettes) to
+/// [`AsyncComputeTaskPool`] and finalizes finished tasks. The heavy pixel work
+/// (palette bake, RGBA conversion, xBRZ upscaling) runs off the main thread;
+/// only the cheap `Assets<Image>` registration happens here.
 pub fn process_pending_animations(
     mut pending: ResMut<PendingAnimations>,
     assets: AnimationSourceAssets,
@@ -127,9 +141,29 @@ pub fn process_pending_animations(
     settings: Res<GraphicsSettings>,
 ) {
     let (sprites, actions, palettes) = assets;
-    let upscaling = settings.upscaling;
+    dispatch_ready_requests(
+        &mut pending,
+        &sprites,
+        &actions,
+        &palettes,
+        &asset_server,
+        settings.upscaling,
+    );
+    finalize_finished_tasks(&mut pending, &mut animations, &mut images);
+}
+
+/// Spawn the CPU stage on the async pool for every request whose source assets
+/// finished loading, moving it from `pending` to `in_flight`.
+fn dispatch_ready_requests(
+    pending: &mut PendingAnimations,
+    sprites: &Assets<RoSpriteAsset>,
+    actions: &Assets<RoActAsset>,
+    palettes: &Assets<RoPaletteAsset>,
+    asset_server: &AssetServer,
+    upscaling: Upscaling,
+) {
+    let task_pool = AsyncComputeTaskPool::get();
     let mut still_pending = Vec::new();
-    let mut newly_completed = Vec::new();
 
     for request in std::mem::take(&mut pending.pending) {
         let sprite_ready = sprites.get(&request.sprite_handle).is_some();
@@ -162,7 +196,8 @@ pub fn process_pending_animations(
                 Some(
                     palettes
                         .get(handle)
-                        .expect("ready palette must be present in Assets"),
+                        .expect("ready palette must be present in Assets")
+                        .clone(),
                 )
             }
             PaletteReadiness::ReadyWithEmbeddedPalette => {
@@ -180,28 +215,56 @@ pub fn process_pending_animations(
             }
             PaletteReadiness::Pending => unreachable!("pending palette was re-queued"),
         };
+
+        // NOTE: source data is cloned into the task; the clone is trivial next
+        // to the pixel work the task exists to offload.
         let sprite = sprites
             .get(&request.sprite_handle)
-            .expect("ready sprite must be present in Assets");
+            .expect("ready sprite must be present in Assets")
+            .sprite
+            .clone();
         let action = actions
             .get(&request.action_handle)
-            .expect("ready action must be present in Assets");
+            .expect("ready action must be present in Assets")
+            .action
+            .clone();
+        let layer_tag = request.layer_tag;
 
-        let animation = RoAnimationProcessor::process(
-            &sprite.sprite,
-            &action.action,
-            custom_palette,
-            request.layer_tag,
-            &mut images,
-            upscaling,
-        );
-
-        let handle = animations.add(animation);
-        newly_completed.push((request, handle));
+        let task = task_pool.spawn(async move {
+            RoAnimationProcessor::process_cpu(
+                &sprite,
+                &action,
+                custom_palette.as_ref(),
+                layer_tag,
+                upscaling,
+            )
+        });
+        pending.in_flight.push(InFlightAnimation { request, task });
     }
 
     pending.pending = still_pending;
-    pending.completed.extend(newly_completed);
+}
+
+/// Drain finished CPU-stage tasks, register their images, and move them to
+/// `completed` for the finalizer systems to claim.
+fn finalize_finished_tasks(
+    pending: &mut PendingAnimations,
+    animations: &mut Assets<RoAnimationAsset>,
+    images: &mut Assets<Image>,
+) {
+    let mut still_in_flight = Vec::new();
+
+    for mut entry in std::mem::take(&mut pending.in_flight) {
+        match check_ready(&mut entry.task) {
+            Some(processed) => {
+                let handle = animations.add(processed.finalize(images));
+                pending.completed.push((entry.request, handle));
+            }
+            None => still_in_flight.push(entry),
+        }
+    }
+
+    pending.in_flight = still_in_flight;
 }
 
 /// Plugin that sets up the animation processing system.
@@ -272,11 +335,26 @@ mod tests {
         }
     }
 
+    /// Processing runs on the async task pool, so completion is not guaranteed
+    /// within a single update; poll with a bounded retry budget.
+    fn wait_for_completed(app: &mut App) -> Vec<(PendingAnimation, Handle<RoAnimationAsset>)> {
+        for _ in 0..500 {
+            app.update();
+            let completed = app
+                .world_mut()
+                .resource_mut::<PendingAnimations>()
+                .take_completed_for_layer(LAYER_BODY);
+            if !completed.is_empty() {
+                return completed;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        panic!("animation processing did not complete within the retry budget");
+    }
+
     fn completed_texture_data(app: &mut App) -> Vec<u8> {
-        let completed = app
-            .world_mut()
-            .resource_mut::<PendingAnimations>()
-            .take_completed_for_layer(LAYER_BODY);
+        let completed = wait_for_completed(app);
+
         let [(_, animation_handle)] = completed.as_slice() else {
             panic!("expected one completed animation");
         };

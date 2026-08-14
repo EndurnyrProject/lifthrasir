@@ -14,6 +14,34 @@ use super::upscale;
 
 pub struct RoAnimationProcessor;
 
+/// Output of [`RoAnimationProcessor::process_cpu`]: fully converted frame
+/// images plus animation metadata, produced off the main thread. Call
+/// [`ProcessedAnimation::finalize`] on the main thread to register the images
+/// and obtain the [`RoAnimationAsset`].
+pub struct ProcessedAnimation {
+    pub images: Vec<Image>,
+    pub actions: Vec<ActionData>,
+    pub layer: Tag,
+    pub sounds: Vec<String>,
+}
+
+impl ProcessedAnimation {
+    /// Register the pre-built images and assemble the final asset.
+    /// Cheap: no pixel work happens here.
+    pub fn finalize(self, images: &mut Assets<Image>) -> RoAnimationAsset {
+        RoAnimationAsset {
+            textures: self
+                .images
+                .into_iter()
+                .map(|image| images.add(image))
+                .collect(),
+            actions: self.actions,
+            layer: self.layer,
+            sounds: self.sounds,
+        }
+    }
+}
+
 impl RoAnimationProcessor {
     /// Process a single SPR+ACT pair into a RoAnimationAsset.
     /// Each layer (body, head, weapon) is processed separately.
@@ -25,41 +53,32 @@ impl RoAnimationProcessor {
         images: &mut Assets<Image>,
         upscaling: Upscaling,
     ) -> RoAnimationAsset {
-        let textures = Self::create_textures(sprite, custom_palette, images, upscaling);
-        let actions = Self::create_actions(action, sprite);
-
-        RoAnimationAsset {
-            textures,
-            actions,
-            layer: layer_tag,
-            sounds: action.sounds.clone(),
-        }
+        Self::process_cpu(sprite, action, custom_palette, layer_tag, upscaling).finalize(images)
     }
 
-    /// Convert all sprite frames to GPU textures once during loading.
-    fn create_textures(
+    /// CPU-only stage: palette lookup, RGBA conversion, and xBRZ upscaling.
+    /// Touches no `Assets` storage, so it is safe to run on `AsyncComputeTaskPool`.
+    pub fn process_cpu(
         sprite: &RoSprite,
+        action: &RoAction,
         custom_palette: Option<&RoPaletteAsset>,
-        images: &mut Assets<Image>,
+        layer_tag: Tag,
         upscaling: Upscaling,
-    ) -> Vec<Handle<Image>> {
-        let handles: Vec<_> = sprite
+    ) -> ProcessedAnimation {
+        let images = sprite
             .frames
             .iter()
             .map(|frame| {
-                let image =
-                    Self::frame_to_image(frame, sprite.palette.as_ref(), custom_palette, upscaling);
-                images.add(image)
+                Self::frame_to_image(frame, sprite.palette.as_ref(), custom_palette, upscaling)
             })
             .collect();
-        if let Some(first) = handles.first() {
-            bevy::log::debug!(
-                "create_textures: Created {} textures, first handle: {:?}",
-                handles.len(),
-                first
-            );
+
+        ProcessedAnimation {
+            images,
+            actions: Self::create_actions(action, sprite),
+            layer: layer_tag,
+            sounds: action.sounds.clone(),
         }
-        handles
     }
 
     /// Convert a sprite frame to a Bevy Image.

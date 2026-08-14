@@ -4,7 +4,6 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use net_contract::events::{SkillEffectShown, UnitEntered, UnitStateChanged};
 
-use crate::infrastructure::assets::paths;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::character::components::visual::{CharacterDirection, Direction};
 use crate::domain::entities::character::systems::OPTION_FALCON;
@@ -21,6 +20,7 @@ use crate::domain::sprite::tags::{
 use crate::domain::system_sets::{EntityLifecycleSystems, SpriteRenderingSystems};
 use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
+use crate::infrastructure::assets::paths;
 use crate::infrastructure::assets::ro_animation_asset::RoAnimationAsset;
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 
