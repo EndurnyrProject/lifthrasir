@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -355,6 +355,39 @@ pub mod envelope {
         HomunculusResult(super::HomunculusResult),
         #[prost(message, tag = "171")]
         HomunculusPrivateState(super::HomunculusPrivateState),
+        /// 172: inventory item binding update
+        #[prost(message, tag = "172")]
+        ItemBound(super::ItemBound),
+        /// 173-185: player trade (client intents + server-authoritative updates)
+        #[prost(message, tag = "173")]
+        TradeRequest(super::TradeRequest),
+        #[prost(message, tag = "174")]
+        TradeResponse(super::TradeResponse),
+        #[prost(message, tag = "175")]
+        TradeAddItem(super::TradeAddItem),
+        #[prost(message, tag = "176")]
+        TradeRemoveItem(super::TradeRemoveItem),
+        #[prost(message, tag = "177")]
+        TradeSetZeny(super::TradeSetZeny),
+        #[prost(message, tag = "178")]
+        TradeLock(super::TradeLock),
+        #[prost(message, tag = "179")]
+        TradeConfirm(super::TradeConfirm),
+        #[prost(message, tag = "180")]
+        TradeCancel(super::TradeCancel),
+        #[prost(message, tag = "181")]
+        TradeRequestReceived(super::TradeRequestReceived),
+        #[prost(message, tag = "182")]
+        TradeOpened(super::TradeOpened),
+        #[prost(message, tag = "183")]
+        TradeOfferUpdate(super::TradeOfferUpdate),
+        #[prost(message, tag = "184")]
+        TradeCompleted(super::TradeCompleted),
+        #[prost(message, tag = "185")]
+        TradeCancelled(super::TradeCancelled),
+        /// 186: per-player quest-icon bubble over an NPC (script questinfo buildin)
+        #[prost(message, tag = "186")]
+        QuestInfoIcon(super::QuestInfoIcon),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -896,6 +929,28 @@ pub struct SpecialEffect {
 }
 /// Server -> client, a minimap/compass marker (replaces RO ZC_COMPASS 0x0144).
 /// Sent only to the invoking player (script `viewpoint`).
+/// Server -> client, a per-player quest-icon bubble shown over an NPC, with an
+/// optional minimap mark (rAthena `questinfo` buildin, replaces
+/// ZC_QUEST_NOTIFY_EFFECT 0x446). Sent only to the player who meets the NPC's
+/// questinfo condition; re-sent as state changes (item/level/job/quest/map).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QuestInfoIcon {
+    /// the NPC that owns the bubble (rAthena bl->id)
+    #[prost(uint32, tag = "1")]
+    pub npc_id: u32,
+    /// NPC cell x
+    #[prost(uint32, tag = "2")]
+    pub x: u32,
+    /// NPC cell y
+    #[prost(uint32, tag = "3")]
+    pub y: u32,
+    /// e_questinfo_types (QTYPE_*): 0 quest .. 10 jumping-poring; 9999 QTYPE_NONE clears
+    #[prost(uint32, tag = "4")]
+    pub icon: u32,
+    /// e_questinfo_markcolor (QMARK_*): 0 none / 1 yellow / 2 green / 3 purple
+    #[prost(uint32, tag = "5")]
+    pub color: u32,
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Viewpoint {
     /// the NPC that owns the marker (rAthena st->oid)
@@ -1294,6 +1349,12 @@ pub struct InventoryItem {
     /// Per-unit weight from the item database (multiply by amount for the stack).
     #[prost(uint32, tag = "14")]
     pub weight: u32,
+    #[prost(string, tag = "15")]
+    pub signer_name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "16")]
+    pub creator_id: u32,
+    #[prost(enumeration = "CreatorKind", tag = "17")]
+    pub creator_kind: i32,
 }
 /// Server -> client, the full inventory dump (collapses RO ZC_INVENTORY_START/
 /// ITEMLIST_NORMAL/ITEMLIST_EQUIP/END 0x0B08-0x0B0B).
@@ -1334,6 +1395,12 @@ pub struct ItemAdded {
     /// Per-unit weight from the item database.
     #[prost(uint32, tag = "13")]
     pub weight: u32,
+    #[prost(string, tag = "14")]
+    pub signer_name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "15")]
+    pub creator_id: u32,
+    #[prost(enumeration = "CreatorKind", tag = "16")]
+    pub creator_kind: i32,
 }
 /// Server -> client, an item was removed from the inventory (replaces RO ZC_DELETE_ITEM_FROM_BODY 0x07FA).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1344,6 +1411,16 @@ pub struct ItemRemoved {
     pub amount: u32,
     #[prost(uint32, tag = "3")]
     pub reason: u32,
+}
+/// Server -> client, an inventory item became bound (for example, on equip).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ItemBound {
+    /// Client inventory index.
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    /// Bound type (1 = account, 4 = character).
+    #[prost(uint32, tag = "2")]
+    pub bound: u32,
 }
 /// Server -> client, the full cart dump (sent on mount/login). Mirrors InventoryList
 /// but for the separate cart container. Carries the cart's own weight totals so the
@@ -1389,6 +1466,12 @@ pub struct CartItemAdded {
     /// Per-unit weight from the item database.
     #[prost(uint32, tag = "13")]
     pub weight: u32,
+    #[prost(string, tag = "14")]
+    pub signer_name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "15")]
+    pub creator_id: u32,
+    #[prost(enumeration = "CreatorKind", tag = "16")]
+    pub creator_kind: i32,
 }
 /// Server -> client, an item was removed from the cart. Mirrors ItemRemoved.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1525,6 +1608,12 @@ pub struct VendingShopItem {
     pub cards: ::prost::alloc::vec::Vec<u32>,
     #[prost(uint32, tag = "9")]
     pub price: u32,
+    #[prost(string, tag = "10")]
+    pub signer_name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "11")]
+    pub creator_id: u32,
+    #[prost(enumeration = "CreatorKind", tag = "12")]
+    pub creator_kind: i32,
 }
 /// Server -> client, the full item list of a vendor's shop (reply to VendingListRequest).
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1549,6 +1638,88 @@ pub struct VendingSaleReport {
     pub zeny_gained: u32,
     #[prost(string, tag = "5")]
     pub buyer_name: ::prost::alloc::string::String,
+}
+/// Client -> server, request a trade with the nearby unit identified by target_gid.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_gid: u32,
+}
+/// Client -> server, accept or decline a pending trade request.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeResponse {
+    #[prost(bool, tag = "1")]
+    pub accept: bool,
+}
+/// Client -> server, add amount from an inventory index to the trade offer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeAddItem {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(uint32, tag = "2")]
+    pub amount: u32,
+}
+/// Client -> server, remove an inventory index from the trade offer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeRemoveItem {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+}
+/// Client -> server, set the zeny offered in the trade.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeSetZeny {
+    #[prost(uint64, tag = "1")]
+    pub amount: u64,
+}
+/// Client -> server, lock the current trade offer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeLock {}
+/// Client -> server, confirm the locked trade offer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeConfirm {}
+/// Client -> server, cancel the current trade.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeCancel {}
+/// Server -> client, a nearby character requested a trade.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeRequestReceived {
+    #[prost(uint32, tag = "1")]
+    pub char_id: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+/// Server -> client, a trade opened with the named partner.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeOpened {
+    #[prost(uint32, tag = "1")]
+    pub partner_char_id: u32,
+    #[prost(string, tag = "2")]
+    pub partner_name: ::prost::alloc::string::String,
+}
+/// Server -> client, the current offers and locks for both trade participants.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TradeOfferUpdate {
+    #[prost(message, repeated, tag = "1")]
+    pub own: ::prost::alloc::vec::Vec<InventoryItem>,
+    #[prost(message, repeated, tag = "2")]
+    pub partner: ::prost::alloc::vec::Vec<InventoryItem>,
+    #[prost(uint64, tag = "3")]
+    pub own_zeny: u64,
+    #[prost(uint64, tag = "4")]
+    pub partner_zeny: u64,
+    #[prost(bool, tag = "5")]
+    pub own_locked: bool,
+    #[prost(bool, tag = "6")]
+    pub partner_locked: bool,
+}
+/// Server -> client, the trade completed successfully.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeCompleted {}
+/// Server -> client, the trade was cancelled with its reason.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TradeCancelled {
+    #[prost(enumeration = "TradeCancelReason", tag = "1")]
+    pub reason: i32,
 }
 /// One item the NPC shop sells, shown in the buy window at its buy price.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2241,6 +2412,12 @@ pub struct StorageItemAdded {
     /// Per-unit weight from the item database.
     #[prost(uint32, tag = "13")]
     pub weight: u32,
+    #[prost(string, tag = "14")]
+    pub signer_name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "15")]
+    pub creator_id: u32,
+    #[prost(enumeration = "CreatorKind", tag = "16")]
+    pub creator_kind: i32,
 }
 /// Server -> client, an item was removed from storage. Mirrors CartItemRemoved.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2915,6 +3092,35 @@ impl FeatureCapability {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CreatorKind {
+    CreatorNone = 0,
+    CreatorSigned = 1,
+    CreatorForged = 2,
+}
+impl CreatorKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::CreatorNone => "CREATOR_NONE",
+            Self::CreatorSigned => "CREATOR_SIGNED",
+            Self::CreatorForged => "CREATOR_FORGED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CREATOR_NONE" => Some(Self::CreatorNone),
+            "CREATOR_SIGNED" => Some(Self::CreatorSigned),
+            "CREATOR_FORGED" => Some(Self::CreatorForged),
+            _ => None,
+        }
+    }
+}
 /// Outcome of a cart mount attempt. Values are prefixed because proto3 enum
 /// constants share the package namespace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -3028,6 +3234,54 @@ impl VendingOpenResultCode {
             "VEND_ITEM_NOT_IN_CART" => Some(Self::VendItemNotInCart),
             "VEND_INSUFFICIENT_STOCK" => Some(Self::VendInsufficientStock),
             "VEND_INVALID_STATE" => Some(Self::VendInvalidState),
+            _ => None,
+        }
+    }
+}
+/// Reason a trade ended without completing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum TradeCancelReason {
+    Declined = 0,
+    Timeout = 1,
+    Cancelled = 2,
+    TooFar = 3,
+    Busy = 4,
+    Dead = 5,
+    Disconnected = 6,
+    Capacity = 7,
+    Invalid = 8,
+}
+impl TradeCancelReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Declined => "TRADE_CANCEL_REASON_DECLINED",
+            Self::Timeout => "TRADE_CANCEL_REASON_TIMEOUT",
+            Self::Cancelled => "TRADE_CANCEL_REASON_CANCELLED",
+            Self::TooFar => "TRADE_CANCEL_REASON_TOO_FAR",
+            Self::Busy => "TRADE_CANCEL_REASON_BUSY",
+            Self::Dead => "TRADE_CANCEL_REASON_DEAD",
+            Self::Disconnected => "TRADE_CANCEL_REASON_DISCONNECTED",
+            Self::Capacity => "TRADE_CANCEL_REASON_CAPACITY",
+            Self::Invalid => "TRADE_CANCEL_REASON_INVALID",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TRADE_CANCEL_REASON_DECLINED" => Some(Self::Declined),
+            "TRADE_CANCEL_REASON_TIMEOUT" => Some(Self::Timeout),
+            "TRADE_CANCEL_REASON_CANCELLED" => Some(Self::Cancelled),
+            "TRADE_CANCEL_REASON_TOO_FAR" => Some(Self::TooFar),
+            "TRADE_CANCEL_REASON_BUSY" => Some(Self::Busy),
+            "TRADE_CANCEL_REASON_DEAD" => Some(Self::Dead),
+            "TRADE_CANCEL_REASON_DISCONNECTED" => Some(Self::Disconnected),
+            "TRADE_CANCEL_REASON_CAPACITY" => Some(Self::Capacity),
+            "TRADE_CANCEL_REASON_INVALID" => Some(Self::Invalid),
             _ => None,
         }
     }
