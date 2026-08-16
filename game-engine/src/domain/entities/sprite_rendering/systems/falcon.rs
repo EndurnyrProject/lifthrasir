@@ -650,6 +650,7 @@ mod tests {
             sex: 0,
             is_boss: false,
             name: String::new(),
+            display_size: 0,
             moving: false,
             dst_x: 0,
             dst_y: 0,

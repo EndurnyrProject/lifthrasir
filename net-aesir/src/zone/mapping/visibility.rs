@@ -1,5 +1,17 @@
+use bevy::prelude::warn;
+
 use crate::proto::aesir::net;
 use net_contract::events::{UnitEntered, UnitLeft};
+
+fn display_size(size: i32) -> u32 {
+    match net::DisplaySize::try_from(size) {
+        Ok(size) => size as u32,
+        Err(_) => {
+            warn!("unknown UnitSpawn.size {size}; defaulting to normal");
+            net::DisplaySize::Normal as u32
+        }
+    }
+}
 
 pub fn unit_spawn(s: net::UnitSpawn) -> UnitEntered {
     UnitEntered {
@@ -35,6 +47,7 @@ pub fn unit_spawn(s: net::UnitSpawn) -> UnitEntered {
         sex: s.sex,
         is_boss: s.is_boss,
         name: s.name,
+        display_size: display_size(s.size),
         moving: s.moving,
         dst_x: s.dst_x,
         dst_y: s.dst_y,
@@ -125,6 +138,34 @@ mod tests {
         assert_eq!(entered.dst_x, 0);
         assert_eq!(entered.dst_y, 0);
         assert_eq!(entered.move_start_time, 0);
+    }
+
+    #[test]
+    fn unit_spawn_maps_display_sizes() {
+        let normal = unit_spawn(sample_spawn());
+        let small = unit_spawn(net::UnitSpawn {
+            size: net::DisplaySize::Small as i32,
+            ..sample_spawn()
+        });
+        let big = unit_spawn(net::UnitSpawn {
+            size: net::DisplaySize::Big as i32,
+            ..sample_spawn()
+        });
+
+        assert_eq!(
+            (normal.display_size, small.display_size, big.display_size),
+            (0, 1, 2)
+        );
+    }
+
+    #[test]
+    fn unit_spawn_defaults_unknown_display_size_to_normal() {
+        let entered = unit_spawn(net::UnitSpawn {
+            size: 99,
+            ..sample_spawn()
+        });
+
+        assert_eq!(entered.display_size, 0);
     }
 
     #[test]

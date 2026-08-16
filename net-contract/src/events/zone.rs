@@ -79,6 +79,8 @@ pub struct UnitEntered {
     pub sex: u32,
     pub is_boss: bool,
     pub name: String,
+    /// Visual size category: 0 normal, 1 small, 2 big.
+    pub display_size: u32,
     pub moving: bool,
     pub dst_x: u32,
     pub dst_y: u32,

@@ -40,6 +40,7 @@ struct SpawnFields {
     gid: u32,
     object_type: crate::domain::entities::types::ObjectType,
     name: String,
+    display_size: u32,
     position: (u16, u16),
     direction: u8,
     /// Server movement speed in ms per cell (lower = faster). Drives walk-animation cadence.
@@ -73,6 +74,7 @@ impl From<&UnitEntered> for SpawnFields {
             gid: e.gid,
             object_type: crate::domain::entities::types::ObjectType::from(e.object_type as u8),
             name: e.name.clone(),
+            display_size: e.display_size,
             position: (e.x as u16, e.y as u16),
             direction: e.dir as u8,
             speed: e.speed as u16,
@@ -99,6 +101,14 @@ impl From<&UnitEntered> for SpawnFields {
     }
 }
 
+fn unit_display_scale(size: u32) -> Vec3 {
+    match size {
+        1 => Vec3::splat(0.5),
+        2 => Vec3::splat(2.0),
+        _ => Vec3::ONE,
+    }
+}
+
 /// Spawn network entities from UnitEntered events
 #[auto_add_system(
     plugin = crate::domain::entities::spawning::plugin::EntitySpawningDomainPlugin,
@@ -108,12 +118,12 @@ impl From<&UnitEntered> for SpawnFields {
         run_if = in_state(GameState::InGame)
     )
 )]
-#[allow(clippy::too_many_arguments)]
 pub fn spawn_network_entity_system(
     mut commands: Commands,
     mut spawn_events: MessageReader<UnitEntered>,
     mut entity_registry: ResMut<EntityRegistry>,
     job_registry: Option<Res<JobSpriteRegistry>>,
+    mut unit_transforms: Query<&mut Transform, With<NetworkEntity>>,
 ) {
     for unit in spawn_events.read() {
         let event = SpawnFields::from(unit);
@@ -122,6 +132,9 @@ pub fn spawn_network_entity_system(
         if let Some(existing_entity) = entity_registry.get_entity(event.gid) {
             // Re-entering view: de-queue any pending despawn. Remote movement is now driven
             // by snapshot interpolation, so we no longer forward a per-step destination here.
+            if let Ok(mut transform) = unit_transforms.get_mut(existing_entity) {
+                transform.scale = unit_display_scale(event.display_size);
+            }
             let mut entity = commands.entity(existing_entity);
             entity.remove::<PendingDespawn>();
             if event.object_type == crate::domain::entities::types::ObjectType::Mob {
@@ -219,7 +232,8 @@ pub fn spawn_network_entity_system(
 
         let mut entity_cmd = commands.spawn((
             NetworkEntity::new(event.aid, event.gid, event.object_type),
-            Transform::from_translation(world_pos),
+            Transform::from_translation(world_pos)
+                .with_scale(unit_display_scale(event.display_size)),
             GlobalTransform::default(),
             Visibility::default(),
             InheritedVisibility::default(),
@@ -713,6 +727,7 @@ mod tests {
             sex: 1,
             is_boss: false,
             name: "Alice".into(),
+            display_size: 0,
             moving: false,
             dst_x: 0,
             dst_y: 0,
@@ -738,6 +753,46 @@ mod tests {
         app
     }
 
+    #[test]
+    fn display_size_scales_new_unit_root() {
+        let mut app = app();
+        let mut small = unit(0, "", 0);
+        small.display_size = 1;
+        app.world_mut().write_message(small);
+
+        app.update();
+
+        let mut query = app
+            .world_mut()
+            .query_filtered::<&Transform, With<NetworkEntity>>();
+        let transform = query.single(app.world()).unwrap();
+        assert_eq!(transform.scale, Vec3::splat(0.5));
+    }
+
+    #[test]
+    fn repeated_spawn_updates_display_size_without_moving_unit() {
+        let mut app = app();
+        app.world_mut().write_message(unit(0, "", 0));
+        app.update();
+
+        let entity = app
+            .world()
+            .resource::<EntityRegistry>()
+            .get_entity(150_001)
+            .unwrap();
+        let original_translation = app.world().get::<Transform>(entity).unwrap().translation;
+
+        let mut big = unit(0, "", 0);
+        big.display_size = 2;
+        app.world_mut().write_message(big);
+        app.update();
+
+        let transform = app.world().get::<Transform>(entity).unwrap();
+        assert_eq!(
+            (transform.translation, transform.scale),
+            (original_translation, Vec3::splat(2.0))
+        );
+    }
     #[test]
     fn mob_spawn_seeds_unit_health_and_hp_broadcasts_apply() {
         let mut app = app();
