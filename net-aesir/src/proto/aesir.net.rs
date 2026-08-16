@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -388,6 +388,30 @@ pub mod envelope {
         /// 186: per-player quest-icon bubble over an NPC (script questinfo buildin)
         #[prost(message, tag = "186")]
         QuestInfoIcon(super::QuestInfoIcon),
+        /// 187: progress bar over the attached character (script `progressbar` buildin)
+        #[prost(message, tag = "187")]
+        ProgressBar(super::ProgressBar),
+        /// 188: open the navigation window / start navigation (script `navigateto` buildin)
+        #[prost(message, tag = "188")]
+        NavigateTo(super::NavigateTo),
+        /// 189-191: NPC waiting room (chat room) client intents
+        #[prost(message, tag = "189")]
+        WaitingRoomJoinRequest(super::WaitingRoomJoinRequest),
+        #[prost(message, tag = "190")]
+        WaitingRoomLeaveRequest(super::WaitingRoomLeaveRequest),
+        #[prost(message, tag = "191")]
+        WaitingRoomChatRequest(super::WaitingRoomChatRequest),
+        /// 192-196: NPC waiting room authoritative state (nearby / members / joiner)
+        #[prost(message, tag = "192")]
+        WaitingRoomInfo(super::WaitingRoomInfo),
+        #[prost(message, tag = "193")]
+        WaitingRoomRemoved(super::WaitingRoomRemoved),
+        #[prost(message, tag = "194")]
+        WaitingRoomJoinResult(super::WaitingRoomJoinResult),
+        #[prost(message, tag = "195")]
+        WaitingRoomMemberUpdate(super::WaitingRoomMemberUpdate),
+        #[prost(message, tag = "196")]
+        WaitingRoomChat(super::WaitingRoomChat),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -778,8 +802,6 @@ pub struct MoveStop {
     #[prost(uint32, tag = "3")]
     pub y: u32,
 }
-/// Server -> client, an entity entered view (collapses RO ZC_NOTIFY_NEWENTRY 0x09FE,
-/// ZC_NOTIFY_STANDENTRY 0x09FF and ZC_NOTIFY_MOVEENTRY 0x09FD). The `moving`, `dst_*` and
 /// `move_start_time` fields carry the moveentry case.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct UnitSpawn {
@@ -857,6 +879,8 @@ pub struct UnitSpawn {
     pub spirit_sphere_count: u32,
     #[prost(uint64, tag = "37")]
     pub spirit_sphere_revision: u64,
+    #[prost(enumeration = "DisplaySize", tag = "38")]
+    pub size: i32,
 }
 /// Server -> client, authoritative absolute spirit-sphere state for a unit.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -991,6 +1015,41 @@ pub struct SoundEffect {
     /// playback type (0 = data/wav)
     #[prost(uint32, tag = "2")]
     pub r#type: u32,
+}
+/// Server -> client, a progress bar over the attached character's head. The bar runs
+/// for `seconds`; on completion the client reports NpcInteract.progress, and
+/// cancel-on-move reuses NpcInteract.cancel. Sent only to the invoking player.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ProgressBar {
+    #[prost(uint32, tag = "1")]
+    pub seconds: u32,
+}
+/// Server -> client, open the navigation window / start navigation toward a map
+/// coordinate or a tracked monster (replaces RO ZC_NAVIGATION 0x08e2, script
+/// `navigateto`). Sent only to the invoking player. The client derives the
+/// navigation target the same way the original packet does: monster_id > 0
+/// targets that monster; else x > 0 && y > 0 targets those coordinates; else
+/// it is map-only (fails client-side if the player is already on the map).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NavigateTo {
+    /// destination map name
+    #[prost(string, tag = "1")]
+    pub map: ::prost::alloc::string::String,
+    /// destination cell x (0 when map-only or monster)
+    #[prost(uint32, tag = "2")]
+    pub x: u32,
+    /// destination cell y (0 when map-only or monster)
+    #[prost(uint32, tag = "3")]
+    pub y: u32,
+    /// allowed transport services (0 none, 1 airship, 10 scroll, 100 kafra)
+    #[prost(uint32, tag = "4")]
+    pub flag: u32,
+    /// true = navigate silently without opening the window
+    #[prost(bool, tag = "5")]
+    pub hide_window: bool,
+    /// optional tracked monster id
+    #[prost(uint32, tag = "6")]
+    pub monster_id: u32,
 }
 /// Client -> server, request an entity's name (replaces RO CZ_REQNAME2 0x0368).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1951,7 +2010,7 @@ pub mod npc_dialog {
 pub struct NpcInteract {
     #[prost(uint32, tag = "1")]
     pub npc_id: u32,
-    #[prost(oneof = "npc_interact::Response", tags = "2, 3, 4, 5, 6")]
+    #[prost(oneof = "npc_interact::Response", tags = "2, 3, 4, 5, 6, 7")]
     pub response: ::core::option::Option<npc_interact::Response>,
 }
 /// Nested message and enum types in `NpcInteract`.
@@ -1968,6 +2027,9 @@ pub mod npc_interact {
         Input(::prost::alloc::string::String),
         #[prost(bool, tag = "6")]
         Cancel(bool),
+        /// progress bar completed (script `progressbar`)
+        #[prost(bool, tag = "7")]
+        Progress(bool),
     }
 }
 /// Server -> client, an item appeared on a map cell (drop or walk-up discovery).
@@ -3064,6 +3126,98 @@ pub struct HomunculusResult {
     #[prost(message, optional, tag = "4")]
     pub state: ::core::option::Option<HomunculusPrivateState>,
 }
+/// Client -> server, join an NPC waiting room (the owner NPC gid is the room id).
+/// The password is always empty for NPC-owned rooms but is carried for fidelity.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomJoinRequest {
+    /// the owner NPC gid
+    #[prost(uint32, tag = "1")]
+    pub room_id: u32,
+    /// always empty for NPC rooms
+    #[prost(string, tag = "2")]
+    pub password: ::prost::alloc::string::String,
+}
+/// Client -> server, leave the waiting room the player is currently in.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomLeaveRequest {}
+/// Client -> server, chat inside the waiting room the player is currently in.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomChatRequest {
+    #[prost(string, tag = "1")]
+    pub message: ::prost::alloc::string::String,
+}
+/// A waiting-room member (roster entry).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomMember {
+    #[prost(uint32, tag = "1")]
+    pub char_id: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+/// Server -> client, a waiting room appeared or its member count changed.
+/// Broadcast to nearby players.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomInfo {
+    /// the owner NPC gid
+    #[prost(uint32, tag = "1")]
+    pub room_id: u32,
+    #[prost(string, tag = "2")]
+    pub title: ::prost::alloc::string::String,
+    /// players in the room (the owner NPC is not counted)
+    #[prost(uint32, tag = "3")]
+    pub member_count: u32,
+    /// the room limit (the owner NPC occupies one slot)
+    #[prost(uint32, tag = "4")]
+    pub limit: u32,
+    /// always true for NPC rooms
+    #[prost(bool, tag = "5")]
+    pub public: bool,
+}
+/// Server -> client, a waiting room disappeared. Broadcast to nearby players.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomRemoved {
+    #[prost(uint32, tag = "1")]
+    pub room_id: u32,
+}
+/// Server -> client, the outcome of a join attempt. Sent only to the joiner;
+/// `members` is the full roster on success.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WaitingRoomJoinResult {
+    #[prost(uint32, tag = "1")]
+    pub room_id: u32,
+    /// 0 ok, 1 full, 2 wrong password, 3 too low level, 4 too high level, 5 no zeny, 6 kicked
+    #[prost(uint32, tag = "2")]
+    pub result: u32,
+    #[prost(message, repeated, tag = "3")]
+    pub members: ::prost::alloc::vec::Vec<WaitingRoomMember>,
+}
+/// Server -> client, a member joined or left the room. Sent to the room's
+/// members; a `kicked` leave is additionally sent to the kicked player.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomMemberUpdate {
+    #[prost(uint32, tag = "1")]
+    pub room_id: u32,
+    #[prost(bool, tag = "2")]
+    pub joined: bool,
+    #[prost(bool, tag = "3")]
+    pub kicked: bool,
+    #[prost(uint32, tag = "4")]
+    pub char_id: u32,
+    #[prost(string, tag = "5")]
+    pub name: ::prost::alloc::string::String,
+}
+/// Server -> client, a chat message inside a waiting room. Sent to the room's members.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomChat {
+    #[prost(uint32, tag = "1")]
+    pub room_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub char_id: u32,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub message: ::prost::alloc::string::String,
+}
 /// Optional features advertised in Hello; HelloAck returns the negotiated intersection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -3155,6 +3309,38 @@ impl BoundType {
             "BOUND_GUILD" => Some(Self::BoundGuild),
             "BOUND_PARTY" => Some(Self::BoundParty),
             "BOUND_CHAR" => Some(Self::BoundChar),
+            _ => None,
+        }
+    }
+}
+/// Server -> client, an entity entered view (collapses RO ZC_NOTIFY_NEWENTRY 0x09FE,
+/// ZC_NOTIFY_STANDENTRY 0x09FF and ZC_NOTIFY_MOVEENTRY 0x09FD). The `moving`, `dst_*` and
+/// Display scale of a spawned unit (used by NPCs: setnpcdisplay's size argument).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum DisplaySize {
+    Normal = 0,
+    Small = 1,
+    Big = 2,
+}
+impl DisplaySize {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Normal => "DISPLAY_SIZE_NORMAL",
+            Self::Small => "DISPLAY_SIZE_SMALL",
+            Self::Big => "DISPLAY_SIZE_BIG",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "DISPLAY_SIZE_NORMAL" => Some(Self::Normal),
+            "DISPLAY_SIZE_SMALL" => Some(Self::Small),
+            "DISPLAY_SIZE_BIG" => Some(Self::Big),
             _ => None,
         }
     }

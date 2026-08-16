@@ -92,6 +92,7 @@ mod tests {
             virtue: 16,
             spirit_sphere_count: 5,
             spirit_sphere_revision: 3,
+            size: net::DisplaySize::Normal as i32,
         }
     }
 
