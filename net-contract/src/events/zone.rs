@@ -579,3 +579,10 @@ pub struct SnapshotReceived {
     pub server_tick: u64,
     pub entities: Vec<ZoneSnapshotEntity>,
 }
+
+/// Requests one player-local WAV sound effect from `data/wav`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PlaySoundEffect {
+    pub name: String,
+}

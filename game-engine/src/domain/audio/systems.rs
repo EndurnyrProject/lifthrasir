@@ -10,6 +10,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_kira_audio::prelude::{AudioControl, SpatialAudioEmitter};
 use bevy_kira_audio::{Audio, AudioChannel, AudioInstance, AudioSource, AudioTween};
+use net_contract::events::PlaySoundEffect;
 
 /// System to handle BGM change requests with crossfading
 /// Listens for PlayBgmEvent and manages track transitions
@@ -263,7 +264,7 @@ pub fn handle_map_bgm(
     }
 }
 
-pub(super) fn mob_sfx_path(name: &str) -> String {
+pub(super) fn sfx_path(name: &str) -> String {
     format!("ro://data/wav/{}", name.replace('\\', "/"))
 }
 
@@ -293,10 +294,25 @@ pub fn play_mob_sfx(
             continue;
         };
 
-        let path = mob_sfx_path(&event.sound);
+        let path = sfx_path(&event.sound);
         let source: Handle<AudioSource> = asset_server.load(&path);
         let handle = sfx_channel.play(source).handle();
         emitter.instances.push(handle);
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::domain::audio::plugin::AudioPlugin,
+    schedule = Update
+)]
+pub fn play_sound_effect(
+    mut events: MessageReader<PlaySoundEffect>,
+    asset_server: Res<AssetServer>,
+    sfx_channel: Res<AudioChannel<SfxChannel>>,
+) {
+    for event in events.read() {
+        let source: Handle<AudioSource> = asset_server.load(sfx_path(&event.name));
+        sfx_channel.play(source);
     }
 }
 
@@ -316,7 +332,7 @@ pub fn play_skill_sfx(
     mut emitters: Query<&mut SpatialAudioEmitter>,
 ) {
     for event in events.read() {
-        let path = mob_sfx_path(&event.sound);
+        let path = sfx_path(&event.sound);
         let source: Handle<AudioSource> = asset_server.load(&path);
         let handle = sfx_channel.play(source).handle();
 
@@ -408,13 +424,13 @@ pub fn handle_ambience_mute_change(
 
 #[cfg(test)]
 mod sfx_tests {
-    use super::{amplitude_to_decibels, mob_sfx_path};
+    use super::{amplitude_to_decibels, sfx_path};
 
     #[test]
-    fn mob_sfx_path_normalizes_backslashes_and_prefixes() {
-        assert_eq!(mob_sfx_path("poring.wav"), "ro://data/wav/poring.wav");
+    fn sfx_path_normalizes_backslashes_and_prefixes() {
+        assert_eq!(sfx_path("poring.wav"), "ro://data/wav/poring.wav");
         assert_eq!(
-            mob_sfx_path("monster\\poring.wav"),
+            sfx_path("monster\\poring.wav"),
             "ro://data/wav/monster/poring.wav"
         );
     }
