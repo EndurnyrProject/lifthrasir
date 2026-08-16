@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
@@ -13,6 +14,17 @@ use net_contract::events::{
     ItemUseFailed,
 };
 
+#[derive(SystemParam)]
+pub struct InventoryEventWriters<'w> {
+    received: MessageWriter<'w, InventoryReceived>,
+    added: MessageWriter<'w, ItemAdded>,
+    removed: MessageWriter<'w, ItemRemoved>,
+    bound: MessageWriter<'w, ItemBound>,
+    equipped: MessageWriter<'w, ItemEquipped>,
+    unequipped: MessageWriter<'w, ItemUnequipped>,
+    use_failed: MessageWriter<'w, ItemUseFailed>,
+}
+
 /// Drains inventory bodies. The dump rides the bulk channel and the deltas ride
 /// gameplay, so the match is on the `Body` variant directly, not the channel.
 #[auto_add_system(
@@ -22,36 +34,30 @@ use net_contract::events::{
 )]
 pub fn zone_drain_inventory(
     mut incoming: MessageReader<IncomingMessage>,
-    mut received: MessageWriter<InventoryReceived>,
-    mut added: MessageWriter<ItemAdded>,
-    mut removed: MessageWriter<ItemRemoved>,
-    mut bound: MessageWriter<ItemBound>,
-    mut equipped: MessageWriter<ItemEquipped>,
-    mut unequipped: MessageWriter<ItemUnequipped>,
-    mut use_failed: MessageWriter<ItemUseFailed>,
+    mut out: InventoryEventWriters,
 ) {
     for msg in incoming.read() {
         match msg.body.clone() {
             Body::InventoryList(l) => {
-                received.write(inventory_list(l));
+                out.received.write(inventory_list(l));
             }
             Body::ItemAdded(a) => {
-                added.write(item_added(a));
+                out.added.write(item_added(a));
             }
             Body::ItemRemoved(r) => {
-                removed.write(item_removed(r));
+                out.removed.write(item_removed(r));
             }
             Body::ItemBound(b) => {
-                bound.write(item_bound(b));
+                out.bound.write(item_bound(b));
             }
             Body::EquipResult(e) => {
-                equipped.write(equip_result(e));
+                out.equipped.write(equip_result(e));
             }
             Body::UnequipResult(u) => {
-                unequipped.write(unequip_result(u));
+                out.unequipped.write(unequip_result(u));
             }
             Body::ItemUseResult(r) if !r.ok => {
-                use_failed.write(item_use_result(r));
+                out.use_failed.write(item_use_result(r));
             }
             _ => {}
         }

@@ -16,10 +16,10 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use game_engine::infrastructure::assets::item_icon_path;
 use game_engine::domain::cart::Cart;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::inventory::Inventory;
+use game_engine::infrastructure::assets::item_icon_path;
 use game_engine::infrastructure::item::ItemDb;
 use net_contract::events::CartMountRejection;
 

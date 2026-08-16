@@ -9,8 +9,8 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
-use game_engine::infrastructure::assets::item_icon_path;
 use game_engine::domain::inventory::Inventory;
+use game_engine::infrastructure::assets::item_icon_path;
 use game_engine::infrastructure::item::ItemDb;
 
 use crate::theme;

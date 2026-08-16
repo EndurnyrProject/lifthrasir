@@ -18,13 +18,13 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use game_engine::infrastructure::assets::item_icon_path;
 use game_engine::domain::equipment::UnequipItemRequested;
 use game_engine::domain::equipment::location::{
     EQP_AMMO, EQP_ARMOR, EQP_GARMENT, EQP_HEAD_LOW, EQP_HEAD_MID, EQP_HEAD_TOP, EQP_LEFT_ACCESSORY,
     EQP_LEFT_HAND, EQP_RIGHT_ACCESSORY, EQP_RIGHT_HAND, EQP_SHOES,
 };
 use game_engine::domain::inventory::{Inventory, Item};
+use game_engine::infrastructure::assets::item_icon_path;
 use game_engine::infrastructure::item::ItemDb;
 
 use crate::theme;

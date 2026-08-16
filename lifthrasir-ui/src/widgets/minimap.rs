@@ -4,10 +4,10 @@
 use bevy::asset::LoadState;
 use bevy::prelude::*;
 use game_engine::core::state::GameState;
-use game_engine::infrastructure::assets::paths::minimap_path;
 use game_engine::domain::entities::character::components::visual::CharacterDirection;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::world::map::MapData;
+use game_engine::infrastructure::assets::paths::minimap_path;
 use game_engine::utils::coordinates::{Direction, world_position_to_spawn_coords};
 
 use crate::theme;

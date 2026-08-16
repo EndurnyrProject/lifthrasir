@@ -1950,7 +1950,9 @@ mod tests {
     #[test]
     fn same_frame_container_deltas_reach_both_rendered_panes() {
         use bevy::scene::ScenePlugin;
-        use net_contract::events::{ItemAdded, ItemRemoved, StorageItemAdded, StorageItemRemoved};
+        use net_contract::events::{
+            ItemAdded, ItemBound, ItemRemoved, StorageItemAdded, StorageItemRemoved,
+        };
 
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
@@ -1958,6 +1960,7 @@ mod tests {
         app.init_asset::<Font>();
         app.add_message::<ItemAdded>();
         app.add_message::<ItemRemoved>();
+        app.add_message::<ItemBound>();
         app.add_message::<StorageItemAdded>();
         app.add_message::<StorageItemRemoved>();
         app.init_resource::<Inventory>();

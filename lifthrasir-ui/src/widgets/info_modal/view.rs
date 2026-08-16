@@ -9,7 +9,6 @@
 
 use bevy::prelude::Color;
 
-use game_engine::infrastructure::assets::{item_collection_path, item_icon_path};
 use game_engine::domain::cart::Cart;
 use game_engine::domain::entities::character::components::equipment::EquipmentSlot;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
@@ -18,6 +17,7 @@ use game_engine::domain::inventory::item::item_category;
 use game_engine::domain::inventory::{Inventory, ItemCategory};
 use game_engine::domain::skill::{SkillNode, SkillTreeState};
 use game_engine::domain::storage::Storage;
+use game_engine::infrastructure::assets::{item_collection_path, item_icon_path};
 use game_engine::infrastructure::item::ItemDb;
 use game_engine::infrastructure::skill::SkillCatalog;
 
