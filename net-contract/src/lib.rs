@@ -223,5 +223,9 @@ mod tests {
             app.world()
                 .contains_resource::<Messages<events::SkillUnitDespawned>>()
         );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::CutinDisplayChanged>>()
+        );
     }
 }

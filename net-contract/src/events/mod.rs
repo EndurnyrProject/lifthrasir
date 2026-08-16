@@ -3,6 +3,7 @@
 pub mod announcement;
 pub mod cart;
 pub mod character;
+pub mod cutin;
 pub mod guild;
 pub mod login;
 pub mod mount;
@@ -15,6 +16,7 @@ pub mod zone;
 pub use announcement::*;
 pub use cart::*;
 pub use character::*;
+pub use cutin::*;
 pub use guild::*;
 pub use login::*;
 pub use mount::*;
