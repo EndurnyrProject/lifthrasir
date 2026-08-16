@@ -12,6 +12,7 @@ pub mod character_info;
 pub mod character_window;
 pub mod chat_box;
 pub mod chrome;
+pub mod cutin;
 pub mod death_dialog;
 pub mod draggable;
 pub mod emote;
@@ -56,6 +57,7 @@ impl Plugin for InGameHudPlugin {
             storage_window::StorageWindowPlugin,
         ));
         app.add_plugins(skill_target_toast::SkillTargetToastPlugin);
+        app.add_plugins(cutin::CutinPlugin);
     }
 }
 
