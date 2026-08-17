@@ -986,7 +986,7 @@ pub struct Viewpoint {
     /// the NPC that owns the marker (rAthena st->oid)
     #[prost(uint32, tag = "1")]
     pub npc_id: u32,
-    /// action: 0 remove / 1 display / 2 display+remove-others
+    /// 0 = display 15s / 1 = display until map change / 2 = remove
     #[prost(uint32, tag = "2")]
     pub r#type: u32,
     #[prost(uint32, tag = "3")]
