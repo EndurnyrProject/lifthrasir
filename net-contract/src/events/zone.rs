@@ -582,6 +582,17 @@ pub struct SnapshotReceived {
     pub entities: Vec<ZoneSnapshotEntity>,
 }
 
+/// Result of a `TimeSync` heartbeat round-trip. `offset_ms` is the RTT-corrected
+/// estimate of `server_wall_clock_ms - client_real_time_ms` (Cristian's algorithm),
+/// so `client_real_time_ms + offset_ms` places the client on the server timeline.
+/// `rtt_ms` is the measured round-trip time for diagnostics.
+#[derive(Message, Debug, Clone, Copy)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ServerClockSynced {
+    pub offset_ms: i64,
+    pub rtt_ms: u32,
+}
+
 /// Requests one player-local WAV sound effect from `data/wav`.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

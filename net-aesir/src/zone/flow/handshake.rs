@@ -14,7 +14,7 @@ use crate::channels::CONTROL;
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
 use crate::proto::aesir::net::{Hello, SessionAuth, TimeSync};
-use net_contract::events::{ZoneDisconnected, ZoneEntered};
+use net_contract::events::{ServerClockSynced, ZoneDisconnected, ZoneEntered};
 
 /// Periodic time-sync cadence, preserving the legacy TCP zone path's 30s interval.
 const TIME_SYNC_INTERVAL: Duration = Duration::from_secs(30);
@@ -75,6 +75,8 @@ pub fn zone_drain_control(
     mut client: ResMut<QuinnetClient>,
     mut state: ResMut<QuicZoneState>,
     mut entered: MessageWriter<ZoneEntered>,
+    mut clock_synced: MessageWriter<ServerClockSynced>,
+    time: Res<Time<Real>>,
 ) {
     for msg in incoming.read() {
         if msg.channel != CONTROL {
@@ -115,33 +117,68 @@ pub fn zone_drain_control(
                 state.phase = next;
             }
             Body::TimeSyncAck(reply) => {
-                state.clock_offset = reply.server_tick as i64;
+                let Some(sent_ms) = state.time_sync_sent_ms.take() else {
+                    warn!("TimeSyncAck without an in-flight TimeSync; ignoring");
+                    continue;
+                };
+                let recv_ms = time.elapsed().as_millis() as i64;
+                clock_synced.write(time_sync_result(sent_ms, recv_ms, reply.server_tick));
             }
             _ => warn!("unexpected control body on zone channel"),
         }
     }
 }
 
-/// Periodically sends `TimeSync { client_tick }` on the control channel.
+/// Sends `TimeSync` on the control channel once the session is entering the map,
+/// firing immediately on each new zone connection and then every
+/// `TIME_SYNC_INTERVAL`, and records the send time so the matching `TimeSyncAck`
+/// can measure RTT. The immediate first send converges `ServerClock` within ~1 RTT
+/// of entry instead of after a full interval.
 #[auto_add_system(
     plugin = crate::AesirNetPlugin,
     schedule = Update,
     config(run_if = client_connected)
 )]
 pub fn zone_time_sync(
-    time: Res<Time>,
+    time: Res<Time<Real>>,
     mut timer: Local<Option<Timer>>,
+    mut synced_epoch: Local<u64>,
     mut client: ResMut<QuinnetClient>,
     mut state: ResMut<QuicZoneState>,
 ) {
-    let timer = timer.get_or_insert_with(|| Timer::new(TIME_SYNC_INTERVAL, TimerMode::Repeating));
-    if !timer.tick(time.delta()).just_finished() {
+    if !matches!(
+        state.phase,
+        ZonePhase::Entering | ZonePhase::MapReady | ZonePhase::Playing
+    ) {
         return;
     }
-    let client_tick = (time.elapsed_secs() * 1000.0) as u32;
-    let body = Body::TimeSync(TimeSync { client_tick });
+    let timer = timer.get_or_insert_with(|| Timer::new(TIME_SYNC_INTERVAL, TimerMode::Repeating));
+    let new_connection = *synced_epoch != state.connection_epoch;
+    if !new_connection && !timer.tick(time.delta()).just_finished() {
+        return;
+    }
+    let now_ms = time.elapsed().as_millis() as i64;
+    let body = Body::TimeSync(TimeSync {
+        client_tick: now_ms as u32,
+    });
     if let Err(e) = state.send(&mut client, CONTROL, body) {
         error!("failed to send TimeSync: {e}");
+        return;
+    }
+    state.time_sync_sent_ms = Some(now_ms);
+    *synced_epoch = state.connection_epoch;
+    timer.reset();
+}
+
+/// Cristian's-algorithm clock estimate from a `TimeSync` round-trip: the server
+/// samples its tick roughly at the round-trip midpoint, so the offset against the
+/// client's `Time<Real>` clock is `server_tick + rtt/2 - recv`.
+fn time_sync_result(sent_ms: i64, recv_ms: i64, server_tick: u32) -> ServerClockSynced {
+    let rtt_ms = (recv_ms - sent_ms).max(0);
+    let offset_ms = server_tick as i64 + rtt_ms / 2 - recv_ms;
+    ServerClockSynced {
+        offset_ms,
+        rtt_ms: rtt_ms as u32,
     }
 }
 
@@ -211,5 +248,22 @@ mod tests {
     fn enter_ack_out_of_phase_is_ignored() {
         assert_eq!(enter_ack_next(ZonePhase::HelloSent), None);
         assert_eq!(enter_ack_next(ZonePhase::Entering), None);
+    }
+
+    #[test]
+    fn time_sync_result_applies_half_rtt_correction() {
+        // sent at t=1000, ack recv at t=1200 (rtt 200), server sampled 5000ms.
+        // offset = 5000 + 200/2 - 1200 = 3900.
+        let result = time_sync_result(1_000, 1_200, 5_000);
+        assert_eq!(result.rtt_ms, 200);
+        assert_eq!(result.offset_ms, 3_900);
+    }
+
+    #[test]
+    fn time_sync_result_clamps_negative_rtt() {
+        // A non-monotonic recv (< sent) must not produce a negative rtt.
+        let result = time_sync_result(1_200, 1_000, 5_000);
+        assert_eq!(result.rtt_ms, 0);
+        assert_eq!(result.offset_ms, 5_000 - 1_000);
     }
 }

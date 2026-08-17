@@ -2,8 +2,9 @@
 //!
 //! aesir broadcasts per-map DELTA snapshots over the unreliable `:snapshots`
 //! channel instead of per-step move packets. This module is the ingest half:
-//! it estimates server time on the client ([`ServerClock`]) and fills a small
-//! per-entity sample buffer ([`SnapshotBuffer`]) from [`SnapshotReceived`].
+//! it fills a small per-entity sample buffer ([`SnapshotBuffer`]) from
+//! [`SnapshotReceived`]. Server time on the client ([`ServerClock`]) is estimated
+//! separately from the RTT-corrected `TimeSync` heartbeat ([`ServerClockSynced`]).
 //!
 //! It does NOT move entities — interpolation reads these buffers in a later step.
 
@@ -14,21 +15,23 @@ use bevy_auto_plugin::prelude::*;
 
 use crate::core::state::GameState;
 use crate::domain::entities::registry::EntityRegistry;
-use net_contract::events::SnapshotReceived;
+use net_contract::events::{ServerClockSynced, SnapshotReceived};
 
 /// Max samples retained per entity. ~6 covers a couple of snapshot intervals
 /// plus interpolation delay; older samples are useless once we've moved past them.
 const BUFFER_CAPACITY: usize = 6;
 
-/// Client-side estimate of server time. `server_tick` is server wall-clock
-/// milliseconds (`System.system_time(:millisecond)`), so the offset against the
-/// client's monotonic [`Time<Real>`] clock lets us place samples on a shared timeline.
+/// Client-side estimate of server time, driven by the RTT-corrected `TimeSync`
+/// heartbeat ([`ServerClockSynced`]). Server ticks are wall-clock milliseconds
+/// (`System.system_time(:millisecond)`), so the offset against the client's
+/// monotonic [`Time<Real>`] clock lets us place server-stamped samples on a shared
+/// timeline.
 ///
-/// Latest snapshot wins — no smoothing for v1.
+/// Latest heartbeat wins — no smoothing for v1.
 #[derive(Resource, Default, Debug)]
 #[auto_init_resource(plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin)]
 pub struct ServerClock {
-    /// `server_tick - client_now_ms` from the most recent snapshot.
+    /// `server_tick - client_now_ms`, RTT-corrected, from the latest heartbeat.
     pub offset_ms: i64,
 }
 
@@ -39,6 +42,27 @@ impl ServerClock {
     }
 }
 
+/// Updates [`ServerClock`] from the RTT-corrected `TimeSync` heartbeat
+/// ([`ServerClockSynced`]). Not state-gated (a heartbeat can land while the map is
+/// still loading, before `InGame`), but guarded on the message resource so the
+/// movement plugin still builds in isolation without `NetContractPlugin`.
+#[auto_add_system(
+    plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
+    schedule = Update,
+    config(run_if = resource_exists::<Messages<ServerClockSynced>>)
+)]
+pub fn update_server_clock_system(
+    mut synced: MessageReader<ServerClockSynced>,
+    mut clock: ResMut<ServerClock>,
+) {
+    for event in synced.read() {
+        clock.offset_ms = event.offset_ms;
+        debug!(
+            "[clock] server clock synced offset_ms={} rtt_ms={}",
+            event.offset_ms, event.rtt_ms
+        );
+    }
+}
 /// One position/state sample for a remote entity, stamped with server time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SnapshotSample {
@@ -82,8 +106,8 @@ impl SnapshotBuffer {
     }
 }
 
-/// Fills per-entity [`SnapshotBuffer`]s from incoming snapshots and re-estimates
-/// the [`ServerClock`] offset. Skips the local player and not-yet-spawned entities.
+/// Fills per-entity [`SnapshotBuffer`]s from incoming snapshots.
+/// Skips the local player and not-yet-spawned entities.
 /// Does not touch `Transform`.
 #[auto_add_system(
     plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin,
@@ -93,16 +117,10 @@ impl SnapshotBuffer {
 pub fn ingest_snapshots_system(
     mut commands: Commands,
     mut snapshots: MessageReader<SnapshotReceived>,
-    time: Res<Time<Real>>,
     registry: Res<EntityRegistry>,
     mut buffers: Query<&mut SnapshotBuffer>,
 ) {
-    let client_now_ms = time.elapsed().as_millis() as i64;
-
     for snapshot in snapshots.read() {
-        let offset_ms = snapshot.server_tick as i64 - client_now_ms;
-        commands.insert_resource(ServerClock { offset_ms });
-
         let mut buffered = 0;
         let mut skipped_unknown = 0;
         let mut skipped_local = 0;
@@ -136,8 +154,8 @@ pub fn ingest_snapshots_system(
         }
 
         debug!(
-            "[snapshot] ingest tick={} offset_ms={} buffered={} skipped_local={} skipped_unknown={}",
-            snapshot.server_tick, offset_ms, buffered, skipped_local, skipped_unknown
+            "[snapshot] ingest tick={} buffered={} skipped_local={} skipped_unknown={}",
+            snapshot.server_tick, buffered, skipped_local, skipped_unknown
         );
     }
 }
@@ -274,7 +292,38 @@ mod tests {
             app.world().get::<SnapshotBuffer>(local).is_none(),
             "local player must not get a buffer"
         );
+    }
 
-        assert_ne!(app.world().resource::<ServerClock>().offset_ms, 0);
+    #[test]
+    fn update_server_clock_applies_latest_heartbeat() {
+        let mut app = App::new();
+        app.add_message::<ServerClockSynced>()
+            .init_resource::<ServerClock>()
+            .add_systems(Update, update_server_clock_system);
+
+        app.world_mut()
+            .resource_mut::<Messages<ServerClockSynced>>()
+            .write(ServerClockSynced {
+                offset_ms: 1_700_000_000_000,
+                rtt_ms: 40,
+            });
+        app.update();
+        assert_eq!(
+            app.world().resource::<ServerClock>().offset_ms,
+            1_700_000_000_000
+        );
+
+        // Latest heartbeat wins.
+        app.world_mut()
+            .resource_mut::<Messages<ServerClockSynced>>()
+            .write(ServerClockSynced {
+                offset_ms: 1_700_000_000_500,
+                rtt_ms: 60,
+            });
+        app.update();
+        assert_eq!(
+            app.world().resource::<ServerClock>().offset_ms,
+            1_700_000_000_500
+        );
     }
 }

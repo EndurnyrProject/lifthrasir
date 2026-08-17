@@ -55,8 +55,8 @@ pub struct ZoneSpawn {
 
 /// Drives the QUIC zone-server flow: tracks the session phase, owns the
 /// seq-counting `QuicConnection`, holds session credentials and the target map,
-/// and stashes the spawn cell from `EnterAck`. Also tracks the latest server
-/// clock offset from `TimeSyncAck`.
+/// and stashes the spawn cell from `EnterAck`. Also holds the in-flight
+/// `TimeSync` send timestamp for RTT-corrected clock sync.
 #[derive(Resource, Default)]
 #[auto_init_resource(plugin = crate::AesirNetPlugin)]
 pub struct QuicZoneState {
@@ -67,7 +67,9 @@ pub struct QuicZoneState {
     pub auth: ZoneAuth,
     pub map_name: String,
     pub spawn: Option<ZoneSpawn>,
-    pub clock_offset: i64,
+    /// Client `Time<Real>` millisecond timestamp of the in-flight `TimeSync`,
+    /// consumed when its `TimeSyncAck` returns to measure RTT. `None` when idle.
+    pub time_sync_sent_ms: Option<i64>,
     /// Latched `LocalMapLoaded` signal; gates the `Entering -> MapReady` advance.
     pub map_loaded_signal: bool,
     /// Latched `LocalPlayerReady` signal; gates the `MapReady -> Playing` advance.
@@ -85,6 +87,7 @@ impl QuicZoneState {
         self.auth = auth;
         self.map_name = map_name;
         self.spawn = None;
+        self.time_sync_sent_ms = None;
         self.phase = ZonePhase::Connecting;
         self.map_loaded_signal = false;
         self.player_ready_signal = false;
