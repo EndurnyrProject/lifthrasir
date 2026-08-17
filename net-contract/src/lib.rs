@@ -231,5 +231,9 @@ mod tests {
             app.world()
                 .contains_resource::<Messages<events::CutinDisplayChanged>>()
         );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::ViewpointChanged>>()
+        );
     }
 }

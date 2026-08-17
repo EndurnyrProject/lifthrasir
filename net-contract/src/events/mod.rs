@@ -11,6 +11,7 @@ pub mod npc;
 pub mod party;
 pub mod shop;
 pub mod storage;
+pub mod viewpoint;
 pub mod zone;
 
 pub use announcement::*;
@@ -24,4 +25,5 @@ pub use npc::*;
 pub use party::*;
 pub use shop::*;
 pub use storage::*;
+pub use viewpoint::*;
 pub use zone::*;
