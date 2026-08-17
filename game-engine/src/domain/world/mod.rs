@@ -8,6 +8,7 @@ pub mod map_scoped;
 pub mod plugin;
 pub mod spawn_context;
 pub mod systems;
+pub mod viewpoint;
 pub mod warp;
 pub mod zone_readiness;
 
