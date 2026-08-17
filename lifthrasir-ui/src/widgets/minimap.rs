@@ -7,6 +7,7 @@ use game_engine::core::state::GameState;
 use game_engine::domain::entities::character::components::visual::CharacterDirection;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::world::map::MapData;
+use game_engine::domain::world::viewpoint::ViewpointMarker;
 use game_engine::infrastructure::assets::paths::minimap_path;
 use game_engine::utils::coordinates::{Direction, world_position_to_spawn_coords};
 
@@ -31,6 +32,10 @@ pub struct MinimapMarker;
 /// Marks the `<mapname> <x>, <y>` coordinate readout text.
 #[derive(Component)]
 pub struct MinimapCoordText;
+
+/// Marks a dot mirroring a live `ViewpointMarker` slot by `id`.
+#[derive(Component)]
+struct ViewpointDot(u32);
 
 /// Caches the current map's minimap dimensions and loaded image handle so the
 /// marker/coord systems can detect a map switch by name rather than relying on
@@ -75,6 +80,9 @@ const FRAME_SIZE: f32 = 180.0;
 
 /// Half the marker's side length in px, used to center it on its grid point.
 const MARKER_HALF: f32 = 6.0;
+
+/// Half a viewpoint dot's side length in px, used to center it on its grid point.
+const DOT_HALF: f32 = 3.0;
 
 /// Builds the minimap under `parent`: a fixed-size map image anchored top-right
 /// with the player marker over it and a coordinate readout below. The image stays
@@ -173,6 +181,7 @@ impl Plugin for MinimapPlugin {
                 sync_minimap_image,
                 update_minimap_marker,
                 update_minimap_coords,
+                sync_viewpoint_dots,
             )
                 .run_if(in_state(GameState::InGame)),
         );
@@ -278,6 +287,69 @@ fn update_minimap_marker(
     *marker_visibility = Visibility::Inherited;
 }
 
+/// Reconciles one [`ViewpointDot`] per live [`ViewpointMarker`] under the frame:
+/// despawns dots whose marker is gone, spawns dots for new markers, and keeps
+/// every dot's position and color in sync with its marker.
+fn sync_viewpoint_dots(
+    markers: Query<&ViewpointMarker>,
+    mut dots: Query<(Entity, &ViewpointDot, &mut Node, &mut BackgroundColor)>,
+    frame: Query<Entity, With<MinimapFrame>>,
+    state: Res<MinimapState>,
+    mut commands: Commands,
+) {
+    let Ok(frame) = frame.single() else {
+        return;
+    };
+    if state.width == 0 || state.height == 0 {
+        return;
+    }
+
+    for (entity, dot, _, _) in &dots {
+        let marker_exists = markers.iter().any(|marker| marker.id == dot.0);
+        if !marker_exists {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    for marker in &markers {
+        let (left, top) = grid_to_frame_px(
+            marker.x,
+            marker.y,
+            state.width,
+            state.height,
+            FRAME_SIZE,
+            FRAME_SIZE,
+        );
+        let (left, top) = (Val::Px(left - DOT_HALF), Val::Px(top - DOT_HALF));
+        match dots.iter_mut().find(|(_, dot, _, _)| dot.0 == marker.id) {
+            Some((_, _, mut node, mut background)) => {
+                node.left = left;
+                node.top = top;
+                background.0 = marker.color;
+            }
+            None => {
+                commands.spawn((
+                    ViewpointDot(marker.id),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left,
+                        top,
+                        width: Val::Px(6.0),
+                        height: Val::Px(6.0),
+                        ..default()
+                    },
+                    BackgroundColor(marker.color),
+                    // Dots are appended after the arrow, so a lower sibling z keeps
+                    // the player marker on top.
+                    ZIndex(-1),
+                    Pickable::IGNORE,
+                    ChildOf(frame),
+                ));
+            }
+        }
+    }
+}
+
 /// Writes the `<mapname> <x>, <y>` readout each frame, only touching the `Text`
 /// when the value actually changes.
 fn update_minimap_coords(
@@ -368,5 +440,80 @@ mod tests {
         assert_eq!(direction_to_degrees(Direction::SouthWest), 225.0);
         assert_eq!(direction_to_degrees(Direction::West), 270.0);
         assert_eq!(direction_to_degrees(Direction::NorthWest), 315.0);
+    }
+
+    fn dot_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_systems(Update, sync_viewpoint_dots);
+        app
+    }
+
+    fn dot_count(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<Entity, With<ViewpointDot>>()
+            .iter(app.world())
+            .count()
+    }
+
+    #[test]
+    fn viewpoint_marker_spawns_one_centered_colored_dot_under_the_frame() {
+        let mut app = dot_app();
+        let color = Color::srgb_u8(255, 128, 0);
+        let frame = app.world_mut().spawn(MinimapFrame).id();
+        app.world_mut().spawn(ViewpointMarker {
+            id: 1,
+            x: 50,
+            y: 50,
+            color,
+        });
+        app.insert_resource(MinimapState {
+            name: "prontera".to_string(),
+            width: 100,
+            height: 100,
+            handle: None,
+        });
+        app.update();
+
+        let (left, top) = grid_to_frame_px(50, 50, 100, 100, FRAME_SIZE, FRAME_SIZE);
+        let (entity, dot, node, background) = app
+            .world_mut()
+            .query::<(Entity, &ViewpointDot, &Node, &BackgroundColor)>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(dot.0, 1);
+        assert_eq!(node.left, Val::Px(left - DOT_HALF));
+        assert_eq!(node.top, Val::Px(top - DOT_HALF));
+        assert_eq!(background.0, color);
+        let children = app.world().get::<Children>(frame).unwrap();
+        assert!(children.contains(&entity));
+    }
+
+    #[test]
+    fn despawning_the_viewpoint_marker_despawns_its_dot() {
+        let mut app = dot_app();
+        app.world_mut().spawn(MinimapFrame);
+        let marker = app
+            .world_mut()
+            .spawn(ViewpointMarker {
+                id: 1,
+                x: 10,
+                y: 20,
+                color: Color::srgb_u8(0, 0, 255),
+            })
+            .id();
+        app.insert_resource(MinimapState {
+            name: "prontera".to_string(),
+            width: 100,
+            height: 100,
+            handle: None,
+        });
+        app.update();
+        assert_eq!(dot_count(&mut app), 1);
+
+        app.world_mut().despawn(marker);
+        app.update();
+
+        assert_eq!(dot_count(&mut app), 0);
     }
 }
