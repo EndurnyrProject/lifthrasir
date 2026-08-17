@@ -20,6 +20,7 @@ fn interact_body(r: &RespondToNpc) -> Body {
         NpcResponse::Number(v) => npc_interact::Response::Number(*v),
         NpcResponse::Input(s) => npc_interact::Response::Input(s.clone()),
         NpcResponse::Cancel => npc_interact::Response::Cancel(true),
+        NpcResponse::Progress => npc_interact::Response::Progress(true),
     };
     Body::NpcInteract(NpcInteract {
         npc_id: r.npc_id,
@@ -152,6 +153,21 @@ mod tests {
             Body::NpcInteract(NpcInteract { npc_id, response }) => {
                 assert_eq!(npc_id, 7u32);
                 assert_eq!(response, Some(npc_interact::Response::Cancel(true)));
+            }
+            other => panic!("expected Body::NpcInteract, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn interact_body_maps_progress() {
+        let body = interact_body(&RespondToNpc {
+            npc_id: 7,
+            response: NpcResponse::Progress,
+        });
+        match body {
+            Body::NpcInteract(NpcInteract { npc_id, response }) => {
+                assert_eq!(npc_id, 7u32);
+                assert_eq!(response, Some(npc_interact::Response::Progress(true)));
             }
             other => panic!("expected Body::NpcInteract, got {other:?}"),
         }

@@ -9,7 +9,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -412,6 +412,12 @@ pub mod envelope {
         WaitingRoomMemberUpdate(super::WaitingRoomMemberUpdate),
         #[prost(message, tag = "196")]
         WaitingRoomChat(super::WaitingRoomChat),
+        /// 197: guild progression client intent (master spends a guild skill point)
+        #[prost(message, tag = "197")]
+        GuildSkillUpRequest(super::GuildSkillUpRequest),
+        /// 198: guild progression authoritative level-up notification
+        #[prost(message, tag = "198")]
+        GuildLevelUp(super::GuildLevelUp),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -1023,6 +1029,14 @@ pub struct SoundEffect {
 pub struct ProgressBar {
     #[prost(uint32, tag = "1")]
     pub seconds: u32,
+    /// Bar fill colour as 0xRRGGBB, parsed from the script's hex string; rendered
+    /// verbatim (color == 0 is a black bar, no default fallback).
+    #[prost(uint32, tag = "2")]
+    pub color: u32,
+    /// Owning NPC gid, so the client can address the Progress/Cancel ack to the
+    /// exact NPC even for a bare progressbar with no open dialog window.
+    #[prost(uint32, tag = "3")]
+    pub npc_id: u32,
 }
 /// Server -> client, open the navigation window / start navigation toward a map
 /// coordinate or a tracked monster (replaces RO ZC_NAVIGATION 0x08e2, script
@@ -2259,6 +2273,11 @@ pub struct GuildPositionEditRequest {
     pub can_invite: bool,
     #[prost(bool, tag = "4")]
     pub can_expel: bool,
+    /// Per-position guild EXP tax percentage; clamped server-side to the
+    /// configured guild_exp_limit. Absent = leave the position's tax unchanged
+    /// (old clients cannot reset a tax they do not know about).
+    #[prost(uint32, optional, tag = "5")]
+    pub tax: ::core::option::Option<u32>,
 }
 /// Client -> server, master-only request to assign a member to a position slot.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2379,6 +2398,48 @@ pub struct GuildInfo {
     pub positions: ::prost::alloc::vec::Vec<GuildPosition>,
     #[prost(message, repeated, tag = "8")]
     pub members: ::prost::alloc::vec::Vec<GuildMember>,
+    /// Guild progression: current level (1-50) and exp progress toward the next.
+    #[prost(uint32, tag = "9")]
+    pub level: u32,
+    /// Exp accumulated toward next_exp; next_exp is 0 at the level cap.
+    #[prost(uint64, tag = "10")]
+    pub exp: u64,
+    #[prost(uint64, tag = "11")]
+    pub next_exp: u64,
+    /// Unspent guild skill points (one granted per level-up).
+    #[prost(uint32, tag = "12")]
+    pub skill_points: u32,
+    /// Learned guild skills with their current and maximum levels.
+    #[prost(message, repeated, tag = "13")]
+    pub skills: ::prost::alloc::vec::Vec<GuildSkillEntry>,
+}
+/// One learned (or learnable) guild skill in a GuildInfo snapshot.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildSkillEntry {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+    #[prost(uint32, tag = "3")]
+    pub max_level: u32,
+}
+/// Client -> server, guild master spends one guild skill point on skill_id.
+/// Rejections come back as GuildActionResult.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildSkillUpRequest {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+}
+/// Server -> client, broadcast to online members when the guild levels up.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildLevelUp {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+    /// Unspent skill points after the level-up.
+    #[prost(uint32, tag = "3")]
+    pub skill_points: u32,
 }
 /// Server -> client, complete current snapshot for one guild member.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3648,6 +3709,9 @@ pub enum GuildError {
     GuildErrInvalidEmblem = 8,
     GuildErrCannotTargetMaster = 9,
     GuildErrInvalidPosition = 10,
+    GuildErrNoSkillPoints = 11,
+    GuildErrSkillRequirement = 12,
+    GuildErrSkillMaxed = 13,
 }
 impl GuildError {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3667,6 +3731,9 @@ impl GuildError {
             Self::GuildErrInvalidEmblem => "GUILD_ERR_INVALID_EMBLEM",
             Self::GuildErrCannotTargetMaster => "GUILD_ERR_CANNOT_TARGET_MASTER",
             Self::GuildErrInvalidPosition => "GUILD_ERR_INVALID_POSITION",
+            Self::GuildErrNoSkillPoints => "GUILD_ERR_NO_SKILL_POINTS",
+            Self::GuildErrSkillRequirement => "GUILD_ERR_SKILL_REQUIREMENT",
+            Self::GuildErrSkillMaxed => "GUILD_ERR_SKILL_MAXED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3683,6 +3750,9 @@ impl GuildError {
             "GUILD_ERR_INVALID_EMBLEM" => Some(Self::GuildErrInvalidEmblem),
             "GUILD_ERR_CANNOT_TARGET_MASTER" => Some(Self::GuildErrCannotTargetMaster),
             "GUILD_ERR_INVALID_POSITION" => Some(Self::GuildErrInvalidPosition),
+            "GUILD_ERR_NO_SKILL_POINTS" => Some(Self::GuildErrNoSkillPoints),
+            "GUILD_ERR_SKILL_REQUIREMENT" => Some(Self::GuildErrSkillRequirement),
+            "GUILD_ERR_SKILL_MAXED" => Some(Self::GuildErrSkillMaxed),
             _ => None,
         }
     }

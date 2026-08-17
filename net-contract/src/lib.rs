@@ -37,6 +37,10 @@ mod tests {
         );
         assert!(
             app.world()
+                .contains_resource::<Messages<events::ProgressBarStarted>>()
+        );
+        assert!(
+            app.world()
                 .contains_resource::<Messages<commands::TalkToNpc>>()
         );
         assert!(

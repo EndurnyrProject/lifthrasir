@@ -16,6 +16,7 @@ pub mod damage_numbers;
 pub mod floor_item_labels;
 pub mod mob_health_bars;
 pub mod nameplates;
+pub mod progress_bar;
 pub mod skill_cast_labels;
 
 /// Query filter for the in-game 3D camera that worldspace overlays project
@@ -46,6 +47,7 @@ impl Plugin for WorldspaceUiPlugin {
             floor_item_labels::FloorItemLabelPlugin,
             mob_health_bars::MobHealthBarPlugin,
             skill_cast_labels::SkillCastLabelPlugin,
+            progress_bar::NpcProgressBarPlugin,
         ));
     }
 }

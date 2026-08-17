@@ -2,7 +2,7 @@ use crate::proto::aesir::net;
 use crate::proto::aesir::net::npc_dialog::Expect;
 use bevy::prelude::warn;
 use net_contract::dto::NpcDialogExpect;
-use net_contract::events::NpcDialogReceived;
+use net_contract::events::{NpcDialogReceived, ProgressBarStarted};
 
 pub fn npc_dialog(d: net::NpcDialog) -> NpcDialogReceived {
     let expect = match Expect::try_from(d.expect) {
@@ -25,6 +25,17 @@ pub fn npc_dialog(d: net::NpcDialog) -> NpcDialogReceived {
         text: d.text,
         expect,
         options: d.options,
+    }
+}
+
+/// Pure wire body -> contract event for the `progressbar` buildin. `color` and
+/// `npc_id` pass through verbatim; positioning (local player) and the ack are the
+/// client's concern.
+pub fn progress_bar(p: net::ProgressBar) -> ProgressBarStarted {
+    ProgressBarStarted {
+        seconds: p.seconds,
+        color: p.color,
+        npc_id: p.npc_id,
     }
 }
 
@@ -72,5 +83,17 @@ mod tests {
     fn maps_close() {
         let d = npc_dialog(dialog(Expect::Close, vec![]));
         assert_eq!(d.expect, NpcDialogExpect::Close);
+    }
+
+    #[test]
+    fn progress_bar_passes_fields_through() {
+        let ev = progress_bar(net::ProgressBar {
+            seconds: 3,
+            color: 0xffff00,
+            npc_id: 150001,
+        });
+        assert_eq!(ev.seconds, 3);
+        assert_eq!(ev.color, 0xffff00);
+        assert_eq!(ev.npc_id, 150001);
     }
 }

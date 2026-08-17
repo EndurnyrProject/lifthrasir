@@ -19,6 +19,11 @@ fn guild_error(value: i32) -> GuildErrorKind {
         Ok(net::GuildError::GuildErrInvalidEmblem) => GuildErrorKind::InvalidEmblem,
         Ok(net::GuildError::GuildErrCannotTargetMaster) => GuildErrorKind::CannotTargetMaster,
         Ok(net::GuildError::GuildErrInvalidPosition) => GuildErrorKind::InvalidPosition,
+        // Guild-skill errors have no neutral GuildErrorKind representation yet;
+        // surface them as Unknown until the contract grows dedicated variants.
+        Ok(net::GuildError::GuildErrNoSkillPoints)
+        | Ok(net::GuildError::GuildErrSkillRequirement)
+        | Ok(net::GuildError::GuildErrSkillMaxed) => GuildErrorKind::Unknown(value),
         Err(_) => GuildErrorKind::Unknown(value),
     }
 }
@@ -211,6 +216,11 @@ mod tests {
                 ap: 5,
                 max_ap: 6,
             }],
+            level: 0,
+            exp: 0,
+            next_exp: 0,
+            skill_points: 0,
+            skills: vec![],
         }))
         .expect("guild info should map");
 
@@ -367,6 +377,11 @@ mod tests {
                 notice_body: String::new(),
                 positions: vec![],
                 members: vec![],
+                level: 0,
+                exp: 0,
+                next_exp: 0,
+                skill_points: 0,
+                skills: vec![],
             }),
             Body::GuildMemberUpdate(net::GuildMemberUpdate {
                 guild_id: 0,

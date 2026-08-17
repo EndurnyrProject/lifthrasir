@@ -100,8 +100,15 @@ impl Plugin for NpcDialogPlugin {
         );
         app.add_systems(
             Update,
-            cancel_on_escape
-                .run_if(in_state(GameState::InGame).and_then(resource_exists::<ActiveNpcDialog>)),
+            cancel_on_escape.run_if(
+                in_state(GameState::InGame)
+                    .and_then(resource_exists::<ActiveNpcDialog>)
+                    // While a progressbar is live it owns cancel (ESC + move), so
+                    // the dialogue's own ESC handler yields to avoid a double Cancel.
+                    .and_then(not(resource_exists::<
+                        crate::worldspace::progress_bar::ActiveProgressBar,
+                    >)),
+            ),
         );
         app.add_systems(
             Update,

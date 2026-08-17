@@ -97,6 +97,11 @@ mod tests {
                 notice_body: String::new(),
                 positions: vec![],
                 members: vec![],
+                level: 0,
+                exp: 0,
+                next_exp: 0,
+                skill_points: 0,
+                skills: vec![],
             }),
             Body::GuildMemberUpdate(crate::proto::aesir::net::GuildMemberUpdate {
                 guild_id: 7,
@@ -304,6 +309,11 @@ mod tests {
                 notice_body: String::new(),
                 positions: vec![],
                 members: vec![],
+                level: 0,
+                exp: 0,
+                next_exp: 0,
+                skill_points: 0,
+                skills: vec![],
             }),
             Body::GuildMemberUpdate(crate::proto::aesir::net::GuildMemberUpdate {
                 guild_id: 0,

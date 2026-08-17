@@ -19,4 +19,6 @@ pub enum NpcResponse {
     Number(i64),
     Input(String),
     Cancel,
+    /// The `progressbar` bar reached 100% and completed naturally.
+    Progress,
 }
