@@ -14,6 +14,7 @@ dev = [
     "bevy/bevy_remote",
     "bevy/bevy_dev_tools",
     "dep:bevy_brp_extras",
+    "lifthrasir-ui/dev",
 ]
 # Tracy profiling. Deliberately split from `dev`: tracy-client is not built
 # in on-demand mode, so it buffers every profiling zone in memory from

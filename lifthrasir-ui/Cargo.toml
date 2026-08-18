@@ -15,6 +15,9 @@ rfd = { workspace = true }
 
 [features]
 dlss = ["bevy/dlss"]
+# Dev-only overlays (map light/effect gizmos). Enabled by the binary's `dev`
+# feature; absent from release builds.
+dev = []
 
 [dev-dependencies]
 lifthrasir-data = { path = "../lifthrasir-data" }

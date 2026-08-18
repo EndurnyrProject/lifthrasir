@@ -13,6 +13,8 @@ use game_engine::domain::entities::billboard::EquipmentPreviewCamera;
 use crate::theme;
 
 pub mod damage_numbers;
+#[cfg(feature = "dev")]
+pub mod debug_gizmos;
 pub mod floor_item_labels;
 pub mod mob_health_bars;
 pub mod nameplates;

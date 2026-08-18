@@ -73,6 +73,7 @@ fn main() {
             bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
             DiagnosticsOverlayPlugin,
             bevy_brp_extras::BrpExtrasPlugin::default(),
+            lifthrasir_ui::worldspace::debug_gizmos::MapDebugGizmosPlugin,
         ));
         app.add_systems(Startup, |mut commands: Commands| {
             commands.spawn(DiagnosticsOverlay::fps());
