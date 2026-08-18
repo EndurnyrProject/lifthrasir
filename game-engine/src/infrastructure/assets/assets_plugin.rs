@@ -33,8 +33,6 @@ impl Plugin for AssetsPlugin {
             .init_asset_loader::<AuthoredEffectLoader>()
             .init_asset::<BgmNameTableAsset>()
             .init_asset_loader::<BgmNameTableLoader>()
-            .init_asset::<IndoorMapTableAsset>()
-            .init_asset_loader::<IndoorMapTableLoader>()
             .init_asset_loader::<BmpLoader>()
             .init_asset_loader::<TgaLoader>()
             .init_asset_loader::<SvgLoader>()

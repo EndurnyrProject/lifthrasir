@@ -920,7 +920,7 @@ mod tests {
 
         assert_eq!(
             digest.to_hex().as_str(),
-            "26e1e126464d56d4204d59315e5a47395f17ba5520515cc5ffa15712187709cc"
+            "e91de58e0be6b805189731d3acd62b0d8f3fb390fb11e4955d009d4cc03bc55e"
         );
     }
 

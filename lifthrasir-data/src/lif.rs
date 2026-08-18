@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Format version written by the current converter and required by the
 /// runtime handler.
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 /// glTF root-extension key for [`LifMap`].
 pub const EXTENSION_MAP: &str = "LIF_map";
@@ -45,10 +45,35 @@ pub struct LifMap {
     pub ambient_color: [f32; 3],
     #[serde(default = "white_tint")]
     pub no_shade_tint: [f32; 3],
+    /// `true` for maps listed in `data/indoorrswtable.txt`. Drives the
+    /// restricted indoor camera and the baked indoor lighting/exposure.
+    #[serde(default)]
+    pub indoor: bool,
+    /// Baked `GlobalAmbientLight::brightness` (lux). Indoor and outdoor maps
+    /// carry different floors; the runtime applies it verbatim.
+    #[serde(default = "default_ambient_brightness")]
+    pub ambient_brightness: f32,
+    /// Baked camera `Exposure::ev100` for this map (outdoor = 15 / SUNLIGHT,
+    /// indoor = 9.7 / BLENDER). The runtime pins the follow camera to it so
+    /// the baked light values read correctly.
+    #[serde(default = "default_exposure_ev100")]
+    pub exposure_ev100: f32,
 }
 
 fn white_tint() -> [f32; 3] {
     [1.0; 3]
+}
+
+/// Legacy ambient floor (Bevy `lux::OFFICE`), used only when deserializing a
+/// glb that predates the field.
+fn default_ambient_brightness() -> f32 {
+    320.0
+}
+
+/// Legacy camera exposure (`Exposure::BLENDER`, the Bevy default), used only
+/// when deserializing a glb that predates the field.
+fn default_exposure_ev100() -> f32 {
+    9.7
 }
 
 pub fn no_shade_tint(ambient: [f32; 3], diffuse: [f32; 3]) -> [f32; 3] {
@@ -413,6 +438,9 @@ mod tests {
             gat_hash: "ghi789".to_string(),
             ambient_color: [0.3, 0.3, 0.4],
             no_shade_tint: [0.5, 0.6, 0.7],
+            indoor: true,
+            ambient_brightness: 100.0,
+            exposure_ev100: 9.7,
         };
 
         let json = serde_json::to_string(&original).expect("serialize");
@@ -647,6 +675,9 @@ mod tests {
         let current = r#"{"format_version":2,"rsw_hash":"a","gnd_hash":"b","gat_hash":"c","ambient_color":[0.3,0.3,0.4]}"#;
         let map: LifMap = serde_json::from_str(current).unwrap();
         assert_eq!(map.no_shade_tint, [1.0; 3]);
+        assert!(!map.indoor);
+        assert_eq!(map.ambient_brightness, 320.0);
+        assert_eq!(map.exposure_ev100, 9.7);
     }
 
     #[test]

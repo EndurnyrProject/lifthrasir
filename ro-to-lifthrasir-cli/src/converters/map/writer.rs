@@ -47,6 +47,23 @@ const TERRAIN_ALPHA_THRESHOLD: f32 = 0.5;
 const SUN_MAX_LUX: f32 = 10_000.0;
 const POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 500.0;
 
+/// Indoor lighting/exposure, live-tuned against `prt_cas` at EV100 9.7 (see
+/// `notes/map-lighting-tuning.md`). Point lights get an 18x intensity boost
+/// (`500 -> 9000` lux-at-half-range) and doubled range; the RSW sun is pinned
+/// to a dim interior value; ambient sits at a slightly higher floor.
+const INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 9_000.0;
+const INDOOR_POINT_LIGHT_RANGE_SCALE: f32 = 2.0;
+const INDOOR_SUN_LUX: f32 = 200.0;
+const INDOOR_AMBIENT_BRIGHTNESS: f32 = 100.0;
+/// Indoor maps stay at Bevy's default `Exposure::BLENDER` (9.7), the exposure
+/// the indoor light values were tuned against.
+const INDOOR_EXPOSURE_EV100: f32 = 9.7;
+
+/// Outdoor lighting/exposure. Outdoor maps are idiomatic daylight: the sun is
+/// the RSW-derived illuminance (up to `SUN_MAX_LUX`) read at `Exposure::SUNLIGHT`
+/// (EV100 15), with Bevy's default ambient floor.
+const OUTDOOR_AMBIENT_BRIGHTNESS: f32 = 80.0;
+const OUTDOOR_EXPOSURE_EV100: f32 = 15.0;
 /// Everything the writer needs; the caller owns parsing and texture export.
 pub struct MapGlbInputs<'a> {
     pub map_name: &'a str,
@@ -63,6 +80,9 @@ pub struct MapGlbInputs<'a> {
     /// library glb (Converted or Skipped) -- what `lif_prop` flips to
     /// `ro://models/...` instead of the native `ro://data/model/...` ref.
     pub converted_models: &'a HashSet<String>,
+    /// Whether this map is listed in `data/indoorrswtable.txt`. Selects the
+    /// indoor lighting/exposure profile and is baked into `LIF_map`.
+    pub indoor: bool,
 }
 
 /// Port of `game-engine/src/utils/coordinates.rs::rsw_position_to_bevy`.
@@ -107,17 +127,38 @@ pub fn sun_direction(light: &RswLight) -> Vec3 {
     .normalize()
 }
 
-/// Mirrors `lighting.rs::calculate_global_lux`.
-fn sun_illuminance(light: &RswLight) -> f32 {
+/// The baked directional (sun) illuminance. Outdoor maps mirror
+/// `lighting.rs::calculate_global_lux` (RSW-derived, read at EV100 15). Indoor
+/// maps pin a dim interior value read at EV100 9.7.
+fn sun_illuminance(light: &RswLight, indoor: bool) -> f32 {
+    if indoor {
+        return INDOOR_SUN_LUX;
+    }
     let diffuse_intensity = light.diffuse.iter().fold(0.0f32, |acc, &x| acc.max(x));
     SUN_MAX_LUX * diffuse_intensity * light.opacity
 }
 
 /// Candela for a point light, chosen so Bevy's importer (`lumens = candela *
 /// 4 * pi`) lands on the native lumens from `lighting.rs::spawn_point_light`.
-fn point_light_candela(light: &RswLightObj) -> f32 {
+/// Indoor maps use the boosted lux-at-half-range so interiors read at EV100 9.7.
+fn point_light_candela(light: &RswLightObj, indoor: bool) -> f32 {
+    let lux_at_half = if indoor {
+        INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE
+    } else {
+        POINT_LIGHT_LUX_AT_HALF_RANGE
+    };
     let half_range = 0.5 * light.range;
-    POINT_LIGHT_LUX_AT_HALF_RANGE * half_range * half_range
+    lux_at_half * half_range * half_range
+}
+
+/// The baked point-light cutoff range. Indoor maps widen it so boosted
+/// interior lights still reach the far walls.
+pub fn point_light_range(light: &RswLightObj, indoor: bool) -> f32 {
+    if indoor {
+        light.range * INDOOR_POINT_LIGHT_RANGE_SCALE
+    } else {
+        light.range
+    }
 }
 
 /// Emits the terrain mesh (one primitive per ground texture) and returns its
@@ -275,12 +316,16 @@ fn light_node_extensions(light: json::Index<KhrLight>) -> json::extensions::scen
 /// lights shine along their node's local -Z, which is also Bevy's
 /// `Transform::forward`, so the node carries the native `looking_to` rotation
 /// pushed through the root fix.
-fn build_sun_node(root: &mut json::Root, light: &RswLight) -> json::Index<json::Node> {
+fn build_sun_node(
+    root: &mut json::Root,
+    light: &RswLight,
+    indoor: bool,
+) -> json::Index<json::Node> {
     let index = push_light(
         root,
         KhrLight {
             color: light.diffuse,
-            intensity: sun_illuminance(light),
+            intensity: sun_illuminance(light, indoor),
             range: None,
             spot: None,
             type_: Valid(KhrLightType::Directional),
@@ -308,13 +353,14 @@ fn build_point_light_node(
     light: &RswLightObj,
     map_width: f32,
     map_height: f32,
+    indoor: bool,
 ) -> json::Index<json::Node> {
     let index = push_light(
         root,
         KhrLight {
             color: light.color,
-            intensity: point_light_candela(light),
-            range: Some(light.range),
+            intensity: point_light_candela(light, indoor),
+            range: Some(point_light_range(light, indoor)),
             spot: None,
             type_: Valid(KhrLightType::Point),
             name: Some(light.name.clone()),
@@ -383,7 +429,7 @@ pub fn is_representable(object: &RswObject) -> bool {
             .iter()
             .chain(&light.color)
             .copied()
-            .chain([light.range, point_light_candela(light)])
+            .chain([light.range, point_light_candela(light, false)])
             .collect(),
         RswObject::Sound(sound) => sound
             .position
@@ -456,12 +502,15 @@ fn build_object_nodes(
     map_width: f32,
     map_height: f32,
     converted_models: &HashSet<String>,
+    indoor: bool,
 ) -> anyhow::Result<Vec<json::Index<json::Node>>> {
     let mut nodes = Vec::new();
 
     for object in emitted_objects(world) {
         let node = match object {
-            RswObject::Light(light) => build_point_light_node(root, light, map_width, map_height),
+            RswObject::Light(light) => {
+                build_point_light_node(root, light, map_width, map_height, indoor)
+            }
             RswObject::Sound(sound) => emitter_node(
                 root,
                 &sound.name,
@@ -550,7 +599,11 @@ pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
 
     let map_width = inputs.ground.width as f32;
     let map_height = inputs.ground.height as f32;
-    children.push(build_sun_node(&mut root, &inputs.world.light));
+    children.push(build_sun_node(
+        &mut root,
+        &inputs.world.light,
+        inputs.indoor,
+    ));
     children.extend(
         build_object_nodes(
             &mut root,
@@ -558,6 +611,7 @@ pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
             map_width,
             map_height,
             inputs.converted_models,
+            inputs.indoor,
         )
         .map_err(|error| {
             anyhow::anyhow!("building props for map '{}': {error}", inputs.map_name)
@@ -620,6 +674,17 @@ fn build_root_extensions(
         gat_hash: hash_hex(inputs.gat_bytes),
         ambient_color: inputs.world.light.ambient,
         no_shade_tint: lif::no_shade_tint(inputs.world.light.ambient, inputs.world.light.diffuse),
+        indoor: inputs.indoor,
+        ambient_brightness: if inputs.indoor {
+            INDOOR_AMBIENT_BRIGHTNESS
+        } else {
+            OUTDOOR_AMBIENT_BRIGHTNESS
+        },
+        exposure_ev100: if inputs.indoor {
+            INDOOR_EXPOSURE_EV100
+        } else {
+            OUTDOOR_EXPOSURE_EV100
+        },
     };
     let gat = lif::LifGat {
         width: altitude.width,
@@ -976,6 +1041,7 @@ mod tests {
                 gnd_bytes: b"gnd",
                 rsw_bytes: b"rsw",
                 converted_models: &HashSet::from(["prontera\\tree01.rsm".to_string()]),
+                indoor: false,
             },
         )
         .expect("write glb");
@@ -1049,6 +1115,66 @@ mod tests {
             ROOT_FIX * node_translation(&node),
             Vec3::new(20.0, -5.0, 30.0),
         );
+    }
+
+    #[test]
+    fn indoor_maps_bake_the_boosted_lighting_and_indoor_exposure() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        write_fixture_ktx2(dir.path(), "tex/grass01.ktx2");
+        let ground = mini_ground();
+        let world = mini_world();
+        let path = dir.path().join("indoor.glb");
+
+        write_glb(
+            &path,
+            &MapGlbInputs {
+                map_name: "indoor",
+                ground: &ground,
+                world: &world,
+                primitives: &build_terrain(&ground).expect("terrain"),
+                textures: &textures(),
+                gat_bytes: &raw_gat(ground.width * 2, ground.height * 2),
+                gnd_bytes: b"gnd-bytes",
+                rsw_bytes: b"rsw-bytes",
+                converted_models: &HashSet::from(["prontera\\tree01.rsm".to_string()]),
+                indoor: true,
+            },
+        )
+        .expect("write glb");
+
+        let root_json = reopen(&path).0.into_json();
+        let extensions = root_json.extensions.as_ref().expect("root extensions");
+        let map: lif::LifMap =
+            serde_json::from_value(extensions.others[lif::EXTENSION_MAP].clone()).expect("LIF_map");
+        assert!(map.indoor);
+        assert_eq!(map.ambient_brightness, INDOOR_AMBIENT_BRIGHTNESS);
+        assert_eq!(map.exposure_ev100, INDOOR_EXPOSURE_EV100);
+
+        let (document, _) = reopen(&path);
+        let scene = scene_root(&document);
+        let point = scene
+            .children()
+            .find_map(|node| {
+                let light = node.light()?;
+                matches!(light.kind(), gltf::khr_lights_punctual::Kind::Point).then_some(light)
+            })
+            .expect("point light");
+        // Native range 40 -> doubled; native candela (500 lux-at-half) -> 18x.
+        assert_eq!(point.range(), Some(40.0 * INDOOR_POINT_LIGHT_RANGE_SCALE));
+        assert_eq!(
+            point.intensity(),
+            INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE * 20.0 * 20.0
+        );
+
+        let sun = scene
+            .children()
+            .find_map(|node| {
+                let light = node.light()?;
+                matches!(light.kind(), gltf::khr_lights_punctual::Kind::Directional)
+                    .then_some(light)
+            })
+            .expect("directional light");
+        assert_eq!(sun.intensity(), INDOOR_SUN_LUX);
     }
 
     #[test]
@@ -1149,6 +1275,7 @@ mod tests {
                 gnd_bytes: b"gnd",
                 rsw_bytes: b"rsw",
                 converted_models: &HashSet::new(),
+                indoor: false,
             },
         )
         .expect_err("a native prop reference must fail");
@@ -1204,6 +1331,7 @@ mod tests {
                 gnd_bytes: b"gnd",
                 rsw_bytes: b"rsw",
                 converted_models: &HashSet::new(),
+                indoor: false,
             },
         )
         .expect_err("missing texture must fail");

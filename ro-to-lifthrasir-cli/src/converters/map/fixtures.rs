@@ -171,6 +171,7 @@ impl Fixture {
             gnd_bytes: &self.gnd_bytes,
             rsw_bytes: &self.rsw_bytes,
             converted_models: &self.converted_models,
+            indoor: false,
         }
     }
 }
@@ -241,6 +242,7 @@ fn regenerate_game_engine_fixtures() {
             gnd_bytes: b"gnd-bytes",
             rsw_bytes: b"rsw-bytes",
             converted_models: &HashSet::from(["prontera\\tree01.rsm".to_string()]),
+            indoor: false,
         },
     )
     .expect("write mini_map.glb");

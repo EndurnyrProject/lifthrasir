@@ -1,23 +1,22 @@
 use bevy::prelude::*;
 
-use crate::infrastructure::assets::IndoorMapTableAsset;
-
-/// Holds the handle to the indoor map table asset (`data\indoorrswtable.txt`).
-/// Loaded once at startup; read by `apply_camera_map_profile` to decide whether
-/// a map uses the restricted indoor camera.
-#[derive(Resource, Debug, Default)]
-pub struct IndoorMapTable {
-    pub handle: Option<Handle<IndoorMapTableAsset>>,
+/// Per-map camera profile baked into `LIF_map`, published by the map loader
+/// when a map's `LifMapData` is ready. Read by `apply_camera_map_profile` to set
+/// the indoor/outdoor camera preset and the camera `Exposure`.
+///
+/// Absent until the first map loads; replaced on every map change.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct CurrentMapCameraProfile {
+    pub indoor: bool,
+    pub exposure_ev100: f32,
 }
 
 /// Tracks which map profile is currently applied to the camera.
 ///
-/// `map_name` is the normalized name the profile was last applied for; it gates
-/// re-application so the profile is only set once per map change. `indoor` lets
-/// the R-key reset re-apply the correct preset.
+/// `indoor` lets the R-key reset re-apply the correct preset without
+/// re-reading the map data.
 #[derive(Resource, Debug, Default)]
 pub struct ActiveCameraProfile {
-    pub map_name: String,
     pub indoor: bool,
 }
 

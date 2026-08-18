@@ -4,12 +4,11 @@ use bevy_auto_plugin::prelude::*;
 use moonshine_kind::Instance;
 
 use super::components::{CameraFollowSettings, CameraFollowTarget};
-use super::resources::{ActiveCameraProfile, CameraRotationDelta, IndoorMapTable};
+use super::resources::{ActiveCameraProfile, CameraRotationDelta, CurrentMapCameraProfile};
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::input::UiFocus;
 use crate::domain::system_sets::CameraSystems;
-use crate::domain::world::spawn_context::MapSpawnContext;
-use crate::infrastructure::assets::IndoorMapTableAsset;
+use bevy::camera::Exposure;
 
 /// Distance change per discrete zoom step (mouse notch).
 const ZOOM_STEP: f32 = 25.0;
@@ -32,14 +31,6 @@ fn offset_from_angles(yaw: f32, pitch: f32, distance: f32) -> Vec3 {
         -distance * pitch.sin(),
         -distance * pitch.cos() * yaw.cos(),
     )
-}
-
-/// Normalize a map name for indoor-table lookup: strip the extension, lowercase.
-fn normalize_map_name(map_name: &str) -> String {
-    map_name
-        .trim_end_matches(".gat")
-        .trim_end_matches(".rsw")
-        .to_lowercase()
 }
 
 /// Apply the indoor or outdoor camera preset to the follow settings.
@@ -330,61 +321,41 @@ pub fn camera_follow_system(
     }
 }
 
-/// Load the indoor map table (`data\indoorrswtable.txt`) once at startup.
-pub fn load_indoor_map_table(
-    mut indoor_table: ResMut<IndoorMapTable>,
-    asset_server: Res<AssetServer>,
-) {
-    if indoor_table.handle.is_none() {
-        debug!("Loading indoor map table from ro://data/indoorrswtable.txt");
-        indoor_table.handle = Some(asset_server.load("ro://data/indoorrswtable.txt"));
-    }
-}
-
-/// Apply the indoor/outdoor camera preset when the map changes.
+/// Apply the baked per-map camera profile: indoor/outdoor preset plus the
+/// map's exposure. Runs when the [`CurrentMapCameraProfile`] resource changes (a
+/// new map loaded) or when a follow camera first appears, so a camera spawned
+/// after the map still gets configured. Between those edges it stays idle so it
+/// never fights the player's zoom/rotation.
 ///
-/// Re-applies only when the normalized current map differs from the last-applied
-/// one, and only once both the indoor table and the follow camera exist. Indoor
-/// maps lock rotation to a closer fixed diagonal; outdoor maps reset to the default
-/// free camera.
+/// Indoor maps lock rotation to a closer fixed diagonal; outdoor maps reset to
+/// the default free camera.
 pub fn apply_camera_map_profile(
-    spawn_context: Option<Res<MapSpawnContext>>,
-    indoor_table: Res<IndoorMapTable>,
-    table_assets: Res<Assets<IndoorMapTableAsset>>,
+    profile: Option<Res<CurrentMapCameraProfile>>,
+    new_cameras: Query<(), Added<CameraFollowSettings>>,
     mut active_profile: ResMut<ActiveCameraProfile>,
-    mut camera_query: Query<&mut CameraFollowSettings, With<Camera3d>>,
+    mut camera_query: Query<(&mut CameraFollowSettings, &mut Exposure)>,
 ) {
-    let Some(spawn_context) = spawn_context else {
+    let Some(profile) = profile else {
         return;
     };
 
-    let map_name = normalize_map_name(&spawn_context.map_name);
-    if map_name == active_profile.map_name {
+    if !profile.is_changed() && new_cameras.is_empty() {
         return;
     }
-
-    let Some(handle) = &indoor_table.handle else {
-        return;
-    };
-    let Some(table) = table_assets.get(handle) else {
-        return;
-    };
-
-    let indoor = table.maps.contains(&map_name);
 
     let mut applied = false;
-    for mut settings in camera_query.iter_mut() {
-        apply_camera_profile(&mut settings, indoor);
+    for (mut settings, mut exposure) in camera_query.iter_mut() {
+        apply_camera_profile(&mut settings, profile.indoor);
+        exposure.ev100 = profile.exposure_ev100;
         applied = true;
     }
 
     if applied {
         debug!(
-            "Camera profile for '{}' applied: {}",
-            map_name,
-            if indoor { "indoor" } else { "outdoor" }
+            "Camera profile applied: {} (ev100 {})",
+            if profile.indoor { "indoor" } else { "outdoor" },
+            profile.exposure_ev100
         );
-        active_profile.map_name = map_name;
-        active_profile.indoor = indoor;
+        active_profile.indoor = profile.indoor;
     }
 }

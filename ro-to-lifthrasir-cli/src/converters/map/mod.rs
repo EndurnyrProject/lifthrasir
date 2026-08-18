@@ -42,6 +42,8 @@ pub fn run(
     let (converted_models, prop_counts) =
         convert_props(vfs, map_name, &world, models_dir, force_models)?;
 
+    let indoor = map_is_indoor(vfs, map_name)?;
+
     let map_dir = out_dir.join(map_name);
     std::fs::create_dir_all(&map_dir).with_context(|| format!("creating {}", map_dir.display()))?;
     let textures = textures::normalize_textures(vfs, &ground.textures, &map_dir)?;
@@ -56,6 +58,7 @@ pub fn run(
         gnd_bytes: &gnd_bytes,
         rsw_bytes: &rsw_bytes,
         converted_models: &converted_models,
+        indoor,
     };
     let glb_path = map_dir.join(format!("{map_name}.glb"));
     let counts = write_and_validate_glb_atomically(&glb_path, &inputs)?;
@@ -93,6 +96,41 @@ fn read_source(vfs: &GrfVfs, map_name: &str, extension: &str) -> anyhow::Result<
     let path = format!("data/{map_name}.{extension}");
     vfs.read(&path)
         .with_context(|| format!("map source not found in GRFs: {path}"))
+}
+
+/// Path to the retail indoor-map table inside the GRFs.
+const INDOOR_TABLE_PATH: &str = "data/indoorrswtable.txt";
+
+/// Whether `map_name` is listed in `data/indoorrswtable.txt`, mirroring the
+/// runtime's former `IndoorMapTableAsset` lookup. The table is EUC-KR text with
+/// one `<name>.rsw#` entry per line and `//` comments. A missing table is a hard
+/// error: silently treating every map as outdoor would bake the wrong lighting
+/// and exposure into every glb.
+fn map_is_indoor(vfs: &GrfVfs, map_name: &str) -> anyhow::Result<bool> {
+    let bytes = vfs
+        .read(INDOOR_TABLE_PATH)
+        .with_context(|| format!("indoor map table not found in GRFs: {INDOOR_TABLE_PATH}"))?;
+    let (decoded, _, _) = encoding_rs::EUC_KR.decode(&bytes);
+    let target = map_name.to_lowercase();
+    Ok(decoded
+        .lines()
+        .filter_map(indoor_table_entry)
+        .any(|name| name == target))
+}
+
+/// Normalizes one indoor-table line to a bare, lowercased map name, or `None`
+/// for blank/comment lines. Entries look like `prt_cas.rsw#`.
+fn indoor_table_entry(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with("//") {
+        return None;
+    }
+    let name = trimmed
+        .trim_end_matches('#')
+        .trim_end_matches(".rsw")
+        .trim_end_matches(".RSW")
+        .to_lowercase();
+    (!name.is_empty()).then_some(name)
 }
 
 fn write_and_validate_glb_atomically(
@@ -201,6 +239,7 @@ mod tests {
             gnd_bytes: b"gnd",
             rsw_bytes: b"rsw",
             converted_models: &converted_models,
+            indoor: false,
         };
 
         assert!(write_and_validate_glb_atomically(&glb_path, &inputs).is_err());

@@ -13,6 +13,7 @@
 //! map load; there is no partial-map fallback.
 
 use crate::domain::audio::map_sounds::spawn_gltf_map_sounds;
+use crate::domain::camera::resources::CurrentMapCameraProfile;
 use crate::domain::effects::map_effects::spawn_gltf_map_effects;
 use crate::domain::entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid};
 use crate::domain::system_sets::WorldLoadingSystems;
@@ -32,7 +33,7 @@ use bevy::gltf::GltfLoaderSettings;
 use bevy::gltf::extensions::{
     ErasedGltfExtensionHandler, GltfExtensionHandler, GltfExtensionHandlers,
 };
-use bevy::light::{CascadeShadowConfigBuilder, light_consts::lux};
+use bevy::light::CascadeShadowConfigBuilder;
 use bevy::prelude::*;
 use bevy::transform::TransformSystems;
 use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
@@ -275,6 +276,10 @@ fn adopt_gltf_map_scene(
         altitude: data.altitude.clone(),
     })));
     commands.insert_resource(ambient_light(&data.meta));
+    commands.insert_resource(CurrentMapCameraProfile {
+        indoor: data.meta.indoor,
+        exposure_ev100: data.meta.exposure_ev100,
+    });
     commands.entity(ready.entity).insert(MapData {
         name: map_name.clone(),
         width: data.altitude.width,
@@ -292,8 +297,9 @@ fn adopt_gltf_map_scene(
     }
 }
 
-/// Applies the RSW ambient colour as-is, kept dim so the sun and point lights
-/// keep contrast.
+/// Applies the RSW ambient colour with the baked per-map brightness floor
+/// (indoor and outdoor maps differ), kept dim so the sun and point lights keep
+/// contrast.
 fn ambient_light(meta: &LifMap) -> GlobalAmbientLight {
     GlobalAmbientLight {
         color: Color::srgb(
@@ -301,7 +307,7 @@ fn ambient_light(meta: &LifMap) -> GlobalAmbientLight {
             meta.ambient_color[1],
             meta.ambient_color[2],
         ),
-        brightness: lux::OFFICE,
+        brightness: meta.ambient_brightness,
         affects_lightmapped_meshes: false,
     }
 }
@@ -1444,7 +1450,8 @@ mod tests {
 
         let ambient = app.world().resource::<GlobalAmbientLight>();
         assert_eq!(ambient.color, Color::srgb(0.25, 0.3, 0.35));
-        assert_eq!(ambient.brightness, lux::OFFICE);
+        // mini_map is outdoor, so it carries the baked outdoor ambient floor.
+        assert_eq!(ambient.brightness, 80.0);
         assert!(!ambient.affects_lightmapped_meshes);
     }
 

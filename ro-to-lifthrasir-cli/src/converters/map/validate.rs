@@ -97,7 +97,7 @@ fn validate_nodes(root: &gltf::Node, blob: &[u8], inputs: &MapGlbInputs) -> anyh
     for (node, object) in emitted.iter().zip(objects) {
         match object {
             RswObject::Light(light) => {
-                validate_point_light(node, light, map_width, map_height)?;
+                validate_point_light(node, light, map_width, map_height, inputs.indoor)?;
                 counts.lights += 1;
             }
             RswObject::Sound(sound) => {
@@ -198,6 +198,7 @@ fn validate_point_light(
     light: &RswLightObj,
     map_width: f32,
     map_height: f32,
+    indoor: bool,
 ) -> anyhow::Result<()> {
     let punctual = node
         .light()
@@ -214,12 +215,13 @@ fn validate_point_light(
         punctual.color(),
         light.color
     );
+    let expected_range = writer::point_light_range(light, indoor);
     ensure!(
-        punctual.range() == Some(light.range),
-        "light '{}' range {:?} differs from the RSW {}",
+        punctual.range() == Some(expected_range),
+        "light '{}' range {:?} differs from the expected {}",
         light.name,
         punctual.range(),
-        light.range
+        expected_range
     );
 
     ensure_position(node, light.position, map_width, map_height, &light.name)
