@@ -329,22 +329,25 @@ pub fn camera_follow_system(
 ///
 /// Indoor maps lock rotation to a closer fixed diagonal; outdoor maps reset to
 /// the default free camera.
+#[allow(clippy::type_complexity)]
 pub fn apply_camera_map_profile(
     profile: Option<Res<CurrentMapCameraProfile>>,
-    new_cameras: Query<(), Added<CameraFollowSettings>>,
     mut active_profile: ResMut<ActiveCameraProfile>,
-    mut camera_query: Query<(&mut CameraFollowSettings, &mut Exposure)>,
+    mut cameras: ParamSet<(
+        Query<(), Added<CameraFollowSettings>>,
+        Query<(&mut CameraFollowSettings, &mut Exposure)>,
+    )>,
 ) {
     let Some(profile) = profile else {
         return;
     };
 
-    if !profile.is_changed() && new_cameras.is_empty() {
+    if !profile.is_changed() && cameras.p0().is_empty() {
         return;
     }
 
     let mut applied = false;
-    for (mut settings, mut exposure) in camera_query.iter_mut() {
+    for (mut settings, mut exposure) in cameras.p1().iter_mut() {
         apply_camera_profile(&mut settings, profile.indoor);
         exposure.ev100 = profile.exposure_ev100;
         applied = true;
