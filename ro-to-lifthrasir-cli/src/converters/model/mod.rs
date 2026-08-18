@@ -21,6 +21,7 @@ use anyhow::{Context, anyhow, bail, ensure};
 use ro_formats::{Rsm, Rsm2};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 /// RSM1 revisions the mesh builder and writer understand. RSM2 (`2.x`) is a
 /// different container the native path does not read either.
@@ -54,6 +55,33 @@ pub enum ConvertOutcome {
     UnsupportedVersion,
 }
 
+/// Run-wide record of what `convert_model` did with each model, so a prop
+/// shared by many maps is handled once per run even under `force`, and so
+/// parallel map conversion does not re-convert a model another map already
+/// took care of.
+#[derive(Default)]
+pub struct ModelCache {
+    /// Keyed by `glb_relative_path`, which normalizes case and slashes.
+    outcomes: Mutex<HashMap<String, ConvertOutcome>>,
+}
+
+impl ModelCache {
+    pub fn get(&self, filename: &str) -> Option<ConvertOutcome> {
+        self.outcomes
+            .lock()
+            .expect("model cache lock poisoned")
+            .get(&glb_relative_path(filename))
+            .copied()
+    }
+
+    pub fn record(&self, filename: &str, outcome: ConvertOutcome) {
+        self.outcomes
+            .lock()
+            .expect("model cache lock poisoned")
+            .insert(glb_relative_path(filename), outcome);
+    }
+}
+
 /// The glb path for a GRF model filename, relative to `models_dir`.
 ///
 /// Lowercased and forward-slashed to match how the pak normalizes entries
@@ -73,7 +101,7 @@ pub fn convert_model(
     vfs: &impl AssetRead,
     filename: &str,
     models_dir: &Path,
-    pool: &mut TexturePool,
+    pool: &TexturePool,
     force: bool,
 ) -> anyhow::Result<ConvertOutcome> {
     let out_path = models_dir.join(glb_relative_path(filename));
@@ -98,7 +126,7 @@ pub fn convert_model_bytes(
     logical_path: &str,
     source_bytes: &[u8],
     models_dir: &Path,
-    pool: &mut TexturePool,
+    pool: &TexturePool,
     force: bool,
 ) -> anyhow::Result<ConvertOutcome> {
     let logical_path = to_forward_slashes(logical_path);
@@ -204,7 +232,7 @@ fn export_textures(
     vfs: &impl AssetRead,
     texture_names: &[String],
     relative_glb_path: &str,
-    pool: &mut TexturePool,
+    pool: &TexturePool,
     replace_bik: bool,
 ) -> anyhow::Result<Vec<TextureOut>> {
     let up = "../".repeat(relative_glb_path.matches('/').count());
@@ -265,6 +293,11 @@ pub fn is_supported_version(bytes: &[u8]) -> anyhow::Result<bool> {
 /// are the only evidence left.
 pub struct TexturePool {
     tex_dir: PathBuf,
+    state: Mutex<PoolState>,
+}
+
+#[derive(Default)]
+struct PoolState {
     /// Sanitized filename stem -> the source name that claimed it.
     claimed: HashMap<String, String>,
     fallback_claims: HashSet<String>,
@@ -274,30 +307,30 @@ impl TexturePool {
     pub fn new(models_dir: &Path) -> Self {
         Self {
             tex_dir: models_dir.join("tex"),
-            claimed: HashMap::new(),
-            fallback_claims: HashSet::new(),
+            state: Mutex::new(PoolState::default()),
         }
     }
 
     /// The pooled KTX2 for `source_name`, relative to `models_dir`.
-    pub fn export(
-        &mut self,
-        vfs: &impl AssetRead,
-        source_name: &str,
-    ) -> anyhow::Result<TextureOut> {
+    pub fn export(&self, vfs: &impl AssetRead, source_name: &str) -> anyhow::Result<TextureOut> {
         self.export_with_policy(vfs, source_name, false)
     }
 
     fn export_with_fallback(
-        &mut self,
+        &self,
         vfs: &impl AssetRead,
         source_name: &str,
     ) -> anyhow::Result<TextureOut> {
         self.export_with_policy(vfs, source_name, true)
     }
 
+    /// The expensive encode runs outside the pool lock, so distinct textures
+    /// encode in parallel; only the claim table and the pooled file writes are
+    /// serialized. Two threads racing on the same texture encode it twice --
+    /// deterministically to identical bytes -- and the second claim finds the
+    /// first and discards its copy.
     fn export_with_policy(
-        &mut self,
+        &self,
         vfs: &impl AssetRead,
         source_name: &str,
         replace_bik: bool,
@@ -307,12 +340,20 @@ impl TexturePool {
             source_name: source_name.to_string(),
             relative_path: format!("tex/{sanitized}.ktx2"),
         };
-        match self.claimed.get(&sanitized) {
+        if self.claim_status(source_name, &sanitized, replace_bik)? == Claim::Satisfied {
+            return Ok(texture);
+        }
+
+        let (ktx2_bytes, used_fallback) = encode_pooled_texture(vfs, source_name, replace_bik)?;
+
+        let mut state = self.state.lock().expect("texture pool lock poisoned");
+        match state.claimed.get(&sanitized) {
             Some(previous) if canonical_name(previous) == canonical_name(source_name) => {
-                // A BIK stand-in written for an RSM2 consumer is replaced by the
-                // real texture once a consumer that keeps BIK asks for it.
-                if !replace_bik && self.fallback_claims.contains(&sanitized) {
-                    self.write_ktx2(vfs, source_name, &sanitized, false)?;
+                // Claimed while this thread was encoding. A BIK stand-in
+                // written for an RSM2 consumer is still replaced by the real
+                // texture once a consumer that keeps BIK asks for it.
+                if !replace_bik && state.fallback_claims.contains(&sanitized) {
+                    self.write_pooled(source_name, &sanitized, &ktx2_bytes)?;
                 }
                 return Ok(texture);
             }
@@ -321,42 +362,51 @@ impl TexturePool {
             ),
             None => {}
         }
-        let used_fallback = self.write_ktx2(vfs, source_name, &sanitized, replace_bik)?;
-        self.claimed
+        self.write_pooled(source_name, &sanitized, &ktx2_bytes)?;
+        state
+            .claimed
             .insert(sanitized.clone(), source_name.to_string());
         if used_fallback {
-            self.fallback_claims.insert(sanitized);
+            state.fallback_claims.insert(sanitized);
         }
         Ok(texture)
     }
 
-    fn write_ktx2(
+    /// Whether an existing claim already satisfies this export, so the caller
+    /// can skip the encode entirely. A claim by a different source name is the
+    /// collision the pool exists to catch.
+    fn claim_status(
         &self,
-        vfs: &impl AssetRead,
         source_name: &str,
         sanitized: &str,
         replace_bik: bool,
-    ) -> anyhow::Result<bool> {
-        let logical_path = format!("data/texture/{source_name}");
-        let is_bik = source_name
-            .rsplit_once('.')
-            .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("bik"));
-        let (ktx2_bytes, used_fallback) = match vfs.read_asset(&logical_path) {
-            Some(_) if replace_bik && is_bik => (fallback_texture_ktx2()?, true),
-            Some(source_bytes) => (
-                texture_bytes_to_ktx2(source_name, &source_bytes)
-                    .with_context(|| format!("converting texture: {logical_path}"))?,
-                false,
-            ),
-            // A texture the archives simply do not contain gets an obviously
-            // wrong stand-in rather than failing the model, but the
-            // substitution is reported so it cannot pass unnoticed.
-            None => {
-                println!("  missing texture, using a placeholder: {logical_path}");
-                (fallback_texture_ktx2()?, true)
+    ) -> anyhow::Result<Claim> {
+        let state = self.state.lock().expect("texture pool lock poisoned");
+        match state.claimed.get(sanitized) {
+            Some(previous) if canonical_name(previous) == canonical_name(source_name) => {
+                // A fallback claim still needs the real texture written when a
+                // consumer that keeps BIK asks for it.
+                if !replace_bik && state.fallback_claims.contains(sanitized) {
+                    Ok(Claim::NeedsEncode)
+                } else {
+                    Ok(Claim::Satisfied)
+                }
             }
-        };
+            Some(previous) => bail!(
+                "texture name collision: '{source_name}' and '{previous}' both sanitize to '{sanitized}.ktx2'"
+            ),
+            None => Ok(Claim::NeedsEncode),
+        }
+    }
 
+    /// Publish encoded bytes into the pool. Callers hold the state lock, which
+    /// also serializes the exists-check against the write.
+    fn write_pooled(
+        &self,
+        source_name: &str,
+        sanitized: &str,
+        ktx2_bytes: &[u8],
+    ) -> anyhow::Result<()> {
         let dest = self.tex_dir.join(format!("{sanitized}.ktx2"));
         if dest.is_file() {
             let pooled = std::fs::read(&dest)
@@ -366,14 +416,55 @@ impl TexturePool {
                 "texture name collision: '{source_name}' sanitizes to '{sanitized}.ktx2', already pooled from a different source at {}",
                 dest.display()
             );
-            return Ok(used_fallback);
+            return Ok(());
         }
 
         std::fs::create_dir_all(&self.tex_dir)
             .with_context(|| format!("creating {}", self.tex_dir.display()))?;
-        std::fs::write(&dest, &ktx2_bytes)
+        let temporary = tempfile::NamedTempFile::new_in(&self.tex_dir)
+            .with_context(|| format!("creating temporary KTX2 beside {}", dest.display()))?;
+        std::fs::write(temporary.path(), ktx2_bytes)
             .with_context(|| format!("writing {}", dest.display()))?;
-        Ok(used_fallback)
+        temporary
+            .persist(&dest)
+            .map_err(|error| error.error)
+            .with_context(|| format!("publishing {}", dest.display()))?;
+        Ok(())
+    }
+}
+
+/// Whether an existing pool claim already covers an export request.
+#[derive(PartialEq, Eq)]
+enum Claim {
+    Satisfied,
+    NeedsEncode,
+}
+
+/// Read and encode one pooled texture: VFS read plus pure CPU, touching no
+/// pool state, so `TexturePool` can run it outside its lock.
+fn encode_pooled_texture(
+    vfs: &impl AssetRead,
+    source_name: &str,
+    replace_bik: bool,
+) -> anyhow::Result<(Vec<u8>, bool)> {
+    let logical_path = format!("data/texture/{source_name}");
+    let is_bik = source_name
+        .rsplit_once('.')
+        .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("bik"));
+    match vfs.read_asset(&logical_path) {
+        Some(_) if replace_bik && is_bik => Ok((fallback_texture_ktx2()?, true)),
+        Some(source_bytes) => Ok((
+            texture_bytes_to_ktx2(source_name, &source_bytes)
+                .with_context(|| format!("converting texture: {logical_path}"))?,
+            false,
+        )),
+        // A texture the archives simply do not contain gets an obviously
+        // wrong stand-in rather than failing the model, but the
+        // substitution is reported so it cannot pass unnoticed.
+        None => {
+            println!("  missing texture, using a placeholder: {logical_path}");
+            Ok((fallback_texture_ktx2()?, true))
+        }
     }
 }
 
@@ -418,10 +509,9 @@ mod tests {
     fn converts_a_model_into_a_path_mirrored_glb_with_pooled_textures() {
         let vfs = vfs(&one_texture_model(), &["data/texture/bark.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
+        let pool = TexturePool::new(out.path());
 
-        let outcome =
-            convert_model(&vfs, TREE, out.path(), &mut pool, false).expect("convert model");
+        let outcome = convert_model(&vfs, TREE, out.path(), &pool, false).expect("convert model");
 
         assert_eq!(outcome, ConvertOutcome::Converted);
         assert!(out.path().join("prontera/tree01.glb").is_file());
@@ -434,9 +524,9 @@ mod tests {
     fn texture_uris_are_relative_to_the_glb_directory() {
         let vfs = vfs(&one_texture_model(), &["data/texture/bark.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
+        let pool = TexturePool::new(out.path());
 
-        convert_model(&vfs, TREE, out.path(), &mut pool, false).expect("convert model");
+        convert_model(&vfs, TREE, out.path(), &pool, false).expect("convert model");
 
         let gltf::Gltf { document, .. } =
             gltf::Gltf::open(out.path().join("prontera/tree01.glb")).expect("reopen glb");
@@ -454,16 +544,15 @@ mod tests {
     fn existing_glb_is_skipped_unless_forced() {
         let vfs = vfs(&one_texture_model(), &["data/texture/bark.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
-        convert_model(&vfs, TREE, out.path(), &mut pool, false).expect("first convert");
+        let pool = TexturePool::new(out.path());
+        convert_model(&vfs, TREE, out.path(), &pool, false).expect("first convert");
         let reads = vfs.reads("data/model/prontera/Tree01.rsm");
 
-        let skipped =
-            convert_model(&vfs, TREE, out.path(), &mut pool, false).expect("second convert");
+        let skipped = convert_model(&vfs, TREE, out.path(), &pool, false).expect("second convert");
         assert_eq!(skipped, ConvertOutcome::Skipped);
         assert_eq!(vfs.reads("data/model/prontera/Tree01.rsm"), reads);
 
-        let forced = convert_model(&vfs, TREE, out.path(), &mut pool, true).expect("forced");
+        let forced = convert_model(&vfs, TREE, out.path(), &pool, true).expect("forced");
         assert_eq!(forced, ConvertOutcome::Converted);
         assert_eq!(vfs.reads("data/model/prontera/Tree01.rsm"), reads + 1);
     }
@@ -490,10 +579,10 @@ mod tests {
             let source = encode_rsm2(minor, "bark.bmp");
             let vfs = vfs(&[], &["data/texture/bark.bmp"]);
             let out = tempfile::tempdir().expect("tempdir");
-            let mut pool = TexturePool::new(out.path());
+            let pool = TexturePool::new(out.path());
 
             let outcome =
-                convert_model_bytes(&vfs, logical_path, &source, out.path(), &mut pool, false)
+                convert_model_bytes(&vfs, logical_path, &source, out.path(), &pool, false)
                     .expect("convert RSM2");
 
             assert_eq!(outcome, ConvertOutcome::Converted);
@@ -519,19 +608,19 @@ mod tests {
             &["data/texture/bark.bmp"],
         );
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
+        let pool = TexturePool::new(out.path());
 
         assert_eq!(
-            convert_model_bytes(&vfs, TREE, &physical, out.path(), &mut pool, false).unwrap(),
+            convert_model_bytes(&vfs, TREE, &physical, out.path(), &pool, false).unwrap(),
             ConvertOutcome::Converted
         );
         assert_eq!(vfs.reads("data/model/prontera/Tree01.rsm"), 0);
         assert_eq!(
-            convert_model_bytes(&vfs, TREE, b"ignored", out.path(), &mut pool, false).unwrap(),
+            convert_model_bytes(&vfs, TREE, b"ignored", out.path(), &pool, false).unwrap(),
             ConvertOutcome::Skipped
         );
         assert_eq!(
-            convert_model_bytes(&vfs, TREE, &physical, out.path(), &mut pool, true).unwrap(),
+            convert_model_bytes(&vfs, TREE, &physical, out.path(), &pool, true).unwrap(),
             ConvertOutcome::Converted
         );
     }
@@ -540,15 +629,15 @@ mod tests {
     fn only_unsupported_legacy_rsm1_falls_back() {
         let vfs = FakeVfs::default();
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
+        let pool = TexturePool::new(out.path());
         let legacy = b"GRSM\x01\x06";
         assert_eq!(
-            convert_model_bytes(&vfs, TREE, legacy, out.path(), &mut pool, false).unwrap(),
+            convert_model_bytes(&vfs, TREE, legacy, out.path(), &pool, false).unwrap(),
             ConvertOutcome::UnsupportedVersion
         );
 
         for bytes in [b"GRSM\x02\x04".as_slice(), b"GRSM\x03\x00".as_slice()] {
-            let error = convert_model_bytes(&vfs, TREE, bytes, out.path(), &mut pool, false)
+            let error = convert_model_bytes(&vfs, TREE, bytes, out.path(), &pool, false)
                 .expect_err("must fail");
             let message = format!("{error:#}");
             assert!(
@@ -567,25 +656,18 @@ mod tests {
         let source = encode_rsm2(2, "bark.bmp");
         let source_vfs = vfs(&[], &["data/texture/bark.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
+        let pool = TexturePool::new(out.path());
         let glb = out.path().join(glb_relative_path(TREE));
 
-        convert_model_bytes(&source_vfs, TREE, &source, out.path(), &mut pool, false).unwrap();
+        convert_model_bytes(&source_vfs, TREE, &source, out.path(), &pool, false).unwrap();
         assert!(glb.is_file());
         assert!(
-            convert_model_bytes(
-                &source_vfs,
-                TREE,
-                b"GRSM\x02\x03",
-                out.path(),
-                &mut pool,
-                true,
-            )
-            .is_err()
+            convert_model_bytes(&source_vfs, TREE, b"GRSM\x02\x03", out.path(), &pool, true,)
+                .is_err()
         );
         assert!(!glb.exists());
 
-        convert_model_bytes(&source_vfs, TREE, &source, out.path(), &mut pool, false).unwrap();
+        convert_model_bytes(&source_vfs, TREE, &source, out.path(), &pool, false).unwrap();
         assert!(glb.is_file());
         let unsupported_texture = encode_rsm2(2, "broken.webp");
         let broken_vfs = vfs(&[], &["data/texture/broken.webp"]);
@@ -595,7 +677,7 @@ mod tests {
                 TREE,
                 &unsupported_texture,
                 out.path(),
-                &mut pool,
+                &pool,
                 true,
             )
             .is_err()
@@ -607,8 +689,8 @@ mod tests {
     fn malformed_rsm2_is_fatal_with_version_and_stage() {
         let vfs = FakeVfs::default();
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
-        let error = convert_model_bytes(&vfs, TREE, b"GRSM\x02\x03", out.path(), &mut pool, false)
+        let pool = TexturePool::new(out.path());
+        let error = convert_model_bytes(&vfs, TREE, b"GRSM\x02\x03", out.path(), &pool, false)
             .expect_err("must fail");
         let message = format!("{error:#}");
         assert!(message.contains("prontera/Tree01.rsm"));
@@ -626,9 +708,9 @@ mod tests {
             &["data/texture/bark.bmp"],
         );
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
+        let pool = TexturePool::new(out.path());
 
-        let err = convert_model(&vfs, TREE, out.path(), &mut pool, false).expect_err("must fail");
+        let err = convert_model(&vfs, TREE, out.path(), &pool, false).expect_err("must fail");
 
         assert!(
             err.to_string().contains("prontera/Tree01.rsm"),
@@ -642,10 +724,10 @@ mod tests {
     fn a_missing_rsm1_texture_becomes_a_placeholder() {
         let vfs = vfs(&one_texture_model(), &[]);
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
+        let pool = TexturePool::new(out.path());
 
         assert_eq!(
-            convert_model(&vfs, TREE, out.path(), &mut pool, false).expect("must convert"),
+            convert_model(&vfs, TREE, out.path(), &pool, false).expect("must convert"),
             ConvertOutcome::Converted
         );
 
@@ -663,10 +745,10 @@ mod tests {
                 .collect::<Vec<_>>();
             let vfs = vfs(&[("data/model/fallback.rsm2", model)], &textures);
             let out = tempfile::tempdir().expect("tempdir");
-            let mut pool = TexturePool::new(out.path());
+            let pool = TexturePool::new(out.path());
 
             assert_eq!(
-                convert_model(&vfs, "fallback.rsm2", out.path(), &mut pool, false,).unwrap(),
+                convert_model(&vfs, "fallback.rsm2", out.path(), &pool, false,).unwrap(),
                 ConvertOutcome::Converted
             );
             let ktx2 = std::fs::read(
@@ -707,10 +789,10 @@ mod tests {
         ];
         let vfs = vfs(&models, &["data/texture/bark.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
+        let pool = TexturePool::new(out.path());
 
-        convert_model(&vfs, TREE, out.path(), &mut pool, false).expect("convert tree");
-        convert_model(&vfs, BUSH, out.path(), &mut pool, false).expect("convert bush");
+        convert_model(&vfs, TREE, out.path(), &pool, false).expect("convert tree");
+        convert_model(&vfs, BUSH, out.path(), &pool, false).expect("convert bush");
 
         assert_eq!(vfs.reads("data/texture/bark.bmp"), 1);
         assert!(out.path().join("prontera/bush01.glb").is_file());
@@ -721,24 +803,12 @@ mod tests {
     fn a_ktx2_pooled_by_an_earlier_run_from_the_same_source_is_reused() {
         let vfs = vfs(&one_texture_model(), &["data/texture/bark.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
-        convert_model(
-            &vfs,
-            TREE,
-            out.path(),
-            &mut TexturePool::new(out.path()),
-            false,
-        )
-        .expect("first run");
+        convert_model(&vfs, TREE, out.path(), &TexturePool::new(out.path()), false)
+            .expect("first run");
         let pooled = std::fs::read(out.path().join("tex/bark_bmp.ktx2")).expect("pooled KTX2");
 
-        let outcome = convert_model(
-            &vfs,
-            TREE,
-            out.path(),
-            &mut TexturePool::new(out.path()),
-            true,
-        )
-        .expect("second run");
+        let outcome = convert_model(&vfs, TREE, out.path(), &TexturePool::new(out.path()), true)
+            .expect("second run");
 
         assert_eq!(outcome, ConvertOutcome::Converted);
         assert_eq!(
@@ -765,23 +835,11 @@ mod tests {
             ("data/texture/a_b.bmp", bmp_bytes(GREEN)),
         ]);
         let out = tempfile::tempdir().expect("tempdir");
-        convert_model(
-            &vfs,
-            TREE,
-            out.path(),
-            &mut TexturePool::new(out.path()),
-            false,
-        )
-        .expect("first run");
+        convert_model(&vfs, TREE, out.path(), &TexturePool::new(out.path()), false)
+            .expect("first run");
 
-        let err = convert_model(
-            &vfs,
-            BUSH,
-            out.path(),
-            &mut TexturePool::new(out.path()),
-            false,
-        )
-        .expect_err("must collide");
+        let err = convert_model(&vfs, BUSH, out.path(), &TexturePool::new(out.path()), false)
+            .expect_err("must collide");
 
         let message = format!("{err:#}");
         assert!(
@@ -802,9 +860,9 @@ mod tests {
         )];
         let vfs = vfs(&models, &["data/texture/ver_h_03.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
+        let pool = TexturePool::new(out.path());
 
-        convert_model(&vfs, TREE, out.path(), &mut pool, false)
+        convert_model(&vfs, TREE, out.path(), &pool, false)
             .expect("one file spelled two ways is not a collision");
 
         assert!(out.path().join("tex/ver_h_03_bmp.ktx2").is_file());
@@ -824,11 +882,10 @@ mod tests {
         ];
         let vfs = vfs(&models, &["data/texture/a b.bmp", "data/texture/a_b.bmp"]);
         let out = tempfile::tempdir().expect("tempdir");
-        let mut pool = TexturePool::new(out.path());
-        convert_model(&vfs, TREE, out.path(), &mut pool, false).expect("convert tree");
+        let pool = TexturePool::new(out.path());
+        convert_model(&vfs, TREE, out.path(), &pool, false).expect("convert tree");
 
-        let err =
-            convert_model(&vfs, BUSH, out.path(), &mut pool, false).expect_err("must collide");
+        let err = convert_model(&vfs, BUSH, out.path(), &pool, false).expect_err("must collide");
 
         let message = format!("{err:#}");
         assert!(message.contains("a b.bmp"), "unexpected error: {message}");

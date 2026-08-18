@@ -21,13 +21,13 @@ pub fn run(vfs: &GrfVfs, models_dir: &Path, models: &[String], force: bool) -> a
     } else {
         models.iter().map(String::as_str).collect()
     };
-    let mut pool = TexturePool::new(models_dir);
+    let pool = TexturePool::new(models_dir);
     let mut converted = 0;
     let mut failed = 0;
     let mut skipped = 0;
 
     for filename in models {
-        match model::convert_model(vfs, filename, models_dir, &mut pool, force) {
+        match model::convert_model(vfs, filename, models_dir, &pool, force) {
             Ok(ConvertOutcome::Converted) => converted += 1,
             Ok(ConvertOutcome::Skipped) => skipped += 1,
             Ok(ConvertOutcome::UnsupportedVersion) => {

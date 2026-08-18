@@ -6774,6 +6774,7 @@ dependencies = [
  "mlua",
  "prost-build",
  "protox",
+ "rayon",
  "regex",
  "ro-formats",
  "ron 0.12.2",

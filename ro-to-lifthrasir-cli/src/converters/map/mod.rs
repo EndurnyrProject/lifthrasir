@@ -6,7 +6,7 @@ pub mod validate;
 pub mod water;
 pub mod writer;
 
-use crate::converters::model::{self, ConvertOutcome, TexturePool};
+use crate::converters::model::{self, ConvertOutcome, ModelCache, TexturePool};
 use crate::grf_vfs::{AssetRead, GrfVfs};
 use anyhow::Context;
 use ro_formats::{RoGround, RoWorld, RswObject};
@@ -26,6 +26,31 @@ pub fn run(
     models_dir: &Path,
     force_models: bool,
 ) -> anyhow::Result<()> {
+    let pool = TexturePool::new(models_dir);
+    let cache = ModelCache::default();
+    run_shared(
+        vfs,
+        map_name,
+        out_dir,
+        models_dir,
+        force_models,
+        &pool,
+        &cache,
+    )
+}
+
+/// `run` against a run-wide texture pool and model cache, shared by every map
+/// of one `convert-maps` invocation (possibly across threads).
+#[allow(clippy::too_many_arguments)]
+pub fn run_shared(
+    vfs: &GrfVfs,
+    map_name: &str,
+    out_dir: &Path,
+    models_dir: &Path,
+    force_models: bool,
+    pool: &TexturePool,
+    cache: &ModelCache,
+) -> anyhow::Result<()> {
     let rsw_bytes = read_source(vfs, map_name, "rsw")?;
     let gnd_bytes = read_source(vfs, map_name, "gnd")?;
     let gat_bytes = read_source(vfs, map_name, "gat")?;
@@ -40,7 +65,7 @@ pub fn run(
     report_dropped_objects(&world);
 
     let (converted_models, prop_counts) =
-        convert_props(vfs, map_name, &world, models_dir, force_models)?;
+        convert_props(vfs, map_name, &world, models_dir, force_models, pool, cache)?;
 
     let indoor = map_is_indoor(vfs, map_name)?;
 
@@ -182,8 +207,9 @@ fn convert_props(
     world: &RoWorld,
     models_dir: &Path,
     force_models: bool,
+    pool: &TexturePool,
+    cache: &ModelCache,
 ) -> anyhow::Result<(HashSet<String>, PropCounts)> {
-    let mut pool = TexturePool::new(models_dir);
     let mut converted_models = HashSet::new();
     let mut counts = PropCounts::default();
     let mut seen = HashSet::new();
@@ -197,8 +223,20 @@ fn convert_props(
             continue;
         }
 
-        let outcome = model::convert_model(vfs, filename, models_dir, &mut pool, force_models)
-            .with_context(|| format!("map '{map_name}', converting prop model '{filename}'"))?;
+        // A model another map already handled this run is not touched again;
+        // for this map it behaves exactly like one already on disk.
+        let outcome = match cache.get(filename) {
+            Some(ConvertOutcome::Converted | ConvertOutcome::Skipped) => ConvertOutcome::Skipped,
+            Some(ConvertOutcome::UnsupportedVersion) => ConvertOutcome::UnsupportedVersion,
+            None => {
+                let outcome = model::convert_model(vfs, filename, models_dir, pool, force_models)
+                    .with_context(|| {
+                    format!("map '{map_name}', converting prop model '{filename}'")
+                })?;
+                cache.record(filename, outcome);
+                outcome
+            }
+        };
         match outcome {
             ConvertOutcome::Converted => {
                 counts.converted += 1;
@@ -219,6 +257,28 @@ fn convert_props(
 mod tests {
     use super::*;
     use crate::config::{GrfEntry, LoaderConfig};
+
+    /// `convert_props` with a fresh pool and cache per call, preserving the
+    /// pre-shared-state semantics these tests were written against.
+    fn convert_props_standalone(
+        vfs: &impl AssetRead,
+        map_name: &str,
+        world: &RoWorld,
+        models_dir: &Path,
+        force_models: bool,
+    ) -> anyhow::Result<(HashSet<String>, PropCounts)> {
+        let pool = TexturePool::new(models_dir);
+        let cache = ModelCache::default();
+        convert_props(
+            vfs,
+            map_name,
+            world,
+            models_dir,
+            force_models,
+            &pool,
+            &cache,
+        )
+    }
 
     #[test]
     fn failed_glb_write_leaves_no_destination() {
@@ -424,7 +484,8 @@ mod tests {
         let out = tempfile::tempdir().expect("tempdir");
 
         let (converted_models, counts) =
-            convert_props(&vfs, "synthetic", &world, out.path(), false).expect("convert props");
+            convert_props_standalone(&vfs, "synthetic", &world, out.path(), false)
+                .expect("convert props");
 
         assert_eq!(counts.converted, 3);
         assert_eq!(counts.skipped, 0);
@@ -478,9 +539,10 @@ mod tests {
         ]);
         let out = tempfile::tempdir().expect("tempdir");
 
-        convert_props(&vfs, "synthetic", &world, out.path(), false).expect("first run");
+        convert_props_standalone(&vfs, "synthetic", &world, out.path(), false).expect("first run");
         let (converted_models, counts) =
-            convert_props(&vfs, "synthetic", &world, out.path(), false).expect("second run");
+            convert_props_standalone(&vfs, "synthetic", &world, out.path(), false)
+                .expect("second run");
 
         assert_eq!(counts.converted, 0);
         assert_eq!(counts.skipped, 2);
@@ -514,7 +576,7 @@ mod tests {
             let world = props_world(vec![model_object("bad", filename)]);
             let out = tempfile::tempdir().expect("tempdir");
 
-            let error = convert_props(&vfs, "test_map", &world, out.path(), false)
+            let error = convert_props_standalone(&vfs, "test_map", &world, out.path(), false)
                 .expect_err("RSM2 must abort map conversion");
             let message = format!("{error:#}");
             assert!(message.contains("map 'test_map'"), "{message}");
@@ -535,7 +597,7 @@ mod tests {
         let world = props_world(vec![model_object("fallback", filename)]);
         let out = tempfile::tempdir().expect("tempdir");
 
-        convert_props(&vfs, "test_map", &world, out.path(), false).unwrap();
+        convert_props_standalone(&vfs, "test_map", &world, out.path(), false).unwrap();
 
         let glb = out.path().join(model::glb_relative_path(filename));
         assert!(glb.is_file());

@@ -1,5 +1,7 @@
 use crate::converters::map;
+use crate::converters::model::{ModelCache, TexturePool};
 use crate::grf_vfs::{GrfVfs, PhysicalAsset, effective_entries, normalize_path};
+use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -14,8 +16,6 @@ pub fn run(
 ) -> anyhow::Result<()> {
     let assets: Vec<_> = vfs.physical_assets().collect();
     let inventory = map_inventory(&assets);
-    let mut converted = 0;
-    let mut failed = 0;
 
     for (map_name, missing) in &inventory.incomplete {
         println!(
@@ -24,15 +24,28 @@ pub fn run(
         );
     }
 
-    for map_name in &inventory.convertible {
-        match map::run(vfs, map_name, out_dir, models_dir, force_models) {
-            Ok(()) => converted += 1,
-            Err(error) => {
-                failed += 1;
-                eprintln!("failed to convert map '{map_name}': {error:#}");
-            }
-        }
-    }
+    // One texture pool and one model cache for the whole run: a prop shared
+    // by many maps converts once, and parallel maps never step on each other.
+    let pool = TexturePool::new(models_dir);
+    let cache = ModelCache::default();
+    let failed = inventory
+        .convertible
+        .par_iter()
+        .filter(|map_name| {
+            map::run_shared(
+                vfs,
+                map_name,
+                out_dir,
+                models_dir,
+                force_models,
+                &pool,
+                &cache,
+            )
+            .inspect_err(|error| eprintln!("failed to convert map '{map_name}': {error:#}"))
+            .is_err()
+        })
+        .count();
+    let converted = inventory.convertible.len() - failed;
 
     println!(
         "maps: {converted} converted, {failed} failed, {} skipped",

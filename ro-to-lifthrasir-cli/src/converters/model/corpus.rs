@@ -1015,14 +1015,14 @@ fn process_models(
                     };
                     row.stage = Some("preflight gate".to_string());
                 } else {
-                    let mut pool = TexturePool::new(&scratch);
+                    let pool = TexturePool::new(&scratch);
                     let conversion = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         convert_model_bytes(
                             vfs,
                             &row.inventory.logical_path,
                             &bytes,
                             &scratch,
-                            &mut pool,
+                            &pool,
                             force,
                         )
                     }));

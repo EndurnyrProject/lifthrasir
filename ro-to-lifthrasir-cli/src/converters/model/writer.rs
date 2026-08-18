@@ -116,8 +116,19 @@ pub fn write_model_glb(
     root.buffer_views = std::mem::take(&mut bin.views);
 
     let json_bytes = json::serialize::to_vec(&root).context("serializing glTF JSON")?;
-    std::fs::write(out_path, glb_container(&json_bytes, &bin.data))
+    // Written beside the destination and atomically renamed into place, so a
+    // parallel reader of the same model path never observes a partial glb.
+    let parent = out_path
+        .parent()
+        .with_context(|| format!("model output path has no parent: {}", out_path.display()))?;
+    let temporary = tempfile::NamedTempFile::new_in(parent)
+        .with_context(|| format!("creating temporary GLB beside {}", out_path.display()))?;
+    std::fs::write(temporary.path(), glb_container(&json_bytes, &bin.data))
         .with_context(|| format!("writing {}", out_path.display()))?;
+    temporary
+        .persist(out_path)
+        .map_err(|error| error.error)
+        .with_context(|| format!("publishing {}", out_path.display()))?;
 
     Ok(())
 }
