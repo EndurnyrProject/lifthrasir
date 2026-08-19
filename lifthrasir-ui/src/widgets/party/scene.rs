@@ -23,6 +23,7 @@ use crate::theme;
 use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
 use crate::widgets::chrome::{body_container, chrome_text, glyph_icon, ignore_picking, titlebar};
 
+use super::member_menu::PartyMemberRow;
 use super::{PARTY_MAX, PartyFooter, PartyTitlebar, PartyWindowBody, PartyWindowRoot};
 
 const WINDOW_LEFT: f32 = 300.0;
@@ -59,6 +60,8 @@ pub(crate) struct RosterRow {
     pub job_name: String,
     pub online: bool,
     pub leader: bool,
+    pub char_id: u32,
+    pub actionable: bool,
     pub on_screen: bool,
     pub resources: Option<MemberResources>,
 }
@@ -209,10 +212,17 @@ fn header_band(header: RosterHeader) -> impl Scene {
 }
 
 /// One roster row: online dot, identity/meta, and the server-owned resource snapshot.
+/// Actionable rows (leader can act on them) are pickable and carry the
+/// [`PartyMemberRow`] marker the global `member_menu::open` observer reads; every
+/// other row stays `ignore_picking()`.
 fn member_row(row: RosterRow) -> impl Scene {
     let crown = row
         .leader
         .then(|| EntityScene(glyph_icon("crown", 12.0, theme::GOLD)));
+    let marker = row
+        .actionable
+        .then(|| bsn! { PartyMemberRow({row.char_id}) });
+    let picking = (!row.actionable).then(ignore_picking);
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
@@ -222,7 +232,8 @@ fn member_row(row: RosterRow) -> impl Scene {
             border_radius: BorderRadius::all(px(7)),
         }
         BackgroundColor(theme::FIELD)
-        ignore_picking()
+        {picking}
+        {marker}
         Children [
             online_dot(row.online),
             (
@@ -546,6 +557,8 @@ mod tests {
                 job_name: "Rune Knight".to_string(),
                 online: true,
                 leader: true,
+                char_id: 1,
+                actionable: false,
                 on_screen: true,
                 resources: Some(MemberResources {
                     hp: ResourceValue {
@@ -566,6 +579,8 @@ mod tests {
                 job_name: "Arch Bishop".to_string(),
                 online: true,
                 leader: false,
+                char_id: 2,
+                actionable: true,
                 on_screen: false,
                 resources: Some(MemberResources {
                     hp: ResourceValue {

@@ -20,12 +20,14 @@ use game_engine::domain::party::PartyState;
 use game_engine::infrastructure::job::JobSpriteRegistry;
 use leafwing_input_manager::prelude::ActionState;
 use net_contract::dto::PartyMemberInfo;
+use net_contract::state::ZoneSession;
 
 use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod create_dialog;
 pub mod feedback;
 pub mod invite_dialog;
+pub mod member_menu;
 pub mod scene;
 pub mod slash;
 
@@ -72,6 +74,7 @@ impl Plugin for PartyPlugin {
         app.init_resource::<PendingPartyInvite>();
         app.add_message::<PartySlashSubmitted>();
         app.add_observer(crate::widgets::player_context_menu::open_player_menu);
+        app.add_observer(member_menu::open);
         app.add_systems(
             Update,
             toggle_party_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
@@ -149,6 +152,7 @@ type FooterQuery<'w, 's> =
 #[allow(clippy::too_many_arguments)]
 pub fn refresh_roster(
     mut commands: Commands,
+    session: Res<ZoneSession>,
     party: Res<PartyState>,
     registry: Res<EntityRegistry>,
     jobs: Option<Res<JobSpriteRegistry>>,
@@ -191,7 +195,14 @@ pub fn refresh_roster(
     }
 
     let header = party.in_party().then(|| roster_header(&party));
-    let rows = roster_rows(&party, &registry, jobs.as_deref());
+    let is_leader = party.is_leader(session.char_id);
+    let rows = roster_rows(
+        &party,
+        &registry,
+        jobs.as_deref(),
+        session.char_id,
+        is_leader,
+    );
 
     commands
         .spawn_scene(scene::body(header, rows))
@@ -221,6 +232,8 @@ fn roster_rows(
     party: &PartyState,
     registry: &EntityRegistry,
     jobs: Option<&JobSpriteRegistry>,
+    local_char_id: u32,
+    is_leader: bool,
 ) -> Vec<scene::RosterRow> {
     party
         .members
@@ -235,6 +248,8 @@ fn roster_rows(
                 .to_string(),
             online: member.online,
             leader: member.char_id == party.leader_char_id,
+            char_id: member.char_id,
+            actionable: is_leader && member.char_id != local_char_id,
             on_screen: registry.get_entity(member.char_id).is_some(),
             resources: member.online.then(|| scene::MemberResources {
                 hp: scene::ResourceValue {
@@ -304,7 +319,7 @@ mod tests {
             .insert(4008, "Rune Knight".to_string());
         let jobs = JobSpriteRegistry::from_job_data(job_data);
 
-        let rows = roster_rows(&party, &entities, Some(&jobs));
+        let rows = roster_rows(&party, &entities, Some(&jobs), party.leader_char_id, true);
 
         assert_eq!(rows[0].job_name, "Rune Knight");
         assert!(rows[0].leader);
@@ -330,8 +345,32 @@ mod tests {
         assert!(!rows[1].on_screen);
         assert_eq!(rows[1].resources, None);
 
-        let rows_without_registry = roster_rows(&party, &entities, None);
+        let rows_without_registry =
+            roster_rows(&party, &entities, None, party.leader_char_id, true);
         assert_eq!(rows_without_registry[0].job_name, "Unknown Job");
+    }
+
+    #[test]
+    fn roster_rows_only_mark_other_member_rows_actionable_for_the_leader() {
+        let leader = member(1, true);
+        let follower = member(2, true);
+        let party = PartyState {
+            leader_char_id: leader.char_id,
+            members: vec![leader, follower],
+            ..default()
+        };
+
+        // Local player is the leader: own row never actionable, other rows are.
+        let rows = roster_rows(&party, &EntityRegistry::default(), None, 1, true);
+        assert!(!rows[0].actionable);
+        assert_eq!(rows[0].char_id, 1);
+        assert!(rows[1].actionable);
+        assert_eq!(rows[1].char_id, 2);
+
+        // Local player is not the leader: no row is actionable.
+        let rows = roster_rows(&party, &EntityRegistry::default(), None, 1, false);
+        assert!(!rows[0].actionable);
+        assert!(!rows[1].actionable);
     }
 
     #[test]
@@ -345,7 +384,7 @@ mod tests {
             ..default()
         };
 
-        let rows = roster_rows(&party, &EntityRegistry::default(), None);
+        let rows = roster_rows(&party, &EntityRegistry::default(), None, 1, true);
 
         assert!(rows[0].resources.as_ref().unwrap().ap.is_none());
     }
@@ -363,6 +402,7 @@ mod tests {
             ..default()
         });
         app.init_resource::<EntityRegistry>();
+        app.init_resource::<ZoneSession>();
         app.world_mut()
             .spawn((PartyWindowRoot, Visibility::Visible));
         app.world_mut().spawn(PartyWindowBody);
