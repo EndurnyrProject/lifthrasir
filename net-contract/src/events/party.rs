@@ -10,6 +10,7 @@ pub struct PartyInfoReceived {
     pub name: String,
     pub leader_char_id: u32,
     pub exp_share: bool,
+    pub item_pickup_share: bool,
     pub members: Vec<PartyMemberInfo>,
 }
 

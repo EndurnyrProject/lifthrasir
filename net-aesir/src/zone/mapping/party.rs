@@ -10,6 +10,7 @@ pub fn party_info(p: net::PartyInfo) -> PartyInfoReceived {
         name: p.name,
         leader_char_id: p.leader_char_id,
         exp_share: p.exp_share,
+        item_pickup_share: p.item_pickup_share,
         members: p.members.into_iter().map(party_member).collect(),
     }
 }
@@ -137,7 +138,7 @@ mod tests {
             name: "Vikings".into(),
             leader_char_id: 42,
             exp_share: true,
-            item_pickup_share: false,
+            item_pickup_share: true,
             members: vec![
                 net::PartyMember {
                     char_id: 42,
@@ -176,6 +177,7 @@ mod tests {
         assert_eq!(received.name, "Vikings");
         assert_eq!(received.leader_char_id, 42);
         assert!(received.exp_share);
+        assert!(received.item_pickup_share);
         assert_eq!(received.members.len(), 2);
         assert_eq!(received.members[0].char_id, 42);
         assert_eq!(received.members[0].name, "Leader");

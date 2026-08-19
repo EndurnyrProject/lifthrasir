@@ -11,6 +11,7 @@ pub fn apply_party_info(
         state.name = info.name.clone();
         state.leader_char_id = info.leader_char_id;
         state.exp_share = info.exp_share;
+        state.item_pickup_share = info.item_pickup_share;
         state.members = info.members.clone();
     }
 }
@@ -106,6 +107,7 @@ mod tests {
             name: "Aesir".into(),
             leader_char_id: 42,
             exp_share: true,
+            item_pickup_share: true,
             members: vec![member(42), member(7)],
         });
         app.update();
@@ -114,6 +116,7 @@ mod tests {
         assert!(state.in_party());
         assert_eq!(state.party_id, 5);
         assert_eq!(state.name, "Aesir");
+        assert!(state.item_pickup_share);
         assert!(state.is_leader(42));
         assert!(!state.is_leader(7));
         assert_eq!(state.members.len(), 2);
@@ -131,6 +134,7 @@ mod tests {
             name: "Aesir".into(),
             leader_char_id: 42,
             exp_share: true,
+            item_pickup_share: true,
             members: vec![leader.clone(), original, unrelated.clone()],
         });
         app.update();
@@ -163,6 +167,7 @@ mod tests {
             name: "Aesir".into(),
             leader_char_id: 7,
             exp_share: false,
+            item_pickup_share: false,
             members: vec![original.clone()],
         });
         app.update();
@@ -193,6 +198,7 @@ mod tests {
             name: "Aesir".into(),
             leader_char_id: 7,
             exp_share: false,
+            item_pickup_share: false,
             members: vec![original.clone()],
         });
         app.update();
@@ -222,6 +228,7 @@ mod tests {
             name: "Aesir".into(),
             leader_char_id: 7,
             exp_share: false,
+            item_pickup_share: false,
             members: vec![member(7)],
         });
         app.update();
@@ -260,6 +267,7 @@ mod tests {
             name: "Aesir".into(),
             leader_char_id: 42,
             exp_share: true,
+            item_pickup_share: false,
             members: vec![member(42)],
         });
         app.update();
@@ -295,6 +303,7 @@ mod tests {
             name: "Aesir".into(),
             leader_char_id: 42,
             exp_share: true,
+            item_pickup_share: false,
             members: vec![member(42)],
         });
         app.world_mut().write_message(PartyMemberUpdated {
@@ -330,6 +339,7 @@ mod tests {
             name: "Aesir".into(),
             leader_char_id: 42,
             exp_share: true,
+            item_pickup_share: false,
             members: vec![member(42)],
         });
         app.world_mut()
