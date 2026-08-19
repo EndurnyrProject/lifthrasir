@@ -2,6 +2,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::{prelude::*, text::EditableText, ui::ColorStop};
 use game_engine::{
     core::state::GameState,
@@ -87,6 +88,12 @@ impl Plugin for CharacterCreateScreenPlugin {
             rebuild_preview_character
                 .after(forward_character_sprite_events)
                 .run_if(in_state(GameState::CharacterCreation)),
+        );
+        // Hand keyboard focus to the name field as soon as it spawns so the
+        // player can type immediately, mirroring the chat and party dialogs.
+        app.add_systems(
+            Update,
+            focus_name_field.run_if(in_state(GameState::CharacterCreation)),
         );
     }
 }
@@ -790,6 +797,19 @@ fn preview_components(form: &CharacterCreationForm) -> (CharacterData, Character
             clothes_color: 0,
         },
     )
+}
+
+/// Hands keyboard focus to the freshly spawned name field so the player can type
+/// at once, mirroring `chat_input_control` and the party create dialog. Clicking the
+/// field still works, but this guarantees the field is usable on screen entry.
+fn focus_name_field(
+    field: Query<Entity, Added<NameField>>,
+    mut input_focus: ResMut<InputFocus>,
+) {
+    let Ok(entity) = field.single() else {
+        return;
+    };
+    input_focus.set(entity, FocusCause::Navigated);
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
