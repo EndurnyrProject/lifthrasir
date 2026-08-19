@@ -310,6 +310,28 @@ pub struct PartyInviteResponded {
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct PartyLeaveRequested;
 
+/// Request to kick a member from the local player's party.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PartyKickRequested {
+    pub target_char_id: u32,
+}
+
+/// Request to set both party options (exp share / item pickup share) as full desired state.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PartyOptionsRequested {
+    pub exp_share: bool,
+    pub item_pickup_share: bool,
+}
+
+/// Request to transfer party leadership to `target_char_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PartyLeaderRequested {
+    pub target_char_id: u32,
+}
+
 /// Request to create a guild named `name`.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
