@@ -14,10 +14,11 @@
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
-use bevy::ui_widgets::Activate;
-use bevy_feathers::controls::FeathersButton;
+use bevy::ui_widgets::{Activate, ValueChange};
+use bevy_feathers::controls::{FeathersButton, FeathersCheckbox};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
-use net_contract::commands::PartyLeaveRequested;
+use game_engine::domain::party::PartyState;
+use net_contract::commands::{PartyLeaveRequested, PartyOptionsRequested};
 
 use crate::theme;
 use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
@@ -65,6 +66,14 @@ pub(crate) struct RosterRow {
     pub on_screen: bool,
     pub resources: Option<MemberResources>,
 }
+
+/// Marks the leader-only EXP-share toggle checkbox inside the options row.
+#[derive(Component, Default, Clone)]
+pub struct ExpShareToggle;
+
+/// Marks the leader-only item-share toggle checkbox inside the options row.
+#[derive(Component, Default, Clone)]
+pub struct ItemShareToggle;
 
 /// Spawn the whole window as one scene and parent it under `parent` with a single
 /// insert.
@@ -125,17 +134,83 @@ fn footer() -> impl Scene {
 }
 
 /// The whole swappable body: the header band plus one row per member, or the partyless
-/// empty state. `header` is `None` exactly when partyless.
-pub(crate) fn body(header: Option<RosterHeader>, rows: Vec<RosterRow>) -> impl Scene {
+/// empty state. `header` is `None` exactly when partyless; `is_leader` adds the
+/// leader-only options row.
+pub(crate) fn body(
+    header: Option<RosterHeader>,
+    rows: Vec<RosterRow>,
+    is_leader: bool,
+) -> impl Scene {
     let partyless = header.is_none();
     let header_scene = header.map(|header| EntityScene(header_band(header)));
     let empty = partyless.then(|| EntityScene(empty_state()));
     let row_scenes: Vec<_> = rows.into_iter().map(member_row).collect();
+    let options = is_leader.then(|| EntityScene(options_row()));
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
         ignore_picking()
-        Children [ {header_scene}, {empty}, {row_scenes} ]
+        Children [ {header_scene}, {empty}, {row_scenes}, {options} ]
     }
+}
+
+/// Leader-only options section: two controlled Feathers checkboxes that write the full
+/// [`PartyOptionsRequested`] pair, preserving the untouched flag from [`PartyState`].
+/// No `checkbox_self_update`: the checked visual is driven solely by
+/// [`sync_party_option_toggles`](super::sync_party_option_toggles), so the toggles
+/// settle on server-confirmed values.
+fn options_row() -> impl Scene {
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: px(4),
+            padding: {UiRect::axes(px(10), px(8))},
+            border_radius: BorderRadius::all(px(7)),
+            margin: {UiRect::bottom(px(4))},
+        }
+        BackgroundColor(theme::GLASS_2)
+        ignore_picking()
+        Children [
+            chrome_text("Party options".to_string(), 11.0, theme::TEXT_DIM),
+            (
+                Node { flex_direction: FlexDirection::Row, column_gap: px(16) }
+                ignore_picking()
+                Children [
+                    (
+                        @FeathersCheckbox { @caption: bsn! { Text("EXP Share") ThemedText } }
+                        ExpShareToggle
+                        on(on_exp_share_changed)
+                    ),
+                    (
+                        @FeathersCheckbox { @caption: bsn! { Text("Item Share") ThemedText } }
+                        ItemShareToggle
+                        on(on_item_share_changed)
+                    ),
+                ]
+            ),
+        ]
+    }
+}
+
+fn on_exp_share_changed(
+    ev: On<ValueChange<bool>>,
+    party: Res<PartyState>,
+    mut writer: MessageWriter<PartyOptionsRequested>,
+) {
+    writer.write(PartyOptionsRequested {
+        exp_share: ev.value,
+        item_pickup_share: party.item_pickup_share,
+    });
+}
+
+fn on_item_share_changed(
+    ev: On<ValueChange<bool>>,
+    party: Res<PartyState>,
+    mut writer: MessageWriter<PartyOptionsRequested>,
+) {
+    writer.write(PartyOptionsRequested {
+        exp_share: party.exp_share,
+        item_pickup_share: ev.value,
+    });
 }
 
 /// Partyless empty state: a hint plus a "Create a party" `@FeathersButton` that opens
@@ -600,8 +675,119 @@ mod tests {
         ];
         assert!(
             app.world_mut()
-                .spawn_scene(body(Some(header), rows))
+                .spawn_scene(body(Some(header), rows, false))
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn body_for_non_leader_renders_no_option_toggles() {
+        let mut app = scene_app();
+        app.world_mut()
+            .spawn_scene(body(None, Vec::new(), false))
+            .unwrap();
+        let world = app.world_mut();
+        assert_eq!(
+            world
+                .query_filtered::<(), With<ExpShareToggle>>()
+                .iter(world)
+                .count(),
+            0
+        );
+        assert_eq!(
+            world
+                .query_filtered::<(), With<ItemShareToggle>>()
+                .iter(world)
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn body_for_leader_renders_exactly_one_of_each_option_toggle() {
+        let mut app = scene_app();
+        app.world_mut()
+            .spawn_scene(body(None, Vec::new(), true))
+            .unwrap();
+        let world = app.world_mut();
+        assert_eq!(
+            world
+                .query_filtered::<(), With<ExpShareToggle>>()
+                .iter(world)
+                .count(),
+            1
+        );
+        assert_eq!(
+            world
+                .query_filtered::<(), With<ItemShareToggle>>()
+                .iter(world)
+                .count(),
+            1
+        );
+    }
+
+    fn option_app() -> App {
+        let mut app = scene_app();
+        app.add_message::<PartyOptionsRequested>();
+        app
+    }
+
+    fn toggle_written(app: &mut App) -> Vec<PartyOptionsRequested> {
+        let messages = app.world().resource::<Messages<PartyOptionsRequested>>();
+        messages.get_cursor().read(messages).cloned().collect()
+    }
+
+    #[test]
+    fn exp_share_toggle_writes_full_pair_preserving_item_share_from_state() {
+        let mut app = option_app();
+        app.insert_resource(PartyState {
+            exp_share: false,
+            item_pickup_share: true,
+            ..default()
+        });
+        let toggle = app
+            .world_mut()
+            .spawn(ExpShareToggle)
+            .observe(on_exp_share_changed)
+            .id();
+
+        app.world_mut().trigger(ValueChange {
+            source: toggle,
+            value: true,
+            is_final: true,
+        });
+        app.world_mut().flush();
+
+        let written = toggle_written(&mut app);
+        assert_eq!(written.len(), 1);
+        assert!(written[0].exp_share);
+        assert!(written[0].item_pickup_share);
+    }
+
+    #[test]
+    fn item_share_toggle_writes_full_pair_preserving_exp_share_from_state() {
+        let mut app = option_app();
+        app.insert_resource(PartyState {
+            exp_share: true,
+            item_pickup_share: false,
+            ..default()
+        });
+        let toggle = app
+            .world_mut()
+            .spawn(ItemShareToggle)
+            .observe(on_item_share_changed)
+            .id();
+
+        app.world_mut().trigger(ValueChange {
+            source: toggle,
+            value: true,
+            is_final: true,
+        });
+        app.world_mut().flush();
+
+        let written = toggle_written(&mut app);
+        assert_eq!(written.len(), 1);
+        assert!(written[0].exp_share);
+        assert!(written[0].item_pickup_share);
     }
 }

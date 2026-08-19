@@ -11,6 +11,7 @@
 //! on an intermediate same-party `PartyInfo` is not fought.
 
 use bevy::prelude::*;
+use bevy::ui::Checked;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use game_engine::core::state::GameState;
 use game_engine::domain::entities::EntityRegistry;
@@ -83,7 +84,7 @@ impl Plugin for PartyPlugin {
             Update,
             (
                 party_visibility,
-                refresh_roster,
+                (refresh_roster, sync_party_option_toggles).chain(),
                 create_dialog::focus_new_name_field,
                 invite_dialog::show_incoming_invite,
                 invite_dialog::claim_invite_choice,
@@ -205,8 +206,32 @@ pub fn refresh_roster(
     );
 
     commands
-        .spawn_scene(scene::body(header, rows))
+        .spawn_scene(scene::body(header, rows, is_leader))
         .insert(ChildOf(body));
+}
+
+/// Drive the leader-only option toggles from the server-confirmed [`PartyState`]. Each
+/// marked checkbox is controlled (no `checkbox_self_update`), so its [`Checked`] visual
+/// only moves when a `PartyInfo` lands.
+fn sync_party_option_toggles(
+    party: Res<PartyState>,
+    mut commands: Commands,
+    exp: Query<Entity, With<scene::ExpShareToggle>>,
+    item: Query<Entity, With<scene::ItemShareToggle>>,
+) {
+    set_checked(&mut commands, &exp, party.exp_share);
+    set_checked(&mut commands, &item, party.item_pickup_share);
+}
+
+fn set_checked<M: Component>(commands: &mut Commands, toggles: &Query<Entity, With<M>>, on: bool) {
+    for entity in toggles {
+        let mut entity = commands.entity(entity);
+        if on {
+            entity.insert(Checked);
+        } else {
+            entity.remove::<Checked>();
+        }
+    }
 }
 
 /// Project the party's identity + counts into the header view-model.
@@ -538,5 +563,30 @@ mod tests {
         app.world_mut().resource_mut::<PartyState>().set_changed();
         app.update();
         assert_eq!(root_visibility(&mut app), Visibility::Hidden);
+    }
+
+    #[test]
+    fn sync_party_option_toggles_mirrors_party_state_checked_flags() {
+        let mut app = App::new();
+        app.insert_resource(PartyState {
+            exp_share: true,
+            item_pickup_share: false,
+            ..default()
+        });
+        let exp = app.world_mut().spawn(scene::ExpShareToggle).id();
+        let item = app.world_mut().spawn(scene::ItemShareToggle).id();
+        app.add_systems(Update, sync_party_option_toggles);
+
+        app.update();
+        assert!(app.world().entity(exp).contains::<Checked>());
+        assert!(!app.world().entity(item).contains::<Checked>());
+
+        app.world_mut().resource_mut::<PartyState>().exp_share = false;
+        app.world_mut()
+            .resource_mut::<PartyState>()
+            .item_pickup_share = true;
+        app.update();
+        assert!(!app.world().entity(exp).contains::<Checked>());
+        assert!(app.world().entity(item).contains::<Checked>());
     }
 }
