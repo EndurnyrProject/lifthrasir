@@ -298,8 +298,8 @@ fn adopt_gltf_map_scene(
 }
 
 /// Applies the RSW ambient colour with the baked per-map brightness floor
-/// (indoor and outdoor maps differ), kept dim so the sun and point lights keep
-/// contrast.
+/// (indoor and outdoor maps differ). Outdoor is a daylight sky-fill tuned for
+/// EV100 12, so shadows stay readable without washing out the sun's contrast.
 fn ambient_light(meta: &LifMap) -> GlobalAmbientLight {
     GlobalAmbientLight {
         color: Color::srgb(
@@ -1451,7 +1451,7 @@ mod tests {
         let ambient = app.world().resource::<GlobalAmbientLight>();
         assert_eq!(ambient.color, Color::srgb(0.25, 0.3, 0.35));
         // mini_map is outdoor, so it carries the baked outdoor ambient floor.
-        assert_eq!(ambient.brightness, 80.0);
+        assert_eq!(ambient.brightness, 2_500.0);
         assert!(!ambient.affects_lightmapped_meshes);
     }
 

@@ -59,11 +59,15 @@ const INDOOR_AMBIENT_BRIGHTNESS: f32 = 100.0;
 /// the indoor light values were tuned against.
 const INDOOR_EXPOSURE_EV100: f32 = 9.7;
 
-/// Outdoor lighting/exposure. Outdoor maps are idiomatic daylight: the sun is
-/// the RSW-derived illuminance (up to `SUN_MAX_LUX`) read at `Exposure::SUNLIGHT`
-/// (EV100 15), with Bevy's default ambient floor.
-const OUTDOOR_AMBIENT_BRIGHTNESS: f32 = 80.0;
-const OUTDOOR_EXPOSURE_EV100: f32 = 15.0;
+/// Outdoor lighting/exposure. Outdoor maps are idiomatic daylight read at
+/// EV100 10.5. The camera multiplier is `2^-ev100 / 1.2`; EV100 15 (the
+/// original sunny-16 anchor) left even a 30k lux sun below middle grey, and
+/// EV100 12 still read dim for RO's near-full-bright look. At EV100 10.5 the
+/// baked sun (up to `SUN_MAX_LUX`) renders sunlit ground near white while the
+/// ambient floor keeps shadowed terrain readable.
+const OUTDOOR_AMBIENT_BRIGHTNESS: f32 = 2_500.0;
+const OUTDOOR_EXPOSURE_EV100: f32 = 10.5;
+
 /// Everything the writer needs; the caller owns parsing and texture export.
 pub struct MapGlbInputs<'a> {
     pub map_name: &'a str,
@@ -128,7 +132,7 @@ pub fn sun_direction(light: &RswLight) -> Vec3 {
 }
 
 /// The baked directional (sun) illuminance. Outdoor maps mirror
-/// `lighting.rs::calculate_global_lux` (RSW-derived, read at EV100 15). Indoor
+/// `lighting.rs::calculate_global_lux` (RSW-derived, read at EV100 10.5). Indoor
 /// maps pin a dim interior value read at EV100 9.7.
 fn sun_illuminance(light: &RswLight, indoor: bool) -> f32 {
     if indoor {
