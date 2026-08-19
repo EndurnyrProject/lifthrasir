@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use ro_formats::GrfFile;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -18,7 +18,7 @@ pub const TOMBSTONE_ENTRY: &str = ".lifthrasir/tombstones";
 pub const FORMAT_VERSION: u32 = 1;
 
 const GRF_FILE_TYPE_FILE: u8 = 0x01;
-const STORED_EXTENSIONS: [&str; 4] = ["ogg", "mp3", "jpg", "png"];
+const STORED_EXTENSIONS: [&str; 5] = ["ogg", "mp3", "jpg", "png", "ktx2"];
 const EXCLUDED_EXTENSIONS: [&str; 5] = ["rsm", "rsm2", "gnd", "gat", "rsw"];
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -76,6 +76,49 @@ pub fn union_entries(sources: Vec<SourceEntries>) -> SourceEntries {
     }
 
     result
+}
+
+/// Pack-time dedup outcome: how many entries were written as aliases of
+/// byte-identical content already in the pak, and the uncompressed bytes saved.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct DedupStats {
+    pub aliased_entries: usize,
+    pub aliased_bytes: u64,
+}
+
+/// [`split_duplicates`] output: canonical entries, `(canonical_path, alias_path)`
+/// duplicate pairs, and the dedup stats.
+type DedupSplit<'a> = (
+    Vec<&'a (String, Vec<u8>)>,
+    Vec<(&'a str, &'a str)>,
+    DedupStats,
+);
+
+/// Splits entries into canonical entries (first occurrence of each distinct
+/// content) and aliases `(canonical_path, alias_path)` for byte-identical
+/// duplicates, which share the canonical entry's data record in the pak.
+fn split_duplicates(entries: &SourceEntries) -> DedupSplit<'_> {
+    let mut first_by_content: HashMap<&[u8], &str> = HashMap::new();
+    let mut canonical = Vec::new();
+    let mut aliases = Vec::new();
+    let mut stats = DedupStats::default();
+
+    for entry in entries {
+        let (path, data) = entry;
+        match first_by_content.entry(data.as_slice()) {
+            Entry::Vacant(slot) => {
+                slot.insert(path);
+                canonical.push(entry);
+            }
+            Entry::Occupied(slot) => {
+                aliases.push((*slot.get(), path.as_str()));
+                stats.aliased_entries += 1;
+                stats.aliased_bytes += data.len() as u64;
+            }
+        }
+    }
+
+    (canonical, aliases, stats)
 }
 
 fn exclude_source_formats(entries: SourceEntries) -> (SourceEntries, usize) {
@@ -221,7 +264,7 @@ fn now_unix() -> u64 {
 /// path as it is written. Shared by the sequential and sharded pack writers.
 fn write_entries(
     writer: &mut ZipWriter<fs::File>,
-    entries: &[(String, Vec<u8>)],
+    entries: &[&(String, Vec<u8>)],
     zstd_level: Option<i32>,
     mut on_entry: impl FnMut(&str),
 ) -> Result<()> {
@@ -245,6 +288,25 @@ fn write_entries(
         writer
             .write_all(data)
             .with_context(|| format!("Failed to write pak entry '{path}'"))?;
+    }
+
+    Ok(())
+}
+
+/// Writes central-directory aliases for duplicate entries: each alias points at the
+/// canonical entry's data record (zip shallow copy), so duplicate content is stored once.
+/// The runtime's zip reader resolves entries via the central directory, so aliases read
+/// like normal entries.
+fn write_aliases(
+    writer: &mut ZipWriter<fs::File>,
+    aliases: &[(&str, &str)],
+    mut on_entry: impl FnMut(&str),
+) -> Result<()> {
+    for (canonical, alias) in aliases {
+        on_entry(alias);
+        writer
+            .shallow_copy_file(canonical, alias)
+            .with_context(|| format!("Failed to alias pak entry '{alias}' -> '{canonical}'"))?;
     }
 
     Ok(())
@@ -274,30 +336,33 @@ fn write_manifest(writer: &mut ZipWriter<fs::File>, content_version: u64) -> Res
 }
 
 /// Writes entries plus the `.lifthrasir/manifest.toml` (written last, uncompressed)
-/// to a zip64 pak at `out_path`. `on_entry` is called with each normalized path
+/// to a zip64 pak at `out_path`. Byte-identical duplicate entries are stored once and
+/// aliased (see [`write_aliases`]). `on_entry` is called with each normalized path
 /// as it is written, for caller-driven progress reporting.
 pub fn write_pak(
     entries: &SourceEntries,
     out_path: &Path,
     content_version: u64,
     zstd_level: Option<i32>,
-    on_entry: impl FnMut(&str),
-) -> Result<()> {
+    mut on_entry: impl FnMut(&str),
+) -> Result<DedupStats> {
+    let (canonical, aliases, stats) = split_duplicates(entries);
     let file = fs::File::create(out_path)
         .with_context(|| format!("Failed to create pak file: {}", out_path.display()))?;
     let mut writer = ZipWriter::new(file);
 
-    write_entries(&mut writer, entries, zstd_level, on_entry)?;
+    write_entries(&mut writer, &canonical, zstd_level, &mut on_entry)?;
+    write_aliases(&mut writer, &aliases, &mut on_entry)?;
     write_manifest(&mut writer, content_version)?;
     writer.finish().context("Failed to finalize pak")?;
 
-    Ok(())
+    Ok(stats)
 }
 
 /// Writes one shard to its own part-pak (no manifest): same codec policy as `write_pak`,
 /// just a plain zip of that shard's entries.
 fn write_shard(
-    shard: &[(String, Vec<u8>)],
+    shard: &[&(String, Vec<u8>)],
     part_path: &Path,
     zstd_level: Option<i32>,
     on_entry: &(impl Fn(&str) + Sync),
@@ -312,20 +377,22 @@ fn write_shard(
     Ok(())
 }
 
-/// Compresses `entries` across `jobs` worker threads (one part-pak per shard, no manifest),
+/// Compresses `canonical` across `jobs` worker threads (one part-pak per shard, no manifest),
 /// then concatenates the parts in shard order via `raw_copy_file` (IO-bound, no
-/// recompression) plus a fresh manifest, into `out_path`. Part files are always cleaned
+/// recompression) plus the duplicate aliases and a fresh manifest, into `out_path`.
+/// Part files are always cleaned
 /// up, on success or failure.
 fn write_pak_sharded(
-    entries: &SourceEntries,
+    canonical: &[&(String, Vec<u8>)],
+    aliases: &[(&str, &str)],
     out_path: &Path,
     content_version: u64,
     zstd_level: Option<i32>,
     jobs: usize,
     on_entry: &(impl Fn(&str) + Sync),
 ) -> Result<()> {
-    let chunk_size = entries.len().div_ceil(jobs).max(1);
-    let shards: Vec<&[(String, Vec<u8>)]> = entries.chunks(chunk_size).collect();
+    let chunk_size = canonical.len().div_ceil(jobs).max(1);
+    let shards: Vec<&[&(String, Vec<u8>)]> = canonical.chunks(chunk_size).collect();
     let part_paths: Vec<PathBuf> = (0..shards.len())
         .map(|i| suffixed(out_path, &format!(".part{i}")))
         .collect();
@@ -370,6 +437,7 @@ fn write_pak_sharded(
             }
         }
 
+        write_aliases(&mut writer, aliases, |path| on_entry(path))?;
         write_manifest(&mut writer, content_version)?;
         writer.finish().context("Failed to finalize pak")?;
         Ok(())
@@ -391,7 +459,7 @@ pub fn write_pak_parallel(
     zstd_level: Option<i32>,
     jobs: usize,
     on_entry: impl Fn(&str) + Sync,
-) -> Result<()> {
+) -> Result<DedupStats> {
     let tmp_path = tmp_path_for(out_path);
     let jobs = jobs.max(1);
 
@@ -400,20 +468,26 @@ pub fn write_pak_parallel(
             on_entry(path)
         })
     } else {
+        let (canonical, aliases, stats) = split_duplicates(entries);
         write_pak_sharded(
-            entries,
+            &canonical,
+            &aliases,
             &tmp_path,
             content_version,
             zstd_level,
             jobs,
             &on_entry,
         )
+        .map(|()| stats)
     };
 
-    if write_result.is_err() {
-        fs::remove_file(&tmp_path).ok();
-        return write_result;
-    }
+    let stats = match write_result {
+        Ok(stats) => stats,
+        Err(e) => {
+            fs::remove_file(&tmp_path).ok();
+            return Err(e);
+        }
+    };
 
     if out_path.exists() {
         fs::remove_file(out_path)
@@ -422,7 +496,7 @@ pub fn write_pak_parallel(
     fs::rename(&tmp_path, out_path)
         .with_context(|| format!("Failed to install pak at '{}'", out_path.display()))?;
 
-    Ok(())
+    Ok(stats)
 }
 
 fn open_pak(path: &Path) -> Result<ZipArchive<fs::File>> {
@@ -483,6 +557,42 @@ pub fn detect_leftovers(main_path: &Path) -> Vec<PathBuf> {
         .into_iter()
         .filter(|p| p.exists())
         .collect()
+}
+
+/// Raw-copies `names` from `archive` into `writer`, preserving dedup: entries that
+/// share an already-copied data record (aliases in the source pak, detected via a
+/// shared local header offset) are re-created as aliases of the first copied name
+/// instead of being re-materialized as full copies.
+fn copy_entries_preserving_dedup<'a>(
+    writer: &mut ZipWriter<fs::File>,
+    archive: &mut ZipArchive<fs::File>,
+    names: impl IntoIterator<Item = &'a str>,
+    on_entry: &mut impl FnMut(&str),
+) -> Result<()> {
+    let mut first_by_offset: HashMap<u64, String> = HashMap::new();
+
+    for name in names {
+        on_entry(name);
+        let file = archive
+            .by_name(name)
+            .with_context(|| format!("Failed to read entry '{name}'"))?;
+
+        if let Some(canonical) = first_by_offset.get(&file.header_start()) {
+            let canonical = canonical.clone();
+            drop(file);
+            writer
+                .shallow_copy_file(&canonical, name)
+                .with_context(|| format!("Failed to alias entry '{name}' -> '{canonical}'"))?;
+            continue;
+        }
+
+        first_by_offset.insert(file.header_start(), name.to_string());
+        writer
+            .raw_copy_file(file)
+            .with_context(|| format!("Failed to copy entry '{name}'"))?;
+    }
+
+    Ok(())
 }
 
 /// Streams a merged pak to `<main>.tmp`: main's surviving entries (raw-copied, skipping
@@ -550,25 +660,21 @@ fn stream_merge(
         .with_context(|| format!("Failed to create merge temp file: {}", tmp_path.display()))?;
     let mut writer = ZipWriter::new(tmp_file);
 
-    for name in &survivor_names {
-        on_entry(name);
-        let file = main_archive
-            .by_name(name)
-            .with_context(|| format!("Failed to read main entry '{name}'"))?;
-        writer
-            .raw_copy_file(file)
-            .with_context(|| format!("Failed to copy main entry '{name}'"))?;
-    }
+    copy_entries_preserving_dedup(
+        &mut writer,
+        &mut main_archive,
+        survivor_names.iter().map(|name| name.as_str()),
+        &mut on_entry,
+    )
+    .context("Failed to copy main pak entries")?;
 
-    for name in &patch_names {
-        on_entry(name);
-        let file = patch_archive
-            .by_name(name)
-            .with_context(|| format!("Failed to read patch entry '{name}'"))?;
-        writer
-            .raw_copy_file(file)
-            .with_context(|| format!("Failed to copy patch entry '{name}'"))?;
-    }
+    copy_entries_preserving_dedup(
+        &mut writer,
+        &mut patch_archive,
+        patch_names.iter().map(String::as_str),
+        &mut on_entry,
+    )
+    .context("Failed to copy patch pak entries")?;
 
     let manifest = PakManifest {
         format_version: FORMAT_VERSION,
@@ -660,7 +766,7 @@ mod tests {
 
     #[test]
     fn codec_policy_stores_already_compressed_formats() {
-        for ext in ["ogg", "mp3", "jpg", "png", "OGG", "Png"] {
+        for ext in ["ogg", "mp3", "jpg", "png", "ktx2", "OGG", "Png", "KTX2"] {
             assert_eq!(
                 codec_for(&format!("data/sound/x.{ext}")),
                 CompressionMethod::Stored,
@@ -1132,5 +1238,142 @@ mod tests {
 
         let leftovers = detect_leftovers(&main_path);
         assert_eq!(leftovers.len(), 2);
+    }
+
+    fn entry_header_start(archive: &mut ZipArchive<fs::File>, name: &str) -> u64 {
+        archive.by_name(name).unwrap().header_start()
+    }
+
+    fn read_entry(archive: &mut ZipArchive<fs::File>, name: &str) -> Vec<u8> {
+        let mut entry = archive.by_name(name).unwrap();
+        let mut contents = Vec::new();
+        entry.read_to_end(&mut contents).unwrap();
+        contents
+    }
+
+    #[test]
+    fn pack_dedupes_byte_identical_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let entries: SourceEntries = vec![
+            ("maps/a/tex/shared.spr".into(), b"same-bytes".to_vec()),
+            ("data/unique.txt".into(), b"unique-bytes".to_vec()),
+            ("maps/b/tex/shared.spr".into(), b"same-bytes".to_vec()),
+            ("models/tex/shared.spr".into(), b"same-bytes".to_vec()),
+        ];
+
+        let out_path = dir.path().join("out.pak");
+        let stats = write_pak(&entries, &out_path, 1, None, |_| {}).unwrap();
+
+        assert_eq!(stats.aliased_entries, 2);
+        assert_eq!(stats.aliased_bytes, 2 * b"same-bytes".len() as u64);
+
+        let mut archive = open_pak(&out_path).unwrap();
+        assert_eq!(archive.len(), 5, "4 data entries + manifest");
+
+        let canonical = entry_header_start(&mut archive, "maps/a/tex/shared.spr");
+        assert_eq!(
+            entry_header_start(&mut archive, "maps/b/tex/shared.spr"),
+            canonical,
+            "duplicate must share the canonical data record"
+        );
+        assert_eq!(
+            entry_header_start(&mut archive, "models/tex/shared.spr"),
+            canonical
+        );
+        assert_ne!(
+            entry_header_start(&mut archive, "data/unique.txt"),
+            canonical
+        );
+
+        assert_eq!(
+            read_entry(&mut archive, "maps/b/tex/shared.spr"),
+            b"same-bytes"
+        );
+        assert_eq!(
+            read_entry(&mut archive, "models/tex/shared.spr"),
+            b"same-bytes"
+        );
+        assert_eq!(read_entry(&mut archive, "data/unique.txt"), b"unique-bytes");
+    }
+
+    #[test]
+    fn parallel_pack_dedupes_across_shards() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut entries: SourceEntries = (0..20)
+            .map(|i| {
+                (
+                    format!("data/file{i:02}.txt"),
+                    format!("content-{i}").into_bytes(),
+                )
+            })
+            .collect();
+        // Duplicates at opposite ends so 4 shards place them in different parts.
+        entries[0].1 = b"dup-bytes".to_vec();
+        entries[19].1 = b"dup-bytes".to_vec();
+
+        let out_path = dir.path().join("out.pak");
+        let stats = write_pak_parallel(&entries, &out_path, 1, None, 4, |_| {}).unwrap();
+
+        assert_eq!(stats.aliased_entries, 1);
+
+        let mut archive = open_pak(&out_path).unwrap();
+        assert_eq!(
+            entry_header_start(&mut archive, "data/file19.txt"),
+            entry_header_start(&mut archive, "data/file00.txt"),
+        );
+        assert_eq!(read_entry(&mut archive, "data/file19.txt"), b"dup-bytes");
+    }
+
+    #[test]
+    fn merge_preserves_dedup_aliases() {
+        let dir = tempfile::tempdir().unwrap();
+        let entries: SourceEntries = vec![
+            ("data/a.txt".into(), b"shared-bytes".to_vec()),
+            ("data/b.txt".into(), b"shared-bytes".to_vec()),
+            ("data/c.txt".into(), b"other-bytes".to_vec()),
+        ];
+        let main_path = dir.path().join("main.pak");
+        write_pak(&entries, &main_path, 1, None, |_| {}).unwrap();
+        let patch_path = write_test_pak(
+            dir.path(),
+            "patch.pak",
+            2,
+            &[("data/d.txt", b"patch-bytes")],
+            None,
+        );
+
+        merge_paks(&main_path, &patch_path, |_| {}).unwrap();
+
+        let mut archive = open_pak(&main_path).unwrap();
+        assert_eq!(
+            entry_header_start(&mut archive, "data/b.txt"),
+            entry_header_start(&mut archive, "data/a.txt"),
+            "merge must not re-materialize aliases as full copies"
+        );
+        assert_eq!(read_entry(&mut archive, "data/a.txt"), b"shared-bytes");
+        assert_eq!(read_entry(&mut archive, "data/b.txt"), b"shared-bytes");
+        assert_eq!(read_entry(&mut archive, "data/c.txt"), b"other-bytes");
+        assert_eq!(read_entry(&mut archive, "data/d.txt"), b"patch-bytes");
+    }
+
+    #[test]
+    fn merge_keeps_alias_readable_when_canonical_is_tombstoned() {
+        let dir = tempfile::tempdir().unwrap();
+        let entries: SourceEntries = vec![
+            ("data/a.txt".into(), b"shared-bytes".to_vec()),
+            ("data/b.txt".into(), b"shared-bytes".to_vec()),
+        ];
+        let main_path = dir.path().join("main.pak");
+        write_pak(&entries, &main_path, 1, None, |_| {}).unwrap();
+        let patch_path = write_test_pak(dir.path(), "patch.pak", 2, &[], Some(&["data/a.txt"]));
+
+        merge_paks(&main_path, &patch_path, |_| {}).unwrap();
+
+        let mut archive = open_pak(&main_path).unwrap();
+        assert_eq!(read_entry(&mut archive, "data/b.txt"), b"shared-bytes");
+        assert!(matches!(
+            archive.by_name("data/a.txt"),
+            Err(zip::result::ZipError::FileNotFound)
+        ));
     }
 }

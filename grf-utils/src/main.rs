@@ -165,15 +165,21 @@ fn pack_command(
             .progress_chars("#>-"),
     );
 
-    pak::write_pak_parallel(&entries, out, content_version, zstd_level, jobs, |path| {
-        pb.set_message(path.to_string());
-        pb.inc(1);
-    })?;
+    let dedup =
+        pak::write_pak_parallel(&entries, out, content_version, zstd_level, jobs, |path| {
+            pb.set_message(path.to_string());
+            pb.inc(1);
+        })?;
 
     pb.finish_with_message("Pack complete");
 
     println!("\nSummary:");
     println!("  Packed:   {}", entries.len());
+    println!(
+        "  Deduped:  {} entries ({:.1} MiB of duplicate content shared)",
+        dedup.aliased_entries,
+        dedup.aliased_bytes as f64 / (1024.0 * 1024.0)
+    );
     println!("  Excluded: {excluded}");
     if skipped > 0 {
         println!("  Skipped:  {skipped}");
