@@ -2,13 +2,15 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::{QuinnetClient, client_connected};
 use net_contract::commands::{
-    PartyCreateRequested, PartyInviteRequested, PartyInviteResponded, PartyLeaveRequested,
+    PartyCreateRequested, PartyInviteRequested, PartyInviteResponded, PartyKickRequested,
+    PartyLeaderRequested, PartyLeaveRequested, PartyOptionsRequested,
 };
 
 use crate::channels::GAMEPLAY;
 use crate::envelope::Body;
 use crate::proto::aesir::net::{
-    PartyCreateRequest, PartyInviteRequest, PartyInviteResponse, PartyLeaveRequest,
+    PartyCreateRequest, PartyInviteRequest, PartyInviteResponse, PartyKickRequest,
+    PartyLeaderRequest, PartyLeaveRequest, PartyOptionsRequest,
 };
 use crate::zone::{QuicZoneState, ZonePhase};
 
@@ -34,6 +36,25 @@ fn party_invite_response_body(r: &PartyInviteResponded) -> Body {
 
 fn party_leave_body(_: &PartyLeaveRequested) -> Body {
     Body::PartyLeaveRequest(PartyLeaveRequest {})
+}
+
+fn party_kick_body(c: &PartyKickRequested) -> Body {
+    Body::PartyKickRequest(PartyKickRequest {
+        target_char_id: c.target_char_id,
+    })
+}
+
+fn party_options_body(c: &PartyOptionsRequested) -> Body {
+    Body::PartyOptionsRequest(PartyOptionsRequest {
+        exp_share: c.exp_share,
+        item_pickup_share: c.item_pickup_share,
+    })
+}
+
+fn party_leader_body(c: &PartyLeaderRequested) -> Body {
+    Body::PartyLeaderRequest(PartyLeaderRequest {
+        target_char_id: c.target_char_id,
+    })
 }
 
 #[auto_add_system(
@@ -120,6 +141,69 @@ pub fn send_party_leave(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_party_kick(
+    mut events: MessageReader<PartyKickRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        events.clear();
+        return;
+    }
+    for ev in events.read() {
+        if let Err(e) = zone.send(&mut client, GAMEPLAY, party_kick_body(ev)) {
+            error!("failed to send PartyKickRequest: {e}");
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_party_options(
+    mut events: MessageReader<PartyOptionsRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        events.clear();
+        return;
+    }
+    for ev in events.read() {
+        if let Err(e) = zone.send(&mut client, GAMEPLAY, party_options_body(ev)) {
+            error!("failed to send PartyOptionsRequest: {e}");
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_party_leader(
+    mut events: MessageReader<PartyLeaderRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        events.clear();
+        return;
+    }
+    for ev in events.read() {
+        if let Err(e) = zone.send(&mut client, GAMEPLAY, party_leader_body(ev)) {
+            error!("failed to send PartyLeaderRequest: {e}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,6 +260,46 @@ mod tests {
         match body {
             Body::PartyLeaveRequest(PartyLeaveRequest {}) => {}
             other => panic!("expected Body::PartyLeaveRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn party_kick_body_maps_target_char_id() {
+        let body = party_kick_body(&PartyKickRequested { target_char_id: 42 });
+        match body {
+            Body::PartyKickRequest(PartyKickRequest { target_char_id }) => {
+                assert_eq!(target_char_id, 42u32);
+            }
+            other => panic!("expected Body::PartyKickRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn party_options_body_maps_both_booleans() {
+        let body = party_options_body(&PartyOptionsRequested {
+            exp_share: true,
+            item_pickup_share: false,
+        });
+        match body {
+            Body::PartyOptionsRequest(PartyOptionsRequest {
+                exp_share,
+                item_pickup_share,
+            }) => {
+                assert!(exp_share);
+                assert!(!item_pickup_share);
+            }
+            other => panic!("expected Body::PartyOptionsRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn party_leader_body_maps_target_char_id() {
+        let body = party_leader_body(&PartyLeaderRequested { target_char_id: 7 });
+        match body {
+            Body::PartyLeaderRequest(PartyLeaderRequest { target_char_id }) => {
+                assert_eq!(target_char_id, 7u32);
+            }
+            other => panic!("expected Body::PartyLeaderRequest, got {other:?}"),
         }
     }
 }
