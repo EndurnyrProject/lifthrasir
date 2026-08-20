@@ -2,8 +2,12 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use bevy::input_focus::{FocusCause, InputFocus};
-use bevy::{prelude::*, text::EditableText, ui::ColorStop};
+use bevy::input_focus::AutoFocus;
+use bevy::{
+    prelude::*,
+    text::{EditableText, TextCursorStyle},
+    ui::ColorStop,
+};
 use game_engine::{
     core::state::GameState,
     domain::{
@@ -89,12 +93,6 @@ impl Plugin for CharacterCreateScreenPlugin {
                 .after(forward_character_sprite_events)
                 .run_if(in_state(GameState::CharacterCreation)),
         );
-        // Hand keyboard focus to the name field as soon as it spawns so the
-        // player can type immediately, mirroring the chat and party dialogs.
-        app.add_systems(
-            Update,
-            focus_name_field.run_if(in_state(GameState::CharacterCreation)),
-        );
     }
 }
 
@@ -115,6 +113,7 @@ struct NameServerError(Option<String>);
 #[derive(Component)]
 struct CreatePreviewCharacter;
 #[derive(Component)]
+#[require(AutoFocus, Pickable, TextCursorStyle)]
 struct NameField;
 #[derive(Component)]
 struct NameStatus;
@@ -799,19 +798,6 @@ fn preview_components(form: &CharacterCreationForm) -> (CharacterData, Character
     )
 }
 
-/// Hands keyboard focus to the freshly spawned name field so the player can type
-/// at once, mirroring `chat_input_control` and the party create dialog. Clicking the
-/// field still works, but this guarantees the field is usable on screen entry.
-fn focus_name_field(
-    field: Query<Entity, Added<NameField>>,
-    mut input_focus: ResMut<InputFocus>,
-) {
-    let Ok(entity) = field.single() else {
-        return;
-    };
-    input_focus.set(entity, FocusCause::Navigated);
-}
-
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn reflect_form_values(
     form: Res<CreationForm>,
@@ -991,6 +977,56 @@ mod tests {
             name_state("Valkyrie", server_error.as_deref()),
             NameState::Ok
         );
+    }
+
+    #[test]
+    fn focused_name_field_accepts_keyboard_input() {
+        use bevy::input::ButtonState;
+        use bevy::input::keyboard::{Key, KeyboardInput};
+        use bevy::window::PrimaryWindow;
+
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            bevy::asset::AssetPlugin::default(),
+            bevy::input::InputPlugin,
+            bevy::input_focus::InputFocusPlugin,
+            bevy::input_focus::InputDispatchPlugin,
+            bevy::text::TextPlugin,
+            bevy::ui_widgets::EditableTextInputPlugin,
+        ));
+        app.init_resource::<bevy::ui::UiScale>();
+        app.add_message::<bevy::window::Ime>();
+        app.add_message::<bevy::picking::events::Pointer<bevy::picking::events::Release>>();
+        let window = app
+            .world_mut()
+            .spawn((Window::default(), PrimaryWindow))
+            .id();
+        let field = app
+            .world_mut()
+            .spawn((NameField, EditableText::default()))
+            .id();
+
+        assert_eq!(
+            app.world()
+                .resource::<bevy::input_focus::InputFocus>()
+                .get(),
+            Some(field)
+        );
+        assert!(app.world().get::<Pickable>(field).is_some());
+        assert!(app.world().get::<TextCursorStyle>(field).is_some());
+
+        app.world_mut().write_message(KeyboardInput {
+            key_code: KeyCode::KeyV,
+            logical_key: Key::Character("V".into()),
+            state: ButtonState::Pressed,
+            text: Some("V".into()),
+            repeat: false,
+            window,
+        });
+        app.update();
+
+        assert_eq!(app.world().get::<EditableText>(field).unwrap().value(), "V");
     }
 
     #[test]
