@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.11.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.10.0...v0.11.0) (2026-08-21)
+
+
+### Features
+
+* apply unit display size to spawned entities ([b3f7190](https://github.com/EndurnyrProject/lifthrasir/commit/b3f7190a8ed588de3f07d107c9ef9327f45aeb12))
+* **debug-utils:** Added Gizmos to help us with lighting ([777b800](https://github.com/EndurnyrProject/lifthrasir/commit/777b800ca85049652a1c542b97150ddd3b9143d6))
+* **game-engine:** spawn viewpoint marker pillars from ViewpointChanged ([f1ca83c](https://github.com/EndurnyrProject/lifthrasir/commit/f1ca83c0ce52d32fe99c6e3e858e57dd0d79cda2))
+* **item:** Wiring up the item-bound stuff ([460d62e](https://github.com/EndurnyrProject/lifthrasir/commit/460d62e6c2505fbb0907fb98ddd2797665641594))
+* **lifthrasir-ui:** show viewpoint markers as minimap dots ([15e0843](https://github.com/EndurnyrProject/lifthrasir/commit/15e08430d5b34231916b606a30e934c85352eb07))
+* **lighting:** Baking the indoor info and light exposure direcly on the map gLTF ([498efe0](https://github.com/EndurnyrProject/lifthrasir/commit/498efe0355b8af8731a667d5551db404813c7158))
+* **net-aesir:** drain Viewpoint bodies into ViewpointChanged ([1075d68](https://github.com/EndurnyrProject/lifthrasir/commit/1075d6828e342ab38a1dc10adffc59918e2b6071))
+* **net-aesir:** map Viewpoint proto to ViewpointChanged ([94006ca](https://github.com/EndurnyrProject/lifthrasir/commit/94006ca6bb99ee2066762b8ba67f355a06ff6d3e))
+* **net-aesir:** send party kick/options/leader requests ([a7ed428](https://github.com/EndurnyrProject/lifthrasir/commit/a7ed428f0647ae600b19b804c5ddcb96ff11d89e))
+* **net-aesir:** translate cutin display messages ([c627e41](https://github.com/EndurnyrProject/lifthrasir/commit/c627e417a4b7ee0542ab574a0ac463326af827d5))
+* **net-contract:** add cutin display events ([90b8247](https://github.com/EndurnyrProject/lifthrasir/commit/90b8247a004b465d4e3e167811fe5d4bdf6ff3de))
+* **net-contract:** add party kick/options/leader commands ([de84678](https://github.com/EndurnyrProject/lifthrasir/commit/de846788675f1f690121331ce0a2ed0e4152db64))
+* **net-contract:** add ViewpointChanged inbound message ([a7b638f](https://github.com/EndurnyrProject/lifthrasir/commit/a7b638ffc93e7877bd60dc21ecc36598e687a545))
+* **pak:** Added support to deduplication on the pak format ([19a0f45](https://github.com/EndurnyrProject/lifthrasir/commit/19a0f456a55383c493f700549f309bf13bedf60c))
+* **party-ui:** leader exp-share and item-share option toggles ([bf43c8a](https://github.com/EndurnyrProject/lifthrasir/commit/bf43c8aa4be996fec53f99ac3a5cc2be5cb98938))
+* **party-ui:** right-click member menu for kick and leader transfer ([7743c76](https://github.com/EndurnyrProject/lifthrasir/commit/7743c76d60b7c0280411f98f87453bcb3dde1d0f))
+* **party:** mirror item_pickup_share from PartyInfo ([16c1159](https://github.com/EndurnyrProject/lifthrasir/commit/16c115974cce41ff8ca8e9b455c2fc71d159c805))
+* Regenerate proto and wired soem new messages ([1cf3f9f](https://github.com/EndurnyrProject/lifthrasir/commit/1cf3f9f208b015166c6a8c3c0ddf1f53eeb16585))
+* **ui:** add horizontal skill tree layout ([c1d81ee](https://github.com/EndurnyrProject/lifthrasir/commit/c1d81ee3e20f2e98d006962fb59edda87d26e026))
+* **ui:** Added support to progress bar UI component ([cfffb92](https://github.com/EndurnyrProject/lifthrasir/commit/cfffb92c69d025069cb780439cad80a05f1b3b32))
+* **ui:** highlight focused skill chains ([a2a30ad](https://github.com/EndurnyrProject/lifthrasir/commit/a2a30adffef8895d39d810e35c979e4868e8613c))
+* **ui:** render horizontal skill job bands ([2180b22](https://github.com/EndurnyrProject/lifthrasir/commit/2180b229906a5bc03f617e3050298a4d3c7dd812))
+* **ui:** render server cutins ([a63b6c1](https://github.com/EndurnyrProject/lifthrasir/commit/a63b6c10d5729732d08f5a98b16285223756b96e))
+* **ui:** render skill prerequisite connectors ([c55ada4](https://github.com/EndurnyrProject/lifthrasir/commit/c55ada45a2e243336d117993d0fbd91972dfcbc8))
+* wire server sound effects to SFX playback ([2c2c1bb](https://github.com/EndurnyrProject/lifthrasir/commit/2c2c1bb58381576da2ef65a940c2bbba01be8727))
+
+
+### Bug Fixes
+
+* **ammo:** Fix ammo equipment ([51823f5](https://github.com/EndurnyrProject/lifthrasir/commit/51823f5e598171cc7409df2eefc7e9bd90e192f7))
+* **animation:** Fixed movement slop ([f9b96b2](https://github.com/EndurnyrProject/lifthrasir/commit/f9b96b2fc8c2e8f3b0393b0f6e60781e24f2097a))
+* **death:** PCs should not be deleted on death ([0cff5ef](https://github.com/EndurnyrProject/lifthrasir/commit/0cff5ef665cdc3c1d44cf5c8fdcdd6370999bb8d))
+* Fixing camera ECS loading ([d73cf4b](https://github.com/EndurnyrProject/lifthrasir/commit/d73cf4b407d1f36b8a2a6154903153df248fc73c))
+* **lighting:** Improving PBR Lighting exposure, pain in the ass ([9812744](https://github.com/EndurnyrProject/lifthrasir/commit/98127448483ecd808ff219b38ec95fa7646ffc20))
+* **slop:** Fixed timesync to use the proto ([a9d74ae](https://github.com/EndurnyrProject/lifthrasir/commit/a9d74ae810b6fee9b3239645661d968b5cc93ee2))
+* **ui:** Fixed character name input focus ([962289a](https://github.com/EndurnyrProject/lifthrasir/commit/962289a39efb2fcd6c2e0b8b046974c483e45491))
+* **ui:** Fixed character name input focus, 'really this time' ([5f5637e](https://github.com/EndurnyrProject/lifthrasir/commit/5f5637e2d54dbd9068e708f733d8df760eb2c169))
+* **ui:** reconcile staged skill allocation gates ([f84a4a6](https://github.com/EndurnyrProject/lifthrasir/commit/f84a4a6c2f5aef4b989a0ce191200d4120ba452a))
+* **ui:** Rendering the item illustration over a parchment ([714de1f](https://github.com/EndurnyrProject/lifthrasir/commit/714de1f2606cfab757c45c3c4d8aef6b2ca208d4))
+
 ## [0.10.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.9.0...v0.10.0) (2026-08-03)
 
 
