@@ -190,8 +190,8 @@ fn parse_rgba_frame(data: &[u8]) -> IResult<&[u8], SpriteFrame> {
     let row_bytes = (width as usize) * 4;
     let mut normalized = Vec::with_capacity(data_size);
     for row in pixel_data.chunks_exact(row_bytes).rev() {
-        for abgr in row.chunks_exact(4) {
-            normalized.extend_from_slice(&[abgr[3], abgr[2], abgr[1], abgr[0]]);
+        for &[a, b, g, r] in row.as_chunks::<4>().0 {
+            normalized.extend_from_slice(&[r, g, b, a]);
         }
     }
 

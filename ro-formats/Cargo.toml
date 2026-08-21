@@ -9,5 +9,5 @@ flate2 = "1.1"
 encoding_rs = { workspace = true }
 nalgebra = "0.35"
 thiserror = { workspace = true }
-glam = "0.32"
+glam = { workspace = true }
 tracing = "0.1"

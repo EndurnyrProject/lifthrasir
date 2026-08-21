@@ -22,7 +22,7 @@ leafwing-input-manager = { workspace = true }
 
 # Parsing and data processing
 thiserror = { workspace = true }
-image = "0.25.8"
+image = { workspace = true }
 xbrz-rs = "0.1"
 resvg = "0.47"
 futures-lite = "2.6.1"
@@ -46,12 +46,8 @@ ron = { workspace = true }
 
 # Naming the extension-handler hook types and parsing LIF_* payloads.
 # Pinned to the same gltf release bevy_gltf uses so cargo unifies them.
-gltf = { version = "1.4", default-features = false, features = [
-    "extensions",
-    "extras",
-    "names",
-] }
-serde_json = "1.0"
+gltf = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
 default = []

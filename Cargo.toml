@@ -31,14 +31,26 @@ bevy_framepace = "0.22.0"
 bevy_quinnet = "0.21.0"
 clap = { version = "4.5", features = ["derive"] }
 encoding_rs = "0.8.35"
+glam = "0.32"
+# `default-features = false` drops gltf's `import`/`utils` (base64 + image +
+# urlencoding); crates that need the importer opt back in explicitly.
+gltf = { version = "1.4.1", default-features = false, features = [
+    "extensions",
+    "extras",
+    "names",
+] }
+gltf-json = { version = "1.4.1", features = ["extensions", "extras", "names"] }
+image = "0.25.8"
 iyes_progress = "0.17"
 leafwing-input-manager = "0.21"
 prost = "0.14"
+prost-build = "0.14"
 regex = "1.12"
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 ron = "0.12"
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 tempfile = "3"
 thiserror = "2.0"
 toml = "1.1.2"
