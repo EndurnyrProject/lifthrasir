@@ -47,7 +47,7 @@ pub fn update_character_status_system(
         return;
     }
 
-    let events: Vec<_> = pending.0.drain(..).collect();
+    let events = std::mem::take(&mut pending.0);
     if !events.is_empty() {
         debug!("Processing {} parameter change events", events.len());
     }

@@ -74,7 +74,9 @@ fn parse_palette(bytes: &[u8]) -> Result<RoPaletteAsset, RoPaletteLoaderError> {
     }
 
     let colors = bytes
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .enumerate()
         .map(|(index, chunk)| {
             [

@@ -128,7 +128,7 @@ pub fn apply_magenta_transparency(rgba_data: &mut [u8]) {
     const GREEN_THRESHOLD: u8 = 15; // G should be <= 15 (was 5)
 
     // Process every 4 bytes (RGBA)
-    for pixel in rgba_data.chunks_exact_mut(4) {
+    for pixel in rgba_data.as_chunks_mut::<4>().0 {
         // Check if this pixel is close to magenta
         // R >= 240, G <= 15, B >= 240
         let is_near_magenta = pixel[0] >= MAGENTA_THRESHOLD

@@ -1,5 +1,4 @@
 use bevy::input_focus::AutoFocus;
-use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{EditableText, EditableTextFilter, FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
