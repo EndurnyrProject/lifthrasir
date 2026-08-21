@@ -53,7 +53,7 @@ fn extract_accessory_data(lua: &mlua::Lua) -> anyhow::Result<AccessoryData> {
         .map_err(lua_err)?;
 
     let mut accessory_data = AccessoryData::default();
-    for pair in table.pairs::<mlua::Value, mlua::String>() {
+    for pair in table.pairs::<mlua::Value, mlua::LuaString>() {
         let (key, name) = pair.map_err(lua_err)?;
         if let Some(view_id) = view_id(&key) {
             accessory_data

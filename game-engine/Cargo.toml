@@ -7,7 +7,12 @@ edition.workspace = true
 ro-formats = { path = "../ro-formats" }
 lifthrasir-data = { path = "../lifthrasir-data" }
 net-contract = { path = "../net-contract" }
-bevy = { workspace = true, features = ["bevy_gltf", "png", "ktx2", "zstd_rust"] }
+bevy = { workspace = true, features = [
+    "bevy_gltf",
+    "png",
+    "ktx2",
+    "zstd_rust",
+] }
 bevy_auto_plugin = { workspace = true }
 bevy_common_assets = { version = "0.17", features = ["toml", "ron"] }
 iyes_progress = { workspace = true }
@@ -24,7 +29,7 @@ leafwing-input-manager = { workspace = true }
 thiserror = { workspace = true }
 image = { workspace = true }
 xbrz-rs = "0.1"
-resvg = "0.47"
+resvg = "0.48"
 futures-lite = "2.6.1"
 encoding_rs = { workspace = true }
 serde = { workspace = true }

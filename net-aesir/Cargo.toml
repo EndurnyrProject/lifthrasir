@@ -9,4 +9,4 @@ bevy = { workspace = true }
 bevy_auto_plugin = { workspace = true }
 bevy_quinnet = { workspace = true }
 prost = { workspace = true }
-bytes = "1.11"
+bytes = "1.12"

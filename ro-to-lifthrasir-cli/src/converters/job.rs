@@ -62,7 +62,7 @@ fn extract_job_data(lua: &mlua::Lua) -> anyhow::Result<JobData> {
     let job_name_table = globals
         .get::<mlua::Table>("JobNameTable")
         .map_err(lua_err)?;
-    for pair in job_name_table.pairs::<mlua::Value, mlua::String>() {
+    for pair in job_name_table.pairs::<mlua::Value, mlua::LuaString>() {
         let (key, name) = pair.map_err(lua_err)?;
         if let Some(id) = job_id(&key) {
             job_data
@@ -74,7 +74,7 @@ fn extract_job_data(lua: &mlua::Lua) -> anyhow::Result<JobData> {
     let pc_job_name_table = globals
         .get::<mlua::Table>("PCJobNameTable")
         .map_err(lua_err)?;
-    for pair in pc_job_name_table.pairs::<mlua::Value, mlua::String>() {
+    for pair in pc_job_name_table.pairs::<mlua::Value, mlua::LuaString>() {
         let (key, name) = pair.map_err(lua_err)?;
         if let Some(id) = job_id(&key).filter(|&id| i64::from(id) <= MAX_VALID_JOB_ID) {
             job_data

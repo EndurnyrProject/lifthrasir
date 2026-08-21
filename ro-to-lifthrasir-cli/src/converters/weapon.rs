@@ -53,7 +53,7 @@ fn extract_weapon_data(lua: &mlua::Lua) -> anyhow::Result<WeaponData> {
         .globals()
         .get::<mlua::Table>("WeaponNameTable")
         .map_err(lua_err)?;
-    for pair in names.pairs::<mlua::Value, mlua::String>() {
+    for pair in names.pairs::<mlua::Value, mlua::LuaString>() {
         let (key, name) = pair.map_err(lua_err)?;
         if let Some(view_id) = view_id(&key) {
             weapon_data
@@ -66,7 +66,7 @@ fn extract_weapon_data(lua: &mlua::Lua) -> anyhow::Result<WeaponData> {
         .globals()
         .get::<mlua::Table>("WeaponHitWaveNameTable")
         .map_err(lua_err)?;
-    for pair in hit_sounds.pairs::<mlua::Value, mlua::String>() {
+    for pair in hit_sounds.pairs::<mlua::Value, mlua::LuaString>() {
         let (key, name) = pair.map_err(lua_err)?;
         if let Some(view_id) = view_id(&key) {
             weapon_data

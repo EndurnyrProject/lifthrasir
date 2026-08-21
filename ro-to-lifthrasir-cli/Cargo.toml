@@ -19,7 +19,7 @@ ron = { workspace = true }
 toml = { workspace = true }
 regex = { workspace = true }
 encoding_rs = { workspace = true }
-mlua = { version = "0.11", features = ["lua51", "vendored"] }
+mlua = { version = "0.12", features = ["lua51", "vendored"] }
 luadec = "0.2"
 gag = "1.0"
 protox = "0.9"

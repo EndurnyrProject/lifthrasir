@@ -126,7 +126,7 @@ fn collect_images(lua: &mlua::Lua) -> anyhow::Result<std::collections::BTreeMap<
     let mut images = std::collections::BTreeMap::new();
     for bucket in list.pairs::<mlua::Value, mlua::Table>() {
         let (_priority, inner) = bucket.map_err(lua_err)?;
-        for pair in inner.pairs::<mlua::Value, mlua::String>() {
+        for pair in inner.pairs::<mlua::Value, mlua::LuaString>() {
             let (key, image) = pair.map_err(lua_err)?;
             if let Some(id) = efst_id(&key) {
                 images.insert(id, decode_euckr(image.as_bytes().as_ref()));
@@ -160,7 +160,7 @@ fn collect_names(lua: &mlua::Lua) -> anyhow::Result<std::collections::BTreeMap<u
 fn descript_name(entry: &mlua::Table) -> Option<String> {
     let descript = entry.get::<mlua::Table>("descript").ok()?;
     let first_row = descript.get::<mlua::Table>(1).ok()?;
-    let name = first_row.get::<mlua::String>(1).ok()?;
+    let name = first_row.get::<mlua::LuaString>(1).ok()?;
     Some(decode_euckr(name.as_bytes().as_ref()))
 }
 

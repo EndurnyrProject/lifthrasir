@@ -101,14 +101,14 @@ fn parse_skill(sub: &mlua::Table, description: Vec<String>) -> SkillMeta {
 }
 
 fn euckr_field(sub: &mlua::Table, key: &str) -> String {
-    match sub.get::<Option<mlua::String>>(key) {
+    match sub.get::<Option<mlua::LuaString>>(key) {
         Ok(Some(s)) => decode_euckr(s.as_bytes().as_ref()),
         _ => String::default(),
     }
 }
 
 fn euckr_field_index(sub: &mlua::Table, idx: i64) -> String {
-    match sub.get::<Option<mlua::String>>(idx) {
+    match sub.get::<Option<mlua::LuaString>>(idx) {
         Ok(Some(s)) => decode_euckr(s.as_bytes().as_ref()),
         _ => String::default(),
     }
@@ -116,7 +116,7 @@ fn euckr_field_index(sub: &mlua::Table, idx: i64) -> String {
 
 fn euckr_lines(table: &mlua::Table) -> Vec<String> {
     table
-        .sequence_values::<mlua::String>()
+        .sequence_values::<mlua::LuaString>()
         .filter_map(Result::ok)
         .map(|s| decode_euckr(s.as_bytes().as_ref()))
         .collect()

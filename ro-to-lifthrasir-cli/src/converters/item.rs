@@ -62,7 +62,7 @@ fn parse_item(sub: &mlua::Table) -> ItemInfo {
 }
 
 fn euckr_field(sub: &mlua::Table, key: &str) -> String {
-    match sub.get::<Option<mlua::String>>(key) {
+    match sub.get::<Option<mlua::LuaString>>(key) {
         Ok(Some(s)) => decode_euckr(s.as_bytes().as_ref()),
         _ => String::default(),
     }
@@ -73,7 +73,7 @@ fn euckr_lines(sub: &mlua::Table, key: &str) -> Vec<String> {
         return Vec::new();
     };
     table
-        .sequence_values::<mlua::String>()
+        .sequence_values::<mlua::LuaString>()
         .filter_map(Result::ok)
         .map(|s| decode_euckr(s.as_bytes().as_ref()))
         .collect()
