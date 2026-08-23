@@ -5,6 +5,7 @@ pub mod loading_progress;
 pub mod map;
 pub mod map_loader;
 pub mod map_scoped;
+pub mod navigation;
 pub mod plugin;
 pub mod spawn_context;
 pub mod systems;
@@ -14,5 +15,6 @@ pub mod zone_readiness;
 
 pub use gltf_map::GltfMapPlugin;
 pub use map_scoped::MapScoped;
+pub use navigation::ActiveRoute;
 pub use plugin::WorldDomainPlugin;
 pub use warp::Warping;
