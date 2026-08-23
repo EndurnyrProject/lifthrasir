@@ -9,6 +9,7 @@ pub mod handshake;
 pub mod inventory;
 pub mod mount;
 pub mod movement;
+pub mod navigation;
 pub mod npc;
 pub mod party;
 pub mod shop;

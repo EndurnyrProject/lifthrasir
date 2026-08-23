@@ -8,6 +8,7 @@ pub mod inventory;
 pub mod lifecycle;
 pub mod mount;
 pub mod movement;
+pub mod navigation;
 pub mod npc;
 pub mod party;
 pub mod shop;
