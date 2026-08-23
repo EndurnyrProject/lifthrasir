@@ -1,6 +1,6 @@
 //! Outbound command Messages (client to server).
 
-use crate::dto::{BuyEntry, NpcResponse, SellEntry};
+use crate::dto::{BuyEntry, NavigationTarget, NpcResponse, SellEntry};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
@@ -11,6 +11,20 @@ pub struct MoveRequested {
     pub dest_x: u16,
     pub dest_y: u16,
 }
+
+/// Ask the server to plan a route to `target`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct NavigationRequested {
+    pub target: NavigationTarget,
+    pub flag: u32,
+    pub hide_window: bool,
+}
+
+/// Ask the server to end the active navigation session.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct NavigationCancelRequested;
 
 /// Request to equip the inventory item at `index` to its worn `location` mask.
 #[derive(Message, Debug, Clone)]

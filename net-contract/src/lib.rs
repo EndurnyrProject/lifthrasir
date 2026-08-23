@@ -235,5 +235,25 @@ mod tests {
             app.world()
                 .contains_resource::<Messages<events::ViewpointChanged>>()
         );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::RouteUpdated>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::NavigationFailed>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::NavigationEnded>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::NavigationRequested>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::NavigationCancelRequested>>()
+        );
     }
 }
