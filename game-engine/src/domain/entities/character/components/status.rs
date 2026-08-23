@@ -65,6 +65,21 @@ pub enum StatusParameter {
     CharFont = 126,
     BankVault = 127,
     RouletteBronze = 128,
+    // Trait stats (4th job). Sent by the server for every character; kept so
+    // they round-trip instead of warning as unknown parameters.
+    Pow = 219,
+    Sta = 220,
+    Wis = 221,
+    Spl = 222,
+    Con = 223,
+    Crt = 224,
+    PAtk = 225,
+    SMAtk = 226,
+    Res = 227,
+    MRes = 228,
+    HPlus = 229,
+    CRate = 230,
+    TraitPoint = 231,
     Ap = 232,
     MaxAp = 233,
 }
@@ -134,6 +149,19 @@ impl StatusParameter {
             126 => Some(Self::CharFont),
             127 => Some(Self::BankVault),
             128 => Some(Self::RouletteBronze),
+            219 => Some(Self::Pow),
+            220 => Some(Self::Sta),
+            221 => Some(Self::Wis),
+            222 => Some(Self::Spl),
+            223 => Some(Self::Con),
+            224 => Some(Self::Crt),
+            225 => Some(Self::PAtk),
+            226 => Some(Self::SMAtk),
+            227 => Some(Self::Res),
+            228 => Some(Self::MRes),
+            229 => Some(Self::HPlus),
+            230 => Some(Self::CRate),
+            231 => Some(Self::TraitPoint),
             232 => Some(Self::Ap),
             233 => Some(Self::MaxAp),
             _ => None,
@@ -204,6 +232,19 @@ impl StatusParameter {
             Self::CharFont => "Character Font",
             Self::BankVault => "Bank Vault",
             Self::RouletteBronze => "Roulette Bronze",
+            Self::Pow => "POW",
+            Self::Sta => "STA",
+            Self::Wis => "WIS",
+            Self::Spl => "SPL",
+            Self::Con => "CON",
+            Self::Crt => "CRT",
+            Self::PAtk => "P.Atk",
+            Self::SMAtk => "S.MAtk",
+            Self::Res => "Res",
+            Self::MRes => "MRes",
+            Self::HPlus => "H.Plus",
+            Self::CRate => "C.Rate",
+            Self::TraitPoint => "Trait Points",
             Self::Ap => "AP",
             Self::MaxAp => "Max AP",
         }
@@ -281,6 +322,19 @@ pub struct CharacterStatus {
     pub char_rename: u32,
     pub char_font: u32,
     pub roulette_bronze: u32,
+    pub pow: u32,
+    pub sta: u32,
+    pub wis: u32,
+    pub spl: u32,
+    pub con: u32,
+    pub crt: u32,
+    pub patk: u32,
+    pub smatk: u32,
+    pub res: u32,
+    pub mres: u32,
+    pub hplus: u32,
+    pub crit_damage_rate: u32,
+    pub trait_point: u32,
     pub ap: u32,
     pub max_ap: u32,
 }
@@ -350,6 +404,19 @@ impl Default for CharacterStatus {
             char_rename: 0,
             char_font: 0,
             roulette_bronze: 0,
+            pow: 0,
+            sta: 0,
+            wis: 0,
+            spl: 0,
+            con: 0,
+            crt: 0,
+            patk: 0,
+            smatk: 0,
+            res: 0,
+            mres: 0,
+            hplus: 0,
+            crit_damage_rate: 0,
+            trait_point: 0,
             ap: 0,
             max_ap: 0,
         }
@@ -421,6 +488,19 @@ impl CharacterStatus {
             StatusParameter::CharRename => self.char_rename = value,
             StatusParameter::CharFont => self.char_font = value,
             StatusParameter::RouletteBronze => self.roulette_bronze = value,
+            StatusParameter::Pow => self.pow = value,
+            StatusParameter::Sta => self.sta = value,
+            StatusParameter::Wis => self.wis = value,
+            StatusParameter::Spl => self.spl = value,
+            StatusParameter::Con => self.con = value,
+            StatusParameter::Crt => self.crt = value,
+            StatusParameter::PAtk => self.patk = value,
+            StatusParameter::SMAtk => self.smatk = value,
+            StatusParameter::Res => self.res = value,
+            StatusParameter::MRes => self.mres = value,
+            StatusParameter::HPlus => self.hplus = value,
+            StatusParameter::CRate => self.crit_damage_rate = value,
+            StatusParameter::TraitPoint => self.trait_point = value,
             StatusParameter::Ap => self.ap = value,
             StatusParameter::MaxAp => self.max_ap = value,
         }
@@ -490,6 +570,19 @@ impl CharacterStatus {
             StatusParameter::CharRename => self.char_rename,
             StatusParameter::CharFont => self.char_font,
             StatusParameter::RouletteBronze => self.roulette_bronze,
+            StatusParameter::Pow => self.pow,
+            StatusParameter::Sta => self.sta,
+            StatusParameter::Wis => self.wis,
+            StatusParameter::Spl => self.spl,
+            StatusParameter::Con => self.con,
+            StatusParameter::Crt => self.crt,
+            StatusParameter::PAtk => self.patk,
+            StatusParameter::SMAtk => self.smatk,
+            StatusParameter::Res => self.res,
+            StatusParameter::MRes => self.mres,
+            StatusParameter::HPlus => self.hplus,
+            StatusParameter::CRate => self.crit_damage_rate,
+            StatusParameter::TraitPoint => self.trait_point,
             StatusParameter::Ap => self.ap,
             StatusParameter::MaxAp => self.max_ap,
         }
@@ -566,6 +659,34 @@ mod tests {
         status.update_param(StatusParameter::MaxAp, 120);
         assert_eq!(status.max_ap, 120);
         assert_eq!(status.get_param(StatusParameter::MaxAp), 120);
+    }
+
+    #[test]
+    fn test_status_parameter_trait_stats_are_known() {
+        // The server sends the whole 219..=231 trait block on every stat sync;
+        // none of them may fall through to the "unknown parameter" warning.
+        let expected = [
+            (219u16, StatusParameter::Pow),
+            (220, StatusParameter::Sta),
+            (221, StatusParameter::Wis),
+            (222, StatusParameter::Spl),
+            (223, StatusParameter::Con),
+            (224, StatusParameter::Crt),
+            (225, StatusParameter::PAtk),
+            (226, StatusParameter::SMAtk),
+            (227, StatusParameter::Res),
+            (228, StatusParameter::MRes),
+            (229, StatusParameter::HPlus),
+            (230, StatusParameter::CRate),
+            (231, StatusParameter::TraitPoint),
+        ];
+
+        let mut status = CharacterStatus::default();
+        for (id, param) in expected {
+            assert_eq!(StatusParameter::from_var_id(id), Some(param), "id {id}");
+            status.update_param(param, id as u32);
+            assert_eq!(status.get_param(param), id as u32, "id {id}");
+        }
     }
 
     #[test]
