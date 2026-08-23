@@ -7,6 +7,7 @@
 //! a text input holds focus), so typing in chat stops WASD/hotkeys without extra
 //! wiring here.
 
+use bevy::ecs::system::SystemParam;
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use bevy::text::EditableText;
@@ -20,6 +21,7 @@ use crate::rich_text::spawn_colored_text;
 use crate::theme;
 use crate::widgets::emote::slash::parse_emote_slash;
 use crate::widgets::mount::parse_mount_slash;
+use crate::widgets::navigation::slash::{NaviSlash, parse_navi_slash};
 use crate::widgets::party::slash::{PartySlashSubmitted, parse_party_slash};
 use crate::widgets::placeholder::Placeholder;
 
@@ -47,6 +49,15 @@ struct ChatLine;
 /// The chat input field. Used to filter [`SubmitText`] to this input.
 #[derive(Component)]
 struct ChatInput;
+
+#[derive(SystemParam)]
+struct ChatInputWriters<'w> {
+    chat: MessageWriter<'w, ChatSendRequested>,
+    party: MessageWriter<'w, PartySlashSubmitted>,
+    emote: MessageWriter<'w, EmoteRequested>,
+    mount: MessageWriter<'w, MountPeco>,
+    navi: MessageWriter<'w, NaviSlash>,
+}
 
 pub struct ChatBoxPlugin;
 
@@ -426,16 +437,14 @@ fn append_incoming_chat(
 ///   A recognized emote slash (`parse_emote_slash`) is tried first and writes
 ///   `EmoteRequested`; then `/mount`//`/unmount` (`parse_mount_slash`) writes
 ///   `MountPeco`; otherwise a recognized party slash command
-///   (`parse_party_slash`) is queued as `PartySlashSubmitted`; otherwise it is sent as
-///   a normal chat message.
+///   (`parse_party_slash`) is queued as `PartySlashSubmitted`; then a recognized navigation
+///   slash (`parse_navi_slash`) is queued as `NaviSlash`; otherwise it is sent as a normal
+///   chat message.
 ///
 fn chat_input_control(
     keys: Res<ButtonInput<KeyCode>>,
     mut chat_input: Query<(Entity, &mut EditableText), With<ChatInput>>,
-    mut writer: MessageWriter<ChatSendRequested>,
-    mut slash_writer: MessageWriter<PartySlashSubmitted>,
-    mut emote_writer: MessageWriter<EmoteRequested>,
-    mut mount_writer: MessageWriter<MountPeco>,
+    mut writers: ChatInputWriters,
     mut input_focus: ResMut<InputFocus>,
 ) {
     let Ok((entity, mut field)) = chat_input.single_mut() else {
@@ -460,13 +469,15 @@ fn chat_input_control(
         let message = value.trim();
         if !message.is_empty() {
             if let Some(emote_type) = parse_emote_slash(message) {
-                emote_writer.write(EmoteRequested { emote_type });
+                writers.emote.write(EmoteRequested { emote_type });
             } else if let Some(mount) = parse_mount_slash(message) {
-                mount_writer.write(MountPeco { mount });
+                writers.mount.write(MountPeco { mount });
             } else if let Some(slash) = parse_party_slash(message) {
-                slash_writer.write(PartySlashSubmitted(slash));
+                writers.party.write(PartySlashSubmitted(slash));
+            } else if let Some(slash) = parse_navi_slash(message) {
+                writers.navi.write(slash);
             } else {
-                writer.write(ChatSendRequested {
+                writers.chat.write(ChatSendRequested {
                     message: message.to_string(),
                 });
             }
@@ -524,6 +535,7 @@ mod tests {
         app.add_message::<PartySlashSubmitted>();
         app.add_message::<EmoteRequested>();
         app.add_message::<MountPeco>();
+        app.add_message::<crate::widgets::navigation::slash::NaviSlash>();
         app.add_systems(Update, chat_input_control);
         let chat = app
             .world_mut()
@@ -546,6 +558,20 @@ mod tests {
 
     fn emote_messages(app: &App) -> Vec<EmoteRequested> {
         let messages = app.world().resource::<Messages<EmoteRequested>>();
+        let mut cursor = messages.get_cursor();
+        cursor.read(messages).cloned().collect()
+    }
+
+    fn mount_messages(app: &App) -> Vec<MountPeco> {
+        let messages = app.world().resource::<Messages<MountPeco>>();
+        let mut cursor = messages.get_cursor();
+        cursor.read(messages).cloned().collect()
+    }
+
+    fn navi_slash_messages(app: &App) -> Vec<crate::widgets::navigation::slash::NaviSlash> {
+        let messages = app
+            .world()
+            .resource::<Messages<crate::widgets::navigation::slash::NaviSlash>>();
         let mut cursor = messages.get_cursor();
         cursor.read(messages).cloned().collect()
     }
@@ -594,6 +620,26 @@ mod tests {
     }
 
     #[test]
+    fn enter_with_navigation_slash_writes_navi_slash_not_chat() {
+        let (mut app, chat) = chat_control_app("/navi geffen");
+        app.world_mut()
+            .resource_mut::<InputFocus>()
+            .set(chat, FocusCause::Navigated);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.update();
+
+        assert_eq!(
+            navi_slash_messages(&app),
+            vec![crate::widgets::navigation::slash::NaviSlash::To(
+                net_contract::dto::NavigationTarget::Map("geffen".into())
+            )]
+        );
+        assert!(chat_messages(&app).is_empty());
+    }
+
+    #[test]
     fn enter_with_party_slash_writes_slash_not_chat() {
         let (mut app, chat) = chat_control_app("/pcreate Wolfpack");
         app.world_mut()
@@ -615,6 +661,25 @@ mod tests {
             chat_messages(&app).is_empty(),
             "a recognized slash never sends normal chat"
         );
+        assert!(navi_slash_messages(&app).is_empty());
+    }
+
+    #[test]
+    fn enter_with_mount_slash_writes_mount_not_chat_or_navi() {
+        let (mut app, chat) = chat_control_app("/mount");
+        app.world_mut()
+            .resource_mut::<InputFocus>()
+            .set(chat, FocusCause::Navigated);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.update();
+
+        let mounts = mount_messages(&app);
+        assert_eq!(mounts.len(), 1);
+        assert!(mounts[0].mount);
+        assert!(chat_messages(&app).is_empty());
+        assert!(navi_slash_messages(&app).is_empty());
     }
 
     #[test]
@@ -640,6 +705,7 @@ mod tests {
             slash_messages(&app).is_empty(),
             "a recognized emote never reaches the party parser"
         );
+        assert!(navi_slash_messages(&app).is_empty());
     }
 
     #[test]

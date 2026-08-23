@@ -33,6 +33,10 @@ pub struct MinimapMarker;
 #[derive(Component)]
 pub struct MinimapCoordText;
 
+/// Systems that synchronize the current map into [`MinimapState`].
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MinimapStateSync;
+
 /// Marks a dot mirroring a live `ViewpointMarker` slot by `id`.
 #[derive(Component)]
 struct ViewpointDot(u32);
@@ -178,7 +182,7 @@ impl Plugin for MinimapPlugin {
         app.add_systems(
             Update,
             (
-                sync_minimap_image,
+                sync_minimap_image.in_set(MinimapStateSync),
                 update_minimap_marker,
                 update_minimap_coords,
                 sync_viewpoint_dots,

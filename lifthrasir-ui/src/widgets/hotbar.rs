@@ -33,6 +33,12 @@ use crate::worldspace::viewport_to_ui;
 
 const SLOTS: usize = 12;
 const SLOT_SIZE: f32 = 44.0;
+const BAR_PADDING_TOP: f32 = 5.0;
+const BAR_PADDING_BOTTOM: f32 = 7.0;
+const BAR_BOTTOM_BORDER: f32 = 1.0;
+pub(crate) const HOTBAR_BOTTOM: f32 = 14.0;
+pub(crate) const HOTBAR_HEIGHT: f32 =
+    SLOT_SIZE + BAR_PADDING_TOP + BAR_PADDING_BOTTOM + BAR_BOTTOM_BORDER;
 const ICON_SIZE: f32 = 32.0;
 const ICON_INSET: f32 = (SLOT_SIZE - ICON_SIZE) / 2.0;
 
@@ -253,7 +259,7 @@ pub fn spawn_hotbar(commands: &mut Commands, parent: Entity, asset_server: &Asse
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                bottom: Val::Px(14.0),
+                bottom: Val::Px(HOTBAR_BOTTOM),
                 width: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
                 ..default()
@@ -272,11 +278,11 @@ pub fn spawn_hotbar(commands: &mut Commands, parent: Entity, asset_server: &Asse
                 padding: UiRect {
                     left: Val::Px(7.0),
                     right: Val::Px(7.0),
-                    top: Val::Px(5.0),
-                    bottom: Val::Px(7.0),
+                    top: Val::Px(BAR_PADDING_TOP),
+                    bottom: Val::Px(BAR_PADDING_BOTTOM),
                 },
                 border: UiRect {
-                    bottom: Val::Px(1.0),
+                    bottom: Val::Px(BAR_BOTTOM_BORDER),
                     ..default()
                 },
                 border_radius: BorderRadius::all(Val::Px(11.0)),

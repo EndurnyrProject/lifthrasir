@@ -22,6 +22,7 @@ pub mod hotbar;
 pub mod info_modal;
 pub mod minimap;
 pub mod mount;
+pub mod navigation;
 pub mod npc_dialog;
 pub mod party;
 pub mod placeholder;
@@ -56,6 +57,7 @@ impl Plugin for InGameHudPlugin {
             status_icons::StatusIconsPlugin,
             storage_window::StorageWindowPlugin,
         ));
+        app.add_plugins(navigation::NavigationUiPlugin);
         app.add_plugins(skill_target_toast::SkillTargetToastPlugin);
         app.add_plugins(cutin::CutinPlugin);
     }
@@ -82,6 +84,11 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     guild_window::scene::build(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root, &asset_server);
     minimap::spawn_minimap(&mut commands, root, &asset_server);
+    navigation::panel::spawn_navigation_panel(
+        &mut commands,
+        root,
+        asset_server.load(crate::theme::FONT_BODY),
+    );
     party::spawn_party_window(&mut commands, root);
     pushcart_window::spawn_pushcart_window(&mut commands, root);
     storage_window::scene::build(&mut commands, root);
