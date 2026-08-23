@@ -20,6 +20,7 @@ use crate::widgets::info_modal::InfoModalRoot;
 use crate::widgets::npc_dialog::ActiveNpcDialog;
 use crate::widgets::settings_window::{SettingsUi, SettingsWindowRoot};
 use crate::widgets::shop_window::ShopSession;
+use crate::widgets::skill_menu::ActiveSkillMenu;
 use crate::widgets::system_dialog::SystemDialogRoot;
 
 const DIALOG_Z: i32 = i32::MAX - 3;
@@ -56,6 +57,7 @@ struct EscapeBlockers<'w, 's> {
     settings_ui: Res<'w, SettingsUi>,
     npc_dialog: Option<Res<'w, ActiveNpcDialog>>,
     shop: Option<Res<'w, ShopSession>>,
+    skill_menu: Option<Res<'w, ActiveSkillMenu>>,
     modal: Query<'w, 's, (), ModalBlocker>,
     dead: Query<'w, 's, (), DeadLocalPlayer>,
 }
@@ -65,6 +67,7 @@ impl EscapeBlockers<'_, '_> {
         self.settings_ui.listening.is_some()
             || self.npc_dialog.is_some()
             || self.shop.is_some()
+            || self.skill_menu.is_some()
             || !self.modal.is_empty()
             || !self.dead.is_empty()
     }

@@ -423,3 +423,21 @@ pub struct GuildEmblemFetchRequested {
     pub guild_id: u32,
     pub emblem_id: u32,
 }
+
+/// The player's answer to a pending
+/// [`SkillMenuOffered`](crate::events::SkillMenuOffered). `src_skill_id` must
+/// echo the offer or the server drops the reply; `selected_id` must be one of
+/// the offered ids. Backing out sets `cancel`, which the server reads instead of
+/// `selected_id` — inventory-slot menus offer slot `0`, so no id can double as a
+/// cancel sentinel. `extra_ids` carries up to three
+/// catalyst item ids (forging star crumbs / elemental stones) and is empty for
+/// every other menu.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct AnswerSkillMenu {
+    pub src_skill_id: u32,
+    pub selected_id: u32,
+    pub extra_ids: Vec<u32>,
+    /// The player dismissed the menu; `selected_id` is ignored when set.
+    pub cancel: bool,
+}

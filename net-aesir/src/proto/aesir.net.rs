@@ -3203,7 +3203,8 @@ pub mod skill_menu {
 }
 /// Client -> server, the player's choice from the pending SkillMenu. `src_skill_id`
 /// must match the offer the server is holding and `selected_id` must be one of its
-/// entry_ids; a stale or forged reply is dropped. selected_id 0 cancels the menu.
+/// entry_ids; a stale or forged reply is dropped. A reply with `cancel` set closes
+/// the menu without acting, which is how the player backs out of it.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SkillMenuReply {
     #[prost(uint32, tag = "1")]
@@ -3213,6 +3214,9 @@ pub struct SkillMenuReply {
     /// Up to three additional catalyst item ids.
     #[prost(uint32, repeated, tag = "3")]
     pub extra_ids: ::prost::alloc::vec::Vec<u32>,
+    /// The player dismissed the menu; selected_id is ignored.
+    #[prost(bool, tag = "4")]
+    pub cancel: bool,
 }
 /// Server -> client, the outcome of an item-production attempt.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]

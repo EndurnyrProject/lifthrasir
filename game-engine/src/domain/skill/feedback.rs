@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 
+use crate::infrastructure::item::ItemDb;
 use net_contract::events::{
-    ChatHeard, LearnSkillResultReceived, SkillCastFailed, SkillCastFailureReason,
+    ChatHeard, LearnSkillResultReceived, ProductionResult, SkillCastFailed, SkillCastFailureReason,
 };
 
 fn cast_failure_message(reason: SkillCastFailureReason) -> &'static str {
@@ -60,9 +61,113 @@ pub fn report_learn_skill_reject(
     }
 }
 
+/// Report the outcome of an item-production attempt (forging, brewing, ...).
+/// The produced item arrives through the normal inventory updates; this is
+/// only the player-facing line.
+#[auto_add_system(
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
+    schedule = Update
+)]
+pub fn report_production_result(
+    mut results: MessageReader<ProductionResult>,
+    mut chat: MessageWriter<ChatHeard>,
+    item_db: Option<Res<ItemDb>>,
+) {
+    for result in results.read() {
+        let name = item_db
+            .as_ref()
+            .and_then(|db| db.name(result.item_id, true))
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("item #{}", result.item_id));
+        let message = if result.success {
+            format!("You successfully created {name}.")
+        } else {
+            format!("You failed to create {name}.")
+        };
+
+        chat.write(ChatHeard { gid: 0, message });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn production_chat(result: ProductionResult, item_db: Option<ItemDb>) -> Vec<ChatHeard> {
+        let mut app = App::new();
+        app.add_message::<ProductionResult>()
+            .add_message::<ChatHeard>()
+            .add_systems(Update, report_production_result);
+        if let Some(db) = item_db {
+            app.insert_resource(db);
+        }
+
+        app.world_mut()
+            .resource_mut::<Messages<ProductionResult>>()
+            .write(result);
+        app.update();
+
+        app.world()
+            .resource::<Messages<ChatHeard>>()
+            .iter_current_update_messages()
+            .cloned()
+            .collect()
+    }
+
+    fn item_db_with(id: u32, name: &str) -> ItemDb {
+        let mut data = lifthrasir_data::ItemData::default();
+        data.items.insert(
+            id,
+            lifthrasir_data::ItemInfo {
+                identified_name: name.to_string(),
+                ..Default::default()
+            },
+        );
+        ItemDb::from_item_data(data)
+    }
+
+    #[test]
+    fn success_names_the_produced_item() {
+        let msgs = production_chat(
+            ProductionResult {
+                success: true,
+                item_id: 1201,
+            },
+            Some(item_db_with(1201, "Knife")),
+        );
+
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].gid, 0);
+        assert_eq!(msgs[0].message, "You successfully created Knife.");
+    }
+
+    #[test]
+    fn failure_names_the_produced_item() {
+        let msgs = production_chat(
+            ProductionResult {
+                success: false,
+                item_id: 1201,
+            },
+            Some(item_db_with(1201, "Knife")),
+        );
+
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].message, "You failed to create Knife.");
+    }
+
+    #[test]
+    fn unknown_item_falls_back_to_the_id() {
+        let msgs = production_chat(
+            ProductionResult {
+                success: true,
+                item_id: 999,
+            },
+            None,
+        );
+
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].message, "You successfully created item #999.");
+    }
 
     fn run_with(result: LearnSkillResultReceived) -> Vec<ChatHeard> {
         let mut app = App::new();
