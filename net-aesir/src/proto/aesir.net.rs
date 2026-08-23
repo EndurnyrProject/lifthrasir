@@ -3,13 +3,27 @@
 /// counter used for correlation; `body` selects the concrete message. Field
 /// numbers are grouped by category: 16-31 control, 32-63 client intents,
 /// 64+ authoritative/world.
+///
+/// Every `body` field carries a routing annotation as a trailing comment. It is
+/// load-bearing metadata, not documentation: Aesir.Commons.Network.ProtoManifest
+/// parses this block at compile time and an unannotated or malformed field fails
+/// the build. The grammar is
+///
+///      // <direction> <servers> \[channel\]
+///
+///    direction  s2c (server -> client) or c2s (client -> server)
+///    servers    comma-separated subset of zone, account, char, no spaces
+///    channel    required for s2c only: control, gameplay, world, bulk, snapshots
+///
+/// The channel is the bevy_quinnet channel the message rides outbound; c2s fields
+/// take none because the client picks the inbound channel.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Envelope {
     #[prost(uint32, tag = "1")]
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -18,406 +32,638 @@ pub mod envelope {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Body {
         /// 16-20: account control
+        ///
+        /// c2s zone,account,char
         #[prost(message, tag = "16")]
         Hello(super::Hello),
+        /// s2c zone,account,char control
         #[prost(message, tag = "17")]
         HelloAck(super::HelloAck),
+        /// c2s account
         #[prost(message, tag = "18")]
         LoginRequest(super::LoginRequest),
+        /// s2c account control
         #[prost(message, tag = "19")]
         LoginResponse(super::LoginResponse),
+        /// s2c account control
         #[prost(message, tag = "20")]
         LoginFailed(super::LoginFailed),
         /// 21-31: char control
+        ///
+        /// c2s zone,char
         #[prost(message, tag = "21")]
         SessionAuth(super::SessionAuth),
+        /// s2c char control
         #[prost(message, tag = "22")]
         CharList(super::CharList),
+        /// s2c char control
         #[prost(message, tag = "23")]
         CharAuthFailed(super::CharAuthFailed),
+        /// c2s char
         #[prost(message, tag = "24")]
         SelectChar(super::SelectChar),
+        /// s2c char control
         #[prost(message, tag = "25")]
         ZoneServerInfo(super::ZoneServerInfo),
+        /// c2s char
         #[prost(message, tag = "26")]
         CreateChar(super::CreateChar),
+        /// s2c char control
         #[prost(message, tag = "27")]
         CharCreated(super::CharCreated),
+        /// s2c char control
         #[prost(message, tag = "28")]
         CharCreateFailed(super::CharCreateFailed),
+        /// c2s char
         #[prost(message, tag = "29")]
         DeleteCharRequest(super::DeleteCharRequest),
+        /// s2c char control
         #[prost(message, tag = "30")]
         DeleteCharAck(super::DeleteCharAck),
+        /// c2s char
         #[prost(message, tag = "31")]
         CharListRefresh(super::CharListRefresh),
         /// 32+: zone
+        ///
+        /// c2s zone
         #[prost(message, tag = "32")]
         MapLoaded(super::MapLoaded),
+        /// c2s zone
         #[prost(message, tag = "33")]
         TimeSync(super::TimeSync),
+        /// s2c zone control
         #[prost(message, tag = "34")]
         TimeSyncAck(super::TimeSyncAck),
+        /// s2c zone control
         #[prost(message, tag = "35")]
         EnterAck(super::EnterAck),
+        /// c2s zone
         #[prost(message, tag = "36")]
         MoveRequest(super::MoveRequest),
+        /// s2c zone gameplay
         #[prost(message, tag = "37")]
         SelfMove(super::SelfMove),
+        /// s2c zone gameplay
         #[prost(message, tag = "38")]
         MoveStop(super::MoveStop),
+        /// s2c zone world
         #[prost(message, tag = "39")]
         UnitSpawn(super::UnitSpawn),
+        /// s2c zone world
         #[prost(message, tag = "40")]
         UnitDespawn(super::UnitDespawn),
+        /// c2s zone
         #[prost(message, tag = "41")]
         NameRequest(super::NameRequest),
+        /// s2c zone world
         #[prost(message, tag = "42")]
         NameResponse(super::NameResponse),
+        /// c2s zone
         #[prost(message, tag = "43")]
         ChatRequest(super::ChatRequest),
+        /// s2c zone world
         #[prost(message, tag = "44")]
         ChatMessage(super::ChatMessage),
+        /// s2c zone snapshots
         #[prost(message, tag = "45")]
         Snapshot(super::Snapshot),
         /// 46-71: zone combat / skill / item / stat
+        ///
+        /// c2s zone
         #[prost(message, tag = "46")]
         ActionRequest(super::ActionRequest),
+        /// s2c zone gameplay
         #[prost(message, tag = "47")]
         DamageDealt(super::DamageDealt),
+        /// s2c zone gameplay
         #[prost(message, tag = "48")]
         Knockback(super::Knockback),
+        /// c2s zone
         #[prost(message, tag = "49")]
         SkillCast(super::SkillCast),
+        /// c2s zone
         #[prost(message, tag = "50")]
         GroundSkillCast(super::GroundSkillCast),
+        /// s2c zone bulk
         #[prost(message, tag = "51")]
         SkillList(super::SkillList),
+        /// s2c zone gameplay
         #[prost(message, tag = "52")]
         SkillDamage(super::SkillDamage),
+        /// s2c zone gameplay
         #[prost(message, tag = "53")]
         SkillEffect(super::SkillEffect),
+        /// s2c zone gameplay
         #[prost(message, tag = "54")]
         SkillCasting(super::SkillCasting),
+        /// s2c zone gameplay
         #[prost(message, tag = "55")]
         CastCancel(super::CastCancel),
+        /// s2c zone gameplay
         #[prost(message, tag = "56")]
         SkillCooldown(super::SkillCooldown),
+        /// s2c zone world
         #[prost(message, tag = "57")]
         GroundSkill(super::GroundSkill),
+        /// c2s zone
         #[prost(message, tag = "58")]
         EquipItem(super::EquipItem),
+        /// c2s zone
         #[prost(message, tag = "59")]
         UnequipItem(super::UnequipItem),
+        /// s2c zone gameplay
         #[prost(message, tag = "60")]
         EquipResult(super::EquipResult),
+        /// s2c zone gameplay
         #[prost(message, tag = "61")]
         UnequipResult(super::UnequipResult),
+        /// s2c zone bulk
         #[prost(message, tag = "62")]
         InventoryList(super::InventoryList),
+        /// s2c zone gameplay
         #[prost(message, tag = "63")]
         ItemAdded(super::ItemAdded),
+        /// s2c zone gameplay
         #[prost(message, tag = "64")]
         ItemRemoved(super::ItemRemoved),
+        /// c2s zone
         #[prost(message, tag = "65")]
         StatUp(super::StatUp),
+        /// s2c zone gameplay
         #[prost(message, tag = "66")]
         StatUpResult(super::StatUpResult),
+        /// s2c zone gameplay
         #[prost(message, tag = "67")]
         ParamChange(super::ParamChange),
+        /// s2c zone world
         #[prost(message, tag = "68")]
         UnitHp(super::UnitHp),
+        /// s2c zone world
         #[prost(message, tag = "69")]
         SpriteChange(super::SpriteChange),
+        /// s2c zone gameplay
         #[prost(message, tag = "70")]
         Resurrect(super::Resurrect),
+        /// c2s zone
         #[prost(message, tag = "71")]
         Respawn(super::Respawn),
+        /// c2s zone
         #[prost(message, tag = "72")]
         LearnSkill(super::LearnSkill),
+        /// s2c zone gameplay
         #[prost(message, tag = "73")]
         LearnSkillResult(super::LearnSkillResult),
+        /// s2c zone control
         #[prost(message, tag = "74")]
         MapMove(super::MapMove),
+        /// c2s zone
         #[prost(message, tag = "75")]
         UseItem(super::UseItem),
+        /// s2c zone gameplay
         #[prost(message, tag = "76")]
         ItemUseResult(super::ItemUseResult),
+        /// s2c zone world
         #[prost(message, tag = "77")]
         StatusChange(super::StatusChange),
+        /// s2c zone world
         #[prost(message, tag = "78")]
         UnitStateChange(super::UnitStateChange),
+        /// s2c zone world
         #[prost(message, tag = "79")]
         SpecialEffect(super::SpecialEffect),
+        /// c2s zone
         #[prost(message, tag = "80")]
         NpcTalk(super::NpcTalk),
+        /// s2c zone world
         #[prost(message, tag = "81")]
         NpcDialog(super::NpcDialog),
+        /// c2s zone
         #[prost(message, tag = "82")]
         NpcInteract(super::NpcInteract),
         /// 83-88: cart (server->client deltas + client intents)
+        ///
+        /// s2c zone bulk
         #[prost(message, tag = "83")]
         CartInfo(super::CartInfo),
+        /// s2c zone gameplay
         #[prost(message, tag = "84")]
         CartItemAdded(super::CartItemAdded),
+        /// s2c zone gameplay
         #[prost(message, tag = "85")]
         CartItemRemoved(super::CartItemRemoved),
+        /// c2s zone
         #[prost(message, tag = "86")]
         CartMountRequest(super::CartMountRequest),
+        /// c2s zone
         #[prost(message, tag = "87")]
         MoveToCartRequest(super::MoveToCartRequest),
+        /// c2s zone
         #[prost(message, tag = "88")]
         MoveFromCartRequest(super::MoveFromCartRequest),
         /// 89-96: vending (client intents + server->client board/list/sale deltas)
+        ///
+        /// c2s zone
         #[prost(message, tag = "89")]
         VendingOpenRequest(super::VendingOpenRequest),
+        /// c2s zone
         #[prost(message, tag = "90")]
         VendingCloseRequest(super::VendingCloseRequest),
+        /// c2s zone
         #[prost(message, tag = "91")]
         VendingListRequest(super::VendingListRequest),
+        /// c2s zone
         #[prost(message, tag = "92")]
         VendingPurchaseRequest(super::VendingPurchaseRequest),
+        /// s2c zone world
         #[prost(message, tag = "93")]
         VendingBoardShown(super::VendingBoardShown),
+        /// s2c zone world
         #[prost(message, tag = "94")]
         VendingBoardRemoved(super::VendingBoardRemoved),
+        /// s2c zone bulk
         #[prost(message, tag = "95")]
         VendingList(super::VendingList),
+        /// s2c zone gameplay
         #[prost(message, tag = "96")]
         VendingSaleReport(super::VendingSaleReport),
         /// 97-101: npc shop (server->client window/result + client buy/sell intents)
+        ///
+        /// s2c zone gameplay
         #[prost(message, tag = "97")]
         NpcShopOpen(super::NpcShopOpen),
+        /// c2s zone
         #[prost(message, tag = "98")]
         NpcBuyRequest(super::NpcBuyRequest),
+        /// c2s zone
         #[prost(message, tag = "99")]
         NpcSellRequest(super::NpcSellRequest),
+        /// s2c zone gameplay
         #[prost(message, tag = "100")]
         NpcBuyResult(super::NpcBuyResult),
+        /// s2c zone gameplay
         #[prost(message, tag = "101")]
         NpcSellResult(super::NpcSellResult),
         /// 102-105: item drops (server->client ground spawn/vanish + client pickup intent/result)
+        ///
+        /// s2c zone world
         #[prost(message, tag = "102")]
         ItemOnGround(super::ItemOnGround),
+        /// s2c zone world
         #[prost(message, tag = "103")]
         ItemVanished(super::ItemVanished),
+        /// c2s zone
         #[prost(message, tag = "104")]
         PickupItemRequest(super::PickupItemRequest),
+        /// s2c zone world
         #[prost(message, tag = "105")]
         PickupResult(super::PickupResult),
         /// 106-116: party
+        ///
+        /// c2s zone
         #[prost(message, tag = "106")]
         PartyCreateRequest(super::PartyCreateRequest),
+        /// c2s zone
         #[prost(message, tag = "107")]
         PartyInviteRequest(super::PartyInviteRequest),
+        /// s2c zone gameplay
         #[prost(message, tag = "108")]
         PartyInviteNotify(super::PartyInviteNotify),
+        /// c2s zone
         #[prost(message, tag = "109")]
         PartyInviteResponse(super::PartyInviteResponse),
+        /// c2s zone
         #[prost(message, tag = "110")]
         PartyLeaveRequest(super::PartyLeaveRequest),
+        /// c2s zone
         #[prost(message, tag = "111")]
         PartyKickRequest(super::PartyKickRequest),
+        /// c2s zone
         #[prost(message, tag = "112")]
         PartyOptionsRequest(super::PartyOptionsRequest),
+        /// c2s zone
         #[prost(message, tag = "113")]
         PartyLeaderRequest(super::PartyLeaderRequest),
+        /// s2c zone gameplay
         #[prost(message, tag = "114")]
         PartyActionResult(super::PartyActionResult),
+        /// s2c zone gameplay
         #[prost(message, tag = "115")]
         PartyInfo(super::PartyInfo),
+        /// s2c zone gameplay
         #[prost(message, tag = "116")]
         PartyDisbanded(super::PartyDisbanded),
         /// 117-123: storage (server->client window/deltas/result + client deposit/withdraw/close intents)
+        ///
+        /// s2c zone bulk
         #[prost(message, tag = "117")]
         StorageOpened(super::StorageOpened),
+        /// c2s zone
         #[prost(message, tag = "118")]
         StorageDepositRequest(super::StorageDepositRequest),
+        /// c2s zone
         #[prost(message, tag = "119")]
         StorageWithdrawRequest(super::StorageWithdrawRequest),
+        /// c2s zone
         #[prost(message, tag = "120")]
         StorageCloseRequest(super::StorageCloseRequest),
+        /// s2c zone gameplay
         #[prost(message, tag = "121")]
         StorageItemAdded(super::StorageItemAdded),
+        /// s2c zone gameplay
         #[prost(message, tag = "122")]
         StorageItemRemoved(super::StorageItemRemoved),
+        /// s2c zone gameplay
         #[prost(message, tag = "123")]
         StorageResult(super::StorageResult),
         /// 124: broadcast messages (GM + script announce/mapannounce/areaannounce/broadcast)
+        ///
+        /// s2c zone world
         #[prost(message, tag = "124")]
         Announcement(super::Announcement),
         /// 125-126: cart/vending results (server->client outcome of a gated intent)
+        ///
+        /// s2c zone gameplay
         #[prost(message, tag = "125")]
         CartMountResult(super::CartMountResult),
+        /// s2c zone gameplay
         #[prost(message, tag = "126")]
         VendingOpenResult(super::VendingOpenResult),
         /// 127-128: emotes (client intent + server->client display)
+        ///
+        /// c2s zone
         #[prost(message, tag = "127")]
         EmoteRequest(super::EmoteRequest),
+        /// s2c zone world
         #[prost(message, tag = "128")]
         Emotion(super::Emotion),
         /// 129-133: quest log (server->client dump + deltas)
+        ///
+        /// s2c zone bulk
         #[prost(message, tag = "129")]
         QuestList(super::QuestList),
+        /// s2c zone gameplay
         #[prost(message, tag = "130")]
         QuestAdded(super::QuestAdded),
+        /// s2c zone gameplay
         #[prost(message, tag = "131")]
         QuestRemoved(super::QuestRemoved),
+        /// s2c zone gameplay
         #[prost(message, tag = "132")]
         QuestStateChanged(super::QuestStateChanged),
+        /// s2c zone gameplay
         #[prost(message, tag = "133")]
         QuestHuntProgress(super::QuestHuntProgress),
         /// 134: minimap viewpoint marker (script viewpoint buildin)
+        ///
+        /// s2c zone world
         #[prost(message, tag = "134")]
         Viewpoint(super::Viewpoint),
         /// 135-136: script cutscene image + sound effect (cutin/soundeffect buildins)
+        ///
+        /// s2c zone world
         #[prost(message, tag = "135")]
         Cutin(super::Cutin),
+        /// s2c zone world
         #[prost(message, tag = "136")]
         SoundEffect(super::SoundEffect),
         /// 137: party member state delta
+        ///
+        /// s2c zone gameplay
         #[prost(message, tag = "137")]
         PartyMemberUpdate(super::PartyMemberUpdate),
         /// 138-154: guild (client intents + server->client roster/emblem/notice deltas)
+        ///
+        /// c2s zone
         #[prost(message, tag = "138")]
         GuildCreateRequest(super::GuildCreateRequest),
+        /// c2s zone
         #[prost(message, tag = "139")]
         GuildInviteRequest(super::GuildInviteRequest),
+        /// c2s zone
         #[prost(message, tag = "140")]
         GuildInviteResponse(super::GuildInviteResponse),
+        /// c2s zone
         #[prost(message, tag = "141")]
         GuildLeaveRequest(super::GuildLeaveRequest),
+        /// c2s zone
         #[prost(message, tag = "142")]
         GuildExpelRequest(super::GuildExpelRequest),
+        /// c2s zone
         #[prost(message, tag = "143")]
         GuildPositionEditRequest(super::GuildPositionEditRequest),
+        /// c2s zone
         #[prost(message, tag = "144")]
         GuildMemberPositionRequest(super::GuildMemberPositionRequest),
+        /// c2s zone
         #[prost(message, tag = "145")]
         GuildNoticeEditRequest(super::GuildNoticeEditRequest),
+        /// c2s zone
         #[prost(message, tag = "146")]
         GuildEmblemUploadRequest(super::GuildEmblemUploadRequest),
+        /// c2s zone
         #[prost(message, tag = "147")]
         GuildEmblemRequest(super::GuildEmblemRequest),
+        /// s2c zone gameplay
         #[prost(message, tag = "148")]
         GuildActionResult(super::GuildActionResult),
+        /// s2c zone gameplay
         #[prost(message, tag = "149")]
         GuildInviteNotify(super::GuildInviteNotify),
+        /// s2c zone gameplay
         #[prost(message, tag = "150")]
         GuildInfo(super::GuildInfo),
+        /// s2c zone gameplay
         #[prost(message, tag = "151")]
         GuildMemberUpdate(super::GuildMemberUpdate),
+        /// s2c zone gameplay
         #[prost(message, tag = "152")]
         GuildEmblemChanged(super::GuildEmblemChanged),
+        /// s2c zone gameplay
         #[prost(message, tag = "153")]
         GuildEmblemData(super::GuildEmblemData),
+        /// s2c zone gameplay
         #[prost(message, tag = "154")]
         GuildDisbanded(super::GuildDisbanded),
         /// 155-159: persistent skill-unit state and caster-only Estimation results
+        ///
+        /// s2c zone world
         #[prost(message, tag = "155")]
         SkillUnitSnapshot(super::SkillUnitSnapshot),
+        /// s2c zone world
         #[prost(message, tag = "156")]
         SkillUnitSpawn(super::SkillUnitSpawn),
+        /// s2c zone world
         #[prost(message, tag = "157")]
         SkillUnitUpdate(super::SkillUnitUpdate),
+        /// s2c zone world
         #[prost(message, tag = "158")]
         SkillUnitDespawn(super::SkillUnitDespawn),
+        /// s2c zone world
         #[prost(message, tag = "159")]
         EstimationResult(super::EstimationResult),
         /// 160-161: generic skill menu (server->client offer + client selection)
+        ///
+        /// s2c zone world
         #[prost(message, tag = "160")]
         SkillMenu(super::SkillMenu),
+        /// c2s zone
         #[prost(message, tag = "161")]
         SkillMenuReply(super::SkillMenuReply),
         /// 162: caster-only reason for a rejected skill cast
+        ///
+        /// s2c zone gameplay
         #[prost(message, tag = "162")]
         SkillCastFailed(super::SkillCastFailed),
         /// 163: authoritative absolute spirit-sphere state
+        ///
+        /// s2c zone world
         #[prost(message, tag = "163")]
         SpiritSphereUpdate(super::SpiritSphereUpdate),
         /// 164-165: peco mount (client intent + server->client outcome)
+        ///
+        /// c2s zone
         #[prost(message, tag = "164")]
         MountRequest(super::MountRequest),
+        /// s2c zone gameplay
         #[prost(message, tag = "165")]
         MountResult(super::MountResult),
         /// 166-167: staged skill text input
+        ///
+        /// s2c zone world
         #[prost(message, tag = "166")]
         SkillTextInputRequest(super::SkillTextInputRequest),
+        /// c2s zone
         #[prost(message, tag = "167")]
         SkillTextInputReply(super::SkillTextInputReply),
         /// 168: server-authoritative production outcome
+        ///
+        /// s2c zone world
         #[prost(message, tag = "168")]
         ProductionResult(super::ProductionResult),
         /// 169-171: owner-private Homunculus commands, results, and state
+        ///
+        /// c2s zone
         #[prost(message, tag = "169")]
         HomunculusRequest(super::HomunculusRequest),
+        /// s2c zone gameplay
         #[prost(message, tag = "170")]
         HomunculusResult(super::HomunculusResult),
+        /// s2c zone bulk
         #[prost(message, tag = "171")]
         HomunculusPrivateState(super::HomunculusPrivateState),
         /// 172: inventory item binding update
+        ///
+        /// s2c zone gameplay
         #[prost(message, tag = "172")]
         ItemBound(super::ItemBound),
         /// 173-185: player trade (client intents + server-authoritative updates)
+        ///
+        /// c2s zone
         #[prost(message, tag = "173")]
         TradeRequest(super::TradeRequest),
+        /// c2s zone
         #[prost(message, tag = "174")]
         TradeResponse(super::TradeResponse),
+        /// c2s zone
         #[prost(message, tag = "175")]
         TradeAddItem(super::TradeAddItem),
+        /// c2s zone
         #[prost(message, tag = "176")]
         TradeRemoveItem(super::TradeRemoveItem),
+        /// c2s zone
         #[prost(message, tag = "177")]
         TradeSetZeny(super::TradeSetZeny),
+        /// c2s zone
         #[prost(message, tag = "178")]
         TradeLock(super::TradeLock),
+        /// c2s zone
         #[prost(message, tag = "179")]
         TradeConfirm(super::TradeConfirm),
+        /// c2s zone
         #[prost(message, tag = "180")]
         TradeCancel(super::TradeCancel),
+        /// s2c zone gameplay
         #[prost(message, tag = "181")]
         TradeRequestReceived(super::TradeRequestReceived),
+        /// s2c zone gameplay
         #[prost(message, tag = "182")]
         TradeOpened(super::TradeOpened),
+        /// s2c zone gameplay
         #[prost(message, tag = "183")]
         TradeOfferUpdate(super::TradeOfferUpdate),
+        /// s2c zone gameplay
         #[prost(message, tag = "184")]
         TradeCompleted(super::TradeCompleted),
+        /// s2c zone gameplay
         #[prost(message, tag = "185")]
         TradeCancelled(super::TradeCancelled),
         /// 186: per-player quest-icon bubble over an NPC (script questinfo buildin)
+        ///
+        /// s2c zone world
         #[prost(message, tag = "186")]
         QuestInfoIcon(super::QuestInfoIcon),
         /// 187: progress bar over the attached character (script `progressbar` buildin)
+        ///
+        /// s2c zone world
         #[prost(message, tag = "187")]
         ProgressBar(super::ProgressBar),
         /// 188: open the navigation window / start navigation (script `navigateto` buildin)
+        ///
+        /// s2c zone world
         #[prost(message, tag = "188")]
         NavigateTo(super::NavigateTo),
         /// 189-191: NPC waiting room (chat room) client intents
+        ///
+        /// c2s zone
         #[prost(message, tag = "189")]
         WaitingRoomJoinRequest(super::WaitingRoomJoinRequest),
+        /// c2s zone
         #[prost(message, tag = "190")]
         WaitingRoomLeaveRequest(super::WaitingRoomLeaveRequest),
+        /// c2s zone
         #[prost(message, tag = "191")]
         WaitingRoomChatRequest(super::WaitingRoomChatRequest),
         /// 192-196: NPC waiting room authoritative state (nearby / members / joiner)
+        ///
+        /// s2c zone world
         #[prost(message, tag = "192")]
         WaitingRoomInfo(super::WaitingRoomInfo),
+        /// s2c zone world
         #[prost(message, tag = "193")]
         WaitingRoomRemoved(super::WaitingRoomRemoved),
+        /// s2c zone world
         #[prost(message, tag = "194")]
         WaitingRoomJoinResult(super::WaitingRoomJoinResult),
+        /// s2c zone world
         #[prost(message, tag = "195")]
         WaitingRoomMemberUpdate(super::WaitingRoomMemberUpdate),
+        /// s2c zone world
         #[prost(message, tag = "196")]
         WaitingRoomChat(super::WaitingRoomChat),
         /// 197: guild progression client intent (master spends a guild skill point)
+        ///
+        /// c2s zone
         #[prost(message, tag = "197")]
         GuildSkillUpRequest(super::GuildSkillUpRequest),
         /// 198: guild progression authoritative level-up notification
+        ///
+        /// s2c zone gameplay
         #[prost(message, tag = "198")]
         GuildLevelUp(super::GuildLevelUp),
+        /// 199-202: server-authoritative navigation requests and outcomes
+        ///
+        /// c2s zone
+        #[prost(message, tag = "199")]
+        NavigationRequest(super::NavigationRequest),
+        /// c2s zone
+        #[prost(message, tag = "200")]
+        NavigationCancel(super::NavigationCancel),
+        /// s2c zone world
+        #[prost(message, tag = "201")]
+        NavigationFailed(super::NavigationFailed),
+        /// s2c zone world
+        #[prost(message, tag = "202")]
+        NavigationEnded(super::NavigationEnded),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -957,8 +1203,6 @@ pub struct SpecialEffect {
     #[prost(uint32, tag = "2")]
     pub effect_id: u32,
 }
-/// Server -> client, a minimap/compass marker (replaces RO ZC_COMPASS 0x0144).
-/// Sent only to the invoking player (script `viewpoint`).
 /// Server -> client, a per-player quest-icon bubble shown over an NPC, with an
 /// optional minimap mark (rAthena `questinfo` buildin, replaces
 /// ZC_QUEST_NOTIFY_EFFECT 0x446). Sent only to the player who meets the NPC's
@@ -981,12 +1225,14 @@ pub struct QuestInfoIcon {
     #[prost(uint32, tag = "5")]
     pub color: u32,
 }
+/// Server -> client, a minimap/compass marker (replaces RO ZC_COMPASS 0x0144).
+/// Sent only to the invoking player (script `viewpoint`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Viewpoint {
     /// the NPC that owns the marker (rAthena st->oid)
     #[prost(uint32, tag = "1")]
     pub npc_id: u32,
-    /// 0 = display 15s / 1 = display until map change / 2 = remove
+    /// action (rAthena ZC_COMPASS): 0 display for 15s / 1 display until dead or teleported / 2 remove mark
     #[prost(uint32, tag = "2")]
     pub r#type: u32,
     #[prost(uint32, tag = "3")]
@@ -1038,21 +1284,19 @@ pub struct ProgressBar {
     #[prost(uint32, tag = "3")]
     pub npc_id: u32,
 }
-/// Server -> client, open the navigation window / start navigation toward a map
-/// coordinate or a tracked monster (replaces RO ZC_NAVIGATION 0x08e2, script
-/// `navigateto`). Sent only to the invoking player. The client derives the
-/// navigation target the same way the original packet does: monster_id > 0
-/// targets that monster; else x > 0 && y > 0 targets those coordinates; else
-/// it is map-only (fails client-side if the player is already on the map).
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+/// Server -> client, open the navigation window / update its server-authoritative
+/// route. Sent only to the invoking player. The legacy target fields stay intact
+/// for existing script content; `legs` is the route detail and `destination` is
+/// the target selected after resolving it against the world.
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NavigateTo {
-    /// destination map name
+    /// legacy destination map name
     #[prost(string, tag = "1")]
     pub map: ::prost::alloc::string::String,
-    /// destination cell x (0 when map-only or monster)
+    /// legacy destination cell x (mirrors `destination`)
     #[prost(uint32, tag = "2")]
     pub x: u32,
-    /// destination cell y (0 when map-only or monster)
+    /// legacy destination cell y (mirrors `destination`)
     #[prost(uint32, tag = "3")]
     pub y: u32,
     /// allowed transport services (0 none, 1 airship, 10 scroll, 100 kafra)
@@ -1064,6 +1308,88 @@ pub struct NavigateTo {
     /// optional tracked monster id
     #[prost(uint32, tag = "6")]
     pub monster_id: u32,
+    /// route legs; only the current leg has cells
+    #[prost(message, repeated, tag = "7")]
+    pub legs: ::prost::alloc::vec::Vec<NavigationLeg>,
+    /// resolved final map and cell
+    #[prost(message, optional, tag = "8")]
+    pub destination: ::core::option::Option<NavigationCoordinate>,
+}
+/// A map cell used by a detailed route leg.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NavigationCell {
+    #[prost(uint32, tag = "1")]
+    pub x: u32,
+    #[prost(uint32, tag = "2")]
+    pub y: u32,
+}
+/// A map coordinate used by a request or resolved destination.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NavigationCoordinate {
+    #[prost(string, tag = "1")]
+    pub map: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub x: u32,
+    #[prost(uint32, tag = "3")]
+    pub y: u32,
+}
+/// One positional route leg. `cells` is empty for topology-only future legs;
+/// `arrive` is set only on the final leg.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NavigationLeg {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+    #[prost(string, tag = "2")]
+    pub map: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "3")]
+    pub cells: ::prost::alloc::vec::Vec<NavigationCell>,
+    #[prost(string, tag = "4")]
+    pub exit_portal: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub next_map: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub arrive: ::core::option::Option<NavigationCell>,
+}
+/// Client -> server, request server-authoritative navigation to one target.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NavigationRequest {
+    /// allowed transport services (0 none, 1 airship, 10 scroll, 100 kafra)
+    #[prost(uint32, tag = "5")]
+    pub flag: u32,
+    /// true = navigate silently without opening the window
+    #[prost(bool, tag = "6")]
+    pub hide_window: bool,
+    #[prost(oneof = "navigation_request::Target", tags = "1, 2, 3, 4")]
+    pub target: ::core::option::Option<navigation_request::Target>,
+}
+/// Nested message and enum types in `NavigationRequest`.
+pub mod navigation_request {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Target {
+        #[prost(message, tag = "1")]
+        Coord(super::NavigationCoordinate),
+        #[prost(string, tag = "2")]
+        Map(::prost::alloc::string::String),
+        #[prost(string, tag = "3")]
+        Npc(::prost::alloc::string::String),
+        #[prost(uint32, tag = "4")]
+        Monster(u32),
+    }
+}
+/// Client -> server, stop the active server-authoritative navigation session.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NavigationCancel {}
+/// Server -> client, explains why a navigation request could not produce a route.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NavigationFailed {
+    #[prost(enumeration = "NavigationFailureReason", tag = "1")]
+    pub reason: i32,
+}
+/// Server -> client, confirms that an active navigation session has ended.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NavigationEnded {
+    #[prost(enumeration = "NavigationEndReason", tag = "1")]
+    pub reason: i32,
 }
 /// Client -> server, request an entity's name (replaces RO CZ_REQNAME2 0x0368).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3402,6 +3728,70 @@ impl DisplaySize {
             "DISPLAY_SIZE_NORMAL" => Some(Self::Normal),
             "DISPLAY_SIZE_SMALL" => Some(Self::Small),
             "DISPLAY_SIZE_BIG" => Some(Self::Big),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum NavigationFailureReason {
+    Unspecified = 0,
+    Unresolved = 1,
+    Unreachable = 2,
+    AlreadyThere = 3,
+    Excluded = 4,
+}
+impl NavigationFailureReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "NAVIGATION_FAILURE_REASON_UNSPECIFIED",
+            Self::Unresolved => "NAVIGATION_FAILURE_REASON_UNRESOLVED",
+            Self::Unreachable => "NAVIGATION_FAILURE_REASON_UNREACHABLE",
+            Self::AlreadyThere => "NAVIGATION_FAILURE_REASON_ALREADY_THERE",
+            Self::Excluded => "NAVIGATION_FAILURE_REASON_EXCLUDED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NAVIGATION_FAILURE_REASON_UNSPECIFIED" => Some(Self::Unspecified),
+            "NAVIGATION_FAILURE_REASON_UNRESOLVED" => Some(Self::Unresolved),
+            "NAVIGATION_FAILURE_REASON_UNREACHABLE" => Some(Self::Unreachable),
+            "NAVIGATION_FAILURE_REASON_ALREADY_THERE" => Some(Self::AlreadyThere),
+            "NAVIGATION_FAILURE_REASON_EXCLUDED" => Some(Self::Excluded),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum NavigationEndReason {
+    Unspecified = 0,
+    Arrived = 1,
+    Cancelled = 2,
+}
+impl NavigationEndReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "NAVIGATION_END_REASON_UNSPECIFIED",
+            Self::Arrived => "NAVIGATION_END_REASON_ARRIVED",
+            Self::Cancelled => "NAVIGATION_END_REASON_CANCELLED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NAVIGATION_END_REASON_UNSPECIFIED" => Some(Self::Unspecified),
+            "NAVIGATION_END_REASON_ARRIVED" => Some(Self::Arrived),
+            "NAVIGATION_END_REASON_CANCELLED" => Some(Self::Cancelled),
             _ => None,
         }
     }
