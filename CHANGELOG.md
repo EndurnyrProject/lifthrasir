@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.12.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.11.0...v0.12.0) (2026-08-25)
+
+
+### Features
+
+* **game-engine:** add navigation route state and world path ([63055b2](https://github.com/EndurnyrProject/lifthrasir/commit/63055b2f933867ff15095daa5be090af5c26d518))
+* **game-engine:** recognize 4th-job trait status parameters (219-231) ([d164643](https://github.com/EndurnyrProject/lifthrasir/commit/d16464379f515379f6895987e58d3e56a8388f53))
+* **lifthrasir-ui:** add the navigation UI ([ae683bd](https://github.com/EndurnyrProject/lifthrasir/commit/ae683bd7684f851c4fbfebc031fdae044e8a889f))
+* **net-aesir:** translate and send navigation messages ([913801c](https://github.com/EndurnyrProject/lifthrasir/commit/913801c492c9a6189027cccf0a97de55bcfd5f64))
+* **net-contract:** add the neutral navigation route contract ([6307e8e](https://github.com/EndurnyrProject/lifthrasir/commit/6307e8ed077b0a0442761df56935d1c086aa6f51))
+* **ui:** Wiring up production system ([283a163](https://github.com/EndurnyrProject/lifthrasir/commit/283a1637d5eebdabb51a0a03f92c23f87239f44d))
+
+
+### Bug Fixes
+
+* **net:** Fixed disconnect message when the server goes caput ([919acab](https://github.com/EndurnyrProject/lifthrasir/commit/919acabb4094449a54184d60c242281d4186f7b1))
+
 ## [0.11.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.10.0...v0.11.0) (2026-08-21)
 
 
