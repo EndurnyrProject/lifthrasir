@@ -16,8 +16,9 @@ use crate::envelope::Body;
 use crate::proto::aesir::net::{Hello, SessionAuth, TimeSync};
 use net_contract::events::{ServerClockSynced, ZoneDisconnected, ZoneEntered};
 
-/// Periodic time-sync cadence, preserving the legacy TCP zone path's 30s interval.
-const TIME_SYNC_INTERVAL: Duration = Duration::from_secs(30);
+/// Time-sync doubles as a liveness probe so an abruptly stopped UDP server is noticed promptly.
+const TIME_SYNC_INTERVAL: Duration = Duration::from_secs(5);
+const TIME_SYNC_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Pure outcome of receiving a `HelloAck`: the next phase, or `None` when out of phase.
 fn hello_ack_next(phase: ZonePhase, accepted: bool) -> Option<ZonePhase> {
@@ -129,15 +130,27 @@ pub fn zone_drain_control(
     }
 }
 
-/// Sends `TimeSync` on the control channel once the session is entering the map,
-/// firing immediately on each new zone connection and then every
-/// `TIME_SYNC_INTERVAL`, and records the send time so the matching `TimeSyncAck`
-/// can measure RTT. The immediate first send converges `ServerClock` within ~1 RTT
-/// of entry instead of after a full interval.
+fn fail_zone_session(state: &mut QuicZoneState, reason: String) -> Option<ZoneDisconnected> {
+    if matches!(state.phase, ZonePhase::Disconnected | ZonePhase::Failed) {
+        return None;
+    }
+    state.phase = ZonePhase::Failed;
+    Some(ZoneDisconnected { reason })
+}
+
+fn time_sync_timed_out(sent_ms: Option<i64>, now_ms: i64) -> bool {
+    sent_ms.is_some_and(|sent_ms| {
+        now_ms.saturating_sub(sent_ms) >= TIME_SYNC_TIMEOUT.as_millis() as i64
+    })
+}
+
+/// Sends `TimeSync` on the control channel once the session is entering the map.
+/// One probe remains in flight until its acknowledgement arrives; a missing reply
+/// for `TIME_SYNC_TIMEOUT` fails the zone session and surfaces `ZoneDisconnected`.
 #[auto_add_system(
     plugin = crate::AesirNetPlugin,
     schedule = Update,
-    config(run_if = client_connected)
+    config(run_if = client_connected, after = zone_drain_control)
 )]
 pub fn zone_time_sync(
     time: Res<Time<Real>>,
@@ -145,6 +158,7 @@ pub fn zone_time_sync(
     mut synced_epoch: Local<u64>,
     mut client: ResMut<QuinnetClient>,
     mut state: ResMut<QuicZoneState>,
+    mut disconnected: MessageWriter<ZoneDisconnected>,
 ) {
     if !matches!(
         state.phase,
@@ -152,17 +166,33 @@ pub fn zone_time_sync(
     ) {
         return;
     }
+    let now_ms = time.elapsed().as_millis() as i64;
+    if time_sync_timed_out(state.time_sync_sent_ms, now_ms) {
+        let reason = "zone server did not answer the liveness probe".to_string();
+        if let Some(event) = fail_zone_session(&mut state, reason) {
+            error!("zone connection lost: {}", event.reason);
+            disconnected.write(event);
+        }
+        return;
+    }
+    if state.time_sync_sent_ms.is_some() {
+        return;
+    }
+
     let timer = timer.get_or_insert_with(|| Timer::new(TIME_SYNC_INTERVAL, TimerMode::Repeating));
     let new_connection = *synced_epoch != state.connection_epoch;
     if !new_connection && !timer.tick(time.delta()).just_finished() {
         return;
     }
-    let now_ms = time.elapsed().as_millis() as i64;
     let body = Body::TimeSync(TimeSync {
         client_tick: now_ms as u32,
     });
-    if let Err(e) = state.send(&mut client, CONTROL, body) {
-        error!("failed to send TimeSync: {e}");
+    if let Err(error) = state.send(&mut client, CONTROL, body) {
+        let reason = format!("failed to send zone liveness probe: {error}");
+        if let Some(event) = fail_zone_session(&mut state, reason) {
+            error!("zone connection lost: {}", event.reason);
+            disconnected.write(event);
+        }
         return;
     }
     state.time_sync_sent_ms = Some(now_ms);
@@ -193,13 +223,11 @@ pub fn zone_handle_connection_lost(
     mut state: ResMut<QuicZoneState>,
     mut disconnected: MessageWriter<ZoneDisconnected>,
 ) {
-    let mut fail = |state: &mut QuicZoneState, message: String| {
-        if state.phase == ZonePhase::Disconnected {
-            return;
+    let mut fail = |state: &mut QuicZoneState, reason: String| {
+        if let Some(event) = fail_zone_session(state, reason) {
+            error!("zone connection lost: {}", event.reason);
+            disconnected.write(event);
         }
-        error!("zone connection lost: {message}");
-        state.phase = ZonePhase::Failed;
-        disconnected.write(ZoneDisconnected { reason: message });
     };
 
     for event in failed_events.read() {
@@ -265,5 +293,40 @@ mod tests {
         let result = time_sync_result(1_200, 1_000, 5_000);
         assert_eq!(result.rtt_ms, 0);
         assert_eq!(result.offset_ms, 5_000 - 1_000);
+    }
+
+    #[test]
+    fn missing_time_sync_ack_disconnects_a_playing_zone() {
+        let mut time = Time::<Real>::default();
+        time.update_with_duration(Duration::ZERO);
+        time.update_with_duration(TIME_SYNC_TIMEOUT);
+
+        let mut app = App::new();
+        app.add_plugins(bevy_quinnet::client::QuinnetClientPlugin::default())
+            .insert_resource(time)
+            .insert_resource(QuicZoneState {
+                phase: ZonePhase::Playing,
+                time_sync_sent_ms: Some(0),
+                ..Default::default()
+            })
+            .add_message::<ZoneDisconnected>()
+            .add_systems(Update, zone_time_sync);
+
+        app.update();
+
+        let messages = app.world().resource::<Messages<ZoneDisconnected>>();
+        let mut cursor = messages.get_cursor();
+        let disconnected = cursor
+            .read(messages)
+            .next()
+            .expect("missing liveness reply should disconnect");
+        assert_eq!(
+            disconnected.reason,
+            "zone server did not answer the liveness probe"
+        );
+        assert_eq!(
+            app.world().resource::<QuicZoneState>().phase,
+            ZonePhase::Failed
+        );
     }
 }
