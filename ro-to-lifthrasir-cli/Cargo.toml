@@ -8,7 +8,7 @@ name = "ro-to-lifthrasir-cli"
 path = "src/main.rs"
 
 [dependencies]
-ro-formats = { path = "../ro-formats" }
+ro-formats = { path = "../ro-formats", features = ["gr2"] }
 glam = { workspace = true }
 lifthrasir-data = { path = "../lifthrasir-data" }
 clap = { workspace = true }

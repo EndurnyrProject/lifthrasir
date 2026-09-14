@@ -2,6 +2,8 @@ pub mod act;
 pub mod des;
 pub mod gat;
 pub mod gnd;
+#[cfg(feature = "gr2")]
+pub mod gr2;
 pub mod grf;
 pub mod rsm;
 pub mod rsm2;

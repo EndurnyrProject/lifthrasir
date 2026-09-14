@@ -1,5 +1,6 @@
 pub mod accessory;
 pub mod gltf_out;
+pub mod gr2;
 pub mod item;
 pub mod job;
 pub mod ktx2_out;

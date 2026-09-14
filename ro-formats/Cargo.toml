@@ -3,6 +3,10 @@ name = "ro-formats"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+gr2 = []
+
 [dependencies]
 nom = "8.0.0"
 flate2 = "1.1"
