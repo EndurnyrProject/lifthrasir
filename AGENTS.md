@@ -179,6 +179,30 @@ These become `assets/data/models/외부소품/트랩*.glb`, which skill ids 115�
 resolve as armed traps at runtime. A pak built without them leaves Hunter traps
 invisible.
 
+Convert GR2 actors before packing too (guild flags, guardians, Emperium and
+other available GR2 models):
+
+```bash
+cargo run --release -p ro-to-lifthrasir-cli -- convert-gr2
+```
+
+This writes self-contained `assets/data/models/3dmob/*.glb` files with their
+embedded textures and available idle/walk/attack/hit/death clips. It uses
+`assets/convert.toml` and processes the effective GRF overlay in sorted order,
+reports individual failures, and exits nonzero if any model failed. Single model:
+`convert-gr2 --model guildflag90_1.gr2`. Writes replace existing outputs atomically
+only after skin/animation validation.
+
+The runtime routes `.gr2` actor resource names to these GLBs, never to SPR/ACT.
+The `ro-formats` `gr2` feature belongs to the offline CLI only; the client uses
+Bevy glTF skinning/animation and the shared guild-emblem cache. Missing optional
+action clips use idle; missing or invalid model GLBs fail loudly. No map format
+version bump is needed. Validate local converted assets without opening a window:
+
+```bash
+cargo test -p game-engine --test gr2_assets -- --ignored
+```
+
 Then produce the pak from retail GRFs (GRF parsing lives only in the offline
 tooling):
 
