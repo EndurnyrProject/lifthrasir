@@ -27,6 +27,8 @@ pub fn party_error_text(error: PartyErrorKind) -> &'static str {
         PartyErrorKind::TargetOffline => "That player is offline.",
         PartyErrorKind::NotMember => "That player is not in your party.",
         PartyErrorKind::NotSameMap => "That player must be on the same map.",
+        PartyErrorKind::BasicSkillRequired => "You need a higher Basic Skill level to do that.",
+        PartyErrorKind::Unknown => "Party action failed due to an unknown error.",
     }
 }
 
@@ -94,7 +96,7 @@ mod tests {
     use super::*;
     use std::collections::HashSet;
 
-    const ALL_ERRORS: [PartyErrorKind; 10] = [
+    const ALL_ERRORS: [PartyErrorKind; 12] = [
         PartyErrorKind::None,
         PartyErrorKind::NameTaken,
         PartyErrorKind::AlreadyInParty,
@@ -105,6 +107,8 @@ mod tests {
         PartyErrorKind::TargetOffline,
         PartyErrorKind::NotMember,
         PartyErrorKind::NotSameMap,
+        PartyErrorKind::BasicSkillRequired,
+        PartyErrorKind::Unknown,
     ];
 
     #[test]
@@ -149,6 +153,36 @@ mod tests {
         app.world_mut().spawn(ChatHistory);
         app.add_systems(Update, ingest_party_feedback);
         app
+    }
+
+    #[test]
+    fn ingest_reports_basic_skill_and_unknown_rejections_as_errors() {
+        for (error, expected) in [
+            (
+                PartyErrorKind::BasicSkillRequired,
+                "You need a higher Basic Skill level to do that.",
+            ),
+            (
+                PartyErrorKind::Unknown,
+                "Party action failed due to an unknown error.",
+            ),
+        ] {
+            let mut app = ingest_app();
+            app.world_mut().write_message(PartyActionResulted {
+                action: "create".into(),
+                success: false,
+                error,
+            });
+            app.update();
+
+            let mut lines = app.world_mut().query::<(&Text, &TextColor)>();
+            let (text, color) = lines.single(app.world()).unwrap();
+            assert_eq!(text.0, expected);
+            assert_eq!(color.0, theme::BAD);
+
+            app.update();
+            assert_eq!(lines.iter(app.world()).count(), 1);
+        }
     }
 
     #[test]

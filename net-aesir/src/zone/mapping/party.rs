@@ -74,9 +74,8 @@ fn party_error(v: i32) -> PartyErrorKind {
         Ok(net::PartyError::TargetOffline) => PartyErrorKind::TargetOffline,
         Ok(net::PartyError::NotMember) => PartyErrorKind::NotMember,
         Ok(net::PartyError::NotSameMap) => PartyErrorKind::NotSameMap,
-        // TODO: Wire basic-skill rejection through net-contract::PartyErrorKind.
-        Ok(net::PartyError::BasicSkillRequired) => PartyErrorKind::None,
-        Err(_) => PartyErrorKind::None,
+        Ok(net::PartyError::BasicSkillRequired) => PartyErrorKind::BasicSkillRequired,
+        Err(_) => PartyErrorKind::Unknown,
     }
 }
 
@@ -129,8 +128,10 @@ mod tests {
     }
 
     #[test]
-    fn party_error_out_of_range_falls_back_to_none() {
-        assert_eq!(party_error(999), PartyErrorKind::None);
+    fn party_error_out_of_range_is_unknown() {
+        for code in [-1, 999, i32::MIN, i32::MAX] {
+            assert_eq!(party_error(code), PartyErrorKind::Unknown);
+        }
     }
 
     #[test]

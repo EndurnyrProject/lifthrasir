@@ -185,6 +185,28 @@ mod tests {
     }
 
     #[test]
+    fn party_action_result_preserves_basic_skill_rejection() {
+        let app = drain(vec![(
+            GAMEPLAY,
+            Body::PartyActionResult(net::PartyActionResult {
+                action: "create".into(),
+                success: false,
+                error: net::PartyError::BasicSkillRequired as i32,
+            }),
+        )]);
+
+        let received = app.world().resource::<Messages<PartyActionResulted>>();
+        let events: Vec<_> = received.iter_current_update_messages().collect();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].action, "create");
+        assert!(!events[0].success);
+        assert_eq!(
+            events[0].error,
+            net_contract::dto::PartyErrorKind::BasicSkillRequired
+        );
+    }
+
+    #[test]
     fn party_disbanded_produces_one_party_disbanded() {
         let app = drain(vec![(
             GAMEPLAY,

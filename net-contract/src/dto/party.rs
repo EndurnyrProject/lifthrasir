@@ -17,7 +17,7 @@ pub struct PartyMemberInfo {
     pub max_ap: u32,
 }
 
-/// Mirrors the proto `PartyError` enum; `None` means no error / not applicable.
+/// Party action rejection reasons; `None` means no error / not applicable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PartyErrorKind {
     #[default]
@@ -31,6 +31,9 @@ pub enum PartyErrorKind {
     TargetOffline,
     NotMember,
     NotSameMap,
+    BasicSkillRequired,
+    /// The adapter did not recognize the server's error code.
+    Unknown,
 }
 
 #[cfg(test)]
