@@ -13,7 +13,6 @@ pub(super) fn model() -> Gr2File {
             width: 1,
             height: 1,
             encoding: TEXTURE_ENCODING_RAW,
-            sub_format: 0,
             bytes_per_pixel: 4,
             component_bits: [8; 4],
             pixels: vec![255; 4],
@@ -91,7 +90,6 @@ pub(super) fn model() -> Gr2File {
         animations: vec![Gr2Animation {
             name: "test".into(),
             duration: 1.0,
-            time_step: 1.0 / 30.0,
             track_group_indices: vec![0],
         }],
     }

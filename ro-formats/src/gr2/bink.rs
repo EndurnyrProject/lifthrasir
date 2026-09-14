@@ -163,10 +163,10 @@ struct BandModels {
 fn setup_models(token: u32, classes: usize) -> BandModels {
     BandModels {
         levels: (0..classes)
-            .map(|_| Window::new(token, (token + 1) as u16))
+            .map(|_| Window::new((token + 1) as u16))
             .collect(),
-        run6: Window::new(0x3f, 0x40),
-        run8: Window::new(0xff, 0x100),
+        run6: Window::new(0x40),
+        run8: Window::new(0x100),
     }
 }
 
@@ -193,7 +193,7 @@ fn dc_band(dec: &mut Decoder, rd: &mut Reservoir, mut band: Band<'_>) {
     } = band;
     let max = rd.pull(16);
     let total = max + 1;
-    let mut model = Window::new(max, total as u16);
+    let mut model = Window::new(total as u16);
 
     let delta = |dec: &mut Decoder, rd: &mut Reservoir, model: &mut Window| -> i32 {
         let mut v = model.decode_symbol(dec, |d| d.decode_commit(total)) as i32;

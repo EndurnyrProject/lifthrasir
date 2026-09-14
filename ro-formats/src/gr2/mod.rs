@@ -36,7 +36,6 @@ impl std::error::Error for Gr2Error {}
 const HEADER_SIZE: usize = 0x20;
 const SECTOR_SIZE: usize = 44;
 const FIXUP_SIZE: usize = 12;
-const OODLE_TAIL_PAD: usize = 4;
 
 // The 16-byte file signature (read as four little-endian words) also encodes
 // the byte order and pointer size of the file; these two are the little-endian,
@@ -68,26 +67,11 @@ pub struct SectorInfo {
 /// A parsed GR2 file: all sectors decompressed into one contiguous buffer with
 /// pointer fix-ups rewritten to absolute offsets within it.
 pub struct Gr2Container {
-    pub version: u32,
     pub data: Vec<u8>,
     pub sector_offsets: Vec<usize>,
     pub sectors: Vec<SectorInfo>,
     pub type_ref: SectorRef,
     pub root_ref: SectorRef,
-}
-
-/// Standard reflected CRC-32 (polynomial `0xEDB88320`), used to verify the file
-/// body against the checksum stored in the header.
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc: u32 = 0xFFFF_FFFF;
-    for &b in data {
-        crc ^= b as u32;
-        for _ in 0..8 {
-            let mask = (crc & 1).wrapping_neg();
-            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
-        }
-    }
-    !crc
 }
 
 /// Read a little-endian `u32` at a byte offset. Shared by the container,
@@ -139,7 +123,7 @@ impl Gr2Container {
         }
 
         let crc_start = HEADER_SIZE + file_info_size;
-        let crc = crc32(bytes.get(crc_start..).ok_or(Gr2Error::UnexpectedEof)?);
+        let crc = crc32fast::hash(bytes.get(crc_start..).ok_or(Gr2Error::UnexpectedEof)?);
         if crc != file_crc {
             return Err(Gr2Error::DecompressionFailed("gr2: crc mismatch".into()));
         }
@@ -211,11 +195,7 @@ impl Gr2Container {
                 let src = bytes
                     .get(src_start..src_start + s.compressed_len as usize)
                     .ok_or(Gr2Error::UnexpectedEof)?;
-                // The decoder may read a few bytes past the compressed input, so
-                // pad the tail with zeros (which decode as a graceful stop).
-                let mut compressed = src.to_vec();
-                compressed.resize(src.len() + OODLE_TAIL_PAD, 0);
-                oodle::decompress(&compressed, dst, s.oodle_stop0, s.oodle_stop1)?;
+                oodle::decompress(src, dst, s.oodle_stop0, s.oodle_stop1)?;
             }
             ofs += s.decompress_len as usize;
         }
@@ -223,7 +203,6 @@ impl Gr2Container {
         apply_fixups(bytes, &mut data, &sector_offsets, &sectors)?;
 
         Ok(Gr2Container {
-            version,
             data,
             sector_offsets,
             sectors,
@@ -304,7 +283,7 @@ mod tests {
 
     fn seal(bytes: &mut [u8]) {
         put(bytes, 0x24, bytes.len() as u32);
-        put(bytes, 0x28, crc32(&bytes[0x58..]));
+        put(bytes, 0x28, crc32fast::hash(&bytes[0x58..]));
     }
 
     #[test]

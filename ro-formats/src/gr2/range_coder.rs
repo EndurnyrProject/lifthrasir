@@ -216,7 +216,7 @@ enum Decoded {
 }
 
 impl Window {
-    pub(crate) fn new(_max_value: u32, count_cap: u16) -> Self {
+    pub(crate) fn new(count_cap: u16) -> Self {
         let cap = ((count_cap as usize) + 5) & !3;
         let mut w = Window {
             total: 0,

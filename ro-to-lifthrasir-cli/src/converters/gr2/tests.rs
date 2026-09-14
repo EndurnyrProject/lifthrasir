@@ -150,12 +150,11 @@ fn retail_guild_flag_decodes_and_samples() {
     );
     for texture in &file.textures {
         println!(
-            "texture {} {}x{} encoding={} subformat={} alpha={}",
+            "texture {} {}x{} encoding={} alpha={}",
             texture.from_file_name,
             texture.width,
             texture.height,
             texture.encoding,
-            texture.sub_format,
             texture.has_alpha()
         );
         assert_eq!(
@@ -172,8 +171,8 @@ fn retail_guild_flag_decodes_and_samples() {
     );
     let clip = &file.animations[0];
     println!(
-        "idle={} duration={} step={} groups={:?}",
-        clip.name, clip.duration, clip.time_step, clip.track_group_indices
+        "idle={} duration={} groups={:?}",
+        clip.name, clip.duration, clip.track_group_indices
     );
     for group in &file.track_groups {
         println!(

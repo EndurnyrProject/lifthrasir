@@ -128,13 +128,10 @@ pub fn spawn_network_entity_system(
 ) {
     for unit in spawn_events.read() {
         let event = SpawnFields::from(unit);
-        let resource_name = (event.object_type != crate::domain::entities::types::ObjectType::Pc)
-            .then(|| {
-                job_registry
-                    .as_ref()
-                    .and_then(|registry| registry.get_sprite_name(event.job as u32))
-            })
-            .flatten();
+        let resource_name = job_registry
+            .as_ref()
+            .filter(|_| event.object_type != crate::domain::entities::types::ObjectType::Pc)
+            .and_then(|registry| registry.get_sprite_name(event.job as u32));
         let model = resource_name
             .filter(|name| {
                 name.rsplit_once('.')

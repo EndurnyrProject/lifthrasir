@@ -20,7 +20,7 @@ pub(super) struct ModelClip {
     pub duration: f32,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub(super) struct ActorPlayback {
     pub actor: Entity,
     pub clips: [Option<ModelClip>; 5],

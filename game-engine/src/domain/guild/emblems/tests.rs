@@ -58,22 +58,7 @@ fn fetch_app() -> App {
     app
 }
 
-fn bmp(width: i32, height: i32) -> Vec<u8> {
-    let row_bytes = (width as usize * 3).div_ceil(4) * 4;
-    let pixel_bytes = row_bytes * height.unsigned_abs() as usize;
-    let size = 54 + pixel_bytes;
-    let mut bytes = vec![0; size];
-    bytes[..2].copy_from_slice(b"BM");
-    bytes[2..6].copy_from_slice(&(size as u32).to_le_bytes());
-    bytes[10..14].copy_from_slice(&54_u32.to_le_bytes());
-    bytes[14..18].copy_from_slice(&40_u32.to_le_bytes());
-    bytes[18..22].copy_from_slice(&width.to_le_bytes());
-    bytes[22..26].copy_from_slice(&height.to_le_bytes());
-    bytes[26..28].copy_from_slice(&1_u16.to_le_bytes());
-    bytes[28..30].copy_from_slice(&24_u16.to_le_bytes());
-    bytes[34..38].copy_from_slice(&(pixel_bytes as u32).to_le_bytes());
-    bytes
-}
+use super::test_emblem_bmp as bmp;
 
 #[test]
 fn validates_only_a_complete_24_pixel_bmp() {
@@ -195,7 +180,7 @@ fn valid_response_caches_once_and_invalid_response_suppresses_retry() {
     let mut images = app.world_mut().resource_mut::<GuildEmblemImages>();
     assert!(images.failed.contains(&invalid));
     images.request(invalid);
-    assert!(!images.has_queued(invalid));
+    assert!(!images.queued.contains(&invalid));
 }
 
 #[test]

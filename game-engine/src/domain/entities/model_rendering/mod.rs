@@ -27,15 +27,13 @@ impl Plugin for ModelRenderingPlugin {
                     .chain()
                     .after(EntityLifecycleSystems::Spawning)
                     .after(MovementSystems::TerrainAlignment)
-                    .after(CombatSystems::HandleDeath)
-                    .run_if(systems::has_models),
+                    .after(CombatSystems::HandleDeath),
             )
             .add_systems(
                 Update,
                 systems::sync_emblems
                     .after(systems::wire_scenes)
-                    .in_set(GuildSystems::UiSync)
-                    .run_if(systems::has_models),
+                    .in_set(GuildSystems::UiSync),
             );
     }
 }

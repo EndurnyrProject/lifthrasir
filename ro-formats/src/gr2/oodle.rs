@@ -65,17 +65,17 @@ impl Dictionary {
         let backref_value_max = p.backref_value_max;
         let lowbit_value_max = min(backref_value_max, 4);
 
-        let lowbit_window = Window::new(lowbit_value_max, lowbit_value_max as u16);
-        let highbit_window = Window::new(p.highbit_count, p.highbit_count as u16);
-        let decoded_window = Window::new(p.decoded_value_max, p.decoded_count as u16);
+        let lowbit_window = Window::new(lowbit_value_max as u16);
+        let highbit_window = Window::new(p.highbit_count as u16);
+        let decoded_window = Window::new(p.decoded_count as u16);
 
         let mut size_windows = Vec::with_capacity(4 * 16 + 1);
         for i in 0..4 {
             for _ in 0..16 {
-                size_windows.push(Window::new(64, p.sizes_count[3 - i] as u16));
+                size_windows.push(Window::new(p.sizes_count[3 - i] as u16));
             }
         }
-        size_windows.push(Window::new(64, p.sizes_count[0] as u16));
+        size_windows.push(Window::new(p.sizes_count[0] as u16));
 
         Dictionary {
             decoded_size: 0,

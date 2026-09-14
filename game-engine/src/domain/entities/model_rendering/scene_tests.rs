@@ -182,16 +182,7 @@ fn delayed_materials_wire_once_and_emblems_are_isolated_by_owner() {
             .last()
             .unwrap();
         let (guild_id, emblem_id) = (request.guild_id, request.emblem_id);
-        let mut data = vec![0_u8; 54 + 24 * 24 * 3];
-        let length = data.len() as u32;
-        data[..2].copy_from_slice(b"BM");
-        data[2..6].copy_from_slice(&length.to_le_bytes());
-        data[10..14].copy_from_slice(&54_u32.to_le_bytes());
-        data[14..18].copy_from_slice(&40_u32.to_le_bytes());
-        data[18..22].copy_from_slice(&24_i32.to_le_bytes());
-        data[22..26].copy_from_slice(&24_i32.to_le_bytes());
-        data[26..28].copy_from_slice(&1_u16.to_le_bytes());
-        data[28..30].copy_from_slice(&24_u16.to_le_bytes());
+        let data = crate::domain::guild::emblems::test_emblem_bmp(24, 24);
         app.world_mut().write_message(GuildIngress {
             generation: ZoneSessionGeneration(1),
             payload: GuildIngressPayload::EmblemData {

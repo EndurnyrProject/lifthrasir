@@ -1,6 +1,7 @@
 //! Offline conversion of RO GR2 actors and their action clips.
 
 pub(crate) mod animation;
+#[cfg(debug_assertions)]
 mod validate;
 mod writer;
 
@@ -66,6 +67,7 @@ pub(crate) fn convert_model(vfs: &impl AssetRead, name: &str, out: &Path) -> any
         .chain(external.iter().map(|(name, file)| (*name, file)))
         .collect();
     let bytes = writer::build(&model, &clips).with_context(|| format!("export {name}"))?;
+    #[cfg(debug_assertions)]
     validate::validate(&bytes, &model, &clips).with_context(|| format!("validate {name}"))?;
     let parent = out
         .parent()
@@ -99,28 +101,13 @@ pub(crate) fn run(vfs: &GrfVfs, out: &Path, selected: Option<&str>) -> anyhow::R
         None => source_models(vfs),
     };
     ensure!(!models.is_empty(), "no GR2 models in configured GRFs");
-    let mut referenced = std::collections::BTreeSet::new();
     let mut failed = Vec::new();
     for name in &models {
         println!("Converting {name}");
-        referenced.insert(format!("data/model/3dmob/{name}"));
-        if let Ok(bone) = bone_type(name) {
-            for (suffix, _) in ACTIONS {
-                referenced.insert(format!("data/model/3dmob_bone/{bone}_{suffix}.gr2"));
-            }
-        }
         let path = out.join(name.replace(".gr2", ".glb"));
         if let Err(error) = convert_model(vfs, name, &path) {
             eprintln!("{name}: {error:#}");
             failed.push(name.as_str());
-        }
-    }
-    if selected.is_none() {
-        for path in source_paths(vfs)
-            .into_iter()
-            .filter(|p| !referenced.contains(p))
-        {
-            eprintln!("Unassociated GR2 source: {path}");
         }
     }
     println!(

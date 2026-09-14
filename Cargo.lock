@@ -6928,6 +6928,7 @@ dependencies = [
 name = "ro-formats"
 version = "0.0.1"
 dependencies = [
+ "crc32fast",
  "encoding_rs",
  "flate2",
  "glam 0.32.1",

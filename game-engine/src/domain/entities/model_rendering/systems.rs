@@ -30,13 +30,6 @@ pub(super) struct EmblemSurface {
     pub default_texture: Option<Handle<Image>>,
 }
 
-pub(super) fn has_models(
-    actors: Query<(), With<Gr2Actor>>,
-    scenes: Query<(), With<ModelScene>>,
-) -> bool {
-    !actors.is_empty() || !scenes.is_empty()
-}
-
 pub(super) fn sync_model_scenes(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -106,12 +99,6 @@ pub(super) fn detect_load_failure(
             assert!(
                 !gltf.scenes.is_empty(),
                 "GR2 model '{}' has no scene 0",
-                scene.model
-            );
-            assert!(
-                gltf.named_animations
-                    .contains_key(lifthrasir_data::gr2::IDLE),
-                "GR2 model '{}' has no idle animation",
                 scene.model
             );
         }
@@ -190,15 +177,9 @@ pub(super) fn wire_scenes(
             continue;
         };
         for player in player_entities {
-            commands.entity(player).insert((
-                animation::ActorPlayback {
-                    actor,
-                    clips: playback.clips,
-                    current: None,
-                    attack_start: None,
-                },
-                graph.clone(),
-            ));
+            commands
+                .entity(player)
+                .insert((playback.clone(), graph.clone()));
         }
         for mesh in mesh_entities {
             let (handle, name) = meshes.get(mesh).expect("mesh checked above");

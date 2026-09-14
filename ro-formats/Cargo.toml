@@ -10,6 +10,7 @@ gr2 = []
 [dependencies]
 nom = "8.0.0"
 flate2 = "1.1"
+crc32fast = "1.5"
 encoding_rs = { workspace = true }
 nalgebra = "0.35"
 thiserror = { workspace = true }

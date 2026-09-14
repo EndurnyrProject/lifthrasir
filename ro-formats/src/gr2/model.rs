@@ -271,7 +271,6 @@ fn read_transform(nav: &Nav, slot: usize) -> Result<Gr2Transform, Gr2Error> {
         *s = nav.f32(slot + 32 + i * 4)?;
     }
     Ok(Gr2Transform {
-        flags: nav.u32(slot)?,
         position: pos,
         rotation,
         scale_shear,
@@ -280,7 +279,6 @@ fn read_transform(nav: &Nav, slot: usize) -> Result<Gr2Transform, Gr2Error> {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Gr2Transform {
-    pub flags: u32,
     pub position: [f32; 3],
     pub rotation: [f32; 4],
     pub scale_shear: [f32; 9],
@@ -290,7 +288,6 @@ impl Gr2Transform {
     /// Identity transform: no translation, identity quaternion, identity
     /// scale-shear matrix. Used when a bone/model/track omits its Transform.
     pub const IDENTITY: Gr2Transform = Gr2Transform {
-        flags: 0,
         position: [0.0; 3],
         rotation: [0.0, 0.0, 0.0, 1.0],
         scale_shear: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
@@ -307,7 +304,6 @@ pub struct Gr2Texture {
     pub width: i32,
     pub height: i32,
     pub encoding: i32,
-    pub sub_format: i32,
     pub bytes_per_pixel: i32,
     /// `Layout.BitsForComponent` (RGBA); alpha is present iff `[3] != 0`.
     pub component_bits: [i32; 4],
@@ -436,7 +432,6 @@ pub struct Gr2TrackGroup {
 pub struct Gr2Animation {
     pub name: String,
     pub duration: f32,
-    pub time_step: f32,
     pub track_group_indices: Vec<usize>,
 }
 
@@ -609,51 +604,6 @@ impl Gr2File {
 /// Map each element's file offset to its index in the parsed vector. References
 /// between collections are stored as file offsets; this inverts that into an
 /// O(1) lookup during cross-reference resolution.
-#[cfg(test)]
-mod validation_tests {
-    use super::*;
-
-    #[test]
-    fn empty_arrays_ignore_unused_unrelocated_pointer() {
-        let data = [0, 0, 0, 0, 255, 255, 255, 255];
-        assert_eq!(Nav::new(&data).array(0).unwrap(), (0, 0));
-    }
-
-    #[test]
-    fn nonempty_arrays_reject_out_of_bounds_or_negative_lengths() {
-        for data in [
-            [1, 0, 0, 0, 255, 255, 255, 255],
-            [255, 255, 255, 255, 0, 0, 0, 0],
-        ] {
-            assert!(Nav::new(&data).array(0).is_err());
-        }
-    }
-
-    #[test]
-    fn cyclic_inline_types_are_errors_not_recursive_layouts() {
-        let mut data = vec![0; 64];
-        data[0..4].copy_from_slice(&1_u32.to_le_bytes());
-        assert!(Nav::new(&data).type_size(0).is_err());
-    }
-
-    #[test]
-    fn invalid_texture_dimensions_and_truncated_pixels_are_errors() {
-        let mut texture = Gr2Texture {
-            from_file_name: "synthetic".into(),
-            width: -1,
-            height: 1,
-            encoding: TEXTURE_ENCODING_RAW,
-            sub_format: 0,
-            bytes_per_pixel: 4,
-            component_bits: [8; 4],
-            pixels: vec![],
-        };
-        assert!(texture.to_rgba().is_err());
-        texture.width = 1;
-        assert!(texture.to_rgba().is_err());
-    }
-}
-
 fn offset_index(offs: &[usize]) -> HashMap<usize, usize> {
     offs.iter().enumerate().map(|(i, &o)| (o, i)).collect()
 }
@@ -729,7 +679,6 @@ fn parse_texture(nav: &Nav, type_off: usize, obj: usize) -> Result<Gr2Texture, G
         width: i32_field(nav, &fields, "Width"),
         height: i32_field(nav, &fields, "Height"),
         encoding: i32_field(nav, &fields, "Encoding"),
-        sub_format: i32_field(nav, &fields, "SubFormat"),
         bytes_per_pixel,
         component_bits,
         pixels,
@@ -1086,9 +1035,52 @@ fn parse_animation_raw(
         Gr2Animation {
             name: string_field(nav, &fields, "Name"),
             duration: f32_field(nav, &fields, "Duration"),
-            time_step: f32_field(nav, &fields, "TimeStep"),
             track_group_indices: Vec::new(),
         },
         tg_offs,
     ))
+}
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    #[test]
+    fn empty_arrays_ignore_unused_unrelocated_pointer() {
+        let data = [0, 0, 0, 0, 255, 255, 255, 255];
+        assert_eq!(Nav::new(&data).array(0).unwrap(), (0, 0));
+    }
+
+    #[test]
+    fn nonempty_arrays_reject_out_of_bounds_or_negative_lengths() {
+        for data in [
+            [1, 0, 0, 0, 255, 255, 255, 255],
+            [255, 255, 255, 255, 0, 0, 0, 0],
+        ] {
+            assert!(Nav::new(&data).array(0).is_err());
+        }
+    }
+
+    #[test]
+    fn cyclic_inline_types_are_errors_not_recursive_layouts() {
+        let mut data = vec![0; 64];
+        data[0..4].copy_from_slice(&1_u32.to_le_bytes());
+        assert!(Nav::new(&data).type_size(0).is_err());
+    }
+
+    #[test]
+    fn invalid_texture_dimensions_and_truncated_pixels_are_errors() {
+        let mut texture = Gr2Texture {
+            from_file_name: "synthetic".into(),
+            width: -1,
+            height: 1,
+            encoding: TEXTURE_ENCODING_RAW,
+            bytes_per_pixel: 4,
+            component_bits: [8; 4],
+            pixels: vec![],
+        };
+        assert!(texture.to_rgba().is_err());
+        texture.width = 1;
+        assert!(texture.to_rgba().is_err());
+    }
 }

@@ -22,16 +22,10 @@ type PickRoots<'w, 's> = Query<'w, 's, (), Or<(With<NetworkEntity>, With<FloorIt
 /// Sprites are direct children; glTF primitives may be nested several nodes below their owner.
 fn pick_root(child: Entity, child_of: &Query<&ChildOf>, roots: &PickRoots) -> Entity {
     let fallback = child_of.get(child).map(|c| c.parent()).unwrap_or(child);
-    let mut entity = child;
-    loop {
-        if roots.contains(entity) {
-            return entity;
-        }
-        let Ok(parent) = child_of.get(entity) else {
-            return fallback;
-        };
-        entity = parent.parent();
-    }
+    std::iter::once(child)
+        .chain(child_of.iter_ancestors(child))
+        .find(|entity| roots.contains(*entity))
+        .unwrap_or(fallback)
 }
 
 #[allow(clippy::too_many_arguments)]

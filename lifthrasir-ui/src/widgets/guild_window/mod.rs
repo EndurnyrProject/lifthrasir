@@ -178,7 +178,6 @@ impl Plugin for GuildWindowPlugin {
         app.init_resource::<GuildUi>()
             .init_resource::<GuildUiSession>()
             .init_resource::<emblem::GuildEmblemPreview>()
-            .init_resource::<game_engine::domain::guild::emblems::GuildEmblemImages>()
             .init_resource::<dialogs::PendingGuildInvite>()
             .init_resource::<dialogs::PendingGuildConfirmation>()
             .add_systems(
