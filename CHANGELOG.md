@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.12.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.11.0...v0.12.0) (2026-09-14)
+
+
+### Features
+
+* **assets:** convert all GR2 models and action clips to glTF ([2eb5313](https://github.com/EndurnyrProject/lifthrasir/commit/2eb53136857785320bdb29f3788fcb8fc079adea))
+* **formats:** add offline GR2 decoding and animation sampling ([0e6bb94](https://github.com/EndurnyrProject/lifthrasir/commit/0e6bb945e9c7ce443ba29251fe86ff439666a962))
+* **game-engine:** add navigation route state and world path ([63055b2](https://github.com/EndurnyrProject/lifthrasir/commit/63055b2f933867ff15095daa5be090af5c26d518))
+* **game-engine:** recognize 4th-job trait status parameters (219-231) ([d164643](https://github.com/EndurnyrProject/lifthrasir/commit/d16464379f515379f6895987e58d3e56a8388f53))
+* **lifthrasir-ui:** add the navigation UI ([ae683bd](https://github.com/EndurnyrProject/lifthrasir/commit/ae683bd7684f851c4fbfebc031fdae044e8a889f))
+* **net-aesir:** translate and send navigation messages ([913801c](https://github.com/EndurnyrProject/lifthrasir/commit/913801c492c9a6189027cccf0a97de55bcfd5f64))
+* **net-contract:** add the neutral navigation route contract ([6307e8e](https://github.com/EndurnyrProject/lifthrasir/commit/6307e8ed077b0a0442761df56935d1c086aa6f51))
+* **render:** display and animate GR2 actors through glTF ([83cee6a](https://github.com/EndurnyrProject/lifthrasir/commit/83cee6ab245c77d55ec481bdc6ee3f885573993b))
+* **rendering:** Refactored and removed the -Y up weirdness ([34594a5](https://github.com/EndurnyrProject/lifthrasir/commit/34594a5c63659c7455582fe1d8ea143dbff8ab53))
+* **ui:** Wiring up production system ([283a163](https://github.com/EndurnyrProject/lifthrasir/commit/283a1637d5eebdabb51a0a03f92c23f87239f44d))
+
+
+### Bug Fixes
+
+* **net:** Fixed disconnect message when the server goes caput ([919acab](https://github.com/EndurnyrProject/lifthrasir/commit/919acabb4094449a54184d60c242281d4186f7b1))
+
 ## [0.11.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.10.0...v0.11.0) (2026-08-21)
 
 
