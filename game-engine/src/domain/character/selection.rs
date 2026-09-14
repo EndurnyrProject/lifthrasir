@@ -9,7 +9,8 @@ use crate::infrastructure::job::registry::JobSpriteRegistry;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use net_contract::events::{
-    CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterServerConnected,
+    CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
+    CharacterServerConnected,
 };
 
 /// Domain-owned snapshot of the character-select roster.
@@ -17,8 +18,7 @@ use net_contract::events::{
 #[auto_init_resource(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct DomainCharacterRoster {
     pub characters: Vec<net_contract::dto::CharacterInfo>,
-    pub max_slots: u8,
-    pub available_slots: u8,
+    pub slot_info: net_contract::dto::CharacterSlotInfo,
     pub display_pages: u32,
 }
 
@@ -32,7 +32,7 @@ fn build_character_list_event(
         .map(|character| usize::from(character.char_num) + 1)
         .max()
         .unwrap_or_default();
-    let mut characters = vec![None; usize::from(roster.max_slots).max(received_slots)];
+    let mut characters = vec![None; usize::from(roster.slot_info.valid_slots).max(received_slots)];
 
     for character in &roster.characters {
         let slot = character.char_num as usize;
@@ -67,8 +67,7 @@ fn build_character_list_event(
 
     CharacterListReceivedEvent {
         characters,
-        max_slots: roster.max_slots,
-        available_slots: roster.available_slots,
+        slot_info: roster.slot_info.clone(),
         display_pages: roster.display_pages.min(u8::MAX as u32) as u8,
     }
 }
@@ -119,8 +118,7 @@ pub fn handle_character_roster_changed(
 ) {
     for event in events.read() {
         roster.characters.clone_from(&event.characters);
-        roster.max_slots = event.max_slots;
-        roster.available_slots = event.available_slots;
+        roster.slot_info.clone_from(&event.slot_info);
         roster.display_pages = event.display_pages;
         lists.write(build_character_list_event(&roster, job_registry.as_deref()));
     }
@@ -151,6 +149,23 @@ pub fn handle_character_deleted_protocol(
 ) {
     for _ in protocol_events.read() {
         refresh_events.write(RefreshCharacterListEvent);
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
+    schedule = Update,
+    config(in_set = CharacterFlowSystems::CharacterDeletion)
+)]
+pub fn handle_character_deletion_failed_protocol(
+    mut protocol_events: MessageReader<CharacterDeletionFailed>,
+    mut domain_events: MessageWriter<CharacterDeletionFailedEvent>,
+) {
+    for event in protocol_events.read() {
+        domain_events.write(CharacterDeletionFailedEvent {
+            character_id: event.char_id,
+            error: event.error.description().to_string(),
+        });
     }
 }
 
@@ -249,17 +264,22 @@ mod tests {
 
     #[test]
     fn character_list_preserves_slots_and_server_metadata() {
+        let slot_info = net_contract::dto::CharacterSlotInfo {
+            normal_slots: 9,
+            premium_slots: 3,
+            billing_slots: 1,
+            producible_slots: 10,
+            valid_slots: 20,
+        };
         let roster = DomainCharacterRoster {
             characters: vec![dto_character(17, "Vidar")],
-            max_slots: 20,
-            available_slots: 11,
+            slot_info: slot_info.clone(),
             display_pages: 7,
         };
 
         let event = build_character_list_event(&roster, None);
 
-        assert_eq!(event.max_slots, 20);
-        assert_eq!(event.available_slots, 11);
+        assert_eq!(event.slot_info, slot_info);
         assert_eq!(event.display_pages, 7);
         assert_eq!(event.characters.len(), 20);
         assert!(event.characters[0].is_none());
@@ -268,5 +288,30 @@ mod tests {
             .expect("character should land in slot 17");
         assert_eq!(placed.base.name, "Vidar");
         assert_eq!(placed.base.char_num, 17);
+    }
+
+    #[test]
+    fn character_deletion_failure_reaches_domain() {
+        use net_contract::{dto::CharDeletionError, events::CharacterDeletionFailed};
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_message::<CharacterDeletionFailed>();
+        app.add_message::<CharacterDeletionFailedEvent>();
+        app.add_systems(Update, handle_character_deletion_failed_protocol);
+        app.world_mut().write_message(CharacterDeletionFailed {
+            char_id: 150001,
+            error: CharDeletionError::CannotDelete,
+        });
+
+        app.update();
+
+        let messages = app
+            .world()
+            .resource::<Messages<CharacterDeletionFailedEvent>>();
+        let mut cursor = messages.get_cursor();
+        let failure = cursor.read(messages).next().expect("domain failure event");
+        assert_eq!(failure.character_id, 150001);
+        assert_eq!(failure.error, "Cannot delete character");
     }
 }

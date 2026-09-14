@@ -4,11 +4,11 @@ use bevy::{color::Color, prelude::*, ui::ColorStop};
 use game_engine::{
     core::state::GameState,
     domain::character::events::{
-        CharacterInfoWithJobName, CharacterListReceivedEvent, DeleteCharacterRequestEvent,
-        RequestCharacterListEvent, SelectCharacterEvent,
+        CharacterDeletionFailedEvent, CharacterInfoWithJobName, CharacterListReceivedEvent,
+        DeleteCharacterRequestEvent, RequestCharacterListEvent, SelectCharacterEvent,
     },
 };
-use net_contract::state::UserSession;
+use net_contract::{dto::CharacterSlotInfo, state::UserSession};
 
 use crate::{
     screens::{
@@ -26,6 +26,7 @@ impl Plugin for CharacterSelectScreenPlugin {
         app.init_resource::<CharacterSelectionData>();
         app.init_resource::<CardsBuilt>();
         app.init_resource::<PendingDeletion>();
+        app.init_resource::<DeletionFeedback>();
         app.init_resource::<SelectedSlot>();
         app.add_systems(
             OnEnter(GameState::CharacterSelection),
@@ -35,6 +36,7 @@ impl Plugin for CharacterSelectScreenPlugin {
             Update,
             (
                 receive_character_list,
+                surface_deletion_failure,
                 normalize_selection,
                 cycle_selected_slot,
                 rebuild_screen,
@@ -53,7 +55,7 @@ impl Plugin for CharacterSelectScreenPlugin {
 #[derive(Resource, Default)]
 struct CharacterSelectionData {
     characters: Vec<Option<CharacterInfoWithJobName>>,
-    max_slots: u8,
+    slot_info: CharacterSlotInfo,
 }
 
 #[derive(Resource, Default)]
@@ -61,6 +63,27 @@ struct CardsBuilt(bool);
 
 #[derive(Resource, Default)]
 struct PendingDeletion(Option<u32>);
+
+#[derive(Resource, Default)]
+struct DeletionFeedback(Option<DeletionFailure>);
+
+struct DeletionFailure {
+    character_id: u32,
+    error: String,
+}
+
+impl DeletionFeedback {
+    fn for_character(&self, character_id: u32) -> Option<&str> {
+        self.0
+            .as_ref()
+            .filter(|failure| failure.character_id == character_id)
+            .map(|failure| failure.error.as_str())
+    }
+
+    fn clear(&mut self) {
+        self.0 = None;
+    }
+}
 
 #[derive(Resource, Default)]
 struct SelectedSlot(usize);
@@ -93,6 +116,14 @@ enum SlotKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SlotTier {
+    Normal,
+    Premium,
+    Billing,
+    Locked,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DeleteAction {
     Armed,
     Confirmed,
@@ -102,11 +133,13 @@ fn show_character_select_screen(
     mut commands: Commands,
     mut built: ResMut<CardsBuilt>,
     mut pending: ResMut<PendingDeletion>,
+    mut feedback: ResMut<DeletionFeedback>,
     mut selected: ResMut<SelectedSlot>,
     mut requests: MessageWriter<RequestCharacterListEvent>,
 ) {
     built.0 = false;
     pending.0 = None;
+    feedback.clear();
     selected.0 = 0;
 
     let root = commands
@@ -120,9 +153,14 @@ fn show_character_select_screen(
             DespawnOnExit(GameState::CharacterSelection),
         ))
         .id();
-    commands
-        .entity(root)
-        .observe(|_: On<Pointer<Click>>, mut pending: ResMut<PendingDeletion>| pending.0 = None);
+    commands.entity(root).observe(
+        |_: On<Pointer<Click>>,
+         mut pending: ResMut<PendingDeletion>,
+         mut feedback: ResMut<DeletionFeedback>| {
+            pending.0 = None;
+            feedback.clear();
+        },
+    );
     requests.write(RequestCharacterListEvent);
 }
 
@@ -131,20 +169,36 @@ fn receive_character_list(
     mut data: ResMut<CharacterSelectionData>,
     mut built: ResMut<CardsBuilt>,
     mut pending: ResMut<PendingDeletion>,
+    mut feedback: ResMut<DeletionFeedback>,
 ) {
     let Some(event) = events.read().last() else {
         return;
     };
     data.characters = event.characters.clone();
-    data.max_slots = event.max_slots;
+    data.slot_info.clone_from(&event.slot_info);
     built.0 = false;
     pending.0 = None;
+    feedback.clear();
+}
+
+fn surface_deletion_failure(
+    mut failures: MessageReader<CharacterDeletionFailedEvent>,
+    mut feedback: ResMut<DeletionFeedback>,
+) {
+    let Some(failure) = failures.read().last() else {
+        return;
+    };
+    feedback.0 = Some(DeletionFailure {
+        character_id: failure.character_id,
+        error: failure.error.clone(),
+    });
 }
 
 fn normalize_selection(
     data: Res<CharacterSelectionData>,
     mut selected: ResMut<SelectedSlot>,
     mut pending: ResMut<PendingDeletion>,
+    mut feedback: ResMut<DeletionFeedback>,
 ) {
     if !data.is_changed() {
         return;
@@ -154,11 +208,12 @@ fn normalize_selection(
         selected.0 = data
             .characters
             .iter()
-            .take(data.max_slots as usize)
+            .take(data.slot_info.valid_slots as usize)
             .position(Option::is_some)
             .unwrap_or(0);
     }
     pending.0 = None;
+    feedback.clear();
 }
 
 fn cycle_selected_slot(
@@ -166,6 +221,7 @@ fn cycle_selected_slot(
     data: Res<CharacterSelectionData>,
     mut selected: ResMut<SelectedSlot>,
     mut pending: ResMut<PendingDeletion>,
+    mut feedback: ResMut<DeletionFeedback>,
 ) {
     let direction = if keys.just_pressed(KeyCode::ArrowLeft) {
         -1
@@ -177,7 +233,7 @@ fn cycle_selected_slot(
     let occupied = data
         .characters
         .iter()
-        .take(data.max_slots as usize)
+        .take(data.slot_info.valid_slots as usize)
         .enumerate()
         .filter_map(|(slot, character)| character.as_ref().map(|_| slot))
         .collect::<Vec<_>>();
@@ -185,6 +241,7 @@ fn cycle_selected_slot(
     if next != selected.0 {
         selected.0 = next;
         pending.0 = None;
+        feedback.clear();
     }
 }
 
@@ -260,18 +317,24 @@ fn rebuild_screen(
     session: Option<Res<UserSession>>,
     selected: Res<SelectedSlot>,
     pending: Res<PendingDeletion>,
+    feedback: Res<DeletionFeedback>,
     mut built: ResMut<CardsBuilt>,
     root: Query<Entity, With<ScreenRoot>>,
     old_content: Query<Entity, With<SceneContent>>,
 ) {
-    if data.max_slots == 0 {
+    if data.slot_info.valid_slots == 0 {
         return;
     }
     let has_occupied = occupied_count(&data) > 0;
     if has_occupied && diorama.target.is_none() {
         return;
     }
-    if built.0 && !selected.is_changed() && !pending.is_changed() && !diorama.is_changed() {
+    if built.0
+        && !selected.is_changed()
+        && !pending.is_changed()
+        && !feedback.is_changed()
+        && !diorama.is_changed()
+    {
         return;
     }
     let Ok(root) = root.single() else {
@@ -320,6 +383,7 @@ fn rebuild_screen(
         featured,
         selected.0 as u8,
         pending.0,
+        featured.and_then(|info| feedback.for_character(info.base.char_id)),
         realm,
         hue,
     );
@@ -478,7 +542,7 @@ fn spawn_lineup(
     diorama: &CharacterDiorama,
     selected: usize,
 ) {
-    let slots = data.max_slots.max(1);
+    let slots = data.slot_info.valid_slots.max(1);
     let lineup = commands
         .spawn((
             Node {
@@ -496,9 +560,9 @@ fn spawn_lineup(
             ChildOf(parent),
         ))
         .id();
-    let first_vacant = (0..slots as usize).find(|&slot| featured(&data.characters, slot).is_none());
     for slot in 0..slots as usize {
-        match slot_kind(data, slot) {
+        let kind = slot_kind(data, slot);
+        match kind {
             SlotKind::Occupied => spawn_occupied_slot(
                 commands,
                 assets,
@@ -515,7 +579,9 @@ fn spawn_lineup(
                 assets,
                 lineup,
                 slot as u8,
-                first_vacant == Some(slot),
+                kind,
+                slot_tier(&data.slot_info, slot),
+                can_create_in_slot(&data.slot_info, slot),
             ),
         }
     }
@@ -550,10 +616,12 @@ fn spawn_occupied_slot(
     commands.entity(card).observe(
         move |mut click: On<Pointer<Click>>,
               mut selected_slot: ResMut<SelectedSlot>,
-              mut pending: ResMut<PendingDeletion>| {
+              mut pending: ResMut<PendingDeletion>,
+              mut feedback: ResMut<DeletionFeedback>| {
             click.propagate(false);
             selected_slot.0 = slot;
             pending.0 = None;
+            feedback.clear();
         },
     );
 
@@ -675,11 +743,18 @@ fn spawn_vacant_slot(
     assets: &AssetServer,
     parent: Entity,
     slot: u8,
-    is_new: bool,
+    kind: SlotKind,
+    tier: SlotTier,
+    can_create: bool,
 ) {
+    let is_new = kind == SlotKind::NewHero;
     let card = commands
         .spawn((
-            Pickable::default(),
+            if can_create {
+                Pickable::default()
+            } else {
+                Pickable::IGNORE
+            },
             Node {
                 min_width: px(0),
                 height: px(160),
@@ -692,17 +767,21 @@ fn spawn_vacant_slot(
             ChildOf(parent),
         ))
         .id();
-    commands.entity(card).observe(
-        move |mut click: On<Pointer<Click>>,
-              mut commands: Commands,
-              mut pending: ResMut<PendingDeletion>,
-              mut next: ResMut<NextState<GameState>>| {
-            click.propagate(false);
-            pending.0 = None;
-            commands.insert_resource(CreationSlot(slot));
-            next.set(GameState::CharacterCreation);
-        },
-    );
+    if can_create {
+        commands.entity(card).observe(
+            move |mut click: On<Pointer<Click>>,
+                  mut commands: Commands,
+                  mut pending: ResMut<PendingDeletion>,
+                  mut feedback: ResMut<DeletionFeedback>,
+                  mut next: ResMut<NextState<GameState>>| {
+                click.propagate(false);
+                pending.0 = None;
+                feedback.clear();
+                commands.insert_resource(CreationSlot(slot));
+                next.set(GameState::CharacterCreation);
+            },
+        );
+    }
     commands.spawn((
         ImageNode {
             image: assets.load(tokens::VACANT_PAD),
@@ -760,7 +839,7 @@ fn spawn_vacant_slot(
     commands.spawn((
         mono_text(
             assets,
-            if is_new { "NEW HERO" } else { "EMPTY" },
+            vacant_slot_label(kind, tier, can_create),
             10.5,
             if is_new {
                 theme::GOLD
@@ -781,6 +860,7 @@ fn spawn_codex(
     featured: Option<&CharacterInfoWithJobName>,
     slot: u8,
     armed: Option<u32>,
+    deletion_error: Option<&str>,
     realm: &str,
     hue: Color,
 ) {
@@ -845,7 +925,15 @@ fn spawn_codex(
             index as u8 + 1,
         );
     }
-    spawn_footer(commands, assets, rail_entity, info, slot, armed);
+    spawn_footer(
+        commands,
+        assets,
+        rail_entity,
+        info,
+        slot,
+        armed,
+        deletion_error,
+    );
 }
 
 fn spawn_empty_codex(commands: &mut Commands, assets: &AssetServer, parent: Entity) {
@@ -1096,19 +1184,50 @@ fn spawn_footer(
     info: &CharacterInfoWithJobName,
     slot: u8,
     armed: Option<u32>,
+    deletion_error: Option<&str>,
 ) {
     let footer = commands
         .spawn((
             Node {
                 width: percent(100),
                 margin: UiRect::top(auto()),
-                padding: UiRect::top(px(26)),
-                column_gap: px(10),
+                padding: UiRect::top(px(18)),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(10),
                 border: UiRect::top(px(1)),
                 ..default()
             },
             BorderColor::all(theme::GOLD_FAINT),
             ChildOf(parent),
+        ))
+        .id();
+    if let Some(error) = deletion_error {
+        commands.spawn((
+            mono_text(
+                assets,
+                &format!("DELETION FAILED · {error}"),
+                9.5,
+                theme::BAD,
+            ),
+            Node {
+                width: percent(100),
+                ..default()
+            },
+            TextLayout {
+                linebreak: LineBreak::WordBoundary,
+                ..default()
+            },
+            ChildOf(footer),
+        ));
+    }
+    let actions = commands
+        .spawn((
+            Node {
+                width: percent(100),
+                column_gap: px(10),
+                ..default()
+            },
+            ChildOf(footer),
         ))
         .id();
     let deletion_pending = info.base.delete_date != 0;
@@ -1151,7 +1270,7 @@ fn spawn_footer(
             } else {
                 theme::GOLD_FAINT
             }),
-            ChildOf(footer),
+            ChildOf(actions),
         ))
         .id();
     commands.spawn((
@@ -1196,9 +1315,14 @@ fn spawn_footer(
 
     let character_id = info.base.char_id;
     let is_armed = armed == Some(character_id);
+    let can_delete = can_request_deletion(info.base.delete_date);
     let delete = commands
         .spawn((
-            Pickable::default(),
+            if can_delete {
+                Pickable::default()
+            } else {
+                Pickable::IGNORE
+            },
             Node {
                 width: px(56),
                 height: px(56),
@@ -1210,11 +1334,17 @@ fn spawn_footer(
             },
             BackgroundColor(if is_armed {
                 theme::BAD.with_alpha(0.28)
-            } else {
+            } else if can_delete {
                 theme::BAD.with_alpha(0.10)
+            } else {
+                theme::GLASS
             }),
-            BorderColor::all(theme::BAD),
-            ChildOf(footer),
+            BorderColor::all(if can_delete {
+                theme::BAD
+            } else {
+                theme::STROKE
+            }),
+            ChildOf(actions),
         ))
         .id();
     if is_armed {
@@ -1228,16 +1358,20 @@ fn spawn_footer(
             ChildOf(delete),
         ));
     }
-    commands.entity(delete).observe(
-        move |mut click: On<Pointer<Click>>,
-              mut pending: ResMut<PendingDeletion>,
-              mut writer: MessageWriter<DeleteCharacterRequestEvent>| {
-            click.propagate(false);
-            if arm_delete(&mut pending.0, character_id) == DeleteAction::Confirmed {
-                writer.write(DeleteCharacterRequestEvent { character_id });
-            }
-        },
-    );
+    if can_delete {
+        commands.entity(delete).observe(
+            move |mut click: On<Pointer<Click>>,
+                  mut pending: ResMut<PendingDeletion>,
+                  mut feedback: ResMut<DeletionFeedback>,
+                  mut writer: MessageWriter<DeleteCharacterRequestEvent>| {
+                click.propagate(false);
+                feedback.clear();
+                if arm_delete(&mut pending.0, character_id) == DeleteAction::Confirmed {
+                    writer.write(DeleteCharacterRequestEvent { character_id });
+                }
+            },
+        );
+    }
 }
 
 fn title_text(assets: &AssetServer, text: &str, size: f32, color: Color) -> impl Bundle {
@@ -1274,7 +1408,7 @@ fn featured(
 fn occupied_count(data: &CharacterSelectionData) -> usize {
     data.characters
         .iter()
-        .take(data.max_slots as usize)
+        .take(data.slot_info.valid_slots as usize)
         .filter(|entry| entry.is_some())
         .count()
 }
@@ -1282,11 +1416,49 @@ fn occupied_count(data: &CharacterSelectionData) -> usize {
 fn slot_kind(data: &CharacterSelectionData, slot: usize) -> SlotKind {
     if featured(&data.characters, slot).is_some() {
         SlotKind::Occupied
-    } else if (0..slot).all(|prior| featured(&data.characters, prior).is_some()) {
+    } else if can_create_in_slot(&data.slot_info, slot)
+        && (0..slot).all(|prior| featured(&data.characters, prior).is_some())
+    {
         SlotKind::NewHero
     } else {
         SlotKind::Vacant
     }
+}
+
+fn slot_tier(info: &CharacterSlotInfo, slot: usize) -> SlotTier {
+    let normal_end = usize::from(info.normal_slots);
+    let premium_end = normal_end + usize::from(info.premium_slots);
+    let billing_end = premium_end + usize::from(info.billing_slots);
+
+    if slot < normal_end {
+        SlotTier::Normal
+    } else if slot < premium_end {
+        SlotTier::Premium
+    } else if slot < billing_end {
+        SlotTier::Billing
+    } else {
+        SlotTier::Locked
+    }
+}
+
+fn can_create_in_slot(info: &CharacterSlotInfo, slot: usize) -> bool {
+    slot < usize::from(info.producible_slots) && slot < usize::from(info.valid_slots)
+}
+
+fn vacant_slot_label(kind: SlotKind, tier: SlotTier, can_create: bool) -> &'static str {
+    if kind == SlotKind::NewHero {
+        return "NEW HERO";
+    }
+    match tier {
+        SlotTier::Premium => "PREMIUM",
+        SlotTier::Billing => "BILLING",
+        SlotTier::Normal if can_create => "EMPTY",
+        SlotTier::Normal | SlotTier::Locked => "LOCKED",
+    }
+}
+
+fn can_request_deletion(delete_date: u32) -> bool {
+    delete_date == 0
 }
 
 fn arm_delete(pending: &mut Option<u32>, character_id: u32) -> DeleteAction {
@@ -1329,6 +1501,40 @@ mod tests {
     use net_contract::dto::CharacterInfo;
 
     #[test]
+    fn slot_tiers_and_creation_limit_follow_server_metadata() {
+        let info = net_contract::dto::CharacterSlotInfo {
+            normal_slots: 2,
+            premium_slots: 1,
+            billing_slots: 1,
+            producible_slots: 3,
+            valid_slots: 5,
+        };
+
+        assert_eq!(slot_tier(&info, 0), SlotTier::Normal);
+        assert_eq!(slot_tier(&info, 2), SlotTier::Premium);
+        assert_eq!(slot_tier(&info, 3), SlotTier::Billing);
+        assert_eq!(slot_tier(&info, 4), SlotTier::Locked);
+        assert!(can_create_in_slot(&info, 2));
+        assert!(!can_create_in_slot(&info, 3));
+    }
+
+    #[test]
+    fn unavailable_paid_tiers_keep_their_labels() {
+        assert_eq!(
+            vacant_slot_label(SlotKind::Vacant, SlotTier::Premium, false),
+            "PREMIUM"
+        );
+        assert_eq!(
+            vacant_slot_label(SlotKind::Vacant, SlotTier::Billing, false),
+            "BILLING"
+        );
+        assert_eq!(
+            vacant_slot_label(SlotKind::Vacant, SlotTier::Locked, false),
+            "LOCKED"
+        );
+    }
+
+    #[test]
     fn slot_layout_marks_first_vacancy_as_new_hero() {
         let data = CharacterSelectionData {
             characters: vec![
@@ -1337,12 +1543,74 @@ mod tests {
                 Some(with_job("Mage", 2)),
                 None,
             ],
-            max_slots: 4,
+            slot_info: CharacterSlotInfo {
+                normal_slots: 4,
+                producible_slots: 4,
+                valid_slots: 4,
+                ..default()
+            },
         };
         assert_eq!(slot_kind(&data, 0), SlotKind::Occupied);
         assert_eq!(slot_kind(&data, 1), SlotKind::NewHero);
         assert_eq!(slot_kind(&data, 2), SlotKind::Occupied);
         assert_eq!(slot_kind(&data, 3), SlotKind::Vacant);
+    }
+
+    #[test]
+    fn deletion_failure_is_kept_for_the_matching_character() {
+        use game_engine::domain::character::events::CharacterDeletionFailedEvent;
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<DeletionFeedback>();
+        app.add_message::<CharacterDeletionFailedEvent>();
+        app.add_systems(Update, surface_deletion_failure);
+        app.world_mut().write_message(CharacterDeletionFailedEvent {
+            character_id: 7,
+            error: "Cannot delete character".into(),
+        });
+
+        app.update();
+
+        let feedback = app.world().resource::<DeletionFeedback>();
+        assert_eq!(feedback.for_character(7), Some("Cannot delete character"));
+        assert_eq!(feedback.for_character(8), None);
+    }
+
+    #[test]
+    fn refreshed_character_list_clears_deletion_failure() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<CharacterSelectionData>();
+        app.init_resource::<CardsBuilt>();
+        app.init_resource::<PendingDeletion>();
+        app.init_resource::<DeletionFeedback>();
+        app.add_message::<CharacterListReceivedEvent>();
+        app.add_systems(Update, receive_character_list);
+        app.world_mut().resource_mut::<DeletionFeedback>().0 = Some(DeletionFailure {
+            character_id: 7,
+            error: "Cannot delete character".into(),
+        });
+        app.world_mut().write_message(CharacterListReceivedEvent {
+            characters: Vec::new(),
+            slot_info: CharacterSlotInfo {
+                normal_slots: 3,
+                producible_slots: 3,
+                valid_slots: 3,
+                ..default()
+            },
+            display_pages: 1,
+        });
+
+        app.update();
+
+        assert!(app.world().resource::<DeletionFeedback>().0.is_none());
+    }
+
+    #[test]
+    fn pending_deletion_cannot_be_requested_again() {
+        assert!(can_request_deletion(0));
+        assert!(!can_request_deletion(1_800_000_000));
     }
 
     #[test]

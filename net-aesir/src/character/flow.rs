@@ -8,8 +8,7 @@ use bevy_quinnet::client::connection::{
 };
 
 use super::mapping::{
-    char_create_failed, char_created, char_list_to_connected, char_list_to_slot_info, delete_ack,
-    zone_server_info_to_event,
+    char_create_failed, char_created, char_list_to_connected, delete_ack, zone_server_info_to_event,
 };
 use super::{CharPhase, QuicCharState};
 use crate::channels::CONTROL;
@@ -18,7 +17,7 @@ use crate::envelope::Body;
 use crate::proto::aesir::net::{Hello, SessionAuth};
 use net_contract::events::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
-    CharacterServerConnected, CharacterSlotInfoReceived, ZoneDisconnected, ZoneServerInfoReceived,
+    CharacterServerConnected, ZoneDisconnected, ZoneServerInfoReceived,
 };
 
 /// Pure outcome of receiving a `HelloAck`: whether to send `SessionAuth` and the next phase.
@@ -75,7 +74,6 @@ pub fn char_send_hello(
 #[derive(SystemParam)]
 pub struct CharEventWriters<'w> {
     connected: MessageWriter<'w, CharacterServerConnected>,
-    slot_info: MessageWriter<'w, CharacterSlotInfoReceived>,
     zone_info: MessageWriter<'w, ZoneServerInfoReceived>,
     zone_disconnected: MessageWriter<'w, ZoneDisconnected>,
     created: MessageWriter<'w, CharacterCreated>,
@@ -133,14 +131,9 @@ pub fn char_drain_control(
                 state.phase = next;
             }
             Body::CharList(list) => {
-                // Emit the roster on every list (initial + create/delete refreshes) so
-                // the domain rebuilds its char-select view; slot info only changes on the
-                // initial list, so keep that initial-only.
-                let initial = state.phase == CharPhase::AuthSent;
+                // Emit the complete roster on every list so slot entitlements also
+                // refresh after account changes.
                 out.connected.write(char_list_to_connected(&list));
-                if initial {
-                    out.slot_info.write(char_list_to_slot_info(&list));
-                }
                 state.phase = char_list_outcome(state.phase);
             }
             Body::CharAuthFailed(_) => {

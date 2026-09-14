@@ -8,20 +8,10 @@ use bevy_auto_plugin::prelude::auto_add_message;
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct CharacterServerConnected {
-    pub max_slots: u8,
-    pub available_slots: u8,
-    pub premium_slots: u8,
+    pub slot_info: CharacterSlotInfo,
     /// Number of char-select pages the server reports (`CharList.page_count`).
     pub display_pages: u32,
     pub characters: Vec<CharacterInfo>,
-}
-
-/// Event emitted when character slot information is received
-// NOTE: no client consumer yet; kept for future implementation.
-#[derive(Message, Debug, Clone)]
-#[auto_add_message(plugin = crate::NetContractPlugin)]
-pub struct CharacterSlotInfoReceived {
-    pub slot_info: CharacterSlotInfo,
 }
 
 /// Event emitted when zone server connection info is received

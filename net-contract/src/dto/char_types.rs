@@ -73,9 +73,8 @@ impl ZoneServerInfo {
     }
 }
 
-/// Character slot information from HC_CHARACTER_LIST packet
-// NOTE: no client consumer yet; kept for future implementation.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// Character slot information from the character-list response.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CharacterSlotInfo {
     pub normal_slots: u8,
     pub premium_slots: u8,

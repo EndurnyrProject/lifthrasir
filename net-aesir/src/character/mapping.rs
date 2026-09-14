@@ -5,7 +5,7 @@ use crate::proto::aesir::net;
 use net_contract::dto::{self as char_types, CharCreationError, CharDeletionError};
 use net_contract::events::{
     CharacterCreated, CharacterCreationFailed, CharacterDeleted, CharacterDeletionFailed,
-    CharacterServerConnected, CharacterSlotInfoReceived, ZoneServerInfoReceived,
+    CharacterServerConnected, ZoneServerInfoReceived,
 };
 
 pub fn character_to_char_info(c: net::Character) -> char_types::CharacterInfo {
@@ -58,22 +58,6 @@ pub fn character_to_char_info(c: net::Character) -> char_types::CharacterInfo {
 
 pub fn char_list_to_connected(l: &net::CharList) -> CharacterServerConnected {
     CharacterServerConnected {
-        max_slots: l.valid_slots as u8,
-        available_slots: l.normal_slots as u8,
-        premium_slots: l.premium_slots as u8,
-        display_pages: l.page_count,
-        characters: l
-            .characters
-            .iter()
-            .cloned()
-            .map(character_to_char_info)
-            .collect(),
-    }
-}
-
-// NOTE: no client consumer yet; kept for future implementation.
-pub fn char_list_to_slot_info(l: &net::CharList) -> CharacterSlotInfoReceived {
-    CharacterSlotInfoReceived {
         slot_info: char_types::CharacterSlotInfo {
             normal_slots: l.normal_slots as u8,
             premium_slots: l.premium_slots as u8,
@@ -81,6 +65,13 @@ pub fn char_list_to_slot_info(l: &net::CharList) -> CharacterSlotInfoReceived {
             producible_slots: l.producible_slots as u8,
             valid_slots: l.valid_slots as u8,
         },
+        display_pages: l.page_count,
+        characters: l
+            .characters
+            .iter()
+            .cloned()
+            .map(character_to_char_info)
+            .collect(),
     }
 }
 
@@ -178,13 +169,13 @@ mod tests {
     }
 
     #[test]
-    fn char_list_maps_to_connected_preserving_appearance() {
+    fn char_list_maps_all_slot_tiers_and_preserves_appearance() {
         let list = net::CharList {
             account_id: 2000001,
             normal_slots: 9,
             premium_slots: 3,
-            billing_slots: 0,
-            producible_slots: 9,
+            billing_slots: 1,
+            producible_slots: 10,
             valid_slots: 12,
             characters: vec![
                 sample_character(150001, "Alice"),
@@ -196,9 +187,11 @@ mod tests {
 
         let connected = char_list_to_connected(&list);
 
-        assert_eq!(connected.max_slots, 12);
-        assert_eq!(connected.available_slots, 9);
-        assert_eq!(connected.premium_slots, 3);
+        assert_eq!(connected.slot_info.normal_slots, 9);
+        assert_eq!(connected.slot_info.premium_slots, 3);
+        assert_eq!(connected.slot_info.billing_slots, 1);
+        assert_eq!(connected.slot_info.producible_slots, 10);
+        assert_eq!(connected.slot_info.valid_slots, 12);
         assert_eq!(connected.display_pages, 1);
         assert_eq!(connected.characters.len(), 2);
 
@@ -230,28 +223,6 @@ mod tests {
 
         assert_eq!(connected.characters[1].name, "Bob");
         assert_eq!(connected.characters[1].char_id, 150002);
-    }
-
-    #[test]
-    fn char_list_maps_to_slot_info() {
-        let list = net::CharList {
-            account_id: 2000001,
-            normal_slots: 9,
-            premium_slots: 3,
-            billing_slots: 1,
-            producible_slots: 9,
-            valid_slots: 12,
-            characters: vec![],
-            page_count: 1,
-            pincode_enabled: false,
-        };
-
-        let info = char_list_to_slot_info(&list).slot_info;
-        assert_eq!(info.normal_slots, 9);
-        assert_eq!(info.premium_slots, 3);
-        assert_eq!(info.billing_slots, 1);
-        assert_eq!(info.producible_slots, 9);
-        assert_eq!(info.valid_slots, 12);
     }
 
     #[test]

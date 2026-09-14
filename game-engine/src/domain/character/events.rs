@@ -20,9 +20,8 @@ pub struct RequestCharacterListEvent;
 #[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct CharacterListReceivedEvent {
     pub characters: Vec<Option<CharacterInfoWithJobName>>,
-    pub max_slots: u8,
-    pub available_slots: u8,
-    /// Character-select display pages (3 slots per page), from HC_CHARLIST_NOTIFY.
+    pub slot_info: net_contract::dto::CharacterSlotInfo,
+    /// Character-select display pages (3 slots per page), from the character-list response.
     pub display_pages: u8,
 }
 
@@ -52,6 +51,13 @@ pub struct CharacterCreationFailedEvent {
 #[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
 pub struct DeleteCharacterRequestEvent {
     pub character_id: u32,
+}
+
+#[derive(Message, Debug)]
+#[auto_add_message(plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin)]
+pub struct CharacterDeletionFailedEvent {
+    pub character_id: u32,
+    pub error: String,
 }
 
 #[derive(Message, Debug)]
