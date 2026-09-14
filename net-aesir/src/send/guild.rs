@@ -54,8 +54,8 @@ fn guild_position_edit_body(command: &GuildPositionEditRequested) -> Body {
         name: command.name.clone(),
         can_invite: command.can_invite,
         can_expel: command.can_expel,
-        // The contract has no tax intent yet; None = leave the position's tax
-        // unchanged (per the proto's absent-field semantics).
+        // TODO: Wire storage permission and tax intent through net-contract.
+        can_storage: None,
         tax: None,
     })
 }
@@ -512,6 +512,7 @@ mod tests {
                 name,
                 can_invite,
                 can_expel,
+                can_storage: _,
                 tax: _,
             }) => {
                 assert_eq!(index, 3);

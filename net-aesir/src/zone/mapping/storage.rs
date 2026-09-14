@@ -5,6 +5,7 @@ use net_contract::events::{
     StorageItemAdded, StorageItemRemoved, StorageOpened, StorageRejection, StorageResult,
 };
 
+// TODO: Wire StorageKind and guild-storage rejections through net-contract.
 pub fn storage_opened(opened: net::StorageOpened) -> StorageOpened {
     StorageOpened {
         capacity: opened.capacity,
@@ -69,6 +70,14 @@ pub fn storage_result(result: net::StorageResult) -> StorageResult {
         Ok(StorageInvalidAmount) => Err(StorageRejection::InvalidAmount),
         Ok(StorageNotOpen) => Err(StorageRejection::NotOpen),
         Ok(StorageBasicSkillRequired) => Err(StorageRejection::BasicSkillRequired),
+        Ok(StorageNoGuild)
+        | Ok(StorageGuildNoSkill)
+        | Ok(StorageGuildNoPermission)
+        | Ok(StorageGuildInUse)
+        | Ok(StorageOtherStorageOpen)
+        | Ok(StorageRental)
+        | Ok(StorageNoGuildStorage)
+        | Ok(StorageStale) => Err(StorageRejection::Unknown(result.result)),
         Err(_) => {
             warn!("unknown Storage result code {}", result.result);
             Err(StorageRejection::Unknown(result.result))
@@ -104,6 +113,7 @@ mod tests {
                 creator_id: 0,
                 creator_kind: 0,
             }],
+            kind: net::StorageKind::Personal as i32,
         });
 
         assert_eq!(opened.capacity, 600);
@@ -142,6 +152,7 @@ mod tests {
             signer_name: String::new(),
             creator_id: 0,
             creator_kind: 0,
+            kind: net::StorageKind::Personal as i32,
         });
 
         let item = added.item;
@@ -165,6 +176,7 @@ mod tests {
             index: 70_002,
             amount: 80_002,
             reason: 3,
+            kind: net::StorageKind::Personal as i32,
         });
 
         assert_eq!(removed.index, 70_002);

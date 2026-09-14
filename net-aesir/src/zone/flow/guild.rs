@@ -102,6 +102,7 @@ mod tests {
                 next_exp: 0,
                 skill_points: 0,
                 skills: vec![],
+                relations: vec![],
             }),
             Body::GuildMemberUpdate(crate::proto::aesir::net::GuildMemberUpdate {
                 guild_id: 7,
@@ -314,6 +315,7 @@ mod tests {
                 next_exp: 0,
                 skill_points: 0,
                 skills: vec![],
+                relations: vec![],
             }),
             Body::GuildMemberUpdate(crate::proto::aesir::net::GuildMemberUpdate {
                 guild_id: 0,

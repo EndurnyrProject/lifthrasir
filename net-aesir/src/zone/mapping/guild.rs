@@ -19,11 +19,19 @@ fn guild_error(value: i32) -> GuildErrorKind {
         Ok(net::GuildError::GuildErrInvalidEmblem) => GuildErrorKind::InvalidEmblem,
         Ok(net::GuildError::GuildErrCannotTargetMaster) => GuildErrorKind::CannotTargetMaster,
         Ok(net::GuildError::GuildErrInvalidPosition) => GuildErrorKind::InvalidPosition,
-        // Guild-skill errors have no neutral GuildErrorKind representation yet;
-        // surface them as Unknown until the contract grows dedicated variants.
+        // TODO: Wire guild skill and relation errors through net-contract.
         Ok(net::GuildError::GuildErrNoSkillPoints)
         | Ok(net::GuildError::GuildErrSkillRequirement)
-        | Ok(net::GuildError::GuildErrSkillMaxed) => GuildErrorKind::Unknown(value),
+        | Ok(net::GuildError::GuildErrSkillMaxed)
+        | Ok(net::GuildError::GuildErrAllyLimit)
+        | Ok(net::GuildError::GuildErrAntagonistLimit)
+        | Ok(net::GuildError::GuildErrAlreadyAllied)
+        | Ok(net::GuildError::GuildErrAlreadyAntagonist)
+        | Ok(net::GuildError::GuildErrNotRelated)
+        | Ok(net::GuildError::GuildErrSameGuild)
+        | Ok(net::GuildError::GuildErrSiegeActive)
+        | Ok(net::GuildError::GuildErrRequestPending)
+        | Ok(net::GuildError::GuildErrAllianceDeclined) => GuildErrorKind::Unknown(value),
         Err(_) => GuildErrorKind::Unknown(value),
     }
 }
@@ -58,6 +66,7 @@ fn guild_member(member: net::GuildMember) -> GuildMemberInfo {
 }
 
 fn guild_info(info: net::GuildInfo) -> GuildInfo {
+    // TODO: Wire guild relations through net-contract::GuildInfo.
     GuildInfo {
         guild_id: info.guild_id,
         name: info.name,
@@ -221,6 +230,7 @@ mod tests {
             next_exp: 0,
             skill_points: 0,
             skills: vec![],
+            relations: vec![],
         }))
         .expect("guild info should map");
 
@@ -382,6 +392,7 @@ mod tests {
                 next_exp: 0,
                 skill_points: 0,
                 skills: vec![],
+                relations: vec![],
             }),
             Body::GuildMemberUpdate(net::GuildMemberUpdate {
                 guild_id: 0,

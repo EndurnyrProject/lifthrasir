@@ -6,14 +6,18 @@ use net_contract::commands::{CloseStorage, DepositStorageItem, WithdrawStorageIt
 use crate::channels::GAMEPLAY;
 use crate::envelope::Body;
 use crate::proto::aesir::net::{
-    StorageCloseRequest, StorageDepositRequest, StorageWithdrawRequest,
+    StorageCloseRequest, StorageDepositRequest, StorageKind, StorageWithdrawRequest,
 };
 use crate::zone::{QuicZoneState, ZonePhase};
+
+// TODO: Wire StorageKind through net-contract commands when guild storage is implemented.
+const DEFAULT_STORAGE_KIND: i32 = StorageKind::Personal as i32;
 
 fn deposit_body(command: &DepositStorageItem) -> Body {
     Body::StorageDepositRequest(StorageDepositRequest {
         inventory_index: command.inventory_index,
         amount: command.amount,
+        kind: DEFAULT_STORAGE_KIND,
     })
 }
 
@@ -21,11 +25,14 @@ fn withdraw_body(command: &WithdrawStorageItem) -> Body {
     Body::StorageWithdrawRequest(StorageWithdrawRequest {
         storage_index: command.storage_index,
         amount: command.amount,
+        kind: DEFAULT_STORAGE_KIND,
     })
 }
 
 fn close_body(_command: &CloseStorage) -> Body {
-    Body::StorageCloseRequest(StorageCloseRequest {})
+    Body::StorageCloseRequest(StorageCloseRequest {
+        kind: DEFAULT_STORAGE_KIND,
+    })
 }
 
 #[auto_add_system(
@@ -142,6 +149,7 @@ mod tests {
             Body::StorageDepositRequest(StorageDepositRequest {
                 inventory_index,
                 amount,
+                kind: _,
             }) => {
                 assert_eq!(inventory_index, 70_000);
                 assert_eq!(amount, 80_000);
@@ -161,6 +169,7 @@ mod tests {
             Body::StorageWithdrawRequest(StorageWithdrawRequest {
                 storage_index,
                 amount,
+                kind: _,
             }) => {
                 assert_eq!(storage_index, 70_001);
                 assert_eq!(amount, 80_001);
@@ -175,7 +184,7 @@ mod tests {
 
         assert!(matches!(
             body,
-            Body::StorageCloseRequest(StorageCloseRequest {})
+            Body::StorageCloseRequest(StorageCloseRequest { kind: _ })
         ));
     }
 

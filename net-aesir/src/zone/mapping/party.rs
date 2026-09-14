@@ -74,6 +74,8 @@ fn party_error(v: i32) -> PartyErrorKind {
         Ok(net::PartyError::TargetOffline) => PartyErrorKind::TargetOffline,
         Ok(net::PartyError::NotMember) => PartyErrorKind::NotMember,
         Ok(net::PartyError::NotSameMap) => PartyErrorKind::NotSameMap,
+        // TODO: Wire basic-skill rejection through net-contract::PartyErrorKind.
+        Ok(net::PartyError::BasicSkillRequired) => PartyErrorKind::None,
         Err(_) => PartyErrorKind::None,
     }
 }

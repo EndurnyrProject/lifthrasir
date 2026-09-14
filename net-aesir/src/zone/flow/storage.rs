@@ -75,6 +75,7 @@ mod tests {
                     weight: 10,
                     ..Default::default()
                 }],
+                kind: net::StorageKind::Personal as i32,
             }),
         )]);
 
@@ -114,6 +115,7 @@ mod tests {
                 index: 70_002,
                 amount: 80_002,
                 reason: 4,
+                kind: net::StorageKind::Personal as i32,
             }),
         )]);
 

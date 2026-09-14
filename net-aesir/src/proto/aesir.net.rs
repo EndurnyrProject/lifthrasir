@@ -23,7 +23,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -664,6 +664,37 @@ pub mod envelope {
         /// s2c zone world
         #[prost(message, tag = "202")]
         NavigationEnded(super::NavigationEnded),
+        /// 203-205: card compounding target discovery and confirmation
+        ///
+        /// s2c zone gameplay
+        #[prost(message, tag = "203")]
+        CardTargetList(super::CardTargetList),
+        /// c2s zone
+        #[prost(message, tag = "204")]
+        CardComposeRequest(super::CardComposeRequest),
+        /// s2c zone gameplay
+        #[prost(message, tag = "205")]
+        CardComposeResult(super::CardComposeResult),
+        /// 206-211: guild alliance and antagonist relations
+        ///
+        /// c2s zone
+        #[prost(message, tag = "206")]
+        GuildAllianceRequest(super::GuildAllianceRequest),
+        /// c2s zone
+        #[prost(message, tag = "207")]
+        GuildAllianceResponse(super::GuildAllianceResponse),
+        /// c2s zone
+        #[prost(message, tag = "208")]
+        GuildAllianceBreakRequest(super::GuildAllianceBreakRequest),
+        /// c2s zone
+        #[prost(message, tag = "209")]
+        GuildAntagonistRequest(super::GuildAntagonistRequest),
+        /// c2s zone
+        #[prost(message, tag = "210")]
+        GuildAntagonistRemoveRequest(super::GuildAntagonistRemoveRequest),
+        /// s2c zone gameplay
+        #[prost(message, tag = "211")]
+        GuildAllianceRequestNotify(super::GuildAllianceRequestNotify),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -686,6 +717,9 @@ pub struct HelloAck {
     pub accepted: bool,
     #[prost(enumeration = "FeatureCapability", repeated, tag = "3")]
     pub capabilities: ::prost::alloc::vec::Vec<i32>,
+    /// Active ruleset; omitted values default to renewal for compatibility.
+    #[prost(enumeration = "GameMode", tag = "4")]
+    pub mode: i32,
 }
 /// Server -> client prompt for one skill text value. request_id correlates its reply.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2276,6 +2310,34 @@ pub struct ItemUseResult {
     #[prost(uint32, tag = "3")]
     pub reason: u32,
 }
+/// Server -> client, compatible equipment client indices for a card source.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CardTargetList {
+    #[prost(uint32, tag = "1")]
+    pub card_index: u32,
+    #[prost(uint32, repeated, tag = "2")]
+    pub equipment_indices: ::prost::alloc::vec::Vec<u32>,
+}
+/// Client -> server, confirm compounding a card into an equipment client index.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CardComposeRequest {
+    #[prost(uint32, tag = "1")]
+    pub card_index: u32,
+    #[prost(uint32, tag = "2")]
+    pub equipment_index: u32,
+}
+/// Server -> client, authoritative outcome and target cards after a card compounding request.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CardComposeResult {
+    #[prost(uint32, tag = "1")]
+    pub card_index: u32,
+    #[prost(uint32, tag = "2")]
+    pub equipment_index: u32,
+    #[prost(enumeration = "CardComposeResultCode", tag = "3")]
+    pub code: i32,
+    #[prost(uint32, repeated, tag = "4")]
+    pub cards: ::prost::alloc::vec::Vec<u32>,
+}
 /// Client -> server, the player clicked an NPC unit (replaces RO CZ_CONTACTNPC 0x0090).
 /// npc_id is the NPC's unit/entity id on the map.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2604,6 +2666,9 @@ pub struct GuildPositionEditRequest {
     /// (old clients cannot reset a tax they do not know about).
     #[prost(uint32, optional, tag = "5")]
     pub tax: ::core::option::Option<u32>,
+    /// Absent = leave the position's storage permission unchanged.
+    #[prost(bool, optional, tag = "6")]
+    pub can_storage: ::core::option::Option<bool>,
 }
 /// Client -> server, master-only request to assign a member to a position slot.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2657,7 +2722,8 @@ pub struct GuildInviteNotify {
     #[prost(string, tag = "3")]
     pub inviter_name: ::prost::alloc::string::String,
 }
-/// One position slot within a GuildInfo. `can_storage` and `tax` are inert in phase 1.
+/// One position slot within a GuildInfo. `can_storage` gates guild storage access;
+/// `tax` is still inert.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GuildPosition {
     #[prost(uint32, tag = "1")]
@@ -2738,6 +2804,9 @@ pub struct GuildInfo {
     /// Learned guild skills with their current and maximum levels.
     #[prost(message, repeated, tag = "13")]
     pub skills: ::prost::alloc::vec::Vec<GuildSkillEntry>,
+    /// This guild's ally and antagonist relations, sorted by guild id.
+    #[prost(message, repeated, tag = "14")]
+    pub relations: ::prost::alloc::vec::Vec<GuildRelation>,
 }
 /// One learned (or learnable) guild skill in a GuildInfo snapshot.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2748,6 +2817,16 @@ pub struct GuildSkillEntry {
     pub level: u32,
     #[prost(uint32, tag = "3")]
     pub max_level: u32,
+}
+/// One ally or antagonist entry within a GuildInfo snapshot.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildRelation {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(enumeration = "GuildRelationKind", tag = "3")]
+    pub kind: i32,
 }
 /// Client -> server, guild master spends one guild skill point on skill_id.
 /// Rejections come back as GuildActionResult.
@@ -2803,6 +2882,57 @@ pub struct GuildDisbanded {
     #[prost(string, tag = "2")]
     pub reason: ::prost::alloc::string::String,
 }
+/// Client -> server, guild master requests an alliance with a character's guild,
+/// identified by id or by name (target_char_id wins when both are set; name is
+/// resolved via a UnitRegistry reverse lookup).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildAllianceRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_char_id: u32,
+    #[prost(string, tag = "2")]
+    pub target_name: ::prost::alloc::string::String,
+}
+/// Client -> server, the target guild master's accept/decline response to a
+/// GuildAllianceRequestNotify.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildAllianceResponse {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(bool, tag = "2")]
+    pub accept: bool,
+}
+/// Client -> server, guild master breaks an existing alliance with guild_id.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildAllianceBreakRequest {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+}
+/// Client -> server, guild master declares antagonist status against a
+/// character's guild, identified by id or by name (target_char_id wins when
+/// both are set; name is resolved via a UnitRegistry reverse lookup).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildAntagonistRequest {
+    #[prost(uint32, tag = "1")]
+    pub target_char_id: u32,
+    #[prost(string, tag = "2")]
+    pub target_name: ::prost::alloc::string::String,
+}
+/// Client -> server, guild master removes an existing antagonist relation with guild_id.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildAntagonistRemoveRequest {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+}
+/// Server -> client, alliance request notification shown to the target guild's master.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildAllianceRequestNotify {
+    #[prost(uint32, tag = "1")]
+    pub guild_id: u32,
+    #[prost(string, tag = "2")]
+    pub guild_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub requester_name: ::prost::alloc::string::String,
+}
 /// Server -> client, the full storage dump (sent on open). Mirrors CartInfo.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StorageOpened {
@@ -2810,6 +2940,8 @@ pub struct StorageOpened {
     pub capacity: u32,
     #[prost(message, repeated, tag = "2")]
     pub items: ::prost::alloc::vec::Vec<InventoryItem>,
+    #[prost(enumeration = "StorageKind", tag = "3")]
+    pub kind: i32,
 }
 /// Client -> server, move an inventory item into storage.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2818,6 +2950,8 @@ pub struct StorageDepositRequest {
     pub inventory_index: u32,
     #[prost(uint32, tag = "2")]
     pub amount: u32,
+    #[prost(enumeration = "StorageKind", tag = "3")]
+    pub kind: i32,
 }
 /// Client -> server, move a storage item back into the inventory.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2826,10 +2960,15 @@ pub struct StorageWithdrawRequest {
     pub storage_index: u32,
     #[prost(uint32, tag = "2")]
     pub amount: u32,
+    #[prost(enumeration = "StorageKind", tag = "3")]
+    pub kind: i32,
 }
 /// Client -> server, close the currently open storage window.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct StorageCloseRequest {}
+pub struct StorageCloseRequest {
+    #[prost(enumeration = "StorageKind", tag = "1")]
+    pub kind: i32,
+}
 /// Server -> client, an item was added to storage. Mirrors CartItemAdded.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StorageItemAdded {
@@ -2866,6 +3005,8 @@ pub struct StorageItemAdded {
     pub creator_id: u32,
     #[prost(enumeration = "CreatorKind", tag = "16")]
     pub creator_kind: i32,
+    #[prost(enumeration = "StorageKind", tag = "17")]
+    pub kind: i32,
 }
 /// Server -> client, an item was removed from storage. Mirrors CartItemRemoved.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2876,6 +3017,8 @@ pub struct StorageItemRemoved {
     pub amount: u32,
     #[prost(uint32, tag = "3")]
     pub reason: u32,
+    #[prost(enumeration = "StorageKind", tag = "4")]
+    pub kind: i32,
 }
 /// Server -> client, result of a storage deposit/withdraw/open request.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3704,6 +3847,32 @@ impl BoundType {
         }
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum GameMode {
+    Renewal = 0,
+    PreRenewal = 1,
+}
+impl GameMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Renewal => "GAME_MODE_RENEWAL",
+            Self::PreRenewal => "GAME_MODE_PRE_RENEWAL",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "GAME_MODE_RENEWAL" => Some(Self::Renewal),
+            "GAME_MODE_PRE_RENEWAL" => Some(Self::PreRenewal),
+            _ => None,
+        }
+    }
+}
 /// Server -> client, an entity entered view (collapses RO ZC_NOTIFY_NEWENTRY 0x09FE,
 /// ZC_NOTIFY_STANDENTRY 0x09FF and ZC_NOTIFY_MOVEENTRY 0x09FD). The `moving`, `dst_*` and
 /// Display scale of a spawned unit (used by NPCs: setnpcdisplay's size argument).
@@ -3882,6 +4051,7 @@ pub enum VendingOpenResultCode {
     VendItemNotInCart = 6,
     VendInsufficientStock = 7,
     VendInvalidState = 8,
+    VendInsufficientSp = 9,
 }
 impl VendingOpenResultCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3899,6 +4069,7 @@ impl VendingOpenResultCode {
             Self::VendItemNotInCart => "VEND_ITEM_NOT_IN_CART",
             Self::VendInsufficientStock => "VEND_INSUFFICIENT_STOCK",
             Self::VendInvalidState => "VEND_INVALID_STATE",
+            Self::VendInsufficientSp => "VEND_INSUFFICIENT_SP",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3913,6 +4084,7 @@ impl VendingOpenResultCode {
             "VEND_ITEM_NOT_IN_CART" => Some(Self::VendItemNotInCart),
             "VEND_INSUFFICIENT_STOCK" => Some(Self::VendInsufficientStock),
             "VEND_INVALID_STATE" => Some(Self::VendInvalidState),
+            "VEND_INSUFFICIENT_SP" => Some(Self::VendInsufficientSp),
             _ => None,
         }
     }
@@ -3961,6 +4133,71 @@ impl TradeCancelReason {
             "TRADE_CANCEL_REASON_DISCONNECTED" => Some(Self::Disconnected),
             "TRADE_CANCEL_REASON_CAPACITY" => Some(Self::Capacity),
             "TRADE_CANCEL_REASON_INVALID" => Some(Self::Invalid),
+            _ => None,
+        }
+    }
+}
+/// Outcome of a card compounding request. Values are prefixed because proto3
+/// enum constants share the package namespace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CardComposeResultCode {
+    CardComposeSuccess = 0,
+    CardComposeCardNotFound = 1,
+    CardComposeNotACard = 2,
+    CardComposeSourceEquipped = 3,
+    CardComposeTargetNotFound = 4,
+    CardComposeSameInventorySlot = 5,
+    CardComposeNotEquipment = 6,
+    CardComposeTargetUnidentified = 7,
+    CardComposeTargetEquipped = 8,
+    CardComposeLocationMismatch = 9,
+    CardComposeNoFreeSocket = 10,
+    CardComposeItemUseDisabled = 11,
+    CardComposePersistenceFailed = 12,
+}
+impl CardComposeResultCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::CardComposeSuccess => "CARD_COMPOSE_SUCCESS",
+            Self::CardComposeCardNotFound => "CARD_COMPOSE_CARD_NOT_FOUND",
+            Self::CardComposeNotACard => "CARD_COMPOSE_NOT_A_CARD",
+            Self::CardComposeSourceEquipped => "CARD_COMPOSE_SOURCE_EQUIPPED",
+            Self::CardComposeTargetNotFound => "CARD_COMPOSE_TARGET_NOT_FOUND",
+            Self::CardComposeSameInventorySlot => "CARD_COMPOSE_SAME_INVENTORY_SLOT",
+            Self::CardComposeNotEquipment => "CARD_COMPOSE_NOT_EQUIPMENT",
+            Self::CardComposeTargetUnidentified => "CARD_COMPOSE_TARGET_UNIDENTIFIED",
+            Self::CardComposeTargetEquipped => "CARD_COMPOSE_TARGET_EQUIPPED",
+            Self::CardComposeLocationMismatch => "CARD_COMPOSE_LOCATION_MISMATCH",
+            Self::CardComposeNoFreeSocket => "CARD_COMPOSE_NO_FREE_SOCKET",
+            Self::CardComposeItemUseDisabled => "CARD_COMPOSE_ITEM_USE_DISABLED",
+            Self::CardComposePersistenceFailed => "CARD_COMPOSE_PERSISTENCE_FAILED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CARD_COMPOSE_SUCCESS" => Some(Self::CardComposeSuccess),
+            "CARD_COMPOSE_CARD_NOT_FOUND" => Some(Self::CardComposeCardNotFound),
+            "CARD_COMPOSE_NOT_A_CARD" => Some(Self::CardComposeNotACard),
+            "CARD_COMPOSE_SOURCE_EQUIPPED" => Some(Self::CardComposeSourceEquipped),
+            "CARD_COMPOSE_TARGET_NOT_FOUND" => Some(Self::CardComposeTargetNotFound),
+            "CARD_COMPOSE_SAME_INVENTORY_SLOT" => {
+                Some(Self::CardComposeSameInventorySlot)
+            }
+            "CARD_COMPOSE_NOT_EQUIPMENT" => Some(Self::CardComposeNotEquipment),
+            "CARD_COMPOSE_TARGET_UNIDENTIFIED" => {
+                Some(Self::CardComposeTargetUnidentified)
+            }
+            "CARD_COMPOSE_TARGET_EQUIPPED" => Some(Self::CardComposeTargetEquipped),
+            "CARD_COMPOSE_LOCATION_MISMATCH" => Some(Self::CardComposeLocationMismatch),
+            "CARD_COMPOSE_NO_FREE_SOCKET" => Some(Self::CardComposeNoFreeSocket),
+            "CARD_COMPOSE_ITEM_USE_DISABLED" => Some(Self::CardComposeItemUseDisabled),
+            "CARD_COMPOSE_PERSISTENCE_FAILED" => Some(Self::CardComposePersistenceFailed),
             _ => None,
         }
     }
@@ -4049,6 +4286,7 @@ pub enum PartyError {
     TargetOffline = 7,
     NotMember = 8,
     NotSameMap = 9,
+    BasicSkillRequired = 10,
 }
 impl PartyError {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4067,6 +4305,7 @@ impl PartyError {
             Self::TargetOffline => "TARGET_OFFLINE",
             Self::NotMember => "NOT_MEMBER",
             Self::NotSameMap => "NOT_SAME_MAP",
+            Self::BasicSkillRequired => "BASIC_SKILL_REQUIRED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4082,6 +4321,7 @@ impl PartyError {
             "TARGET_OFFLINE" => Some(Self::TargetOffline),
             "NOT_MEMBER" => Some(Self::NotMember),
             "NOT_SAME_MAP" => Some(Self::NotSameMap),
+            "BASIC_SKILL_REQUIRED" => Some(Self::BasicSkillRequired),
             _ => None,
         }
     }
@@ -4106,6 +4346,15 @@ pub enum GuildError {
     GuildErrNoSkillPoints = 11,
     GuildErrSkillRequirement = 12,
     GuildErrSkillMaxed = 13,
+    GuildErrAllyLimit = 14,
+    GuildErrAntagonistLimit = 15,
+    GuildErrAlreadyAllied = 16,
+    GuildErrAlreadyAntagonist = 17,
+    GuildErrNotRelated = 18,
+    GuildErrSameGuild = 19,
+    GuildErrSiegeActive = 20,
+    GuildErrRequestPending = 21,
+    GuildErrAllianceDeclined = 22,
 }
 impl GuildError {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4128,6 +4377,15 @@ impl GuildError {
             Self::GuildErrNoSkillPoints => "GUILD_ERR_NO_SKILL_POINTS",
             Self::GuildErrSkillRequirement => "GUILD_ERR_SKILL_REQUIREMENT",
             Self::GuildErrSkillMaxed => "GUILD_ERR_SKILL_MAXED",
+            Self::GuildErrAllyLimit => "GUILD_ERR_ALLY_LIMIT",
+            Self::GuildErrAntagonistLimit => "GUILD_ERR_ANTAGONIST_LIMIT",
+            Self::GuildErrAlreadyAllied => "GUILD_ERR_ALREADY_ALLIED",
+            Self::GuildErrAlreadyAntagonist => "GUILD_ERR_ALREADY_ANTAGONIST",
+            Self::GuildErrNotRelated => "GUILD_ERR_NOT_RELATED",
+            Self::GuildErrSameGuild => "GUILD_ERR_SAME_GUILD",
+            Self::GuildErrSiegeActive => "GUILD_ERR_SIEGE_ACTIVE",
+            Self::GuildErrRequestPending => "GUILD_ERR_REQUEST_PENDING",
+            Self::GuildErrAllianceDeclined => "GUILD_ERR_ALLIANCE_DECLINED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4147,6 +4405,69 @@ impl GuildError {
             "GUILD_ERR_NO_SKILL_POINTS" => Some(Self::GuildErrNoSkillPoints),
             "GUILD_ERR_SKILL_REQUIREMENT" => Some(Self::GuildErrSkillRequirement),
             "GUILD_ERR_SKILL_MAXED" => Some(Self::GuildErrSkillMaxed),
+            "GUILD_ERR_ALLY_LIMIT" => Some(Self::GuildErrAllyLimit),
+            "GUILD_ERR_ANTAGONIST_LIMIT" => Some(Self::GuildErrAntagonistLimit),
+            "GUILD_ERR_ALREADY_ALLIED" => Some(Self::GuildErrAlreadyAllied),
+            "GUILD_ERR_ALREADY_ANTAGONIST" => Some(Self::GuildErrAlreadyAntagonist),
+            "GUILD_ERR_NOT_RELATED" => Some(Self::GuildErrNotRelated),
+            "GUILD_ERR_SAME_GUILD" => Some(Self::GuildErrSameGuild),
+            "GUILD_ERR_SIEGE_ACTIVE" => Some(Self::GuildErrSiegeActive),
+            "GUILD_ERR_REQUEST_PENDING" => Some(Self::GuildErrRequestPending),
+            "GUILD_ERR_ALLIANCE_DECLINED" => Some(Self::GuildErrAllianceDeclined),
+            _ => None,
+        }
+    }
+}
+/// Directed relation kind carried in a GuildInfo snapshot's relation list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum GuildRelationKind {
+    GuildRelationAlly = 0,
+    GuildRelationAntagonist = 1,
+}
+impl GuildRelationKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::GuildRelationAlly => "GUILD_RELATION_ALLY",
+            Self::GuildRelationAntagonist => "GUILD_RELATION_ANTAGONIST",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "GUILD_RELATION_ALLY" => Some(Self::GuildRelationAlly),
+            "GUILD_RELATION_ANTAGONIST" => Some(Self::GuildRelationAntagonist),
+            _ => None,
+        }
+    }
+}
+/// Distinguishes personal and guild storage windows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum StorageKind {
+    Personal = 0,
+    Guild = 1,
+}
+impl StorageKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Personal => "STORAGE_KIND_PERSONAL",
+            Self::Guild => "STORAGE_KIND_GUILD",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "STORAGE_KIND_PERSONAL" => Some(Self::Personal),
+            "STORAGE_KIND_GUILD" => Some(Self::Guild),
             _ => None,
         }
     }
@@ -4166,6 +4487,14 @@ pub enum StorageResultCode {
     StorageInvalidAmount = 6,
     StorageNotOpen = 7,
     StorageBasicSkillRequired = 8,
+    StorageNoGuild = 9,
+    StorageGuildNoSkill = 10,
+    StorageGuildNoPermission = 11,
+    StorageGuildInUse = 12,
+    StorageOtherStorageOpen = 13,
+    StorageRental = 14,
+    StorageNoGuildStorage = 15,
+    StorageStale = 16,
 }
 impl StorageResultCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4183,6 +4512,14 @@ impl StorageResultCode {
             Self::StorageInvalidAmount => "STORAGE_INVALID_AMOUNT",
             Self::StorageNotOpen => "STORAGE_NOT_OPEN",
             Self::StorageBasicSkillRequired => "STORAGE_BASIC_SKILL_REQUIRED",
+            Self::StorageNoGuild => "STORAGE_NO_GUILD",
+            Self::StorageGuildNoSkill => "STORAGE_GUILD_NO_SKILL",
+            Self::StorageGuildNoPermission => "STORAGE_GUILD_NO_PERMISSION",
+            Self::StorageGuildInUse => "STORAGE_GUILD_IN_USE",
+            Self::StorageOtherStorageOpen => "STORAGE_OTHER_STORAGE_OPEN",
+            Self::StorageRental => "STORAGE_RENTAL",
+            Self::StorageNoGuildStorage => "STORAGE_NO_GUILD_STORAGE",
+            Self::StorageStale => "STORAGE_STALE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4197,6 +4534,14 @@ impl StorageResultCode {
             "STORAGE_INVALID_AMOUNT" => Some(Self::StorageInvalidAmount),
             "STORAGE_NOT_OPEN" => Some(Self::StorageNotOpen),
             "STORAGE_BASIC_SKILL_REQUIRED" => Some(Self::StorageBasicSkillRequired),
+            "STORAGE_NO_GUILD" => Some(Self::StorageNoGuild),
+            "STORAGE_GUILD_NO_SKILL" => Some(Self::StorageGuildNoSkill),
+            "STORAGE_GUILD_NO_PERMISSION" => Some(Self::StorageGuildNoPermission),
+            "STORAGE_GUILD_IN_USE" => Some(Self::StorageGuildInUse),
+            "STORAGE_OTHER_STORAGE_OPEN" => Some(Self::StorageOtherStorageOpen),
+            "STORAGE_RENTAL" => Some(Self::StorageRental),
+            "STORAGE_NO_GUILD_STORAGE" => Some(Self::StorageNoGuildStorage),
+            "STORAGE_STALE" => Some(Self::StorageStale),
             _ => None,
         }
     }
