@@ -1,4 +1,11 @@
-//! Protocol-neutral Storage item type.
+//! Protocol-neutral storage kinds and items.
+
+/// The vault selected by the server when opening storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StorageKind {
+    Personal,
+    Guild,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageItem {

@@ -24,13 +24,19 @@ pub fn zone_drain_storage(
     for message in incoming.read() {
         match message.body.clone() {
             Body::StorageOpened(snapshot) => {
-                opened.write(storage_opened(snapshot));
+                if let Some(snapshot) = storage_opened(snapshot) {
+                    opened.write(snapshot);
+                }
             }
             Body::StorageItemAdded(delta) => {
-                added.write(storage_item_added(delta));
+                if let Some(delta) = storage_item_added(delta) {
+                    added.write(delta);
+                }
             }
             Body::StorageItemRemoved(delta) => {
-                removed.write(storage_item_removed(delta));
+                if let Some(delta) = storage_item_removed(delta) {
+                    removed.write(delta);
+                }
             }
             Body::StorageResult(outcome) => {
                 result.write(storage_result(outcome));
@@ -143,6 +149,140 @@ mod tests {
             results[0].outcome,
             Err(net_contract::events::StorageRejection::NotOpen)
         );
+    }
+
+    #[test]
+    fn storage_snapshots_and_deltas_preserve_personal_and_guild_kind() {
+        for (wire, expected) in [
+            (
+                net::StorageKind::Personal,
+                net_contract::dto::StorageKind::Personal,
+            ),
+            (
+                net::StorageKind::Guild,
+                net_contract::dto::StorageKind::Guild,
+            ),
+        ] {
+            let app = drain(vec![
+                (
+                    BULK,
+                    Body::StorageOpened(net::StorageOpened {
+                        kind: wire as i32,
+                        ..Default::default()
+                    }),
+                ),
+                (
+                    GAMEPLAY,
+                    Body::StorageItemAdded(net::StorageItemAdded {
+                        kind: wire as i32,
+                        ..Default::default()
+                    }),
+                ),
+                (
+                    GAMEPLAY,
+                    Body::StorageItemRemoved(net::StorageItemRemoved {
+                        kind: wire as i32,
+                        ..Default::default()
+                    }),
+                ),
+            ]);
+            assert_eq!(
+                app.world()
+                    .resource::<Messages<StorageOpened>>()
+                    .iter_current_update_messages()
+                    .next()
+                    .unwrap()
+                    .kind,
+                expected
+            );
+            assert_eq!(
+                app.world()
+                    .resource::<Messages<StorageItemAdded>>()
+                    .iter_current_update_messages()
+                    .next()
+                    .unwrap()
+                    .kind,
+                expected
+            );
+            assert_eq!(
+                app.world()
+                    .resource::<Messages<StorageItemRemoved>>()
+                    .iter_current_update_messages()
+                    .next()
+                    .unwrap()
+                    .kind,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_storage_kind_never_opens_or_changes_a_vault() {
+        let app = drain(vec![
+            (
+                BULK,
+                Body::StorageOpened(net::StorageOpened {
+                    kind: 99,
+                    ..Default::default()
+                }),
+            ),
+            (
+                GAMEPLAY,
+                Body::StorageItemAdded(net::StorageItemAdded {
+                    kind: 99,
+                    ..Default::default()
+                }),
+            ),
+            (
+                GAMEPLAY,
+                Body::StorageItemRemoved(net::StorageItemRemoved {
+                    kind: 99,
+                    ..Default::default()
+                }),
+            ),
+        ]);
+        assert!(app.world().resource::<Messages<StorageOpened>>().is_empty());
+        assert!(
+            app.world()
+                .resource::<Messages<StorageItemAdded>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<StorageItemRemoved>>()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn guild_storage_rejections_are_not_unknown() {
+        use net::StorageResultCode::*;
+        use net_contract::events::StorageRejection;
+        let codes = [
+            (StorageNoGuild, StorageRejection::NoGuild),
+            (StorageGuildNoSkill, StorageRejection::GuildNoSkill),
+            (
+                StorageGuildNoPermission,
+                StorageRejection::GuildNoPermission,
+            ),
+            (StorageGuildInUse, StorageRejection::GuildInUse),
+            (StorageOtherStorageOpen, StorageRejection::OtherStorageOpen),
+            (StorageRental, StorageRejection::Rental),
+            (StorageNoGuildStorage, StorageRejection::NoGuildStorage),
+            (StorageStale, StorageRejection::Stale),
+        ];
+        for (code, expected) in codes {
+            let app = drain(vec![(
+                GAMEPLAY,
+                Body::StorageResult(net::StorageResult {
+                    result: code as i32,
+                }),
+            )]);
+            let messages = app.world().resource::<Messages<StorageResult>>();
+            let results: Vec<_> = messages.iter_current_update_messages().collect();
+            assert_eq!(results.len(), 1);
+            assert_eq!(results[0].outcome, Err(expected), "{code:?}");
+        }
     }
 
     #[test]

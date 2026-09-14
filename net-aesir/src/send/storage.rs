@@ -10,14 +10,18 @@ use crate::proto::aesir::net::{
 };
 use crate::zone::{QuicZoneState, ZonePhase};
 
-// TODO: Wire StorageKind through net-contract commands when guild storage is implemented.
-const DEFAULT_STORAGE_KIND: i32 = StorageKind::Personal as i32;
+fn storage_kind(kind: net_contract::dto::StorageKind) -> i32 {
+    match kind {
+        net_contract::dto::StorageKind::Personal => StorageKind::Personal as i32,
+        net_contract::dto::StorageKind::Guild => StorageKind::Guild as i32,
+    }
+}
 
 fn deposit_body(command: &DepositStorageItem) -> Body {
     Body::StorageDepositRequest(StorageDepositRequest {
         inventory_index: command.inventory_index,
         amount: command.amount,
-        kind: DEFAULT_STORAGE_KIND,
+        kind: storage_kind(command.kind),
     })
 }
 
@@ -25,13 +29,13 @@ fn withdraw_body(command: &WithdrawStorageItem) -> Body {
     Body::StorageWithdrawRequest(StorageWithdrawRequest {
         storage_index: command.storage_index,
         amount: command.amount,
-        kind: DEFAULT_STORAGE_KIND,
+        kind: storage_kind(command.kind),
     })
 }
 
-fn close_body(_command: &CloseStorage) -> Body {
+fn close_body(command: &CloseStorage) -> Body {
     Body::StorageCloseRequest(StorageCloseRequest {
-        kind: DEFAULT_STORAGE_KIND,
+        kind: storage_kind(command.kind),
     })
 }
 
@@ -120,6 +124,39 @@ pub fn send_close_storage(
 mod tests {
     use super::*;
 
+    #[test]
+    fn storage_requests_target_the_selected_vault() {
+        use net_contract::dto::StorageKind as Kind;
+        for (kind, expected) in [(Kind::Personal, 0), (Kind::Guild, 1)] {
+            let Body::StorageDepositRequest(deposit) = deposit_body(&DepositStorageItem {
+                kind,
+                inventory_index: 70_000,
+                amount: 80_000,
+            }) else {
+                panic!("expected deposit");
+            };
+            let Body::StorageWithdrawRequest(withdraw) = withdraw_body(&WithdrawStorageItem {
+                kind,
+                storage_index: 70_001,
+                amount: 80_001,
+            }) else {
+                panic!("expected withdrawal");
+            };
+            let Body::StorageCloseRequest(close) = close_body(&CloseStorage { kind }) else {
+                panic!("expected close");
+            };
+            assert_eq!(
+                (deposit.kind, deposit.inventory_index, deposit.amount),
+                (expected, 70_000, 80_000)
+            );
+            assert_eq!(
+                (withdraw.kind, withdraw.storage_index, withdraw.amount),
+                (expected, 70_001, 80_001)
+            );
+            assert_eq!(close.kind, expected);
+        }
+    }
+
     fn app_with_storage_senders() -> App {
         let mut app = App::new();
         app.init_resource::<QuinnetClient>();
@@ -141,6 +178,7 @@ mod tests {
     #[test]
     fn deposit_body_preserves_u32_inventory_index_and_amount() {
         let body = deposit_body(&DepositStorageItem {
+            kind: net_contract::dto::StorageKind::Personal,
             inventory_index: 70_000,
             amount: 80_000,
         });
@@ -161,6 +199,7 @@ mod tests {
     #[test]
     fn withdraw_body_preserves_u32_storage_index_and_amount() {
         let body = withdraw_body(&WithdrawStorageItem {
+            kind: net_contract::dto::StorageKind::Personal,
             storage_index: 70_001,
             amount: 80_001,
         });
@@ -180,7 +219,9 @@ mod tests {
 
     #[test]
     fn close_body_produces_storage_close_request() {
-        let body = close_body(&CloseStorage);
+        let body = close_body(&CloseStorage {
+            kind: net_contract::dto::StorageKind::Personal,
+        });
 
         assert!(matches!(
             body,
@@ -192,14 +233,18 @@ mod tests {
     fn out_of_phase_systems_clear_all_storage_commands() {
         let mut app = app_with_storage_senders();
         app.world_mut().write_message(DepositStorageItem {
+            kind: net_contract::dto::StorageKind::Personal,
             inventory_index: 7,
             amount: 2,
         });
         app.world_mut().write_message(WithdrawStorageItem {
+            kind: net_contract::dto::StorageKind::Personal,
             storage_index: 8,
             amount: 3,
         });
-        app.world_mut().write_message(CloseStorage);
+        app.world_mut().write_message(CloseStorage {
+            kind: net_contract::dto::StorageKind::Personal,
+        });
 
         app.update();
         app.world_mut().resource_mut::<QuicZoneState>().phase = ZonePhase::Playing;
@@ -222,14 +267,18 @@ mod tests {
         );
         app.world_mut().resource_mut::<QuicZoneState>().phase = ZonePhase::Playing;
         app.world_mut().write_message(DepositStorageItem {
+            kind: net_contract::dto::StorageKind::Personal,
             inventory_index: 7,
             amount: 2,
         });
         app.world_mut().write_message(WithdrawStorageItem {
+            kind: net_contract::dto::StorageKind::Personal,
             storage_index: 8,
             amount: 3,
         });
-        app.world_mut().write_message(CloseStorage);
+        app.world_mut().write_message(CloseStorage {
+            kind: net_contract::dto::StorageKind::Personal,
+        });
 
         app.update();
 

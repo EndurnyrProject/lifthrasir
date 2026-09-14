@@ -110,7 +110,7 @@ pub(crate) fn pane_views(
             empty_message,
         },
         StoragePaneView {
-            title: "Storage Vault",
+            title: vault_title(storage.kind()),
             subtitle: format!("{} / {}", storage.len(), storage.capacity()),
             cells: vault,
             empty_message,
@@ -344,6 +344,7 @@ fn storage_titlebar() -> impl Scene {
         Children [
             glyph_icon("vault", 16.0, theme::GOLD),
             (
+                StorageWindowTitle
                 Text("Storage Vault")
                 TextFont { font: FontSourceTemplate::Handle(theme::FONT_TITLE), font_size: {FontSize::Px(15.0)} }
                 TextColor({theme::TEXT})
@@ -695,6 +696,83 @@ mod tests {
     }
 
     #[test]
+    fn switching_to_guild_storage_reuses_shell_and_clears_personal_drafts() {
+        let mut app = test_app();
+        app.init_resource::<Storage>();
+        app.init_resource::<StorageUi>();
+        app.init_resource::<InputFocus>();
+        app.add_systems(Update, (sync_window_visibility, sync_window_title).chain());
+        let root = app.world_mut().spawn_scene(window()).unwrap().id();
+        app.world_mut()
+            .resource_mut::<Storage>()
+            .open(StorageKind::Personal, 600, vec![]);
+        app.update();
+        *app.world_mut().resource_mut::<StorageUi>() = StorageUi {
+            previous_open: true,
+            selection: Some(StorageSelection::Vault(7)),
+            pending_transfer: Some(PendingTransfer {
+                source: StorageSelection::Vault(7),
+                amount: "5".into(),
+            }),
+            awaiting_result: true,
+            panel_error: Some("old error".into()),
+            ..Default::default()
+        };
+        app.world_mut()
+            .resource_mut::<StorageUi>()
+            .set_query("potion");
+        let search = app
+            .world_mut()
+            .query_filtered::<Entity, With<StorageSearchField>>()
+            .single(app.world())
+            .unwrap();
+        app.world_mut()
+            .get_mut::<EditableText>(search)
+            .unwrap()
+            .editor_mut()
+            .set_text("potion");
+        app.insert_resource(InputFocus::from_entity(search));
+        app.world_mut()
+            .resource_mut::<Storage>()
+            .open(StorageKind::Guild, 100, vec![]);
+        app.update();
+
+        let ui = app.world().resource::<StorageUi>();
+        assert!(ui.pending_transfer.is_none());
+        assert!(ui.selection.is_none());
+        assert!(!ui.awaiting_result);
+        assert!(ui.query().is_empty());
+        assert!(ui.panel_error.is_none());
+        let (_, vault) = pane_views(
+            &Inventory::default(),
+            app.world().resource::<Storage>(),
+            ui,
+            &item_db(),
+        );
+        assert_eq!(vault.title, "Guild Storage");
+        assert_eq!(vault.subtitle, "0 / 100");
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
+        assert_eq!(app.world().get::<EditableText>(search).unwrap().value(), "");
+        assert_eq!(
+            app.world().get::<Visibility>(root),
+            Some(&Visibility::Inherited)
+        );
+        assert_eq!(
+            app.world_mut()
+                .query::<&StorageWindowRoot>()
+                .iter(app.world())
+                .count(),
+            1
+        );
+        assert!(
+            app.world_mut()
+                .query::<&Text>()
+                .iter(app.world())
+                .any(|text| text.0 == "Guild Storage")
+        );
+    }
+
+    #[test]
     fn pane_views_render_filtered_names_and_live_capacity() {
         let db = item_db();
         let mut inventory = Inventory::default();
@@ -715,7 +793,7 @@ mod tests {
             ..Default::default()
         });
         let mut storage = Storage::default();
-        storage.open(600, vec![vault_item(70_000)]);
+        storage.open(StorageKind::Personal, 600, vec![vault_item(70_000)]);
         let mut ui = StorageUi {
             category: StorageCategory::Use,
             ..Default::default()
@@ -751,9 +829,11 @@ mod tests {
             identified: true,
             ..Default::default()
         });
-        app.world_mut()
-            .resource_mut::<Storage>()
-            .open(600, vec![vault_item(70_000)]);
+        app.world_mut().resource_mut::<Storage>().open(
+            StorageKind::Personal,
+            600,
+            vec![vault_item(70_000)],
+        );
 
         app.update();
         let search = app

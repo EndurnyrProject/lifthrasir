@@ -1,27 +1,32 @@
 use bevy::prelude::*;
-use net_contract::dto::StorageItem;
+use net_contract::dto::{StorageItem, StorageKind};
 use std::collections::BTreeMap;
 
 #[derive(Resource, Default)]
 pub struct Storage {
     items: BTreeMap<u32, StorageItem>,
     capacity: u32,
-    open: bool,
+    kind: Option<StorageKind>,
 }
 
 impl Storage {
-    pub fn open(&mut self, capacity: u32, items: Vec<StorageItem>) {
+    pub fn open(&mut self, kind: StorageKind, capacity: u32, items: Vec<StorageItem>) {
         self.items = items.into_iter().map(|item| (item.index, item)).collect();
         self.capacity = capacity;
-        self.open = true;
+        self.kind = Some(kind);
     }
 
     pub fn is_open(&self) -> bool {
-        self.open
+        self.kind.is_some()
+    }
+
+    /// The active vault, or `None` while storage is closed.
+    pub fn kind(&self) -> Option<StorageKind> {
+        self.kind
     }
 
     pub fn close(&mut self) {
-        self.open = false;
+        self.kind = None;
     }
 
     pub fn reset(&mut self) {
@@ -88,9 +93,9 @@ mod tests {
     #[test]
     fn opening_replaces_snapshot_capacity_and_marks_storage_open() {
         let mut storage = Storage::default();
-        storage.open(100, vec![item(9, 1)]);
+        storage.open(StorageKind::Personal, 100, vec![item(9, 1)]);
 
-        storage.open(40, vec![item(7, 2), item(3, 5)]);
+        storage.open(StorageKind::Personal, 40, vec![item(7, 2), item(3, 5)]);
 
         assert!(storage.is_open());
         assert_eq!(storage.capacity(), 40);
@@ -105,7 +110,7 @@ mod tests {
     #[test]
     fn upsert_inserts_and_replaces_server_reported_total() {
         let mut storage = Storage::default();
-        storage.open(40, vec![]);
+        storage.open(StorageKind::Personal, 40, vec![]);
 
         storage.upsert(item(7, 2));
         storage.upsert(item(7, 9));
@@ -117,7 +122,7 @@ mod tests {
     #[test]
     fn remove_amount_decrements_a_stack() {
         let mut storage = Storage::default();
-        storage.open(40, vec![item(7, 9)]);
+        storage.open(StorageKind::Personal, 40, vec![item(7, 9)]);
 
         storage.remove_amount(7, 4);
 
@@ -127,7 +132,7 @@ mod tests {
     #[test]
     fn remove_amount_drops_a_stack_at_zero() {
         let mut storage = Storage::default();
-        storage.open(40, vec![item(7, 4)]);
+        storage.open(StorageKind::Personal, 40, vec![item(7, 4)]);
 
         storage.remove_amount(7, 4);
 
@@ -138,7 +143,7 @@ mod tests {
     #[test]
     fn close_marks_storage_closed_without_discarding_snapshot() {
         let mut storage = Storage::default();
-        storage.open(40, vec![item(7, 4)]);
+        storage.open(StorageKind::Personal, 40, vec![item(7, 4)]);
 
         storage.close();
 
@@ -150,7 +155,7 @@ mod tests {
     #[test]
     fn reset_clears_snapshot_capacity_and_open_state() {
         let mut storage = Storage::default();
-        storage.open(40, vec![item(7, 4)]);
+        storage.open(StorageKind::Personal, 40, vec![item(7, 4)]);
 
         storage.reset();
 

@@ -1,6 +1,6 @@
 //! Outbound command Messages (client to server).
 
-use crate::dto::{BuyEntry, NavigationTarget, NpcResponse, SellEntry};
+use crate::dto::{BuyEntry, NavigationTarget, NpcResponse, SellEntry, StorageKind};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
@@ -278,6 +278,7 @@ pub struct MoveFromCart {
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct DepositStorageItem {
+    pub kind: StorageKind,
     pub inventory_index: u32,
     pub amount: u32,
 }
@@ -286,6 +287,7 @@ pub struct DepositStorageItem {
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct WithdrawStorageItem {
+    pub kind: StorageKind,
     pub storage_index: u32,
     pub amount: u32,
 }
@@ -293,7 +295,9 @@ pub struct WithdrawStorageItem {
 /// Request to close the active Storage session.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
-pub struct CloseStorage;
+pub struct CloseStorage {
+    pub kind: StorageKind,
+}
 
 /// Request to create a party named `name`.
 #[derive(Message, Debug, Clone)]

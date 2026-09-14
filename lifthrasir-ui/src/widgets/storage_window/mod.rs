@@ -11,7 +11,7 @@ use game_engine::domain::inventory::{Inventory, Item, ItemCategory};
 use game_engine::domain::storage::Storage;
 use game_engine::infrastructure::item::ItemDb;
 use net_contract::commands::{CloseStorage, DepositStorageItem, WithdrawStorageItem};
-use net_contract::dto::StorageItem;
+use net_contract::dto::{StorageItem, StorageKind};
 use net_contract::events::{StorageRejection, StorageResult};
 use std::time::Duration;
 
@@ -19,6 +19,7 @@ use crate::theme;
 use crate::theme::feathers_theme::install_norse_theme;
 use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
 
+mod feedback;
 pub mod scene;
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(300);
@@ -28,6 +29,9 @@ pub struct StorageWindowRoot;
 
 #[derive(Component, Default, Clone)]
 pub struct StorageWindowTitlebar;
+
+#[derive(Component, Default, Clone)]
+pub struct StorageWindowTitle;
 
 #[derive(Component, Default, Clone)]
 pub struct StorageBagHost;
@@ -267,6 +271,16 @@ pub(crate) fn rejection_message(rejection: StorageRejection) -> String {
         StorageRejection::InvalidAmount => "Enter a valid amount.".to_string(),
         StorageRejection::NotOpen => "Storage is not open.".to_string(),
         StorageRejection::BasicSkillRequired => "Basic Skill level 6 is required.".to_string(),
+        StorageRejection::NoGuild => "You are not in a guild.".to_string(),
+        StorageRejection::GuildNoSkill => "Your guild needs the Guild Storage skill.".to_string(),
+        StorageRejection::GuildNoPermission => {
+            "You do not have permission to use guild storage.".to_string()
+        }
+        StorageRejection::GuildInUse => "Guild storage is already in use.".to_string(),
+        StorageRejection::OtherStorageOpen => "Close your other storage window first.".to_string(),
+        StorageRejection::Rental => "Rental items cannot be stored here.".to_string(),
+        StorageRejection::NoGuildStorage => "Guild storage is unavailable.".to_string(),
+        StorageRejection::Stale => "Your storage session has expired. Reopen storage.".to_string(),
         StorageRejection::Unknown(code) => format!("Storage request failed (code {code})."),
     }
 }
@@ -282,6 +296,7 @@ pub(crate) fn is_double_click(
 }
 
 fn write_transfer(
+    kind: StorageKind,
     source: StorageSelection,
     amount: u32,
     deposit: &mut MessageWriter<DepositStorageItem>,
@@ -293,6 +308,7 @@ fn write_transfer(
             amount,
         } => {
             deposit.write(DepositStorageItem {
+                kind,
                 inventory_index,
                 amount,
             });
@@ -302,6 +318,7 @@ fn write_transfer(
             amount,
         } => {
             withdraw.write(WithdrawStorageItem {
+                kind,
                 storage_index,
                 amount,
             });
@@ -317,9 +334,12 @@ fn begin_transfer(
     deposit: &mut MessageWriter<DepositStorageItem>,
     withdraw: &mut MessageWriter<WithdrawStorageItem>,
 ) {
-    if ui.awaiting_result || ui.pending_transfer.is_some() || !storage.is_open() {
+    if ui.awaiting_result || ui.pending_transfer.is_some() {
         return;
     }
+    let Some(kind) = storage.kind() else {
+        return;
+    };
     let available = match source {
         StorageSelection::Bag(index) => inventory
             .get(index)
@@ -333,7 +353,7 @@ fn begin_transfer(
     ui.last_click = None;
     ui.panel_error = None;
     if available == 1 {
-        write_transfer(source, 1, deposit, withdraw);
+        write_transfer(kind, source, 1, deposit, withdraw);
         ui.awaiting_result = true;
     } else {
         ui.pending_transfer = Some(PendingTransfer {
@@ -443,9 +463,12 @@ pub(crate) fn on_amount_confirm(
     mut ui: ResMut<StorageUi>,
     mut writers: StorageWriters,
 ) {
-    if ui.awaiting_result || !data.storage.is_open() {
+    if ui.awaiting_result {
         return;
     }
+    let Some(kind) = data.storage.kind() else {
+        return;
+    };
     let (Some(source), Ok((field_entity, field))) = (
         ui.pending_transfer.as_ref().map(|pending| pending.source),
         fields.single(),
@@ -455,7 +478,13 @@ pub(crate) fn on_amount_confirm(
     let input = field.value().to_string();
     match validate_live_amount(source, &input, &data.inventory, &data.storage) {
         Ok(amount) => {
-            write_transfer(source, amount, &mut writers.deposit, &mut writers.withdraw);
+            write_transfer(
+                kind,
+                source,
+                amount,
+                &mut writers.deposit,
+                &mut writers.withdraw,
+            );
             ui.pending_transfer = None;
             ui.awaiting_result = true;
             ui.panel_error = None;
@@ -745,6 +774,7 @@ fn clear_storage_focus(input_focus: &mut InputFocus, fields: &Query<(), StorageF
 
 fn sync_window_visibility(
     storage: Res<Storage>,
+    mut previous_kind: Local<Option<StorageKind>>,
     mut roots: Query<&mut Visibility, With<StorageWindowRoot>>,
     mut fields: Query<&mut EditableText, With<StorageSearchField>>,
     storage_fields: Query<(), StorageFieldFilter>,
@@ -760,13 +790,12 @@ fn sync_window_visibility(
     } else {
         Visibility::Hidden
     };
-    if ui.previous_open != open {
+    if ui.previous_open != open || *previous_kind != storage.kind() {
         if let Ok(mut field) = fields.single_mut() {
             field.clear();
         }
-        if !open {
-            clear_storage_focus(&mut input_focus, &storage_fields);
-        }
+        clear_storage_focus(&mut input_focus, &storage_fields);
+        *previous_kind = storage.kind();
         *ui = StorageUi {
             previous_open: open,
             ..Default::default()
@@ -774,23 +803,50 @@ fn sync_window_visibility(
     }
 }
 
+fn vault_title(kind: Option<StorageKind>) -> &'static str {
+    match kind {
+        Some(StorageKind::Guild) => "Guild Storage",
+        _ => "Storage Vault",
+    }
+}
+
+fn sync_window_title(
+    storage: Res<Storage>,
+    mut titles: Query<&mut Text, With<StorageWindowTitle>>,
+) {
+    for mut title in &mut titles {
+        let label = vault_title(storage.kind());
+        if title.0 != label {
+            title.0 = label.to_string();
+        }
+    }
+}
+
 pub(crate) fn on_storage_close(
     _: On<Activate>,
+    storage: Res<Storage>,
     mut close: MessageWriter<CloseStorage>,
     mut roots: Query<&mut Visibility, With<StorageWindowRoot>>,
-    mut fields: Query<&mut EditableText, With<StorageSearchField>>,
-    storage_fields: Query<(), StorageFieldFilter>,
+    mut fields: Query<(Entity, &mut EditableText), StorageFieldFilter>,
     mut input_focus: ResMut<InputFocus>,
     mut ui: ResMut<StorageUi>,
 ) {
-    close.write(CloseStorage);
+    let Some(kind) = storage.kind() else {
+        return;
+    };
+    close.write(CloseStorage { kind });
     if let Ok(mut root) = roots.single_mut() {
         *root = Visibility::Hidden;
     }
-    if let Ok(mut field) = fields.single_mut() {
+    if input_focus
+        .get()
+        .is_some_and(|entity| fields.contains(entity))
+    {
+        input_focus.clear();
+    }
+    for (_, mut field) in &mut fields {
         field.clear();
     }
-    clear_storage_focus(&mut input_focus, &storage_fields);
     *ui = StorageUi::default();
 }
 
@@ -810,11 +866,16 @@ impl Plugin for StorageWindowPlugin {
             .add_systems(
                 Update,
                 (
-                    sync_search,
+                    sync_search.after(sync_window_visibility),
+                    sync_window_title.after(sync_window_visibility),
+                    feedback::ingest_unprompted_errors
+                        .after(sync_window_visibility)
+                        .before(apply_storage_results),
                     apply_storage_results
                         .after(game_engine::domain::inventory::systems::apply_item_deltas)
                         .after(game_engine::domain::storage::systems::apply_storage_item_deltas)
-                        .after(game_engine::domain::storage::systems::apply_storage_close),
+                        .after(game_engine::domain::storage::systems::apply_storage_close)
+                        .after(sync_window_visibility),
                     rebuild_panes
                         .after(sync_search)
                         .after(apply_storage_results)
@@ -837,6 +898,116 @@ impl Plugin for StorageWindowPlugin {
 mod tests {
     use super::*;
     use lifthrasir_data::{ItemData, ItemInfo};
+
+    #[test]
+    fn shared_controls_target_the_active_personal_or_guild_vault() {
+        for kind in [StorageKind::Personal, StorageKind::Guild] {
+            let mut app = App::new();
+            app.add_message::<DepositStorageItem>();
+            app.add_message::<WithdrawStorageItem>();
+            app.add_message::<CloseStorage>();
+            app.init_resource::<Inventory>();
+            app.init_resource::<InputFocus>();
+            app.init_resource::<StorageUi>();
+            app.init_resource::<Storage>();
+            app.world_mut().resource_mut::<Inventory>().upsert(Item {
+                index: 7,
+                amount: 1,
+                ..Default::default()
+            });
+            app.world_mut().resource_mut::<Storage>().open(
+                kind,
+                600,
+                vec![storage_item(70_000, 501, 0, 1)],
+            );
+            app.world_mut().resource_mut::<StorageUi>().selection = Some(StorageSelection::Bag(7));
+            let deposit = app
+                .world_mut()
+                .spawn(StorageTransferButton {
+                    direction: StorageTransferDirection::Deposit,
+                    enabled: true,
+                })
+                .observe(on_transfer_activate)
+                .id();
+            app.world_mut().trigger(Activate { entity: deposit });
+            let sent: Vec<_> = app
+                .world_mut()
+                .resource_mut::<Messages<DepositStorageItem>>()
+                .drain()
+                .collect();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(
+                (sent[0].kind, sent[0].inventory_index, sent[0].amount),
+                (kind, 7, 1)
+            );
+
+            app.world_mut().resource_mut::<StorageUi>().awaiting_result = false;
+            let withdraw = app
+                .world_mut()
+                .spawn(StorageQuickTransfer(StorageSelection::Vault(70_000)))
+                .observe(on_quick_transfer_activate)
+                .id();
+            app.world_mut().trigger(Activate { entity: withdraw });
+            let sent: Vec<_> = app
+                .world_mut()
+                .resource_mut::<Messages<WithdrawStorageItem>>()
+                .drain()
+                .collect();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(
+                (sent[0].kind, sent[0].storage_index, sent[0].amount),
+                (kind, 70_000, 1)
+            );
+
+            app.world_mut()
+                .resource_mut::<Storage>()
+                .upsert(storage_item(70_000, 501, 0, 5));
+            app.world_mut().resource_mut::<StorageUi>().awaiting_result = false;
+            app.world_mut().trigger(Activate { entity: withdraw });
+            assert!(
+                app.world()
+                    .resource::<StorageUi>()
+                    .pending_transfer
+                    .is_some()
+            );
+            app.world_mut()
+                .spawn((StorageAmountField, EditableText::new("3")));
+            let confirm = app
+                .world_mut()
+                .spawn_empty()
+                .observe(on_amount_confirm)
+                .id();
+            app.world_mut().trigger(Activate { entity: confirm });
+            let sent: Vec<_> = app
+                .world_mut()
+                .resource_mut::<Messages<WithdrawStorageItem>>()
+                .drain()
+                .collect();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(
+                (sent[0].kind, sent[0].storage_index, sent[0].amount),
+                (kind, 70_000, 3)
+            );
+            assert_eq!(
+                app.world()
+                    .resource::<Storage>()
+                    .get(70_000)
+                    .unwrap()
+                    .amount,
+                5
+            );
+
+            let close = app.world_mut().spawn_empty().observe(on_storage_close).id();
+            app.world_mut().trigger(Activate { entity: close });
+            let sent: Vec<_> = app
+                .world_mut()
+                .resource_mut::<Messages<CloseStorage>>()
+                .drain()
+                .collect();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(sent[0].kind, kind);
+        }
+    }
 
     fn item_db() -> ItemDb {
         let mut data = ItemData::default();
@@ -980,6 +1151,7 @@ mod tests {
         });
         let mut storage = Storage::default();
         storage.open(
+            StorageKind::Personal,
             100,
             vec![
                 storage_item(70_000, 501, 0, 10),
@@ -1053,7 +1225,11 @@ mod tests {
             ..Default::default()
         });
         let mut storage = Storage::default();
-        storage.open(100, vec![storage_item(70_000, 501, 0, 4)]);
+        storage.open(
+            StorageKind::Personal,
+            100,
+            vec![storage_item(70_000, 501, 0, 4)],
+        );
 
         assert_eq!(
             validate_live_amount(StorageSelection::Bag(7), "5", &inventory, &storage),
@@ -1237,7 +1413,9 @@ mod tests {
             amount: 1,
             ..Default::default()
         });
-        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        app.world_mut()
+            .resource_mut::<Storage>()
+            .open(StorageKind::Personal, 600, vec![]);
         let button = app
             .world_mut()
             .spawn(StorageTransferButton {
@@ -1295,7 +1473,9 @@ mod tests {
             amount: 5,
             ..Default::default()
         });
-        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        app.world_mut()
+            .resource_mut::<Storage>()
+            .open(StorageKind::Personal, 600, vec![]);
         let button = app
             .world_mut()
             .spawn(StorageTransferButton {
@@ -1333,7 +1513,11 @@ mod tests {
         app.init_resource::<Inventory>();
         app.insert_resource(StorageUi::default());
         let mut storage = Storage::default();
-        storage.open(600, vec![storage_item(70_000, 501, 0, 1)]);
+        storage.open(
+            StorageKind::Personal,
+            600,
+            vec![storage_item(70_000, 501, 0, 1)],
+        );
         app.insert_resource(storage);
         let button = app
             .world_mut()
@@ -1377,7 +1561,9 @@ mod tests {
             amount: 1,
             ..Default::default()
         });
-        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        app.world_mut()
+            .resource_mut::<Storage>()
+            .open(StorageKind::Personal, 600, vec![]);
         let window = app.world_mut().spawn(Window::default()).id();
         let cell = app
             .world_mut()
@@ -1453,9 +1639,11 @@ mod tests {
     #[test]
     fn secondary_click_on_a_filled_vault_cell_opens_the_info_modal() {
         let mut app = secondary_click_app();
-        app.world_mut()
-            .resource_mut::<Storage>()
-            .open(600, vec![storage_item(70_000, 501, 0, 4)]);
+        app.world_mut().resource_mut::<Storage>().open(
+            StorageKind::Personal,
+            600,
+            vec![storage_item(70_000, 501, 0, 4)],
+        );
         let window = app.world_mut().spawn(Window::default()).id();
         let cell = app
             .world_mut()
@@ -1550,7 +1738,11 @@ mod tests {
             ..Default::default()
         });
         let mut storage = Storage::default();
-        storage.open(600, vec![storage_item(70_000, 501, 0, 1)]);
+        storage.open(
+            StorageKind::Personal,
+            600,
+            vec![storage_item(70_000, 501, 0, 1)],
+        );
         app.insert_resource(storage);
         let direction = app
             .world_mut()
@@ -1617,7 +1809,7 @@ mod tests {
             ..Default::default()
         });
         let mut storage = Storage::default();
-        storage.open(600, vec![]);
+        storage.open(StorageKind::Personal, 600, vec![]);
         app.insert_resource(storage);
         app.add_systems(Update, apply_storage_results);
         let window = app.world_mut().spawn(Window::default()).id();
@@ -1672,7 +1864,9 @@ mod tests {
             amount: 5,
             ..Default::default()
         });
-        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        app.world_mut()
+            .resource_mut::<Storage>()
+            .open(StorageKind::Personal, 600, vec![]);
         app.world_mut()
             .spawn((StorageAmountField, EditableText::new("6")));
         let confirm = app
@@ -1718,7 +1912,11 @@ mod tests {
             ..Default::default()
         });
         let mut storage = Storage::default();
-        storage.open(600, vec![storage_item(70_000, 501, 0, 4)]);
+        storage.open(
+            StorageKind::Personal,
+            600,
+            vec![storage_item(70_000, 501, 0, 4)],
+        );
         app.insert_resource(storage);
         let field = app
             .world_mut()
@@ -1810,7 +2008,11 @@ mod tests {
             ..Default::default()
         });
         let mut storage = Storage::default();
-        storage.open(600, vec![storage_item(70_000, 501, 0, 4)]);
+        storage.open(
+            StorageKind::Personal,
+            600,
+            vec![storage_item(70_000, 501, 0, 4)],
+        );
         app.insert_resource(storage);
         app.add_systems(Update, apply_storage_results);
 
@@ -1838,7 +2040,7 @@ mod tests {
         app.add_message::<StorageResult>();
         app.insert_resource(StorageUi::default());
         let mut storage = Storage::default();
-        storage.open(600, vec![]);
+        storage.open(StorageKind::Personal, 600, vec![]);
         app.insert_resource(storage);
         app.add_systems(Update, apply_storage_results);
 
@@ -1907,7 +2109,9 @@ mod tests {
             Some("existing")
         );
 
-        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        app.world_mut()
+            .resource_mut::<Storage>()
+            .open(StorageKind::Personal, 600, vec![]);
         app.update();
         let ui = app.world().resource::<StorageUi>();
         assert!(!ui.awaiting_result);
@@ -1966,7 +2170,7 @@ mod tests {
         app.init_resource::<Inventory>();
         app.init_resource::<StorageUi>();
         let mut storage = Storage::default();
-        storage.open(600, vec![]);
+        storage.open(StorageKind::Personal, 600, vec![]);
         app.insert_resource(storage);
         app.insert_resource(item_db());
         app.add_systems(
@@ -1996,6 +2200,7 @@ mod tests {
             look: 0,
         });
         app.world_mut().write_message(StorageItemAdded {
+            kind: StorageKind::Personal,
             item: storage_item(70_000, 501, 0, 3),
         });
 
@@ -2030,7 +2235,7 @@ mod tests {
         });
         app.insert_resource(inventory);
         let mut storage = Storage::default();
-        storage.open(600, vec![]);
+        storage.open(StorageKind::Personal, 600, vec![]);
         app.insert_resource(storage);
         app.insert_resource(StorageUi {
             selection: Some(StorageSelection::Bag(7)),
@@ -2093,6 +2298,9 @@ mod tests {
     fn close_hides_shell_resets_ui_and_emits_command() {
         let mut app = App::new();
         app.add_message::<CloseStorage>();
+        let mut storage = Storage::default();
+        storage.open(StorageKind::Personal, 600, vec![]);
+        app.insert_resource(storage);
         app.insert_resource(StorageUi {
             category: StorageCategory::Equip,
             pending_transfer: Some(PendingTransfer {
@@ -2143,7 +2351,9 @@ mod tests {
             .spawn((StorageWindowRoot, Visibility::Hidden))
             .id();
 
-        app.world_mut().resource_mut::<Storage>().open(600, vec![]);
+        app.world_mut()
+            .resource_mut::<Storage>()
+            .open(StorageKind::Personal, 600, vec![]);
         app.update();
         assert_eq!(
             app.world().get::<Visibility>(root),

@@ -1,4 +1,4 @@
-use crate::dto::StorageItem;
+use crate::dto::{StorageItem, StorageKind};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
@@ -6,6 +6,7 @@ use bevy_auto_plugin::prelude::auto_add_message;
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct StorageOpened {
+    pub kind: StorageKind,
     pub capacity: u32,
     pub items: Vec<StorageItem>,
 }
@@ -14,6 +15,7 @@ pub struct StorageOpened {
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct StorageItemAdded {
+    pub kind: StorageKind,
     pub item: StorageItem,
 }
 
@@ -21,12 +23,13 @@ pub struct StorageItemAdded {
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct StorageItemRemoved {
+    pub kind: StorageKind,
     pub index: u32,
     pub amount: u32,
     pub reason: u32,
 }
 
-/// Why the server rejected a Storage transfer.
+/// Why the server rejected opening storage or transferring an item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageRejection {
     Full,
@@ -37,10 +40,19 @@ pub enum StorageRejection {
     InvalidAmount,
     NotOpen,
     BasicSkillRequired,
+    NoGuild,
+    GuildNoSkill,
+    GuildNoPermission,
+    GuildInUse,
+    OtherStorageOpen,
+    Rental,
+    NoGuildStorage,
+    Stale,
     Unknown(i32),
 }
 
-/// The server's outcome of a Storage deposit or withdrawal.
+/// The server's outcome of opening storage, a deposit, or a withdrawal.
+/// The wire result has no storage kind or request identifier.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct StorageResult {

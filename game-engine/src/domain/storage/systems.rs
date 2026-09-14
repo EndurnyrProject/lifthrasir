@@ -8,7 +8,7 @@ pub fn apply_storage_opened(
     mut storage: ResMut<Storage>,
 ) {
     for snapshot in opened.read() {
-        storage.open(snapshot.capacity, snapshot.items.clone());
+        storage.open(snapshot.kind, snapshot.capacity, snapshot.items.clone());
     }
 }
 
@@ -29,16 +29,22 @@ pub fn apply_storage_item_deltas(
     }
 
     for event in added.read() {
-        storage.upsert(event.item.clone());
+        if storage.kind() == Some(event.kind) {
+            storage.upsert(event.item.clone());
+        }
     }
     for event in removed.read() {
-        storage.remove_amount(event.index, event.amount);
+        if storage.kind() == Some(event.kind) {
+            storage.remove_amount(event.index, event.amount);
+        }
     }
 }
 
 pub fn apply_storage_close(mut closed: MessageReader<CloseStorage>, mut storage: ResMut<Storage>) {
-    if closed.read().next().is_some() {
-        storage.close();
+    for command in closed.read() {
+        if storage.kind() == Some(command.kind) {
+            storage.close();
+        }
     }
 }
 
@@ -53,7 +59,7 @@ mod tests {
     use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
     use net_contract::commands::CloseStorage;
-    use net_contract::dto::StorageItem;
+    use net_contract::dto::{StorageItem, StorageKind};
     use net_contract::events::{StorageItemAdded, StorageItemRemoved, StorageOpened};
 
     fn item(index: u32, amount: u32) -> StorageItem {
@@ -84,15 +90,66 @@ mod tests {
     }
 
     #[test]
+    fn only_the_active_vault_accepts_deltas_and_close() {
+        for (kind, other) in [
+            (StorageKind::Guild, StorageKind::Personal),
+            (StorageKind::Personal, StorageKind::Guild),
+        ] {
+            let mut app = app_with_storage();
+            app.world_mut().write_message(StorageOpened {
+                kind,
+                capacity: 600,
+                items: vec![item(7, 10)],
+            });
+            app.update();
+            app.world_mut().write_message(StorageItemAdded {
+                kind: other,
+                item: item(7, 99),
+            });
+            app.world_mut().write_message(StorageItemRemoved {
+                kind: other,
+                index: 7,
+                amount: 10,
+                reason: 0,
+            });
+            app.world_mut().write_message(CloseStorage { kind: other });
+            app.update();
+            let storage = app.world().resource::<Storage>();
+            assert!(storage.is_open());
+            assert_eq!(storage.get(7).unwrap().amount, 10);
+
+            app.world_mut().write_message(StorageItemAdded {
+                kind,
+                item: item(7, 8),
+            });
+            app.world_mut().write_message(StorageItemRemoved {
+                kind,
+                index: 7,
+                amount: 3,
+                reason: 0,
+            });
+            app.update();
+            assert_eq!(app.world().resource::<Storage>().get(7).unwrap().amount, 5);
+            app.world_mut().write_message(CloseStorage { kind });
+            app.update();
+            assert!(!app.world().resource::<Storage>().is_open());
+        }
+    }
+
+    #[test]
     fn snapshot_is_applied_before_same_frame_deltas() {
         let mut app = app_with_storage();
         app.world_mut().write_message(StorageOpened {
+            kind: StorageKind::Personal,
             capacity: 40,
             items: vec![item(7, 10)],
         });
-        app.world_mut()
-            .write_message(StorageItemAdded { item: item(7, 7) });
+        app.world_mut().write_message(StorageItemAdded {
+            kind: StorageKind::Personal,
+            item: item(7, 7),
+        });
         app.world_mut().write_message(StorageItemRemoved {
+            kind: StorageKind::Personal,
             index: 7,
             amount: 2,
             reason: 0,
@@ -109,9 +166,12 @@ mod tests {
     #[test]
     fn deltas_while_closed_are_ignored() {
         let mut app = app_with_storage();
-        app.world_mut()
-            .write_message(StorageItemAdded { item: item(7, 7) });
+        app.world_mut().write_message(StorageItemAdded {
+            kind: StorageKind::Personal,
+            item: item(7, 7),
+        });
         app.world_mut().write_message(StorageItemRemoved {
+            kind: StorageKind::Personal,
             index: 7,
             amount: 2,
             reason: 0,
@@ -140,12 +200,17 @@ mod tests {
         app.init_resource::<CloseMessageCount>();
         app.add_systems(Update, count_close_messages);
         app.world_mut().write_message(StorageOpened {
+            kind: StorageKind::Personal,
             capacity: 40,
             items: vec![item(7, 10)],
         });
-        app.world_mut()
-            .write_message(StorageItemAdded { item: item(7, 7) });
-        app.world_mut().write_message(CloseStorage);
+        app.world_mut().write_message(StorageItemAdded {
+            kind: StorageKind::Personal,
+            item: item(7, 7),
+        });
+        app.world_mut().write_message(CloseStorage {
+            kind: StorageKind::Personal,
+        });
 
         app.update();
 
@@ -171,6 +236,7 @@ mod tests {
             .set(GameState::InGame);
         app.update();
         app.world_mut().write_message(StorageOpened {
+            kind: StorageKind::Personal,
             capacity: 40,
             items: vec![item(7, 10)],
         });

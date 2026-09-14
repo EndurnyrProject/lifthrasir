@@ -747,7 +747,11 @@ mod tests {
         let inventory = Inventory::default();
         let storage = {
             let mut s = Storage::default();
-            s.open(100, vec![storage_item(3, 25)]);
+            s.open(
+                net_contract::dto::StorageKind::Personal,
+                100,
+                vec![storage_item(3, 25)],
+            );
             s
         };
         let cart = Cart::default();

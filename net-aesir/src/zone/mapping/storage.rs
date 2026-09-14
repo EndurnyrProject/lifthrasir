@@ -1,16 +1,27 @@
 use crate::proto::aesir::net;
 use bevy::prelude::warn;
-use net_contract::dto::StorageItem;
+use net_contract::dto::{StorageItem, StorageKind};
 use net_contract::events::{
     StorageItemAdded, StorageItemRemoved, StorageOpened, StorageRejection, StorageResult,
 };
 
-// TODO: Wire StorageKind and guild-storage rejections through net-contract.
-pub fn storage_opened(opened: net::StorageOpened) -> StorageOpened {
-    StorageOpened {
+fn storage_kind(kind: i32) -> Option<StorageKind> {
+    match net::StorageKind::try_from(kind) {
+        Ok(net::StorageKind::Personal) => Some(StorageKind::Personal),
+        Ok(net::StorageKind::Guild) => Some(StorageKind::Guild),
+        Err(_) => {
+            warn!(kind, "ignoring message with unknown Storage kind");
+            None
+        }
+    }
+}
+
+pub fn storage_opened(opened: net::StorageOpened) -> Option<StorageOpened> {
+    Some(StorageOpened {
+        kind: storage_kind(opened.kind)?,
         capacity: opened.capacity,
         items: opened.items.into_iter().map(storage_item).collect(),
-    }
+    })
 }
 
 fn storage_item(item: net::InventoryItem) -> StorageItem {
@@ -30,8 +41,9 @@ fn storage_item(item: net::InventoryItem) -> StorageItem {
     }
 }
 
-pub fn storage_item_added(added: net::StorageItemAdded) -> StorageItemAdded {
-    StorageItemAdded {
+pub fn storage_item_added(added: net::StorageItemAdded) -> Option<StorageItemAdded> {
+    Some(StorageItemAdded {
+        kind: storage_kind(added.kind)?,
         item: StorageItem {
             index: added.index,
             nameid: added.nameid,
@@ -46,15 +58,16 @@ pub fn storage_item_added(added: net::StorageItemAdded) -> StorageItemAdded {
             identified: added.identified,
             cards: added.cards,
         },
-    }
+    })
 }
 
-pub fn storage_item_removed(removed: net::StorageItemRemoved) -> StorageItemRemoved {
-    StorageItemRemoved {
+pub fn storage_item_removed(removed: net::StorageItemRemoved) -> Option<StorageItemRemoved> {
+    Some(StorageItemRemoved {
+        kind: storage_kind(removed.kind)?,
         index: removed.index,
         amount: removed.amount,
         reason: removed.reason,
-    }
+    })
 }
 
 pub fn storage_result(result: net::StorageResult) -> StorageResult {
@@ -70,14 +83,14 @@ pub fn storage_result(result: net::StorageResult) -> StorageResult {
         Ok(StorageInvalidAmount) => Err(StorageRejection::InvalidAmount),
         Ok(StorageNotOpen) => Err(StorageRejection::NotOpen),
         Ok(StorageBasicSkillRequired) => Err(StorageRejection::BasicSkillRequired),
-        Ok(StorageNoGuild)
-        | Ok(StorageGuildNoSkill)
-        | Ok(StorageGuildNoPermission)
-        | Ok(StorageGuildInUse)
-        | Ok(StorageOtherStorageOpen)
-        | Ok(StorageRental)
-        | Ok(StorageNoGuildStorage)
-        | Ok(StorageStale) => Err(StorageRejection::Unknown(result.result)),
+        Ok(StorageNoGuild) => Err(StorageRejection::NoGuild),
+        Ok(StorageGuildNoSkill) => Err(StorageRejection::GuildNoSkill),
+        Ok(StorageGuildNoPermission) => Err(StorageRejection::GuildNoPermission),
+        Ok(StorageGuildInUse) => Err(StorageRejection::GuildInUse),
+        Ok(StorageOtherStorageOpen) => Err(StorageRejection::OtherStorageOpen),
+        Ok(StorageRental) => Err(StorageRejection::Rental),
+        Ok(StorageNoGuildStorage) => Err(StorageRejection::NoGuildStorage),
+        Ok(StorageStale) => Err(StorageRejection::Stale),
         Err(_) => {
             warn!("unknown Storage result code {}", result.result);
             Err(StorageRejection::Unknown(result.result))
@@ -114,7 +127,8 @@ mod tests {
                 creator_kind: 0,
             }],
             kind: net::StorageKind::Personal as i32,
-        });
+        })
+        .unwrap();
 
         assert_eq!(opened.capacity, 600);
         assert_eq!(opened.items.len(), 1);
@@ -153,7 +167,8 @@ mod tests {
             creator_id: 0,
             creator_kind: 0,
             kind: net::StorageKind::Personal as i32,
-        });
+        })
+        .unwrap();
 
         let item = added.item;
         assert_eq!(item.index, 70_001);
@@ -177,7 +192,8 @@ mod tests {
             amount: 80_002,
             reason: 3,
             kind: net::StorageKind::Personal as i32,
-        });
+        })
+        .unwrap();
 
         assert_eq!(removed.index, 70_002);
         assert_eq!(removed.amount, 80_002);
