@@ -58,6 +58,14 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    ConvertGr2 {
+        #[arg(long, default_value = "assets/convert.toml")]
+        loader: PathBuf,
+        #[arg(long, default_value = "assets/data/models/3dmob")]
+        out: PathBuf,
+        #[arg(long)]
+        model: Option<String>,
+    },
     ModelCorpus {
         #[command(subcommand)]
         action: ModelCorpusCommand,
@@ -142,6 +150,11 @@ fn main() -> anyhow::Result<()> {
             let grfs = config.grfs_by_priority();
             let vfs = grf_vfs::GrfVfs::open(&grfs)?;
             converters::props::run(&vfs, &models_dir, &model, force)?;
+        }
+        Command::ConvertGr2 { loader, out, model } => {
+            let config = config::LoaderConfig::from_path(&loader)?;
+            let vfs = grf_vfs::GrfVfs::open(&config.grfs_by_priority())?;
+            converters::gr2::run(&vfs, &out, model.as_deref())?;
         }
         Command::ModelCorpus { action } => match action {
             ModelCorpusCommand::Extract { loader, out } => {

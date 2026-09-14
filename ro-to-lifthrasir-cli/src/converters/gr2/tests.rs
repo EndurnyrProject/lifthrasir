@@ -6,6 +6,55 @@ use crate::{
 use ro_formats::gr2::{self, Gr2File};
 use std::path::Path;
 
+#[test]
+fn synthetic_skin_remaps_bindings_and_preserves_source_axes() {
+    let model = fixtures::model();
+    let clips = [("idle", &model)];
+    let bytes = writer::build(&model, &clips).unwrap();
+    validate::validate(&bytes, &model, &clips).unwrap();
+    let (document, buffers, _) = gltf::import_slice(bytes).unwrap();
+    let primitive = document
+        .meshes()
+        .next()
+        .unwrap()
+        .primitives()
+        .next()
+        .unwrap();
+    let reader = primitive.reader(|b| Some(&buffers[b.index()].0));
+    assert_eq!(
+        reader.read_joints(0).unwrap().into_u16().next().unwrap(),
+        [1, 0, 0, 0]
+    );
+    let axis =
+        glam::Mat4::from_cols_array_2d(&document.nodes().next().unwrap().transform().matrix());
+    assert!(
+        axis.transform_point3(glam::Vec3::new(2.0, 5.0, 1.0))
+            .abs_diff_eq(glam::Vec3::new(2.0, 1.0, -5.0), 1e-5)
+    );
+}
+
+#[test]
+fn malformed_skin_bindings_are_not_replaced_with_joint_zero() {
+    let mut model = fixtures::model();
+    model.meshes[0].bone_bindings[0] = "missing".into();
+    assert!(writer::build(&model, &[("idle", &model)]).is_err());
+}
+
+#[test]
+fn failed_conversion_preserves_existing_output() {
+    struct Corrupt;
+    impl AssetRead for Corrupt {
+        fn read_asset(&self, _: &str) -> Option<Vec<u8>> {
+            Some(vec![0; 16])
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("model.glb");
+    std::fs::write(&path, b"previous output").unwrap();
+    assert!(convert_model(&Corrupt, "model_1.gr2", &path).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), b"previous output");
+}
+
 fn retail_vfs() -> GrfVfs {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let mut config = LoaderConfig::from_path(&root.join("assets/convert.toml")).unwrap();
@@ -160,6 +209,27 @@ fn retail_guild_flag_decodes_and_samples() {
         |(min, max), &p| (min.min(p), max.max(p)),
     );
     println!("source bounds={bounds:?}");
+}
+
+#[test]
+#[ignore = "requires retail GRFs configured in assets/convert.toml"]
+fn retail_gr2_corpus_exports_self_contained_glbs() {
+    let vfs = retail_vfs();
+    let output = tempfile::tempdir().unwrap();
+    for name in source_models(&vfs) {
+        let path = output.path().join(name.replace(".gr2", ".glb"));
+        convert_model(&vfs, &name, &path).unwrap();
+        let (document, _, images) = gltf::import(&path).unwrap();
+        assert!(document.default_scene().is_some());
+        assert!(document.skins().count() > 0);
+        assert!(document.animations().any(|a| a.name() == Some("idle")));
+        assert!(!images.is_empty());
+        assert!(
+            document
+                .images()
+                .all(|image| matches!(image.source(), gltf::image::Source::View { .. }))
+        );
+    }
 }
 
 #[test]
