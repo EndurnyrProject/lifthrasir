@@ -99,6 +99,8 @@ pub fn update_terrain_raycast_cache(
             .map(|height| p.y - height)
     };
 
+    // `signed_gap` is positive above the surface; the camera starts above and
+    // the crossing is the first step that lands on or below it.
     let mut above = ray.origin;
     let mut above_gap = signed_gap(above);
     let mut crossing = None;
@@ -106,8 +108,8 @@ pub fn update_terrain_raycast_cache(
         let current = ray.origin + ray.direction * (step as f32 * STEP);
         let current_gap = signed_gap(current);
         if let (Some(prev), Some(cur)) = (above_gap, current_gap)
-            && prev <= 0.0
-            && cur >= 0.0
+            && prev >= 0.0
+            && cur <= 0.0
         {
             crossing = Some((above, current));
             break;
@@ -127,7 +129,7 @@ pub fn update_terrain_raycast_cache(
     for _ in 0..BISECT_STEPS {
         let mid = (lo + hi) * 0.5;
         match signed_gap(mid) {
-            Some(gap) if gap < 0.0 => lo = mid,
+            Some(gap) if gap > 0.0 => lo = mid,
             Some(_) => hi = mid,
             None => break,
         }

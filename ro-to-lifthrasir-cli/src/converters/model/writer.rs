@@ -9,9 +9,9 @@
 //! this writer applies the root fix exactly once: the synthetic root node
 //! carries `to_gltf_quat(Quat::IDENTITY)` and everything below it -- node TRS,
 //! vertices, normals and keyframe values -- is written raw-local, verbatim
-//! from the RSM. The runtime spawns the scene under a `ROOT_FIX` rotation, so
-//! `ROOT_FIX * root_rotation` cancels to identity and each node reproduces its
-//! native local transform exactly. Pushing the node values through the fix as
+//! from the RSM. The glb is therefore Y-up, and the map's prop node (which
+//! bakes the RSW placement conjugated into Y-up space) parents it with an
+//! identity transform at runtime. Pushing the node values through the fix as
 //! well would rotate them twice.
 
 use crate::converters::gltf_out::{
@@ -931,7 +931,7 @@ mod tests {
 
         assert_eq!(
             digest.to_hex().as_str(),
-            "e91de58e0be6b805189731d3acd62b0d8f3fb390fb11e4955d009d4cc03bc55e"
+            "2b0e014a00d12e5e6084fd349634e4149836958be5c8b7dafd2bb91d9fa9ccd2"
         );
     }
 

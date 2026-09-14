@@ -246,19 +246,20 @@ fn missing_required_idle_animation_fails_loudly() {
 
 #[test]
 fn all_facings_are_world_relative() {
-    use crate::{domain::world::gltf_map::ROOT_FIX, utils::coordinates::Direction};
+    use crate::utils::coordinates::Direction;
+    // South, SW, W, NW, N, NE, E, SE in the Y-up, north = -Z world.
     let directions = [
-        Vec3::NEG_Z,
-        Vec3::new(-1.0, 0.0, -1.0),
-        Vec3::NEG_X,
-        Vec3::new(-1.0, 0.0, 1.0),
         Vec3::Z,
-        Vec3::new(1.0, 0.0, 1.0),
-        Vec3::X,
+        Vec3::new(-1.0, 0.0, 1.0),
+        Vec3::NEG_X,
+        Vec3::new(-1.0, 0.0, -1.0),
+        Vec3::NEG_Z,
         Vec3::new(1.0, 0.0, -1.0),
+        Vec3::X,
+        Vec3::new(1.0, 0.0, 1.0),
     ];
     for (i, expected) in directions.into_iter().enumerate() {
-        let rotation = systems::facing_rotation(Direction::from_u8(i as u8)) * ROOT_FIX.inverse();
-        assert!((rotation * Vec3::NEG_Z).abs_diff_eq(expected.normalize(), 1e-5));
+        let rotation = systems::facing_rotation(Direction::from_u8(i as u8));
+        assert!((rotation * Vec3::Z).abs_diff_eq(expected.normalize(), 1e-5));
     }
 }

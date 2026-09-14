@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use std::f32::consts::FRAC_PI_2;
 
 const QUAD_SIZE: f32 = 4.2;
-const PATH_LIFT: f32 = -0.1;
+const PATH_LIFT: f32 = 0.1;
 
 #[derive(Component)]
 struct NavigationPathQuad;
@@ -25,7 +25,7 @@ impl FromWorld for NavigationPathAssets {
     fn from_world(world: &mut World) -> Self {
         let quad = world.resource_mut::<Assets<Mesh>>().add(
             Mesh::from(Rectangle::new(QUAD_SIZE, QUAD_SIZE).mesh())
-                .rotated_by(Quat::from_rotation_x(FRAC_PI_2)),
+                .rotated_by(Quat::from_rotation_x(-FRAC_PI_2)),
         );
         let material = world
             .resource_mut::<Assets<StandardMaterial>>()

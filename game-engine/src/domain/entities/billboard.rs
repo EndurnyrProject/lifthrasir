@@ -106,8 +106,7 @@ fn setup_shared_sprite_quad(mut commands: Commands, mut meshes: ResMut<Assets<Me
 /// System that makes world billboard entities always face the active camera.
 /// Copies that camera's rotation directly to each billboard transform — the
 /// gameplay follow camera in-game, or the orthographic preview camera on the
-/// character-selection / character-creation screens (which uses a `NEG_Y` up
-/// vector the billboards must inherit, else they render upside down).
+/// character-selection / character-creation screens.
 /// The equipment-window preview camera is excluded; its `PreviewBillboard`
 /// layer is faced separately by `preview_billboard_rotation_system`. Only one
 /// such camera exists per screen, so `single()` is unambiguous.

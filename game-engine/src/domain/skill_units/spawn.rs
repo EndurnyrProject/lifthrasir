@@ -225,10 +225,10 @@ fn spawn_group(
 /// how a mob/NPC's body billboard carries `Pickable` while its `NetworkEntity`
 /// lives one level up on the root (here: the cell).
 fn spawn_cell_collider(commands: &mut Commands, meshes: &mut Assets<Mesh>, cell_entity: Entity) {
-    // World up is -Y here; the plane's front face must point along NEG_Y or
+    // The plane's front face must point up (+Y) toward the camera or
     // bevy_picking backface-culls it and no click ever hits it.
     let mesh = meshes.add(Mesh::from(Plane3d::new(
-        Vec3::NEG_Y,
+        Vec3::Y,
         Vec2::splat(CELL_COLLIDER_HALF_SIZE),
     )));
 

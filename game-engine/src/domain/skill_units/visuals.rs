@@ -157,13 +157,10 @@ fn spawn_vfx_crystal(
         mesh.merge(&shard)
             .expect("cone meshes share one attribute layout");
     }
-    // World up is -Y: the cones are built along +Y with their bases at the cell
-    // origin, so flip the finished cluster to stand it upright on the ground.
-    // The sink is baked into the vertices, not the entity transform, so the
+    // The cones are built along +Y with their bases at the cell origin. The
+    // sink is baked into the vertices, not the entity transform, so the
     // spawned child stays at the cell origin.
-    let mesh = mesh
-        .rotated_by(Quat::from_rotation_x(std::f32::consts::PI))
-        .translated_by(Vec3::Y * CRYSTAL_SINK);
+    let mesh = mesh.translated_by(Vec3::NEG_Y * CRYSTAL_SINK);
 
     let material = materials.add(StandardMaterial {
         base_color: descriptor_tint(descriptor),

@@ -217,7 +217,8 @@ pub fn handle_movement_confirmed_system(
 
         let dx = (event.dest_x as f32) - (actual_src_x as f32);
         let dy = (event.dest_y as f32) - (actual_src_y as f32);
-        let direction = Direction::from_movement_vector(dx, dy);
+        // Cell +y is world -Z.
+        let direction = Direction::from_movement_vector(dx, -dy);
 
         let already_walking = matches!(movement_states.get(entity), Ok(MovementState::Moving));
 
@@ -735,10 +736,10 @@ mod tests {
         app.update();
 
         // Uniform corner heights make the bilinear blend collapse to the corner
-        // value, less the format's fixed 1.5 offset.
+        // value; GAT heights are positive-down, and the lookup lifts by 1.5.
         assert_eq!(
             app.world().get::<Transform>(entity).unwrap().translation.y,
-            CORNER_HEIGHT - 1.5
+            1.5 - CORNER_HEIGHT
         );
     }
 
@@ -746,14 +747,14 @@ mod tests {
     fn test_direction_from_movement() {
         assert_eq!(Direction::from_movement_vector(1.0, 0.0), Direction::East);
         assert_eq!(Direction::from_movement_vector(-1.0, 0.0), Direction::West);
-        assert_eq!(Direction::from_movement_vector(0.0, 1.0), Direction::North);
-        assert_eq!(Direction::from_movement_vector(0.0, -1.0), Direction::South);
+        assert_eq!(Direction::from_movement_vector(0.0, -1.0), Direction::North);
+        assert_eq!(Direction::from_movement_vector(0.0, 1.0), Direction::South);
         assert_eq!(
-            Direction::from_movement_vector(1.0, -1.0),
+            Direction::from_movement_vector(1.0, 1.0),
             Direction::SouthEast
         );
         assert_eq!(
-            Direction::from_movement_vector(-1.0, 1.0),
+            Direction::from_movement_vector(-1.0, -1.0),
             Direction::NorthWest
         );
     }

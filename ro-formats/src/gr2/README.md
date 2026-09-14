@@ -37,8 +37,8 @@ Guild flag: 2 meshes, 296 vertices, 41 joints, 5 materials and 2 Bink-encoded
 textures (256×256 banner and a raw 16×16 emblem). Idle lasts 5.666667 seconds.
 Its initial placement is identity. Sampled source bounds at time zero are
 approximately `(-8.3865, -8.2567, -0.8428)` to `(8.3865, 6.1579, 41.5211)`;
-the source is Z-up. Source-reference rendering stands it up using +90° about X
-in a -Y-up world. Maximum observed idle vertex displacement is 13.3028 units.
+the source is Z-up; the converter stands it up with -90° about X into glTF
+Y-up space, which is also the runtime world. Maximum observed idle vertex displacement is 13.3028 units.
 
 Run parser tests with `cargo test -p ro-formats --features gr2 gr2`.
 The CLI's ignored `retail_gr2_corpus_decodes_and_samples` test requires the GRFs

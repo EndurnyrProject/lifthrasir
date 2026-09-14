@@ -3,8 +3,11 @@ use moonshine_tag::Tag;
 use crate::domain::entities::character::components::equipment::EquipmentSlot;
 
 pub const PIXELS_PER_METRE: f32 = 4.0;
-pub const Z_OFFSET_PER_LAYER: f32 = 0.001;
-pub const SPRITE_BASE_Y_OFFSET: f32 = -7.5;
+/// World-Z step between sprite layers. Negative: the default camera looks
+/// toward -Z, so a lower-order layer sits farther from it.
+pub const Z_OFFSET_PER_LAYER: f32 = -0.001;
+/// Lift of the sprite quads above the unit's grounded origin.
+pub const SPRITE_BASE_Y_OFFSET: f32 = 7.5;
 
 moonshine_tag::tags! {
     pub LAYER_SHADOW,

@@ -139,12 +139,12 @@ fn spawn_marker(
     if let Some(duration) = ttl {
         entity.insert(ViewpointExpiry(Timer::new(duration, TimerMode::Once)));
     }
-    // World up is -Y: offset the center-origin cuboid negative-Y so its base
-    // rests on the grounded parent origin and the pillar rises upward.
+    // Offset the center-origin cuboid up by half its height so its base rests
+    // on the grounded parent origin and the pillar rises upward.
     entity.with_child((
         Mesh3d(mesh),
         MeshMaterial3d(material),
-        Transform::from_xyz(0.0, -PILLAR_HEIGHT / 2.0, 0.0),
+        Transform::from_xyz(0.0, PILLAR_HEIGHT / 2.0, 0.0),
     ));
 }
 
@@ -224,12 +224,12 @@ mod tests {
 
         assert_eq!(marker_ids(&mut app), vec![1]);
 
-        // The pillar mesh is a child offset to -Y (world up is -Y) so its base
+        // The pillar mesh is a child offset up by half its height so its base
         // rests on the grounded parent origin.
         let mut children = app.world_mut().query_filtered::<&Transform, With<Mesh3d>>();
         let transforms: Vec<_> = children.iter(app.world()).collect();
         assert_eq!(transforms.len(), 1);
-        assert_eq!(transforms[0].translation.y, -PILLAR_HEIGHT / 2.0);
+        assert_eq!(transforms[0].translation.y, PILLAR_HEIGHT / 2.0);
     }
 
     #[test]

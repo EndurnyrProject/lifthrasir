@@ -617,8 +617,8 @@ const OPTION_SIGHT: u32 = 1;
 const SIGHT_ORBIT_RADIUS: f32 = 9.0;
 /// Full revolution period of the Sight fireball.
 const SIGHT_ORBIT_PERIOD_SECS: f32 = 2.0;
-/// Vertical offset lifting the orbit above the unit's feet; world up is `-Y`.
-const SIGHT_ORBIT_LIFT: f32 = -8.0;
+/// Vertical offset lifting the orbit above the unit's feet.
+const SIGHT_ORBIT_LIFT: f32 = 8.0;
 
 /// The anchor entity orbiting a unit with the Sight option bit set. A
 /// TOP-LEVEL entity following `unit` from the outside (the STR-effect

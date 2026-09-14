@@ -99,10 +99,10 @@ fn walk_speed_factor(action_type: ActionType, movement_speed: Option<&MovementSp
 /// entity's world facing rotated by the camera's orientation, so a unit keeps
 /// the same on-screen orientation as the camera orbits. `camera_forward` is the
 /// camera's look direction (`Transform::forward`); the heading is anchored so
-/// the default camera, which looks toward +Z (north), yields 0 and leaves the
+/// the default camera, which looks toward -Z (north), yields 0 and leaves the
 /// world facing unchanged.
 fn camera_view_octant(camera_forward: Vec3) -> u8 {
-    let heading = camera_forward.z.atan2(camera_forward.x) - FRAC_PI_2;
+    let heading = (-camera_forward.z).atan2(camera_forward.x) - FRAC_PI_2;
     ((heading / FRAC_PI_4).round() as i32).rem_euclid(8) as u8
 }
 
@@ -261,10 +261,10 @@ mod tests {
 
     // Camera forwards for the RO-style camera (looks down at the player). Only
     // the horizontal (x, z) components drive the octant; y is the downward tilt.
-    const FORWARD_LOOKING_NORTH: Vec3 = Vec3::new(0.0, 0.707, 0.707); // default yaw
-    const FORWARD_LOOKING_WEST: Vec3 = Vec3::new(-0.707, 0.707, 0.0); // orbited +90°
-    const FORWARD_LOOKING_SOUTH: Vec3 = Vec3::new(0.0, 0.707, -0.707); // orbited 180°
-    const FORWARD_LOOKING_EAST: Vec3 = Vec3::new(0.707, 0.707, 0.0); // orbited -90°
+    const FORWARD_LOOKING_NORTH: Vec3 = Vec3::new(0.0, -0.707, -0.707); // default yaw
+    const FORWARD_LOOKING_WEST: Vec3 = Vec3::new(-0.707, -0.707, 0.0); // orbited +90°
+    const FORWARD_LOOKING_SOUTH: Vec3 = Vec3::new(0.0, -0.707, 0.707); // orbited 180°
+    const FORWARD_LOOKING_EAST: Vec3 = Vec3::new(0.707, -0.707, 0.0); // orbited -90°
 
     #[test]
     fn default_camera_octant_is_identity() {
@@ -360,12 +360,12 @@ mod tests {
         // World camera looking west (octant 2).
         app.world_mut().spawn((
             Camera3d::default(),
-            Transform::IDENTITY.looking_to(Vec3::new(-0.707, 0.707, 0.0), Vec3::NEG_Y),
+            Transform::IDENTITY.looking_to(Vec3::new(-0.707, -0.707, 0.0), Vec3::Y),
         ));
         // Second camera that must be excluded from the world query.
         app.world_mut().spawn((
             Camera3d::default(),
-            Transform::IDENTITY.looking_to(Vec3::new(0.0, 0.707, 0.707), Vec3::NEG_Y),
+            Transform::IDENTITY.looking_to(Vec3::new(0.0, -0.707, -0.707), Vec3::Y),
             EquipmentPreviewCamera,
         ));
 

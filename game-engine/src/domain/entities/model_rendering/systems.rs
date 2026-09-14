@@ -2,7 +2,6 @@ use super::{animation, *};
 use crate::domain::{
     entities::{character::components::visual::CharacterDirection, picking},
     guild::emblems::{EmblemKey, GuildEmblemImages},
-    world::gltf_map::ROOT_FIX,
 };
 use bevy::{
     asset::{LoadState, RecursiveDependencyLoadState},
@@ -56,7 +55,7 @@ pub(super) fn sync_model_scenes(
         let root = commands
             .spawn((
                 Name::new("GR2 model scene"),
-                Transform::from_rotation(ROOT_FIX),
+                Transform::IDENTITY,
                 WorldAssetRoot(
                     asset_server.load(GltfAssetLabel::Scene(0).from_asset(model.model.clone())),
                 ),
@@ -207,9 +206,11 @@ pub(super) fn wire_scenes(
     }
 }
 
-/// South is -Z in the engine; the converted source model faces -Z after ROOT_FIX.
+/// South is +Z in the engine and the converted source model faces +Z, so
+/// direction 0 (South) is the identity. RO direction indices step clockwise as
+/// seen from above, which is a negative yaw about +Y.
 pub(super) fn facing_rotation(direction: crate::utils::coordinates::Direction) -> Quat {
-    Quat::from_rotation_y(direction as u8 as f32 * std::f32::consts::FRAC_PI_4) * ROOT_FIX
+    Quat::from_rotation_y(-(direction as u8 as f32) * std::f32::consts::FRAC_PI_4)
 }
 
 pub(super) fn sync_facing(

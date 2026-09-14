@@ -48,109 +48,61 @@ impl Direction {
         }
     }
 
-    /// Convert an angle (in radians) to the nearest 8-direction
+    /// Convert a compass angle (in radians) to the nearest 8-direction.
     ///
-    /// Maps angles in the range [0, 2π] to discrete 8-directional values.
-    /// Angles are measured counter-clockwise from the positive X-axis (East).
-    ///
-    /// # Arguments
-    ///
-    /// * `angle` - Angle in radians (any value, will be normalized to 0-2π)
-    ///
-    /// # Returns
-    ///
-    /// The closest Direction enum value for the given angle
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let dir = Direction::from_angle(0.0); // East
-    /// let dir = Direction::from_angle(std::f32::consts::PI); // West
-    /// ```
+    /// The angle is measured counter-clockwise from East as seen from above:
+    /// 0 = East, π/2 = North, π = West, 3π/2 = South. Any value is accepted
+    /// and normalized to [0, 2π).
     pub fn from_angle(angle: f32) -> Self {
-        // Normalize angle to [0, 2π] range
-        let normalized = ((angle % (2.0 * std::f32::consts::PI) + 2.0 * std::f32::consts::PI)
-            % (2.0 * std::f32::consts::PI))
-            * 180.0
-            / std::f32::consts::PI;
+        use std::f32::consts::TAU;
+        let normalized = (angle % TAU + TAU) % TAU * 180.0 / std::f32::consts::PI;
 
-        // Map degrees to 8 directions (45° per direction, centered on each cardinal/ordinal)
-        // RO coordinate system: 0° = West (negative X in standard math coords)
+        // 45° per direction, centered on each cardinal/ordinal.
         match normalized as u32 {
-            337..=360 | 0..=22 => Direction::West, // 0° ± 22.5°
-            23..=67 => Direction::NorthWest,       // 45° ± 22.5°
-            68..=112 => Direction::North,          // 90° ± 22.5°
-            113..=157 => Direction::NorthEast,     // 135° ± 22.5°
-            158..=202 => Direction::East,          // 180° ± 22.5°
-            203..=247 => Direction::SouthEast,     // 225° ± 22.5°
-            248..=292 => Direction::South,         // 270° ± 22.5°
-            293..=336 => Direction::SouthWest,     // 315° ± 22.5°
-            _ => Direction::South,                 // Fallback (shouldn't happen)
+            337..=360 | 0..=22 => Direction::East,
+            23..=67 => Direction::NorthEast,
+            68..=112 => Direction::North,
+            113..=157 => Direction::NorthWest,
+            158..=202 => Direction::West,
+            203..=247 => Direction::SouthWest,
+            248..=292 => Direction::South,
+            293..=336 => Direction::SouthEast,
+            _ => Direction::South,
         }
     }
 
-    /// Calculate direction from a 2D movement vector
+    /// Facing for a world-space movement delta (destination - source).
     ///
-    /// Takes a movement delta (destination - source) and returns the appropriate
-    /// 8-direction facing. Uses atan2 to compute the angle then maps to discrete directions.
-    ///
-    /// # Arguments
-    ///
-    /// * `dx` - Delta X (destination X - source X)
-    /// * `dz` - Delta Z (destination Z - source Z)
-    ///   Note: In Bevy 3D space, Z maps to the RO Y coordinate
-    ///
-    /// # Returns
-    ///
-    /// The closest 8-direction enum value for the given movement vector.
-    /// Returns `Direction::South` if the movement vector is too small (near-zero).
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let dir = Direction::from_movement_vector(1.0, 0.0); // Moving east
-    /// let dir = Direction::from_movement_vector(-1.0, 1.0); // Moving northwest
-    /// ```
+    /// World axes: +X is East, -Z is North (RO cell +y). Returns
+    /// `Direction::South` when the delta is too small to have a direction.
     pub fn from_movement_vector(dx: f32, dz: f32) -> Self {
-        // Handle near-zero movement (no meaningful direction)
         if dx.abs() < 0.01 && dz.abs() < 0.01 {
             return Direction::South;
         }
-
-        // from_angle uses the RO angle convention where 0° is West, so the X
-        // axis is negated to map world +X movement to East.
-        let angle = dz.atan2(-dx);
-
-        // Normalize to [0, 2π] range and use from_angle
-        let normalized_angle = if angle < 0.0 {
-            angle + 2.0 * std::f32::consts::PI
-        } else {
-            angle
-        };
-
-        Self::from_angle(normalized_angle)
+        Self::from_angle((-dz).atan2(dx))
     }
 }
 
-/// Convert RO spawn coordinates to Bevy world position
-/// RO coordinates use 5.0 units per cell, while Bevy uses 10.0 (CELL_SIZE)
-/// This is because CELL_SIZE is 2x RO's native scale for rendering
-pub fn spawn_coords_to_world_position(x: u16, y: u16) -> Vec3 {
-    // RO uses 5.0 units per cell in its native coordinate system
-    // Bevy's CELL_SIZE (10.0) is 2x this for scaled rendering
-    const RO_UNITS_PER_CELL: f32 = 5.0;
-    let world_x = x as f32 * RO_UNITS_PER_CELL;
-    let world_z = y as f32 * RO_UNITS_PER_CELL;
+/// World units per RO cell. RO's native scale is 5.0 units per cell; `CELL_SIZE`
+/// (10.0) is the GND cell, which spans two GAT cells.
+pub const RO_UNITS_PER_CELL: f32 = 5.0;
 
-    Vec3::new(world_x, 0.0, world_z)
+/// Convert RO cell coordinates to a world position on the y = 0 plane.
+/// World up is +Y and RO cell +y runs toward -Z, so the world is right-handed
+/// with North at -Z, matching glTF and Bevy's forward convention.
+pub fn spawn_coords_to_world_position(x: u16, y: u16) -> Vec3 {
+    Vec3::new(
+        x as f32 * RO_UNITS_PER_CELL,
+        0.0,
+        -(y as f32) * RO_UNITS_PER_CELL,
+    )
 }
 
-/// Convert Bevy world position to RO spawn coordinates
-/// Inverse of spawn_coords_to_world_position, using RO's native 5.0 units per cell
+/// Convert a world position to RO cell coordinates.
+/// Inverse of `spawn_coords_to_world_position`.
 pub fn world_position_to_spawn_coords(pos: Vec3) -> (u16, u16) {
-    const RO_UNITS_PER_CELL: f32 = 5.0;
     let x = (pos.x / RO_UNITS_PER_CELL).round() as u16;
-    let y = (pos.z / RO_UNITS_PER_CELL).round() as u16;
+    let y = (-pos.z / RO_UNITS_PER_CELL).round() as u16;
     (x, y)
 }
 

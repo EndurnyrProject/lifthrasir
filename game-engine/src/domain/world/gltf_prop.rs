@@ -12,7 +12,7 @@
 //! spawner, not registered globally -- every other glb the app loads must stay
 //! untouched.
 
-use super::gltf_map::{CurrentMapNoShadeTint, LifPropRef, ROOT_FIX};
+use super::gltf_map::{CurrentMapNoShadeTint, LifPropRef};
 use crate::domain::entities::systems::AnimationType;
 use bevy::animation::RepeatAnimation;
 use bevy::gltf::{GltfAssetLabel, GltfExtras};
@@ -56,7 +56,7 @@ pub fn spawn_gltf_map_props(
         if path.ends_with(".glb") {
             commands
                 .spawn((
-                    Transform::from_rotation(ROOT_FIX),
+                    Transform::IDENTITY,
                     WorldAssetRoot(
                         asset_server.load(GltfAssetLabel::Scene(0).from_asset(path.clone())),
                     ),
@@ -576,7 +576,11 @@ mod tests {
         let children = world.get::<Children>(entity).expect("one child spawned");
         assert_eq!(children.len(), 1);
         let child = children[0];
-        assert_eq!(world.get::<Transform>(child).unwrap().rotation, ROOT_FIX);
+        assert_eq!(
+            world.get::<Transform>(child).unwrap().rotation,
+            Quat::IDENTITY,
+            "the map's prop node already maps the Y-up prop glb into the world"
+        );
         assert!(world.get::<WorldAssetRoot>(child).is_some());
         let anim = world.get::<PropAnim>(child).expect("PropAnim on the child");
         assert_eq!(anim.model, "ro://models/prontera/tree01.glb");

@@ -21,15 +21,16 @@ const INDOOR_MIN_DISTANCE: f32 = 90.0;
 const INDOOR_MAX_DISTANCE: f32 = 130.0;
 const INDOOR_DISTANCE: f32 = 110.0;
 /// Fixed indoor yaw: camera sits to the southwest looking northeast (RO diagonal).
-/// World axes: +X = East, +Z = North, so -45° gives offset (-x, -z) = southwest.
+/// World axes: +X = East, -Z = North, so -45° gives offset (-x, +z) = southwest.
 const INDOOR_YAW: f32 = -std::f32::consts::FRAC_PI_4;
 
-/// Build a camera offset vector from yaw/pitch angles and a distance.
+/// Build a camera offset vector from yaw/pitch angles and a distance. Yaw 0 puts
+/// the camera south of (+Z) the target; positive pitch lifts it above.
 fn offset_from_angles(yaw: f32, pitch: f32, distance: f32) -> Vec3 {
     Vec3::new(
         distance * pitch.cos() * yaw.sin(),
-        -distance * pitch.sin(),
-        -distance * pitch.cos() * yaw.cos(),
+        distance * pitch.sin(),
+        distance * pitch.cos() * yaw.cos(),
     )
 }
 
@@ -112,8 +113,8 @@ pub fn spawn_camera_on_player_ready(
     let offset = settings.offset;
     let distance = offset.length();
     if distance > 0.001 {
-        settings.yaw = offset.x.atan2(-offset.z);
-        settings.pitch = (-offset.y / distance).asin();
+        settings.yaw = offset.x.atan2(offset.z);
+        settings.pitch = (offset.y / distance).asin();
     }
 
     let camera_position = player_position + settings.offset;
@@ -128,7 +129,7 @@ pub fn spawn_camera_on_player_ready(
         // Default exposure (EV100 9.7): light values are physical and anchored
         // against it in lighting.rs. HDR + bloom are inserted by the settings
         // layer (apply_camera_effects) per the graphics settings.
-        Transform::from_translation(camera_position).looking_at(player_position, Vec3::NEG_Y),
+        Transform::from_translation(camera_position).looking_at(player_position, Vec3::Y),
         CameraFollowTarget::new(player_entity, player_position),
         settings,
         // Opts this camera into mesh picking (MeshPickingSettings::require_markers).
@@ -317,7 +318,7 @@ pub fn camera_follow_system(
 
         follow_target.smoothed_look_at = smoothed_look_at;
 
-        camera_transform.look_at(smoothed_look_at, Vec3::NEG_Y);
+        camera_transform.look_at(smoothed_look_at, Vec3::Y);
     }
 }
 

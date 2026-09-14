@@ -87,15 +87,15 @@ fn sync_body_layer_impl<T: ActionLayout>(
 
             // RO authors each frame so the sprite, drawn centered at its ACT
             // `position`, lands its feet on the ground anchor. `position` was
-            // Y-negated on extraction into a Y-up space, and world up is -Y, so we
-            // negate again to place the center: taller sprites carry a larger
-            // `position.y` and are lifted more, which is what grounds them.
+            // Y-negated on extraction into Y-up space, so it places the center
+            // directly: taller sprites carry a larger `position.y` and are
+            // lifted more, which is what grounds them.
             let current = *transform;
             transform.set_if_neq(Transform {
                 scale: Vec3::new(scale_x, scale_y, 1.0),
                 translation: Vec3::new(
                     part.position.x * SPRITE_WORLD_SCALE,
-                    -part.position.y * SPRITE_WORLD_SCALE,
+                    part.position.y * SPRITE_WORLD_SCALE,
                     current.translation.z,
                 ),
                 ..current

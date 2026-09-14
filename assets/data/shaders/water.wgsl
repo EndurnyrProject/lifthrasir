@@ -193,8 +193,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 
     // Use the Gerstner wave normal (normalized sum of all wave normals)
     let wave_normal = normalize(normal_sum);
-    let final_wave_normal = vec3<f32>(wave_normal.x, -wave_normal.y, wave_normal.z);
-    out.world_normal = normalize((world_from_local * vec4<f32>(final_wave_normal, 0.0)).xyz);
+    out.world_normal = normalize((world_from_local * vec4<f32>(wave_normal, 0.0)).xyz);
 
     // Calculate tangent and bitangent for normal mapping
     // For a horizontal water plane, tangent aligns with X-axis, bitangent with Z-axis

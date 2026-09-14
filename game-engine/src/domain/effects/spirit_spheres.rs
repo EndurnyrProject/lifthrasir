@@ -11,8 +11,8 @@ use crate::domain::entities::registry::EntityRegistry;
 const SPHERE_ORBIT_RADIUS: f32 = 11.0;
 /// Full revolution period of the sphere ring.
 const SPHERE_ORBIT_PERIOD_SECS: f32 = 3.0;
-/// Vertical offset lifting the ring to the unit's upper body; world up is `-Y`.
-const SPHERE_ORBIT_LIFT: f32 = -10.0;
+/// Vertical offset lifting the ring to the unit's upper body.
+const SPHERE_ORBIT_LIFT: f32 = 10.0;
 /// Amplitude of the per-sphere vertical bob.
 const SPHERE_BOB_AMPLITUDE: f32 = 0.8;
 /// Period of the per-sphere vertical bob.

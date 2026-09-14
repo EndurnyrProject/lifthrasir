@@ -4,17 +4,12 @@
 //!
 //! # Coordinate convention
 //!
-//! The runtime's world is -Y-up; glTF is Y-up. The runtime spawns this scene
-//! under a single root fix of 180 degrees about X, so every position, normal
-//! and node transform written here is pre-rotated by that same rotation --
-//! which is its own inverse, so `(x, y, z)` is stored as `(x, -y, -z)` and a
-//! node rotation `q` is stored as `FIX * q`. Applying the runtime root fix to
-//! the imported data therefore reproduces the native path's world values
-//! exactly, and because the fix is a proper rotation the glb is also right
-//! way up in a stock glTF viewer.
-//!
-//! This assumes Bevy's experimental `GltfLoaderSettings::convert_coordinates`
-//! stays at its default (off); enabling it would add a second rotation.
+//! RO's native frame is -Y-up; the runtime world is glTF space (Y-up, north at
+//! -Z) and the runtime spawns this scene with an identity root. Every
+//! position, normal and node transform written here is rotated from the
+//! native frame by `ROOT_FIX` (180 degrees about X): `(x, y, z)` is stored as
+//! `(x, -y, -z)` and a node rotation `q` is stored as `FIX * q`. See
+//! `gltf_out` for the full note.
 
 use crate::converters::gltf_out::{
     BinChunk, GeometryAttributes, extras_for, glb_container, push_geometry_primitive,
@@ -555,7 +550,12 @@ fn emitter_node(
 }
 
 /// Prop node with the RSW placement fully baked, so the runtime only parents
-/// the loaded RSM to it.
+/// the loaded prop glb to it under an identity transform.
+///
+/// The prop glb is Y-up (its root carries the native-to-world fix), so the
+/// node must map Y-up model space to the world: the native placement is
+/// conjugated by the fix, `FIX * q * FIX`, rather than only pre-rotated like
+/// the emitter nodes, which have no children.
 fn build_prop_node(
     root: &mut json::Root,
     model: &RswModel,
@@ -564,7 +564,7 @@ fn build_prop_node(
     converted_models: &HashSet<String>,
 ) -> anyhow::Result<json::Index<json::Node>> {
     let translation = to_gltf_vec(rsw_position_to_world(model.position, map_width, map_height));
-    let rotation = to_gltf_quat(rsw_model_rotation(model));
+    let rotation = to_gltf_quat(rsw_model_rotation(model)) * ROOT_FIX;
     let extras = extras_for(lif::EXTRAS_PROP, &lif_prop(model, converted_models)?)?;
 
     Ok(json::Index::push(
@@ -1254,7 +1254,9 @@ mod tests {
         let expected = Quat::from_rotation_z(30f32.to_radians())
             * Quat::from_rotation_x(10f32.to_radians())
             * Quat::from_rotation_y(20f32.to_radians());
-        let world = ROOT_FIX * Quat::from_array(rotation);
+        // The node maps the Y-up prop glb into the world, so the native
+        // placement is recovered by undoing the fix on both sides.
+        let world = ROOT_FIX * Quat::from_array(rotation) * ROOT_FIX;
         assert_close(world * Vec3::X, expected * Vec3::X);
         assert_close(world * Vec3::Y, expected * Vec3::Y);
         assert_close(world * Vec3::Z, expected * Vec3::Z);

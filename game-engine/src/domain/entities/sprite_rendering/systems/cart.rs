@@ -258,27 +258,27 @@ type CartLayerQuery<'w, 's> = Query<
 const CART_BACK_DISTANCE: f32 = 7.0;
 
 /// Ground-plane (x, z) offset pointing behind a unit facing `direction`.
-/// World axes: South = -Z, East = +X. Diagonals keep full per-axis magnitude
+/// World axes: South = +Z, East = +X. Diagonals keep full per-axis magnitude
 /// (a grid-diagonal step, not a normalized vector) so the cart lands on the
 /// visually adjacent back cell.
 fn cart_behind_offset(direction: Direction) -> Vec2 {
     match direction {
-        Direction::South => Vec2::new(0.0, 1.0),
-        Direction::SouthWest => Vec2::new(1.0, 1.0),
+        Direction::South => Vec2::new(0.0, -1.0),
+        Direction::SouthWest => Vec2::new(1.0, -1.0),
         Direction::West => Vec2::new(1.0, 0.0),
-        Direction::NorthWest => Vec2::new(1.0, -1.0),
-        Direction::North => Vec2::new(0.0, -1.0),
-        Direction::NorthEast => Vec2::new(-1.0, -1.0),
+        Direction::NorthWest => Vec2::new(1.0, 1.0),
+        Direction::North => Vec2::new(0.0, 1.0),
+        Direction::NorthEast => Vec2::new(-1.0, 1.0),
         Direction::East => Vec2::new(-1.0, 0.0),
-        Direction::SouthEast => Vec2::new(-1.0, 1.0),
+        Direction::SouthEast => Vec2::new(-1.0, -1.0),
     }
 }
 
 /// Drives each cart quad per frame off its parent's `PlayerSprite`: the cart
 /// ACT is direction-only (8 actions), so the parent's facing picks the action
 /// and the wheel frames animate on the cart's own delay while walking.
-/// Positions like the body (raw layer position, world up is -Y), then pulls
-/// the quad behind the character on the ground plane.
+/// Positions like the body (raw layer position), then pulls the quad behind
+/// the character on the ground plane.
 #[auto_add_system(
     plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
     schedule = Update,
@@ -355,7 +355,7 @@ pub fn sync_cart_layer(
             scale: Vec3::new(scale_x, scale_y, 1.0),
             translation: Vec3::new(
                 part.position.x * SPRITE_WORLD_SCALE + behind.x,
-                -part.position.y * SPRITE_WORLD_SCALE,
+                part.position.y * SPRITE_WORLD_SCALE,
                 part_z + behind.y,
             ),
             ..current

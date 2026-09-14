@@ -37,8 +37,7 @@ type RemoteEntityQuery = (
     &'static mut MovementState,
 );
 
-/// World units per RO cell (mirrors `spawn_coords_to_world_position`'s `cell * 5` mapping).
-const RO_UNITS_PER_CELL: f32 = 5.0;
+use crate::utils::coordinates::RO_UNITS_PER_CELL;
 
 /// Gap, in cells, beyond which we snap the visual position instead of gliding to it.
 /// Anything larger is a spawn/teleport/large correction, not a walk step.
@@ -197,9 +196,9 @@ pub fn interpolate_remote_entities_system(
 }
 
 /// World position for a fractional cell. `spawn_coords_to_world_position` only takes
-/// integer cells, so we replicate its linear `cell * 5.0` mapping for the fractional case.
+/// integer cells, so we replicate its linear mapping (cell +y runs toward -Z).
 fn world_from_cell(x: f32, y: f32) -> Vec3 {
-    Vec3::new(x * RO_UNITS_PER_CELL, 0.0, y * RO_UNITS_PER_CELL)
+    Vec3::new(x * RO_UNITS_PER_CELL, 0.0, -y * RO_UNITS_PER_CELL)
 }
 
 /// Move `current` toward `target` at the unit's walk pace (one straight cell per `ms_per_cell`),

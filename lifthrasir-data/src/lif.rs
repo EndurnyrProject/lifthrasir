@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Format version written by the current converter and required by the
 /// runtime handler.
-pub const FORMAT_VERSION: u32 = 3;
+pub const FORMAT_VERSION: u32 = 4;
 
 /// glTF root-extension key for [`LifMap`].
 pub const EXTENSION_MAP: &str = "LIF_map";

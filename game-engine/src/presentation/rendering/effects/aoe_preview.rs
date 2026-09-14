@@ -38,10 +38,9 @@ use std::f32::consts::FRAC_PI_2;
 /// reads as a grid of cells rather than one solid slab.
 const QUAD_SIZE: f32 = 4.6;
 
-/// Vertical lift off the terrain surface. Up is `-Y` in this world, so a negative
-/// offset raises the quad to dodge z-fighting with the ground (mirrors
-/// `cast_circle.rs`'s `CIRCLE_LIFT`).
-const PREVIEW_LIFT: f32 = -0.05;
+/// Vertical lift off the terrain surface to dodge z-fighting with the ground
+/// (mirrors `cast_circle.rs`'s `CIRCLE_LIFT`).
+const PREVIEW_LIFT: f32 = 0.05;
 
 /// One quad in the preview pool.
 #[derive(Component)]
@@ -60,7 +59,7 @@ impl FromWorld for AoePreviewAssets {
     fn from_world(world: &mut World) -> Self {
         let quad = world.resource_mut::<Assets<Mesh>>().add(
             Mesh::from(Rectangle::new(QUAD_SIZE, QUAD_SIZE).mesh())
-                .rotated_by(Quat::from_rotation_x(FRAC_PI_2)),
+                .rotated_by(Quat::from_rotation_x(-FRAC_PI_2)),
         );
         let material = world
             .resource_mut::<Assets<StandardMaterial>>()
@@ -649,7 +648,7 @@ mod tests {
         app.update();
 
         // Deterministic flat-GAT height sampled the same way the system does, so
-        // the assertion pins the -Y lift relationship, not a hardcoded magic value.
+        // the assertion pins the lift relationship, not a hardcoded magic value.
         let expected = spawn_coords_to_world_position(3, 7);
         let world = app.world_mut();
         let handle = world.resource::<CurrentMapAltitude>().0.clone();
@@ -676,7 +675,7 @@ mod tests {
         );
         assert!(
             (translation.y - (terrain_height + PREVIEW_LIFT)).abs() < 1e-4,
-            "ring sits at the sampled terrain height plus the -Y lift"
+            "ring sits at the sampled terrain height plus the lift"
         );
         assert!(
             world.resource::<Assets<Mesh>>().get(&mesh_handle).is_some(),

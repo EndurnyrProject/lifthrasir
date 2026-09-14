@@ -78,11 +78,11 @@ pub(super) fn apply_animation_part(
             part.scale.y * part.texture_size.y * SPRITE_WORLD_SCALE,
             1.0,
         ),
-        // World up is -Y and RO centres the sprite on the ACT position, so
-        // the authored y offset lifts the sprite off the cell when negated.
+        // RO centres the sprite on the ACT position; the authored y offset
+        // (already Y-up after extraction) lifts the sprite off the cell.
         translation: Vec3::new(
             part.position.x * SPRITE_WORLD_SCALE,
-            -part.position.y * SPRITE_WORLD_SCALE,
+            part.position.y * SPRITE_WORLD_SCALE,
             current.translation.z,
         ),
         ..current

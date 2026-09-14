@@ -58,7 +58,7 @@ impl CameraFollowTarget {
 /// - `rotation_locked`: Disables right-drag rotation (indoor maps)
 /// - `rotation_sensitivity`: Degrees per pixel for rotation (0.3 recommended)
 /// - `yaw`: Current horizontal rotation in radians (0.0 = facing north)
-/// - `pitch`: Current vertical rotation in radians (+45° default, looking down; -Y up)
+/// - `pitch`: Current vertical rotation in radians (+45° default, looking down)
 /// - `min_pitch`: Minimum pitch angle to prevent camera flipping
 /// - `max_pitch`: Maximum pitch angle to prevent camera flipping
 ///
@@ -74,7 +74,7 @@ impl CameraFollowTarget {
 #[reflect(Component)]
 pub struct CameraFollowSettings {
     /// Camera offset from the player character in world space
-    /// Default: Vec3::new(0.0, -150.0, -150.0) for RO isometric style
+    /// Default: Vec3::new(0.0, 150.0, 150.0) for RO isometric style
     pub offset: Vec3,
 
     /// Smoothing speed for horizontal movement (X and Z axes)
@@ -104,7 +104,7 @@ pub struct CameraFollowSettings {
     pub yaw: f32,
 
     /// Current vertical rotation (pitch) in radians.
-    /// With -Y up, positive = camera above looking down (RO style: +45° default).
+    /// Positive = camera above looking down (RO style: +45° default).
     pub pitch: f32,
 
     /// Minimum pitch angle in radians (prevents camera flipping)
@@ -120,8 +120,8 @@ impl Default for CameraFollowSettings {
 
         Self {
             // RO-style isometric camera offset
-            // Y=-150 (above player), Z=-150 (behind player)
-            offset: Vec3::new(0.0, -150.0, -150.0),
+            // Y=150 (above player), Z=150 (south of / behind the player)
+            offset: Vec3::new(0.0, 150.0, 150.0),
 
             // Cinematic horizontal smoothing (X, Z axes)
             horizontal_smoothing_speed: 4.0,
@@ -140,8 +140,8 @@ impl Default for CameraFollowSettings {
             rotation_sensitivity: 0.3,
 
             // Initial rotation: 0 yaw (behind player), +45 degrees pitch (looking down).
-            // With -Y up, the default offset (0, -150, -150) is above+behind the player,
-            // which corresponds to a *positive* pitch (offset_y = -distance * sin(pitch)).
+            // The default offset (0, 150, 150) is above+behind the player
+            // (offset_y = distance * sin(pitch)).
             yaw: 0.0,
             pitch: PI / 4.0, // +45 degrees in radians
 

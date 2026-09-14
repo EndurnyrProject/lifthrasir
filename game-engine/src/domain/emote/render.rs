@@ -11,9 +11,9 @@ use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
 use crate::infrastructure::assets::ro_animation_asset::{FramePart, RoAnimationAsset};
 use crate::utils::constants::SPRITE_WORLD_SCALE;
 
-/// Local child offset lifting the emote quad above the unit's head. World up is
-/// -Y, so this is more negative than the body's `SPRITE_BASE_Y_OFFSET` (-7.5).
-const ABOVE_HEAD_Y: f32 = -12.0;
+/// Local child offset lifting the emote quad above the unit's head, higher
+/// than the body's `SPRITE_BASE_Y_OFFSET` (7.5).
+const ABOVE_HEAD_Y: f32 = 12.0;
 
 /// A playing above-head emote quad. `elapsed` is seconds since spawn;
 /// `action_index` is the `emote_type` this quad renders (one action per emote,

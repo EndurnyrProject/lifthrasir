@@ -60,11 +60,11 @@ const PREVIEW_H: u32 = 240;
 /// World-space vertical extent the orthographic camera frames.
 const VIEWPORT_HEIGHT: f32 = 42.0;
 /// Vertical aim offset so the camera frames the body, not the feet at the origin.
-const LOOK_AT_Y: f32 = -8.0;
+const LOOK_AT_Y: f32 = 8.0;
 /// Camera offset mirroring the in-world RO isometric tilt, so this camera's rotation
 /// matches the world follow camera's — that match is what lets the engine drive the
 /// preview character's head/headgear from the world camera.
-const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, -150.0, -150.0);
+const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, 150.0, 150.0);
 /// Where the preview rig lives, far from the play area.
 const PREVIEW_ORIGIN: Vec3 = Vec3::new(0.0, 100_000.0, 0.0);
 /// Dedicated render layer isolating the preview camera + billboards from the world.
@@ -274,7 +274,7 @@ pub fn manage_console_preview(
                 },
                 ..OrthographicProjection::default_3d()
             }),
-            Transform::from_translation(look_at + CAMERA_OFFSET).looking_at(look_at, Vec3::NEG_Y),
+            Transform::from_translation(look_at + CAMERA_OFFSET).looking_at(look_at, Vec3::Y),
             RenderLayers::layer(PREVIEW_LAYER),
             EquipmentPreviewCamera,
             Name::new("ConsolePreviewCamera"),

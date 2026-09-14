@@ -81,8 +81,7 @@ fn soft_particle_image() -> Image {
 }
 
 /// A persistent, position-anchored smoke column: particles drift upward
-/// (world up is `-Y`, per project convention) while fading in, then out, and
-/// growing. Baked grey tint — `MapAmbientVfx` does not currently carry the
+/// while fading in, then out, and growing. Baked grey tint — `MapAmbientVfx` does not currently carry the
 /// catalog color.
 fn smoke_effect() -> EffectAsset {
     let writer = ExprWriter::new();
@@ -93,11 +92,11 @@ fn smoke_effect() -> EffectAsset {
         dimension: ShapeDimension::Volume,
     };
     // Velocity is `normalize(position - center) * speed`. Offsetting the center
-    // below the spawn sphere (+Y is down; up is -Y) biases emission upward and
-    // keeps `position - center` nonzero, guarding against a `normalize(0)` = NaN
-    // if a particle ever spawns exactly at the center.
+    // below the spawn sphere biases emission upward and keeps
+    // `position - center` nonzero, guarding against a `normalize(0)` = NaN if a
+    // particle ever spawns exactly at the center.
     let init_vel = SetVelocitySphereModifier {
-        center: writer.lit(Vec3::new(0.0, 2.0, 0.0)).expr(),
+        center: writer.lit(Vec3::new(0.0, -2.0, 0.0)).expr(),
         speed: writer.lit(0.3).uniform(writer.lit(0.9)).expr(),
     };
     let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.0).expr());
@@ -105,7 +104,7 @@ fn smoke_effect() -> EffectAsset {
         Attribute::LIFETIME,
         writer.lit(4.0).uniform(writer.lit(7.0)).expr(),
     );
-    let update_rise = AccelModifier::new(writer.lit(Vec3::new(0.0, -0.7, 0.0)).expr());
+    let update_rise = AccelModifier::new(writer.lit(Vec3::new(0.0, 0.7, 0.0)).expr());
 
     // Texture slot #0 for the soft particle mask; bound per-entity via
     // `EffectMaterial` in the attach system.
@@ -165,7 +164,7 @@ fn emitter_effect(emit_speed: f32, params: [f32; 4]) -> EffectAsset {
     // Offset center below the spawn sphere: biases the emitter upward and
     // guards against `normalize(0)` = NaN (see smoke_effect).
     let init_vel = SetVelocitySphereModifier {
-        center: writer.lit(Vec3::new(0.0, 2.0, 0.0)).expr(),
+        center: writer.lit(Vec3::new(0.0, -2.0, 0.0)).expr(),
         speed: writer.lit(speed * 0.5).uniform(writer.lit(speed)).expr(),
     };
     let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.0).expr());
@@ -173,7 +172,7 @@ fn emitter_effect(emit_speed: f32, params: [f32; 4]) -> EffectAsset {
         Attribute::LIFETIME,
         writer.lit(0.8).uniform(writer.lit(1.5)).expr(),
     );
-    let update_rise = AccelModifier::new(writer.lit(Vec3::new(0.0, -speed * 0.5, 0.0)).expr());
+    let update_rise = AccelModifier::new(writer.lit(Vec3::new(0.0, speed * 0.5, 0.0)).expr());
 
     let texture_slot = writer.lit(0u32).expr();
 

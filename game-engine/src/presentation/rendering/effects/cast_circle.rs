@@ -21,9 +21,9 @@ use std::f32::consts::FRAC_PI_2;
 const OUTER_RADIUS: f32 = 6.0;
 const INNER_RADIUS: f32 = 4.5;
 
-/// Vertical offset from the caster's origin. Up is `-Y` in this world, so a
-/// negative offset lifts the ring off the ground plane to dodge z-fighting.
-const CIRCLE_LIFT: f32 = -0.05;
+/// Vertical offset from the caster's origin, lifting the ring off the ground
+/// plane to dodge z-fighting.
+const CIRCLE_LIFT: f32 = 0.05;
 
 /// Radians/sec the ring spins around its local Y axis.
 const SPIN_RATE: f32 = 1.5;
@@ -59,9 +59,8 @@ struct CastCircle {
     timer: Timer,
 }
 
-/// Shared ring mesh, built once. Lies flat in the XZ plane with a `-Y`-facing
-/// normal (matches the pick-plane convention: this world's default culling
-/// backface-culls a `+Y`-facing plane).
+/// Shared ring mesh, built once. Lies flat in the XZ plane with a `+Y`-facing
+/// normal so it faces the camera above.
 #[derive(Resource)]
 struct CastCircleAssets {
     ring: Handle<Mesh>,
@@ -71,7 +70,7 @@ impl FromWorld for CastCircleAssets {
     fn from_world(world: &mut World) -> Self {
         let ring = world.resource_mut::<Assets<Mesh>>().add(
             Mesh::from(Annulus::new(INNER_RADIUS, OUTER_RADIUS).mesh())
-                .rotated_by(Quat::from_rotation_x(FRAC_PI_2)),
+                .rotated_by(Quat::from_rotation_x(-FRAC_PI_2)),
         );
         Self { ring }
     }

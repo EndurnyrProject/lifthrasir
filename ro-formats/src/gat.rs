@@ -118,18 +118,14 @@ impl RoAltitude {
     /// This method should be used for character positioning and gameplay logic.
     /// Returns `None` if the position is outside the map boundaries.
     ///
-    /// # Arguments
-    /// * `world_pos` - The world position to query (X, Y, Z coordinates)
-    ///
-    /// # Returns
-    /// * `Some(height)` - The interpolated terrain height in world coordinates
-    /// * `None` - If the position is outside the terrain bounds
-    ///
+    /// The runtime world is Y-up with cell +y running toward -Z, while GAT
+    /// heights are positive-down, so the returned world Y is the negated
+    /// interpolated height, lifted by the format's fixed 1.5.
     pub fn get_terrain_height_at_position(&self, world_pos: Vec3) -> Option<f32> {
         // Convert world position to cell coordinates
         // GAT has 2x the resolution of GND (200×200 vs 100×100), so scale by 2
         let cell_x = (world_pos.x / CELL_SIZE * 2.0).floor() as i32;
-        let cell_z = (world_pos.z / CELL_SIZE * 2.0).floor() as i32;
+        let cell_z = (-world_pos.z / CELL_SIZE * 2.0).floor() as i32;
 
         // Bounds check
         if cell_x < 0 || cell_x >= self.width as i32 || cell_z < 0 || cell_z >= self.height as i32 {
@@ -143,7 +139,7 @@ impl RoAltitude {
         // Calculate fractional position within cell [0.0, 1.0]
         // Account for 2x resolution scaling
         let fx = (world_pos.x / CELL_SIZE * 2.0).fract().abs();
-        let fz = (world_pos.z / CELL_SIZE * 2.0).fract().abs();
+        let fz = (-world_pos.z / CELL_SIZE * 2.0).fract().abs();
 
         // debug!("GAT: fx={}, fz={}", fx, fz);
 
@@ -156,7 +152,7 @@ impl RoAltitude {
         let v4 = cell.height[3] * fx * (1.0 - fz);
         let interpolated_height = v1 + v2 + v3 + v4;
 
-        Some(interpolated_height - 1.5)
+        Some(1.5 - interpolated_height)
     }
 }
 

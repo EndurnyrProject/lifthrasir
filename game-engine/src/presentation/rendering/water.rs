@@ -228,7 +228,11 @@ fn spawn_water_zone(
     zone: &WaterZoneLoadingState,
     normal_map: Handle<Image>,
 ) {
-    let mesh_handle = meshes.add(create_water_tiles_mesh(&zone.water_tiles, zone.wave_height));
+    // RSW water levels are positive-down; the world is Y-up.
+    let mesh_handle = meshes.add(create_water_tiles_mesh(
+        &zone.water_tiles,
+        -zone.wave_height,
+    ));
     let wave_pitch = zone.wave_pitch.clamp(MIN_WAVE_PITCH, MAX_WAVE_PITCH);
     let k = 2.0 * std::f32::consts::PI / wave_pitch;
     let scaled_wave_height = (zone.wave_height_param.min(MAX_WAVE_HEIGHT) * k).min(MAX_WAVE_HEIGHT);
@@ -329,16 +333,17 @@ fn create_water_tiles_mesh(water_tiles: &[(usize, usize)], water_y: f32) -> Mesh
         let base_vertex = positions.len() as u32;
 
         let tile_world_x = tile_x as f32 * CELL_SIZE;
-        let tile_world_z = tile_y as f32 * CELL_SIZE;
+        // Tile +y runs toward -Z; rows step along -Z so the winding faces +Y.
+        let tile_world_z = -(tile_y as f32) * CELL_SIZE;
 
         // Create vertex grid for this tile (5x5 for 4x4 subdivision)
         for row in 0..verts_per_side {
             for col in 0..verts_per_side {
                 let x = tile_world_x + col as f32 * step_size;
-                let z = tile_world_z + row as f32 * step_size;
+                let z = tile_world_z - row as f32 * step_size;
 
                 positions.push([x, water_y, z]);
-                normals.push([0.0, -1.0, 0.0]);
+                normals.push([0.0, 1.0, 0.0]);
 
                 // UV coordinates (0-1 within tile, shader calculates world UVs)
                 let u = col as f32 / subdivisions as f32;

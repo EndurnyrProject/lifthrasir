@@ -40,10 +40,9 @@ use net_contract::events::{
 const SPECIAL_EFFECT_LIFETIME_SECS: f32 = 8.0;
 
 /// Vertical offset from a unit's `Transform.translation` (its feet) to where a
-/// procedural VFX anchors. Up is `-Y` in this world, so the offset is negative to
-/// lift the burst off the ground and read it over the target's body rather than
-/// clipping into the terrain.
-const VFX_CENTER_HEIGHT: f32 = -2.0;
+/// procedural VFX anchors, lifting the burst off the ground so it reads over
+/// the target's body rather than clipping into the terrain.
+const VFX_CENTER_HEIGHT: f32 = 2.0;
 
 /// Delay between successive damage numbers of a multi-hit skill (bolts, Napalm
 /// Beat), so `div` hits read as a sequence rather than one stacked total.

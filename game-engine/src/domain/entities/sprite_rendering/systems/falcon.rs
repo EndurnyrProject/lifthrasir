@@ -88,7 +88,7 @@ impl FalconFlight {
 
 const FALCON_REST_OFFSET: Vec3 = Vec3::new(
     PIXELS_PER_METRE * 2.0,
-    SPRITE_BASE_Y_OFFSET - PIXELS_PER_METRE * 2.0,
+    SPRITE_BASE_Y_OFFSET + PIXELS_PER_METRE * 2.0,
     0.0,
 );
 const FALCON_FOLLOW_RATE: f32 = 6.0;
@@ -283,7 +283,7 @@ pub fn finalize_falcon_layer(
                 Transform {
                     translation: Vec3::new(
                         part_data.position.x * SPRITE_WORLD_SCALE,
-                        SPRITE_BASE_Y_OFFSET - part_data.position.y * SPRITE_WORLD_SCALE,
+                        SPRITE_BASE_Y_OFFSET + part_data.position.y * SPRITE_WORLD_SCALE,
                         layer_order(LAYER_FALCON) as f32 * Z_OFFSET_PER_LAYER + part as f32 * 0.001,
                     ),
                     scale: Vec3::new(scale_x, scale_y, 1.0),
@@ -514,7 +514,7 @@ pub fn sync_falcon_layer(
         transform.set_if_neq(Transform {
             translation: Vec3::new(
                 part.position.x * SPRITE_WORLD_SCALE + flight_offset.x + follow.lag.x,
-                -part.position.y * SPRITE_WORLD_SCALE + flight_offset.y + follow.lag.y,
+                part.position.y * SPRITE_WORLD_SCALE + flight_offset.y + follow.lag.y,
                 part_z + flight_offset.z + follow.lag.z,
             ),
             scale: Vec3::new(
@@ -954,7 +954,7 @@ mod tests {
         let translation = app.world().get::<Transform>(falcon).unwrap().translation;
         assert_eq!(translation.x, FALCON_REST_OFFSET.x);
         assert_eq!(translation.y, FALCON_REST_OFFSET.y);
-        assert!(translation.y < 0.0, "world-up hover must use negative Y");
+        assert!(translation.y > 0.0, "the falcon hovers above the ground");
     }
 
     #[test]

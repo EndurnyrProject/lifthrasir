@@ -6,14 +6,14 @@
 //!
 //! # Coordinate convention
 //!
-//! The runtime's world is -Y-up; glTF is Y-up. The runtime spawns glb scenes
-//! under a single root fix of 180 degrees about X, so every position, normal
-//! and node transform written by a caller of this module is pre-rotated by
-//! that same rotation -- which is its own inverse, so `(x, y, z)` is stored
-//! as `(x, -y, -z)` and a node rotation `q` is stored as `FIX * q`. Applying
-//! the runtime root fix to the imported data therefore reproduces the
-//! native path's world values exactly, and because the fix is a proper
-//! rotation the glb is also right way up in a stock glTF viewer.
+//! RO's native frame is -Y-up (heights are positive-down, cell +y runs toward
+//! +Z). The runtime world is glTF space: Y-up, right-handed, north (cell +y)
+//! at -Z, and the runtime spawns glb scenes with an identity root. So every
+//! position, normal and node transform written by a caller of this module is
+//! rotated from the native frame by [`ROOT_FIX`], 180 degrees about X:
+//! `(x, y, z)` is stored as `(x, -y, -z)` and a node rotation `q` is stored
+//! as `FIX * q`. The fix is a proper rotation, so the glb is right way up in
+//! a stock glTF viewer and in the client alike.
 //!
 //! This assumes Bevy's experimental `GltfLoaderSettings::convert_coordinates`
 //! stays at its default (off); enabling it would add a second rotation.
@@ -27,10 +27,9 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
 
-/// The runtime root fix: 180 degrees about X, mapping glTF Y-up onto the
-/// engine's -Y-up world. Written in exact components (`Quat::from_rotation_x`
-/// leaves a 1e-7 residue in the Z term) and self-inverse, so the converter
-/// applies the very same rotation to go the other way.
+/// Native RO frame to world (glTF) frame: 180 degrees about X. Written in
+/// exact components (`Quat::from_rotation_x` leaves a 1e-7 residue in the Z
+/// term) and self-inverse.
 pub const ROOT_FIX: Quat = Quat::from_xyzw(1.0, 0.0, 0.0, 0.0);
 
 /// Native world position -> glTF position; `ROOT_FIX * v`, spelled out so the

@@ -166,7 +166,7 @@ impl RoAnimationProcessor {
             .filter(|layer| (layer.sprite_index as usize) < sprite.frames.len())
             .map(|layer| {
                 let transform = Self::build_transform(layer, sprite);
-                // Negate Y to convert from ACT coords (+Y up) to Bevy coords (-Y up)
+                // Negate Y to convert from ACT coords (+Y down) to world coords (+Y up)
                 let position = Vec2::new(layer.pos[0] as f32, -layer.pos[1] as f32);
                 let scale = Vec2::new(layer.scale[0], layer.scale[1]);
                 let frame = &sprite.frames[layer.sprite_index as usize];
@@ -256,7 +256,7 @@ impl RoAnimationProcessor {
     }
 
     /// Extract attach point from animation frame (for body/head connection).
-    /// Y is negated to convert from RO coordinates (+Y down) to Bevy coordinates (-Y up).
+    /// Y is negated to convert from RO coordinates (+Y down) to world coordinates (+Y up).
     fn extract_attach_point(
         animation: &crate::infrastructure::ro_formats::act::Animation,
     ) -> Option<Vec2> {

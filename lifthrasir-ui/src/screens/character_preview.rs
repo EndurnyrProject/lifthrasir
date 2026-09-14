@@ -43,14 +43,14 @@ pub const ROW_PX: u32 = 224;
 /// live BRP) so a standing character fills the column; horizontal extent derives
 /// from the target aspect ratio (`viewport_height * width / height`).
 const PREVIEW_VIEWPORT_HEIGHT: f32 = 42.0;
-/// Vertical aim offset (world Y, down-positive) so the camera frames the character's
-/// body rather than its feet at the origin. Tuned to center the sprite in the card.
-const LOOK_AT_Y: f32 = -8.0;
+/// Vertical aim offset so the camera frames the character's body rather than
+/// its feet at the origin. Tuned to center the sprite in the card.
+const LOOK_AT_Y: f32 = 8.0;
 /// Camera offset from the row it frames, mirroring the in-world RO isometric tilt
 /// (`CameraFollowSettings::default().offset`). Magnitude is irrelevant for an
 /// orthographic projection (only `scaling_mode` sets the size); only the direction
-/// — and thus the viewing angle — matters. Y is down in this world.
-const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, -150.0, -150.0);
+/// — and thus the viewing angle — matters.
+const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, 150.0, 150.0);
 
 /// Marker for the spawned preview character entities (despawned on rebuild/exit).
 #[derive(Component)]
@@ -153,7 +153,7 @@ pub fn spawn_preview_diorama(
             },
             ..OrthographicProjection::default_3d()
         }),
-        Transform::from_translation(look_at + CAMERA_OFFSET).looking_at(look_at, Vec3::NEG_Y),
+        Transform::from_translation(look_at + CAMERA_OFFSET).looking_at(look_at, Vec3::Y),
         PreviewCamera,
         Name::new("CharacterPreviewCamera"),
     ));

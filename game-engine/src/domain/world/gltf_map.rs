@@ -53,15 +53,6 @@ const SUN_OVERLAP_PROPORTION: f32 = 0.2;
 /// inverse-square hot spot near the source.
 const POINT_LIGHT_RADIUS: f32 = 1.5;
 
-/// The one transform the runtime applies to a map glb: glTF is Y-up, the
-/// Lifthrasir world is -Y-up. Everything else (RSW placement) is baked by the
-/// converter, which pre-applied this rotation's inverse.
-///
-/// It must stay bit-identical to `writer::ROOT_FIX` in `ro-to-lifthrasir-cli`:
-/// `Quat::from_rotation_x(PI)` is the same rotation on paper but leaves a ~9e-7
-/// residue that the converter's validation pass does not expect.
-pub const ROOT_FIX: Quat = Quat::from_xyzw(1.0, 0.0, 0.0, 0.0);
-
 /// Map-wide data decoded from the glb's root extensions, on the scene root.
 #[derive(Component, Reflect, Debug, Clone)]
 #[reflect(opaque)]
@@ -210,7 +201,7 @@ fn spawn_gltf_map(
         });
         commands.entity(entity).insert((
             WorldAssetRoot(scene),
-            Transform::from_rotation(ROOT_FIX),
+            Transform::IDENTITY,
             MapScoped,
             GltfMapLoader { map_name },
         ));
@@ -1174,7 +1165,11 @@ mod tests {
         );
         assert!(world.get::<MapScoped>(entity).is_some());
         assert!(world.get::<WorldAssetRoot>(entity).is_some());
-        assert_eq!(world.get::<Transform>(entity).unwrap().rotation, ROOT_FIX);
+        assert_eq!(
+            world.get::<Transform>(entity).unwrap().rotation,
+            Quat::IDENTITY,
+            "the glb is already in world space; no root rotation is applied"
+        );
     }
 
     #[test]
@@ -1297,8 +1292,8 @@ mod tests {
         app.insert_resource(ForwardedCursorPosition {
             position: Some(VIEWPORT * 0.5),
         });
-        // World up is -Y, so a camera above the terrain looks along +Y.
-        let transform = Transform::from_xyz(7.0, -100.0, 7.0).looking_to(Vec3::Y, Vec3::Z);
+        // A camera above the terrain looks straight down; cell +y is -Z.
+        let transform = Transform::from_xyz(7.0, 100.0, -7.0).looking_to(Vec3::NEG_Y, Vec3::NEG_Z);
         app.world_mut().spawn((
             Camera3d::default(),
             headless_camera(),
@@ -1313,13 +1308,13 @@ mod tests {
         let cache = app.world().resource::<TerrainRaycastCache>();
         let world_position = cache.world_position.expect("the ray must hit the terrain");
         // Fixture GAT cell (1, 1) is `[5, 6, 7, 8]`; bilinear at 40% into the
-        // cell is 6.6, and the GAT lookup drops the usual 1.5.
+        // cell is 6.6 (positive-down), and the GAT lookup lifts by 1.5.
         assert!(
-            (world_position.y - 5.1).abs() < 0.02,
+            (world_position.y + 5.1).abs() < 0.02,
             "{world_position} is not the fixture terrain height"
         );
         assert!(
-            world_position.xz().abs_diff_eq(Vec2::splat(7.0), 0.05),
+            world_position.xz().abs_diff_eq(Vec2::new(7.0, -7.0), 0.05),
             "{world_position} drifted off the camera axis"
         );
 
@@ -1509,12 +1504,12 @@ mod tests {
         assert_eq!(source.base_volume, 0.75);
         assert_eq!(source.range, 30.0);
         assert_eq!(source.cycle, Duration::from_secs_f32(4.5));
-        // RSW [1, -2, 3] on a 2x2 ground, baked by the converter and put back
-        // in world space by `ROOT_FIX`.
+        // RSW [1, -2, 3] on a 2x2 ground, baked by the converter into the
+        // Y-up, north = -Z world.
         assert!(
             transform
                 .translation
-                .abs_diff_eq(Vec3::new(11.0, -2.0, 13.0), 1e-4),
+                .abs_diff_eq(Vec3::new(11.0, 2.0, -13.0), 1e-4),
             "{}",
             transform.translation
         );
@@ -1555,12 +1550,12 @@ mod tests {
         assert_eq!(vfx.key, "smoke");
         assert_eq!(vfx.emit_speed, 0.25);
         assert_eq!(vfx.params, [1.0, 2.0, 3.0, 4.0]);
-        // RSW [4, -6, 8] on a 2x2 ground, baked by the converter and put back
-        // in world space by `ROOT_FIX`.
+        // RSW [4, -6, 8] on a 2x2 ground, baked by the converter into the
+        // Y-up, north = -Z world.
         assert!(
             transform
                 .translation
-                .abs_diff_eq(Vec3::new(14.0, -6.0, 18.0), 1e-4),
+                .abs_diff_eq(Vec3::new(14.0, 6.0, -18.0), 1e-4),
             "{}",
             transform.translation
         );
@@ -1660,14 +1655,20 @@ mod tests {
 
         let (scale, rotation, translation) = global.to_scale_rotation_translation();
         assert!(
-            translation.abs_diff_eq(Vec3::new(17.0, -8.0, 19.0), 1e-4),
+            translation.abs_diff_eq(Vec3::new(17.0, 8.0, -19.0), 1e-4),
             "{translation}"
         );
         assert!(scale.abs_diff_eq(Vec3::new(1.0, 2.0, 3.0), 1e-4), "{scale}");
 
-        let expected = Quat::from_rotation_z(30f32.to_radians())
+        // The RSW rotation in RO's native (-Y-up) frame, conjugated by the
+        // converter's 180-degree X rotation so the node places the Y-up prop
+        // glb under it directly.
+        let fix = Quat::from_rotation_x(std::f32::consts::PI);
+        let expected = fix
+            * Quat::from_rotation_z(30f32.to_radians())
             * Quat::from_rotation_x(10f32.to_radians())
-            * Quat::from_rotation_y(20f32.to_radians());
+            * Quat::from_rotation_y(20f32.to_radians())
+            * fix;
         for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
             assert!(
                 (rotation * axis).abs_diff_eq(expected * axis, 1e-4),

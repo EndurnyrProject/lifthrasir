@@ -463,10 +463,11 @@ mod tests {
     fn test_current_direction_l_shaped_path() {
         use crate::domain::entities::character::components::visual::Direction;
 
+        // Cell +y is world -Z, so the second leg heads north along -Z.
         let waypoint_world_positions = vec![
             Vec3::new(0.0, 0.0, 0.0),
             Vec3::new(50.0, 0.0, 0.0),
-            Vec3::new(50.0, 0.0, 50.0),
+            Vec3::new(50.0, 0.0, -50.0),
         ];
         let waypoint_cell_coords = vec![(0, 0), (10, 0), (10, 10)];
 
@@ -476,7 +477,7 @@ mod tests {
             10,
             10,
             Vec3::new(0.0, 0.0, 0.0),
-            Vec3::new(50.0, 0.0, 50.0),
+            Vec3::new(50.0, 0.0, -50.0),
             1000,
             waypoint_world_positions,
             waypoint_cell_coords,
