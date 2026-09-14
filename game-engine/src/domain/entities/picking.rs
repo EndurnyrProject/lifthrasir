@@ -1,4 +1,7 @@
 use bevy::prelude::*;
+
+#[cfg(test)]
+mod tests;
 use net_contract::commands::{AttackRequested, PickupRequested, TalkToNpc};
 
 use crate::domain::entities::components::NetworkEntity;
@@ -14,12 +17,21 @@ use crate::domain::item_drop::components::FloorItem;
 use crate::domain::item_drop::pickup::{PendingPickups, PickupInfo};
 use crate::domain::skill::{CastTarget, SkillCastResolved};
 
-/// Root entity that owns the picked body billboard. The billboard is a
-/// `ChildOf` the `NetworkEntity`/`FloorItem` root, so hover/click intent is
-/// resolved on the parent; a picked entity without a parent is treated as its
-/// own root.
-fn pick_root(child: Entity, child_of: &Query<&ChildOf>) -> Entity {
-    child_of.get(child).map(|c| c.parent()).unwrap_or(child)
+type PickRoots<'w, 's> = Query<'w, 's, (), Or<(With<NetworkEntity>, With<FloorItem>)>>;
+
+/// Sprites are direct children; glTF primitives may be nested several nodes below their owner.
+fn pick_root(child: Entity, child_of: &Query<&ChildOf>, roots: &PickRoots) -> Entity {
+    let fallback = child_of.get(child).map(|c| c.parent()).unwrap_or(child);
+    let mut entity = child;
+    loop {
+        if roots.contains(entity) {
+            return entity;
+        }
+        let Ok(parent) = child_of.get(entity) else {
+            return fallback;
+        };
+        entity = parent.parent();
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -27,13 +39,14 @@ pub fn on_sprite_over(
     over: On<Pointer<Over>>,
     mut commands: Commands,
     child_of: Query<&ChildOf>,
+    roots: PickRoots,
     nets: Query<&NetworkEntity>,
     kinds: Query<(Has<Mob>, Has<Npc>, Has<FloorItem>)>,
     mut hovered: ResMut<CurrentlyHoveredEntity>,
     mut hovered_item: ResMut<HoveredFloorItem>,
     mut cursor: MessageWriter<CursorChangeRequest>,
 ) {
-    let root = pick_root(over.entity, &child_of);
+    let root = pick_root(over.entity, &child_of, &roots);
     hovered.entity = Some(root);
 
     let net = nets.get(root).ok();
@@ -66,13 +79,14 @@ pub fn on_sprite_out(
     out: On<Pointer<Out>>,
     mut commands: Commands,
     child_of: Query<&ChildOf>,
+    roots: PickRoots,
     nets: Query<&NetworkEntity>,
     mut hovered: ResMut<CurrentlyHoveredEntity>,
     mut hovered_item: ResMut<HoveredFloorItem>,
     cache: Res<TerrainRaycastCache>,
     mut cursor: MessageWriter<CursorChangeRequest>,
 ) {
-    let root = pick_root(out.entity, &child_of);
+    let root = pick_root(out.entity, &child_of, &roots);
 
     if hovered.entity == Some(root) {
         hovered.entity = None;
@@ -99,6 +113,7 @@ pub fn on_sprite_out(
 pub fn on_sprite_click(
     click: On<Pointer<Click>>,
     child_of: Query<&ChildOf>,
+    roots: PickRoots,
     nets: Query<&NetworkEntity>,
     kinds: Query<(Has<Mob>, Has<Npc>)>,
     floor_items: Query<&FloorItem>,
@@ -114,7 +129,7 @@ pub fn on_sprite_click(
         return;
     }
 
-    let root = pick_root(click.entity, &child_of);
+    let root = pick_root(click.entity, &child_of, &roots);
 
     if let TargetingMode::AwaitingEntity { skill_id, level } = *targeting {
         if let Ok(net) = nets.get(root) {

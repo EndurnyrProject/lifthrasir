@@ -14,6 +14,7 @@ use crate::{
                 GuildIdentity, NetworkEntity, PendingDespawn, SpawnGuildIdentityKnown, UnitHealth,
             },
             markers::*,
+            model_rendering::{Gr2Actor, GuildFlag},
             movement::components::{MovementSpeed, MovementState},
             registry::EntityRegistry,
             spawning::events::{DespawnEntity, EntityVanishRequested, PendingSpawnBuffer},
@@ -127,6 +128,22 @@ pub fn spawn_network_entity_system(
 ) {
     for unit in spawn_events.read() {
         let event = SpawnFields::from(unit);
+        let resource_name = (event.object_type != crate::domain::entities::types::ObjectType::Pc)
+            .then(|| {
+                job_registry
+                    .as_ref()
+                    .and_then(|registry| registry.get_sprite_name(event.job as u32))
+            })
+            .flatten();
+        let model = resource_name
+            .filter(|name| {
+                name.rsplit_once('.')
+                    .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("gr2"))
+            })
+            .map(|name| {
+                lifthrasir_data::gr2::model_asset_path(name)
+                    .unwrap_or_else(|| panic!("invalid GR2 actor resource name '{name}'"))
+            });
 
         // Check if entity already exists (e.g., spawned from character selection or re-entering view)
         if let Some(existing_entity) = entity_registry.get_entity(event.gid) {
@@ -156,6 +173,9 @@ pub fn spawn_network_entity_system(
                 }
             } else {
                 entity.remove::<(GuildIdentity, SpawnGuildIdentityKnown)>();
+                if let Some(model) = model {
+                    insert_model_actor(&mut entity, model, &event);
+                }
             }
             continue;
         }
@@ -341,6 +361,11 @@ pub fn spawn_network_entity_system(
             continue;
         }
 
+        if let Some(model) = model {
+            insert_model_actor(&mut commands.entity(entity_id), model, &event);
+            continue;
+        }
+
         // Route sprite spawning based on entity type
         match event.object_type {
             crate::domain::entities::types::ObjectType::Pc => {
@@ -368,11 +393,8 @@ pub fn spawn_network_entity_system(
             | crate::domain::entities::types::ObjectType::Homunculus
             | crate::domain::entities::types::ObjectType::Mercenary
             | crate::domain::entities::types::ObjectType::Elemental => {
-                let sprite_name = if let Some(registry) = job_registry.as_ref() {
-                    registry
-                        .get_sprite_name(event.job as u32)
-                        .unwrap_or("초보자")
-                        .to_string()
+                let sprite_name = if job_registry.is_some() {
+                    resource_name.unwrap_or("초보자").to_string()
                 } else {
                     warn!("JobSpriteRegistry not loaded yet, using fallback");
                     "초보자".to_string()
@@ -411,6 +433,26 @@ pub fn spawn_network_entity_system(
             "Spawned entity: {} ({:?}) at ({}, {}) - Entity ID: {:?}",
             event.name, event.object_type, event.position.0, event.position.1, entity_id
         );
+    }
+}
+
+/// Model actors retain the network root; only their visual and optional flag owner differ.
+fn insert_model_actor(entity: &mut EntityCommands, model: String, event: &SpawnFields) {
+    entity.insert((
+        Gr2Actor { model },
+        CharacterDirection {
+            facing: Direction::from_u8(event.direction),
+        },
+    ));
+    if event.object_type == crate::domain::entities::types::ObjectType::Npc
+        && u32::from(event.job) == lifthrasir_data::gr2::GUILD_FLAG_JOB_ID
+    {
+        entity.insert(GuildFlag {
+            guild_id: event.guild_id,
+            emblem_id: event.emblem_id,
+        });
+    } else {
+        entity.remove::<GuildFlag>();
     }
 }
 

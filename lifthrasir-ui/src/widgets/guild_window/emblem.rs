@@ -455,8 +455,10 @@ mod tests {
     fn session_clear_removes_preview_assets() {
         let mut assets = Assets::default();
         let preview = assets.add(decode_bmp(&bmp(24, 24)).unwrap());
-        let mut images = GuildEmblemPreview::default();
-        images.preview = Some(preview.clone());
+        let mut images = GuildEmblemPreview {
+            preview: Some(preview.clone()),
+            ..default()
+        };
         images.clear(&mut assets);
         assert!(assets.get(&preview).is_none());
         assert!(images.preview.is_none());

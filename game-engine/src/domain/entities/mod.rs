@@ -5,6 +5,7 @@ pub mod components;
 pub mod hover;
 pub mod hover_plugin;
 pub mod markers;
+pub mod model_rendering;
 pub mod movement;
 pub mod name_request_system;
 pub mod pathfinding;

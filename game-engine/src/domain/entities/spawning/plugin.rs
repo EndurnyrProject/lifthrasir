@@ -29,7 +29,10 @@ impl Plugin for EntitySpawningPlugin {
             .add_message::<RequestEntityVanish>();
 
         // Add entity spawning domain plugin (auto-plugin with observers and systems)
-        app.add_plugins(EntitySpawningDomainPlugin);
+        app.add_plugins((
+            EntitySpawningDomainPlugin,
+            super::super::model_rendering::ModelRenderingPlugin,
+        ));
 
         debug!("EntitySpawningPlugin initialized");
     }
