@@ -394,8 +394,7 @@ pub struct GroundSkillPlaced {
     pub server_tick: u64,
 }
 
-/// An entity was knocked back.
-// NOTE: no client consumer yet; kept for future implementation.
+/// An entity was knocked back to the server's authoritative destination.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct KnockedBack {
