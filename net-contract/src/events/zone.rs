@@ -519,8 +519,10 @@ pub struct ItemUseFailed {
     pub reason: u32,
 }
 
-/// Result of a stat allocation.
-// NOTE: no client consumer yet; kept for future implementation.
+/// Acknowledgment of a stat allocation, consumed by the Character tab.
+/// `ok` may acknowledge a partial allocation. `value` is an absolute stat value
+/// (potentially capped by the adapter's server); use `ParamChanged` for stat and
+/// point-balance updates rather than applying this acknowledgment as a delta.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct StatRaised {

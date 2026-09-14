@@ -91,6 +91,34 @@ mod tests {
     }
 
     #[test]
+    fn stat_allocation_results_preserve_success_and_rejection() {
+        let app = drain(vec![
+            (
+                GAMEPLAY,
+                Body::StatUpResult(net::StatUpResult {
+                    stat_id: 13,
+                    ok: true,
+                    value: 91,
+                }),
+            ),
+            (
+                GAMEPLAY,
+                Body::StatUpResult(net::StatUpResult {
+                    stat_id: 14,
+                    ok: false,
+                    value: 10,
+                }),
+            ),
+        ]);
+        let messages = app.world().resource::<Messages<StatRaised>>();
+        let results: Vec<_> = messages
+            .iter_current_update_messages()
+            .map(|result| (result.stat_id, result.ok, result.value))
+            .collect();
+        assert_eq!(results, vec![(13, true, 91), (14, false, 10)]);
+    }
+
+    #[test]
     fn unit_hp_on_world_produces_one_unit_hp_changed() {
         let app = drain(vec![(
             WORLD,

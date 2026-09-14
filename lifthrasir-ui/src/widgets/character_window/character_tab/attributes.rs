@@ -7,22 +7,22 @@
 //! messages (`CharacterStatus`, `StatusParameter`, `StatIncreaseRequested`,
 //! `LocalPlayer`) and the chrome/theme helpers are reused.
 //!
-//! The staging model (`stat_point_cost`, `raise`/`lower`/`spent`/`points_left`/
-//! `can_raise`, `save_messages`, `primary_bases`) is a verbatim carry-over of the old
-//! window's pure logic, along with its unit tests. The client replicates only the
-//! stat-point cost curve as a UX estimate; the server stays authoritative and
-//! reconciles on Save. Combat-stat formulas are deliberately not replicated —
-//! [`CharCombatCell`] is read straight from `CharacterStatus`.
+//! The client estimates stat-point costs for drafts, then locks editing while
+//! submitted stats await acknowledgment. Rejections are shown inline; stat and
+//! point-balance updates remain server-authoritative through `ParamChanged`.
+//! Combat-stat formulas are not replicated: [`CharCombatCell`] reads `CharacterStatus`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use bevy::text::{FontSize, FontSourceTemplate};
+use game_engine::core::state::GameState;
 use game_engine::domain::entities::character::components::status::{
     CharacterStatus, StatusParameter,
 };
 use game_engine::domain::entities::character::events::StatIncreaseRequested;
 use game_engine::domain::entities::markers::LocalPlayer;
+use net_contract::events::StatRaised;
 
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, ignore_picking};
@@ -38,14 +38,39 @@ pub const PRIMARY_STATS: [StatusParameter; 6] = [
 
 const STAT_CAP: u32 = 99;
 
+/// Register attribute state and its live UI projection.
+pub fn register(app: &mut App) {
+    app.init_resource::<CharStatStaging>();
+    app.add_systems(
+        Update,
+        (consume_stat_results, update_allocation_feedback)
+            .chain()
+            .before(update_console_attributes),
+    );
+    app.add_systems(
+        Update,
+        update_console_attributes
+            .run_if(in_state(GameState::InGame).and_then(console_attributes_changed)),
+    );
+    app.add_systems(OnExit(GameState::InGame), reset_allocations);
+}
+
+/// Drafts and outstanding replies belong to the current gameplay session only.
+fn reset_allocations(mut staging: ResMut<CharStatStaging>) {
+    *staging = default();
+}
+
 // ---------------------------------------------------------------------------
-// Pure staging model (verbatim carry-over from the old status window).
+// Stat allocation state and draft cost estimates.
 // ---------------------------------------------------------------------------
 
-/// Points staged per primary stat this session (added on top of the server base).
+/// Draft points and outstanding acknowledgments. Submitted points are never added
+/// to server stats locally; editing stays locked until every stat has replied.
 #[derive(Resource, Default)]
 pub struct CharStatStaging {
     staged: HashMap<StatusParameter, u32>,
+    pending: HashSet<u32>,
+    rejection: String,
 }
 
 /// Renewal stat-point cost to raise a stat from `value` to `value + 1`.
@@ -83,6 +108,9 @@ impl CharStatStaging {
         status_point: u32,
         bases: &HashMap<StatusParameter, u32>,
     ) {
+        if !self.pending.is_empty() {
+            return;
+        }
         let staged = self.staged_value(stat);
         let base = bases.get(&stat).copied().unwrap_or(0);
         if can_raise(base, staged, self.points_left(status_point, bases)) {
@@ -207,6 +235,10 @@ pub enum CharCombatCell {
     Aspd,
 }
 
+/// Inline pending/rejection feedback below the stat allocation controls.
+#[derive(Component, Default, Clone)]
+struct CharAllocationFeedback;
+
 /// Marks the Save / Reset commit buttons so their dim-state tracks staging.
 #[derive(Component, Default, Clone)]
 pub struct CharCommitButton;
@@ -235,7 +267,14 @@ pub fn attributes_panel() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(12), flex_grow: 1.0, flex_basis: px(0) }
         ignore_picking()
-        Children [ ledger(), commit_row() ]
+        Children [
+            ledger(),
+            commit_row(),
+            (
+                CharAllocationFeedback
+                chrome_text(String::new(), 11.0, theme::GOLD)
+            ),
+        ]
     }
 }
 
@@ -459,14 +498,18 @@ fn on_char_stepper(
     }
 }
 
-/// Save: emit one `StatIncreaseRequested` per modified stat, then clear staging.
-/// No-op when nothing is staged (`save_messages` returns empty).
+/// Submit the draft once, retaining each stat ID until its acknowledgment arrives.
 fn on_char_save(
     _: On<Pointer<Click>>,
     mut staging: ResMut<CharStatStaging>,
     mut writer: MessageWriter<StatIncreaseRequested>,
 ) {
+    if !staging.pending.is_empty() || staging.is_empty() {
+        return;
+    }
+    staging.rejection.clear();
     for message in save_messages(&staging) {
+        staging.pending.insert(u32::from(message.status_id));
         writer.write(message);
     }
     staging.clear();
@@ -475,6 +518,53 @@ fn on_char_save(
 /// Reset: discard all staged points without contacting the server.
 fn on_char_reset(_: On<Pointer<Click>>, mut staging: ResMut<CharStatStaging>) {
     staging.clear();
+}
+
+/// Consume acknowledgments even when the window is hidden. `value` is capped by
+/// Aesir and may represent a partial allocation, so only `ParamChanged` updates
+/// character stats and point balances.
+fn consume_stat_results(
+    mut results: MessageReader<StatRaised>,
+    mut staging: ResMut<CharStatStaging>,
+) {
+    for result in results.read() {
+        if !staging.pending.contains(&result.stat_id) {
+            continue;
+        }
+        staging.pending.remove(&result.stat_id);
+        if !result.ok
+            && let Some(stat) = PRIMARY_STATS
+                .iter()
+                .find(|&&stat| stat as u32 == result.stat_id)
+        {
+            staging
+                .rejection
+                .push_str(&format!("{} allocation rejected by server.\n", stat.name()));
+        }
+    }
+}
+
+/// Project pending/rejected results independently of the currently visible tab.
+fn update_allocation_feedback(
+    staging: Res<CharStatStaging>,
+    mut labels: Query<&mut Text, With<CharAllocationFeedback>>,
+) {
+    for mut text in &mut labels {
+        if !staging.is_changed() && !text.is_added() {
+            continue;
+        }
+        let waiting = if staging.pending.is_empty() {
+            ""
+        } else {
+            "Waiting for stat allocation...\n"
+        };
+        set_text(
+            &mut text,
+            format!("{waiting}{}", staging.rejection)
+                .trim_end()
+                .to_string(),
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -577,11 +667,12 @@ pub fn update_console_attributes(
     for (mut bg, stepper) in &mut steppers {
         let base = status.get_param(stepper.stat);
         let staged = staging.staged_value(stepper.stat);
-        let enabled = if stepper.raise {
-            can_raise(base, staged, points_left)
-        } else {
-            staged > 0
-        };
+        let enabled = staging.pending.is_empty()
+            && if stepper.raise {
+                can_raise(base, staged, points_left)
+            } else {
+                staged > 0
+            };
         let color = if enabled {
             theme::FIELD
         } else {
@@ -605,6 +696,9 @@ fn set_text(text: &mut Text, value: String) {
         *text = Text::new(value);
     }
 }
+
+#[cfg(test)]
+mod allocation_tests;
 
 #[cfg(test)]
 mod tests {

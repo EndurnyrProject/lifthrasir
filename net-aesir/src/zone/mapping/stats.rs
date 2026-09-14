@@ -19,7 +19,7 @@ pub fn unit_hp(u: net::UnitHp) -> UnitHpChanged {
     }
 }
 
-// NOTE: no client consumer yet; kept for future implementation.
+/// Forward allocation acknowledgments to the Character tab's pending-allocation UI.
 pub fn stat_up_result(s: net::StatUpResult) -> StatRaised {
     StatRaised {
         stat_id: s.stat_id,

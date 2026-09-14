@@ -73,7 +73,7 @@ fn paperdoll_row() -> impl Scene {
 
 /// Register the Character tab's resources + systems into `CharacterWindowPlugin`.
 pub fn register(app: &mut App) {
-    app.init_resource::<attributes::CharStatStaging>();
+    attributes::register(app);
     app.init_resource::<equip::CharLastSlotClick>();
     app.init_resource::<preview::ConsolePreviewState>();
     app.init_resource::<preview::ConsoleLocalHeadgear>();
@@ -86,7 +86,6 @@ pub fn register(app: &mut App) {
         Update,
         (
             equip::sync_console_equipment_slots,
-            attributes::update_console_attributes.run_if(attributes::console_attributes_changed),
             preview::cache_local_headgear,
             preview::manage_console_preview.after(forward_character_sprite_events),
             preview::forward_preview_headgear,
