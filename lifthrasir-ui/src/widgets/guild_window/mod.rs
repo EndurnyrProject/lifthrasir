@@ -177,7 +177,8 @@ impl Plugin for GuildWindowPlugin {
         }
         app.init_resource::<GuildUi>()
             .init_resource::<GuildUiSession>()
-            .init_resource::<emblem::GuildEmblemImages>()
+            .init_resource::<emblem::GuildEmblemPreview>()
+            .init_resource::<game_engine::domain::guild::emblems::GuildEmblemImages>()
             .init_resource::<dialogs::PendingGuildInvite>()
             .init_resource::<dialogs::PendingGuildConfirmation>()
             .add_systems(
@@ -186,7 +187,7 @@ impl Plugin for GuildWindowPlugin {
                     reset_guild_ui_session,
                     dialogs::reset_stale_invite,
                     dialogs::reset_stale_confirmation,
-                    emblem::reset_emblems,
+                    emblem::reset_emblem_preview,
                 )
                     .chain()
                     .in_set(GuildSystems::SessionReset),
@@ -207,9 +208,8 @@ impl Plugin for GuildWindowPlugin {
                         sync_header,
                         emblem::invalidate_picker_when_hidden,
                         emblem::poll_picker,
-                        emblem::receive_emblem_data,
+                        emblem::receive_emblem_changes,
                         emblem::queue_current_guild_emblem,
-                        emblem::send_next_fetch,
                         emblem::sync_header_emblem,
                         sync_emblem_upload_control,
                     )
@@ -449,7 +449,7 @@ fn apply_guild_results(
     generation: Res<ZoneSessionGeneration>,
     session: Option<Res<GuildUiSession>>,
     mut ui: ResMut<GuildUi>,
-    mut images: ResMut<emblem::GuildEmblemImages>,
+    mut images: ResMut<emblem::GuildEmblemPreview>,
     mut assets: ResMut<Assets<Image>>,
 ) {
     if session.as_deref().is_some_and(|session| session.blocked) {
@@ -1168,7 +1168,7 @@ mod tests {
             ..default()
         });
         app.init_resource::<GuildState>();
-        app.init_resource::<emblem::GuildEmblemImages>()
+        app.init_resource::<emblem::GuildEmblemPreview>()
             .insert_resource(Assets::<Image>::default());
         app.add_systems(Update, apply_guild_results);
         app.world_mut()
@@ -1206,7 +1206,7 @@ mod tests {
             }),
             ..default()
         });
-        app.init_resource::<emblem::GuildEmblemImages>()
+        app.init_resource::<emblem::GuildEmblemPreview>()
             .insert_resource(Assets::<Image>::default());
         app.add_systems(Update, apply_guild_results);
         app.world_mut()
@@ -1277,7 +1277,7 @@ mod tests {
             }),
             ..default()
         });
-        app.init_resource::<emblem::GuildEmblemImages>()
+        app.init_resource::<emblem::GuildEmblemPreview>()
             .insert_resource(Assets::<Image>::default());
         app.add_systems(Update, apply_guild_results);
         app.world_mut().write_message(GuildIngress {
@@ -1312,7 +1312,7 @@ mod tests {
             }),
             ..default()
         });
-        app.init_resource::<emblem::GuildEmblemImages>()
+        app.init_resource::<emblem::GuildEmblemPreview>()
             .insert_resource(Assets::<Image>::default());
         app.add_systems(Update, apply_guild_results);
         app.world_mut().write_message(GuildIngress {

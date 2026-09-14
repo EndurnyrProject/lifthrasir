@@ -13,8 +13,8 @@ use game_engine::domain::guild::{GuildState, GuildSystems};
 use game_engine::domain::party::PartyState;
 
 use crate::theme;
-use crate::widgets::guild_window::emblem::{EmblemKey, GuildEmblemImages};
 use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};
+use game_engine::domain::guild::emblems::{EmblemKey, GuildEmblemImages};
 
 const NAMEPLATE_WIDTH: f32 = 220.0;
 const NAMEPLATE_FONT_SIZE: f32 = 13.0;
@@ -42,6 +42,7 @@ impl Plugin for NameplatePlugin {
             )
                 .chain()
                 .after(GuildSystems::UiSync)
+                .before(GuildSystems::EmblemSend)
                 .run_if(in_state(GameState::InGame)),
         );
         app.add_systems(OnExit(GameState::InGame), despawn_all_nameplates);
@@ -412,6 +413,24 @@ mod tests {
         app
     }
 
+    fn hierarchy_labels(world: &mut World) -> Vec<String> {
+        let root = world
+            .query_filtered::<Entity, With<Nameplate>>()
+            .single(world)
+            .unwrap();
+        let mut pending = std::collections::VecDeque::from([root]);
+        let mut labels = Vec::new();
+        while let Some(entity) = pending.pop_front() {
+            if let Some(text) = world.get::<Text>(entity) {
+                labels.push(text.0.clone());
+            }
+            if let Some(children) = world.get::<Children>(entity) {
+                pending.extend(children.iter());
+            }
+        }
+        labels
+    }
+
     fn plate_count(app: &mut App) -> usize {
         let world = app.world_mut();
         world.query::<&Nameplate>().iter(world).count()
@@ -525,11 +544,7 @@ mod tests {
         app.update();
 
         let world = app.world_mut();
-        let labels: Vec<String> = world
-            .query::<&Text>()
-            .iter(world)
-            .map(|text| text.0.clone())
-            .collect();
+        let labels = hierarchy_labels(world);
         assert_eq!(
             labels,
             vec![
@@ -566,11 +581,7 @@ mod tests {
         app.update();
 
         let world = app.world_mut();
-        let labels: Vec<String> = world
-            .query::<&Text>()
-            .iter(world)
-            .map(|text| text.0.clone())
-            .collect();
+        let labels = hierarchy_labels(world);
         assert_eq!(
             labels,
             vec![
@@ -596,7 +607,12 @@ mod tests {
             },
             Visibility::Hidden,
         ));
-        app.add_systems(Update, request_visible_emblems);
+        app.add_systems(
+            Update,
+            request_visible_emblems
+                .after(GuildSystems::UiSync)
+                .before(GuildSystems::EmblemSend),
+        );
 
         app.update();
 
@@ -606,7 +622,11 @@ mod tests {
                 .cached(key)
                 .is_none()
         );
-        assert!(!app.world().resource::<GuildEmblemImages>().has_queued(key));
+        assert!(
+            app.world()
+                .resource::<Messages<net_contract::commands::GuildEmblemFetchRequested>>()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -673,14 +693,32 @@ mod tests {
             HoveredEntity,
         ));
         app.update();
-        let image = {
-            let mut assets = app.world_mut().resource_mut::<Assets<Image>>();
-            assets.add(Image::default())
-        };
         app.world_mut()
             .resource_mut::<GuildEmblemImages>()
-            .insert_cached_for_test(key, image);
-        app.add_systems(Update, sync_nameplate_emblems);
+            .request(key);
+        app.update();
+        let mut data = vec![0_u8; 54 + 24 * 24 * 3];
+        let size = data.len() as u32;
+        data[..2].copy_from_slice(b"BM");
+        data[2..6].copy_from_slice(&size.to_le_bytes());
+        data[10..14].copy_from_slice(&54_u32.to_le_bytes());
+        data[14..18].copy_from_slice(&40_u32.to_le_bytes());
+        data[18..22].copy_from_slice(&24_i32.to_le_bytes());
+        data[22..26].copy_from_slice(&24_i32.to_le_bytes());
+        data[26..28].copy_from_slice(&1_u16.to_le_bytes());
+        data[28..30].copy_from_slice(&24_u16.to_le_bytes());
+        app.world_mut().write_message(GuildIngress {
+            generation: ZoneSessionGeneration(1),
+            payload: GuildIngressPayload::EmblemData {
+                guild_id: key.guild_id,
+                emblem_id: key.emblem_id,
+                data,
+            },
+        });
+        app.add_systems(
+            Update,
+            sync_nameplate_emblems.after(GuildSystems::EmblemReceive),
+        );
 
         app.update();
         let world = app.world_mut();
@@ -697,9 +735,9 @@ mod tests {
                 .all(|visibility| *visibility == Visibility::Hidden)
         );
 
-        app.world_mut()
-            .resource_mut::<GuildEmblemImages>()
-            .remove_cached_for_test(key);
+        app.world_mut().write_message(ZoneDisconnected {
+            reason: "test cache reset".into(),
+        });
         app.update();
         let world = app.world_mut();
         assert!(
