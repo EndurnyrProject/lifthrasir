@@ -8,6 +8,7 @@ mod relation_dialogs;
 mod relations;
 pub mod scene;
 mod skills;
+pub(crate) mod slash;
 
 pub(crate) use members::request_invite;
 
@@ -56,7 +57,6 @@ pub struct PendingGuildMutation {
 #[derive(Resource, Debug, Default, PartialEq, Eq)]
 pub struct GuildUi {
     pub selected_tab: GuildTab,
-    pub create_name: String,
     pub feedback: Option<String>,
     pub pending: Option<PendingGuildMutation>,
     feedback_is_error: bool,
@@ -87,7 +87,6 @@ fn request_create(
         ui.feedback_is_error = true;
         return None;
     }
-    ui.create_name = name.to_string();
     ui.feedback = Some("Creating guild…".to_string());
     ui.feedback_is_error = false;
     ui.pending = Some(PendingGuildMutation {
@@ -103,10 +102,6 @@ fn request_create(
 pub struct GuildWindowRoot;
 #[derive(Component, Default, Clone)]
 pub struct GuildTitlebar;
-#[derive(Component, Default, Clone)]
-pub struct GuildUnguildedPanel;
-#[derive(Component, Default, Clone)]
-pub struct GuildGuildedPanel;
 #[derive(Component, Default, Clone)]
 pub struct GuildMembersPanel;
 #[derive(Component, Default, Clone)]
@@ -131,10 +126,6 @@ pub struct GuildInviteControls;
 pub struct GuildInviteNameField;
 #[derive(Component, Default, Clone)]
 pub struct GuildInviteButton;
-#[derive(Component, Default, Clone)]
-pub struct GuildCreateNameField;
-#[derive(Component, Default, Clone)]
-pub struct GuildCreateButton;
 #[derive(Component, Default, Clone)]
 pub struct GuildFeedbackText;
 #[derive(Component, Default, Clone)]
@@ -189,7 +180,6 @@ pub(crate) struct GuildMutationContext<'w> {
 }
 
 type GuildTextFieldFilter = Or<(
-    With<GuildCreateNameField>,
     With<GuildInviteNameField>,
     With<positions::PositionNameField>,
     With<positions::PositionTaxField>,
@@ -202,7 +192,6 @@ type GuildTextFieldFilter = Or<(
 type GuildTextFields<'w, 's> = Query<'w, 's, Entity, GuildTextFieldFilter>;
 type GuildEditableTextFields<'w, 's> =
     Query<'w, 's, &'static mut EditableText, GuildTextFieldFilter>;
-type GuildModePanel<'w, 's, F> = Query<'w, 's, (&'static mut Visibility, &'static mut Node), F>;
 
 pub struct GuildWindowPlugin;
 
@@ -212,7 +201,8 @@ impl Plugin for GuildWindowPlugin {
         if !app.is_plugin_added::<FeathersCorePlugin>() {
             app.add_plugins(FeathersPlugins);
         }
-        app.init_resource::<GuildUi>()
+        app.add_message::<slash::GuildSlashSubmitted>()
+            .init_resource::<GuildUi>()
             .init_resource::<GuildUiSession>()
             .init_resource::<positions::PositionDraftState>()
             .init_resource::<emblem::GuildEmblemPreview>()
@@ -244,7 +234,8 @@ impl Plugin for GuildWindowPlugin {
                     (
                         reset_guild_ui_guild,
                         relation_dialogs::reset_invalid_relation_dialogs,
-                        sync_create_draft,
+                        slash::dispatch_guild_slash
+                            .after(crate::widgets::chat_box::chat_input_control),
                         positions::sync_position_drafts,
                         apply_guild_results,
                         relation_dialogs::expire_pending_alliance,
@@ -434,6 +425,7 @@ fn sync_management_controls(
 }
 
 fn toggle_guild_window(
+    guild: Res<GuildState>,
     player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,
     ui_focus: Res<UiFocus>,
     mut root: Query<&mut Visibility, With<GuildWindowRoot>>,
@@ -450,7 +442,7 @@ fn toggle_guild_window(
         return;
     };
     if *visibility == Visibility::Hidden {
-        if ui_focus.text_input_active {
+        if !guild.in_guild() || ui_focus.text_input_active {
             return;
         }
         *visibility = Visibility::Visible;
@@ -490,34 +482,6 @@ fn clear_guild_focus_on_exit(fields: GuildTextFields, mut input_focus: ResMut<In
     clear_guild_focus(&mut input_focus, &fields);
 }
 
-pub(crate) fn on_create(
-    _: On<Activate>,
-    field: Query<&EditableText, With<GuildCreateNameField>>,
-    generation: Res<ZoneSessionGeneration>,
-    mut ui: ResMut<GuildUi>,
-    mut writer: MessageWriter<GuildCreateRequested>,
-) {
-    let Ok(field) = field.single() else {
-        return;
-    };
-    if let Some(command) = request_create(&mut ui, *generation, &field.value().to_string()) {
-        writer.write(command);
-    }
-}
-
-fn sync_create_draft(
-    field: Query<&EditableText, (With<GuildCreateNameField>, Changed<EditableText>)>,
-    mut ui: ResMut<GuildUi>,
-) {
-    let Ok(field) = field.single() else {
-        return;
-    };
-    let value = field.value().to_string();
-    if ui.create_name != value {
-        ui.create_name = value;
-    }
-}
-
 pub(crate) fn select_members(_: On<Activate>, mut ui: ResMut<GuildUi>) {
     ui.selected_tab = GuildTab::Members;
 }
@@ -540,44 +504,13 @@ pub(crate) fn select_relations(_: On<Activate>, mut ui: ResMut<GuildUi>) {
 
 fn sync_membership_mode(
     guild: Res<GuildState>,
-    mut create: GuildModePanel<(
-        With<GuildUnguildedPanel>,
-        Without<GuildGuildedPanel>,
-        Without<GuildWindowRoot>,
-    )>,
-    mut guilded: GuildModePanel<(
-        With<GuildGuildedPanel>,
-        Without<GuildUnguildedPanel>,
-        Without<GuildWindowRoot>,
-    )>,
-    mut root: Query<&mut Node, With<GuildWindowRoot>>,
+    mut root: Query<&mut Visibility, With<GuildWindowRoot>>,
 ) {
-    let Ok((mut create_visibility, mut create_node)) = create.single_mut() else {
-        return;
-    };
-    let Ok((mut guilded_visibility, mut guilded_node)) = guilded.single_mut() else {
-        return;
-    };
-    let Ok(mut root) = root.single_mut() else {
-        return;
-    };
-    let in_guild = guild.in_guild();
-    if in_guild {
-        *create_visibility = Visibility::Hidden;
-        *guilded_visibility = Visibility::Inherited;
-        create_node.display = Display::None;
-        guilded_node.display = Display::Flex;
-    } else {
-        *create_visibility = Visibility::Inherited;
-        *guilded_visibility = Visibility::Hidden;
-        create_node.display = Display::Flex;
-        guilded_node.display = Display::None;
+    if !guild.in_guild() {
+        for mut visibility in &mut root {
+            *visibility = Visibility::Hidden;
+        }
     }
-    root.width = px(if in_guild {
-        scene::GUILD_WINDOW_WIDTH
-    } else {
-        scene::CREATE_MODAL_WIDTH
-    });
 }
 
 #[allow(clippy::type_complexity)]
@@ -779,8 +712,6 @@ fn sync_tabs(
 fn sync_feedback(
     ui: Res<GuildUi>,
     mut feedback: Query<(&mut Text, &mut TextColor, &mut Visibility), With<GuildFeedbackText>>,
-    button: Query<Entity, With<GuildCreateButton>>,
-    mut commands: Commands,
 ) {
     for (mut text, mut color, mut visibility) in &mut feedback {
         if let Some(message) = &ui.feedback {
@@ -794,14 +725,6 @@ fn sync_feedback(
         } else {
             *visibility = Visibility::Hidden;
         }
-    }
-    let Ok(button) = button.single() else {
-        return;
-    };
-    if ui.pending.is_some() {
-        commands.entity(button).insert(InteractionDisabled);
-    } else {
-        commands.entity(button).remove::<InteractionDisabled>();
     }
 }
 
@@ -896,7 +819,7 @@ mod tests {
         app.add_plugins(crate::focus::UiFocusMirrorPlugin);
         let field = app
             .world_mut()
-            .spawn((GuildCreateNameField, EditableText::new("")))
+            .spawn((GuildInviteNameField, EditableText::new("")))
             .id();
         app.world_mut().spawn((GuildWindowRoot, visibility));
         let player = app
@@ -919,7 +842,7 @@ mod tests {
     }
 
     #[test]
-    fn opening_unguilded_window_does_not_claim_text_focus() {
+    fn unguilded_hotkey_keeps_window_closed_without_claiming_focus() {
         let (mut app, _, player) = toggle_app(Visibility::Hidden);
         let primary_window = app
             .world_mut()
@@ -941,7 +864,7 @@ mod tests {
             .query_filtered::<&Visibility, With<GuildWindowRoot>>()
             .single(app.world())
             .unwrap();
-        assert_eq!(*visibility, Visibility::Visible);
+        assert_eq!(*visibility, Visibility::Hidden);
     }
 
     #[test]
@@ -1083,7 +1006,7 @@ mod tests {
     fn titlebar_close_releases_guild_owned_focus() {
         let mut app = App::new();
         app.init_resource::<InputFocus>();
-        let field = app.world_mut().spawn(GuildCreateNameField).id();
+        let field = app.world_mut().spawn(GuildInviteNameField).id();
         app.world_mut()
             .spawn((GuildWindowRoot, Visibility::Visible));
         let close = app
@@ -1104,7 +1027,7 @@ mod tests {
     fn hidden_root_releases_only_guild_owned_focus() {
         let mut app = App::new();
         app.init_resource::<InputFocus>();
-        let field = app.world_mut().spawn(GuildCreateNameField).id();
+        let field = app.world_mut().spawn(positions::PositionNameField).id();
         let invite = app.world_mut().spawn(GuildInviteNameField).id();
         let other = app.world_mut().spawn_empty().id();
         app.world_mut().spawn((GuildWindowRoot, Visibility::Hidden));
@@ -1165,10 +1088,7 @@ mod tests {
             .insert_resource(ZoneSessionGeneration(9))
             .add_plugins(game_engine::domain::guild::GuildPlugin);
         app.world_mut()
-            .spawn((GuildUnguildedPanel, Visibility::Hidden, Node::default()));
-        app.world_mut()
-            .spawn((GuildGuildedPanel, Visibility::Inherited, Node::default()));
-        app.world_mut().spawn((GuildWindowRoot, Node::default()));
+            .spawn((GuildWindowRoot, Visibility::Visible));
         app.world_mut().spawn((GuildNameText, Text::default()));
         app.world_mut().spawn((GuildMasterText, Text::default()));
         app.world_mut().spawn((GuildNoticeText, Text::default()));
@@ -1205,23 +1125,10 @@ mod tests {
     }
 
     #[test]
-    fn authoritative_snapshot_switches_mode_and_projects_header() {
+    fn authoritative_snapshot_enables_management_without_opening_window() {
         let mut app = authoritative_ui_app();
         app.update();
-        assert_eq!(
-            visibility::<GuildUnguildedPanel>(&mut app),
-            Visibility::Inherited
-        );
-        assert_eq!(
-            visibility::<GuildGuildedPanel>(&mut app),
-            Visibility::Hidden
-        );
-        assert_eq!(node::<GuildUnguildedPanel>(&mut app).display, Display::Flex);
-        assert_eq!(node::<GuildGuildedPanel>(&mut app).display, Display::None);
-        assert_eq!(
-            node::<GuildWindowRoot>(&mut app).width,
-            px(scene::CREATE_MODAL_WIDTH)
-        );
+        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Hidden);
 
         app.world_mut().write_message(GuildIngress {
             generation: ZoneSessionGeneration(9),
@@ -1265,20 +1172,7 @@ mod tests {
         });
         app.update();
 
-        assert_eq!(
-            visibility::<GuildUnguildedPanel>(&mut app),
-            Visibility::Hidden
-        );
-        assert_eq!(
-            visibility::<GuildGuildedPanel>(&mut app),
-            Visibility::Inherited
-        );
-        assert_eq!(node::<GuildUnguildedPanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildGuildedPanel>(&mut app).display, Display::Flex);
-        assert_eq!(
-            node::<GuildWindowRoot>(&mut app).width,
-            px(scene::GUILD_WINDOW_WIDTH)
-        );
+        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Hidden);
         assert_eq!(marked_text::<GuildNameText>(&mut app), "Vikings");
         assert_eq!(
             marked_text::<GuildMasterText>(&mut app),
@@ -1287,6 +1181,17 @@ mod tests {
         assert_eq!(marked_text::<GuildNoticeText>(&mut app), "Welcome");
         assert_eq!(marked_text::<GuildMemberCountText>(&mut app), "1 member");
         assert_eq!(marked_text::<GuildOnlineCountText>(&mut app), "0 online");
+
+        app.init_resource::<UiFocus>();
+        app.init_resource::<InputFocus>();
+        let player = app
+            .world_mut()
+            .spawn((LocalPlayer, ActionState::<PlayerAction>::default()))
+            .id();
+        app.add_systems(Update, toggle_guild_window);
+        press_guild(&mut app, player);
+        app.update();
+        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Visible);
     }
 
     #[test]
@@ -1657,7 +1562,6 @@ mod tests {
             })
             .insert_resource(GuildUi {
                 selected_tab: GuildTab::Notice,
-                create_name: "Character A draft".into(),
                 feedback: Some("pending".into()),
                 pending: Some(PendingGuildMutation {
                     action: "create",
@@ -1674,9 +1578,12 @@ mod tests {
             .world_mut()
             .spawn((GuildWindowRoot, Visibility::Visible))
             .id();
-        let create = app
+        let position = app
             .world_mut()
-            .spawn((GuildCreateNameField, EditableText::new("Character A")))
+            .spawn((
+                positions::PositionNameField,
+                EditableText::new("Character A"),
+            ))
             .id();
         let invite = app
             .world_mut()
@@ -1694,7 +1601,7 @@ mod tests {
         );
         assert!(
             app.world()
-                .entity(create)
+                .entity(position)
                 .get::<EditableText>()
                 .unwrap()
                 .value()

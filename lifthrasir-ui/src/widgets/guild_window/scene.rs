@@ -13,7 +13,6 @@ use super::*;
 
 const WINDOW_LEFT: f32 = 250.0;
 const WINDOW_TOP: f32 = 70.0;
-pub(crate) const CREATE_MODAL_WIDTH: f32 = 360.0;
 pub(crate) const GUILD_WINDOW_WIDTH: f32 = 690.0;
 
 pub fn build(commands: &mut Commands, parent: Entity) {
@@ -27,7 +26,7 @@ fn window() -> impl Scene {
             position_type: PositionType::Absolute,
             left: px(WINDOW_LEFT),
             top: px(WINDOW_TOP),
-            width: px(CREATE_MODAL_WIDTH),
+            width: px(GUILD_WINDOW_WIDTH),
             max_height: px(650),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Stretch,
@@ -47,79 +46,15 @@ fn window() -> impl Scene {
                     padding: {UiRect::all(px(16))},
                 }
                 ignore_picking()
-                Children [ create_panel(), guild_panel() ]
+                Children [ guild_panel() ]
             ),
-        ]
-    }
-}
-
-fn create_panel() -> impl Scene {
-    let editable = EditableText {
-        max_characters: Some(24),
-        ..default()
-    };
-    bsn! {
-        GuildUnguildedPanel
-        Node { flex_direction: FlexDirection::Column, row_gap: px(12) }
-        Children [
-            title_text("Create a Guild".to_string(), 20.0, theme::DISPLAY_GOLD),
-            chrome_text("Choose a guild name to establish your banner.".to_string(), 12.0, theme::TEXT_DIM),
-            (
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    height: px(42),
-                    padding: {UiRect::horizontal(px(12))},
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(9)),
-                }
-                BackgroundColor(theme::FIELD)
-                BorderColor::all(theme::STROKE)
-                Pickable
-                Children [
-                    (
-                        GuildCreateNameField
-                        Pickable
-                        template_value(editable)
-                        TextFont {
-                            font: FontSourceTemplate::Handle(theme::FONT_BODY),
-                            font_size: {FontSize::Px(14.0)},
-                        }
-                        TextColor(theme::TEXT)
-                        Node { flex_grow: 1.0, height: px(18) }
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(10),
-                }
-                ignore_picking()
-                Children [
-                    (
-                        GuildCreateButton
-                        @FeathersButton {
-                            @caption: bsn! { (Text("Create") ThemedText) },
-                            @variant: ButtonVariant::Primary,
-                        }
-                        Node { width: px(150), height: px(38) }
-                        on(super::on_create)
-                    ),
-                    chrome_text("Requires 1 Emperium".to_string(), 11.5, theme::GOLD),
-                ]
-            ),
-            feedback_text(),
         ]
     }
 }
 
 fn guild_panel() -> impl Scene {
     bsn! {
-        GuildGuildedPanel
-        Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10), display: Display::None }
-        Visibility::Hidden
+        Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10) }
         ignore_picking()
         Children [ header(), tabs(), content(), leave_control(), feedback_text() ]
     }
@@ -570,7 +505,7 @@ mod tests {
     }
 
     #[test]
-    fn window_has_create_and_approved_supported_tabs() {
+    fn window_has_supported_tabs_without_creation_controls() {
         let mut app = app();
         app.world_mut().spawn_scene(window()).unwrap();
         let texts: Vec<_> = app
@@ -580,18 +515,13 @@ mod tests {
             .map(|text| text.0.clone())
             .collect();
 
-        for expected in [
-            "Create a Guild",
-            "Requires 1 Emperium",
-            "Members",
-            "Positions",
-            "Notice",
-            "Skills",
-            "Relations",
-        ] {
+        for expected in ["Members", "Positions", "Notice", "Skills", "Relations"] {
             assert!(texts.contains(&expected.to_string()), "missing {expected}");
         }
         for omitted in [
+            "Create a Guild",
+            "Create",
+            "Requires 1 Emperium",
             "Territories",
             "Expelled",
             "Guild Funds",
@@ -668,7 +598,7 @@ mod tests {
     }
 
     #[test]
-    fn create_view_is_compact_and_name_fields_are_click_focusable() {
+    fn management_window_keeps_invite_field_click_focusable() {
         let mut app = app();
         app.add_plugins(crate::focus::UiFocusMirrorPlugin);
         app.world_mut().spawn_scene(window()).unwrap();
@@ -678,35 +608,91 @@ mod tests {
             .query_filtered::<&Node, With<GuildWindowRoot>>()
             .single(app.world())
             .unwrap();
-        assert_eq!(root.width, px(CREATE_MODAL_WIDTH));
+        assert_eq!(root.width, px(GUILD_WINDOW_WIDTH));
+        let entity = app
+            .world_mut()
+            .query_filtered::<Entity, With<GuildInviteNameField>>()
+            .single(app.world())
+            .unwrap();
         assert_eq!(
-            app.world_mut()
-                .query_filtered::<&Node, With<GuildGuildedPanel>>()
-                .single(app.world())
-                .unwrap()
-                .display,
-            Display::None
+            app.world().get::<Pickable>(entity),
+            Some(&Pickable::default())
         );
-        for entity in [
-            app.world_mut()
-                .query_filtered::<Entity, With<GuildCreateNameField>>()
-                .single(app.world())
-                .unwrap(),
-            app.world_mut()
-                .query_filtered::<Entity, With<GuildInviteNameField>>()
-                .single(app.world())
-                .unwrap(),
-        ] {
-            assert_eq!(
-                app.world().get::<Pickable>(entity),
-                Some(&Pickable::default())
-            );
-            assert_eq!(
-                app.world()
-                    .get::<bevy::input_focus::tab_navigation::TabIndex>(entity),
-                Some(&bevy::input_focus::tab_navigation::TabIndex(0))
-            );
-        }
+        assert_eq!(
+            app.world()
+                .get::<bevy::input_focus::tab_navigation::TabIndex>(entity),
+            Some(&bevy::input_focus::tab_navigation::TabIndex(0))
+        );
+    }
+
+    #[test]
+    fn clicking_invite_name_field_accepts_keyboard_input() {
+        use bevy::camera::RenderTarget;
+        use bevy::input::ButtonState;
+        use bevy::input::keyboard::{Key, KeyboardInput};
+        use bevy::input_focus::tab_navigation::TabNavigationPlugin;
+        use bevy::input_focus::{InputDispatchPlugin, InputFocusPlugin};
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerButton, PointerId};
+        use bevy::window::{PrimaryWindow, WindowRef};
+
+        let mut app = app();
+        app.add_plugins((
+            bevy::input::InputPlugin,
+            InputFocusPlugin,
+            InputDispatchPlugin,
+            TabNavigationPlugin,
+            bevy::text::TextPlugin,
+            bevy::ui_widgets::EditableTextInputPlugin,
+            crate::focus::UiFocusMirrorPlugin,
+        ));
+        app.init_resource::<game_engine::domain::input::UiFocus>();
+        app.init_resource::<bevy::ui::UiScale>();
+        app.add_message::<bevy::window::Ime>();
+        app.add_message::<Pointer<Release>>();
+        let window = app
+            .world_mut()
+            .spawn((Window::default(), PrimaryWindow))
+            .id();
+        app.world_mut().spawn_scene(super::window()).unwrap();
+        let name_box = app
+            .world_mut()
+            .query_filtered::<Entity, With<GuildInviteNameField>>()
+            .single(app.world())
+            .unwrap();
+
+        app.world_mut().trigger(Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: RenderTarget::Window(WindowRef::Entity(window))
+                    .normalize(Some(window))
+                    .unwrap(),
+                position: Vec2::new(4.0, 4.0),
+            },
+            Press {
+                button: PointerButton::Primary,
+                hit: HitData::new(window, 0.0, None, None),
+                count: 1,
+            },
+            name_box,
+        ));
+        app.world_mut().flush();
+        app.world_mut().write_message(KeyboardInput {
+            key_code: KeyCode::KeyV,
+            logical_key: Key::Character("V".into()),
+            state: ButtonState::Pressed,
+            text: Some("V".into()),
+            repeat: false,
+            window,
+        });
+        app.update();
+
+        let field = app
+            .world_mut()
+            .query_filtered::<&EditableText, With<GuildInviteNameField>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(field.value(), "V");
     }
 
     #[test]

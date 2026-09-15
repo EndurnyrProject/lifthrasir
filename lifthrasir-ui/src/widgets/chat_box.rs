@@ -20,6 +20,7 @@ use net_contract::events::ChatHeard;
 use crate::rich_text::spawn_colored_text;
 use crate::theme;
 use crate::widgets::emote::slash::parse_emote_slash;
+use crate::widgets::guild_window::slash::{GuildSlashSubmitted, parse_guild_slash};
 use crate::widgets::mount::parse_mount_slash;
 use crate::widgets::navigation::slash::{NaviSlash, parse_navi_slash};
 use crate::widgets::party::slash::{PartySlashSubmitted, parse_party_slash};
@@ -48,15 +49,16 @@ struct ChatLine;
 
 /// The chat input field. Used to filter [`SubmitText`] to this input.
 #[derive(Component)]
-struct ChatInput;
+pub(crate) struct ChatInput;
 
 #[derive(SystemParam)]
-struct ChatInputWriters<'w> {
+pub(crate) struct ChatInputWriters<'w> {
     chat: MessageWriter<'w, ChatSendRequested>,
     party: MessageWriter<'w, PartySlashSubmitted>,
     emote: MessageWriter<'w, EmoteRequested>,
     mount: MessageWriter<'w, MountPeco>,
     navi: MessageWriter<'w, NaviSlash>,
+    guild: MessageWriter<'w, GuildSlashSubmitted>,
 }
 
 pub struct ChatBoxPlugin;
@@ -438,10 +440,10 @@ fn append_incoming_chat(
 ///   `EmoteRequested`; then `/mount`//`/unmount` (`parse_mount_slash`) writes
 ///   `MountPeco`; otherwise a recognized party slash command
 ///   (`parse_party_slash`) is queued as `PartySlashSubmitted`; then a recognized navigation
-///   slash (`parse_navi_slash`) is queued as `NaviSlash`; otherwise it is sent as a normal
-///   chat message.
+///   slash (`parse_navi_slash`) is queued as `NaviSlash`; `/guild` is queued as
+///   `GuildSlashSubmitted` (including syntax errors); otherwise it is sent as normal chat.
 ///
-fn chat_input_control(
+pub(crate) fn chat_input_control(
     keys: Res<ButtonInput<KeyCode>>,
     mut chat_input: Query<(Entity, &mut EditableText), With<ChatInput>>,
     mut writers: ChatInputWriters,
@@ -476,6 +478,8 @@ fn chat_input_control(
                 writers.party.write(PartySlashSubmitted(slash));
             } else if let Some(slash) = parse_navi_slash(message) {
                 writers.navi.write(slash);
+            } else if let Some(slash) = parse_guild_slash(message) {
+                writers.guild.write(slash);
             } else {
                 writers.chat.write(ChatSendRequested {
                     message: message.to_string(),
@@ -533,6 +537,7 @@ mod tests {
         app.init_resource::<InputFocus>();
         app.add_message::<ChatSendRequested>();
         app.add_message::<PartySlashSubmitted>();
+        app.add_message::<GuildSlashSubmitted>();
         app.add_message::<EmoteRequested>();
         app.add_message::<MountPeco>();
         app.add_message::<crate::widgets::navigation::slash::NaviSlash>();
@@ -616,6 +621,52 @@ mod tests {
             app.world().resource::<InputFocus>().get(),
             None,
             "field unfocused after submit"
+        );
+    }
+
+    #[test]
+    fn enter_with_guild_creation_command_does_not_broadcast_it() {
+        let (mut app, chat) = chat_control_app("/guild \"Viking Guild\"");
+        app.world_mut()
+            .resource_mut::<InputFocus>()
+            .set(chat, FocusCause::Navigated);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.update();
+
+        assert!(chat_messages(&app).is_empty());
+        let messages = app.world().resource::<Messages<GuildSlashSubmitted>>();
+        let mut cursor = messages.get_cursor();
+        assert_eq!(
+            cursor.read(messages).cloned().collect::<Vec<_>>(),
+            vec![GuildSlashSubmitted(Ok("Viking Guild".into()))]
+        );
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
+        assert_eq!(app.world().get::<EditableText>(chat).unwrap().value(), "");
+    }
+
+    #[test]
+    fn malformed_guild_command_is_handled_locally_not_broadcast() {
+        let (mut app, chat) = chat_control_app("/guild missing quotes");
+        app.world_mut()
+            .resource_mut::<InputFocus>()
+            .set(chat, FocusCause::Navigated);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.update();
+
+        assert!(chat_messages(&app).is_empty());
+        let messages = app.world().resource::<Messages<GuildSlashSubmitted>>();
+        assert!(
+            messages
+                .get_cursor()
+                .read(messages)
+                .next()
+                .unwrap()
+                .0
+                .is_err()
         );
     }
 

@@ -170,6 +170,14 @@ pub(super) fn ingest_guild_announcements(
             continue;
         }
         match &event.payload {
+            GuildIngressPayload::ActionResult(result) if result.action == "create" => {
+                let (text, color) = if result.success {
+                    ("Guild created. Waiting for guild information…", theme::GOLD)
+                } else {
+                    (guild_action_error_text("create", result.error), theme::BAD)
+                };
+                append_colored_line(&mut commands, container, text, color, font.clone());
+            }
             GuildIngressPayload::ActionResult(result)
                 if result.action == "alliance_request"
                     && !result.success
@@ -279,6 +287,57 @@ mod tests {
                 .in_set(GuildSystems::UiSync),
         );
         app
+    }
+
+    #[test]
+    fn creation_results_appear_in_chat_with_the_guild_window_closed() {
+        let generation = ZoneSessionGeneration(9);
+        for (success, error, expected) in [
+            (
+                true,
+                GuildErrorKind::None,
+                "Guild created. Waiting for guild information…",
+            ),
+            (
+                false,
+                GuildErrorKind::NoEmperium,
+                "Creation requires an Emperium",
+            ),
+            (
+                false,
+                GuildErrorKind::NameTaken,
+                "Guild name is already taken",
+            ),
+        ] {
+            let mut app = feedback_app(generation);
+            app.world_mut().resource_mut::<GuildUi>().pending = Some(PendingGuildMutation {
+                action: "create",
+                generation,
+            });
+            for event_generation in [ZoneSessionGeneration(8), generation] {
+                app.world_mut().write_message(GuildIngress {
+                    generation: event_generation,
+                    payload: GuildIngressPayload::ActionResult(GuildActionResult {
+                        action: "create".into(),
+                        success,
+                        error,
+                    }),
+                });
+            }
+            app.update();
+
+            let mut lines = app.world_mut().query::<&Text>();
+            assert_eq!(lines.single(app.world()).unwrap().0, expected);
+            assert!(app.world().resource::<GuildUi>().pending.is_none());
+            assert!(!app.world().resource::<GuildState>().in_guild());
+            assert_eq!(
+                *app.world_mut()
+                    .query_filtered::<&Visibility, With<GuildWindowRoot>>()
+                    .single(app.world())
+                    .unwrap(),
+                Visibility::Hidden
+            );
+        }
     }
 
     #[test]

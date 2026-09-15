@@ -36,8 +36,7 @@ setup.log
 _opam/
 
 # GRF
-en.grf
-data.grf
+*.grf
 *.pak
 
 # Generated assets
