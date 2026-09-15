@@ -5,6 +5,7 @@ mod members;
 mod notice;
 mod positions;
 pub mod scene;
+mod skills;
 
 pub(crate) use members::request_invite;
 
@@ -40,6 +41,7 @@ pub enum GuildTab {
     Members,
     Positions,
     Notice,
+    Skills,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -108,7 +110,11 @@ pub struct GuildPositionsPanel;
 #[derive(Component, Default, Clone)]
 pub struct GuildNoticePanel;
 #[derive(Component, Default, Clone)]
+pub struct GuildSkillsPanel;
+#[derive(Component, Default, Clone)]
 pub struct GuildPositionsList;
+#[derive(Component, Default, Clone)]
+pub struct GuildSkillsList;
 #[derive(Component, Default, Clone)]
 pub struct GuildNoticeContent;
 #[derive(Component, Default, Clone)]
@@ -136,6 +142,14 @@ pub struct GuildMemberCountText;
 #[derive(Component, Default, Clone)]
 pub struct GuildOnlineCountText;
 #[derive(Component, Default, Clone)]
+pub struct GuildLevelText;
+#[derive(Component, Default, Clone)]
+pub struct GuildExpText;
+#[derive(Component, Default, Clone)]
+pub struct GuildSkillPointsText;
+#[derive(Component, Default, Clone)]
+pub struct GuildExpFill;
+#[derive(Component, Default, Clone)]
 pub struct GuildHeaderEmblemImage;
 #[derive(Component, Default, Clone)]
 pub struct GuildHeaderEmblemFallback;
@@ -147,6 +161,12 @@ pub struct MembersTabButton;
 pub struct PositionsTabButton;
 #[derive(Component, Default, Clone)]
 pub struct NoticeTabButton;
+#[derive(Component, Default, Clone)]
+pub struct SkillsTabButton;
+#[derive(Component, Default, Clone)]
+pub struct GuildTabButton;
+#[derive(Component, Default, Clone)]
+pub struct GuildTabPage;
 #[derive(Component, Default, Clone)]
 pub struct GuildMutationControl;
 #[derive(Component, Default, Clone)]
@@ -232,6 +252,7 @@ impl Plugin for GuildWindowPlugin {
                         sync_expel_controls,
                         refresh_members,
                         positions::refresh_positions,
+                        skills::refresh_skills,
                         positions::sync_invite_labels,
                         positions::sync_expel_labels,
                         positions::sync_storage_toggles,
@@ -457,6 +478,10 @@ pub(crate) fn select_notice(_: On<Activate>, mut ui: ResMut<GuildUi>) {
     ui.selected_tab = GuildTab::Notice;
 }
 
+pub(crate) fn select_skills(_: On<Activate>, mut ui: ResMut<GuildUi>) {
+    ui.selected_tab = GuildTab::Skills;
+}
+
 fn sync_membership_mode(
     guild: Res<GuildState>,
     mut create: GuildModePanel<(
@@ -508,7 +533,11 @@ fn sync_header(
         Query<&mut Text, With<GuildNoticeText>>,
         Query<&mut Text, With<GuildMemberCountText>>,
         Query<&mut Text, With<GuildOnlineCountText>>,
+        Query<&mut Text, With<GuildLevelText>>,
+        Query<&mut Text, With<GuildExpText>>,
+        Query<&mut Text, With<GuildSkillPointsText>>,
     )>,
+    mut exp_fill: Query<&mut Node, With<GuildExpFill>>,
 ) {
     let Some(info) = guild.info() else {
         return;
@@ -535,6 +564,33 @@ fn sync_header(
     set_single_text(&mut texts.p3(), member_label);
     let online = info.members.iter().filter(|member| member.online).count();
     set_single_text(&mut texts.p4(), format!("{online} online"));
+    set_single_text(&mut texts.p5(), format!("Guild Level {}", info.level));
+    let exp_label = if info.next_exp == 0 {
+        format!("Guild EXP {} · MAX", info.exp)
+    } else {
+        format!("Guild EXP {} / {}", info.exp, info.next_exp)
+    };
+    set_single_text(&mut texts.p6(), exp_label);
+    let point_label = if info.skill_points == 1 {
+        "skill point"
+    } else {
+        "skill points"
+    };
+    set_single_text(
+        &mut texts.p7(),
+        format!("{} {point_label} available", info.skill_points),
+    );
+    if let Ok(mut fill) = exp_fill.single_mut() {
+        let progress_percent = if info.next_exp == 0 {
+            100.0
+        } else {
+            (info.exp as f64 / info.next_exp as f64 * 100.0).clamp(0.0, 100.0) as f32
+        };
+        let width = percent(progress_percent);
+        if fill.width != width {
+            fill.width = width;
+        }
+    }
 }
 
 fn set_single_text<F: bevy::ecs::query::QueryFilter>(
@@ -557,6 +613,7 @@ fn sync_tabs(
             With<GuildMembersPanel>,
             Without<GuildPositionsPanel>,
             Without<GuildNoticePanel>,
+            Without<GuildSkillsPanel>,
         ),
     >,
     mut positions: Query<
@@ -565,6 +622,7 @@ fn sync_tabs(
             With<GuildPositionsPanel>,
             Without<GuildMembersPanel>,
             Without<GuildNoticePanel>,
+            Without<GuildSkillsPanel>,
         ),
     >,
     mut notice: Query<
@@ -573,6 +631,16 @@ fn sync_tabs(
             With<GuildNoticePanel>,
             Without<GuildMembersPanel>,
             Without<GuildPositionsPanel>,
+            Without<GuildSkillsPanel>,
+        ),
+    >,
+    mut skills: Query<
+        (&mut Visibility, &mut Node),
+        (
+            With<GuildSkillsPanel>,
+            Without<GuildMembersPanel>,
+            Without<GuildPositionsPanel>,
+            Without<GuildNoticePanel>,
         ),
     >,
 ) {
@@ -618,6 +686,15 @@ fn sync_tabs(
     } else {
         Display::None
     };
+    if let Ok((mut visibility, mut node)) = skills.single_mut() {
+        let active = ui.selected_tab == GuildTab::Skills;
+        *visibility = if active {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        node.display = if active { Display::Flex } else { Display::None };
+    }
 }
 
 fn sync_feedback(
@@ -832,6 +909,35 @@ mod tests {
     }
 
     #[test]
+    fn selecting_skills_removes_every_other_page_from_layout() {
+        let mut app = App::new();
+        app.insert_resource(GuildUi {
+            selected_tab: GuildTab::Skills,
+            ..default()
+        });
+        app.world_mut()
+            .spawn((GuildMembersPanel, Node::default(), Visibility::Inherited));
+        app.world_mut()
+            .spawn((GuildPositionsPanel, Node::default(), Visibility::Inherited));
+        app.world_mut()
+            .spawn((GuildNoticePanel, Node::default(), Visibility::Inherited));
+        app.world_mut()
+            .spawn((GuildSkillsPanel, Node::default(), Visibility::Hidden));
+        app.add_systems(Update, sync_tabs);
+
+        app.update();
+
+        assert_eq!(node::<GuildMembersPanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildPositionsPanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildNoticePanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildSkillsPanel>(&mut app).display, Display::Flex);
+        assert_eq!(
+            visibility::<GuildSkillsPanel>(&mut app),
+            Visibility::Inherited
+        );
+    }
+
+    #[test]
     fn visible_with_guild_focus_closes_and_releases_focus() {
         let (mut app, field, player) = toggle_app(Visibility::Visible);
         app.insert_resource(InputFocus::from_entity(field));
@@ -959,6 +1065,11 @@ mod tests {
             .spawn((GuildMemberCountText, Text::default()));
         app.world_mut()
             .spawn((GuildOnlineCountText, Text::default()));
+        app.world_mut().spawn((GuildLevelText, Text::default()));
+        app.world_mut().spawn((GuildExpText, Text::default()));
+        app.world_mut()
+            .spawn((GuildSkillPointsText, Text::default()));
+        app.world_mut().spawn((GuildExpFill, Node::default()));
         app.add_systems(
             Update,
             (sync_membership_mode, sync_header).in_set(GuildSystems::UiSync),
@@ -1065,6 +1176,58 @@ mod tests {
         assert_eq!(marked_text::<GuildNoticeText>(&mut app), "Welcome");
         assert_eq!(marked_text::<GuildMemberCountText>(&mut app), "1 member");
         assert_eq!(marked_text::<GuildOnlineCountText>(&mut app), "0 online");
+    }
+
+    #[test]
+    fn progression_header_keeps_large_exp_exact_and_caps_without_division() {
+        let mut app = authoritative_ui_app();
+        let large_exp = u32::MAX as u64 + 99;
+        let next_exp = u32::MAX as u64 + 1_099;
+        app.world_mut().write_message(GuildIngress {
+            generation: ZoneSessionGeneration(9),
+            payload: GuildIngressPayload::Info(GuildInfo {
+                guild_id: 7,
+                name: "Vikings".into(),
+                master_char_id: 42,
+                emblem_id: 0,
+                notice_subject: String::new(),
+                notice_body: String::new(),
+                positions: vec![],
+                members: vec![],
+                level: 27,
+                exp: large_exp,
+                next_exp,
+                skill_points: 4,
+                skills: vec![],
+                relations: vec![],
+            }),
+        });
+        app.update();
+
+        assert_eq!(marked_text::<GuildLevelText>(&mut app), "Guild Level 27");
+        assert_eq!(
+            marked_text::<GuildExpText>(&mut app),
+            format!("Guild EXP {large_exp} / {next_exp}")
+        );
+        assert_eq!(
+            marked_text::<GuildSkillPointsText>(&mut app),
+            "4 skill points available"
+        );
+        assert_eq!(node::<GuildExpFill>(&mut app).width, percent(99.999_98));
+
+        let mut capped = app.world().resource::<GuildState>().info().unwrap().clone();
+        capped.next_exp = 0;
+        app.world_mut().write_message(GuildIngress {
+            generation: ZoneSessionGeneration(9),
+            payload: GuildIngressPayload::Info(capped),
+        });
+        app.update();
+
+        assert_eq!(
+            marked_text::<GuildExpText>(&mut app),
+            format!("Guild EXP {large_exp} · MAX")
+        );
+        assert_eq!(node::<GuildExpFill>(&mut app).width, percent(100));
     }
 
     fn node<M: Component>(app: &mut App) -> Node {

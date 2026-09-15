@@ -188,6 +188,31 @@ fn header() -> impl Scene {
                     (GuildNameText title_text(String::new(), 21.0, theme::TEXT)),
                     (GuildMasterText chrome_text(String::new(), 11.5, theme::TEXT_DIM)),
                     (GuildNoticeText chrome_text(String::new(), 11.0, theme::TEXT_FAINT)),
+                    (
+                        Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
+                        ignore_picking()
+                        Children [
+                            (GuildLevelText chrome_text(String::new(), 10.5, theme::GOLD)),
+                            (GuildExpText chrome_text(String::new(), 10.5, theme::TEXT_DIM)),
+                        ]
+                    ),
+                    (
+                        Node {
+                            width: percent(100), height: px(7),
+                            border_radius: BorderRadius::all(px(4)),
+                            overflow: {Overflow::clip()},
+                        }
+                        BackgroundColor(theme::FIELD)
+                        ignore_picking()
+                        Children [
+                            (
+                                GuildExpFill
+                                Node { width: percent(0), height: percent(100), border_radius: BorderRadius::all(px(4)) }
+                                BackgroundColor(theme::GOLD)
+                                ignore_picking()
+                            ),
+                        ]
+                    ),
                 ]
             ),
             (
@@ -196,6 +221,7 @@ fn header() -> impl Scene {
                 Children [
                     (GuildMemberCountText chrome_text(String::new(), 12.0, theme::TEXT)),
                     (GuildOnlineCountText chrome_text(String::new(), 11.5, theme::EMERALD_BRI)),
+                    (GuildSkillPointsText chrome_text(String::new(), 11.0, theme::GOLD)),
                     (
                         GuildEmblemUploadButton
                         GuildMutationControl
@@ -220,21 +246,31 @@ fn tabs() -> impl Scene {
         Children [
             (
                 MembersTabButton
+                GuildTabButton
                 @FeathersButton { @caption: bsn! { (Text("Members") ThemedText) } }
                 Node { flex_grow: 1.0, height: px(34) }
                 on(super::select_members)
             ),
             (
                 PositionsTabButton
+                GuildTabButton
                 @FeathersButton { @caption: bsn! { (Text("Positions") ThemedText) } }
                 Node { flex_grow: 1.0, height: px(34) }
                 on(super::select_positions)
             ),
             (
                 NoticeTabButton
+                GuildTabButton
                 @FeathersButton { @caption: bsn! { (Text("Notice") ThemedText) } }
                 Node { flex_grow: 1.0, height: px(34) }
                 on(super::select_notice)
+            ),
+            (
+                SkillsTabButton
+                GuildTabButton
+                @FeathersButton { @caption: bsn! { (Text("Skills") ThemedText) } }
+                Node { flex_grow: 1.0, height: px(34) }
+                on(super::select_skills)
             ),
         ]
     }
@@ -247,6 +283,7 @@ fn content() -> impl Scene {
         Children [
             (
                 GuildMembersPanel
+                GuildTabPage
                 Node {
                     width: percent(100),
                     height: percent(100),
@@ -281,6 +318,7 @@ fn content() -> impl Scene {
             ),
             (
                 GuildPositionsPanel
+                GuildTabPage
                 Node {
                     width: percent(100),
                     height: percent(100),
@@ -295,6 +333,7 @@ fn content() -> impl Scene {
             ),
             (
                 GuildNoticePanel
+                GuildTabPage
                 Node {
                     width: percent(100),
                     height: percent(100),
@@ -306,6 +345,21 @@ fn content() -> impl Scene {
                 Visibility::Hidden
                 ignore_picking()
                 Children [ (GuildNoticeContent Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(10) } ignore_picking()) ]
+            ),
+            (
+                GuildSkillsPanel
+                GuildTabPage
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    display: Display::None,
+                    overflow: {Overflow::scroll_y()},
+                    flex_direction: FlexDirection::Column,
+                    padding: {UiRect::vertical(px(10))},
+                }
+                Visibility::Hidden
+                Pickable
+                Children [ (GuildSkillsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
             ),
         ]
     }
@@ -481,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn window_has_create_and_exactly_three_supported_tabs() {
+    fn window_has_create_and_approved_supported_tabs() {
         let mut app = app();
         app.world_mut().spawn_scene(window()).unwrap();
         let texts: Vec<_> = app
@@ -497,15 +551,14 @@ mod tests {
             "Members",
             "Positions",
             "Notice",
+            "Skills",
         ] {
             assert!(texts.contains(&expected.to_string()), "missing {expected}");
         }
         for omitted in [
             "Territories",
-            "Skills",
             "Relations",
             "Expelled",
-            "Guild EXP",
             "Guild Funds",
             "Contrib",
             "Edit",
@@ -516,6 +569,66 @@ mod tests {
                 !texts.contains(&omitted.to_string()),
                 "rendered unsupported {omitted}"
             );
+        }
+    }
+
+    #[test]
+    fn tab_buttons_and_pages_match_with_only_one_page_in_layout() {
+        let mut app = app();
+        app.world_mut().spawn_scene(window()).unwrap();
+
+        let tab_count = app
+            .world_mut()
+            .query_filtered::<Entity, With<GuildTabButton>>()
+            .iter(app.world())
+            .count();
+        let pages: Vec<_> = app
+            .world_mut()
+            .query_filtered::<&Node, With<GuildTabPage>>()
+            .iter(app.world())
+            .map(|node| node.display)
+            .collect();
+
+        assert_eq!(pages.len(), tab_count);
+        assert_eq!(
+            pages
+                .iter()
+                .filter(|display| **display == Display::Flex)
+                .count(),
+            1
+        );
+        assert!(
+            pages
+                .iter()
+                .filter(|display| **display != Display::Flex)
+                .all(|display| *display == Display::None)
+        );
+    }
+
+    #[test]
+    fn guilded_view_contains_shared_progression_header_structure() {
+        let mut app = app();
+        app.world_mut().spawn_scene(window()).unwrap();
+
+        for count in [
+            app.world_mut()
+                .query_filtered::<Entity, With<GuildLevelText>>()
+                .iter(app.world())
+                .count(),
+            app.world_mut()
+                .query_filtered::<Entity, With<GuildExpText>>()
+                .iter(app.world())
+                .count(),
+            app.world_mut()
+                .query_filtered::<Entity, With<GuildSkillPointsText>>()
+                .iter(app.world())
+                .count(),
+            app.world_mut()
+                .query_filtered::<Entity, With<GuildExpFill>>()
+                .iter(app.world())
+                .count(),
+        ] {
+            assert_eq!(count, 1);
         }
     }
 
