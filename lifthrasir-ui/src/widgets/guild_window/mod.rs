@@ -1,11 +1,16 @@
 mod dialogs;
 pub(crate) mod emblem;
+mod feedback;
 mod members;
 mod notice;
 mod positions;
 pub mod scene;
 
 pub(crate) use members::request_invite;
+
+use feedback::apply_guild_results;
+#[cfg(test)]
+use feedback::guild_error_text;
 
 use bevy::ecs::system::SystemParam;
 use bevy::input_focus::InputFocus;
@@ -21,8 +26,9 @@ use game_engine::domain::input::{PlayerAction, UiFocus};
 use game_engine::infrastructure::job::JobSpriteRegistry;
 use leafwing_input_manager::prelude::ActionState;
 use net_contract::commands::GuildCreateRequested;
-use net_contract::dto::GuildErrorKind;
-use net_contract::events::{GuildIngress, GuildIngressPayload, ZoneDisconnected};
+use net_contract::events::ZoneDisconnected;
+#[cfg(test)]
+use net_contract::events::{GuildIngress, GuildIngressPayload};
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};
 
 use crate::theme;
@@ -203,6 +209,7 @@ impl Plugin for GuildWindowPlugin {
                     (
                         sync_create_draft,
                         apply_guild_results,
+                        feedback::ingest_guild_announcements,
                         sync_membership_mode,
                         sync_header,
                         emblem::invalidate_picker_when_hidden,
@@ -441,99 +448,6 @@ pub(crate) fn select_positions(_: On<Activate>, mut ui: ResMut<GuildUi>) {
 
 pub(crate) fn select_notice(_: On<Activate>, mut ui: ResMut<GuildUi>) {
     ui.selected_tab = GuildTab::Notice;
-}
-
-fn apply_guild_results(
-    mut ingress: MessageReader<GuildIngress>,
-    generation: Res<ZoneSessionGeneration>,
-    session: Option<Res<GuildUiSession>>,
-    mut ui: ResMut<GuildUi>,
-    mut images: ResMut<emblem::GuildEmblemPreview>,
-    mut assets: ResMut<Assets<Image>>,
-) {
-    if session.as_deref().is_some_and(|session| session.blocked) {
-        ingress.clear();
-        return;
-    }
-    for event in ingress.read() {
-        let GuildIngressPayload::ActionResult(result) = &event.payload else {
-            continue;
-        };
-        let matches = ui.pending.as_ref().is_some_and(|pending| {
-            pending.action == result.action
-                && pending.generation == event.generation
-                && event.generation == *generation
-        });
-        if !matches {
-            if let Some(pending) = ui.pending.as_ref()
-                && pending.action != result.action
-            {
-                warn!(
-                    expected = pending.action,
-                    received = %result.action,
-                    "ignoring mismatched guild action result"
-                );
-            }
-            continue;
-        }
-        ui.pending = None;
-        if result.success {
-            ui.feedback = Some(match result.action.as_str() {
-                "create" => "Guild created. Waiting for guild information…".to_string(),
-                "invite" => "Guild invitation sent.".to_string(),
-                "position_edit" => "Position saved. Waiting for guild information…".to_string(),
-                "member_position" => {
-                    "Position assignment sent. Waiting for guild information…".to_string()
-                }
-                "notice_edit" => "Notice saved. Waiting for guild information…".to_string(),
-                "emblem_upload" => {
-                    "Emblem uploaded. Waiting for the authoritative emblem update…".to_string()
-                }
-                "leave" => "Guild leave requested. Waiting for authoritative state…".to_string(),
-                "expel" => "Guild member expelled. Waiting for roster refresh…".to_string(),
-                _ => "Guild action completed.".to_string(),
-            });
-            ui.feedback_is_error = false;
-        } else {
-            if result.action == "emblem_upload" {
-                images.discard_preview(&mut assets);
-            }
-            ui.feedback = Some(guild_error_text(result.error).to_string());
-            ui.feedback_is_error = true;
-        }
-    }
-}
-
-fn guild_error_text(error: GuildErrorKind) -> &'static str {
-    match error {
-        GuildErrorKind::None => "Success",
-        GuildErrorKind::NameTaken => "Guild name is already taken",
-        GuildErrorKind::AlreadyInGuild => "Character already belongs to a guild",
-        GuildErrorKind::GuildFull => "Guild is full",
-        GuildErrorKind::NoPermission => "Current position lacks permission",
-        GuildErrorKind::NotMember => "Character is not a guild member",
-        GuildErrorKind::TargetOffline => "Target is offline",
-        GuildErrorKind::NoEmperium => "Creation requires an Emperium",
-        GuildErrorKind::InvalidEmblem => "Emblem is invalid",
-        GuildErrorKind::CannotTargetMaster => "Guild master cannot be expelled",
-        GuildErrorKind::InvalidPosition => "Position is invalid",
-        GuildErrorKind::NoSkillPoints => "No guild skill points available",
-        GuildErrorKind::SkillRequirement => "Guild skill requirements are not met",
-        GuildErrorKind::SkillMaxed => "Guild skill is already at maximum level",
-        GuildErrorKind::AllyLimit => "Guild alliance limit reached",
-        GuildErrorKind::AntagonistLimit => "Guild antagonist limit reached",
-        GuildErrorKind::AlreadyAllied => "Guilds are already allied",
-        GuildErrorKind::AlreadyAntagonist => "Guild is already an antagonist",
-        GuildErrorKind::NotRelated => "Guild relation does not exist",
-        GuildErrorKind::SameGuild => "Cannot target the same guild",
-        GuildErrorKind::SiegeActive => "Guild relations cannot change during a siege",
-        GuildErrorKind::RequestPending => "An alliance request is already pending",
-        GuildErrorKind::AllianceDeclined => "Alliance request was declined",
-        GuildErrorKind::Unknown(value) => {
-            warn!(value, "unknown guild operation error");
-            "Guild operation failed"
-        }
-    }
 }
 
 fn sync_membership_mode(
