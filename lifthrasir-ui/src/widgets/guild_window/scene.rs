@@ -272,6 +272,13 @@ fn tabs() -> impl Scene {
                 Node { flex_grow: 1.0, height: px(34) }
                 on(super::select_skills)
             ),
+            (
+                RelationsTabButton
+                GuildTabButton
+                @FeathersButton { @caption: bsn! { (Text("Relations") ThemedText) } }
+                Node { flex_grow: 1.0, height: px(34) }
+                on(super::select_relations)
+            ),
         ]
     }
 }
@@ -360,6 +367,34 @@ fn content() -> impl Scene {
                 Visibility::Hidden
                 Pickable
                 Children [ (GuildSkillsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
+            ),
+            (
+                GuildRelationsPanel
+                GuildTabPage
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    display: Display::None,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(10),
+                    padding: {UiRect::vertical(px(10))},
+                }
+                Visibility::Hidden
+                Pickable
+                Children [
+                    super::relations::relation_controls(),
+                    (
+                        super::relations::GuildRelationsList
+                        Node {
+                            width: percent(100),
+                            flex_grow: 1.0,
+                            min_height: px(0),
+                            overflow: {Overflow::scroll_y()},
+                            flex_direction: FlexDirection::Column,
+                        }
+                        Pickable
+                    ),
+                ]
             ),
         ]
     }
@@ -552,12 +587,12 @@ mod tests {
             "Positions",
             "Notice",
             "Skills",
+            "Relations",
         ] {
             assert!(texts.contains(&expected.to_string()), "missing {expected}");
         }
         for omitted in [
             "Territories",
-            "Relations",
             "Expelled",
             "Guild Funds",
             "Contrib",
@@ -659,6 +694,34 @@ mod tests {
                 .unwrap(),
             app.world_mut()
                 .query_filtered::<Entity, With<GuildInviteNameField>>()
+                .single(app.world())
+                .unwrap(),
+        ] {
+            assert_eq!(
+                app.world().get::<Pickable>(entity),
+                Some(&Pickable::default())
+            );
+            assert_eq!(
+                app.world()
+                    .get::<bevy::input_focus::tab_navigation::TabIndex>(entity),
+                Some(&bevy::input_focus::tab_navigation::TabIndex(0))
+            );
+        }
+    }
+
+    #[test]
+    fn relation_name_fields_are_static_click_focusable_controls() {
+        let mut app = app();
+        app.add_plugins(crate::focus::UiFocusMirrorPlugin);
+        app.world_mut().spawn_scene(window()).unwrap();
+
+        for entity in [
+            app.world_mut()
+                .query_filtered::<Entity, With<super::relations::GuildAllianceNameField>>()
+                .single(app.world())
+                .unwrap(),
+            app.world_mut()
+                .query_filtered::<Entity, With<super::relations::GuildAntagonistNameField>>()
                 .single(app.world())
                 .unwrap(),
         ] {

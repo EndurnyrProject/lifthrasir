@@ -4,6 +4,8 @@ mod feedback;
 mod members;
 mod notice;
 mod positions;
+mod relation_dialogs;
+mod relations;
 pub mod scene;
 mod skills;
 
@@ -42,6 +44,7 @@ pub enum GuildTab {
     Positions,
     Notice,
     Skills,
+    Relations,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,6 +66,7 @@ pub struct GuildUi {
 pub(crate) struct GuildUiSession {
     generation: ZoneSessionGeneration,
     char_id: u32,
+    guild_id: u32,
     blocked: bool,
     reset: bool,
 }
@@ -111,6 +115,8 @@ pub struct GuildPositionsPanel;
 pub struct GuildNoticePanel;
 #[derive(Component, Default, Clone)]
 pub struct GuildSkillsPanel;
+#[derive(Component, Default, Clone)]
+pub struct GuildRelationsPanel;
 #[derive(Component, Default, Clone)]
 pub struct GuildPositionsList;
 #[derive(Component, Default, Clone)]
@@ -164,6 +170,8 @@ pub struct NoticeTabButton;
 #[derive(Component, Default, Clone)]
 pub struct SkillsTabButton;
 #[derive(Component, Default, Clone)]
+pub struct RelationsTabButton;
+#[derive(Component, Default, Clone)]
 pub struct GuildTabButton;
 #[derive(Component, Default, Clone)]
 pub struct GuildTabPage;
@@ -188,6 +196,8 @@ type GuildTextFieldFilter = Or<(
     With<notice::GuildNoticeSubjectField>,
     With<notice::GuildNoticeBodyField>,
     With<members::GuildExpelReasonField>,
+    With<relations::GuildAllianceNameField>,
+    With<relations::GuildAntagonistNameField>,
 )>;
 type GuildTextFields<'w, 's> = Query<'w, 's, Entity, GuildTextFieldFilter>;
 type GuildEditableTextFields<'w, 's> =
@@ -208,6 +218,8 @@ impl Plugin for GuildWindowPlugin {
             .init_resource::<emblem::GuildEmblemPreview>()
             .init_resource::<dialogs::PendingGuildInvite>()
             .init_resource::<dialogs::PendingGuildConfirmation>()
+            .init_resource::<relation_dialogs::PendingAllianceInvite>()
+            .init_resource::<relation_dialogs::PendingRelationConfirmation>()
             .add_systems(
                 Update,
                 (
@@ -230,9 +242,15 @@ impl Plugin for GuildWindowPlugin {
                 Update,
                 (
                     (
+                        reset_guild_ui_guild,
+                        relation_dialogs::reset_invalid_relation_dialogs,
                         sync_create_draft,
                         positions::sync_position_drafts,
                         apply_guild_results,
+                        relation_dialogs::expire_pending_alliance,
+                        relation_dialogs::queue_incoming_alliance,
+                        relation_dialogs::claim_alliance_choice,
+                        relation_dialogs::claim_relation_confirmation,
                         positions::resolve_position_submission,
                         feedback::ingest_guild_announcements,
                         sync_membership_mode,
@@ -253,6 +271,8 @@ impl Plugin for GuildWindowPlugin {
                         refresh_members,
                         positions::refresh_positions,
                         skills::refresh_skills,
+                        relations::refresh_relations,
+                        relations::sync_relation_controls,
                         positions::sync_invite_labels,
                         positions::sync_expel_labels,
                         positions::sync_storage_toggles,
@@ -283,6 +303,9 @@ impl Plugin for GuildWindowPlugin {
                 dialogs::show_pending_invite,
                 dialogs::close_finished_invite_dialog,
                 dialogs::show_pending_confirmation,
+                relation_dialogs::show_pending_alliance,
+                relation_dialogs::show_pending_relation_confirmation,
+                relation_dialogs::close_finished_relation_dialogs,
             )
                 .chain(),
         );
@@ -294,6 +317,7 @@ impl Plugin for GuildWindowPlugin {
                 positions::clear_position_drafts,
                 dialogs::clear_pending_invite,
                 dialogs::clear_pending_confirmation,
+                relation_dialogs::clear_relation_dialogs,
             ),
         );
     }
@@ -323,6 +347,30 @@ fn reset_guild_ui_session(
     session.char_id = char_id;
     session.blocked = !generation_changed && (disconnected || character_changed);
     *ui = GuildUi::default();
+    for mut visibility in &mut roots {
+        *visibility = Visibility::Hidden;
+    }
+    for mut field in &mut fields {
+        field.clear();
+    }
+}
+
+fn reset_guild_ui_guild(
+    guild: Res<GuildState>,
+    mut session: ResMut<GuildUiSession>,
+    mut ui: ResMut<GuildUi>,
+    mut drafts: ResMut<positions::PositionDraftState>,
+    mut roots: Query<&mut Visibility, With<GuildWindowRoot>>,
+    mut fields: GuildEditableTextFields,
+) {
+    let guild_id = guild.info().map_or(0, |info| info.guild_id);
+    if session.guild_id == guild_id {
+        return;
+    }
+    session.guild_id = guild_id;
+    session.reset = true;
+    *ui = GuildUi::default();
+    *drafts = positions::PositionDraftState::default();
     for mut visibility in &mut roots {
         *visibility = Visibility::Hidden;
     }
@@ -365,12 +413,16 @@ fn sync_emblem_upload_control(
 fn sync_management_controls(
     ui: Res<GuildUi>,
     confirmation: Option<Res<dialogs::PendingGuildConfirmation>>,
+    relation_confirmation: Option<Res<relation_dialogs::PendingRelationConfirmation>>,
     controls: Query<Entity, With<GuildMutationControl>>,
     mut commands: Commands,
 ) {
     for control in &controls {
         if ui.pending.is_some()
             || confirmation
+                .as_deref()
+                .is_some_and(|pending| pending.is_pending())
+            || relation_confirmation
                 .as_deref()
                 .is_some_and(|pending| pending.is_pending())
         {
@@ -480,6 +532,10 @@ pub(crate) fn select_notice(_: On<Activate>, mut ui: ResMut<GuildUi>) {
 
 pub(crate) fn select_skills(_: On<Activate>, mut ui: ResMut<GuildUi>) {
     ui.selected_tab = GuildTab::Skills;
+}
+
+pub(crate) fn select_relations(_: On<Activate>, mut ui: ResMut<GuildUi>) {
+    ui.selected_tab = GuildTab::Relations;
 }
 
 fn sync_membership_mode(
@@ -614,6 +670,7 @@ fn sync_tabs(
             Without<GuildPositionsPanel>,
             Without<GuildNoticePanel>,
             Without<GuildSkillsPanel>,
+            Without<GuildRelationsPanel>,
         ),
     >,
     mut positions: Query<
@@ -623,6 +680,7 @@ fn sync_tabs(
             Without<GuildMembersPanel>,
             Without<GuildNoticePanel>,
             Without<GuildSkillsPanel>,
+            Without<GuildRelationsPanel>,
         ),
     >,
     mut notice: Query<
@@ -632,6 +690,7 @@ fn sync_tabs(
             Without<GuildMembersPanel>,
             Without<GuildPositionsPanel>,
             Without<GuildSkillsPanel>,
+            Without<GuildRelationsPanel>,
         ),
     >,
     mut skills: Query<
@@ -641,6 +700,17 @@ fn sync_tabs(
             Without<GuildMembersPanel>,
             Without<GuildPositionsPanel>,
             Without<GuildNoticePanel>,
+            Without<GuildRelationsPanel>,
+        ),
+    >,
+    mut relations: Query<
+        (&mut Visibility, &mut Node),
+        (
+            With<GuildRelationsPanel>,
+            Without<GuildMembersPanel>,
+            Without<GuildPositionsPanel>,
+            Without<GuildNoticePanel>,
+            Without<GuildSkillsPanel>,
         ),
     >,
 ) {
@@ -688,6 +758,15 @@ fn sync_tabs(
     };
     if let Ok((mut visibility, mut node)) = skills.single_mut() {
         let active = ui.selected_tab == GuildTab::Skills;
+        *visibility = if active {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        node.display = if active { Display::Flex } else { Display::None };
+    }
+    if let Ok((mut visibility, mut node)) = relations.single_mut() {
+        let active = ui.selected_tab == GuildTab::Relations;
         *visibility = if active {
             Visibility::Inherited
         } else {
@@ -933,6 +1012,38 @@ mod tests {
         assert_eq!(node::<GuildSkillsPanel>(&mut app).display, Display::Flex);
         assert_eq!(
             visibility::<GuildSkillsPanel>(&mut app),
+            Visibility::Inherited
+        );
+    }
+
+    #[test]
+    fn selecting_relations_removes_all_four_other_pages_from_layout() {
+        let mut app = App::new();
+        app.insert_resource(GuildUi {
+            selected_tab: GuildTab::Relations,
+            ..default()
+        });
+        app.world_mut()
+            .spawn((GuildMembersPanel, Node::default(), Visibility::Inherited));
+        app.world_mut()
+            .spawn((GuildPositionsPanel, Node::default(), Visibility::Inherited));
+        app.world_mut()
+            .spawn((GuildNoticePanel, Node::default(), Visibility::Inherited));
+        app.world_mut()
+            .spawn((GuildSkillsPanel, Node::default(), Visibility::Inherited));
+        app.world_mut()
+            .spawn((GuildRelationsPanel, Node::default(), Visibility::Hidden));
+        app.add_systems(Update, sync_tabs);
+
+        app.update();
+
+        assert_eq!(node::<GuildMembersPanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildPositionsPanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildNoticePanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildSkillsPanel>(&mut app).display, Display::None);
+        assert_eq!(node::<GuildRelationsPanel>(&mut app).display, Display::Flex);
+        assert_eq!(
+            visibility::<GuildRelationsPanel>(&mut app),
             Visibility::Inherited
         );
     }
@@ -1602,6 +1713,95 @@ mod tests {
         let session = app.world().resource::<GuildUiSession>();
         assert_eq!(session.char_id, 43);
         assert!(session.blocked);
+        assert!(session.reset);
+    }
+
+    #[test]
+    fn own_guild_change_resets_pending_ui_and_relation_fields_before_capture() {
+        let generation = ZoneSessionGeneration(9);
+        let mut app = App::new();
+        app.add_message::<GuildIngress>()
+            .add_message::<ZoneDisconnected>()
+            .insert_resource(generation)
+            .insert_resource(ZoneSession {
+                char_id: 42,
+                ..default()
+            })
+            .insert_resource(GuildUiSession {
+                generation,
+                char_id: 42,
+                guild_id: 7,
+                ..default()
+            })
+            .insert_resource(GuildUi {
+                selected_tab: GuildTab::Relations,
+                feedback: Some("old guild".into()),
+                pending: Some(PendingGuildMutation {
+                    action: "alliance_request",
+                    generation,
+                }),
+                ..default()
+            })
+            .init_resource::<positions::PositionDraftState>()
+            .add_plugins(game_engine::domain::guild::GuildPlugin)
+            .add_systems(Update, reset_guild_ui_guild.in_set(GuildSystems::UiSync));
+        let alliance = app
+            .world_mut()
+            .spawn((
+                relations::GuildAllianceNameField,
+                EditableText::new("Freya"),
+            ))
+            .id();
+        let antagonist = app
+            .world_mut()
+            .spawn((
+                relations::GuildAntagonistNameField,
+                EditableText::new("Loki"),
+            ))
+            .id();
+        app.world_mut().write_message(GuildIngress {
+            generation,
+            payload: GuildIngressPayload::Info(GuildInfo {
+                guild_id: 11,
+                name: "New Guild".into(),
+                master_char_id: 42,
+                emblem_id: 0,
+                notice_subject: String::new(),
+                notice_body: String::new(),
+                positions: vec![],
+                members: vec![],
+                level: 1,
+                exp: 0,
+                next_exp: 0,
+                skill_points: 0,
+                skills: vec![],
+                relations: vec![],
+            }),
+        });
+
+        app.update();
+
+        assert_eq!(*app.world().resource::<GuildUi>(), GuildUi::default());
+        assert!(
+            app.world()
+                .entity(alliance)
+                .get::<EditableText>()
+                .unwrap()
+                .value()
+                .to_string()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .entity(antagonist)
+                .get::<EditableText>()
+                .unwrap()
+                .value()
+                .to_string()
+                .is_empty()
+        );
+        let session = app.world().resource::<GuildUiSession>();
+        assert_eq!(session.guild_id, 11);
         assert!(session.reset);
     }
 

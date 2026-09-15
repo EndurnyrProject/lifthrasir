@@ -39,6 +39,9 @@ pub enum SystemDialogKind {
     GuildInvite,
     GuildLeave,
     GuildExpel,
+    GuildAllianceInvite,
+    GuildAllianceBreak,
+    GuildAntagonistDeclare,
 }
 
 /// Summons the reusable system-dialog modal (see `lifthrasir-ui` `SystemDialog`).
