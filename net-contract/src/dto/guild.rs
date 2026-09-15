@@ -11,6 +11,44 @@ pub struct GuildInfo {
     pub notice_body: String,
     pub positions: Vec<GuildPositionInfo>,
     pub members: Vec<GuildMemberInfo>,
+    pub level: u32,
+    pub exp: u64,
+    pub next_exp: u64,
+    pub skill_points: u32,
+    pub skills: Vec<GuildSkillInfo>,
+    pub relations: Vec<GuildRelationInfo>,
+}
+
+/// One learned or learnable guild skill.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuildSkillInfo {
+    pub skill_id: u32,
+    pub level: u32,
+    pub max_level: u32,
+}
+
+/// One authoritative guild relation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuildRelationInfo {
+    pub guild_id: u32,
+    pub name: String,
+    pub kind: GuildRelationKind,
+}
+
+/// Protocol-neutral guild relation kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuildRelationKind {
+    Ally,
+    Antagonist,
+    Unknown(i32),
+}
+
+/// One incoming alliance request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuildAllianceInviteInfo {
+    pub guild_id: u32,
+    pub guild_name: String,
+    pub requester_name: String,
 }
 
 /// One fixed guild position slot.
@@ -73,6 +111,18 @@ pub enum GuildErrorKind {
     InvalidEmblem,
     CannotTargetMaster,
     InvalidPosition,
+    NoSkillPoints,
+    SkillRequirement,
+    SkillMaxed,
+    AllyLimit,
+    AntagonistLimit,
+    AlreadyAllied,
+    AlreadyAntagonist,
+    NotRelated,
+    SameGuild,
+    SiegeActive,
+    RequestPending,
+    AllianceDeclined,
     Unknown(i32),
 }
 

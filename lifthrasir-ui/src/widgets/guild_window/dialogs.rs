@@ -520,6 +520,12 @@ mod tests {
                 },
             ],
             members: vec![member(42, 0, "Odin"), member(43, 1, "Thor")],
+            level: 1,
+            exp: 0,
+            next_exp: 0,
+            skill_points: 0,
+            skills: vec![],
+            relations: vec![],
         }
     }
 

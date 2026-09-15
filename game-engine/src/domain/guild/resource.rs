@@ -85,7 +85,9 @@ impl GuildState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use net_contract::dto::{GuildMemberInfo, GuildPositionInfo};
+    use net_contract::dto::{
+        GuildMemberInfo, GuildPositionInfo, GuildRelationInfo, GuildRelationKind, GuildSkillInfo,
+    };
 
     fn info() -> GuildInfo {
         GuildInfo {
@@ -145,7 +147,37 @@ mod tests {
                     max_ap: 0,
                 },
             ],
+            level: 1,
+            exp: 0,
+            next_exp: 0,
+            skill_points: 0,
+            skills: vec![],
+            relations: vec![],
         }
+    }
+
+    #[test]
+    fn replace_preserves_the_complete_authoritative_snapshot() {
+        let mut expected = info();
+        expected.level = 17;
+        expected.exp = u32::MAX as u64 + 99;
+        expected.next_exp = u32::MAX as u64 + 1_000;
+        expected.skill_points = 4;
+        expected.skills = vec![GuildSkillInfo {
+            skill_id: 10000,
+            level: 2,
+            max_level: 5,
+        }];
+        expected.relations = vec![GuildRelationInfo {
+            guild_id: 8,
+            name: "Allies".into(),
+            kind: GuildRelationKind::Ally,
+        }];
+        let mut state = GuildState::default();
+
+        state.replace(expected.clone());
+
+        assert_eq!(state.info(), Some(&expected));
     }
 
     #[test]

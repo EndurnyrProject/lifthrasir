@@ -54,9 +54,8 @@ fn guild_position_edit_body(command: &GuildPositionEditRequested) -> Body {
         name: command.name.clone(),
         can_invite: command.can_invite,
         can_expel: command.can_expel,
-        // TODO: Wire storage permission and tax intent through net-contract.
-        can_storage: None,
-        tax: None,
+        can_storage: command.can_storage,
+        tax: command.tax,
     })
 }
 
@@ -404,6 +403,8 @@ mod tests {
             name: "Officer".to_string(),
             can_invite: true,
             can_expel: true,
+            tax: None,
+            can_storage: None,
         });
         app.world_mut().write_message(GuildMemberPositionRequested {
             target_char_id: 5,
@@ -504,6 +505,8 @@ mod tests {
             name: "Officer".to_string(),
             can_invite: true,
             can_expel: false,
+            tax: None,
+            can_storage: None,
         });
 
         match body {
@@ -521,6 +524,27 @@ mod tests {
                 assert!(!can_expel);
             }
             other => panic!("expected Body::GuildPositionEditRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn position_edit_body_preserves_optional_storage_and_tax_intent() {
+        let cases = [(None, None), (Some(false), Some(0)), (Some(true), Some(25))];
+
+        for (can_storage, tax) in cases {
+            let body = guild_position_edit_body(&GuildPositionEditRequested {
+                index: 3,
+                name: "Officer".to_string(),
+                can_invite: true,
+                can_expel: false,
+                can_storage,
+                tax,
+            });
+            let Body::GuildPositionEditRequest(request) = body else {
+                panic!("expected GuildPositionEditRequest");
+            };
+            assert_eq!(request.can_storage, can_storage);
+            assert_eq!(request.tax, tax);
         }
     }
 

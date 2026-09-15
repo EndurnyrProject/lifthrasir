@@ -15,6 +15,37 @@ mod tests {
     use bevy::prelude::*;
 
     #[test]
+    fn net_contract_plugin_registers_guild_progression_and_relation_commands() {
+        let mut app = App::new();
+        app.add_plugins(NetContractPlugin);
+
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::GuildSkillUpRequested>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::GuildAllianceRequested>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::GuildAllianceResponded>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::GuildAllianceBreakRequested>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::GuildAntagonistRequested>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::GuildAntagonistRemoveRequested>>()
+        );
+    }
+
+    #[test]
     fn net_contract_plugin_registers_moved_messages() {
         let mut app = App::new();
         app.add_plugins(NetContractPlugin);

@@ -395,6 +395,53 @@ pub struct GuildPositionEditRequested {
     pub name: String,
     pub can_invite: bool,
     pub can_expel: bool,
+    pub tax: Option<u32>,
+    pub can_storage: Option<bool>,
+}
+
+/// Request to spend one guild skill point on `skill_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildSkillUpRequested {
+    pub skill_id: u32,
+}
+
+/// Request an alliance with a character's guild.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildAllianceRequested {
+    pub target_char_id: u32,
+    pub target_name: String,
+}
+
+/// Respond to an alliance request from `guild_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildAllianceResponded {
+    pub guild_id: u32,
+    pub accept: bool,
+}
+
+/// Request to break the alliance with `guild_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildAllianceBreakRequested {
+    pub guild_id: u32,
+}
+
+/// Request antagonist status against a character's guild.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildAntagonistRequested {
+    pub target_char_id: u32,
+    pub target_name: String,
+}
+
+/// Request to remove the antagonist relation with `guild_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GuildAntagonistRemoveRequested {
+    pub guild_id: u32,
 }
 
 /// Request to assign a guild member to a fixed position slot.

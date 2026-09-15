@@ -517,6 +517,18 @@ fn guild_error_text(error: GuildErrorKind) -> &'static str {
         GuildErrorKind::InvalidEmblem => "Emblem is invalid",
         GuildErrorKind::CannotTargetMaster => "Guild master cannot be expelled",
         GuildErrorKind::InvalidPosition => "Position is invalid",
+        GuildErrorKind::NoSkillPoints => "No guild skill points available",
+        GuildErrorKind::SkillRequirement => "Guild skill requirements are not met",
+        GuildErrorKind::SkillMaxed => "Guild skill is already at maximum level",
+        GuildErrorKind::AllyLimit => "Guild alliance limit reached",
+        GuildErrorKind::AntagonistLimit => "Guild antagonist limit reached",
+        GuildErrorKind::AlreadyAllied => "Guilds are already allied",
+        GuildErrorKind::AlreadyAntagonist => "Guild is already an antagonist",
+        GuildErrorKind::NotRelated => "Guild relation does not exist",
+        GuildErrorKind::SameGuild => "Cannot target the same guild",
+        GuildErrorKind::SiegeActive => "Guild relations cannot change during a siege",
+        GuildErrorKind::RequestPending => "An alliance request is already pending",
+        GuildErrorKind::AllianceDeclined => "Alliance request was declined",
         GuildErrorKind::Unknown(value) => {
             warn!(value, "unknown guild operation error");
             "Guild operation failed"
@@ -1086,6 +1098,12 @@ mod tests {
                     ap: 8,
                     max_ap: 10,
                 }],
+                level: 1,
+                exp: 0,
+                next_exp: 0,
+                skill_points: 0,
+                skills: vec![],
+                relations: vec![],
             }),
         });
         app.update();
@@ -1261,6 +1279,52 @@ mod tests {
             guild_error_text(GuildErrorKind::Unknown(99)),
             "Guild operation failed"
         );
+    }
+
+    #[test]
+    fn guild_error_copy_maps_progression_and_relation_errors_distinctly() {
+        let expected = [
+            (
+                GuildErrorKind::NoSkillPoints,
+                "No guild skill points available",
+            ),
+            (
+                GuildErrorKind::SkillRequirement,
+                "Guild skill requirements are not met",
+            ),
+            (
+                GuildErrorKind::SkillMaxed,
+                "Guild skill is already at maximum level",
+            ),
+            (GuildErrorKind::AllyLimit, "Guild alliance limit reached"),
+            (
+                GuildErrorKind::AntagonistLimit,
+                "Guild antagonist limit reached",
+            ),
+            (GuildErrorKind::AlreadyAllied, "Guilds are already allied"),
+            (
+                GuildErrorKind::AlreadyAntagonist,
+                "Guild is already an antagonist",
+            ),
+            (GuildErrorKind::NotRelated, "Guild relation does not exist"),
+            (GuildErrorKind::SameGuild, "Cannot target the same guild"),
+            (
+                GuildErrorKind::SiegeActive,
+                "Guild relations cannot change during a siege",
+            ),
+            (
+                GuildErrorKind::RequestPending,
+                "An alliance request is already pending",
+            ),
+            (
+                GuildErrorKind::AllianceDeclined,
+                "Alliance request was declined",
+            ),
+        ];
+
+        for (error, copy) in expected {
+            assert_eq!(guild_error_text(error), copy);
+        }
     }
 
     #[test]

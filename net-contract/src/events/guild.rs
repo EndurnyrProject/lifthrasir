@@ -1,7 +1,9 @@
 //! Ordered guild ingress from the active network adapter.
 
 use crate::{
-    dto::{GuildActionResult, GuildInfo, GuildInviteInfo, GuildMemberInfo},
+    dto::{
+        GuildActionResult, GuildAllianceInviteInfo, GuildInfo, GuildInviteInfo, GuildMemberInfo,
+    },
     state::ZoneSessionGeneration,
 };
 use bevy::prelude::*;
@@ -21,6 +23,12 @@ pub enum GuildIngressPayload {
     ActionResult(GuildActionResult),
     InviteNotified(GuildInviteInfo),
     Info(GuildInfo),
+    LevelUp {
+        guild_id: u32,
+        level: u32,
+        skill_points: u32,
+    },
+    AllianceRequestNotified(GuildAllianceInviteInfo),
     MemberUpdated {
         guild_id: u32,
         member: GuildMemberInfo,

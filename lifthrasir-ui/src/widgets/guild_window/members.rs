@@ -211,6 +211,12 @@ mod tests {
                     max_ap: 10,
                 },
             ],
+            level: 1,
+            exp: 0,
+            next_exp: 0,
+            skill_points: 0,
+            skills: vec![],
+            relations: vec![],
         };
 
         let rows = super::project_rows(&info, None);

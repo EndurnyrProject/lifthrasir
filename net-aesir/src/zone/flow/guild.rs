@@ -190,6 +190,60 @@ mod tests {
     }
 
     #[test]
+    fn progression_and_alliance_notifications_keep_receive_order_and_generation() {
+        let mut app = App::new();
+        app.add_message::<IncomingMessage>()
+            .add_message::<GuildIngress>()
+            .insert_resource(ZoneSessionGeneration(11))
+            .add_systems(Update, zone_drain_guild);
+        for body in [
+            Body::GuildLevelUp(crate::proto::aesir::net::GuildLevelUp {
+                guild_id: 7,
+                level: 18,
+                skill_points: 5,
+            }),
+            Body::GuildAllianceRequestNotify(
+                crate::proto::aesir::net::GuildAllianceRequestNotify {
+                    guild_id: 8,
+                    guild_name: "Allies".into(),
+                    requester_name: "Freya".into(),
+                },
+            ),
+        ] {
+            app.world_mut().write_message(IncomingMessage {
+                channel: GAMEPLAY,
+                body,
+            });
+        }
+
+        app.update();
+
+        let received = app.world().resource::<Messages<GuildIngress>>();
+        let events: Vec<_> = received.iter_current_update_messages().collect();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].generation, ZoneSessionGeneration(11));
+        assert_eq!(
+            events[0].payload,
+            GuildIngressPayload::LevelUp {
+                guild_id: 7,
+                level: 18,
+                skill_points: 5,
+            }
+        );
+        assert_eq!(events[1].generation, ZoneSessionGeneration(11));
+        assert_eq!(
+            events[1].payload,
+            GuildIngressPayload::AllianceRequestNotified(
+                net_contract::dto::GuildAllianceInviteInfo {
+                    guild_id: 8,
+                    guild_name: "Allies".into(),
+                    requester_name: "Freya".into(),
+                }
+            )
+        );
+    }
+
+    #[test]
     fn member_update_without_member_is_dropped() {
         let mut app = App::new();
         app.add_message::<IncomingMessage>()
@@ -205,6 +259,44 @@ mod tests {
                     member: None,
                 }),
             });
+
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .resource::<Messages<GuildIngress>>()
+                .iter_current_update_messages()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn progression_and_alliance_notifications_reject_zero_guild_ids() {
+        let mut app = App::new();
+        app.add_message::<IncomingMessage>()
+            .add_message::<GuildIngress>()
+            .insert_resource(ZoneSessionGeneration(3))
+            .add_systems(Update, zone_drain_guild);
+        for body in [
+            Body::GuildLevelUp(crate::proto::aesir::net::GuildLevelUp {
+                guild_id: 0,
+                level: 18,
+                skill_points: 5,
+            }),
+            Body::GuildAllianceRequestNotify(
+                crate::proto::aesir::net::GuildAllianceRequestNotify {
+                    guild_id: 0,
+                    guild_name: "Invalid".into(),
+                    requester_name: "Freya".into(),
+                },
+            ),
+        ] {
+            app.world_mut().write_message(IncomingMessage {
+                channel: GAMEPLAY,
+                body,
+            });
+        }
 
         app.update();
 

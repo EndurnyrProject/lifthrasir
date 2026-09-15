@@ -210,6 +210,12 @@ mod tests {
             notice_body: "Old body".into(),
             positions: vec![],
             members: vec![],
+            level: 1,
+            exp: 0,
+            next_exp: 0,
+            skill_points: 0,
+            skills: vec![],
+            relations: vec![],
         }
     }
 

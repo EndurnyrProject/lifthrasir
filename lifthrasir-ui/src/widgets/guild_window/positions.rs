@@ -327,6 +327,8 @@ fn on_save_position(
             name,
             can_invite: draft.can_invite,
             can_expel: draft.can_expel,
+            tax: None,
+            can_storage: None,
         },
     ) {
         writer.write(command);
@@ -577,6 +579,12 @@ mod tests {
                     max_ap: 0,
                 },
             ],
+            level: 1,
+            exp: 0,
+            next_exp: 0,
+            skill_points: 0,
+            skills: vec![],
+            relations: vec![],
         }
     }
 
@@ -618,6 +626,8 @@ mod tests {
                 name: "  Officer  ".into(),
                 can_invite: true,
                 can_expel: false,
+                tax: None,
+                can_storage: None,
             },
         )
         .unwrap();
@@ -636,6 +646,8 @@ mod tests {
             name: "Officer".into(),
             can_invite: true,
             can_expel: false,
+            tax: None,
+            can_storage: None,
         };
         let mut member_ui = crate::widgets::guild_window::GuildUi::default();
         assert!(
@@ -661,6 +673,8 @@ mod tests {
                     name: "Renamed".into(),
                     can_invite: false,
                     can_expel: false,
+                    tax: None,
+                    can_storage: None,
                 },
             )
             .is_none()

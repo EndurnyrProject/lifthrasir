@@ -100,7 +100,10 @@ mod tests {
     use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
     use net_contract::{
-        dto::{GuildActionResult, GuildErrorKind, GuildInfo, GuildMemberInfo, GuildPositionInfo},
+        dto::{
+            GuildActionResult, GuildErrorKind, GuildInfo, GuildMemberInfo, GuildPositionInfo,
+            GuildRelationInfo, GuildRelationKind, GuildSkillInfo,
+        },
         events::{GuildIngress, GuildIngressPayload, ZoneDisconnected},
         state::{ZoneSession, ZoneSessionGeneration},
     };
@@ -140,6 +143,12 @@ mod tests {
                 tax: 0,
             }],
             members: vec![member],
+            level: 1,
+            exp: 0,
+            next_exp: 0,
+            skill_points: 0,
+            skills: vec![],
+            relations: vec![],
         }
     }
 
@@ -176,6 +185,80 @@ mod tests {
             state.member(42).map(|member| member.name.as_str()),
             Some("Member 42")
         );
+    }
+
+    #[test]
+    fn level_up_notification_and_action_success_do_not_mutate_partial_progression() {
+        let mut app = app(1);
+        let mut expected = info(7, member(42, 0));
+        expected.level = 17;
+        expected.exp = u32::MAX as u64 + 99;
+        expected.next_exp = u32::MAX as u64 + 1_000;
+        expected.skill_points = 4;
+        expected.skills = vec![GuildSkillInfo {
+            skill_id: 10000,
+            level: 2,
+            max_level: 5,
+        }];
+        expected.relations = vec![GuildRelationInfo {
+            guild_id: 8,
+            name: "Allies".into(),
+            kind: GuildRelationKind::Ally,
+        }];
+        ingress(&mut app, 1, GuildIngressPayload::Info(expected.clone()));
+        app.update();
+
+        ingress(
+            &mut app,
+            1,
+            GuildIngressPayload::LevelUp {
+                guild_id: 7,
+                level: 18,
+                skill_points: 5,
+            },
+        );
+        ingress(
+            &mut app,
+            1,
+            GuildIngressPayload::ActionResult(GuildActionResult {
+                action: "skill_up".into(),
+                success: true,
+                error: GuildErrorKind::None,
+            }),
+        );
+        app.update();
+
+        assert_eq!(app.world().resource::<GuildState>().info(), Some(&expected));
+    }
+
+    #[test]
+    fn fresh_epoch_reset_cannot_be_repopulated_by_stale_progression_snapshot() {
+        let mut app = app(1);
+        let mut original = info(7, member(42, 0));
+        original.level = 17;
+        original.skill_points = 4;
+        original.skills = vec![GuildSkillInfo {
+            skill_id: 10000,
+            level: 2,
+            max_level: 5,
+        }];
+        ingress(&mut app, 1, GuildIngressPayload::Info(original));
+        app.update();
+
+        *app.world_mut().resource_mut::<ZoneSessionGeneration>() = ZoneSessionGeneration(2);
+        let mut stale = info(8, member(43, 0));
+        stale.level = 50;
+        stale.exp = u64::MAX;
+        stale.skill_points = 99;
+        stale.relations = vec![GuildRelationInfo {
+            guild_id: 9,
+            name: "Stale allies".into(),
+            kind: GuildRelationKind::Ally,
+        }];
+        ingress(&mut app, 1, GuildIngressPayload::Info(stale));
+        app.update();
+
+        assert!(app.world().resource::<GuildState>().info().is_none());
     }
 
     #[test]

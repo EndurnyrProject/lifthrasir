@@ -1,8 +1,8 @@
 use crate::envelope::Body;
 use crate::proto::aesir::net;
 use net_contract::dto::{
-    GuildActionResult, GuildErrorKind, GuildInfo, GuildInviteInfo, GuildMemberInfo,
-    GuildPositionInfo,
+    GuildActionResult, GuildAllianceInviteInfo, GuildErrorKind, GuildInfo, GuildInviteInfo,
+    GuildMemberInfo, GuildPositionInfo, GuildRelationInfo, GuildRelationKind, GuildSkillInfo,
 };
 use net_contract::events::GuildIngressPayload;
 
@@ -19,19 +19,18 @@ fn guild_error(value: i32) -> GuildErrorKind {
         Ok(net::GuildError::GuildErrInvalidEmblem) => GuildErrorKind::InvalidEmblem,
         Ok(net::GuildError::GuildErrCannotTargetMaster) => GuildErrorKind::CannotTargetMaster,
         Ok(net::GuildError::GuildErrInvalidPosition) => GuildErrorKind::InvalidPosition,
-        // TODO: Wire guild skill and relation errors through net-contract.
-        Ok(net::GuildError::GuildErrNoSkillPoints)
-        | Ok(net::GuildError::GuildErrSkillRequirement)
-        | Ok(net::GuildError::GuildErrSkillMaxed)
-        | Ok(net::GuildError::GuildErrAllyLimit)
-        | Ok(net::GuildError::GuildErrAntagonistLimit)
-        | Ok(net::GuildError::GuildErrAlreadyAllied)
-        | Ok(net::GuildError::GuildErrAlreadyAntagonist)
-        | Ok(net::GuildError::GuildErrNotRelated)
-        | Ok(net::GuildError::GuildErrSameGuild)
-        | Ok(net::GuildError::GuildErrSiegeActive)
-        | Ok(net::GuildError::GuildErrRequestPending)
-        | Ok(net::GuildError::GuildErrAllianceDeclined) => GuildErrorKind::Unknown(value),
+        Ok(net::GuildError::GuildErrNoSkillPoints) => GuildErrorKind::NoSkillPoints,
+        Ok(net::GuildError::GuildErrSkillRequirement) => GuildErrorKind::SkillRequirement,
+        Ok(net::GuildError::GuildErrSkillMaxed) => GuildErrorKind::SkillMaxed,
+        Ok(net::GuildError::GuildErrAllyLimit) => GuildErrorKind::AllyLimit,
+        Ok(net::GuildError::GuildErrAntagonistLimit) => GuildErrorKind::AntagonistLimit,
+        Ok(net::GuildError::GuildErrAlreadyAllied) => GuildErrorKind::AlreadyAllied,
+        Ok(net::GuildError::GuildErrAlreadyAntagonist) => GuildErrorKind::AlreadyAntagonist,
+        Ok(net::GuildError::GuildErrNotRelated) => GuildErrorKind::NotRelated,
+        Ok(net::GuildError::GuildErrSameGuild) => GuildErrorKind::SameGuild,
+        Ok(net::GuildError::GuildErrSiegeActive) => GuildErrorKind::SiegeActive,
+        Ok(net::GuildError::GuildErrRequestPending) => GuildErrorKind::RequestPending,
+        Ok(net::GuildError::GuildErrAllianceDeclined) => GuildErrorKind::AllianceDeclined,
         Err(_) => GuildErrorKind::Unknown(value),
     }
 }
@@ -65,8 +64,28 @@ fn guild_member(member: net::GuildMember) -> GuildMemberInfo {
     }
 }
 
+fn guild_skill(skill: net::GuildSkillEntry) -> GuildSkillInfo {
+    GuildSkillInfo {
+        skill_id: skill.skill_id,
+        level: skill.level,
+        max_level: skill.max_level,
+    }
+}
+
+fn guild_relation(relation: net::GuildRelation) -> GuildRelationInfo {
+    let kind = match net::GuildRelationKind::try_from(relation.kind) {
+        Ok(net::GuildRelationKind::GuildRelationAlly) => GuildRelationKind::Ally,
+        Ok(net::GuildRelationKind::GuildRelationAntagonist) => GuildRelationKind::Antagonist,
+        Err(_) => GuildRelationKind::Unknown(relation.kind),
+    };
+    GuildRelationInfo {
+        guild_id: relation.guild_id,
+        name: relation.name,
+        kind,
+    }
+}
+
 fn guild_info(info: net::GuildInfo) -> GuildInfo {
-    // TODO: Wire guild relations through net-contract::GuildInfo.
     GuildInfo {
         guild_id: info.guild_id,
         name: info.name,
@@ -76,6 +95,12 @@ fn guild_info(info: net::GuildInfo) -> GuildInfo {
         notice_body: info.notice_body,
         positions: info.positions.into_iter().map(guild_position).collect(),
         members: info.members.into_iter().map(guild_member).collect(),
+        level: info.level,
+        exp: info.exp,
+        next_exp: info.next_exp,
+        skill_points: info.skill_points,
+        skills: info.skills.into_iter().map(guild_skill).collect(),
+        relations: info.relations.into_iter().map(guild_relation).collect(),
     }
 }
 
@@ -83,6 +108,8 @@ pub(crate) fn guild_scope_id(body: &Body) -> Option<u32> {
     match body {
         Body::GuildInviteNotify(invite) => Some(invite.guild_id),
         Body::GuildInfo(info) => Some(info.guild_id),
+        Body::GuildLevelUp(level_up) => Some(level_up.guild_id),
+        Body::GuildAllianceRequestNotify(request) => Some(request.guild_id),
         Body::GuildMemberUpdate(update) => Some(update.guild_id),
         Body::GuildEmblemChanged(emblem) => Some(emblem.guild_id),
         Body::GuildEmblemData(emblem) => Some(emblem.guild_id),
@@ -111,6 +138,18 @@ pub(crate) fn guild_payload(body: Body) -> Option<GuildIngressPayload> {
             }))
         }
         Body::GuildInfo(info) => Some(GuildIngressPayload::Info(guild_info(info))),
+        Body::GuildLevelUp(level_up) => Some(GuildIngressPayload::LevelUp {
+            guild_id: level_up.guild_id,
+            level: level_up.level,
+            skill_points: level_up.skill_points,
+        }),
+        Body::GuildAllianceRequestNotify(request) => Some(
+            GuildIngressPayload::AllianceRequestNotified(GuildAllianceInviteInfo {
+                guild_id: request.guild_id,
+                guild_name: request.guild_name,
+                requester_name: request.requester_name,
+            }),
+        ),
         Body::GuildMemberUpdate(update) => {
             update
                 .member
@@ -194,6 +233,64 @@ mod tests {
     }
 
     #[test]
+    fn guild_error_maps_progression_and_relation_errors_distinctly() {
+        let known = [
+            (
+                net::GuildError::GuildErrNoSkillPoints,
+                GuildErrorKind::NoSkillPoints,
+            ),
+            (
+                net::GuildError::GuildErrSkillRequirement,
+                GuildErrorKind::SkillRequirement,
+            ),
+            (
+                net::GuildError::GuildErrSkillMaxed,
+                GuildErrorKind::SkillMaxed,
+            ),
+            (
+                net::GuildError::GuildErrAllyLimit,
+                GuildErrorKind::AllyLimit,
+            ),
+            (
+                net::GuildError::GuildErrAntagonistLimit,
+                GuildErrorKind::AntagonistLimit,
+            ),
+            (
+                net::GuildError::GuildErrAlreadyAllied,
+                GuildErrorKind::AlreadyAllied,
+            ),
+            (
+                net::GuildError::GuildErrAlreadyAntagonist,
+                GuildErrorKind::AlreadyAntagonist,
+            ),
+            (
+                net::GuildError::GuildErrNotRelated,
+                GuildErrorKind::NotRelated,
+            ),
+            (
+                net::GuildError::GuildErrSameGuild,
+                GuildErrorKind::SameGuild,
+            ),
+            (
+                net::GuildError::GuildErrSiegeActive,
+                GuildErrorKind::SiegeActive,
+            ),
+            (
+                net::GuildError::GuildErrRequestPending,
+                GuildErrorKind::RequestPending,
+            ),
+            (
+                net::GuildError::GuildErrAllianceDeclined,
+                GuildErrorKind::AllianceDeclined,
+            ),
+        ];
+
+        for (wire, expected) in known {
+            assert_eq!(guild_error(wire as i32), expected);
+        }
+    }
+
+    #[test]
     fn guild_info_maps_the_complete_authoritative_snapshot() {
         let payload = guild_payload(Body::GuildInfo(net::GuildInfo {
             guild_id: 7,
@@ -264,6 +361,97 @@ mod tests {
         assert_eq!(info.members[0].max_sp, u32::MAX as u64 + 4);
         assert_eq!(info.members[0].ap, 5);
         assert_eq!(info.members[0].max_ap, 6);
+    }
+
+    #[test]
+    fn guild_info_preserves_progression_skills_and_relations() {
+        let payload = guild_payload(Body::GuildInfo(net::GuildInfo {
+            guild_id: 7,
+            name: "Vikings".into(),
+            master_char_id: 42,
+            emblem_id: 3,
+            notice_subject: String::new(),
+            notice_body: String::new(),
+            positions: vec![],
+            members: vec![],
+            level: 17,
+            exp: u32::MAX as u64 + 99,
+            next_exp: u32::MAX as u64 + 1_000,
+            skill_points: 4,
+            skills: vec![
+                net::GuildSkillEntry {
+                    skill_id: 10000,
+                    level: 2,
+                    max_level: 5,
+                },
+                net::GuildSkillEntry {
+                    skill_id: 10001,
+                    level: 0,
+                    max_level: 0,
+                },
+            ],
+            relations: vec![
+                net::GuildRelation {
+                    guild_id: 8,
+                    name: "Allies".into(),
+                    kind: net::GuildRelationKind::GuildRelationAlly as i32,
+                },
+                net::GuildRelation {
+                    guild_id: 9,
+                    name: "Rivals".into(),
+                    kind: net::GuildRelationKind::GuildRelationAntagonist as i32,
+                },
+                net::GuildRelation {
+                    guild_id: 10,
+                    name: "Future".into(),
+                    kind: 77,
+                },
+            ],
+        }))
+        .expect("guild info should map");
+
+        let GuildIngressPayload::Info(info) = payload else {
+            panic!("expected guild info payload");
+        };
+        assert_eq!(info.level, 17);
+        assert_eq!(info.exp, u32::MAX as u64 + 99);
+        assert_eq!(info.next_exp, u32::MAX as u64 + 1_000);
+        assert_eq!(info.skill_points, 4);
+        assert_eq!(
+            info.skills,
+            vec![
+                GuildSkillInfo {
+                    skill_id: 10000,
+                    level: 2,
+                    max_level: 5,
+                },
+                GuildSkillInfo {
+                    skill_id: 10001,
+                    level: 0,
+                    max_level: 0,
+                },
+            ]
+        );
+        assert_eq!(
+            info.relations,
+            vec![
+                GuildRelationInfo {
+                    guild_id: 8,
+                    name: "Allies".into(),
+                    kind: GuildRelationKind::Ally,
+                },
+                GuildRelationInfo {
+                    guild_id: 9,
+                    name: "Rivals".into(),
+                    kind: GuildRelationKind::Antagonist,
+                },
+                GuildRelationInfo {
+                    guild_id: 10,
+                    name: "Future".into(),
+                    kind: GuildRelationKind::Unknown(77),
+                },
+            ]
+        );
     }
 
     #[test]
