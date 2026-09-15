@@ -164,6 +164,7 @@ type GuildTextFieldFilter = Or<(
     With<GuildCreateNameField>,
     With<GuildInviteNameField>,
     With<positions::PositionNameField>,
+    With<positions::PositionTaxField>,
     With<notice::GuildNoticeSubjectField>,
     With<notice::GuildNoticeBodyField>,
     With<members::GuildExpelReasonField>,
@@ -183,6 +184,7 @@ impl Plugin for GuildWindowPlugin {
         }
         app.init_resource::<GuildUi>()
             .init_resource::<GuildUiSession>()
+            .init_resource::<positions::PositionDraftState>()
             .init_resource::<emblem::GuildEmblemPreview>()
             .init_resource::<dialogs::PendingGuildInvite>()
             .init_resource::<dialogs::PendingGuildConfirmation>()
@@ -190,6 +192,7 @@ impl Plugin for GuildWindowPlugin {
                 Update,
                 (
                     reset_guild_ui_session,
+                    positions::reset_position_drafts,
                     dialogs::reset_stale_invite,
                     dialogs::reset_stale_confirmation,
                     emblem::reset_emblem_preview,
@@ -208,7 +211,9 @@ impl Plugin for GuildWindowPlugin {
                 (
                     (
                         sync_create_draft,
+                        positions::sync_position_drafts,
                         apply_guild_results,
+                        positions::resolve_position_submission,
                         feedback::ingest_guild_announcements,
                         sync_membership_mode,
                         sync_header,
@@ -229,6 +234,7 @@ impl Plugin for GuildWindowPlugin {
                         positions::refresh_positions,
                         positions::sync_invite_labels,
                         positions::sync_expel_labels,
+                        positions::sync_storage_toggles,
                         notice::refresh_notice,
                         sync_management_controls,
                         release_hidden_guild_focus,
@@ -264,6 +270,7 @@ impl Plugin for GuildWindowPlugin {
             (
                 clear_guild_focus_on_exit,
                 block_guild_ui_on_exit,
+                positions::clear_position_drafts,
                 dialogs::clear_pending_invite,
                 dialogs::clear_pending_confirmation,
             ),
@@ -897,6 +904,20 @@ mod tests {
         app.insert_resource(InputFocus::from_entity(other));
         app.update();
         assert_eq!(app.world().resource::<InputFocus>().get(), Some(other));
+    }
+
+    #[test]
+    fn hidden_root_releases_position_tax_field_focus() {
+        let mut app = App::new();
+        app.init_resource::<InputFocus>();
+        let tax = app.world_mut().spawn(positions::PositionTaxField).id();
+        app.world_mut().spawn((GuildWindowRoot, Visibility::Hidden));
+        app.add_systems(Update, release_hidden_guild_focus);
+        app.insert_resource(InputFocus::from_entity(tax));
+
+        app.update();
+
+        assert_eq!(app.world().resource::<InputFocus>().get(), None);
     }
 
     #[test]
