@@ -3,17 +3,21 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::{QuinnetClient, client_connected};
 use net_contract::commands::{
-    GuildCreateRequested, GuildEmblemFetchRequested, GuildEmblemUploadRequested,
-    GuildExpelRequested, GuildInviteRequested, GuildInviteResponded, GuildLeaveRequested,
-    GuildMemberPositionRequested, GuildNoticeEditRequested, GuildPositionEditRequested,
+    GuildAllianceBreakRequested, GuildAllianceRequested, GuildAllianceResponded,
+    GuildAntagonistRemoveRequested, GuildAntagonistRequested, GuildCreateRequested,
+    GuildEmblemFetchRequested, GuildEmblemUploadRequested, GuildExpelRequested,
+    GuildInviteRequested, GuildInviteResponded, GuildLeaveRequested, GuildMemberPositionRequested,
+    GuildNoticeEditRequested, GuildPositionEditRequested, GuildSkillUpRequested,
 };
 
 use crate::channels::GAMEPLAY;
 use crate::envelope::Body;
 use crate::proto::aesir::net::{
-    GuildCreateRequest, GuildEmblemRequest, GuildEmblemUploadRequest, GuildExpelRequest,
-    GuildInviteRequest, GuildInviteResponse, GuildLeaveRequest, GuildMemberPositionRequest,
-    GuildNoticeEditRequest, GuildPositionEditRequest,
+    GuildAllianceBreakRequest, GuildAllianceRequest, GuildAllianceResponse,
+    GuildAntagonistRemoveRequest, GuildAntagonistRequest, GuildCreateRequest, GuildEmblemRequest,
+    GuildEmblemUploadRequest, GuildExpelRequest, GuildInviteRequest, GuildInviteResponse,
+    GuildLeaveRequest, GuildMemberPositionRequest, GuildNoticeEditRequest,
+    GuildPositionEditRequest, GuildSkillUpRequest,
 };
 use crate::zone::{QuicZoneState, ZonePhase};
 
@@ -59,6 +63,45 @@ fn guild_position_edit_body(command: &GuildPositionEditRequested) -> Body {
     })
 }
 
+fn guild_skill_up_body(command: &GuildSkillUpRequested) -> Body {
+    Body::GuildSkillUpRequest(GuildSkillUpRequest {
+        skill_id: command.skill_id,
+    })
+}
+
+fn guild_alliance_body(command: &GuildAllianceRequested) -> Body {
+    Body::GuildAllianceRequest(GuildAllianceRequest {
+        target_char_id: command.target_char_id,
+        target_name: command.target_name.clone(),
+    })
+}
+
+fn guild_alliance_response_body(command: &GuildAllianceResponded) -> Body {
+    Body::GuildAllianceResponse(GuildAllianceResponse {
+        guild_id: command.guild_id,
+        accept: command.accept,
+    })
+}
+
+fn guild_alliance_break_body(command: &GuildAllianceBreakRequested) -> Body {
+    Body::GuildAllianceBreakRequest(GuildAllianceBreakRequest {
+        guild_id: command.guild_id,
+    })
+}
+
+fn guild_antagonist_body(command: &GuildAntagonistRequested) -> Body {
+    Body::GuildAntagonistRequest(GuildAntagonistRequest {
+        target_char_id: command.target_char_id,
+        target_name: command.target_name.clone(),
+    })
+}
+
+fn guild_antagonist_remove_body(command: &GuildAntagonistRemoveRequested) -> Body {
+    Body::GuildAntagonistRemoveRequest(GuildAntagonistRemoveRequest {
+        guild_id: command.guild_id,
+    })
+}
+
 fn guild_member_position_body(command: &GuildMemberPositionRequested) -> Body {
     Body::GuildMemberPositionRequest(GuildMemberPositionRequest {
         target_char_id: command.target_char_id,
@@ -96,6 +139,12 @@ pub struct GuildCommandQueues<'w> {
     leaves: ResMut<'w, Messages<GuildLeaveRequested>>,
     expulsions: ResMut<'w, Messages<GuildExpelRequested>>,
     position_edits: ResMut<'w, Messages<GuildPositionEditRequested>>,
+    skill_ups: ResMut<'w, Messages<GuildSkillUpRequested>>,
+    alliance_requests: ResMut<'w, Messages<GuildAllianceRequested>>,
+    alliance_responses: ResMut<'w, Messages<GuildAllianceResponded>>,
+    alliance_breaks: ResMut<'w, Messages<GuildAllianceBreakRequested>>,
+    antagonist_requests: ResMut<'w, Messages<GuildAntagonistRequested>>,
+    antagonist_removals: ResMut<'w, Messages<GuildAntagonistRemoveRequested>>,
     member_positions: ResMut<'w, Messages<GuildMemberPositionRequested>>,
     notice_edits: ResMut<'w, Messages<GuildNoticeEditRequested>>,
     emblem_uploads: ResMut<'w, Messages<GuildEmblemUploadRequested>>,
@@ -110,6 +159,12 @@ impl GuildCommandQueues<'_> {
         self.leaves.clear();
         self.expulsions.clear();
         self.position_edits.clear();
+        self.skill_ups.clear();
+        self.alliance_requests.clear();
+        self.alliance_responses.clear();
+        self.alliance_breaks.clear();
+        self.antagonist_requests.clear();
+        self.antagonist_removals.clear();
         self.member_positions.clear();
         self.notice_edits.clear();
         self.emblem_uploads.clear();
@@ -257,6 +312,134 @@ pub fn send_guild_position_edit(
     schedule = Update,
     config(run_if = client_connected)
 )]
+pub fn send_guild_skill_up(
+    mut commands: MessageReader<GuildSkillUpRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        commands.clear();
+        return;
+    }
+    for command in commands.read() {
+        if let Err(error) = zone.send(&mut client, GAMEPLAY, guild_skill_up_body(command)) {
+            error!("failed to send GuildSkillUpRequest: {error}");
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_guild_alliance(
+    mut commands: MessageReader<GuildAllianceRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        commands.clear();
+        return;
+    }
+    for command in commands.read() {
+        if let Err(error) = zone.send(&mut client, GAMEPLAY, guild_alliance_body(command)) {
+            error!("failed to send GuildAllianceRequest: {error}");
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_guild_alliance_response(
+    mut commands: MessageReader<GuildAllianceResponded>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        commands.clear();
+        return;
+    }
+    for command in commands.read() {
+        if let Err(error) = zone.send(&mut client, GAMEPLAY, guild_alliance_response_body(command))
+        {
+            error!("failed to send GuildAllianceResponse: {error}");
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_guild_alliance_break(
+    mut commands: MessageReader<GuildAllianceBreakRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        commands.clear();
+        return;
+    }
+    for command in commands.read() {
+        if let Err(error) = zone.send(&mut client, GAMEPLAY, guild_alliance_break_body(command)) {
+            error!("failed to send GuildAllianceBreakRequest: {error}");
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_guild_antagonist(
+    mut commands: MessageReader<GuildAntagonistRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        commands.clear();
+        return;
+    }
+    for command in commands.read() {
+        if let Err(error) = zone.send(&mut client, GAMEPLAY, guild_antagonist_body(command)) {
+            error!("failed to send GuildAntagonistRequest: {error}");
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_guild_antagonist_remove(
+    mut commands: MessageReader<GuildAntagonistRemoveRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        commands.clear();
+        return;
+    }
+    for command in commands.read() {
+        if let Err(error) = zone.send(&mut client, GAMEPLAY, guild_antagonist_remove_body(command))
+        {
+            error!("failed to send GuildAntagonistRemoveRequest: {error}");
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
 pub fn send_guild_member_position(
     mut commands: MessageReader<GuildMemberPositionRequested>,
     mut client: ResMut<QuinnetClient>,
@@ -350,6 +533,12 @@ mod tests {
         app.add_message::<GuildLeaveRequested>();
         app.add_message::<GuildExpelRequested>();
         app.add_message::<GuildPositionEditRequested>();
+        app.add_message::<GuildSkillUpRequested>();
+        app.add_message::<GuildAllianceRequested>();
+        app.add_message::<GuildAllianceResponded>();
+        app.add_message::<GuildAllianceBreakRequested>();
+        app.add_message::<GuildAntagonistRequested>();
+        app.add_message::<GuildAntagonistRemoveRequested>();
         app.add_message::<GuildMemberPositionRequested>();
         app.add_message::<GuildNoticeEditRequested>();
         app.add_message::<GuildEmblemUploadRequested>();
@@ -420,6 +609,89 @@ mod tests {
             guild_id: 7,
             emblem_id: 8,
         });
+    }
+
+    #[test]
+    fn skill_up_body_preserves_skill_id() {
+        let body =
+            guild_skill_up_body(&net_contract::commands::GuildSkillUpRequested { skill_id: 10001 });
+
+        match body {
+            Body::GuildSkillUpRequest(crate::proto::aesir::net::GuildSkillUpRequest {
+                skill_id,
+            }) => assert_eq!(skill_id, 10001),
+            other => panic!("expected Body::GuildSkillUpRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn alliance_body_preserves_character_target() {
+        let body = guild_alliance_body(&GuildAllianceRequested {
+            target_char_id: 42,
+            target_name: "Ally".to_string(),
+        });
+
+        match body {
+            Body::GuildAllianceRequest(GuildAllianceRequest {
+                target_char_id,
+                target_name,
+            }) => {
+                assert_eq!(target_char_id, 42);
+                assert_eq!(target_name, "Ally");
+            }
+            other => panic!("expected Body::GuildAllianceRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn alliance_response_body_preserves_decline() {
+        let body = guild_alliance_response_body(&GuildAllianceResponded {
+            guild_id: 43,
+            accept: false,
+        });
+
+        match body {
+            Body::GuildAllianceResponse(GuildAllianceResponse { guild_id, accept }) => {
+                assert_eq!(guild_id, 43);
+                assert!(!accept);
+            }
+            other => panic!("expected Body::GuildAllianceResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn alliance_break_body_preserves_guild_id() {
+        assert!(matches!(
+            guild_alliance_break_body(&GuildAllianceBreakRequested { guild_id: 44 }),
+            Body::GuildAllianceBreakRequest(GuildAllianceBreakRequest { guild_id: 44 })
+        ));
+    }
+
+    #[test]
+    fn antagonist_body_preserves_character_target() {
+        let body = guild_antagonist_body(&GuildAntagonistRequested {
+            target_char_id: 45,
+            target_name: "Rival".to_string(),
+        });
+
+        match body {
+            Body::GuildAntagonistRequest(GuildAntagonistRequest {
+                target_char_id,
+                target_name,
+            }) => {
+                assert_eq!(target_char_id, 45);
+                assert_eq!(target_name, "Rival");
+            }
+            other => panic!("expected Body::GuildAntagonistRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn antagonist_remove_body_preserves_guild_id() {
+        assert!(matches!(
+            guild_antagonist_remove_body(&GuildAntagonistRemoveRequested { guild_id: 46 }),
+            Body::GuildAntagonistRemoveRequest(GuildAntagonistRemoveRequest { guild_id: 46 })
+        ));
     }
 
     #[test]
@@ -668,6 +940,106 @@ mod tests {
                 .resource::<Messages<GuildEmblemFetchRequested>>()
                 .is_empty()
         );
+    }
+
+    fn write_skill_and_relation_commands(app: &mut App) {
+        app.world_mut()
+            .write_message(GuildSkillUpRequested { skill_id: 1 });
+        app.world_mut().write_message(GuildAllianceRequested {
+            target_char_id: 2,
+            target_name: "Ally".to_string(),
+        });
+        app.world_mut().write_message(GuildAllianceResponded {
+            guild_id: 3,
+            accept: false,
+        });
+        app.world_mut()
+            .write_message(GuildAllianceBreakRequested { guild_id: 4 });
+        app.world_mut().write_message(GuildAntagonistRequested {
+            target_char_id: 5,
+            target_name: "Rival".to_string(),
+        });
+        app.world_mut()
+            .write_message(GuildAntagonistRemoveRequested { guild_id: 6 });
+    }
+
+    fn assert_skill_and_relation_commands_empty(app: &App) {
+        assert!(
+            app.world()
+                .resource::<Messages<GuildSkillUpRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildAllianceRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildAllianceResponded>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildAllianceBreakRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildAntagonistRequested>>()
+                .is_empty()
+        );
+        assert!(
+            app.world()
+                .resource::<Messages<GuildAntagonistRemoveRequested>>()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn skill_and_relation_commands_are_consumed_outside_playing() {
+        let mut app = app_with_guild_messages();
+        app.add_systems(
+            Update,
+            (
+                send_guild_skill_up,
+                send_guild_alliance,
+                send_guild_alliance_response,
+                send_guild_alliance_break,
+                send_guild_antagonist,
+                send_guild_antagonist_remove,
+            ),
+        );
+        app.update();
+        write_skill_and_relation_commands(&mut app);
+
+        app.update();
+        app.world_mut().resource_mut::<QuicZoneState>().phase = ZonePhase::Playing;
+        app.update();
+
+        let frame = app
+            .world_mut()
+            .resource_mut::<QuicZoneState>()
+            .conn
+            .next_frame(Body::GuildSkillUpRequest(GuildSkillUpRequest {
+                skill_id: 0,
+            }));
+        assert_eq!(crate::envelope::decode(&frame).unwrap().seq, 0);
+    }
+
+    #[test]
+    fn skill_and_relation_commands_are_cleared_while_disconnected() {
+        let mut app = app_with_guild_messages();
+        app.add_systems(
+            Last,
+            clear_guild_commands_while_disconnected.run_if(not(client_connected)),
+        );
+        app.world_mut().resource_mut::<QuicZoneState>().phase = ZonePhase::Playing;
+        write_skill_and_relation_commands(&mut app);
+
+        app.update();
+
+        assert_skill_and_relation_commands_empty(&app);
     }
 
     #[test]
