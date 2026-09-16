@@ -8,7 +8,7 @@ use bevy::{
 };
 use game_engine::domain::guild::{
     GuildState,
-    emblems::{EmblemKey, GuildEmblemImages, decode_emblem_bmp as decode_bmp},
+    emblems::{EmblemKey, GuildEmblemImages, decode_emblem as decode_bmp},
 };
 use net_contract::{
     commands::GuildEmblemUploadRequested,
@@ -86,7 +86,7 @@ pub(crate) fn on_select_emblem(
     let form_generation = images.form_generation;
     let task = IoTaskPool::get().spawn(async move {
         let file = rfd::AsyncFileDialog::new()
-            .add_filter("Bitmap", &["bmp"])
+            .add_filter("Image", &["bmp", "png"])
             .pick_file()
             .await?;
         Some(file.read().await)

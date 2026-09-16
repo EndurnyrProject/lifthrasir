@@ -1,10 +1,11 @@
 //! Downloaded guild emblems shared by world rendering and UI.
 
 use super::plugin::GuildSessionGate;
+use crate::infrastructure::assets::converters::apply_magenta_transparency;
 use bevy::{
     asset::RenderAssetUsages,
-    image::{CompressedImageFormats, ImageSampler, ImageType},
     prelude::*,
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 use net_contract::{
     commands::GuildEmblemFetchRequested,
@@ -106,7 +107,7 @@ pub(super) fn receive_emblem_data(
                     continue;
                 }
                 images.in_flight = None;
-                match decode_emblem_bmp(data) {
+                match decode_emblem(data) {
                     Ok(image) => {
                         images.cache.insert(key, assets.add(image));
                     }
@@ -163,28 +164,41 @@ pub(super) fn block_emblems(
     images.clear(&mut assets);
 }
 
-/// Validate and decode the protocol's bounded 24×24 BMP payload.
-pub fn decode_emblem_bmp(data: &[u8]) -> Result<Image, &'static str> {
+/// Validate and decode the protocol's bounded 24×24 BMP or PNG payload.
+///
+/// BMP emblems use the RO convention of magenta as the transparent color; PNG
+/// emblems carry their own alpha channel and are used as-is.
+pub fn decode_emblem(data: &[u8]) -> Result<Image, &'static str> {
     if data.len() > MAX_EMBLEM_BYTES {
         return Err("Guild emblems must be 100 KB or smaller.");
     }
-    if !data.starts_with(b"BM") {
-        return Err("Guild emblems must be BMP files.");
-    }
-    let image = Image::from_buffer(
-        data,
-        ImageType::Extension("bmp"),
-        CompressedImageFormats::all(),
-        true,
-        ImageSampler::Default,
-        RenderAssetUsages::default(),
-    )
-    .map_err(|_| "Guild emblem BMP data is corrupt or truncated.")?;
-    let size = image.texture_descriptor.size;
-    if size.width != 24 || size.height != 24 {
+    let format = if data.starts_with(b"BM") {
+        image::ImageFormat::Bmp
+    } else if data.starts_with(b"\x89PNG") {
+        image::ImageFormat::Png
+    } else {
+        return Err("Guild emblems must be BMP or PNG files.");
+    };
+    let decoded = image::load_from_memory_with_format(data, format)
+        .map_err(|_| "Guild emblem image data is corrupt or truncated.")?;
+    if decoded.width() != 24 || decoded.height() != 24 {
         return Err("Guild emblems must be exactly 24 by 24 pixels.");
     }
-    Ok(image)
+    let mut rgba = decoded.into_rgba8().into_raw();
+    if format == image::ImageFormat::Bmp {
+        apply_magenta_transparency(&mut rgba);
+    }
+    Ok(Image::new(
+        Extent3d {
+            width: 24,
+            height: 24,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        rgba,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    ))
 }
 
 /// Minimal uncompressed 24-bit BMP of the given size, for tests across crates.

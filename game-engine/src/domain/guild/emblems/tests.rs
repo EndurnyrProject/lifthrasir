@@ -43,7 +43,7 @@ fn session_clear_removes_cached_assets_and_pending_requests() {
     assert!(images.failed.is_empty());
 }
 
-use super::decode_emblem_bmp as decode_bmp;
+use super::decode_emblem as decode_bmp;
 
 use net_contract::dto::{GuildActionResult, GuildErrorKind};
 
@@ -66,6 +66,35 @@ fn validates_only_a_complete_24_pixel_bmp() {
     assert!(decode_bmp(b"BM").is_err());
     assert!(decode_bmp(&bmp(23, 24)).is_err());
     assert!(decode_bmp(b"not-a-bmp").is_err());
+}
+
+fn png(width: u32, height: u32) -> Vec<u8> {
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image::RgbaImage::from_pixel(width, height, image::Rgba([255, 0, 255, 255]))
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+    bytes.into_inner()
+}
+
+#[test]
+fn accepts_24_pixel_png_and_keeps_its_alpha() {
+    let image = decode_bmp(&png(24, 24)).unwrap();
+    assert_eq!(image.data.as_deref().unwrap()[3], 255);
+    assert!(decode_bmp(&png(23, 24)).is_err());
+    assert!(decode_bmp(b"\x89PNG").is_err());
+}
+
+#[test]
+fn bmp_magenta_becomes_transparent() {
+    let mut data = bmp(24, 24);
+    data[54] = 255;
+    data[55] = 0;
+    data[56] = 255;
+    let image = decode_bmp(&data).unwrap();
+    let pixels = image.data.as_deref().unwrap();
+    let first_magenta = &pixels[(23 * 24) * 4..(23 * 24) * 4 + 4];
+    assert_eq!(first_magenta, [0, 0, 0, 0]);
+    assert_eq!(pixels[..4], [0, 0, 0, 255]);
 }
 
 #[test]
