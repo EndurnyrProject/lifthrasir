@@ -56,7 +56,7 @@ fn guild_panel() -> impl Scene {
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10) }
         ignore_picking()
-        Children [ header(), tabs(), content(), leave_control(), feedback_text() ]
+        Children [ header(), tabs(), content(), feedback_banner(), leave_control() ]
     }
 }
 
@@ -489,11 +489,23 @@ fn member_row(row: MemberRow) -> impl Scene {
     }
 }
 
-fn feedback_text() -> impl Scene {
+fn feedback_banner() -> impl Scene {
     bsn! {
-        GuildFeedbackText
-        chrome_text(String::new(), 11.5, theme::BAD)
+        GuildFeedbackBanner
+        Node {
+            width: percent(100),
+            min_height: px(34),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            padding: {UiRect::axes(px(12), px(8))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(8)),
+        }
+        BackgroundColor(Color::NONE)
+        BorderColor::all(Color::NONE)
         Visibility::Hidden
+        ignore_picking()
+        Children [ (GuildFeedbackText chrome_text(String::new(), 11.5, theme::TEXT)) ]
     }
 }
 

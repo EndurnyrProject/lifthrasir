@@ -49,35 +49,7 @@ pub(super) fn apply_guild_results(
         }
         ui.pending = None;
         if result.success {
-            ui.feedback = Some(match result.action.as_str() {
-                "create" => "Guild created. Waiting for guild information…".to_string(),
-                "invite" => "Guild invitation sent.".to_string(),
-                "position_edit" => "Position saved. Waiting for guild information…".to_string(),
-                "member_position" => {
-                    "Position assignment sent. Waiting for guild information…".to_string()
-                }
-                "notice_edit" => "Notice saved. Waiting for guild information…".to_string(),
-                "emblem_upload" => {
-                    "Emblem uploaded. Waiting for the authoritative emblem update…".to_string()
-                }
-                "leave" => "Guild leave requested. Waiting for authoritative state…".to_string(),
-                "expel" => "Guild member expelled. Waiting for roster refresh…".to_string(),
-                "skill_up" => {
-                    "Guild skill upgrade accepted. Waiting for guild information…".to_string()
-                }
-                "alliance_request" => "Alliance request sent.".to_string(),
-                "alliance_response" => "Alliance response processed.".to_string(),
-                "alliance_break" => {
-                    "Alliance break accepted. Waiting for guild information…".to_string()
-                }
-                "antagonist" => {
-                    "Antagonist declaration accepted. Waiting for guild information…".to_string()
-                }
-                "antagonist_remove" => {
-                    "Antagonist removal accepted. Waiting for guild information…".to_string()
-                }
-                _ => "Guild action completed.".to_string(),
-            });
+            ui.feedback = Some(guild_success_text(&result.action).to_string());
             ui.feedback_is_error = false;
         } else {
             if result.action == "emblem_upload" {
@@ -86,6 +58,28 @@ pub(super) fn apply_guild_results(
             ui.feedback = Some(guild_action_error_text(&result.action, result.error).to_string());
             ui.feedback_is_error = true;
         }
+    }
+}
+
+/// Short confirmation shown once the server accepts `action`. The guild snapshot
+/// that follows refreshes the window on its own, so the text never mentions it.
+pub(super) fn guild_success_text(action: &str) -> &'static str {
+    match action {
+        "create" => "Guild created",
+        "invite" => "Invitation sent",
+        "position_edit" => "Position saved",
+        "member_position" => "Position assigned",
+        "notice_edit" => "Notice saved",
+        "emblem_upload" => "Emblem updated",
+        "leave" => "You left the guild",
+        "expel" => "Member expelled",
+        "skill_up" => "Guild skill upgraded",
+        "alliance_request" => "Alliance request sent",
+        "alliance_response" => "Alliance response sent",
+        "alliance_break" => "Alliance broken",
+        "antagonist" => "Antagonist declared",
+        "antagonist_remove" => "Antagonist removed",
+        _ => "Done",
     }
 }
 
@@ -172,7 +166,7 @@ pub(super) fn ingest_guild_announcements(
         match &event.payload {
             GuildIngressPayload::ActionResult(result) if result.action == "create" => {
                 let (text, color) = if result.success {
-                    ("Guild created. Waiting for guild information…", theme::GOLD)
+                    (guild_success_text("create"), theme::GOLD)
                 } else {
                     (guild_action_error_text("create", result.error), theme::BAD)
                 };
@@ -293,11 +287,7 @@ mod tests {
     fn creation_results_appear_in_chat_with_the_guild_window_closed() {
         let generation = ZoneSessionGeneration(9);
         for (success, error, expected) in [
-            (
-                true,
-                GuildErrorKind::None,
-                "Guild created. Waiting for guild information…",
-            ),
+            (true, GuildErrorKind::None, "Guild created"),
             (
                 false,
                 GuildErrorKind::NoEmperium,
@@ -549,24 +539,12 @@ mod tests {
     fn new_action_results_release_matching_pending_with_accurate_feedback() {
         let generation = ZoneSessionGeneration(9);
         for (action, expected) in [
-            (
-                "skill_up",
-                "Guild skill upgrade accepted. Waiting for guild information…",
-            ),
-            ("alliance_request", "Alliance request sent."),
-            ("alliance_response", "Alliance response processed."),
-            (
-                "alliance_break",
-                "Alliance break accepted. Waiting for guild information…",
-            ),
-            (
-                "antagonist",
-                "Antagonist declaration accepted. Waiting for guild information…",
-            ),
-            (
-                "antagonist_remove",
-                "Antagonist removal accepted. Waiting for guild information…",
-            ),
+            ("skill_up", "Guild skill upgraded"),
+            ("alliance_request", "Alliance request sent"),
+            ("alliance_response", "Alliance response sent"),
+            ("alliance_break", "Alliance broken"),
+            ("antagonist", "Antagonist declared"),
+            ("antagonist_remove", "Antagonist removed"),
         ] {
             let mut app = feedback_app(generation);
             app.world_mut().resource_mut::<GuildUi>().pending =

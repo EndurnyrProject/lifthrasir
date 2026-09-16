@@ -16,6 +16,8 @@ use feedback::apply_guild_results;
 #[cfg(test)]
 use feedback::guild_error_text;
 
+use std::time::Duration;
+
 use bevy::ecs::system::SystemParam;
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
@@ -126,6 +128,8 @@ pub struct GuildInviteControls;
 pub struct GuildInviteNameField;
 #[derive(Component, Default, Clone)]
 pub struct GuildInviteButton;
+#[derive(Component, Default, Clone)]
+pub struct GuildFeedbackBanner;
 #[derive(Component, Default, Clone)]
 pub struct GuildFeedbackText;
 #[derive(Component, Default, Clone)]
@@ -707,23 +711,57 @@ fn sync_tabs(
     }
 }
 
+/// How long a feedback banner stays up before it clears itself.
+const FEEDBACK_DISMISS: Duration = Duration::from_secs(5);
+
+/// Shows `GuildUi::feedback` in the banner and clears it after
+/// [`FEEDBACK_DISMISS`]. A new message restarts the timer; re-setting the same
+/// text while it is still showing does not.
 fn sync_feedback(
-    ui: Res<GuildUi>,
-    mut feedback: Query<(&mut Text, &mut TextColor, &mut Visibility), With<GuildFeedbackText>>,
+    mut ui: ResMut<GuildUi>,
+    time: Res<Time>,
+    mut shown: Local<Option<(String, Duration)>>,
+    mut banner: Query<
+        (&mut BackgroundColor, &mut BorderColor, &mut Visibility),
+        With<GuildFeedbackBanner>,
+    >,
+    mut text: Query<(&mut Text, &mut TextColor), With<GuildFeedbackText>>,
 ) {
-    for (mut text, mut color, mut visibility) in &mut feedback {
-        if let Some(message) = &ui.feedback {
-            text.0.clone_from(message);
-            color.0 = if ui.feedback_is_error {
-                theme::BAD
-            } else {
-                theme::EMERALD_BRI
-            };
-            *visibility = Visibility::Inherited;
-        } else {
+    let now = time.elapsed();
+    let expired = shown.as_ref().is_some_and(|(message, since)| {
+        ui.feedback.as_ref() == Some(message) && now - *since > FEEDBACK_DISMISS
+    });
+    if expired {
+        ui.feedback = None;
+    }
+    let Some(message) = ui.feedback.clone() else {
+        *shown = None;
+        for (_, _, mut visibility) in &mut banner {
             *visibility = Visibility::Hidden;
         }
+        return;
+    };
+    if shown
+        .as_ref()
+        .is_some_and(|(current, _)| *current == message)
+    {
+        return;
     }
+    let tint = if ui.feedback_is_error {
+        theme::BAD
+    } else {
+        theme::EMERALD_BRI
+    };
+    for (mut background, mut border, mut visibility) in &mut banner {
+        background.0 = tint.with_alpha(0.12);
+        *border = BorderColor::all(tint.with_alpha(0.35));
+        *visibility = Visibility::Inherited;
+    }
+    for (mut text, mut color) in &mut text {
+        text.0.clone_from(&message);
+        color.0 = tint;
+    }
+    *shown = Some((message, now));
 }
 
 fn sync_invite_controls(
@@ -837,6 +875,53 @@ mod tests {
             .get_mut::<ActionState<PlayerAction>>()
             .unwrap()
             .press(&PlayerAction::Guild);
+    }
+
+    fn feedback_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<GuildUi>();
+        app.add_systems(Update, sync_feedback);
+        app.world_mut().spawn((
+            GuildFeedbackBanner,
+            BackgroundColor(Color::NONE),
+            BorderColor::all(Color::NONE),
+            Visibility::Hidden,
+        ));
+        app.world_mut()
+            .spawn((GuildFeedbackText, Text::default(), TextColor(theme::TEXT)));
+        app
+    }
+
+    fn banner_visibility(app: &mut App) -> Visibility {
+        *app.world_mut()
+            .query_filtered::<&Visibility, With<GuildFeedbackBanner>>()
+            .single(app.world())
+            .unwrap()
+    }
+
+    #[test]
+    fn feedback_banner_shows_then_dismisses_itself() {
+        let mut app = feedback_app();
+        app.world_mut().resource_mut::<GuildUi>().feedback = Some("Notice saved".into());
+        app.update();
+
+        assert_eq!(banner_visibility(&mut app), Visibility::Inherited);
+        let text = app
+            .world_mut()
+            .query_filtered::<&Text, With<GuildFeedbackText>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(text.0, "Notice saved");
+
+        app.world_mut()
+            .resource_mut::<Time<Virtual>>()
+            .advance_by(FEEDBACK_DISMISS + Duration::from_secs(1));
+        app.update();
+        app.update();
+
+        assert_eq!(banner_visibility(&mut app), Visibility::Hidden);
+        assert!(app.world().resource::<GuildUi>().feedback.is_none());
     }
 
     #[test]
@@ -1315,10 +1400,7 @@ mod tests {
 
         let ui = app.world().resource::<GuildUi>();
         assert!(ui.pending.is_none());
-        assert_eq!(
-            ui.feedback.as_deref(),
-            Some("Guild created. Waiting for guild information…")
-        );
+        assert_eq!(ui.feedback.as_deref(), Some("Guild created"));
         assert!(!app.world().resource::<GuildState>().in_guild());
     }
 
@@ -1468,10 +1550,7 @@ mod tests {
 
         let ui = app.world().resource::<GuildUi>();
         assert!(ui.pending.is_none());
-        assert_eq!(
-            ui.feedback.as_deref(),
-            Some("Notice saved. Waiting for guild information…")
-        );
+        assert_eq!(ui.feedback.as_deref(), Some("Notice saved"));
     }
 
     #[test]
