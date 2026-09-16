@@ -265,13 +265,31 @@ fn content() -> impl Scene {
                     width: percent(100),
                     height: percent(100),
                     display: Display::None,
-                    overflow: {Overflow::scroll_y()},
-                    flex_direction: FlexDirection::Column,
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Stretch,
+                    column_gap: px(4),
                     padding: {UiRect::vertical(px(10))},
                 }
                 Visibility::Hidden
-                Pickable
-                Children [ (GuildPositionsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
+                ignore_picking()
+                Children [
+                    (
+                        #positions_scroll
+                        Node {
+                            flex_grow: 1.0,
+                            min_width: px(0),
+                            height: percent(100),
+                            overflow: {Overflow::scroll_y()},
+                            flex_direction: FlexDirection::Column,
+                            padding: {UiRect::right(px(6))},
+                        }
+                        ScrollArea
+                        Pickable
+                        Children [ (GuildPositionsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
+                    ),
+                    @FeathersScrollbar { @target: #positions_scroll, @orientation: {ControlOrientation::Vertical} }
+                    Node { width: px(6), height: percent(100) }
+                ]
             ),
             (
                 GuildNoticePanel

@@ -98,17 +98,29 @@ type ChangedPositionTextFields<'w, 's> = Query<
     Or<(With<PositionNameField>, With<PositionTaxField>)>,
 >;
 #[derive(Component, Default, Clone)]
-struct PositionInviteToggle;
+pub(crate) struct PositionInviteToggle;
 #[derive(Component, Default, Clone)]
-struct PositionExpelToggle;
+pub(crate) struct PositionExpelToggle;
 #[derive(Component, Default, Clone)]
 pub(crate) struct PositionStorageToggle;
 #[derive(Component, Default, Clone)]
 struct PositionSave;
-#[derive(Component, Default, Clone)]
-pub(crate) struct PositionInviteLabel;
-#[derive(Component, Default, Clone)]
-pub(crate) struct PositionExpelLabel;
+type PermissionToggles<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static ChildOf,
+        Has<bevy::ui::Checked>,
+        Has<PositionInviteToggle>,
+        Has<PositionExpelToggle>,
+    ),
+    Or<(
+        With<PositionInviteToggle>,
+        With<PositionExpelToggle>,
+        With<PositionStorageToggle>,
+    )>,
+>;
 
 #[derive(Component, Clone, Debug, Default)]
 struct AssignmentAction {
@@ -235,7 +247,7 @@ pub(crate) fn project_assignments(info: &GuildInfo, is_master: bool) -> Vec<Memb
     let mut positions: Vec<_> = info
         .positions
         .iter()
-        .filter(|position| Some(position.index) != protected)
+        .filter(|position| Some(position.index) != protected && !position.name.trim().is_empty())
         .map(|position| PositionChoice {
             index: position.index,
             name: position.name.clone(),
@@ -559,42 +571,28 @@ pub(crate) fn refresh_positions(
         .insert(ChildOf(container));
 }
 
-pub(crate) fn sync_invite_labels(
-    drafts: Query<&PositionDraft>,
-    mut labels: Query<(&mut Text, &ChildOf), With<PositionInviteLabel>>,
-) {
-    for (mut label, parent) in &mut labels {
-        if let Ok(draft) = drafts.get(parent.parent()) {
-            label.0 = format!("Invite: {}", yes_no(draft.can_invite));
-        }
-    }
-}
-
-pub(crate) fn sync_expel_labels(
-    drafts: Query<&PositionDraft>,
-    mut labels: Query<(&mut Text, &ChildOf), With<PositionExpelLabel>>,
-) {
-    for (mut label, parent) in &mut labels {
-        if let Ok(draft) = drafts.get(parent.parent()) {
-            label.0 = format!("Expel: {}", yes_no(draft.can_expel));
-        }
-    }
-}
-
-pub(crate) fn sync_storage_toggles(
+/// Mirrors each row's draft flags onto its invite, expel and storage checkboxes.
+pub(crate) fn sync_permission_toggles(
     rows: Query<&PositionDraft>,
-    toggles: Query<(Entity, &ChildOf, Has<bevy::ui::Checked>), With<PositionStorageToggle>>,
+    toggles: PermissionToggles,
     mut commands: Commands,
 ) {
-    for (toggle, parent, checked) in &toggles {
+    for (toggle, parent, checked, is_invite, is_expel) in &toggles {
         let Ok(draft) = rows.get(parent.parent()) else {
             continue;
         };
-        if draft.can_storage == checked {
+        let wanted = if is_invite {
+            draft.can_invite
+        } else if is_expel {
+            draft.can_expel
+        } else {
+            draft.can_storage
+        };
+        if wanted == checked {
             continue;
         }
         let mut toggle = commands.entity(toggle);
-        if draft.can_storage {
+        if wanted {
             toggle.insert(bevy::ui::Checked);
         } else {
             toggle.remove::<bevy::ui::Checked>();
@@ -602,8 +600,8 @@ pub(crate) fn sync_storage_toggles(
     }
 }
 
-fn yes_no(value: bool) -> &'static str {
-    if value { "Yes" } else { "No" }
+fn flag_mark(value: bool) -> &'static str {
+    if value { "✓" } else { "–" }
 }
 
 fn parent_draft(
@@ -615,44 +613,27 @@ fn parent_draft(
     drafts.contains(parent).then_some(parent)
 }
 
-fn on_toggle_invite(
-    event: On<Activate>,
-    parents: Query<&ChildOf>,
-    drafts: Query<(), With<PositionDraft>>,
-    mut mutable_drafts: Query<&mut PositionDraft>,
-) {
-    let Some(row) = parent_draft(event.entity, &parents, &drafts) else {
-        return;
-    };
-    if let Ok(mut draft) = mutable_drafts.get_mut(row) {
-        draft.can_invite = !draft.can_invite;
-    }
-}
-
-fn on_toggle_expel(
-    event: On<Activate>,
-    parents: Query<&ChildOf>,
-    drafts: Query<(), With<PositionDraft>>,
-    mut mutable_drafts: Query<&mut PositionDraft>,
-) {
-    let Some(row) = parent_draft(event.entity, &parents, &drafts) else {
-        return;
-    };
-    if let Ok(mut draft) = mutable_drafts.get_mut(row) {
-        draft.can_expel = !draft.can_expel;
-    }
-}
-
-fn on_toggle_storage(
+fn on_toggle_permission(
     event: On<ValueChange<bool>>,
     parents: Query<&ChildOf>,
     drafts: Query<(), With<PositionDraft>>,
+    kinds: Query<(Has<PositionInviteToggle>, Has<PositionExpelToggle>)>,
     mut mutable_drafts: Query<&mut PositionDraft>,
 ) {
     let Some(row) = parent_draft(event.source, &parents, &drafts) else {
         return;
     };
-    if let Ok(mut draft) = mutable_drafts.get_mut(row) {
+    let Ok((is_invite, is_expel)) = kinds.get(event.source) else {
+        return;
+    };
+    let Ok(mut draft) = mutable_drafts.get_mut(row) else {
+        return;
+    };
+    if is_invite {
+        draft.can_invite = event.value;
+    } else if is_expel {
+        draft.can_expel = event.value;
+    } else {
         draft.can_storage = event.value;
     }
 }
@@ -783,6 +764,28 @@ fn on_assign_member(
     }
 }
 
+const COL_INDEX: f32 = 30.0;
+const COL_FLAG: f32 = 58.0;
+const COL_TAX: f32 = 54.0;
+const COL_ACTION: f32 = 66.0;
+const ROW_HEIGHT: f32 = 28.0;
+
+/// Layout state of one of a row's two variants (read-only or editable).
+fn variant(active: bool) -> (Display, Visibility) {
+    if active {
+        (Display::Flex, Visibility::Inherited)
+    } else {
+        (Display::None, Visibility::Hidden)
+    }
+}
+
+fn cell(width: f32, text: String, size: f32, color: Color) -> impl Scene {
+    bsn! {
+        Node { width: px(width), flex_shrink: 0.0 }
+        chrome_text(text, size, color)
+    }
+}
+
 pub(crate) fn position_management(
     rows: Vec<PositionRow>,
     assignments: Vec<MemberAssignmentRow>,
@@ -790,48 +793,100 @@ pub(crate) fn position_management(
 ) -> impl Scene {
     let rows: Vec<_> = rows.into_iter().map(position_row).collect();
     let assignments: Vec<_> = assignments.into_iter().map(assignment_row).collect();
-    let assignment_visibility = if is_master {
-        Visibility::Inherited
+    let (assignment_display, assignment_visibility) = variant(is_master);
+    let hint = if is_master {
+        "Name a slot, set its permissions and save the row. Members can only be assigned to named slots."
     } else {
-        Visibility::Hidden
+        "Permissions granted by each guild position."
     };
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
         ignore_picking()
         Children [
-            chrome_text("Fixed positions".to_string(), 13.0, theme::TEXT),
-            chrome_text("Rename slots and control invitation or expulsion permission.".to_string(), 10.5, theme::TEXT_DIM),
-            (Node { flex_direction: FlexDirection::Column, row_gap: px(6) } ignore_picking() Children [ {rows} ]),
+            chrome_text("Positions".to_string(), 13.0, theme::TEXT),
+            chrome_text(hint.to_string(), 10.5, theme::TEXT_DIM),
+            table_heading(),
+            (Node { flex_direction: FlexDirection::Column, row_gap: px(4) } ignore_picking() Children [ {rows} ]),
             (
                 template_value(assignment_visibility)
-                Node { flex_direction: FlexDirection::Column, row_gap: px(6), padding: {UiRect::top(px(8))} }
+                Node { flex_direction: FlexDirection::Column, row_gap: px(6), padding: {UiRect::top(px(10))}, display: {assignment_display} }
                 ignore_picking()
                 Children [
                     chrome_text("Member assignments".to_string(), 13.0, theme::TEXT),
-                    (Node { flex_direction: FlexDirection::Column, row_gap: px(6) } ignore_picking() Children [ {assignments} ]),
+                    chrome_text("Click a position to assign it. The highlighted one is the member's current position.".to_string(), 10.5, theme::TEXT_DIM),
+                    (Node { flex_direction: FlexDirection::Column, row_gap: px(4) } ignore_picking() Children [ {assignments} ]),
                 ]
             ),
         ]
     }
 }
 
+fn table_heading() -> impl Scene {
+    let label = |text: &str, width: f32| cell(width, text.to_string(), 9.5, theme::TEXT_FAINT);
+    bsn! {
+        Node { flex_direction: FlexDirection::Row, column_gap: px(6), padding: {UiRect::horizontal(px(8))} }
+        ignore_picking()
+        Children [
+            label("#", COL_INDEX),
+            (Node { flex_grow: 1.0, min_width: px(0) } chrome_text("Name".to_string(), 9.5, theme::TEXT_FAINT)),
+            label("Invite", COL_FLAG),
+            label("Expel", COL_FLAG),
+            label("Storage", COL_FLAG),
+            label("Tax %", COL_TAX),
+            label("", COL_ACTION),
+        ]
+    }
+}
+
+fn text_field(field: EditableText, width: Val, size: f32, display: Display) -> impl Scene {
+    bsn! {
+        Pickable
+        template_value(field)
+        TextFont { font: FontSourceTemplate::Handle(theme::FONT_BODY), font_size: {FontSize::Px(size)} }
+        TextColor(theme::TEXT)
+        BackgroundColor(theme::GLASS_2)
+        BorderColor::all(theme::STROKE)
+        Node {
+            width: width,
+            flex_shrink: 0.0,
+            height: px(ROW_HEIGHT),
+            padding: {UiRect::axes(px(7), px(4))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(5)),
+            display: {display},
+        }
+    }
+}
+
+fn permission_toggle(display: Display) -> impl Scene {
+    bsn! {
+        GuildMutationControl
+        @FeathersCheckbox {}
+        on(checkbox_self_update)
+        on(on_toggle_permission)
+        Node { width: px(COL_FLAG), flex_shrink: 0.0, display: {display} }
+    }
+}
+
 fn position_row(row: PositionRow) -> impl Scene {
-    let edit_visibility = if row.editable {
-        Visibility::Inherited
+    let (edit_display, edit_visibility) = variant(row.editable);
+    let (read_display, read_visibility) = variant(!row.editable);
+    let name = if row.name.is_empty() {
+        "(unnamed)".to_string()
     } else {
-        Visibility::Hidden
+        row.name.clone()
     };
-    let read_visibility = if row.editable {
-        Visibility::Hidden
+    let name_color = if row.name.is_empty() {
+        theme::TEXT_FAINT
     } else {
-        Visibility::Inherited
+        theme::TEXT
     };
-    let protected = if row.protected { " · Master" } else { "" };
-    let editable = EditableText {
+    let badge = if row.protected { "Master" } else { "" };
+    let name_field = EditableText {
         max_characters: Some(24),
         ..EditableText::new(row.name.clone())
     };
-    let tax = EditableText {
+    let tax_field = EditableText {
         max_characters: Some(3),
         ..EditableText::new(&row.tax_input)
     };
@@ -851,74 +906,68 @@ fn position_row(row: PositionRow) -> impl Scene {
         Node {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            flex_wrap: FlexWrap::Wrap,
-            column_gap: px(7),
-            row_gap: px(5),
-            padding: {UiRect::axes(px(9), px(7))},
+            column_gap: px(6),
+            padding: {UiRect::axes(px(8), px(5))},
             border_radius: BorderRadius::all(px(8)),
         }
         BackgroundColor(theme::FIELD)
         Children [
-            (Node { width: px(55) } chrome_text(format!("#{}{}", row.index, protected), 10.5, theme::TEXT_DIM)),
+            cell(COL_INDEX, row.index.to_string(), 11.0, theme::TEXT_DIM),
             (
                 template_value(read_visibility)
-                Node { flex_grow: 1.0 }
-                chrome_text(row.name, 12.5, theme::TEXT)
+                Node { flex_grow: 1.0, min_width: px(0), display: {read_display} }
+                chrome_text(name, 12.0, name_color)
             ),
             (
                 PositionNameField GuildMutationControl
-                Pickable
                 template_value(edit_visibility)
-                template_value(editable)
-                TextFont { font: FontSourceTemplate::Handle(theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
-                TextColor(theme::TEXT)
-                BackgroundColor(theme::GLASS_2)
-                Node { flex_grow: 1.0, height: px(30), padding: {UiRect::axes(px(8), px(5))} }
-            ),
-            (PositionInviteLabel chrome_text(format!("Invite: {}", yes_no(row.can_invite)), 10.0, theme::TEXT_DIM)),
-            (PositionExpelLabel chrome_text(format!("Expel: {}", yes_no(row.can_expel)), 10.0, theme::TEXT_DIM)),
-            (
-                template_value(read_visibility)
-                chrome_text(format!("Storage access: {}", yes_no(row.can_storage)), 10.0, theme::TEXT_DIM)
+                text_field(name_field, auto(), 12.0, edit_display)
+                Node { flex_grow: 1.0, flex_shrink: 1.0, min_width: px(0) }
             ),
             (
                 template_value(read_visibility)
-                chrome_text(format!("EXP tax: {}%", row.tax), 10.0, theme::TEXT_DIM)
+                Node { display: {read_display} }
+                cell(COL_FLAG, flag_mark(row.can_invite).to_string(), 12.0, theme::TEXT_DIM)
             ),
             (
-                PositionInviteToggle GuildMutationControl
+                PositionInviteToggle
                 template_value(edit_visibility)
-                @FeathersButton { @caption: bsn! { (Text("Invite") ThemedText) } }
-                Node { width: px(65), height: px(30) }
-                on(on_toggle_invite)
+                permission_toggle(edit_display)
             ),
             (
-                PositionExpelToggle GuildMutationControl
-                template_value(edit_visibility)
-                @FeathersButton { @caption: bsn! { (Text("Expel") ThemedText) } }
-                Node { width: px(65), height: px(30) }
-                on(on_toggle_expel)
+                template_value(read_visibility)
+                Node { display: {read_display} }
+                cell(COL_FLAG, flag_mark(row.can_expel).to_string(), 12.0, theme::TEXT_DIM)
             ),
             (
-                PositionStorageToggle GuildMutationControl
+                PositionExpelToggle
                 template_value(edit_visibility)
-                @FeathersCheckbox { @caption: bsn! { Text("Storage access") ThemedText } }
-                on(checkbox_self_update)
-                on(on_toggle_storage)
+                permission_toggle(edit_display)
             ),
             (
+                template_value(read_visibility)
+                Node { display: {read_display} }
+                cell(COL_FLAG, flag_mark(row.can_storage).to_string(), 12.0, theme::TEXT_DIM)
+            ),
+            (
+                PositionStorageToggle
                 template_value(edit_visibility)
-                chrome_text("EXP tax %".to_string(), 10.0, theme::TEXT_DIM)
+                permission_toggle(edit_display)
+            ),
+            (
+                template_value(read_visibility)
+                Node { display: {read_display} }
+                cell(COL_TAX, format!("{}%", row.tax), 11.0, theme::TEXT_DIM)
             ),
             (
                 PositionTaxField GuildMutationControl
-                Pickable
                 template_value(edit_visibility)
-                template_value(tax)
-                TextFont { font: FontSourceTemplate::Handle(theme::FONT_BODY), font_size: {FontSize::Px(12.0)} }
-                TextColor(theme::TEXT)
-                BackgroundColor(theme::GLASS_2)
-                Node { width: px(48), height: px(30), padding: {UiRect::axes(px(7), px(5))} }
+                text_field(tax_field, px(COL_TAX), 11.0, edit_display)
+            ),
+            (
+                template_value(read_visibility)
+                Node { display: {read_display} }
+                cell(COL_ACTION, badge.to_string(), 10.0, theme::GOLD)
             ),
             (
                 PositionSave GuildMutationControl
@@ -927,7 +976,7 @@ fn position_row(row: PositionRow) -> impl Scene {
                     @caption: bsn! { (Text("Save") ThemedText) },
                     @variant: ButtonVariant::Primary,
                 }
-                Node { width: px(60), height: px(30) }
+                Node { width: px(COL_ACTION), flex_shrink: 0.0, height: px(ROW_HEIGHT), display: {edit_display} }
                 on(on_save_position)
             ),
         ]
@@ -944,14 +993,14 @@ fn assignment_row(row: MemberAssignmentRow) -> impl Scene {
         Node {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            column_gap: px(7),
-            padding: {UiRect::axes(px(9), px(7))},
+            column_gap: px(8),
+            padding: {UiRect::axes(px(8), px(5))},
             border_radius: BorderRadius::all(px(8)),
         }
         BackgroundColor(theme::FIELD)
         Children [
-            (Node { width: px(130) } chrome_text(row.name, 12.0, theme::TEXT)),
-            (Node { flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: px(5), row_gap: px(5) } ignore_picking() Children [ {buttons} ]),
+            (Node { width: px(150), flex_shrink: 0.0 } chrome_text(row.name, 12.0, theme::TEXT)),
+            (Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: px(5), row_gap: px(5) } ignore_picking() Children [ {buttons} ]),
         ]
     }
 }
@@ -961,16 +1010,17 @@ fn assignment_button(
     current_position: u32,
     position: PositionChoice,
 ) -> impl Scene {
-    let caption = if current_position == position.index {
-        format!("{} ✓", position.name)
+    let variant = if current_position == position.index {
+        ButtonVariant::Primary
     } else {
-        position.name
+        ButtonVariant::Normal
     };
+    let caption = position.name;
     bsn! {
         template_value(AssignmentAction { target_char_id, position_index: position.index })
         GuildMutationControl
-        @FeathersButton { @caption: bsn! { (Text(caption) ThemedText) } }
-        Node { height: px(28), padding: {UiRect::horizontal(px(8))} }
+        @FeathersButton { @caption: bsn! { (Text(caption) ThemedText) }, @variant: variant }
+        Node { height: px(ROW_HEIGHT), padding: {UiRect::horizontal(px(8))} }
         on(on_assign_member)
     }
 }
@@ -1092,7 +1142,7 @@ mod tests {
                 super::super::feedback::apply_guild_results,
                 resolve_position_submission,
                 refresh_positions,
-                sync_storage_toggles,
+                sync_permission_toggles,
             )
                 .chain()
                 .in_set(GuildSystems::UiSync),
@@ -1759,8 +1809,6 @@ mod tests {
             .map(|text| text.0.clone())
             .collect();
         for unsupported in [
-            "Tax",
-            "Storage",
             "Skills",
             "War",
             "Diplomacy",
