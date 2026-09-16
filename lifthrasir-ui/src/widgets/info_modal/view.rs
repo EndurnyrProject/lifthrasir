@@ -20,6 +20,7 @@ use game_engine::domain::storage::Storage;
 use game_engine::infrastructure::assets::{item_collection_path, item_icon_path};
 use game_engine::infrastructure::item::ItemDb;
 use game_engine::infrastructure::skill::SkillCatalog;
+use net_contract::dto::GuildInfo;
 
 use crate::rich_text::parse_color_codes;
 use crate::theme;
@@ -450,6 +451,47 @@ pub fn build_skill_view(
         unlocks,
         can_raise,
         points_left,
+    })
+}
+
+/// Builds the info-only view for a guild skill from the guild snapshot. `None`
+/// when the guild does not list `skill_id`. Guild skills carry no prerequisite
+/// tree, so requires/unlocks stay empty and raising is not offered here.
+pub fn build_guild_skill_view(
+    skill_id: u32,
+    catalog: Option<&SkillCatalog>,
+    info: &GuildInfo,
+) -> Option<SkillInfoView> {
+    let skill = info
+        .skills
+        .iter()
+        .find(|skill| skill.skill_id == skill_id)?;
+    let meta = catalog.and_then(|c| c.get(skill_id));
+    let description = meta
+        .map(|m| {
+            m.description
+                .iter()
+                .map(|line| parse_color_codes(line, theme::TEXT_DIM))
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(SkillInfoView {
+        icon_path: catalog.and_then(|c| c.icon_path(skill_id)),
+        edge: skill_edge_grade(skill.level, skill.max_level, true),
+        name: skill_name(skill_id, catalog),
+        kind: "Guild".to_string(),
+        level_line: format!("{}/{}", skill.level, skill.max_level),
+        description,
+        sp_cost: meta
+            .and_then(|m| level_value(&m.sp_cost, skill.level))
+            .map(|v| v.to_string()),
+        range: meta
+            .and_then(|m| level_value(&m.attack_range, skill.level))
+            .map(|v| v.to_string()),
+        requires: Vec::new(),
+        unlocks: Vec::new(),
+        can_raise: false,
+        points_left: 0,
     })
 }
 
@@ -1203,5 +1245,40 @@ mod tests {
 
         assert_eq!(passive.kind, "Passive");
         assert_eq!(active.kind, "Active");
+    }
+
+    #[test]
+    fn guild_skill_view_resolves_level_from_guild_snapshot() {
+        use net_contract::dto::GuildSkillInfo;
+        let info = GuildInfo {
+            guild_id: 7,
+            name: "Vikings".into(),
+            master_char_id: 42,
+            emblem_id: 0,
+            notice_subject: String::new(),
+            notice_body: String::new(),
+            positions: vec![],
+            members: vec![],
+            level: 3,
+            exp: 0,
+            next_exp: 0,
+            skill_points: 0,
+            skills: vec![GuildSkillInfo {
+                skill_id: 10_000,
+                level: 2,
+                max_level: 5,
+            }],
+            relations: vec![],
+        };
+
+        let view = build_guild_skill_view(10_000, None, &info).unwrap();
+
+        assert_eq!(view.name, "#10000");
+        assert_eq!(view.kind, "Guild");
+        assert_eq!(view.level_line, "2/5");
+        assert_eq!(view.edge, EdgeGrade::Fine);
+        assert!(view.requires.is_empty());
+        assert!(!view.can_raise);
+        assert!(build_guild_skill_view(1, None, &info).is_none());
     }
 }

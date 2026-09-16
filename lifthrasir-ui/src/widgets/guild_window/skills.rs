@@ -1,8 +1,5 @@
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::ui_widgets::Activate;
-use bevy_feathers::controls::{ButtonVariant, FeathersButton};
-use bevy_feathers::theme::ThemedText;
 use game_engine::domain::guild::GuildState;
 use game_engine::infrastructure::skill::SkillCatalog;
 use net_contract::commands::GuildSkillUpRequested;
@@ -13,14 +10,14 @@ use super::{
     GuildMutationContext, GuildMutationControl, GuildSkillsList, GuildUi, PendingGuildMutation,
     feedback::guild_action_error_text,
 };
+use crate::theme;
 use crate::widgets::chrome::{chrome_text, ignore_picking};
-use crate::{rich_text::parse_color_codes, theme};
+use crate::widgets::info_modal::{InfoTarget, ShowInfoModal};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SkillRow {
     pub skill_id: u32,
     pub name: String,
-    pub description: Option<String>,
     pub icon_path: Option<String>,
     pub level: u32,
     pub max_level: u32,
@@ -36,27 +33,12 @@ pub(crate) fn project_rows(
         .iter()
         .map(|skill| {
             let metadata = catalog.and_then(|catalog| catalog.get(skill.skill_id));
-            let description = metadata.and_then(|metadata| {
-                let description = metadata
-                    .description
-                    .iter()
-                    .map(|line| {
-                        parse_color_codes(line, theme::TEXT_DIM)
-                            .into_iter()
-                            .map(|(_, text)| text)
-                            .collect::<String>()
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                (!description.is_empty()).then_some(description)
-            });
             SkillRow {
                 skill_id: skill.skill_id,
                 name: metadata
                     .filter(|metadata| !metadata.display_name.is_empty())
                     .map(|metadata| metadata.display_name.clone())
                     .unwrap_or_else(|| format!("Skill {}", skill.skill_id)),
-                description,
                 icon_path: catalog.and_then(|catalog| catalog.icon_path(skill.skill_id)),
                 level: skill.level,
                 max_level: skill.max_level,
@@ -73,10 +55,14 @@ pub(crate) fn project_rows(
 #[derive(Component, Clone, Debug, Default)]
 struct GuildSkillUpgrade(u32);
 
+#[derive(Component, Clone, Debug, Default)]
+struct GuildSkillCell(u32);
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct SkillRenderSignature {
     guild_id: Option<u32>,
     requester_char_id: u32,
+    skill_points: u32,
     rows: Vec<SkillRow>,
 }
 
@@ -125,14 +111,18 @@ pub(super) fn request_skill_up(
 }
 
 fn on_skill_up(
-    activate: On<Activate>,
+    mut click: On<Pointer<Click>>,
     buttons: Query<&GuildSkillUpgrade>,
     mut context: GuildMutationContext,
     mut writer: MessageWriter<GuildSkillUpRequested>,
 ) {
-    let Ok(button) = buttons.get(activate.entity) else {
+    let Ok(button) = buttons.get(click.entity) else {
         return;
     };
+    if click.button != PointerButton::Primary {
+        return;
+    }
+    click.propagate(false);
     let Some(info) = context.guild.info() else {
         return;
     };
@@ -145,6 +135,23 @@ fn on_skill_up(
     ) {
         writer.write(command);
     }
+}
+
+/// Secondary-click on a cell opens the info modal for that guild skill.
+fn on_cell_click(
+    click: On<Pointer<Click>>,
+    cells: Query<&GuildSkillCell>,
+    mut writer: MessageWriter<ShowInfoModal>,
+) {
+    let Ok(cell) = cells.get(click.entity) else {
+        return;
+    };
+    if click.button != PointerButton::Secondary {
+        return;
+    }
+    writer.write(ShowInfoModal {
+        target: InfoTarget::GuildSkill(cell.0),
+    });
 }
 
 pub(crate) fn refresh_skills(
@@ -161,6 +168,7 @@ pub(crate) fn refresh_skills(
     let signature = SkillRenderSignature {
         guild_id: guild.info().map(|info| info.guild_id),
         requester_char_id: session.char_id,
+        skill_points: guild.info().map(|info| info.skill_points).unwrap_or(0),
         rows: guild
             .info()
             .map(|info| project_rows(info, session.char_id, catalog.as_deref()))
@@ -177,87 +185,118 @@ pub(crate) fn refresh_skills(
     }
     if signature.guild_id.is_some() {
         commands
-            .spawn_scene(skill_rows(signature.rows.clone()))
+            .spawn_scene(skill_grid(signature.rows.clone(), signature.skill_points))
             .insert(ChildOf(container));
     }
     *rendered = Some(signature);
 }
 
-pub(crate) fn skill_rows(rows: Vec<SkillRow>) -> impl Scene {
-    let rows: Vec<_> = rows.into_iter().map(skill_row).collect();
+pub(crate) fn skill_grid(rows: Vec<SkillRow>, skill_points: u32) -> impl Scene {
+    let cells: Vec<_> = rows.into_iter().map(skill_cell).collect();
     bsn! {
-        Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) }
-        ignore_picking()
-        Children [
-            chrome_text("Guild skills".to_string(), 13.0, theme::TEXT),
-            chrome_text("Spend available points on server-listed guild skills.".to_string(), 10.5, theme::TEXT_DIM),
-            (Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(7) } ignore_picking() Children [ {rows} ]),
-        ]
-    }
-}
-
-fn skill_row(row: SkillRow) -> impl Scene {
-    let icon = row.icon_path.map(|path| EntityScene(skill_icon(path)));
-    let description = row
-        .description
-        .map(|description| EntityScene(chrome_text(description, 10.0, theme::TEXT_DIM)));
-    let upgrade_visibility = if row.can_upgrade {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
-    bsn! {
-        Node {
-            width: percent(100),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(10),
-            padding: {UiRect::axes(px(10), px(8))},
-            border_radius: BorderRadius::all(px(8)),
-        }
-        BackgroundColor(theme::FIELD)
+        Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10) }
         ignore_picking()
         Children [
             (
                 Node {
-                    width: px(42), height: px(42), flex_shrink: 0.0,
+                    width: percent(100),
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                }
+                ignore_picking()
+                Children [
+                    chrome_text("Guild skills".to_string(), 13.0, theme::TEXT),
+                    chrome_text(format!("{skill_points} points"), 10.5, theme::GOLD),
+                ]
+            ),
+            (
+                Node {
+                    width: percent(100),
+                    flex_direction: FlexDirection::Row,
+                    flex_wrap: FlexWrap::Wrap,
+                    column_gap: px(10),
+                    row_gap: px(10),
+                }
+                ignore_picking()
+                Children [ {cells} ]
+            ),
+        ]
+    }
+}
+
+fn skill_cell(row: SkillRow) -> impl Scene {
+    let icon = row.icon_path.map(|path| EntityScene(skill_icon(path)));
+    let upgrade = row
+        .can_upgrade
+        .then(|| EntityScene(upgrade_button(row.skill_id)));
+    let level_color = if row.max_level > 0 && row.level >= row.max_level {
+        theme::GOLD
+    } else if row.level > 0 {
+        theme::EMERALD_BRI
+    } else {
+        theme::TEXT_FAINT
+    };
+    bsn! {
+        template_value(GuildSkillCell(row.skill_id))
+        Node {
+            width: px(62),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            row_gap: px(4),
+            padding: {UiRect::vertical(px(3))},
+            border_radius: BorderRadius::all(px(8)),
+        }
+        Pickable
+        on(on_cell_click)
+        Children [
+            (
+                Node {
+                    width: px(44), height: px(44),
                     align_items: AlignItems::Center,
                     justify_content: JustifyContent::Center,
-                    border: px(1), border_radius: BorderRadius::all(px(8)),
+                    border: px(1),
+                    border_radius: BorderRadius::all(px(10)),
                 }
-                BackgroundColor(theme::GLASS_2)
+                BackgroundColor(theme::FIELD)
                 BorderColor::all(theme::STROKE)
                 ignore_picking()
                 Children [ {icon} ]
             ),
+            chrome_text(row.name, 8.5, theme::TEXT_FAINT),
             (
-                Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Column, row_gap: px(3) }
+                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(3) }
                 ignore_picking()
                 Children [
-                    chrome_text(row.name, 12.5, theme::TEXT),
-                    {description},
-                    chrome_text(format!("Level {} / {}", row.level, row.max_level), 10.5, theme::GOLD),
+                    chrome_text(format!("{}/{}", row.level, row.max_level), 9.0, level_color),
+                    {upgrade},
                 ]
             ),
-            (
-                template_value(GuildSkillUpgrade(row.skill_id))
-                GuildMutationControl
-                template_value(upgrade_visibility)
-                @FeathersButton {
-                    @caption: bsn! { (Text("Upgrade +1") ThemedText) },
-                    @variant: ButtonVariant::Primary,
-                }
-                Node { width: px(108), height: px(32), flex_shrink: 0.0 }
-                on(on_skill_up)
-            ),
         ]
+    }
+}
+
+fn upgrade_button(skill_id: u32) -> impl Scene {
+    bsn! {
+        template_value(GuildSkillUpgrade(skill_id))
+        GuildMutationControl
+        Node {
+            width: px(14), height: px(14),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border_radius: BorderRadius::MAX,
+        }
+        BackgroundColor(theme::EMERALD)
+        Pickable
+        on(on_skill_up)
+        Children [ chrome_text("+".to_string(), 10.0, theme::EMERALD_INK) ]
     }
 }
 
 fn skill_icon(path: String) -> impl Scene {
     bsn! {
         ImageNode { image: {path} }
-        Node { width: px(32), height: px(32) }
+        Node { width: px(30), height: px(30) }
         ignore_picking()
     }
 }
@@ -340,10 +379,6 @@ mod tests {
         assert_eq!(rows.len(), 3);
         assert_eq!(rows[0].name, "Guild Glory");
         assert_eq!(
-            rows[0].description.as_deref(),
-            Some("Raises guild prestige.")
-        );
-        assert_eq!(
             rows[0].icon_path.as_deref(),
             Some("ro://data/texture/유저인터페이스/item/gd_gloryguild.bmp")
         );
@@ -351,7 +386,6 @@ mod tests {
         assert_eq!(rows[0].max_level, 5);
         assert!(rows[0].can_upgrade);
         assert_eq!(rows[1].name, "Skill 99999");
-        assert!(rows[1].description.is_none());
         assert_eq!(rows[1].max_level, 2);
         assert!(rows[1].can_upgrade);
         assert_eq!(rows[2].name, "Skill 99998");
@@ -379,7 +413,7 @@ mod tests {
         app.init_asset::<Image>();
         app.init_asset::<Font>();
         app.world_mut()
-            .spawn_scene(skill_rows(project_rows(&info, 42, None)))
+            .spawn_scene(skill_grid(project_rows(&info, 42, None), 2))
             .unwrap();
 
         let texts: Vec<_> = app
@@ -390,14 +424,69 @@ mod tests {
             .collect();
         assert!(texts.contains(&"Skill 99999".to_string()));
         assert!(texts.contains(&"Skill 99998".to_string()));
+        assert!(texts.contains(&"2 points".to_string()));
         let controls: Vec<_> = app
             .world_mut()
-            .query::<(&GuildSkillUpgrade, &Visibility)>()
+            .query::<&GuildSkillUpgrade>()
             .iter(app.world())
-            .map(|(control, visibility)| (control.0, *visibility))
+            .map(|control| control.0)
             .collect();
-        assert!(controls.contains(&(99_999, Visibility::Inherited)));
-        assert!(controls.contains(&(99_998, Visibility::Hidden)));
+        assert_eq!(controls, vec![99_999]);
+    }
+
+    fn click_event(target: Entity, button: PointerButton) -> Pointer<Click> {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+        use std::time::Duration;
+        Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(target)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+            Click {
+                button,
+                hit: HitData::new(target, 0.0, None, None),
+                duration: Duration::ZERO,
+                count: 1,
+            },
+            target,
+        )
+    }
+
+    #[test]
+    fn secondary_cell_click_opens_the_guild_skill_info_modal() {
+        let mut app = skill_app();
+        app.world_mut().write_message(GuildIngress {
+            generation: ZoneSessionGeneration(9),
+            payload: GuildIngressPayload::Info(guild()),
+        });
+        app.update();
+        let cell = app
+            .world_mut()
+            .query_filtered::<Entity, With<GuildSkillCell>>()
+            .single(app.world())
+            .unwrap();
+
+        app.world_mut()
+            .trigger(click_event(cell, PointerButton::Secondary));
+
+        let requests: Vec<_> = app
+            .world()
+            .resource::<Messages<ShowInfoModal>>()
+            .iter_current_update_messages()
+            .map(|request| request.target)
+            .collect();
+        assert_eq!(requests, vec![InfoTarget::GuildSkill(10_000)]);
+        assert!(
+            app.world()
+                .resource::<Messages<GuildSkillUpRequested>>()
+                .is_empty()
+        );
     }
 
     fn skill_app() -> App {
@@ -409,6 +498,7 @@ mod tests {
         app.add_message::<GuildIngress>()
             .add_message::<ZoneDisconnected>()
             .add_message::<GuildSkillUpRequested>()
+            .add_message::<ShowInfoModal>()
             .insert_resource(generation)
             .insert_resource(ZoneSession {
                 char_id: 42,
@@ -447,8 +537,10 @@ mod tests {
             .single(app.world())
             .unwrap();
 
-        app.world_mut().trigger(Activate { entity: button });
-        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut()
+            .trigger(click_event(button, PointerButton::Primary));
+        app.world_mut()
+            .trigger(click_event(button, PointerButton::Primary));
 
         let commands = app
             .world()
@@ -473,7 +565,8 @@ mod tests {
             .query_filtered::<Entity, With<GuildSkillUpgrade>>()
             .single(app.world())
             .unwrap();
-        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut()
+            .trigger(click_event(button, PointerButton::Primary));
         app.world_mut().write_message(GuildIngress {
             generation: ZoneSessionGeneration(9),
             payload: GuildIngressPayload::ActionResult(GuildActionResult {
@@ -494,7 +587,7 @@ mod tests {
             app.world_mut()
                 .query::<&Text>()
                 .iter(app.world())
-                .any(|text| text.0 == "Level 1 / 5")
+                .any(|text| text.0 == "1/5")
         );
     }
 
@@ -522,13 +615,14 @@ mod tests {
             .iter(app.world())
             .map(|text| text.0.clone())
             .collect();
-        assert!(texts.contains(&"Level 2 / 5".to_string()));
-        let visibility = app
+        assert!(texts.contains(&"2/5".to_string()));
+        assert!(texts.contains(&"0 points".to_string()));
+        let upgrades = app
             .world_mut()
-            .query_filtered::<&Visibility, With<GuildSkillUpgrade>>()
-            .single(app.world())
-            .unwrap();
-        assert_eq!(*visibility, Visibility::Hidden);
+            .query::<&GuildSkillUpgrade>()
+            .iter(app.world())
+            .count();
+        assert_eq!(upgrades, 0);
     }
 
     #[test]
@@ -544,7 +638,8 @@ mod tests {
             .query_filtered::<Entity, With<GuildSkillUpgrade>>()
             .single(app.world())
             .unwrap();
-        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut()
+            .trigger(click_event(button, PointerButton::Primary));
         app.world_mut().write_message(GuildIngress {
             generation: ZoneSessionGeneration(9),
             payload: GuildIngressPayload::ActionResult(GuildActionResult {

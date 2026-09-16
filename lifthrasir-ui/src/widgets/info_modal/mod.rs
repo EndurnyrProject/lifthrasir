@@ -17,6 +17,7 @@ use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 use game_engine::domain::cart::Cart;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::markers::LocalPlayer;
+use game_engine::domain::guild::GuildState;
 use game_engine::domain::inventory::Inventory;
 use game_engine::domain::skill::SkillTreeState;
 use game_engine::domain::storage::Storage;
@@ -63,6 +64,8 @@ impl Plugin for InfoModalPlugin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InfoTarget {
     Skill(u32),
+    /// A skill from the guild snapshot; info only, no raise footer.
+    GuildSkill(u32),
     Item(ItemRef),
 }
 
@@ -106,6 +109,7 @@ pub(crate) fn show_info_modal(
     skill_catalog: Option<Res<SkillCatalog>>,
     skill_tree: Res<SkillTreeState>,
     skill_staging: Res<SkillPanelStaging>,
+    guild: Res<GuildState>,
     local_player: Query<&CharacterStatus, With<LocalPlayer>>,
     mut commands: Commands,
 ) {
@@ -126,7 +130,24 @@ pub(crate) fn show_info_modal(
                 return;
             };
             despawn_existing(&existing, &mut commands);
-            commands.spawn_scene(info_modal(view.edge, skill_scene::scene(view, id)));
+            commands.spawn_scene(info_modal(view.edge, skill_scene::scene(view, Some(id))));
+        }
+        InfoTarget::GuildSkill(id) => {
+            let Some(catalog) = skill_catalog.as_deref() else {
+                warn!("info modal: SkillCatalog not loaded yet, ignoring show request");
+                return;
+            };
+            let Some(view) = guild
+                .info()
+                .and_then(|info| view::build_guild_skill_view(id, Some(catalog), info))
+            else {
+                warn!(
+                    "info modal: guild skill #{id} not in the guild snapshot, ignoring show request"
+                );
+                return;
+            };
+            despawn_existing(&existing, &mut commands);
+            commands.spawn_scene(info_modal(view.edge, skill_scene::scene(view, None)));
         }
         InfoTarget::Item(item_ref) => {
             let Some(item_db) = item_db.as_deref() else {
@@ -259,6 +280,7 @@ mod tests {
             lifthrasir_data::SkillData::default(),
         ));
         app.init_resource::<SkillPanelStaging>();
+        app.init_resource::<GuildState>();
         app.add_message::<ShowInfoModal>();
         app.add_systems(Update, (show_info_modal, close_on_escape));
         app
@@ -318,6 +340,17 @@ mod tests {
         let mut app = test_app();
         app.world_mut().write_message(ShowInfoModal {
             target: InfoTarget::Skill(9999),
+        });
+        app.update();
+
+        assert!(roots(&mut app).is_empty());
+    }
+
+    #[test]
+    fn guild_skill_target_outside_a_guild_ignores_the_request() {
+        let mut app = test_app();
+        app.world_mut().write_message(ShowInfoModal {
+            target: InfoTarget::GuildSkill(10_000),
         });
         app.update();
 

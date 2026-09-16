@@ -82,8 +82,9 @@ impl Default for RaiseAction {
 }
 
 /// The skill modal's whole content: header, then the section stack, then the
-/// always-present Raise footer.
-pub(super) fn scene(view: SkillInfoView, skill_id: u32) -> impl Scene {
+/// Raise footer for `raise_target` (a tree skill id). `None` renders info only,
+/// which is what guild skills use since they are raised from the guild window.
+pub(super) fn scene(view: SkillInfoView, raise_target: Option<u32>) -> impl Scene {
     let (cur, max) = parse_level_line(&view.level_line);
     let tag = state_tag(view.edge, cur).to_string();
 
@@ -130,6 +131,13 @@ pub(super) fn scene(view: SkillInfoView, skill_id: u32) -> impl Scene {
     } else {
         format!("Raise to Lv {}", cur + 1)
     };
+    let footer = raise_target.map(|skill_id| {
+        EntityScene(shell::footer_bar(vec![raise_button(
+            skill_id,
+            raise_label,
+            raise_disabled,
+        )]))
+    });
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: px(0) }
@@ -152,7 +160,7 @@ pub(super) fn scene(view: SkillInfoView, skill_id: u32) -> impl Scene {
                     {unlocks},
                 ]
             }),
-            shell::footer_bar(vec![raise_button(skill_id, raise_label, raise_disabled)]),
+            {footer},
         ]
     }
 }
@@ -359,7 +367,7 @@ mod tests {
     fn full_view_renders_pips_meta_description_and_chips() {
         let mut app = test_app();
         app.world_mut()
-            .spawn_scene(scene(full_view(), 5))
+            .spawn_scene(scene(full_view(), Some(5)))
             .expect("scene spawns");
         app.update();
 
@@ -582,7 +590,7 @@ mod tests {
         view.can_raise = false;
         view.points_left = 0;
         app.world_mut()
-            .spawn_scene(scene(view, 5))
+            .spawn_scene(scene(view, Some(5)))
             .expect("scene spawns");
         app.update();
 
