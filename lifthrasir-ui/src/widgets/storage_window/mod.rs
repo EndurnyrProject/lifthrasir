@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use crate::theme;
 use crate::theme::feathers_theme::install_norse_theme;
-use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
+use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view};
 
 mod feedback;
 pub mod scene;
@@ -572,11 +572,13 @@ pub(crate) fn on_category_activate(
 /// Cell click: select the item; a double-click begins the transfer via
 /// [`begin_transfer`]. Secondary-click opens the info modal for a filled cell
 /// instead; empty cells are inert on either button.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn on_cell_select(
     click: On<Pointer<Click>>,
     cells: Query<&StorageCell>,
     time: Res<Time>,
     data: StorageData,
+    item_db: Option<Res<ItemDb>>,
     mut ui: ResMut<StorageUi>,
     mut writers: StorageWriters,
     mut info_writer: MessageWriter<ShowInfoModal>,
@@ -585,13 +587,23 @@ pub(crate) fn on_cell_select(
         return;
     };
     if click.button == PointerButton::Secondary {
-        let occupied = match cell.0 {
-            StorageSelection::Bag(index) => data.inventory.get(index).is_some(),
-            StorageSelection::Vault(index) => data.storage.get(index).is_some(),
+        let Some(item_db) = item_db.as_deref() else {
+            warn!("storage: ItemDb not loaded yet, ignoring inspect");
+            return;
         };
-        if occupied {
+        let view = match cell.0 {
+            StorageSelection::Bag(index) => data
+                .inventory
+                .get(index)
+                .map(|item| view::inventory_item_view(item, item_db)),
+            StorageSelection::Vault(index) => data
+                .storage
+                .get(index)
+                .map(|item| view::storage_item_view(item, item_db)),
+        };
+        if let Some(view) = view {
             info_writer.write(ShowInfoModal {
-                target: InfoTarget::Item(ItemRef::Storage(cell.0)),
+                content: InfoContent::Item { view, action: None },
             });
         }
         return;
@@ -1605,7 +1617,14 @@ mod tests {
         app.init_resource::<Inventory>();
         app.init_resource::<Storage>();
         app.init_resource::<StorageUi>();
+        app.init_resource::<ItemDb>();
         app
+    }
+
+    fn contents(app: &App) -> Vec<InfoContent> {
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        reader.read(messages).map(|m| m.content.clone()).collect()
     }
 
     #[test]
@@ -1626,13 +1645,12 @@ mod tests {
         app.world_mut()
             .trigger(click_event(cell, window, PointerButton::Secondary));
 
-        let messages = app.world().resource::<Messages<ShowInfoModal>>();
-        let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(
-            targets,
-            vec![InfoTarget::Item(ItemRef::Storage(StorageSelection::Bag(7)))]
-        );
+        let contents = contents(&app);
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Item { view, action: None } if view.meta.is_empty()
+        ));
         assert_eq!(app.world().resource::<StorageUi>().selection, None);
     }
 
@@ -1654,15 +1672,13 @@ mod tests {
         app.world_mut()
             .trigger(click_event(cell, window, PointerButton::Secondary));
 
-        let messages = app.world().resource::<Messages<ShowInfoModal>>();
-        let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(
-            targets,
-            vec![InfoTarget::Item(ItemRef::Storage(StorageSelection::Vault(
-                70_000
-            )))]
-        );
+        let contents = contents(&app);
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Item { view, action: None }
+                if view.item_id == 501 && view.meta.iter().any(|(k, _)| k == "Weight")
+        ));
     }
 
     #[test]

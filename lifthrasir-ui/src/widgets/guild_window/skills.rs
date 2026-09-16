@@ -12,7 +12,7 @@ use super::{
 };
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, ignore_picking};
-use crate::widgets::info_modal::{InfoTarget, ShowInfoModal};
+use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SkillRow {
@@ -141,6 +141,8 @@ fn on_skill_up(
 fn on_cell_click(
     click: On<Pointer<Click>>,
     cells: Query<&GuildSkillCell>,
+    guild: Res<GuildState>,
+    catalog: Option<Res<SkillCatalog>>,
     mut writer: MessageWriter<ShowInfoModal>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
@@ -149,8 +151,21 @@ fn on_cell_click(
     if click.button != PointerButton::Secondary {
         return;
     }
+    let Some(skill) = guild
+        .info()
+        .and_then(|info| info.skills.iter().find(|skill| skill.skill_id == cell.0))
+    else {
+        warn!(
+            "guild: skill #{} not in the guild snapshot, ignoring inspect",
+            cell.0
+        );
+        return;
+    };
     writer.write(ShowInfoModal {
-        target: InfoTarget::GuildSkill(cell.0),
+        content: InfoContent::Skill {
+            view: view::guild_skill_view(skill, catalog.as_deref()),
+            raise: None,
+        },
     });
 }
 
@@ -479,9 +494,13 @@ mod tests {
             .world()
             .resource::<Messages<ShowInfoModal>>()
             .iter_current_update_messages()
-            .map(|request| request.target)
+            .map(|request| request.content.clone())
             .collect();
-        assert_eq!(requests, vec![InfoTarget::GuildSkill(10_000)]);
+        assert_eq!(requests.len(), 1);
+        assert!(matches!(
+            &requests[0],
+            InfoContent::Skill { view, raise: None } if view.kind == "Guild"
+        ));
         assert!(
             app.world()
                 .resource::<Messages<GuildSkillUpRequested>>()

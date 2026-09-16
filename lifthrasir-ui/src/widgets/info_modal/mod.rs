@@ -1,33 +1,25 @@
 //! Info modal: a message-driven right-click inspect popup for items and skills
 //! (BSN + Feathers), ported from the Endurnir `info-modals.css` mockups.
 //!
-//! Any surface (bag, equipment, skills, storage, shop, cart) summons it by writing
+//! Any surface (bag, equipment, skills, guild, storage, shop, cart) summons it by
+//! building an [`InfoContent`] from the data it already has and writing
 //! [`ShowInfoModal`]; `show_info_modal` despawns any modal already open and spawns a
 //! fresh one — rebuild-on-show, which is also how requirement-chip navigation works
-//! in the skill scene. Unlike [`system_dialog`](super::system_dialog), the backdrop
-//! itself closes the modal on click, in addition to the close button and Escape.
+//! in the skill scene. The modal never resolves ids against domain resources itself,
+//! so adding a surface touches only that surface. Unlike
+//! [`system_dialog`](super::system_dialog), the backdrop itself closes the modal on
+//! click, in addition to the close button and Escape.
 //!
 //! This module only owns the shell and lifecycle; [`shell`] holds the shared chrome
-//! scenes and item/skill content lives in `item_scene`/`skill_scene`, dispatched
-//! from `show_info_modal`.
+//! scenes, [`view`] the builders that turn domain payloads into view structs, and
+//! item/skill content lives in `item_scene`/`skill_scene`.
 
 use bevy::prelude::*;
 use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 
-use game_engine::domain::cart::Cart;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::guild::GuildState;
-use game_engine::domain::inventory::Inventory;
-use game_engine::domain::skill::SkillTreeState;
-use game_engine::domain::storage::Storage;
-use game_engine::infrastructure::item::ItemDb;
-use game_engine::infrastructure::skill::SkillCatalog;
+use game_engine::domain::inventory::{Item, ItemCategory};
 
 use crate::theme::feathers_theme::install_norse_theme;
-use crate::widgets::character_window::SkillPanelStaging;
-use crate::widgets::shop_window::ShopSession;
-use crate::widgets::storage_window::StorageSelection;
 use crate::widgets::system_dialog;
 
 mod item_scene;
@@ -60,30 +52,65 @@ impl Plugin for InfoModalPlugin {
     }
 }
 
-/// Right-click inspect target: an item ref (per surface) or a skill id.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InfoTarget {
-    Skill(u32),
-    /// A skill from the guild snapshot; info only, no raise footer.
-    GuildSkill(u32),
-    Item(ItemRef),
+/// What the modal shows, built by the summoning surface.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InfoContent {
+    /// `raise` is the tree skill id the footer's Raise button stages; `None`
+    /// renders info only (guild skills are raised from the guild window).
+    Skill {
+        view: view::SkillInfoView,
+        raise: Option<u32>,
+    },
+    /// `action` is the footer's primary button; `None` when the summoning context
+    /// has no valid one (storage, cart, shop).
+    Item {
+        view: view::ItemInfoView,
+        action: Option<ItemAction>,
+    },
 }
 
-/// Where the inspected item lives, so a later task's footer can act on (and
-/// revalidate) it at the stored index/selection.
+/// The item footer's primary action on the inventory slot at `index`. The click
+/// revalidates the slot still holds the view's `item_id` before acting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ItemRef {
-    Inventory(u16),
-    Equipped(u16),
-    Storage(StorageSelection),
-    Cart(u16),
-    ShopBuy(u32),
+pub struct ItemAction {
+    pub kind: ItemActionKind,
+    pub index: u16,
 }
 
-/// Opens the info modal for `target`, replacing any modal already open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ItemActionKind {
+    Use,
+    Equip,
+    Unequip,
+}
+
+impl ItemAction {
+    /// The primary action for an item sitting in the bag: Use or Equip by
+    /// category, none for Etc.
+    pub fn for_bag_item(item: &Item) -> Option<Self> {
+        let kind = match item.category() {
+            ItemCategory::Use => ItemActionKind::Use,
+            ItemCategory::Equip => ItemActionKind::Equip,
+            ItemCategory::Etc => return None,
+        };
+        Some(Self {
+            kind,
+            index: item.index,
+        })
+    }
+
+    pub fn unequip(index: u16) -> Self {
+        Self {
+            kind: ItemActionKind::Unequip,
+            index,
+        }
+    }
+}
+
+/// Opens the info modal with `content`, replacing any modal already open.
 #[derive(Message, Debug, Clone)]
 pub struct ShowInfoModal {
-    pub target: InfoTarget,
+    pub content: InfoContent,
 }
 
 /// The modal root. A fresh one is spawned on every show, so at most one exists.
@@ -93,91 +120,21 @@ pub struct InfoModalRoot;
 /// Spawns the modal for the latest request, despawning any modal already open.
 /// Last message wins when several are written in one frame (e.g. a requirement-chip
 /// click that rebuilds the modal for a different skill).
-///
-/// Built before despawning the existing root, so a request that can't be honored
-/// (registry not loaded, or the item ref no longer resolves) leaves an already-open
-/// modal untouched instead of replacing it with nothing.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn show_info_modal(
     mut requests: MessageReader<ShowInfoModal>,
     existing: Query<Entity, With<InfoModalRoot>>,
-    item_db: Option<Res<ItemDb>>,
-    inventory: Res<Inventory>,
-    storage: Res<Storage>,
-    cart: Res<Cart>,
-    shop: Option<Res<ShopSession>>,
-    skill_catalog: Option<Res<SkillCatalog>>,
-    skill_tree: Res<SkillTreeState>,
-    skill_staging: Res<SkillPanelStaging>,
-    guild: Res<GuildState>,
-    local_player: Query<&CharacterStatus, With<LocalPlayer>>,
     mut commands: Commands,
 ) {
     let Some(request) = requests.read().last() else {
         return;
     };
-    match request.target {
-        InfoTarget::Skill(id) => {
-            let Some(catalog) = skill_catalog.as_deref() else {
-                warn!("info modal: SkillCatalog not loaded yet, ignoring show request");
-                return;
-            };
-            let status = local_player.single().ok();
-            let Some(view) =
-                view::build_skill_view(id, Some(catalog), &skill_tree, &skill_staging, status)
-            else {
-                warn!("info modal: skill #{id} not in the tree, ignoring show request");
-                return;
-            };
-            despawn_existing(&existing, &mut commands);
-            commands.spawn_scene(info_modal(view.edge, skill_scene::scene(view, Some(id))));
+    despawn_existing(&existing, &mut commands);
+    match request.content.clone() {
+        InfoContent::Skill { view, raise } => {
+            commands.spawn_scene(info_modal(view.edge, skill_scene::scene(view, raise)));
         }
-        InfoTarget::GuildSkill(id) => {
-            let Some(catalog) = skill_catalog.as_deref() else {
-                warn!("info modal: SkillCatalog not loaded yet, ignoring show request");
-                return;
-            };
-            let Some(view) = guild
-                .info()
-                .and_then(|info| view::build_guild_skill_view(id, Some(catalog), info))
-            else {
-                warn!(
-                    "info modal: guild skill #{id} not in the guild snapshot, ignoring show request"
-                );
-                return;
-            };
-            despawn_existing(&existing, &mut commands);
-            commands.spawn_scene(info_modal(view.edge, skill_scene::scene(view, None)));
-        }
-        InfoTarget::Item(item_ref) => {
-            let Some(item_db) = item_db.as_deref() else {
-                warn!("info modal: ItemDb not loaded yet, ignoring show request");
-                return;
-            };
-            let Some(view) = view::build_item_view(
-                item_ref,
-                item_db,
-                &inventory,
-                &storage,
-                &cart,
-                shop.as_deref(),
-            ) else {
-                warn!(
-                    "info modal: {item_ref:?} no longer resolves to an item, ignoring show request"
-                );
-                return;
-            };
-            let category = match item_ref {
-                ItemRef::Inventory(index) | ItemRef::Equipped(index) => {
-                    inventory.get(index).map(|item| item.category())
-                }
-                ItemRef::Storage(_) | ItemRef::Cart(_) | ItemRef::ShopBuy(_) => None,
-            };
-            despawn_existing(&existing, &mut commands);
-            commands.spawn_scene(info_modal(
-                view.edge,
-                item_scene::scene(view, item_ref, category),
-            ));
+        InfoContent::Item { view, action } => {
+            commands.spawn_scene(info_modal(view.edge, item_scene::scene(view, action)));
         }
     }
 }
@@ -242,28 +199,26 @@ mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
 
-    fn skill_tree() -> SkillTreeState {
-        use game_engine::domain::skill::SkillNode;
-        let mut skills = std::collections::HashMap::new();
-        for id in [1, 2] {
-            skills.insert(
-                id,
-                SkillNode {
-                    level: 0,
-                    max_level: 5,
-                    upgradable: true,
+    fn skill(name: &str) -> ShowInfoModal {
+        ShowInfoModal {
+            content: InfoContent::Skill {
+                view: view::SkillInfoView {
+                    icon_path: None,
+                    edge: shell::EdgeGrade::Fine,
+                    name: name.to_string(),
+                    kind: "Active".to_string(),
+                    level_line: "1/5".to_string(),
+                    description: vec![],
+                    sp_cost: None,
+                    range: None,
                     requires: vec![],
-                    req_base_level: 0,
-                    req_job_level: 0,
-                    sp: 1,
-                    range: 1,
-                    inf_type: 0,
-                    job_id: 1,
-                    splash_radius: 0,
+                    unlocks: vec![],
+                    can_raise: false,
+                    points_left: 0,
                 },
-            );
+                raise: Some(1),
+            },
         }
-        SkillTreeState { skills }
     }
 
     fn test_app() -> App {
@@ -272,15 +227,6 @@ mod tests {
         app.init_asset::<Image>();
         app.init_asset::<Font>();
         app.init_resource::<ButtonInput<KeyCode>>();
-        app.init_resource::<Inventory>();
-        app.init_resource::<Storage>();
-        app.init_resource::<Cart>();
-        app.insert_resource(skill_tree());
-        app.insert_resource(SkillCatalog::from_skill_data(
-            lifthrasir_data::SkillData::default(),
-        ));
-        app.init_resource::<SkillPanelStaging>();
-        app.init_resource::<GuildState>();
         app.add_message::<ShowInfoModal>();
         app.add_systems(Update, (show_info_modal, close_on_escape));
         app
@@ -296,9 +242,7 @@ mod tests {
     #[test]
     fn showing_spawns_exactly_one_root() {
         let mut app = test_app();
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Skill(1),
-        });
+        app.world_mut().write_message(skill("Bash"));
         app.update();
 
         assert_eq!(roots(&mut app).len(), 1);
@@ -307,15 +251,11 @@ mod tests {
     #[test]
     fn showing_again_replaces_the_root() {
         let mut app = test_app();
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Skill(1),
-        });
+        app.world_mut().write_message(skill("Bash"));
         app.update();
         let first = roots(&mut app)[0];
 
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Skill(2),
-        });
+        app.world_mut().write_message(skill("Provoke"));
         app.update();
 
         let after = roots(&mut app);
@@ -324,88 +264,61 @@ mod tests {
     }
 
     #[test]
-    fn skill_target_with_no_catalog_ignores_the_request() {
+    fn last_request_in_a_frame_wins() {
         let mut app = test_app();
-        app.world_mut().remove_resource::<SkillCatalog>();
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Skill(1),
-        });
-        app.update();
-
-        assert!(roots(&mut app).is_empty());
-    }
-
-    #[test]
-    fn skill_target_not_in_the_tree_ignores_the_request() {
-        let mut app = test_app();
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Skill(9999),
-        });
-        app.update();
-
-        assert!(roots(&mut app).is_empty());
-    }
-
-    #[test]
-    fn guild_skill_target_outside_a_guild_ignores_the_request() {
-        let mut app = test_app();
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::GuildSkill(10_000),
-        });
-        app.update();
-
-        assert!(roots(&mut app).is_empty());
-    }
-
-    #[test]
-    fn item_target_with_no_item_db_ignores_the_request() {
-        let mut app = test_app();
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Item(ItemRef::Inventory(3)),
-        });
-        app.update();
-
-        assert!(roots(&mut app).is_empty());
-    }
-
-    #[test]
-    fn item_target_with_an_empty_slot_ignores_the_request() {
-        let mut app = test_app();
-        app.insert_resource(ItemDb::default());
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Item(ItemRef::Inventory(3)),
-        });
-        app.update();
-
-        assert!(roots(&mut app).is_empty());
-    }
-
-    #[test]
-    fn item_target_resolves_and_spawns_a_root() {
-        let mut app = test_app();
-        app.insert_resource(ItemDb::default());
-        app.world_mut()
-            .resource_mut::<Inventory>()
-            .upsert(game_engine::domain::inventory::Item {
-                index: 3,
-                item_id: 501,
-                identified: true,
-                ..Default::default()
-            });
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Item(ItemRef::Inventory(3)),
-        });
+        app.world_mut().write_message(skill("Bash"));
+        app.world_mut().write_message(skill("Provoke"));
         app.update();
 
         assert_eq!(roots(&mut app).len(), 1);
+        let texts: Vec<String> = app
+            .world_mut()
+            .query::<&Text>()
+            .iter(app.world())
+            .map(|text| text.0.clone())
+            .collect();
+        assert!(texts.contains(&"Provoke".to_string()), "{texts:?}");
+        assert!(!texts.contains(&"Bash".to_string()), "{texts:?}");
+    }
+
+    #[test]
+    fn bag_item_action_follows_category() {
+        let usable = Item {
+            index: 3,
+            item_type: 0,
+            ..Default::default()
+        };
+        let equip = Item {
+            index: 4,
+            item_type: 5,
+            ..Default::default()
+        };
+        let etc = Item {
+            index: 5,
+            item_type: 3,
+            ..Default::default()
+        };
+        assert_eq!(
+            ItemAction::for_bag_item(&usable),
+            Some(ItemAction {
+                kind: ItemActionKind::Use,
+                index: 3
+            })
+        );
+        assert_eq!(
+            ItemAction::for_bag_item(&equip),
+            Some(ItemAction {
+                kind: ItemActionKind::Equip,
+                index: 4
+            })
+        );
+        assert_eq!(ItemAction::for_bag_item(&etc), None);
     }
 
     #[test]
     fn backdrop_is_pickable_so_clicks_do_not_leak_to_the_world() {
         let mut app = test_app();
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Skill(1),
-        });
+        app.world_mut().write_message(skill("Bash"));
         app.update();
 
         let root = roots(&mut app)[0];
@@ -415,9 +328,7 @@ mod tests {
     #[test]
     fn escape_despawns_the_open_modal() {
         let mut app = test_app();
-        app.world_mut().write_message(ShowInfoModal {
-            target: InfoTarget::Skill(1),
-        });
+        app.world_mut().write_message(skill("Bash"));
         app.update();
         assert_eq!(roots(&mut app).len(), 1);
 

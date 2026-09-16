@@ -1,34 +1,31 @@
-//! View-model builders for the info modal: [`build_item_view`] and
-//! [`build_skill_view`] resolve an [`ItemRef`]/skill id plus the live domain
-//! resources into plain [`ItemInfoView`]/[`SkillInfoView`] structs. Every optional
-//! section is `Option`/`Vec` so the scenes (item_scene.rs/skill_scene.rs, later
-//! tasks) can skip absent sections without special-casing.
+//! View-model builders for the info modal: one per domain payload an item can come
+//! from (`inventory_item_view`, `storage_item_view`, `cart_item_view`,
+//! `shop_item_view`) plus [`build_skill_view`] and [`guild_skill_view`], each
+//! producing a plain [`ItemInfoView`]/[`SkillInfoView`]. The summoning surface calls
+//! the builder for the data it holds; the modal never resolves ids itself. Every
+//! optional section is `Option`/`Vec` so the scenes can skip absent sections
+//! without special-casing.
 //!
-//! These builders are pure functions over borrowed resource references — no
-//! `Res<T>`/ECS access — so they are unit-testable without spinning up an `App`.
+//! These builders are pure functions over borrowed references — no `Res<T>`/ECS
+//! access — so they are unit-testable without spinning up an `App`.
 
 use bevy::prelude::Color;
 
-use game_engine::domain::cart::Cart;
 use game_engine::domain::entities::character::components::equipment::EquipmentSlot;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::equipment::decode_wear_location;
 use game_engine::domain::inventory::item::item_category;
-use game_engine::domain::inventory::{Inventory, ItemCategory};
+use game_engine::domain::inventory::{Item, ItemCategory};
 use game_engine::domain::skill::{SkillNode, SkillTreeState};
-use game_engine::domain::storage::Storage;
 use game_engine::infrastructure::assets::{item_collection_path, item_icon_path};
 use game_engine::infrastructure::item::ItemDb;
 use game_engine::infrastructure::skill::SkillCatalog;
-use net_contract::dto::GuildInfo;
+use net_contract::dto::{CartItem, GuildSkillInfo, StorageItem};
 
 use crate::rich_text::parse_color_codes;
 use crate::theme;
 use crate::widgets::character_window::{SkillPanelStaging, skill_name};
-use crate::widgets::shop_window::ShopSession;
-use crate::widgets::storage_window::StorageSelection;
 
-use super::ItemRef;
 use super::shell::EdgeGrade;
 
 /// One description line split into `^RRGGBB`-colored runs (already parsed —
@@ -39,27 +36,26 @@ pub type ColoredLine = Vec<(Color, String)>;
 /// section is absent for this item/context.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ItemInfoView {
-    /// The resolved item's `item_id`, carried through so the footer can
-    /// revalidate the item at its stored index is still the one shown.
+    /// Carried through so the footer can revalidate the item at its stored index
+    /// is still the one shown.
     pub item_id: u32,
     pub icon_path: Option<String>,
     pub illustration_path: Option<String>,
     pub edge: EdgeGrade,
     pub name: String,
     pub identified: bool,
-    /// Display-only server flag; not identification-gated. Accurate only for
-    /// refs that resolve through a real domain `Item` (Inventory/Equipped/
-    /// Storage bag) — false for every other `ItemRef`, since neither the
-    /// storage vault, cart, nor shop DTOs carry it.
-    pub favorite: bool,
+    /// Display-only server flag, shown as the footer star when `Some`. Only a
+    /// domain `Item` (the bag) carries it; the storage vault, cart and shop DTOs
+    /// do not, so their views have `None` and no star.
+    pub favorite: Option<bool>,
     pub tags: Vec<String>,
     pub refine: Option<i32>,
     pub sockets_filled: u8,
     pub sockets_total: u8,
     pub cards: Vec<String>,
     pub description: Vec<ColoredLine>,
-    /// Contextual `(label, value)` meta-grid rows — weight for Storage/Cart refs,
-    /// price for ShopBuy, empty otherwise.
+    /// Contextual `(label, value)` meta-grid rows — weight for storage/cart items,
+    /// price for shop stock, empty otherwise.
     pub meta: Vec<(String, String)>,
 }
 
@@ -94,12 +90,12 @@ pub struct SkillInfoView {
 // Item view builder.
 // ---------------------------------------------------------------------------
 
-/// An item instance resolved from its `ItemRef`, stripped down to the fields the
-/// view needs, regardless of which domain payload it came from.
+/// An item instance stripped down to the fields the view needs, regardless of
+/// which domain payload it came from.
 struct ResolvedItem<'a> {
     item_id: u32,
     identified: bool,
-    favorite: bool,
+    favorite: Option<bool>,
     refine: u8,
     cards: &'a [u32],
     wear_mask: u32,
@@ -108,78 +104,77 @@ struct ResolvedItem<'a> {
     price: Option<u32>,
 }
 
-/// Resolves `item_ref` against the live resources into a [`ResolvedItem`]. `None`
-/// when the referenced slot/selection is empty (e.g. the item was consumed or
-/// moved between the right-click and the build).
-fn resolve_item<'a>(
-    item_ref: ItemRef,
-    inventory: &'a Inventory,
-    storage: &'a Storage,
-    cart: &'a Cart,
-    shop: Option<&'a ShopSession>,
-) -> Option<ResolvedItem<'a>> {
-    match item_ref {
-        ItemRef::Inventory(index)
-        | ItemRef::Equipped(index)
-        | ItemRef::Storage(StorageSelection::Bag(index)) => {
-            let item = inventory.get(index)?;
-            Some(ResolvedItem {
-                item_id: item.item_id,
-                identified: item.identified,
-                favorite: item.favorite,
-                refine: item.refine,
-                cards: &item.cards,
-                wear_mask: item.location,
-                category_label: Some(category_label(item.category())),
-                weight: None,
-                price: None,
-            })
-        }
-        ItemRef::Storage(StorageSelection::Vault(index)) => {
-            let item = storage.get(index)?;
-            Some(ResolvedItem {
-                item_id: item.nameid,
-                identified: item.identified,
-                favorite: false,
-                refine: item.refine as u8,
-                cards: &item.cards,
-                wear_mask: item.location,
-                category_label: Some(category_label(item_category(item.type_))),
-                weight: Some(item.weight),
-                price: None,
-            })
-        }
-        ItemRef::Cart(index) => {
-            let item = cart.get(index)?;
-            Some(ResolvedItem {
-                item_id: item.nameid,
-                identified: item.identified,
-                favorite: false,
-                refine: item.refine as u8,
-                cards: &item.cards,
-                wear_mask: 0,
-                category_label: None,
-                weight: Some(item.weight),
-                price: None,
-            })
-        }
-        ItemRef::ShopBuy(nameid) => {
-            let price = shop
-                .and_then(|s| s.buy_items.iter().find(|i| i.nameid == nameid))
-                .map(|i| i.price);
-            Some(ResolvedItem {
-                item_id: nameid,
-                identified: true,
-                favorite: false,
-                refine: 0,
-                cards: &[],
-                wear_mask: 0,
-                category_label: None,
-                weight: None,
-                price,
-            })
-        }
-    }
+/// View for an item in the bag, whether inspected from the inventory, an equipped
+/// slot, or the storage/cart/shop bag side.
+pub fn inventory_item_view(item: &Item, item_db: &ItemDb) -> ItemInfoView {
+    item_view_from_resolved(
+        ResolvedItem {
+            item_id: item.item_id,
+            identified: item.identified,
+            favorite: Some(item.favorite),
+            refine: item.refine,
+            cards: &item.cards,
+            wear_mask: item.location,
+            category_label: Some(category_label(item.category())),
+            weight: None,
+            price: None,
+        },
+        item_db,
+    )
+}
+
+/// View for an item in the storage vault; carries its weight.
+pub fn storage_item_view(item: &StorageItem, item_db: &ItemDb) -> ItemInfoView {
+    item_view_from_resolved(
+        ResolvedItem {
+            item_id: item.nameid,
+            identified: item.identified,
+            favorite: None,
+            refine: item.refine as u8,
+            cards: &item.cards,
+            wear_mask: item.location,
+            category_label: Some(category_label(item_category(item.type_))),
+            weight: Some(item.weight),
+            price: None,
+        },
+        item_db,
+    )
+}
+
+/// View for an item in the cart; carries its weight.
+pub fn cart_item_view(item: &CartItem, item_db: &ItemDb) -> ItemInfoView {
+    item_view_from_resolved(
+        ResolvedItem {
+            item_id: item.nameid,
+            identified: item.identified,
+            favorite: None,
+            refine: item.refine as u8,
+            cards: &item.cards,
+            wear_mask: 0,
+            category_label: None,
+            weight: Some(item.weight),
+            price: None,
+        },
+        item_db,
+    )
+}
+
+/// View for shop stock, always identified; carries the price when known.
+pub fn shop_item_view(nameid: u32, price: Option<u32>, item_db: &ItemDb) -> ItemInfoView {
+    item_view_from_resolved(
+        ResolvedItem {
+            item_id: nameid,
+            identified: true,
+            favorite: None,
+            refine: 0,
+            cards: &[],
+            wear_mask: 0,
+            category_label: None,
+            weight: None,
+            price,
+        },
+        item_db,
+    )
 }
 
 fn category_label(category: ItemCategory) -> &'static str {
@@ -232,21 +227,8 @@ fn card_names(card_ids: &[u32], slot_count: u8, item_db: &ItemDb) -> Vec<String>
         .collect()
 }
 
-/// Resolves `item_ref` and builds its view. `None` when the referenced
-/// slot/selection no longer holds an item. An `item_id` absent from `item_db`
-/// still yields a view — `Item #<id>`, no description — rather than panicking.
-pub fn build_item_view(
-    item_ref: ItemRef,
-    item_db: &ItemDb,
-    inventory: &Inventory,
-    storage: &Storage,
-    cart: &Cart,
-    shop: Option<&ShopSession>,
-) -> Option<ItemInfoView> {
-    let resolved = resolve_item(item_ref, inventory, storage, cart, shop)?;
-    Some(item_view_from_resolved(resolved, item_db))
-}
-
+/// An `item_id` absent from `item_db` still yields a view — `Item #<id>`, no
+/// description — rather than panicking.
 fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfoView {
     let item_id = resolved.item_id;
     let identified = resolved.identified;
@@ -454,18 +436,10 @@ pub fn build_skill_view(
     })
 }
 
-/// Builds the info-only view for a guild skill from the guild snapshot. `None`
-/// when the guild does not list `skill_id`. Guild skills carry no prerequisite
-/// tree, so requires/unlocks stay empty and raising is not offered here.
-pub fn build_guild_skill_view(
-    skill_id: u32,
-    catalog: Option<&SkillCatalog>,
-    info: &GuildInfo,
-) -> Option<SkillInfoView> {
-    let skill = info
-        .skills
-        .iter()
-        .find(|skill| skill.skill_id == skill_id)?;
+/// The info-only view for a guild skill. Guild skills carry no prerequisite tree,
+/// so requires/unlocks stay empty and raising is not offered here.
+pub fn guild_skill_view(skill: &GuildSkillInfo, catalog: Option<&SkillCatalog>) -> SkillInfoView {
+    let skill_id = skill.skill_id;
     let meta = catalog.and_then(|c| c.get(skill_id));
     let description = meta
         .map(|m| {
@@ -475,7 +449,7 @@ pub fn build_guild_skill_view(
                 .collect()
         })
         .unwrap_or_default();
-    Some(SkillInfoView {
+    SkillInfoView {
         icon_path: catalog.and_then(|c| c.icon_path(skill_id)),
         edge: skill_edge_grade(skill.level, skill.max_level, true),
         name: skill_name(skill_id, catalog),
@@ -492,7 +466,7 @@ pub fn build_guild_skill_view(
         unlocks: Vec::new(),
         can_raise: false,
         points_left: 0,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -501,7 +475,7 @@ mod tests {
     use game_engine::domain::inventory::Item;
     use game_engine::domain::skill::SkillNode;
     use lifthrasir_data::{ItemData, ItemInfo, SkillData, SkillMeta};
-    use net_contract::dto::{CartItem, ShopBuyItem, StorageItem};
+    use net_contract::dto::{CartItem, StorageItem};
     use std::collections::HashMap;
 
     // -----------------------------------------------------------------
@@ -595,25 +569,6 @@ mod tests {
         }
     }
 
-    fn shop_session() -> ShopSession {
-        ShopSession {
-            unit_id: 1,
-            buy_items: vec![ShopBuyItem {
-                nameid: 501,
-                price: 500,
-            }],
-            sell_items: vec![],
-            tab: Default::default(),
-            cart_buy: HashMap::new(),
-            cart_sell: HashMap::new(),
-            selected: None,
-            pending_qty: 1,
-            banner: None,
-            confirm_open: false,
-            awaiting: false,
-        }
-    }
-
     #[test]
     fn item_edge_grade_boundaries() {
         assert_eq!(item_edge_grade(3, false), EdgeGrade::Common);
@@ -625,24 +580,7 @@ mod tests {
 
     #[test]
     fn identified_equip_grades_by_refine_and_cards() {
-        let db = item_db();
-        let inventory = {
-            let mut inv = Inventory::default();
-            inv.upsert(equip_item(2, 7, [4001, 0, 0, 0], true));
-            inv
-        };
-        let storage = Storage::default();
-        let cart = Cart::default();
-
-        let view = build_item_view(
-            ItemRef::Inventory(2),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
+        let view = inventory_item_view(&equip_item(2, 7, [4001, 0, 0, 0], true), &item_db());
 
         assert_eq!(view.edge, EdgeGrade::Rare);
         assert_eq!(view.refine, Some(7));
@@ -653,24 +591,7 @@ mod tests {
 
     #[test]
     fn unidentified_item_suppresses_refine_cards_and_pips() {
-        let db = item_db();
-        let inventory = {
-            let mut inv = Inventory::default();
-            inv.upsert(equip_item(2, 7, [4001, 0, 0, 0], false));
-            inv
-        };
-        let storage = Storage::default();
-        let cart = Cart::default();
-
-        let view = build_item_view(
-            ItemRef::Inventory(2),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
+        let view = inventory_item_view(&equip_item(2, 7, [4001, 0, 0, 0], false), &item_db());
 
         assert!(!view.identified);
         assert_eq!(view.name, "Round Shield");
@@ -683,29 +604,14 @@ mod tests {
 
     #[test]
     fn unknown_item_id_falls_back_to_placeholder_name() {
-        let db = item_db();
-        let inventory = {
-            let mut inv = Inventory::default();
-            inv.upsert(Item {
-                index: 2,
-                item_id: 9999,
-                identified: true,
-                ..Default::default()
-            });
-            inv
+        let item = Item {
+            index: 2,
+            item_id: 9999,
+            identified: true,
+            ..Default::default()
         };
-        let storage = Storage::default();
-        let cart = Cart::default();
 
-        let view = build_item_view(
-            ItemRef::Inventory(2),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
+        let view = inventory_item_view(&item, &item_db());
 
         assert_eq!(view.name, "Item #9999");
         assert!(view.description.is_empty());
@@ -714,275 +620,65 @@ mod tests {
     }
 
     #[test]
-    fn missing_inventory_slot_yields_no_view() {
-        let db = item_db();
-        let inventory = Inventory::default();
-        let storage = Storage::default();
-        let cart = Cart::default();
-
-        let view = build_item_view(
-            ItemRef::Inventory(2),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        );
-
-        assert!(view.is_none());
-    }
-
-    #[test]
-    fn inventory_and_equipped_refs_carry_no_meta() {
-        let db = item_db();
-        let inventory = {
-            let mut inv = Inventory::default();
-            inv.upsert(equip_item(2, 0, [0; 4], true));
-            inv
-        };
-        let storage = Storage::default();
-        let cart = Cart::default();
-
-        let inventory_view = build_item_view(
-            ItemRef::Inventory(2),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
-        let equipped_view =
-            build_item_view(ItemRef::Equipped(2), &db, &inventory, &storage, &cart, None).unwrap();
-
-        assert!(inventory_view.meta.is_empty());
-        assert!(equipped_view.meta.is_empty());
-    }
-
-    #[test]
-    fn storage_bag_selection_carries_no_meta() {
-        let db = item_db();
-        let inventory = {
-            let mut inv = Inventory::default();
-            inv.upsert(equip_item(2, 0, [0; 4], true));
-            inv
-        };
-        let storage = Storage::default();
-        let cart = Cart::default();
-
-        let view = build_item_view(
-            ItemRef::Storage(StorageSelection::Bag(2)),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
+    fn inventory_item_carries_no_meta() {
+        let view = inventory_item_view(&equip_item(2, 0, [0; 4], true), &item_db());
 
         assert!(view.meta.is_empty());
     }
 
     #[test]
-    fn storage_vault_selection_carries_weight_meta() {
-        let db = item_db();
-        let inventory = Inventory::default();
-        let storage = {
-            let mut s = Storage::default();
-            s.open(
-                net_contract::dto::StorageKind::Personal,
-                100,
-                vec![storage_item(3, 25)],
-            );
-            s
-        };
-        let cart = Cart::default();
-
-        let view = build_item_view(
-            ItemRef::Storage(StorageSelection::Vault(3)),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
+    fn storage_item_carries_weight_meta() {
+        let view = storage_item_view(&storage_item(3, 25), &item_db());
 
         assert_eq!(view.meta, vec![("Weight".to_string(), "25".to_string())]);
+        assert_eq!(view.favorite, None);
     }
 
     #[test]
-    fn cart_ref_carries_weight_meta() {
-        let db = item_db();
-        let inventory = Inventory::default();
-        let storage = Storage::default();
-        let mut cart = Cart::default();
-        cart.upsert(cart_item(1, 30));
-
-        let view =
-            build_item_view(ItemRef::Cart(1), &db, &inventory, &storage, &cart, None).unwrap();
+    fn cart_item_carries_weight_meta() {
+        let view = cart_item_view(&cart_item(1, 30), &item_db());
 
         assert_eq!(view.meta, vec![("Weight".to_string(), "30".to_string())]);
+        assert_eq!(view.favorite, None);
     }
 
     #[test]
-    fn shop_buy_ref_carries_price_meta() {
-        let db = item_db();
-        let inventory = Inventory::default();
-        let storage = Storage::default();
-        let cart = Cart::default();
-        let shop = shop_session();
-
-        let view = build_item_view(
-            ItemRef::ShopBuy(501),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            Some(&shop),
-        )
-        .unwrap();
+    fn shop_item_carries_price_meta() {
+        let view = shop_item_view(501, Some(500), &item_db());
 
         assert_eq!(view.meta, vec![("Price".to_string(), "500z".to_string())]);
         assert!(view.identified);
+        assert_eq!(view.favorite, None);
     }
 
     #[test]
-    fn inventory_ref_carries_favorite_flag() {
-        let db = item_db();
-        let inventory = {
-            let mut inv = Inventory::default();
-            let mut item = equip_item(2, 0, [0; 4], true);
-            item.favorite = true;
-            inv.upsert(item);
-            inv
-        };
-        let storage = Storage::default();
-        let cart = Cart::default();
-
-        let view = build_item_view(
-            ItemRef::Inventory(2),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
-
-        assert!(view.favorite);
-    }
-
-    #[test]
-    fn inventory_ref_carries_unfavorited_flag() {
-        let db = item_db();
-        let inventory = {
-            let mut inv = Inventory::default();
-            inv.upsert(equip_item(2, 0, [0; 4], true));
-            inv
-        };
-        let storage = Storage::default();
-        let cart = Cart::default();
-
-        let view = build_item_view(
-            ItemRef::Inventory(2),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
-
-        assert!(!view.favorite);
-    }
-
-    #[test]
-    fn shop_buy_ref_is_never_favorited() {
-        let db = item_db();
-        let inventory = Inventory::default();
-        let storage = Storage::default();
-        let cart = Cart::default();
-        let shop = shop_session();
-
-        let view = build_item_view(
-            ItemRef::ShopBuy(501),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            Some(&shop),
-        )
-        .unwrap();
-
-        assert!(!view.favorite);
-    }
-
-    #[test]
-    fn shop_buy_ref_with_no_session_has_no_price_meta_but_still_resolves() {
-        let db = item_db();
-        let inventory = Inventory::default();
-        let storage = Storage::default();
-        let cart = Cart::default();
-
-        let view = build_item_view(
-            ItemRef::ShopBuy(501),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
+    fn shop_item_with_no_price_has_no_meta_but_still_resolves() {
+        let view = shop_item_view(501, None, &item_db());
 
         assert!(view.meta.is_empty());
         assert_eq!(view.name, "Red Potion");
     }
 
     #[test]
-    fn equips_to_tags_decode_from_wear_mask() {
-        let db = item_db();
-        let inventory = {
-            let mut inv = Inventory::default();
-            inv.upsert(equip_item(2, 0, [0; 4], true));
-            inv
-        };
-        let storage = Storage::default();
-        let cart = Cart::default();
+    fn inventory_item_carries_favorite_flag() {
+        let mut item = equip_item(2, 0, [0; 4], true);
+        item.favorite = true;
 
-        let view = build_item_view(
-            ItemRef::Inventory(2),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
+        assert_eq!(inventory_item_view(&item, &item_db()).favorite, Some(true));
+        item.favorite = false;
+        assert_eq!(inventory_item_view(&item, &item_db()).favorite, Some(false));
+    }
+
+    #[test]
+    fn equips_to_tags_decode_from_wear_mask() {
+        let view = inventory_item_view(&equip_item(2, 0, [0; 4], true), &item_db());
 
         assert!(view.tags.contains(&"Shield".to_string()));
     }
 
     #[test]
     fn description_carries_color_runs() {
-        let db = item_db();
-        let inventory = {
-            let mut inv = Inventory::default();
-            inv.upsert(equip_item(2, 0, [0; 4], true));
-            inv
-        };
-        let storage = Storage::default();
-        let cart = Cart::default();
-
-        let view = build_item_view(
-            ItemRef::Inventory(2),
-            &db,
-            &inventory,
-            &storage,
-            &cart,
-            None,
-        )
-        .unwrap();
+        let view = inventory_item_view(&equip_item(2, 0, [0; 4], true), &item_db());
 
         assert_eq!(
             view.description,
@@ -1248,30 +944,14 @@ mod tests {
     }
 
     #[test]
-    fn guild_skill_view_resolves_level_from_guild_snapshot() {
-        use net_contract::dto::GuildSkillInfo;
-        let info = GuildInfo {
-            guild_id: 7,
-            name: "Vikings".into(),
-            master_char_id: 42,
-            emblem_id: 0,
-            notice_subject: String::new(),
-            notice_body: String::new(),
-            positions: vec![],
-            members: vec![],
-            level: 3,
-            exp: 0,
-            next_exp: 0,
-            skill_points: 0,
-            skills: vec![GuildSkillInfo {
-                skill_id: 10_000,
-                level: 2,
-                max_level: 5,
-            }],
-            relations: vec![],
+    fn guild_skill_view_reads_level_from_the_snapshot() {
+        let skill = GuildSkillInfo {
+            skill_id: 10_000,
+            level: 2,
+            max_level: 5,
         };
 
-        let view = build_guild_skill_view(10_000, None, &info).unwrap();
+        let view = guild_skill_view(&skill, None);
 
         assert_eq!(view.name, "#10000");
         assert_eq!(view.kind, "Guild");
@@ -1279,6 +959,5 @@ mod tests {
         assert_eq!(view.edge, EdgeGrade::Fine);
         assert!(view.requires.is_empty());
         assert!(!view.can_raise);
-        assert!(build_guild_skill_view(1, None, &info).is_none());
     }
 }

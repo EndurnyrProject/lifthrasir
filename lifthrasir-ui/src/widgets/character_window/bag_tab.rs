@@ -28,7 +28,7 @@ use game_engine::infrastructure::item::ItemDb;
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 use crate::widgets::hotbar::HotbarDrag;
-use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
+use crate::widgets::info_modal::{InfoContent, ItemAction, ShowInfoModal, view};
 
 use super::BagTabBody;
 
@@ -195,6 +195,7 @@ fn on_cell_click(
     time: Res<Time>,
     mut last: ResMut<LastBagClick>,
     inventory: Res<Inventory>,
+    item_db: Option<Res<ItemDb>>,
     mut use_writer: MessageWriter<UseItemRequested>,
     mut equip_writer: MessageWriter<EquipItemRequested>,
     mut unequip_writer: MessageWriter<UnequipItemRequested>,
@@ -204,9 +205,16 @@ fn on_cell_click(
         return;
     };
     if click.button == PointerButton::Secondary {
-        if inventory.get(cell.index).is_some() {
+        let Some(item_db) = item_db.as_deref() else {
+            warn!("bag: ItemDb not loaded yet, ignoring inspect");
+            return;
+        };
+        if let Some(item) = inventory.get(cell.index) {
             info_writer.write(ShowInfoModal {
-                target: InfoTarget::Item(ItemRef::Inventory(cell.index)),
+                content: InfoContent::Item {
+                    view: view::inventory_item_view(item, item_db),
+                    action: ItemAction::for_bag_item(item),
+                },
             });
         }
         return;
@@ -674,6 +682,7 @@ mod tests {
         app.init_resource::<LastBagClick>();
         app.init_resource::<Time>();
         app.init_resource::<Inventory>();
+        app.init_resource::<ItemDb>();
         app
     }
 
@@ -695,8 +704,13 @@ mod tests {
 
         let messages = app.world().resource::<Messages<ShowInfoModal>>();
         let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Inventory(3))]);
+        let contents: Vec<_> = reader.read(messages).map(|m| m.content.clone()).collect();
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Item { view, action: Some(ItemAction { index: 3, .. }) }
+                if view.item_id == item(3, 0).item_id
+        ));
         assert_eq!(app.world().resource::<BagUi>().selected, None);
     }
 

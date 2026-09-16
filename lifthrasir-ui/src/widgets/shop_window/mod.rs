@@ -22,7 +22,7 @@ use net_contract::dto::{BuyEntry, SellEntry, ShopBuyItem, ShopResult, ShopSellIt
 use net_contract::events::{ChatHeard, ShopBuyResulted, ShopOpened, ShopSellResulted};
 
 use crate::theme::feathers_theme::install_norse_theme;
-use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
+use crate::widgets::info_modal::{InfoContent, ItemAction, ShowInfoModal, view};
 use crate::widgets::npc_dialog::{ActiveNpcDialog, NpcDialogRoot};
 
 pub mod scene;
@@ -560,15 +560,17 @@ pub(super) fn on_shop_button(
 }
 
 /// Secondary-click on a stock row opens the info modal for that item instead of
-/// selecting it: a Buy row resolves to `ItemRef::ShopBuy(nameid)`, a Sell row to
-/// `ItemRef::Inventory(inventory_index)` (the sell snapshot mirrors a live bag
-/// slot). Only fires for `Select` rows — the row builder is the only shop
+/// selecting it: a Buy row shows the stock item with its price, a Sell row shows
+/// the bag item (the sell snapshot mirrors a live bag slot). Only fires for `Select` rows — the row builder is the only shop
 /// button carrying that action, but the guard keeps this safe if it's ever
 /// attached elsewhere; other shop buttons (tab switch, qty steppers, cart
 /// controls) stay untouched.
 pub(super) fn on_shop_row_secondary_click(
     click: On<Pointer<Click>>,
     actions: Query<&ShopButtonAction>,
+    session: Option<Res<ShopSession>>,
+    inventory: Res<Inventory>,
+    item_db: Option<Res<ItemDb>>,
     mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     if click.button != PointerButton::Secondary {
@@ -577,13 +579,32 @@ pub(super) fn on_shop_row_secondary_click(
     let Ok(ShopButtonAction::Select(selection)) = actions.get(click.entity) else {
         return;
     };
-    let item_ref = match *selection {
-        Selection::Buy(nameid) => ItemRef::ShopBuy(nameid),
-        Selection::Sell(index) => ItemRef::Inventory(index as u16),
+    let Some(item_db) = item_db.as_deref() else {
+        warn!("shop: ItemDb not loaded yet, ignoring inspect");
+        return;
     };
-    info_writer.write(ShowInfoModal {
-        target: InfoTarget::Item(item_ref),
-    });
+    let content = match *selection {
+        Selection::Buy(nameid) => {
+            let price = session
+                .as_deref()
+                .and_then(|s| s.buy_items.iter().find(|i| i.nameid == nameid))
+                .map(|i| i.price);
+            InfoContent::Item {
+                view: view::shop_item_view(nameid, price, item_db),
+                action: None,
+            }
+        }
+        Selection::Sell(index) => {
+            let Some(item) = inventory.get(index as u16) else {
+                return;
+            };
+            InfoContent::Item {
+                view: view::inventory_item_view(item, item_db),
+                action: ItemAction::for_bag_item(item),
+            }
+        }
+    };
+    info_writer.write(ShowInfoModal { content });
 }
 
 /// Resolves a display name for `nameid` via `ItemDb`, always as identified — the
@@ -1096,7 +1117,23 @@ mod tests {
     fn row_click_app() -> App {
         let mut app = App::new();
         app.add_message::<ShowInfoModal>();
+        app.init_resource::<ItemDb>();
+        app.init_resource::<Inventory>();
+        app.world_mut()
+            .resource_mut::<Inventory>()
+            .upsert(game_engine::domain::inventory::Item {
+                index: 3,
+                item_id: 501,
+                identified: true,
+                ..game_engine::domain::inventory::Item::default()
+            });
         app
+    }
+
+    fn contents(app: &App) -> Vec<InfoContent> {
+        let messages = app.world().resource::<Messages<ShowInfoModal>>();
+        let mut reader = messages.get_cursor();
+        reader.read(messages).map(|m| m.content.clone()).collect()
     }
 
     #[test]
@@ -1112,10 +1149,12 @@ mod tests {
         app.world_mut()
             .trigger(click_event(row, window, PointerButton::Secondary));
 
-        let messages = app.world().resource::<Messages<ShowInfoModal>>();
-        let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::ShopBuy(501))]);
+        let contents = contents(&app);
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Item { view, action: None } if view.item_id == 501 && view.meta.is_empty()
+        ));
     }
 
     #[test]
@@ -1131,10 +1170,13 @@ mod tests {
         app.world_mut()
             .trigger(click_event(row, window, PointerButton::Secondary));
 
-        let messages = app.world().resource::<Messages<ShowInfoModal>>();
-        let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Inventory(3))]);
+        let contents = contents(&app);
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Item { view, action: Some(ItemAction { index: 3, .. }) }
+                if view.item_id == 501
+        ));
     }
 
     #[test]
@@ -1237,6 +1279,16 @@ mod tests {
         app.add_message::<BuyFromShop>();
         app.add_message::<SellToShop>();
         app.init_resource::<ButtonInput<MouseButton>>();
+        app.init_resource::<ItemDb>();
+        app.init_resource::<Inventory>();
+        app.world_mut()
+            .resource_mut::<Inventory>()
+            .upsert(game_engine::domain::inventory::Item {
+                index: 0,
+                item_id: 501,
+                identified: true,
+                ..Default::default()
+            });
         app.insert_resource(session);
         app
     }
@@ -1265,10 +1317,13 @@ mod tests {
             MouseButton::Right,
         );
 
-        let messages = app.world().resource::<Messages<ShowInfoModal>>();
-        let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Inventory(0))]);
+        let contents = contents(&app);
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Item { view, action: Some(ItemAction { index: 0, .. }) }
+                if view.item_id == 501
+        ));
 
         let session = app.world().resource::<ShopSession>();
         assert_eq!(session.selected, Some(Selection::Sell(1)));

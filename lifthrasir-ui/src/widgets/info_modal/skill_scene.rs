@@ -1,8 +1,8 @@
 //! Skill info modal content: renders a [`SkillInfoView`] through the shell chrome —
 //! header (kind + state tag) → level pips → meta grid (SP cost, range) → colored
-//! description → Requires/Unlocks chips. Chip clicks write [`ShowInfoModal`] for
-//! their skill id; rebuilding the modal on that message is the whole navigation
-//! model — there is no back stack.
+//! description → Requires/Unlocks chips. Chip clicks build the view for their
+//! skill id and write [`ShowInfoModal`]; rebuilding the modal on that message is
+//! the whole navigation model — there is no back stack.
 //!
 //! The footer Raise button stages `+1` in [`SkillPanelStaging`] — the same path the
 //! skills-tab stepper uses (`skills_tab.rs::on_stepper`) — and never writes
@@ -19,14 +19,15 @@ use bevy_feathers::theme::ThemedText;
 use game_engine::domain::entities::character::components::status::CharacterStatus;
 use game_engine::domain::entities::markers::LocalPlayer;
 use game_engine::domain::skill::SkillTreeState;
+use game_engine::infrastructure::skill::SkillCatalog;
 
 use crate::theme;
 use crate::widgets::character_window::SkillPanelStaging;
 use crate::widgets::chrome::{chrome_text, ignore_picking};
 
 use super::shell::{self, EdgeGrade, HeaderView};
-use super::view::{SkillInfoView, SkillReqChip};
-use super::{InfoTarget, ShowInfoModal};
+use super::view::{self, SkillInfoView, SkillReqChip};
+use super::{InfoContent, ShowInfoModal};
 
 /// Parses a `SkillInfoView::level_line` (`"cur/max"`, always written by
 /// `build_skill_view`) back into its parts. `(0, 0)` for anything malformed rather
@@ -257,16 +258,35 @@ fn skill_chip(chip: SkillReqChip, is_requires: bool) -> impl Scene {
     }
 }
 
+/// Rebuilds the modal for the chip's skill. Chips only reference tree skills, so
+/// the rebuilt modal keeps its Raise footer.
 fn on_chip_click(
     click: On<Pointer<Click>>,
     chips: Query<&ChipTarget>,
+    catalog: Option<Res<SkillCatalog>>,
+    tree: Res<SkillTreeState>,
+    staging: Res<SkillPanelStaging>,
+    player: Query<&CharacterStatus, With<LocalPlayer>>,
     mut writer: MessageWriter<ShowInfoModal>,
 ) {
-    let Ok(target) = chips.get(click.entity) else {
+    let Ok(ChipTarget(skill_id)) = chips.get(click.entity).copied() else {
+        return;
+    };
+    let Some(view) = view::build_skill_view(
+        skill_id,
+        catalog.as_deref(),
+        &tree,
+        &staging,
+        player.single().ok(),
+    ) else {
+        warn!("info modal: chip skill #{skill_id} not in the tree, ignoring");
         return;
     };
     writer.write(ShowInfoModal {
-        target: InfoTarget::Skill(target.0),
+        content: InfoContent::Skill {
+            view,
+            raise: Some(skill_id),
+        },
     });
 }
 
@@ -389,10 +409,35 @@ mod tests {
         assert!(texts.contains(&"Raise to Lv 4".to_string()), "{texts:?}");
     }
 
-    #[test]
-    fn requirement_chip_click_emits_show_info_modal_for_its_skill() {
+    fn chip_app() -> App {
+        use game_engine::domain::skill::SkillNode;
         let mut app = App::new();
         app.add_message::<ShowInfoModal>();
+        app.init_resource::<SkillPanelStaging>();
+        let mut skills = std::collections::HashMap::new();
+        skills.insert(
+            9,
+            SkillNode {
+                level: 0,
+                max_level: 5,
+                upgradable: true,
+                requires: vec![],
+                req_base_level: 0,
+                req_job_level: 0,
+                sp: 1,
+                range: 1,
+                inf_type: 0,
+                job_id: 1,
+                splash_radius: 0,
+            },
+        );
+        app.insert_resource(SkillTreeState { skills });
+        app
+    }
+
+    #[test]
+    fn requirement_chip_click_emits_show_info_modal_for_its_skill() {
+        let mut app = chip_app();
         let window = app.world_mut().spawn_empty().id();
         let chip = app
             .world_mut()
@@ -407,10 +452,29 @@ mod tests {
             .world()
             .resource::<Messages<ShowInfoModal>>()
             .iter_current_update_messages()
-            .map(|m| m.target)
+            .map(|m| m.content.clone())
             .collect();
         assert_eq!(messages.len(), 1);
-        assert!(matches!(messages[0], InfoTarget::Skill(9)));
+        assert!(matches!(
+            &messages[0],
+            InfoContent::Skill { view, raise: Some(9) } if view.name == "#9"
+        ));
+    }
+
+    #[test]
+    fn requirement_chip_click_for_a_skill_outside_the_tree_writes_nothing() {
+        let mut app = chip_app();
+        let window = app.world_mut().spawn_empty().id();
+        let chip = app
+            .world_mut()
+            .spawn(ChipTarget(9999))
+            .observe(on_chip_click)
+            .id();
+
+        app.world_mut().trigger(click_event(chip, window));
+        app.world_mut().flush();
+
+        assert!(app.world().resource::<Messages<ShowInfoModal>>().is_empty());
     }
 
     fn click_event(target: Entity, window: Entity) -> Pointer<Click> {

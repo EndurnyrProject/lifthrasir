@@ -32,7 +32,7 @@ use net_contract::commands::{MountCart, MoveFromCart, MoveToCart};
 use net_contract::events::{CartMountRejection, CartMountResult};
 
 use crate::theme::feathers_theme::install_norse_theme;
-use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
+use crate::widgets::info_modal::{InfoContent, ItemAction, ShowInfoModal, view};
 
 pub mod scene;
 
@@ -295,31 +295,38 @@ fn rebuild_body(
 
 /// Cell click: select the clicked `(side, index)` and reset the quantity stepper
 /// to one, mirroring how the shop window resets its pending quantity on select.
-/// Secondary-click opens the info modal for a filled cell instead — `Bag`
-/// resolves to `ItemRef::Inventory`, `Cart` to `ItemRef::Cart`; empty cells are
-/// inert on either button.
+/// Secondary-click opens the info modal for a filled cell instead: a `Bag` cell
+/// with its bag action, a `Cart` cell info-only; empty cells are inert on either
+/// button.
 fn on_cell_click(
     click: On<Pointer<Click>>,
     cells: Query<&CartCell>,
     mut ui: ResMut<CartUi>,
     inventory: Res<Inventory>,
     cart: Res<Cart>,
+    item_db: Option<Res<ItemDb>>,
     mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
         return;
     };
     if click.button == PointerButton::Secondary {
-        let item_ref = match cell.side {
-            Side::Bag => inventory
-                .get(cell.index)
-                .map(|_| ItemRef::Inventory(cell.index)),
-            Side::Cart => cart.get(cell.index).map(|_| ItemRef::Cart(cell.index)),
+        let Some(item_db) = item_db.as_deref() else {
+            warn!("cart: ItemDb not loaded yet, ignoring inspect");
+            return;
         };
-        if let Some(item_ref) = item_ref {
-            info_writer.write(ShowInfoModal {
-                target: InfoTarget::Item(item_ref),
-            });
+        let content = match cell.side {
+            Side::Bag => inventory.get(cell.index).map(|item| InfoContent::Item {
+                view: view::inventory_item_view(item, item_db),
+                action: ItemAction::for_bag_item(item),
+            }),
+            Side::Cart => cart.get(cell.index).map(|item| InfoContent::Item {
+                view: view::cart_item_view(item, item_db),
+                action: None,
+            }),
+        };
+        if let Some(content) = content {
+            info_writer.write(ShowInfoModal { content });
         }
         return;
     }
@@ -827,6 +834,7 @@ mod tests {
         app.init_resource::<CartUi>();
         app.init_resource::<Inventory>();
         app.init_resource::<Cart>();
+        app.init_resource::<ItemDb>();
         app
     }
 
@@ -851,8 +859,12 @@ mod tests {
 
         let messages = app.world().resource::<Messages<ShowInfoModal>>();
         let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Inventory(7))]);
+        let contents: Vec<_> = reader.read(messages).map(|m| m.content.clone()).collect();
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Item { view, .. } if view.favorite.is_some()
+        ));
         assert_eq!(app.world().resource::<CartUi>().selected, None);
     }
 
@@ -875,8 +887,12 @@ mod tests {
 
         let messages = app.world().resource::<Messages<ShowInfoModal>>();
         let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Cart(2))]);
+        let contents: Vec<_> = reader.read(messages).map(|m| m.content.clone()).collect();
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Item { view, action: None } if view.favorite.is_none()
+        ));
         assert_eq!(app.world().resource::<CartUi>().selected, None);
     }
 

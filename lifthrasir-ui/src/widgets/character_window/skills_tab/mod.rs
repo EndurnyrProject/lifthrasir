@@ -20,7 +20,7 @@ use game_engine::infrastructure::skill::SkillCatalog;
 
 use crate::theme;
 use crate::widgets::hotbar::HotbarDrag;
-use crate::widgets::info_modal::{InfoTarget, ShowInfoModal};
+use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view};
 
 use super::SkillsTabBody;
 
@@ -522,12 +522,17 @@ fn on_stepper(
 
 /// Cell click: select the skill; a double-click within the cast window emits
 /// [`SkillCastRequested`]. Secondary-click opens the info modal instead.
+#[allow(clippy::too_many_arguments)]
 fn on_cell_click(
     click: On<Pointer<Click>>,
     cells: Query<&SkillPanelCell>,
     mut ui: ResMut<SkillPanelUi>,
     time: Res<Time>,
     mut last: ResMut<LastSkillPanelClick>,
+    catalog: Option<Res<SkillCatalog>>,
+    tree: Res<SkillTreeState>,
+    staging: Res<SkillPanelStaging>,
+    player: Query<&CharacterStatus, With<LocalPlayer>>,
     mut cast_writer: MessageWriter<SkillCastRequested>,
     mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
@@ -535,8 +540,24 @@ fn on_cell_click(
         return;
     };
     if click.button == PointerButton::Secondary {
+        let Some(view) = view::build_skill_view(
+            cell.0,
+            catalog.as_deref(),
+            &tree,
+            &staging,
+            player.single().ok(),
+        ) else {
+            warn!(
+                "skills: skill #{} not in the tree, ignoring inspect",
+                cell.0
+            );
+            return;
+        };
         info_writer.write(ShowInfoModal {
-            target: InfoTarget::Skill(cell.0),
+            content: InfoContent::Skill {
+                view,
+                raise: Some(cell.0),
+            },
         });
         return;
     }
@@ -2009,7 +2030,13 @@ mod tests {
             app.world()
                 .resource::<Messages<ShowInfoModal>>()
                 .iter_current_update_messages()
-                .any(|message| message.target == InfoTarget::Skill(42))
+                .any(|message| matches!(
+                    &message.content,
+                    InfoContent::Skill {
+                        raise: Some(42),
+                        ..
+                    }
+                ))
         );
 
         app.world_mut().trigger(drag_start_event(cell, window));
@@ -2104,7 +2131,10 @@ mod tests {
         assert!(
             messages
                 .iter_current_update_messages()
-                .any(|message| message.target == InfoTarget::Skill(1))
+                .any(|message| matches!(
+                    &message.content,
+                    InfoContent::Skill { raise: Some(1), .. }
+                ))
         );
     }
 
@@ -2247,6 +2277,8 @@ mod tests {
         app.init_resource::<SkillPanelUi>();
         app.init_resource::<LastSkillPanelClick>();
         app.init_resource::<Time>();
+        app.init_resource::<SkillPanelStaging>();
+        app.insert_resource(tree(&[(42, node(1, 5, 7))]));
 
         let cell = app
             .world_mut()
@@ -2260,8 +2292,12 @@ mod tests {
 
         let messages = app.world().resource::<Messages<ShowInfoModal>>();
         let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(targets, vec![InfoTarget::Skill(42)]);
+        let contents: Vec<_> = reader.read(messages).map(|m| m.content.clone()).collect();
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Skill { view, raise: Some(42) } if view.level_line == "1/5"
+        ));
         assert_eq!(app.world().resource::<SkillPanelUi>().selected, None);
     }
 
@@ -2274,6 +2310,8 @@ mod tests {
         app.init_resource::<SkillPanelUi>();
         app.init_resource::<LastSkillPanelClick>();
         app.init_resource::<Time>();
+        app.init_resource::<SkillPanelStaging>();
+        app.insert_resource(tree(&[(42, node(1, 5, 7))]));
 
         let cell = app
             .world_mut()

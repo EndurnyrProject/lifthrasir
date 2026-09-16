@@ -1,6 +1,6 @@
 //! Item info modal content: renders an [`ItemInfoView`] through the shell chrome —
-//! header, card slots, meta grid, and description — plus a footer whose action
-//! depends on where the item came from (`ItemRef`). Optional sections (cards, meta,
+//! header, card slots, meta grid, and description — plus a footer whose action the
+//! summoning surface chose (`ItemAction`). Optional sections (cards, meta,
 //! description, footer) are omitted entirely when their view field is empty, rather
 //! than spawned as empty wrappers.
 //!
@@ -18,41 +18,31 @@ use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::{ThemeBorderColor, ThemedText};
 
 use game_engine::domain::equipment::{EquipItemRequested, UnequipItemRequested};
-use game_engine::domain::inventory::{Inventory, ItemCategory, UseItemRequested};
+use game_engine::domain::inventory::{Inventory, UseItemRequested};
 
 use crate::theme;
 use crate::widgets::chrome::{glyph_icon, ignore_picking};
 
 use super::shell::{self, HeaderView};
 use super::view::ItemInfoView;
-use super::{InfoModalRoot, ItemRef};
+use super::{InfoModalRoot, ItemAction, ItemActionKind};
 
-/// Which command a footer button writes on click.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FooterActionKind {
-    Use,
-    Equip,
-    Unequip,
-}
-
-impl FooterActionKind {
-    fn label(self) -> &'static str {
-        match self {
-            FooterActionKind::Use => "Use",
-            FooterActionKind::Equip => "Equip",
-            FooterActionKind::Unequip => "Unequip",
-        }
+fn action_label(kind: ItemActionKind) -> &'static str {
+    match kind {
+        ItemActionKind::Use => "Use",
+        ItemActionKind::Equip => "Equip",
+        ItemActionKind::Unequip => "Unequip",
     }
 }
 
 /// Carries the data a footer button's click observer needs to revalidate and act:
-/// where the item lives, the `item_id` it had when the modal was built, and which
+/// the inventory slot, the `item_id` it had when the modal was built, and which
 /// command to write.
 #[derive(Component, Clone, Copy)]
 pub(super) struct FooterAction {
-    item_ref: ItemRef,
+    index: u16,
     item_id: u32,
-    kind: FooterActionKind,
+    kind: ItemActionKind,
     disabled: bool,
 }
 
@@ -61,9 +51,9 @@ pub(super) struct FooterAction {
 impl Default for FooterAction {
     fn default() -> Self {
         Self {
-            item_ref: ItemRef::Cart(0),
+            index: 0,
             item_id: 0,
-            kind: FooterActionKind::Use,
+            kind: ItemActionKind::Use,
             disabled: false,
         }
     }
@@ -160,13 +150,8 @@ fn favorite_star(favorite: bool) -> impl Scene {
 }
 
 /// The item modal's whole content: header, then the scrollable section stack, then
-/// the contextual footer.
-pub(super) fn scene(
-    view: ItemInfoView,
-    item_ref: ItemRef,
-    category: Option<ItemCategory>,
-) -> impl Scene {
-    let item_id = view.item_id;
+/// the footer with `action` (if any) and the favorite star (if the view carries one).
+pub(super) fn scene(view: ItemInfoView, action: Option<ItemAction>) -> impl Scene {
     let header = shell::header(HeaderView {
         icon_path: view.icon_path.clone(),
         refine: view.refine,
@@ -193,9 +178,9 @@ pub(super) fn scene(
         .clone()
         .map(|path| EntityScene(item_illustration(path, view.edge)));
 
-    let primary_actions = footer_actions(item_ref, item_id, view.identified, category);
-    let star = matches!(item_ref, ItemRef::Inventory(_)).then(|| favorite_star(view.favorite));
-    let mut footer_children: Vec<Box<dyn Scene>> = primary_actions
+    let button = action.map(|action| action_button(&view, action));
+    let star = view.favorite.map(favorite_star);
+    let mut footer_children: Vec<Box<dyn Scene>> = button
         .into_iter()
         .map(|action| Box::new(action) as Box<dyn Scene>)
         .collect();
@@ -283,39 +268,19 @@ fn card_slot(name: Option<String>) -> impl Scene {
     }
 }
 
-/// The footer's action buttons for `item_ref`: Use or Equip (by `category`) for an
-/// inventory item, Unequip for an equipped one, nothing for Storage/Cart/ShopBuy —
-/// there is no valid primary action from those contexts.
-fn footer_actions(
-    item_ref: ItemRef,
-    item_id: u32,
-    identified: bool,
-    category: Option<ItemCategory>,
-) -> Vec<impl Scene> {
-    let action = match (item_ref, category) {
-        (ItemRef::Inventory(_), Some(ItemCategory::Equip)) => {
-            Some((FooterActionKind::Equip, !identified))
-        }
-        (ItemRef::Inventory(_), Some(ItemCategory::Use)) => Some((FooterActionKind::Use, false)),
-        (ItemRef::Inventory(_), Some(ItemCategory::Etc) | None) => None,
-        (ItemRef::Equipped(_), _) => Some((FooterActionKind::Unequip, false)),
-        (ItemRef::Storage(_) | ItemRef::Cart(_) | ItemRef::ShopBuy(_), _) => None,
+/// The footer's primary button. Equip is disabled for an unidentified item, since
+/// the server refuses it; the other actions are always live.
+fn action_button(view: &ItemInfoView, action: ItemAction) -> impl Scene {
+    let disabled = action.kind == ItemActionKind::Equip && !view.identified;
+    let template = FooterAction {
+        index: action.index,
+        item_id: view.item_id,
+        kind: action.kind,
+        disabled,
     };
-    action
-        .map(|(kind, disabled)| action_button(item_ref, item_id, kind, disabled))
-        .into_iter()
-        .collect()
-}
-
-fn action_button(
-    item_ref: ItemRef,
-    item_id: u32,
-    kind: FooterActionKind,
-    disabled: bool,
-) -> impl Scene {
-    let label = kind.label().to_string();
+    let label = action_label(action.kind).to_string();
     bsn! {
-        template_value(FooterAction { item_ref, item_id, kind, disabled })
+        template_value(template)
         @FeathersButton {
             @caption: bsn! { (Text(label) ThemedText) },
             @variant: ButtonVariant::Primary,
@@ -357,24 +322,21 @@ fn on_footer_action_click(
     let Ok(action) = actions.get(activate.entity) else {
         return;
     };
-    let index = match action.item_ref {
-        ItemRef::Inventory(index) | ItemRef::Equipped(index) => index,
-        ItemRef::Storage(_) | ItemRef::Cart(_) | ItemRef::ShopBuy(_) => return,
-    };
+    let index = action.index;
     let still_valid = inventory
         .get(index)
         .is_some_and(|item| item.item_id == action.item_id);
     if still_valid {
         match action.kind {
-            FooterActionKind::Use => {
+            ItemActionKind::Use => {
                 use_writer.write(UseItemRequested {
                     index: index as u32,
                 });
             }
-            FooterActionKind::Equip => {
+            ItemActionKind::Equip => {
                 equip_writer.write(EquipItemRequested { index });
             }
-            FooterActionKind::Unequip => {
+            ItemActionKind::Unequip => {
                 unequip_writer.write(UnequipItemRequested { index });
             }
         }
@@ -410,7 +372,7 @@ mod tests {
             edge: shell::EdgeGrade::Fine,
             name: "Red Potion".to_string(),
             identified: true,
-            favorite: false,
+            favorite: Some(false),
             tags: vec!["Usable".to_string()],
             refine: Some(4),
             sockets_filled: 1,
@@ -429,7 +391,7 @@ mod tests {
             edge: shell::EdgeGrade::Common,
             name: "Junk".to_string(),
             identified: true,
-            favorite: false,
+            favorite: None,
             tags: vec![],
             refine: None,
             sockets_filled: 0,
@@ -440,6 +402,10 @@ mod tests {
         }
     }
 
+    fn action(kind: ItemActionKind) -> Option<ItemAction> {
+        Some(ItemAction { kind, index: 1 })
+    }
+
     fn texts(app: &mut App) -> Vec<String> {
         app.world_mut()
             .query::<&Text>()
@@ -448,15 +414,27 @@ mod tests {
             .collect()
     }
 
+    fn footer_actions(app: &mut App) -> Vec<FooterAction> {
+        app.world_mut()
+            .query::<&FooterAction>()
+            .iter(app.world())
+            .copied()
+            .collect()
+    }
+
+    fn stars(app: &mut App) -> Vec<FavoriteStar> {
+        app.world_mut()
+            .query::<&FavoriteStar>()
+            .iter(app.world())
+            .copied()
+            .collect()
+    }
+
     #[test]
     fn full_view_renders_header_cards_meta_and_description() {
         let mut app = test_app();
         app.world_mut()
-            .spawn_scene(scene(
-                full_view(),
-                ItemRef::Inventory(1),
-                Some(ItemCategory::Use),
-            ))
+            .spawn_scene(scene(full_view(), action(ItemActionKind::Use)))
             .expect("scene spawns");
         app.update();
 
@@ -509,7 +487,7 @@ mod tests {
     fn empty_view_renders_no_optional_sections() {
         let mut app = test_app();
         app.world_mut()
-            .spawn_scene(scene(empty_view(), ItemRef::Cart(1), None))
+            .spawn_scene(scene(empty_view(), None))
             .expect("scene spawns");
         app.update();
 
@@ -535,42 +513,19 @@ mod tests {
                 "unexpected {absent:?} in {texts:?}"
             );
         }
+        assert!(footer_actions(&mut app).is_empty());
+        assert!(stars(&mut app).is_empty());
     }
 
     #[test]
-    fn storage_cart_and_shop_refs_have_no_footer_action() {
+    fn no_action_renders_no_footer_button() {
         let mut app = test_app();
         app.world_mut()
-            .spawn_scene(scene(full_view(), ItemRef::ShopBuy(501), None))
+            .spawn_scene(scene(full_view(), None))
             .expect("scene spawns");
         app.update();
 
-        let count = app
-            .world_mut()
-            .query::<&FooterAction>()
-            .iter(app.world())
-            .count();
-        assert_eq!(count, 0);
-    }
-
-    #[test]
-    fn etc_inventory_item_has_no_footer_action() {
-        let mut app = test_app();
-        app.world_mut()
-            .spawn_scene(scene(
-                full_view(),
-                ItemRef::Inventory(1),
-                Some(ItemCategory::Etc),
-            ))
-            .expect("scene spawns");
-        app.update();
-
-        let count = app
-            .world_mut()
-            .query::<&FooterAction>()
-            .iter(app.world())
-            .count();
-        assert_eq!(count, 0);
+        assert!(footer_actions(&mut app).is_empty());
     }
 
     #[test]
@@ -579,22 +534,15 @@ mod tests {
         let mut view = full_view();
         view.identified = false;
         app.world_mut()
-            .spawn_scene(scene(
-                view,
-                ItemRef::Inventory(1),
-                Some(ItemCategory::Equip),
-            ))
+            .spawn_scene(scene(view, action(ItemActionKind::Equip)))
             .expect("scene spawns");
         app.update();
 
-        let actions: Vec<_> = app
-            .world_mut()
-            .query::<&FooterAction>()
-            .iter(app.world())
-            .copied()
-            .collect();
+        let actions = footer_actions(&mut app);
         assert_eq!(actions.len(), 1);
-        assert_eq!(actions[0].kind, FooterActionKind::Equip);
+        assert_eq!(actions[0].kind, ItemActionKind::Equip);
+        assert_eq!(actions[0].item_id, 501);
+        assert_eq!(actions[0].index, 1);
         assert!(actions[0].disabled);
     }
 
@@ -602,20 +550,11 @@ mod tests {
     fn identified_equip_button_is_not_disabled() {
         let mut app = test_app();
         app.world_mut()
-            .spawn_scene(scene(
-                full_view(),
-                ItemRef::Inventory(1),
-                Some(ItemCategory::Equip),
-            ))
+            .spawn_scene(scene(full_view(), action(ItemActionKind::Equip)))
             .expect("scene spawns");
         app.update();
 
-        let actions: Vec<_> = app
-            .world_mut()
-            .query::<&FooterAction>()
-            .iter(app.world())
-            .copied()
-            .collect();
+        let actions = footer_actions(&mut app);
         assert_eq!(actions.len(), 1);
         assert!(!actions[0].disabled);
     }
@@ -627,18 +566,18 @@ mod tests {
         let disabled = app
             .world_mut()
             .spawn(FooterAction {
-                item_ref: ItemRef::Inventory(1),
+                index: 1,
                 item_id: 1,
-                kind: FooterActionKind::Equip,
+                kind: ItemActionKind::Equip,
                 disabled: true,
             })
             .id();
         let enabled = app
             .world_mut()
             .spawn(FooterAction {
-                item_ref: ItemRef::Inventory(1),
+                index: 1,
                 item_id: 1,
-                kind: FooterActionKind::Use,
+                kind: ItemActionKind::Use,
                 disabled: false,
             })
             .id();
@@ -649,21 +588,16 @@ mod tests {
     }
 
     #[test]
-    fn favorite_star_renders_for_inventory_ref_with_no_primary_action() {
+    fn favorite_star_renders_with_no_primary_action() {
         let mut app = test_app();
         let mut view = full_view();
-        view.favorite = true;
+        view.favorite = Some(true);
         app.world_mut()
-            .spawn_scene(scene(view, ItemRef::Inventory(1), Some(ItemCategory::Etc)))
+            .spawn_scene(scene(view, None))
             .expect("scene spawns");
         app.update();
 
-        let stars: Vec<_> = app
-            .world_mut()
-            .query::<&FavoriteStar>()
-            .iter(app.world())
-            .copied()
-            .collect();
+        let stars = stars(&mut app);
         assert_eq!(stars.len(), 1);
         assert!(stars[0].lit);
     }
@@ -671,54 +605,34 @@ mod tests {
     #[test]
     fn favorite_star_unlit_when_view_not_favorited() {
         let mut app = test_app();
-        let mut view = full_view();
-        view.favorite = false;
         app.world_mut()
-            .spawn_scene(scene(view, ItemRef::Inventory(1), Some(ItemCategory::Use)))
+            .spawn_scene(scene(full_view(), action(ItemActionKind::Use)))
             .expect("scene spawns");
         app.update();
 
-        let stars: Vec<_> = app
-            .world_mut()
-            .query::<&FavoriteStar>()
-            .iter(app.world())
-            .copied()
-            .collect();
+        let stars = stars(&mut app);
         assert_eq!(stars.len(), 1);
         assert!(!stars[0].lit);
     }
 
     #[test]
-    fn favorite_star_absent_for_non_inventory_refs() {
-        for item_ref in [
-            ItemRef::Equipped(1),
-            ItemRef::Cart(1),
-            ItemRef::ShopBuy(501),
-        ] {
-            let mut app = test_app();
-            app.world_mut()
-                .spawn_scene(scene(full_view(), item_ref, None))
-                .expect("scene spawns");
-            app.update();
+    fn favorite_star_absent_when_view_carries_no_flag() {
+        let mut app = test_app();
+        let mut view = full_view();
+        view.favorite = None;
+        app.world_mut()
+            .spawn_scene(scene(view, action(ItemActionKind::Unequip)))
+            .expect("scene spawns");
+        app.update();
 
-            let count = app
-                .world_mut()
-                .query::<&FavoriteStar>()
-                .iter(app.world())
-                .count();
-            assert_eq!(count, 0, "{item_ref:?}");
-        }
+        assert!(stars(&mut app).is_empty());
     }
 
     #[test]
     fn favorite_star_is_not_interactive() {
         let mut app = test_app();
         app.world_mut()
-            .spawn_scene(scene(
-                full_view(),
-                ItemRef::Inventory(1),
-                Some(ItemCategory::Use),
-            ))
+            .spawn_scene(scene(full_view(), action(ItemActionKind::Use)))
             .expect("scene spawns");
         app.update();
 
@@ -754,9 +668,9 @@ mod tests {
         let button = app
             .world_mut()
             .spawn(FooterAction {
-                item_ref: ItemRef::Inventory(5),
+                index: 5,
                 item_id: 501,
-                kind: FooterActionKind::Use,
+                kind: ItemActionKind::Use,
                 disabled: false,
             })
             .observe(on_footer_action_click)
@@ -790,9 +704,9 @@ mod tests {
         let button = app
             .world_mut()
             .spawn(FooterAction {
-                item_ref: ItemRef::Inventory(5),
+                index: 5,
                 item_id: 501,
-                kind: FooterActionKind::Use,
+                kind: ItemActionKind::Use,
                 disabled: false,
             })
             .observe(on_footer_action_click)

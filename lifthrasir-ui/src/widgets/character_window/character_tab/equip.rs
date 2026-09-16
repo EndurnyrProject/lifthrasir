@@ -30,7 +30,7 @@ use game_engine::infrastructure::item::ItemDb;
 use crate::theme;
 use crate::theme::feathers_theme::{TOKEN_PANEL_BG, TOKEN_WINDOW_BORDER};
 use crate::widgets::chrome::{glyph_icon, ignore_picking};
-use crate::widgets::info_modal::{InfoTarget, ItemRef, ShowInfoModal};
+use crate::widgets::info_modal::{InfoContent, ItemAction, ShowInfoModal, view};
 
 /// Which paperdoll slot a well represents.
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -348,11 +348,14 @@ pub struct CharEquipSlotTooltip;
 /// Double-clicking a filled slot unequips it; the resulting `Inventory` change re-runs
 /// [`sync_console_equipment_slots`], which empties the slot. Secondary-click opens the
 /// info modal instead. Empty slots are inert on either button.
+#[allow(clippy::too_many_arguments)]
 fn on_slot_click(
     click: On<Pointer<Click>>,
     slots: Query<&CharEquippedIndex>,
     time: Res<Time>,
     mut last: ResMut<CharLastSlotClick>,
+    inventory: Res<Inventory>,
+    item_db: Option<Res<ItemDb>>,
     mut unequip: MessageWriter<UnequipItemRequested>,
     mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
@@ -360,9 +363,18 @@ fn on_slot_click(
         return;
     };
     if click.button == PointerButton::Secondary {
-        info_writer.write(ShowInfoModal {
-            target: InfoTarget::Item(ItemRef::Equipped(equipped.0)),
-        });
+        let Some(item_db) = item_db.as_deref() else {
+            warn!("equipment: ItemDb not loaded yet, ignoring inspect");
+            return;
+        };
+        if let Some(item) = inventory.get(equipped.0) {
+            info_writer.write(ShowInfoModal {
+                content: InfoContent::Item {
+                    view: view::inventory_item_view(item, item_db),
+                    action: Some(ItemAction::unequip(equipped.0)),
+                },
+            });
+        }
         return;
     }
     let now = time.elapsed();
@@ -649,12 +661,20 @@ mod tests {
         app.add_message::<ShowInfoModal>();
         app.init_resource::<CharLastSlotClick>();
         app.init_resource::<Time>();
+        app.init_resource::<ItemDb>();
+        app.init_resource::<Inventory>();
         app
     }
 
     #[test]
     fn secondary_click_on_a_filled_slot_opens_the_info_modal() {
         let mut app = slot_click_app();
+        app.world_mut().resource_mut::<Inventory>().upsert(Item {
+            index: 4,
+            item_id: 2104,
+            identified: true,
+            ..Default::default()
+        });
         let slot = app
             .world_mut()
             .spawn(CharEquippedIndex(4))
@@ -667,8 +687,13 @@ mod tests {
 
         let messages = app.world().resource::<Messages<ShowInfoModal>>();
         let mut reader = messages.get_cursor();
-        let targets: Vec<InfoTarget> = reader.read(messages).map(|m| m.target).collect();
-        assert_eq!(targets, vec![InfoTarget::Item(ItemRef::Equipped(4))]);
+        let contents: Vec<_> = reader.read(messages).map(|m| m.content.clone()).collect();
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            InfoContent::Item { view, action: Some(action) }
+                if view.item_id == 2104 && *action == ItemAction::unequip(4)
+        ));
         assert_eq!(
             app.world_mut()
                 .resource_mut::<Messages<UnequipItemRequested>>()
