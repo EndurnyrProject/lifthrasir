@@ -716,13 +716,14 @@ const FEEDBACK_DISMISS: Duration = Duration::from_secs(5);
 
 /// Shows `GuildUi::feedback` in the banner and clears it after
 /// [`FEEDBACK_DISMISS`]. A new message restarts the timer; re-setting the same
-/// text while it is still showing does not.
+/// text while it is still showing does not. The banner toggles `Display`, not
+/// `Visibility`, so a hidden banner takes no layout space.
 fn sync_feedback(
     mut ui: ResMut<GuildUi>,
     time: Res<Time>,
     mut shown: Local<Option<(String, Duration)>>,
     mut banner: Query<
-        (&mut BackgroundColor, &mut BorderColor, &mut Visibility),
+        (&mut Node, &mut BackgroundColor, &mut BorderColor),
         With<GuildFeedbackBanner>,
     >,
     mut text: Query<(&mut Text, &mut TextColor), With<GuildFeedbackText>>,
@@ -736,8 +737,8 @@ fn sync_feedback(
     }
     let Some(message) = ui.feedback.clone() else {
         *shown = None;
-        for (_, _, mut visibility) in &mut banner {
-            *visibility = Visibility::Hidden;
+        for (mut node, _, _) in &mut banner {
+            node.display = Display::None;
         }
         return;
     };
@@ -752,10 +753,10 @@ fn sync_feedback(
     } else {
         theme::EMERALD_BRI
     };
-    for (mut background, mut border, mut visibility) in &mut banner {
+    for (mut node, mut background, mut border) in &mut banner {
+        node.display = Display::Flex;
         background.0 = tint.with_alpha(0.12);
         *border = BorderColor::all(tint.with_alpha(0.35));
-        *visibility = Visibility::Inherited;
     }
     for (mut text, mut color) in &mut text {
         text.0.clone_from(&message);
@@ -884,20 +885,24 @@ mod tests {
         app.add_systems(Update, sync_feedback);
         app.world_mut().spawn((
             GuildFeedbackBanner,
+            Node {
+                display: Display::None,
+                ..default()
+            },
             BackgroundColor(Color::NONE),
             BorderColor::all(Color::NONE),
-            Visibility::Hidden,
         ));
         app.world_mut()
             .spawn((GuildFeedbackText, Text::default(), TextColor(theme::TEXT)));
         app
     }
 
-    fn banner_visibility(app: &mut App) -> Visibility {
-        *app.world_mut()
-            .query_filtered::<&Visibility, With<GuildFeedbackBanner>>()
+    fn banner_display(app: &mut App) -> Display {
+        app.world_mut()
+            .query_filtered::<&Node, With<GuildFeedbackBanner>>()
             .single(app.world())
             .unwrap()
+            .display
     }
 
     #[test]
@@ -906,7 +911,7 @@ mod tests {
         app.world_mut().resource_mut::<GuildUi>().feedback = Some("Notice saved".into());
         app.update();
 
-        assert_eq!(banner_visibility(&mut app), Visibility::Inherited);
+        assert_eq!(banner_display(&mut app), Display::Flex);
         let text = app
             .world_mut()
             .query_filtered::<&Text, With<GuildFeedbackText>>()
@@ -920,7 +925,7 @@ mod tests {
         app.update();
         app.update();
 
-        assert_eq!(banner_visibility(&mut app), Visibility::Hidden);
+        assert_eq!(banner_display(&mut app), Display::None);
         assert!(app.world().resource::<GuildUi>().feedback.is_none());
     }
 

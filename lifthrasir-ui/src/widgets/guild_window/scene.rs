@@ -493,6 +493,7 @@ fn feedback_banner() -> impl Scene {
     bsn! {
         GuildFeedbackBanner
         Node {
+            display: Display::None,
             width: percent(100),
             min_height: px(34),
             align_items: AlignItems::Center,
@@ -503,7 +504,6 @@ fn feedback_banner() -> impl Scene {
         }
         BackgroundColor(Color::NONE)
         BorderColor::all(Color::NONE)
-        Visibility::Hidden
         ignore_picking()
         Children [ (GuildFeedbackText chrome_text(String::new(), 11.5, theme::TEXT)) ]
     }
