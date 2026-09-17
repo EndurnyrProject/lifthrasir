@@ -318,6 +318,7 @@ fn content() -> impl Scene {
                     padding: {UiRect::vertical(px(10))},
                 }
                 Visibility::Hidden
+                ScrollArea
                 Pickable
                 Children [ (GuildSkillsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
             ),
@@ -345,6 +346,7 @@ fn content() -> impl Scene {
                             overflow: {Overflow::scroll_y()},
                             flex_direction: FlexDirection::Column,
                         }
+                        ScrollArea
                         Pickable
                     ),
                 ]
@@ -532,6 +534,64 @@ mod tests {
         app.init_asset::<Image>();
         app.init_asset::<Font>();
         app
+    }
+
+    #[test]
+    fn wheel_scrolls_every_guild_scroll_panel_from_its_children() {
+        use bevy::input::{mouse::MouseScrollUnit, touch::TouchPhase};
+        use bevy::picking::{
+            backend::HitData,
+            events::Scroll,
+            pointer::{Location, PointerId},
+        };
+        use bevy::ui::OverflowAxis;
+        use bevy::ui_widgets::ScrollAreaPlugin;
+
+        let mut app = app();
+        app.add_plugins(ScrollAreaPlugin);
+        app.world_mut().spawn_scene(window()).unwrap();
+        let window = app.world_mut().spawn(Window::default()).id();
+        let panels: Vec<_> = app
+            .world_mut()
+            .query::<(Entity, &Node)>()
+            .iter(app.world())
+            .filter(|(_, node)| node.overflow.y == OverflowAxis::Scroll)
+            .map(|(entity, _)| entity)
+            .collect();
+        assert!(!panels.is_empty());
+
+        for panel in panels {
+            app.world_mut().entity_mut(panel).insert(ComputedNode {
+                size: Vec2::splat(100.0),
+                content_size: Vec2::new(100.0, 500.0),
+                ..default()
+            });
+            let child = app.world_mut().spawn(ChildOf(panel)).id();
+            app.world_mut().trigger(Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: bevy::camera::RenderTarget::Window(bevy::window::WindowRef::Entity(
+                        window,
+                    ))
+                    .normalize(None)
+                    .unwrap(),
+                    position: Vec2::ZERO,
+                },
+                Scroll {
+                    unit: MouseScrollUnit::Pixel,
+                    x: 0.0,
+                    y: -40.0,
+                    hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
+                    phase: TouchPhase::Moved,
+                },
+                child,
+            ));
+            assert_eq!(
+                app.world().get::<ScrollPosition>(panel).unwrap().y,
+                40.0,
+                "wheel did not scroll guild panel {panel:?}"
+            );
+        }
     }
 
     #[test]

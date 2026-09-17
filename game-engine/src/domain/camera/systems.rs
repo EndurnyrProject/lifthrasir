@@ -1,4 +1,5 @@
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
+use bevy::picking::{hover::HoverMap, pointer::PointerId};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use moonshine_kind::Instance;
@@ -175,6 +176,8 @@ pub fn camera_follow_system(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     ui_focus: Res<UiFocus>,
     mut mouse_wheel_events: MessageReader<MouseWheel>,
+    hover_map: Res<HoverMap>,
+    ui_nodes: Query<Option<&Pickable>, (With<ComputedNode>, Without<Window>)>,
     mut rotation_delta: ResMut<CameraRotationDelta>,
     active_profile: Res<ActiveCameraProfile>,
     mut camera_query: Query<
@@ -187,6 +190,18 @@ pub fn camera_follow_system(
     >,
 ) {
     let delta = time.delta_secs();
+
+    // Discard only this reader's UI wheel input, leaving Bevy's scroll areas active.
+    // ComputedNode also covers scrollbar thumbs, which do not carry Node.
+    if hover_map.get(&PointerId::Mouse).is_some_and(|hits| {
+        hits.keys().any(|entity| {
+            ui_nodes
+                .get(*entity)
+                .is_ok_and(|pickable| pickable.is_none_or(|p| p.should_block_lower))
+        })
+    }) {
+        mouse_wheel_events.clear();
+    }
 
     for (mut camera_transform, mut follow_target, mut settings) in camera_query.iter_mut() {
         let target_position = follow_target.cached_position;
