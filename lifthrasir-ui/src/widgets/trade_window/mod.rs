@@ -6,8 +6,10 @@ use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod feedback;
 pub mod request_dialog;
+pub mod slash;
 
 pub use request_dialog::PendingTradeRequest;
+pub use slash::TradeSlashSubmitted;
 
 pub struct TradeWindowPlugin;
 
@@ -18,6 +20,7 @@ impl Plugin for TradeWindowPlugin {
             app.add_plugins(FeathersPlugins);
         }
         app.init_resource::<PendingTradeRequest>()
+            .add_message::<TradeSlashSubmitted>()
             .add_systems(
                 Update,
                 (
@@ -32,6 +35,10 @@ impl Plugin for TradeWindowPlugin {
             .add_systems(
                 Update,
                 feedback::ingest_trade_feedback.run_if(in_state(GameState::InGame)),
+            )
+            .add_systems(
+                Update,
+                slash::dispatch_trade_slash.run_if(in_state(GameState::InGame)),
             )
             .add_systems(
                 OnExit(GameState::InGame),

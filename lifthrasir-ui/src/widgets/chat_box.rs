@@ -25,6 +25,7 @@ use crate::widgets::mount::parse_mount_slash;
 use crate::widgets::navigation::slash::{NaviSlash, parse_navi_slash};
 use crate::widgets::party::slash::{PartySlashSubmitted, parse_party_slash};
 use crate::widgets::placeholder::Placeholder;
+use crate::widgets::trade_window::slash::{TradeSlashSubmitted, parse_trade_slash};
 
 /// Oldest lines past this are dropped so the history (and its layout) stays bounded.
 const MAX_CHAT_LINES: usize = 100;
@@ -55,6 +56,7 @@ pub(crate) struct ChatInput;
 pub(crate) struct ChatInputWriters<'w> {
     chat: MessageWriter<'w, ChatSendRequested>,
     party: MessageWriter<'w, PartySlashSubmitted>,
+    trade: MessageWriter<'w, TradeSlashSubmitted>,
     emote: MessageWriter<'w, EmoteRequested>,
     mount: MessageWriter<'w, MountPeco>,
     navi: MessageWriter<'w, NaviSlash>,
@@ -439,7 +441,8 @@ fn append_incoming_chat(
 ///   A recognized emote slash (`parse_emote_slash`) is tried first and writes
 ///   `EmoteRequested`; then `/mount`//`/unmount` (`parse_mount_slash`) writes
 ///   `MountPeco`; otherwise a recognized party slash command
-///   (`parse_party_slash`) is queued as `PartySlashSubmitted`; then a recognized navigation
+///   (`parse_party_slash`) is queued as `PartySlashSubmitted`; then `/trade <name>`
+///   (`parse_trade_slash`) is queued as `TradeSlashSubmitted`; then a recognized navigation
 ///   slash (`parse_navi_slash`) is queued as `NaviSlash`; `/guild` is queued as
 ///   `GuildSlashSubmitted` (including syntax errors); otherwise it is sent as normal chat.
 ///
@@ -476,6 +479,8 @@ pub(crate) fn chat_input_control(
                 writers.mount.write(MountPeco { mount });
             } else if let Some(slash) = parse_party_slash(message) {
                 writers.party.write(PartySlashSubmitted(slash));
+            } else if let Some(name) = parse_trade_slash(message) {
+                writers.trade.write(TradeSlashSubmitted(name));
             } else if let Some(slash) = parse_navi_slash(message) {
                 writers.navi.write(slash);
             } else if let Some(slash) = parse_guild_slash(message) {
@@ -537,6 +542,7 @@ mod tests {
         app.init_resource::<InputFocus>();
         app.add_message::<ChatSendRequested>();
         app.add_message::<PartySlashSubmitted>();
+        app.add_message::<TradeSlashSubmitted>();
         app.add_message::<GuildSlashSubmitted>();
         app.add_message::<EmoteRequested>();
         app.add_message::<MountPeco>();
@@ -757,6 +763,26 @@ mod tests {
             "a recognized emote never reaches the party parser"
         );
         assert!(navi_slash_messages(&app).is_empty());
+    }
+
+    #[test]
+    fn enter_with_trade_slash_writes_trade_not_chat() {
+        let (mut app, chat) = chat_control_app("/trade Bob");
+        app.world_mut()
+            .resource_mut::<InputFocus>()
+            .set(chat, FocusCause::Navigated);
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Enter);
+        app.update();
+        let submitted: Vec<_> = app
+            .world()
+            .resource::<Messages<TradeSlashSubmitted>>()
+            .iter_current_update_messages()
+            .map(|m| m.0.clone())
+            .collect();
+        assert_eq!(submitted, ["Bob"]);
+        assert!(chat_messages(&app).is_empty());
     }
 
     #[test]

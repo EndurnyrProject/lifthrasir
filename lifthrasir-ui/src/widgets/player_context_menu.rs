@@ -1,4 +1,4 @@
-//! One right-click popup for independently eligible Party and Guild invitations.
+//! One right-click popup for eligible Party, Guild, and Trade actions.
 
 use bevy::prelude::*;
 use bevy::text::{FontSize, FontSourceTemplate};
@@ -9,7 +9,8 @@ use game_engine::domain::entities::components::NetworkEntity;
 use game_engine::domain::entities::types::ObjectType;
 use game_engine::domain::guild::GuildState;
 use game_engine::domain::party::PartyState;
-use net_contract::commands::{GuildInviteRequested, PartyInviteRequested};
+use game_engine::domain::trade::TradeSession;
+use net_contract::commands::{GuildInviteRequested, PartyInviteRequested, RequestTrade};
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};
 
 use crate::theme;
@@ -25,21 +26,23 @@ pub struct PlayerContextMenuRoot;
 pub struct ContextMenuTarget(pub u32);
 
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
-enum InviteAction {
+enum MenuAction {
     #[default]
     Party,
     Guild,
+    Trade,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PlayerMenuActions {
     pub party: bool,
     pub guild: bool,
+    pub trade: bool,
 }
 
 impl PlayerMenuActions {
     fn any(self) -> bool {
-        self.party || self.guild
+        self.party || self.guild || self.trade
     }
 }
 
@@ -53,6 +56,7 @@ pub fn eligible_actions(
     is_local: bool,
     party: bool,
     guild: bool,
+    trade: bool,
 ) -> PlayerMenuActions {
     let valid_target = button == PointerButton::Secondary
         && !is_local
@@ -60,7 +64,11 @@ pub fn eligible_actions(
     if !valid_target {
         return PlayerMenuActions::default();
     }
-    PlayerMenuActions { party, guild }
+    PlayerMenuActions {
+        party,
+        guild,
+        trade,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -72,6 +80,7 @@ pub fn open_player_menu(
     party: Res<PartyState>,
     guild: Res<GuildState>,
     guild_ui: Res<GuildUi>,
+    trade: Res<TradeSession>,
     existing: Query<Entity, With<PlayerContextMenuRoot>>,
     mut commands: Commands,
 ) {
@@ -84,6 +93,7 @@ pub fn open_player_menu(
         is_local,
         party.is_leader(session.char_id),
         guild_ui.pending.is_none() && guild.can_invite(session.char_id),
+        !trade.is_open(),
     );
     if !actions.any() {
         return;
@@ -120,10 +130,13 @@ fn context_menu(cursor: Vec2, target: u32, actions: PlayerMenuActions) -> impl S
 fn card(cursor: Vec2, actions: PlayerMenuActions) -> impl Scene {
     let mut buttons = Vec::new();
     if actions.party {
-        buttons.push(invite_button("Invite to Party", InviteAction::Party));
+        buttons.push(invite_button("Invite to Party", MenuAction::Party));
     }
     if actions.guild {
-        buttons.push(invite_button("Invite to Guild", InviteAction::Guild));
+        buttons.push(invite_button("Invite to Guild", MenuAction::Guild));
+    }
+    if actions.trade {
+        buttons.push(invite_button("Trade", MenuAction::Trade));
     }
     bsn! {
         Node {
@@ -145,7 +158,7 @@ fn card(cursor: Vec2, actions: PlayerMenuActions) -> impl Scene {
     }
 }
 
-fn invite_button(label: &'static str, action: InviteAction) -> impl Scene {
+fn invite_button(label: &'static str, action: MenuAction) -> impl Scene {
     bsn! {
         template_value(action)
         @FeathersButton {
@@ -169,12 +182,14 @@ fn invite_button(label: &'static str, action: InviteAction) -> impl Scene {
 #[allow(clippy::too_many_arguments)]
 fn on_invite(
     activate: On<Activate>,
-    action: Query<&InviteAction>,
+    action: Query<&MenuAction>,
     menu: Query<(Entity, &ContextMenuTarget), With<PlayerContextMenuRoot>>,
     generation: Res<ZoneSessionGeneration>,
+    trade: Res<TradeSession>,
     mut guild_ui: ResMut<GuildUi>,
     mut party_writer: MessageWriter<PartyInviteRequested>,
     mut guild_writer: MessageWriter<GuildInviteRequested>,
+    mut trade_writer: MessageWriter<RequestTrade>,
     mut commands: Commands,
 ) {
     let Ok(action) = action.get(activate.entity) else {
@@ -184,17 +199,23 @@ fn on_invite(
         return;
     };
     match action {
-        InviteAction::Party => {
+        MenuAction::Party => {
             party_writer.write(PartyInviteRequested {
                 target_char_id: target.0,
                 target_name: String::new(),
             });
         }
-        InviteAction::Guild => {
+        MenuAction::Guild => {
             if let Some(command) = request_invite(&mut guild_ui, *generation, target.0, "") {
                 guild_writer.write(command);
             }
         }
+        MenuAction::Trade if !trade.is_open() => {
+            trade_writer.write(RequestTrade {
+                target_char_id: target.0,
+            });
+        }
+        MenuAction::Trade => {}
     }
     commands.entity(root).despawn();
 }
@@ -222,8 +243,19 @@ mod tests {
     fn party_and_guild_eligibility_are_independent() {
         for (party, guild) in [(true, false), (false, true), (true, true), (false, false)] {
             assert_eq!(
-                eligible_actions(PointerButton::Secondary, Some(&pc()), false, party, guild),
-                PlayerMenuActions { party, guild }
+                eligible_actions(
+                    PointerButton::Secondary,
+                    Some(&pc()),
+                    false,
+                    party,
+                    guild,
+                    false
+                ),
+                PlayerMenuActions {
+                    party,
+                    guild,
+                    trade: false
+                }
             );
         }
     }
@@ -248,21 +280,24 @@ mod tests {
         assert_eq!(
             rendered_actions(PlayerMenuActions {
                 party: true,
-                guild: false
+                guild: false,
+                trade: false,
             }),
             ["Invite to Party"]
         );
         assert_eq!(
             rendered_actions(PlayerMenuActions {
                 party: false,
-                guild: true
+                guild: true,
+                trade: false,
             }),
             ["Invite to Guild"]
         );
         assert_eq!(
             rendered_actions(PlayerMenuActions {
                 party: true,
-                guild: true
+                guild: true,
+                trade: false,
             }),
             ["Invite to Party", "Invite to Guild"]
         );
@@ -273,31 +308,139 @@ mod tests {
     fn local_non_pc_and_primary_clicks_are_never_claimed() {
         let mob = NetworkEntity::new(2, 2, ObjectType::Mob);
         assert_eq!(
-            eligible_actions(PointerButton::Secondary, Some(&pc()), true, true, true),
+            eligible_actions(
+                PointerButton::Secondary,
+                Some(&pc()),
+                true,
+                true,
+                true,
+                true
+            ),
             PlayerMenuActions::default()
         );
         assert_eq!(
-            eligible_actions(PointerButton::Secondary, Some(&mob), false, true, true),
+            eligible_actions(
+                PointerButton::Secondary,
+                Some(&mob),
+                false,
+                true,
+                true,
+                true
+            ),
             PlayerMenuActions::default()
         );
         assert_eq!(
-            eligible_actions(PointerButton::Primary, Some(&pc()), false, true, true),
+            eligible_actions(PointerButton::Primary, Some(&pc()), false, true, true, true),
             PlayerMenuActions::default()
         );
+    }
+
+    #[test]
+    fn trade_only_available_for_other_pc_and_visible_in_menu() {
+        assert_eq!(
+            eligible_actions(
+                PointerButton::Secondary,
+                Some(&pc()),
+                false,
+                false,
+                false,
+                true
+            ),
+            PlayerMenuActions {
+                party: false,
+                guild: false,
+                trade: true
+            }
+        );
+        assert!(
+            !eligible_actions(
+                PointerButton::Secondary,
+                Some(&pc()),
+                false,
+                false,
+                false,
+                false
+            )
+            .trade
+        );
+        assert_eq!(
+            rendered_actions(PlayerMenuActions {
+                party: false,
+                guild: false,
+                trade: true
+            }),
+            ["Trade"]
+        );
+    }
+
+    #[test]
+    fn trade_action_sends_clicked_gid_and_closes_menu() {
+        let mut app = App::new();
+        app.add_message::<PartyInviteRequested>()
+            .add_message::<GuildInviteRequested>()
+            .add_message::<RequestTrade>()
+            .insert_resource(ZoneSessionGeneration(3))
+            .init_resource::<TradeSession>()
+            .init_resource::<GuildUi>();
+        let menu = app
+            .world_mut()
+            .spawn((PlayerContextMenuRoot, ContextMenuTarget(1337)))
+            .id();
+        let button = app
+            .world_mut()
+            .spawn(MenuAction::Trade)
+            .observe(on_invite)
+            .id();
+        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut().flush();
+        let sent: Vec<_> = app
+            .world()
+            .resource::<Messages<RequestTrade>>()
+            .iter_current_update_messages()
+            .collect();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].target_char_id, 1337);
+        assert!(app.world().get_entity(menu).is_err());
+    }
+
+    #[test]
+    fn stale_trade_menu_cannot_send_while_session_open() {
+        let mut app = App::new();
+        app.add_message::<PartyInviteRequested>()
+            .add_message::<GuildInviteRequested>()
+            .add_message::<RequestTrade>()
+            .insert_resource(ZoneSessionGeneration(3))
+            .init_resource::<TradeSession>()
+            .init_resource::<GuildUi>();
+        app.world_mut()
+            .resource_mut::<TradeSession>()
+            .open(77, "Alice".into());
+        app.world_mut()
+            .spawn((PlayerContextMenuRoot, ContextMenuTarget(1337)));
+        let button = app
+            .world_mut()
+            .spawn(MenuAction::Trade)
+            .observe(on_invite)
+            .id();
+        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut().flush();
+        assert!(app.world().resource::<Messages<RequestTrade>>().is_empty());
     }
 
     #[test]
     fn party_action_preserves_the_existing_command_payload() {
         let mut app = App::new();
         app.add_message::<PartyInviteRequested>()
+            .add_message::<RequestTrade>()
             .add_message::<GuildInviteRequested>()
             .insert_resource(ZoneSessionGeneration(3))
+            .init_resource::<TradeSession>()
             .init_resource::<GuildUi>();
         app.world_mut()
             .spawn((PlayerContextMenuRoot, ContextMenuTarget(1337)));
         let button = app
             .world_mut()
-            .spawn(InviteAction::Party)
+            .spawn(MenuAction::Party)
             .observe(on_invite)
             .id();
 
@@ -316,14 +459,16 @@ mod tests {
     fn guild_action_uses_the_same_invite_request_as_by_name() {
         let mut app = App::new();
         app.add_message::<PartyInviteRequested>()
+            .add_message::<RequestTrade>()
             .add_message::<GuildInviteRequested>()
             .insert_resource(ZoneSessionGeneration(3))
+            .init_resource::<TradeSession>()
             .init_resource::<GuildUi>();
         app.world_mut()
             .spawn((PlayerContextMenuRoot, ContextMenuTarget(1337)));
         let button = app
             .world_mut()
-            .spawn(InviteAction::Guild)
+            .spawn(MenuAction::Guild)
             .observe(on_invite)
             .id();
 
