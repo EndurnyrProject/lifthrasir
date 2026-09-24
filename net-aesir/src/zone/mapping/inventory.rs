@@ -15,7 +15,7 @@ pub fn inventory_list(l: net::InventoryList) -> InventoryReceived {
     }
 }
 
-fn inventory_item(i: net::InventoryItem) -> ZoneInventoryItem {
+pub(super) fn inventory_item(i: net::InventoryItem) -> ZoneInventoryItem {
     ZoneInventoryItem {
         index: i.index,
         nameid: i.nameid,
