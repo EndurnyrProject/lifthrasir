@@ -35,6 +35,7 @@ pub mod skill_target_toast;
 pub mod status_icons;
 pub mod storage_window;
 pub mod system_dialog;
+pub mod trade_window;
 
 pub struct InGameHudPlugin;
 
@@ -58,6 +59,7 @@ impl Plugin for InGameHudPlugin {
             status_icons::StatusIconsPlugin,
             storage_window::StorageWindowPlugin,
         ));
+        app.add_plugins(trade_window::TradeWindowPlugin);
         app.add_plugins(skill_menu::SkillMenuPlugin);
         app.add_plugins(navigation::NavigationUiPlugin);
         app.add_plugins(skill_target_toast::SkillTargetToastPlugin);
