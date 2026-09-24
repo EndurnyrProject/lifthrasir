@@ -27,6 +27,7 @@ pub use domain::party::PartyPlugin;
 pub use domain::settings::SettingsRuntimePlugin;
 pub use domain::skill_units::SkillUnitsPlugin;
 pub use domain::storage::StoragePlugin;
+pub use domain::trade::TradePlugin;
 pub use domain::world::GltfMapPlugin;
 pub use domain::world::WorldDomainPlugin;
 pub use infrastructure::accessory::{AccessoryDb, AccessoryDbPlugin};
@@ -74,6 +75,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(InventoryPlugin)
             .add(CartPlugin)
             .add(StoragePlugin)
+            .add(TradePlugin)
             .add(EmotePlugin)
             .add(PartyPlugin)
             .add(GuildPlugin)

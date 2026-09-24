@@ -36,6 +36,7 @@ pub enum SystemDialogKind {
     #[default]
     Generic,
     PartyInvite,
+    TradeRequest,
     GuildInvite,
     GuildLeave,
     GuildExpel,
