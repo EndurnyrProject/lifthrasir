@@ -11,6 +11,7 @@ mod server_info;
 mod shop;
 mod skill_units;
 mod storage;
+mod trade;
 
 pub use cart::*;
 pub use char_types::*;
@@ -23,3 +24,4 @@ pub use server_info::*;
 pub use shop::*;
 pub use skill_units::*;
 pub use storage::*;
+pub use trade::*;

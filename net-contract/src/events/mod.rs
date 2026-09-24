@@ -14,6 +14,7 @@ pub mod production;
 pub mod shop;
 pub mod skill_menu;
 pub mod storage;
+pub mod trade;
 pub mod viewpoint;
 pub mod zone;
 
@@ -31,5 +32,6 @@ pub use production::*;
 pub use shop::*;
 pub use skill_menu::*;
 pub use storage::*;
+pub use trade::*;
 pub use viewpoint::*;
 pub use zone::*;

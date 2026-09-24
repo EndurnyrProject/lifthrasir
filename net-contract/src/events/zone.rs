@@ -198,7 +198,7 @@ pub struct ParamChanged {
 }
 
 /// One inventory slot, mirroring the proto InventoryList item shape.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ZoneInventoryItem {
     pub index: u32,
     pub nameid: u32,

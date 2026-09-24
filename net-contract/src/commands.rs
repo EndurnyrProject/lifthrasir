@@ -492,3 +492,54 @@ pub struct AnswerSkillMenu {
     /// The player dismissed the menu; `selected_id` is ignored when set.
     pub cancel: bool,
 }
+
+/// Client-to-server request to trade with the character identified by `target_char_id`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct RequestTrade {
+    pub target_char_id: u32,
+}
+
+/// Client-to-server answer to a pending trade request.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct RespondTrade {
+    pub accept: bool,
+}
+
+/// Client-to-server request to offer `amount` of the inventory item at `index`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct AddTradeItem {
+    pub index: u32,
+    pub amount: u32,
+}
+
+/// Client-to-server request to remove the offered item at inventory `index`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct RemoveTradeItem {
+    pub index: u32,
+}
+
+/// Client-to-server request to offer `amount` zeny.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SetTradeZeny {
+    pub amount: u64,
+}
+
+/// Client-to-server request to lock the local player's offer.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct LockTrade;
+
+/// Client-to-server request to confirm the locked trade.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ConfirmTrade;
+
+/// Client-to-server request to cancel the trade.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct CancelTrade;
