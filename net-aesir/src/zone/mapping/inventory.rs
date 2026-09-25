@@ -1,7 +1,7 @@
 use crate::proto::aesir::net;
 use net_contract::events::{
-    InventoryReceived, ItemAdded, ItemBound, ItemEquipped, ItemRemoved, ItemUnequipped,
-    ItemUseFailed, ZoneInventoryItem,
+    CardComposeOutcome, CardCompositionFinished, CardTargetsOffered, InventoryReceived, ItemAdded,
+    ItemBound, ItemEquipped, ItemRemoved, ItemUnequipped, ItemUseFailed, ZoneInventoryItem,
 };
 
 pub fn inventory_list(l: net::InventoryList) -> InventoryReceived {
@@ -82,6 +82,59 @@ pub fn unequip_result(u: net::UnequipResult) -> ItemUnequipped {
     }
 }
 
+pub fn card_target_list(list: net::CardTargetList) -> CardTargetsOffered {
+    CardTargetsOffered {
+        card_index: list.card_index,
+        equipment_indices: list.equipment_indices,
+    }
+}
+
+pub fn card_compose_result(result: net::CardComposeResult) -> CardCompositionFinished {
+    CardCompositionFinished {
+        card_index: result.card_index,
+        equipment_index: result.equipment_index,
+        outcome: match net::CardComposeResultCode::try_from(result.code) {
+            Ok(net::CardComposeResultCode::CardComposeSuccess) => CardComposeOutcome::Success,
+            Ok(net::CardComposeResultCode::CardComposeCardNotFound) => {
+                CardComposeOutcome::CardNotFound
+            }
+            Ok(net::CardComposeResultCode::CardComposeNotACard) => CardComposeOutcome::NotACard,
+            Ok(net::CardComposeResultCode::CardComposeSourceEquipped) => {
+                CardComposeOutcome::SourceEquipped
+            }
+            Ok(net::CardComposeResultCode::CardComposeTargetNotFound) => {
+                CardComposeOutcome::TargetNotFound
+            }
+            Ok(net::CardComposeResultCode::CardComposeSameInventorySlot) => {
+                CardComposeOutcome::SameInventorySlot
+            }
+            Ok(net::CardComposeResultCode::CardComposeNotEquipment) => {
+                CardComposeOutcome::NotEquipment
+            }
+            Ok(net::CardComposeResultCode::CardComposeTargetUnidentified) => {
+                CardComposeOutcome::TargetUnidentified
+            }
+            Ok(net::CardComposeResultCode::CardComposeTargetEquipped) => {
+                CardComposeOutcome::TargetEquipped
+            }
+            Ok(net::CardComposeResultCode::CardComposeLocationMismatch) => {
+                CardComposeOutcome::LocationMismatch
+            }
+            Ok(net::CardComposeResultCode::CardComposeNoFreeSocket) => {
+                CardComposeOutcome::NoFreeSocket
+            }
+            Ok(net::CardComposeResultCode::CardComposeItemUseDisabled) => {
+                CardComposeOutcome::ItemUseDisabled
+            }
+            Ok(net::CardComposeResultCode::CardComposePersistenceFailed) => {
+                CardComposeOutcome::PersistenceFailed
+            }
+            Err(_) => CardComposeOutcome::Unknown(result.code),
+        },
+        cards: result.cards,
+    }
+}
+
 pub fn item_use_result(r: net::ItemUseResult) -> ItemUseFailed {
     ItemUseFailed {
         index: r.index,
@@ -92,6 +145,74 @@ pub fn item_use_result(r: net::ItemUseResult) -> ItemUseFailed {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn card_compose_codes_map_to_distinct_neutral_outcomes() {
+        use net::CardComposeResultCode as Wire;
+        let cases = [
+            (Wire::CardComposeSuccess, CardComposeOutcome::Success),
+            (
+                Wire::CardComposeCardNotFound,
+                CardComposeOutcome::CardNotFound,
+            ),
+            (Wire::CardComposeNotACard, CardComposeOutcome::NotACard),
+            (
+                Wire::CardComposeSourceEquipped,
+                CardComposeOutcome::SourceEquipped,
+            ),
+            (
+                Wire::CardComposeTargetNotFound,
+                CardComposeOutcome::TargetNotFound,
+            ),
+            (
+                Wire::CardComposeSameInventorySlot,
+                CardComposeOutcome::SameInventorySlot,
+            ),
+            (
+                Wire::CardComposeNotEquipment,
+                CardComposeOutcome::NotEquipment,
+            ),
+            (
+                Wire::CardComposeTargetUnidentified,
+                CardComposeOutcome::TargetUnidentified,
+            ),
+            (
+                Wire::CardComposeTargetEquipped,
+                CardComposeOutcome::TargetEquipped,
+            ),
+            (
+                Wire::CardComposeLocationMismatch,
+                CardComposeOutcome::LocationMismatch,
+            ),
+            (
+                Wire::CardComposeNoFreeSocket,
+                CardComposeOutcome::NoFreeSocket,
+            ),
+            (
+                Wire::CardComposeItemUseDisabled,
+                CardComposeOutcome::ItemUseDisabled,
+            ),
+            (
+                Wire::CardComposePersistenceFailed,
+                CardComposeOutcome::PersistenceFailed,
+            ),
+        ];
+        for (code, expected) in cases {
+            let result = card_compose_result(net::CardComposeResult {
+                code: code as i32,
+                ..Default::default()
+            });
+            assert_eq!(result.outcome, expected, "{code:?}");
+        }
+        assert_eq!(
+            card_compose_result(net::CardComposeResult {
+                code: 99,
+                ..Default::default()
+            })
+            .outcome,
+            CardComposeOutcome::Unknown(99)
+        );
+    }
 
     fn sample_item(index: u32, nameid: u32) -> net::InventoryItem {
         net::InventoryItem {
