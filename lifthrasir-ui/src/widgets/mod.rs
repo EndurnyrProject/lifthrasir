@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use game_engine::core::state::GameState;
 
 pub mod announcement;
+pub mod card_compounding;
 pub mod character_info;
 pub mod character_window;
 pub mod chat_box;
@@ -60,6 +61,7 @@ impl Plugin for InGameHudPlugin {
             storage_window::StorageWindowPlugin,
         ));
         app.add_plugins(trade_window::TradeWindowPlugin);
+        app.add_plugins(card_compounding::CardCompoundingPlugin);
         app.add_plugins(skill_menu::SkillMenuPlugin);
         app.add_plugins(navigation::NavigationUiPlugin);
         app.add_plugins(skill_target_toast::SkillTargetToastPlugin);

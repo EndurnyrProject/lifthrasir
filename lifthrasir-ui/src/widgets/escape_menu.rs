@@ -16,6 +16,7 @@ use net_contract::commands::RespawnRequested;
 
 use crate::theme;
 use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER, install_norse_theme};
+use crate::widgets::card_compounding::ActiveCardPicker;
 use crate::widgets::info_modal::InfoModalRoot;
 use crate::widgets::npc_dialog::ActiveNpcDialog;
 use crate::widgets::settings_window::{SettingsUi, SettingsWindowRoot};
@@ -58,6 +59,7 @@ struct EscapeBlockers<'w, 's> {
     npc_dialog: Option<Res<'w, ActiveNpcDialog>>,
     shop: Option<Res<'w, ShopSession>>,
     skill_menu: Option<Res<'w, ActiveSkillMenu>>,
+    card_picker: Option<Res<'w, ActiveCardPicker>>,
     modal: Query<'w, 's, (), ModalBlocker>,
     dead: Query<'w, 's, (), DeadLocalPlayer>,
 }
@@ -68,6 +70,7 @@ impl EscapeBlockers<'_, '_> {
             || self.npc_dialog.is_some()
             || self.shop.is_some()
             || self.skill_menu.is_some()
+            || self.card_picker.is_some()
             || !self.modal.is_empty()
             || !self.dead.is_empty()
     }
