@@ -28,13 +28,13 @@ pub struct MapModel {
     pub node_name: String,
 }
 
-/// Converts RSW's `anim_type` field to our enum. Most RO models should loop
-/// by default for continuous animation.
+/// RSW documents `0` as static and `2` as looping. Unknown values retain
+/// the existing looping fallback.
 pub(crate) fn rsw_anim_type_to_animation_type(anim_type: u32) -> AnimationType {
     match anim_type {
         0 => AnimationType::None,
         1 => AnimationType::Loop,
-        2 => AnimationType::Once,
+        2 => AnimationType::Loop,
         _ => AnimationType::Loop,
     }
 }
@@ -782,7 +782,7 @@ mod tests {
     fn maps_rsw_anim_types_to_repeat_modes() {
         assert_eq!(prop_repeat_mode(0), None);
         assert_eq!(prop_repeat_mode(1), Some(RepeatAnimation::Forever));
-        assert_eq!(prop_repeat_mode(2), Some(RepeatAnimation::Never));
+        assert_eq!(prop_repeat_mode(2), Some(RepeatAnimation::Forever));
         assert_eq!(prop_repeat_mode(99), Some(RepeatAnimation::Forever));
     }
 
