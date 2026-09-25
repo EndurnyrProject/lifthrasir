@@ -165,6 +165,12 @@ pub fn update_camera_target_cache(
     }
 }
 
+type WheelUiInput<'w, 's> = (
+    MessageReader<'w, 's, MouseWheel>,
+    Res<'w, HoverMap>,
+    Query<'w, 's, Option<&'static Pickable>, (With<ComputedNode>, Without<Window>)>,
+);
+
 /// Main camera follow system with smooth interpolation, zoom control, and rotation.
 #[auto_add_system(
     plugin = crate::LifthrasirPlugin,
@@ -175,9 +181,7 @@ pub fn camera_follow_system(
     time: Res<Time>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     ui_focus: Res<UiFocus>,
-    mut mouse_wheel_events: MessageReader<MouseWheel>,
-    hover_map: Res<HoverMap>,
-    ui_nodes: Query<Option<&Pickable>, (With<ComputedNode>, Without<Window>)>,
+    (mut mouse_wheel_events, hover_map, ui_nodes): WheelUiInput,
     mut rotation_delta: ResMut<CameraRotationDelta>,
     active_profile: Res<ActiveCameraProfile>,
     mut camera_query: Query<
