@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.13.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.12.0...v0.13.0) (2026-09-25)
+
+
+### Features
+
+* Added /guild command ([2217a2b](https://github.com/EndurnyrProject/lifthrasir/commit/2217a2bc5d38038d24579ea4c61cf40e0c281db6))
+* complete character list and deletion acknowledgments ([1f33ad4](https://github.com/EndurnyrProject/lifthrasir/commit/1f33ad4a2e596fd6955ce8deffb86a6c47d802ce))
+* complete guild storage support ([2c75ca1](https://github.com/EndurnyrProject/lifthrasir/commit/2c75ca1b06058ae4d7c740e1e8abb748ad0dd37a))
+* **game-engine:** add authoritative TradeSession state ([e7e2959](https://github.com/EndurnyrProject/lifthrasir/commit/e7e2959ac15b2c1c126bdff60f68681c8a10b8b4))
+* **guild:** accept PNG emblems and key BMP magenta to transparent ([148d51f](https://github.com/EndurnyrProject/lifthrasir/commit/148d51f9a9975cc425ffc3be66120b799468cad9))
+* **guild:** complete guild contracts and ingress ([a49d22c](https://github.com/EndurnyrProject/lifthrasir/commit/a49d22c84b82ec36011df5364f84bd048f2e0952))
+* **guild:** display progression and allocate guild skills ([952c505](https://github.com/EndurnyrProject/lifthrasir/commit/952c5058af7001536b602b8f9f89d9e11051fa72))
+* **guild:** edit storage permissions and experience tax ([6fe1f23](https://github.com/EndurnyrProject/lifthrasir/commit/6fe1f23e4dae62fd97d0d15370e440d2cd65a63d))
+* **guild:** handle progression and diplomacy feedback ([a7ae973](https://github.com/EndurnyrProject/lifthrasir/commit/a7ae973dd0733f017d1b7ff960186efc22ffb372))
+* **guild:** manage alliances and antagonists ([7b916ca](https://github.com/EndurnyrProject/lifthrasir/commit/7b916cadefb61059839d8042937bc03e60ed1b94))
+* **guild:** send skill and relation requests ([7a10ed4](https://github.com/EndurnyrProject/lifthrasir/commit/7a10ed4d15bfe8776c87d76355b54c4d9f95ca40))
+* handle server-authoritative knockback ([1920ffc](https://github.com/EndurnyrProject/lifthrasir/commit/1920ffca847a8960692938e21e3f5d09ba2e9bf7))
+* handle stat allocation acknowledgments ([d509b4b](https://github.com/EndurnyrProject/lifthrasir/commit/d509b4b4e425f671ca9c48fdb033baa4d44f8d64))
+* **net-aesir:** wire player trade commands and events ([c3cef47](https://github.com/EndurnyrProject/lifthrasir/commit/c3cef477661a28e4f813b6d67a2327ac511aea08))
+* **net-contract:** add player trade commands, events, and cancel reason ([49c0d7c](https://github.com/EndurnyrProject/lifthrasir/commit/49c0d7c2bd99033402f89b39549461541c22589c))
+* **ui:** guild skills as icon grid with right-click info modal ([047537b](https://github.com/EndurnyrProject/lifthrasir/commit/047537b357faeaaf81cf8f9de85fcf45b78f499c))
+* **ui:** initiate player trade from context menu and slash command ([38a2558](https://github.com/EndurnyrProject/lifthrasir/commit/38a2558bc7d8097bcd2bb0a0f73eb4855bd9d0d7))
+* **ui:** player trade window ([65dfb71](https://github.com/EndurnyrProject/lifthrasir/commit/65dfb71d265b94db2b4e077fa51052f3221626a3))
+* **ui:** trade request dialog and trade feedback lines ([d6bb17b](https://github.com/EndurnyrProject/lifthrasir/commit/d6bb17b3f59100caf526b0c45014976e2bf34f91))
+
+
+### Bug Fixes
+
+* **entities:** correct RO direction mapping ([ae0711f](https://github.com/EndurnyrProject/lifthrasir/commit/ae0711f2cb0a16955facedcd5f65710b8b7c2fde))
+* **models:** Fixed models looping animation ([719ac85](https://github.com/EndurnyrProject/lifthrasir/commit/719ac8540c1b0d2823622ee91435eec328d54bdb))
+* preserve party action rejection reasons ([e46b937](https://github.com/EndurnyrProject/lifthrasir/commit/e46b937d53eea7da5d120049138a2018d7ca2418))
+* **scroll:** Fixed the scroll bar on UIs to not scroll zoom ([bea3442](https://github.com/EndurnyrProject/lifthrasir/commit/bea34422c0b80503c953d652d30e3226f30306d3))
+* **ui:** guild feedback as auto-dismissing banner with plain wording ([d28af50](https://github.com/EndurnyrProject/lifthrasir/commit/d28af50e75d2aeff3c3d0ba8908ecf1371156700))
+* **ui:** hidden guild feedback banner no longer reserves layout space ([0055ac4](https://github.com/EndurnyrProject/lifthrasir/commit/0055ac4f721f8960fdfac1b320edbc5273f9abb7))
+* **ui:** Improving guild positions UI ([654f4dd](https://github.com/EndurnyrProject/lifthrasir/commit/654f4dd511c0bb6446bdc30c07643c7e409f579f))
+
 ## [0.12.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.11.0...v0.12.0) (2026-09-14)
 
 
