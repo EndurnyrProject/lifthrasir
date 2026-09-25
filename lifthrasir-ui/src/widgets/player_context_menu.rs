@@ -1,5 +1,6 @@
 //! One right-click popup for eligible Party, Guild, and Trade actions.
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
@@ -71,29 +72,34 @@ pub fn eligible_actions(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Social state that decides which menu actions the local player may use.
+#[derive(SystemParam)]
+pub struct MenuEligibility<'w> {
+    session: Res<'w, ZoneSession>,
+    party: Res<'w, PartyState>,
+    guild: Res<'w, GuildState>,
+    guild_ui: Res<'w, GuildUi>,
+    trade: Res<'w, TradeSession>,
+}
+
 pub fn open_player_menu(
     mut click: On<Pointer<Click>>,
     child_of: Query<&ChildOf>,
     nets: Query<&NetworkEntity>,
-    session: Res<ZoneSession>,
-    party: Res<PartyState>,
-    guild: Res<GuildState>,
-    guild_ui: Res<GuildUi>,
-    trade: Res<TradeSession>,
+    state: MenuEligibility,
     existing: Query<Entity, With<PlayerContextMenuRoot>>,
     mut commands: Commands,
 ) {
     let root = pick_root(click.entity, &child_of);
     let net = nets.get(root).ok();
-    let is_local = net.is_some_and(|net| net.gid == session.char_id);
+    let me = state.session.char_id;
     let actions = eligible_actions(
         click.event.button,
         net,
-        is_local,
-        party.is_leader(session.char_id),
-        guild_ui.pending.is_none() && guild.can_invite(session.char_id),
-        !trade.is_open(),
+        net.is_some_and(|net| net.gid == me),
+        state.party.is_leader(me),
+        state.guild_ui.pending.is_none() && state.guild.can_invite(me),
+        !state.trade.is_open(),
     );
     if !actions.any() {
         return;
@@ -179,17 +185,47 @@ fn invite_button(label: &'static str, action: MenuAction) -> impl Scene {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Everything a menu button needs to turn its action into an outbound command.
+#[derive(SystemParam)]
+struct InviteSender<'w> {
+    generation: Res<'w, ZoneSessionGeneration>,
+    trade: Res<'w, TradeSession>,
+    guild_ui: ResMut<'w, GuildUi>,
+    party_writer: MessageWriter<'w, PartyInviteRequested>,
+    guild_writer: MessageWriter<'w, GuildInviteRequested>,
+    trade_writer: MessageWriter<'w, RequestTrade>,
+}
+
+impl InviteSender<'_> {
+    fn send(&mut self, action: MenuAction, target: u32) {
+        match action {
+            MenuAction::Party => {
+                self.party_writer.write(PartyInviteRequested {
+                    target_char_id: target,
+                    target_name: String::new(),
+                });
+            }
+            MenuAction::Guild => {
+                let generation = *self.generation;
+                if let Some(command) = request_invite(&mut self.guild_ui, generation, target, "") {
+                    self.guild_writer.write(command);
+                }
+            }
+            MenuAction::Trade if !self.trade.is_open() => {
+                self.trade_writer.write(RequestTrade {
+                    target_char_id: target,
+                });
+            }
+            MenuAction::Trade => {}
+        }
+    }
+}
+
 fn on_invite(
     activate: On<Activate>,
     action: Query<&MenuAction>,
     menu: Query<(Entity, &ContextMenuTarget), With<PlayerContextMenuRoot>>,
-    generation: Res<ZoneSessionGeneration>,
-    trade: Res<TradeSession>,
-    mut guild_ui: ResMut<GuildUi>,
-    mut party_writer: MessageWriter<PartyInviteRequested>,
-    mut guild_writer: MessageWriter<GuildInviteRequested>,
-    mut trade_writer: MessageWriter<RequestTrade>,
+    mut sender: InviteSender,
     mut commands: Commands,
 ) {
     let Ok(action) = action.get(activate.entity) else {
@@ -198,25 +234,7 @@ fn on_invite(
     let Ok((root, target)) = menu.single() else {
         return;
     };
-    match action {
-        MenuAction::Party => {
-            party_writer.write(PartyInviteRequested {
-                target_char_id: target.0,
-                target_name: String::new(),
-            });
-        }
-        MenuAction::Guild => {
-            if let Some(command) = request_invite(&mut guild_ui, *generation, target.0, "") {
-                guild_writer.write(command);
-            }
-        }
-        MenuAction::Trade if !trade.is_open() => {
-            trade_writer.write(RequestTrade {
-                target_char_id: target.0,
-            });
-        }
-        MenuAction::Trade => {}
-    }
+    sender.send(*action, target.0);
     commands.entity(root).despawn();
 }
 
