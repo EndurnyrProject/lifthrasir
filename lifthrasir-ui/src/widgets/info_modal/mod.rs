@@ -86,11 +86,12 @@ pub enum ItemActionKind {
 
 impl ItemAction {
     /// The primary action for an item sitting in the bag: Use or Equip by
-    /// category, none for Etc.
+    /// category, except cards (type 6) in Etc also offer Use.
     pub fn for_bag_item(item: &Item) -> Option<Self> {
         let kind = match item.category() {
             ItemCategory::Use => ItemActionKind::Use,
             ItemCategory::Equip => ItemActionKind::Equip,
+            ItemCategory::Etc if item.item_type == 6 => ItemActionKind::Use,
             ItemCategory::Etc => return None,
         };
         Some(Self {
@@ -313,6 +314,30 @@ mod tests {
             })
         );
         assert_eq!(ItemAction::for_bag_item(&etc), None);
+    }
+
+    #[test]
+    fn card_in_bag_has_use_action_without_enabling_other_etc_items() {
+        let card = Item {
+            index: 8,
+            item_type: 6,
+            ..Default::default()
+        };
+        assert_eq!(card.category(), ItemCategory::Etc);
+        assert_eq!(
+            ItemAction::for_bag_item(&card),
+            Some(ItemAction {
+                kind: ItemActionKind::Use,
+                index: 8
+            })
+        );
+        assert_eq!(
+            ItemAction::for_bag_item(&Item {
+                item_type: 3,
+                ..card
+            }),
+            None
+        );
     }
 
     #[test]

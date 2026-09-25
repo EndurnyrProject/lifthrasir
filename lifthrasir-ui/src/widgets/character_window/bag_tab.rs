@@ -99,7 +99,7 @@ enum CellAction {
 }
 
 /// Decides what a click on `item` at `index` does: a double-click uses a Use item and
-/// equips/unequips an Equip item; anything else (single click, Etc item) is `None`.
+/// equips/unequips an Equip item; cards in Etc also use, while other Etc items do not.
 fn cell_action(item: &Item, index: u16, is_double: bool) -> Option<CellAction> {
     if !is_double {
         return None;
@@ -108,6 +108,7 @@ fn cell_action(item: &Item, index: u16, is_double: bool) -> Option<CellAction> {
         ItemCategory::Use => Some(CellAction::Use(index as u32)),
         ItemCategory::Equip if item.is_equipped() => Some(CellAction::Unequip(index)),
         ItemCategory::Equip => Some(CellAction::Equip(index)),
+        ItemCategory::Etc if item.item_type == 6 => Some(CellAction::Use(index as u32)),
         ItemCategory::Etc => None,
     }
 }
@@ -549,6 +550,18 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(cell_action(&potion, 5, false), None);
+    }
+
+    #[test]
+    fn double_click_card_uses_item_but_single_click_only_selects() {
+        let card = Item {
+            index: 8,
+            item_type: 6,
+            ..Default::default()
+        };
+        assert_eq!(card.category(), ItemCategory::Etc);
+        assert_eq!(cell_action(&card, 8, true), Some(CellAction::Use(8)));
+        assert_eq!(cell_action(&card, 8, false), None);
     }
 
     #[test]
