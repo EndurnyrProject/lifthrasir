@@ -57,6 +57,12 @@ impl Inventory {
         item.wear_state = mask;
     }
 
+    pub fn set_cards(&mut self, index: u16, cards: [u32; 4]) {
+        if let Some(item) = self.items.get_mut(&index) {
+            item.cards = cards;
+        }
+    }
+
     pub fn set_bound(&mut self, index: u16, bound: u8) {
         let Some(item) = self.items.get_mut(&index) else {
             return;

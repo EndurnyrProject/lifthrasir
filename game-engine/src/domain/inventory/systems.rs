@@ -2,7 +2,8 @@ use super::item::Item;
 use super::resource::Inventory;
 use bevy::prelude::*;
 use net_contract::events::{
-    InventoryReceived, ItemAdded, ItemBound, ItemRemoved, ZoneInventoryItem,
+    CardComposeOutcome, CardCompositionFinished, InventoryReceived, ItemAdded, ItemBound,
+    ItemRemoved, ZoneInventoryItem,
 };
 
 /// Maps a proto-shaped inventory slot onto the domain `Item`.
@@ -98,6 +99,28 @@ pub fn apply_item_deltas(
     }
 }
 
+pub fn apply_card_composition_results(
+    mut finished: MessageReader<CardCompositionFinished>,
+    mut inventory: ResMut<Inventory>,
+) {
+    for result in finished.read() {
+        if result.outcome != CardComposeOutcome::Success {
+            continue;
+        }
+        let (Ok(index), Ok(cards)) = (
+            u16::try_from(result.equipment_index),
+            <[u32; 4]>::try_from(result.cards.as_slice()),
+        ) else {
+            warn!(
+                "invalid card composition result for equipment index {}",
+                result.equipment_index
+            );
+            continue;
+        };
+        inventory.set_cards(index, cards);
+    }
+}
+
 pub fn reset_inventory(mut inventory: ResMut<Inventory>) {
     *inventory = Inventory::default();
 }
@@ -110,7 +133,8 @@ mod tests {
     use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
     use net_contract::events::{
-        InventoryReceived, ItemAdded, ItemBound, ItemRemoved, ZoneInventoryItem,
+        CardComposeOutcome, CardCompositionFinished, InventoryReceived, ItemAdded, ItemBound,
+        ItemRemoved, ZoneInventoryItem,
     };
 
     fn slot(index: u32, amount: u32) -> ZoneInventoryItem {
@@ -161,6 +185,7 @@ mod tests {
         app.add_message::<ItemAdded>();
         app.add_message::<ItemRemoved>();
         app.add_message::<ItemBound>();
+        app.add_message::<CardCompositionFinished>();
         app.add_plugins(InventoryPlugin);
         app
     }
@@ -192,6 +217,70 @@ mod tests {
 
     fn dump(items: Vec<ZoneInventoryItem>) -> InventoryReceived {
         InventoryReceived { items }
+    }
+
+    #[test]
+    fn successful_compose_updates_only_target_sockets() {
+        let mut app = app_with_inventory();
+        let mut target = slot(9, 1);
+        target.nameid = 2104;
+        target.cards = vec![101, 0, 0, 0];
+        app.world_mut()
+            .write_message(dump(vec![slot(7, 2), target]));
+        app.update();
+
+        app.world_mut().write_message(CardCompositionFinished {
+            card_index: 7,
+            equipment_index: 9,
+            outcome: CardComposeOutcome::Success,
+            cards: vec![101, 202, 0, 0],
+        });
+        app.update();
+
+        let inventory = app.world().resource::<Inventory>();
+        assert_eq!(inventory.get(9).unwrap().cards, [101, 202, 0, 0]);
+        assert_eq!(inventory.get(9).unwrap().item_id, 2104);
+        assert_eq!(inventory.get(7).unwrap().amount, 2);
+
+        app.world_mut().write_message(removed(7, 1));
+        app.update();
+        assert_eq!(
+            app.world().resource::<Inventory>().get(7).unwrap().amount,
+            1
+        );
+    }
+
+    #[test]
+    fn rejected_or_invalid_compose_never_changes_inventory() {
+        let mut app = app_with_inventory();
+        let mut target = slot(9, 1);
+        target.cards = vec![101, 0, 0, 0];
+        app.world_mut()
+            .write_message(dump(vec![slot(7, 2), target]));
+        app.update();
+
+        for (outcome, equipment_index, cards) in [
+            (CardComposeOutcome::NoFreeSocket, 9, vec![]),
+            (CardComposeOutcome::Unknown(99), 9, vec![]),
+            (
+                CardComposeOutcome::Success,
+                u32::from(u16::MAX) + 10,
+                vec![1, 2, 3, 4],
+            ),
+            (CardComposeOutcome::Success, 99, vec![1, 2, 3, 4]),
+            (CardComposeOutcome::Success, 9, vec![1, 2, 3]),
+        ] {
+            app.world_mut().write_message(CardCompositionFinished {
+                card_index: 7,
+                equipment_index,
+                outcome,
+                cards,
+            });
+            app.update();
+            let inventory = app.world().resource::<Inventory>();
+            assert_eq!(inventory.get(9).unwrap().cards, [101, 0, 0, 0]);
+            assert_eq!(inventory.get(7).unwrap().amount, 2);
+        }
     }
 
     #[test]
