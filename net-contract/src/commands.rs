@@ -48,6 +48,14 @@ pub struct UseRequested {
     pub index: u32,
 }
 
+/// Confirm compounding the card in `card_index` into `equipment_index`.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ComposeCardRequested {
+    pub card_index: u32,
+    pub equipment_index: u32,
+}
+
 /// Request to pick up the ground item identified by `ground_id`.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

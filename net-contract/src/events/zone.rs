@@ -224,6 +224,42 @@ pub struct InventoryReceived {
     pub items: Vec<ZoneInventoryItem>,
 }
 
+/// Server-approved equipment client indices for compounding a card.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct CardTargetsOffered {
+    pub card_index: u32,
+    pub equipment_indices: Vec<u32>,
+}
+
+/// The authoritative outcome of a card-compounding request.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct CardCompositionFinished {
+    pub card_index: u32,
+    pub equipment_index: u32,
+    pub outcome: CardComposeOutcome,
+    pub cards: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CardComposeOutcome {
+    Success,
+    CardNotFound,
+    NotACard,
+    SourceEquipped,
+    TargetNotFound,
+    SameInventorySlot,
+    NotEquipment,
+    TargetUnidentified,
+    TargetEquipped,
+    LocationMismatch,
+    NoFreeSocket,
+    ItemUseDisabled,
+    PersistenceFailed,
+    Unknown(i32),
+}
+
 /// A skill cast bar started.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

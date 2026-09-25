@@ -46,6 +46,25 @@ mod tests {
     }
 
     #[test]
+    fn net_contract_plugin_registers_card_compounding_messages() {
+        let mut app = App::new();
+        app.add_plugins(NetContractPlugin);
+
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::ComposeCardRequested>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::CardTargetsOffered>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::CardCompositionFinished>>()
+        );
+    }
+
+    #[test]
     fn net_contract_plugin_registers_moved_messages() {
         let mut app = App::new();
         app.add_plugins(NetContractPlugin);
