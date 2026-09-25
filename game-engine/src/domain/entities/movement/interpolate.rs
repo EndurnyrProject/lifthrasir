@@ -160,7 +160,7 @@ pub fn interpolate_remote_entities_system(
         transform.translation.x = smoothed.x;
         transform.translation.z = smoothed.z;
 
-        let facing = Direction::from_u8(output.dir);
+        let facing = Direction::from_ro_u8(output.dir);
         if direction.facing != facing {
             direction.facing = facing;
         }

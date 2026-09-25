@@ -260,7 +260,7 @@ pub fn spawn_network_entity_system(
                 event.name, event.object_type, event.aid
             )),
             CharacterDirection {
-                facing: Direction::from_u8(event.direction),
+                facing: Direction::from_ro_u8(event.direction),
             },
             MapScoped,
         ));
@@ -438,7 +438,7 @@ fn insert_model_actor(entity: &mut EntityCommands, model: String, event: &SpawnF
     entity.insert((
         Gr2Actor { model },
         CharacterDirection {
-            facing: Direction::from_u8(event.direction),
+            facing: Direction::from_ro_u8(event.direction),
         },
     ));
     if event.object_type == crate::domain::entities::types::ObjectType::Npc

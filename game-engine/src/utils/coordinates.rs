@@ -48,6 +48,21 @@ impl Direction {
         }
     }
 
+    /// Convert RO's network direction order into the internal ACT direction order.
+    pub fn from_ro_u8(value: u8) -> Self {
+        match value {
+            0 => Direction::North,
+            1 => Direction::NorthWest,
+            2 => Direction::West,
+            3 => Direction::SouthWest,
+            4 => Direction::South,
+            5 => Direction::SouthEast,
+            6 => Direction::East,
+            7 => Direction::NorthEast,
+            _ => Direction::South,
+        }
+    }
+
     /// Convert a compass angle (in radians) to the nearest 8-direction.
     ///
     /// The angle is measured counter-clockwise from East as seen from above:
@@ -203,4 +218,27 @@ pub fn decode_move_data(data: [u8; 6]) -> (u16, u16, u16, u16) {
     let dst_y = (((data[3] as u16) & 0x03) << 8) | (data[4] as u16);
 
     (src_x, src_y, dst_x, dst_y)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Direction;
+
+    #[test]
+    fn ro_directions_convert_to_internal_facings() {
+        let expected = [
+            Direction::North,
+            Direction::NorthWest,
+            Direction::West,
+            Direction::SouthWest,
+            Direction::South,
+            Direction::SouthEast,
+            Direction::East,
+            Direction::NorthEast,
+        ];
+
+        for (value, direction) in expected.into_iter().enumerate() {
+            assert_eq!(Direction::from_ro_u8(value as u8), direction);
+        }
+    }
 }
