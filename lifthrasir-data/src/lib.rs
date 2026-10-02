@@ -302,6 +302,14 @@ pub struct EffectData {
     /// map `EFFECT` objects and aesir's `SpecialEffect` packets — they key on
     /// the same ids.
     pub special: BTreeMap<u32, EffectDescriptor>,
+    /// Persistent skill-unit visuals, keyed by rAthena skill id, for skills
+    /// whose `skills` entry is a one-shot cast. Needed when the server's ruleset
+    /// decides whether a skill places a ground unit at all: a pre-renewal song
+    /// is a field that follows its performer, the renewal one a party snapshot
+    /// with no unit. The cast plays the `skills` entry; the unit group, if the
+    /// server places one, plays this. Entries must be `repeating: true`.
+    #[serde(default)]
+    pub skill_units: BTreeMap<u32, EffectDescriptor>,
     /// Status-aura descriptors, keyed by EFST id. Both the lookup table for
     /// `StatusEffectChanged` and the recipe table [`Visual::Efst`] composes.
     #[serde(default)]

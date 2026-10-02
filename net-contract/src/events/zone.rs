@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
-use crate::dto::{SkillUnitDespawnReason, SkillUnitGroupState, SkillUnitUpdateReason};
+use crate::dto::{
+    SkillUnitCellState, SkillUnitDespawnReason, SkillUnitGroupState, SkillUnitUpdateReason,
+};
 
 /// Zone entry accepted: AID folded into EnterAck (collapses ZC_ACCEPT_ENTER + ZC_AID).
 #[derive(Message, Debug, Clone)]
@@ -333,6 +335,19 @@ pub struct SkillUnitUpdated {
     pub max_hp: u32,
     pub hp_delta: i32,
     pub reason: SkillUnitUpdateReason,
+}
+
+/// A known skill-unit group moved with its caster (a pre-renewal song or dance
+/// field following its performer). `cells` is the group's complete cell set;
+/// cell ids are stable, so each listed cell is the same cell at new coordinates.
+/// Identity, timing and phase are unchanged.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SkillUnitMoved {
+    pub group_id: u64,
+    pub center_x: i32,
+    pub center_y: i32,
+    pub cells: Vec<SkillUnitCellState>,
 }
 
 /// One or more cells of a skill-unit group were removed; the group root

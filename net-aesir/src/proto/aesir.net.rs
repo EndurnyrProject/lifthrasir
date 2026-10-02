@@ -23,7 +23,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -695,6 +695,33 @@ pub mod envelope {
         /// s2c zone gameplay
         #[prost(message, tag = "211")]
         GuildAllianceRequestNotify(super::GuildAllianceRequestNotify),
+        /// 212-215: player chat room client intents (create and owner commands)
+        ///
+        /// c2s zone
+        #[prost(message, tag = "212")]
+        WaitingRoomCreateRequest(super::WaitingRoomCreateRequest),
+        /// c2s zone
+        #[prost(message, tag = "213")]
+        WaitingRoomKickRequest(super::WaitingRoomKickRequest),
+        /// c2s zone
+        #[prost(message, tag = "214")]
+        WaitingRoomChangeOwnerRequest(super::WaitingRoomChangeOwnerRequest),
+        /// c2s zone
+        #[prost(message, tag = "215")]
+        WaitingRoomChangeStatusRequest(super::WaitingRoomChangeStatusRequest),
+        /// 216-217: player chat room authoritative state (creator / members)
+        ///
+        /// s2c zone world
+        #[prost(message, tag = "216")]
+        WaitingRoomCreateResult(super::WaitingRoomCreateResult),
+        /// s2c zone world
+        #[prost(message, tag = "217")]
+        WaitingRoomRoleChanged(super::WaitingRoomRoleChanged),
+        /// 218: a live skill-unit group moved with its caster
+        ///
+        /// s2c zone world
+        #[prost(message, tag = "218")]
+        SkillUnitMove(super::SkillUnitMove),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -3231,6 +3258,24 @@ pub struct SkillUnitUpdate {
     #[prost(uint64, tag = "9")]
     pub server_tick: u64,
 }
+/// Server -> client, a known group's footprint moved with its caster (a
+/// pre-renewal song or dance field following its performer). Cell IDs are
+/// stable: every listed cell is the same cell at its new coordinates, and the
+/// list is the group's complete cell set. Group identity, timing and phase are
+/// unchanged. Observers who do not know the group receive SkillUnitSpawn instead.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SkillUnitMove {
+    #[prost(uint64, tag = "1")]
+    pub group_id: u64,
+    #[prost(int32, tag = "2")]
+    pub center_x: i32,
+    #[prost(int32, tag = "3")]
+    pub center_y: i32,
+    #[prost(message, repeated, tag = "4")]
+    pub cells: ::prost::alloc::vec::Vec<SkillUnitCellState>,
+    #[prost(uint64, tag = "5")]
+    pub server_tick: u64,
+}
 /// Server -> client, removes the listed cells from a persistent group.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SkillUnitDespawn {
@@ -3660,16 +3705,79 @@ pub struct HomunculusResult {
     #[prost(message, optional, tag = "4")]
     pub state: ::core::option::Option<HomunculusPrivateState>,
 }
-/// Client -> server, join an NPC waiting room (the owner NPC gid is the room id).
-/// The password is always empty for NPC-owned rooms but is carried for fidelity.
+/// Client -> server, join a chat room (NPC- or player-owned).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WaitingRoomJoinRequest {
-    /// the owner NPC gid
+    /// the room id from WaitingRoomInfo
     #[prost(uint32, tag = "1")]
     pub room_id: u32,
-    /// always empty for NPC rooms
+    /// checked only for private rooms; NPC rooms are always public
     #[prost(string, tag = "2")]
     pub password: ::prost::alloc::string::String,
+}
+/// Client -> server, open a player chat room owned by the sender. The title is
+/// truncated to 60 bytes, the password to 8 bytes, and the limit clamped to 1..20.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomCreateRequest {
+    #[prost(string, tag = "1")]
+    pub title: ::prost::alloc::string::String,
+    /// required to join when `public` is false
+    #[prost(string, tag = "2")]
+    pub password: ::prost::alloc::string::String,
+    /// max members, the owner included
+    #[prost(uint32, tag = "3")]
+    pub limit: u32,
+    /// false makes the room password-protected
+    #[prost(bool, tag = "4")]
+    pub public: bool,
+}
+/// Client -> server, the room owner kicks a member by character name. The kicked
+/// player cannot rejoin that room until it is destroyed.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomKickRequest {
+    /// the member's character name
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+}
+/// Client -> server, the room owner hands ownership to a member by character name.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomChangeOwnerRequest {
+    /// the new owner's character name
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+}
+/// Client -> server, the room owner edits the room. Same limits as creation.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomChangeStatusRequest {
+    #[prost(string, tag = "1")]
+    pub title: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub password: ::prost::alloc::string::String,
+    /// max members, the owner included
+    #[prost(uint32, tag = "3")]
+    pub limit: u32,
+    #[prost(bool, tag = "4")]
+    pub public: bool,
+}
+/// Server -> client, the outcome of a create request. Sent only to the creator.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomCreateResult {
+    /// 0 ok, 1 refused
+    #[prost(uint32, tag = "1")]
+    pub result: u32,
+}
+/// Server -> client, a member's owner role changed (succession or handoff).
+/// Sent to the room's members.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WaitingRoomRoleChanged {
+    #[prost(uint32, tag = "1")]
+    pub room_id: u32,
+    /// the member whose role changed
+    #[prost(uint32, tag = "2")]
+    pub char_id: u32,
+    /// true: now the owner; false: no longer the owner
+    #[prost(bool, tag = "3")]
+    pub owner: bool,
 }
 /// Client -> server, leave the waiting room the player is currently in.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3688,24 +3796,31 @@ pub struct WaitingRoomMember {
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
-/// Server -> client, a waiting room appeared or its member count changed.
-/// Broadcast to nearby players.
+/// Server -> client, a chat room appeared or changed (member count, owner, or
+/// settings). Broadcast to players near the owner; draw the bubble over the unit
+/// `owner_gid`.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WaitingRoomInfo {
-    /// the owner NPC gid
+    /// NPC rooms: the owner NPC gid; player rooms: an allocated id
     #[prost(uint32, tag = "1")]
     pub room_id: u32,
     #[prost(string, tag = "2")]
     pub title: ::prost::alloc::string::String,
-    /// players in the room (the owner NPC is not counted)
+    /// players in the room (an owner NPC is not counted)
     #[prost(uint32, tag = "3")]
     pub member_count: u32,
-    /// the room limit (the owner NPC occupies one slot)
+    /// room limit (an owner NPC occupies one slot, a player owner is a member)
     #[prost(uint32, tag = "4")]
     pub limit: u32,
-    /// always true for NPC rooms
+    /// false: joining requires the password (NPC rooms are always public)
     #[prost(bool, tag = "5")]
     pub public: bool,
+    /// the owner unit: the NPC gid or the owning player's char id
+    #[prost(uint32, tag = "6")]
+    pub owner_gid: u32,
+    /// true for NPC rooms, false for player rooms
+    #[prost(bool, tag = "7")]
+    pub owner_is_npc: bool,
 }
 /// Server -> client, a waiting room disappeared. Broadcast to nearby players.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3724,6 +3839,9 @@ pub struct WaitingRoomJoinResult {
     pub result: u32,
     #[prost(message, repeated, tag = "3")]
     pub members: ::prost::alloc::vec::Vec<WaitingRoomMember>,
+    /// on success: the owner NPC gid or the owning player's char id
+    #[prost(uint32, tag = "4")]
+    pub owner_gid: u32,
 }
 /// Server -> client, a member joined or left the room. Sent to the room's
 /// members; a `kicked` leave is additionally sent to the kicked player.

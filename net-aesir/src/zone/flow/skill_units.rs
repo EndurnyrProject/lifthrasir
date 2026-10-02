@@ -3,12 +3,13 @@ use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
 
 use super::super::mapping::skill_units::{
-    skill_unit_despawn, skill_unit_snapshot, skill_unit_spawn, skill_unit_update,
+    skill_unit_despawn, skill_unit_move, skill_unit_snapshot, skill_unit_spawn, skill_unit_update,
 };
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
 use net_contract::events::{
-    SkillUnitDespawned, SkillUnitSnapshotReceived, SkillUnitSpawned, SkillUnitUpdated,
+    SkillUnitDespawned, SkillUnitMoved, SkillUnitSnapshotReceived, SkillUnitSpawned,
+    SkillUnitUpdated,
 };
 
 /// Drains the persistent skill-unit lifecycle (Storm Gust groups, Ice Wall
@@ -25,6 +26,7 @@ pub fn zone_drain_skill_units(
     mut spawned: MessageWriter<SkillUnitSpawned>,
     mut updated: MessageWriter<SkillUnitUpdated>,
     mut despawned: MessageWriter<SkillUnitDespawned>,
+    mut moved: MessageWriter<SkillUnitMoved>,
 ) {
     for msg in incoming.read() {
         match msg.body.clone() {
@@ -42,6 +44,9 @@ pub fn zone_drain_skill_units(
             }
             Body::SkillUnitDespawn(d) => {
                 despawned.write(skill_unit_despawn(d));
+            }
+            Body::SkillUnitMove(m) => {
+                moved.write(skill_unit_move(m));
             }
             _ => {}
         }
@@ -61,6 +66,7 @@ mod tests {
             .add_message::<SkillUnitSpawned>()
             .add_message::<SkillUnitUpdated>()
             .add_message::<SkillUnitDespawned>()
+            .add_message::<SkillUnitMoved>()
             .add_systems(Update, zone_drain_skill_units);
         app
     }
@@ -174,5 +180,40 @@ mod tests {
         assert_eq!(drained.len(), 1);
         assert_eq!(drained[0].group_id, 7);
         assert_eq!(drained[0].cell_ids, vec![700, 701]);
+    }
+
+    #[test]
+    fn move_drains_to_event() {
+        let mut app = app_with_drain();
+        write_incoming(
+            &mut app,
+            Body::SkillUnitMove(net::SkillUnitMove {
+                group_id: 7,
+                center_x: 51,
+                center_y: 60,
+                cells: vec![net::SkillUnitCellState {
+                    cell_id: 700,
+                    x: 50,
+                    y: 59,
+                    ..Default::default()
+                }],
+                server_tick: 9,
+            }),
+        );
+        app.update();
+
+        let events = app.world().resource::<Messages<SkillUnitMoved>>();
+        let drained: Vec<_> = events.iter_current_update_messages().collect();
+        assert_eq!(drained.len(), 1);
+        assert_eq!((drained[0].center_x, drained[0].center_y), (51, 60));
+        assert_eq!(drained[0].cells.len(), 1);
+        assert_eq!(
+            (
+                drained[0].cells[0].cell_id,
+                drained[0].cells[0].x,
+                drained[0].cells[0].y
+            ),
+            (700, 50, 59)
+        );
     }
 }

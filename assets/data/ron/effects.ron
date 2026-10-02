@@ -1,5 +1,6 @@
-// Unified effect catalog. Four sections, three of them descriptor tables keyed
-// by DISTINCT id namespaces that overlap numerically but mean different things
+// Unified effect catalog. Five sections, four of them descriptor tables keyed
+// by id namespaces (`skills` and `skill_units` share the skill id; the others
+// are DISTINCT) that overlap numerically but mean different things
 // (86 is the WZ_WATERBALL *skill* and the EFST_EXPLOSIONSPIRITS *status*; 89 is
 // the WZ_STORMGUST *skill* and the EF_STORMGUST *special effect*) -- a flat
 // merged map would silently collide.
@@ -10,6 +11,11 @@
 //                 `placement`/`ground_anchor` are ignored here.
 //   `skills`   -- keyed by rAthena skill id; drives the skill-effect runtime
 //                 (`domain/effects/triggers.rs`).
+//   `skill_units` -- keyed by rAthena skill id; the persistent visual of a
+//                 skill-unit group for a skill whose `skills` entry is a
+//                 one-shot cast (`domain/skill_units`). Must be repeating.
+//                 Without one, a group uses its `skills` entry only when that
+//                 entry is repeating.
 //   `special`  -- the rAthena `e_special_effects` (EF_*) namespace, serving BOTH
 //                 the RSW `EFFECT` object's `effect_type` (`spawn_map_effects`,
 //                 persistent position-anchored) and aesir's `SpecialEffect`
@@ -1112,6 +1118,197 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Bard / Dancer / Ensemble (BD_*, BA_*, DC_*) ----------------------
+        // These are the cast visuals, played on the SkillEffect aesir sends in
+        // both rulesets. Renewal runs every performance as a party snapshot
+        // with no ground unit. Pre-renewal solo songs and dances (317, 319-322,
+        // 325, 327-330) also place a 7x7 field that follows the performer;
+        // its looping visual lives in `skill_units`. Pre-renewal ensembles are
+        // still snapshots server-side. Each cast is one caster-anchored burst:
+        // the native
+        // note_1.str rising-notes flourish, tinted per song, plus the retail
+        // song wav where the GRF ships one (they live under data/wav/effect/
+        // with Korean names). Passives (Musical Lesson 315, Dancing Lesson
+        // 323) and Adaptation to Circumstances (304, cancels a song, no visual
+        // in the official client) are intentionally absent. Ragnarok (314) is
+        // not implemented server-side.
+        305: ( // BD_ENCORE -- replays the last song; the song itself is unknown
+               // client-side, so a plain untinted note burst and no wav.
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        306: ( // BD_LULLABY -- soft lavender notes. The sleep on each victim is
+               // the status visual.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/자장가.wav"),
+            placement: Caster,
+            color: (0.8, 0.75, 1.0, 1.0),
+            repeating: false,
+        ),
+        307: ( // BD_RICHMANKIM (Mr. Kim A Rich Man) -- gold notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/김서방돈.wav"),
+            placement: Caster,
+            color: (1.0, 0.85, 0.4, 1.0),
+            repeating: false,
+        ),
+        308: ( // BD_ETERNALCHAOS -- dark red notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/영원의 혼돈.wav"),
+            placement: Caster,
+            color: (0.95, 0.4, 0.4, 1.0),
+            repeating: false,
+        ),
+        309: ( // BD_DRUMBATTLEFIELD (A Drum on the Battlefield) -- bronze notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/전장의.wav"),
+            placement: Caster,
+            color: (1.0, 0.6, 0.3, 1.0),
+            repeating: false,
+        ),
+        310: ( // BD_RINGNIBELUNGEN (The Ring of Nibelungen) -- pale gold notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/니벨룽겐의 반지.wav"),
+            placement: Caster,
+            color: (1.0, 0.92, 0.7, 1.0),
+            repeating: false,
+        ),
+        311: ( // BD_ROKISWEIL (Loki's Veil) -- grey-violet notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/로키.wav"),
+            placement: Caster,
+            color: (0.7, 0.6, 0.85, 1.0),
+            repeating: false,
+        ),
+        312: ( // BD_INTOABYSS (Into the Abyss) -- teal notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/심연속으로.wav"),
+            placement: Caster,
+            color: (0.5, 0.85, 0.9, 1.0),
+            repeating: false,
+        ),
+        313: ( // BD_SIEGFRIED (Invulnerable Siegfried) -- silver-blue notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/불사신.wav"),
+            placement: Caster,
+            color: (0.8, 0.9, 1.0, 1.0),
+            repeating: false,
+        ),
+        316: ( // BA_MUSICALSTRIKE (Melody Strike, 연주붕격) -- native arrow-strike
+               // STR on the victim, shared with Phantasmic Arrow (1009).
+               // Dedicated native wav.
+            visuals: [Str("arrowshot.str")],
+            sound: Some("effect/연주붕격.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        317: ( // BA_DISSONANCE -- self-cast magic splash (aesir
+               // ba_dissonance.ex); like Magnum Break (7), Caster placement,
+               // and the per-victim SkillDamage spawns the authored sour-chord
+               // burst on each hit unit. No wav in the GRF.
+            visuals: [Str("dissonance.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        318: ( // BA_FROSTJOKER (Frost Joke) -- the official client only shows
+               // the joke as chat (EF_TALK_FROSTJOKE); authored frost bloom on
+               // the caster instead. The freeze on each victim is the status
+               // visual. No wav in the GRF.
+            visuals: [Str("frost_joke.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        319: ( // BA_WHISTLE -- ice-white notes. No whistle wav in the GRF.
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Caster,
+            color: (0.85, 0.95, 1.0, 1.0),
+            repeating: false,
+        ),
+        320: ( // BA_ASSASSINCROSS (Assassin Cross of Sunset) -- sunset orange notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/석양의 어쌔신.wav"),
+            placement: Caster,
+            color: (1.0, 0.6, 0.35, 1.0),
+            repeating: false,
+        ),
+        321: ( // BA_POEMBRAGI (A Poem of Bragi) -- violet notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/브라기의 시.wav"),
+            placement: Caster,
+            color: (0.8, 0.65, 1.0, 1.0),
+            repeating: false,
+        ),
+        322: ( // BA_APPLEIDUN (The Apple of Idun) -- authored: the native
+               // idun_apple.bmp apples rise with the notes.
+            visuals: [Str("apple_idun.strfx.ron")],
+            sound: Some("effect/이둔의 사과.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        324: ( // DC_THROWARROW (Slinging Arrow) -- native arrow-strike STR on
+               // the victim; no dedicated retail wav.
+            visuals: [Str("arrowshot.str")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        325: ( // DC_UGLYDANCE -- sickly green notes. No wav in the GRF.
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Caster,
+            color: (0.6, 0.9, 0.4, 1.0),
+            repeating: false,
+        ),
+        326: ( // DC_SCREAM -- the official client only shows the shout as chat
+               // (EF_TALK_SCREAM); authored shockwave rings on the caster
+               // instead. The stun on each victim is the status visual. Retail
+               // female scream SE at the wav root.
+            visuals: [Str("scream.strfx.ron")],
+            sound: Some("se_scream_w01.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        327: ( // DC_HUMMING -- warm yellow notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/흥얼거림.wav"),
+            placement: Caster,
+            color: (1.0, 0.95, 0.6, 1.0),
+            repeating: false,
+        ),
+        328: ( // DC_DONTFORGETME (Please Don't Forget Me) -- pink notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/나를잊지말아요.wav"),
+            placement: Caster,
+            color: (1.0, 0.7, 0.85, 1.0),
+            repeating: false,
+        ),
+        329: ( // DC_FORTUNEKISS (Fortune's Kiss) -- authored: the native
+               // kiss.bmp hearts rise with a treble clef.
+            visuals: [Str("fortune_kiss.strfx.ron")],
+            sound: Some("effect/행운의.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        330: ( // DC_SERVICEFORYOU (Service for You) -- light blue notes.
+            visuals: [Str("note_1.str")],
+            sound: Some("effect/당신을 위한 서비스.wav"),
+            placement: Caster,
+            color: (0.7, 0.8, 1.0, 1.0),
+            repeating: false,
+        ),
         495: ( // KN_ONEHAND (One-Hand Quicken) -- no STR of its own; the classic
                // client reuses the Two-Hand Quicken flash and wav.
             visuals: [Str("twohand.str")],
@@ -1157,6 +1354,24 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        1010: ( // BA_PANGVOICE (Pang Voice, quest) -- authored: the native
+                // pang.bmp starburst on the victim's head. The confusion is the
+                // status visual. No wav in the GRF.
+            visuals: [Str("pang_voice.strfx.ron")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1011: ( // DC_WINKCHARM (Wink of Charm, quest) -- authored hearts on the
+                // charmed target (EF_WINK is hardcoded in the official client).
+                // No wav in the GRF.
+            visuals: [Str("wink_charm.strfx.ron")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         1014: ( // PR_REDEMPTIO -- authored effect (redemptio.strfx.ron): a
                 // large solemn radiant burst on the caster (mass-resurrection
                 // sacrifice). No plausible dedicated wav found in the GRF
@@ -1185,6 +1400,85 @@
             placement: Target,
             color: (1.0, 0.6, 0.3, 1.0),
             repeating: false,
+        ),
+    },
+    skill_units: {
+        // --- Pre-renewal song and dance fields ---------------------------------
+        // aesir places these 7x7 fields only in pre-renewal and moves them with
+        // the performer (SkillUnitMove). One looping note_1.str at the field
+        // center, tinted like the song's cast burst, so the field reads as the
+        // same song. Apple of Idun and Fortune's Kiss cast authored bursts, so
+        // their fields take tints of their own. Dissonance's per-tick damage
+        // still plays its cast burst on each victim through `skills`.
+        317: ( // BA_DISSONANCE -- sour magenta notes.
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (0.9, 0.5, 0.9, 1.0),
+            repeating: true,
+        ),
+        319: ( // BA_WHISTLE
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (0.85, 0.95, 1.0, 1.0),
+            repeating: true,
+        ),
+        320: ( // BA_ASSASSINCROSS
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 0.6, 0.35, 1.0),
+            repeating: true,
+        ),
+        321: ( // BA_POEMBRAGI
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (0.8, 0.65, 1.0, 1.0),
+            repeating: true,
+        ),
+        322: ( // BA_APPLEIDUN -- apple-green notes.
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (0.7, 1.0, 0.55, 1.0),
+            repeating: true,
+        ),
+        325: ( // DC_UGLYDANCE
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (0.6, 0.9, 0.4, 1.0),
+            repeating: true,
+        ),
+        327: ( // DC_HUMMING
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 0.95, 0.6, 1.0),
+            repeating: true,
+        ),
+        328: ( // DC_DONTFORGETME
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 0.7, 0.85, 1.0),
+            repeating: true,
+        ),
+        329: ( // DC_FORTUNEKISS -- rose notes.
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 0.55, 0.65, 1.0),
+            repeating: true,
+        ),
+        330: ( // DC_SERVICEFORYOU
+            visuals: [Str("note_1.str")],
+            sound: None,
+            placement: Ground,
+            color: (0.7, 0.8, 1.0, 1.0),
+            repeating: true,
         ),
     },
     special: {

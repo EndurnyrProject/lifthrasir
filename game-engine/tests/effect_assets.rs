@@ -1,4 +1,5 @@
-use game_engine::infrastructure::effect::AuthoredEffect;
+use bevy::asset::Handle;
+use game_engine::infrastructure::effect::{AuthoredEffect, convert_authored_effect};
 use lifthrasir_data::{EffectData, EffectDescriptor, Visual};
 use ron::extensions::Extensions;
 use std::collections::BTreeMap;
@@ -24,6 +25,7 @@ fn effect_catalog_assets_exist() {
 
     for (section, descriptors) in [
         ("skills", &data.skills),
+        ("skill_units", &data.skill_units),
         ("special", &data.special),
         ("efsts", &data.efsts),
     ] {
@@ -218,6 +220,10 @@ fn check_authored_textures(
             .with_default_extension(Extensions::IMPLICIT_SOME)
             .from_str(&contents)
             .unwrap_or_else(|error| panic!("failed to parse {name}: {error}"));
+        // Parsing alone misses the loader's key checks (ascending `at`,
+        // quad/xy exclusivity), which would otherwise only fail in-game.
+        convert_authored_effect(&effect, |_| Handle::default())
+            .unwrap_or_else(|error| panic!("invalid authored effect {name}: {error}"));
         let source = authored_sources
             .get(name)
             .map(|sources| sources.join(", "))

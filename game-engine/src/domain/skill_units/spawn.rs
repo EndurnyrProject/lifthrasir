@@ -174,20 +174,17 @@ fn spawn_group(
         cell_entities.push((cell_entity, cell));
     }
 
-    let Some(descriptor) = catalog.and_then(|c| c.skill(group.skill_id)) else {
-        warn!(
-            "No effect catalog entry for skill-unit skill {}; group {} spawned without visuals",
-            group.skill_id, group.group_id
-        );
+    // Skill-unit entities own persistent visuals only; `skill_unit` yields
+    // none for a skill whose only entry is a one-shot cast.
+    let Some(descriptor) = catalog.and_then(|c| c.skill_unit(group.skill_id)) else {
+        if catalog.is_none_or(|c| c.skill(group.skill_id).is_none()) {
+            warn!(
+                "No effect catalog entry for skill-unit skill {}; group {} spawned without visuals",
+                group.skill_id, group.group_id
+            );
+        }
         return;
     };
-
-    // Skill-unit entities own persistent visuals only. Some ground skills use
-    // a short-lived administrative group for scheduling; their one-shot visual
-    // belongs to the damage/ground trigger instead of this group center.
-    if !descriptor.repeating {
-        return;
-    }
 
     match descriptor.ground_anchor {
         GroundAnchor::Group => {

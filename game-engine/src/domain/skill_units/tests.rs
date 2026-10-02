@@ -1,10 +1,10 @@
 //! Message-driven integration tests for the skill-unit systems: the three
-//! systems run together in a minimal app, exercised purely via the four
+//! systems run together in a minimal app, exercised purely via the five
 //! lifecycle messages, mirroring how the server drives them.
 
 use super::components::{SkillUnitCell, SkillUnitGroup};
 use super::detonation::spawn_trap_detonation;
-use super::lifecycle::{despawn_skill_units, update_skill_units};
+use super::lifecycle::{despawn_skill_units, move_skill_units, update_skill_units};
 use super::spawn::spawn_skill_units;
 use crate::domain::audio::events::PlaySkillSfx;
 use crate::domain::effects::EffectSprite;
@@ -22,7 +22,8 @@ use net_contract::dto::{
     SkillUnitPhase,
 };
 use net_contract::events::{
-    SkillUnitDespawned, SkillUnitSnapshotReceived, SkillUnitSpawned, SkillUnitUpdated,
+    SkillUnitDespawned, SkillUnitMoved, SkillUnitSnapshotReceived, SkillUnitSpawned,
+    SkillUnitUpdated,
 };
 
 fn targetable_cell(cell_id: u32, x: i32, y: i32, visible: bool) -> SkillUnitCellState {
@@ -135,6 +136,7 @@ fn test_app(catalog: EffectCatalog) -> App {
         .add_message::<SkillUnitSnapshotReceived>()
         .add_message::<SkillUnitUpdated>()
         .add_message::<SkillUnitDespawned>()
+        .add_message::<SkillUnitMoved>()
         .add_message::<PlaySkillSfx>()
         .insert_resource(catalog)
         .add_systems(
@@ -143,6 +145,7 @@ fn test_app(catalog: EffectCatalog) -> App {
                 despawn_skill_units,
                 spawn_skill_units,
                 update_skill_units,
+                move_skill_units,
                 spawn_trap_detonation,
             )
                 .chain(),
@@ -248,6 +251,75 @@ fn spawn_creates_root_and_cells_at_world_positions() {
         seen += 1;
     }
     assert_eq!(seen, 2);
+}
+
+#[test]
+fn move_recenters_root_and_reoffsets_cells_keeping_ids() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+    let effects_before = effects(&mut app);
+
+    app.world_mut().write_message(SkillUnitMoved {
+        group_id: 1,
+        center_x: 42,
+        center_y: 51,
+        cells: vec![cell(100, 42, 51, true), cell(101, 43, 51, true)],
+    });
+    app.update();
+
+    let mut roots = app
+        .world_mut()
+        .query_filtered::<(Entity, &Transform), With<SkillUnitGroup>>();
+    let (root, root_transform) = roots
+        .single(app.world())
+        .map(|(e, t)| (e, *t))
+        .expect("one root");
+    assert_eq!(
+        root_transform.translation,
+        spawn_coords_to_world_position(42, 51)
+    );
+
+    let mut cells = app
+        .world_mut()
+        .query::<(&SkillUnitCell, &Transform, &ChildOf)>();
+    for (cell, transform, child_of) in cells.iter(app.world()) {
+        assert_eq!(child_of.parent(), root, "cell stays under the same root");
+        let cell_x = if cell.cell_id == 100 { 42 } else { 43 };
+        assert_eq!(
+            root_transform.translation + transform.translation,
+            spawn_coords_to_world_position(cell_x, 51),
+            "cell {} world position",
+            cell.cell_id
+        );
+    }
+    assert_eq!(cell_count(&mut app), 2, "cells are moved, not respawned");
+    assert_eq!(
+        effects(&mut app),
+        effects_before,
+        "visuals are not respawned"
+    );
+}
+
+#[test]
+fn move_for_unknown_group_is_a_noop() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitMoved {
+        group_id: 99,
+        center_x: 42,
+        center_y: 51,
+        cells: vec![cell(100, 42, 51, true)],
+    });
+    app.update();
+
+    assert_eq!(roots(&mut app), 0);
+    assert_eq!(cell_count(&mut app), 0);
 }
 
 #[test]
@@ -725,6 +797,35 @@ fn cell_anchored_vfx_only_spawns_one_placeholder_per_visible_cell() {
         effects(&mut app),
         0,
         "vfx-only descriptor spawns no STR effect"
+    );
+}
+
+#[test]
+fn pre_renewal_song_field_plays_its_skill_units_visual() {
+    const POEM_OF_BRAGI: u32 = 321; // one-shot `skills` cast + looping field
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            POEM_OF_BRAGI,
+            vec![cell(100, 40, 50, false), cell(101, 41, 50, false)],
+        ),
+    });
+    app.update();
+
+    assert_eq!(
+        effects(&mut app),
+        1,
+        "one looping visual at the field center"
+    );
+    let mut effects = app.world_mut().query::<(&ActiveEffect, &ChildOf)>();
+    let (effect, child_of) = effects.single(app.world()).expect("one effect");
+    assert!(effect.repeating, "the field visual loops until despawn");
+    assert!(
+        app.world()
+            .get::<SkillUnitGroup>(child_of.parent())
+            .is_some(),
+        "the visual rides on the group root, so it follows SkillUnitMoved"
     );
 }
 

@@ -4,7 +4,8 @@ use net_contract::dto::{
     SkillUnitPhase, SkillUnitUpdateReason,
 };
 use net_contract::events::{
-    SkillUnitDespawned, SkillUnitSnapshotReceived, SkillUnitSpawned, SkillUnitUpdated,
+    SkillUnitDespawned, SkillUnitMoved, SkillUnitSnapshotReceived, SkillUnitSpawned,
+    SkillUnitUpdated,
 };
 
 fn skill_unit_cell_flags(flags: u32) -> SkillUnitCellFlags {
@@ -97,6 +98,15 @@ pub fn skill_unit_update(u: net::SkillUnitUpdate) -> SkillUnitUpdated {
         max_hp: u.max_hp,
         hp_delta: u.hp_delta,
         reason: skill_unit_update_reason(u.reason),
+    }
+}
+
+pub fn skill_unit_move(m: net::SkillUnitMove) -> SkillUnitMoved {
+    SkillUnitMoved {
+        group_id: m.group_id,
+        center_x: m.center_x,
+        center_y: m.center_y,
+        cells: m.cells.into_iter().map(skill_unit_cell).collect(),
     }
 }
 

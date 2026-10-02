@@ -1,0 +1,59 @@
+// Dissonance (BA_DISSONANCE) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive, Blend = alpha (magenta-keyed sprites). Angles are
+// raw STR units (1024 per turn).
+//
+// Shape: a sour chord on the victim: two native ws2.bmp sharps and a note jolt
+// in from either side, tilt and flicker off-key, over a dull purple flash.
+// Quick (~18f) so per-victim splash hits do not pile up.
+(
+    fps: 30,
+    layers: [
+        // Left sharp jolting in.
+        (
+            textures: ["ro://data/texture/effect/ws2.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (284.0, 236.0), quad: (18.0, 18.0), color: (230, 150, 255, 0),   angle: -80.0 ),
+                ( at: 3,  offset: (296.0, 232.0), quad: (28.0, 28.0), color: (235, 170, 255, 240), angle: -40.0 ),
+                ( at: 9,  offset: (300.0, 226.0), quad: (28.0, 28.0), color: (235, 170, 255, 200), angle: 40.0 ),
+                ( at: 16, offset: (296.0, 216.0), quad: (24.0, 24.0), color: (230, 150, 255, 0),   angle: 80.0 ),
+            ],
+        ),
+        // Right sharp, mirrored and a beat later.
+        (
+            textures: ["ro://data/texture/effect/ws2.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 2,  offset: (354.0, 236.0), quad: (18.0, 18.0), color: (230, 150, 255, 0),   angle: 80.0 ),
+                ( at: 5,  offset: (342.0, 232.0), quad: (28.0, 28.0), color: (235, 170, 255, 240), angle: 40.0 ),
+                ( at: 11, offset: (338.0, 226.0), quad: (28.0, 28.0), color: (235, 170, 255, 200), angle: -40.0 ),
+                ( at: 18, offset: (342.0, 216.0), quad: (24.0, 24.0), color: (230, 150, 255, 0),   angle: -80.0 ),
+            ],
+        ),
+        // Off-key note flickering above the head.
+        (
+            textures: ["ro://data/texture/effect/ws1.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 1,  offset: (319.0, 224.0), quad: (20.0, 20.0), color: (230, 150, 255, 0),   angle: 0.0 ),
+                ( at: 4,  offset: (321.0, 216.0), quad: (26.0, 26.0), color: (235, 170, 255, 240), angle: 60.0 ),
+                ( at: 8,  offset: (317.0, 212.0), quad: (26.0, 26.0), color: (235, 170, 255, 120), angle: -60.0 ),
+                ( at: 12, offset: (321.0, 206.0), quad: (26.0, 26.0), color: (235, 170, 255, 220), angle: 60.0 ),
+                ( at: 18, offset: (319.0, 198.0), quad: (22.0, 22.0), color: (230, 150, 255, 0),   angle: 0.0 ),
+            ],
+        ),
+        // Dull purple flash on the torso.
+        (
+            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 238.0), quad: (20.0, 20.0),   color: (170, 90, 220, 0) ),
+                ( at: 4,  offset: (319.0, 238.0), quad: (110.0, 110.0), color: (190, 110, 240, 200) ),
+                ( at: 14, offset: (319.0, 238.0), quad: (130.0, 130.0), color: (160, 80, 210, 0) ),
+            ],
+        ),
+    ],
+)

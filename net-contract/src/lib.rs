@@ -279,6 +279,10 @@ mod tests {
         );
         assert!(
             app.world()
+                .contains_resource::<Messages<events::SkillUnitMoved>>()
+        );
+        assert!(
+            app.world()
                 .contains_resource::<Messages<events::CutinDisplayChanged>>()
         );
         assert!(

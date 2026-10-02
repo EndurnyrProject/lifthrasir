@@ -9,18 +9,20 @@ use std::collections::{BTreeMap, HashMap};
 #[serde(transparent)]
 pub struct EffectDataAsset(pub lifthrasir_data::EffectData);
 
-/// The three descriptor tables of `effects.ron`, resolved and validated once at
-/// load: `skills` (rAthena skill id), `special` (the `e_special_effects` EF_*
-/// id, driving both RSW map effects and aesir `SpecialEffect` packets), and
-/// `efsts` (EFST id). The id namespaces are distinct, so the tables stay
-/// separate.
+/// The descriptor tables of `effects.ron`, resolved and validated once at
+/// load: `skills` (rAthena skill id), `skill_units` (rAthena skill id, the
+/// persistent visual of a skill whose `skills` entry is a one-shot cast),
+/// `special` (the `e_special_effects` EF_* id, driving both RSW map effects and
+/// aesir `SpecialEffect` packets), and `efsts` (EFST id). The id namespaces are
+/// distinct, so the tables stay separate.
 ///
-/// `Visual::Efst` layers in `skills`/`special` are spliced with the referenced
+/// `Visual::Efst` layers in `skills`/`skill_units`/`special` are spliced with the referenced
 /// `efsts` recipe's layers here, so lookups return descriptors whose `visuals`
 /// carry no composition left to resolve.
 #[derive(Resource, Debug)]
 pub struct EffectCatalog {
     skills: HashMap<u32, EffectDescriptor>,
+    skill_units: HashMap<u32, EffectDescriptor>,
     special: HashMap<u32, EffectDescriptor>,
     efsts: HashMap<u32, EffectDescriptor>,
 }
@@ -38,10 +40,21 @@ impl EffectCatalog {
         }
 
         let skills = resolve_section("skills", &data.skills, &data.efsts)?;
+        let skill_units = resolve_section("skill_units", &data.skill_units, &data.efsts)?;
         let special = resolve_section("special", &data.special, &data.efsts)?;
+
+        if let Some(id) = skill_units
+            .iter()
+            .find_map(|(id, descriptor)| (!descriptor.repeating).then_some(id))
+        {
+            return Err(format!(
+                "skill_units[{id}] must be repeating: true; a skill unit's visual is persistent"
+            ));
+        }
 
         for (section, table) in [
             ("skills", &skills),
+            ("skill_units", &skill_units),
             ("special", &special),
             ("efsts", &data.efsts),
         ] {
@@ -52,6 +65,7 @@ impl EffectCatalog {
 
         Ok(Self {
             skills: skills.into_iter().collect(),
+            skill_units: skill_units.into_iter().collect(),
             special: special.into_iter().collect(),
             efsts: data.efsts.clone().into_iter().collect(),
         })
@@ -59,6 +73,16 @@ impl EffectCatalog {
 
     pub fn skill(&self, skill_id: u32) -> Option<&EffectDescriptor> {
         self.skills.get(&skill_id)
+    }
+
+    /// The persistent visual of a skill-unit group: its `skill_units` entry,
+    /// else a repeating `skills` entry. A non-repeating `skills` entry is a
+    /// one-shot whose visual belongs to the cast or damage trigger, not the
+    /// group (some ground skills place a short-lived scheduling group).
+    pub fn skill_unit(&self, skill_id: u32) -> Option<&EffectDescriptor> {
+        self.skill_units
+            .get(&skill_id)
+            .or_else(|| self.skills.get(&skill_id).filter(|d| d.repeating))
     }
 
     pub fn special(&self, effect_id: u32) -> Option<&EffectDescriptor> {
@@ -817,6 +841,202 @@ mod tests {
 
         // CR_FAITH (248) is a passive with no cast event: deliberately absent.
         assert!(catalog.skill(248).is_none());
+    }
+
+    #[test]
+    fn bard_dancer_skill_effects_ron_deserialize_into_catalog() {
+        let catalog = seeded_catalog();
+
+        // Every performance is a caster-anchored one-shot: the native note
+        // burst for plain songs, authored assets where a dedicated retail
+        // texture exists. Strikes and the quest debuffs anchor on the victim.
+        let expected: [(u32, &str, EffectPlacement, Option<&str>); 25] = [
+            (305, "note_1.str", EffectPlacement::Caster, None),
+            (
+                306,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/자장가.wav"),
+            ),
+            (
+                307,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/김서방돈.wav"),
+            ),
+            (
+                308,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/영원의 혼돈.wav"),
+            ),
+            (
+                309,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/전장의.wav"),
+            ),
+            (
+                310,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/니벨룽겐의 반지.wav"),
+            ),
+            (
+                311,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/로키.wav"),
+            ),
+            (
+                312,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/심연속으로.wav"),
+            ),
+            (
+                313,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/불사신.wav"),
+            ),
+            (
+                316,
+                "arrowshot.str",
+                EffectPlacement::Target,
+                Some("effect/연주붕격.wav"),
+            ),
+            (317, "dissonance.strfx.ron", EffectPlacement::Caster, None),
+            (318, "frost_joke.strfx.ron", EffectPlacement::Caster, None),
+            (319, "note_1.str", EffectPlacement::Caster, None),
+            (
+                320,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/석양의 어쌔신.wav"),
+            ),
+            (
+                321,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/브라기의 시.wav"),
+            ),
+            (
+                322,
+                "apple_idun.strfx.ron",
+                EffectPlacement::Caster,
+                Some("effect/이둔의 사과.wav"),
+            ),
+            (324, "arrowshot.str", EffectPlacement::Target, None),
+            (325, "note_1.str", EffectPlacement::Caster, None),
+            (
+                326,
+                "scream.strfx.ron",
+                EffectPlacement::Caster,
+                Some("se_scream_w01.wav"),
+            ),
+            (
+                327,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/흥얼거림.wav"),
+            ),
+            (
+                328,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/나를잊지말아요.wav"),
+            ),
+            (
+                329,
+                "fortune_kiss.strfx.ron",
+                EffectPlacement::Caster,
+                Some("effect/행운의.wav"),
+            ),
+            (
+                330,
+                "note_1.str",
+                EffectPlacement::Caster,
+                Some("effect/당신을 위한 서비스.wav"),
+            ),
+            (1010, "pang_voice.strfx.ron", EffectPlacement::Target, None),
+            (1011, "wink_charm.strfx.ron", EffectPlacement::Target, None),
+        ];
+        for (skill_id, asset_name, placement, sound) in expected {
+            let descriptor = catalog
+                .skill(skill_id)
+                .unwrap_or_else(|| panic!("skill {skill_id} descriptor"));
+            assert_eq!(descriptor.str_name(), Some(asset_name), "skill {skill_id}");
+            assert_eq!(descriptor.placement, placement, "skill {skill_id}");
+            assert_eq!(descriptor.sound.as_deref(), sound, "skill {skill_id}");
+            assert!(!descriptor.repeating, "skill {skill_id}");
+        }
+
+        // Songs sharing note_1.str stay distinct through their tint.
+        let tints: Vec<[f32; 4]> = [
+            306, 307, 308, 309, 310, 311, 312, 313, 320, 321, 327, 328, 330,
+        ]
+        .iter()
+        .map(|id| catalog.skill(*id).expect("song").color)
+        .collect();
+        for (i, a) in tints.iter().enumerate() {
+            for b in &tints[i + 1..] {
+                assert_ne!(a, b, "two note_1.str songs share a tint");
+            }
+        }
+
+        // Passives, Adaptation (no visual) and Ragnarok (not implemented in
+        // aesir) are deliberately absent.
+        for id in [304, 314, 315, 323] {
+            assert!(catalog.skill(id).is_none(), "skill {id} should be absent");
+        }
+
+        // Pre-renewal solo songs and dances also place a field: its group
+        // resolves the looping `skill_units` visual while the cast keeps its
+        // one-shot `skills` burst. Ensembles stay snapshots server-side, so
+        // they have no field visual.
+        for id in [317, 319, 320, 321, 322, 325, 327, 328, 329, 330] {
+            let field = catalog
+                .skill_unit(id)
+                .unwrap_or_else(|| panic!("skill {id} field visual"));
+            assert_eq!(field.str_name(), Some("note_1.str"), "skill {id}");
+            assert!(field.repeating, "skill {id} field loops");
+            assert!(!catalog.skill(id).expect("cast").repeating, "skill {id}");
+        }
+        for id in 305..=313 {
+            assert!(catalog.skill_unit(id).is_none(), "skill {id} has no field");
+        }
+    }
+
+    #[test]
+    fn skill_unit_falls_back_only_to_a_repeating_skills_entry() {
+        let catalog = seeded_catalog();
+        assert_eq!(
+            catalog.skill_unit(89).map(|d| d.repeating),
+            Some(true),
+            "Storm Gust's repeating skills entry is its unit visual"
+        );
+        assert!(
+            catalog.skill_unit(83).is_none(),
+            "Meteor Storm's one-shot skills entry is not a unit visual"
+        );
+    }
+
+    #[test]
+    fn non_repeating_skill_units_entry_is_rejected() {
+        let mut data = EffectData::default();
+        data.skill_units.insert(
+            319,
+            EffectDescriptor {
+                visuals: vec![Visual::Str("note_1.str".into())],
+                placement: EffectPlacement::Ground,
+                color: [1.0; 4],
+                repeating: false,
+                ..Default::default()
+            },
+        );
+        let error = EffectCatalog::build(&data).expect_err("must reject");
+        assert!(error.contains("skill_units[319]"), "{error}");
     }
 
     #[test]
