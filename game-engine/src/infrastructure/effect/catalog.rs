@@ -991,21 +991,34 @@ mod tests {
             assert!(catalog.skill(id).is_none(), "skill {id} should be absent");
         }
 
-        // Pre-renewal solo songs and dances also place a field: its group
-        // resolves the looping `skill_units` visual while the cast keeps its
-        // one-shot `skills` burst. Ensembles stay snapshots server-side, so
-        // they have no field visual.
-        for id in [317, 319, 320, 321, 322, 325, 327, 328, 329, 330] {
+        // Pre-renewal performances place fields with looping visuals while
+        // their casts keep one-shot bursts. Ensembles stay at the cast origin.
+        for id in [
+            306, 307, 308, 309, 310, 311, 312, 313, 317, 319, 320, 321, 322, 325, 327, 328, 329,
+            330,
+        ] {
             let field = catalog
                 .skill_unit(id)
                 .unwrap_or_else(|| panic!("skill {id} field visual"));
-            assert_eq!(field.str_name(), Some("note_1.str"), "skill {id}");
+            assert!(
+                field
+                    .str_name()
+                    .is_some_and(|name| name.ends_with(".strfx.ron")),
+                "skill {id} needs a dedicated performance loop"
+            );
+            assert_eq!(
+                field.color, [1.0; 4],
+                "skill {id} preserves its artwork colors"
+            );
+            assert_eq!(field.placement, EffectPlacement::Ground, "skill {id}");
+            assert!(
+                field.sound.is_none(),
+                "skill {id} must not replay its cast sound"
+            );
             assert!(field.repeating, "skill {id} field loops");
             assert!(!catalog.skill(id).expect("cast").repeating, "skill {id}");
         }
-        for id in 305..=313 {
-            assert!(catalog.skill_unit(id).is_none(), "skill {id} has no field");
-        }
+        assert!(catalog.skill_unit(305).is_none(), "Encore has no field");
     }
 
     #[test]

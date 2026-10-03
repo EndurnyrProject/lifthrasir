@@ -1,0 +1,36 @@
+// A Poem of Bragi field: blue-violet spell glyphs, not musical notes.
+// Motif reference: roBrowserLegacy src/Renderer/Effects/Songs.js (BragiSpellEffect).
+// NOTE: fixed glyph selection and group-centered bobbing approximate the
+// reference's randomized per-tile glyphs without adding a particle spawner.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/spell_01.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (279.0, 275.0), quad: (28.0, 28.0), color: (156, 156, 255, 200)),
+                (at: 60, offset: (279.0, 263.0), quad: (28.0, 28.0), color: (156, 156, 255, 200)),
+                (at: 120, offset: (279.0, 275.0), quad: (28.0, 28.0), color: (156, 156, 255, 200)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/spell_04.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (319.0, 255.0), quad: (28.0, 28.0), color: (156, 156, 255, 200)),
+                (at: 60, offset: (319.0, 267.0), quad: (28.0, 28.0), color: (156, 156, 255, 200)),
+                (at: 120, offset: (319.0, 255.0), quad: (28.0, 28.0), color: (156, 156, 255, 200)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/spell_08.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (359.0, 275.0), quad: (28.0, 28.0), color: (156, 156, 255, 200)),
+                (at: 60, offset: (359.0, 263.0), quad: (28.0, 28.0), color: (156, 156, 255, 200)),
+                (at: 120, offset: (359.0, 275.0), quad: (28.0, 28.0), color: (156, 156, 255, 200)),
+            ],
+        ),
+    ],
+)

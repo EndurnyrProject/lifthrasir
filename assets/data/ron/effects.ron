@@ -1123,8 +1123,8 @@
         // both rulesets. Renewal runs every performance as a party snapshot
         // with no ground unit. Pre-renewal solo songs and dances (317, 319-322,
         // 325, 327-330) also place a 7x7 field that follows the performer;
-        // its looping visual lives in `skill_units`. Pre-renewal ensembles are
-        // still snapshots server-side. Each cast is one caster-anchored burst:
+        // ensembles (306-313) place stationary 9x9 fields. Their looping
+        // visuals live in `skill_units`. Each cast is one caster-anchored burst:
         // the native
         // note_1.str rising-notes flourish, tinted per song, plus the retail
         // song wav where the GRF ships one (they live under data/wav/effect/
@@ -1403,81 +1403,141 @@
         ),
     },
     skill_units: {
+        // Pre-renewal performance motifs from roBrowserLegacy's Songs.js:
+        // https://github.com/MrAntares/roBrowserLegacy/blob/master/src/Renderer/Effects/Songs.js
+        // Keep retail texture colors rather than multiplying by cast-note tints.
+        // NOTE: these are group-centered hovering approximations, not RO's
+        // per-tile ground overlays. A per-cell renderer can refine the layout
+        // later; the server still owns movement and lifetime. Ensemble fields
+        // stay at the cast origin. Shared motifs reuse the same authored asset.
+        306: ( // BD_LULLABY -- sleep symbols
+            visuals: [Str("performance_sleep.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        307: ( // BD_RICHMANKIM -- money bags
+            visuals: [Str("performance_money.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        308: ( // BD_ETERNALCHAOS -- green light
+            visuals: [Str("performance_green_glow.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        309: ( // BD_DRUMBATTLEFIELD -- melody_b symbols
+            visuals: [Str("performance_whistle.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        310: ( // BD_RINGNIBELUNGEN -- blue spirals
+            visuals: [Str("performance_ring.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        311: ( // BD_ROKISWEIL -- energy curls
+            visuals: [Str("performance_ward.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        312: ( // BD_INTOABYSS -- gemstones
+            visuals: [Str("performance_gems.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        313: ( // BD_SIEGFRIED -- blue light
+            visuals: [Str("performance_blue_glow.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         // --- Pre-renewal song and dance fields ---------------------------------
-        // aesir places these 7x7 fields only in pre-renewal and moves them with
-        // the performer (SkillUnitMove). One looping note_1.str at the field
-        // center, tinted like the song's cast burst, so the field reads as the
-        // same song. Apple of Idun and Fortune's Kiss cast authored bursts, so
-        // their fields take tints of their own. Dissonance's per-tick damage
-        // still plays its cast burst on each victim through `skills`.
-        317: ( // BA_DISSONANCE -- sour magenta notes.
-            visuals: [Str("note_1.str")],
+        // aesir moves these 7x7 fields with the performer (SkillUnitMove).
+        // Dissonance's per-tick damage still plays its cast burst on each
+        // victim through `skills`; field loops are silent and independent.
+        317: ( // BA_DISSONANCE -- white light
+            visuals: [Str("performance_white_glow.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (0.9, 0.5, 0.9, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        319: ( // BA_WHISTLE
-            visuals: [Str("note_1.str")],
+        319: ( // BA_WHISTLE -- melody_b symbols
+            visuals: [Str("performance_whistle.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (0.85, 0.95, 1.0, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        320: ( // BA_ASSASSINCROSS
-            visuals: [Str("note_1.str")],
+        320: ( // BA_ASSASSINCROSS -- red light
+            visuals: [Str("performance_red_glow.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (1.0, 0.6, 0.35, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        321: ( // BA_POEMBRAGI
-            visuals: [Str("note_1.str")],
+        321: ( // BA_POEMBRAGI -- blue-violet spell glyphs
+            visuals: [Str("performance_runes.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (0.8, 0.65, 1.0, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        322: ( // BA_APPLEIDUN -- apple-green notes.
-            visuals: [Str("note_1.str")],
+        322: ( // BA_APPLEIDUN -- yellow apples
+            visuals: [Str("performance_apples.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (0.7, 1.0, 0.55, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        325: ( // DC_UGLYDANCE
-            visuals: [Str("note_1.str")],
+        325: ( // DC_UGLYDANCE -- white light
+            visuals: [Str("performance_white_glow.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (0.6, 0.9, 0.4, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        327: ( // DC_HUMMING
-            visuals: [Str("note_1.str")],
+        327: ( // DC_HUMMING -- melody_a symbols
+            visuals: [Str("performance_humming.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (1.0, 0.95, 0.6, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        328: ( // DC_DONTFORGETME
-            visuals: [Str("note_1.str")],
+        328: ( // DC_DONTFORGETME -- green light
+            visuals: [Str("performance_green_glow.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (1.0, 0.7, 0.85, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        329: ( // DC_FORTUNEKISS -- rose notes.
-            visuals: [Str("note_1.str")],
+        329: ( // DC_FORTUNEKISS -- hearts
+            visuals: [Str("performance_hearts.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (1.0, 0.55, 0.65, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        330: ( // DC_SERVICEFORYOU
-            visuals: [Str("note_1.str")],
+        330: ( // DC_SERVICEFORYOU -- energy curls
+            visuals: [Str("performance_ward.strfx.ron")],
             sound: None,
             placement: Ground,
-            color: (0.7, 0.8, 1.0, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
     },
