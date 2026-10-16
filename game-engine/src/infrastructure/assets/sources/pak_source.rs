@@ -1,26 +1,16 @@
 use super::{AssetSource, AssetSourceError};
-use serde::Deserialize;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
+use lifthrasir_pak::{PakError, PakReader};
 use std::path::Path;
-use std::sync::Mutex;
-use zip::ZipArchive;
 
+#[cfg(test)]
+use std::fs::File;
+#[cfg(test)]
 const MANIFEST_ENTRY: &str = ".lifthrasir/manifest.toml";
-const LIFTHRASIR_PREFIX: &str = ".lifthrasir/";
-const FORMAT_VERSION: u32 = 1;
-
-#[derive(Debug, Deserialize)]
-struct PakManifest {
-    format_version: u32,
-}
 
 pub struct PakSource {
     name: String,
     priority: u32,
-    archive: Mutex<ZipArchive<File>>,
-    index_by_name: HashMap<String, usize>,
+    reader: PakReader,
 }
 
 impl std::fmt::Debug for PakSource {
@@ -30,129 +20,44 @@ impl std::fmt::Debug for PakSource {
             "PakSource(name: {}, priority: {}, entries: {})",
             self.name,
             self.priority,
-            self.index_by_name.len()
+            self.reader.list_files().len()
         )
+    }
+}
+
+fn source_error(error: PakError) -> AssetSourceError {
+    match error {
+        PakError::NotFound(path) => AssetSourceError::NotFound(path),
+        PakError::Archive(message) => AssetSourceError::Archive(message),
     }
 }
 
 impl PakSource {
     pub fn new<P: AsRef<Path>>(path: P, priority: u32) -> Result<Self, AssetSourceError> {
         let path = path.as_ref();
-        let name = format!("Pak({})", path.display());
-
-        let file = File::open(path).map_err(|e| {
-            AssetSourceError::Archive(format!(
-                "Failed to open pak '{}': {e} (run `grf-utils pack` to build one)",
-                path.display()
-            ))
-        })?;
-
-        let mut archive = ZipArchive::new(file).map_err(|e| {
-            AssetSourceError::Archive(format!(
-                "Failed to read pak zip structure '{}': {e} (run `grf-utils pack` to build one)",
-                path.display()
-            ))
-        })?;
-
-        let manifest = read_manifest(&mut archive, path)?;
-        if manifest.format_version != FORMAT_VERSION {
-            return Err(AssetSourceError::Archive(format!(
-                "Pak '{}' has format_version {} (expected {}); rebuild it with `grf-utils pack`",
-                path.display(),
-                manifest.format_version,
-                FORMAT_VERSION
-            )));
-        }
-
-        let mut index_by_name = HashMap::new();
-        for index in 0..archive.len() {
-            let entry = archive.by_index(index).map_err(|e| {
-                AssetSourceError::Archive(format!(
-                    "Failed to read pak entry at index {index} in '{}': {e}",
-                    path.display()
-                ))
-            })?;
-            let entry_name = Self::normalize_path(entry.name());
-            if !entry_name.starts_with(LIFTHRASIR_PREFIX) {
-                index_by_name.insert(entry_name, index);
-            }
-        }
-
         Ok(Self {
-            name,
+            name: format!("Pak({})", path.display()),
             priority,
-            archive: Mutex::new(archive),
-            index_by_name,
+            reader: PakReader::open(path).map_err(source_error)?,
         })
     }
-
-    fn normalize_path(path: &str) -> String {
-        path.replace('\\', "/").to_lowercase()
-    }
-}
-
-fn read_manifest(
-    archive: &mut ZipArchive<File>,
-    path: &Path,
-) -> Result<PakManifest, AssetSourceError> {
-    let mut entry = archive.by_name(MANIFEST_ENTRY).map_err(|e| {
-        AssetSourceError::Archive(format!(
-            "Pak '{}' is missing {MANIFEST_ENTRY} ({e}); rebuild it with `grf-utils pack`",
-            path.display()
-        ))
-    })?;
-
-    let mut contents = String::new();
-    entry.read_to_string(&mut contents).map_err(|e| {
-        AssetSourceError::Archive(format!(
-            "Failed to read manifest in pak '{}': {e}",
-            path.display()
-        ))
-    })?;
-
-    toml::from_str(&contents).map_err(|e| {
-        AssetSourceError::Archive(format!(
-            "Failed to parse manifest in pak '{}': {e}",
-            path.display()
-        ))
-    })
 }
 
 impl AssetSource for PakSource {
     fn name(&self) -> &str {
         &self.name
     }
-
     fn priority(&self) -> u32 {
         self.priority
     }
-
     fn exists(&self, path: &str) -> bool {
-        self.index_by_name.contains_key(&Self::normalize_path(path))
+        self.reader.exists(path)
     }
-
     fn load(&self, path: &str) -> Result<Vec<u8>, AssetSourceError> {
-        let normalized_path = Self::normalize_path(path);
-        let index = *self
-            .index_by_name
-            .get(&normalized_path)
-            .ok_or_else(|| AssetSourceError::NotFound(path.to_string()))?;
-
-        let mut archive = self.archive.lock().unwrap();
-        let mut entry = archive.by_index(index).map_err(|e| {
-            AssetSourceError::Archive(format!("Failed to read pak entry '{path}': {e}"))
-        })?;
-
-        let mut data = Vec::with_capacity(entry.size() as usize);
-        entry.read_to_end(&mut data).map_err(|e| {
-            AssetSourceError::Archive(format!("Failed to decompress pak entry '{path}': {e}"))
-        })?;
-
-        Ok(data)
+        self.reader.read(path).map_err(source_error)
     }
-
     fn list_files(&self) -> Vec<String> {
-        self.index_by_name.keys().cloned().collect()
+        self.reader.list_files()
     }
 }
 

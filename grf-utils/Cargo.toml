@@ -8,16 +8,16 @@ name = "grf-utils"
 path = "src/main.rs"
 
 [dependencies]
+lifthrasir-pak = { path = "../lifthrasir-pak" }
 ro-formats = { path = "../ro-formats" }
 clap = { workspace = true }
 anyhow = { workspace = true }
 indicatif = "0.18"
-zip = { workspace = true }
-toml = { workspace = true }
-serde = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+zip = { workspace = true }
+toml = { workspace = true }
 
 [profile.release]
 strip = true

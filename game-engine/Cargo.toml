@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 ro-formats = { path = "../ro-formats" }
 lifthrasir-data = { path = "../lifthrasir-data" }
+lifthrasir-pak = { path = "../lifthrasir-pak" }
 net-contract = { path = "../net-contract" }
 bevy = { workspace = true, features = [
     "bevy_gltf",

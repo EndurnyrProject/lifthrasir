@@ -165,11 +165,17 @@ fn pack_command(
             .progress_chars("#>-"),
     );
 
-    let dedup =
-        pak::write_pak_parallel(&entries, out, content_version, zstd_level, jobs, |path| {
+    let dedup = lifthrasir_pak::write_pak_parallel(
+        &entries,
+        out,
+        content_version,
+        zstd_level,
+        jobs,
+        |path| {
             pb.set_message(path.to_string());
             pb.inc(1);
-        })?;
+        },
+    )?;
 
     pb.finish_with_message("Pack complete");
 
@@ -189,7 +195,7 @@ fn pack_command(
 }
 
 fn merge_command(main: &Path, patch: &Path) -> Result<()> {
-    for leftover in pak::detect_leftovers(main) {
+    for leftover in lifthrasir_pak::detect_leftovers(main) {
         eprintln!(
             "Warning: found leftover '{}' from a previous interrupted merge; \
              it will be overwritten or replaced by this run",
@@ -205,7 +211,7 @@ fn merge_command(main: &Path, patch: &Path) -> Result<()> {
     );
 
     let mut count = 0u64;
-    pak::merge_paks(main, patch, |entry| {
+    lifthrasir_pak::merge_paks(main, patch, |entry| {
         count += 1;
         pb.set_message(entry.to_string());
         pb.tick();

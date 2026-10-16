@@ -3659,6 +3659,7 @@ dependencies = [
  "iyes_progress",
  "leafwing-input-manager",
  "lifthrasir-data",
+ "lifthrasir-pak",
  "moonshine-behavior",
  "moonshine-kind",
  "moonshine-tag",
@@ -3944,8 +3945,8 @@ dependencies = [
  "anyhow",
  "clap",
  "indicatif",
+ "lifthrasir-pak",
  "ro-formats",
- "serde",
  "tempfile",
  "toml",
  "zip",
@@ -4741,6 +4742,18 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "lifthrasir-pak"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.20",
+ "toml",
+ "zip",
 ]
 
 [[package]]

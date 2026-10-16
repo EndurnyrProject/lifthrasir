@@ -4,6 +4,7 @@ members = [
     "game-engine",
     "grf-utils",
     "lifthrasir-data",
+    "lifthrasir-pak",
     "lifthrasir-ui",
     "lifthrasir",
     "net-aesir",
