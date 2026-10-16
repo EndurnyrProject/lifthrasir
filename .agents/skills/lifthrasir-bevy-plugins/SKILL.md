@@ -161,7 +161,7 @@ Patterns in repo: BGM crossfade via `instance.stop(AudioTween::linear(..))` on t
 
 ### Channels + spatial audio (SFX/ambience)
 
-`AudioPlugin` (the domain one, `game-engine/src/plugins/audio_plugin.rs`) also wires `SpatialAudioPlugin` and two custom `AudioChannel`s — SFX no longer plays on the default `Audio` resource:
+`ContentAudioPlugin` (`crates/lifthrasir-runtime/src/audio/plugin.rs`) owns Kira, `SpatialAudioPlugin` and the channels below. The client audio plugin bridges settings/BGM only; it must not install a second backend:
 
 ```rust
 use bevy_kira_audio::prelude::{AudioApp, SpatialAudioPlugin};
@@ -238,11 +238,11 @@ app.add_plugins(BehaviorPlugin::<AnimationState>::default());
 
 Wired for windows, theme, and the game cursor (`FeathersPlugins`/`FeathersCorePlugin` group, `UiTheme` overrides, `bsn!` scenes). See the `bevy-feathers-bsn` skill for widget/scene authoring patterns — that's the primary reference, not this one.
 
-**⚠️ Gotcha (owned here because it's project wiring, not a Feathers API detail):** `bevy_feathers`'s `CursorIconPlugin` (bundled in `FeathersPlugins`) overwrites the window's `CursorIcon` every `PreUpdate`. Never `insert_resource`/set the window cursor directly — it will be stomped. Drive the RO cursor through Feathers' own `OverrideCursor` resource instead (`bevy_feathers::cursor::{EntityCursor, OverrideCursor}`), which requires the `custom_cursor` feature (already enabled on this workspace's `bevy_feathers` dep). See `lifthrasir-ui/src/cursor.rs`.
+**⚠️ Gotcha (owned here because it's project wiring, not a Feathers API detail):** `bevy_feathers`'s `CursorIconPlugin` (bundled in `FeathersPlugins`) overwrites the window's `CursorIcon` every `PreUpdate`. Never `insert_resource`/set the window cursor directly — it will be stomped. Drive the RO cursor through Feathers' own `OverrideCursor` resource instead (`bevy_feathers::cursor::{EntityCursor, OverrideCursor}`), which requires the `custom_cursor` feature (already enabled on this workspace's `bevy_feathers` dep). See `crates/lifthrasir-client-ui/src/cursor.rs`.
 
 ### bevy_hanabi (0.19) — plugin registered, no particles authored yet
 
-`VfxPlugin` (`game-engine/src/presentation/rendering/effects/mod.rs`) owns `HanabiPlugin` — **add it in exactly one place**; a second `add_plugins(HanabiPlugin)` panics. Every other VFX plugin (e.g. `PortalVfxPlugin`) nests under `VfxPlugin` and assumes Hanabi is already registered.
+`EffectsPlaybackPlugin` (`crates/lifthrasir-runtime/src/effects/plugin.rs`) owns `HanabiPlugin` when a renderer is available. **Add it in exactly one place**; client `VfxPlugin` owns gameplay bridges, not Hanabi. The shared CPU subset deliberately omits GPU initialization.
 
 No `EffectAsset`/`ParticleEffect` exists in the repo yet — the portal effect uses a hand-written `Material` + WGSL shader, not Hanabi particles. If you're asked to add a particle effect (sparks, dust, spell trails), this is a green field: author an `EffectAsset` with `ExprWriter`, add it as a `ParticleEffectBundle`/`ParticleEffect` under the same `VfxSystems` set ordering as the other effect-attach systems.
 
@@ -272,7 +272,7 @@ fn on_apply(mut persistent: ResMut<Persistent<Settings>>) {
 
 ### bevy_framepace (git `hacknus/bevy_framepace@bevy_0.19`)
 
-Not on crates.io for this pin — the workspace Cargo.toml points at a fork branch tracking Bevy 0.19. `FramepacePlugin` is added once in `lifthrasir/src/main.rs`, but the limiter itself is **not** hard-coded — it's driven dynamically by the user's FPS-cap setting in `game-engine/src/domain/settings/apply.rs`:
+The workspace pins `bevy_framepace` 0.22.0. `FramepacePlugin` is added once in `apps/lifthrasir/src/main.rs`, but the limiter is driven by the user's FPS-cap setting in `crates/lifthrasir-client/src/domain/settings/apply.rs`:
 
 ```rust
 fn apply_graphics(mut framepace: ResMut<bevy_framepace::FramepaceSettings>, settings: Res<Persistent<Settings>>) {

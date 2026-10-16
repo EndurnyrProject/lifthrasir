@@ -1,0 +1,728 @@
+//! Item info modal content: renders an [`ItemInfoView`] through the shell chrome —
+//! header, card slots, meta grid, and description — plus a footer whose action the
+//! summoning surface chose (`ItemAction`). Optional sections (cards, meta,
+//! description, footer) are omitted entirely when their view field is empty, rather
+//! than spawned as empty wrappers.
+//!
+//! Footer actions revalidate the item at the stored index against the `item_id`
+//! captured when the modal was built, since the inventory can change while the
+//! modal is open (item consumed, moved, sold). A mismatch warns and closes the
+//! modal without writing a command.
+
+use bevy::prelude::*;
+use bevy::scene::EntityScene;
+use bevy::text::{FontSize, FontSourceTemplate};
+use bevy::ui::InteractionDisabled;
+use bevy::ui_widgets::Activate;
+use bevy_feathers::controls::{ButtonVariant, FeathersButton};
+use bevy_feathers::theme::{ThemeBorderColor, ThemedText};
+
+use lifthrasir_client::domain::equipment::{EquipItemRequested, UnequipItemRequested};
+use lifthrasir_client::domain::inventory::{Inventory, UseItemRequested};
+
+use lifthrasir_ui::widgets::chrome::{glyph_icon, ignore_picking};
+
+use crate::widgets::info_modal::shell::{self, HeaderView};
+use crate::widgets::info_modal::view::ItemInfoView;
+use crate::widgets::info_modal::{InfoModalRoot, ItemAction, ItemActionKind};
+
+fn action_label(kind: ItemActionKind) -> &'static str {
+    match kind {
+        ItemActionKind::Use => "Use",
+        ItemActionKind::Equip => "Equip",
+        ItemActionKind::Unequip => "Unequip",
+    }
+}
+
+/// Carries the data a footer button's click observer needs to revalidate and act:
+/// the inventory slot, the `item_id` it had when the modal was built, and which
+/// command to write.
+#[derive(Component, Clone, Copy)]
+pub(super) struct FooterAction {
+    index: u16,
+    item_id: u32,
+    kind: ItemActionKind,
+    disabled: bool,
+}
+
+/// Every field is always set explicitly at the `template_value` call site; this
+/// impl exists only so `FooterAction` satisfies `bsn!`'s `Template` bound.
+impl Default for FooterAction {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            item_id: 0,
+            kind: ItemActionKind::Use,
+            disabled: false,
+        }
+    }
+}
+
+/// Marks the display-only favorite indicator in the item footer — `.im-act.ghost`
+/// (`.on` when lit). Carries the flag it renders so tests can assert lit state
+/// without inspecting colors; not a button, never targeted by an observer.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct FavoriteStar {
+    pub lit: bool,
+}
+
+const ILLUSTRATION_PARCHMENT: Color = Color::srgb_u8(0xe8, 0xdd, 0xc2);
+
+/// Marks the parchment plate holding the native RO collection illustration.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ItemIllustration;
+
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ItemIllustrationImage;
+
+fn item_illustration(path: String, edge: shell::EdgeGrade) -> impl Scene {
+    bsn! {
+        ItemIllustration
+        Node {
+            width: percent(100),
+            height: px(176),
+            flex_shrink: 0.0,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: px(1),
+            border_radius: BorderRadius::all(px(12)),
+            overflow: Overflow::clip(),
+        }
+        BackgroundColor(ILLUSTRATION_PARCHMENT)
+        BorderColor::all(lifthrasir_ui::theme::STROKE)
+        ignore_picking()
+        Children [
+            (
+                ItemIllustrationImage
+                ImageNode { image: {path}, color: {ILLUSTRATION_PARCHMENT} }
+                Node { width: px(75), height: px(100) }
+                ignore_picking()
+            ),
+            (
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(6), right: px(6), top: px(6), bottom: px(6),
+                    border: px(1),
+                    border_radius: BorderRadius::all(px(8)),
+                }
+                ThemeBorderColor({edge.token()})
+                ignore_picking()
+            ),
+        ]
+    }
+}
+
+/// The footer's favorite indicator — gold when `favorite`, dim otherwise. Rendered
+/// only for `Inventory` refs, since favorite is server item state with no command
+/// to toggle it here. `ignore_picking` (not a `FeathersButton`, no observer) keeps
+/// it a display-only ghost button per the mockup.
+fn favorite_star(favorite: bool) -> impl Scene {
+    let (bg, border, color) = if favorite {
+        (
+            Color::srgba(0.851, 0.643, 0.255, 0.1),
+            lifthrasir_ui::theme::GOLD_FAINT,
+            lifthrasir_ui::theme::GOLD,
+        )
+    } else {
+        (
+            Color::WHITE.with_alpha(0.03),
+            lifthrasir_ui::theme::STROKE,
+            lifthrasir_ui::theme::TEXT_DIM,
+        )
+    };
+    bsn! {
+        template_value(FavoriteStar { lit: favorite })
+        Node {
+            width: px(42),
+            height: px(40),
+            flex_shrink: 0.0,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: px(1),
+            border_radius: BorderRadius::all(px(9)),
+        }
+        BackgroundColor(bg)
+        BorderColor::all(border)
+        ignore_picking()
+        Children [ glyph_icon("star", 15.0, color) ]
+    }
+}
+
+/// The item modal's whole content: header, then the scrollable section stack, then
+/// the footer with `action` (if any) and the favorite star (if the view carries one).
+pub(super) fn scene(view: ItemInfoView, action: Option<ItemAction>) -> impl Scene {
+    let header = shell::header(HeaderView {
+        icon_path: view.icon_path.clone(),
+        refine: view.refine,
+        sockets_filled: view.sockets_filled,
+        sockets_total: view.sockets_total,
+        edge: view.edge,
+        name: view.name.clone(),
+        tags: view.tags.clone(),
+    });
+    let cards = (view.sockets_total > 0).then(|| EntityScene(card_slots_section(&view)));
+    let meta = (!view.meta.is_empty()).then(|| {
+        EntityScene(shell::meta_grid(
+            view.meta
+                .iter()
+                .cloned()
+                .map(|(key, value)| shell::meta_cell(key, value))
+                .collect(),
+        ))
+    });
+    let description = (!view.description.is_empty())
+        .then(|| EntityScene(shell::description_section(view.description.clone())));
+    let illustration = view
+        .illustration_path
+        .clone()
+        .map(|path| EntityScene(item_illustration(path, view.edge)));
+
+    let button = action.map(|action| action_button(&view, action));
+    let star = view.favorite.map(favorite_star);
+    let mut footer_children: Vec<Box<dyn Scene>> = button
+        .into_iter()
+        .map(|action| Box::new(action) as Box<dyn Scene>)
+        .collect();
+    footer_children.extend(star.map(|star| Box::new(star) as Box<dyn Scene>));
+    let footer =
+        (!footer_children.is_empty()).then(|| EntityScene(shell::footer_bar(footer_children)));
+
+    bsn! {
+        Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: px(0) }
+        ignore_picking()
+        Children [
+            header,
+            shell::scroll_body(bsn! {
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    flex_shrink: 0.0,
+                    row_gap: px(14),
+                    padding: {UiRect { left: px(20), right: px(20), top: px(0), bottom: px(6) }},
+                }
+                ignore_picking()
+                Children [ {illustration}, {cards}, {meta}, {description} ]
+            }),
+            {footer},
+        ]
+    }
+}
+
+/// The Card Slots section: a section label with the `filled/total` counter, and one
+/// row per socket — filled ones name the card, empty ones say so.
+fn card_slots_section(view: &ItemInfoView) -> impl Scene + use<> {
+    let counter = format!("{} / {}", view.cards.len(), view.sockets_total);
+    let slots: Vec<_> = (0..view.sockets_total)
+        .map(|i| card_slot(view.cards.get(i as usize).cloned()))
+        .collect();
+    bsn! {
+        Node { flex_direction: FlexDirection::Column }
+        ignore_picking()
+        Children [
+            shell::section_label("Card Slots".to_string(), Some(counter)),
+            (
+                Node { flex_direction: FlexDirection::Column, row_gap: px(7) }
+                ignore_picking()
+                Children [ {slots} ]
+            ),
+        ]
+    }
+}
+
+fn card_slot(name: Option<String>) -> impl Scene {
+    let filled = name.is_some();
+    let label = name.unwrap_or_else(|| "Empty Socket".to_string());
+    let (bg, border, color) = if filled {
+        (
+            Color::srgba(0.851, 0.643, 0.255, 0.06),
+            lifthrasir_ui::theme::GOLD_FAINT,
+            lifthrasir_ui::theme::TEXT,
+        )
+    } else {
+        (
+            Color::BLACK.with_alpha(0.22),
+            lifthrasir_ui::theme::STROKE,
+            lifthrasir_ui::theme::TEXT_FAINT,
+        )
+    };
+    bsn! {
+        Node {
+            padding: {UiRect::axes(px(11), px(9))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(9)),
+        }
+        BackgroundColor(bg)
+        BorderColor::all(border)
+        ignore_picking()
+        Children [
+            (
+                Text(label)
+                TextFont {
+                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                    font_size: {FontSize::Px(12.0)},
+                }
+                TextColor(color)
+                ignore_picking()
+            ),
+        ]
+    }
+}
+
+/// The footer's primary button. Equip is disabled for an unidentified item, since
+/// the server refuses it; the other actions are always live.
+fn action_button(view: &ItemInfoView, action: ItemAction) -> impl Scene {
+    let disabled = action.kind == ItemActionKind::Equip && !view.identified;
+    let template = FooterAction {
+        index: action.index,
+        item_id: view.item_id,
+        kind: action.kind,
+        disabled,
+    };
+    let label = action_label(action.kind).to_string();
+    bsn! {
+        template_value(template)
+        @FeathersButton {
+            @caption: bsn! { (Text(label) ThemedText) },
+            @variant: ButtonVariant::Primary,
+        }
+        Node { flex_grow: 1.0, height: px(40), border_radius: BorderRadius::all(px(9)) }
+        on(on_footer_action_click)
+    }
+}
+
+/// Applies [`FooterAction::disabled`] as Feathers' `InteractionDisabled` once per
+/// spawned button — the modal rebuilds from scratch on every show, so `Added` fires
+/// exactly once per button and needs no steady-state upkeep.
+pub(super) fn apply_footer_disabled(
+    buttons: Query<(Entity, &FooterAction), Added<FooterAction>>,
+    mut commands: Commands,
+) {
+    for (entity, action) in &buttons {
+        if action.disabled {
+            commands.entity(entity).insert(InteractionDisabled);
+        }
+    }
+}
+
+/// Revalidates the item at the stored index still has the button's `item_id`
+/// before writing its command; a mismatch (item consumed/moved/sold while the
+/// modal was open) warns and closes the modal without writing anything. Either
+/// way, the modal closes.
+#[allow(clippy::too_many_arguments)]
+fn on_footer_action_click(
+    activate: On<Activate>,
+    actions: Query<&FooterAction>,
+    inventory: Res<Inventory>,
+    root: Query<Entity, With<InfoModalRoot>>,
+    mut commands: Commands,
+    mut use_writer: MessageWriter<UseItemRequested>,
+    mut equip_writer: MessageWriter<EquipItemRequested>,
+    mut unequip_writer: MessageWriter<UnequipItemRequested>,
+) {
+    let Ok(action) = actions.get(activate.entity) else {
+        return;
+    };
+    let index = action.index;
+    let still_valid = inventory
+        .get(index)
+        .is_some_and(|item| item.item_id == action.item_id);
+    if still_valid {
+        match action.kind {
+            ItemActionKind::Use => {
+                use_writer.write(UseItemRequested {
+                    index: index as u32,
+                });
+            }
+            ItemActionKind::Equip => {
+                equip_writer.write(EquipItemRequested { index });
+            }
+            ItemActionKind::Unequip => {
+                unequip_writer.write(UnequipItemRequested { index });
+            }
+        }
+    } else {
+        warn!(
+            "info modal: item at index {index} changed before the footer action fired; closing without acting"
+        );
+    }
+    if let Ok(root) = root.single() {
+        commands.entity(root).despawn();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::scene::ScenePlugin;
+    use lifthrasir_client::domain::inventory::Item;
+
+    fn test_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app
+    }
+
+    fn full_view() -> ItemInfoView {
+        ItemInfoView {
+            item_id: 501,
+            icon_path: Some("items/red_potion.png".to_string()),
+            illustration_path: Some("items/red_potion_illustration.png".to_string()),
+            edge: shell::EdgeGrade::Fine,
+            name: "Red Potion".to_string(),
+            identified: true,
+            favorite: Some(false),
+            tags: vec!["Usable".to_string()],
+            refine: Some(4),
+            sockets_filled: 1,
+            sockets_total: 2,
+            cards: vec!["Poring Card".to_string()],
+            description: vec![vec![(
+                lifthrasir_ui::theme::TEXT_DIM,
+                "Restores HP.".to_string(),
+            )]],
+            meta: vec![("Weight".to_string(), "10".to_string())],
+        }
+    }
+
+    fn empty_view() -> ItemInfoView {
+        ItemInfoView {
+            item_id: 502,
+            icon_path: None,
+            illustration_path: None,
+            edge: shell::EdgeGrade::Common,
+            name: "Junk".to_string(),
+            identified: true,
+            favorite: None,
+            tags: vec![],
+            refine: None,
+            sockets_filled: 0,
+            sockets_total: 0,
+            cards: vec![],
+            description: vec![],
+            meta: vec![],
+        }
+    }
+
+    fn action(kind: ItemActionKind) -> Option<ItemAction> {
+        Some(ItemAction { kind, index: 1 })
+    }
+
+    fn texts(app: &mut App) -> Vec<String> {
+        app.world_mut()
+            .query::<&Text>()
+            .iter(app.world())
+            .map(|text| text.0.clone())
+            .collect()
+    }
+
+    fn footer_actions(app: &mut App) -> Vec<FooterAction> {
+        app.world_mut()
+            .query::<&FooterAction>()
+            .iter(app.world())
+            .copied()
+            .collect()
+    }
+
+    fn stars(app: &mut App) -> Vec<FavoriteStar> {
+        app.world_mut()
+            .query::<&FavoriteStar>()
+            .iter(app.world())
+            .copied()
+            .collect()
+    }
+
+    #[test]
+    fn full_view_renders_header_cards_meta_and_description() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(scene(full_view(), action(ItemActionKind::Use)))
+            .expect("scene spawns");
+        app.update();
+
+        let texts = texts(&mut app);
+        assert!(texts.contains(&"Red Potion".to_string()), "{texts:?}");
+        assert!(texts.contains(&"CARD SLOTS".to_string()), "{texts:?}");
+        assert!(texts.contains(&"1 / 2".to_string()), "{texts:?}");
+        assert!(texts.contains(&"Poring Card".to_string()), "{texts:?}");
+        assert!(texts.contains(&"Empty Socket".to_string()), "{texts:?}");
+        assert!(texts.contains(&"WEIGHT".to_string()), "{texts:?}");
+        assert!(texts.contains(&"10".to_string()), "{texts:?}");
+        assert!(texts.contains(&"Restores HP.".to_string()), "{texts:?}");
+        assert!(texts.contains(&"Use".to_string()), "{texts:?}");
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, With<ItemIllustration>>()
+                .iter(app.world())
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn illustration_uses_parchment_plate_and_warm_tint() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(item_illustration(
+                "items/red_potion_illustration.png".to_string(),
+                shell::EdgeGrade::Fine,
+            ))
+            .expect("scene spawns");
+        app.update();
+
+        let mut plate_query = app
+            .world_mut()
+            .query_filtered::<(&Node, &BackgroundColor), With<ItemIllustration>>();
+        let (plate, background) = plate_query.single(app.world()).expect("one plate");
+        assert_eq!(plate.width, percent(100));
+        assert_eq!(plate.height, px(176));
+        assert_eq!(background.0, ILLUSTRATION_PARCHMENT);
+
+        let mut image_query = app
+            .world_mut()
+            .query_filtered::<&ImageNode, With<ItemIllustrationImage>>();
+        let image = image_query.single(app.world()).expect("one illustration");
+        assert_eq!(image.color, ILLUSTRATION_PARCHMENT);
+    }
+
+    #[test]
+    fn empty_view_renders_no_optional_sections() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(scene(empty_view(), None))
+            .expect("scene spawns");
+        app.update();
+
+        let texts = texts(&mut app);
+        assert!(texts.contains(&"Junk".to_string()), "{texts:?}");
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, With<ItemIllustration>>()
+                .iter(app.world())
+                .count(),
+            0
+        );
+        for absent in [
+            "CARD SLOTS",
+            "Empty Socket",
+            "WEIGHT",
+            "Use",
+            "Equip",
+            "Unequip",
+        ] {
+            assert!(
+                !texts.iter().any(|t| t == absent),
+                "unexpected {absent:?} in {texts:?}"
+            );
+        }
+        assert!(footer_actions(&mut app).is_empty());
+        assert!(stars(&mut app).is_empty());
+    }
+
+    #[test]
+    fn no_action_renders_no_footer_button() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(scene(full_view(), None))
+            .expect("scene spawns");
+        app.update();
+
+        assert!(footer_actions(&mut app).is_empty());
+    }
+
+    #[test]
+    fn equip_button_carries_disabled_state_when_unidentified() {
+        let mut app = test_app();
+        let mut view = full_view();
+        view.identified = false;
+        app.world_mut()
+            .spawn_scene(scene(view, action(ItemActionKind::Equip)))
+            .expect("scene spawns");
+        app.update();
+
+        let actions = footer_actions(&mut app);
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].kind, ItemActionKind::Equip);
+        assert_eq!(actions[0].item_id, 501);
+        assert_eq!(actions[0].index, 1);
+        assert!(actions[0].disabled);
+    }
+
+    #[test]
+    fn identified_equip_button_is_not_disabled() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(scene(full_view(), action(ItemActionKind::Equip)))
+            .expect("scene spawns");
+        app.update();
+
+        let actions = footer_actions(&mut app);
+        assert_eq!(actions.len(), 1);
+        assert!(!actions[0].disabled);
+    }
+
+    #[test]
+    fn apply_footer_disabled_inserts_interaction_disabled_only_when_flagged() {
+        let mut app = App::new();
+        app.add_systems(Update, apply_footer_disabled);
+        let disabled = app
+            .world_mut()
+            .spawn(FooterAction {
+                index: 1,
+                item_id: 1,
+                kind: ItemActionKind::Equip,
+                disabled: true,
+            })
+            .id();
+        let enabled = app
+            .world_mut()
+            .spawn(FooterAction {
+                index: 1,
+                item_id: 1,
+                kind: ItemActionKind::Use,
+                disabled: false,
+            })
+            .id();
+        app.update();
+
+        assert!(app.world().get::<InteractionDisabled>(disabled).is_some());
+        assert!(app.world().get::<InteractionDisabled>(enabled).is_none());
+    }
+
+    #[test]
+    fn favorite_star_renders_with_no_primary_action() {
+        let mut app = test_app();
+        let mut view = full_view();
+        view.favorite = Some(true);
+        app.world_mut()
+            .spawn_scene(scene(view, None))
+            .expect("scene spawns");
+        app.update();
+
+        let stars = stars(&mut app);
+        assert_eq!(stars.len(), 1);
+        assert!(stars[0].lit);
+    }
+
+    #[test]
+    fn favorite_star_unlit_when_view_not_favorited() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(scene(full_view(), action(ItemActionKind::Use)))
+            .expect("scene spawns");
+        app.update();
+
+        let stars = stars(&mut app);
+        assert_eq!(stars.len(), 1);
+        assert!(!stars[0].lit);
+    }
+
+    #[test]
+    fn favorite_star_absent_when_view_carries_no_flag() {
+        let mut app = test_app();
+        let mut view = full_view();
+        view.favorite = None;
+        app.world_mut()
+            .spawn_scene(scene(view, action(ItemActionKind::Unequip)))
+            .expect("scene spawns");
+        app.update();
+
+        assert!(stars(&mut app).is_empty());
+    }
+
+    #[test]
+    fn favorite_star_is_not_interactive() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(scene(full_view(), action(ItemActionKind::Use)))
+            .expect("scene spawns");
+        app.update();
+
+        let pickable = app
+            .world_mut()
+            .query_filtered::<&Pickable, With<FavoriteStar>>()
+            .single(app.world())
+            .expect("star entity has a Pickable component");
+        assert!(!pickable.is_hoverable);
+    }
+
+    fn revalidation_app() -> App {
+        let mut app = App::new();
+        app.add_message::<UseItemRequested>();
+        app.add_message::<EquipItemRequested>();
+        app.add_message::<UnequipItemRequested>();
+        app
+    }
+
+    #[test]
+    fn revalidation_blocks_the_command_when_the_item_changed() {
+        let mut app = revalidation_app();
+        let mut inventory = Inventory::default();
+        inventory.upsert(Item {
+            index: 5,
+            item_id: 999,
+            identified: true,
+            ..Default::default()
+        });
+        app.insert_resource(inventory);
+
+        let root = app.world_mut().spawn(InfoModalRoot).id();
+        let button = app
+            .world_mut()
+            .spawn(FooterAction {
+                index: 5,
+                item_id: 501,
+                kind: ItemActionKind::Use,
+                disabled: false,
+            })
+            .observe(on_footer_action_click)
+            .id();
+
+        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut().flush();
+
+        let used = app
+            .world()
+            .resource::<Messages<UseItemRequested>>()
+            .iter_current_update_messages()
+            .count();
+        assert_eq!(used, 0);
+        assert!(app.world().get_entity(root).is_err());
+    }
+
+    #[test]
+    fn revalidation_writes_the_command_when_the_item_still_matches() {
+        let mut app = revalidation_app();
+        let mut inventory = Inventory::default();
+        inventory.upsert(Item {
+            index: 5,
+            item_id: 501,
+            identified: true,
+            ..Default::default()
+        });
+        app.insert_resource(inventory);
+
+        let root = app.world_mut().spawn(InfoModalRoot).id();
+        let button = app
+            .world_mut()
+            .spawn(FooterAction {
+                index: 5,
+                item_id: 501,
+                kind: ItemActionKind::Use,
+                disabled: false,
+            })
+            .observe(on_footer_action_click)
+            .id();
+
+        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut().flush();
+
+        let used = app
+            .world()
+            .resource::<Messages<UseItemRequested>>()
+            .iter_current_update_messages()
+            .count();
+        assert_eq!(used, 1);
+        assert!(app.world().get_entity(root).is_err());
+    }
+}

@@ -4697,6 +4697,7 @@ dependencies = [
  "lifthrasir-ui",
  "net-aesir",
  "net-contract",
+ "tempfile",
  "toml",
 ]
 
@@ -4734,8 +4735,6 @@ dependencies = [
  "bevy_framepace",
  "bevy_kira_audio",
  "dirs",
- "encoding_rs",
- "futures-lite",
  "gltf",
  "image",
  "iyes_progress",
@@ -4743,6 +4742,7 @@ dependencies = [
  "lifthrasir-assets",
  "lifthrasir-data",
  "lifthrasir-runtime",
+ "lifthrasir-ui",
  "moonshine-behavior",
  "moonshine-kind",
  "moonshine-tag",
@@ -4755,7 +4755,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.20",
- "toml",
  "zip",
 ]
 
@@ -4767,8 +4766,10 @@ dependencies = [
  "bevy_feathers",
  "iyes_progress",
  "leafwing-input-manager",
+ "lifthrasir-assets",
  "lifthrasir-client",
  "lifthrasir-data",
+ "lifthrasir-runtime",
  "lifthrasir-ui",
  "net-contract",
  "rfd",

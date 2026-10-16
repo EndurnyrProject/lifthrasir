@@ -1,6 +1,6 @@
 // Increase AGI (AL_INCAGI) - authored STR-style effect.
 //
-// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// Coordinate / units convention (see crates/lifthrasir-runtime/src/effects/playback.rs,
 // mirrors cold_bolt.strfx.ron / heal.strfx.ron):
 //   - offset & quad are in STR screen pixels. The runtime maps a point to world
 //     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
@@ -10,7 +10,7 @@
 //     SMALLER offset.y renders HIGHER above the anchor. Arrows rise by animating
 //     offset.y DOWNWARD (toward smaller values -- upward on screen).
 //   - angle is in raw STR units (1024 = 360 degrees, STR_ANGLE_UNITS_PER_DEGREE
-//     in systems.rs). icearrow.tga's native orientation (angle: 0) points
+//     in playback.rs). icearrow.tga's native orientation (angle: 0) points
 //     DOWNWARD along its fall (see cold_bolt.strfx.ron); rising arrows here need
 //     the 180-degree flip = 512 raw, with small per-layer jitter around it so
 //     they point upward.

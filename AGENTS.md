@@ -3,7 +3,7 @@
 ## Skills to use
 
 - Load the bevy-cheatbook skill
-- When working with UI, load the bevy-enhanced-ui skill
+- When working with UI, load the bevy-feathers-bsn skill
 - Always Load the ponytail skill, it helps you to be more token efficient
 
 ---
@@ -14,9 +14,9 @@
 
 ### Key Features
 - Support for Ragnarok Online file formats (GRF, GND, GAT, RSW, RSM/RSM2, SPR, ACT).
-  **Map and model formats are read by the offline tooling only** — see "Map
-  runtime boundary" below. At runtime the client reads SPR/ACT sprites, STR
-  effects, palettes, and glTF.
+  **GND/RSW/RSM/RSM2 and GR2 import are offline-only**; runtime keeps embedded
+  GAT decoding, SPR/ACT sprites, STR effects, palettes and glTF. See the map
+  runtime boundary below.
 - 3D terrain rendering from converted glTF, with proper coordinate system translation
 - Character rendering with equipment and animation systems
 - Authentication and character management
@@ -46,12 +46,24 @@ The project is organized as a Cargo workspace:
 
 ```
 lifthrasir/
-├── game-engine/        # Core game engine (Bevy ECS)
-├── lifthrasir-ui/      # Native Bevy UI components
-├── lifthrasir/         # Binary entry point
-├── net-contract/       # Protocol-neutral network contract (Bevy Messages)
-├── net-aesir/          # Aesir QUIC network adapter (transport + codec)
-└── grf-utils/          # GRF archive utilities
+├── apps/
+│   ├── lifthrasir/              # Client binary and explicit plugin composition
+│   ├── grf-utils/               # GRF inspection, pak/merge CLI
+│   └── ro-to-lifthrasir-cli/     # Conversion dispatcher and protobuf generation
+├── crates/
+│   ├── lifthrasir-data/         # Bevy-free LIF/catalog/effect data
+│   ├── lifthrasir-pak/          # Bevy-free archive reader/writer
+│   ├── lifthrasir-assets/       # ro:// source, loaders, catalogs, processing
+│   ├── lifthrasir-runtime/      # Content actors/effects/audio/world capabilities
+│   ├── lifthrasir-ui/           # Generic Feathers/chrome/text/meter primitives
+│   ├── lifthrasir-tooling/      # Bevy-free offline import/conversion/pack inputs
+│   ├── lifthrasir-client/       # Client state, settings, gameplay and adapters
+│   ├── lifthrasir-client-ui/    # Login/HUD/screens and gameplay UI
+│   ├── net-contract/           # Protocol-neutral Bevy Messages
+│   ├── net-aesir/              # QUIC transport and protobuf codec
+│   └── ro-formats/             # RO readers; GR2 import is offline-only
+├── assets/                     # Root-CWD bootstrap and content
+└── icons/                      # Packaging icons
 ```
 
 ### Network boundary
@@ -67,25 +79,27 @@ The network stack is split into a protocol-neutral contract and swappable adapte
   Messages and writes the inbound event Messages; that is its entire interface to
   the rest of the app.
 
-`game-engine` and `lifthrasir-ui` depend **only** on `net-contract` and never on a
-transport/codec. This is locked in by `game-engine/tests/no_transport_dep.rs`, which
-fails if `game-engine`'s dependency tree regains `bevy_quinnet`, `prost`, or an
-adapter crate.
+`lifthrasir-client` and `lifthrasir-client-ui` use `net-contract`, never a
+transport/codec. `crates/lifthrasir-client/tests/workspace_boundaries.rs` checks
+normal/build package identities; `no_transport_dep.rs` also checks the isolated
+client tree. Shared assets/runtime/UI have no client or network dependency.
 
-The adapter is wired at the binary, not in `game-engine`: the `lifthrasir` binary
-(`lifthrasir/src/main.rs`) depends on `net-aesir` and adds its `AesirNetPlugin`.
+The adapter is wired at `apps/lifthrasir/src/main.rs`, which adds `AesirNetPlugin`
+when the default `net-aesir` feature is enabled. `--no-default-features` compiles
+without networking; that alone does not produce a playable client.
 
 **To support a different protocol (e.g. rAthena):** implement a new crate that
 depends only on `net-contract`, write the inbound event Messages from incoming
 packets, read the outbound command Messages and translate them to outgoing packets,
-expose a plugin, and add that plugin in `main.rs`. The contract, `game-engine`, and
-`lifthrasir-ui` stay untouched.
+expose a plugin, and add it at the binary. The contract, client and UI libraries
+stay untouched.
 
 
 ### Map runtime boundary
 
-Maps are **converted offline to glTF and never parsed at runtime.** The client
-contains no GND, GAT, RSW, RSM or RSM2 reader; a map is a single
+Maps are **converted offline to glTF**, not loaded from standalone RO map files.
+GND/RSW/RSM/RSM2 parsing is offline-only; embedded GAT decoding remains runtime.
+A map is a single
 `data/maps/<map>/<map>.glb` produced by `ro-to-lifthrasir-cli convert-maps`,
 carrying terrain meshes, baked `KHR_lights_punctual` lighting and ambient,
 sound and effect emitters, prop references, water parameters **plus its baked
@@ -93,10 +107,10 @@ water tile mask**, and the original `.gat` bytes verbatim in the binary chunk.
 
 Consequences worth knowing before changing map code:
 
-- **A missing or invalid map glb is a hard failure**, not a fallback. There is
-  no second loading path to degrade into. `spawn_gltf_map` is the sole claimer
-  of a map request and `detect_gltf_map_load_failure` panics naming the
-  expected path.
+- **A missing or invalid map glb is a hard failure**, not a fallback. Shared
+  `MapSceneRequest`/`MapSceneStatus` own loading/dependency readiness; the client
+  selects the active root and turns a selected scene failure into a path-qualified
+  fatal error. No raw-map fallback exists.
 - **`ro-formats`' GAT parser is still a runtime dependency.** `LIF_gat` stores
   raw `.gat` bytes that the runtime decodes into `CurrentMapPathfindingGrid`
   and `CurrentMapAltitude`. Only the GND/RSW/RSM/RSM2 parsers are offline-only.
@@ -109,17 +123,31 @@ Consequences worth knowing before changing map code:
 - **Props resolve only to `.glb`.** Conversion fails loudly on a prop it could
   not convert, so a written map glb is loadable by construction.
 - Adding a map feature means extending the **converter schema**
-  (`lifthrasir-data/src/lif.rs`) and the glb writer, not adding a runtime
+  (`crates/lifthrasir-data/src/lif.rs`) and the glb writer, not adding a runtime
   parser. Bump `lif::FORMAT_VERSION` when the schema changes — note it is
   shared by `LifMap` and `LifModel`, so bumping it invalidates converted
   **models** as well as maps.
 
+### Shared host composition
+
+Register `ro://` with `register_ro_asset_source` **before** `AssetPlugin` (or
+`DefaultPlugins`). After renderer/asset stores exist, add `ContentAssetsPlugin`,
+`ContentCatalogPlugin`, then the runtime capabilities you need or
+`ContentRuntimePlugins`. The full group owns Kira/spatial audio; disable
+`ContentAudioPlugin` for a device-free host and disable Bevy's built-in audio when
+using Kira. Actors/effects need `RuntimeCorePlugin`; world GLB loading requires
+Bevy glTF/scene/mesh/animation support. Use the examples as executable composition
+references, not `ClientPlugins` as a shared prerequisite.
+
+Choose the Feathers theme before `UiPrimitivesPlugin`, which owns generic focus
+and widgets. `ClientUiPlugin` owns gameplay focus/cursor/HDR policy. The binary
+alone composes contract, content, client, adapter and UI groups, each once.
+
 ### Building
 
 ```bash
-# Build game engine only
-cd game-engine
-cargo build
+# Build client library only, from the workspace root
+cargo build -p lifthrasir-client
 
 # Build entire workspace
 cargo build
@@ -159,7 +187,7 @@ what is already on disk, and the runtime cannot load an unconverted map:
 cargo run --release -p ro-to-lifthrasir-cli -- convert-maps --force-models
 ```
 
-This writes `assets/data/maps/<map>/<map>.glb` plus `tex/*.png`, and the props
+This writes `assets/data/maps/<map>/<map>.glb` plus its external textures, and the props
 they reference into `assets/data/models`. It processes maps in sorted order,
 logs and continues past failures, and exits non-zero if any map failed; writes
 are atomic so a failed map leaves no partial glb. `--force-models` re-converts
@@ -194,13 +222,13 @@ reports individual failures, and exits nonzero if any model failed. Single model
 only after skin/animation validation.
 
 The runtime routes `.gr2` actor resource names to these GLBs, never to SPR/ACT.
-The `ro-formats` `gr2` feature belongs to the offline CLI only; the client uses
+The `ro-formats` `gr2` feature belongs to offline tooling only; the client uses
 Bevy glTF skinning/animation and the shared guild-emblem cache. Missing optional
 action clips use idle; missing or invalid model GLBs fail loudly. No map format
 version bump is needed. Validate local converted assets without opening a window:
 
 ```bash
-cargo test -p game-engine --test gr2_assets -- --ignored
+cargo test -p lifthrasir-client --test gr2_assets -- --ignored
 ```
 
 Then produce the pak from retail GRFs (GRF parsing lives only in the offline
@@ -238,7 +266,7 @@ inspect a pak. Validate all effect-catalog asset references against a built pak
 with:
 
 ```bash
-cargo test -p game-engine --test effect_assets -- --ignored
+cargo test -p lifthrasir-client --test effect_assets -- --ignored
 ```
 
 `ro-to-lifthrasir-cli` still reads raw GRFs for offline conversion via its own
@@ -269,12 +297,12 @@ Manual verification checklist: `specs/2026-06-28-dlss/design.md` → "Testing".
 
 ### Generating network protobuf types
 
-The client talks to the aesir account server over QUIC using protobuf (`bevy_quinnet` + `prost`). The Rust types are generated from aesir's canonical `aesir.proto` and committed at `net-aesir/src/proto/aesir.net.rs`. Re-run this whenever that schema changes:
+The client talks to the aesir account server over QUIC using protobuf (`bevy_quinnet` + `prost`). The Rust types are generated from aesir's canonical `aesir.proto` and committed at `crates/net-aesir/src/proto/aesir.net.rs`. Re-run this whenever that schema changes:
 
 ```bash
 cargo run -p ro-to-lifthrasir-cli -- gen-proto \
   --src <aesir>/apps/commons/proto \
-  --out net-aesir/src/proto/aesir.net.rs
+  --out crates/net-aesir/src/proto/aesir.net.rs
 ```
 
 This uses the pure-Rust `protox` compiler, so no system `protoc` is required. Commit the regenerated file.
@@ -285,9 +313,31 @@ This uses the pure-Rust `protox` compiler, so no system `protoc` is required. Co
 # Run all tests
 cargo test
 
-# Run specific test
-cargo test <test_name>
+# Focused standalone and client-linked boundaries
+cargo test --locked -p lifthrasir-client --test workspace_boundaries --test shared_plugin_isolation
+cargo test --locked -p lifthrasir-client --test settings_compatibility
+cargo test --locked -p lifthrasir-runtime --test plugin_composition
+cargo check --locked -p lifthrasir-runtime --examples
 ```
+
+The examples compile without a client session. Running `effect_preview` or
+`content_viewer` opens a window (the latter also opens audio), so obtain approval
+and suitable hardware first; see README commands. CPU tests do not validate
+rendering, sound, login, equipment previews or map-warp gameplay.
+
+The two ignored `effect_assets`/`gr2_assets` commands above are read-only checks
+against locally provisioned content, not fixture generation. Tooling's ignored
+`regenerate_game_engine_fixtures` and `generate_mip_probe_fixture` tests **write**
+`crates/lifthrasir-runtime/tests/fixtures`; do not run them for validation. Keep
+historical design notes as historical evidence rather than rewriting old paths.
+
+### Release follow-ups
+
+`.github/workflows/release.yml` still builds with `--no-default-features` without
+selecting `net-aesir`, and copies checkout assets without provisioning a pak.
+Those are existing release-readiness hazards, not solved by this extraction.
+Do not claim a playable distribution from compilation/packaging; no release or
+asset provisioning is part of this migration.
 
 ### Code Quality
 
