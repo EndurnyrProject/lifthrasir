@@ -3,62 +3,12 @@ use bevy::{
     prelude::*,
     reflect::TypePath,
 };
-use serde::Deserialize;
+pub use lifthrasir_data::effects::{
+    AuthoredBlend, AuthoredEffect, AuthoredEffectError, AuthoredKey, AuthoredLayer,
+};
 use thiserror::Error;
 
 use super::asset::{EffectBlend, LoadedEffectAsset, LoadedFrame, LoadedLayer};
-
-/// Hand-authored effect, deserialized from a `*.strfx.ron` file. Converts into
-/// the exact `LoadedEffectAsset` the GRF `.str` loader produces, so authored
-/// effects flow through the unchanged STR playback runtime.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AuthoredEffect {
-    pub fps: u32,
-    pub layers: Vec<AuthoredLayer>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct AuthoredLayer {
-    /// Full asset paths (e.g. `ro://data/texture/effect/icearrow.tga`), resolved
-    /// via `load_context.load()`. Per-key `texture_index` selects into this list.
-    pub textures: Vec<String>,
-    pub blend: AuthoredBlend,
-    pub keys: Vec<AuthoredKey>,
-}
-
-/// Named blend mode, mapped directly onto `EffectBlend` (no D3D ints).
-#[derive(Debug, Clone, Copy, Deserialize)]
-pub enum AuthoredBlend {
-    Add,
-    Blend,
-    Multiply,
-}
-
-/// A single authored keyframe. `at` is the key index (STR frame index). Exactly
-/// one of `quad` or `xy` must be set; `offset`, `uv`, `angle` and
-/// `texture_index` default.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AuthoredKey {
-    pub at: u32,
-    #[serde(default)]
-    pub offset: (f32, f32),
-    /// `(w, h)` sugar centred on the origin. Mutually exclusive with `xy`.
-    #[serde(default)]
-    pub quad: Option<(f32, f32)>,
-    /// Raw STR corner array escape hatch. Mutually exclusive with `quad`.
-    #[serde(default)]
-    pub xy: Option<[f32; 8]>,
-    /// STR `uv[8]`; defaults to the full quad.
-    #[serde(default)]
-    pub uv: Option<[f32; 8]>,
-    /// RGBA in 0-255 (divided by 255 at interpolation time).
-    pub color: (u8, u8, u8, u8),
-    /// Raw STR angle units.
-    #[serde(default)]
-    pub angle: f32,
-    #[serde(default)]
-    pub texture_index: usize,
-}
 
 /// Full-quad UVs: origin `(0, 0)`, width/height `1` in `uv[0..4]`; `uvs_from_uv`
 /// ignores `uv[4..8]`.
@@ -74,30 +24,6 @@ impl From<AuthoredBlend> for EffectBlend {
     }
 }
 
-/// Validation failures for an authored effect. Loud, per-layer/per-key.
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum AuthoredEffectError {
-    #[error("authored effect has no layers")]
-    NoLayers,
-    #[error("layer {layer} has no textures")]
-    NoTextures { layer: usize },
-    #[error("layer {layer} has no keys")]
-    NoKeys { layer: usize },
-    #[error("layer {layer} keys are not strictly ascending by `at` (at key index {key})")]
-    UnsortedKeys { layer: usize, key: usize },
-    #[error(
-        "layer {layer} key {key} texture_index {index} out of range (layer has {len} textures)"
-    )]
-    TextureIndexOutOfRange {
-        layer: usize,
-        key: usize,
-        index: usize,
-        len: usize,
-    },
-    #[error("layer {layer} key {key} must set exactly one of `quad` or `xy`")]
-    QuadXyAmbiguous { layer: usize, key: usize },
-}
-
 /// Expand `quad: (w, h)` into the centred `xy[8]` corner array consumed by
 /// `corners_from_xy`: `xy[0..4]` are the four corner x's, `xy[4..8]` the y's.
 fn quad_to_xy(w: f32, h: f32) -> [f32; 8] {
@@ -105,19 +31,12 @@ fn quad_to_xy(w: f32, h: f32) -> [f32; 8] {
     [-hw, hw, hw, -hw, -hh, -hh, hh, hh]
 }
 
-/// Convert an authored key into the raw `xy[8]`, validating quad/xy exclusivity.
-fn key_xy(
-    key: &AuthoredKey,
-    layer: usize,
-    key_index: usize,
-) -> Result<[f32; 8], AuthoredEffectError> {
+/// Convert a key whose quad/xy exclusivity has already been validated.
+fn key_xy(key: &AuthoredKey) -> [f32; 8] {
     match (key.quad, key.xy) {
-        (Some((w, h)), None) => Ok(quad_to_xy(w, h)),
-        (None, Some(xy)) => Ok(xy),
-        _ => Err(AuthoredEffectError::QuadXyAmbiguous {
-            layer,
-            key: key_index,
-        }),
+        (Some((w, h)), None) => quad_to_xy(w, h),
+        (None, Some(xy)) => xy,
+        _ => unreachable!("authored effect validated before conversion"),
     }
 }
 
@@ -144,44 +63,17 @@ fn build_authored_map(keys: &[AuthoredKey], layer_max_key: usize) -> Vec<Option<
 /// caller-supplied `load_texture` so this stays asset-server-free and testable.
 fn convert_layer(
     layer: &AuthoredLayer,
-    layer_index: usize,
     load_texture: &mut impl FnMut(&str) -> Handle<Image>,
-) -> Result<LoadedLayer, AuthoredEffectError> {
-    if layer.textures.is_empty() {
-        return Err(AuthoredEffectError::NoTextures { layer: layer_index });
-    }
-    if layer.keys.is_empty() {
-        return Err(AuthoredEffectError::NoKeys { layer: layer_index });
-    }
-
+) -> LoadedLayer {
     let blend: EffectBlend = layer.blend.into();
     let textures = layer.textures.iter().map(|p| load_texture(p)).collect();
 
     let mut frames = Vec::with_capacity(layer.keys.len() * 2);
-    let mut previous_at: Option<u32> = None;
-
-    for (key_index, key) in layer.keys.iter().enumerate() {
-        if previous_at.is_some_and(|prev| key.at <= prev) {
-            return Err(AuthoredEffectError::UnsortedKeys {
-                layer: layer_index,
-                key: key_index,
-            });
-        }
-        previous_at = Some(key.at);
-
-        if key.texture_index >= layer.textures.len() {
-            return Err(AuthoredEffectError::TextureIndexOutOfRange {
-                layer: layer_index,
-                key: key_index,
-                index: key.texture_index,
-                len: layer.textures.len(),
-            });
-        }
-
+    for key in &layer.keys {
         let frame = LoadedFrame {
             frame_index: key.at as usize,
             offset: Vec2::new(key.offset.0, key.offset.1),
-            xy: key_xy(key, layer_index, key_index)?,
+            xy: key_xy(key),
             uv: key.uv.unwrap_or(FULL_QUAD_UV),
             texture_index: key.texture_index,
             color: [
@@ -205,12 +97,12 @@ fn convert_layer(
     let layer_max_key = last_key.at as usize + 1;
     let frame_index_map = build_authored_map(&layer.keys, layer_max_key);
 
-    Ok(LoadedLayer {
+    LoadedLayer {
         textures,
         frame_index_map,
         frames,
         blend,
-    })
+    }
 }
 
 /// Pure conversion of an `AuthoredEffect` into a `LoadedEffectAsset`. Validates
@@ -221,16 +113,13 @@ pub fn convert_authored_effect(
     effect: &AuthoredEffect,
     mut load_texture: impl FnMut(&str) -> Handle<Image>,
 ) -> Result<LoadedEffectAsset, AuthoredEffectError> {
-    if effect.layers.is_empty() {
-        return Err(AuthoredEffectError::NoLayers);
-    }
+    effect.validate()?;
 
-    let layers = effect
+    let layers: Vec<_> = effect
         .layers
         .iter()
-        .enumerate()
-        .map(|(index, layer)| convert_layer(layer, index, &mut load_texture))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|layer| convert_layer(layer, &mut load_texture))
+        .collect();
 
     // Each converted layer's dense map is `last_key.at + 1` long; the effect's
     // `max_key` is the widest. Both the layer list and each layer's keys are

@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 serde = { workspace = true }
+thiserror = { workspace = true }
 ro-formats = { path = "../ro-formats" }
 
 [dev-dependencies]
