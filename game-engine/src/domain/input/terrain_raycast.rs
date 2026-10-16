@@ -1,7 +1,6 @@
 use crate::{
     domain::{system_sets::InputSystems, world::components::CurrentMapAltitude},
     infrastructure::assets::loaders::RoAltitudeAsset,
-    utils::coordinates::world_position_to_spawn_coords,
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
@@ -84,74 +83,17 @@ pub fn update_terrain_raycast_cache(
         return;
     }
 
-    // March the ray against the terrain heightfield and bisect the surface crossing.
-    // A fixed-point plane refinement diverged for shallow (near-horizon) angles, so the
-    // gizmo lost the cursor near the top of the screen; marching is stable at any angle
-    // and stops cleanly at the map edge (height lookup returns None off-map).
-    const STEP: f32 = 2.0;
-    const MAX_STEPS: u32 = 4096;
-    const BISECT_STEPS: u32 = 8;
-
-    let signed_gap = |p: Vec3| {
-        altitude_asset
-            .altitude
-            .get_terrain_height_at_position(p)
-            .map(|height| p.y - height)
-    };
-
-    // `signed_gap` is positive above the surface; the camera starts above and
-    // the crossing is the first step that lands on or below it.
-    let mut above = ray.origin;
-    let mut above_gap = signed_gap(above);
-    let mut crossing = None;
-    for step in 1..=MAX_STEPS {
-        let current = ray.origin + ray.direction * (step as f32 * STEP);
-        let current_gap = signed_gap(current);
-        if let (Some(prev), Some(cur)) = (above_gap, current_gap)
-            && prev >= 0.0
-            && cur <= 0.0
-        {
-            crossing = Some((above, current));
-            break;
+    match lifthrasir_runtime::world::terrain::raycast_terrain(&altitude_asset.altitude, ray) {
+        Some(hit) => {
+            cache.cell_coords = Some(hit.cell_coords);
+            cache.world_position = Some(hit.world_position);
+            cache.is_walkable = hit.is_walkable;
         }
-        above = current;
-        above_gap = current_gap;
-    }
-
-    let Some((mut lo, mut hi)) = crossing else {
-        cache.cell_coords = None;
-        cache.world_position = None;
-        cache.is_walkable = false;
-        cache.last_input = Some((cursor_position, *camera_transform));
-        return;
-    };
-
-    for _ in 0..BISECT_STEPS {
-        let mid = (lo + hi) * 0.5;
-        match signed_gap(mid) {
-            Some(gap) if gap > 0.0 => lo = mid,
-            Some(_) => hi = mid,
-            None => break,
+        None => {
+            cache.cell_coords = None;
+            cache.world_position = None;
+            cache.is_walkable = false;
         }
     }
-    let world_pos = (lo + hi) * 0.5;
-
-    let (raw_x, raw_y) = world_position_to_spawn_coords(world_pos);
-
-    // The raycast resolves one grid cell off from the cursor's true cell (-1 X, +1 Y).
-    // Correct at this single source so the gizmo, walkability, and click-to-move agree.
-    // No upper clamp: cells are in GAT space, so clamping against the GND-resolution
-    // (half) map dimensions froze the gizmo mid-map. is_walkable bounds-checks internally
-    // and the ray-march already returns None past the true map edge.
-    let cell_x = raw_x.saturating_sub(1);
-    let cell_y = raw_y + 1;
-
-    let is_walkable = altitude_asset
-        .altitude
-        .is_walkable(cell_x as usize, cell_y as usize);
-
-    cache.cell_coords = Some((cell_x, cell_y));
-    cache.world_position = Some(world_pos);
-    cache.is_walkable = is_walkable;
     cache.last_input = Some((cursor_position, *camera_transform));
 }

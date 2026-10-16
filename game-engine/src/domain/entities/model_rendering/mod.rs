@@ -1,55 +1,42 @@
-//! Rendering of offline-converted GR2 actors through standard glTF.
+//! Client policy around shared converted-model presentation.
 
+use crate::domain::guild::{GuildSystems, emblems::GuildEmblemImages};
+use crate::domain::system_sets::SpriteRenderingSystems;
 use bevy::prelude::*;
+pub use lifthrasir_runtime::actors::{ActorEmblem, ActorVisualStatus, Gr2Actor};
 
-mod animation;
-mod systems;
-
-use crate::domain::{
-    guild::{GuildSystems, emblems::GuildEmblemImages},
-    system_sets::{CombatSystems, EntityLifecycleSystems, MovementSystems},
-};
+mod client;
 
 pub struct ModelRenderingPlugin;
-
 impl Plugin for ModelRenderingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GuildEmblemImages>()
             .add_systems(
                 Update,
-                (
-                    systems::sync_model_scenes,
-                    systems::detect_load_failure,
-                    systems::wire_scenes,
-                    systems::sync_facing,
-                    animation::sync_animation,
-                )
-                    .chain()
-                    .after(EntityLifecycleSystems::Spawning)
-                    .after(MovementSystems::TerrainAlignment)
-                    .after(CombatSystems::HandleDeath),
+                client::sync_actor_emblems
+                    .in_set(GuildSystems::UiSync)
+                    .after(SpriteRenderingSystems::HierarchySpawn)
+                    .before(SpriteRenderingSystems::TransformUpdate),
             )
             .add_systems(
                 Update,
-                systems::sync_emblems
-                    .after(systems::wire_scenes)
-                    .in_set(GuildSystems::UiSync),
+                client::enforce_model_load_failures.after(SpriteRenderingSystems::TransformUpdate),
             );
     }
 }
 
-#[derive(Component, Debug, Clone, PartialEq, Eq)]
-pub struct Gr2Actor {
-    pub model: String,
-}
-
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+#[require(ActorEmblem)]
 pub struct GuildFlag {
     pub guild_id: u32,
     pub emblem_id: u32,
 }
 
 #[cfg(test)]
+mod animation;
+#[cfg(test)]
 mod scene_tests;
+#[cfg(test)]
+mod systems;
 #[cfg(test)]
 mod tests;

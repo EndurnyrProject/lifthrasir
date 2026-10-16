@@ -25,7 +25,16 @@ fn app() -> App {
         .insert_resource(ZoneSessionGeneration(1))
         .add_plugins(GuildPlugin)
         .add_systems(Update, systems::wire_scenes.before(GuildSystems::UiSync))
-        .add_systems(Update, systems::sync_emblems.in_set(GuildSystems::UiSync));
+        .add_systems(
+            Update,
+            (client::sync_actor_emblems, systems::sync_emblems)
+                .chain()
+                .in_set(GuildSystems::UiSync),
+        )
+        .add_systems(
+            Update,
+            client::enforce_model_load_failures.after(GuildSystems::UiSync),
+        );
     app
 }
 

@@ -14,9 +14,9 @@ use lifthrasir_data::lif::LifProp;
 use net_contract::dto::SkillUnitPhase;
 
 use crate::domain::effects::components::EffectAnchor;
-use crate::domain::effects::triggers::{descriptor_tint, load_effect};
 use crate::domain::effects::{EffectSprite, spawn_effect};
 use crate::domain::world::gltf_map::LifPropRef;
+use lifthrasir_runtime::effects::{descriptor_tint, load_effect};
 
 /// The classic client's translucent frosted-ice texture (`ice.tga`) — the same
 /// one it wraps around its hardcoded Ice Wall pillars. Its own alpha channel

@@ -1,4 +1,16 @@
 use bevy::prelude::*;
+use bevy_auto_plugin::prelude::auto_observer;
+use lifthrasir_runtime::actors::ActorVisualRoot;
+
+/// Gameplay interaction is attached by the client, never by shared rendering.
+#[auto_observer(plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin)]
+fn attach_actor_visual_observers(added: On<Add, ActorVisualRoot>, mut commands: Commands) {
+    commands
+        .entity(added.entity)
+        .observe(on_sprite_over)
+        .observe(on_sprite_out)
+        .observe(on_sprite_click);
+}
 
 #[cfg(test)]
 mod tests;
@@ -20,7 +32,15 @@ use crate::domain::skill::{CastTarget, SkillCastResolved};
 type PickRoots<'w, 's> = Query<'w, 's, (), Or<(With<NetworkEntity>, With<FloorItem>)>>;
 
 /// Sprites are direct children; glTF primitives may be nested several nodes below their owner.
-fn pick_root(child: Entity, child_of: &Query<&ChildOf>, roots: &PickRoots) -> Entity {
+fn pick_root(
+    child: Entity,
+    child_of: &Query<&ChildOf>,
+    roots: &PickRoots,
+    visuals: &Query<&ActorVisualRoot>,
+) -> Entity {
+    if let Ok(visual) = visuals.get(child) {
+        return visual.0;
+    }
     let fallback = child_of.get(child).map(|c| c.parent()).unwrap_or(child);
     std::iter::once(child)
         .chain(child_of.iter_ancestors(child))
@@ -31,6 +51,7 @@ fn pick_root(child: Entity, child_of: &Query<&ChildOf>, roots: &PickRoots) -> En
 #[allow(clippy::too_many_arguments)]
 pub fn on_sprite_over(
     over: On<Pointer<Over>>,
+    visuals: Query<&ActorVisualRoot>,
     mut commands: Commands,
     child_of: Query<&ChildOf>,
     roots: PickRoots,
@@ -40,7 +61,7 @@ pub fn on_sprite_over(
     mut hovered_item: ResMut<HoveredFloorItem>,
     mut cursor: MessageWriter<CursorChangeRequest>,
 ) {
-    let root = pick_root(over.entity, &child_of, &roots);
+    let root = pick_root(over.entity, &child_of, &roots, &visuals);
     hovered.entity = Some(root);
 
     let net = nets.get(root).ok();
@@ -71,6 +92,7 @@ pub fn on_sprite_over(
 #[allow(clippy::too_many_arguments)]
 pub fn on_sprite_out(
     out: On<Pointer<Out>>,
+    visuals: Query<&ActorVisualRoot>,
     mut commands: Commands,
     child_of: Query<&ChildOf>,
     roots: PickRoots,
@@ -80,7 +102,7 @@ pub fn on_sprite_out(
     cache: Res<TerrainRaycastCache>,
     mut cursor: MessageWriter<CursorChangeRequest>,
 ) {
-    let root = pick_root(out.entity, &child_of, &roots);
+    let root = pick_root(out.entity, &child_of, &roots, &visuals);
 
     if hovered.entity == Some(root) {
         hovered.entity = None;
@@ -106,6 +128,7 @@ pub fn on_sprite_out(
 #[allow(clippy::too_many_arguments)]
 pub fn on_sprite_click(
     click: On<Pointer<Click>>,
+    visuals: Query<&ActorVisualRoot>,
     child_of: Query<&ChildOf>,
     roots: PickRoots,
     nets: Query<&NetworkEntity>,
@@ -123,7 +146,7 @@ pub fn on_sprite_click(
         return;
     }
 
-    let root = pick_root(click.entity, &child_of, &roots);
+    let root = pick_root(click.entity, &child_of, &roots, &visuals);
 
     if let TargetingMode::AwaitingEntity { skill_id, level } = *targeting {
         if let Ok(net) = nets.get(root) {

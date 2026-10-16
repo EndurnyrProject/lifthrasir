@@ -46,7 +46,8 @@ fn main() {
             .set(bevy::log::LogPlugin {
                 filter: format!("{},bevy_hanabi::render=off", bevy::log::DEFAULT_FILTER),
                 ..default()
-            }),
+            })
+            .disable::<bevy::audio::AudioPlugin>(),
     );
     app.add_plugins(bevy::settings::SettingsPlugin::new(
         "com.github.endurnyrproject.lifthrasir",
@@ -80,10 +81,9 @@ fn main() {
         });
     }
 
-    app.add_plugins(game_engine::MapPlugin);
     app.add_plugins(game_engine::CoreGamePlugins);
-
-    app.add_plugins(game_engine::GltfMapPlugin);
+    app.add_plugins(lifthrasir_runtime::ContentRuntimePlugins);
+    app.add_plugins((game_engine::MapPlugin, game_engine::GltfMapPlugin));
 
     #[cfg(feature = "net-aesir")]
     app.add_plugins(net_aesir::AesirNetPlugin);

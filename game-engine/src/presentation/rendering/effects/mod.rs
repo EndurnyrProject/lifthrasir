@@ -7,7 +7,6 @@ pub mod portal;
 pub mod skill_fx;
 
 use bevy::prelude::*;
-use bevy_hanabi::prelude::*;
 
 pub use ambient::MapAmbientVfxPlugin;
 pub use aoe_preview::AoePreviewPlugin;
@@ -23,22 +22,15 @@ pub use skill_fx::SkillFxPlugin;
 ///
 /// NOTE: a single marker set for now. Promote to an enum with explicit phases if
 /// effects ever need ordering between themselves.
-#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VfxSystems;
+pub use lifthrasir_runtime::effects::procedural::VfxSystems;
 
-/// Aggregate plugin for presentation-layer VFX. Owns `HanabiPlugin` once (a
-/// second `add_plugins(HanabiPlugin)` panics) and registers each effect plugin.
-/// Add new effects here.
+/// Client casting, targeting, navigation, and warp-portal bridges.
+/// Shared procedural playback and Hanabi are owned by EffectsPlaybackPlugin.
 pub struct VfxPlugin;
 
 impl Plugin for VfxPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(HanabiPlugin)
-            .configure_sets(Update, VfxSystems)
-            .add_plugins(PortalVfxPlugin)
-            .add_plugins(ImpactVfxPlugin)
-            .add_plugins(SkillFxPlugin)
-            .add_plugins(MapAmbientVfxPlugin)
+        app.add_systems(Update, portal::attach_warp_portal_vfx.before(VfxSystems))
             .add_plugins(CastCircleVfxPlugin)
             .add_plugins(AoePreviewPlugin)
             .add_plugins(NavigationPathPlugin);

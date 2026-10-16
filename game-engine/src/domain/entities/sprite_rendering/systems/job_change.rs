@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
-use super::super::components::{HeadAttachment, PendingRenderLayers, RenderLayer};
+use super::super::components::{
+    EntitySpriteData, EntitySpriteInfo, HeadAttachment, PendingRenderLayers, RenderLayer,
+};
 use crate::domain::entities::character::components::{CharacterData, Gender};
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::sprite::tags::LAYER_BODY;
@@ -36,7 +38,12 @@ pub fn apply_base_look_changes(
     mut commands: Commands,
     mut sprite_changes: MessageReader<UnitSpriteChanged>,
     registry: Res<EntityRegistry>,
-    mut characters: Query<(&mut CharacterData, &Gender, &Children)>,
+    mut characters: Query<(
+        &mut CharacterData,
+        &Gender,
+        &Children,
+        Option<&mut EntitySpriteInfo>,
+    )>,
     layers: BodyLayerQuery,
     heads: Query<Entity, With<HeadAttachment>>,
     asset_server: Res<AssetServer>,
@@ -52,7 +59,7 @@ pub fn apply_base_look_changes(
             continue;
         };
 
-        let Ok((mut character, gender, children)) = characters.get_mut(entity) else {
+        let Ok((mut character, gender, children, sprite_info)) = characters.get_mut(entity) else {
             continue;
         };
 
@@ -82,6 +89,16 @@ pub fn apply_base_look_changes(
         let body_act_path = body_spr_path.replace(".spr", ".act");
 
         character.job_id = job_id;
+        if let Some(mut info) = sprite_info
+            && let EntitySpriteData::Character {
+                job_id: visual_job,
+                riding,
+                ..
+            } = &mut info.sprite_data
+        {
+            *visual_job = job_id;
+            *riding = false;
+        }
 
         for child in children.iter() {
             if layers
@@ -97,6 +114,7 @@ pub fn apply_base_look_changes(
             }
         }
 
+        pending_animations.discard_for(entity, LAYER_BODY);
         pending_animations.request(
             asset_server.load(&body_spr_path),
             asset_server.load(&body_act_path),
@@ -260,6 +278,69 @@ mod tests {
         );
         assert!(world.get_entity(f.body_layer).is_ok());
         assert!(!world.resource::<PendingAnimations>().has_pending());
+    }
+
+    #[test]
+    fn newer_body_request_discards_only_its_superseded_completion() {
+        let mut f = setup();
+        f.app
+            .world_mut()
+            .entity_mut(f.character)
+            .insert(EntitySpriteInfo {
+                sprite_data: EntitySpriteData::Character {
+                    job_id: NOVICE,
+                    gender: Gender::Male,
+                    head: 0,
+                    hair_color: 0,
+                    riding: true,
+                },
+            });
+        let other = f.app.world_mut().spawn_empty().id();
+        let completion = |entity, layer_tag| {
+            (
+                crate::infrastructure::assets::animation_processing_system::PendingAnimation {
+                    sprite_handle: Handle::default(),
+                    action_handle: Handle::default(),
+                    palette_handle: None,
+                    layer_tag,
+                    callback_entity: Some(entity),
+                },
+                Handle::default(),
+            )
+        };
+        f.app
+            .world_mut()
+            .resource_mut::<PendingAnimations>()
+            .defer_completed(vec![
+                completion(f.character, LAYER_BODY),
+                completion(f.character, LAYER_HEAD),
+                completion(other, LAYER_BODY),
+            ]);
+        send(&mut f.app, LOOK_BASE, SWORDMAN as u32);
+        let remaining = f
+            .app
+            .world_mut()
+            .resource_mut::<PendingAnimations>()
+            .take_completed_where(|_| true);
+        assert_eq!(remaining.len(), 2);
+        assert!(matches!(
+            f.app
+                .world()
+                .get::<EntitySpriteInfo>(f.character)
+                .unwrap()
+                .sprite_data,
+            EntitySpriteData::Character {
+                job_id: SWORDMAN,
+                riding: false,
+                ..
+            }
+        ));
+        assert!(
+            remaining
+                .iter()
+                .all(|(request, _)| request.callback_entity != Some(f.character)
+                    || request.layer_tag != LAYER_BODY)
+        );
     }
 
     #[test]

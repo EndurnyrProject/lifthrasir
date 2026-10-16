@@ -6,6 +6,7 @@ members = [
     "lifthrasir-assets",
     "lifthrasir-data",
     "lifthrasir-pak",
+    "lifthrasir-runtime",
     "lifthrasir-ui",
     "lifthrasir",
     "net-aesir",

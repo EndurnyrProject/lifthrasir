@@ -2,6 +2,7 @@ use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
 use crate::domain::entities::character::states::setup_character_state_machines;
 use crate::domain::entities::sprite_rendering::plugin::GenericSpriteRenderingPlugin;
 use crate::domain::world::plugin::ZoneDomainAutoPlugin;
+use crate::presentation::actors::register_actor_input_bridge;
 use bevy::prelude::*;
 
 /// Character Domain Plugin
@@ -27,6 +28,7 @@ impl Plugin for CharacterDomainPlugin {
         // Add domain auto-plugins (all domain events and systems)
         app.add_plugins(CharacterDomainAutoPlugin);
         app.add_plugins(ZoneDomainAutoPlugin);
+        register_actor_input_bridge(app);
 
         debug!("CharacterDomainPlugin initialized");
     }

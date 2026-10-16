@@ -1,10 +1,1 @@
-use bevy::prelude::*;
-
-#[derive(Component)]
-pub struct SpriteRoot;
-
-#[derive(Component)]
-pub struct SpriteLayer;
-
-#[derive(Component, Debug)]
-pub struct EffectLayer;
+pub use lifthrasir_runtime::actors::sprites::kinds::*;

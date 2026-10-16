@@ -59,6 +59,7 @@ pub fn spawn_character_sprite_on_game_start(
         CharacterStatus::default(),
         EntityName::new(character.name.clone()),
         SpatialAudioReceiver,
+        lifthrasir_runtime::audio::ContentAudioListener,
         SpatialAudioEmitter::default(),
         keybinds.to_input_map(),
     ));

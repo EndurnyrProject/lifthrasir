@@ -213,6 +213,58 @@ fn placeholders(app: &mut App) -> usize {
 }
 
 #[test]
+fn armed_trap_reaches_the_shared_prop_scene_renderer() {
+    use bevy::world_serialization::{WorldAsset, WorldAssetRoot};
+    use lifthrasir_runtime::world::props::MapModel;
+    let mut app = test_app(group_anchored_model_catalog(115));
+    app.init_asset::<WorldAsset>()
+        .init_asset::<AnimationClip>()
+        .init_asset::<AnimationGraph>()
+        .add_plugins(lifthrasir_runtime::world::PropRenderPlugin);
+    crate::presentation::world::register_client_prop_inputs(&mut app);
+    let tint = [0.2, 0.4, 0.6];
+    let map = app
+        .world_mut()
+        .spawn((
+            crate::domain::world::map::MapData {
+                name: "synthetic".into(),
+                width: 1,
+                height: 1,
+            },
+            lifthrasir_runtime::world::PropSceneContext {
+                no_shade_tint: tint,
+            },
+        ))
+        .id();
+    app.insert_resource(crate::presentation::world::SelectedMapScene(map));
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, 115, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+    let prop = app
+        .world_mut()
+        .query_filtered::<Entity, With<LifPropRef>>()
+        .single(app.world())
+        .unwrap();
+    assert!(
+        app.world().get::<MapModel>(prop).is_some(),
+        "armed trap must reach prop dispatch"
+    );
+    let scene = app
+        .world()
+        .get::<Children>(prop)
+        .expect("trap model scene child")[0];
+    assert!(app.world().get::<WorldAssetRoot>(scene).is_some());
+    assert_eq!(
+        app.world()
+            .get::<lifthrasir_runtime::world::PropSceneContext>(scene)
+            .unwrap()
+            .no_shade_tint,
+        tint
+    );
+}
+
+#[test]
 fn spawn_creates_root_and_cells_at_world_positions() {
     let mut app = test_app(seeded_catalog());
     app.world_mut().write_message(SkillUnitSpawned {

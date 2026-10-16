@@ -14,7 +14,7 @@ use crate::{
                 GuildIdentity, NetworkEntity, PendingDespawn, SpawnGuildIdentityKnown, UnitHealth,
             },
             markers::*,
-            model_rendering::{Gr2Actor, GuildFlag},
+            model_rendering::{ActorEmblem, Gr2Actor, GuildFlag},
             movement::components::{MovementSpeed, MovementState},
             registry::EntityRegistry,
             spawning::events::{DespawnEntity, EntityVanishRequested, PendingSpawnBuffer},
@@ -449,7 +449,7 @@ fn insert_model_actor(entity: &mut EntityCommands, model: String, event: &SpawnF
             emblem_id: event.emblem_id,
         });
     } else {
-        entity.remove::<GuildFlag>();
+        entity.remove::<(GuildFlag, ActorEmblem)>();
     }
 }
 

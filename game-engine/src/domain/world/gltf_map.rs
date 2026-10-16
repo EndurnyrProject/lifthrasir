@@ -1,595 +1,33 @@
-//! Runtime side of the GLB map pipeline: the `LIF_*` glTF extension
-//! handler that turns a converted per-map glb back into engine data.
-//!
-//! The handler is registered globally, so it sees every glb the app loads. A
-//! document without a `LIF_map` root extension is not a Lifthrasir map and is
-//! left completely untouched -- no components, no light retuning, no logs.
-//!
-//! Every `GltfExtensionHandler` hook returns `()`, so an extension cannot make
-//! Bevy's glTF loader return an error. A malformed or version-incompatible
-//! `LIF_*` payload is therefore reported two ways: an `error!` naming the asset
-//! path, and a [`LifMapLoadError`] on the scene root *instead of*
-//! [`LifMapData`]. Consumers must treat a root without `LifMapData` as a failed
-//! map load; there is no partial-map fallback.
+//! Client composition around neutral GLB decoding/loading and selected-map activation.
 
-use crate::domain::audio::map_sounds::spawn_gltf_map_sounds;
-use crate::domain::camera::resources::CurrentMapCameraProfile;
-use crate::domain::effects::map_effects::spawn_gltf_map_effects;
-use crate::domain::entities::pathfinding::{CurrentMapPathfindingGrid, PathfindingGrid};
-use crate::domain::system_sets::WorldLoadingSystems;
-use crate::domain::world::components::CurrentMapAltitude;
-use crate::domain::world::gltf_prop::{
-    PropAnim, play_prop_uv_animation, spawn_gltf_map_props, wire_pending_prop_scenes,
-};
-use crate::domain::world::map::MapData;
-use crate::domain::world::map_loader::MapRequestLoader;
-use crate::domain::world::map_scoped::MapScoped;
-use crate::infrastructure::assets::loaders::RoAltitudeAsset;
-use crate::presentation::rendering::water::begin_water_loading;
-use bevy::app::AnimationSystems;
-use bevy::asset::LoadContext;
-use bevy::gltf::GltfAssetLabel;
-use bevy::gltf::GltfLoaderSettings;
-use bevy::gltf::extensions::{
-    ErasedGltfExtensionHandler, GltfExtensionHandler, GltfExtensionHandlers,
-};
-use bevy::light::CascadeShadowConfigBuilder;
+pub use crate::presentation::world::GltfMapLoader;
 use bevy::prelude::*;
-use bevy::transform::TransformSystems;
-use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
-use lifthrasir_data::lif::{self, LifAudio, LifEffect, LifGat, LifMap, LifProp, LifWater};
-use ro_formats::RoAltitude;
+pub use lifthrasir_runtime::world::{
+    LifAudioEmitter, LifEffectEmitter, LifMapData, LifMapLoadError, LifPropRef,
+};
 
-/// Map directional-light tuning. Colour and illuminance already arrive through
-/// `KHR_lights_punctual`.
-const SUN_SHADOW_DEPTH_BIAS: f32 = 0.02;
-const SUN_SHADOW_NORMAL_BIAS: f32 = 1.8;
-const SUN_CASCADES: usize = 3;
-const SUN_FIRST_CASCADE_FAR_BOUND: f32 = 200.0;
-const SUN_MAXIMUM_DISTANCE: f32 = 1500.0;
-const SUN_OVERLAP_PROPORTION: f32 = 0.2;
-
-/// Map point-light tuning: a wide emitter surface that softens the
-/// inverse-square hot spot near the source.
-const POINT_LIGHT_RADIUS: f32 = 1.5;
-
-/// Map-wide data decoded from the glb's root extensions, on the scene root.
-#[derive(Component, Reflect, Debug, Clone)]
-#[reflect(opaque)]
-#[reflect(Component, Debug, Clone)]
-pub struct LifMapData {
-    pub altitude: RoAltitude,
-    pub water: Option<LifWater>,
-    pub water_tiles: Vec<(usize, usize)>,
-    pub meta: LifMap,
-}
-
-#[derive(Resource, Debug, Clone, Copy)]
-pub(crate) struct CurrentMapNoShadeTint(pub [f32; 3]);
-
-impl Default for CurrentMapNoShadeTint {
-    fn default() -> Self {
-        Self([1.0; 3])
-    }
-}
-
-/// On the scene root when the `LIF_*` payload could not be read. Mutually
-/// exclusive with [`LifMapData`].
-#[derive(Component, Reflect, Debug, Clone)]
-#[reflect(opaque)]
-#[reflect(Component, Debug, Clone)]
-pub struct LifMapLoadError(pub String);
-
-/// A node carrying `lif_audio` extras; its transform is the emitter position.
-#[derive(Component, Reflect, Debug, Clone)]
-#[reflect(opaque)]
-#[reflect(Component, Debug, Clone)]
-pub struct LifAudioEmitter(pub LifAudio);
-
-/// A node carrying `lif_effect` extras; its transform is the emitter position.
-#[derive(Component, Reflect, Debug, Clone)]
-#[reflect(opaque)]
-#[reflect(Component, Debug, Clone)]
-pub struct LifEffectEmitter(pub LifEffect);
-
-/// A node carrying `lif_prop` extras; its transform is the baked RSW placement
-/// of the referenced native RSM model.
-#[derive(Component, Reflect, Debug, Clone)]
-#[reflect(opaque)]
-#[reflect(Component, Debug, Clone)]
-pub struct LifPropRef(pub LifProp);
-
-/// On the map-loader entity whose map is served by a converted glb instead of
-/// the native `.gnd`/`.gat`/`.rsw` triple. The entity is the scene root, so the
-/// whole imported map hangs off it.
-#[derive(Component, Reflect, Debug, Clone)]
-#[reflect(Component, Debug, Clone)]
-pub struct GltfMapLoader {
-    /// Lowercased, extension-free map name -- what the glb path was built from.
-    pub map_name: String,
-}
-
-/// The glb scene of the map currently loaded, held so that tearing the map down
-/// cannot unload it.
-///
-/// `MapScoped` reaps the map root on every warp -- including a warp back to the
-/// map you are standing on. Without this handle that teardown drops the last
-/// reference to the glb, and the reload that immediately follows restores it
-/// unevenly: meshes come back as brand new assets, while the textures are
-/// resurrected in place with no asset event at all. A render world that dropped
-/// them on the way out gets its geometry back and never hears about the
-/// textures again -- untextured terrain.
-///
-/// Loading any other map drops the entry, and with it the previous map's
-/// assets: another glb map replaces it, a natively served one removes it.
-#[derive(Resource)]
-struct LoadedMapScene {
-    map_name: String,
-    scene: Handle<WorldAsset>,
-}
-
-/// Runtime plugin for the GLB map pipeline (unified per-map glb loading).
 pub struct GltfMapPlugin;
-
 impl Plugin for GltfMapPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CurrentMapNoShadeTint>()
-            .register_type::<LifMapData>()
-            .register_type::<LifMapLoadError>()
-            .register_type::<LifAudioEmitter>()
-            .register_type::<LifEffectEmitter>()
-            .register_type::<LifPropRef>()
-            .register_type::<PropAnim>()
-            .register_type::<GltfMapLoader>();
-
-        app.world_mut()
-            .resource_mut::<GltfExtensionHandlers>()
-            .0
-            .write_blocking()
-            .push(Box::new(LifExtensionHandler::default()));
-
-        app.add_systems(
-            Update,
-            (
-                spawn_gltf_map.in_set(WorldLoadingSystems::AssetExtraction),
-                detect_gltf_map_load_failure.in_set(WorldLoadingSystems::AssetFailureDetection),
-            ),
-        );
-        // Emitter nodes are positioned by the scene hierarchy, so their world
-        // position only exists once transforms have propagated -- which happens
-        // in `PostUpdate`, after the `SpawnScene` schedule that instantiates
-        // them.
-        app.add_systems(
-            PostUpdate,
-            (
-                spawn_gltf_map_sounds,
-                spawn_gltf_map_effects,
-                spawn_gltf_map_props,
-                wire_pending_prop_scenes,
-            )
-                .after(TransformSystems::Propagate),
-        );
-        app.add_systems(PostUpdate, play_prop_uv_animation.after(AnimationSystems));
-        app.add_observer(adopt_gltf_map_scene);
+        crate::presentation::world::register_client_world(app);
     }
 }
 
-/// Claims every map request and loads its converted glb scene.
-fn spawn_gltf_map(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    loaded: Option<Res<LoadedMapScene>>,
-    mut requests: Query<(Entity, &mut MapRequestLoader), Without<GltfMapLoader>>,
-) {
-    for (entity, mut request) in requests.iter_mut() {
-        if request.loaded {
-            continue;
-        }
-
-        let map_name = request.map_name.trim_end_matches(".gat").to_lowercase();
-        let path = format!("maps/{map_name}/{map_name}.glb");
-        info!("Loading map '{map_name}' from {path}");
-
-        let scene = match loaded.as_deref() {
-            Some(current) if current.map_name == map_name => current.scene.clone(),
-            _ => asset_server.load(GltfAssetLabel::Scene(0).from_asset(format!("ro://{path}"))),
-        };
-
-        commands.insert_resource(LoadedMapScene {
-            map_name: map_name.clone(),
-            scene: scene.clone(),
-        });
-        commands.entity(entity).insert((
-            WorldAssetRoot(scene),
-            Transform::IDENTITY,
-            MapScoped,
-            GltfMapLoader { map_name },
-        ));
-
-        request.loaded = true;
-    }
-}
-
-fn detect_gltf_map_load_failure(
-    asset_server: Res<AssetServer>,
-    maps: Query<(&WorldAssetRoot, &GltfMapLoader)>,
-) {
-    for (root, map) in maps.iter() {
-        if let bevy::asset::LoadState::Failed(error) = asset_server.load_state(&root.0) {
-            let map_name = &map.map_name;
-            panic!("failed to load map glb 'maps/{map_name}/{map_name}.glb': {error:?}");
-        }
-    }
-}
-
-/// Publishes the ready glb scene's walkability grid, heightfield, ambient
-/// light, water surface, and `MapData` on the loader entity.
-///
-/// A glb map that imported badly is a hard failure: bevy's extension hooks
-/// cannot fail a load, so a broken `LIF_*` payload still reports `Loaded` and
-/// would otherwise spawn a map missing its altitude, water and metadata.
-#[allow(clippy::too_many_arguments)]
-fn adopt_gltf_map_scene(
-    ready: On<WorldInstanceReady>,
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut altitudes: ResMut<Assets<RoAltitudeAsset>>,
-    roots: Query<&GltfMapLoader>,
-    children: Query<&Children>,
-    errors: Query<&LifMapLoadError>,
-    map_data: Query<&LifMapData>,
-) {
-    let Ok(root) = roots.get(ready.entity) else {
-        return;
-    };
-
-    let map_name = &root.map_name;
-
-    if let Some(error) = children
-        .iter_descendants(ready.entity)
-        .find_map(|entity| errors.get(entity).ok())
-    {
-        panic!("map glb for '{map_name}' is unusable: {}", error.0);
-    }
-
-    let Some(data) = children
-        .iter_descendants(ready.entity)
-        .find_map(|entity| map_data.get(entity).ok())
-    else {
-        panic!("map glb for '{map_name}' carries no LIF_map data");
-    };
-
-    commands.insert_resource(CurrentMapNoShadeTint(data.meta.no_shade_tint));
-    commands.insert_resource(CurrentMapPathfindingGrid(PathfindingGrid::from_gat(
-        &data.altitude,
-    )));
-    commands.insert_resource(CurrentMapAltitude(altitudes.add(RoAltitudeAsset {
-        altitude: data.altitude.clone(),
-    })));
-    commands.insert_resource(ambient_light(&data.meta));
-    commands.insert_resource(CurrentMapCameraProfile {
-        indoor: data.meta.indoor,
-        exposure_ev100: data.meta.exposure_ev100,
-    });
-    commands.entity(ready.entity).insert(MapData {
-        name: map_name.clone(),
-        width: data.altitude.width,
-        height: data.altitude.height,
-    });
-
-    if let Some(water) = data.water.as_ref() {
-        begin_water_loading(
-            &mut commands,
-            &asset_server,
-            ready.entity,
-            water,
-            data.water_tiles.clone(),
-        );
-    }
-}
-
-/// Applies the RSW ambient colour with the baked per-map brightness floor
-/// (indoor and outdoor maps differ). Outdoor is a daylight sky-fill tuned for
-/// EV100 12, so shadows stay readable without washing out the sun's contrast.
-fn ambient_light(meta: &LifMap) -> GlobalAmbientLight {
-    GlobalAmbientLight {
-        color: Color::srgb(
-            meta.ambient_color[0],
-            meta.ambient_color[1],
-            meta.ambient_color[2],
-        ),
-        brightness: meta.ambient_brightness,
-        affects_lightmapped_meshes: false,
-    }
-}
-
-/// Per-load state: the root extensions decoded once in [`on_root`], handed to
-/// the scene root in [`on_scene_completed`].
-///
-/// `None` means the document carries no `LIF_map` and is therefore not a
-/// Lifthrasir map -- every other hook then leaves it alone.
-///
-/// [`on_root`]: GltfExtensionHandler::on_root
-/// [`on_scene_completed`]: GltfExtensionHandler::on_scene_completed
-#[derive(Clone, Default)]
-struct LifExtensionHandler {
-    state: Option<Result<LifMapData, String>>,
-}
-
-impl LifExtensionHandler {
-    /// Whether this load is a Lifthrasir map at all, broken or not.
-    fn is_map(&self) -> bool {
-        self.state.is_some()
-    }
-
-    /// Whether this load is a Lifthrasir map that decoded cleanly.
-    fn is_usable_map(&self) -> bool {
-        matches!(self.state, Some(Ok(_)))
-    }
-
-    /// Records the first failure of this load and logs it. Later failures are
-    /// logged too but do not replace the root cause.
-    fn fail(&mut self, load_context: &LoadContext<'_>, message: String) {
-        error!("{}: {message}", load_context.path());
-        if !matches!(self.state, Some(Err(_))) {
-            self.state = Some(Err(message));
-        }
-    }
-}
-
-impl GltfExtensionHandler for LifExtensionHandler {
-    fn dyn_clone(&self) -> Box<dyn ErasedGltfExtensionHandler> {
-        Box::new(self.clone())
-    }
-
-    fn on_root(
-        &mut self,
-        load_context: &mut LoadContext<'_>,
-        gltf: &gltf::Gltf,
-        _settings: &GltfLoaderSettings,
-    ) {
-        if gltf.extension_value(lif::EXTENSION_MAP).is_none() {
-            return;
-        }
-
-        match decode_root(gltf) {
-            Ok(data) => self.state = Some(Ok(data)),
-            Err(message) => self.fail(load_context, message),
-        }
-    }
-
-    fn on_gltf_node(
-        &mut self,
-        load_context: &mut LoadContext<'_>,
-        gltf_node: &gltf::Node,
-        entity: &mut EntityWorldMut,
-    ) {
-        if !self.is_map() {
-            return;
-        }
-
-        let Some(extras) = gltf_node.extras().as_ref() else {
-            return;
-        };
-
-        if let Err(message) = insert_node_markers(extras.get(), entity) {
-            let name = gltf_node.name().unwrap_or("<unnamed>");
-            self.fail(
-                load_context,
-                format!("node {} '{name}': {message}", gltf_node.index()),
-            );
-        }
-    }
-
-    fn on_scene_completed(
-        &mut self,
-        _load_context: &mut LoadContext<'_>,
-        _scene: &gltf::Scene,
-        world_root_id: Entity,
-        scene_world: &mut World,
-    ) {
-        let mut root = scene_world.entity_mut(world_root_id);
-        match &self.state {
-            Some(Ok(data)) => {
-                root.insert(data.clone());
-            }
-            Some(Err(message)) => {
-                root.insert(LifMapLoadError(message.clone()));
-            }
-            None => {}
-        }
-    }
-
-    fn on_spawn_light_directional(
-        &mut self,
-        _load_context: &mut LoadContext<'_>,
-        _gltf_node: &gltf::Node,
-        entity: &mut EntityWorldMut,
-    ) {
-        if !self.is_usable_map() {
-            return;
-        }
-
-        if let Some(mut light) = entity.get_mut::<DirectionalLight>() {
-            light.shadow_maps_enabled = true;
-            light.shadow_depth_bias = SUN_SHADOW_DEPTH_BIAS;
-            light.shadow_normal_bias = SUN_SHADOW_NORMAL_BIAS;
-        }
-
-        entity.insert(
-            CascadeShadowConfigBuilder {
-                num_cascades: SUN_CASCADES,
-                first_cascade_far_bound: SUN_FIRST_CASCADE_FAR_BOUND,
-                maximum_distance: SUN_MAXIMUM_DISTANCE,
-                overlap_proportion: SUN_OVERLAP_PROPORTION,
-                ..default()
-            }
-            .build(),
-        );
-    }
-
-    fn on_spawn_light_point(
-        &mut self,
-        _load_context: &mut LoadContext<'_>,
-        _gltf_node: &gltf::Node,
-        entity: &mut EntityWorldMut,
-    ) {
-        if !self.is_usable_map() {
-            return;
-        }
-
-        if let Some(mut light) = entity.get_mut::<PointLight>() {
-            light.radius = POINT_LIGHT_RADIUS;
-            light.shadow_maps_enabled = false;
-        }
-    }
-}
-
-fn decode_root(gltf: &gltf::Gltf) -> Result<LifMapData, String> {
-    let meta: LifMap = root_extension(gltf, lif::EXTENSION_MAP)?
-        .ok_or_else(|| format!("missing root extension {}", lif::EXTENSION_MAP))?;
-    if meta.format_version != lif::FORMAT_VERSION {
-        return Err(format!(
-            "{} format_version {} is not supported (runtime expects {})",
-            lif::EXTENSION_MAP,
-            meta.format_version,
-            lif::FORMAT_VERSION
-        ));
-    }
-
-    let gat: LifGat = root_extension(gltf, lif::EXTENSION_GAT)?
-        .ok_or_else(|| format!("missing root extension {}", lif::EXTENSION_GAT))?;
-    let raw = buffer_view_bytes(gltf, gat.buffer_view as usize, lif::EXTENSION_GAT)?;
-    let altitude = LifGat::decode(raw)
-        .map_err(|error| format!("decoding the {} bufferView: {error}", lif::EXTENSION_GAT))?;
-    // `LifGat::validate` re-parses the whole grid; the check is two
-    // comparisons and this runs on every map load.
-    if altitude.width != gat.width || altitude.height != gat.height {
-        return Err(format!(
-            "{} declares {}x{} but its bufferView parses to {}x{}",
-            lif::EXTENSION_GAT,
-            gat.width,
-            gat.height,
-            altitude.width,
-            altitude.height
-        ));
-    }
-
-    let water = root_extension::<LifWater>(gltf, lif::EXTENSION_WATER)?;
-    let water_tiles = match water.as_ref() {
-        Some(water) => {
-            let zone_count = water
-                .split_width
-                .checked_mul(water.split_height)
-                .ok_or_else(|| format!("{} zone dimensions overflow", lif::EXTENSION_WATER))?
-                as usize;
-            if water.split_width == 0 || water.split_height == 0 || water.zones.len() != zone_count
-            {
-                return Err(format!(
-                    "{} declares a {}x{} zone grid but carries {} zones",
-                    lif::EXTENSION_WATER,
-                    water.split_width,
-                    water.split_height,
-                    water.zones.len()
-                ));
-            }
-
-            let mask = buffer_view_bytes(gltf, water.buffer_view, lif::EXTENSION_WATER)?;
-            let cell_count = (water.width as usize)
-                .checked_mul(water.height as usize)
-                .ok_or_else(|| format!("{} mask dimensions overflow", lif::EXTENSION_WATER))?;
-            let expected_mask_len = cell_count.div_ceil(8);
-            if mask.len() != expected_mask_len {
-                return Err(format!(
-                    "{} mask has {} bytes but {}x{} dimensions require {expected_mask_len}",
-                    lif::EXTENSION_WATER,
-                    mask.len(),
-                    water.width,
-                    water.height,
-                ));
-            }
-            lif::decode_water_mask(mask, water.width as usize, water.height as usize)
-        }
-        None => Vec::new(),
-    };
-
-    Ok(LifMapData {
-        altitude,
-        water,
-        water_tiles,
-        meta,
-    })
-}
-
-fn root_extension<T: serde::de::DeserializeOwned>(
-    gltf: &gltf::Gltf,
-    key: &str,
-) -> Result<Option<T>, String> {
-    let Some(value) = gltf.extension_value(key) else {
-        return Ok(None);
-    };
-
-    serde_json::from_value(value.clone())
-        .map(Some)
-        .map_err(|error| format!("root extension {key} is malformed: {error}"))
-}
-
-/// Resolves a `LIF_*` bufferView against the GLB binary chunk.
-fn buffer_view_bytes<'a>(
-    gltf: &'a gltf::Gltf,
-    buffer_view: usize,
-    extension: &str,
-) -> Result<&'a [u8], String> {
-    let view = gltf
-        .views()
-        .nth(buffer_view)
-        .ok_or_else(|| format!("{extension} points at missing bufferView {buffer_view}"))?;
-
-    if !matches!(view.buffer().source(), gltf::buffer::Source::Bin) {
-        return Err(format!(
-            "{extension} bufferView {buffer_view} is not backed by the GLB binary chunk"
-        ));
-    }
-
-    let blob = gltf
-        .blob
-        .as_deref()
-        .ok_or_else(|| format!("glb has no binary chunk to read {extension} from"))?;
-    let start = view.offset();
-    let end = start + view.length();
-
-    blob.get(start..end).ok_or_else(|| {
-        format!(
-            "{extension} bufferView {start}..{end} is outside the {}-byte binary chunk",
-            blob.len()
-        )
-    })
-}
-
-fn insert_node_markers(raw_extras: &str, entity: &mut EntityWorldMut) -> Result<(), String> {
-    let extras: serde_json::Value = serde_json::from_str(raw_extras)
-        .map_err(|error| format!("extras are not JSON: {error}"))?;
-
-    if let Some(value) = extras.get(lif::EXTRAS_AUDIO) {
-        entity.insert(LifAudioEmitter(parse_extras(lif::EXTRAS_AUDIO, value)?));
-    }
-    if let Some(value) = extras.get(lif::EXTRAS_EFFECT) {
-        entity.insert(LifEffectEmitter(parse_extras(lif::EXTRAS_EFFECT, value)?));
-    }
-    if let Some(value) = extras.get(lif::EXTRAS_PROP) {
-        entity.insert(LifPropRef(parse_extras(lif::EXTRAS_PROP, value)?));
-    }
-
-    Ok(())
-}
-
-fn parse_extras<T: serde::de::DeserializeOwned>(
-    key: &str,
-    value: &serde_json::Value,
-) -> Result<T, String> {
-    serde_json::from_value(value.clone())
-        .map_err(|error| format!("extras key '{key}' is malformed: {error}"))
-}
+#[cfg(test)]
+use crate::{
+    domain::{
+        entities::pathfinding::CurrentMapPathfindingGrid,
+        world::{
+            components::CurrentMapAltitude, map::MapData, map_loader::MapRequestLoader,
+            map_scoped::MapScoped,
+        },
+    },
+    presentation::world::SelectedMapScene,
+};
+#[cfg(test)]
+use bevy::world_serialization::WorldAssetRoot;
+#[cfg(test)]
+use lifthrasir_runtime::world::{MapSceneRequest, MapSceneStatus, PropSceneContext};
 
 #[cfg(test)]
 mod tests {
@@ -603,7 +41,7 @@ mod tests {
     use crate::domain::input::terrain_raycast::{
         TerrainRaycastCache, update_terrain_raycast_cache,
     };
-    use crate::domain::world::gltf_prop::MapModel;
+    use crate::domain::world::gltf_prop::{MapModel, PropAnim};
     use crate::domain::world::loading_progress::{GLTF_MAP_STEPS, track_map_load_progress};
     use crate::domain::world::spawn_context::MapSpawnContext;
     use crate::infrastructure::assets::hierarchical_reader::HierarchicalAssetReader;
@@ -612,14 +50,17 @@ mod tests {
     use crate::infrastructure::effect::{EffectCatalog, EffectDataAsset};
     use crate::presentation::rendering::water::WaterLoadingState;
     use crate::utils::coordinates::world_position_to_spawn_coords;
+    use bevy::asset::LoadContext;
     use bevy::asset::io::{AssetSourceBuilder, AssetSourceId};
     use bevy::asset::{AssetApp, AssetPlugin};
     use bevy::ecs::system::RunSystemOnce;
+    use bevy::gltf::extensions::{
+        ErasedGltfExtensionHandler, GltfExtensionHandler, GltfExtensionHandlers,
+    };
     use bevy::gltf::{GltfMaterial, GltfPlugin};
     use bevy::image::{CompressedImageFormats, ImageLoader, ImagePlugin};
-    use bevy::light::CascadeShadowConfig;
     use bevy::mesh::MeshPlugin;
-    use bevy::world_serialization::{WorldAsset, WorldSerializationPlugin};
+    use bevy::world_serialization::WorldSerializationPlugin;
     use std::sync::{Arc, RwLock};
     use std::time::{Duration, Instant};
 
@@ -627,224 +68,8 @@ mod tests {
     /// `ro-to-lifthrasir-cli`'s ignored `regenerate_game_engine_fixtures` test.
     const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
 
-    fn test_app() -> App {
-        let mut app = App::new();
-        app.add_plugins((
-            MinimalPlugins,
-            AssetPlugin {
-                file_path: FIXTURES.to_string(),
-                ..default()
-            },
-            ImagePlugin::default(),
-            MeshPlugin,
-            WorldSerializationPlugin,
-            GltfPlugin::default(),
-            GltfMapPlugin,
-        ));
-        app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
-        app.init_asset::<StandardMaterial>();
-        // `GltfPlugin` only registers the real loader in `finish`, which
-        // `App::update` never calls on its own.
-        app.finish();
-        app.cleanup();
-        app
-    }
-
-    /// Loads scene 0 of `file` and blocks until the asset server settles.
-    fn load_scene(app: &mut App, file: &str) -> Handle<WorldAsset> {
-        let handle = app
-            .world()
-            .resource::<AssetServer>()
-            .load(GltfAssetLabel::Scene(0).from_asset(file.to_string()));
-
-        let deadline = Instant::now() + Duration::from_secs(30);
-        loop {
-            app.update();
-            let state = app.world().resource::<AssetServer>().load_state(&handle);
-            assert!(!state.is_failed(), "{file} failed to load: {state:?}");
-            if state.is_loaded() {
-                return handle;
-            }
-            assert!(Instant::now() < deadline, "{file} never finished loading");
-            std::thread::sleep(Duration::from_millis(2));
-        }
-    }
-
-    /// Runs `assertions` against the loaded scene's world. The world lives
-    /// inside the asset, so it is reached through `Assets<WorldAsset>`.
-    fn with_scene_world(app: &mut App, file: &str, assertions: impl FnOnce(&mut World)) {
-        let handle = load_scene(app, file);
-        let mut assets = app.world_mut().resource_mut::<Assets<WorldAsset>>();
-        let mut asset = assets.get_mut(&handle).expect("scene world asset");
-        assertions(&mut asset.world);
-    }
-
-    fn single<C: Component + Clone>(world: &mut World) -> C {
-        let mut query = world.query::<&C>();
-        let mut found = query.iter(world);
-        let value = found
-            .next()
-            .unwrap_or_else(|| panic!("no entity has {}", core::any::type_name::<C>()))
-            .clone();
-        assert!(
-            found.next().is_none(),
-            "more than one entity has {}",
-            core::any::type_name::<C>()
-        );
-        value
-    }
-
-    #[test]
-    fn decodes_the_gat_from_the_glb_binary_chunk() {
-        with_scene_world(&mut test_app(), "mini_map.glb", |world| {
-            let data = single::<LifMapData>(world);
-
-            assert_eq!(data.meta.format_version, lif::FORMAT_VERSION);
-            assert_eq!(data.meta.ambient_color, [0.25, 0.3, 0.35]);
-
-            // The fixture GAT is 4x4 with cell `i` at heights `i..i+3` and
-            // raw cell type 1 (non-walkable).
-            assert_eq!((data.altitude.width, data.altitude.height), (4, 4));
-            assert_eq!(data.altitude.cells.len(), 16);
-            assert_eq!(data.altitude.cells[0].height, [0.0, 1.0, 2.0, 3.0]);
-            assert_eq!(data.altitude.cells[15].height, [15.0, 16.0, 17.0, 18.0]);
-            assert!(!data.altitude.cells[7].cell_type.is_walkable());
-        });
-    }
-
-    #[test]
-    fn carries_the_water_extension_onto_the_scene_root() {
-        with_scene_world(&mut test_app(), "mini_map.glb", |world| {
-            let water = single::<LifMapData>(world).water.expect("LIF_water");
-
-            assert_eq!((water.split_width, water.split_height), (1, 1));
-            let zone = water.zone_at(0, 0);
-            assert_eq!(zone.level, 12.5);
-            assert_eq!(zone.water_type, 3);
-            assert_eq!(zone.wave_height, 0.6);
-            assert_eq!(zone.wave_speed, 1.25);
-            assert_eq!(zone.wave_pitch, 45.0);
-            assert_eq!(zone.anim_speed, 4);
-            assert_eq!((water.width, water.height), (2, 2));
-        });
-    }
-
-    #[test]
-    fn a_water_mask_with_incompatible_dimensions_fails_root_decode() {
-        let bytes = std::fs::read(format!("{FIXTURES}/bad_water_mask.glb")).unwrap();
-        let gltf = gltf::Gltf::from_slice(&bytes).unwrap();
-
-        assert!(
-            decode_root(&gltf)
-                .unwrap_err()
-                .contains("LIF_water mask has 1 bytes but 9x2 dimensions require 3")
-        );
-    }
-
-    #[test]
-    fn turns_node_extras_into_emitter_and_prop_markers() {
-        with_scene_world(&mut test_app(), "mini_map.glb", |world| {
-            assert_eq!(
-                single::<LifAudioEmitter>(world).0,
-                LifAudio {
-                    name: "water".to_string(),
-                    file: "ro://data/wav/effect/water.wav".to_string(),
-                    volume: 0.75,
-                    range: 30.0,
-                    cycle: 4.5,
-                }
-            );
-            assert_eq!(
-                single::<LifEffectEmitter>(world).0,
-                LifEffect {
-                    name: "steam".to_string(),
-                    effect_type: 12,
-                    emit_speed: 0.25,
-                    params: [1.0, 2.0, 3.0, 4.0],
-                }
-            );
-            assert_eq!(
-                single::<LifPropRef>(world).0,
-                LifProp {
-                    model: "ro://models/prontera/tree01.glb".to_string(),
-                    anim_type: 1,
-                    anim_speed: 2.0,
-                }
-            );
-        });
-    }
-
-    #[test]
-    fn map_lights_get_shadow_tuning() {
-        with_scene_world(&mut test_app(), "mini_map.glb", |world| {
-            let sun = single::<DirectionalLight>(world);
-            assert!(sun.shadow_maps_enabled);
-            assert_eq!(sun.shadow_depth_bias, SUN_SHADOW_DEPTH_BIAS);
-            assert_eq!(sun.shadow_normal_bias, SUN_SHADOW_NORMAL_BIAS);
-            assert_eq!(sun.illuminance, 4500.0);
-
-            let cascades = single::<CascadeShadowConfig>(world);
-            assert_eq!(cascades.bounds.len(), SUN_CASCADES);
-            assert_eq!(cascades.overlap_proportion, SUN_OVERLAP_PROPORTION);
-            // The builder derives the bounds geometrically, so they land a
-            // rounding step off the values fed in.
-            assert!((cascades.bounds[0] - SUN_FIRST_CASCADE_FAR_BOUND).abs() < 0.01);
-            assert!((cascades.bounds[2] - SUN_MAXIMUM_DISTANCE).abs() < 0.01);
-
-            let point = single::<PointLight>(world);
-            assert_eq!(point.radius, POINT_LIGHT_RADIUS);
-            assert!(!point.shadow_maps_enabled);
-            assert_eq!(point.range, 40.0);
-        });
-    }
-
-    #[test]
-    fn an_unsupported_format_version_marks_the_root_as_failed() {
-        with_scene_world(&mut test_app(), "bad_version.glb", |world| {
-            let mut query = world.query::<&LifMapData>();
-            assert!(
-                query.iter(world).next().is_none(),
-                "an unsupported LIF_map must not produce map data"
-            );
-
-            let error = single::<LifMapLoadError>(world).0;
-            assert!(
-                error.contains("format_version") && error.contains(lif::EXTENSION_MAP),
-                "unhelpful error: {error}"
-            );
-        });
-    }
-
-    /// The handler is global, so ordinary glTF assets travel through it too.
-    /// They must come out exactly as Bevy's loader built them.
-    #[test]
-    fn a_glb_without_lif_extensions_is_left_untouched() {
-        with_scene_world(&mut test_app(), "plain.glb", |world| {
-            let mut map_data = world.query::<&LifMapData>();
-            assert!(map_data.iter(world).next().is_none());
-            let mut load_error = world.query::<&LifMapLoadError>();
-            assert!(
-                load_error.iter(world).next().is_none(),
-                "a plain glTF is not a broken map"
-            );
-            let mut props = world.query::<&LifPropRef>();
-            assert!(props.iter(world).next().is_none());
-
-            let sun = single::<DirectionalLight>(world);
-            assert!(
-                !sun.shadow_maps_enabled,
-                "shadow tuning leaked onto a non-map glb"
-            );
-            assert_eq!(
-                single::<CascadeShadowConfig>(world).bounds,
-                CascadeShadowConfig::default().bounds
-            );
-            assert_eq!(single::<PointLight>(world).radius, 0.0);
-        });
-    }
-
     /// Lays a fixture glb out the way the converter ships it -- and the way
-    /// [`spawn_gltf_map`] looks for it -- inside a throwaway `ro://` root.
+    /// [`lifthrasir_runtime::world::MapScenePlugin`] looks for it -- inside a throwaway `ro://` root.
     fn stage_map(map: &str, fixture: &str) -> tempfile::TempDir {
         let root = tempfile::tempdir().unwrap();
         stage_map_into(&root, map, fixture);
@@ -892,6 +117,7 @@ mod tests {
             MeshPlugin,
             WorldSerializationPlugin,
             GltfPlugin::default(),
+            lifthrasir_runtime::WorldRenderPlugin,
             GltfMapPlugin,
         ));
         app.world_mut()
@@ -931,9 +157,12 @@ mod tests {
     }
 
     fn request_map(app: &mut App, map: &str) -> Entity {
-        app.world_mut()
+        let entity = app
+            .world_mut()
             .spawn(MapRequestLoader::new(map.to_string()))
-            .id()
+            .id();
+        app.insert_resource(SelectedMapScene(entity));
+        entity
     }
 
     /// Pumps the app until the glb scene has been instantiated under `entity`,
@@ -1206,7 +435,10 @@ mod tests {
             .expect("scene instance")[0];
         let map_data = world.entity(scene_root).get::<LifMapData>().unwrap();
         assert_eq!(
-            world.resource::<CurrentMapNoShadeTint>().0,
+            world
+                .get::<PropSceneContext>(entity)
+                .expect("scene-derived tint context")
+                .no_shade_tint,
             map_data.meta.no_shade_tint
         );
         assert_eq!(
@@ -1214,6 +446,35 @@ mod tests {
             0,
             "a healthy map must not report a load error"
         );
+    }
+
+    #[test]
+    fn an_unselected_ready_root_does_not_activate_client_map_resources() {
+        let root = stage_map("mini_map", "mini_map.glb");
+        let mut app = map_app(&root);
+        let selected = request_map(&mut app, "mini_map");
+        app.update();
+        wait_for_scene(&mut app, selected);
+        let altitude = app.world().resource::<CurrentMapAltitude>().0.clone();
+        let other = app
+            .world_mut()
+            .spawn((
+                MapSceneRequest {
+                    path: "ro://maps/mini_map/mini_map.glb".into(),
+                },
+                GltfMapLoader {
+                    map_name: "unselected".into(),
+                },
+            ))
+            .id();
+        app.update();
+        wait_for_scene(&mut app, other);
+        assert_eq!(
+            app.world().get::<MapSceneStatus>(other),
+            Some(&MapSceneStatus::Ready)
+        );
+        assert!(app.world().get::<MapData>(other).is_none());
+        assert_eq!(app.world().resource::<CurrentMapAltitude>().0, altitude);
     }
 
     #[test]
@@ -1538,7 +799,7 @@ mod tests {
         app.update();
 
         let world = app.world_mut();
-        let mut query = world.query_filtered::<(&MapAmbientVfx, &Transform), With<MapScoped>>();
+        let mut query = world.query_filtered::<(&MapAmbientVfx, &Transform), With<lifthrasir_runtime::world::SceneOwner>>();
         let effects: Vec<_> = query.iter(world).collect();
         assert_eq!(
             effects.len(),
@@ -1705,22 +966,5 @@ mod tests {
 
         app.update();
         wait_for_scene(&mut app, entity);
-    }
-
-    #[test]
-    fn malformed_node_extras_fail_the_whole_map() {
-        with_scene_world(&mut test_app(), "bad_extras.glb", |world| {
-            let mut query = world.query::<&LifMapData>();
-            assert!(
-                query.iter(world).next().is_none(),
-                "a malformed lif_audio must not leave usable map data behind"
-            );
-
-            let error = single::<LifMapLoadError>(world).0;
-            assert!(
-                error.contains(lif::EXTRAS_AUDIO),
-                "unhelpful error: {error}"
-            );
-        });
     }
 }

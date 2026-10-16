@@ -3,6 +3,7 @@ use crate::core::state::GameState;
 use crate::domain::system_sets::CharacterFlowSystems;
 use crate::domain::world::map::MapData;
 use crate::domain::world::spawn_context::MapSpawnContext;
+use crate::presentation::world::SelectedMapScene;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
@@ -39,12 +40,13 @@ pub fn start_map_loading_timer(
 #[auto_add_system(
     plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(in_set = CharacterFlowSystems::MapLoadTimeout)
+    config(in_set = CharacterFlowSystems::MapLoadTimeout, after = crate::presentation::world::activate_selected_scene)
 )]
 pub fn detect_map_loading_timeout(
     timer: Option<ResMut<MapLoadingTimer>>,
     time: Res<Time>,
-    maps: Query<&MapData>,
+    maps: Query<(), With<MapData>>,
+    selected: Option<Res<SelectedMapScene>>,
     mut commands: Commands,
     mut game_state: ResMut<NextState<GameState>>,
 ) {
@@ -52,7 +54,7 @@ pub fn detect_map_loading_timeout(
         return;
     };
 
-    if !maps.is_empty() {
+    if selected.is_some_and(|selected| maps.contains(selected.0)) {
         debug!(
             "Map '{}' loaded successfully, removing timeout timer",
             loading.map_name
@@ -77,14 +79,21 @@ pub fn detect_map_loading_timeout(
 #[auto_add_system(
     plugin = crate::domain::character::plugin::CharacterDomainAutoPlugin,
     schedule = Update,
-    config(in_set = CharacterFlowSystems::MapLoadDetect)
+    config(in_set = CharacterFlowSystems::MapLoadDetect, after = crate::presentation::world::activate_selected_scene)
 )]
 pub fn detect_map_load_complete(
     maps: Query<Entity, Added<MapData>>,
+    selected: Option<Res<SelectedMapScene>>,
     spawn_context: Option<Res<MapSpawnContext>>,
     mut events: MessageWriter<MapLoadCompleted>,
 ) {
     for entity in maps.iter() {
+        if selected
+            .as_ref()
+            .is_none_or(|selected| selected.0 != entity)
+        {
+            continue;
+        }
         let Some(context) = spawn_context.as_ref() else {
             warn!(
                 "MapData spawned (entity {:?}) without MapSpawnContext - skipping",

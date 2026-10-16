@@ -4,6 +4,7 @@ use net_contract::commands::{LocalMapLoaded, LocalPlayerReady};
 
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::world::map::MapData;
+use crate::presentation::world::SelectedMapScene;
 
 /// Signal the adapter that the local map asset finished loading.
 ///
@@ -11,13 +12,15 @@ use crate::domain::world::map::MapData;
 /// longer touches the zone phase machine.
 #[auto_add_system(
     plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
-    schedule = Update
+    schedule = Update,
+    config(after = crate::presentation::world::activate_selected_scene)
 )]
 pub fn notify_map_loaded(
     map_added: Query<(), Added<MapData>>,
+    selected: Option<Res<SelectedMapScene>>,
     mut w: MessageWriter<LocalMapLoaded>,
 ) {
-    if !map_added.is_empty() {
+    if selected.is_some_and(|selected| map_added.contains(selected.0)) {
         w.write(LocalMapLoaded);
     }
 }

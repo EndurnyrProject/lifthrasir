@@ -3649,7 +3649,6 @@ dependencies = [
  "bevy_auto_plugin",
  "bevy_common_assets",
  "bevy_framepace",
- "bevy_hanabi",
  "bevy_kira_audio",
  "dirs",
  "encoding_rs",
@@ -3660,11 +3659,11 @@ dependencies = [
  "leafwing-input-manager",
  "lifthrasir-assets",
  "lifthrasir-data",
+ "lifthrasir-runtime",
  "moonshine-behavior",
  "moonshine-kind",
  "moonshine-tag",
  "net-contract",
- "pathfinding",
  "regex",
  "ro-formats",
  "ron 0.12.2",
@@ -4727,6 +4726,7 @@ dependencies = [
  "bevy_framepace",
  "game-engine",
  "lifthrasir-assets",
+ "lifthrasir-runtime",
  "lifthrasir-ui",
  "net-aesir",
  "toml",
@@ -4777,6 +4777,26 @@ dependencies = [
  "thiserror 2.0.20",
  "toml",
  "zip",
+]
+
+[[package]]
+name = "lifthrasir-runtime"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_auto_plugin",
+ "bevy_hanabi",
+ "bevy_kira_audio",
+ "gltf",
+ "lifthrasir-assets",
+ "lifthrasir-data",
+ "moonshine-kind",
+ "moonshine-tag",
+ "pathfinding",
+ "ro-formats",
+ "serde",
+ "serde_json",
+ "toml",
 ]
 
 [[package]]

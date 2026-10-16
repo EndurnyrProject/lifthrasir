@@ -5,11 +5,12 @@ use net_contract::events::{SkillUnitSnapshotReceived, SkillUnitSpawned};
 
 use super::spawn::grid_coord;
 use crate::domain::audio::events::PlaySkillSfx;
-use crate::domain::effects::triggers::{descriptor_tint, ground_world_position, load_str_effect};
+use crate::domain::effects::triggers::ground_world_position;
 use crate::domain::effects::{EffectAnchor, spawn_effect};
 use crate::domain::world::components::CurrentMapAltitude;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
 use crate::infrastructure::effect::EffectCatalog;
+use lifthrasir_runtime::effects::{descriptor_tint, load_str_effect};
 
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_trap_detonation(

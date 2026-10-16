@@ -9,6 +9,50 @@ use bevy::{
 use std::time::Duration;
 
 #[test]
+fn client_attaches_interaction_to_explicit_visual_root_mappings() {
+    let mut app = App::new();
+    app.init_resource::<TargetingMode>()
+        .init_resource::<LockedTarget>()
+        .init_resource::<PendingPickups>()
+        .add_message::<AttackRequested>()
+        .add_message::<PickupRequested>()
+        .add_message::<TalkToNpc>()
+        .add_message::<SkillCastResolved>()
+        .add_observer(attach_actor_visual_observers);
+    let owner = app
+        .world_mut()
+        .spawn((NetworkEntity::new(17, 42, ObjectType::Mob), Mob))
+        .id();
+    let unrelated_parent = app.world_mut().spawn_empty().id();
+    let body = app
+        .world_mut()
+        .spawn((ChildOf(unrelated_parent), ActorVisualRoot(owner)))
+        .id();
+    app.world_mut().flush();
+    app.world_mut().trigger(Pointer::new(
+        PointerId::Mouse,
+        Location {
+            target: NormalizedRenderTarget::Image(ImageRenderTarget {
+                handle: Handle::default(),
+                scale_factor: 1.0,
+            }),
+            position: Vec2::ZERO,
+        },
+        Click {
+            button: PointerButton::Primary,
+            hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
+            duration: Duration::ZERO,
+            count: 1,
+        },
+        body,
+    ));
+    let messages = app.world().resource::<Messages<AttackRequested>>();
+    let requests: Vec<_> = messages.iter_current_update_messages().collect();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].target_id, 42);
+}
+
+#[test]
 fn nested_gltf_and_direct_sprite_picks_target_the_network_owner() {
     for kind in [ObjectType::Npc, ObjectType::Mob] {
         for nested in [false, true] {

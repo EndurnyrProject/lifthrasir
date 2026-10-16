@@ -1,15 +1,21 @@
 use bevy::prelude::*;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static ATTACK_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Timer for attack animations
 #[derive(Component, Debug, Clone)]
 pub struct AttackTimer {
     pub timer: Timer,
+    /// Distinguishes new requests even when their start time and duration match.
+    pub request_id: u64,
 }
 
 impl AttackTimer {
     pub fn new(duration_secs: f32) -> Self {
         Self {
             timer: Timer::from_seconds(duration_secs, TimerMode::Once),
+            request_id: ATTACK_REQUEST_ID.fetch_add(1, Ordering::Relaxed),
         }
     }
 }

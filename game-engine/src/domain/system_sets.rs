@@ -71,25 +71,12 @@ pub enum MovementSystems {
 
 /// Sprite rendering and animation pipeline
 /// This is the CRITICAL rendering pipeline - all sprite systems depend on this ordering
-/// The `chain` attribute ensures variants execute in the exact order listed below
+/// RuntimeCorePlugin installs the phase chain without adding state gates to message consumers.
+pub use lifthrasir_runtime::rendering::SpriteRenderingSystems;
+
+/// Client adapters publish presentation inputs before the shared animation readers.
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[auto_configure_system_set(
-    plugin = crate::domain::entities::sprite_rendering::GenericSpriteRenderingPlugin,
-    schedule = Update,
-    chain,
-    config(run_if = in_game_or_character_select)
-)]
-pub enum SpriteRenderingSystems {
-    HierarchySpawn,
-    AssetPopulation,
-    AnimationEvents,
-    AnimationSync,
-    AnimationMarkers,
-    AnimationAdvance,
-    TransformUpdate,
-    AnimationPlayback,
-    OrphanCleanup,
-}
+pub struct ClientPresentationSystems;
 
 // =============================================================================
 // ENTITY INTERACTION SYSTEMS
@@ -207,14 +194,4 @@ pub enum AuthenticationSystems {
 // RENDERING SYSTEMS
 // =============================================================================
 
-#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[auto_configure_system_set(
-    plugin = crate::presentation::rendering::map_plugin::MapDomainPlugin,
-    schedule = Update,
-    chain
-)]
-pub enum WaterRenderingSystems {
-    WaterLoading,
-    WaterFinalization,
-    WaterAnimation,
-}
+pub use lifthrasir_runtime::rendering::WaterRenderingSystems;

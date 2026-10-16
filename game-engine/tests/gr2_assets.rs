@@ -91,7 +91,12 @@ fn loader() -> App {
         .push(Box::new(StandardMaterials));
     app.init_asset::<StandardMaterial>()
         .register_type::<MeshMaterial3d<StandardMaterial>>()
-        .add_plugins(ModelRenderingPlugin);
+        .add_plugins((
+            lifthrasir_assets::ContentAssetsPlugin,
+            lifthrasir_runtime::RuntimeCorePlugin,
+            lifthrasir_runtime::ActorRenderPlugin,
+            ModelRenderingPlugin,
+        ));
     app.finish();
     app.cleanup();
     app

@@ -23,19 +23,7 @@ pub struct EquipmentItem {
     pub options: Vec<EquipmentOption>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum EquipmentSlot {
-    HeadTop,
-    HeadMid,
-    HeadBottom,
-    Weapon,
-    Shield,
-    Armor,
-    Garment,
-    Shoes,
-    Accessory1,
-    Accessory2,
-}
+pub use lifthrasir_runtime::actors::EquipmentSlot;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EquipmentOption {

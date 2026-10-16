@@ -1,0 +1,343 @@
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
+use std::time::Duration;
+
+use crate::actors::ActorAnimationInput;
+use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
+
+use crate::actors::sprites::components::{MobSprite, PlayerSprite, RoSpriteGeneric};
+use crate::actors::sprites::layout::{ActionLayout, MobLayout, PlayerLayout};
+use crate::actors::{ActionType, CharacterDirection, CombatMotion, Direction};
+use crate::effects::AnimationPaused;
+use crate::rendering::SpriteRenderingSystems;
+use crate::rendering::billboard::EquipmentPreviewCamera;
+
+type SpriteActionQuery<'w, 's, T> = Query<
+    'w,
+    's,
+    (
+        &'static ActorAnimationInput,
+        Option<&'static CombatMotion>,
+        Option<&'static AnimationPaused>,
+        &'static mut RoSpriteGeneric<T>,
+    ),
+>;
+
+fn is_attack(action_type: ActionType) -> bool {
+    matches!(
+        action_type,
+        ActionType::Attack | ActionType::Attack1 | ActionType::Attack2
+    )
+}
+
+/// Remap an armed attack to the equipped weapon's real swing motion (ATTACK1/2/3
+/// vary by weapon). Idle/walk/etc. are left untouched, so an armed character out
+/// of combat stands in normal idle — the weapon simply isn't drawn there (its ACT
+/// has no idle frames), matching the reference client.
+fn resolve_action_type(base: ActionType, motion: Option<CombatMotion>) -> ActionType {
+    match motion {
+        Some(motion) if is_attack(base) => motion.attack,
+        _ => base,
+    }
+}
+
+fn sync_sprite_action_impl<T: ActionLayout>(time: &Res<Time>, query: &mut SpriteActionQuery<T>) {
+    for (input, motion, paused, mut sprite) in query.iter_mut() {
+        let resolved = ActorAnimationInput {
+            action: resolve_action_type(input.action, motion.copied()),
+            ..*input
+        };
+        let sample_time = if input.paused {
+            paused.map_or(time.elapsed(), |pause| {
+                Duration::from_millis(u64::from(pause.at_ms))
+            })
+        } else {
+            time.elapsed()
+        };
+        sprite.apply_animation_input(&resolved, sample_time);
+    }
+}
+
+/// Quantize the camera's horizontal heading into one of the 8 sprite octants.
+///
+/// RO sprites are camera-relative billboards: the displayed facing is the
+/// entity's world facing rotated by the camera's orientation, so a unit keeps
+/// the same on-screen orientation as the camera orbits. `camera_forward` is the
+/// camera's look direction (`Transform::forward`); the heading is anchored so
+/// the default camera, which looks toward -Z (north), yields 0 and leaves the
+/// world facing unchanged.
+fn camera_view_octant(camera_forward: Vec3) -> u8 {
+    let heading = (-camera_forward.z).atan2(camera_forward.x) - FRAC_PI_2;
+    ((heading / FRAC_PI_4).round() as i32).rem_euclid(8) as u8
+}
+
+/// Rotate a world-space facing by the camera octant to pick the sprite frame to
+/// display, mirroring the reference client's `(camera_direction + direction) & 7`.
+fn camera_relative_direction(facing: Direction, camera_octant: u8) -> Direction {
+    Direction::from_u8((facing as u8 + camera_octant) % 8)
+}
+
+/// Pick each sprite's directional frame relative to the current camera angle.
+///
+/// Runs every frame (not gated on `Changed<CharacterDirection>`) because the
+/// displayed frame also depends on the camera, which can orbit while a unit
+/// stands still. The compare-guard keeps change detection clean so the frame
+/// only re-publishes when it actually changes.
+fn sync_sprite_direction_impl<T: ActionLayout>(
+    camera_octant: u8,
+    query: &mut Query<(&CharacterDirection, &mut RoSpriteGeneric<T>)>,
+) {
+    for (direction, mut ro_sprite) in query.iter_mut() {
+        let display = camera_relative_direction(direction.facing, camera_octant);
+        if ro_sprite.direction != display {
+            ro_sprite.set_direction(display);
+        }
+    }
+}
+
+#[auto_add_system(
+    plugin = crate::actors::ActorRenderPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::AnimationSync)
+)]
+pub fn sync_player_sprite_action(time: Res<Time>, mut query: SpriteActionQuery<PlayerLayout>) {
+    sync_sprite_action_impl(&time, &mut query);
+}
+
+#[auto_add_system(
+    plugin = crate::actors::ActorRenderPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::AnimationSync, after = sync_player_sprite_action)
+)]
+pub fn sync_player_sprite_direction(
+    camera_query: Query<&Transform, (With<Camera3d>, Without<EquipmentPreviewCamera>)>,
+    mut query: Query<(&CharacterDirection, &mut PlayerSprite)>,
+) {
+    let octant = camera_query
+        .single()
+        .map(|t| camera_view_octant(*t.forward()))
+        .unwrap_or(0);
+    sync_sprite_direction_impl(octant, &mut query);
+}
+
+#[auto_add_system(
+    plugin = crate::actors::ActorRenderPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::AnimationSync)
+)]
+pub fn sync_mob_sprite_action(time: Res<Time>, mut query: SpriteActionQuery<MobLayout>) {
+    sync_sprite_action_impl(&time, &mut query);
+}
+
+#[auto_add_system(
+    plugin = crate::actors::ActorRenderPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::AnimationSync, after = sync_mob_sprite_action)
+)]
+pub fn sync_mob_sprite_direction(
+    camera_query: Query<&Transform, (With<Camera3d>, Without<EquipmentPreviewCamera>)>,
+    mut query: Query<(&CharacterDirection, &mut MobSprite)>,
+) {
+    let octant = camera_query
+        .single()
+        .map(|t| camera_view_octant(*t.forward()))
+        .unwrap_or(0);
+    sync_sprite_direction_impl(octant, &mut query);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SWORD_MOTION: CombatMotion = CombatMotion {
+        attack: ActionType::Attack2,
+    };
+
+    #[test]
+    fn without_motion_action_is_unchanged() {
+        assert_eq!(
+            resolve_action_type(ActionType::Idle, None),
+            ActionType::Idle
+        );
+        assert_eq!(
+            resolve_action_type(ActionType::Attack, None),
+            ActionType::Attack
+        );
+    }
+
+    #[test]
+    fn motion_remaps_attack_to_swing_and_leaves_idle_relaxed() {
+        // Out of combat the armed character stays in normal idle (the weapon has
+        // no idle frames); only the attack is remapped to the weapon's swing.
+        assert_eq!(
+            resolve_action_type(ActionType::Idle, Some(SWORD_MOTION)),
+            ActionType::Idle
+        );
+        assert_eq!(
+            resolve_action_type(ActionType::Attack, Some(SWORD_MOTION)),
+            ActionType::Attack2
+        );
+    }
+
+    #[test]
+    fn motion_leaves_other_actions_untouched() {
+        assert_eq!(
+            resolve_action_type(ActionType::Walk, Some(SWORD_MOTION)),
+            ActionType::Walk
+        );
+        assert_eq!(
+            resolve_action_type(ActionType::Hit, Some(SWORD_MOTION)),
+            ActionType::Hit
+        );
+    }
+
+    #[test]
+    fn is_attack_covers_all_attack_variants() {
+        assert!(is_attack(ActionType::Attack));
+        assert!(is_attack(ActionType::Attack1));
+        assert!(is_attack(ActionType::Attack2));
+        assert!(!is_attack(ActionType::Idle));
+        assert!(!is_attack(ActionType::ReadyFight));
+    }
+
+    // Camera forwards for the RO-style camera (looks down at the player). Only
+    // the horizontal (x, z) components drive the octant; y is the downward tilt.
+    const FORWARD_LOOKING_NORTH: Vec3 = Vec3::new(0.0, -0.707, -0.707); // default yaw
+    const FORWARD_LOOKING_WEST: Vec3 = Vec3::new(-0.707, -0.707, 0.0); // orbited +90°
+    const FORWARD_LOOKING_SOUTH: Vec3 = Vec3::new(0.0, -0.707, 0.707); // orbited 180°
+    const FORWARD_LOOKING_EAST: Vec3 = Vec3::new(0.707, -0.707, 0.0); // orbited -90°
+
+    #[test]
+    fn default_camera_octant_is_identity() {
+        assert_eq!(camera_view_octant(FORWARD_LOOKING_NORTH), 0);
+    }
+
+    #[test]
+    fn quarter_turn_camera_octants() {
+        assert_eq!(camera_view_octant(FORWARD_LOOKING_WEST), 2);
+        assert_eq!(camera_view_octant(FORWARD_LOOKING_SOUTH), 4);
+        assert_eq!(camera_view_octant(FORWARD_LOOKING_EAST), 6);
+    }
+
+    #[test]
+    fn default_camera_shows_world_facing() {
+        assert_eq!(
+            camera_relative_direction(Direction::South, 0),
+            Direction::South
+        );
+        assert_eq!(
+            camera_relative_direction(Direction::East, 0),
+            Direction::East
+        );
+    }
+
+    #[test]
+    fn facing_the_camera_renders_front() {
+        // Whatever way the camera orbits, a unit facing toward it shows South
+        // (front) and a unit facing away shows North (back).
+        let octant = camera_view_octant(FORWARD_LOOKING_WEST); // camera on the east
+        assert_eq!(
+            camera_relative_direction(Direction::East, octant),
+            Direction::South
+        );
+        assert_eq!(
+            camera_relative_direction(Direction::West, octant),
+            Direction::North
+        );
+    }
+
+    #[test]
+    fn orbiting_rotates_a_standing_units_frame() {
+        // A south-facing unit seen from a 90°-orbited camera shows a side frame,
+        // and from behind shows its back.
+        assert_eq!(
+            camera_relative_direction(Direction::South, 2),
+            Direction::West
+        );
+        assert_eq!(
+            camera_relative_direction(Direction::South, 4),
+            Direction::North
+        );
+    }
+
+    #[test]
+    fn initially_frozen_input_honors_its_captured_pose_timestamp() {
+        use lifthrasir_assets::animation::asset::{ActionData, FrameData, RoAnimationAsset};
+        use std::time::Duration;
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .add_systems(Update, sync_player_sprite_action);
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs(1));
+        let actor = app
+            .world_mut()
+            .spawn((
+                ActorAnimationInput {
+                    action: ActionType::Walk,
+                    restart_id: 1,
+                    paused: true,
+                    ..default()
+                },
+                AnimationPaused { at_ms: 400 },
+                PlayerSprite::default(),
+            ))
+            .id();
+        app.update();
+        let mut animation = RoAnimationAsset {
+            actions: vec![ActionData::default(); 16],
+            ..default()
+        };
+        animation.actions[8] = ActionData {
+            frames: vec![FrameData::default(); 10],
+            delay_ms: 100.0,
+        };
+        assert_eq!(
+            app.world()
+                .get::<PlayerSprite>(actor)
+                .unwrap()
+                .get_frame_index(&animation, 400),
+            4
+        );
+    }
+
+    #[test]
+    fn direction_sync_ignores_equipment_preview_camera() {
+        // With the equipment preview camera present, the world direction system must
+        // still resolve the primary camera (not fall back to octant 0), so a standing
+        // unit's displayed frame keeps tracking the orbited world camera.
+        let mut app = App::new();
+        app.add_systems(Update, sync_player_sprite_direction);
+
+        // World camera looking west (octant 2).
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::IDENTITY.looking_to(Vec3::new(-0.707, -0.707, 0.0), Vec3::Y),
+        ));
+        // Second camera that must be excluded from the world query.
+        app.world_mut().spawn((
+            Camera3d::default(),
+            Transform::IDENTITY.looking_to(Vec3::new(0.0, -0.707, -0.707), Vec3::Y),
+            EquipmentPreviewCamera,
+        ));
+
+        let unit = app
+            .world_mut()
+            .spawn((
+                CharacterDirection {
+                    facing: Direction::South,
+                },
+                PlayerSprite::default(),
+            ))
+            .id();
+
+        app.update();
+
+        // South (0) rotated by octant 2 = West. A failed single() would fall back to
+        // octant 0 and leave the frame at South.
+        assert_eq!(
+            app.world().get::<PlayerSprite>(unit).unwrap().direction,
+            Direction::West
+        );
+    }
+}

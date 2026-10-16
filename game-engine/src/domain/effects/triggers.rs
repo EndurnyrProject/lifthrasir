@@ -15,6 +15,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use lifthrasir_data::{EffectDescriptor, EffectPlacement};
+use lifthrasir_runtime::effects::{descriptor_tint, load_effect};
 use moonshine_behavior::prelude::BehaviorMut;
 
 use super::components::EffectAnchor;
@@ -27,7 +28,9 @@ use crate::domain::entities::character::states::AnimationState;
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::world::components::CurrentMapAltitude;
 use crate::infrastructure::assets::loaders::RoAltitudeAsset;
-use crate::infrastructure::effect::{EffectCatalog, LoadedEffectAsset, ShaderFxCatalog};
+#[cfg(test)]
+use crate::infrastructure::effect::LoadedEffectAsset;
+use crate::infrastructure::effect::{EffectCatalog, ShaderFxCatalog};
 use crate::utils::coordinates::spawn_coords_to_world_position;
 use net_contract::events::{
     GroundSkillPlaced, SkillDamageReceived, SkillEffectShown, SpecialEffectShown,
@@ -154,39 +157,6 @@ fn play_procedural_sound(
 /// `combat/systems.rs`). `None` when the unit is not registered.
 fn resolve_gid(registry: &EntityRegistry, gid: u32) -> Option<Entity> {
     registry.get_entity(gid)
-}
-
-/// The descriptor's RGBA tint as a Bevy `Color` (the data crate stays Bevy-free).
-pub(crate) fn descriptor_tint(descriptor: &EffectDescriptor) -> Color {
-    let [r, g, b, a] = descriptor.color;
-    Color::srgba(r, g, b, a)
-}
-
-/// Resolves a `Str` layer's asset name to its `ro://` asset path: authored
-/// `.strfx.ron` effects live under `effects/`, GRF `.str` effects under the
-/// archive's `data/texture/effect/`.
-fn effect_asset_path(name: &str) -> String {
-    if name.ends_with(".strfx.ron") {
-        format!("ro://effects/{name}")
-    } else {
-        format!("ro://data/texture/effect/{name}")
-    }
-}
-
-/// Load a named STR effect through the registered `.str`/`.strfx.ron` loader.
-pub(crate) fn load_str_effect(asset_server: &AssetServer, name: &str) -> Handle<LoadedEffectAsset> {
-    asset_server.load(effect_asset_path(name))
-}
-
-/// Load the descriptor's STR effect. `None` for descriptors with no `Str`
-/// layer, which spawn no STR visual.
-pub(crate) fn load_effect(
-    asset_server: &AssetServer,
-    descriptor: &EffectDescriptor,
-) -> Option<Handle<LoadedEffectAsset>> {
-    descriptor
-        .str_name()
-        .map(|name| load_str_effect(asset_server, name))
 }
 
 /// Spawn the descriptor's STR effect when it has one, returning the entity the
@@ -770,22 +740,6 @@ mod tests {
         let hits = split_hits(3200, 1000);
         assert_eq!(hits.len(), MAX_HITS as usize, "clamped to the sanity cap");
         assert_eq!(hits.iter().sum::<i32>(), 3200);
-    }
-
-    #[test]
-    fn effect_asset_path_resolves_authored_names_to_the_filesystem_source() {
-        assert_eq!(
-            effect_asset_path("fire_bolt.strfx.ron"),
-            "ro://effects/fire_bolt.strfx.ron"
-        );
-    }
-
-    #[test]
-    fn effect_asset_path_resolves_grf_names_to_the_ro_source() {
-        assert_eq!(
-            effect_asset_path("heal.str"),
-            "ro://data/texture/effect/heal.str"
-        );
     }
 
     #[test]

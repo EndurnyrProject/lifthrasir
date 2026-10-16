@@ -38,7 +38,10 @@ pub fn setup_unified_map_loading(
         context.map_name, context.spawn_x, context.spawn_y
     );
 
-    commands.spawn((MapRequestLoader::new(context.map_name.clone()), MapScoped));
+    let root = commands
+        .spawn((MapRequestLoader::new(context.map_name.clone()), MapScoped))
+        .id();
+    commands.insert_resource(crate::presentation::world::SelectedMapScene(root));
     debug!(
         "Spawned MapRequestLoader entity for map '{}'",
         context.map_name

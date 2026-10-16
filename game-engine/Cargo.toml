@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 ro-formats = { path = "../ro-formats" }
 lifthrasir-assets = { path = "../lifthrasir-assets" }
+lifthrasir-runtime = { path = "../lifthrasir-runtime" }
 lifthrasir-data = { path = "../lifthrasir-data" }
 net-contract = { path = "../net-contract" }
 bevy = { workspace = true, features = [
@@ -19,10 +20,6 @@ bevy_common_assets = { version = "0.17", features = ["toml", "ron"] }
 iyes_progress = { workspace = true }
 bevy_kira_audio = { version = "0.26", features = ["mp3", "wav", "ogg"] }
 bevy_framepace = { workspace = true }
-# default-features off drops the `2d` render path: this project has no 2D
-# particles, and the 2D path double-draws every world effect through the UI
-# Camera2d as fixed screen-space specks. Keep only `3d`.
-bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
 dirs = "6"
 leafwing-input-manager = { workspace = true }
 
@@ -44,8 +41,6 @@ moonshine-kind = "0.5"
 moonshine-tag = "0.5"
 moonshine-behavior = "0.5"
 
-# Pathfinding
-pathfinding = "4.15"
 ron = { workspace = true }
 
 # Naming the extension-handler hook types and parsing LIF_* payloads.
@@ -59,4 +54,5 @@ dynamic = ["bevy/dynamic_linking"]
 dlss = ["bevy/dlss"]
 
 [dev-dependencies]
+lifthrasir-runtime = { path = "../lifthrasir-runtime", features = ["test-support"] }
 tempfile = { workspace = true }

@@ -391,6 +391,40 @@ mod tests {
     }
 
     #[test]
+    fn boot_applies_loaded_audio_preferences_to_the_shared_resource() {
+        let config = AudioConfig {
+            bgm_volume: 0.12,
+            bgm_muted: true,
+            sfx_volume: 0.34,
+            sfx_muted: false,
+            ambient_volume: 0.56,
+            ambient_muted: true,
+        };
+        let mut app = audio_test_app(config);
+        app.add_systems(PostStartup, super::super::emit_initial_apply);
+        app.update();
+        let settings = app
+            .world()
+            .resource::<lifthrasir_runtime::audio::AudioSettings>();
+        assert_eq!(
+            (
+                settings.bgm_volume,
+                settings.sfx_volume,
+                settings.ambience_volume
+            ),
+            (0.12, 0.34, 0.56)
+        );
+        assert_eq!(
+            (
+                settings.bgm_muted,
+                settings.sfx_muted,
+                settings.ambience_muted
+            ),
+            (true, false, true)
+        );
+    }
+
+    #[test]
     fn apply_audio_emits_the_six_audio_messages() {
         let mut app = audio_test_app(AudioConfig::default());
         app.world_mut().write_message(ApplySettings);

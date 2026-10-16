@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
-use super::super::components::{HeadAttachment, PendingRenderLayers, RenderLayer};
+use super::super::components::{
+    EntitySpriteData, EntitySpriteInfo, HeadAttachment, PendingRenderLayers, RenderLayer,
+};
 use crate::domain::entities::character::components::{CharacterData, Gender};
 use crate::domain::entities::character::systems::OPTION_RIDING;
 use crate::domain::entities::registry::EntityRegistry;
@@ -11,11 +13,7 @@ use crate::infrastructure::assets::animation_processing_system::PendingAnimation
 use crate::infrastructure::job::registry::JobSpriteRegistry;
 use net_contract::events::UnitStateChanged;
 
-/// The unit's body currently renders its mounted (Peco) sprite. Presence of the
-/// marker *is* the rendered mount state, so repeated `effect_state` broadcasts
-/// with the bit unchanged don't rebuild the body.
-#[derive(Component)]
-pub struct RidingPeco;
+pub use lifthrasir_runtime::actors::sprites::components::RidingPeco;
 
 type BodyLayerQuery<'w, 's> = Query<'w, 's, (Entity, &'static RenderLayer)>;
 
@@ -43,7 +41,12 @@ pub fn apply_peco_mount(
     mut commands: Commands,
     mut state_changes: MessageReader<UnitStateChanged>,
     registry: Res<EntityRegistry>,
-    characters: Query<(&CharacterData, &Gender, Option<&Children>)>,
+    mut characters: Query<(
+        &CharacterData,
+        &Gender,
+        Option<&Children>,
+        Option<&mut EntitySpriteInfo>,
+    )>,
     riding_markers: Query<(), With<RidingPeco>>,
     layers: BodyLayerQuery,
     heads: Query<Entity, With<HeadAttachment>>,
@@ -60,7 +63,7 @@ pub fn apply_peco_mount(
         if riding_markers.contains(entity) == desired {
             continue;
         }
-        let Ok((character, gender, children)) = characters.get(entity) else {
+        let Ok((character, gender, children, sprite_info)) = characters.get_mut(entity) else {
             continue;
         };
         let Some(job_registry) = job_registry.as_deref() else {
@@ -116,6 +119,11 @@ pub fn apply_peco_mount(
             Some(entity),
         );
 
+        if let Some(mut info) = sprite_info
+            && let EntitySpriteData::Character { riding, .. } = &mut info.sprite_data
+        {
+            *riding = desired;
+        }
         let mut entity_commands = commands.entity(entity);
         entity_commands.insert(PendingRenderLayers);
         if desired {
@@ -328,6 +336,38 @@ mod tests {
         let world = f.app.world();
         assert!(world.get_entity(f.body_layer).is_ok());
         assert!(!world.resource::<PendingAnimations>().has_pending());
+    }
+
+    #[test]
+    fn mounted_metadata_tracks_the_resolved_body_request() {
+        let (mut app, character) = setup_character_only(KNIGHT);
+        app.world_mut()
+            .entity_mut(character)
+            .insert(EntitySpriteInfo {
+                sprite_data: EntitySpriteData::Character {
+                    job_id: KNIGHT,
+                    gender: Gender::Male,
+                    head: 0,
+                    hair_color: 0,
+                    riding: false,
+                },
+            });
+        send(&mut app, OPTION_RIDING);
+        assert!(matches!(
+            app.world()
+                .get::<EntitySpriteInfo>(character)
+                .unwrap()
+                .sprite_data,
+            EntitySpriteData::Character { riding: true, .. }
+        ));
+        send(&mut app, 0);
+        assert!(matches!(
+            app.world()
+                .get::<EntitySpriteInfo>(character)
+                .unwrap()
+                .sprite_data,
+            EntitySpriteData::Character { riding: false, .. }
+        ));
     }
 
     #[test]

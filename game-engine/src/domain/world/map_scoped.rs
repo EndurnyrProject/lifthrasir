@@ -17,8 +17,8 @@ pub struct MapScoped;
 /// Runs on `OnExit(GameState::InGame)`, which fires both on session leave and on
 /// every warp (warps cycle `InGame -> Loading -> InGame`). Despawn is recursive in
 /// Bevy 0.18, so tagging the hierarchy roots is enough to reap their descendants
-/// (model nodes, meshes, etc.). Map sounds keep their own teardown
-/// (`teardown_map_sounds`) and are intentionally not `MapScoped`.
+/// (model nodes, meshes, etc.). Emitted sounds/effects carry runtime SceneOwner
+/// instead; runtime removes only the outputs whose owner root was deleted.
 #[auto_add_system(
     plugin = crate::domain::world::WorldDomainPlugin,
     schedule = OnExit(GameState::InGame)
@@ -32,6 +32,7 @@ pub fn despawn_map_scoped(
         commands.entity(entity).despawn();
     }
     registry.clear_non_local();
+    commands.remove_resource::<crate::presentation::world::SelectedMapScene>();
 }
 
 #[cfg(test)]

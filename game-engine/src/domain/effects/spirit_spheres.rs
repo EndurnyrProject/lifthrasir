@@ -1,40 +1,11 @@
 use std::collections::HashMap;
-use std::f32::consts::TAU;
 
 use bevy::prelude::*;
 use net_contract::events::{SpiritSphereChanged, UnitEntered};
 
 use crate::domain::entities::registry::EntityRegistry;
 
-/// Orbit radius, in world units, of each spirit sphere — wide enough that the
-/// ring clears the body sprite instead of clipping through it.
-const SPHERE_ORBIT_RADIUS: f32 = 11.0;
-/// Full revolution period of the sphere ring.
-const SPHERE_ORBIT_PERIOD_SECS: f32 = 3.0;
-/// Vertical offset lifting the ring to the unit's upper body.
-const SPHERE_ORBIT_LIFT: f32 = 10.0;
-/// Amplitude of the per-sphere vertical bob.
-const SPHERE_BOB_AMPLITUDE: f32 = 0.8;
-/// Period of the per-sphere vertical bob.
-const SPHERE_BOB_PERIOD_SECS: f32 = 1.6;
-/// Phase offset between neighbouring spheres' bobs so the ring undulates
-/// instead of moving as one rigid plate.
-const SPHERE_BOB_PHASE_STEP: f32 = 1.7;
-
-/// One spirit-sphere anchor orbiting `unit`. A TOP-LEVEL entity following the
-/// unit from the outside (the same pattern as [`super::SightOrbit`] — effect
-/// visuals do not render reliably as unit children). The domain spawns only
-/// this bare anchor, moved every frame by [`orbit_spirit_spheres`]; the
-/// presentation layer dresses it with the ki-ball billboard
-/// (`dress_spirit_sphere_orbits` in `presentation/rendering/effects/skill_fx.rs`).
-#[derive(Component, Debug, Clone, Copy)]
-pub struct SpiritSphereOrbit {
-    pub unit: Entity,
-    /// This sphere's slot within the ring, `0..count`.
-    pub index: u32,
-    /// Ring size when spawned; fixes each sphere's angular offset.
-    pub count: u32,
-}
+pub use lifthrasir_runtime::effects::overlays::{SpiritSphereOrbit, orbit_spirit_spheres};
 
 /// Latest sphere count for units whose entity has not registered yet, keyed by
 /// unit_id. Same shape and rationale as [`super::PendingBodyStates`].
@@ -123,38 +94,6 @@ fn apply_sphere_count(
             Transform::from_translation(start),
             Visibility::default(),
         ));
-    }
-}
-
-/// Moves every [`SpiritSphereOrbit`] anchor along the shared ring around its
-/// unit's current position, each sphere offset by its slot angle and bobbing
-/// gently out of phase with its neighbours. An orbit whose unit is gone
-/// (despawned, map change) is despawned here, taking the dressed ball with it.
-pub fn orbit_spirit_spheres(
-    time: Res<Time>,
-    mut commands: Commands,
-    units: Query<&GlobalTransform>,
-    mut orbits: Query<(Entity, &SpiritSphereOrbit, &mut Transform)>,
-) {
-    let elapsed = time.elapsed_secs();
-    let base_angle = elapsed * (TAU / SPHERE_ORBIT_PERIOD_SECS);
-    for (orbit_entity, orbit, mut transform) in &mut orbits {
-        let Ok(unit) = units.get(orbit.unit) else {
-            commands.entity(orbit_entity).despawn();
-            continue;
-        };
-        let slot = orbit.index as f32 * TAU / orbit.count.max(1) as f32;
-        let (sin, cos) = (base_angle + slot).sin_cos();
-        let bob = (elapsed * (TAU / SPHERE_BOB_PERIOD_SECS)
-            + orbit.index as f32 * SPHERE_BOB_PHASE_STEP)
-            .sin()
-            * SPHERE_BOB_AMPLITUDE;
-        transform.translation = unit.translation()
-            + Vec3::new(
-                cos * SPHERE_ORBIT_RADIUS,
-                SPHERE_ORBIT_LIFT + bob,
-                sin * SPHERE_ORBIT_RADIUS,
-            );
     }
 }
 

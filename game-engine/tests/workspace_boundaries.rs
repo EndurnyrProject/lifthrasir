@@ -127,6 +127,7 @@ fn current_workspace_boundaries() {
         "lifthrasir-data",
         "lifthrasir-pak",
         "lifthrasir-assets",
+        "lifthrasir-runtime",
         "lifthrasir",
         "net-contract",
         "net-aesir",
@@ -134,6 +135,21 @@ fn current_workspace_boundaries() {
         assert_package_present(package);
     }
     assert_no_dependency("game-engine", &["bevy_quinnet", "prost", "net-aesir"]);
+    assert_no_dependency(
+        "lifthrasir-runtime",
+        &[
+            "game-engine",
+            "lifthrasir",
+            "lifthrasir-client",
+            "net-contract",
+            "net-aesir",
+            "lifthrasir-ui",
+            "lifthrasir-client-ui",
+            "lifthrasir-tooling",
+            "ro-to-lifthrasir-cli",
+            "grf-utils",
+        ],
+    );
     assert_no_dependency(
         "lifthrasir-assets",
         &[
