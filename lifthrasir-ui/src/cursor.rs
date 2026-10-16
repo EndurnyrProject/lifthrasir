@@ -16,7 +16,7 @@
 use bevy::prelude::*;
 use bevy::window::{CustomCursor, CustomCursorImage};
 use bevy_feathers::cursor::{EntityCursor, OverrideCursor};
-use game_engine::domain::input::{CurrentCursorType, CursorType};
+use lifthrasir_client::domain::input::{CurrentCursorType, CursorType};
 
 /// `ro://` directory holding the extracted cursor PNGs.
 const CURSOR_DIR: &str = "ro://textures/ui/cursors";

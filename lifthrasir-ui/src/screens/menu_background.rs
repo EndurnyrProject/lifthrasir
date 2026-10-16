@@ -1,5 +1,5 @@
 use bevy::{prelude::*, render::render_resource::AsBindGroup, shader::ShaderRef};
-use game_engine::core::state::GameState;
+use lifthrasir_client::core::state::GameState;
 
 /// Loaded through the `ro://` composite source. Paths are joined onto the data
 /// folder root (`assets/data`), so the bare filename maps to `assets/data/main_bg.png`.

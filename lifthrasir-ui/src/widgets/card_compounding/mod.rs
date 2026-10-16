@@ -3,17 +3,15 @@
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::inventory::Inventory;
-use game_engine::infrastructure::assets::item_icon_path;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::inventory::Inventory;
+use lifthrasir_client::infrastructure::assets::item_icon_path;
+use lifthrasir_client::infrastructure::item::ItemDb;
 use net_contract::commands::ComposeCardRequested;
 use net_contract::events::{
     CardComposeOutcome, CardCompositionFinished, CardTargetsOffered, ChatHeard,
 };
 
-use crate::theme::feathers_theme::install_norse_theme;
 use crate::widgets::info_modal::InfoModalRoot;
 
 mod scene;
@@ -44,10 +42,6 @@ pub(crate) struct ActiveCardPicker {
 
 impl Plugin for CardCompoundingPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_systems(
             Update,
             (
@@ -285,8 +279,8 @@ mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
     use bevy::state::app::StatesPlugin;
-    use game_engine::domain::inventory::{Inventory, Item};
-    use game_engine::infrastructure::item::ItemDb;
+    use lifthrasir_client::domain::inventory::{Inventory, Item};
+    use lifthrasir_client::infrastructure::item::ItemDb;
     use lifthrasir_data::{ItemData, ItemInfo};
 
     fn picker_app() -> App {
@@ -307,7 +301,7 @@ mod tests {
         app.add_message::<ComposeCardRequested>();
         app.add_message::<ChatHeard>();
         app.insert_resource(Inventory::default());
-        install_norse_theme(&mut app);
+        crate::install_test_ui_primitives(&mut app);
         app.add_systems(
             Update,
             (
@@ -608,8 +602,14 @@ mod tests {
         let mut app = picker_app();
         offer_with_equipment(&mut app, vec![9]);
         app.world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(KeyCode::Escape);
+            .write_message(bevy::input::keyboard::KeyboardInput {
+                key_code: KeyCode::Escape,
+                logical_key: bevy::input::keyboard::Key::Escape,
+                state: bevy::input::ButtonState::Pressed,
+                text: None,
+                repeat: false,
+                window: Entity::PLACEHOLDER,
+            });
         app.update();
         assert!(!app.world().contains_resource::<ActiveCardPicker>());
         assert_eq!(

@@ -16,12 +16,12 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::prelude::*;
 use bevy::text::{FontSize, FontSourceTemplate};
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::character::components::status::{
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::character::components::status::{
     CharacterStatus, StatusParameter,
 };
-use game_engine::domain::entities::character::events::StatIncreaseRequested;
-use game_engine::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::entities::character::events::StatIncreaseRequested;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use net_contract::events::StatRaised;
 
 use crate::theme;

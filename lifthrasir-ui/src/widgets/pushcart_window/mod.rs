@@ -18,20 +18,18 @@
 
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::cart::Cart;
-use game_engine::domain::entities::character::components::UnitState;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::input::{PlayerAction, ui_unfocused};
-use game_engine::domain::inventory::Inventory;
-use game_engine::infrastructure::item::ItemDb;
 use leafwing_input_manager::prelude::ActionState;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::cart::Cart;
+use lifthrasir_client::domain::entities::character::components::UnitState;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
+use lifthrasir_client::domain::inventory::Inventory;
+use lifthrasir_client::infrastructure::item::ItemDb;
 use net_contract::commands::{MountCart, MoveFromCart, MoveToCart};
 use net_contract::events::{CartMountRejection, CartMountResult};
 
-use crate::theme::feathers_theme::install_norse_theme;
 use crate::widgets::info_modal::{InfoContent, ItemAction, ShowInfoModal, view};
 
 pub mod scene;
@@ -207,10 +205,6 @@ pub struct PushcartWindowPlugin;
 
 impl Plugin for PushcartWindowPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.init_resource::<CartUi>();
         app.add_systems(
             Update,
@@ -446,7 +440,7 @@ fn reset(mut ui: ResMut<CartUi>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::inventory::Item;
+    use lifthrasir_client::domain::inventory::Item;
     use net_contract::dto::CartItem;
 
     fn cart_item(index: u32) -> CartItem {

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use game_engine::domain::skill::SkillTreeState;
+use lifthrasir_client::domain::skill::SkillTreeState;
 
 const NODE_WIDTH: f32 = 62.0;
 const NODE_HEIGHT: f32 = 82.0;
@@ -441,7 +441,7 @@ fn route_connectors(topology: &[SkillTopology], nodes: &[NodePlacement]) -> Vec<
 mod tests {
     use std::collections::HashMap;
 
-    use game_engine::domain::skill::{SkillNode, SkillTreeState};
+    use lifthrasir_client::domain::skill::{SkillNode, SkillTreeState};
 
     use super::{TreeLayout, focus};
 

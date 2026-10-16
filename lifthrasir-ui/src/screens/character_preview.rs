@@ -12,7 +12,7 @@
 //! than one `Camera3d` exists, and during `CharacterSelection` there is no in-game
 //! camera, so this preview camera is the only one and billboards face it correctly.
 //! The `SpriteRenderingSystems` set is ungated for `CharacterSelection`
-//! (see `game_engine::domain::system_sets::in_game_or_character_select`) so the
+//! (see `lifthrasir_client::domain::system_sets::in_game_or_character_select`) so the
 //! previews animate through the exact same path as in-world characters.
 
 use std::collections::HashMap;
@@ -23,16 +23,16 @@ use bevy::camera::{
 };
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
-use game_engine::core::state::GameState;
-use game_engine::domain::character::events::{
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::character::events::{
     CharacterInfoWithJobName, CharacterListReceivedEvent,
 };
-use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
-use game_engine::domain::entities::character::components::CharacterInfo;
-use game_engine::domain::entities::character::components::visual::{
+use lifthrasir_client::domain::entities::character::SpawnCharacterSpriteEvent;
+use lifthrasir_client::domain::entities::character::components::CharacterInfo;
+use lifthrasir_client::domain::entities::character::components::visual::{
     CharacterDirection, CharacterSprite,
 };
-use game_engine::domain::entities::character::events::forward_character_sprite_events;
+use lifthrasir_client::domain::entities::character::events::forward_character_sprite_events;
 
 /// Pixel width of one character column in the shared render target. Also the
 /// display width of each card's preview image.

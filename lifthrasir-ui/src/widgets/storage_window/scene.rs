@@ -4,10 +4,10 @@ use bevy::text::{EditableText, EditableTextFilter, FontSize, FontSourceTemplate}
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use game_engine::domain::inventory::{Inventory, ItemCategory};
-use game_engine::domain::storage::Storage;
-use game_engine::infrastructure::assets::item_icon_path;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::domain::inventory::{Inventory, ItemCategory};
+use lifthrasir_client::domain::storage::Storage;
+use lifthrasir_client::infrastructure::assets::item_icon_path;
+use lifthrasir_client::infrastructure::item::ItemDb;
 
 use crate::theme;
 use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
@@ -584,9 +584,9 @@ mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
     use bevy::text::EditableText;
-    use game_engine::domain::inventory::{Inventory, Item};
-    use game_engine::domain::storage::Storage;
-    use game_engine::infrastructure::item::ItemDb;
+    use lifthrasir_client::domain::inventory::{Inventory, Item};
+    use lifthrasir_client::domain::storage::Storage;
+    use lifthrasir_client::infrastructure::item::ItemDb;
     use lifthrasir_data::{ItemData, ItemInfo};
     use net_contract::dto::StorageItem;
 

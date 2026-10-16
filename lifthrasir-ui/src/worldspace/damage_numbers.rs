@@ -5,9 +5,9 @@
 //! per-frame projection or entity dependency is needed after spawn.
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
-use game_engine::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
 
 use crate::theme;
 use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};

@@ -1,8 +1,7 @@
 use bevy::input_focus::InputFocus;
-use bevy::input_focus::tab_navigation::TabIndex;
 use bevy::prelude::*;
 use bevy::text::EditableText;
-use game_engine::domain::input::UiFocus;
+use lifthrasir_client::domain::input::UiFocus;
 
 use crate::screens::login::TextField;
 
@@ -17,15 +16,7 @@ pub struct UiFocusMirrorPlugin;
 
 impl Plugin for UiFocusMirrorPlugin {
     fn build(&self, app: &mut App) {
-        // Feathers installs `TabNavigationPlugin`, whose `click_to_focus` observer
-        // fires an `AcquireFocus` on every pointer press. That event bubbles up
-        // looking for a `TabIndex`; if it reaches the window it CLEARS `InputFocus`,
-        // undoing the click-to-focus that `EditableTextInputPlugin` just performed.
-        // Requiring `TabIndex` on every `EditableText` makes the field itself the
-        // `AcquireFocus` target, so clicking an input focuses it and clicking
-        // anywhere else releases it.
-        app.register_required_components::<EditableText, TabIndex>()
-            .add_systems(Update, mirror_text_input_focus);
+        app.add_systems(Update, mirror_text_input_focus);
     }
 }
 
@@ -43,15 +34,36 @@ fn mirror_text_input_focus(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::input_focus::tab_navigation::TabIndex;
+
+    fn focus_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        crate::install_test_ui_primitives(&mut app);
+        app.init_resource::<UiFocus>()
+            .add_plugins(UiFocusMirrorPlugin);
+        app
+    }
 
     #[test]
     fn editable_text_is_click_focusable_via_tab_index() {
-        let mut app = App::new();
-        app.init_resource::<InputFocus>();
-        app.init_resource::<UiFocus>();
-        app.add_plugins(UiFocusMirrorPlugin);
+        let mut app = focus_app();
         let field = app.world_mut().spawn(EditableText::new("")).id();
 
         assert_eq!(app.world().get::<TabIndex>(field), Some(&TabIndex(0)));
+    }
+
+    #[test]
+    fn shared_text_focus_still_suppresses_client_gameplay_input() {
+        let mut app = focus_app();
+        let field = app.world_mut().spawn(EditableText::new("")).id();
+        app.world_mut()
+            .resource_mut::<InputFocus>()
+            .set(field, bevy::input_focus::FocusCause::Navigated);
+        app.update();
+        assert!(app.world().resource::<UiFocus>().text_input_active);
+        app.world_mut().resource_mut::<InputFocus>().clear();
+        app.update();
+        assert!(!app.world().resource::<UiFocus>().text_input_active);
     }
 }

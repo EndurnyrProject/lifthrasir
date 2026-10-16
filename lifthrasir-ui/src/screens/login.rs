@@ -9,9 +9,9 @@
 
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::authentication::events::LoginFailureEvent;
-use game_engine::presentation::ui::events::LoginAttemptEvent;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::authentication::events::LoginFailureEvent;
+use lifthrasir_client::presentation::ui::events::LoginAttemptEvent;
 use net_contract::dto::NetworkError;
 use secrecy::SecretString;
 

@@ -3,7 +3,7 @@ use bevy::text::{EditableText, FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::ThemedText;
-use game_engine::domain::guild::GuildState;
+use lifthrasir_client::domain::guild::GuildState;
 use net_contract::commands::GuildNoticeEditRequested;
 use net_contract::dto::GuildInfo;
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};

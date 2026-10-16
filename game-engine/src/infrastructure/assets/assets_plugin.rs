@@ -3,14 +3,12 @@ use crate::infrastructure::config::ClientConfig;
 use crate::infrastructure::effect::AuthoredEffectLoader;
 use bevy::prelude::*;
 use bevy_common_assets::toml::TomlAssetPlugin;
-use lifthrasir_assets::ContentAssetsPlugin;
+/// Client-specific configuration decoding; shared content loaders belong to the host.
+pub struct ClientConfigPlugin;
 
-pub struct AssetsPlugin;
-
-impl Plugin for AssetsPlugin {
+impl Plugin for ClientConfigPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(ContentAssetsPlugin)
-            .init_asset::<ClientConfig>()
+        app.init_asset::<ClientConfig>()
             .add_plugins(TomlAssetPlugin::<ClientConfig>::new(&["client.toml"]));
     }
 }

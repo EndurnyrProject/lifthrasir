@@ -5,10 +5,10 @@
 //! per-entity hover marker, since at most one drop can be hovered at a time.
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::item_drop::HoveredFloorItem;
-use game_engine::domain::item_drop::components::FloorItem;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::item_drop::HoveredFloorItem;
+use lifthrasir_client::domain::item_drop::components::FloorItem;
+use lifthrasir_client::infrastructure::item::ItemDb;
 
 use crate::theme;
 use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};

@@ -1,7 +1,7 @@
 //! Character selection screen rendered as a full-width sprite lineup and codex rail.
 
 use bevy::{color::Color, prelude::*, ui::ColorStop};
-use game_engine::{
+use lifthrasir_client::{
     core::state::GameState,
     domain::character::events::{
         CharacterDeletionFailedEvent, CharacterInfoWithJobName, CharacterListReceivedEvent,
@@ -1558,7 +1558,7 @@ mod tests {
 
     #[test]
     fn deletion_failure_is_kept_for_the_matching_character() {
-        use game_engine::domain::character::events::CharacterDeletionFailedEvent;
+        use lifthrasir_client::domain::character::events::CharacterDeletionFailedEvent;
 
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);

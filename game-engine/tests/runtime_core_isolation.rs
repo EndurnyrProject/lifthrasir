@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
+use lifthrasir_client::core::state::GameState;
 use lifthrasir_runtime::{RuntimeCorePlugin, rendering::SpriteRenderingSystems};
 
 #[derive(Resource, Default)]
@@ -29,17 +29,22 @@ fn client_app() -> App {
         bevy::gltf::GltfPlugin::default(),
     ))
     .init_asset::<StandardMaterial>()
-    .add_plugins(
-        game_engine::CoreGamePlugins
-            .build()
-            .disable::<game_engine::AudioPlugin>()
-            .disable::<game_engine::EffectsPlugin>()
-            .disable::<game_engine::VfxPlugin>(),
-    )
+    .add_plugins(net_contract::NetContractPlugin)
+    .add_plugins((
+        lifthrasir_assets::ContentAssetsPlugin,
+        lifthrasir_assets::catalogs::ContentCatalogPlugin,
+    ))
     .add_plugins(
         lifthrasir_runtime::ContentRuntimePlugins
             .build()
             .disable::<lifthrasir_runtime::ContentAudioPlugin>(),
+    )
+    .add_plugins(
+        lifthrasir_client::ClientPlugins
+            .build()
+            .disable::<lifthrasir_client::AudioPlugin>()
+            .disable::<lifthrasir_client::EffectsPlugin>()
+            .disable::<lifthrasir_client::VfxPlugin>(),
     );
     app
 }
@@ -47,7 +52,6 @@ fn client_app() -> App {
 #[test]
 fn client_world_scene_and_character_phase_graph_is_acyclic() {
     let mut app = client_app();
-    app.add_plugins(game_engine::domain::world::gltf_map::GltfMapPlugin);
     app.finish();
     app.cleanup();
     app.world_mut().schedule_scope(Update, |world, schedule| {

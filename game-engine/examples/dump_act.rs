@@ -1,6 +1,10 @@
-use game_engine::infrastructure::ro_formats::act::parse_act;
+use lifthrasir_client::infrastructure::ro_formats::act::parse_act;
 
-fn dump(label: &str, act: &game_engine::infrastructure::ro_formats::act::RoAction, action: usize) {
+fn dump(
+    label: &str,
+    act: &lifthrasir_client::infrastructure::ro_formats::act::RoAction,
+    action: usize,
+) {
     let Some(seq) = act.actions.get(action) else {
         println!(
             "{label} action {action}: MISSING (total {})",

@@ -13,8 +13,8 @@
 //! `Cancel`.
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use net_contract::commands::{MoveRequested, RespondToNpc};
 use net_contract::dto::NpcResponse;
 use net_contract::events::ProgressBarStarted;

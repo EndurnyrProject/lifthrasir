@@ -13,9 +13,9 @@
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use game_engine::core::state::GameState;
-use game_engine::domain::input::targeting::TargetingMode;
-use game_engine::infrastructure::skill::SkillCatalog;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::input::targeting::TargetingMode;
+use lifthrasir_client::infrastructure::skill::SkillCatalog;
 
 use crate::theme;
 use crate::worldspace::viewport_to_ui;

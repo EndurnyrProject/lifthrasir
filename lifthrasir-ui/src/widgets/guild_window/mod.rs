@@ -24,13 +24,12 @@ use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::guild::{GuildState, GuildSystems};
-use game_engine::domain::input::{PlayerAction, UiFocus};
-use game_engine::infrastructure::job::JobSpriteRegistry;
 use leafwing_input_manager::prelude::ActionState;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::guild::{GuildState, GuildSystems};
+use lifthrasir_client::domain::input::{PlayerAction, UiFocus};
+use lifthrasir_client::infrastructure::job::JobSpriteRegistry;
 use net_contract::commands::GuildCreateRequested;
 use net_contract::events::ZoneDisconnected;
 #[cfg(test)]
@@ -38,7 +37,6 @@ use net_contract::events::{GuildIngress, GuildIngressPayload};
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};
 
 use crate::theme;
-use crate::theme::feathers_theme::install_norse_theme;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GuildTab {
@@ -201,10 +199,6 @@ pub struct GuildWindowPlugin;
 
 impl Plugin for GuildWindowPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_message::<slash::GuildSlashSubmitted>()
             .init_resource::<GuildUi>()
             .init_resource::<GuildUiSession>()
@@ -1174,7 +1168,7 @@ mod tests {
         app.add_message::<GuildIngress>()
             .add_message::<ZoneDisconnected>()
             .insert_resource(ZoneSessionGeneration(9))
-            .add_plugins(game_engine::domain::guild::GuildPlugin);
+            .add_plugins(lifthrasir_client::domain::guild::GuildPlugin);
         app.world_mut()
             .spawn((GuildWindowRoot, Visibility::Visible));
         app.world_mut().spawn((GuildNameText, Text::default()));
@@ -1732,7 +1726,7 @@ mod tests {
                 ..default()
             })
             .init_resource::<positions::PositionDraftState>()
-            .add_plugins(game_engine::domain::guild::GuildPlugin)
+            .add_plugins(lifthrasir_client::domain::guild::GuildPlugin)
             .add_systems(Update, reset_guild_ui_guild.in_set(GuildSystems::UiSync));
         let alliance = app
             .world_mut()

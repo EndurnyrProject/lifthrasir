@@ -10,9 +10,11 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::character::states::status_icons::{ActiveStatus, LocalStatuses};
-use game_engine::infrastructure::status::StatusIconCatalog;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::character::states::status_icons::{
+    ActiveStatus, LocalStatuses,
+};
+use lifthrasir_client::infrastructure::status::StatusIconCatalog;
 
 use crate::theme;
 use scene::{ICON_SIZE, blink_alpha, diff_efsts, format_remaining};

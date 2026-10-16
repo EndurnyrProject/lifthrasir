@@ -3642,41 +3642,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "game-engine"
-version = "0.0.1"
-dependencies = [
- "bevy",
- "bevy_auto_plugin",
- "bevy_common_assets",
- "bevy_framepace",
- "bevy_kira_audio",
- "dirs",
- "encoding_rs",
- "futures-lite",
- "gltf",
- "image",
- "iyes_progress",
- "leafwing-input-manager",
- "lifthrasir-assets",
- "lifthrasir-data",
- "lifthrasir-runtime",
- "moonshine-behavior",
- "moonshine-kind",
- "moonshine-tag",
- "net-contract",
- "regex",
- "ro-formats",
- "ron 0.12.2",
- "secrecy",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.20",
- "toml",
- "zip",
-]
-
-[[package]]
 name = "generator"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4724,11 +4689,13 @@ dependencies = [
  "bevy",
  "bevy_brp_extras",
  "bevy_framepace",
- "game-engine",
  "lifthrasir-assets",
+ "lifthrasir-client",
+ "lifthrasir-client-ui",
  "lifthrasir-runtime",
  "lifthrasir-ui",
  "net-aesir",
+ "net-contract",
  "toml",
 ]
 
@@ -4754,6 +4721,57 @@ dependencies = [
  "toml",
  "xbrz-rs",
  "zip",
+]
+
+[[package]]
+name = "lifthrasir-client"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_auto_plugin",
+ "bevy_common_assets",
+ "bevy_framepace",
+ "bevy_kira_audio",
+ "dirs",
+ "encoding_rs",
+ "futures-lite",
+ "gltf",
+ "image",
+ "iyes_progress",
+ "leafwing-input-manager",
+ "lifthrasir-assets",
+ "lifthrasir-data",
+ "lifthrasir-runtime",
+ "moonshine-behavior",
+ "moonshine-kind",
+ "moonshine-tag",
+ "net-contract",
+ "regex",
+ "ro-formats",
+ "ron 0.12.2",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "toml",
+ "zip",
+]
+
+[[package]]
+name = "lifthrasir-client-ui"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_feathers",
+ "iyes_progress",
+ "leafwing-input-manager",
+ "lifthrasir-client",
+ "lifthrasir-data",
+ "lifthrasir-ui",
+ "net-contract",
+ "rfd",
+ "secrecy",
 ]
 
 [[package]]
@@ -4805,13 +4823,6 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "bevy_feathers",
- "game-engine",
- "iyes_progress",
- "leafwing-input-manager",
- "lifthrasir-data",
- "net-contract",
- "rfd",
- "secrecy",
 ]
 
 [[package]]

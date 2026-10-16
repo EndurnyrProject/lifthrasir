@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use game_engine::domain::guild::GuildState;
-use game_engine::presentation::ui::events::{
+use lifthrasir_client::domain::guild::GuildState;
+use lifthrasir_client::presentation::ui::events::{
     DialogSeverity, ShowSystemDialog, SystemDialogChoice, SystemDialogKind,
 };
 use net_contract::commands::{GuildExpelRequested, GuildInviteResponded, GuildLeaveRequested};
@@ -456,7 +456,7 @@ pub(crate) fn clear_pending_confirmation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::guild::{GuildPlugin, GuildSystems};
+    use lifthrasir_client::domain::guild::{GuildPlugin, GuildSystems};
     use net_contract::dto::{GuildInfo, GuildMemberInfo, GuildPositionInfo};
     use std::time::Duration;
 
@@ -650,7 +650,7 @@ mod tests {
     #[test]
     fn matching_accept_writes_response_without_changing_authoritative_state() {
         let mut app = dialog_app();
-        app.init_resource::<game_engine::domain::guild::GuildState>();
+        app.init_resource::<lifthrasir_client::domain::guild::GuildState>();
         app.world_mut()
             .write_message(ingress(ZoneSessionGeneration(9)));
         app.update();
@@ -669,7 +669,7 @@ mod tests {
         assert!(written[0].accept);
         assert!(
             !app.world()
-                .resource::<game_engine::domain::guild::GuildState>()
+                .resource::<lifthrasir_client::domain::guild::GuildState>()
                 .in_guild()
         );
     }
@@ -770,7 +770,7 @@ mod tests {
 
     #[test]
     fn generation_switch_replaces_stale_pending_with_new_invite_in_same_frame() {
-        use game_engine::domain::guild::GuildSystems;
+        use lifthrasir_client::domain::guild::GuildSystems;
 
         let mut app = App::new();
         app.add_message::<GuildIngress>()

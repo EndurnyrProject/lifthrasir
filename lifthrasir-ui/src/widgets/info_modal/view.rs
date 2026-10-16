@@ -11,15 +11,15 @@
 
 use bevy::prelude::Color;
 
-use game_engine::domain::entities::character::components::equipment::EquipmentSlot;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::equipment::decode_wear_location;
-use game_engine::domain::inventory::item::item_category;
-use game_engine::domain::inventory::{Item, ItemCategory};
-use game_engine::domain::skill::{SkillNode, SkillTreeState};
-use game_engine::infrastructure::assets::{item_collection_path, item_icon_path};
-use game_engine::infrastructure::item::ItemDb;
-use game_engine::infrastructure::skill::SkillCatalog;
+use lifthrasir_client::domain::entities::character::components::equipment::EquipmentSlot;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::equipment::decode_wear_location;
+use lifthrasir_client::domain::inventory::item::item_category;
+use lifthrasir_client::domain::inventory::{Item, ItemCategory};
+use lifthrasir_client::domain::skill::{SkillNode, SkillTreeState};
+use lifthrasir_client::infrastructure::assets::{item_collection_path, item_icon_path};
+use lifthrasir_client::infrastructure::item::ItemDb;
+use lifthrasir_client::infrastructure::skill::SkillCatalog;
 use net_contract::dto::{CartItem, GuildSkillInfo, StorageItem};
 
 use crate::rich_text::parse_color_codes;
@@ -300,7 +300,7 @@ fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfo
 // ---------------------------------------------------------------------------
 
 fn kind_label(inf: u32) -> String {
-    use game_engine::domain::skill::{Form, form};
+    use lifthrasir_client::domain::skill::{Form, form};
     match form(inf) {
         Form::Passive => "Passive",
         Form::Active => "Active",
@@ -472,8 +472,8 @@ pub fn guild_skill_view(skill: &GuildSkillInfo, catalog: Option<&SkillCatalog>) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::inventory::Item;
-    use game_engine::domain::skill::SkillNode;
+    use lifthrasir_client::domain::inventory::Item;
+    use lifthrasir_client::domain::skill::SkillNode;
     use lifthrasir_data::{ItemData, ItemInfo, SkillData, SkillMeta};
     use net_contract::dto::{CartItem, StorageItem};
     use std::collections::HashMap;

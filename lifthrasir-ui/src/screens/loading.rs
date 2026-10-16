@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
 use iyes_progress::prelude::ProgressTracker;
+use lifthrasir_client::core::state::GameState;
 
 use crate::theme;
 

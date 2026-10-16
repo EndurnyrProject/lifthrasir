@@ -31,7 +31,7 @@ pub use domain::trade::TradePlugin;
 pub use domain::world::GltfMapPlugin;
 pub use domain::world::WorldDomainPlugin;
 pub use infrastructure::accessory::{AccessoryDb, AccessoryDbPlugin};
-pub use infrastructure::assets::AssetsPlugin;
+pub use infrastructure::assets::ClientConfigPlugin;
 pub use infrastructure::diagnostics::RoDiagnosticsPlugin;
 pub use infrastructure::effect::EffectsPlugin;
 pub use infrastructure::item::{ItemDb, ItemDbPlugin};
@@ -43,20 +43,17 @@ pub use presentation::rendering::{MapPlugin, VfxPlugin};
 
 use bevy::app::PluginGroupBuilder;
 use bevy::prelude::*;
-use lifthrasir_assets::ContentCatalogPlugin;
 
-pub struct CoreGamePlugins;
+pub struct ClientPlugins;
 
-impl PluginGroup for CoreGamePlugins {
+impl PluginGroup for ClientPlugins {
     fn build(self) -> PluginGroupBuilder {
         PluginGroupBuilder::start::<Self>()
-            .add(net_contract::NetContractPlugin)
             .add(RoDiagnosticsPlugin)
             .add(LifthrasirPlugin)
             .add(SettingsRuntimePlugin)
             .add(CameraPlugin)
-            .add(AssetsPlugin)
-            .add(ContentCatalogPlugin)
+            .add(ClientConfigPlugin)
             .add(EffectsPlugin)
             .add(SkillUnitsPlugin)
             .add(VfxPlugin)
@@ -79,5 +76,7 @@ impl PluginGroup for CoreGamePlugins {
             .add(EquipmentPlugin)
             .add(InputPlugin)
             .add(NativeInputPlugin)
+            .add(MapPlugin)
+            .add(GltfMapPlugin)
     }
 }

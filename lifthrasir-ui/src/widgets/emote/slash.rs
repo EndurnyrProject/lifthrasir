@@ -4,7 +4,7 @@
 //! `parse_party_slash`; a recognized emote alias is written as `EmoteRequested`
 //! instead of a normal chat message or a party slash command.
 
-use game_engine::domain::emote::table::emote_id_from_alias;
+use lifthrasir_client::domain::emote::table::emote_id_from_alias;
 
 /// Parse one chat line into an emote id. Only input starting with `/` is a
 /// candidate, so a normal chat line always falls through. Returns `None` for

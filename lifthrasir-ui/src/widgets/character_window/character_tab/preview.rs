@@ -33,18 +33,18 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
-use game_engine::domain::entities::billboard::{
+use lifthrasir_client::domain::entities::billboard::{
     Billboard, EquipmentPreviewCamera, PreviewBillboard,
 };
-use game_engine::domain::entities::character::SpawnCharacterSpriteEvent;
-use game_engine::domain::entities::character::components::visual::{
+use lifthrasir_client::domain::entities::character::SpawnCharacterSpriteEvent;
+use lifthrasir_client::domain::entities::character::components::visual::{
     CharacterDirection, CharacterSprite, Direction,
 };
-use game_engine::domain::entities::character::components::{
+use lifthrasir_client::domain::entities::character::components::{
     CharacterAppearance, CharacterData, EquipmentItem, EquipmentSet, EquipmentSlot,
 };
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::entities::sprite_rendering::EquipmentChangeEvent;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::entities::sprite_rendering::EquipmentChangeEvent;
 
 use crate::screens::character_preview::create_render_target;
 use crate::theme;

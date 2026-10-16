@@ -8,6 +8,7 @@ members = [
     "lifthrasir-pak",
     "lifthrasir-runtime",
     "lifthrasir-ui",
+    "lifthrasir-ui-primitives",
     "lifthrasir",
     "net-aesir",
     "net-contract",

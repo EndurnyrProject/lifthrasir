@@ -1,5 +1,5 @@
 use bevy::asset::Handle;
-use game_engine::infrastructure::effect::{AuthoredEffect, convert_authored_effect};
+use lifthrasir_client::infrastructure::effect::{AuthoredEffect, convert_authored_effect};
 use lifthrasir_data::{EffectData, EffectDescriptor, Visual};
 use ron::extensions::Extensions;
 use std::collections::BTreeMap;

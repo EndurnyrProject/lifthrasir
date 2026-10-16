@@ -5,7 +5,7 @@ use bevy::text::{EditableText, FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{Activate, ValueChange, checkbox_self_update};
 use bevy_feathers::controls::{ButtonVariant, FeathersButton, FeathersCheckbox};
 use bevy_feathers::theme::ThemedText;
-use game_engine::domain::guild::GuildState;
+use lifthrasir_client::domain::guild::GuildState;
 use net_contract::commands::{GuildMemberPositionRequested, GuildPositionEditRequested};
 use net_contract::dto::{GuildErrorKind, GuildInfo, GuildPositionInfo};
 use net_contract::events::{GuildIngress, GuildIngressPayload};
@@ -1028,7 +1028,7 @@ fn assignment_button(
 #[cfg(test)]
 mod tests {
     use bevy::scene::ScenePlugin;
-    use game_engine::domain::guild::{GuildPlugin, GuildSystems};
+    use lifthrasir_client::domain::guild::{GuildPlugin, GuildSystems};
     use net_contract::commands::GuildPositionEditRequested;
     use net_contract::dto::{
         GuildActionResult, GuildErrorKind, GuildInfo, GuildMemberInfo, GuildPositionInfo,
@@ -1722,9 +1722,8 @@ mod tests {
         let info = guild();
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        crate::install_test_ui_primitives(&mut app);
         app.add_plugins(crate::focus::UiFocusMirrorPlugin);
-        app.init_asset::<Image>();
-        app.init_asset::<Font>();
         app.world_mut()
             .spawn_scene(position_management(
                 project_positions(&info, true),

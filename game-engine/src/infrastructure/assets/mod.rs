@@ -20,7 +20,7 @@ pub use animation_processing_system::{
     AnimationProcessingPlugin, PendingAnimation, PendingAnimations,
 };
 pub use animation_processor::{RoAnimationProcessor, calculate_attach_offset};
-pub use assets_plugin::AssetsPlugin;
+pub use assets_plugin::ClientConfigPlugin;
 pub use config::*;
 pub use converters::*;
 pub use loaders::{

@@ -15,11 +15,9 @@
 //! item/skill content lives in `item_scene`/`skill_scene`.
 
 use bevy::prelude::*;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
 
-use game_engine::domain::inventory::{Item, ItemCategory};
+use lifthrasir_client::domain::inventory::{Item, ItemCategory};
 
-use crate::theme::feathers_theme::install_norse_theme;
 use crate::widgets::system_dialog;
 
 mod item_scene;
@@ -35,10 +33,6 @@ pub struct InfoModalPlugin;
 
 impl Plugin for InfoModalPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_message::<ShowInfoModal>();
         app.add_systems(
             Update,

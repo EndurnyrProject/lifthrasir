@@ -7,8 +7,8 @@
 //! transition.
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::presentation::ui::events::ServerSelectedEvent;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::presentation::ui::events::ServerSelectedEvent;
 use net_contract::dto::ServerInfo;
 use net_contract::state::UserSession;
 

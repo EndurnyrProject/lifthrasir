@@ -17,8 +17,8 @@ use bevy::ui::RelativeCursorPosition;
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use game_engine::domain::input::{HOTBAR_ACTIONS, PlayerAction};
-use game_engine::domain::settings::DisplayMode;
+use lifthrasir_client::domain::input::{HOTBAR_ACTIONS, PlayerAction};
+use lifthrasir_client::domain::settings::DisplayMode;
 
 use crate::theme;
 use crate::theme::feathers_theme::{TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};

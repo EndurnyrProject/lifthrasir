@@ -11,7 +11,7 @@ use bevy::{
     prelude::*,
     world_serialization::{WorldAssetRoot, WorldSerializationPlugin},
 };
-use game_engine::domain::entities::{
+use lifthrasir_client::domain::entities::{
     character::{components::visual::CharacterDirection, states::AnimationState},
     model_rendering::{Gr2Actor, GuildFlag, ModelRenderingPlugin},
 };

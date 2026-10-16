@@ -1,7 +1,7 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use game_engine::domain::guild::GuildState;
-use game_engine::presentation::ui::events::{
+use lifthrasir_client::domain::guild::GuildState;
+use lifthrasir_client::presentation::ui::events::{
     DialogSeverity, ShowSystemDialog, SystemDialogChoice, SystemDialogKind,
 };
 use net_contract::commands::{
@@ -513,7 +513,7 @@ fn despawn_owned(
 mod tests {
     use std::time::Duration;
 
-    use game_engine::domain::guild::{GuildPlugin, GuildSystems};
+    use lifthrasir_client::domain::guild::{GuildPlugin, GuildSystems};
     use net_contract::dto::{GuildInfo, GuildRelationInfo};
     use net_contract::events::ZoneDisconnected;
 

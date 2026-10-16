@@ -6,16 +6,15 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::combat::components::DeadEntity;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::input::targeting::cancel_targeting;
-use game_engine::domain::input::ui_unfocused;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::combat::components::DeadEntity;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::input::targeting::cancel_targeting;
+use lifthrasir_client::domain::input::ui_unfocused;
 use net_contract::commands::RespawnRequested;
 
 use crate::theme;
-use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER, install_norse_theme};
+use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
 use crate::widgets::card_compounding::ActiveCardPicker;
 use crate::widgets::info_modal::InfoModalRoot;
 use crate::widgets::npc_dialog::ActiveNpcDialog;
@@ -31,10 +30,6 @@ pub struct EscapeMenuPlugin;
 
 impl Plugin for EscapeMenuPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_systems(
             Update,
             toggle_escape_menu
@@ -217,9 +212,9 @@ fn button_label(text: &'static str) -> impl Scene {
 mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
-    use game_engine::domain::input::targeting::TargetingMode;
-    use game_engine::domain::settings::{AudioConfig, GraphicsSettings, Keybinds};
-    use game_engine::presentation::ui::events::{
+    use lifthrasir_client::domain::input::targeting::TargetingMode;
+    use lifthrasir_client::domain::settings::{AudioConfig, GraphicsSettings, Keybinds};
+    use lifthrasir_client::presentation::ui::events::{
         DialogSeverity, ShowSystemDialog, SystemDialogKind,
     };
 

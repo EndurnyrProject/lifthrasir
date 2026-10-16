@@ -11,9 +11,9 @@ use bevy::ecs::system::SystemParam;
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use bevy::text::EditableText;
-use game_engine::core::state::GameState;
-use game_engine::domain::character::chat::ChatSendRequested;
-use game_engine::domain::emote::EmoteRequested;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::character::chat::ChatSendRequested;
+use lifthrasir_client::domain::emote::EmoteRequested;
 use net_contract::commands::MountPeco;
 use net_contract::events::ChatHeard;
 

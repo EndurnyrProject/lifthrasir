@@ -14,7 +14,7 @@ use bevy::ui_widgets::Activate;
 use bevy::window::PrimaryWindow;
 use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use game_engine::core::state::GameState;
+use lifthrasir_client::core::state::GameState;
 use net_contract::events::{CutinDisplayChanged, CutinPlacement};
 
 use crate::theme;
@@ -597,7 +597,7 @@ mod tests {
     use bevy::state::app::StatesPlugin;
     use bevy::ui::IsDefaultUiCamera;
     use bevy::window::WindowResolution;
-    use game_engine::infrastructure::assets::bmp_loader::BmpLoader;
+    use lifthrasir_client::infrastructure::assets::bmp_loader::BmpLoader;
 
     // ---- Pure helpers -----------------------------------------------------
 

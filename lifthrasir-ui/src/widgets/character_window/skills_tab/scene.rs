@@ -3,8 +3,8 @@ use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
-use game_engine::domain::skill::SkillTreeState;
-use game_engine::infrastructure::skill::SkillCatalog;
+use lifthrasir_client::domain::skill::SkillTreeState;
+use lifthrasir_client::infrastructure::skill::SkillCatalog;
 
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, ignore_picking};

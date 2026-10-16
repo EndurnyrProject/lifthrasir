@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use game_engine::presentation::ui::events::{
+use lifthrasir_client::presentation::ui::events::{
     DialogSeverity, ShowSystemDialog, SystemDialogChoice, SystemDialogKind,
 };
 use net_contract::commands::RespondTrade;

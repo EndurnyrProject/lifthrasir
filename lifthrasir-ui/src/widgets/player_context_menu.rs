@@ -6,11 +6,11 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::ThemedText;
-use game_engine::domain::entities::components::NetworkEntity;
-use game_engine::domain::entities::types::ObjectType;
-use game_engine::domain::guild::GuildState;
-use game_engine::domain::party::PartyState;
-use game_engine::domain::trade::TradeSession;
+use lifthrasir_client::domain::entities::components::NetworkEntity;
+use lifthrasir_client::domain::entities::types::ObjectType;
+use lifthrasir_client::domain::guild::GuildState;
+use lifthrasir_client::domain::party::PartyState;
+use lifthrasir_client::domain::trade::TradeSession;
 use net_contract::commands::{GuildInviteRequested, PartyInviteRequested, RequestTrade};
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};
 

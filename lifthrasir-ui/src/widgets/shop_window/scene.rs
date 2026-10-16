@@ -9,9 +9,9 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
-use game_engine::domain::inventory::Inventory;
-use game_engine::infrastructure::assets::item_icon_path;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::domain::inventory::Inventory;
+use lifthrasir_client::infrastructure::assets::item_icon_path;
+use lifthrasir_client::infrastructure::item::ItemDb;
 
 use crate::theme;
 use crate::theme::feathers_theme::{
@@ -1491,7 +1491,7 @@ fn confirm_actions(confirm_label: String, confirm_bg: Color) -> impl Scene {
 mod tests {
     use std::collections::HashMap;
 
-    use game_engine::domain::inventory::Item;
+    use lifthrasir_client::domain::inventory::Item;
     use net_contract::dto::{ShopBuyItem, ShopSellItem};
 
     use super::*;

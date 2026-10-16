@@ -2,7 +2,7 @@
 //! windows). [`window`] builds the persistent chrome — root, titlebar, and an
 //! empty body region — as one `bsn!` tree; [`body`] renders one of two mount
 //! states and is respawned by [`rebuild_body`](super::rebuild_body) on every
-//! mount-state / [`Cart`](game_engine::domain::cart::Cart) change.
+//! mount-state / [`Cart`](lifthrasir_client::domain::cart::Cart) change.
 //!
 //! The mounted [`body`] projects the live `Inventory` + `Cart` into two sprite-
 //! well panes, a detail strip (selected sprite/name/type + quantity stepper +
@@ -16,11 +16,11 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use game_engine::domain::cart::Cart;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::inventory::Inventory;
-use game_engine::infrastructure::assets::item_icon_path;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::domain::cart::Cart;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::inventory::Inventory;
+use lifthrasir_client::infrastructure::assets::item_icon_path;
+use lifthrasir_client::infrastructure::item::ItemDb;
 use net_contract::events::CartMountRejection;
 
 use crate::theme;
@@ -757,7 +757,7 @@ fn muted_text(text: String) -> impl Scene {
 mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
-    use game_engine::domain::inventory::Item;
+    use lifthrasir_client::domain::inventory::Item;
     use lifthrasir_data::{ItemData, ItemInfo};
     use net_contract::dto::CartItem;
 

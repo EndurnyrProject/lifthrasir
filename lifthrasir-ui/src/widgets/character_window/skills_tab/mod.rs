@@ -9,14 +9,14 @@ use std::time::Duration;
 use bevy::picking::hover::HoverMap;
 use bevy::picking::pointer::PointerId;
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::entities::character::events::SkillLearnRequested;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::hotbar::HotbarSlot;
-use game_engine::domain::skill::{SkillCastRequested, SkillTreeState};
-use game_engine::infrastructure::job::registry::JobSpriteRegistry;
-use game_engine::infrastructure::skill::SkillCatalog;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::character::events::SkillLearnRequested;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::hotbar::HotbarSlot;
+use lifthrasir_client::domain::skill::{SkillCastRequested, SkillTreeState};
+use lifthrasir_client::infrastructure::job::registry::JobSpriteRegistry;
+use lifthrasir_client::infrastructure::skill::SkillCatalog;
 
 use crate::theme;
 use crate::widgets::hotbar::HotbarDrag;
@@ -476,9 +476,9 @@ pub(super) fn register(app: &mut App) {
             scene::project_live.run_if(should_project_skills),
         )
             .chain()
-            .after(game_engine::domain::skill::apply_skill_list)
+            .after(lifthrasir_client::domain::skill::apply_skill_list)
             .after(
-                game_engine::domain::entities::character::systems::update_character_status_system,
+                lifthrasir_client::domain::entities::character::systems::update_character_status_system,
             )
             .run_if(in_state(GameState::InGame)),
     );
@@ -613,10 +613,10 @@ mod tests {
 
     use super::*;
     use bevy::scene::ScenePlugin;
-    use game_engine::domain::entities::character::events::StatusParameterChanged;
-    use game_engine::domain::entities::character::systems::PendingStatusParams;
-    use game_engine::domain::entities::registry::EntityRegistry;
-    use game_engine::domain::skill::SkillNode;
+    use lifthrasir_client::domain::entities::character::events::StatusParameterChanged;
+    use lifthrasir_client::domain::entities::character::systems::PendingStatusParams;
+    use lifthrasir_client::domain::entities::registry::EntityRegistry;
+    use lifthrasir_client::domain::skill::SkillNode;
     use net_contract::events::{ParamChanged, SkillListReceived, ZoneSkillInfo};
 
     #[test]
@@ -951,8 +951,8 @@ mod tests {
         app.add_systems(
             Update,
             (
-                game_engine::domain::skill::apply_skill_list,
-                game_engine::domain::entities::character::systems::update_character_status_system,
+                lifthrasir_client::domain::skill::apply_skill_list,
+                lifthrasir_client::domain::entities::character::systems::update_character_status_system,
             ),
         );
         app.add_systems(
@@ -968,9 +968,9 @@ mod tests {
                     .run_if(should_project_skills),
             )
                 .chain()
-                .after(game_engine::domain::skill::apply_skill_list)
+                .after(lifthrasir_client::domain::skill::apply_skill_list)
                 .after(
-                    game_engine::domain::entities::character::systems::update_character_status_system,
+                    lifthrasir_client::domain::entities::character::systems::update_character_status_system,
                 ),
         );
         app

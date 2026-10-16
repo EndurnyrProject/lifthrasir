@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use game_engine::{core::state::GameState, domain::world::navigation::NavigationSystems};
+use lifthrasir_client::{core::state::GameState, domain::world::navigation::NavigationSystems};
 
 use crate::widgets::minimap::MinimapStateSync;
 

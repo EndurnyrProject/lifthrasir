@@ -8,20 +8,17 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::FeathersCorePlugin;
-use bevy_feathers::FeathersPlugins;
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::entities::components::EntityName;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::entities::registry::EntityRegistry;
-use game_engine::domain::inventory::Inventory;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::components::EntityName;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::entities::registry::EntityRegistry;
+use lifthrasir_client::domain::inventory::Inventory;
+use lifthrasir_client::infrastructure::item::ItemDb;
 use net_contract::commands::{BuyFromShop, SellToShop};
 use net_contract::dto::{BuyEntry, SellEntry, ShopBuyItem, ShopResult, ShopSellItem};
 use net_contract::events::{ChatHeard, ShopBuyResulted, ShopOpened, ShopSellResulted};
 
-use crate::theme::feathers_theme::install_norse_theme;
 use crate::widgets::info_modal::{InfoContent, ItemAction, ShowInfoModal, view};
 use crate::widgets::npc_dialog::{ActiveNpcDialog, NpcDialogRoot};
 
@@ -255,10 +252,6 @@ pub struct ShopWindowPlugin;
 
 impl Plugin for ShopWindowPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_systems(Update, on_shop_opened.run_if(in_state(GameState::InGame)));
         app.add_systems(
             Update,
@@ -1119,14 +1112,14 @@ mod tests {
         app.add_message::<ShowInfoModal>();
         app.init_resource::<ItemDb>();
         app.init_resource::<Inventory>();
-        app.world_mut()
-            .resource_mut::<Inventory>()
-            .upsert(game_engine::domain::inventory::Item {
+        app.world_mut().resource_mut::<Inventory>().upsert(
+            lifthrasir_client::domain::inventory::Item {
                 index: 3,
                 item_id: 501,
                 identified: true,
-                ..game_engine::domain::inventory::Item::default()
-            });
+                ..lifthrasir_client::domain::inventory::Item::default()
+            },
+        );
         app
     }
 
@@ -1281,14 +1274,14 @@ mod tests {
         app.init_resource::<ButtonInput<MouseButton>>();
         app.init_resource::<ItemDb>();
         app.init_resource::<Inventory>();
-        app.world_mut()
-            .resource_mut::<Inventory>()
-            .upsert(game_engine::domain::inventory::Item {
+        app.world_mut().resource_mut::<Inventory>().upsert(
+            lifthrasir_client::domain::inventory::Item {
                 index: 0,
                 item_id: 501,
                 identified: true,
                 ..Default::default()
-            });
+            },
+        );
         app.insert_resource(session);
         app
     }

@@ -8,13 +8,13 @@
 
 use bevy::prelude::*;
 use bevy::settings::{ReflectSettingsGroup, SaveSettings, SettingsGroup};
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::character::components::core::CharacterData;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::entities::components::EntityName;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::infrastructure::job::player_jobs::is_fourth_job;
-use game_engine::infrastructure::job::registry::JobSpriteRegistry;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::character::components::core::CharacterData;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::components::EntityName;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::infrastructure::job::player_jobs::is_fourth_job;
+use lifthrasir_client::infrastructure::job::registry::JobSpriteRegistry;
 
 use crate::theme;
 
@@ -843,7 +843,7 @@ fn update_character_info(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::entities::character::components::core::CharacterStats;
+    use lifthrasir_client::domain::entities::character::components::core::CharacterStats;
 
     #[test]
     fn percentage_basic_ratios() {

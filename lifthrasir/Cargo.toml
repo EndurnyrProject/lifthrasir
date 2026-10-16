@@ -14,7 +14,7 @@ dev = [
     "bevy/bevy_remote",
     "bevy/bevy_dev_tools",
     "dep:bevy_brp_extras",
-    "lifthrasir-ui/dev",
+    "lifthrasir-client-ui/dev",
 ]
 # Tracy profiling. Deliberately split from `dev`: tracy-client is not built
 # in on-demand mode, so it buffers every profiling zone in memory from
@@ -22,15 +22,17 @@ dev = [
 # feature and no profiler attached grows memory without bound. Enable only
 # while actually profiling: `--features dev,tracy`.
 tracy = ["bevy/trace", "bevy/trace_tracy"]
-dlss = ["bevy/dlss", "game-engine/dlss", "lifthrasir-ui/dlss"]
+dlss = ["bevy/dlss", "lifthrasir-client/dlss", "lifthrasir-client-ui/dlss"]
 
 [dependencies]
 bevy = { workspace = true }
 bevy_framepace = { workspace = true }
 bevy_brp_extras = { version = "0.22.3", optional = true }
-game-engine = { path = "../game-engine" }
+lifthrasir-client = { path = "../game-engine" }
+net-contract = { path = "../net-contract" }
 lifthrasir-assets = { path = "../lifthrasir-assets" }
 lifthrasir-runtime = { path = "../lifthrasir-runtime" }
-lifthrasir-ui = { path = "../lifthrasir-ui" }
+lifthrasir-client-ui = { path = "../lifthrasir-ui" }
+lifthrasir-ui = { path = "../lifthrasir-ui-primitives" }
 net-aesir = { path = "../net-aesir", optional = true }
 toml = { workspace = true }

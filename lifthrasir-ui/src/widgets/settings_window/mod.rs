@@ -14,15 +14,13 @@ use bevy::prelude::*;
 use bevy::settings::SaveSettings;
 use bevy::ui::RelativeCursorPosition;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::domain::input::PlayerAction;
-use game_engine::domain::settings::{
+use lifthrasir_client::domain::input::PlayerAction;
+use lifthrasir_client::domain::settings::{
     ActionBinds, ApplySettings, AudioConfig, DisplayMode, GraphicsSettings, KeyBind, Keybinds,
     Modifier, resolution_label, resolution_next, resolution_prev,
 };
 
 use crate::theme;
-use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod scene;
 
@@ -150,10 +148,6 @@ pub struct SettingsWindowPlugin;
 
 impl Plugin for SettingsWindowPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.init_resource::<SettingsUi>();
         app.add_systems(Startup, spawn_settings_root);
         app.add_systems(
@@ -497,7 +491,7 @@ enum AudioChannel {
 
 impl AudioChannel {
     /// Reads the channel's `(volume, muted)` off the draft audio config.
-    fn read(self, audio: &game_engine::domain::settings::AudioConfig) -> (f32, bool) {
+    fn read(self, audio: &lifthrasir_client::domain::settings::AudioConfig) -> (f32, bool) {
         match self {
             AudioChannel::Bgm => (audio.bgm_volume, audio.bgm_muted),
             AudioChannel::Sfx => (audio.sfx_volume, audio.sfx_muted),
@@ -506,7 +500,7 @@ impl AudioChannel {
     }
 
     /// Sets the channel's volume on the draft audio config.
-    fn set_volume(self, audio: &mut game_engine::domain::settings::AudioConfig, volume: f32) {
+    fn set_volume(self, audio: &mut lifthrasir_client::domain::settings::AudioConfig, volume: f32) {
         match self {
             AudioChannel::Bgm => audio.bgm_volume = volume,
             AudioChannel::Sfx => audio.sfx_volume = volume,
@@ -515,7 +509,7 @@ impl AudioChannel {
     }
 
     /// Flips the channel's mute on the draft audio config.
-    fn toggle_muted(self, audio: &mut game_engine::domain::settings::AudioConfig) {
+    fn toggle_muted(self, audio: &mut lifthrasir_client::domain::settings::AudioConfig) {
         match self {
             AudioChannel::Bgm => audio.bgm_muted = !audio.bgm_muted,
             AudioChannel::Sfx => audio.sfx_muted = !audio.sfx_muted,
@@ -672,7 +666,7 @@ fn refresh_sound(
 
 /// Borrows the stored binds for an action off the draft keybinds.
 fn action_binds(
-    keybinds: &game_engine::domain::settings::Keybinds,
+    keybinds: &lifthrasir_client::domain::settings::Keybinds,
     action: PlayerAction,
 ) -> &ActionBinds {
     match action {
@@ -689,7 +683,7 @@ fn action_binds(
 
 /// Mutably borrows the stored binds for an action off the draft keybinds.
 fn action_binds_mut(
-    keybinds: &mut game_engine::domain::settings::Keybinds,
+    keybinds: &mut lifthrasir_client::domain::settings::Keybinds,
     action: PlayerAction,
 ) -> &mut ActionBinds {
     match action {
@@ -897,7 +891,7 @@ fn refresh_input(
 mod tests {
     use super::*;
     use bevy::asset::AssetPlugin;
-    use game_engine::domain::settings::{AntiAliasing, FpsCap};
+    use lifthrasir_client::domain::settings::{AntiAliasing, FpsCap};
 
     /// Spawns the entire window tree (titlebar + all three tab bodies) so a
     /// malformed bundle — e.g. a duplicate `Pickable` — panics here at

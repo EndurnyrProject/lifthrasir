@@ -8,7 +8,7 @@
 
 use bevy::prelude::*;
 use bevy::text::Font;
-use game_engine::domain::entities::billboard::EquipmentPreviewCamera;
+use lifthrasir_client::domain::entities::billboard::EquipmentPreviewCamera;
 
 use crate::theme;
 

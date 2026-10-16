@@ -1,10 +1,10 @@
 use bevy::prelude::*;
-use game_engine::domain::audio::*;
-use game_engine::domain::settings::{
-    AudioConfig, GraphicsSettings, Keybinds, SettingsRuntimePlugin,
-};
 use lifthrasir_assets::animation::SpriteProcessingSystems;
 use lifthrasir_assets::{SpriteProcessingSettings, Upscaling};
+use lifthrasir_client::domain::audio::*;
+use lifthrasir_client::domain::settings::{
+    AudioConfig, GraphicsSettings, Keybinds, SettingsRuntimePlugin,
+};
 
 #[derive(Resource, Default)]
 struct Observed(Option<Upscaling>);

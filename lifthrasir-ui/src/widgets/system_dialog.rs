@@ -22,14 +22,12 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::ThemedText;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::presentation::ui::events::{
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::presentation::ui::events::{
     DialogSeverity, ShowSystemDialog, SystemDialogChoice, SystemDialogKind,
 };
 
 use crate::theme;
-use crate::theme::feathers_theme::install_norse_theme;
 use crate::widgets::chrome::ignore_picking;
 
 /// Sits just below the fade transition so the modal renders over every screen.
@@ -41,10 +39,6 @@ pub struct SystemDialogPlugin;
 
 impl Plugin for SystemDialogPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_systems(Update, (show_system_dialog, confirm_on_enter));
     }
 }

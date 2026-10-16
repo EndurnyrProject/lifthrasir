@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use game_engine::domain::guild::GuildState;
-use game_engine::infrastructure::skill::SkillCatalog;
+use lifthrasir_client::domain::guild::GuildState;
+use lifthrasir_client::infrastructure::skill::SkillCatalog;
 use net_contract::commands::GuildSkillUpRequested;
 use net_contract::dto::{GuildErrorKind, GuildInfo};
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};
@@ -319,8 +319,8 @@ fn skill_icon(path: String) -> impl Scene {
 #[cfg(test)]
 mod tests {
     use bevy::scene::ScenePlugin;
-    use game_engine::domain::guild::{GuildPlugin, GuildState, GuildSystems};
-    use game_engine::infrastructure::skill::SkillCatalog;
+    use lifthrasir_client::domain::guild::{GuildPlugin, GuildState, GuildSystems};
+    use lifthrasir_client::infrastructure::skill::SkillCatalog;
     use lifthrasir_data::{SkillData, SkillMeta};
     use net_contract::dto::{GuildActionResult, GuildErrorKind, GuildInfo, GuildSkillInfo};
     use net_contract::events::{GuildIngress, GuildIngressPayload, ZoneDisconnected};

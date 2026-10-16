@@ -3,18 +3,15 @@ use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::inventory::{Inventory, Item};
-use game_engine::domain::trade::TradeSession;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::inventory::{Inventory, Item};
+use lifthrasir_client::domain::trade::TradeSession;
+use lifthrasir_client::infrastructure::item::ItemDb;
 use net_contract::commands::{
     AddTradeItem, CancelTrade, ConfirmTrade, LockTrade, RemoveTradeItem, SetTradeZeny,
 };
-
-use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod feedback;
 pub mod request_dialog;
@@ -542,10 +539,6 @@ pub struct TradeWindowPlugin;
 
 impl Plugin for TradeWindowPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.init_resource::<PendingTradeRequest>()
             .init_resource::<TradeUi>()
             .add_message::<TradeSlashSubmitted>()
@@ -564,20 +557,20 @@ impl Plugin for TradeWindowPlugin {
                 Update,
                 (
                     sync_window_visibility
-                        .after(game_engine::domain::trade::systems::apply_trade_opened)
-                        .after(game_engine::domain::trade::systems::apply_trade_ended),
+                        .after(lifthrasir_client::domain::trade::systems::apply_trade_opened)
+                        .after(lifthrasir_client::domain::trade::systems::apply_trade_ended),
                     sync_title.after(sync_window_visibility),
                     rebuild_bag
                         .after(sync_window_visibility)
-                        .after(game_engine::domain::trade::systems::apply_trade_offer)
-                        .after(game_engine::domain::inventory::systems::apply_item_deltas),
+                        .after(lifthrasir_client::domain::trade::systems::apply_trade_offer)
+                        .after(lifthrasir_client::domain::inventory::systems::apply_item_deltas),
                     rebuild_offers
                         .after(sync_window_visibility)
-                        .after(game_engine::domain::trade::systems::apply_trade_offer),
+                        .after(lifthrasir_client::domain::trade::systems::apply_trade_offer),
                     sync_controls
                         .after(rebuild_bag)
                         .after(rebuild_offers)
-                        .after(game_engine::domain::trade::systems::apply_trade_ended),
+                        .after(lifthrasir_client::domain::trade::systems::apply_trade_ended),
                     sync_amount_prompt.after(sync_window_visibility),
                     sync_error.after(sync_window_visibility),
                     feedback::ingest_trade_feedback,
@@ -684,7 +677,7 @@ mod tests {
         session.apply_offer(&offer(
             false,
             false,
-            game_engine::domain::trade::MAX_OFFER_SLOTS,
+            lifthrasir_client::domain::trade::MAX_OFFER_SLOTS,
         ));
         assert!(session.offer_full());
         assert!(!bag_row_enabled(&source, &session));
@@ -1044,7 +1037,7 @@ mod tests {
 
     #[test]
     fn lock_sends_zeny_before_lock_only_if_balance_allows_it() {
-        use game_engine::domain::entities::character::components::status::CharacterStatus;
+        use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
         let mut app = test_app();
         app.world_mut()
             .resource_mut::<TradeSession>()

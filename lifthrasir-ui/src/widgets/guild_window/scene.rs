@@ -533,6 +533,7 @@ mod tests {
         app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
         app.init_asset::<Image>();
         app.init_asset::<Font>();
+        crate::install_test_ui_primitives(&mut app);
         app
     }
 
@@ -720,23 +721,17 @@ mod tests {
         use bevy::camera::RenderTarget;
         use bevy::input::ButtonState;
         use bevy::input::keyboard::{Key, KeyboardInput};
-        use bevy::input_focus::tab_navigation::TabNavigationPlugin;
-        use bevy::input_focus::{InputDispatchPlugin, InputFocusPlugin};
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerButton, PointerId};
         use bevy::window::{PrimaryWindow, WindowRef};
 
         let mut app = app();
         app.add_plugins((
-            bevy::input::InputPlugin,
-            InputFocusPlugin,
-            InputDispatchPlugin,
-            TabNavigationPlugin,
             bevy::text::TextPlugin,
             bevy::ui_widgets::EditableTextInputPlugin,
             crate::focus::UiFocusMirrorPlugin,
         ));
-        app.init_resource::<game_engine::domain::input::UiFocus>();
+        app.init_resource::<lifthrasir_client::domain::input::UiFocus>();
         app.init_resource::<bevy::ui::UiScale>();
         app.add_message::<bevy::window::Ime>();
         app.add_message::<Pointer<Release>>();

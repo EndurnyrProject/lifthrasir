@@ -4,19 +4,17 @@ use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::inventory::item::item_category;
-use game_engine::domain::inventory::{Inventory, Item, ItemCategory};
-use game_engine::domain::storage::Storage;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::inventory::item::item_category;
+use lifthrasir_client::domain::inventory::{Inventory, Item, ItemCategory};
+use lifthrasir_client::domain::storage::Storage;
+use lifthrasir_client::infrastructure::item::ItemDb;
 use net_contract::commands::{CloseStorage, DepositStorageItem, WithdrawStorageItem};
 use net_contract::dto::{StorageItem, StorageKind};
 use net_contract::events::{StorageRejection, StorageResult};
 use std::time::Duration;
 
 use crate::theme;
-use crate::theme::feathers_theme::install_norse_theme;
 use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view};
 
 mod feedback;
@@ -870,10 +868,6 @@ pub struct StorageWindowPlugin;
 
 impl Plugin for StorageWindowPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.init_resource::<StorageUi>()
             .add_systems(
                 Update,
@@ -884,21 +878,25 @@ impl Plugin for StorageWindowPlugin {
                         .after(sync_window_visibility)
                         .before(apply_storage_results),
                     apply_storage_results
-                        .after(game_engine::domain::inventory::systems::apply_item_deltas)
-                        .after(game_engine::domain::storage::systems::apply_storage_item_deltas)
-                        .after(game_engine::domain::storage::systems::apply_storage_close)
+                        .after(lifthrasir_client::domain::inventory::systems::apply_item_deltas)
+                        .after(
+                            lifthrasir_client::domain::storage::systems::apply_storage_item_deltas,
+                        )
+                        .after(lifthrasir_client::domain::storage::systems::apply_storage_close)
                         .after(sync_window_visibility),
                     rebuild_panes
                         .after(sync_search)
                         .after(apply_storage_results)
-                        .after(game_engine::domain::inventory::systems::apply_item_deltas)
-                        .after(game_engine::domain::storage::systems::apply_storage_opened)
-                        .after(game_engine::domain::storage::systems::apply_storage_item_deltas),
+                        .after(lifthrasir_client::domain::inventory::systems::apply_item_deltas)
+                        .after(lifthrasir_client::domain::storage::systems::apply_storage_opened)
+                        .after(
+                            lifthrasir_client::domain::storage::systems::apply_storage_item_deltas,
+                        ),
                     sync_controls.after(rebuild_panes),
                     rebuild_feedback.after(rebuild_panes),
                     sync_window_visibility
-                        .after(game_engine::domain::storage::systems::apply_storage_opened)
-                        .after(game_engine::domain::storage::systems::apply_storage_close),
+                        .after(lifthrasir_client::domain::storage::systems::apply_storage_opened)
+                        .after(lifthrasir_client::domain::storage::systems::apply_storage_close),
                 )
                     .run_if(in_state(GameState::InGame)),
             )
@@ -1083,7 +1081,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, AssetPlugin::default()));
         app.init_asset::<bevy::shader::Shader>();
-
+        crate::install_test_ui_primitives(&mut app);
         app.add_plugins(StorageWindowPlugin);
 
         assert_eq!(app.world().resource::<StorageUi>(), &StorageUi::default());
@@ -2192,11 +2190,11 @@ mod tests {
         app.add_systems(
             Update,
             (
-                game_engine::domain::inventory::systems::apply_item_deltas,
-                game_engine::domain::storage::systems::apply_storage_item_deltas,
+                lifthrasir_client::domain::inventory::systems::apply_item_deltas,
+                lifthrasir_client::domain::storage::systems::apply_storage_item_deltas,
                 rebuild_panes
-                    .after(game_engine::domain::inventory::systems::apply_item_deltas)
-                    .after(game_engine::domain::storage::systems::apply_storage_item_deltas),
+                    .after(lifthrasir_client::domain::inventory::systems::apply_item_deltas)
+                    .after(lifthrasir_client::domain::storage::systems::apply_storage_item_deltas),
             ),
         );
         app.world_mut().spawn(StorageBagHost);

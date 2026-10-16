@@ -5,10 +5,10 @@
 //! `left`/`top` follow `Camera::world_to_viewport` every frame.
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::combat::events::DisplayDamageNumber;
-use game_engine::domain::entities::components::UnitHealth;
-use game_engine::domain::entities::markers::Mob;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::combat::events::DisplayDamageNumber;
+use lifthrasir_client::domain::entities::components::UnitHealth;
+use lifthrasir_client::domain::entities::markers::Mob;
 
 use crate::theme;
 use crate::worldspace::{WorldCameraFilter, viewport_to_ui};

@@ -9,18 +9,15 @@
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::FeathersCorePlugin;
-use bevy_feathers::FeathersPlugins;
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::components::EntityName;
-use game_engine::domain::entities::registry::EntityRegistry;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::components::EntityName;
+use lifthrasir_client::domain::entities::registry::EntityRegistry;
 use net_contract::commands::RespondToNpc;
 use net_contract::dto::{NpcDialogExpect, NpcResponse};
 use net_contract::events::NpcDialogReceived;
 
 use crate::rich_text::parse_color_codes;
 use crate::theme;
-use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod scene;
 
@@ -90,10 +87,6 @@ pub struct NpcDialogPlugin;
 
 impl Plugin for NpcDialogPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_systems(
             Update,
             on_dialog_received.run_if(in_state(GameState::InGame)),

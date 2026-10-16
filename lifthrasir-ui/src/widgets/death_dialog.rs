@@ -15,14 +15,13 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::combat::components::DeadEntity;
-use game_engine::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::combat::components::DeadEntity;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use net_contract::commands::RespawnRequested;
 
 use crate::theme;
-use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER, install_norse_theme};
+use crate::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
 
 /// Renders over the in-game HUD, but one tier *below* the system dialog
 /// (`i32::MAX - 2`): on the char-select path the server disconnects and the
@@ -40,10 +39,6 @@ pub struct DeathDialogPlugin;
 
 impl Plugin for DeathDialogPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_systems(Update, (show_death_dialog, hide_death_dialog));
     }
 }

@@ -12,13 +12,10 @@
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::input::{PlayerAction, ui_unfocused};
 use leafwing_input_manager::prelude::ActionState;
-
-use crate::theme::feathers_theme::install_norse_theme;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
 
 mod bag_tab;
 mod character_tab;
@@ -100,10 +97,6 @@ pub struct CharacterWindowPlugin;
 
 impl Plugin for CharacterWindowPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.init_resource::<CharacterWindowState>();
         app.init_resource::<bag_tab::BagUi>();
         app.init_resource::<bag_tab::LastBagClick>();

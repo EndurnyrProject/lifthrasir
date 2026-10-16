@@ -8,7 +8,7 @@ use bevy::{
     text::{EditableText, TextCursorStyle},
     ui::ColorStop,
 };
-use game_engine::{
+use lifthrasir_client::{
     core::state::GameState,
     domain::{
         character::{

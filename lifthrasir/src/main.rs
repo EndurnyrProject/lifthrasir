@@ -74,21 +74,27 @@ fn main() {
             bevy::diagnostic::FrameTimeDiagnosticsPlugin::default(),
             DiagnosticsOverlayPlugin,
             bevy_brp_extras::BrpExtrasPlugin::default(),
-            lifthrasir_ui::worldspace::debug_gizmos::MapDebugGizmosPlugin,
+            lifthrasir_client_ui::worldspace::debug_gizmos::MapDebugGizmosPlugin,
         ));
         app.add_systems(Startup, |mut commands: Commands| {
             commands.spawn(DiagnosticsOverlay::fps());
         });
     }
 
-    app.add_plugins(game_engine::CoreGamePlugins);
+    app.add_plugins(net_contract::NetContractPlugin);
+    app.add_plugins((
+        lifthrasir_assets::ContentAssetsPlugin,
+        lifthrasir_assets::catalogs::ContentCatalogPlugin,
+    ));
     app.add_plugins(lifthrasir_runtime::ContentRuntimePlugins);
-    app.add_plugins((game_engine::MapPlugin, game_engine::GltfMapPlugin));
+    app.add_plugins(lifthrasir_client::ClientPlugins);
 
     #[cfg(feature = "net-aesir")]
     app.add_plugins(net_aesir::AesirNetPlugin);
 
-    app.add_plugins(lifthrasir_ui::LifthrasirUiPlugin);
+    app.insert_resource(lifthrasir_ui::theme::feathers_theme::norse_theme());
+    app.add_plugins(lifthrasir_ui::UiPrimitivesPlugin);
+    app.add_plugins(lifthrasir_client_ui::ClientUiPlugin);
 
     app.run();
 }

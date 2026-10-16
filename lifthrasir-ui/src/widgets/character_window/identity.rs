@@ -9,12 +9,12 @@
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
-use game_engine::domain::entities::character::components::core::CharacterData;
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::entities::components::EntityName;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::infrastructure::job::JobSpriteRegistry;
-use game_engine::infrastructure::job::player_jobs::is_fourth_job;
+use lifthrasir_client::domain::entities::character::components::core::CharacterData;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::components::EntityName;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::infrastructure::job::JobSpriteRegistry;
+use lifthrasir_client::infrastructure::job::player_jobs::is_fourth_job;
 
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, ignore_picking};
@@ -297,7 +297,7 @@ fn ap_line(ratio: f32, label: String) -> impl Scene {
 mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
-    use game_engine::domain::entities::character::components::core::CharacterStats;
+    use lifthrasir_client::domain::entities::character::components::core::CharacterStats;
 
     fn identity_app() -> App {
         let mut app = App::new();

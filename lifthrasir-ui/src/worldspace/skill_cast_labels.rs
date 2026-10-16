@@ -9,9 +9,9 @@
 use std::collections::HashSet;
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::EntityRegistry;
-use game_engine::infrastructure::skill::SkillCatalog;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::EntityRegistry;
+use lifthrasir_client::infrastructure::skill::SkillCatalog;
 use net_contract::events::{SkillCastStarted, SkillDamageReceived, SkillEffectShown};
 
 use crate::theme;

@@ -5,8 +5,8 @@
 
 use bevy::color::palettes::css;
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::world::gltf_map::LifEffectEmitter;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::world::gltf_map::LifEffectEmitter;
 
 use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};
 

@@ -5,7 +5,7 @@
 //! down by `DespawnOnExit`; the two widget sub-plugins drive their marked elements.
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
+use lifthrasir_client::core::state::GameState;
 
 pub mod announcement;
 pub mod card_compounding;

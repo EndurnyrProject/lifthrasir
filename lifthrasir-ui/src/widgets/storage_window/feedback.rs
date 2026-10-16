@@ -1,7 +1,7 @@
 //! Storage errors without a pending transfer must remain visible outside the vault window.
 
 use bevy::prelude::*;
-use game_engine::domain::storage::Storage;
+use lifthrasir_client::domain::storage::Storage;
 use net_contract::events::StorageResult;
 
 use super::{StorageUi, rejection_message};

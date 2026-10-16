@@ -4,17 +4,17 @@
 //! on-hover server name request; positioned by projecting the target's world position.
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::EntityRegistry;
-use game_engine::domain::entities::components::{EntityName, GuildIdentity};
-use game_engine::domain::entities::hover::HoveredEntity;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::guild::{GuildState, GuildSystems};
-use game_engine::domain::party::PartyState;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::EntityRegistry;
+use lifthrasir_client::domain::entities::components::{EntityName, GuildIdentity};
+use lifthrasir_client::domain::entities::hover::HoveredEntity;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::guild::{GuildState, GuildSystems};
+use lifthrasir_client::domain::party::PartyState;
 
 use crate::theme;
 use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};
-use game_engine::domain::guild::emblems::{EmblemKey, GuildEmblemImages};
+use lifthrasir_client::domain::guild::emblems::{EmblemKey, GuildEmblemImages};
 
 const NAMEPLATE_WIDTH: f32 = 220.0;
 const NAMEPLATE_FONT_SIZE: f32 = 13.0;
@@ -390,7 +390,7 @@ fn despawn_all_nameplates(mut commands: Commands, nameplates: Query<Entity, With
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::guild::GuildPlugin;
+    use lifthrasir_client::domain::guild::GuildPlugin;
     use net_contract::{
         dto::GuildInfo,
         events::{GuildIngress, GuildIngressPayload, ZoneDisconnected},
@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn party_member_plate_shows_party_name_with_character_name() {
-        use game_engine::domain::party::PartyState;
+        use lifthrasir_client::domain::party::PartyState;
         use net_contract::dto::PartyMemberInfo;
 
         let mut app = test_app();
@@ -703,7 +703,7 @@ mod tests {
             .resource_mut::<GuildEmblemImages>()
             .request(key);
         app.update();
-        let data = game_engine::domain::guild::emblems::test_emblem_bmp(24, 24);
+        let data = lifthrasir_client::domain::guild::emblems::test_emblem_bmp(24, 24);
         app.world_mut().write_message(GuildIngress {
             generation: ZoneSessionGeneration(1),
             payload: GuildIngressPayload::EmblemData {
@@ -753,7 +753,7 @@ mod tests {
 
     #[test]
     fn non_member_plate_has_no_party_line() {
-        use game_engine::domain::party::PartyState;
+        use lifthrasir_client::domain::party::PartyState;
 
         let mut app = test_app();
         let target = app

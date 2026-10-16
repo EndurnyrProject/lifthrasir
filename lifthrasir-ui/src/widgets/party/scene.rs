@@ -17,7 +17,7 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{Activate, ValueChange};
 use bevy_feathers::controls::{FeathersButton, FeathersCheckbox};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
-use game_engine::domain::party::PartyState;
+use lifthrasir_client::domain::party::PartyState;
 use net_contract::commands::{PartyLeaveRequested, PartyOptionsRequested};
 
 use crate::theme;

@@ -1,12 +1,13 @@
 [package]
-name = "lifthrasir-ui"
+name = "lifthrasir-client-ui"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
+lifthrasir-ui = { path = "../lifthrasir-ui-primitives" }
 bevy = { workspace = true }
 bevy_feathers = { workspace = true }
-game-engine = { path = "../game-engine" }
+lifthrasir-client = { path = "../game-engine" }
 iyes_progress = { workspace = true }
 net-contract = { path = "../net-contract" }
 leafwing-input-manager = { workspace = true }

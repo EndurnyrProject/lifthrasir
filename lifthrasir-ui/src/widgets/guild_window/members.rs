@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui_widgets::Activate;
-use game_engine::infrastructure::job::JobSpriteRegistry;
+use lifthrasir_client::infrastructure::job::JobSpriteRegistry;
 use net_contract::commands::GuildInviteRequested;
 use net_contract::dto::GuildInfo;
 use net_contract::state::ZoneSessionGeneration;

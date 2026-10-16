@@ -11,15 +11,18 @@ pub mod theme;
 pub mod widgets;
 pub mod worldspace;
 
-pub struct LifthrasirUiPlugin;
+pub struct ClientUiPlugin;
 
-impl Plugin for LifthrasirUiPlugin {
+impl Plugin for ClientUiPlugin {
     fn build(&self, app: &mut App) {
+        assert!(
+            app.is_plugin_added::<lifthrasir_ui::UiPrimitivesPlugin>(),
+            "ClientUiPlugin requires UiPrimitivesPlugin first"
+        );
         app.add_systems(Startup, spawn_ui_camera);
         app.add_plugins((
             cursor::NativeCursorPlugin,
             focus::UiFocusMirrorPlugin,
-            widgets::placeholder::PlaceholderPlugin,
             screens::fade::FadeTransitionPlugin,
             screens::menu_background::MenuBackgroundPlugin,
             screens::loading::LoadingScreenPlugin,
@@ -40,6 +43,27 @@ impl Plugin for LifthrasirUiPlugin {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn install_test_ui_primitives(app: &mut App) {
+    if !app.is_plugin_added::<bevy::input::InputPlugin>() {
+        app.add_plugins(bevy::input::InputPlugin);
+    }
+    if !app.world().contains_resource::<Assets<Image>>() {
+        app.init_asset::<Image>();
+    }
+    if !app.world().contains_resource::<Assets<Font>>() {
+        app.init_asset::<Font>();
+    }
+    if !app
+        .world()
+        .contains_resource::<Assets<bevy::shader::Shader>>()
+    {
+        app.init_asset::<bevy::shader::Shader>();
+    }
+    app.insert_resource(lifthrasir_ui::theme::feathers_theme::norse_theme())
+        .add_plugins(lifthrasir_ui::UiPrimitivesPlugin);
+}
+
 /// Dedicated 2D camera that hosts all screen-space UI. It renders above the 3D
 /// world camera and never clears it, so menus and in-game overlays share the window.
 fn spawn_ui_camera(mut commands: Commands) {
@@ -58,4 +82,41 @@ fn spawn_ui_camera(mut commands: Commands) {
         IsDefaultUiCamera,
         Name::new("UiCamera"),
     ));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn client_root_preserves_host_theme_and_keeps_its_hdr_camera() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        install_test_ui_primitives(&mut app);
+        let token = theme::feathers_theme::TOKEN_ACCENT;
+        app.world_mut()
+            .resource_mut::<bevy_feathers::theme::UiTheme>()
+            .0
+            .color
+            .insert(token.clone(), Color::WHITE);
+        app.init_resource::<lifthrasir_client::domain::settings::GraphicsSettings>()
+            .init_resource::<lifthrasir_client::domain::settings::AudioConfig>()
+            .init_resource::<lifthrasir_client::domain::settings::Keybinds>()
+            .add_plugins(ClientUiPlugin);
+        assert_eq!(
+            app.world()
+                .resource::<bevy_feathers::theme::UiTheme>()
+                .color(&token),
+            Color::WHITE
+        );
+        app.world_mut().run_system_once(spawn_ui_camera).unwrap();
+        let world = app.world_mut();
+        let (camera, _) = world
+            .query_filtered::<(&Camera, &Hdr), With<IsDefaultUiCamera>>()
+            .single(world)
+            .unwrap();
+        assert_eq!(camera.order, 1);
+        assert!(matches!(camera.clear_color, ClearColorConfig::None));
+    }
 }

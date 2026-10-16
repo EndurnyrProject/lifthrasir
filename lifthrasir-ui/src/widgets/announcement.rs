@@ -11,7 +11,7 @@
 use std::collections::VecDeque;
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
+use lifthrasir_client::core::state::GameState;
 use net_contract::events::{AnnouncementReceived, AnnouncementStyle};
 
 use crate::rich_text::spawn_colored_text;

@@ -15,8 +15,8 @@
 //! called from the plugin's `build`.
 
 use bevy::prelude::*;
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::character::events::forward_character_sprite_events;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::character::events::forward_character_sprite_events;
 
 use crate::widgets::chrome::ignore_picking;
 

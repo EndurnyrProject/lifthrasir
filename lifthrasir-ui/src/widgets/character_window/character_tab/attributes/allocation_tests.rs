@@ -101,7 +101,7 @@ fn unrelated_and_duplicate_replies_do_not_unlock_other_pending_stats() {
 
 #[test]
 fn authoritative_param_updates_are_not_reapplied_from_the_acknowledgment() {
-    use game_engine::domain::entities::{
+    use lifthrasir_client::domain::entities::{
         character::events::StatusParameterChanged,
         character::systems::status_update::{PendingStatusParams, update_character_status_system},
         registry::EntityRegistry,

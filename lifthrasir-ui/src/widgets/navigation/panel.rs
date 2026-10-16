@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use game_engine::domain::world::navigation::ActiveRoute;
+use lifthrasir_client::domain::world::navigation::ActiveRoute;
 
 use crate::{
     theme,
@@ -152,7 +152,7 @@ fn set_text(text: &mut Text, value: String) {
 
 #[cfg(test)]
 mod tests {
-    use game_engine::domain::world::navigation::{ActiveRoute, Route};
+    use lifthrasir_client::domain::world::navigation::{ActiveRoute, Route};
     use net_contract::dto::{RouteDestination, RouteLeg};
 
     use super::*;

@@ -91,7 +91,7 @@ pub(super) fn dispatch_guild_slash(
 mod tests {
     use super::super::GuildUi;
     use super::*;
-    use game_engine::domain::guild::GuildState;
+    use lifthrasir_client::domain::guild::GuildState;
     use net_contract::state::{ZoneSession, ZoneSessionGeneration};
 
     fn app() -> App {

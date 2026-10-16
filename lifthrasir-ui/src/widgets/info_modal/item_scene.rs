@@ -17,8 +17,8 @@ use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::{ThemeBorderColor, ThemedText};
 
-use game_engine::domain::equipment::{EquipItemRequested, UnequipItemRequested};
-use game_engine::domain::inventory::{Inventory, UseItemRequested};
+use lifthrasir_client::domain::equipment::{EquipItemRequested, UnequipItemRequested};
+use lifthrasir_client::domain::inventory::{Inventory, UseItemRequested};
 
 use crate::theme;
 use crate::widgets::chrome::{glyph_icon, ignore_picking};
@@ -354,7 +354,7 @@ fn on_footer_action_click(
 mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
-    use game_engine::domain::inventory::Item;
+    use lifthrasir_client::domain::inventory::Item;
 
     fn test_app() -> App {
         let mut app = App::new();

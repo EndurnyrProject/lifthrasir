@@ -11,16 +11,12 @@
 
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::FeathersCorePlugin;
-use bevy_feathers::FeathersPlugins;
-use game_engine::core::state::GameState;
-use game_engine::domain::inventory::Inventory;
-use game_engine::infrastructure::item::ItemDb;
-use game_engine::infrastructure::skill::SkillCatalog;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::inventory::Inventory;
+use lifthrasir_client::infrastructure::item::ItemDb;
+use lifthrasir_client::infrastructure::skill::SkillCatalog;
 use net_contract::commands::AnswerSkillMenu;
 use net_contract::events::{SkillMenuKind, SkillMenuOffered};
-
-use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod scene;
 
@@ -68,10 +64,6 @@ pub struct SkillMenuPlugin;
 
 impl Plugin for SkillMenuPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_systems(
             Update,
             (open_menu, sync_window)
@@ -347,7 +339,7 @@ fn cancel_answer(menu: &ActiveSkillMenu) -> AnswerSkillMenu {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::inventory::Item;
+    use lifthrasir_client::domain::inventory::Item;
     use lifthrasir_data::{ItemData, ItemInfo, SkillData, SkillMeta};
 
     fn item_db() -> ItemDb {

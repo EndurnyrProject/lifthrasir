@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use game_engine::domain::guild::GuildState;
+use lifthrasir_client::domain::guild::GuildState;
 use net_contract::dto::GuildErrorKind;
 use net_contract::events::{GuildIngress, GuildIngressPayload};
 use net_contract::state::ZoneSessionGeneration;
@@ -211,7 +211,7 @@ mod tests {
     use crate::widgets::guild_window::{
         GuildUi, GuildUiSession, GuildWindowRoot, PendingGuildMutation,
     };
-    use game_engine::domain::guild::{GuildPlugin, GuildSystems};
+    use lifthrasir_client::domain::guild::{GuildPlugin, GuildSystems};
     use net_contract::dto::{
         GuildActionResult, GuildErrorKind, GuildInfo, GuildMemberInfo, GuildPositionInfo,
     };

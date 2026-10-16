@@ -1,7 +1,7 @@
 use bevy::prelude::*;
-use game_engine::domain::entities::components::{EntityName, NetworkEntity};
-use game_engine::domain::entities::types::ObjectType;
-use game_engine::domain::trade::TradeSession;
+use lifthrasir_client::domain::entities::components::{EntityName, NetworkEntity};
+use lifthrasir_client::domain::entities::types::ObjectType;
+use lifthrasir_client::domain::trade::TradeSession;
 use net_contract::commands::RequestTrade;
 use net_contract::state::ZoneSession;
 

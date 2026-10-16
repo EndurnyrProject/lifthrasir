@@ -123,7 +123,7 @@ fn assert_no_dependency(package: &str, forbidden: &[&str]) {
 #[test]
 fn current_workspace_boundaries() {
     for package in [
-        "game-engine",
+        "lifthrasir-client",
         "lifthrasir-data",
         "lifthrasir-pak",
         "lifthrasir-assets",
@@ -134,7 +134,7 @@ fn current_workspace_boundaries() {
     ] {
         assert_package_present(package);
     }
-    assert_no_dependency("game-engine", &["bevy_quinnet", "prost", "net-aesir"]);
+    assert_no_dependency("lifthrasir-client", &["bevy_quinnet", "prost", "net-aesir"]);
     assert_no_dependency(
         "lifthrasir-runtime",
         &[
@@ -170,6 +170,8 @@ fn current_workspace_boundaries() {
             "bevy",
             "ro-formats",
             "game-engine",
+            "lifthrasir-client",
+            "lifthrasir-client-ui",
             "lifthrasir-ui",
             "lifthrasir",
             "net-contract",
@@ -184,10 +186,49 @@ fn current_workspace_boundaries() {
         &[
             "bevy",
             "game-engine",
+            "lifthrasir-client",
+            "lifthrasir-client-ui",
             "lifthrasir-ui",
             "lifthrasir",
             "net-contract",
             "net-aesir",
+        ],
+    );
+}
+
+#[test]
+fn client_package_replaces_engine_without_a_compatibility_package() {
+    assert_package_present("lifthrasir-client");
+    assert!(
+        metadata()
+            .packages
+            .iter()
+            .all(|package| package.name != "game-engine")
+    );
+}
+
+#[test]
+fn shared_ui_is_unique_and_has_no_client_or_content_policy_dependencies() {
+    assert_package_present("lifthrasir-client-ui");
+    assert_eq!(
+        metadata()
+            .packages
+            .iter()
+            .filter(|package| package.name == "lifthrasir-ui")
+            .count(),
+        1
+    );
+    assert_no_dependency(
+        "lifthrasir-ui",
+        &[
+            "game-engine",
+            "lifthrasir-client",
+            "lifthrasir-client-ui",
+            "lifthrasir-runtime",
+            "lifthrasir-assets",
+            "net-contract",
+            "net-aesir",
+            "lifthrasir",
         ],
     );
 }

@@ -3,9 +3,9 @@ use bevy::text::{EditableText, EditableTextFilter, FontSize, FontSourceTemplate}
 use bevy::ui_widgets::ScrollArea;
 use bevy_feathers::controls::FeathersButton;
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use game_engine::domain::inventory::Item;
-use game_engine::infrastructure::assets::item_icon_path;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::domain::inventory::Item;
+use lifthrasir_client::infrastructure::assets::item_icon_path;
+use lifthrasir_client::infrastructure::item::ItemDb;
 use net_contract::events::zone::ZoneInventoryItem;
 
 use crate::theme;

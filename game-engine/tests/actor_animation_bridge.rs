@@ -1,11 +1,11 @@
 use bevy::prelude::*;
-use game_engine::domain::combat::components::AttackTimer;
-use game_engine::domain::effects::AnimationPaused;
-use game_engine::domain::entities::character::states::AnimationState;
-use game_engine::domain::entities::model_rendering::Gr2Actor;
-use game_engine::domain::entities::movement::components::MovementSpeed;
-use game_engine::domain::entities::sprite_rendering::components::PlayerSprite;
-use game_engine::presentation::actors::sync_actor_animation_inputs;
+use lifthrasir_client::domain::combat::components::AttackTimer;
+use lifthrasir_client::domain::effects::AnimationPaused;
+use lifthrasir_client::domain::entities::character::states::AnimationState;
+use lifthrasir_client::domain::entities::model_rendering::Gr2Actor;
+use lifthrasir_client::domain::entities::movement::components::MovementSpeed;
+use lifthrasir_client::domain::entities::sprite_rendering::components::PlayerSprite;
+use lifthrasir_client::presentation::actors::sync_actor_animation_inputs;
 use lifthrasir_runtime::actors::{ActionType, ActorAnimationInput};
 use std::time::Duration;
 

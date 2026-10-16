@@ -4,7 +4,7 @@ use bevy::text::{EditableText, FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::ThemedText;
-use game_engine::domain::guild::GuildState;
+use lifthrasir_client::domain::guild::GuildState;
 use net_contract::commands::{GuildAllianceRequested, GuildAntagonistRemoveRequested};
 use net_contract::dto::{GuildErrorKind, GuildInfo, GuildRelationInfo, GuildRelationKind};
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};
@@ -641,7 +641,7 @@ mod tests {
 
     #[test]
     fn action_acknowledgement_does_not_change_lists_before_authoritative_snapshot() {
-        use game_engine::domain::guild::{GuildPlugin, GuildSystems};
+        use lifthrasir_client::domain::guild::{GuildPlugin, GuildSystems};
         use net_contract::dto::{GuildActionResult, GuildErrorKind};
         use net_contract::events::{GuildIngress, GuildIngressPayload, ZoneDisconnected};
 

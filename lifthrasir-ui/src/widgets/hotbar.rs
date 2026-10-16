@@ -20,13 +20,13 @@
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use game_engine::core::state::GameState;
-use game_engine::domain::hotbar::{Hotbar, HotbarSlot, HotbarSlotActivated};
-use game_engine::domain::inventory::Inventory;
-use game_engine::domain::skill::SkillCooldownTracker;
-use game_engine::infrastructure::assets::item_icon_path;
-use game_engine::infrastructure::item::ItemDb;
-use game_engine::infrastructure::skill::SkillCatalog;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::hotbar::{Hotbar, HotbarSlot, HotbarSlotActivated};
+use lifthrasir_client::domain::inventory::Inventory;
+use lifthrasir_client::domain::skill::SkillCooldownTracker;
+use lifthrasir_client::infrastructure::assets::item_icon_path;
+use lifthrasir_client::infrastructure::item::ItemDb;
+use lifthrasir_client::infrastructure::skill::SkillCatalog;
 
 use crate::theme;
 use crate::worldspace::viewport_to_ui;
@@ -745,7 +745,7 @@ fn spawn_ghost(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::inventory::Item;
+    use lifthrasir_client::domain::inventory::Item;
 
     fn inventory_with(item_id: u32, amount: u16) -> Inventory {
         let mut inv = Inventory::default();
@@ -891,7 +891,7 @@ mod tests {
 
     #[test]
     fn update_hotbar_reflects_cooldown_seconds() {
-        use game_engine::domain::skill::cooldown::apply_skill_cooldown;
+        use lifthrasir_client::domain::skill::cooldown::apply_skill_cooldown;
         use net_contract::events::SkillCooldownSet;
 
         let mut app = App::new();

@@ -10,15 +10,12 @@
 
 use bevy::prelude::*;
 use bevy::ui::InteractionDisabled;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::emote::EmoteCooldown;
-use game_engine::domain::emote::assets::EmoteAssets;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::input::{PlayerAction, ui_unfocused};
 use leafwing_input_manager::prelude::ActionState;
-
-use crate::theme::feathers_theme::install_norse_theme;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::emote::EmoteCooldown;
+use lifthrasir_client::domain::emote::assets::EmoteAssets;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
 
 pub mod scene;
 pub mod slash;
@@ -39,10 +36,6 @@ pub struct EmotePickerPlugin;
 
 impl Plugin for EmotePickerPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.add_systems(
             Update,
             toggle_emote_picker.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),

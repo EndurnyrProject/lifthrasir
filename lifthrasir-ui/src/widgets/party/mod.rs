@@ -12,18 +12,15 @@
 
 use bevy::prelude::*;
 use bevy::ui::Checked;
-use bevy_feathers::{FeathersCorePlugin, FeathersPlugins};
-use game_engine::core::state::GameState;
-use game_engine::domain::entities::EntityRegistry;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::input::{PlayerAction, ui_unfocused};
-use game_engine::domain::party::PartyState;
-use game_engine::infrastructure::job::JobSpriteRegistry;
 use leafwing_input_manager::prelude::ActionState;
+use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::EntityRegistry;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
+use lifthrasir_client::domain::party::PartyState;
+use lifthrasir_client::infrastructure::job::JobSpriteRegistry;
 use net_contract::dto::PartyMemberInfo;
 use net_contract::state::ZoneSession;
-
-use crate::theme::feathers_theme::install_norse_theme;
 
 pub mod create_dialog;
 pub mod feedback;
@@ -68,10 +65,6 @@ pub struct PartyPlugin;
 
 impl Plugin for PartyPlugin {
     fn build(&self, app: &mut App) {
-        install_norse_theme(app);
-        if !app.is_plugin_added::<FeathersCorePlugin>() {
-            app.add_plugins(FeathersPlugins);
-        }
         app.init_resource::<PendingPartyInvite>();
         app.add_message::<PartySlashSubmitted>();
         app.add_observer(crate::widgets::player_context_menu::open_player_menu);
@@ -298,7 +291,7 @@ fn roster_rows(
 mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
-    use game_engine::infrastructure::job::JobSpriteRegistry;
+    use lifthrasir_client::infrastructure::job::JobSpriteRegistry;
 
     fn member(char_id: u32, online: bool) -> PartyMemberInfo {
         PartyMemberInfo {

@@ -16,10 +16,10 @@ use bevy::ui_widgets::Activate;
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::ThemedText;
 
-use game_engine::domain::entities::character::components::status::CharacterStatus;
-use game_engine::domain::entities::markers::LocalPlayer;
-use game_engine::domain::skill::SkillTreeState;
-use game_engine::infrastructure::skill::SkillCatalog;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::skill::SkillTreeState;
+use lifthrasir_client::infrastructure::skill::SkillCatalog;
 
 use crate::theme;
 use crate::widgets::character_window::SkillPanelStaging;
@@ -410,7 +410,7 @@ mod tests {
     }
 
     fn chip_app() -> App {
-        use game_engine::domain::skill::SkillNode;
+        use lifthrasir_client::domain::skill::SkillNode;
         let mut app = App::new();
         app.add_message::<ShowInfoModal>();
         app.init_resource::<SkillPanelStaging>();
@@ -502,14 +502,14 @@ mod tests {
 
     fn raise_test_app() -> App {
         let mut app = App::new();
-        app.add_message::<game_engine::domain::entities::character::events::SkillLearnRequested>();
+        app.add_message::<lifthrasir_client::domain::entities::character::events::SkillLearnRequested>();
         app.init_resource::<SkillTreeState>();
         app.init_resource::<SkillPanelStaging>();
         app
     }
 
     fn seed_tree(app: &mut App, skill_id: u32, max_level: u32) {
-        use game_engine::domain::skill::SkillNode;
+        use lifthrasir_client::domain::skill::SkillNode;
         app.world_mut()
             .resource_mut::<SkillTreeState>()
             .skills
@@ -557,11 +557,13 @@ mod tests {
         app.world_mut().flush();
 
         assert_eq!(app.world().resource::<SkillPanelStaging>().staged(5), 1);
-        let learned = app
-            .world()
-            .resource::<Messages<game_engine::domain::entities::character::events::SkillLearnRequested>>()
-            .iter_current_update_messages()
-            .count();
+        let learned =
+            app.world()
+                .resource::<Messages<
+                    lifthrasir_client::domain::entities::character::events::SkillLearnRequested,
+                >>()
+                .iter_current_update_messages()
+                .count();
         assert_eq!(learned, 0);
     }
 

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use game_engine::domain::world::navigation::{ActiveRoute, densify};
+use lifthrasir_client::domain::world::navigation::{ActiveRoute, densify};
 
 use crate::{
     theme,
@@ -113,7 +113,7 @@ fn despawn_navigation_segments(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::world::navigation::Route;
+    use lifthrasir_client::domain::world::navigation::Route;
     use net_contract::dto::{RouteDestination, RouteLeg};
 
     fn segment_app() -> App {

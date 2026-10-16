@@ -6,7 +6,7 @@ use bevy::{
     prelude::*,
     tasks::{IoTaskPool, Task, poll_once},
 };
-use game_engine::domain::guild::{
+use lifthrasir_client::domain::guild::{
     GuildState,
     emblems::{EmblemKey, GuildEmblemImages, decode_emblem as decode_bmp},
 };
@@ -258,7 +258,7 @@ pub(crate) fn receive_emblem_changes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use game_engine::domain::guild::emblems::test_emblem_bmp as bmp;
+    use lifthrasir_client::domain::guild::emblems::test_emblem_bmp as bmp;
     use net_contract::dto::{GuildActionResult, GuildErrorKind};
 
     #[test]

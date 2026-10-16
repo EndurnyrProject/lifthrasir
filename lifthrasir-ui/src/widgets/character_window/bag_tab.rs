@@ -19,11 +19,11 @@ use bevy::scene::EntityScene;
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
-use game_engine::domain::equipment::{EquipItemRequested, UnequipItemRequested};
-use game_engine::domain::hotbar::HotbarSlot;
-use game_engine::domain::inventory::{Inventory, Item, ItemCategory, UseItemRequested};
-use game_engine::infrastructure::assets::item_icon_path;
-use game_engine::infrastructure::item::ItemDb;
+use lifthrasir_client::domain::equipment::{EquipItemRequested, UnequipItemRequested};
+use lifthrasir_client::domain::hotbar::HotbarSlot;
+use lifthrasir_client::domain::inventory::{Inventory, Item, ItemCategory, UseItemRequested};
+use lifthrasir_client::infrastructure::assets::item_icon_path;
+use lifthrasir_client::infrastructure::item::ItemDb;
 
 use crate::theme;
 use crate::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};

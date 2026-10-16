@@ -3,12 +3,12 @@ use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::input::touch::TouchPhase;
 use bevy::picking::{backend::HitData, hover::HoverMap, pointer::PointerId};
 use bevy::prelude::*;
-use game_engine::domain::camera::{
+use lifthrasir_client::domain::camera::{
     components::{CameraFollowSettings, CameraFollowTarget},
     resources::{ActiveCameraProfile, CameraRotationDelta},
     systems::camera_follow_system,
 };
-use game_engine::domain::input::UiFocus;
+use lifthrasir_client::domain::input::UiFocus;
 use moonshine_kind::Instance;
 
 fn test_app() -> (App, Entity) {
