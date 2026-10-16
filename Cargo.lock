@@ -3658,15 +3658,14 @@ dependencies = [
  "image",
  "iyes_progress",
  "leafwing-input-manager",
+ "lifthrasir-assets",
  "lifthrasir-data",
- "lifthrasir-pak",
  "moonshine-behavior",
  "moonshine-kind",
  "moonshine-tag",
  "net-contract",
  "pathfinding",
  "regex",
- "resvg",
  "ro-formats",
  "ron 0.12.2",
  "secrecy",
@@ -3675,7 +3674,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "toml",
- "xbrz-rs",
  "zip",
 ]
 
@@ -4728,9 +4726,34 @@ dependencies = [
  "bevy_brp_extras",
  "bevy_framepace",
  "game-engine",
+ "lifthrasir-assets",
  "lifthrasir-ui",
  "net-aesir",
  "toml",
+]
+
+[[package]]
+name = "lifthrasir-assets"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_common_assets",
+ "encoding_rs",
+ "futures-lite",
+ "image",
+ "lifthrasir-data",
+ "lifthrasir-pak",
+ "moonshine-tag",
+ "resvg",
+ "ro-formats",
+ "ron 0.12.2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "toml",
+ "xbrz-rs",
+ "zip",
 ]
 
 [[package]]

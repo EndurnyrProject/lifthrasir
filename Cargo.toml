@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "game-engine",
     "grf-utils",
+    "lifthrasir-assets",
     "lifthrasir-data",
     "lifthrasir-pak",
     "lifthrasir-ui",

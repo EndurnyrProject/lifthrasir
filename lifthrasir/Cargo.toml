@@ -29,6 +29,7 @@ bevy = { workspace = true }
 bevy_framepace = { workspace = true }
 bevy_brp_extras = { version = "0.22.3", optional = true }
 game-engine = { path = "../game-engine" }
+lifthrasir-assets = { path = "../lifthrasir-assets" }
 lifthrasir-ui = { path = "../lifthrasir-ui" }
 net-aesir = { path = "../net-aesir", optional = true }
 toml = { workspace = true }

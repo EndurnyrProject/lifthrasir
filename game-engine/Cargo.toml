@@ -5,8 +5,8 @@ edition.workspace = true
 
 [dependencies]
 ro-formats = { path = "../ro-formats" }
+lifthrasir-assets = { path = "../lifthrasir-assets" }
 lifthrasir-data = { path = "../lifthrasir-data" }
-lifthrasir-pak = { path = "../lifthrasir-pak" }
 net-contract = { path = "../net-contract" }
 bevy = { workspace = true, features = [
     "bevy_gltf",
@@ -29,8 +29,6 @@ leafwing-input-manager = { workspace = true }
 # Parsing and data processing
 thiserror = { workspace = true }
 image = { workspace = true }
-xbrz-rs = "0.1"
-resvg = "0.48"
 futures-lite = "2.6.1"
 encoding_rs = { workspace = true }
 serde = { workspace = true }
@@ -62,6 +60,3 @@ dlss = ["bevy/dlss"]
 
 [dev-dependencies]
 tempfile = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = ["xbrz-rs"]

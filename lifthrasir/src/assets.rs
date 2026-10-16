@@ -1,12 +1,8 @@
-use std::sync::{Arc, RwLock};
-
-use bevy::asset::{AssetApp, io::AssetSourceBuilder, io::AssetSourceId};
-use bevy::prelude::*;
-
-use game_engine::infrastructure::assets::{
-    AssetConfig, SharedCompositeAssetSource, hierarchical_reader::HierarchicalAssetReader,
-    ro_asset_source::setup_composite_source_from_config, sources::CompositeAssetSource,
+pub use lifthrasir_assets::source::register_ro_asset_source;
+use lifthrasir_assets::source::{
+    AssetConfig, CompositeAssetSource, setup_composite_source_from_config,
 };
+use std::sync::{Arc, RwLock};
 
 pub fn load_composite_source() -> Arc<RwLock<CompositeAssetSource>> {
     let config = load_asset_config();
@@ -23,19 +19,4 @@ fn load_asset_config() -> AssetConfig {
 
     toml::from_str(&content)
         .unwrap_or_else(|e| panic!("Failed to parse config '{}': {}", config_path, e))
-}
-
-pub fn register_ro_asset_source(
-    app: &mut App,
-    composite_source: Arc<RwLock<CompositeAssetSource>>,
-) {
-    app.register_asset_source(
-        AssetSourceId::Name("ro".into()),
-        AssetSourceBuilder::new({
-            let composite_clone = composite_source.clone();
-            move || Box::new(HierarchicalAssetReader::new(composite_clone.clone()))
-        }),
-    );
-
-    app.insert_resource(SharedCompositeAssetSource(composite_source));
 }

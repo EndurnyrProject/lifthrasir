@@ -17,7 +17,6 @@ use bevy::prelude::*;
 use crate::domain::entities::billboard::{Billboard, SharedSpriteQuad};
 use crate::domain::entities::sprite_rendering::asset_bank::SpriteAssetBank;
 use crate::domain::entities::sprite_rendering::systems::set_layer_texture;
-use crate::domain::settings::GraphicsSettings;
 use crate::domain::sprite::tags::{
     LAYER_EFFECT, Z_OFFSET_PER_LAYER, layer_depth_bias, layer_order,
 };
@@ -25,6 +24,7 @@ use crate::infrastructure::assets::animation_processor::RoAnimationProcessor;
 use crate::infrastructure::assets::loaders::{RoActAsset, RoSpriteAsset};
 use crate::infrastructure::assets::ro_animation_asset::{FramePart, RoAnimationAsset};
 use crate::utils::constants::SPRITE_WORLD_SCALE;
+use lifthrasir_assets::SpriteProcessingSettings;
 
 /// Effect sprites carry one action; the classic client plays it on a loop.
 const EFFECT_SPRITE_ACTION: usize = 0;
@@ -189,7 +189,7 @@ fn resolve_animation(
     actions: &Assets<RoActAsset>,
     animations: &mut Assets<RoAnimationAsset>,
     images: &mut Assets<Image>,
-    settings: &GraphicsSettings,
+    settings: &SpriteProcessingSettings,
     commands: &mut Commands,
     entity: Entity,
     path: &str,

@@ -33,6 +33,18 @@ use super::resources::DlssMode;
 #[cfg(feature = "dlss")]
 use bevy::anti_alias::dlss::{Dlss, DlssSuperResolutionSupported};
 
+/// Mirror saved preferences before shared sprite jobs dispatch, including boot defaults.
+#[auto_add_system(plugin = super::SettingsRuntimePlugin, schedule = Update,
+    config(before = lifthrasir_assets::animation::SpriteProcessingSystems::Dispatch))]
+pub fn sync_sprite_processing_settings(
+    settings: Res<GraphicsSettings>,
+    mut processing: ResMut<lifthrasir_assets::SpriteProcessingSettings>,
+) {
+    if processing.upscaling != settings.upscaling {
+        processing.upscaling = settings.upscaling;
+    }
+}
+
 /// Index of the candidate nearest (squared pixel distance) to `target`, or
 /// `None` when there are no candidates. An exact match wins outright.
 fn nearest_mode_index(candidates: &[(u32, u32)], target: (u32, u32)) -> Option<usize> {

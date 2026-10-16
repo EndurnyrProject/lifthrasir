@@ -1,0 +1,16 @@
+moonshine_tag::tags! {
+    pub LAYER_SHADOW,
+    pub LAYER_BODY,
+    pub LAYER_HEAD,
+    pub LAYER_GARMENT,
+    pub LAYER_WEAPON,
+    pub LAYER_SHIELD,
+    pub LAYER_HEAD_TOP,
+    pub LAYER_HEAD_MID,
+    pub LAYER_HEAD_BOTTOM,
+    pub LAYER_EFFECT,
+    pub LAYER_CART,
+    pub LAYER_FALCON,
+    pub FRAME_ATTACK,
+    pub FRAME_SOUND,
+}

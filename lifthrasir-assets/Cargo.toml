@@ -1,0 +1,29 @@
+[package]
+name = "lifthrasir-assets"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+serde = { workspace = true }
+lifthrasir-pak = { path = "../lifthrasir-pak" }
+thiserror = { workspace = true }
+toml = { workspace = true }
+futures-lite = "2.6.1"
+ro-formats = { path = "../ro-formats" }
+lifthrasir-data = { path = "../lifthrasir-data" }
+image = { workspace = true }
+encoding_rs = { workspace = true }
+ron = { workspace = true }
+resvg = "0.48"
+xbrz-rs = "0.1"
+moonshine-tag = "0.5"
+bevy_common_assets = { version = "0.17", features = ["ron"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+zip = { workspace = true }
+serde_json = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = ["xbrz-rs"]

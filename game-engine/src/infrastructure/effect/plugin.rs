@@ -1,4 +1,3 @@
-use super::catalog::{process_loaded_effect_data, start_loading_effect_data};
 use crate::domain::effects::{
     EffectLayer, EffectSpriteAssets, PendingBodyStates, PendingEffectStates, PendingSpiritSpheres,
     PendingVirtues, PlayProceduralVfx, advance_effect_timers, apply_body_state_tint,
@@ -14,8 +13,8 @@ use crate::presentation::rendering::effect_material::EffectMaterial;
 use bevy::prelude::*;
 
 /// Aggregate plugin for the skill-effect subsystem: registers the
-/// `EffectMaterial` render pipeline, the `EffectCatalog` startup-load, and the
-/// effect runtime systems.
+/// `EffectMaterial` render pipeline and the effect runtime systems.
+/// Content catalog loading is owned by `ContentCatalogPlugin`.
 pub struct EffectsPlugin;
 
 impl Plugin for EffectsPlugin {
@@ -27,7 +26,7 @@ impl Plugin for EffectsPlugin {
             .init_resource::<PendingVirtues>()
             .init_resource::<PendingSpiritSpheres>()
             .init_resource::<EffectSpriteAssets>()
-            .add_systems(Startup, (start_loading_effect_data, load_frozen_ice_assets))
+            .add_systems(Startup, load_frozen_ice_assets)
             .add_systems(
                 Update,
                 (
@@ -41,7 +40,6 @@ impl Plugin for EffectsPlugin {
             .add_systems(
                 Update,
                 (
-                    process_loaded_effect_data,
                     // The skill-event and special-effect consumers spawn the effect instances.
                     (
                         on_skill_effect,

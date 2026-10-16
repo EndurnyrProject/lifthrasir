@@ -43,6 +43,7 @@ pub use presentation::rendering::{MapPlugin, VfxPlugin};
 
 use bevy::app::PluginGroupBuilder;
 use bevy::prelude::*;
+use lifthrasir_assets::ContentCatalogPlugin;
 
 pub struct CoreGamePlugins;
 
@@ -55,15 +56,10 @@ impl PluginGroup for CoreGamePlugins {
             .add(SettingsRuntimePlugin)
             .add(CameraPlugin)
             .add(AssetsPlugin)
-            .add(JobSystemPlugin)
-            .add(SkillSystemPlugin)
+            .add(ContentCatalogPlugin)
             .add(EffectsPlugin)
             .add(SkillUnitsPlugin)
-            .add(StatusIconPlugin)
             .add(VfxPlugin)
-            .add(ItemDbPlugin)
-            .add(AccessoryDbPlugin)
-            .add(WeaponDbPlugin)
             .add(AudioPlugin)
             .add(EntitySpawningPlugin)
             .add(CharacterDomainPlugin)
