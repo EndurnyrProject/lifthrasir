@@ -1,3 +1,4 @@
+use crate::OperationReport;
 pub mod accessory;
 pub mod gltf_out;
 pub mod gr2;
@@ -26,7 +27,7 @@ pub(crate) fn read_system_en(rel: &str) -> anyhow::Result<Vec<u8>> {
     std::fs::read(&path).with_context(|| format!("reading SystemEN file: {}", path.display()))
 }
 
-type ConverterFn = fn(&GrfVfs, &Path) -> anyhow::Result<()>;
+type ConverterFn = fn(&GrfVfs, &Path) -> anyhow::Result<OperationReport>;
 
 const CONVERTERS: &[(&str, ConverterFn)] = &[
     ("job", job::run),
@@ -37,16 +38,24 @@ const CONVERTERS: &[(&str, ConverterFn)] = &[
     ("status_icon", status_icon::run),
 ];
 
-pub fn run(only: Option<&str>, vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
+pub fn run(only: Option<&str>, vfs: &GrfVfs, out: &Path) -> anyhow::Result<OperationReport> {
     if let Some(name) = only
         && !CONVERTERS.iter().any(|(n, _)| *n == name)
     {
         anyhow::bail!("unknown converter: {name}");
     }
+    let mut report = OperationReport::default();
+    let mut failures = Vec::new();
     for (name, f) in CONVERTERS {
-        if only.is_none_or(|o| o == *name) {
-            f(vfs, out)?;
+        if only.is_some_and(|selected| selected != *name) {
+            continue;
+        }
+        if !report.include(
+            f(vfs, out).with_context(|| format!("catalog '{name}'")),
+            &mut failures,
+        ) {
+            return report.finish(failures);
         }
     }
-    Ok(())
+    report.finish(failures)
 }

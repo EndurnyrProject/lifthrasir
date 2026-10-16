@@ -1,3 +1,4 @@
+use crate::OperationReport;
 use crate::decompile::decompile;
 use crate::encoding::decode_euckr;
 use crate::grf_vfs::GrfVfs;
@@ -26,7 +27,7 @@ const LUA_BYTECODE_MAGIC: &[u8] = b"\x1bLua";
 ///   TGA or name for it, but aesir broadcasts it (SC_PUSHCART), so name it here.
 const NAME_OVERRIDES: &[(u32, &str)] = &[(673, "Cart")];
 
-pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
+pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<OperationReport> {
     let lua = lua::new_vm_unbounded().map_err(lua_err)?;
 
     lua::exec_chunk(&lua, &read_grf_lub(vfs, EFSTIDS_PATH)?).map_err(lua_err)?;
@@ -41,8 +42,12 @@ pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
     let dest = out.join("status_icons.ron");
     std::fs::write(&dest, ron).with_context(|| format!("writing {}", dest.display()))?;
 
-    println!("status_icons.ron: {} icons", data.icons.len());
-    Ok(())
+    let mut report = OperationReport {
+        outputs: vec![dest],
+        ..Default::default()
+    };
+    report.info(format!("status_icons.ron: {} icons", data.icons.len()));
+    Ok(report)
 }
 
 fn lua_err(e: mlua::Error) -> anyhow::Error {

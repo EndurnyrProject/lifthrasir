@@ -150,7 +150,20 @@ fn pack_command(
     jobs: Option<usize>,
 ) -> Result<()> {
     println!("Scanning sources...");
-    let (entries, skipped, excluded) = pak::collect_entries(grf_paths, data_folder, content_dirs);
+    let lifthrasir_tooling::PackInputs {
+        entries,
+        skipped,
+        excluded,
+        diagnostics,
+    } = pak::collect_entries(grf_paths, data_folder, content_dirs);
+    for diagnostic in diagnostics {
+        match diagnostic.level {
+            lifthrasir_tooling::DiagnosticLevel::Info => println!("{}", diagnostic.message),
+            lifthrasir_tooling::DiagnosticLevel::Warning => {
+                eprintln!("Warning: {}", diagnostic.message)
+            }
+        }
+    }
 
     let jobs = jobs
         .or_else(|| std::thread::available_parallelism().ok().map(|n| n.get()))

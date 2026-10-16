@@ -1,3 +1,4 @@
+use crate::OperationReport;
 use crate::decompile::decompile;
 use crate::encoding::decode_euckr;
 use crate::grf_vfs::GrfVfs;
@@ -12,7 +13,7 @@ use std::path::Path;
 /// Ships as bytecode.
 const WEAPONTABLE_PATH: &str = "data/luafiles514/lua files/datainfo/weapontable.lub";
 
-pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
+pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<OperationReport> {
     let lua = lua::new_vm_unbounded().map_err(lua_err)?;
     lua::exec_chunk(&lua, &read_grf_lub(vfs, WEAPONTABLE_PATH)?).map_err(lua_err)?;
 
@@ -23,13 +24,17 @@ pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
     let dest = out.join("weapon_data.ron");
     std::fs::write(&dest, ron).with_context(|| format!("writing {}", dest.display()))?;
 
-    println!(
+    let mut report = OperationReport {
+        outputs: vec![dest],
+        ..Default::default()
+    };
+    report.info(format!(
         "weapon_data.ron: {} names, {} hit_sounds, {} bow_types",
         weapon_data.names.len(),
         weapon_data.hit_sounds.len(),
         weapon_data.bow_types.len()
-    );
-    Ok(())
+    ));
+    Ok(report)
 }
 
 fn lua_err(e: mlua::Error) -> anyhow::Error {

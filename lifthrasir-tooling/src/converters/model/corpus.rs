@@ -165,7 +165,7 @@ pub fn inventory(vfs: &GrfVfs, extracted_root: &Path) -> anyhow::Result<Prefligh
     relevant.extend(rsw_assets.iter().copied());
     relevant.sort_by_key(|asset| (asset.source_index, asset.entry.offset));
     validate_extraction(&relevant, extracted_root)?;
-    eprintln!(
+    log::info!(
         "corpus: scanning {} extracted models and {} effective worlds",
         model_assets.len(),
         rsw_assets.len()
@@ -251,7 +251,7 @@ fn extract_all(
     root: &Path,
     errors: &mut Vec<InventoryError>,
 ) {
-    eprintln!("corpus: extracting {} files from GRFs", assets.len());
+    log::info!("corpus: extracting {} files from GRFs", assets.len());
     let total = assets.len();
     let mut extracted = 0;
     vfs.visit_physical(assets.iter().copied(), |asset, bytes| {
@@ -270,7 +270,7 @@ fn extract_all(
         }
         extracted += 1;
         if extracted % 1_000 == 0 || extracted == total {
-            eprintln!("corpus: extracted {extracted}/{total}");
+            log::info!("corpus: extracted {extracted}/{total}");
         }
     });
 }

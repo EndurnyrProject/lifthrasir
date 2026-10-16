@@ -197,6 +197,28 @@ fn current_workspace_boundaries() {
 }
 
 #[test]
+fn tooling_is_bevy_free_and_does_not_own_proto_generation() {
+    assert_package_present("lifthrasir-tooling");
+    assert_no_dependency(
+        "lifthrasir-tooling",
+        &[
+            "bevy",
+            "lifthrasir-client",
+            "lifthrasir-client-ui",
+            "lifthrasir-assets",
+            "lifthrasir-runtime",
+            "lifthrasir-ui",
+            "net-contract",
+            "net-aesir",
+            "protox",
+            "prost-build",
+            "clap",
+            "indicatif",
+        ],
+    );
+}
+
+#[test]
 fn client_package_replaces_engine_without_a_compatibility_package() {
     assert_package_present("lifthrasir-client");
     assert!(

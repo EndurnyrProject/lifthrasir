@@ -8,38 +8,10 @@ name = "ro-to-lifthrasir-cli"
 path = "src/main.rs"
 
 [dependencies]
-ro-formats = { path = "../ro-formats", features = ["gr2"] }
-glam = { workspace = true }
-lifthrasir-data = { path = "../lifthrasir-data" }
+lifthrasir-tooling = { path = "../lifthrasir-tooling" }
 clap = { workspace = true }
 anyhow = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true, features = ["raw_value"] }
-ron = { workspace = true }
-toml = { workspace = true }
-regex = { workspace = true }
-encoding_rs = { workspace = true }
-mlua = { version = "0.12", features = ["lua51", "vendored"] }
-luadec = "0.2"
-gag = "1.0"
+log = "0.4"
 protox = "0.9"
 prost-build = { workspace = true }
-rayon = "1"
 tempfile = { workspace = true }
-image = { workspace = true }
-zstd = "0.13"
-blake3 = "1.8"
-gltf-json = { workspace = true, features = [
-    "KHR_lights_punctual",
-    "KHR_materials_unlit",
-] }
-# Re-enables gltf's default `import`/`utils`, which the workspace dep drops.
-gltf = { workspace = true, features = [
-    "import",
-    "utils",
-    "KHR_lights_punctual",
-    "KHR_materials_unlit",
-] }
-
-[dev-dependencies]
-ktx2 = "0.5"

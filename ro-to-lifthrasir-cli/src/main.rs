@@ -1,12 +1,7 @@
-mod config;
-mod converters;
-mod decompile;
-mod encoding;
-mod grf_vfs;
-mod lua;
 mod proto_gen;
 
 use clap::{Parser, Subcommand};
+use lifthrasir_tooling::{GrfVfs, LoaderConfig};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -108,14 +103,61 @@ enum ModelCorpusCommand {
     },
 }
 
+struct CorpusLogger;
+impl log::Log for CorpusLogger {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+    fn log(&self, record: &log::Record<'_>) {
+        if self.enabled(record.metadata()) {
+            eprintln!("{}", record.args());
+        }
+    }
+    fn flush(&self) {}
+}
+static CORPUS_LOGGER: CorpusLogger = CorpusLogger;
+
+fn render_report(report: &lifthrasir_tooling::OperationReport) {
+    for diagnostic in &report.diagnostics {
+        match diagnostic.level {
+            lifthrasir_tooling::DiagnosticLevel::Info => println!("{}", diagnostic.message),
+            lifthrasir_tooling::DiagnosticLevel::Warning => eprintln!("{}", diagnostic.message),
+        }
+    }
+}
+
+fn present(result: anyhow::Result<lifthrasir_tooling::OperationReport>) -> anyhow::Result<()> {
+    match result {
+        Ok(report) => {
+            render_report(&report);
+            Ok(())
+        }
+        Err(error) => {
+            if let Some(batch) = error.downcast_ref::<lifthrasir_tooling::BatchFailure>() {
+                render_report(&batch.report);
+            }
+            Err(error)
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    if matches!(&cli.command, Command::ModelCorpus { .. }) {
+        log::set_logger(&CORPUS_LOGGER)
+            .map_err(|error| anyhow::anyhow!("installing corpus diagnostics logger: {error}"))?;
+        log::set_max_level(log::LevelFilter::Info);
+    }
     match cli.command {
         Command::Convert { loader, out, only } => {
-            let config = config::LoaderConfig::from_path(&loader)?;
+            let config = LoaderConfig::from_path(&loader)?;
             let grfs = config.grfs_by_priority();
-            let vfs = grf_vfs::GrfVfs::open(&grfs)?;
-            converters::run(only.as_deref(), &vfs, &out)?;
+            let vfs = GrfVfs::open(&grfs)?;
+            present(lifthrasir_tooling::convert_catalogs(
+                only.as_deref(),
+                &vfs,
+                &out,
+            ))?;
         }
         Command::ConvertMap {
             map,
@@ -124,10 +166,16 @@ fn main() -> anyhow::Result<()> {
             models_dir,
             force_models,
         } => {
-            let config = config::LoaderConfig::from_path(&loader)?;
+            let config = LoaderConfig::from_path(&loader)?;
             let grfs = config.grfs_by_priority();
-            let vfs = grf_vfs::GrfVfs::open(&grfs)?;
-            converters::map::run(&vfs, &map, &out, &models_dir, force_models)?;
+            let vfs = GrfVfs::open(&grfs)?;
+            present(lifthrasir_tooling::convert_map(
+                &vfs,
+                &map,
+                &out,
+                &models_dir,
+                force_models,
+            ))?;
         }
         Command::ConvertMaps {
             loader,
@@ -135,10 +183,15 @@ fn main() -> anyhow::Result<()> {
             models_dir,
             force_models,
         } => {
-            let config = config::LoaderConfig::from_path(&loader)?;
+            let config = LoaderConfig::from_path(&loader)?;
             let grfs = config.grfs_by_priority();
-            let vfs = grf_vfs::GrfVfs::open(&grfs)?;
-            converters::maps::run(&vfs, &out, &models_dir, force_models)?;
+            let vfs = GrfVfs::open(&grfs)?;
+            present(lifthrasir_tooling::convert_maps(
+                &vfs,
+                &out,
+                &models_dir,
+                force_models,
+            ))?;
         }
         Command::ConvertProps {
             loader,
@@ -146,22 +199,31 @@ fn main() -> anyhow::Result<()> {
             model,
             force,
         } => {
-            let config = config::LoaderConfig::from_path(&loader)?;
+            let config = LoaderConfig::from_path(&loader)?;
             let grfs = config.grfs_by_priority();
-            let vfs = grf_vfs::GrfVfs::open(&grfs)?;
-            converters::props::run(&vfs, &models_dir, &model, force)?;
+            let vfs = GrfVfs::open(&grfs)?;
+            present(lifthrasir_tooling::convert_props(
+                &vfs,
+                &models_dir,
+                &model,
+                force,
+            ))?;
         }
         Command::ConvertGr2 { loader, out, model } => {
-            let config = config::LoaderConfig::from_path(&loader)?;
-            let vfs = grf_vfs::GrfVfs::open(&config.grfs_by_priority())?;
-            converters::gr2::run(&vfs, &out, model.as_deref())?;
+            let config = LoaderConfig::from_path(&loader)?;
+            let vfs = GrfVfs::open(&config.grfs_by_priority())?;
+            present(lifthrasir_tooling::convert_gr2(
+                &vfs,
+                &out,
+                model.as_deref(),
+            ))?;
         }
         Command::ModelCorpus { action } => match action {
             ModelCorpusCommand::Extract { loader, out } => {
-                let config = config::LoaderConfig::from_path(&loader)?;
+                let config = LoaderConfig::from_path(&loader)?;
                 let grfs = config.grfs_by_priority();
-                let vfs = grf_vfs::GrfVfs::open(&grfs)?;
-                let count = converters::model::corpus::extract(&vfs, &out)?;
+                let vfs = GrfVfs::open(&grfs)?;
+                let count = lifthrasir_tooling::extract_corpus(&vfs, &out)?;
                 println!("extracted {count} corpus files to {}", out.display());
             }
             ModelCorpusCommand::Scan {
@@ -169,11 +231,10 @@ fn main() -> anyhow::Result<()> {
                 extracted,
                 report,
             } => {
-                let config = config::LoaderConfig::from_path(&loader)?;
+                let config = LoaderConfig::from_path(&loader)?;
                 let grfs = config.grfs_by_priority();
-                let vfs = grf_vfs::GrfVfs::open(&grfs)?;
-                let preflight =
-                    converters::model::corpus::write_preflight(&vfs, &report, &extracted)?;
+                let vfs = GrfVfs::open(&grfs)?;
+                let preflight = lifthrasir_tooling::write_preflight(&vfs, &report, &extracted)?;
                 println!(
                     "models: {} physical / {} effective, placements: {}, errors: {}",
                     preflight.summary.physical_models,
@@ -196,12 +257,11 @@ fn main() -> anyhow::Result<()> {
                 report,
                 force,
             } => {
-                let config = config::LoaderConfig::from_path(&loader)?;
+                let config = LoaderConfig::from_path(&loader)?;
                 let grfs = config.grfs_by_priority();
-                let vfs = grf_vfs::GrfVfs::open(&grfs)?;
-                let corpus = converters::model::corpus::convert_corpus(
-                    &vfs, &extracted, &out, &report, force,
-                )?;
+                let vfs = GrfVfs::open(&grfs)?;
+                let corpus =
+                    lifthrasir_tooling::convert_corpus(&vfs, &extracted, &out, &report, force)?;
                 println!(
                     "models: {}, supported RSM2: {} ({} well-formed), placements: {}, blockers: {}",
                     corpus.totals.physical_models,
@@ -223,4 +283,45 @@ fn main() -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn command_names_defaults_and_proto_dispatch_remain_compatible() {
+        Cli::command().debug_assert();
+        let cli = Cli::try_parse_from(["ro-to-lifthrasir-cli", "convert-map", "--map", "prontera"])
+            .unwrap();
+        let Command::ConvertMap {
+            map,
+            loader,
+            out,
+            models_dir,
+            force_models,
+        } = cli.command
+        else {
+            panic!("wrong command");
+        };
+        assert_eq!(map, "prontera");
+        assert_eq!(loader, PathBuf::from("assets/convert.toml"));
+        assert_eq!(out, PathBuf::from("assets/data/maps"));
+        assert_eq!(models_dir, PathBuf::from("assets/data/models"));
+        assert!(!force_models);
+        assert!(matches!(
+            Cli::try_parse_from([
+                "ro-to-lifthrasir-cli",
+                "gen-proto",
+                "--src",
+                "proto",
+                "--out",
+                "out.rs"
+            ])
+            .unwrap()
+            .command,
+            Command::GenProto { .. }
+        ));
+    }
 }

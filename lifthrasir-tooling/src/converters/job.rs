@@ -1,3 +1,4 @@
+use crate::OperationReport;
 use crate::converters::read_system_en;
 use crate::decompile::decompile;
 use crate::encoding::decode_euckr;
@@ -20,7 +21,7 @@ const GRF_LUB_PATHS: [&str; 3] = [
 
 const PCJOBNAME_PATH: &str = "LuaFiles514/pcjobname.lub";
 
-pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
+pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<OperationReport> {
     let lua = lua::new_vm().map_err(lua_err)?;
 
     lua::exec_chunk(&lua, &read_grf_lub(vfs, GRF_LUB_PATHS[0])?).map_err(lua_err)?;
@@ -36,12 +37,16 @@ pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
     let dest = out.join("job_data.ron");
     std::fs::write(&dest, ron).with_context(|| format!("writing {}", dest.display()))?;
 
-    println!(
+    let mut report = OperationReport {
+        outputs: vec![dest],
+        ..Default::default()
+    };
+    report.info(format!(
         "job_data.ron: {} npc sprites, {} display names",
         job_data.npc_sprites.len(),
         job_data.display_names.len()
-    );
-    Ok(())
+    ));
+    Ok(report)
 }
 
 fn lua_err(e: mlua::Error) -> anyhow::Error {

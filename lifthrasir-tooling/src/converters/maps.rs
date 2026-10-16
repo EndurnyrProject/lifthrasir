@@ -1,3 +1,4 @@
+use crate::OperationReport;
 use crate::converters::map;
 use crate::converters::model::{ModelCache, TexturePool};
 use crate::grf_vfs::{GrfVfs, PhysicalAsset, effective_entries, normalize_path};
@@ -13,25 +14,26 @@ pub fn run(
     out_dir: &Path,
     models_dir: &Path,
     force_models: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<OperationReport> {
     let assets: Vec<_> = vfs.physical_assets().collect();
     let inventory = map_inventory(&assets);
 
+    let mut report = OperationReport::default();
     for (map_name, missing) in &inventory.incomplete {
-        println!(
+        report.info(format!(
             "skipping map '{map_name}': no {} in the GRFs",
             missing.join(", ")
-        );
+        ));
     }
 
     // One texture pool and one model cache for the whole run: a prop shared
     // by many maps converts once, and parallel maps never step on each other.
     let pool = TexturePool::new(models_dir);
     let cache = ModelCache::default();
-    let failed = inventory
+    let results: Vec<_> = inventory
         .convertible
         .par_iter()
-        .filter(|map_name| {
+        .map(|map_name| {
             map::run_shared(
                 vfs,
                 map_name,
@@ -41,18 +43,22 @@ pub fn run(
                 &pool,
                 &cache,
             )
-            .inspect_err(|error| eprintln!("failed to convert map '{map_name}': {error:#}"))
-            .is_err()
         })
-        .count();
-    let converted = inventory.convertible.len() - failed;
-
-    println!(
-        "maps: {converted} converted, {failed} failed, {} skipped",
+        .collect();
+    let mut failures = Vec::new();
+    let mut converted = 0;
+    for result in results {
+        if report.include(result, &mut failures) {
+            converted += 1;
+        }
+    }
+    report.diagnostics.extend(pool.diagnostics());
+    report.info(format!(
+        "maps: {converted} converted, {} failed, {} skipped",
+        failures.len(),
         inventory.incomplete.len()
-    );
-    anyhow::ensure!(failed == 0, "map conversion failed for {failed} maps");
-    Ok(())
+    ));
+    report.finish(failures)
 }
 
 /// Map names split by whether every source a conversion needs is present.

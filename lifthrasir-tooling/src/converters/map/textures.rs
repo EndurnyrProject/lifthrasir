@@ -24,6 +24,7 @@ pub fn normalize_textures(
     vfs: &GrfVfs,
     texture_names: &[String],
     out_dir: &Path,
+    diagnostics: &mut Vec<crate::Diagnostic>,
 ) -> anyhow::Result<Vec<TextureOut>> {
     let tex_dir = out_dir.join("tex");
     std::fs::create_dir_all(&tex_dir).with_context(|| format!("creating {}", tex_dir.display()))?;
@@ -33,7 +34,7 @@ pub fn normalize_textures(
     texture_names
         .iter()
         .zip(sanitized_names)
-        .map(|(name, sanitized)| normalize_one(vfs, name, &sanitized, &tex_dir))
+        .map(|(name, sanitized)| normalize_one(vfs, name, &sanitized, &tex_dir, diagnostics))
         .collect()
 }
 
@@ -63,6 +64,7 @@ fn normalize_one(
     name: &str,
     sanitized: &str,
     tex_dir: &Path,
+    diagnostics: &mut Vec<crate::Diagnostic>,
 ) -> anyhow::Result<TextureOut> {
     let logical_path = format!("data/texture/{name}");
 
@@ -74,7 +76,10 @@ fn normalize_one(
         Some(source_bytes) => texture_bytes_to_ktx2(name, &source_bytes)
             .with_context(|| format!("converting texture: {logical_path}"))?,
         None => {
-            println!("  missing texture, using a placeholder: {logical_path}");
+            diagnostics.push(crate::Diagnostic {
+                level: crate::DiagnosticLevel::Warning,
+                message: format!("  missing texture, using a placeholder: {logical_path}"),
+            });
             crate::converters::model::fallback_texture_ktx2()
                 .with_context(|| format!("building placeholder for {logical_path}"))?
         }
@@ -284,8 +289,13 @@ mod tests {
         let vfs = GrfVfs::open(&[] as &[&GrfEntry]).expect("empty vfs opens");
         let out = tempfile::tempdir().expect("tempdir");
 
-        let textures = normalize_textures(&vfs, &["grass01.bmp".to_string()], out.path())
-            .expect("a missing texture must not fail the map");
+        let textures = normalize_textures(
+            &vfs,
+            &["grass01.bmp".to_string()],
+            out.path(),
+            &mut Vec::new(),
+        )
+        .expect("a missing texture must not fail the map");
 
         assert_eq!(textures.len(), 1);
         assert_eq!(textures[0].relative_path, "tex/grass01_bmp.ktx2");

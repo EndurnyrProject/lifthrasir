@@ -1,3 +1,4 @@
+use crate::OperationReport;
 use crate::decompile::decompile;
 use crate::encoding::decode_euckr;
 use crate::grf_vfs::GrfVfs;
@@ -13,7 +14,7 @@ use std::path::Path;
 const ACCESSORYID_PATH: &str = "data/luafiles514/lua files/datainfo/accessoryid.lub";
 const ACCNAME_PATH: &str = "data/luafiles514/lua files/datainfo/accname.lub";
 
-pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
+pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<OperationReport> {
     let lua = lua::new_vm_unbounded().map_err(lua_err)?;
     lua::exec_chunk(&lua, &read_grf_lub(vfs, ACCESSORYID_PATH)?).map_err(lua_err)?;
     lua::exec_chunk(&lua, &read_grf_lub(vfs, ACCNAME_PATH)?).map_err(lua_err)?;
@@ -25,11 +26,15 @@ pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
     let dest = out.join("accessory_data.ron");
     std::fs::write(&dest, ron).with_context(|| format!("writing {}", dest.display()))?;
 
-    println!(
+    let mut report = OperationReport {
+        outputs: vec![dest],
+        ..Default::default()
+    };
+    report.info(format!(
         "accessory_data.ron: {} accessories",
         accessory_data.names.len()
-    );
-    Ok(())
+    ));
+    Ok(report)
 }
 
 fn lua_err(e: mlua::Error) -> anyhow::Error {

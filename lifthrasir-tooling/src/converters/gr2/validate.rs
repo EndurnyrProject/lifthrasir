@@ -12,6 +12,7 @@ pub(super) fn validate(
     bytes: &[u8],
     source: &Gr2File,
     clips: &[(&str, &Gr2File)],
+    report: &mut crate::OperationReport,
 ) -> anyhow::Result<()> {
     let parsed = gltf::Gltf::from_slice(bytes)?;
     ensure!(
@@ -254,7 +255,9 @@ pub(super) fn validate(
                 }
             }
         }
-        println!("  {name}: {duration:.3}s, max pose error {worst:.6} (limit {tolerance:.6})");
+        report.info(format!(
+            "  {name}: {duration:.3}s, max pose error {worst:.6} (limit {tolerance:.6})"
+        ));
     }
     Ok(())
 }

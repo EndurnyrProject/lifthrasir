@@ -1,3 +1,4 @@
+use crate::OperationReport;
 use crate::converters::read_system_en;
 use crate::encoding::decode_euckr;
 use crate::grf_vfs::GrfVfs;
@@ -8,7 +9,7 @@ use std::path::Path;
 
 const ITEMINFO_PATH: &str = "LuaFiles514/itemInfo.lua";
 
-pub fn run(_vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
+pub fn run(_vfs: &GrfVfs, out: &Path) -> anyhow::Result<OperationReport> {
     let src = read_system_en(ITEMINFO_PATH)?;
 
     let lua = lua::new_vm_unbounded().map_err(lua_err)?;
@@ -29,8 +30,12 @@ pub fn run(_vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
     let dest = out.join("item_data.ron");
     std::fs::write(&dest, ron).with_context(|| format!("writing {}", dest.display()))?;
 
-    println!("item_data.ron: {} items", item_data.items.len());
-    Ok(())
+    let mut report = OperationReport {
+        outputs: vec![dest],
+        ..Default::default()
+    };
+    report.info(format!("item_data.ron: {} items", item_data.items.len()));
+    Ok(report)
 }
 
 fn lua_err(e: mlua::Error) -> anyhow::Error {

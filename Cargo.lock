@@ -3908,6 +3908,7 @@ dependencies = [
  "clap",
  "indicatif",
  "lifthrasir-pak",
+ "lifthrasir-tooling",
  "ro-formats",
  "tempfile",
  "toml",
@@ -4815,6 +4816,35 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+]
+
+[[package]]
+name = "lifthrasir-tooling"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "encoding_rs",
+ "gag",
+ "glam 0.32.1",
+ "gltf",
+ "gltf-json",
+ "image",
+ "ktx2",
+ "lifthrasir-data",
+ "lifthrasir-pak",
+ "log",
+ "luadec",
+ "mlua",
+ "rayon",
+ "regex",
+ "ro-formats",
+ "ron 0.12.2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+ "zstd",
 ]
 
 [[package]]
@@ -7011,29 +7041,12 @@ name = "ro-to-lifthrasir-cli"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "blake3",
  "clap",
- "encoding_rs",
- "gag",
- "glam 0.32.1",
- "gltf",
- "gltf-json",
- "image",
- "ktx2",
- "lifthrasir-data",
- "luadec",
- "mlua",
+ "lifthrasir-tooling",
+ "log",
  "prost-build",
  "protox",
- "rayon",
- "regex",
- "ro-formats",
- "ron 0.12.2",
- "serde",
- "serde_json",
  "tempfile",
- "toml",
- "zstd",
 ]
 
 [[package]]

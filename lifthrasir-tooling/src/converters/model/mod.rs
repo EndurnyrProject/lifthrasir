@@ -294,6 +294,7 @@ pub fn is_supported_version(bytes: &[u8]) -> anyhow::Result<bool> {
 pub struct TexturePool {
     tex_dir: PathBuf,
     state: Mutex<PoolState>,
+    diagnostics: Mutex<Vec<crate::Diagnostic>>,
 }
 
 #[derive(Default)]
@@ -308,7 +309,15 @@ impl TexturePool {
         Self {
             tex_dir: models_dir.join("tex"),
             state: Mutex::new(PoolState::default()),
+            diagnostics: Mutex::new(Vec::new()),
         }
+    }
+
+    pub(crate) fn diagnostics(&self) -> Vec<crate::Diagnostic> {
+        self.diagnostics
+            .lock()
+            .expect("texture diagnostics lock poisoned")
+            .clone()
     }
 
     /// The pooled KTX2 for `source_name`, relative to `models_dir`.
@@ -344,7 +353,8 @@ impl TexturePool {
             return Ok(texture);
         }
 
-        let (ktx2_bytes, used_fallback) = encode_pooled_texture(vfs, source_name, replace_bik)?;
+        let (ktx2_bytes, used_fallback) =
+            encode_pooled_texture(vfs, source_name, replace_bik, &self.diagnostics)?;
 
         let mut state = self.state.lock().expect("texture pool lock poisoned");
         match state.claimed.get(&sanitized) {
@@ -446,6 +456,7 @@ fn encode_pooled_texture(
     vfs: &impl AssetRead,
     source_name: &str,
     replace_bik: bool,
+    diagnostics: &Mutex<Vec<crate::Diagnostic>>,
 ) -> anyhow::Result<(Vec<u8>, bool)> {
     let logical_path = format!("data/texture/{source_name}");
     let is_bik = source_name
@@ -462,7 +473,15 @@ fn encode_pooled_texture(
         // wrong stand-in rather than failing the model, but the
         // substitution is reported so it cannot pass unnoticed.
         None => {
-            println!("  missing texture, using a placeholder: {logical_path}");
+            let message = format!("  missing texture, using a placeholder: {logical_path}");
+            log::warn!("{message}");
+            diagnostics
+                .lock()
+                .expect("texture diagnostics lock poisoned")
+                .push(crate::Diagnostic {
+                    level: crate::DiagnosticLevel::Warning,
+                    message,
+                });
             Ok((fallback_texture_ktx2()?, true))
         }
     }

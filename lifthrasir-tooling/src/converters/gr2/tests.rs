@@ -11,7 +11,13 @@ fn synthetic_skin_remaps_bindings_and_preserves_source_axes() {
     let model = fixtures::model();
     let clips = [("idle", &model)];
     let bytes = writer::build(&model, &clips).unwrap();
-    validate::validate(&bytes, &model, &clips).unwrap();
+    validate::validate(
+        &bytes,
+        &model,
+        &clips,
+        &mut crate::OperationReport::default(),
+    )
+    .unwrap();
     let (document, buffers, _) = gltf::import_slice(bytes).unwrap();
     let primitive = document
         .meshes()

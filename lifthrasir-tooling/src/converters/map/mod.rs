@@ -8,6 +8,7 @@ pub mod writer;
 
 use crate::converters::model::{self, ConvertOutcome, ModelCache, TexturePool};
 use crate::grf_vfs::{AssetRead, GrfVfs};
+use crate::{BatchFailure, OperationReport};
 use anyhow::Context;
 use ro_formats::{RoGround, RoWorld, RswObject};
 use std::collections::HashSet;
@@ -25,10 +26,10 @@ pub fn run(
     out_dir: &Path,
     models_dir: &Path,
     force_models: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<OperationReport> {
     let pool = TexturePool::new(models_dir);
     let cache = ModelCache::default();
-    run_shared(
+    let result = run_shared(
         vfs,
         map_name,
         out_dir,
@@ -36,7 +37,8 @@ pub fn run(
         force_models,
         &pool,
         &cache,
-    )
+    );
+    crate::report::add_diagnostics(result, pool.diagnostics())
 }
 
 /// `run` against a run-wide texture pool and model cache, shared by every map
@@ -50,61 +52,78 @@ pub fn run_shared(
     force_models: bool,
     pool: &TexturePool,
     cache: &ModelCache,
-) -> anyhow::Result<()> {
-    let rsw_bytes = read_source(vfs, map_name, "rsw")?;
-    let gnd_bytes = read_source(vfs, map_name, "gnd")?;
-    let gat_bytes = read_source(vfs, map_name, "gat")?;
+) -> anyhow::Result<OperationReport> {
+    let mut report = OperationReport::default();
+    let result: anyhow::Result<()> = (|| {
+        let rsw_bytes = read_source(vfs, map_name, "rsw")?;
+        let gnd_bytes = read_source(vfs, map_name, "gnd")?;
+        let gat_bytes = read_source(vfs, map_name, "gat")?;
 
-    let world = RoWorld::from_bytes(&rsw_bytes)
-        .with_context(|| format!("parsing RSW of map '{map_name}'"))?;
-    let ground = RoGround::from_bytes(&gnd_bytes)
-        .with_context(|| format!("parsing GND of map '{map_name}'"))?;
-    let primitives = terrain::build_terrain(&ground)
-        .with_context(|| format!("building terrain of map '{map_name}'"))?;
+        let world = RoWorld::from_bytes(&rsw_bytes)
+            .with_context(|| format!("parsing RSW of map '{map_name}'"))?;
+        let ground = RoGround::from_bytes(&gnd_bytes)
+            .with_context(|| format!("parsing GND of map '{map_name}'"))?;
+        let primitives = terrain::build_terrain(&ground)
+            .with_context(|| format!("building terrain of map '{map_name}'"))?;
 
-    report_dropped_objects(&world);
+        report_dropped_objects(&world, &mut report);
 
-    let (converted_models, prop_counts) =
-        convert_props(vfs, map_name, &world, models_dir, force_models, pool, cache)?;
+        let (converted_models, prop_counts) =
+            convert_props(vfs, map_name, &world, models_dir, force_models, pool, cache)?;
 
-    let indoor = map_is_indoor(vfs, map_name)?;
+        let indoor = map_is_indoor(vfs, map_name)?;
 
-    let map_dir = out_dir.join(map_name);
-    std::fs::create_dir_all(&map_dir).with_context(|| format!("creating {}", map_dir.display()))?;
-    let textures = textures::normalize_textures(vfs, &ground.textures, &map_dir)?;
+        let map_dir = out_dir.join(map_name);
+        std::fs::create_dir_all(&map_dir)
+            .with_context(|| format!("creating {}", map_dir.display()))?;
+        let textures =
+            textures::normalize_textures(vfs, &ground.textures, &map_dir, &mut report.diagnostics)?;
 
-    let inputs = writer::MapGlbInputs {
-        map_name,
-        ground: &ground,
-        world: &world,
-        primitives: &primitives,
-        textures: &textures,
-        gat_bytes: &gat_bytes,
-        gnd_bytes: &gnd_bytes,
-        rsw_bytes: &rsw_bytes,
-        converted_models: &converted_models,
-        indoor,
-    };
-    let glb_path = map_dir.join(format!("{map_name}.glb"));
-    let counts = write_and_validate_glb_atomically(&glb_path, &inputs)?;
-    println!(
-        "{map_name}: {counts}, {} textures, {prop_counts} -> {}",
-        textures.len(),
-        glb_path.display()
-    );
-
-    Ok(())
+        let inputs = writer::MapGlbInputs {
+            map_name,
+            ground: &ground,
+            world: &world,
+            primitives: &primitives,
+            textures: &textures,
+            gat_bytes: &gat_bytes,
+            gnd_bytes: &gnd_bytes,
+            rsw_bytes: &rsw_bytes,
+            converted_models: &converted_models,
+            indoor,
+        };
+        let glb_path = map_dir.join(format!("{map_name}.glb"));
+        let counts = write_and_validate_glb_atomically(&glb_path, &inputs)?;
+        report.info(format!(
+            "{map_name}: {counts}, {} textures, {prop_counts} -> {}",
+            textures.len(),
+            glb_path.display()
+        ));
+        report.outputs.push(glb_path);
+        Ok(())
+    })();
+    match result {
+        Ok(()) => Ok(report),
+        Err(error) => {
+            let message = format!("failed to convert map '{map_name}': {error:#}");
+            report.warning(message.clone());
+            Err(BatchFailure {
+                report,
+                failures: vec![message],
+            }
+            .into())
+        }
+    }
 }
 
 /// Names every object `writer::emitted_objects` drops for carrying a number
 /// glTF cannot express, so corrupt retail records cannot pass unnoticed.
-fn report_dropped_objects(world: &RoWorld) {
+fn report_dropped_objects(world: &RoWorld, report: &mut OperationReport) {
     world
         .objects
         .iter()
         .filter(|object| !writer::is_representable(object))
         .for_each(|object| {
-            println!(
+            report.warning(format!(
                 "  not a finite placement, dropping {}: '{}'",
                 match object {
                     RswObject::Model(_) => "prop",
@@ -113,7 +132,7 @@ fn report_dropped_objects(world: &RoWorld) {
                     RswObject::Effect(_) => "effect",
                 },
                 writer::object_name(object)
-            );
+            ));
         });
 }
 

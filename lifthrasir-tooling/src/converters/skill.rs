@@ -1,3 +1,4 @@
+use crate::OperationReport;
 use crate::decompile::decompile;
 use crate::encoding::decode_euckr;
 use crate::grf_vfs::GrfVfs;
@@ -19,7 +20,7 @@ const SKILLDESCRIPT_PATH: &str = "data/luafiles514/lua files/skillinfoz/skilldes
 const STUB_JOBID: &[u8] =
     b"JOBID = setmetatable({}, { __index = function(_, k) return tostring(k) end })";
 
-pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
+pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<OperationReport> {
     // SKILL_INFO_LIST / SKILL_DESCRIPT key off `[SKID.NAME]`, so SKID must exist first.
     // The tables are large; use the unbounded VM like the item converter.
     let lua = lua::new_vm_unbounded().map_err(lua_err)?;
@@ -37,8 +38,15 @@ pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<()> {
     let dest = out.join("skill_data.ron");
     std::fs::write(&dest, ron).with_context(|| format!("writing {}", dest.display()))?;
 
-    println!("skill_data.ron: {} skills", skill_data.skills.len());
-    Ok(())
+    let mut report = OperationReport {
+        outputs: vec![dest],
+        ..Default::default()
+    };
+    report.info(format!(
+        "skill_data.ron: {} skills",
+        skill_data.skills.len()
+    ));
+    Ok(report)
 }
 
 fn lua_err(e: mlua::Error) -> anyhow::Error {
