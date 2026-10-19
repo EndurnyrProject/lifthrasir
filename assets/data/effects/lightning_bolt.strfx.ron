@@ -1,6 +1,6 @@
 // Lightning Bolt (MG_LIGHTNINGBOLT) - authored STR-style effect.
 //
-// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs):
+// Coordinate / units convention (see crates/lifthrasir-runtime/src/effects/playback.rs):
 //   - offset & quad are in STR screen pixels. The runtime maps a point to world
 //     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, with EFFECT_ORIGIN = (319, 291)
 //     and STR_WORLD_SCALE = 0.2.

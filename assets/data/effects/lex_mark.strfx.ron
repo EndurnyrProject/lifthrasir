@@ -1,7 +1,7 @@
 // Lex Aeterna (PR_LEXAETERNA) - persistent status mark, authored STR-style
 // effect.
 //
-// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// Coordinate / units convention (see crates/lifthrasir-runtime/src/effects/playback.rs,
 // mirrors heal.strfx.ron / inc_agi.strfx.ron):
 //   - offset & quad are in STR screen pixels. The runtime maps a point to world
 //     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),

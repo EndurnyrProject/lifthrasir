@@ -7,7 +7,7 @@ description: "Use when building Bevy 0.19 UI with BSN scenes (the bsn! macro, sc
 
 The next-generation scene system (BSN) and the `bevy_feathers` widget toolkit, as they actually ship in **Bevy 0.19** (verified against the released crates and the official `examples/scene/bsn.rs` + `examples/large_scenes/bevy_city/` examples). This is the modern, declarative way to author `bevy_ui` — use it for new windows/panels/widgets instead of imperative `commands.spawn` trees.
 
-> Lifthrasir context: the equipment window (`lifthrasir-ui/src/widgets/equipment_window/`) is the canonical worked example in this repo — read `scene.rs` for a full declarative window, `mod.rs` for plugin/toggle/markers, `slots.rs` for the data-sync-via-system pattern, and `theme/feathers_theme.rs` for the token overrides. See [[lifthrasir-bevy-plugins]] for the rest of the ecosystem (those are still Bevy 0.18-era notes; this skill is 0.19).
+> Lifthrasir context: the equipment window (`crates/lifthrasir-client-ui/src/widgets/equipment_window/`) is the canonical worked example in this repo — read `scene.rs` for a full declarative window, `mod.rs` for plugin/toggle/markers, `slots.rs` for the data-sync-via-system pattern, and `crates/lifthrasir-ui/src/theme/feathers_theme.rs` for shared token overrides. See [[lifthrasir-bevy-plugins]] for the rest of the ecosystem (those are still Bevy 0.18-era notes; this skill is 0.19).
 
 ## The one mistake to avoid
 
@@ -236,7 +236,7 @@ So: **structure + behavior in `bsn!`; live data in a system keyed on marker comp
 
 ## Reference
 
-- This repo's worked example: `lifthrasir-ui/src/widgets/equipment_window/{scene,mod,slots}.rs` + `theme/feathers_theme.rs`.
+- This repo's worked example: `crates/lifthrasir-client-ui/src/widgets/equipment_window/{scene,mod,slots}.rs` + `crates/lifthrasir-ui/src/theme/feathers_theme.rs`.
 - Official: `examples/scene/bsn.rs`, `examples/large_scenes/bevy_city/src/{main,settings}.rs` (tag `v0.19.0`). Fetch with
   `gh api "repos/bevyengine/bevy/contents/examples/scene/bsn.rs?ref=v0.19.0" --jq '.content' | base64 -d`.
 - Crate docs: `bevy_scene` lib.rs (the module docs cover Children, `#Name`, `on()`, asset paths, SceneComponent) and `bevy_feathers` `controls/button.rs` + `theme.rs`.

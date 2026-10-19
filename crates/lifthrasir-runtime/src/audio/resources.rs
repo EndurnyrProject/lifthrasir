@@ -1,0 +1,137 @@
+use bevy::prelude::*;
+use bevy_auto_plugin::prelude::auto_init_resource;
+use bevy_kira_audio::AudioInstance;
+
+/// Resource that manages the BGM playback state
+/// Tracks active and fading out audio instances for crossfading
+#[derive(Resource, Debug, Default, Reflect)]
+#[reflect(Resource, Debug)]
+#[auto_init_resource(plugin = crate::audio::ContentAudioPlugin)]
+pub struct BgmManager {
+    /// The currently active BGM instance (playing or fading in)
+    #[reflect(ignore)]
+    pub active_instance: Option<Handle<AudioInstance>>,
+    /// BGM instances that are fading out (will be cleaned up when stopped)
+    #[reflect(ignore)]
+    pub fading_out_instances: Vec<Handle<AudioInstance>>,
+    /// Path to the currently playing track (for duplicate prevention)
+    pub current_track_path: Option<String>,
+}
+
+impl BgmManager {
+    /// Check if a specific track is already playing
+    pub fn is_playing(&self, path: &str) -> bool {
+        self.current_track_path.as_deref() == Some(path)
+    }
+
+    /// Set the active track
+    pub fn set_active(&mut self, instance: Handle<AudioInstance>, path: String) {
+        self.active_instance = Some(instance);
+        self.current_track_path = Some(path);
+    }
+
+    /// Take the active instance and prepare it for fade-out
+    pub fn take_active_for_fadeout(&mut self) -> Option<Handle<AudioInstance>> {
+        self.current_track_path = None;
+        self.active_instance.take()
+    }
+
+    /// Add an instance to the fading out list
+    pub fn add_fading_out(&mut self, instance: Handle<AudioInstance>) {
+        self.fading_out_instances.push(instance);
+    }
+
+    /// Remove stopped instances from the fading out list
+    pub fn cleanup_stopped(&mut self, instances: &Assets<AudioInstance>) {
+        self.fading_out_instances.retain(|handle| {
+            instances
+                .get(handle)
+                .map(|instance| instance.state() != bevy_kira_audio::PlaybackState::Stopped)
+                .unwrap_or(false)
+        });
+    }
+}
+
+/// Resource that stores audio settings (volume, mute state)
+#[derive(Resource, Debug, Reflect)]
+#[reflect(Resource, Debug)]
+#[auto_init_resource(plugin = crate::audio::ContentAudioPlugin)]
+pub struct AudioSettings {
+    /// BGM volume (0.0 to 1.0)
+    pub bgm_volume: f32,
+    /// Whether BGM is muted
+    pub bgm_muted: bool,
+    /// SFX volume (0.0 to 1.0)
+    pub sfx_volume: f32,
+    /// Whether SFX is muted
+    pub sfx_muted: bool,
+    /// Ambience volume (0.0 to 1.0)
+    pub ambience_volume: f32,
+    /// Whether ambience is muted
+    pub ambience_muted: bool,
+}
+
+impl Default for AudioSettings {
+    fn default() -> Self {
+        Self {
+            bgm_volume: 0.7,
+            bgm_muted: false,
+            sfx_volume: 0.8,
+            sfx_muted: false,
+            ambience_volume: 0.8,
+            ambience_muted: false,
+        }
+    }
+}
+
+impl AudioSettings {
+    /// Get the effective BGM volume (considering mute state)
+    pub fn effective_bgm_volume(&self) -> f32 {
+        if self.bgm_muted { 0.0 } else { self.bgm_volume }
+    }
+
+    pub fn effective_sfx_volume(&self) -> f32 {
+        if self.sfx_muted { 0.0 } else { self.sfx_volume }
+    }
+
+    pub fn effective_ambience_volume(&self) -> f32 {
+        if self.ambience_muted {
+            0.0
+        } else {
+            self.ambience_volume
+        }
+    }
+}
+
+/// Marker type for the dedicated sound-effects audio channel.
+#[derive(Resource)]
+pub struct SfxChannel;
+
+/// Marker type for the dedicated ambient-sounds audio channel.
+#[derive(Resource)]
+pub struct AmbienceChannel;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effective_ambience_volume_returns_zero_when_muted() {
+        let settings = AudioSettings {
+            ambience_volume: 0.6,
+            ambience_muted: true,
+            ..Default::default()
+        };
+        assert_eq!(settings.effective_ambience_volume(), 0.0);
+    }
+
+    #[test]
+    fn effective_ambience_volume_returns_volume_when_unmuted() {
+        let settings = AudioSettings {
+            ambience_volume: 0.6,
+            ambience_muted: false,
+            ..Default::default()
+        };
+        assert_eq!(settings.effective_ambience_volume(), 0.6);
+    }
+}

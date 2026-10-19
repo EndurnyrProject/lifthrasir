@@ -61,6 +61,58 @@ Its not mandatory though, since jj is backed by Git, you can keep using Git if y
    ```
    This generates `assets/data/ron/job_data.ron`, which the client loads for job and sprite data. Re-run it whenever the source `.lub` files in your GRFs change.
 
+### Workspace checks and compatibility
+
+Work from the repository root. Packages retain their names after moving to
+`apps/` and `crates/`; do not create a `game-engine` compatibility crate or use
+client modules as SDK forwarding facades. Shared data/pak/tooling stay Bevy-free;
+shared assets/runtime/UI must not acquire client/network policy. See
+[AGENTS.md](AGENTS.md) for ownership and plugin prerequisites.
+
+Run focused packages independently where feature isolation matters, then root
+checks:
+
+```bash
+cargo test --locked -p lifthrasir-assets
+cargo test --locked -p lifthrasir-runtime
+cargo test --locked -p lifthrasir-ui
+cargo test --locked -p lifthrasir-client-ui
+cargo test --locked -p lifthrasir-client --test workspace_boundaries --test shared_plugin_isolation --test settings_compatibility
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cargo fmt --all --check
+cargo check --locked -p lifthrasir --features dev
+cargo check --locked -p lifthrasir --no-default-features
+```
+
+Do not use `--all-features`: DLSS is unsupported on macOS and needs separate
+SDK/hardware conditions elsewhere. The runtime feature guard resolves a separate
+temporary runtime-only consumer, not the workspace-unified importer graph.
+Settings tests use a synthetic temporary `settings.toml`; preserve the production
+application ID `com.github.endurnyrproject.lifthrasir`, group keys `graphics`,
+`audio`, `keybinds`, enum values and existing user files.
+
+`effect_assets` and `gr2_assets` ignored tests are read-only local-content checks.
+Do not run all ignored tests: tooling's `regenerate_game_engine_fixtures` and
+`generate_mip_probe_fixture` are writers. Their outputs live at
+`crates/lifthrasir-runtime/tests/fixtures`; fixture bytes must not be regenerated
+just to validate a move. Historical design notes keep their original paths.
+
+Protobuf generation remains CLI-only and writes
+`crates/net-aesir/src/proto/aesir.net.rs`; use the command in AGENTS.md. Conversion
+and packing commands in README keep root-CWD defaults and **write** output; they
+are setup operations, not read-only verification. Obtain approval for graphical
+or audio previews, and record unobserved hardware checks as deferred.
+
+### Existing release hazards
+
+The release workflow still disables default features without selecting
+`net-aesir`, and packages checkout assets without provisioning the required pak.
+A successful no-default build is not a network-capable game, and packaging is not
+proof of a playable distribution. Asset provisioning and licensing (including
+xBRZ/DLSS distribution questions) are separate release-readiness work. Do not
+change release behavior or publish artifacts as part of a workspace refactor.
+
 ### Feature Development Workflow
 
 #### 1. Starting a New Feature

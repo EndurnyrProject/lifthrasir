@@ -1,6 +1,6 @@
 // Decrease AGI (AL_DECAGI) - authored STR-style effect.
 //
-// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// Coordinate / units convention (see crates/lifthrasir-runtime/src/effects/playback.rs,
 // mirrors cold_bolt.strfx.ron / inc_agi.strfx.ron):
 //   - offset & quad are in STR screen pixels. The runtime maps a point to world
 //     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
@@ -11,7 +11,7 @@
 //     offset.y UPWARD from above the anchor down to it (downward on screen) --
 //     the mirror of inc_agi.strfx.ron's rising column.
 //   - angle is in raw STR units (1024 = 360 degrees, STR_ANGLE_UNITS_PER_DEGREE
-//     in systems.rs). icearrow.tga's native orientation (angle: 0) already
+//     in playback.rs). icearrow.tga's native orientation (angle: 0) already
 //     points DOWNWARD along its fall (see cold_bolt.strfx.ron), so falling
 //     arrows here keep that ~0 baseline with small per-layer jitter -- the
 //     mirror of inc_agi.strfx.ron's 512-raw (180-degree) flip.

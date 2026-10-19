@@ -12,6 +12,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+  RUSTFLAGS: -C link-arg=-fuse-ld=mold
 
 jobs:
   fmt:
@@ -28,7 +31,7 @@ jobs:
         run: cargo fmt --all --check
 
   clippy:
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-2604-arm64-8x
     steps:
       - uses: actions/checkout@v7
 
@@ -36,6 +39,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            mold \
             pkg-config \
             libasound2-dev \
             libudev-dev \
@@ -54,12 +58,14 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Clippy
         run: cargo clippy --workspace --locked --all-targets -- -D warnings
 
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-2604-arm64-8x
     steps:
       - uses: actions/checkout@v7
 
@@ -67,6 +73,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            mold \
             pkg-config \
             libasound2-dev \
             libudev-dev \
@@ -83,6 +90,8 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Build & Test
         run: cargo test --workspace --locked
