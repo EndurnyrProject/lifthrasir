@@ -59,7 +59,7 @@ jobs:
         run: cargo clippy --workspace --locked --all-targets -- -D warnings
 
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-2604-arm64-4x
     steps:
       - uses: actions/checkout@v7
 
