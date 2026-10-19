@@ -13,10 +13,16 @@ updates:
       # Bevy and its ecosystem crates move in lockstep; bump them together.
       bevy:
         patterns:
-          - "bevy*"
+          - "bevy"
+          - "bevy_*"
+          - "bevy-*"
           - "iyes_*"
           - "leafwing-*"
           - "moonshine-*"
+        update-types:
+          - major
+          - minor
+          - patch
       cargo-minor-patch:
         update-types:
           - minor
