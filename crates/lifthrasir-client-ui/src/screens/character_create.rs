@@ -2,6 +2,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use bevy::ecs::system::SystemParam;
 use bevy::input_focus::AutoFocus;
 use bevy::{
     prelude::*,
@@ -67,6 +68,7 @@ impl Plugin for CharacterCreateScreenPlugin {
         app.init_resource::<CreationForm>();
         app.init_resource::<CreatePreview>();
         app.init_resource::<NameServerError>();
+        app.init_resource::<LastNameValue>();
         app.add_systems(
             OnEnter(GameState::CharacterCreation),
             show_character_create_screen,
@@ -110,6 +112,17 @@ struct CreatePreview {
 
 #[derive(Resource, Default)]
 struct NameServerError(Option<String>);
+
+#[derive(Resource, Default)]
+struct LastNameValue(String);
+
+#[derive(SystemParam)]
+struct CreationScreenState<'w> {
+    form: ResMut<'w, CreationForm>,
+    preview: ResMut<'w, CreatePreview>,
+    server_error: ResMut<'w, NameServerError>,
+    last_name: ResMut<'w, LastNameValue>,
+}
 
 #[derive(Component)]
 struct CreatePreviewCharacter;
@@ -164,15 +177,14 @@ fn show_character_create_screen(
     mut commands: Commands,
     assets: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
-    mut form: ResMut<CreationForm>,
-    mut preview: ResMut<CreatePreview>,
-    mut server_error: ResMut<NameServerError>,
+    mut creation: CreationScreenState,
     session: Option<Res<UserSession>>,
 ) {
-    *form = CreationForm::default();
-    server_error.0 = None;
+    *creation.form = CreationForm::default();
+    creation.server_error.0 = None;
+    creation.last_name.0.clear();
     let target = spawn_preview_diorama(&mut commands, &mut images, 1, 2.0);
-    preview.target = Some(target.clone());
+    creation.preview.target = Some(target.clone());
     let realm = session
         .as_ref()
         .and_then(|session| session.selected_server.as_ref())
@@ -200,7 +212,7 @@ fn show_character_create_screen(
 
     spawn_header(&mut commands, &assets, root);
     spawn_stage(&mut commands, &assets, root, target);
-    spawn_form_rail(&mut commands, &assets, root, realm, &form.0);
+    spawn_form_rail(&mut commands, &assets, root, realm, &creation.form.0);
 }
 
 fn spawn_header(commands: &mut Commands, assets: &AssetServer, parent: Entity) {
@@ -846,6 +858,7 @@ fn preview_components(form: &CharacterCreationForm) -> (CharacterData, Character
 fn reflect_form_values(
     form: Res<CreationForm>,
     mut server_error: ResMut<NameServerError>,
+    mut last_name: ResMut<LastNameValue>,
     names: Query<Ref<EditableText>, With<NameField>>,
     mut values: Query<(&mut Text, &FormValue), (Without<NameTrailing>, Without<NameStatus>)>,
     mut swatches: Query<(&HairSwatch, &mut BorderColor, &mut Node)>,
@@ -874,14 +887,41 @@ fn reflect_form_values(
     }
 
     let Ok(name) = names.single() else { return };
-    if name.is_changed() {
-        server_error.0 = None;
-    }
     let value = name.value().to_string();
+    if value != last_name.0 {
+        server_error.0 = None;
+        last_name.0.clone_from(&value);
+    }
     let state = name_state(&value, server_error.0.as_deref());
-    let (trailing_text, status_text, color) = match state {
+    let (trailing_text, status_text, color) =
+        name_feedback(state, &value, server_error.0.as_deref());
+    for (mut text, mut text_color) in &mut trailing {
+        **text = trailing_text.clone();
+        text_color.0 = color;
+    }
+    for (mut text, mut text_color) in &mut statuses {
+        **text = status_text.clone();
+        text_color.0 = color;
+    }
+    let enabled = state == NameState::Ok;
+    for (mut pickable, mut gradient) in &mut create_buttons {
+        *pickable = if enabled {
+            Pickable::default()
+        } else {
+            Pickable::IGNORE
+        };
+        *gradient = primary_gradient(enabled);
+    }
+}
+
+fn name_feedback(
+    state: NameState,
+    name: &str,
+    server_error: Option<&str>,
+) -> (String, String, Color) {
+    match state {
         NameState::Idle => (
-            format!("{}/16", value.chars().count()),
+            format!("{}/16", name.chars().count()),
             String::new(),
             lifthrasir_ui::theme::TEXT_FAINT,
         ),
@@ -902,26 +942,9 @@ fn reflect_form_values(
         ),
         NameState::ServerError => (
             "!".into(),
-            server_error.0.clone().unwrap_or_default(),
+            server_error.unwrap_or_default().into(),
             lifthrasir_ui::theme::BAD,
         ),
-    };
-    for (mut text, mut text_color) in &mut trailing {
-        **text = trailing_text.clone();
-        text_color.0 = color;
-    }
-    for (mut text, mut text_color) in &mut statuses {
-        **text = status_text.clone();
-        text_color.0 = color;
-    }
-    let enabled = state == NameState::Ok;
-    for (mut pickable, mut gradient) in &mut create_buttons {
-        *pickable = if enabled {
-            Pickable::default()
-        } else {
-            Pickable::IGNORE
-        };
-        *gradient = primary_gradient(enabled);
     }
 }
 
@@ -1028,6 +1051,39 @@ mod tests {
     }
 
     #[test]
+    fn server_name_error_is_displayed_in_red() {
+        let feedback = name_feedback(
+            NameState::ServerError,
+            "ForbiddenName",
+            Some("Invalid character name"),
+        );
+        assert_eq!(feedback.0, "!");
+        assert_eq!(feedback.1, "Invalid character name");
+        assert_eq!(feedback.2, lifthrasir_ui::theme::BAD);
+    }
+
+    #[test]
+    fn server_name_error_clears_only_when_the_name_changes() {
+        let mut last_name = LastNameValue("ForbiddenName".into());
+        let mut server_error = NameServerError(Some("Invalid character name".into()));
+
+        let unchanged = "ForbiddenName";
+        if unchanged != last_name.0 {
+            server_error.0 = None;
+            last_name.0.clone_from(&unchanged.to_string());
+        }
+        assert_eq!(server_error.0.as_deref(), Some("Invalid character name"));
+
+        let changed = "AllowedName";
+        if changed != last_name.0 {
+            server_error.0 = None;
+            last_name.0.clone_from(&changed.to_string());
+        }
+        assert!(server_error.0.is_none());
+        assert_eq!(last_name.0, "AllowedName");
+    }
+
+    #[test]
     fn focused_name_field_accepts_keyboard_input() {
         use bevy::input::ButtonState;
         use bevy::input::keyboard::{Key, KeyboardInput};
@@ -1131,6 +1187,7 @@ mod tests {
         app.add_plugins(MinimalPlugins);
         app.init_resource::<CreationForm>();
         app.init_resource::<NameServerError>();
+        app.init_resource::<LastNameValue>();
         app.add_systems(Update, reflect_form_values);
         app.update();
     }

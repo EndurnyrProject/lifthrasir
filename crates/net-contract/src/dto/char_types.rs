@@ -98,7 +98,7 @@ impl From<u8> for CharCreationError {
     fn from(value: u8) -> Self {
         match value {
             0x00 => CharCreationError::NameExists,
-            0xFF => CharCreationError::InvalidName,
+            0x01 | 0xFF => CharCreationError::InvalidName,
             other => CharCreationError::Unknown(other),
         }
     }
@@ -154,6 +154,7 @@ mod tests {
             CharCreationError::from(0xFF),
             CharCreationError::InvalidName
         );
+        assert_eq!(CharCreationError::from(1), CharCreationError::InvalidName);
         assert_eq!(CharCreationError::from(7), CharCreationError::Unknown(7));
     }
 
