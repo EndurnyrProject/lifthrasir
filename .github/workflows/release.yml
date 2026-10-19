@@ -8,6 +8,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -50,7 +54,7 @@ jobs:
             os: warp-macos-26-arm64-6x
             target: aarch64-apple-darwin
           - name: windows-x86_64
-            os: warp-windows-2025-vs2026-x64-4x
+            os: warp-windows-2025-vs2026-x64-8x
             target: x86_64-pc-windows-msvc
             dlss: true
     runs-on: ${{ matrix.os }}
@@ -104,6 +108,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+          cache-on-failure: true
 
       - name: Build
         env:
@@ -111,7 +116,6 @@ jobs:
         run: >
           cargo build -p lifthrasir
           --profile dist
-          --no-default-features
           --locked
           --target ${{ matrix.target }}
           ${{ matrix.dlss && '--features dlss' || '' }}
