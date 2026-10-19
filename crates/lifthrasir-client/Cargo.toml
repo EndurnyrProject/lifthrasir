@@ -34,7 +34,7 @@ secrecy = { workspace = true }
 # Character entity system dependencies
 moonshine-kind = "0.5"
 moonshine-tag = "0.5"
-moonshine-behavior = "0.5"
+moonshine-behavior = "0.6"
 
 ron = { workspace = true }
 
