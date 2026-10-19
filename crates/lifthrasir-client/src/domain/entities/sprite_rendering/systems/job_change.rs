@@ -1,0 +1,359 @@
+use bevy::prelude::*;
+use bevy_auto_plugin::prelude::*;
+
+use crate::domain::entities::registry::EntityRegistry;
+use lifthrasir_assets::animation::processing::PendingAnimations;
+use lifthrasir_assets::catalogs::job::registry::JobSpriteRegistry;
+use lifthrasir_runtime::actors::sprites::components::{
+    EntitySpriteData, EntitySpriteInfo, HeadAttachment, PendingRenderLayers, RenderLayer,
+};
+use lifthrasir_runtime::rendering::SpriteRenderingSystems;
+use lifthrasir_runtime::rendering::layers::LAYER_BODY;
+use net_contract::events::UnitSpriteChanged;
+use {crate::domain::entities::character::components::CharacterData, lifthrasir_assets::Gender};
+
+/// `LOOK_BASE`: the job/class look slot. The server broadcasts it to the
+/// changing player *and* to nearby players, so this runs for the local player
+/// too, unlike the equipment look types in `domain::equipment::sprite_change`.
+const LOOK_BASE: u32 = 0;
+
+type BodyLayerQuery<'w, 's> = Query<'w, 's, (Entity, &'static RenderLayer)>;
+
+/// Rebuild the body sprite when the server changes a unit's base look (a job
+/// change). The body layer child is despawned and its animation re-requested
+/// from the new job's SPR/ACT; `finalize_render_layers` spawns the replacement,
+/// which is why `PendingRenderLayers` goes back on the unit.
+///
+/// The head layer's `HeadAttachment` is dropped at the same time: it points at
+/// the despawned body layer entity, and `link_head_to_body` only links heads
+/// that have no attachment, so without this the head would stop following the
+/// body.
+#[auto_add_system(
+    plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::HierarchySpawn, before = lifthrasir_runtime::actors::sprites::systems::spawn::finalize_render_layers)
+)]
+#[allow(clippy::too_many_arguments)]
+pub fn apply_base_look_changes(
+    mut commands: Commands,
+    mut sprite_changes: MessageReader<UnitSpriteChanged>,
+    registry: Res<EntityRegistry>,
+    mut characters: Query<(
+        &mut CharacterData,
+        &Gender,
+        &Children,
+        Option<&mut EntitySpriteInfo>,
+    )>,
+    layers: BodyLayerQuery,
+    heads: Query<Entity, With<HeadAttachment>>,
+    asset_server: Res<AssetServer>,
+    mut pending_animations: ResMut<PendingAnimations>,
+    job_registry: Option<Res<JobSpriteRegistry>>,
+) {
+    for change in sprite_changes.read() {
+        if change.type_ != LOOK_BASE {
+            continue;
+        }
+
+        let Some(entity) = registry.get_entity(change.gid) else {
+            continue;
+        };
+
+        let Ok((mut character, gender, children, sprite_info)) = characters.get_mut(entity) else {
+            continue;
+        };
+
+        let job_id = change.val as u16;
+        if character.job_id == job_id {
+            continue;
+        }
+
+        let Some(job_registry) = job_registry.as_deref() else {
+            warn!("apply_base_look_changes: JobSpriteRegistry not available");
+            continue;
+        };
+
+        let gender_byte = match gender {
+            Gender::Male => 1u8,
+            Gender::Female => 0u8,
+        };
+
+        let Some(body_spr_path) = job_registry.get_body_sprite_path(job_id as u32, gender_byte)
+        else {
+            warn!(
+                "apply_base_look_changes: Unknown job_id {} for entity {:?}",
+                job_id, entity
+            );
+            continue;
+        };
+        let body_act_path = body_spr_path.replace(".spr", ".act");
+
+        character.job_id = job_id;
+        if let Some(mut info) = sprite_info
+            && let EntitySpriteData::Character {
+                job_id: visual_job,
+                riding,
+                ..
+            } = &mut info.sprite_data
+        {
+            *visual_job = job_id;
+            *riding = false;
+        }
+
+        for child in children.iter() {
+            if layers
+                .get(child)
+                .is_ok_and(|(_, layer)| layer.layer == LAYER_BODY)
+            {
+                commands.entity(child).despawn();
+                continue;
+            }
+
+            if heads.contains(child) {
+                commands.entity(child).remove::<HeadAttachment>();
+            }
+        }
+
+        pending_animations.discard_for(entity, LAYER_BODY);
+        pending_animations.request(
+            asset_server.load(&body_spr_path),
+            asset_server.load(&body_act_path),
+            None,
+            LAYER_BODY,
+            Some(entity),
+        );
+        // The rebuild uses the new job's normal body, so a mounted-body marker
+        // from `apply_peco_mount` would go stale.
+        commands
+            .entity(entity)
+            .insert(PendingRenderLayers)
+            .remove::<lifthrasir_runtime::actors::sprites::components::RidingPeco>();
+
+        debug!(
+            "apply_base_look_changes: Rebuilding body ({}) for entity {:?}",
+            body_spr_path, entity
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::entities::character::components::CharacterStats;
+    use bevy::asset::AssetPlugin;
+    use lifthrasir_runtime::actors::sprites::components::BodyAttachPoint;
+    use lifthrasir_runtime::rendering::layers::LAYER_HEAD;
+
+    const GID: u32 = 150_001;
+    const NOVICE: u16 = 0;
+    const SWORDMAN: u16 = 1;
+
+    struct Fixture {
+        app: App,
+        character: Entity,
+        body_layer: Entity,
+        head_layer: Entity,
+    }
+
+    fn character_data(job_id: u16) -> CharacterData {
+        CharacterData {
+            name: "tester".into(),
+            job_id,
+            level: 1,
+            experience: 0,
+            stats: CharacterStats {
+                str: 1,
+                agi: 1,
+                vit: 1,
+                int: 1,
+                dex: 1,
+                luk: 1,
+                max_hp: 40,
+                current_hp: 40,
+                max_sp: 11,
+                current_sp: 11,
+            },
+            slot: 0,
+        }
+    }
+
+    fn layer(app: &mut App, tag: moonshine_tag::Tag) -> Entity {
+        app.world_mut()
+            .spawn(RenderLayer::body(Handle::default(), tag, Vec::new()))
+            .id()
+    }
+
+    fn setup() -> Fixture {
+        let mut app = App::new();
+        app.add_plugins((TaskPoolPlugin::default(), AssetPlugin::default()))
+            .init_asset::<lifthrasir_assets::loaders::RoSpriteAsset>()
+            .init_asset::<lifthrasir_assets::loaders::RoActAsset>()
+            .init_resource::<EntityRegistry>()
+            .init_resource::<PendingAnimations>()
+            .insert_resource(JobSpriteRegistry::from_job_data(
+                lifthrasir_data::JobData::default(),
+            ))
+            .add_message::<UnitSpriteChanged>()
+            .add_systems(Update, apply_base_look_changes);
+
+        let body_layer = layer(&mut app, LAYER_BODY);
+        let head_layer = layer(&mut app, LAYER_HEAD);
+        app.world_mut()
+            .entity_mut(body_layer)
+            .insert(BodyAttachPoint::default());
+        let body_instance =
+            moonshine_kind::Instance::from_entity(app.world().entity(body_layer)).unwrap();
+        app.world_mut()
+            .entity_mut(head_layer)
+            .insert(HeadAttachment {
+                body_entity: body_instance,
+            });
+
+        let character = app
+            .world_mut()
+            .spawn((character_data(NOVICE), Gender::Male))
+            .add_children(&[body_layer, head_layer])
+            .id();
+
+        app.world_mut()
+            .resource_mut::<EntityRegistry>()
+            .register_entity(GID, character);
+
+        Fixture {
+            app,
+            character,
+            body_layer,
+            head_layer,
+        }
+    }
+
+    fn send(app: &mut App, type_: u32, val: u32) {
+        app.world_mut()
+            .resource_mut::<Messages<UnitSpriteChanged>>()
+            .write(UnitSpriteChanged {
+                gid: GID,
+                type_,
+                val,
+                val2: 0,
+            });
+        app.update();
+    }
+
+    #[test]
+    fn base_look_change_rebuilds_body_and_unlinks_head() {
+        let mut f = setup();
+        send(&mut f.app, LOOK_BASE, SWORDMAN as u32);
+
+        let world = f.app.world();
+        assert_eq!(
+            world.get::<CharacterData>(f.character).unwrap().job_id,
+            SWORDMAN
+        );
+        assert!(world.get_entity(f.body_layer).is_err());
+        assert!(world.get::<HeadAttachment>(f.head_layer).is_none());
+        assert!(world.get::<PendingRenderLayers>(f.character).is_some());
+        assert!(world.resource::<PendingAnimations>().has_pending());
+    }
+
+    #[test]
+    fn same_job_is_a_no_op() {
+        let mut f = setup();
+        send(&mut f.app, LOOK_BASE, NOVICE as u32);
+
+        let world = f.app.world();
+        assert!(world.get_entity(f.body_layer).is_ok());
+        assert!(world.get::<HeadAttachment>(f.head_layer).is_some());
+        assert!(!world.resource::<PendingAnimations>().has_pending());
+    }
+
+    #[test]
+    fn equipment_look_types_are_ignored() {
+        let mut f = setup();
+        send(&mut f.app, 4, SWORDMAN as u32);
+
+        let world = f.app.world();
+        assert_eq!(
+            world.get::<CharacterData>(f.character).unwrap().job_id,
+            NOVICE
+        );
+        assert!(world.get_entity(f.body_layer).is_ok());
+        assert!(!world.resource::<PendingAnimations>().has_pending());
+    }
+
+    #[test]
+    fn newer_body_request_discards_only_its_superseded_completion() {
+        let mut f = setup();
+        f.app
+            .world_mut()
+            .entity_mut(f.character)
+            .insert(EntitySpriteInfo {
+                sprite_data: EntitySpriteData::Character {
+                    job_id: NOVICE,
+                    gender: Gender::Male,
+                    head: 0,
+                    hair_color: 0,
+                    riding: true,
+                },
+            });
+        let other = f.app.world_mut().spawn_empty().id();
+        let completion = |entity, layer_tag| {
+            (
+                lifthrasir_assets::animation::processing::PendingAnimation {
+                    sprite_handle: Handle::default(),
+                    action_handle: Handle::default(),
+                    palette_handle: None,
+                    layer_tag,
+                    callback_entity: Some(entity),
+                },
+                Handle::default(),
+            )
+        };
+        f.app
+            .world_mut()
+            .resource_mut::<PendingAnimations>()
+            .defer_completed(vec![
+                completion(f.character, LAYER_BODY),
+                completion(f.character, LAYER_HEAD),
+                completion(other, LAYER_BODY),
+            ]);
+        send(&mut f.app, LOOK_BASE, SWORDMAN as u32);
+        let remaining = f
+            .app
+            .world_mut()
+            .resource_mut::<PendingAnimations>()
+            .take_completed_where(|_| true);
+        assert_eq!(remaining.len(), 2);
+        assert!(matches!(
+            f.app
+                .world()
+                .get::<EntitySpriteInfo>(f.character)
+                .unwrap()
+                .sprite_data,
+            EntitySpriteData::Character {
+                job_id: SWORDMAN,
+                riding: false,
+                ..
+            }
+        ));
+        assert!(
+            remaining
+                .iter()
+                .all(|(request, _)| request.callback_entity != Some(f.character)
+                    || request.layer_tag != LAYER_BODY)
+        );
+    }
+
+    #[test]
+    fn unknown_job_leaves_the_sprite_alone() {
+        let mut f = setup();
+        send(&mut f.app, LOOK_BASE, 999_999);
+
+        let world = f.app.world();
+        assert_eq!(
+            world.get::<CharacterData>(f.character).unwrap().job_id,
+            NOVICE
+        );
+        assert!(world.get_entity(f.body_layer).is_ok());
+        assert!(!world.resource::<PendingAnimations>().has_pending());
+    }
+}

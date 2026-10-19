@@ -3,22 +3,21 @@
 // Persistent skill-unit visual: repeating, Ground-placed, Group-anchored
 // (ground_anchor omitted in effects.ron, matching the Sanctuary/Magnus
 // convention). Spawned as a child of the skill-unit group by
-// `spawn_effect_child` (game-engine/src/domain/skill_units/visuals.rs:50-94)
+// `spawn_effect_child` (crates/lifthrasir-client/src/domain/skill_units/visuals.rs)
 // and torn down by the group's recursive despawn -- no separate cast-circle
 // descriptor is authored (architecture decision: the classic client's
 // pre-open charging visual is a distinct hardcoded sprite, out of scope here).
 //
 // Loop semantics (confirmed from source, not assumed):
-//   - `EffectFrameTimer::update` (game-engine/src/domain/effects/components.rs:86-101)
+//   - `EffectFrameTimer::update` (crates/lifthrasir-runtime/src/effects/components.rs)
 //     advances `current_frame` from elapsed time and, once
 //     `current_frame >= max_key`, HARD-RESETS both `elapsed` and
-//     `current_frame` to 0 (components.rs:97-99) rather than wrapping/carrying
-//     over remainder time. `repeating` effects simply keep ticking after this
-//     reset (systems.rs:147: `!effect.timer.update(delta) && !effect.repeating`
-//     only despawns non-repeating ones); repeating effects are otherwise
-//     inert to their own restart -- there is no crossfade back to key 0.
-//   - `max_key` is `last_key.at + 1` for a layer (authored.rs:205), and the
-//     asset-wide `max_key` is the widest across all layers (authored.rs:238),
+//     `current_frame` to 0 rather than wrapping/carrying over remainder time.
+//     `repeating` effects keep ticking: `advance_effect_timers` in
+//     crates/lifthrasir-runtime/src/effects/playback.rs only despawns completed
+//     non-repeating effects; there is no crossfade back to key 0.
+//   - `convert_authored_effect` in crates/lifthrasir-assets/src/effects/authored.rs
+//     sets `max_key` to `last_key.at + 1` per layer, then takes the widest value,
 //     so every layer here shares the same final `at` -- otherwise a
 //     shorter-lived layer would blank out for the tail frames before the
 //     shared wrap (its `frame_index_map` runs out at its own last key).

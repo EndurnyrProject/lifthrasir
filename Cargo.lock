@@ -3642,43 +3642,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "game-engine"
-version = "0.0.1"
-dependencies = [
- "bevy",
- "bevy_auto_plugin",
- "bevy_common_assets",
- "bevy_framepace",
- "bevy_hanabi",
- "bevy_kira_audio",
- "dirs",
- "encoding_rs",
- "futures-lite",
- "gltf",
- "image",
- "iyes_progress",
- "leafwing-input-manager",
- "lifthrasir-data",
- "moonshine-behavior",
- "moonshine-kind",
- "moonshine-tag",
- "net-contract",
- "pathfinding",
- "regex",
- "resvg",
- "ro-formats",
- "ron 0.12.2",
- "secrecy",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.20",
- "toml",
- "xbrz-rs",
- "zip",
-]
-
-[[package]]
 name = "generator"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3944,8 +3907,9 @@ dependencies = [
  "anyhow",
  "clap",
  "indicatif",
+ "lifthrasir-pak",
+ "lifthrasir-tooling",
  "ro-formats",
- "serde",
  "tempfile",
  "toml",
  "zip",
@@ -4726,10 +4690,90 @@ dependencies = [
  "bevy",
  "bevy_brp_extras",
  "bevy_framepace",
- "game-engine",
+ "lifthrasir-assets",
+ "lifthrasir-client",
+ "lifthrasir-client-ui",
+ "lifthrasir-runtime",
  "lifthrasir-ui",
  "net-aesir",
+ "net-contract",
+ "tempfile",
  "toml",
+]
+
+[[package]]
+name = "lifthrasir-assets"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_common_assets",
+ "encoding_rs",
+ "futures-lite",
+ "image",
+ "lifthrasir-data",
+ "lifthrasir-pak",
+ "moonshine-tag",
+ "resvg",
+ "ro-formats",
+ "ron 0.12.2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "toml",
+ "xbrz-rs",
+ "zip",
+]
+
+[[package]]
+name = "lifthrasir-client"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_auto_plugin",
+ "bevy_common_assets",
+ "bevy_framepace",
+ "bevy_kira_audio",
+ "dirs",
+ "gltf",
+ "image",
+ "iyes_progress",
+ "leafwing-input-manager",
+ "lifthrasir-assets",
+ "lifthrasir-data",
+ "lifthrasir-runtime",
+ "lifthrasir-ui",
+ "moonshine-behavior",
+ "moonshine-kind",
+ "moonshine-tag",
+ "net-contract",
+ "regex",
+ "ro-formats",
+ "ron 0.12.2",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "zip",
+]
+
+[[package]]
+name = "lifthrasir-client-ui"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_feathers",
+ "iyes_progress",
+ "leafwing-input-manager",
+ "lifthrasir-assets",
+ "lifthrasir-client",
+ "lifthrasir-data",
+ "lifthrasir-runtime",
+ "lifthrasir-ui",
+ "net-contract",
+ "rfd",
+ "secrecy",
 ]
 
 [[package]]
@@ -4740,6 +4784,68 @@ dependencies = [
  "ron 0.12.2",
  "serde",
  "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "lifthrasir-pak"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.20",
+ "toml",
+ "zip",
+]
+
+[[package]]
+name = "lifthrasir-runtime"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_auto_plugin",
+ "bevy_hanabi",
+ "bevy_kira_audio",
+ "gltf",
+ "lifthrasir-assets",
+ "lifthrasir-data",
+ "moonshine-kind",
+ "moonshine-tag",
+ "pathfinding",
+ "ro-formats",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
+name = "lifthrasir-tooling"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "encoding_rs",
+ "gag",
+ "glam 0.32.1",
+ "gltf",
+ "gltf-json",
+ "image",
+ "ktx2",
+ "lifthrasir-data",
+ "lifthrasir-pak",
+ "log",
+ "luadec",
+ "mlua",
+ "rayon",
+ "regex",
+ "ro-formats",
+ "ron 0.12.2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+ "zstd",
 ]
 
 [[package]]
@@ -4748,13 +4854,6 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "bevy_feathers",
- "game-engine",
- "iyes_progress",
- "leafwing-input-manager",
- "lifthrasir-data",
- "net-contract",
- "rfd",
- "secrecy",
 ]
 
 [[package]]
@@ -6943,29 +7042,12 @@ name = "ro-to-lifthrasir-cli"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "blake3",
  "clap",
- "encoding_rs",
- "gag",
- "glam 0.32.1",
- "gltf",
- "gltf-json",
- "image",
- "ktx2",
- "lifthrasir-data",
- "luadec",
- "mlua",
+ "lifthrasir-tooling",
+ "log",
  "prost-build",
  "protox",
- "rayon",
- "regex",
- "ro-formats",
- "ron 0.12.2",
- "serde",
- "serde_json",
  "tempfile",
- "toml",
- "zstd",
 ]
 
 [[package]]

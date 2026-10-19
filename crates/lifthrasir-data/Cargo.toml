@@ -1,0 +1,13 @@
+[package]
+name = "lifthrasir-data"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+ro-formats = { path = "../ro-formats" }
+
+[dev-dependencies]
+ron = { workspace = true }
+serde_json = { workspace = true }

@@ -1,0 +1,26 @@
+[package]
+name = "lifthrasir-runtime"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bevy = { workspace = true, features = ["bevy_gltf", "png", "ktx2", "zstd_rust"] }
+bevy_auto_plugin = { workspace = true }
+bevy_kira_audio = { version = "0.26", features = ["mp3", "wav", "ogg"] }
+ro-formats = { path = "../ro-formats" }
+lifthrasir-assets = { path = "../lifthrasir-assets" }
+lifthrasir-data = { path = "../lifthrasir-data" }
+moonshine-tag = "0.5"
+moonshine-kind = "0.5"
+serde = { workspace = true }
+serde_json = { workspace = true }
+gltf = { workspace = true }
+pathfinding = "4.15"
+# Keep only 3d: Hanabi's 2d path also draws world effects through the UI Camera2d.
+bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
+
+[features]
+test-support = []
+
+[dev-dependencies]
+toml = { workspace = true }

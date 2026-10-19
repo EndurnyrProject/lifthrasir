@@ -1,0 +1,54 @@
+// Scream (DC_SCREAM) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive.
+//
+// Shape: a piercing shout: a hot flash at the dancer's mouth and two shockwave
+// rings racing outward from the head, the second chasing the first. The stun
+// on each victim is the status visual, not this cast burst.
+(
+    fps: 30,
+    layers: [
+        // Flash at the mouth.
+        (
+            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 218.0), quad: (16.0, 16.0),   color: (255, 200, 200, 0) ),
+                ( at: 3, offset: (319.0, 218.0), quad: (110.0, 110.0), color: (255, 215, 210, 240) ),
+                ( at: 10, offset: (319.0, 218.0), quad: (140.0, 140.0), color: (255, 190, 190, 0) ),
+            ],
+        ),
+        // First shockwave ring from the head.
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                ( at: 1,  offset: (319.0, 220.0), quad: (20.0, 20.0),   color: (255, 220, 220, 0) ),
+                ( at: 5,  offset: (319.0, 220.0), quad: (160.0, 160.0), color: (255, 230, 225, 230) ),
+                ( at: 16, offset: (319.0, 220.0), quad: (340.0, 340.0), color: (255, 210, 210, 0) ),
+            ],
+        ),
+        // Second ring, chasing the first.
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                ( at: 7,  offset: (319.0, 220.0), quad: (20.0, 20.0),   color: (255, 220, 220, 0) ),
+                ( at: 11, offset: (319.0, 220.0), quad: (160.0, 160.0), color: (255, 230, 225, 200) ),
+                ( at: 22, offset: (319.0, 220.0), quad: (340.0, 340.0), color: (255, 210, 210, 0) ),
+            ],
+        ),
+        // Shock ring along the ground.
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                ( at: 4,  offset: (319.0, 291.0), quad: (40.0, 20.0),   color: (255, 220, 220, 0) ),
+                ( at: 9,  offset: (319.0, 291.0), quad: (220.0, 110.0), color: (255, 230, 225, 190) ),
+                ( at: 22, offset: (319.0, 291.0), quad: (400.0, 200.0), color: (255, 210, 210, 0) ),
+            ],
+        ),
+    ],
+)

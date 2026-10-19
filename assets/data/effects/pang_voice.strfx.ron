@@ -1,0 +1,46 @@
+// Pang Voice (BA_PANGVOICE, quest) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive. Angles are raw STR units (1024 per turn).
+//
+// Shape: the native pang.bmp starburst detonates at the victim's head, a
+// second smaller burst counter-spins inside it, and a note is knocked loose.
+// The confusion itself is the status visual, not this hit burst.
+(
+    fps: 30,
+    layers: [
+        // Main starburst at the head.
+        (
+            textures: ["ro://data/texture/effect/pang.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 214.0), quad: (20.0, 20.0),   color: (200, 220, 255, 0),   angle: 0.0 ),
+                ( at: 4,  offset: (319.0, 214.0), quad: (150.0, 150.0), color: (220, 235, 255, 255), angle: 40.0 ),
+                ( at: 12, offset: (319.0, 214.0), quad: (190.0, 190.0), color: (200, 220, 255, 140), angle: 100.0 ),
+                ( at: 20, offset: (319.0, 214.0), quad: (210.0, 210.0), color: (180, 205, 255, 0),   angle: 150.0 ),
+            ],
+        ),
+        // Inner burst spinning the other way.
+        (
+            textures: ["ro://data/texture/effect/pang.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2,  offset: (319.0, 214.0), quad: (20.0, 20.0),   color: (200, 220, 255, 0),   angle: 512.0 ),
+                ( at: 6,  offset: (319.0, 214.0), quad: (90.0, 90.0),   color: (230, 240, 255, 230), angle: 460.0 ),
+                ( at: 16, offset: (319.0, 214.0), quad: (120.0, 120.0), color: (200, 220, 255, 0),   angle: 380.0 ),
+            ],
+        ),
+        // Note knocked loose, tumbling up and away.
+        (
+            textures: ["ro://data/texture/effect/ws1.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 3,  offset: (326.0, 214.0), quad: (18.0, 18.0), color: (255, 255, 255, 0),   angle: 0.0 ),
+                ( at: 7,  offset: (338.0, 200.0), quad: (26.0, 26.0), color: (255, 255, 255, 240), angle: 120.0 ),
+                ( at: 15, offset: (352.0, 186.0), quad: (26.0, 26.0), color: (255, 255, 255, 180), angle: 300.0 ),
+                ( at: 22, offset: (360.0, 176.0), quad: (22.0, 22.0), color: (255, 255, 255, 0),   angle: 420.0 ),
+            ],
+        ),
+    ],
+)

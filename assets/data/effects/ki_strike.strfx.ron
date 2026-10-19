@@ -1,6 +1,6 @@
 // Ki Strike (MO_TRIPLEATTACK / MO_CHAINCOMBO) - authored STR-style effect.
 //
-// Coordinate / units convention (see game-engine/src/domain/effects/systems.rs,
+// Coordinate / units convention (see crates/lifthrasir-runtime/src/effects/playback.rs,
 // mirrors fire_bolt.strfx.ron):
 //   - offset & quad are in STR screen pixels; the runtime maps a point to world
 //     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),

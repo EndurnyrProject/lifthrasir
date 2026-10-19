@@ -1,0 +1,25 @@
+[graphics]
+display_mode = "Windowed"
+resolution = [1280, 720]
+antialiasing = "MsaaX4"
+anisotropy = "X16"
+upscaling = "X3"
+vsync = false
+fps_cap = "F144"
+ui_scaling = "P150"
+bloom = false
+shadows = false
+dlss = "Off"
+ssao = "High"
+
+[audio]
+bgm_volume = 0.25
+bgm_muted = true
+sfx_volume = 0.5
+sfx_muted = true
+ambient_volume = 0.125
+ambient_muted = true
+
+[keybinds.party]
+primary = { key = "KeyO", modifier = "Control" }
+secondary = { key = "KeyZ", modifier = "Shift" }
