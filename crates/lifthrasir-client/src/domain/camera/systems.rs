@@ -76,6 +76,22 @@ fn apply_camera_profile(settings: &mut CameraFollowSettings, indoor: bool) {
 /// Type alias for player query - matches local player with Transform
 type PlayerReadyQuery<'w, 's> = Query<'w, 's, (Instance<LocalPlayer>, &'static Transform)>;
 
+type FollowCameraQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Transform,
+        &'static mut CameraFollowTarget,
+        &'static CameraFollowSettings,
+    ),
+    (
+        With<Camera3d>,
+        With<CameraFollowTarget>,
+        Without<LocalPlayer>,
+        Without<lifthrasir_runtime::rendering::billboard::EquipmentPreviewCamera>,
+    ),
+>;
+
 /// Resource to track if the camera has been spawned.
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct CameraSpawned(pub bool);
@@ -84,19 +100,7 @@ pub struct CameraSpawned(pub bool);
 pub fn spawn_camera_on_player_ready(
     mut commands: Commands,
     player_query: PlayerReadyQuery,
-    mut camera_query: Query<
-        (
-            &mut Transform,
-            &mut CameraFollowTarget,
-            &CameraFollowSettings,
-        ),
-        (
-            With<Camera3d>,
-            With<CameraFollowTarget>,
-            Without<LocalPlayer>,
-            Without<lifthrasir_runtime::rendering::billboard::EquipmentPreviewCamera>,
-        ),
-    >,
+    mut camera_query: FollowCameraQuery,
     mut camera_spawned: ResMut<CameraSpawned>,
 ) {
     let Ok((player_entity, player_transform)) = player_query.single() else {
@@ -105,7 +109,9 @@ pub fn spawn_camera_on_player_ready(
 
     let player_position = player_transform.translation;
 
-    for (mut camera_transform, mut follow_target, settings) in &mut camera_query {
+    if let Some((mut camera_transform, mut follow_target, settings)) =
+        camera_query.iter_mut().next()
+    {
         camera_spawned.0 = true;
 
         if follow_target.target_entity.entity() == player_entity.entity() {
