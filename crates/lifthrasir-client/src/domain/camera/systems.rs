@@ -76,6 +76,22 @@ fn apply_camera_profile(settings: &mut CameraFollowSettings, indoor: bool) {
 /// Type alias for player query - matches local player with Transform
 type PlayerReadyQuery<'w, 's> = Query<'w, 's, (Instance<LocalPlayer>, &'static Transform)>;
 
+type FollowCameraQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut Transform,
+        &'static mut CameraFollowTarget,
+        &'static CameraFollowSettings,
+    ),
+    (
+        With<Camera3d>,
+        With<CameraFollowTarget>,
+        Without<LocalPlayer>,
+        Without<lifthrasir_runtime::rendering::billboard::EquipmentPreviewCamera>,
+    ),
+>;
+
 /// Resource to track if the camera has been spawned.
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct CameraSpawned(pub bool);
@@ -84,32 +100,36 @@ pub struct CameraSpawned(pub bool);
 pub fn spawn_camera_on_player_ready(
     mut commands: Commands,
     player_query: PlayerReadyQuery,
-    camera_query: Query<
-        Entity,
-        (
-            With<Camera3d>,
-            Without<lifthrasir_runtime::rendering::billboard::EquipmentPreviewCamera>,
-        ),
-    >,
+    mut camera_query: FollowCameraQuery,
     mut camera_spawned: ResMut<CameraSpawned>,
 ) {
-    if !camera_query.is_empty() {
-        if !camera_spawned.0 {
-            debug!("Camera already exists, marking as spawned");
-            camera_spawned.0 = true;
+    let Ok((player_entity, player_transform)) = player_query.single() else {
+        return;
+    };
+
+    let player_position = player_transform.translation;
+
+    if let Some((mut camera_transform, mut follow_target, settings)) =
+        camera_query.iter_mut().next()
+    {
+        camera_spawned.0 = true;
+
+        if follow_target.target_entity.entity() == player_entity.entity() {
+            return;
         }
+
+        follow_target.target_entity = player_entity;
+        follow_target.cached_position = player_position;
+        follow_target.smoothed_look_at = player_position;
+        camera_transform.translation = player_position + settings.offset;
+        camera_transform.look_at(player_position, Vec3::Y);
+        info!("Rebound character-follow camera to local player {player_entity:?}");
         return;
     }
 
     if camera_spawned.0 {
         return;
     }
-
-    let Ok((player_entity, player_transform)) = player_query.single() else {
-        return;
-    };
-
-    let player_position = player_transform.translation;
 
     let mut settings = CameraFollowSettings::default();
 
@@ -143,6 +163,52 @@ pub fn spawn_camera_on_player_ready(
     camera_spawned.0 = true;
 
     debug!("Character-follow camera spawned successfully");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn rebinds_existing_camera_to_reconnected_player() {
+        let mut app = App::new();
+        app.init_resource::<CameraSpawned>();
+
+        let old_player_entity = app
+            .world_mut()
+            .spawn((LocalPlayer, Transform::from_xyz(1.0, 2.0, 3.0)))
+            .id();
+        let old_player = Instance::from_entity(app.world().entity(old_player_entity)).unwrap();
+        let camera = app
+            .world_mut()
+            .spawn((
+                Camera3d::default(),
+                Transform::default(),
+                CameraFollowTarget::new(old_player, Vec3::ZERO),
+                CameraFollowSettings::default(),
+            ))
+            .id();
+        app.world_mut().despawn(old_player_entity);
+        let new_position = Vec3::new(100.0, 20.0, -50.0);
+        let new_player = app
+            .world_mut()
+            .spawn((LocalPlayer, Transform::from_translation(new_position)))
+            .id();
+
+        app.world_mut()
+            .run_system_once(spawn_camera_on_player_ready)
+            .unwrap();
+
+        let follow = app.world().get::<CameraFollowTarget>(camera).unwrap();
+        assert_eq!(follow.target_entity.entity(), new_player);
+        assert_eq!(follow.cached_position, new_position);
+        assert_eq!(follow.smoothed_look_at, new_position);
+        assert_eq!(
+            app.world().get::<Transform>(camera).unwrap().translation,
+            new_position + CameraFollowSettings::default().offset
+        );
+    }
 }
 
 /// System that updates the cached position of the follow target each frame.
