@@ -6,158 +6,37 @@
 
 # Lifthrasir
 
-A modern, cross-platform Ragnarok Online client implementation built with Rust and Bevy.
+A Ragnarok Online client built with Rust and Bevy. This is a learning project, and I want room to try new ideas while keeping the feel of the original game. A perfect 1:1 remake isn't the goal.
 
-## Overview and Objective
+You’ll need Rust and your own legitimate Ragnarok Online GRF files. Game data is proprietary and isn't included here.
 
-I always wanted to build this stuff, and since i wanted to learn Rust, why not? Will this ever be fully playable? Probably not,
-maybe, who knows?
+## Getting started
 
-The objetive here is most fun, i don't want to build a 1-to-1 ragnarok client copy, i want some liberty to add new stuff, redo some stuff
-i didn't like, while trying to keep the same feeling.
-
-## Project Architecture and Functionalities
-
-I'm trying to keep it as close to the Bevy ECS recommended architecture, the basic concepts are: 
-
-1. Follow the ECS pattern, where systems operate on components attached to entities.
-2. Keep the network and game logic separate, albeit i don't want to build compatibility for other servers, do not keep people from doing it.
-
-### Workspace ownership
-
-`apps/` contains the existing `lifthrasir`, `grf-utils` and
-`ro-to-lifthrasir-cli` executables. Reusable libraries live in `crates/`:
-
-- `lifthrasir-data`, `lifthrasir-pak`, `lifthrasir-tooling`: Bevy-free schemas,
-  archive I/O and offline imports. The converter CLI presents structured reports;
-  the library does not own terminal output or protobuf generation.
-- `lifthrasir-assets`, `lifthrasir-runtime`: content loading/catalogs and reusable
-  actor/effect/world/audio presentation, with no client/network policy.
-- `lifthrasir-ui`: generic Feathers primitives. Client screens and gameplay live
-  in `lifthrasir-client-ui` and `lifthrasir-client`.
-- `net-contract`, `net-aesir`, `ro-formats`: neutral messages, the selected adapter
-  and RO readers. Runtime GAT/SPR/ACT/STR support is intentional; GR2 import is
-  offline-only.
-
-The binary composes these groups explicitly. For source-registration order,
-capability prerequisites and dependency guards, see [AGENTS.md](AGENTS.md).
-No editor application is part of this workspace.
-
-## Prerequisites
-
-- **Rust** (latest stable)
-- **Ragnarok Online GRF Files** - You must provide your own legitimate GRF data files
-
-### Required Files
-
-This client requires Ragnarok Online data files, which are proprietary to Gravity Co., Ltd. and are **NOT included** in this repository.
-
-## Getting Started
+Clone the repo, put your GRF files in `assets/`, configure `assets/loader.toml`, then follow the [development guide](docs/development.md) to convert the data and build a pak. Once that’s done, run:
 
 ```bash
-git clone git@github.com:EndurnyrProject/lifthrasir.git
-cd lifthrasir
-# Run commands from this root, not apps/lifthrasir. Add your *.grf to the assets folder, configure the loader.toml
-
-# Build the offline tooling once -- release is dramatically faster here
-cargo build --release -p ro-to-lifthrasir-cli -p grf-utils
-
-# 1. Convert the data tables (jobs, items, skills, ...)
-./target/release/ro-to-lifthrasir-cli convert
-
-# 2. Convert every map to glb. REQUIRED -- the client loads maps only from
-#    converted glbs, so an unconverted map is a hard startup failure.
-#    Takes a while: it converts each map's terrain, lighting, water and props.
-./target/release/ro-to-lifthrasir-cli convert-maps --force-models
-
-# 3. Generate your pak file. Bump --content-version on every rebuild; it is
-#    enforced monotonic. Writing to .new first keeps a failed pack from
-#    destroying a working pak.
-./target/release/grf-utils pack \
-  --grf assets/en.grf --grf assets/data.grf \
-  --content-dir assets/data \
-  --out assets/lifthrasir.pak.new --content-version 1
-mv assets/lifthrasir.pak.new assets/lifthrasir.pak
-
-# 4. Run the app on dev mode
 cargo run -p lifthrasir --features dev
 ```
 
-### Notes on the asset pipeline
+For an overview of the crates and how they fit together, see [Architecture](docs/architecture.md).
 
-- **Map conversion is not optional.** Maps/props load only converted GLBs;
-  GND/RSW/RSM/RSM2 readers are offline. Each map embeds raw GAT bytes decoded at
-  runtime for grounding, raycast and pathfinding. Water tile masks are baked,
-  not inferred from GAT heights. `assets/data/maps/<map>/<map>.glb` loads through
-  `ro://maps/<map>/<map>.glb`; a missing/invalid GLB fails loudly.
-- **`--force-models` matters when the glb format version changes.** Props are
-  cached in `assets/data/models` and skipped if already present, so after a
-  format bump you must force a reconvert or your maps will reference stale
-  models the runtime rejects.
-- **`convert-maps` continues past failures.** It logs each failing map with its
-  error, converts the rest, prints converted/failed counts and exits non-zero
-  if anything failed. Writes are atomic, so a failed map leaves no partial glb.
-  To (re)convert a single map, use `convert-map --map <name>`.
-- **`pack` never converts anything.** It only archives what is already on disk,
-  so always convert before packing. It skips Ragnarok's native map and model
-  formats (`.rsm`, `.rsm2`, `.gnd`, `.gat`, `.rsw`) since nothing reads them at runtime,
-  and reports how many entries it excluded.
-- **Patching an existing install:** build a patch pak the same way, then
-  `grf-utils merge --main assets/lifthrasir.pak --patch patch.pak` with the game
-  closed. The patch file is consumed and the main pak atomically replaced.
+## Server compatibility
 
-### Standalone verification and previews
-
-CPU-only checks, without a client session:
-
-```bash
-cargo test --locked -p lifthrasir-data -p lifthrasir-pak
-cargo test --locked -p lifthrasir-tooling
-cargo test --locked -p lifthrasir-client --test workspace_boundaries --test shared_plugin_isolation --test settings_compatibility
-cargo check --locked -p lifthrasir-runtime --examples
-```
-
-After provisioning content, the following are **manual, hardware-dependent**
-previews, not unattended validation commands. Obtain approval before running;
-`content_viewer` opens both a window and audio, `effect_preview` is silent:
-
-```bash
-cargo run -p lifthrasir-runtime --example effect_preview -- ro://effects/bash.strfx.ron
-cargo run -p lifthrasir-runtime --example content_viewer -- map ro://maps/prontera/prontera.glb
-cargo run -p lifthrasir-runtime --example content_viewer -- sprite poring
-cargo run -p lifthrasir-runtime --example content_viewer -- model ro://models/3dmob/guildflag90_1.glb
-```
-
-These hosts link no client or network. CPU compilation/tests do not prove visual,
-audio or login/equipment/map-warp/gameplay/UI compatibility. See [CONTRIBUTING.md](CONTRIBUTING.md)
-for isolated checks, fixture-writer warnings and release limitations.
-
-## Server Side
-
-### Does it work with rAthena?
-
-Nope, and its not my plan to make it work, only with [Aesir](https://github.com/EndurnyrProject/aesir), the
-engine protocol is agnostic though, feel free to implement the protocol
-for rAthena if you want.
+The client currently works with [Aesir](https://github.com/EndurnyrProject/aesir). The network boundary is protocol-neutral, so other server adapters are possible, but rAthena compatibility isn't a project goal.
 
 ## Contributing
 
-Contributions are welcome! Please ensure:
-1. Code follows Rust idioms and formatting (`cargo fmt`)
-2. All tests pass (`cargo test`)
-3. Clippy produces no warnings (`cargo clippy`)
-4. Commits follow conventional commit format
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for project guidance.
 
-## Thank you
+## Thanks
 
-I shamelessly took a lot of code and ideas from these amazing projects:
+This project borrows code and ideas from:
 
-- [RagnarokRebuildTcp](https://github.com/Doddler/RagnarokRebuildTcp)  
-- [BrowEdit3](https://github.com/Borf/BrowEdit3)  
-- [GRFEditor](https://github.com/Tokeiburu/GRFEditor)  
-- [Korangar](https://github.com/vE5li/korangar)  
+- [RagnarokRebuildTcp](https://github.com/Doddler/RagnarokRebuildTcp)
+- [BrowEdit3](https://github.com/Borf/BrowEdit3)
+- [GRFEditor](https://github.com/Tokeiburu/GRFEditor)
+- [Korangar](https://github.com/vE5li/korangar)
 
-## Legal Notice
+## Legal notice
 
 This project is not affiliated with, endorsed by, or connected to Gravity Co., Ltd. or any official Ragnarok Online server. Users must provide their own legitimate game data files and comply with all applicable terms of service.
-Gravity pls don't strike me :(

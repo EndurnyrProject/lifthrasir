@@ -331,14 +331,6 @@ against locally provisioned content, not fixture generation. Tooling's ignored
 `crates/lifthrasir-runtime/tests/fixtures`; do not run them for validation. Keep
 historical design notes as historical evidence rather than rewriting old paths.
 
-### Release follow-ups
-
-`.github/workflows/release.yml` still builds with `--no-default-features` without
-selecting `net-aesir`, and copies checkout assets without provisioning a pak.
-Those are existing release-readiness hazards, not solved by this extraction.
-Do not claim a playable distribution from compilation/packaging; no release or
-asset provisioning is part of this migration.
-
 ### Code Quality
 
 ```bash
