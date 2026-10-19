@@ -11,7 +11,7 @@ ro-formats = { path = "../ro-formats" }
 lifthrasir-assets = { path = "../lifthrasir-assets" }
 lifthrasir-data = { path = "../lifthrasir-data" }
 moonshine-tag = "0.5"
-moonshine-kind = "0.5"
+moonshine-kind = "0.6"
 serde = { workspace = true }
 serde_json = { workspace = true }
 gltf = { workspace = true }
