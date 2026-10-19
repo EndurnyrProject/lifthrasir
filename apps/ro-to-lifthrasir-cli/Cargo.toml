@@ -12,6 +12,6 @@ lifthrasir-tooling = { path = "../../crates/lifthrasir-tooling" }
 clap = { workspace = true }
 anyhow = { workspace = true }
 log = "0.4"
-protox = "0.9"
+protox = "0.10"
 prost-build = { workspace = true }
 tempfile = { workspace = true }
