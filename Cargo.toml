@@ -47,7 +47,7 @@ gltf = { version = "1.4.1", default-features = false, features = [
 gltf-json = { version = "1.4.1", features = ["extensions", "extras", "names"] }
 image = "0.25.8"
 iyes_progress = "0.17"
-leafwing-input-manager = "0.21"
+leafwing-input-manager = "0.22"
 prost = "0.14"
 prost-build = "0.14"
 regex = "1.12"
