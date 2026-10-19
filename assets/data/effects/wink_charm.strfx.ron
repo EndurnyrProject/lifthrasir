@@ -1,0 +1,59 @@
+// Wink of Charm (DC_WINKCHARM, quest) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive, Blend = alpha (magenta-keyed sprites).
+//
+// Shape: the charmed target is smitten: a big native heart_1.bmp swells above
+// the head while two small kiss2.bmp hearts sway up beside it, over a soft
+// pink glow. The charm itself is the status visual, not this hit burst.
+(
+    fps: 30,
+    layers: [
+        // Big heart swelling above the head.
+        (
+            textures: ["ro://data/texture/effect/heart_1.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (319.0, 206.0), quad: (10.0, 10.0), color: (255, 255, 255, 0) ),
+                ( at: 5,  offset: (319.0, 200.0), quad: (40.0, 40.0), color: (255, 255, 255, 250) ),
+                ( at: 9,  offset: (319.0, 198.0), quad: (34.0, 34.0), color: (255, 255, 255, 250) ),
+                ( at: 13, offset: (319.0, 196.0), quad: (42.0, 42.0), color: (255, 255, 255, 250) ),
+                ( at: 24, offset: (319.0, 186.0), quad: (36.0, 36.0), color: (255, 255, 255, 200) ),
+                ( at: 34, offset: (319.0, 174.0), quad: (30.0, 30.0), color: (255, 255, 255, 0) ),
+            ],
+        ),
+        // Small left heart swaying up.
+        (
+            textures: ["ro://data/texture/effect/kiss2.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 4,  offset: (298.0, 236.0), quad: (14.0, 14.0), color: (255, 255, 255, 0) ),
+                ( at: 10, offset: (294.0, 226.0), quad: (18.0, 18.0), color: (255, 255, 255, 240) ),
+                ( at: 20, offset: (300.0, 210.0), quad: (18.0, 18.0), color: (255, 255, 255, 220) ),
+                ( at: 32, offset: (294.0, 194.0), quad: (16.0, 16.0), color: (255, 255, 255, 0) ),
+            ],
+        ),
+        // Small right heart, a beat later.
+        (
+            textures: ["ro://data/texture/effect/kiss2.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 8,  offset: (340.0, 236.0), quad: (14.0, 14.0), color: (255, 255, 255, 0) ),
+                ( at: 14, offset: (344.0, 226.0), quad: (18.0, 18.0), color: (255, 255, 255, 240) ),
+                ( at: 24, offset: (338.0, 210.0), quad: (18.0, 18.0), color: (255, 255, 255, 220) ),
+                ( at: 36, offset: (344.0, 194.0), quad: (16.0, 16.0), color: (255, 255, 255, 0) ),
+            ],
+        ),
+        // Pink glow around the head.
+        (
+            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 212.0), quad: (30.0, 30.0),   color: (255, 150, 200, 0) ),
+                ( at: 6,  offset: (319.0, 212.0), quad: (110.0, 110.0), color: (255, 170, 215, 150) ),
+                ( at: 36, offset: (319.0, 206.0), quad: (130.0, 130.0), color: (255, 150, 200, 0) ),
+            ],
+        ),
+    ],
+)

@@ -1,0 +1,1151 @@
+//! Message-driven integration tests for the skill-unit systems: the three
+//! systems run together in a minimal app, exercised purely via the five
+//! lifecycle messages, mirroring how the server drives them.
+
+use crate::domain::entities::registry::EntityRegistry;
+use crate::domain::skill_units::components::{SkillUnitCell, SkillUnitGroup};
+use crate::domain::skill_units::detonation::spawn_trap_detonation;
+use crate::domain::skill_units::lifecycle::{
+    despawn_skill_units, move_skill_units, update_skill_units,
+};
+use crate::domain::skill_units::spawn::spawn_skill_units;
+use bevy::prelude::*;
+use lifthrasir_assets::{
+    catalogs::effect::{EffectCatalog, EffectDataAsset},
+    effects::asset::LoadedEffectAsset,
+};
+use lifthrasir_data::{
+    EffectData, EffectDescriptor, EffectPlacement, GroundAnchor, TriggerFx, Visual,
+};
+use lifthrasir_runtime::audio::events::PlaySkillSfx;
+use lifthrasir_runtime::effects::sprites::EffectSprite;
+use lifthrasir_runtime::effects::{ActiveEffect, EffectAnchor};
+use lifthrasir_runtime::rendering::coordinates::spawn_coords_to_world_position;
+use lifthrasir_runtime::world::LifPropRef;
+use net_contract::dto::{
+    SkillUnitCellFlags, SkillUnitCellState, SkillUnitDespawnReason, SkillUnitGroupState,
+    SkillUnitPhase,
+};
+use net_contract::events::{
+    SkillUnitDespawned, SkillUnitMoved, SkillUnitSnapshotReceived, SkillUnitSpawned,
+    SkillUnitUpdated,
+};
+
+fn targetable_cell(cell_id: u32, x: i32, y: i32, visible: bool) -> SkillUnitCellState {
+    SkillUnitCellState {
+        cell_id,
+        x,
+        y,
+        hp: 100,
+        max_hp: 100,
+        flags: SkillUnitCellFlags {
+            targetable: true,
+            visible,
+            ..Default::default()
+        },
+    }
+}
+
+const SAFETY_WALL: u32 = 12; // seeded Ground/Cell anchor with the native STR.
+const STORM_GUST: u32 = 89; // seeded Ground/Group anchor with an STR.
+
+fn seeded_catalog() -> EffectCatalog {
+    let ron = include_str!("../../../../../assets/data/ron/effects.ron");
+    let asset = ron::from_str::<EffectDataAsset>(ron).expect("seed RON");
+    EffectCatalog::build(&asset.0).expect("seed catalog builds")
+}
+
+/// A single-skill catalog holding a cell-anchored persistent descriptor with
+/// exactly `visual` as its only layer.
+fn cell_anchored_catalog_with(skill_id: u32, visual: Visual) -> EffectCatalog {
+    let mut data = EffectData::default();
+    data.skills.insert(
+        skill_id,
+        EffectDescriptor {
+            visuals: vec![visual],
+            sound: None,
+            on_trigger: None,
+            placement: EffectPlacement::Ground,
+            color: [1.0, 1.0, 1.0, 1.0],
+            repeating: true,
+            ground_anchor: GroundAnchor::Cell,
+        },
+    );
+    EffectCatalog::build(&data).expect("catalog builds")
+}
+
+fn cell_anchored_catalog(skill_id: u32) -> EffectCatalog {
+    cell_anchored_catalog_with(skill_id, Visual::Str("icewall.str".into()))
+}
+
+fn group_anchored_model_catalog(skill_id: u32) -> EffectCatalog {
+    let mut data = EffectData::default();
+    data.skills.insert(
+        skill_id,
+        EffectDescriptor {
+            visuals: vec![Visual::Model("외부소품/트랩01".into())],
+            sound: None,
+            on_trigger: None,
+            placement: EffectPlacement::Ground,
+            color: [1.0, 1.0, 1.0, 1.0],
+            repeating: true,
+            ground_anchor: GroundAnchor::Group,
+        },
+    );
+    EffectCatalog::build(&data).expect("catalog builds")
+}
+
+fn trap_catalog(skill_id: u32) -> EffectCatalog {
+    let mut data = EffectData::default();
+    data.skills.insert(
+        skill_id,
+        EffectDescriptor {
+            visuals: vec![Visual::Model("외부소품/트랩01".into())],
+            sound: None,
+            on_trigger: Some(TriggerFx {
+                visual: Visual::Str("trap_burst.strfx.ron".into()),
+                sound: Some("effect/trap.wav".into()),
+            }),
+            placement: EffectPlacement::Ground,
+            color: [0.25, 0.5, 0.75, 1.0],
+            repeating: true,
+            ground_anchor: GroundAnchor::Group,
+        },
+    );
+    EffectCatalog::build(&data).expect("catalog builds")
+}
+
+/// Cell-anchored descriptor with a `Bespoke` layer and NO STR (the Ice Wall
+/// shape): spawns a persistent crystal cluster per visible cell instead of an
+/// STR.
+fn cell_anchored_vfx_catalog(skill_id: u32) -> EffectCatalog {
+    cell_anchored_catalog_with(skill_id, Visual::Bespoke("ice_wall".into()))
+}
+
+/// Cell-anchored descriptor with a `Sprite` layer and NO STR (the Fire Wall /
+/// Fire Pillar shape): each visible cell gets a looping SPR/ACT animation.
+fn cell_anchored_sprite_catalog(skill_id: u32) -> EffectCatalog {
+    cell_anchored_catalog_with(skill_id, Visual::Sprite("이팩트/firewall".into()))
+}
+
+fn test_app(catalog: EffectCatalog) -> App {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(bevy::asset::AssetPlugin::default())
+        .init_asset::<LoadedEffectAsset>()
+        .init_asset::<Mesh>()
+        .init_asset::<Image>()
+        .init_asset::<StandardMaterial>()
+        .init_resource::<EntityRegistry>()
+        .add_message::<SkillUnitSpawned>()
+        .add_message::<SkillUnitSnapshotReceived>()
+        .add_message::<SkillUnitUpdated>()
+        .add_message::<SkillUnitDespawned>()
+        .add_message::<SkillUnitMoved>()
+        .add_message::<PlaySkillSfx>()
+        .insert_resource(catalog)
+        .add_systems(
+            Update,
+            (
+                despawn_skill_units,
+                spawn_skill_units,
+                update_skill_units,
+                move_skill_units,
+                spawn_trap_detonation,
+            )
+                .chain(),
+        );
+    app
+}
+
+fn cell(cell_id: u32, x: i32, y: i32, visible: bool) -> SkillUnitCellState {
+    SkillUnitCellState {
+        cell_id,
+        x,
+        y,
+        hp: 100,
+        max_hp: 100,
+        flags: SkillUnitCellFlags {
+            visible,
+            ..Default::default()
+        },
+    }
+}
+
+fn group(group_id: u64, skill_id: u32, cells: Vec<SkillUnitCellState>) -> SkillUnitGroupState {
+    SkillUnitGroupState {
+        group_id,
+        skill_id,
+        skill_level: 10,
+        owner_id: 42,
+        center_x: 40,
+        center_y: 50,
+        phase: SkillUnitPhase::Active,
+        created_tick: 1_000,
+        expires_tick: 9_000,
+        cells,
+    }
+}
+
+fn roots(app: &mut App) -> usize {
+    app.world_mut()
+        .query::<&SkillUnitGroup>()
+        .iter(app.world())
+        .count()
+}
+
+fn cell_count(app: &mut App) -> usize {
+    app.world_mut()
+        .query::<&SkillUnitCell>()
+        .iter(app.world())
+        .count()
+}
+
+fn effects(app: &mut App) -> usize {
+    app.world_mut()
+        .query::<&ActiveEffect>()
+        .iter(app.world())
+        .count()
+}
+
+/// Crystal clusters carry a `StandardMaterial`; the click colliders on
+/// targetable cells are material-less, so this counts only the vfx crystals.
+fn placeholders(app: &mut App) -> usize {
+    app.world_mut()
+        .query::<&MeshMaterial3d<StandardMaterial>>()
+        .iter(app.world())
+        .count()
+}
+
+#[test]
+fn armed_trap_reaches_the_shared_prop_scene_renderer() {
+    use bevy::world_serialization::{WorldAsset, WorldAssetRoot};
+    use lifthrasir_runtime::world::props::MapModel;
+    let mut app = test_app(group_anchored_model_catalog(115));
+    app.init_asset::<WorldAsset>()
+        .init_asset::<AnimationClip>()
+        .init_asset::<AnimationGraph>()
+        .add_plugins(lifthrasir_runtime::world::PropRenderPlugin);
+    crate::presentation::world::register_client_prop_inputs(&mut app);
+    let tint = [0.2, 0.4, 0.6];
+    let map = app
+        .world_mut()
+        .spawn((
+            crate::domain::world::map::MapData {
+                name: "synthetic".into(),
+                width: 1,
+                height: 1,
+            },
+            lifthrasir_runtime::world::PropSceneContext {
+                no_shade_tint: tint,
+            },
+        ))
+        .id();
+    app.insert_resource(crate::presentation::world::SelectedMapScene(map));
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, 115, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+    let prop = app
+        .world_mut()
+        .query_filtered::<Entity, With<LifPropRef>>()
+        .single(app.world())
+        .unwrap();
+    assert!(
+        app.world().get::<MapModel>(prop).is_some(),
+        "armed trap must reach prop dispatch"
+    );
+    let scene = app
+        .world()
+        .get::<Children>(prop)
+        .expect("trap model scene child")[0];
+    assert!(app.world().get::<WorldAssetRoot>(scene).is_some());
+    assert_eq!(
+        app.world()
+            .get::<lifthrasir_runtime::world::PropSceneContext>(scene)
+            .unwrap()
+            .no_shade_tint,
+        tint
+    );
+}
+
+#[test]
+fn spawn_creates_root_and_cells_at_world_positions() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+
+    assert_eq!(roots(&mut app), 1, "one group root");
+    assert_eq!(cell_count(&mut app), 2, "two cells");
+
+    // Root sits at the group center; each cell is a child positioned so its
+    // world transform (root + local) lands on the cell's world coordinate.
+    let center = spawn_coords_to_world_position(40, 50);
+    let mut root_query = app.world_mut().query::<(Entity, &Transform)>();
+    let root = root_query
+        .iter(app.world())
+        .find(|(e, _)| app.world().get::<SkillUnitGroup>(*e).is_some())
+        .map(|(e, t)| (e, *t))
+        .expect("root");
+    assert_eq!(root.1.translation, center);
+
+    let mut cells = app
+        .world_mut()
+        .query::<(&SkillUnitCell, &Transform, &ChildOf)>();
+    let mut seen = 0;
+    for (cell, transform, child_of) in cells.iter(app.world()) {
+        assert_eq!(child_of.parent(), root.0, "cell is a child of the root");
+        let world = root.1.translation + transform.translation;
+        let cell_x = if cell.cell_id == 100 { 40 } else { 41 };
+        let want = spawn_coords_to_world_position(cell_x, 50);
+        assert_eq!(world, want, "cell {} world position", cell.cell_id);
+        seen += 1;
+    }
+    assert_eq!(seen, 2);
+}
+
+#[test]
+fn move_recenters_root_and_reoffsets_cells_keeping_ids() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+    let effects_before = effects(&mut app);
+
+    app.world_mut().write_message(SkillUnitMoved {
+        group_id: 1,
+        center_x: 42,
+        center_y: 51,
+        cells: vec![cell(100, 42, 51, true), cell(101, 43, 51, true)],
+    });
+    app.update();
+
+    let mut roots = app
+        .world_mut()
+        .query_filtered::<(Entity, &Transform), With<SkillUnitGroup>>();
+    let (root, root_transform) = roots
+        .single(app.world())
+        .map(|(e, t)| (e, *t))
+        .expect("one root");
+    assert_eq!(
+        root_transform.translation,
+        spawn_coords_to_world_position(42, 51)
+    );
+
+    let mut cells = app
+        .world_mut()
+        .query::<(&SkillUnitCell, &Transform, &ChildOf)>();
+    for (cell, transform, child_of) in cells.iter(app.world()) {
+        assert_eq!(child_of.parent(), root, "cell stays under the same root");
+        let cell_x = if cell.cell_id == 100 { 42 } else { 43 };
+        assert_eq!(
+            root_transform.translation + transform.translation,
+            spawn_coords_to_world_position(cell_x, 51),
+            "cell {} world position",
+            cell.cell_id
+        );
+    }
+    assert_eq!(cell_count(&mut app), 2, "cells are moved, not respawned");
+    assert_eq!(
+        effects(&mut app),
+        effects_before,
+        "visuals are not respawned"
+    );
+}
+
+#[test]
+fn move_for_unknown_group_is_a_noop() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitMoved {
+        group_id: 99,
+        center_x: 42,
+        center_y: 51,
+        cells: vec![cell(100, 42, 51, true)],
+    });
+    app.update();
+
+    assert_eq!(roots(&mut app), 0);
+    assert_eq!(cell_count(&mut app), 0);
+}
+
+#[test]
+fn spawned_root_carries_phase_from_message() {
+    let mut app = test_app(seeded_catalog());
+    let mut spawned = group(1, STORM_GUST, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Sprung;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    let mut query = app.world_mut().query::<&SkillUnitGroup>();
+    let root = query.iter(app.world()).next().expect("group root");
+    assert_eq!(root.phase, SkillUnitPhase::Sprung);
+}
+
+#[test]
+fn snapshot_bulk_spawns_all_groups() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSnapshotReceived {
+        server_tick: 7,
+        groups: vec![
+            group(1, STORM_GUST, vec![cell(100, 40, 50, true)]),
+            group(
+                2,
+                STORM_GUST,
+                vec![cell(200, 41, 50, true), cell(201, 42, 50, true)],
+            ),
+        ],
+    });
+    app.update();
+
+    assert_eq!(roots(&mut app), 2, "both snapshot groups spawn");
+    assert_eq!(cell_count(&mut app), 3, "all snapshot cells spawn");
+}
+
+#[test]
+fn duplicate_spawn_replaces_and_does_not_stack() {
+    let mut app = test_app(seeded_catalog());
+    let cells = vec![cell(100, 40, 50, true), cell(101, 41, 50, true)];
+
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, STORM_GUST, cells.clone()),
+    });
+    app.update();
+    assert_eq!(roots(&mut app), 1);
+    assert_eq!(cell_count(&mut app), 2);
+    assert_eq!(effects(&mut app), 1, "one group-anchored effect");
+
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, STORM_GUST, cells),
+    });
+    app.update();
+
+    assert_eq!(roots(&mut app), 1, "duplicate replaces the root");
+    assert_eq!(cell_count(&mut app), 2, "cells did not stack");
+    assert_eq!(effects(&mut app), 1, "visual replaced, not stacked");
+}
+
+/// A trap phase change arrives as `SkillUnitDespawn{Destroyed}` + a fresh
+/// `SkillUnitSpawn` carrying the same `group_id`. The replacement deliberately
+/// **reuses the same cell ids**, because a trap changing phase still occupies
+/// the same tiles -- and that is exactly what makes the system order
+/// load-bearing: with the chain reversed (spawn first), the stale despawn
+/// matches every cell of the *new* root, computes `remaining == 0`, and deletes
+/// the trap permanently. Using fresh cell ids here would leave `remaining > 0`
+/// and let a catastrophic ordering pass by luck.
+#[test]
+fn phase_replacement_despawns_before_spawning_the_new_root() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100, 101],
+        reason: SkillUnitDespawnReason::Destroyed,
+    });
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+
+    assert_eq!(roots(&mut app), 1, "replacement leaves one root");
+    assert_eq!(cell_count(&mut app), 2, "only replacement cells survive");
+}
+
+#[test]
+fn same_frame_spawn_then_final_despawn_is_retried() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, STORM_GUST, vec![cell(100, 40, 50, true)]),
+    });
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100],
+        reason: SkillUnitDespawnReason::Destroyed,
+    });
+
+    app.update();
+    assert_eq!(roots(&mut app), 1, "spawn runs after the initial lookup");
+    app.update();
+    assert_eq!(roots(&mut app), 0, "buffered despawn removes the root");
+}
+
+#[test]
+fn unknown_despawn_is_dropped_after_one_retry() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 99,
+        cell_ids: vec![100],
+        reason: SkillUnitDespawnReason::Destroyed,
+    });
+
+    app.update();
+    app.update();
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(99, STORM_GUST, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    assert_eq!(
+        roots(&mut app),
+        1,
+        "despawn was not retained past one retry"
+    );
+}
+
+#[test]
+fn subset_despawn_keeps_root_last_cell_removes_root() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+    assert_eq!(cell_count(&mut app), 2);
+
+    // Subset despawn: one cell goes, the root stays.
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100],
+        reason: Default::default(),
+    });
+    app.update();
+    assert_eq!(roots(&mut app), 1, "root survives a subset despawn");
+    assert_eq!(cell_count(&mut app), 1, "one cell removed");
+
+    // Last cell goes: the root despawns with it.
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![101],
+        reason: Default::default(),
+    });
+    app.update();
+    assert_eq!(cell_count(&mut app), 0, "no cells left");
+    assert_eq!(
+        roots(&mut app),
+        0,
+        "root despawns once the last cell is gone"
+    );
+}
+
+#[test]
+fn duplicate_cell_ids_in_one_despawn_do_not_remove_root_early() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+
+    // Duplicated id for a single cell must count as one removal, not two.
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100, 100],
+        reason: Default::default(),
+    });
+    app.update();
+
+    assert_eq!(
+        cell_count(&mut app),
+        1,
+        "only the one referenced cell is gone"
+    );
+    assert_eq!(roots(&mut app), 1, "root survives; a live cell remains");
+}
+
+#[test]
+fn out_of_range_center_skips_the_group() {
+    let mut app = test_app(seeded_catalog());
+    let mut g = group(1, STORM_GUST, vec![cell(100, 40, 50, true)]);
+    g.center_x = -1;
+    app.world_mut().write_message(SkillUnitSpawned { group: g });
+    app.update();
+
+    assert_eq!(
+        roots(&mut app),
+        0,
+        "malformed center is rejected, not wrapped"
+    );
+    assert_eq!(cell_count(&mut app), 0);
+}
+
+#[test]
+fn out_of_range_cell_skips_only_that_cell() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![cell(100, 40, 50, true), cell(101, -5, 50, true)],
+        ),
+    });
+    app.update();
+
+    assert_eq!(roots(&mut app), 1, "the group still spawns");
+    assert_eq!(cell_count(&mut app), 1, "the out-of-range cell is dropped");
+}
+
+#[test]
+fn unknown_group_on_update_is_a_noop() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitUpdated {
+        group_id: 999,
+        cell_id: 1,
+        hp: 10,
+        max_hp: 100,
+        hp_delta: -90,
+        reason: Default::default(),
+    });
+    app.update();
+    assert_eq!(roots(&mut app), 0, "no panic, nothing spawned");
+}
+
+#[test]
+fn update_mutates_known_cell_hp() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, STORM_GUST, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    app.world_mut().write_message(SkillUnitUpdated {
+        group_id: 1,
+        cell_id: 100,
+        hp: 25,
+        max_hp: 100,
+        hp_delta: -75,
+        reason: Default::default(),
+    });
+    app.update();
+
+    let mut query = app.world_mut().query::<&SkillUnitCell>();
+    let cell = query.iter(app.world()).next().expect("cell");
+    assert_eq!(cell.hp, 25);
+}
+
+#[test]
+fn unknown_group_on_despawn_is_a_noop() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, STORM_GUST, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 999,
+        cell_ids: vec![100],
+        reason: Default::default(),
+    });
+    app.update();
+
+    assert_eq!(roots(&mut app), 1, "unrelated group untouched");
+    assert_eq!(cell_count(&mut app), 1);
+}
+
+#[test]
+fn group_anchor_yields_exactly_one_effect() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![
+                cell(100, 40, 50, true),
+                cell(101, 41, 50, true),
+                cell(102, 42, 50, true),
+            ],
+        ),
+    });
+    app.update();
+    assert_eq!(
+        effects(&mut app),
+        1,
+        "group anchor spawns one effect on the root regardless of cell count"
+    );
+}
+
+#[test]
+fn active_model_spawns_one_prop_on_root_and_despawns_with_it() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(group_anchored_model_catalog(ANKLE_SNARE));
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            ANKLE_SNARE,
+            vec![cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+
+    let props: Vec<(Entity, String, u32, Entity)> = app
+        .world_mut()
+        .query::<(Entity, &LifPropRef, &ChildOf)>()
+        .iter(app.world())
+        .map(|(entity, prop, child_of)| {
+            (
+                entity,
+                prop.0.model.clone(),
+                prop.0.anim_type,
+                child_of.parent(),
+            )
+        })
+        .collect();
+    assert_eq!(props.len(), 1, "one prop for the group, not its cells");
+    let (prop, model, anim_type, parent) = &props[0];
+    assert_eq!(model, "ro://models/외부소품/트랩01.glb");
+    assert_eq!(*anim_type, 0, "trap props do not animate");
+    assert!(
+        app.world().get::<SkillUnitGroup>(*parent).is_some(),
+        "prop is attached directly to the group root"
+    );
+    assert!(
+        app.world().get::<SkillUnitCell>(*parent).is_none(),
+        "prop is not attached to a cell"
+    );
+
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100, 101],
+        reason: Default::default(),
+    });
+    app.update();
+    assert!(
+        app.world().get_entity(*prop).is_err(),
+        "root despawn removes its prop child"
+    );
+}
+
+#[test]
+fn used_and_sprung_models_spawn_no_prop() {
+    const ANKLE_SNARE: u32 = 115;
+    for phase in [SkillUnitPhase::Used, SkillUnitPhase::Sprung] {
+        let mut app = test_app(group_anchored_model_catalog(ANKLE_SNARE));
+        let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+        spawned.phase = phase;
+        app.world_mut()
+            .write_message(SkillUnitSpawned { group: spawned });
+        app.update();
+
+        assert_eq!(
+            app.world_mut()
+                .query::<&LifPropRef>()
+                .iter(app.world())
+                .count(),
+            0,
+            "{phase:?} trap has no physical prop"
+        );
+    }
+}
+
+#[test]
+fn captured_model_keeps_its_prop() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(group_anchored_model_catalog(ANKLE_SNARE));
+    let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Captured;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    assert_eq!(
+        app.world_mut()
+            .query::<&LifPropRef>()
+            .iter(app.world())
+            .count(),
+        1,
+        "captured Ankle Snare remains physically present"
+    );
+}
+
+#[test]
+fn safety_wall_attaches_native_str_to_its_visible_cell() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, SAFETY_WALL, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    let (effect, parent) = app
+        .world_mut()
+        .query::<(&ActiveEffect, &ChildOf)>()
+        .single(app.world())
+        .expect("one Safety Wall effect");
+    assert!(effect.repeating);
+    assert!(
+        app.world().get::<SkillUnitCell>(parent.parent()).is_some(),
+        "Safety Wall STR must be anchored to its visible unit cell"
+    );
+}
+
+#[test]
+fn cell_anchor_yields_one_effect_per_visible_cell() {
+    const ICE_WALL: u32 = 87;
+    let mut app = test_app(cell_anchored_catalog(ICE_WALL));
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            ICE_WALL,
+            vec![
+                cell(100, 40, 50, true),
+                cell(101, 41, 50, true),
+                cell(102, 42, 50, false), // not visible: no effect
+            ],
+        ),
+    });
+    app.update();
+    assert_eq!(
+        effects(&mut app),
+        2,
+        "one effect per visible cell, none for the hidden cell"
+    );
+}
+
+#[test]
+fn cell_anchored_vfx_only_spawns_one_placeholder_per_visible_cell() {
+    const ICE_WALL: u32 = 87;
+    let mut app = test_app(cell_anchored_vfx_catalog(ICE_WALL));
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            ICE_WALL,
+            vec![
+                cell(100, 40, 50, true),
+                cell(101, 41, 50, true),
+                cell(102, 42, 50, false), // not visible: no placeholder
+            ],
+        ),
+    });
+    app.update();
+
+    assert_eq!(
+        placeholders(&mut app),
+        2,
+        "one persistent crystal cluster per visible cell, none for the hidden cell or STR"
+    );
+    assert_eq!(
+        effects(&mut app),
+        0,
+        "vfx-only descriptor spawns no STR effect"
+    );
+}
+
+#[test]
+fn pre_renewal_song_field_plays_its_skill_units_visual() {
+    const POEM_OF_BRAGI: u32 = 321; // one-shot `skills` cast + looping field
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            POEM_OF_BRAGI,
+            vec![cell(100, 40, 50, false), cell(101, 41, 50, false)],
+        ),
+    });
+    app.update();
+
+    assert_eq!(
+        effects(&mut app),
+        1,
+        "one looping visual at the field center"
+    );
+    let mut effects = app.world_mut().query::<(&ActiveEffect, &ChildOf)>();
+    let (effect, child_of) = effects.single(app.world()).expect("one effect");
+    assert!(effect.repeating, "the field visual loops until despawn");
+    assert!(
+        app.world()
+            .get::<SkillUnitGroup>(child_of.parent())
+            .is_some(),
+        "the visual rides on the group root, so it follows SkillUnitMoved"
+    );
+}
+
+#[test]
+fn non_repeating_skill_unit_spawns_no_persistent_visual() {
+    const METEOR_STORM: u32 = 83;
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, METEOR_STORM, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    assert_eq!(effects(&mut app), 0, "no STR at the administrative center");
+    assert_eq!(
+        placeholders(&mut app),
+        0,
+        "non-repeating VFX must not fall back to an Ice Wall crystal"
+    );
+}
+
+#[test]
+fn cell_anchored_sprite_requests_one_animation_per_visible_cell() {
+    const FIRE_WALL: u32 = 18;
+    let mut app = test_app(cell_anchored_sprite_catalog(FIRE_WALL));
+    let mut spawned = group(
+        1,
+        FIRE_WALL,
+        vec![
+            cell(100, 40, 50, true),
+            cell(101, 41, 50, true),
+            cell(102, 42, 50, false), // not visible: no flame
+        ],
+    );
+    spawned.phase = SkillUnitPhase::Sprung;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    let requests: Vec<EffectSprite> = app
+        .world_mut()
+        .query::<&EffectSprite>()
+        .iter(app.world())
+        .cloned()
+        .collect();
+    assert_eq!(
+        requests.len(),
+        2,
+        "one sprite request per visible cell, none for the hidden cell"
+    );
+    assert!(requests.iter().all(|r| r.path == "이팩트/firewall"));
+    assert_eq!(
+        effects(&mut app),
+        0,
+        "sprite descriptor spawns no STR effect"
+    );
+}
+
+#[test]
+fn seeded_firewall_and_firepillar_are_cell_anchored_sprites() {
+    let catalog = seeded_catalog();
+    for skill_id in [18, 80] {
+        let descriptor = catalog.skill(skill_id).expect("seeded descriptor");
+        assert_eq!(descriptor.ground_anchor, GroundAnchor::Cell);
+        assert!(
+            descriptor.sprite_stem().is_some(),
+            "skill {skill_id} needs a Sprite layer"
+        );
+        assert!(
+            descriptor.str_name().is_none(),
+            "skill {skill_id} must not also carry a Str layer"
+        );
+    }
+}
+
+#[test]
+fn targetable_cell_registers_non_targetable_does_not() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(
+            1,
+            STORM_GUST,
+            vec![targetable_cell(100, 40, 50, true), cell(101, 41, 50, true)],
+        ),
+    });
+    app.update();
+
+    let registry = app.world().resource::<EntityRegistry>();
+    assert!(
+        registry.get_entity(100).is_some(),
+        "targetable cell registers its cell_id"
+    );
+    assert!(
+        registry.get_entity(101).is_none(),
+        "non-targetable cell does not register"
+    );
+}
+
+#[test]
+fn despawn_unregisters_targetable_cell() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, STORM_GUST, vec![targetable_cell(100, 40, 50, true)]),
+    });
+    app.update();
+    assert!(
+        app.world()
+            .resource::<EntityRegistry>()
+            .get_entity(100)
+            .is_some()
+    );
+
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100],
+        reason: Default::default(),
+    });
+    app.update();
+
+    assert!(
+        app.world()
+            .resource::<EntityRegistry>()
+            .get_entity(100)
+            .is_none(),
+        "despawn unregisters the targetable cell"
+    );
+}
+
+#[test]
+fn duplicate_spawn_unregisters_old_targetable_cells() {
+    let mut app = test_app(seeded_catalog());
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, STORM_GUST, vec![targetable_cell(100, 40, 50, true)]),
+    });
+    app.update();
+    assert!(
+        app.world()
+            .resource::<EntityRegistry>()
+            .get_entity(100)
+            .is_some()
+    );
+
+    // Group re-entering view (or a duplicate spawn) with a different cell
+    // id: the old targetable cell's registration must not survive the replace.
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, STORM_GUST, vec![targetable_cell(200, 40, 50, true)]),
+    });
+    app.update();
+
+    let registry = app.world().resource::<EntityRegistry>();
+    assert!(
+        registry.get_entity(100).is_none(),
+        "old cell's registration is dropped on replace"
+    );
+    assert!(registry.get_entity(200).is_some(), "new cell registers");
+}
+
+#[test]
+fn used_trap_spawns_one_detonation_effect_and_sound_at_group_center() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(trap_catalog(ANKLE_SNARE));
+    let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Used;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    let (effect_entity, effect, anchor, transform) = app
+        .world_mut()
+        .query::<(Entity, &ActiveEffect, &EffectAnchor, &Transform)>()
+        .single(app.world())
+        .expect("one detonation effect");
+    let center = spawn_coords_to_world_position(40, 50);
+    assert!(!effect.repeating);
+    assert!(matches!(anchor, EffectAnchor::Position(position) if *position == center));
+    assert_eq!(transform.translation, center);
+
+    let sfx = app.world().resource::<Messages<PlaySkillSfx>>();
+    let mut cursor = sfx.get_cursor();
+    let sounds: Vec<_> = cursor.read(sfx).collect();
+    assert_eq!(sounds.len(), 1);
+    assert_eq!(sounds[0].emitter, effect_entity);
+    assert_eq!(sounds[0].sound, "effect/trap.wav");
+}
+
+#[test]
+fn active_trap_spawns_no_detonation() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(trap_catalog(ANKLE_SNARE));
+    app.world_mut().write_message(SkillUnitSpawned {
+        group: group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]),
+    });
+    app.update();
+
+    assert_eq!(effects(&mut app), 0);
+    let sfx = app.world().resource::<Messages<PlaySkillSfx>>();
+    let mut cursor = sfx.get_cursor();
+    assert_eq!(cursor.read(sfx).count(), 0);
+}
+
+#[test]
+fn used_trap_without_trigger_fx_spawns_no_detonation() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(group_anchored_model_catalog(ANKLE_SNARE));
+    let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Used;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    assert_eq!(effects(&mut app), 0);
+    let sfx = app.world().resource::<Messages<PlaySkillSfx>>();
+    let mut cursor = sfx.get_cursor();
+    assert_eq!(cursor.read(sfx).count(), 0);
+}
+
+#[test]
+fn captured_trap_keeps_prop_and_spawns_detonation() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(trap_catalog(ANKLE_SNARE));
+    let mut spawned = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Captured;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    assert_eq!(effects(&mut app), 1);
+    assert_eq!(
+        app.world_mut()
+            .query::<&LifPropRef>()
+            .iter(app.world())
+            .count(),
+        1,
+        "captured trap independently keeps its prop"
+    );
+}
+
+#[test]
+fn non_catalog_skill_in_non_active_phase_is_ignored() {
+    let mut app = test_app(EffectCatalog::build(&EffectData::default()).expect("empty catalog"));
+    let mut spawned = group(1, 999_999, vec![cell(100, 40, 50, true)]);
+    spawned.phase = SkillUnitPhase::Used;
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: spawned });
+    app.update();
+
+    assert_eq!(roots(&mut app), 1);
+    assert_eq!(effects(&mut app), 0);
+}
+
+#[test]
+fn non_active_snapshot_group_spawns_detonation() {
+    const ANKLE_SNARE: u32 = 115;
+    let mut app = test_app(trap_catalog(ANKLE_SNARE));
+    let mut snapshot_group = group(1, ANKLE_SNARE, vec![cell(100, 40, 50, true)]);
+    snapshot_group.phase = SkillUnitPhase::Sprung;
+    app.world_mut().write_message(SkillUnitSnapshotReceived {
+        server_tick: 7,
+        groups: vec![snapshot_group],
+    });
+    app.update();
+
+    assert_eq!(effects(&mut app), 1);
+    let sfx = app.world().resource::<Messages<PlaySkillSfx>>();
+    let mut cursor = sfx.get_cursor();
+    assert_eq!(cursor.read(sfx).count(), 1);
+}

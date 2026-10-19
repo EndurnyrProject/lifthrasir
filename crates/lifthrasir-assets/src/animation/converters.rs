@@ -1,0 +1,166 @@
+use crate::loaders::RoPaletteAsset;
+use bevy::prelude::*;
+use ro_formats::{Palette, sprite::SpriteFrame};
+use std::collections::HashSet;
+
+/// Convert indexed sprite data to RGBA using palette
+/// Performance: This is called for every animation frame conversion
+pub fn convert_indexed_to_rgba(indexed_data: &[u8], palette: &Palette) -> Vec<u8> {
+    let mut rgba_data = Vec::with_capacity(indexed_data.len() * 4);
+    let mut invalid_indices = 0;
+    let mut transparent_pixels = 0;
+    let mut unique_indices = HashSet::new();
+
+    for &index in indexed_data {
+        unique_indices.insert(index);
+
+        if let Some(color) = palette.colors.get(index as usize) {
+            // Check if this color is magenta (255, 0, 255)
+            let is_magenta = color[0] == 255 && color[1] == 0 && color[2] == 255;
+
+            // In RO sprites, index 0 OR magenta color is transparent
+            let final_color = if index == 0 || is_magenta {
+                [color[0], color[1], color[2], 0] // Transparent
+            } else {
+                [color[0], color[1], color[2], 255] // Opaque
+            };
+
+            if final_color[3] == 0 {
+                transparent_pixels += 1;
+            }
+            rgba_data.extend_from_slice(&final_color);
+        } else {
+            // Magenta for missing palette entries (but transparent)
+            rgba_data.extend_from_slice(&[255, 0, 255, 0]);
+            invalid_indices += 1;
+        }
+    }
+
+    // Log conversion stats
+    if unique_indices.len() > 1 {
+        debug!(
+            "Palette conversion: {} unique indices, {:.1}% transparent",
+            unique_indices.len(),
+            transparent_pixels as f32 / indexed_data.len() as f32 * 100.0
+        );
+    }
+
+    if invalid_indices > 0 {
+        warn!(
+            "Found {} invalid palette indices (will show as transparent magenta)",
+            invalid_indices
+        );
+    }
+
+    rgba_data
+}
+
+/// Convert indexed sprite data to RGBA using a custom RoPaletteAsset
+/// This is used for custom palettes like hair colors
+/// Handles transparency for index 0 and magenta (255, 0, 255)
+pub fn convert_indexed_to_rgba_with_custom_palette(
+    indexed_data: &[u8],
+    palette: &RoPaletteAsset,
+) -> Vec<u8> {
+    let mut rgba_data = Vec::with_capacity(indexed_data.len() * 4);
+
+    for &index in indexed_data {
+        if let Some(color) = palette.colors.get(index as usize) {
+            // Check for magenta transparency marker (255, 0, 255)
+            let is_magenta = color[0] == 255 && color[1] == 0 && color[2] == 255;
+
+            // Index 0 OR magenta color = transparent
+            let final_color = if index == 0 || is_magenta {
+                [color[0], color[1], color[2], 0] // Transparent
+            } else {
+                [color[0], color[1], color[2], 255]
+            };
+
+            rgba_data.extend_from_slice(&final_color);
+        } else {
+            // Fallback for invalid palette indices - transparent
+            rgba_data.extend_from_slice(&[0, 0, 0, 0]);
+        }
+    }
+
+    rgba_data
+}
+
+/// Convert a sprite frame to RGBA, handling both indexed and RGBA formats
+/// Supports custom palettes for hair colors and other customizations
+pub fn convert_sprite_frame_to_rgba(
+    frame: &SpriteFrame,
+    default_palette: Option<&Palette>,
+    custom_palette: Option<&RoPaletteAsset>,
+) -> Vec<u8> {
+    if frame.is_rgba {
+        // Already RGBA format - return as-is
+        frame.data.clone()
+    } else if let Some(custom_pal) = custom_palette {
+        // Use custom palette (for hair colors, etc)
+        convert_indexed_to_rgba_with_custom_palette(&frame.data, custom_pal)
+    } else if let Some(default_pal) = default_palette {
+        // Use default palette from sprite file
+        convert_indexed_to_rgba(&frame.data, default_pal)
+    } else {
+        // Fallback: grayscale conversion
+        frame
+            .data
+            .iter()
+            .flat_map(|&pixel| {
+                if pixel == 0 {
+                    [0, 0, 0, 0] // Transparent
+                } else {
+                    [pixel, pixel, pixel, 255] // Opaque grayscale
+                }
+            })
+            .collect()
+    }
+}
+
+pub use crate::loaders::pixels::apply_magenta_transparency;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn indexed_frame() -> SpriteFrame {
+        SpriteFrame {
+            width: 2,
+            height: 1,
+            data: vec![0, 1],
+            is_rgba: false,
+        }
+    }
+
+    #[test]
+    fn custom_palette_overrides_embedded_palette() {
+        let embedded_palette = Palette {
+            colors: vec![[1, 2, 3, 4], [5, 6, 7, 8]],
+        };
+        let custom_palette = RoPaletteAsset {
+            colors: vec![[10, 20, 30, 40], [50, 60, 70, 80]],
+        };
+
+        assert_eq!(
+            convert_sprite_frame_to_rgba(
+                &indexed_frame(),
+                Some(&embedded_palette),
+                Some(&custom_palette),
+            ),
+            vec![10, 20, 30, 0, 50, 60, 70, 255]
+        );
+    }
+
+    #[test]
+    fn embedded_palette_is_used_without_custom_palette() {
+        let embedded_palette = Palette {
+            colors: vec![[1, 2, 3, 4], [5, 6, 7, 8]],
+        };
+
+        assert_eq!(
+            convert_sprite_frame_to_rgba(&indexed_frame(), Some(&embedded_palette), None),
+            vec![1, 2, 3, 0, 5, 6, 7, 255]
+        );
+    }
+}

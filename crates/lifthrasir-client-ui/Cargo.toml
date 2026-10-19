@@ -1,0 +1,26 @@
+[package]
+name = "lifthrasir-client-ui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+lifthrasir-ui = { path = "../lifthrasir-ui" }
+lifthrasir-assets = { path = "../lifthrasir-assets" }
+lifthrasir-runtime = { path = "../lifthrasir-runtime" }
+bevy = { workspace = true }
+bevy_feathers = { workspace = true }
+lifthrasir-client = { path = "../lifthrasir-client" }
+iyes_progress = { workspace = true }
+net-contract = { path = "../net-contract" }
+leafwing-input-manager = { workspace = true }
+secrecy = { workspace = true }
+rfd = { workspace = true }
+
+[features]
+dlss = ["bevy/dlss"]
+# Dev-only overlays (map light/effect gizmos). Enabled by the binary's `dev`
+# feature; absent from release builds.
+dev = []
+
+[dev-dependencies]
+lifthrasir-data = { path = "../lifthrasir-data" }

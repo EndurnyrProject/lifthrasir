@@ -1,0 +1,36 @@
+// Into the Abyss field: red, yellow and blue gemstones.
+// Motif reference: roBrowserLegacy src/Renderer/Effects/Songs.js (AbyssEffects).
+// NOTE: fixed gem selection and group-centered bobbing approximate the
+// reference's randomized per-tile gems without adding a particle spawner.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/레드젬스톤.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (279.0, 275.0), quad: (32.0, 32.0), color: (255, 255, 255, 220)),
+                (at: 60, offset: (279.0, 263.0), quad: (32.0, 32.0), color: (255, 255, 255, 220)),
+                (at: 120, offset: (279.0, 275.0), quad: (32.0, 32.0), color: (255, 255, 255, 220)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/옐로우젬스톤.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (319.0, 255.0), quad: (32.0, 32.0), color: (255, 255, 255, 220)),
+                (at: 60, offset: (319.0, 267.0), quad: (32.0, 32.0), color: (255, 255, 255, 220)),
+                (at: 120, offset: (319.0, 255.0), quad: (32.0, 32.0), color: (255, 255, 255, 220)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/블루젬스톤.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (359.0, 275.0), quad: (32.0, 32.0), color: (255, 255, 255, 220)),
+                (at: 60, offset: (359.0, 263.0), quad: (32.0, 32.0), color: (255, 255, 255, 220)),
+                (at: 120, offset: (359.0, 275.0), quad: (32.0, 32.0), color: (255, 255, 255, 220)),
+            ],
+        ),
+    ],
+)

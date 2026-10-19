@@ -1,0 +1,488 @@
+mod pak;
+
+use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
+use indicatif::{ProgressBar, ProgressStyle};
+use ro_formats::GrfFile;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Parser)]
+#[command(name = "grf-utils")]
+#[command(about = "A CLI utility for extracting and inspecting GRF archive files", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// List all files in the GRF archive
+    List {
+        /// Path to the GRF file
+        grf_file: PathBuf,
+    },
+    /// Extract files from the GRF archive
+    Extract {
+        /// Path to the GRF file
+        grf_file: PathBuf,
+
+        /// Files to extract (if empty, extracts all files)
+        #[arg(value_name = "FILE")]
+        files: Vec<String>,
+
+        /// Output directory (default: "output")
+        #[arg(short, long, default_value = "output")]
+        output: PathBuf,
+    },
+    /// Show information about the GRF archive
+    Info {
+        /// Path to the GRF file
+        grf_file: PathBuf,
+    },
+    /// Pack GRF archives (and an optional loose data folder) into a Lifthrasir pak
+    Pack {
+        /// Path to a GRF file (repeatable; earlier flags win on path collisions)
+        #[arg(long = "grf")]
+        grf: Vec<PathBuf>,
+
+        /// Loose RO data folder overriding same-path GRF entries (kept under its
+        /// own name, so `.../data` shadows the GRFs' `data/...` entries)
+        #[arg(long)]
+        data_folder: Option<PathBuf>,
+
+        /// Lifthrasir content folder mounted at the pak root (repeatable), e.g.
+        /// `assets/data`, whose `fonts/`, `shaders/`, `ui/`, `ron/` … land at the
+        /// root of the `ro://` namespace
+        #[arg(long = "content-dir")]
+        content_dir: Vec<PathBuf>,
+
+        /// Output pak path
+        #[arg(long)]
+        out: PathBuf,
+
+        /// Monotonic content version stamped into the pak manifest
+        #[arg(long)]
+        content_version: u64,
+
+        /// zstd compression level (crate default if omitted)
+        #[arg(long)]
+        zstd_level: Option<i32>,
+
+        /// Worker threads for compression (default: available CPU parallelism)
+        #[arg(long)]
+        jobs: Option<usize>,
+    },
+    /// Merge a patch pak into a main pak in place. Run this only while the game is closed:
+    /// the swap replaces the main pak file, which the running client may hold open.
+    Merge {
+        /// Path to the main pak to update
+        #[arg(long)]
+        main: PathBuf,
+
+        /// Path to the patch pak to apply
+        #[arg(long)]
+        patch: PathBuf,
+    },
+}
+
+fn main() {
+    if let Err(e) = run() {
+        eprintln!("Error: {:#}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::List { grf_file } => {
+            let grf = load_grf(&grf_file)?;
+            list_files(&grf);
+        }
+        Commands::Extract {
+            grf_file,
+            files,
+            output,
+        } => {
+            let grf = load_grf(&grf_file)?;
+            extract_files(&grf, &files, &output)?;
+        }
+        Commands::Info { grf_file } => {
+            let grf = load_grf(&grf_file)?;
+            show_info(&grf);
+        }
+        Commands::Pack {
+            grf,
+            data_folder,
+            content_dir,
+            out,
+            content_version,
+            zstd_level,
+            jobs,
+        } => {
+            pack_command(
+                &grf,
+                data_folder.as_deref(),
+                &content_dir,
+                &out,
+                content_version,
+                zstd_level,
+                jobs,
+            )?;
+        }
+        Commands::Merge { main, patch } => {
+            merge_command(&main, &patch)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn pack_command(
+    grf_paths: &[PathBuf],
+    data_folder: Option<&Path>,
+    content_dirs: &[PathBuf],
+    out: &Path,
+    content_version: u64,
+    zstd_level: Option<i32>,
+    jobs: Option<usize>,
+) -> Result<()> {
+    println!("Scanning sources...");
+    let lifthrasir_tooling::PackInputs {
+        entries,
+        skipped,
+        excluded,
+        diagnostics,
+    } = pak::collect_entries(grf_paths, data_folder, content_dirs);
+    for diagnostic in diagnostics {
+        match diagnostic.level {
+            lifthrasir_tooling::DiagnosticLevel::Info => println!("{}", diagnostic.message),
+            lifthrasir_tooling::DiagnosticLevel::Warning => {
+                eprintln!("Warning: {}", diagnostic.message)
+            }
+        }
+    }
+
+    let jobs = jobs
+        .or_else(|| std::thread::available_parallelism().ok().map(|n| n.get()))
+        .unwrap_or(1);
+
+    println!("Packing {} entries across {jobs} job(s)...", entries.len());
+    let pb = ProgressBar::new(entries.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) - {msg}")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+
+    let dedup = lifthrasir_pak::write_pak_parallel(
+        &entries,
+        out,
+        content_version,
+        zstd_level,
+        jobs,
+        |path| {
+            pb.set_message(path.to_string());
+            pb.inc(1);
+        },
+    )?;
+
+    pb.finish_with_message("Pack complete");
+
+    println!("\nSummary:");
+    println!("  Packed:   {}", entries.len());
+    println!(
+        "  Deduped:  {} entries ({:.1} MiB of duplicate content shared)",
+        dedup.aliased_entries,
+        dedup.aliased_bytes as f64 / (1024.0 * 1024.0)
+    );
+    println!("  Excluded: {excluded}");
+    if skipped > 0 {
+        println!("  Skipped:  {skipped}");
+    }
+
+    Ok(())
+}
+
+fn merge_command(main: &Path, patch: &Path) -> Result<()> {
+    for leftover in lifthrasir_pak::detect_leftovers(main) {
+        eprintln!(
+            "Warning: found leftover '{}' from a previous interrupted merge; \
+             it will be overwritten or replaced by this run",
+            leftover.display()
+        );
+    }
+
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.green} [{elapsed_precise}] {msg}")
+            .unwrap(),
+    );
+
+    let mut count = 0u64;
+    lifthrasir_pak::merge_paks(main, patch, |entry| {
+        count += 1;
+        pb.set_message(entry.to_string());
+        pb.tick();
+    })?;
+
+    pb.finish_with_message("Merge complete");
+    println!("\nSummary:");
+    println!("  Entries written: {}", count);
+
+    Ok(())
+}
+
+fn load_grf(path: &Path) -> Result<GrfFile> {
+    GrfFile::from_path(path.to_path_buf())
+        .with_context(|| format!("Failed to load GRF file: {}", path.display()))
+}
+
+fn list_files(grf: &GrfFile) {
+    println!("Files in archive:");
+    println!("{:-<80}", "");
+
+    for entry in &grf.entries {
+        let size = if entry.real_size < 1024 {
+            format!("{} B", entry.real_size)
+        } else if entry.real_size < 1024 * 1024 {
+            format!("{:.2} KB", entry.real_size as f64 / 1024.0)
+        } else {
+            format!("{:.2} MB", entry.real_size as f64 / (1024.0 * 1024.0))
+        };
+
+        println!("{:<60} {:>15}", entry.filename, size);
+    }
+
+    println!("{:-<80}", "");
+    println!("Total files: {}", grf.entries.len());
+}
+
+fn extract_files(grf: &GrfFile, files: &[String], output_path: &Path) -> Result<()> {
+    // Create and canonicalize output directory for path traversal protection
+    fs::create_dir_all(output_path).with_context(|| {
+        format!(
+            "Failed to create output directory: {}",
+            output_path.display()
+        )
+    })?;
+
+    let canonical_output = output_path.canonicalize().with_context(|| {
+        format!(
+            "Failed to canonicalize output path: {}",
+            output_path.display()
+        )
+    })?;
+
+    if files.is_empty() {
+        // Extract all files
+        extract_all_files(grf, &canonical_output)?;
+    } else {
+        // Extract specific files
+        extract_specific_files(grf, files, &canonical_output)?;
+    }
+
+    Ok(())
+}
+
+enum WriteOutcome {
+    Written,
+    PathTraversalBlocked,
+    WriteFailed(std::io::Error),
+}
+
+/// Validates `output_file_path` stays within `canonical_output` (path traversal
+/// protection), creates parent directories, and writes `data`. Shared by
+/// `extract_all_files` and `extract_specific_files`; callers own their own
+/// success/failure messages and counters.
+fn write_entry(
+    canonical_output: &Path,
+    output_file_path: &Path,
+    label: &str,
+    data: &[u8],
+) -> WriteOutcome {
+    match output_file_path.canonicalize() {
+        Ok(canonical_file) => {
+            if !canonical_file.starts_with(canonical_output) {
+                eprintln!(
+                    "Warning: Skipping potentially malicious file path '{}'",
+                    label
+                );
+                return WriteOutcome::PathTraversalBlocked;
+            }
+        }
+        Err(_) => {
+            // File doesn't exist yet, check parent directory
+            if let Some(parent) = output_file_path.parent()
+                && !parent.starts_with(canonical_output)
+            {
+                eprintln!(
+                    "Warning: Skipping potentially malicious file path '{}'",
+                    label
+                );
+                return WriteOutcome::PathTraversalBlocked;
+            }
+        }
+    }
+
+    // Create parent directories
+    if let Some(parent) = output_file_path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+
+    match fs::write(output_file_path, data) {
+        Ok(_) => WriteOutcome::Written,
+        Err(e) => WriteOutcome::WriteFailed(e),
+    }
+}
+
+fn extract_all_files(grf: &GrfFile, canonical_output: &Path) -> Result<()> {
+    let entries_count = grf.entries.len() as u64;
+
+    println!("Extracting {} files...", entries_count);
+
+    let pb = ProgressBar::new(entries_count);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) - {msg}")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+
+    let mut extracted_count = 0;
+    let mut skipped_count = 0;
+
+    for entry in &grf.entries {
+        // Normalize path (convert backslashes to forward slashes)
+        let normalized_path = entry.filename.replace('\\', "/");
+        pb.set_message(normalized_path.clone());
+
+        let output_file_path = canonical_output.join(&normalized_path);
+
+        if let Some(data) = grf.get_file(&entry.filename) {
+            match write_entry(canonical_output, &output_file_path, &entry.filename, &data) {
+                WriteOutcome::Written => extracted_count += 1,
+                WriteOutcome::PathTraversalBlocked => skipped_count += 1,
+                WriteOutcome::WriteFailed(e) => {
+                    eprintln!(
+                        "Failed to write file '{}': {}",
+                        output_file_path.display(),
+                        e
+                    );
+                    skipped_count += 1;
+                }
+            }
+        } else {
+            skipped_count += 1;
+        }
+
+        pb.inc(1);
+    }
+
+    pb.finish_with_message("Extraction complete");
+
+    println!("\nSummary:");
+    println!("  Extracted: {}", extracted_count);
+    if skipped_count > 0 {
+        println!("  Skipped:   {}", skipped_count);
+    }
+
+    Ok(())
+}
+
+fn extract_specific_files(grf: &GrfFile, files: &[String], canonical_output: &Path) -> Result<()> {
+    println!("Extracting {} specific file(s)...", files.len());
+
+    let pb = ProgressBar::new(files.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} - {msg}",
+            )
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+
+    let mut extracted_count = 0;
+    let mut not_found_count = 0;
+
+    for file_name in files {
+        pb.set_message(file_name.clone());
+
+        // Normalize file name for lookup (GRF uses backslashes)
+        let normalized_name = file_name.replace('/', "\\");
+
+        if let Some(data) = grf.get_file(&normalized_name) {
+            // Use the user-provided name for output (with forward slashes)
+            let output_file_path = canonical_output.join(file_name);
+
+            match write_entry(canonical_output, &output_file_path, file_name, &data) {
+                WriteOutcome::Written => {
+                    extracted_count += 1;
+                    println!("  ✓ {}", file_name);
+                }
+                WriteOutcome::PathTraversalBlocked => {}
+                WriteOutcome::WriteFailed(e) => {
+                    eprintln!("  ✗ Failed to write '{}': {}", file_name, e);
+                }
+            }
+        } else {
+            eprintln!("  ✗ File not found in archive: '{}'", file_name);
+            not_found_count += 1;
+        }
+
+        pb.inc(1);
+    }
+
+    pb.finish_with_message("Extraction complete");
+
+    println!("\nSummary:");
+    println!("  Extracted: {}", extracted_count);
+    if not_found_count > 0 {
+        println!("  Not found: {}", not_found_count);
+    }
+
+    Ok(())
+}
+
+fn show_info(grf: &GrfFile) {
+    println!("GRF Archive Information:");
+    println!("{:=<80}", "");
+    println!("Total files:    {}", grf.entries.len());
+
+    // Calculate total sizes
+    let total_compressed: u64 = grf.entries.iter().map(|e| e.pack_size as u64).sum();
+    let total_uncompressed: u64 = grf.entries.iter().map(|e| e.real_size as u64).sum();
+
+    println!(
+        "Compressed:     {:.2} MB",
+        total_compressed as f64 / (1024.0 * 1024.0)
+    );
+    println!(
+        "Uncompressed:   {:.2} MB",
+        total_uncompressed as f64 / (1024.0 * 1024.0)
+    );
+
+    let compression_ratio = if total_uncompressed > 0 {
+        (total_compressed as f64 / total_uncompressed as f64) * 100.0
+    } else {
+        0.0
+    };
+    println!("Compression:    {:.1}%", compression_ratio);
+
+    // File type statistics
+    let encrypted_count = grf
+        .entries
+        .iter()
+        .filter(|e| e.file_type & 0x06 != 0)
+        .count();
+    if encrypted_count > 0 {
+        println!("Encrypted:      {} files", encrypted_count);
+    }
+
+    println!("{:=<80}", "");
+}

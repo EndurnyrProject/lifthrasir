@@ -1,15 +1,20 @@
 [workspace]
 resolver = "2"
 members = [
-    "game-engine",
-    "grf-utils",
-    "lifthrasir-data",
-    "lifthrasir-ui",
-    "lifthrasir",
-    "net-aesir",
-    "net-contract",
-    "ro-formats",
-    "ro-to-lifthrasir-cli",
+    "crates/lifthrasir-client",
+    "apps/grf-utils",
+    "crates/lifthrasir-assets",
+    "crates/lifthrasir-data",
+    "crates/lifthrasir-pak",
+    "crates/lifthrasir-runtime",
+    "crates/lifthrasir-tooling",
+    "crates/lifthrasir-client-ui",
+    "crates/lifthrasir-ui",
+    "apps/lifthrasir",
+    "crates/net-aesir",
+    "crates/net-contract",
+    "crates/ro-formats",
+    "apps/ro-to-lifthrasir-cli",
 ]
 
 [workspace.package]

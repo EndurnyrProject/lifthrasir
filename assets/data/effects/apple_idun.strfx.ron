@@ -1,0 +1,69 @@
+// Apple of Idun (BA_APPLEIDUN) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive, Blend = alpha (magenta-keyed sprites).
+//
+// Shape: the native idun_apple.bmp apples drift up on either side of the
+// performer's head with a pair of notes between them, over a soft warm glow.
+// Mirrors the note_1.str song burst the other songs reuse, with the apples
+// standing in for the outer notes.
+(
+    fps: 30,
+    layers: [
+        // Left apple rising.
+        (
+            textures: ["ro://data/texture/effect/idun_apple.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (292.0, 252.0), quad: (22.0, 22.0), color: (255, 255, 255, 0) ),
+                ( at: 8,  offset: (290.0, 240.0), quad: (26.0, 26.0), color: (255, 255, 255, 235) ),
+                ( at: 22, offset: (286.0, 222.0), quad: (28.0, 28.0), color: (255, 255, 255, 235) ),
+                ( at: 36, offset: (284.0, 204.0), quad: (26.0, 26.0), color: (255, 255, 255, 0) ),
+            ],
+        ),
+        // Right apple rising, slightly later.
+        (
+            textures: ["ro://data/texture/effect/idun_apple.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 5,  offset: (346.0, 252.0), quad: (22.0, 22.0), color: (255, 255, 255, 0) ),
+                ( at: 13, offset: (348.0, 240.0), quad: (26.0, 26.0), color: (255, 255, 255, 235) ),
+                ( at: 27, offset: (352.0, 222.0), quad: (28.0, 28.0), color: (255, 255, 255, 235) ),
+                ( at: 41, offset: (354.0, 204.0), quad: (26.0, 26.0), color: (255, 255, 255, 0) ),
+            ],
+        ),
+        // Centre eighth note.
+        (
+            textures: ["ro://data/texture/effect/ws1.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 3,  offset: (312.0, 246.0), quad: (20.0, 20.0), color: (255, 240, 200, 0) ),
+                ( at: 10, offset: (314.0, 234.0), quad: (24.0, 24.0), color: (255, 240, 200, 220) ),
+                ( at: 24, offset: (318.0, 214.0), quad: (24.0, 24.0), color: (255, 240, 200, 200) ),
+                ( at: 36, offset: (320.0, 196.0), quad: (22.0, 22.0), color: (255, 240, 200, 0) ),
+            ],
+        ),
+        // Beamed notes, trailing the first.
+        (
+            textures: ["ro://data/texture/effect/ws3.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 9,  offset: (330.0, 250.0), quad: (20.0, 20.0), color: (255, 240, 200, 0) ),
+                ( at: 16, offset: (328.0, 238.0), quad: (24.0, 24.0), color: (255, 240, 200, 220) ),
+                ( at: 30, offset: (324.0, 218.0), quad: (24.0, 24.0), color: (255, 240, 200, 200) ),
+                ( at: 42, offset: (322.0, 200.0), quad: (22.0, 22.0), color: (255, 240, 200, 0) ),
+            ],
+        ),
+        // Warm glow behind the performer.
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 240.0), quad: (60.0, 60.0),   color: (255, 200, 120, 0) ),
+                ( at: 12, offset: (319.0, 236.0), quad: (130.0, 130.0), color: (255, 210, 140, 120) ),
+                ( at: 42, offset: (319.0, 226.0), quad: (150.0, 150.0), color: (255, 200, 120, 0) ),
+            ],
+        ),
+    ],
+)
