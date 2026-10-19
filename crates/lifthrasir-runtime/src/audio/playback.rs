@@ -51,17 +51,17 @@ pub fn handle_bgm_change(
         let audio_source: Handle<AudioSource> = asset_server.load(&event.path);
 
         // Play with fade-in and volume settings
-        let effective_volume = audio_settings.effective_bgm_volume() as f64;
+        let effective_volume = bgm_decibels(&audio_settings);
         let instance_handle = audio
             .play(audio_source)
             .looped()
-            .with_volume(0.0) // Start at 0 volume for fade-in
+            .with_volume(amplitude_to_decibels(0.0)) // start silent, then fade in
             .handle();
 
         // Apply fade-in after starting
         if let Some(mut instance) = audio_instances.get_mut(&instance_handle) {
             instance.set_decibels(
-                effective_volume as f32,
+                effective_volume,
                 AudioTween::linear(std::time::Duration::from_secs_f32(event.fade_in_duration)),
             );
         }
@@ -117,13 +117,13 @@ pub fn handle_volume_change(
         debug!("Setting BGM volume to {}", clamped_volume);
         audio_settings.bgm_volume = clamped_volume;
 
-        let effective_volume = audio_settings.effective_bgm_volume() as f64;
+        let effective_volume = bgm_decibels(&audio_settings);
 
         // Apply to active track
         if let Some(active_handle) = &bgm_manager.active_instance
             && let Some(mut instance) = audio_instances.get_mut(active_handle)
         {
-            instance.set_decibels(effective_volume as f32, AudioTween::default());
+            instance.set_decibels(effective_volume, AudioTween::default());
         }
 
         // Apply to fading tracks (they should fade to the new volume level)
@@ -152,19 +152,19 @@ pub fn handle_mute_change(
         debug!("Setting BGM muted to {}", event.muted);
         audio_settings.bgm_muted = event.muted;
 
-        let effective_volume = audio_settings.effective_bgm_volume() as f64;
+        let effective_volume = bgm_decibels(&audio_settings);
 
         // Apply to active track
         if let Some(active_handle) = &bgm_manager.active_instance
             && let Some(mut instance) = audio_instances.get_mut(active_handle)
         {
-            instance.set_decibels(effective_volume as f32, AudioTween::default());
+            instance.set_decibels(effective_volume, AudioTween::default());
         }
 
         // Mute/unmute fading tracks as well
         for fading_handle in &bgm_manager.fading_out_instances {
             if let Some(mut instance) = audio_instances.get_mut(fading_handle) {
-                instance.set_decibels(effective_volume as f32, AudioTween::default());
+                instance.set_decibels(effective_volume, AudioTween::default());
             }
         }
     }
@@ -202,6 +202,10 @@ pub(crate) fn amplitude_to_decibels(amplitude: f32) -> f32 {
     } else {
         20.0 * amplitude.log10()
     }
+}
+
+fn bgm_decibels(settings: &AudioSettings) -> f32 {
+    amplitude_to_decibels(settings.effective_bgm_volume())
 }
 
 #[auto_add_system(
@@ -348,8 +352,8 @@ pub fn handle_ambience_mute_change(
 }
 
 #[cfg(test)]
-mod sfx_tests {
-    use super::{amplitude_to_decibels, sfx_path};
+mod tests {
+    use super::{AudioSettings, amplitude_to_decibels, bgm_decibels, sfx_path};
 
     #[test]
     fn sfx_path_normalizes_backslashes_and_prefixes() {
@@ -365,5 +369,52 @@ mod sfx_tests {
         assert_eq!(amplitude_to_decibels(1.0), 0.0);
         assert!(amplitude_to_decibels(0.0) <= -80.0);
         assert!((amplitude_to_decibels(0.5) - (-6.0206)).abs() < 0.01);
+    }
+
+    #[test]
+    fn bgm_slider_zero_is_silence_not_unity() {
+        let settings = AudioSettings {
+            bgm_volume: 0.0,
+            ..Default::default()
+        };
+        let decibels = bgm_decibels(&settings);
+        assert!(
+            decibels <= -80.0,
+            "BGM at 0 must be silence, got {decibels} dB"
+        );
+    }
+
+    #[test]
+    fn bgm_slider_is_monotonic_across_the_whole_range() {
+        let decibels: Vec<f32> = [0.0, 0.1, 0.25, 0.5, 0.75, 1.0]
+            .iter()
+            .map(|v| {
+                bgm_decibels(&AudioSettings {
+                    bgm_volume: *v,
+                    ..Default::default()
+                })
+            })
+            .collect();
+        assert!(
+            decibels.windows(2).all(|w| w[0] < w[1]),
+            "BGM volume must increase with the slider, got {decibels:?}"
+        );
+        assert_eq!(decibels.last().copied(), Some(0.0));
+    }
+
+    #[test]
+    fn bgm_mute_is_silence_regardless_of_slider_position() {
+        for volume in [0.0, 0.25, 0.5, 1.0] {
+            let settings = AudioSettings {
+                bgm_volume: volume,
+                bgm_muted: true,
+                ..Default::default()
+            };
+            let decibels = bgm_decibels(&settings);
+            assert!(
+                decibels <= -80.0,
+                "muted BGM at slider {volume} must be silence, got {decibels} dB"
+            );
+        }
     }
 }
