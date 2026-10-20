@@ -9,7 +9,7 @@ use bevy::{
     light::CascadeShadowConfigBuilder,
     prelude::*,
 };
-use lifthrasir_data::lif::{self, LifGat, LifMap, LifWater};
+use lifthrasir_data::lif::{self, LifEditor, LifMap, LifWater};
 
 /// Register LIF metadata decoding after Bevy's glTF plugin; installs no map lifecycle.
 pub struct MapGltfPlugin;
@@ -196,23 +196,13 @@ fn decode_root(gltf: &gltf::Gltf) -> Result<LifMapData, String> {
         ));
     }
 
-    let gat: LifGat = root_extension(gltf, lif::EXTENSION_GAT)?
-        .ok_or_else(|| format!("missing root extension {}", lif::EXTENSION_GAT))?;
-    let raw = buffer_view_bytes(gltf, gat.buffer_view as usize, lif::EXTENSION_GAT)?;
-    let altitude = LifGat::decode(raw)
-        .map_err(|error| format!("decoding the {} bufferView: {error}", lif::EXTENSION_GAT))?;
-    // `LifGat::validate` re-parses the whole grid; the check is two
-    // comparisons and this runs on every map load.
-    if altitude.width != gat.width || altitude.height != gat.height {
-        return Err(format!(
-            "{} declares {}x{} but its bufferView parses to {}x{}",
-            lif::EXTENSION_GAT,
-            gat.width,
-            gat.height,
-            altitude.width,
-            altitude.height
-        ));
-    }
+    let editor: LifEditor = root_extension(gltf, lif::EXTENSION_EDITOR)?
+        .ok_or_else(|| format!("missing root extension {}", lif::EXTENSION_EDITOR))?;
+    let collision = editor.collision;
+    let collision_bytes = buffer_view_bytes(gltf, collision.buffer_view, lif::EXTENSION_EDITOR)?;
+    let altitude = collision
+        .to_altitude(collision_bytes)
+        .map_err(|error| format!("decoding {} collision: {error}", lif::EXTENSION_EDITOR))?;
 
     let water = root_extension::<LifWater>(gltf, lif::EXTENSION_WATER)?;
     let water_tiles = match water.as_ref() {

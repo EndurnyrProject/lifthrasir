@@ -931,7 +931,7 @@ mod tests {
 
         assert_eq!(
             digest.to_hex().as_str(),
-            "2b0e014a00d12e5e6084fd349634e4149836958be5c8b7dafd2bb91d9fa9ccd2"
+            "22f8121067c881bc4060dc5823e326942c308ad053fd22832ca0f33ffd174a50"
         );
     }
 

@@ -1,0 +1,17 @@
+[package]
+name = "lifthrasir-map-editor"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+bevy = { workspace = true, features = ["bevy_gltf", "ktx2", "zstd_rust"] }
+clap = { workspace = true }
+gltf = { workspace = true }
+lifthrasir-data = { path = "../lifthrasir-data" }
+lifthrasir-assets = { path = "../lifthrasir-assets" }
+lifthrasir-runtime = { path = "../lifthrasir-runtime" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+toml = { workspace = true }

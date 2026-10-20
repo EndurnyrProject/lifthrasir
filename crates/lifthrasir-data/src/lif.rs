@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Format version written by the current converter and required by the
 /// runtime handler.
-pub const FORMAT_VERSION: u32 = 4;
+pub const FORMAT_VERSION: u32 = 5;
 
 /// glTF root-extension key for [`LifMap`].
 pub const EXTENSION_MAP: &str = "LIF_map";
@@ -17,6 +17,13 @@ pub const EXTENSION_WATER: &str = "LIF_water";
 
 /// glTF root-extension key for [`LifGat`].
 pub const EXTENSION_GAT: &str = "LIF_gat";
+
+/// glTF root-extension key for editor-owned map data.
+///
+/// Unlike [`EXTENSION_GAT`], this payload has a Lifthrasir-defined binary
+/// representation and contains no Ragnarok file bytes. It is the migration
+/// target for maps opened and saved by the map editor.
+pub const EXTENSION_EDITOR: &str = "LIF_editor";
 
 /// glTF root-extension key for [`LifModel`].
 pub const EXTENSION_MODEL: &str = "LIF_model";
@@ -251,6 +258,179 @@ impl LifGat {
     }
 }
 
+/// Root extension `LIF_editor`: editor-owned data buffers for a map.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LifEditor {
+    pub collision: LifCollision,
+}
+
+/// A rectangular collision grid stored in the GLB binary chunk.
+///
+/// Each cell is twenty bytes: four little-endian `f32` corner heights followed
+/// by one byte of [`LifCollisionFlags`]. The representation is deliberately
+/// independent of GAT and can be rewritten by the editor without retaining or
+/// recreating a native map file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LifCollision {
+    pub width: u32,
+    pub height: u32,
+    pub buffer_view: usize,
+}
+
+/// Gameplay properties of a collision cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LifCollisionFlags(u8);
+
+impl LifCollisionFlags {
+    pub const WALKABLE: Self = Self(1 << 0);
+    pub const WATER: Self = Self(1 << 1);
+    pub const SNIPABLE: Self = Self(1 << 2);
+
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
+    pub const fn contains(self, property: Self) -> bool {
+        self.0 & property.0 != 0
+    }
+
+    pub const fn from_bits(bits: u8) -> Self {
+        Self(bits & (Self::WALKABLE.0 | Self::WATER.0 | Self::SNIPABLE.0))
+    }
+}
+
+/// One decoded cell of a [`LifCollision`] grid.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LifCollisionCell {
+    pub height: [f32; 4],
+    pub flags: LifCollisionFlags,
+}
+
+impl LifCollision {
+    pub const BYTES_PER_CELL: usize = 4 * std::mem::size_of::<f32>() + 1;
+
+    pub fn encoded_len(self) -> Result<usize, String> {
+        (self.width as usize)
+            .checked_mul(self.height as usize)
+            .and_then(|count| count.checked_mul(Self::BYTES_PER_CELL))
+            .ok_or_else(|| "LIF_editor collision dimensions overflow".to_string())
+    }
+
+    pub fn decode(self, bytes: &[u8]) -> Result<Vec<LifCollisionCell>, String> {
+        let expected = self.encoded_len()?;
+        if bytes.len() != expected {
+            return Err(format!(
+                "LIF_editor collision buffer has {} bytes, expected {expected}",
+                bytes.len()
+            ));
+        }
+        Ok(bytes
+            .chunks_exact(Self::BYTES_PER_CELL)
+            .map(|chunk| LifCollisionCell {
+                height: std::array::from_fn(|index| {
+                    let offset = index * std::mem::size_of::<f32>();
+                    f32::from_le_bytes(chunk[offset..offset + 4].try_into().expect("four bytes"))
+                }),
+                flags: LifCollisionFlags::from_bits(chunk[16]),
+            })
+            .collect())
+    }
+
+    pub fn encode(cells: &[LifCollisionCell], width: u32, height: u32) -> Result<Vec<u8>, String> {
+        let collision = Self {
+            width,
+            height,
+            buffer_view: 0,
+        };
+        let expected_cells = (width as usize)
+            .checked_mul(height as usize)
+            .ok_or_else(|| "LIF_editor collision dimensions overflow".to_string())?;
+        if cells.len() != expected_cells {
+            return Err(format!(
+                "LIF_editor collision has {} cells, expected {expected_cells}",
+                cells.len()
+            ));
+        }
+        let mut bytes = Vec::with_capacity(collision.encoded_len()?);
+        for cell in cells {
+            for height in cell.height {
+                bytes.extend_from_slice(&height.to_le_bytes());
+            }
+            bytes.push(cell.flags.bits());
+        }
+        Ok(bytes)
+    }
+
+    /// Converts a parsed import-time GAT into editor-owned data. The source
+    /// format's several equivalent walkable type ids intentionally collapse to
+    /// their gameplay properties here.
+    pub fn from_altitude(altitude: &RoAltitude) -> Result<(Self, Vec<u8>), String> {
+        let cells: Vec<_> = altitude
+            .cells
+            .iter()
+            .map(|cell| {
+                let mut flags = LifCollisionFlags::empty();
+                if cell.cell_type.is_walkable() {
+                    flags.0 |= LifCollisionFlags::WALKABLE.0;
+                }
+                if cell.cell_type.is_water() {
+                    flags.0 |= LifCollisionFlags::WATER.0;
+                }
+                if cell.cell_type.is_snipable() {
+                    flags.0 |= LifCollisionFlags::SNIPABLE.0;
+                }
+                LifCollisionCell {
+                    height: cell.height,
+                    flags,
+                }
+            })
+            .collect();
+        let bytes = Self::encode(&cells, altitude.width, altitude.height)?;
+        Ok((
+            Self {
+                width: altitude.width,
+                height: altitude.height,
+                buffer_view: 0,
+            },
+            bytes,
+        ))
+    }
+
+    /// Produces the runtime altitude representation from editor-owned data.
+    /// This is a compatibility bridge while gameplay APIs still use
+    /// `RoAltitude`; it never reparses or retains a GAT file.
+    pub fn to_altitude(self, bytes: &[u8]) -> Result<RoAltitude, String> {
+        let cells = self.decode(bytes)?;
+        Ok(RoAltitude {
+            version: "LIF_editor".to_string(),
+            width: self.width,
+            height: self.height,
+            cells: cells
+                .into_iter()
+                .map(|cell| {
+                    let raw_type = if cell.flags.contains(LifCollisionFlags::WATER) {
+                        3
+                    } else if cell.flags.contains(LifCollisionFlags::WALKABLE) {
+                        0
+                    } else if cell.flags.contains(LifCollisionFlags::SNIPABLE) {
+                        5
+                    } else {
+                        1
+                    };
+                    ro_formats::GatCell {
+                        height: cell.height,
+                        cell_type: raw_type.into(),
+                    }
+                })
+                .collect(),
+        })
+    }
+}
+
 /// Parameters for one cell of a [`LifWater`] zone grid.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct LifWaterZone {
@@ -474,6 +654,43 @@ mod tests {
         let deserialized: LifGat = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn editor_collision_round_trips_without_native_file_bytes() {
+        let cells = [
+            LifCollisionCell {
+                height: [1.0, 2.0, 3.0, 4.0],
+                flags: LifCollisionFlags::WALKABLE,
+            },
+            LifCollisionCell {
+                height: [-1.0, -2.0, -3.0, -4.0],
+                flags: LifCollisionFlags::from_bits(
+                    LifCollisionFlags::WATER.bits() | LifCollisionFlags::SNIPABLE.bits(),
+                ),
+            },
+        ];
+
+        let bytes = LifCollision::encode(&cells, 2, 1).expect("encode collision");
+        let collision = LifCollision {
+            width: 2,
+            height: 1,
+            buffer_view: 7,
+        };
+
+        assert_eq!(bytes.len(), 2 * LifCollision::BYTES_PER_CELL);
+        assert_eq!(collision.decode(&bytes).expect("decode collision"), cells);
+    }
+
+    #[test]
+    fn editor_collision_rejects_a_truncated_buffer() {
+        let collision = LifCollision {
+            width: 1,
+            height: 1,
+            buffer_view: 0,
+        };
+
+        assert!(collision.decode(&[0; 16]).is_err());
     }
 
     #[test]

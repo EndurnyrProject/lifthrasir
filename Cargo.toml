@@ -5,6 +5,7 @@ members = [
     "apps/grf-utils",
     "crates/lifthrasir-assets",
     "crates/lifthrasir-data",
+    "crates/lifthrasir-map-editor",
     "crates/lifthrasir-pak",
     "crates/lifthrasir-runtime",
     "crates/lifthrasir-tooling",

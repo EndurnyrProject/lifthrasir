@@ -275,29 +275,35 @@ fn validate_root_extensions(
     blob: &[u8],
     inputs: &MapGlbInputs,
 ) -> anyhow::Result<()> {
-    validate_gat_extension(root, blob, inputs.gat_bytes)?;
+    validate_editor_extension(root, blob, inputs.gat_bytes)?;
     validate_map_extension(root, inputs)?;
     validate_water_extension(root, blob, inputs)
 }
 
-/// The strongest guarantee of the format: the bin chunk still holds the
-/// server's `.gat` file, byte for byte.
-fn validate_gat_extension(
+/// The collision buffer is a decoded, editor-owned equivalent of the imported
+/// GAT. Native source bytes must not be retained in a converted map.
+fn validate_editor_extension(
     root: &gltf_json::Root,
     blob: &[u8],
     source: &[u8],
 ) -> anyhow::Result<()> {
-    let gat: lif::LifGat = root_extension(root, lif::EXTENSION_GAT)?;
-    let embedded = gat_bytes(root, blob, &gat)?;
+    let editor: lif::LifEditor = root_extension(root, lif::EXTENSION_EDITOR)?;
+    let embedded = collision_bytes(root, blob, &editor.collision)?;
+    let source = ro_formats::RoAltitude::from_bytes(source).context("parsing source GAT")?;
+    let (expected, expected_bytes) = lif::LifCollision::from_altitude(&source)
+        .map_err(anyhow::Error::msg)
+        .context("encoding expected editor collision")?;
     ensure!(
-        embedded == source,
-        "{} bufferView holds {} bytes that differ from the {} source .gat bytes",
-        lif::EXTENSION_GAT,
-        embedded.len(),
-        source.len()
+        editor.collision.width == expected.width && editor.collision.height == expected.height,
+        "{} collision dimensions differ from the source GAT",
+        lif::EXTENSION_EDITOR
     );
-    gat.validate(embedded)
-        .with_context(|| format!("validating {} dims", lif::EXTENSION_GAT))
+    ensure!(
+        embedded == expected_bytes,
+        "{} collision buffer differs from the decoded source GAT",
+        lif::EXTENSION_EDITOR
+    );
+    Ok(())
 }
 
 fn validate_map_extension(root: &gltf_json::Root, inputs: &MapGlbInputs) -> anyhow::Result<()> {
@@ -422,20 +428,25 @@ fn water_mask_bytes<'a>(
     Ok(&blob[start..end])
 }
 
-fn gat_bytes<'a>(
+fn collision_bytes<'a>(
     root: &gltf_json::Root,
     blob: &'a [u8],
-    gat: &lif::LifGat,
+    collision: &lif::LifCollision,
 ) -> anyhow::Result<&'a [u8]> {
     let view = root
         .buffer_views
-        .get(gat.buffer_view as usize)
-        .with_context(|| format!("LIF_gat points at missing bufferView {}", gat.buffer_view))?;
+        .get(collision.buffer_view)
+        .with_context(|| {
+            format!(
+                "LIF_editor points at missing bufferView {}",
+                collision.buffer_view
+            )
+        })?;
     let start = view.byte_offset.map_or(0, |offset| offset.0 as usize);
     let end = start + view.byte_length.0 as usize;
     if end > blob.len() {
         bail!(
-            "LIF_gat bufferView spans {start}..{end}, past the {} byte BIN chunk",
+            "LIF_editor bufferView spans {start}..{end}, past the {} byte BIN chunk",
             blob.len()
         );
     }
@@ -479,11 +490,11 @@ mod tests {
     }
 
     #[test]
-    fn mutated_gat_bytes_fail_the_byte_for_byte_check() {
+    fn mutated_gat_bytes_fail_the_editor_collision_check() {
         let mut fixture = write_fixture();
         fixture.gat[24] ^= 0xff;
 
-        assert_fails(&fixture, lif::EXTENSION_GAT);
+        assert_fails(&fixture, lif::EXTENSION_EDITOR);
     }
 
     #[test]

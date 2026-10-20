@@ -4800,6 +4800,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "lifthrasir-map-editor"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "clap",
+ "gltf",
+ "lifthrasir-assets",
+ "lifthrasir-data",
+ "lifthrasir-runtime",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "lifthrasir-pak"
 version = "0.0.1"
 dependencies = [

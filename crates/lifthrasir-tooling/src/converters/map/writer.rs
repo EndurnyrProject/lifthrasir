@@ -659,9 +659,9 @@ pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Root extensions: `LIF_map` always, `LIF_gat` with the source `.gat` bytes
-/// embedded verbatim in the bin chunk, and `LIF_water` when any resolved zone
-/// declares a non-zero water level.
+/// Root extensions: `LIF_map` always, `LIF_editor` with decoded collision
+/// data, and `LIF_water` when any resolved zone declares a non-zero water
+/// level. Native GAT bytes are import-only and are never written to the GLB.
 fn build_root_extensions(
     root: &mut json::Root,
     bin: &mut BinChunk,
@@ -669,7 +669,10 @@ fn build_root_extensions(
 ) -> anyhow::Result<()> {
     let altitude = RoAltitude::from_bytes(inputs.gat_bytes)
         .with_context(|| format!("parsing GAT of map '{}'", inputs.map_name))?;
-    let gat_view = bin.push_view(inputs.gat_bytes, None);
+    let (mut collision, collision_bytes) = lif::LifCollision::from_altitude(&altitude)
+        .map_err(anyhow::Error::msg)
+        .with_context(|| format!("encoding collision of map '{}'", inputs.map_name))?;
+    collision.buffer_view = bin.push_view(&collision_bytes, None).value() as usize;
 
     let map = lif::LifMap {
         format_version: lif::FORMAT_VERSION,
@@ -690,24 +693,20 @@ fn build_root_extensions(
             OUTDOOR_EXPOSURE_EV100
         },
     };
-    let gat = lif::LifGat {
-        width: altitude.width,
-        height: altitude.height,
-        buffer_view: gat_view.value() as u32,
-    };
 
     let extensions = root.extensions.get_or_insert_with(Default::default);
     extensions
         .others
         .insert(lif::EXTENSION_MAP.to_string(), serde_json::to_value(&map)?);
-    extensions
-        .others
-        .insert(lif::EXTENSION_GAT.to_string(), serde_json::to_value(gat)?);
+    extensions.others.insert(
+        lif::EXTENSION_EDITOR.to_string(),
+        serde_json::to_value(lif::LifEditor { collision })?,
+    );
 
     root.extensions_used = vec![
         "KHR_lights_punctual".to_string(),
         lif::EXTENSION_MAP.to_string(),
-        lif::EXTENSION_GAT.to_string(),
+        lif::EXTENSION_EDITOR.to_string(),
     ];
 
     let mut resolved_water = water::resolve_water(inputs.ground, &inputs.world.water)?;
@@ -930,24 +929,31 @@ mod tests {
     }
 
     #[test]
-    fn lif_gat_buffer_view_holds_the_source_gat_bytes_verbatim() {
+    fn lif_editor_collision_buffer_holds_the_decoded_source_gat() {
         let fixture = write_fixture();
 
         let (document, buffers) = reopen(&fixture.path);
         let root_json = document.into_json();
         let extensions = root_json.extensions.as_ref().expect("root extensions");
-        let gat: lif::LifGat =
-            serde_json::from_value(extensions.others[lif::EXTENSION_GAT].clone()).expect("LIF_gat");
+        let editor: lif::LifEditor =
+            serde_json::from_value(extensions.others[lif::EXTENSION_EDITOR].clone())
+                .expect("LIF_editor");
+        let collision = editor.collision;
 
-        let view = &root_json.buffer_views[gat.buffer_view as usize];
+        let view = &root_json.buffer_views[collision.buffer_view];
         let start = view.byte_offset.expect("byte offset").0 as usize;
         let end = start + view.byte_length.0 as usize;
         let embedded = &buffers[0][start..end];
 
-        assert_eq!(embedded, fixture.gat.as_slice());
-        assert_eq!(gat.width, 4);
-        assert_eq!(gat.height, 4);
-        assert!(gat.validate(embedded).is_ok());
+        let source = RoAltitude::from_bytes(&fixture.gat).expect("source GAT");
+        let (expected, expected_bytes) =
+            lif::LifCollision::from_altitude(&source).expect("collision");
+        assert_eq!((collision.width, collision.height), (4, 4));
+        assert_eq!(
+            (collision.width, collision.height),
+            (expected.width, expected.height)
+        );
+        assert_eq!(embedded, expected_bytes);
     }
 
     #[test]
@@ -1013,7 +1019,7 @@ mod tests {
         for name in [
             "KHR_lights_punctual",
             lif::EXTENSION_MAP,
-            lif::EXTENSION_GAT,
+            lif::EXTENSION_EDITOR,
             lif::EXTENSION_WATER,
         ] {
             assert!(
