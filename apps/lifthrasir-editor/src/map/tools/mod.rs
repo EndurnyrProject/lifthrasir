@@ -6,17 +6,16 @@ pub mod place;
 use super::{layout::MapLayout, open::EditorScreen};
 use crate::shell::{
     browser::{AssetRef, BrowserSelection},
-    camera::EditorCamera,
     gizmo::GizmoChoice,
-    ui::{EditorUiArea, EditorUiSet, viewport_owns_pointer},
+    outliner::Outliner,
+    ui::{EditorUiArea, EditorUiSet, ViewportCursor},
 };
 use bevy::{
     ecs::system::SystemParam,
     picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings},
     prelude::*,
-    window::PrimaryWindow,
 };
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui, input::EguiWantsInput};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use transform_gizmo_bevy::config::GizmoModeKind;
 
 /// What a click in the viewport does.
@@ -32,13 +31,10 @@ pub enum ToolMode {
 /// The world-space terrain point under the primary window's cursor.
 #[derive(SystemParam)]
 pub struct TerrainCursor<'w, 's> {
+    cursor: ViewportCursor<'w, 's>,
     ray_cast: MeshRayCast<'w, 's>,
-    windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
-    cameras: Query<'w, 's, (&'static Camera, &'static GlobalTransform), With<EditorCamera>>,
     parents: Query<'w, 's, &'static ChildOf>,
     layout: Option<Res<'w, MapLayout>>,
-    egui: Option<Res<'w, EguiWantsInput>>,
-    area: Option<Res<'w, EditorUiArea>>,
 }
 
 impl TerrainCursor<'_, '_> {
@@ -47,26 +43,14 @@ impl TerrainCursor<'_, '_> {
     /// `MeshRayCast::cast_ray` does.
     pub fn hit(&mut self) -> Option<Vec3> {
         let terrain = self.layout.as_ref()?.terrain_node?;
-        let cursor = self.windows.single().ok()?.cursor_position()?;
-        let egui_wants = self
-            .egui
-            .as_ref()
-            .is_some_and(|egui| egui.wants_any_pointer_input());
-        let viewport = self.area.as_ref().and_then(|area| area.viewport());
-        if !viewport_owns_pointer(egui_wants, viewport, Some(cursor)) {
-            return None;
-        }
-        let (camera, global) = self.cameras.single().ok()?;
-        let ray = camera.viewport_to_world(global, cursor).ok()?;
+        let (_, ray) = self.cursor.ray()?;
         let parents = &self.parents;
         let on_terrain = |entity| {
             parents
                 .get(entity)
                 .is_ok_and(|parent| parent.parent() == terrain)
         };
-        let settings = MeshRayCastSettings::default()
-            .with_filter(&on_terrain)
-            .with_early_exit_test(&|_| false);
+        let settings = MeshRayCastSettings::default().with_filter(&on_terrain);
         self.ray_cast
             .cast_ray(ray, &settings)
             .first()
@@ -96,6 +80,7 @@ fn toolbar(
     mut mode: ResMut<ToolMode>,
     browser: Res<BrowserSelection>,
     gizmo: Option<ResMut<GizmoChoice>>,
+    mut outliner: ResMut<Outliner>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let mut current = mode.clone();
@@ -117,6 +102,8 @@ fn toolbar(
                 {
                     current = ToolMode::Place(asset.clone());
                 }
+                ui.separator();
+                ui.toggle_value(&mut outliner.open, "Outliner");
                 let Some(GizmoChoice(kind)) = &mut choice else {
                     return;
                 };

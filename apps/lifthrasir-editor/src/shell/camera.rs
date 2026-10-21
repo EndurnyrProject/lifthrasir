@@ -84,6 +84,14 @@ pub fn frame_bounds(camera: &mut Transform, min: Vec3, max: Vec3) {
     *camera = orbit_transform(centre, 0.0, extent * std::f32::consts::SQRT_2);
 }
 
+/// Moves the camera so it looks at `target` from `distance` away, keeping its
+/// rotation (and so the orbit pitch and yaw), and makes `target` the focus.
+pub fn focus_on(camera: &mut Transform, editor: &mut EditorCamera, target: Vec3, distance: f32) {
+    let distance = distance.clamp(MIN_DISTANCE, MAX_DISTANCE);
+    camera.translation = target - camera.forward() * distance;
+    editor.focus = target;
+}
+
 fn fly_look(rotation: Quat, delta: Vec2) -> Quat {
     let (yaw, pitch, _) = rotation.to_euler(EulerRot::YXZ);
     let yaw = yaw - delta.x * LOOK_SENSITIVITY;

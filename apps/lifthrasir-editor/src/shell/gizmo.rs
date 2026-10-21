@@ -3,29 +3,17 @@
 
 use super::{
     camera::{CameraMode, EditorCamera},
-    node::{EditorNodeId, find_node},
+    node::{EditorNodeId, KindFlags, LightFlags, NodeKind, find_node, node_kind},
     selection::Selection,
     ui::{viewport_has_keyboard, viewport_has_pointer},
     undo::{ComponentEdit, record},
 };
 use crate::map::{open::EditorScreen, refresh::after_node_edit, tools::ToolMode};
 use bevy::prelude::*;
-use lifthrasir_runtime::world::{LifAudioEmitter, LifEffectEmitter, LifPropRef};
 use transform_gizmo_bevy::{
     GizmoCamera, GizmoDragStarted, GizmoDragging, GizmoMode, GizmoOptions, GizmoTarget,
     TransformGizmoPlugin, config::GizmoModeKind,
 };
-
-/// What kind of object node a gizmo is attached to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NodeKind {
-    Prop,
-    Sound,
-    Effect,
-    PointLight,
-    SpotLight,
-    Sun,
-}
 
 /// The transform modes a node kind may use; the first is the fallback when
 /// the chosen mode is not allowed.
@@ -53,14 +41,7 @@ impl Default for GizmoChoice {
 #[derive(Resource, Default)]
 struct Drag(Option<(EditorNodeId, Transform)>);
 
-type NodeQuery<'a> = (
-    Entity,
-    &'a EditorNodeId,
-    Has<LifPropRef>,
-    Has<LifAudioEmitter>,
-    Has<LifEffectEmitter>,
-    Option<&'a Children>,
-);
+type NodeQuery<'a> = (Entity, &'a EditorNodeId, KindFlags<'a>);
 
 /// The gizmo on the selected node. Needs a render app and picking, so the
 /// binary adds it; headless apps leave it out.
@@ -120,29 +101,6 @@ fn choice_keys(
     }
 }
 
-fn node_kind(
-    (prop, sound, effect, children): (bool, bool, bool, Option<&Children>),
-    lights: &Query<(Has<DirectionalLight>, Has<SpotLight>, Has<PointLight>)>,
-) -> Option<NodeKind> {
-    if prop {
-        return Some(NodeKind::Prop);
-    }
-    if sound {
-        return Some(NodeKind::Sound);
-    }
-    if effect {
-        return Some(NodeKind::Effect);
-    }
-    children?
-        .iter()
-        .find_map(|child| match lights.get(child).ok()? {
-            (true, _, _) => Some(NodeKind::Sun),
-            (_, true, _) => Some(NodeKind::SpotLight),
-            (_, _, true) => Some(NodeKind::PointLight),
-            _ => None,
-        })
-}
-
 /// Keeps `GizmoTarget` on the selected node only (in the Select tool while
 /// editing) and restricts the gizmo to the chosen mode, or the node kind's
 /// first allowed mode. Frozen during a drag.
@@ -155,7 +113,7 @@ fn sync_target(
     screen: Res<State<EditorScreen>>,
     choice: Res<GizmoChoice>,
     nodes: Query<NodeQuery<'static>>,
-    lights: Query<(Has<DirectionalLight>, Has<SpotLight>, Has<PointLight>)>,
+    lights: Query<LightFlags>,
     targets: Query<Entity, With<GizmoTarget>>,
     mut options: ResMut<GizmoOptions>,
 ) {
@@ -167,9 +125,7 @@ fn sync_target(
         .0
         .filter(|_| editing)
         .and_then(|id| nodes.iter().find(|node| *node.1 == id))
-        .and_then(|(entity, _, prop, sound, effect, children)| {
-            node_kind((prop, sound, effect, children), &lights).map(|kind| (entity, kind))
-        });
+        .and_then(|(entity, _, flags)| node_kind(flags, &lights).map(|kind| (entity, kind)));
     for target in &targets {
         if wanted.is_none_or(|(entity, _)| entity != target) {
             commands.entity(target).remove::<GizmoTarget>();

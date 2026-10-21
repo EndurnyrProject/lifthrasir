@@ -28,6 +28,53 @@ impl EditorNodeIds {
     }
 }
 
+/// What kind of object node an entity is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeKind {
+    Prop,
+    Sound,
+    Effect,
+    PointLight,
+    SpotLight,
+    Sun,
+}
+
+/// Query data [`node_kind`] reads from an object node.
+pub type KindFlags<'a> = (
+    Has<LifPropRef>,
+    Has<LifAudioEmitter>,
+    Has<LifEffectEmitter>,
+    Option<&'a Children>,
+);
+
+/// Query data [`node_kind`] reads from a node's light child.
+pub type LightFlags = (Has<DirectionalLight>, Has<SpotLight>, Has<PointLight>);
+
+/// The kind of an object node: its payload component, or the light on one
+/// of its children. `None` for anything else.
+pub fn node_kind(
+    (prop, sound, effect, children): (bool, bool, bool, Option<&Children>),
+    lights: &Query<LightFlags>,
+) -> Option<NodeKind> {
+    if prop {
+        return Some(NodeKind::Prop);
+    }
+    if sound {
+        return Some(NodeKind::Sound);
+    }
+    if effect {
+        return Some(NodeKind::Effect);
+    }
+    children?
+        .iter()
+        .find_map(|child| match lights.get(child).ok()? {
+            (true, _, _) => Some(NodeKind::Sun),
+            (_, true, _) => Some(NodeKind::SpotLight),
+            (_, _, true) => Some(NodeKind::PointLight),
+            _ => None,
+        })
+}
+
 /// The editable payload of an object node. Lights keep the authored candela,
 /// since `intensity` cannot be divided back bit-exactly.
 #[derive(Debug, Clone)]

@@ -1,8 +1,10 @@
-//! The selected object node, click picking, delete, and the editor-only
-//! handles that make lights and emitters clickable.
+//! The selected object node, selecting the hovered node on press, delete,
+//! and the editor-only handles that make lights and emitters visible and
+//! clickable.
 
 use super::{
     node::{EditorNodeId, NodeSnapshot, find_node},
+    pick::{Hovered, hover},
     ui::{viewport_has_keyboard, viewport_has_pointer},
     undo::{DespawnNode, commit},
 };
@@ -10,8 +12,9 @@ use crate::{
     EditorOnly,
     map::{layout::MapLayout, open::EditorScreen, tools::ToolMode},
 };
-use bevy::{light::NotShadowCaster, picking::events::Click, prelude::*};
+use bevy::{light::NotShadowCaster, prelude::*};
 use lifthrasir_runtime::world::{LifAudioEmitter, LifEffectEmitter};
+use transform_gizmo_bevy::GizmoTarget;
 
 /// The selected object node, if any.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,13 +44,12 @@ type PointOrSpot = Or<(With<PointLight>, With<SpotLight>)>;
 
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<Selection>()
-        .add_message::<Pointer<Click>>()
         .add_systems(OnExit(EditorScreen::Editing), clear_selection)
         .add_systems(
             Update,
             (
                 attach_handles,
-                select_on_click.run_if(
+                select_on_press.after(hover).run_if(
                     in_state(EditorScreen::Editing)
                         .and_then(resource_equals(ToolMode::Select))
                         .and_then(viewport_has_pointer),
@@ -63,8 +65,8 @@ fn clear_selection(mut selection: ResMut<Selection>) {
 }
 
 /// Gives every new light (point/spot) or emitter node one handle child:
-/// yellow for lights, blue for sounds, magenta for effects. The sun is
-/// selected from the inspector instead.
+/// yellow for lights, blue for sounds, magenta for effects. The sun has none;
+/// it is picked by its origin or from the outliner.
 fn attach_handles(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -128,30 +130,21 @@ pub fn object_node(
     }
 }
 
-/// A primary click selects the clicked object node, or clears the selection
-/// when it hits anything else.
-fn select_on_click(
-    mut clicks: MessageReader<Pointer<Click>>,
-    parents: Query<&ChildOf>,
+/// A left press selects the hovered object node, or clears the selection
+/// over anything else. Presses on the transform gizmo are left to it.
+fn select_on_press(
+    mouse: Res<ButtonInput<MouseButton>>,
+    hovered: Res<Hovered>,
     ids: Query<&EditorNodeId>,
-    layout: Option<Res<MapLayout>>,
+    gizmos: Query<&GizmoTarget>,
     mut selection: ResMut<Selection>,
 ) {
-    let Some(layout) = layout else {
-        clicks.clear();
+    if !mouse.just_pressed(MouseButton::Left) || gizmos.iter().any(GizmoTarget::is_focused) {
         return;
-    };
-    for click in clicks
-        .read()
-        .filter(|click| click.event.button == PointerButton::Primary)
-    {
-        let node = object_node(
-            click.entity,
-            |entity| parents.get(entity).ok().map(ChildOf::parent),
-            &layout,
-        );
-        selection.set_if_neq(Selection(node.and_then(|node| ids.get(node).ok().copied())));
     }
+    selection.set_if_neq(Selection(
+        hovered.0.and_then(|node| ids.get(node).ok().copied()),
+    ));
 }
 
 /// Escape clears the selection; Delete/Backspace deletes the selected node.

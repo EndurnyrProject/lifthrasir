@@ -104,6 +104,8 @@ pub fn editor_app(data_folder: &Path) -> App {
         EditorShellPlugin,
         MapEditorPlugin,
     ))
+    // Prop glbs carry animation clips.
+    .init_asset::<bevy::animation::AnimationClip>()
     .insert_resource(EditorPaths {
         data_folder: data_folder.to_path_buf(),
     });

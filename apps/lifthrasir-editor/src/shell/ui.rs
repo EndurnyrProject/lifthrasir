@@ -6,7 +6,7 @@ use crate::{
     EditorPaths,
     map::{open::OpenMap, save::map_glb_path},
 };
-use bevy::{prelude::*, window::PrimaryWindow};
+use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContexts, egui, input::EguiWantsInput};
 
 /// Editor egui systems, chained in this order in `EguiPrimaryContextPass`.
@@ -52,11 +52,6 @@ impl EditorUiArea {
         self.pass = pass;
         self.rect = Some(ui.available_rect_before_wrap());
     }
-
-    /// The 3D viewport left after the last panel pass, once panels have drawn.
-    pub fn viewport(&self) -> Option<egui::Rect> {
-        self.rect
-    }
 }
 
 /// True when the pointer belongs to the 3D viewport: egui does not want it and
@@ -74,6 +69,42 @@ pub fn viewport_has_pointer(
     )
 }
 
+/// The primary window's cursor over the 3D viewport, and the editor camera
+/// ray through it.
+#[derive(SystemParam)]
+pub struct ViewportCursor<'w, 's> {
+    windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
+    cameras: Query<'w, 's, (&'static Camera, &'static GlobalTransform), With<EditorCamera>>,
+    egui: Option<Res<'w, EguiWantsInput>>,
+    area: Option<Res<'w, EditorUiArea>>,
+}
+
+impl ViewportCursor<'_, '_> {
+    /// The cursor and its camera ray; `None` over egui panels or outside the
+    /// window.
+    pub fn ray(&self) -> Option<(Vec2, Ray3d)> {
+        let cursor = self.windows.single().ok()?.cursor_position()?;
+        let egui_wants = self
+            .egui
+            .as_ref()
+            .is_some_and(|egui| egui.wants_any_pointer_input());
+        let viewport = self.area.as_ref().and_then(|area| area.rect);
+        if !viewport_owns_pointer(egui_wants, viewport, Some(cursor)) {
+            return None;
+        }
+        let (camera, global) = self.cameras.single().ok()?;
+        let ray = camera.viewport_to_world(global, cursor).ok()?;
+        Some((cursor, ray))
+    }
+
+    /// Where `point` lands on screen, and its distance from the camera.
+    pub fn to_screen(&self, point: Vec3) -> Option<(Vec2, f32)> {
+        let (camera, global) = self.cameras.single().ok()?;
+        let screen = camera.world_to_viewport(global, point).ok()?;
+        Some((screen, global.translation().distance(point)))
+    }
+}
+
 /// True when egui is not taking keyboard input. Without egui the viewport owns it.
 pub fn viewport_has_keyboard(egui: Option<Res<EguiWantsInput>>) -> bool {
     !egui.is_some_and(|egui| egui.wants_any_keyboard_input())
@@ -81,7 +112,7 @@ pub fn viewport_has_keyboard(egui: Option<Res<EguiWantsInput>>) -> bool {
 
 // NOTE: compares egui points with logical window pixels, equal at egui zoom 1;
 // convert with the egui zoom factor if editor zoom is ever exposed.
-pub(crate) fn viewport_owns_pointer(
+fn viewport_owns_pointer(
     egui_wants: bool,
     viewport: Option<egui::Rect>,
     cursor: Option<Vec2>,

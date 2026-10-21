@@ -5,6 +5,8 @@ pub mod camera;
 pub mod gizmo;
 pub mod inspector;
 pub mod node;
+pub mod outliner;
+pub mod pick;
 pub mod preview;
 pub mod selection;
 pub mod ui;
@@ -21,38 +23,44 @@ pub struct EditorShellPlugin;
 
 impl Plugin for EditorShellPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((browser::BrowserPlugin, selection::plugin, inspector::plugin))
-            .init_resource::<EditorUiArea>()
-            .init_resource::<undo::UndoStack>()
-            .init_resource::<node::EditorNodeIds>()
-            .configure_sets(
-                EguiPrimaryContextPass,
+        app.add_plugins((
+            browser::BrowserPlugin,
+            pick::plugin,
+            outliner::plugin,
+            selection::plugin,
+            inspector::plugin,
+        ))
+        .init_resource::<EditorUiArea>()
+        .init_resource::<undo::UndoStack>()
+        .init_resource::<node::EditorNodeIds>()
+        .configure_sets(
+            EguiPrimaryContextPass,
+            (
+                EditorUiSet::MenuBar,
+                EditorUiSet::ToolBar,
+                EditorUiSet::LeftPanel,
+                EditorUiSet::RightPanel,
+                EditorUiSet::Windows,
+                EditorUiSet::StatusBar,
+            )
+                .chain(),
+        )
+        .add_systems(Startup, camera::spawn_editor_camera)
+        .add_systems(
+            Update,
+            (
                 (
-                    EditorUiSet::MenuBar,
-                    EditorUiSet::ToolBar,
-                    EditorUiSet::LeftPanel,
-                    EditorUiSet::RightPanel,
-                    EditorUiSet::Windows,
-                    EditorUiSet::StatusBar,
+                    camera::toggle_camera_mode,
+                    camera::fly_move,
+                    undo::history_keys,
                 )
-                    .chain(),
-            )
-            .add_systems(Startup, camera::spawn_editor_camera)
-            .add_systems(
-                Update,
-                (
-                    (
-                        camera::toggle_camera_mode,
-                        camera::fly_move,
-                        undo::history_keys,
-                    )
-                        .run_if(viewport_has_keyboard),
-                    (camera::fly_look_input, camera::orbit_input).run_if(viewport_has_pointer),
-                ),
-            )
-            .add_systems(
-                EguiPrimaryContextPass,
-                ui::status_bar.in_set(EditorUiSet::StatusBar),
-            );
+                    .run_if(viewport_has_keyboard),
+                (camera::fly_look_input, camera::orbit_input).run_if(viewport_has_pointer),
+            ),
+        )
+        .add_systems(
+            EguiPrimaryContextPass,
+            ui::status_bar.in_set(EditorUiSet::StatusBar),
+        );
     }
 }
