@@ -148,6 +148,18 @@ pub fn collect_entries(
     data_folder: Option<&Path>,
     content_folders: &[PathBuf],
 ) -> PackInputs {
+    collect_entries_with_pruning(grf_paths, data_folder, content_folders, false)
+}
+
+/// As [`collect_entries`], optionally omitting converted prop GLBs that are no
+/// longer referenced by any map GLB in the content folders. Actor GLBs under
+/// `models/3dmob` are never treated as map props.
+pub fn collect_entries_with_pruning(
+    grf_paths: &[PathBuf],
+    data_folder: Option<&Path>,
+    content_folders: &[PathBuf],
+    prune_unused_props: bool,
+) -> PackInputs {
     let mut tiers: Vec<SourceEntries> = Vec::new();
     if let Some(folder) = data_folder {
         tiers.push(scan_data_folder(folder));
@@ -171,13 +183,73 @@ pub fn collect_entries(
         }
     }
 
-    let (entries, excluded) = exclude_source_formats(union_entries(tiers));
+    let (mut entries, excluded) = exclude_source_formats(union_entries(tiers));
+    let mut pruned = 0;
+    if prune_unused_props {
+        let referenced = referenced_prop_models(&entries);
+        entries.retain(|(path, _)| {
+            let candidate = path.starts_with("models/")
+                && path.ends_with(".glb")
+                && !path.starts_with("models/3dmob/");
+            let remove = candidate && !referenced.contains(path);
+            pruned += usize::from(remove);
+            !remove
+        });
+        if pruned > 0 {
+            diagnostics.push(Diagnostic {
+                level: DiagnosticLevel::Info,
+                message: format!("pruned {pruned} unreferenced prop model(s)"),
+            });
+        }
+    }
     PackInputs {
         entries,
         skipped,
         excluded,
         diagnostics,
     }
+}
+
+fn referenced_prop_models(entries: &SourceEntries) -> HashSet<String> {
+    let mut referenced = HashSet::new();
+    for (path, bytes) in entries {
+        if !path.starts_with("maps/") || !path.ends_with(".glb") {
+            continue;
+        }
+        let Ok(json) = glb_json(bytes) else { continue };
+        let Some(nodes) = json.get("nodes").and_then(serde_json::Value::as_array) else {
+            continue;
+        };
+        for node in nodes {
+            let Some(model) = node
+                .pointer("/extras/lif_prop/model")
+                .and_then(serde_json::Value::as_str)
+            else {
+                continue;
+            };
+            let model = model.trim_start_matches("ro://").to_lowercase();
+            if let Some(model) = model.strip_prefix("data/") {
+                // Old maps can still point at source models; those are not
+                // candidates for pruning, but keeping the normalized key is
+                // useful for converted references below.
+                referenced.insert(model.to_string());
+            } else {
+                referenced.insert(model);
+            }
+        }
+    }
+    referenced
+}
+
+fn glb_json(bytes: &[u8]) -> Result<serde_json::Value, ()> {
+    if bytes.len() < 20 || &bytes[..4] != b"glTF" {
+        return Err(());
+    }
+    let json_len = u32::from_le_bytes(bytes[12..16].try_into().map_err(|_| ())?) as usize;
+    if &bytes[16..20] != b"JSON" || 20 + json_len > bytes.len() {
+        return Err(());
+    }
+    serde_json::from_slice(&bytes[20..20 + json_len]).map_err(|_| ())
 }
 
 #[cfg(test)]

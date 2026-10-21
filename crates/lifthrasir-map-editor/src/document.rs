@@ -272,6 +272,77 @@ impl MapDocument {
         self.deleted_props.contains(&node_index)
     }
 
+    /// Duplicates a leaf map prop and places it beside the original. The new
+    /// node is intentionally added to the same parent, preserving the GLTF
+    /// scene hierarchy used by the runtime.
+    pub fn duplicate_prop(&mut self, node_index: usize) -> Result<usize> {
+        self.commit_pending_prop_transform();
+        let nodes = self
+            .root
+            .get("nodes")
+            .and_then(serde_json::Value::as_array)
+            .context("map has no nodes")?;
+        let source = nodes
+            .get(node_index)
+            .cloned()
+            .with_context(|| format!("map has no node {node_index}"))?;
+        ensure!(
+            source
+                .pointer(&format!("/extras/{}", lif::EXTRAS_PROP))
+                .is_some(),
+            "node {node_index} is not a map prop"
+        );
+        let mut duplicate = source;
+        let mut transform = node_transform(&duplicate)?;
+        transform.translation[0] += 20.0;
+        write_node_transform(&mut duplicate, transform);
+
+        let new_index = nodes.len();
+        self.root
+            .get_mut("nodes")
+            .and_then(serde_json::Value::as_array_mut)
+            .expect("nodes validated above")
+            .push(duplicate);
+
+        let mut parent_found = false;
+        if let Some(nodes) = self
+            .root
+            .get_mut("nodes")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for parent in nodes {
+                if let Some(children) = parent
+                    .get_mut("children")
+                    .and_then(serde_json::Value::as_array_mut)
+                    && children
+                        .iter()
+                        .any(|value| value.as_u64() == Some(node_index as u64))
+                {
+                    children.push(serde_json::json!(new_index));
+                    parent_found = true;
+                    break;
+                }
+            }
+        }
+        if !parent_found {
+            let scenes = self
+                .root
+                .get_mut("scenes")
+                .and_then(serde_json::Value::as_array_mut)
+                .context("map has no scenes")?;
+            let scene = scenes.first_mut().context("map has no default scene")?;
+            scene
+                .get_mut("nodes")
+                .and_then(serde_json::Value::as_array_mut)
+                .context("default scene has no nodes")?
+                .push(serde_json::json!(new_index));
+        }
+        self.scene.props += 1;
+        self.dirty = true;
+        self.redo.clear();
+        Ok(new_index)
+    }
+
     /// Returns a prop node's current document transform for synchronizing an
     /// undo/redo operation back into the live editor scene.
     pub fn prop_transform(&self, node_index: usize) -> Result<([f32; 3], [f32; 4], [f32; 3])> {

@@ -8,7 +8,7 @@ mod grf_vfs;
 mod lua;
 mod pack_inputs;
 mod report;
-pub use pack_inputs::collect_entries;
+pub use pack_inputs::{collect_entries, collect_entries_with_pruning};
 pub use report::{BatchFailure, Diagnostic, DiagnosticLevel, OperationReport, PackInputs};
 
 pub use config::LoaderConfig;

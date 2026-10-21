@@ -2,7 +2,7 @@ use anyhow::Result;
 use bevy::{
     asset::AssetPlugin,
     camera::Exposure,
-    input::mouse::{MouseMotion, MouseWheel},
+    camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     prelude::*,
     text::{FontSize, FontSourceTemplate},
 };
@@ -14,7 +14,7 @@ use lifthrasir_assets::{
 use lifthrasir_map_editor::{LifCollisionFlags, MapDocument};
 use lifthrasir_runtime::{
     RuntimeCorePlugin, WorldRenderPlugin,
-    world::{LifMapData, LifMapNodeIndex, LifPropRef, MapSceneRequest},
+    world::{LifMapData, LifMapNodeIndex, LifPropRef, MapSceneRequest, PropSceneContext},
 };
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -55,8 +55,26 @@ impl EditorNotice {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum GizmoMode {
+    #[default]
+    Translate,
+    Rotate,
+}
+
 #[derive(Resource, Default)]
-struct PropSaveDebounce(Option<Timer>);
+struct PropGizmo {
+    mode: GizmoMode,
+    drag: Option<(Entity, Entity)>,
+}
+
+#[derive(Component)]
+struct PropGizmoRoot;
+
+#[derive(Component, Clone, Copy)]
+struct GizmoAxis {
+    axis: Vec3,
+}
 
 #[derive(Component, Default, Clone)]
 struct NoticeLabel;
@@ -94,7 +112,7 @@ fn main() -> Result<()> {
         .insert_resource(CursorCell::default())
         .init_resource::<SelectedProp>()
         .init_resource::<EditorNotice>()
-        .init_resource::<PropSaveDebounce>()
+        .init_resource::<PropGizmo>()
         .add_plugins(
             DefaultPlugins
                 .set(AssetPlugin {
@@ -111,21 +129,23 @@ fn main() -> Result<()> {
                     ..default()
                 }),
         )
+        .add_plugins(FreeCameraPlugin)
         .add_systems(Startup, setup)
         .add_systems(
             Update,
             (
-                move_camera,
-                look_camera,
                 move_cursor,
                 select_cursor_with_mouse,
                 toggle_cursor_cell,
                 undo_redo,
                 refresh_collision_overlay,
                 apply_map_lighting,
+                switch_gizmo_mode,
                 move_selected_prop,
+                duplicate_selected_prop,
                 delete_selected_prop,
-                auto_save_prop_transform,
+                sync_prop_gizmo,
+                draw_prop_gizmo,
                 sync_prop_cursor,
                 update_notice,
                 save_document,
@@ -138,6 +158,9 @@ fn main() -> Result<()> {
         WorldRenderPlugin,
     ));
     app.add_observer(select_prop);
+    app.add_observer(gizmo_drag_start);
+    app.add_observer(gizmo_drag);
+    app.add_observer(gizmo_drag_end);
     app.run();
     Ok(())
 }
@@ -214,8 +237,17 @@ fn sync_prop_cursor(
     *visibility = Visibility::Visible;
 }
 
-/// Temporary keyboard transform tool while the dedicated gizmo widget is
-/// built: I/K move forward/back in map Z, J/L move X, U/O move Y, Q/E rotate.
+fn switch_gizmo_mode(keys: Res<ButtonInput<KeyCode>>, mut gizmo: ResMut<PropGizmo>) {
+    if keys.just_pressed(KeyCode::KeyG) {
+        gizmo.mode = GizmoMode::Translate;
+    }
+    if keys.just_pressed(KeyCode::KeyR) {
+        gizmo.mode = GizmoMode::Rotate;
+    }
+}
+
+/// Keyboard fine-control remains available alongside the mouse gizmo.
+/// I/K move along Z, J/L along X, U/O along Y, and Q/E rotate around Y.
 fn move_selected_prop(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
@@ -223,10 +255,8 @@ fn move_selected_prop(
     mut document: ResMut<EditorDocument>,
     mut props: Query<(&mut Transform, &LifMapNodeIndex), With<LifPropRef>>,
 ) {
-    let Some(entity) = selected.0 else {
-        return;
-    };
-    if !keys.any_pressed([
+    let Some(entity) = selected.0 else { return };
+    let moving = keys.any_pressed([
         KeyCode::KeyI,
         KeyCode::KeyK,
         KeyCode::KeyJ,
@@ -235,10 +265,11 @@ fn move_selected_prop(
         KeyCode::KeyO,
         KeyCode::KeyQ,
         KeyCode::KeyE,
-    ]) {
+    ]);
+    if !moving {
         return;
     }
-    let Ok((mut transform, node_index)) = props.get_mut(entity) else {
+    let Ok((mut transform, node)) = props.get_mut(entity) else {
         return;
     };
     let distance = 20.0 * time.delta_secs();
@@ -266,14 +297,46 @@ fn move_selected_prop(
     if keys.pressed(KeyCode::KeyE) {
         transform.rotate_y(-time.delta_secs());
     }
-    let translation = transform.translation.to_array();
-    let rotation = transform.rotation.to_array();
-    let scale = transform.scale.to_array();
-    if let Err(error) = document
-        .0
-        .update_prop_transform(node_index.0, translation, rotation, scale)
+    if let Err(error) = document.0.update_prop_transform(
+        node.0,
+        transform.translation.to_array(),
+        transform.rotation.to_array(),
+        transform.scale.to_array(),
+    ) {
+        error!("recording keyboard prop transform: {error:#}");
+    }
+}
+
+fn duplicate_selected_prop(
+    keys: Res<ButtonInput<KeyCode>>,
+    selected: Res<SelectedProp>,
+    mut document: ResMut<EditorDocument>,
+    props: Query<(&LifMapNodeIndex, &LifPropRef, &Transform), With<LifPropRef>>,
+    mut commands: Commands,
+    mut notice: ResMut<EditorNotice>,
+) {
+    if !keys.just_pressed(KeyCode::KeyD)
+        || !keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight])
     {
-        error!("recording prop transform: {error:#}");
+        return;
+    }
+    let Some(entity) = selected.0 else { return };
+    let Ok((node, prop, transform)) = props.get(entity) else {
+        return;
+    };
+    match document.0.duplicate_prop(node.0) {
+        Ok(index) => {
+            let mut duplicate_transform = *transform;
+            duplicate_transform.translation.x += 20.0;
+            commands.spawn((
+                LifPropRef(prop.0.clone()),
+                LifMapNodeIndex(index),
+                PropSceneContext::default(),
+                duplicate_transform,
+            ));
+            notice.show(format!("Duplicated prop (node {index}) — Ctrl+S to save"));
+        }
+        Err(error) => notice.show(format!("Duplicate failed: {error}")),
     }
 }
 
@@ -302,43 +365,153 @@ fn delete_selected_prop(
     notice.show("Deleted prop — Ctrl+S to save");
 }
 
-fn auto_save_prop_transform(
-    keys: Res<ButtonInput<KeyCode>>,
-    time: Res<Time>,
-    mut document: ResMut<EditorDocument>,
-    mut debounce: ResMut<PropSaveDebounce>,
-    mut notice: ResMut<EditorNotice>,
+fn gizmo_drag_start(
+    drag: On<Pointer<DragStart>>,
+    axes: Query<&GizmoAxis>,
+    selected: Res<SelectedProp>,
+    mut state: ResMut<PropGizmo>,
 ) {
-    let moving = keys.any_pressed([
-        KeyCode::KeyI,
-        KeyCode::KeyK,
-        KeyCode::KeyJ,
-        KeyCode::KeyL,
-        KeyCode::KeyU,
-        KeyCode::KeyO,
-        KeyCode::KeyQ,
-        KeyCode::KeyE,
-    ]);
-    if moving || !document.0.has_pending_prop_transform() {
-        debounce.0 = None;
+    if drag.button != PointerButton::Primary {
         return;
     }
-    let timer = debounce
-        .0
-        .get_or_insert_with(|| Timer::from_seconds(0.15, TimerMode::Once));
-    timer.tick(time.delta());
-    if !timer.is_finished() {
+    let Ok(_) = axes.get(drag.entity) else { return };
+    let Some(prop) = selected.0 else { return };
+    state.drag = Some((drag.entity, prop));
+}
+
+fn gizmo_drag(
+    drag: On<Pointer<Drag>>,
+    axes: Query<&GizmoAxis>,
+    cameras: Query<&GlobalTransform, With<EditorCamera>>,
+    mut props: Query<(&mut Transform, &LifMapNodeIndex), With<LifPropRef>>,
+    mut document: ResMut<EditorDocument>,
+    state: Res<PropGizmo>,
+) {
+    if drag.button != PointerButton::Primary {
         return;
     }
+    let Some((axis_entity, prop_entity)) = state.drag else {
+        return;
+    };
+    if axis_entity != drag.entity {
+        return;
+    }
+    let Ok(axis) = axes.get(drag.entity) else {
+        return;
+    };
+    let Ok(camera) = cameras.single() else {
+        return;
+    };
+    let Ok((mut transform, node)) = props.get_mut(prop_entity) else {
+        return;
+    };
+    let axis = axis.axis;
+    let right = camera.right().as_vec3();
+    let up = camera.up().as_vec3();
+    let screen_axis = Vec2::new(axis.dot(right), -axis.dot(up));
+    let amount = if screen_axis.length_squared() > 0.001 {
+        drag.delta.dot(screen_axis.normalize()) * 0.08
+    } else {
+        0.0
+    };
+    if state.mode == GizmoMode::Translate {
+        transform.translation += axis * amount;
+    } else {
+        transform.rotation = Quat::from_axis_angle(axis, amount * 0.025) * transform.rotation;
+    }
+    if let Err(error) = document.0.update_prop_transform(
+        node.0,
+        transform.translation.to_array(),
+        transform.rotation.to_array(),
+        transform.scale.to_array(),
+    ) {
+        error!("recording gizmo transform: {error:#}");
+    }
+}
+
+fn gizmo_drag_end(
+    drag: On<Pointer<DragEnd>>,
+    mut state: ResMut<PropGizmo>,
+    mut document: ResMut<EditorDocument>,
+) {
+    if drag.button != PointerButton::Primary {
+        return;
+    }
+    let Some((axis, _)) = state.drag else { return };
+    if axis != drag.entity {
+        return;
+    }
+    state.drag = None;
     document.0.commit_pending_prop_transform();
-    debounce.0 = None;
-    match document.0.save() {
-        Ok(()) => notice.show("Saved map GLB"),
-        Err(error) => {
-            error!("saving map: {error:#}");
-            notice.show(format!("Save failed: {error}"));
+}
+
+fn sync_prop_gizmo(
+    selected: Res<SelectedProp>,
+    props: Query<&GlobalTransform, With<LifPropRef>>,
+    mut roots: Query<(&mut Transform, &mut Visibility), With<PropGizmoRoot>>,
+    mut axes: Query<(&GizmoAxis, &mut Visibility), Without<PropGizmoRoot>>,
+    gizmo: Res<PropGizmo>,
+) {
+    let Ok((mut root, mut visibility)) = roots.single_mut() else {
+        return;
+    };
+    let Some(entity) = selected.0 else {
+        *visibility = Visibility::Hidden;
+        return;
+    };
+    let Ok(transform) = props.get(entity) else {
+        *visibility = Visibility::Hidden;
+        return;
+    };
+    root.translation = transform.translation();
+    *visibility = Visibility::Visible;
+    for (axis, mut visibility) in &mut axes {
+        *visibility = if gizmo.mode == GizmoMode::Translate {
+            Visibility::Visible
+        } else {
+            Visibility::Visible
+        };
+        let _ = axis;
+    }
+}
+
+/// Immediate-mode presentation following Bevy's 3D gizmo example. The mesh
+/// children remain only as transparent, pickable hit targets for axis dragging.
+fn draw_prop_gizmo(
+    mut gizmos: Gizmos,
+    selected: Res<SelectedProp>,
+    props: Query<&GlobalTransform, With<LifPropRef>>,
+    gizmo: Res<PropGizmo>,
+) {
+    let Some(entity) = selected.0 else { return };
+    let Ok(transform) = props.get(entity) else {
+        return;
+    };
+    let origin = transform.translation();
+    const AXES: [(Vec3, Color); 3] = [
+        (Vec3::X, Color::srgb(0.95, 0.1, 0.1)),
+        (Vec3::Y, Color::srgb(0.1, 0.95, 0.2)),
+        (Vec3::Z, Color::srgb(0.1, 0.35, 1.0)),
+    ];
+    match gizmo.mode {
+        GizmoMode::Translate => {
+            for (axis, color) in AXES {
+                gizmos.arrow(origin, origin + axis * 45.0, color);
+            }
+        }
+        GizmoMode::Rotate => {
+            for (axis, color) in AXES {
+                gizmos
+                    .circle(
+                        Isometry3d::new(origin, Quat::from_rotation_arc(Vec3::Z, axis)),
+                        35.0,
+                        color,
+                    )
+                    .resolution(48);
+            }
         }
     }
+    gizmos.cross(origin, 6.0, Color::WHITE);
 }
 
 #[derive(Resource)]
@@ -359,6 +532,17 @@ fn setup(
     commands.spawn((
         Camera3d::default(),
         EditorCamera,
+        // The upstream example's 5 units/s default is for its five-unit
+        // plane; converted RO maps are hundreds to thousands of units wide.
+        FreeCamera {
+            walk_speed: 300.0,
+            run_speed: 900.0,
+            // Keep Q/E available for prop rotation. These match the common
+            // Godot editor fly-camera convention instead.
+            key_up: KeyCode::Space,
+            key_down: KeyCode::ControlLeft,
+            ..default()
+        },
         Transform::from_xyz(600.0, 500.0, 700.0).looking_at(Vec3::new(600.0, 0.0, -600.0), Vec3::Y),
     ));
     commands.spawn(MapSceneRequest {
@@ -382,6 +566,36 @@ fn setup(
         })),
         Transform::default(),
     ));
+    let gizmo_root = commands
+        .spawn((PropGizmoRoot, Visibility::Hidden, Transform::default()))
+        .id();
+    for (axis, color) in [
+        (Vec3::X, Color::srgb(0.95, 0.1, 0.1)),
+        (Vec3::Y, Color::srgb(0.1, 0.95, 0.2)),
+        (Vec3::Z, Color::srgb(0.1, 0.35, 1.0)),
+    ] {
+        let length = 45.0;
+        let mesh = meshes.add(Cuboid::new(
+            if axis.x != 0.0 { length } else { 4.0 },
+            if axis.y != 0.0 { length } else { 4.0 },
+            if axis.z != 0.0 { length } else { 4.0 },
+        ));
+        commands.spawn((
+            GizmoAxis { axis },
+            Mesh3d(mesh),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                // `draw_prop_gizmo` is the visible handle. This mesh is only
+                // a generous pick volume around its corresponding axis.
+                base_color: color.with_alpha(0.0),
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            })),
+            Pickable::default(),
+            Transform::from_translation(axis * (length * 0.5)),
+            ChildOf(gizmo_root),
+        ));
+    }
     commands.spawn_scene(command_overlay());
     commands.spawn_scene(notice_overlay());
     commands.insert_resource(OverlayAssets {
@@ -417,7 +631,7 @@ fn command_overlay() -> impl Scene {
         Pickable::IGNORE
         Children [
             (
-                Text("Camera\nWASD - move camera\nRMB - look\nWheel  altitude\n\nCollision\nLMB / arrows - select cell\nSpace - toggle walkability\nCtrl+Z / Ctrl+Y - undo / redo\nCtrl+S - save\n\nProps\nClick a prop - select\nI/K, J/L, U/O - translate\nQ/E - rotate")
+                 Text("Camera\nWASD - move · Space/Ctrl - up/down\nRMB - look · Wheel - speed\n\nCollision\nLMB / arrows - select cell\nF - toggle walkability\nCtrl+Z / Ctrl+Y - undo / redo\nCtrl+S - save\n\nProps\nClick a prop, drag gizmo axis\nI/K J/L U/O - move\nQ/E - rotate · G/R - gizmo mode\nCtrl+D duplicate · Delete remove")
                 TextFont {
                     font: FontSourceTemplate::Handle("ro://fonts/space-mono.ttf"),
                     font_size: FontSize::Px(14.0),
@@ -449,63 +663,12 @@ fn notice_overlay() -> impl Scene {
     }
 }
 
-fn move_camera(
-    keys: Res<ButtonInput<KeyCode>>,
-    time: Res<Time>,
-    mut cameras: Query<&mut Transform, With<EditorCamera>>,
-) {
-    if keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
-        return;
-    }
-    let Ok(mut transform) = cameras.single_mut() else {
-        return;
-    };
-    let speed = 300.0 * time.delta_secs();
-    // Flight-style movement: W/S follow the full camera forward vector, so
-    // looking down and moving forward descends toward the terrain.
-    let forward = transform.rotation * Vec3::NEG_Z;
-    let right = transform.rotation * Vec3::X;
-    if keys.pressed(KeyCode::KeyW) {
-        transform.translation += forward * speed;
-    }
-    if keys.pressed(KeyCode::KeyS) {
-        transform.translation -= forward * speed;
-    }
-    if keys.pressed(KeyCode::KeyA) {
-        transform.translation -= right * speed;
-    }
-    if keys.pressed(KeyCode::KeyD) {
-        transform.translation += right * speed;
-    }
-}
-
-fn look_camera(
-    buttons: Res<ButtonInput<MouseButton>>,
-    mut motion: MessageReader<MouseMotion>,
-    mut wheel: MessageReader<MouseWheel>,
-    mut cameras: Query<&mut Transform, With<EditorCamera>>,
-) {
-    let Ok(mut transform) = cameras.single_mut() else {
-        return;
-    };
-    if buttons.pressed(MouseButton::Right) {
-        let delta: Vec2 = motion.read().map(|event| event.delta).sum();
-        transform.rotate_y(-delta.x * 0.005);
-        transform.rotate_local_x(-delta.y * 0.005);
-    } else {
-        motion.clear();
-    }
-    for event in wheel.read() {
-        transform.translation.y = (transform.translation.y - event.y * 25.0).max(10.0);
-    }
-}
-
 fn toggle_cursor_cell(
     keys: Res<ButtonInput<KeyCode>>,
     mut document: ResMut<EditorDocument>,
     cursor: Res<CursorCell>,
 ) {
-    if !keys.just_pressed(KeyCode::Space) {
+    if !keys.just_pressed(KeyCode::KeyF) {
         return;
     }
     let Some(mut cell) = document.0.collision_cell(cursor.x, cursor.y) else {

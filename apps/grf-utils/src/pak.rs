@@ -1,3 +1,4 @@
+#[cfg(test)]
 pub use lifthrasir_tooling::collect_entries;
 
 #[cfg(test)]

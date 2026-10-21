@@ -72,6 +72,10 @@ enum Commands {
         /// Worker threads for compression (default: available CPU parallelism)
         #[arg(long)]
         jobs: Option<usize>,
+
+        /// Drop converted map-prop GLBs that no map in the content set references
+        #[arg(long)]
+        prune_unused_props: bool,
     },
     /// Merge a patch pak into a main pak in place. Run this only while the game is closed:
     /// the swap replaces the main pak file, which the running client may hold open.
@@ -121,6 +125,7 @@ fn run() -> Result<()> {
             content_version,
             zstd_level,
             jobs,
+            prune_unused_props,
         } => {
             pack_command(
                 &grf,
@@ -130,6 +135,7 @@ fn run() -> Result<()> {
                 content_version,
                 zstd_level,
                 jobs,
+                prune_unused_props,
             )?;
         }
         Commands::Merge { main, patch } => {
@@ -148,6 +154,7 @@ fn pack_command(
     content_version: u64,
     zstd_level: Option<i32>,
     jobs: Option<usize>,
+    prune_unused_props: bool,
 ) -> Result<()> {
     println!("Scanning sources...");
     let lifthrasir_tooling::PackInputs {
@@ -155,7 +162,12 @@ fn pack_command(
         skipped,
         excluded,
         diagnostics,
-    } = pak::collect_entries(grf_paths, data_folder, content_dirs);
+    } = lifthrasir_tooling::collect_entries_with_pruning(
+        grf_paths,
+        data_folder,
+        content_dirs,
+        prune_unused_props,
+    );
     for diagnostic in diagnostics {
         match diagnostic.level {
             lifthrasir_tooling::DiagnosticLevel::Info => println!("{}", diagnostic.message),
