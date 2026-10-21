@@ -5,6 +5,7 @@ use super::{
     preview::{PreviewPlugin, PreviewState, preview_ui},
     ui::{EditorUiArea, EditorUiSet},
 };
+use crate::map::tools::{ToolMode, place::is_placeable};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use lifthrasir_assets::{
@@ -132,6 +133,7 @@ fn browser_panel(
     source: Res<SharedCompositeAssetSource>,
     catalog: Option<Res<EffectCatalog>>,
     mut preview: ResMut<PreviewState>,
+    mut mode: ResMut<ToolMode>,
 ) -> Result {
     let textures = preview.texture_ids(&mut contexts);
     let ctx = contexts.ctx_mut()?;
@@ -159,6 +161,11 @@ fn browser_panel(
                 });
                 ui.separator();
                 egui::Panel::bottom("browser_preview").show(ui, |ui| {
+                    if let Some(asset) = selection.0.as_ref().filter(|asset| is_placeable(asset))
+                        && ui.button("Place").clicked()
+                    {
+                        *mode = ToolMode::Place(asset.clone());
+                    }
                     preview_ui(ui, &selection, &mut preview, &textures);
                 });
                 if panel.tab == BrowserTab::Effects && catalog.is_none() {

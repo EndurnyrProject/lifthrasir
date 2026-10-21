@@ -52,6 +52,11 @@ impl EditorUiArea {
         self.pass = pass;
         self.rect = Some(ui.available_rect_before_wrap());
     }
+
+    /// The 3D viewport left after the last panel pass, once panels have drawn.
+    pub fn viewport(&self) -> Option<egui::Rect> {
+        self.rect
+    }
 }
 
 /// True when the pointer belongs to the 3D viewport: egui does not want it and
@@ -76,7 +81,7 @@ pub fn viewport_has_keyboard(egui: Option<Res<EguiWantsInput>>) -> bool {
 
 // NOTE: compares egui points with logical window pixels, equal at egui zoom 1;
 // convert with the egui zoom factor if editor zoom is ever exposed.
-fn viewport_owns_pointer(
+pub(crate) fn viewport_owns_pointer(
     egui_wants: bool,
     viewport: Option<egui::Rect>,
     cursor: Option<Vec2>,

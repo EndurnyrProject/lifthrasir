@@ -23,6 +23,7 @@ use lifthrasir_editor::{
 };
 use lifthrasir_runtime::world::{
     MapEmittersPlugin, MapGltfPlugin, MapScenePlugin, MapSceneRequest, MapSceneStatus,
+    props::PropRenderPlugin,
 };
 use std::{
     collections::HashMap,
@@ -88,9 +89,9 @@ impl AssetSource for FixturePak {
     }
 }
 
-/// The editor without egui: the runtime map stack, the editor shell and map
-/// plugins, `ro://` = loose `data_folder` over a fixture pak, and saves going
-/// to `data_folder`.
+/// The editor without egui: the runtime map stack plus prop spawning, the
+/// editor shell and map plugins, `ro://` = loose `data_folder` over a fixture
+/// pak, and saves going to `data_folder`.
 pub fn editor_app(data_folder: &Path) -> App {
     let mut source = CompositeAssetSource::new();
     source.add_source(Box::new(DataFolderSource::new(data_folder)));
@@ -99,6 +100,7 @@ pub fn editor_app(data_folder: &Path) -> App {
     app.add_plugins((
         bevy::state::app::StatesPlugin,
         bevy::input::InputPlugin,
+        PropRenderPlugin,
         EditorShellPlugin,
         MapEditorPlugin,
     ))
