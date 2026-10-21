@@ -21,3 +21,5 @@ serde = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# Encodes the fixture water texture; the same crate Bevy decodes it with.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }

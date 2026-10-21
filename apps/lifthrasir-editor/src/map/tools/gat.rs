@@ -119,20 +119,31 @@ pub fn gat_cell_at(altitude: &RoAltitude, world: Vec3) -> Option<(u32, u32)> {
     Some((x as u32, z as u32))
 }
 
-/// The cells within `radius` of `center`, clipped to the map.
-fn brush_cells(
-    altitude: &RoAltitude,
+/// The cells within `radius` of `center` (`dx² + dy² <= r²`) on a
+/// `width` x `height` grid. Shared by the cell brushes.
+pub(crate) fn disc(
     center: (u32, u32),
     radius: u32,
+    width: u32,
+    height: u32,
 ) -> impl Iterator<Item = (u32, u32)> {
-    let (width, height) = (altitude.width as i64, altitude.height as i64);
-    let (cx, cy, r) = (center.0 as i64, center.1 as i64, radius as i64);
+    let (width, height) = (i64::from(width), i64::from(height));
+    let (cx, cy, r) = (i64::from(center.0), i64::from(center.1), i64::from(radius));
     (-r..=r)
         .flat_map(move |dy| (-r..=r).map(move |dx| (dx, dy)))
         .filter(move |(dx, dy)| dx * dx + dy * dy <= r * r)
         .map(move |(dx, dy)| (cx + dx, cy + dy))
         .filter(move |(x, y)| (0..width).contains(x) && (0..height).contains(y))
         .map(|(x, y)| (x as u32, y as u32))
+}
+
+/// The cells within `radius` of `center`, clipped to the map.
+fn brush_cells(
+    altitude: &RoAltitude,
+    center: (u32, u32),
+    radius: u32,
+) -> impl Iterator<Item = (u32, u32)> {
+    disc(center, radius, altitude.width, altitude.height)
 }
 
 /// Sets every cell within the brush circle to the brush type; heights stay.

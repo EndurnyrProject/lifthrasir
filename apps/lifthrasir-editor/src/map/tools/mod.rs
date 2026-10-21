@@ -4,6 +4,7 @@
 pub mod gat;
 pub mod lights;
 pub mod place;
+pub mod water;
 
 use super::{layout::MapLayout, open::EditorScreen};
 use crate::shell::{
@@ -32,6 +33,8 @@ pub enum ToolMode {
     AddLight(lights::LightKind),
     /// Drags paint GAT cell types.
     GatPaint(gat::GatBrush),
+    /// The water window is open; drags paint water tiles.
+    Water(water::WaterBrush),
 }
 
 /// Ends a placing tool: back to Select with the Move gizmo, so the node just
@@ -81,7 +84,7 @@ pub struct ToolsPlugin;
 impl Plugin for ToolsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ToolMode>()
-            .add_plugins((place::plugin, lights::plugin, gat::plugin))
+            .add_plugins((place::plugin, lights::plugin, gat::plugin, water::plugin))
             .add_systems(
                 EguiPrimaryContextPass,
                 toolbar
@@ -141,6 +144,14 @@ fn toolbar(
                     && !painting
                 {
                     current = ToolMode::GatPaint(gat::GatBrush::default());
+                }
+                let watering = matches!(current, ToolMode::Water(_));
+                if ui
+                    .add(egui::Button::selectable(watering, "Water"))
+                    .clicked()
+                    && !watering
+                {
+                    current = ToolMode::Water(water::WaterBrush::default());
                 }
                 ui.separator();
                 ui.toggle_value(&mut outliner.open, "Outliner");

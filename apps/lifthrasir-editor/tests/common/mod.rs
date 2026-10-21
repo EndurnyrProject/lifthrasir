@@ -23,7 +23,7 @@ use lifthrasir_editor::{
 };
 use lifthrasir_runtime::world::{
     MapEmittersPlugin, MapGltfPlugin, MapScenePlugin, MapSceneRequest, MapSceneStatus,
-    props::PropRenderPlugin,
+    WaterRenderPlugin, props::PropRenderPlugin,
 };
 use std::{
     collections::HashMap,
@@ -53,7 +53,9 @@ pub fn runtime_app() -> App {
 }
 
 /// Stands in for the pak: the fixture at its map path, its ground texture,
-/// and the prop model and sound file it references (never loaded headless).
+/// its water texture (type 3), and the prop model and sound file it
+/// references (never loaded headless). Paths are looked up with `/`, as the
+/// pak normalizes them.
 struct FixturePak(HashMap<&'static str, Vec<u8>>);
 
 impl FixturePak {
@@ -64,8 +66,22 @@ impl FixturePak {
             ("ground/tex/grass01.ktx2", read("ground/tex/grass01.ktx2")),
             ("models/prontera/tree01.glb", read("uv_prop.glb")),
             ("data/wav/effect/water.wav", Vec::new()),
+            ("data/texture/워터/water300.jpg", water_texture()),
         ]))
     }
+
+    fn get(&self, path: &str) -> Option<&Vec<u8>> {
+        self.0.get(path.replace('\\', "/").as_str())
+    }
+}
+
+/// A 4 x 4 blue JPEG.
+fn water_texture() -> Vec<u8> {
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image::RgbImage::from_pixel(4, 4, image::Rgb([40, 90, 200]))
+        .write_to(&mut bytes, image::ImageFormat::Jpeg)
+        .unwrap();
+    bytes.into_inner()
 }
 
 impl AssetSource for FixturePak {
@@ -76,11 +92,10 @@ impl AssetSource for FixturePak {
         1
     }
     fn exists(&self, path: &str) -> bool {
-        self.0.contains_key(path)
+        self.get(path).is_some()
     }
     fn load(&self, path: &str) -> Result<Vec<u8>, AssetSourceError> {
-        self.0
-            .get(path)
+        self.get(path)
             .cloned()
             .ok_or_else(|| AssetSourceError::NotFound(path.into()))
     }
@@ -101,6 +116,7 @@ pub fn editor_app(data_folder: &Path) -> App {
         bevy::state::app::StatesPlugin,
         bevy::input::InputPlugin,
         PropRenderPlugin,
+        WaterRenderPlugin,
         EditorShellPlugin,
         MapEditorPlugin,
     ))

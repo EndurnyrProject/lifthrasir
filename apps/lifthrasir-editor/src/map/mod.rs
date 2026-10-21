@@ -7,6 +7,7 @@ pub mod open;
 pub mod refresh;
 pub mod save;
 pub mod settings;
+pub mod terrain;
 pub mod tools;
 pub mod wizard;
 

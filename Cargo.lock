@@ -5056,6 +5056,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "bevy_kira_audio",
+ "image",
  "lifthrasir-assets",
  "lifthrasir-data",
  "lifthrasir-runtime",
