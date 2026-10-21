@@ -7,9 +7,12 @@ use bevy::prelude::*;
 use lifthrasir_editor::{
     map::{
         document::collect_document,
-        tools::lights::{LightKind, add_light, spot_angles_valid},
+        tools::{
+            ToolMode,
+            lights::{LightKind, add_light, spot_angles_valid},
+        },
     },
-    shell::undo::undo,
+    shell::{selection::Selection, undo::undo},
 };
 use lifthrasir_tooling::converters::{
     gltf_out::from_gltf_vec,
@@ -82,4 +85,17 @@ fn the_inspector_rejects_an_inner_angle_past_the_outer() {
         defaults.outer_angle + 0.1,
         defaults.outer_angle
     ));
+}
+
+#[test]
+fn placing_a_light_returns_to_select_with_the_light_selected() {
+    let data_folder = tempfile::tempdir().unwrap();
+    let mut app = common::editor_app(data_folder.path());
+    common::open_fixture(&mut app);
+    *app.world_mut().resource_mut::<ToolMode>() = ToolMode::AddLight(LightKind::Point);
+
+    add_light(app.world_mut(), LightKind::Point, Vec3::ZERO);
+
+    assert_eq!(*app.world().resource::<ToolMode>(), ToolMode::Select);
+    assert!(app.world().resource::<Selection>().0.is_some());
 }
