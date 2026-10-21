@@ -23,4 +23,5 @@ bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
 test-support = []
 
 [dev-dependencies]
+tempfile = { workspace = true }
 toml = { workspace = true }

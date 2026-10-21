@@ -329,7 +329,9 @@ impl LifCollision {
             ));
         }
         Ok(bytes
-            .chunks_exact(Self::BYTES_PER_CELL)
+            .as_chunks::<{ Self::BYTES_PER_CELL }>()
+            .0
+            .iter()
             .map(|chunk| LifCollisionCell {
                 height: std::array::from_fn(|index| {
                     let offset = index * std::mem::size_of::<f32>();

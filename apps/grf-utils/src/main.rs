@@ -132,10 +132,12 @@ fn run() -> Result<()> {
                 data_folder.as_deref(),
                 &content_dir,
                 &out,
-                content_version,
-                zstd_level,
-                jobs,
-                prune_unused_props,
+                PackOptions {
+                    content_version,
+                    zstd_level,
+                    jobs,
+                    prune_unused_props,
+                },
             )?;
         }
         Commands::Merge { main, patch } => {
@@ -146,16 +148,26 @@ fn run() -> Result<()> {
     Ok(())
 }
 
+struct PackOptions {
+    content_version: u64,
+    zstd_level: Option<i32>,
+    jobs: Option<usize>,
+    prune_unused_props: bool,
+}
+
 fn pack_command(
     grf_paths: &[PathBuf],
     data_folder: Option<&Path>,
     content_dirs: &[PathBuf],
     out: &Path,
-    content_version: u64,
-    zstd_level: Option<i32>,
-    jobs: Option<usize>,
-    prune_unused_props: bool,
+    options: PackOptions,
 ) -> Result<()> {
+    let PackOptions {
+        content_version,
+        zstd_level,
+        jobs,
+        prune_unused_props,
+    } = options;
     println!("Scanning sources...");
     let lifthrasir_tooling::PackInputs {
         entries,

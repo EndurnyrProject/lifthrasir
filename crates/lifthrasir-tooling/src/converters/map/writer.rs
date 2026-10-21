@@ -672,7 +672,7 @@ fn build_root_extensions(
     let (mut collision, collision_bytes) = lif::LifCollision::from_altitude(&altitude)
         .map_err(anyhow::Error::msg)
         .with_context(|| format!("encoding collision of map '{}'", inputs.map_name))?;
-    collision.buffer_view = bin.push_view(&collision_bytes, None).value() as usize;
+    collision.buffer_view = bin.push_view(&collision_bytes, None).value();
 
     let map = lif::LifMap {
         format_version: lif::FORMAT_VERSION,

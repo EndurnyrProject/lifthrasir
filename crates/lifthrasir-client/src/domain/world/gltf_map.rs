@@ -29,6 +29,12 @@ use lifthrasir_runtime::world::{MapSceneRequest, MapSceneStatus, PropSceneContex
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod map_fixtures {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../lifthrasir-runtime/tests/support/map_fixtures.rs"
+        ));
+    }
     use crate::domain::character::events::MapLoadCompleted;
     use crate::domain::character::map_loading::detect_map_load_complete;
     use crate::domain::input::resources::ForwardedCursorPosition;
@@ -82,10 +88,11 @@ mod tests {
     /// Adds another map to an existing `ro://` root, for the tests that need
     /// two maps to warp between.
     fn stage_map_into(root: &tempfile::TempDir, map: &str, fixture: &str) {
+        let fixtures = map_fixtures::StagedFixtures::new(std::path::Path::new(FIXTURES));
         let map_dir = root.path().join(format!("maps/{map}"));
         std::fs::create_dir_all(map_dir.join("tex")).unwrap();
         std::fs::copy(
-            format!("{FIXTURES}/{fixture}"),
+            fixtures.path().join(fixture),
             map_dir.join(format!("{map}.glb")),
         )
         .unwrap();

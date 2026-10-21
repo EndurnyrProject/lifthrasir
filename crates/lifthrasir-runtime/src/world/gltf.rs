@@ -325,6 +325,7 @@ fn parse_extras<T: serde::de::DeserializeOwned>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::map_fixtures::StagedFixtures;
     use bevy::{
         asset::{AssetApp, AssetPlugin},
         gltf::{GltfAssetLabel, GltfPlugin},
@@ -338,10 +339,11 @@ mod tests {
     const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
     fn test_app() -> App {
         let mut app = App::new();
+        let fixtures = StagedFixtures::new(std::path::Path::new(FIXTURES));
         app.add_plugins((
             MinimalPlugins,
             AssetPlugin {
-                file_path: FIXTURES.to_string(),
+                file_path: fixtures.path().to_string_lossy().into_owned(),
                 ..default()
             },
             ImagePlugin::default(),
@@ -350,6 +352,7 @@ mod tests {
             GltfPlugin::default(),
             MapGltfPlugin,
         ));
+        app.insert_resource(fixtures);
         app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
         app.init_asset::<StandardMaterial>();
         // `GltfPlugin` only registers the real loader in `finish`, which
@@ -440,7 +443,8 @@ mod tests {
 
     #[test]
     fn a_water_mask_with_incompatible_dimensions_fails_root_decode() {
-        let bytes = std::fs::read(format!("{FIXTURES}/bad_water_mask.glb")).unwrap();
+        let fixtures = StagedFixtures::new(std::path::Path::new(FIXTURES));
+        let bytes = std::fs::read(fixtures.path().join("bad_water_mask.glb")).unwrap();
         let gltf = gltf::Gltf::from_slice(&bytes).unwrap();
 
         assert!(

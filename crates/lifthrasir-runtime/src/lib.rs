@@ -1,5 +1,9 @@
 //! Content presentation independent of client state and networking.
 
+#[cfg(test)]
+#[path = "../tests/support/map_fixtures.rs"]
+mod map_fixtures;
+
 pub mod actors;
 pub use actors::ActorRenderPlugin;
 pub mod audio;

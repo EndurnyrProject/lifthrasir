@@ -8,10 +8,20 @@ use lifthrasir_runtime::world::{
 };
 use std::time::{Duration, Instant};
 
+#[path = "support/map_fixtures.rs"]
+mod map_fixtures;
+
 fn app() -> App {
     let mut app = App::new();
-    let fixtures = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
-    app.register_asset_source("ro", AssetSourceBuilder::platform_default(fixtures, None));
+    let fixtures = map_fixtures::StagedFixtures::new(std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures"
+    )));
+    app.register_asset_source(
+        "ro",
+        AssetSourceBuilder::platform_default(fixtures.path().to_str().unwrap(), None),
+    );
+    app.insert_resource(fixtures);
     app.add_plugins((
         MinimalPlugins,
         TransformPlugin,
