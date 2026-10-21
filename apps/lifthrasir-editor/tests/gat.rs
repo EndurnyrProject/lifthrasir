@@ -1,5 +1,5 @@
 //! A GAT stroke is one undoable map data edit; the saved GAT carries the
-//! painted raw types and the overlay follows undo.
+//! painted raw types and undo rebuilds the chunked overlay.
 
 mod common;
 
@@ -8,7 +8,7 @@ use lifthrasir_editor::{
     map::{
         document::collect_document,
         layout::MapLayout,
-        tools::gat::{GatBrush, GatOverlayMesh, end_stroke, paint_cells},
+        tools::gat::{GatBrush, GatOverlayChunk, end_stroke, paint_cells},
     },
     shell::undo::{UndoStack, undo},
 };
@@ -27,19 +27,19 @@ fn raw_types(app: &App, layout: &MapLayout) -> Vec<u32> {
         .collect()
 }
 
+/// The vertices of every overlay chunk.
 fn overlay_vertices(app: &mut App) -> usize {
     let world = app.world_mut();
-    let handle = world
-        .query_filtered::<&Mesh3d, With<GatOverlayMesh>>()
-        .single(world)
-        .unwrap()
-        .0
-        .clone();
-    world
-        .resource::<Assets<Mesh>>()
-        .get(&handle)
-        .unwrap()
-        .count_vertices()
+    let handles: Vec<Handle<Mesh>> = world
+        .query_filtered::<&Mesh3d, With<GatOverlayChunk>>()
+        .iter(world)
+        .map(|mesh| mesh.0.clone())
+        .collect();
+    let meshes = world.resource::<Assets<Mesh>>();
+    handles
+        .iter()
+        .map(|handle| meshes.get(handle).unwrap().count_vertices())
+        .sum()
 }
 
 #[test]
@@ -69,7 +69,6 @@ fn a_stroke_saves_its_raw_types_and_undoes_in_one_step() {
         app.world().resource::<UndoStack>().undo_label(),
         Some("Edit map data")
     );
-    assert_eq!(overlay_vertices(&mut app), 4 * (width * height) as usize);
     let bytes = collect_document(app.world_mut(), &layout, false)
         .unwrap()
         .gat
@@ -81,6 +80,7 @@ fn a_stroke_saves_its_raw_types_and_undoes_in_one_step() {
     undo(app.world_mut());
     assert_eq!(raw_types(&app, &layout), original);
     assert!(app.world().resource::<UndoStack>().is_pristine());
+    assert_eq!(overlay_vertices(&mut app), 4 * (width * height) as usize);
 }
 
 #[test]

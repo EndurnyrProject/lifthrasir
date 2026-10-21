@@ -17,11 +17,12 @@ use bevy::{
     light::NotShadowCaster,
     mesh::{Indices, PrimitiveTopology, VertexAttributeValues},
     prelude::*,
+    tasks::{ComputeTaskPool, ParallelSlice, TaskPool},
 };
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use lifthrasir_runtime::world::LifMapData;
 use ro_formats::{CELL_SIZE, RoAltitude, gat::GatCellType};
-use std::f32::consts::FRAC_PI_2;
+use std::{collections::HashMap, f32::consts::FRAC_PI_2};
 
 /// One GAT cell's side in world units (a GND cell holds 2 x 2 GAT cells).
 pub const GAT_CELL_SIZE: f32 = CELL_SIZE / 2.0;
@@ -34,6 +35,9 @@ const OVERLAY_LIFT: f32 = 0.1;
 const CORNER_INSET: f32 = 1e-3;
 const OVERLAY_ALPHA: f32 = 0.45;
 const MAX_RADIUS: u32 = 32;
+/// Overlay chunk side in GAT cells: a paint re-uploads only the chunks it
+/// touches (4096 vertices each), not the whole map.
+pub const OVERLAY_CHUNK: u32 = 32;
 const BRUSH_COLOR: Color = Color::srgb(1.0, 1.0, 1.0);
 
 /// The brush: cells within `radius` (in GAT cells) of the center get
@@ -60,12 +64,17 @@ pub struct GatOverlay {
     pub visible: bool,
 }
 
-/// The overlay entity of map root `0`.
+/// The overlay of map root `0`; its children are the [`GatOverlayChunk`]s.
 #[derive(Component)]
 pub struct GatOverlayMesh(pub Entity);
 
+/// One overlay mesh: the cells of chunk `0` (in [`OVERLAY_CHUNK`] units).
+#[derive(Component)]
+pub struct GatOverlayChunk(pub UVec2);
+
 /// The stroke in progress: the map data when it started and the last cell
-/// painted (each paint re-uploads the overlay, so a resting brush does not).
+/// painted (each paint re-uploads the chunks it touches, so a resting brush
+/// does not).
 #[derive(Resource, Default)]
 struct GatStroke {
     before: Option<LifMapData>,
@@ -110,12 +119,12 @@ pub fn gat_cell_at(altitude: &RoAltitude, world: Vec3) -> Option<(u32, u32)> {
     Some((x as u32, z as u32))
 }
 
-/// Indices of the cells within `radius` of `center`, clipped to the map.
+/// The cells within `radius` of `center`, clipped to the map.
 fn brush_cells(
     altitude: &RoAltitude,
     center: (u32, u32),
     radius: u32,
-) -> impl Iterator<Item = usize> {
+) -> impl Iterator<Item = (u32, u32)> {
     let (width, height) = (altitude.width as i64, altitude.height as i64);
     let (cx, cy, r) = (center.0 as i64, center.1 as i64, radius as i64);
     (-r..=r)
@@ -123,14 +132,16 @@ fn brush_cells(
         .filter(move |(dx, dy)| dx * dx + dy * dy <= r * r)
         .map(move |(dx, dy)| (cx + dx, cy + dy))
         .filter(move |(x, y)| (0..width).contains(x) && (0..height).contains(y))
-        .map(move |(x, y)| (y * width + x) as usize)
+        .map(|(x, y)| (x as u32, y as u32))
 }
 
 /// Sets every cell within the brush circle to the brush type; heights stay.
 pub fn paint_cells(altitude: &mut RoAltitude, center: (u32, u32), brush: &GatBrush) {
-    let cells: Vec<usize> = brush_cells(altitude, center, brush.radius).collect();
-    for index in cells {
-        altitude.cells[index].cell_type = GatCellType::from(brush.raw_type);
+    let cells: Vec<(u32, u32)> = brush_cells(altitude, center, brush.radius).collect();
+    let width = altitude.width as usize;
+    for (x, y) in cells {
+        altitude.cells[y as usize * width + x as usize].cell_type =
+            GatCellType::from(brush.raw_type);
     }
 }
 
@@ -167,28 +178,58 @@ fn corner_height(altitude: &RoAltitude, native_x: f32, native_z: f32) -> f32 {
     altitude.get_terrain_height_at_position(at).unwrap_or(0.0) + OVERLAY_LIFT
 }
 
-/// One quad per GAT cell, in cell order, colored by raw type and lying on the
-/// height the client walks.
-pub fn gat_overlay_mesh(altitude: &RoAltitude) -> Mesh {
-    let count = altitude.cells.len();
+/// Every overlay chunk of `altitude`, row-major.
+pub fn overlay_chunks(altitude: &RoAltitude) -> Vec<UVec2> {
+    let (columns, rows) = (
+        altitude.width.div_ceil(OVERLAY_CHUNK),
+        altitude.height.div_ceil(OVERLAY_CHUNK),
+    );
+    (0..rows)
+        .flat_map(|y| (0..columns).map(move |x| UVec2::new(x, y)))
+        .collect()
+}
+
+/// The first cell of `chunk` and its size in cells, clipped to the map.
+fn chunk_bounds(altitude: &RoAltitude, chunk: UVec2) -> (UVec2, UVec2) {
+    let origin = chunk * OVERLAY_CHUNK;
+    let size =
+        (UVec2::new(altitude.width, altitude.height) - origin).min(UVec2::splat(OVERLAY_CHUNK));
+    (origin, size)
+}
+
+/// Where cell `(x, y)` sits: its chunk and the index of its quad there.
+fn quad_of(altitude: &RoAltitude, (x, y): (u32, u32)) -> (UVec2, usize) {
+    let chunk = UVec2::new(x, y) / OVERLAY_CHUNK;
+    let (origin, size) = chunk_bounds(altitude, chunk);
+    let local = UVec2::new(x, y) - origin;
+    (chunk, (local.y * size.x + local.x) as usize)
+}
+
+/// One quad per GAT cell of `chunk`, row-major, colored by raw type and
+/// lying on the height the client walks.
+pub fn gat_overlay_chunk_mesh(altitude: &RoAltitude, chunk: UVec2) -> Mesh {
+    let (origin, size) = chunk_bounds(altitude, chunk);
+    let count = (size.x * size.y) as usize;
     let mut positions = Vec::with_capacity(count * 4);
     let mut colors = Vec::with_capacity(count * 4);
     let mut indices = Vec::with_capacity(count * 6);
-    for (index, cell) in altitude.cells.iter().enumerate() {
-        let x = (index % altitude.width as usize) as f32 * GAT_CELL_SIZE;
-        let z = (index / altitude.width as usize) as f32 * GAT_CELL_SIZE;
-        let (x1, z1) = (x + GAT_CELL_SIZE, z + GAT_CELL_SIZE);
-        let (inner_x0, inner_x1) = (x + CORNER_INSET, x1 - CORNER_INSET);
-        let (inner_z0, inner_z1) = (z + CORNER_INSET, z1 - CORNER_INSET);
-        positions.extend([
-            [x, corner_height(altitude, inner_x0, inner_z0), -z],
-            [x1, corner_height(altitude, inner_x1, inner_z0), -z],
-            [x1, corner_height(altitude, inner_x1, inner_z1), -z1],
-            [x, corner_height(altitude, inner_x0, inner_z1), -z1],
-        ]);
-        colors.extend([cell_color(cell.cell_type.raw()); 4]);
-        let base = (index * 4) as u32;
-        indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
+    for cell_y in origin.y..origin.y + size.y {
+        for cell_x in origin.x..origin.x + size.x {
+            let cell = &altitude.cells[(cell_y * altitude.width + cell_x) as usize];
+            let (x, z) = (cell_x as f32 * GAT_CELL_SIZE, cell_y as f32 * GAT_CELL_SIZE);
+            let (x1, z1) = (x + GAT_CELL_SIZE, z + GAT_CELL_SIZE);
+            let (inner_x0, inner_x1) = (x + CORNER_INSET, x1 - CORNER_INSET);
+            let (inner_z0, inner_z1) = (z + CORNER_INSET, z1 - CORNER_INSET);
+            let base = positions.len() as u32;
+            positions.extend([
+                [x, corner_height(altitude, inner_x0, inner_z0), -z],
+                [x1, corner_height(altitude, inner_x1, inner_z0), -z],
+                [x1, corner_height(altitude, inner_x1, inner_z1), -z1],
+                [x, corner_height(altitude, inner_x0, inner_z1), -z1],
+            ]);
+            colors.extend([cell_color(cell.cell_type.raw()); 4]);
+            indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
+        }
     }
     Mesh::new(
         PrimitiveTopology::TriangleList,
@@ -200,23 +241,39 @@ pub fn gat_overlay_mesh(altitude: &RoAltitude) -> Mesh {
     .with_inserted_indices(Indices::U32(indices))
 }
 
-/// The [`EditHook`](crate::shell::undo::EditHook) of GAT edits: rebuilds the
-/// overlay of `root` from its altitude, spawning it on first use.
+/// Every chunk mesh of `altitude`, built across the compute task pool.
+pub fn gat_overlay_meshes(altitude: &RoAltitude) -> Vec<(UVec2, Mesh)> {
+    let pool = ComputeTaskPool::get_or_init(TaskPool::default);
+    overlay_chunks(altitude)
+        .par_splat_map(pool, None, |_, chunks| {
+            chunks
+                .iter()
+                .map(|&chunk| (chunk, gat_overlay_chunk_mesh(altitude, chunk)))
+                .collect::<Vec<_>>()
+        })
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+/// The [`EditHook`](crate::shell::undo::EditHook) of GAT edits: replaces the
+/// overlay of `root` with one built from its altitude.
+// NOTE: re-uploads every chunk (one hitch on undo of a large map); diff
+// against the live chunk colors if that shows.
 pub fn rebuild_gat_overlay(world: &mut World, root: Entity) {
-    let Some(mesh) = world
+    let Some(chunks) = world
         .get::<LifMapData>(root)
-        .map(|data| gat_overlay_mesh(&data.altitude))
+        .map(|data| gat_overlay_meshes(&data.altitude))
     else {
         return;
     };
-    let mesh = Mesh3d(world.resource_mut::<Assets<Mesh>>().add(mesh));
-    let existing = world
+    let stale: Vec<Entity> = world
         .query::<(Entity, &GatOverlayMesh)>()
         .iter(world)
-        .find_map(|(entity, overlay)| (overlay.0 == root).then_some(entity));
-    if let Some(overlay) = existing {
-        world.entity_mut(overlay).insert(mesh);
-        return;
+        .filter_map(|(entity, overlay)| (overlay.0 == root).then_some(entity))
+        .collect();
+    for overlay in stale {
+        world.entity_mut(overlay).despawn();
     }
     let material = world
         .resource_mut::<Assets<StandardMaterial>>()
@@ -226,20 +283,38 @@ pub fn rebuild_gat_overlay(world: &mut World, root: Entity) {
             cull_mode: None,
             ..default()
         });
-    world.spawn((
-        Name::new("gat overlay"),
-        GatOverlayMesh(root),
-        EditorOnly,
-        mesh,
-        MeshMaterial3d(material),
-        Transform::IDENTITY,
-        Visibility::Hidden,
-        NotShadowCaster,
-    ));
+    let visibility = overlay_visibility(world.resource::<GatOverlay>());
+    let overlay = world
+        .spawn((
+            Name::new("gat overlay"),
+            GatOverlayMesh(root),
+            EditorOnly,
+            Transform::IDENTITY,
+            visibility,
+        ))
+        .id();
+    for (chunk, mesh) in chunks {
+        let mesh = world.resource_mut::<Assets<Mesh>>().add(mesh);
+        world.spawn((
+            GatOverlayChunk(chunk),
+            EditorOnly,
+            Mesh3d(mesh),
+            MeshMaterial3d(material.clone()),
+            NotShadowCaster,
+            ChildOf(overlay),
+        ));
+    }
 }
 
-/// Records the stroke that started from `before` as one undoable step (when
-/// it changed a cell) and rebuilds the overlay.
+fn overlay_visibility(overlay: &GatOverlay) -> Visibility {
+    match overlay.visible {
+        true => Visibility::Inherited,
+        false => Visibility::Hidden,
+    }
+}
+
+/// Records the stroke that started from `before` as one undoable step, when
+/// it changed a cell. The overlay already shows it (painting recolors live).
 pub fn end_stroke(world: &mut World, before: LifMapData) {
     let Some(root) = world.get_resource::<MapLayout>().map(|layout| layout.root) else {
         return;
@@ -259,7 +334,6 @@ pub fn end_stroke(world: &mut World, before: LifMapData) {
             Box::new(MapDataEdit::new(root, before, after).with_hook(rebuild_gat_overlay)),
         );
     }
-    rebuild_gat_overlay(world, root);
 }
 
 /// Shows the overlay when the tool is entered, not on brush changes, so `G`
@@ -337,32 +411,38 @@ fn recolor(world: &mut World, root: Entity, center: (u32, u32), radius: u32) {
     let Some(data) = world.get::<LifMapData>(root) else {
         return;
     };
-    let colors: Vec<(usize, [f32; 4])> = brush_cells(&data.altitude, center, radius)
-        .map(|index| {
-            (
-                index,
-                cell_color(data.altitude.cells[index].cell_type.raw()),
-            )
+    let altitude = &data.altitude;
+    let quads: Vec<(UVec2, usize, [f32; 4])> = brush_cells(altitude, center, radius)
+        .map(|(x, y)| {
+            let (chunk, quad) = quad_of(altitude, (x, y));
+            let raw = altitude.cells[(y * altitude.width + x) as usize]
+                .cell_type
+                .raw();
+            (chunk, quad, cell_color(raw))
         })
         .collect();
-    let Some(mesh) = world
-        .query::<(&GatOverlayMesh, &Mesh3d)>()
+    let chunks: HashMap<UVec2, AssetId<Mesh>> = world
+        .query::<(&GatOverlayChunk, &Mesh3d, &ChildOf)>()
         .iter(world)
-        .find_map(|(overlay, mesh)| (overlay.0 == root).then_some(mesh.id()))
-    else {
-        return;
-    };
+        .filter(|(_, _, parent)| {
+            world
+                .get::<GatOverlayMesh>(parent.parent())
+                .is_some_and(|overlay| overlay.0 == root)
+        })
+        .map(|(chunk, mesh, _)| (chunk.0, mesh.id()))
+        .collect();
     let mut meshes = world.resource_mut::<Assets<Mesh>>();
-    let Some(mut mesh) = meshes.get_mut(mesh) else {
-        return;
-    };
-    let Ok(VertexAttributeValues::Float32x4(quads)) = mesh.try_attribute_mut(Mesh::ATTRIBUTE_COLOR)
-    else {
-        return;
-    };
-    for (index, color) in colors {
-        if let Some(quad) = quads.get_mut(index * 4..index * 4 + 4) {
-            quad.fill(color);
+    for (chunk, quad, color) in quads {
+        let Some(mut mesh) = chunks.get(&chunk).and_then(|&id| meshes.get_mut(id)) else {
+            continue;
+        };
+        let Ok(VertexAttributeValues::Float32x4(colors)) =
+            mesh.try_attribute_mut(Mesh::ATTRIBUTE_COLOR)
+        else {
+            continue;
+        };
+        if let Some(vertices) = colors.get_mut(quad * 4..quad * 4 + 4) {
+            vertices.fill(color);
         }
     }
 }
@@ -377,10 +457,7 @@ fn sync_overlay(
     let Some(root) = layout.map(|layout| layout.root) else {
         return;
     };
-    let visibility = match overlay.visible {
-        true => Visibility::Inherited,
-        false => Visibility::Hidden,
-    };
+    let visibility = overlay_visibility(&overlay);
     let mut built = false;
     for (mesh, mut current) in &mut overlays {
         built |= mesh.0 == root;
@@ -522,7 +599,7 @@ mod tests {
     fn the_overlay_has_one_quad_per_cell_on_the_walk_height() {
         let mut altitude = altitude(3, 2);
         altitude.cells[0].height = [-4.0; 4];
-        let mesh = gat_overlay_mesh(&altitude);
+        let mesh = gat_overlay_chunk_mesh(&altitude, UVec2::ZERO);
         assert_eq!(mesh.count_vertices(), 4 * 3 * 2);
         let Some(VertexAttributeValues::Float32x3(positions)) =
             mesh.attribute(Mesh::ATTRIBUTE_POSITION)
@@ -536,6 +613,112 @@ mod tests {
         assert_eq!(positions[0], [0.0, expected, 0.0]);
         assert_eq!(positions[2][0], GAT_CELL_SIZE);
         assert_eq!(positions[2][2], -GAT_CELL_SIZE);
+    }
+
+    #[test]
+    fn the_chunks_cover_every_cell_once() {
+        let (width, height) = (OVERLAY_CHUNK + 8, OVERLAY_CHUNK + 3);
+        let altitude = altitude(width, height);
+        let meshes = gat_overlay_meshes(&altitude);
+        let chunks: Vec<UVec2> = meshes.iter().map(|(chunk, _)| *chunk).collect();
+        assert_eq!(
+            chunks,
+            [
+                UVec2::new(0, 0),
+                UVec2::new(1, 0),
+                UVec2::new(0, 1),
+                UVec2::new(1, 1)
+            ]
+        );
+        let vertices: usize = meshes.iter().map(|(_, mesh)| mesh.count_vertices()).sum();
+        assert_eq!(vertices, 4 * (width * height) as usize);
+        assert_eq!(meshes[3].1.count_vertices(), 4 * 8 * 3);
+    }
+
+    #[test]
+    fn a_cell_maps_to_its_chunk_quad() {
+        let altitude = altitude(OVERLAY_CHUNK + 8, OVERLAY_CHUNK + 3);
+        assert_eq!(quad_of(&altitude, (0, 0)), (UVec2::ZERO, 0));
+        assert_eq!(
+            quad_of(&altitude, (OVERLAY_CHUNK + 1, OVERLAY_CHUNK + 2)),
+            (UVec2::ONE, 2 * 8 + 1)
+        );
+        let (chunk, quad) = quad_of(&altitude, (OVERLAY_CHUNK + 1, OVERLAY_CHUNK + 2));
+        let mesh = gat_overlay_chunk_mesh(&altitude, chunk);
+        let Some(VertexAttributeValues::Float32x3(positions)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("positions");
+        };
+        let corner = positions[quad * 4];
+        assert_eq!(corner[0], (OVERLAY_CHUNK + 1) as f32 * GAT_CELL_SIZE);
+        assert_eq!(corner[2], -((OVERLAY_CHUNK + 2) as f32) * GAT_CELL_SIZE);
+    }
+
+    #[test]
+    fn painting_recolors_only_the_quads_of_the_brush_cells() {
+        use lifthrasir_data::lif::LifMap;
+        let mut world = World::new();
+        world.init_resource::<Assets<Mesh>>();
+        world.init_resource::<Assets<StandardMaterial>>();
+        world.init_resource::<GatOverlay>();
+        let root = world
+            .spawn(LifMapData {
+                altitude: altitude(OVERLAY_CHUNK + 8, 4),
+                water: None,
+                water_tiles: Vec::new(),
+                meta: LifMap {
+                    format_version: 0,
+                    source: None,
+                    ambient_color: [0.0; 3],
+                    no_shade_tint: [1.0; 3],
+                    indoor: false,
+                    ambient_brightness: 0.0,
+                    exposure_ev100: 0.0,
+                },
+            })
+            .id();
+        rebuild_gat_overlay(&mut world, root);
+        let center = (OVERLAY_CHUNK, 1);
+        let brush = GatBrush {
+            radius: 1,
+            raw_type: 3,
+        };
+        paint_cells(
+            &mut world.get_mut::<LifMapData>(root).unwrap().altitude,
+            center,
+            &brush,
+        );
+
+        recolor(&mut world, root, center, brush.radius);
+
+        let altitude = world.get::<LifMapData>(root).unwrap().altitude.clone();
+        let meshes: HashMap<UVec2, Handle<Mesh>> = world
+            .query::<(&GatOverlayChunk, &Mesh3d)>()
+            .iter(&world)
+            .map(|(chunk, mesh)| (chunk.0, mesh.0.clone()))
+            .collect();
+        let assets = world.resource::<Assets<Mesh>>();
+        for (index, cell) in altitude.cells.iter().enumerate() {
+            let at = (index as u32 % altitude.width, index as u32 / altitude.width);
+            let (chunk, quad) = quad_of(&altitude, at);
+            let Some(VertexAttributeValues::Float32x4(colors)) = assets
+                .get(&meshes[&chunk])
+                .unwrap()
+                .attribute(Mesh::ATTRIBUTE_COLOR)
+            else {
+                panic!("colors");
+            };
+            assert_eq!(colors[quad * 4], cell_color(cell.cell_type.raw()), "{at:?}");
+        }
+        assert_eq!(
+            altitude
+                .cells
+                .iter()
+                .filter(|cell| cell.cell_type.raw() == 3)
+                .count(),
+            5
+        );
     }
 
     #[test]
