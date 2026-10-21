@@ -5,9 +5,13 @@
 use ro_formats::{GatError, RoAltitude};
 use serde::{Deserialize, Serialize};
 
-/// Format version written by the current converter and required by the
-/// runtime handler.
-pub const FORMAT_VERSION: u32 = 4;
+/// Format version written by the current map converter and required by the
+/// runtime map handler.
+pub const MAP_FORMAT_VERSION: u32 = 5;
+
+/// Format version written by the current prop converter and required by the
+/// runtime model handler.
+pub const MODEL_FORMAT_VERSION: u32 = 4;
 
 /// glTF root-extension key for [`LifMap`].
 pub const EXTENSION_MAP: &str = "LIF_map";
@@ -33,14 +37,22 @@ pub const EXTRAS_PROP: &str = "lif_prop";
 pub const EXTRAS_UV_ANIMATION: &str = "lif_uv_animation";
 pub const EXTRAS_NO_SHADE: &str = "lif_no_shade";
 
+/// Retail source-file provenance for a converted map. Absent on maps authored
+/// by the world editor, which have no retail inputs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LifSource {
+    pub rsw_hash: String,
+    pub gnd_hash: String,
+    pub gat_hash: String,
+}
+
 /// Root extension `LIF_map`: format identity, source-file provenance, and the
 /// ambient light that has no `KHR_lights_punctual` equivalent.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LifMap {
     pub format_version: u32,
-    pub rsw_hash: String,
-    pub gnd_hash: String,
-    pub gat_hash: String,
+    #[serde(default)]
+    pub source: Option<LifSource>,
     /// Mirrors `RswLight::ambient` (RGB, no alpha).
     pub ambient_color: [f32; 3],
     #[serde(default = "white_tint")]
@@ -433,9 +445,11 @@ mod tests {
     fn lif_map_serde_round_trip() {
         let original = LifMap {
             format_version: 1,
-            rsw_hash: "abc123".to_string(),
-            gnd_hash: "def456".to_string(),
-            gat_hash: "ghi789".to_string(),
+            source: Some(LifSource {
+                rsw_hash: "abc123".to_string(),
+                gnd_hash: "def456".to_string(),
+                gat_hash: "ghi789".to_string(),
+            }),
             ambient_color: [0.3, 0.3, 0.4],
             no_shade_tint: [0.5, 0.6, 0.7],
             indoor: true,
@@ -672,12 +686,21 @@ mod tests {
         for (actual, expected) in tint.into_iter().zip([0.68, 0.58, 0.9]) {
             assert!((actual - expected).abs() < 1e-6);
         }
-        let current = r#"{"format_version":2,"rsw_hash":"a","gnd_hash":"b","gat_hash":"c","ambient_color":[0.3,0.3,0.4]}"#;
+        let current = r#"{"format_version":2,"ambient_color":[0.3,0.3,0.4]}"#;
         let map: LifMap = serde_json::from_str(current).unwrap();
+        assert_eq!(map.source, None);
         assert_eq!(map.no_shade_tint, [1.0; 3]);
         assert!(!map.indoor);
         assert_eq!(map.ambient_brightness, 320.0);
         assert_eq!(map.exposure_ev100, 9.7);
+    }
+
+    #[test]
+    fn lif_map_source_is_optional() {
+        let json = r#"{"format_version":5,"ambient_color":[0,0,0]}"#;
+        let map: LifMap = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(map.format_version, MAP_FORMAT_VERSION);
+        assert_eq!(map.source, None);
     }
 
     #[test]

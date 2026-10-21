@@ -303,17 +303,21 @@ fn validate_gat_extension(
 fn validate_map_extension(root: &gltf_json::Root, inputs: &MapGlbInputs) -> anyhow::Result<()> {
     let map: lif::LifMap = root_extension(root, lif::EXTENSION_MAP)?;
     ensure!(
-        map.format_version == lif::FORMAT_VERSION,
+        map.format_version == lif::MAP_FORMAT_VERSION,
         "{} format_version is {}, this converter writes {}",
         lif::EXTENSION_MAP,
         map.format_version,
-        lif::FORMAT_VERSION
+        lif::MAP_FORMAT_VERSION
     );
+    let provenance = map
+        .source
+        .as_ref()
+        .context("converter output must carry LIF_map source provenance")?;
 
     for (label, actual, source) in [
-        ("rsw", &map.rsw_hash, inputs.rsw_bytes),
-        ("gnd", &map.gnd_hash, inputs.gnd_bytes),
-        ("gat", &map.gat_hash, inputs.gat_bytes),
+        ("rsw", &provenance.rsw_hash, inputs.rsw_bytes),
+        ("gnd", &provenance.gnd_hash, inputs.gnd_bytes),
+        ("gat", &provenance.gat_hash, inputs.gat_bytes),
     ] {
         let expected = writer::hash_hex(source);
         ensure!(
@@ -492,6 +496,19 @@ mod tests {
         fixture.gnd_bytes = b"other-gnd-bytes".to_vec();
 
         assert_fails(&fixture, "gnd_hash");
+    }
+
+    #[test]
+    fn converter_output_without_provenance_is_rejected() {
+        let fixture = write_fixture();
+        let patched = crate::converters::map::fixtures::patched_glb(
+            &fixture.path,
+            "\"source\":{\"gat_hash\"",
+            "\"Xource\":{\"gat_hash\"",
+        );
+        std::fs::write(&fixture.path, patched).expect("rewrite glb");
+
+        assert_fails(&fixture, "provenance");
     }
 
     #[test]

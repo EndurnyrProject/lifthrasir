@@ -584,7 +584,7 @@ fn build_root_extensions(
     normalized: &NormalizedModel,
 ) -> anyhow::Result<()> {
     let model = lif::LifModel {
-        format_version: lif::FORMAT_VERSION,
+        format_version: lif::MODEL_FORMAT_VERSION,
         rsm_hash: normalized.provenance.source_hash.clone(),
     };
 
@@ -913,7 +913,7 @@ mod tests {
             serde_json::from_value(extensions.others[lif::EXTENSION_MODEL].clone())
                 .expect("LIF_model");
 
-        assert_eq!(model.format_version, lif::FORMAT_VERSION);
+        assert_eq!(model.format_version, lif::MODEL_FORMAT_VERSION);
         assert_eq!(model.rsm_hash, ModelFixture::RSM_HASH);
         assert_eq!(root_json.extensions_used, vec![lif::EXTENSION_MODEL]);
         assert!(root_json.extensions_required.is_empty());

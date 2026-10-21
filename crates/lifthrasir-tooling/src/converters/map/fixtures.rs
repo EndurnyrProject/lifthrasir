@@ -246,8 +246,8 @@ fn regenerate_game_engine_fixtures() {
     // The same document declaring a format the runtime does not support.
     let version = patched_glb(
         &good,
-        &format!("\"format_version\":{}", lif::FORMAT_VERSION),
-        &format!("\"format_version\":{}", lif::FORMAT_VERSION + 1),
+        &format!("\"format_version\":{}", lif::MAP_FORMAT_VERSION),
+        &format!("\"format_version\":{}", lif::MAP_FORMAT_VERSION + 1),
     );
     std::fs::write(out.join("bad_version.glb"), version).expect("write bad_version.glb");
 
@@ -302,7 +302,7 @@ fn generate_mip_probe_fixture() {
 /// equal-length replacements are allowed, so the chunk lengths stay valid
 /// without re-serializing the document; the binary chunk is left alone so a
 /// short needle cannot corrupt embedded data.
-fn patched_glb(source: &Path, needle: &str, replacement: &str) -> Vec<u8> {
+pub fn patched_glb(source: &Path, needle: &str, replacement: &str) -> Vec<u8> {
     assert_eq!(
         needle.len(),
         replacement.len(),

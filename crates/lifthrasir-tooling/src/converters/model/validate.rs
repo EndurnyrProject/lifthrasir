@@ -827,10 +827,10 @@ fn validate_root_extensions(
 ) -> anyhow::Result<()> {
     let model: lif::LifModel = root_extension(root, lif::EXTENSION_MODEL)?;
     ensure!(
-        model.format_version == lif::FORMAT_VERSION,
+        model.format_version == lif::MODEL_FORMAT_VERSION,
         "LIF_model format_version is {}, this converter writes {}",
         model.format_version,
-        lif::FORMAT_VERSION
+        lif::MODEL_FORMAT_VERSION
     );
     ensure!(
         model.rsm_hash == expected.provenance.source_hash,

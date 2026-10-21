@@ -187,12 +187,12 @@ impl GltfExtensionHandler for LifExtensionHandler {
 fn decode_root(gltf: &gltf::Gltf) -> Result<LifMapData, String> {
     let meta: LifMap = root_extension(gltf, lif::EXTENSION_MAP)?
         .ok_or_else(|| format!("missing root extension {}", lif::EXTENSION_MAP))?;
-    if meta.format_version != lif::FORMAT_VERSION {
+    if meta.format_version != lif::MAP_FORMAT_VERSION {
         return Err(format!(
             "{} format_version {} is not supported (runtime expects {})",
             lif::EXTENSION_MAP,
             meta.format_version,
-            lif::FORMAT_VERSION
+            lif::MAP_FORMAT_VERSION
         ));
     }
 
@@ -416,7 +416,7 @@ mod tests {
         with_scene_world(&mut test_app(), "mini_map.glb", |world| {
             let data = single::<LifMapData>(world);
 
-            assert_eq!(data.meta.format_version, lif::FORMAT_VERSION);
+            assert_eq!(data.meta.format_version, lif::MAP_FORMAT_VERSION);
             assert_eq!(data.meta.ambient_color, [0.25, 0.3, 0.35]);
 
             // The fixture GAT is 4x4 with cell `i` at heights `i..i+3` and

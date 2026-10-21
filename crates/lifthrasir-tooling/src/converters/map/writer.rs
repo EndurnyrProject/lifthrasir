@@ -672,10 +672,12 @@ fn build_root_extensions(
     let gat_view = bin.push_view(inputs.gat_bytes, None);
 
     let map = lif::LifMap {
-        format_version: lif::FORMAT_VERSION,
-        rsw_hash: hash_hex(inputs.rsw_bytes),
-        gnd_hash: hash_hex(inputs.gnd_bytes),
-        gat_hash: hash_hex(inputs.gat_bytes),
+        format_version: lif::MAP_FORMAT_VERSION,
+        source: Some(lif::LifSource {
+            rsw_hash: hash_hex(inputs.rsw_bytes),
+            gnd_hash: hash_hex(inputs.gnd_bytes),
+            gat_hash: hash_hex(inputs.gat_bytes),
+        }),
         ambient_color: inputs.world.light.ambient,
         no_shade_tint: lif::no_shade_tint(inputs.world.light.ambient, inputs.world.light.diffuse),
         indoor: inputs.indoor,
@@ -992,11 +994,12 @@ mod tests {
 
         let map: lif::LifMap =
             serde_json::from_value(extensions.others[lif::EXTENSION_MAP].clone()).expect("LIF_map");
-        assert_eq!(map.format_version, lif::FORMAT_VERSION);
+        assert_eq!(map.format_version, lif::MAP_FORMAT_VERSION);
         assert_eq!(map.ambient_color, [0.25, 0.3, 0.35]);
-        assert_eq!(map.gat_hash, hash_hex(&fixture.gat));
-        assert_eq!(map.gnd_hash, hash_hex(b"gnd-bytes"));
-        assert_eq!(map.rsw_hash, hash_hex(b"rsw-bytes"));
+        let source = map.source.as_ref().expect("converter provenance");
+        assert_eq!(source.gat_hash, hash_hex(&fixture.gat));
+        assert_eq!(source.gnd_hash, hash_hex(b"gnd-bytes"));
+        assert_eq!(source.rsw_hash, hash_hex(b"rsw-bytes"));
 
         let water: lif::LifWater =
             serde_json::from_value(extensions.others[lif::EXTENSION_WATER].clone())
