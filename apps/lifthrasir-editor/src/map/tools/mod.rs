@@ -106,12 +106,19 @@ fn toolbar(
                     current = ToolMode::Place(asset.clone());
                 }
                 ui.separator();
-                for (kind, label) in [
-                    (lights::LightKind::Point, "Add point light"),
-                    (lights::LightKind::Spot, "Add spot light"),
-                ] {
-                    ui.selectable_value(&mut current, ToolMode::AddLight(kind), label);
-                }
+                let adding = matches!(current, ToolMode::AddLight(_));
+                egui::containers::menu::MenuButton::from_button(egui::Button::selectable(
+                    adding,
+                    "Add light ⏷",
+                ))
+                .ui(ui, |ui| {
+                    for (kind, label) in [
+                        (lights::LightKind::Point, "Point light"),
+                        (lights::LightKind::Spot, "Spot light"),
+                    ] {
+                        ui.selectable_value(&mut current, ToolMode::AddLight(kind), label);
+                    }
+                });
                 ui.separator();
                 ui.toggle_value(&mut outliner.open, "Outliner");
                 let Some(GizmoChoice(kind)) = &mut choice else {
