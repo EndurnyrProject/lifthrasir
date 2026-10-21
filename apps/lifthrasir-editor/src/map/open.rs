@@ -10,6 +10,7 @@ use super::{
     lighting::apply_map_lighting,
     save::SaveAsDialog,
     save::SaveRequest,
+    settings::MapSettingsWindow,
 };
 use crate::shell::{
     camera::{EditorCamera, frame_bounds},
@@ -306,7 +307,7 @@ fn list_maps(source: &dyn AssetSource) -> Vec<String> {
     maps
 }
 
-/// The File menu: owns the top panel.
+/// The File and Map menus: owns the top panel.
 #[allow(clippy::too_many_arguments)]
 fn menu_bar(
     mut contexts: EguiContexts,
@@ -316,6 +317,7 @@ fn menu_bar(
     mut picker: ResMut<MapPicker>,
     mut actions: ResMut<StartScreenActions>,
     mut save_as: ResMut<SaveAsDialog>,
+    mut settings: ResMut<MapSettingsWindow>,
     mut saves: MessageWriter<SaveRequest>,
     mut closes: MessageWriter<WindowCloseRequested>,
     windows: Query<Entity, With<PrimaryWindow>>,
@@ -348,6 +350,14 @@ fn menu_bar(
                         for window in &windows {
                             closes.write(WindowCloseRequested { window });
                         }
+                    }
+                });
+                ui.menu_button("Map", |ui| {
+                    if ui
+                        .add_enabled(editing, egui::Button::new("Map settings…"))
+                        .clicked()
+                    {
+                        settings.open = true;
                     }
                 });
             });
