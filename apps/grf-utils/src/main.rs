@@ -61,9 +61,11 @@ enum Commands {
         #[arg(long)]
         out: PathBuf,
 
-        /// Monotonic content version stamped into the pak manifest
+        /// Content version stamped into the pak manifest. Defaults to the
+        /// current Unix time in milliseconds; override only to reproduce an
+        /// earlier build.
         #[arg(long)]
-        content_version: u64,
+        content_version: Option<u64>,
 
         /// zstd compression level (crate default if omitted)
         #[arg(long)]
@@ -127,7 +129,7 @@ fn run() -> Result<()> {
                 data_folder.as_deref(),
                 &content_dir,
                 &out,
-                content_version,
+                content_version.unwrap_or_else(lifthrasir_pak::content_version_now),
                 zstd_level,
                 jobs,
             )?;

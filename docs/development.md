@@ -42,7 +42,7 @@ The GR2 conversion reads `assets/convert.toml`. Both commands report individual 
 
 ## Build a pak
 
-`pack` archives existing files; it does not run conversions. It excludes `.rsm`, `.rsm2`, `.gnd`, `.gat`, and `.rsw` files because the runtime does not read those formats directly. Increase `--content-version` on every rebuild; versions are enforced as monotonic.
+`pack` archives existing files; it does not run conversions. It excludes `.rsm`, `.rsm2`, `.gnd`, `.gat`, and `.rsw` files because the runtime does not read those formats directly. The manifest `content_version` is the pack timestamp (Unix milliseconds) by default, and `merge` only requires a patch to be newer than the main pak, so no manual bump is needed. Use `--content-version` only to reproduce an earlier build.
 
 Write to a temporary file so a failed pack doesn't replace a working pak:
 
@@ -50,7 +50,7 @@ Write to a temporary file so a failed pack doesn't replace a working pak:
 ./target/release/grf-utils pack \
   --grf assets/en.grf --grf assets/data.grf \
   --content-dir assets/data \
-  --out assets/lifthrasir.pak.new --content-version 1
+  --out assets/lifthrasir.pak.new
 mv assets/lifthrasir.pak.new assets/lifthrasir.pak
 ```
 

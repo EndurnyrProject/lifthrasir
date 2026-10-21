@@ -245,14 +245,16 @@ tooling):
 cargo run --release -p grf-utils -- pack \
   --grf assets/en.grf --grf assets/data.grf \
   --content-dir assets/data \
-  --out assets/lifthrasir.pak --content-version 1
+  --out assets/lifthrasir.pak
 ```
 
 `pack` **excludes `.rsm`, `.rsm2`, `.gnd`, `.gat` and `.rsw`** from the archive:
 nothing reads them at runtime, and each map glb already embeds its `.gat` bytes.
 The filter is applied after the precedence tiers are merged, so no tier can
-reintroduce them; the summary reports an `Excluded:` count. `--content-version`
-is enforced monotonic, so **bump it on every rebuild.**
+reintroduce them; the summary reports an `Excluded:` count. The manifest
+`content_version` defaults to the pack timestamp (Unix milliseconds), and
+`merge` only requires a patch to be newer than the main pak, so ordering is
+automatic. `--content-version` is an override for reproducing an earlier build.
 
 Earlier `--grf` flags win on duplicate paths. `--content-dir` (repeatable) packs
 a folder **at the pak root**, mirroring the runtime's `data_folder`, and is what
