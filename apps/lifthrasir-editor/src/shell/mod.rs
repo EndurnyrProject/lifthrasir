@@ -2,6 +2,7 @@
 
 pub mod browser;
 pub mod camera;
+pub mod gizmo;
 pub mod inspector;
 pub mod node;
 pub mod preview;

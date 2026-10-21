@@ -13,7 +13,11 @@ use lifthrasir_assets::{
     catalogs::ContentCatalogPlugin,
     source::{AssetConfig, register_ro_asset_source, setup_composite_source_from_config},
 };
-use lifthrasir_editor::{EditorPaths, map::MapEditorPlugin, shell::EditorShellPlugin};
+use lifthrasir_editor::{
+    EditorPaths,
+    map::MapEditorPlugin,
+    shell::{EditorShellPlugin, gizmo::GizmoPlugin},
+};
 use lifthrasir_runtime::ContentRuntimePlugins;
 use std::sync::{Arc, RwLock};
 
@@ -66,6 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         MeshPickingPlugin,
         EguiPlugin::default(),
         EditorShellPlugin,
+        GizmoPlugin,
         MapEditorPlugin,
     ))
     .insert_resource(EditorPaths::from_config(&config));
