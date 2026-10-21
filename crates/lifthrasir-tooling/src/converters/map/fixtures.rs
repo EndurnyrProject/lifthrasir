@@ -3,7 +3,7 @@
 //! raw GAT buffer in the real on-disk layout.
 
 use crate::converters::ktx2_out::encode_ktx2;
-use crate::converters::map::document::{MapDocument, RetailInputs};
+use crate::converters::map::document::{MapDocument, MapLight, RetailInputs};
 use crate::converters::map::terrain::{TerrainPrimitive, build_terrain};
 use crate::converters::map::textures::TextureOut;
 use crate::converters::map::writer::write_glb;
@@ -257,7 +257,7 @@ fn regenerate_game_engine_fixtures() {
     let primitives = build_terrain(&ground).expect("terrain");
     let good = out.join("mini_map.glb");
 
-    let document = document_for(
+    let mut document = document_for(
         "mini_map",
         &ground,
         &world,
@@ -270,6 +270,17 @@ fn regenerate_game_engine_fixtures() {
         false,
     )
     .expect("mini_map document");
+    // Retail RSW has no spot lights; the fixture carries one so the runtime
+    // loader path is exercised.
+    document.lights.push(MapLight::Spot {
+        translation: glam::Vec3::new(4.0, 6.0, -4.0),
+        rotation: glam::Quat::from_rotation_y(std::f32::consts::FRAC_PI_4),
+        color: [0.4, 0.8, 1.0],
+        candela: 50.0,
+        range: 20.0,
+        inner_angle: 0.3,
+        outer_angle: 0.6,
+    });
     write_glb(&good, &document).expect("write mini_map.glb");
 
     // The same document declaring a format the runtime does not support.

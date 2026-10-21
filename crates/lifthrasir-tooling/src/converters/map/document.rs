@@ -77,6 +77,17 @@ pub enum MapLight {
         candela: f32,
         range: f32,
     },
+    /// Authored by the world editor; retail RSW has no spot lights.
+    #[allow(dead_code)]
+    Spot {
+        translation: Vec3,
+        rotation: Quat,
+        color: [f32; 3],
+        candela: f32,
+        range: f32,
+        inner_angle: f32,
+        outer_angle: f32,
+    },
 }
 
 /// Water zones plus the GND cells the converter selected for them.
@@ -321,6 +332,38 @@ fn validate_light(light: &MapLight) -> Vec<String> {
             }
             if !finite_all(color.iter().copied().chain([*lux])) {
                 errors.push("sun color or lux is not finite".to_string());
+            }
+        }
+        MapLight::Spot {
+            translation,
+            rotation,
+            color,
+            candela,
+            range,
+            inner_angle,
+            outer_angle,
+        } => {
+            if !finite_all(
+                translation
+                    .to_array()
+                    .into_iter()
+                    .chain(color.iter().copied())
+                    .chain([*candela, *range, *inner_angle, *outer_angle]),
+            ) {
+                errors.push("spot light transform or intensity is not finite".to_string());
+            }
+            if !is_unit(*rotation) {
+                errors.push("spot light rotation is not a unit quaternion".to_string());
+            }
+            if !(0.0 < *inner_angle && *inner_angle <= *outer_angle) {
+                errors.push(format!(
+                    "spot light inner angle {inner_angle} must be > 0 and <= outer angle {outer_angle}"
+                ));
+            }
+            if *outer_angle > std::f32::consts::FRAC_PI_2 {
+                errors.push(format!(
+                    "spot light outer angle {outer_angle} must be <= PI/2"
+                ));
             }
         }
         MapLight::Point {
@@ -639,6 +682,27 @@ mod tests {
 
         let errors = document.validate().expect_err("dims must match cells");
         assert!(errors.iter().any(|error| error.contains("GAT declares")));
+    }
+
+    #[test]
+    fn validate_rejects_a_spot_whose_inner_angle_exceeds_its_outer_angle() {
+        let mut document = retail_document();
+        document.lights.push(MapLight::Spot {
+            translation: Vec3::new(4.0, 6.0, -4.0),
+            rotation: Quat::IDENTITY,
+            color: [1.0; 3],
+            candela: 50.0,
+            range: 20.0,
+            inner_angle: 0.8,
+            outer_angle: 0.6,
+        });
+
+        let errors = document.validate().expect_err("the cone must be ordered");
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("spot light inner"))
+        );
     }
 
     #[test]

@@ -266,6 +266,48 @@ fn build_point_light_node(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+fn build_spot_light_node(
+    root: &mut json::Root,
+    translation: Vec3,
+    rotation: Quat,
+    color: [f32; 3],
+    candela: f32,
+    range: f32,
+    inner_angle: f32,
+    outer_angle: f32,
+) -> json::Index<json::Node> {
+    let index = push_light(
+        root,
+        KhrLight {
+            color,
+            intensity: candela,
+            range: Some(range),
+            spot: Some(json::extensions::scene::khr_lights_punctual::Spot {
+                inner_cone_angle: inner_angle,
+                outer_cone_angle: outer_angle,
+            }),
+            type_: Valid(KhrLightType::Spot),
+            name: Some("spot_light".to_string()),
+            extensions: None,
+            extras: Default::default(),
+        },
+    );
+
+    json::Index::push(
+        &mut root.nodes,
+        json::Node {
+            name: Some("spot_light".to_string()),
+            translation: Some(to_gltf_vec(translation).to_array()),
+            rotation: Some(json::scene::UnitQuaternion(
+                to_gltf_quat(rotation).to_array(),
+            )),
+            extensions: Some(light_node_extensions(index)),
+            ..Default::default()
+        },
+    )
+}
+
 fn emitter_node(
     root: &mut json::Root,
     node: &MapNode<impl serde::Serialize>,
@@ -329,6 +371,24 @@ fn build_object_nodes(
                 candela,
                 range,
             } => build_point_light_node(root, *translation, *color, *candela, *range),
+            MapLight::Spot {
+                translation,
+                rotation,
+                color,
+                candela,
+                range,
+                inner_angle,
+                outer_angle,
+            } => build_spot_light_node(
+                root,
+                *translation,
+                *rotation,
+                *color,
+                *candela,
+                *range,
+                *inner_angle,
+                *outer_angle,
+            ),
         });
     }
     for prop in &doc.props {
@@ -999,6 +1059,58 @@ mod tests {
         assert_close(world * Vec3::Y, expected * Vec3::Y);
         assert_close(world * Vec3::Z, expected * Vec3::Z);
         assert_eq!(fixture.world.objects.len(), 4);
+    }
+
+    #[test]
+    fn spot_lights_are_written_as_spot_punctual_lights_with_their_corners() {
+        let fixture = write_fixture();
+        let mut document = fixture.document();
+        let rotation = Quat::from_rotation_y(0.5);
+        document.lights.push(MapLight::Spot {
+            translation: Vec3::new(4.0, 6.0, -4.0),
+            rotation,
+            color: [0.4, 0.8, 1.0],
+            candela: 50.0,
+            range: 20.0,
+            inner_angle: 0.3,
+            outer_angle: 0.6,
+        });
+        write_glb(&fixture.path, &document).expect("write glb");
+
+        let (document, _) = reopen(&fixture.path);
+        let root = scene_root(&document);
+        let (node, light) = root
+            .children()
+            .find_map(|node| {
+                let light = node.light()?;
+                matches!(light.kind(), gltf::khr_lights_punctual::Kind::Spot { .. })
+                    .then_some((node, light))
+            })
+            .expect("spot light");
+
+        assert_eq!(light.color(), [0.4, 0.8, 1.0]);
+        assert_eq!(light.intensity(), 50.0);
+        assert_eq!(light.range(), Some(20.0));
+        assert!(
+            matches!(
+                light.kind(),
+                gltf::khr_lights_punctual::Kind::Spot {
+                    inner_cone_angle,
+                    outer_cone_angle,
+                } if inner_cone_angle == 0.3 && outer_cone_angle == 0.6
+            ),
+            "unexpected light kind"
+        );
+
+        let (translation, actual_rotation, _) = node.transform().decomposed();
+        assert_close(
+            ROOT_FIX * Vec3::from(translation),
+            Vec3::new(4.0, 6.0, -4.0),
+        );
+        let native = ROOT_FIX * Quat::from_array(actual_rotation);
+        for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+            assert_close(native * axis, rotation * axis);
+        }
     }
 
     #[test]

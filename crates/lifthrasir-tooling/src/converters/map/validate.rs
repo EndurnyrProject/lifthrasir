@@ -190,6 +190,55 @@ fn validate_light(node: &gltf::Node, light: &MapLight) -> anyhow::Result<()> {
             let expected = *rotation * Vec3::NEG_Z;
             ensure_close("sun direction", world_direction, expected)
         }
+        MapLight::Spot {
+            translation,
+            rotation,
+            color,
+            candela,
+            range,
+            inner_angle,
+            outer_angle,
+        } => {
+            ensure!(
+                matches!(punctual.kind(), gltf::khr_lights_punctual::Kind::Spot {
+                    inner_cone_angle,
+                    outer_cone_angle,
+                } if inner_cone_angle == *inner_angle && outer_cone_angle == *outer_angle),
+                "spot light node is not a spot light with the document's cone angles"
+            );
+            ensure!(
+                punctual.color() == *color,
+                "spot light color {:?} differs from the document {:?}",
+                punctual.color(),
+                color
+            );
+            ensure!(
+                punctual.intensity() == *candela,
+                "spot light intensity {} differs from the document {candela}",
+                punctual.intensity()
+            );
+            ensure!(
+                punctual.range() == Some(*range),
+                "spot light range {:?} differs from the document {range}",
+                punctual.range()
+            );
+
+            let (actual, actual_rotation, _) = node.transform().decomposed();
+            ensure_close(
+                "spot light position",
+                ROOT_FIX * Vec3::from(actual),
+                *translation,
+            )?;
+
+            // The glb rotation carries the fix; applying it again recovers the
+            // native rotation, as with the sun.
+            let native = ROOT_FIX * Quat::from_array(actual_rotation);
+            let wanted = *rotation;
+            for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+                ensure_close("spot light rotation", native * axis, wanted * axis)?;
+            }
+            Ok(())
+        }
         MapLight::Point {
             translation,
             color,

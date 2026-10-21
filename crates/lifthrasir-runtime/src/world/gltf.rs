@@ -182,6 +182,22 @@ impl GltfExtensionHandler for LifExtensionHandler {
             light.shadow_maps_enabled = false;
         }
     }
+
+    fn on_spawn_light_spot(
+        &mut self,
+        _load_context: &mut LoadContext<'_>,
+        _gltf_node: &gltf::Node,
+        entity: &mut EntityWorldMut,
+    ) {
+        if !self.is_usable_map() {
+            return;
+        }
+
+        if let Some(mut light) = entity.get_mut::<SpotLight>() {
+            light.radius = POINT_LIGHT_RADIUS;
+            light.shadow_maps_enabled = false;
+        }
+    }
 }
 
 fn decode_root(gltf: &gltf::Gltf) -> Result<LifMapData, String> {
@@ -518,6 +534,20 @@ mod tests {
                     anim_speed: 2.0,
                 }
             );
+        });
+    }
+
+    #[test]
+    fn spot_lights_get_the_same_tuning_as_point_lights() {
+        with_scene_world(&mut test_app(), "mini_map.glb", |world| {
+            let spot = single::<SpotLight>(world);
+
+            assert!((spot.intensity - 50.0 * 4.0 * std::f32::consts::PI).abs() < 1e-3);
+            assert_eq!(spot.range, 20.0);
+            assert_eq!(spot.inner_angle, 0.3);
+            assert_eq!(spot.outer_angle, 0.6);
+            assert_eq!(spot.radius, POINT_LIGHT_RADIUS);
+            assert!(!spot.shadow_maps_enabled);
         });
     }
 
