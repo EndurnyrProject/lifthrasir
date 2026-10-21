@@ -16,7 +16,8 @@ use std::f32::consts::FRAC_PI_4;
 pub enum CameraMode {
     /// WASD, Q/E down/up, Shift faster, right-mouse look.
     Fly,
-    /// Fixed pitch, scroll zoom, right-mouse drag yaws around `focus`.
+    /// Fixed pitch, scroll zoom, right-mouse drag yaws around `focus`, WASD
+    /// pans over the ground (Shift faster).
     #[default]
     Orbit,
 }
@@ -66,6 +67,15 @@ pub fn spawn_editor_camera(mut commands: Commands) {
 /// (x right, y up, -z forward); its length is ignored.
 pub fn fly_step(rotation: Quat, input: Vec3, distance: f32) -> Vec3 {
     rotation * input.normalize_or_zero() * distance
+}
+
+/// World-space displacement of one orbit pan step: `input` x/z (right,
+/// -forward) along the camera's yaw on the ground plane; y and the length of
+/// `input` are ignored.
+pub fn orbit_pan(rotation: Quat, input: Vec3, distance: f32) -> Vec3 {
+    let (yaw, _, _) = rotation.to_euler(EulerRot::YXZ);
+    let flat = Vec3::new(input.x, 0.0, input.z).normalize_or_zero();
+    Quat::from_rotation_y(yaw) * flat * distance
 }
 
 /// Orbit camera at `distance` from `focus`, yawed by `yaw` around world Y and
@@ -133,10 +143,12 @@ pub fn toggle_camera_mode(
     }
 }
 
+/// WASD (and Q/E in Fly mode) moves the camera; in Orbit mode the focus moves
+/// with it.
 pub fn fly_move(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    mut cameras: Query<(&EditorCamera, &mut Transform)>,
+    mut cameras: Query<(&mut EditorCamera, &mut Transform)>,
 ) {
     let axis = |positive: KeyCode, negative: KeyCode| {
         keys.pressed(positive) as i8 as f32 - keys.pressed(negative) as i8 as f32
@@ -151,12 +163,16 @@ pub fn fly_move(
     }
     let fast = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
     let speed = FLY_SPEED * if fast { FLY_FAST_FACTOR } else { 1.0 };
-    for (camera, mut transform) in &mut cameras {
-        if camera.mode != CameraMode::Fly {
-            continue;
-        }
-        let step = fly_step(transform.rotation, input, speed * time.delta_secs());
+    let distance = speed * time.delta_secs();
+    for (mut camera, mut transform) in &mut cameras {
+        let step = match camera.mode {
+            CameraMode::Fly => fly_step(transform.rotation, input, distance),
+            CameraMode::Orbit => orbit_pan(transform.rotation, input, distance),
+        };
         transform.translation += step;
+        if camera.mode == CameraMode::Orbit {
+            camera.focus += step;
+        }
     }
 }
 
@@ -232,6 +248,26 @@ mod tests {
             Vec3::new(0.0, 0.0, 10.0)
         ));
         assert!((fly_step(rotation, Vec3::new(1.0, 0.0, -1.0), 2.0).length() - 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn an_orbit_pan_stays_on_the_ground_plane_along_the_yaw() {
+        let rotation = Quat::from_euler(
+            EulerRot::YXZ,
+            -std::f32::consts::FRAC_PI_2,
+            ORBIT_PITCH,
+            0.0,
+        );
+
+        assert!(close(
+            orbit_pan(rotation, Vec3::NEG_Z, 10.0),
+            Vec3::new(10.0, 0.0, 0.0)
+        ));
+        assert!(close(
+            orbit_pan(rotation, Vec3::X, 10.0),
+            Vec3::new(0.0, 0.0, 10.0)
+        ));
+        assert_eq!(orbit_pan(rotation, Vec3::Y, 10.0), Vec3::ZERO);
     }
 
     #[test]

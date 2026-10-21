@@ -125,9 +125,9 @@ fn toolbar(
                     return;
                 };
                 ui.separator();
-                ui.selectable_value(kind, GizmoModeKind::Translate, "Move (W)");
-                ui.selectable_value(kind, GizmoModeKind::Rotate, "Rotate (E)");
-                ui.selectable_value(kind, GizmoModeKind::Scale, "Scale (R)");
+                ui.selectable_value(kind, GizmoModeKind::Translate, "Move (1)");
+                ui.selectable_value(kind, GizmoModeKind::Rotate, "Rotate (2)");
+                ui.selectable_value(kind, GizmoModeKind::Scale, "Scale (3)");
             });
         });
     });

@@ -2,7 +2,7 @@
 //! `transform-gizmo-bevy`. One drag records one `ComponentEdit<Transform>`.
 
 use super::{
-    camera::{CameraMode, EditorCamera},
+    camera::EditorCamera,
     node::{EditorNodeId, KindFlags, LightFlags, NodeKind, find_node, node_kind},
     selection::Selection,
     ui::{viewport_has_keyboard, viewport_has_pointer},
@@ -27,7 +27,7 @@ pub fn allowed_modes(kind: NodeKind) -> &'static [GizmoModeKind] {
     }
 }
 
-/// The mode the user picked with W/E/R or the toolbar.
+/// The mode the user picked with 1/2/3 or the toolbar.
 #[derive(Resource, Debug, Clone, Copy, PartialEq)]
 pub struct GizmoChoice(pub GizmoModeKind);
 
@@ -70,29 +70,21 @@ fn mark_gizmo_camera(added: On<Add, EditorCamera>, mut commands: Commands) {
     commands.entity(added.entity).insert(GizmoCamera);
 }
 
-/// W/E/R pick translate/rotate/scale, in Orbit mode only (Fly mode moves
-/// with W and E).
-fn choice_keys(
-    keys: Res<ButtonInput<KeyCode>>,
-    cameras: Query<&EditorCamera>,
-    mut choice: ResMut<GizmoChoice>,
-) {
-    let orbit = cameras
-        .single()
-        .is_ok_and(|camera| camera.mode == CameraMode::Orbit);
+/// 1/2/3 pick translate/rotate/scale (WASD/Q/E move the camera).
+fn choice_keys(keys: Res<ButtonInput<KeyCode>>, mut choice: ResMut<GizmoChoice>) {
     let modifier = keys.any_pressed([
         KeyCode::ControlLeft,
         KeyCode::ControlRight,
         KeyCode::SuperLeft,
         KeyCode::SuperRight,
     ]);
-    if !orbit || modifier {
+    if modifier {
         return;
     }
     let picked = [
-        (KeyCode::KeyW, GizmoModeKind::Translate),
-        (KeyCode::KeyE, GizmoModeKind::Rotate),
-        (KeyCode::KeyR, GizmoModeKind::Scale),
+        (KeyCode::Digit1, GizmoModeKind::Translate),
+        (KeyCode::Digit2, GizmoModeKind::Rotate),
+        (KeyCode::Digit3, GizmoModeKind::Scale),
     ]
     .into_iter()
     .find(|(key, _)| keys.just_pressed(*key));
