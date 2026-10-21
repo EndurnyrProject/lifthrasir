@@ -1,7 +1,16 @@
+use bevy::ui_widgets::Activate;
 use bevy::{
     prelude::*,
     tasks::{IoTaskPool, Task, block_on, futures_lite::future::poll_once},
     text::{FontSize, FontSourceTemplate},
+};
+use bevy_feathers::{
+    controls::{
+        FeathersMenu, FeathersMenuButton, FeathersMenuDivider, FeathersMenuItem, FeathersMenuPopup,
+    },
+    dark_theme::create_dark_theme,
+    theme::{ThemedText, UiTheme},
+    tokens,
 };
 
 use crate::application::{EditorDocument, EditorNotice, EditorSystems, control_pressed, save};
@@ -10,11 +19,31 @@ use crate::{infrastructure::content::MapSceneRequest, map_asset_path, presentati
 const MENU_BAR_HEIGHT: f32 = 28.0;
 const FILE_MENU_WIDTH: f32 = 220.0;
 
-#[derive(Component, Default, Clone)]
-struct NoticeLabel;
+/// Keep Feathers' menu controls aligned with the editor's blue/slate overlays.
+pub(super) fn editor_theme() -> UiTheme {
+    let mut theme = UiTheme(create_dark_theme());
+    let color = &mut theme.0.color;
+    let background = Color::srgb(0.075, 0.085, 0.12);
+    let hover = Color::srgb(0.12, 0.16, 0.25);
+    let pressed = Color::srgb(0.16, 0.28, 0.48);
+    let border = Color::srgb(0.23, 0.28, 0.4);
+    let text = Color::srgb(0.9, 0.93, 1.0);
+
+    color.insert(tokens::BUTTON_BG, background);
+    color.insert(tokens::BUTTON_BG_HOVER, hover);
+    color.insert(tokens::BUTTON_BG_PRESSED, pressed);
+    color.insert(tokens::BUTTON_TEXT, text);
+    color.insert(tokens::MENU_BG, background);
+    color.insert(tokens::MENU_BORDER, border);
+    color.insert(tokens::MENUITEM_BG_HOVER, hover);
+    color.insert(tokens::MENUITEM_BG_PRESSED, pressed);
+    color.insert(tokens::MENUITEM_BG_FOCUSED, pressed);
+    color.insert(tokens::MENUITEM_TEXT, text);
+    theme
+}
 
 #[derive(Component, Default, Clone)]
-struct FileMenuPopup;
+struct NoticeLabel;
 
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum FileAction {
@@ -73,19 +102,12 @@ fn menu_bar() -> impl Scene {
 
 fn file_menu() -> impl Scene {
     bsn! {
+        @FeathersMenu
         Node { position_type: PositionType::Relative, width: px(58), height: percent(100) }
         Children [
             (
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                }
-                BackgroundColor(Color::srgb(0.075, 0.085, 0.12))
-                Pickable
-                on(toggle_file_menu)
-                Children [ label("File", 14.0, Color::srgb(0.9, 0.93, 1.0)) ]
+                @FeathersMenuButton { @caption: bsn! { Text("File") ThemedText } }
+                Node { width: percent(100), height: percent(100) }
             ),
             file_popup(),
         ]
@@ -94,26 +116,15 @@ fn file_menu() -> impl Scene {
 
 fn file_popup() -> impl Scene {
     bsn! {
-        FileMenuPopup
+        @FeathersMenuPopup
         Node {
-            position_type: PositionType::Absolute,
-            top: px(MENU_BAR_HEIGHT),
-            left: px(0),
             width: px(FILE_MENU_WIDTH),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Stretch,
-            padding: {UiRect::vertical(px(4))},
-            border: px(1),
-            border_radius: BorderRadius::bottom(px(5)),
+            min_width: px(FILE_MENU_WIDTH),
         }
-        BackgroundColor(Color::srgb(0.075, 0.085, 0.12))
-        BorderColor::all(Color::srgb(0.23, 0.28, 0.4))
-        Visibility::Hidden
-        Pickable
         Children [
             file_action("Open File", "Ctrl+O", FileAction::Open),
             file_action("Save File", "Ctrl+S", FileAction::Save),
-            separator(),
+            @FeathersMenuDivider,
             file_action("Quit", "Alt+F4", FileAction::Quit),
         ]
     }
@@ -122,20 +133,21 @@ fn file_popup() -> impl Scene {
 fn file_action(label_text: &'static str, shortcut: &'static str, action: FileAction) -> impl Scene {
     bsn! {
         template_value(action)
+        @FeathersMenuItem { @caption: bsn! { menu_item_caption(label_text, shortcut) } }
+        on(on_file_action)
+    }
+}
+
+fn menu_item_caption(label_text: &'static str, shortcut: &'static str) -> impl Scene {
+    bsn! {
         Node {
-            height: px(30),
-            margin: {UiRect::horizontal(px(4))},
-            padding: {UiRect::horizontal(px(9))},
+            width: percent(100),
             flex_direction: FlexDirection::Row,
             justify_content: JustifyContent::SpaceBetween,
             align_items: AlignItems::Center,
-            border_radius: BorderRadius::all(px(3)),
         }
-        BackgroundColor(Color::srgb(0.075, 0.085, 0.12))
-        Pickable
-        on(on_file_action)
         Children [
-            label(label_text, 14.0, Color::srgb(0.9, 0.93, 1.0)),
+            (Text(label_text) ThemedText),
             label(shortcut, 12.0, Color::srgb(0.48, 0.52, 0.62)),
         ]
     }
@@ -153,35 +165,15 @@ fn label(text: &'static str, size: f32, color: Color) -> impl Scene {
     }
 }
 
-fn separator() -> impl Scene {
-    bsn! {
-        Node { height: px(1), margin: {UiRect::axes(px(8), px(4))} }
-        BackgroundColor(Color::srgb(0.23, 0.28, 0.4))
-        Pickable::IGNORE
-    }
-}
-
-fn toggle_file_menu(_: On<Pointer<Click>>, mut popup: Query<&mut Visibility, With<FileMenuPopup>>) {
-    let Ok(mut visibility) = popup.single_mut() else {
-        return;
-    };
-    *visibility = match *visibility {
-        Visibility::Hidden => Visibility::Visible,
-        _ => Visibility::Hidden,
-    };
-}
-
 fn on_file_action(
-    mut click: On<Pointer<Click>>,
+    activate: On<Activate>,
     actions: Query<&FileAction>,
-    mut popup: Query<&mut Visibility, With<FileMenuPopup>>,
     document: Option<ResMut<EditorDocument>>,
     mut notice: ResMut<EditorNotice>,
     mut picker: ResMut<MapFilePicker>,
     mut exit: MessageWriter<AppExit>,
 ) {
-    click.propagate(false);
-    let Ok(action) = actions.get(click.entity) else {
+    let Ok(action) = actions.get(activate.entity) else {
         return;
     };
     match action {
@@ -196,9 +188,6 @@ fn on_file_action(
         FileAction::Quit => {
             exit.write(AppExit::Success);
         }
-    }
-    if let Ok(mut visibility) = popup.single_mut() {
-        *visibility = Visibility::Hidden;
     }
 }
 

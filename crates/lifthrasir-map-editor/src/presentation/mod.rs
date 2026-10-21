@@ -7,6 +7,7 @@ mod ui;
 mod viewport;
 
 use bevy::prelude::*;
+use bevy_feathers::FeathersPlugins;
 
 pub(crate) use viewport::MapAssetPath;
 
@@ -14,7 +15,8 @@ pub(crate) struct EditorPresentationPlugin;
 
 impl Plugin for EditorPresentationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
+        app.insert_resource(ui::editor_theme()).add_plugins((
+            FeathersPlugins,
             bevy::picking::mesh_picking::MeshPickingPlugin,
             viewport::ViewportPlugin,
             collision::CollisionEditorPlugin,

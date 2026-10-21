@@ -5,7 +5,7 @@ edition.workspace = true
 
 [features]
 default = ["gui"]
-gui = ["dep:bevy", "dep:clap", "dep:lifthrasir-assets", "dep:lifthrasir-runtime", "dep:rfd", "dep:toml"]
+gui = ["dep:bevy", "dep:bevy_feathers", "dep:clap", "dep:lifthrasir-assets", "dep:lifthrasir-runtime", "dep:rfd", "dep:toml"]
 
 [[bin]]
 name = "lifthrasir-map-editor"
@@ -15,6 +15,7 @@ required-features = ["gui"]
 [dependencies]
 anyhow = { workspace = true }
 bevy = { workspace = true, optional = true, features = ["bevy_dev_tools", "bevy_gltf", "free_camera", "ktx2", "zstd_rust"] }
+bevy_feathers = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 lifthrasir-data = { path = "../lifthrasir-data" }
 lifthrasir-assets = { path = "../lifthrasir-assets", optional = true }
