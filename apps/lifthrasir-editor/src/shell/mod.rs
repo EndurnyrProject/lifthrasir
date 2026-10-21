@@ -2,6 +2,7 @@
 
 pub mod browser;
 pub mod camera;
+pub mod fonts;
 pub mod gizmo;
 pub mod inspector;
 pub mod node;
@@ -60,7 +61,10 @@ impl Plugin for EditorShellPlugin {
         )
         .add_systems(
             EguiPrimaryContextPass,
-            ui::status_bar.in_set(EditorUiSet::StatusBar),
+            (
+                fonts::install_korean_font.before(EditorUiSet::MenuBar),
+                ui::status_bar.in_set(EditorUiSet::StatusBar),
+            ),
         );
     }
 }
