@@ -259,7 +259,10 @@ impl MapDocument {
         let mut errors = Vec::new();
 
         if !is_valid_map_name(&self.name) {
-            errors.push(format!("map name '{}' must match ^[a-z0-9_]+$", self.name));
+            errors.push(format!(
+                "map name '{}' must be a lowercase asset path segment (a-z, 0-9, _, -, @)",
+                self.name
+            ));
         }
         if self.meta.format_version != lif::MAP_FORMAT_VERSION {
             errors.push(format!(
@@ -394,12 +397,15 @@ fn is_unit(rotation: Quat) -> bool {
     (rotation.length_squared() - 1.0).abs() < 1e-3
 }
 
-/// Names match `^[a-z0-9_]+$` in every host, because they become asset paths.
+/// A map name is one asset path segment, so it must be non-empty and free of
+/// separators, spaces and uppercase. Everything else retail already uses is
+/// allowed: `a-z`, `0-9`, `_`, `-` and `@` cover `1@pump`, `pvp_y_1-2` and
+/// every other shipped map.
 pub fn is_valid_map_name(name: &str) -> bool {
     !name.is_empty()
         && name
             .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-' | '@'))
 }
 
 fn object_kind(object: &RswObject) -> &'static str {
@@ -663,7 +669,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_an_empty_or_malformed_name() {
+    fn validate_rejects_an_empty_name_or_one_that_is_not_a_path_segment() {
         let mut document = retail_document();
         document.name = String::new();
         assert!(document.validate().is_err());
@@ -671,8 +677,21 @@ mod tests {
         document.name = "Not A Map".to_string();
         assert!(document.validate().is_err());
 
-        document.name = "prontera_02".to_string();
-        assert!(document.validate().is_ok());
+        document.name = "maps/prontera".to_string();
+        assert!(document.validate().is_err());
+    }
+
+    #[test]
+    fn validate_accepts_the_retail_name_alphabet() {
+        let mut document = retail_document();
+
+        for name in ["prontera_02", "1@pump", "pvp_y_1-2", "2@tower"] {
+            document.name = name.to_string();
+            assert!(
+                document.validate().is_ok(),
+                "retail map name '{name}' must be accepted"
+            );
+        }
     }
 
     #[test]
