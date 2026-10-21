@@ -1,6 +1,7 @@
 //! Tool modes, the toolbar that switches between them, and the terrain point
 //! under the cursor that tools act on.
 
+pub mod lights;
 pub mod place;
 
 use super::{layout::MapLayout, open::EditorScreen};
@@ -26,6 +27,8 @@ pub enum ToolMode {
     Select,
     /// Clicks place the asset on the terrain.
     Place(AssetRef),
+    /// Clicks add a light above the terrain.
+    AddLight(lights::LightKind),
 }
 
 /// The world-space terrain point under the primary window's cursor.
@@ -64,7 +67,7 @@ pub struct ToolsPlugin;
 impl Plugin for ToolsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ToolMode>()
-            .add_plugins(place::plugin)
+            .add_plugins((place::plugin, lights::plugin))
             .add_systems(
                 EguiPrimaryContextPass,
                 toolbar
@@ -101,6 +104,13 @@ fn toolbar(
                     && let Some(asset) = &placeable
                 {
                     current = ToolMode::Place(asset.clone());
+                }
+                ui.separator();
+                for (kind, label) in [
+                    (lights::LightKind::Point, "Add point light"),
+                    (lights::LightKind::Spot, "Add spot light"),
+                ] {
+                    ui.selectable_value(&mut current, ToolMode::AddLight(kind), label);
                 }
                 ui.separator();
                 ui.toggle_value(&mut outliner.open, "Outliner");

@@ -57,7 +57,7 @@ impl<T: Component + Clone> ComponentEdit<T> {
 
 /// `node` itself when it has `T`, otherwise its first child with `T`, otherwise
 /// `node` (the edit then adds `T` there).
-fn component_holder<T: Component>(world: &World, node: Entity) -> Entity {
+pub(crate) fn component_holder<T: Component>(world: &World, node: Entity) -> Entity {
     if world.get::<T>(node).is_some() {
         return node;
     }

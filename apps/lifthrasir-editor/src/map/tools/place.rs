@@ -42,12 +42,13 @@ struct PlaceGhost {
 
 pub(super) fn plugin(app: &mut App) {
     let placing = |mode: Res<ToolMode>| matches!(*mode, ToolMode::Place(_));
+    let tool_active = |mode: Res<ToolMode>| *mode != ToolMode::Select;
     app.add_systems(
         Update,
         (
             (swap_ghost, follow_cursor.run_if(placing)).chain(),
-            leave_on_escape.run_if(placing.and_then(viewport_has_keyboard)),
-            leave_on_right_click.run_if(placing.and_then(viewport_has_pointer)),
+            leave_on_escape.run_if(tool_active.and_then(viewport_has_keyboard)),
+            leave_on_right_click.run_if(tool_active.and_then(viewport_has_pointer)),
         )
             .run_if(in_state(EditorScreen::Editing)),
     )
