@@ -1,6 +1,7 @@
 //! Tool modes, the toolbar that switches between them, and the terrain point
 //! under the cursor that tools act on.
 
+pub mod color;
 pub mod gat;
 pub mod lights;
 pub mod paint;
@@ -44,6 +45,8 @@ pub enum ToolMode {
     PaintTile(paint::TileBrush),
     /// Two edge-adjacent cell clicks add a wall between them.
     Wall(wall::WallBrush),
+    /// Drags blend the terrain's vertex colors.
+    Color(color::ColorBrush),
 }
 
 /// Ends a placing tool: back to Select with the Move gizmo, so the node just
@@ -101,6 +104,7 @@ impl Plugin for ToolsPlugin {
                 sculpt::plugin,
                 paint::plugin,
                 wall::plugin,
+                color::plugin,
             ))
             .add_systems(
                 EguiPrimaryContextPass,
@@ -209,6 +213,14 @@ fn toolbar(
                     current = ToolMode::Wall(wall::WallBrush {
                         texture_uri: uri.clone(),
                     });
+                }
+                let coloring = matches!(current, ToolMode::Color(_));
+                if ui
+                    .add(egui::Button::selectable(coloring, "Color"))
+                    .clicked()
+                    && !coloring
+                {
+                    current = ToolMode::Color(color::ColorBrush::default());
                 }
                 ui.separator();
                 ui.toggle_value(&mut outliner.open, "Outliner");

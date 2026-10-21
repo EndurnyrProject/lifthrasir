@@ -113,7 +113,7 @@ pub fn sculpt_y(op: SculptOp, y: f32, weight: f32, target: f32) -> f32 {
 }
 
 /// 1 at the center easing to 0 at `radius`.
-fn falloff(distance: f32, radius: f32) -> f32 {
+pub(crate) fn falloff(distance: f32, radius: f32) -> f32 {
     0.5 * (1.0 + (PI * (distance / radius).min(1.0)).cos())
 }
 
