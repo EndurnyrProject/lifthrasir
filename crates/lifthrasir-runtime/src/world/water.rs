@@ -10,7 +10,7 @@ use bevy::{
 use bevy_auto_plugin::prelude::*;
 use lifthrasir_data::lif::LifWater;
 
-use super::components::SceneOwner;
+use super::components::{LifMapData, SceneOwner};
 use crate::rendering::{WaterRenderingSystems, constants::CELL_SIZE};
 
 /// Water mesh/material playback; renderer plugins must precede this capability.
@@ -149,6 +149,34 @@ pub fn begin_water_loading(
     }
 
     commands.entity(entity).insert(WaterLoadingState { zones });
+}
+
+/// Rebuilds one root's water surfaces from a (possibly edited) map. Every
+/// surface owned by `root` is despawned first; when the map declares no water
+/// nothing is spawned, so edited-away water disappears without a scene reload.
+pub fn respawn_water(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    root: Entity,
+    data: &LifMapData,
+    surfaces: &Query<(Entity, &SceneOwner), With<WaterSurface>>,
+) {
+    for (entity, owner) in surfaces {
+        if owner.0 == root {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    let Some(water) = &data.water else {
+        return;
+    };
+    begin_water_loading(
+        commands,
+        asset_server,
+        root,
+        water,
+        data.water_tiles.clone(),
+    );
 }
 
 fn group_water_tiles(
@@ -560,6 +588,167 @@ mod tests {
             .unwrap();
         assert_eq!(material.extension.water_data.wave_params.y, 1.25);
         assert_eq!(material.extension.water_data.wave_params.z, 45.0);
+    }
+
+    fn map_data(water: Option<LifWater>, tiles: Vec<(usize, usize)>) -> LifMapData {
+        LifMapData {
+            altitude: ro_formats::RoAltitude {
+                version: "1.2".to_string(),
+                width: 1,
+                height: 1,
+                cells: Vec::new(),
+            },
+            water,
+            water_tiles: tiles,
+            meta: lifthrasir_data::lif::LifMap {
+                format_version: lifthrasir_data::lif::MAP_FORMAT_VERSION,
+                source: None,
+                ambient_color: [0.0; 3],
+                no_shade_tint: [1.0; 3],
+                indoor: false,
+                ambient_brightness: 320.0,
+                exposure_ev100: 9.7,
+            },
+        }
+    }
+
+    fn lif_water(level: f32) -> LifWater {
+        LifWater {
+            split_width: 1,
+            split_height: 1,
+            zones: vec![water_zone(level)],
+            width: 2,
+            height: 1,
+            buffer_view: 0,
+        }
+    }
+
+    #[test]
+    fn respawn_water_replaces_a_roots_surfaces_from_the_edited_map() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_asset::<Mesh>()
+            .add_plugins((crate::RuntimeCorePlugin, WaterRenderPlugin));
+        let root = app.world_mut().spawn_empty().id();
+        let other = app.world_mut().spawn_empty().id();
+        app.add_systems(
+            Startup,
+            move |mut commands: Commands,
+                  mut meshes: ResMut<Assets<Mesh>>,
+                  mut materials: ResMut<Assets<WaterMaterial>>| {
+                for (owner, level) in [(root, 5.0), (other, 9.0)] {
+                    spawn_water_zone(
+                        &mut commands,
+                        &mut meshes,
+                        &mut materials,
+                        &WaterZoneLoadingState {
+                            texture_handle: Handle::default(),
+                            water_tiles: vec![(0, 0)],
+                            wave_height: level,
+                            water_level: level,
+                            wave_height_param: 0.5,
+                            wave_speed: 1.0,
+                            wave_pitch: 20.0,
+                            animation_speed: 3.0,
+                        },
+                        Handle::default(),
+                        owner,
+                    );
+                }
+            },
+        );
+        app.update();
+
+        let edited = map_data(Some(lif_water(7.5)), vec![(0, 0), (1, 0)]);
+        app.add_systems(
+            Update,
+            move |mut commands: Commands,
+                  asset_server: Res<AssetServer>,
+                  surfaces: Query<(Entity, &SceneOwner), With<WaterSurface>>| {
+                respawn_water(&mut commands, &asset_server, root, &edited, &surfaces);
+            },
+        );
+        app.update();
+
+        let owned: Vec<Entity> = app
+            .world_mut()
+            .query::<(Entity, &SceneOwner, &WaterSurface)>()
+            .iter(app.world())
+            .filter(|(_, owner, _)| owner.0 == root)
+            .map(|(entity, _, _)| entity)
+            .collect();
+        assert!(owned.is_empty(), "stale surfaces must be despawned");
+
+        let other_surfaces = app
+            .world_mut()
+            .query::<(&SceneOwner, &WaterSurface)>()
+            .iter(app.world())
+            .filter(|(owner, _)| owner.0 == other)
+            .count();
+        assert_eq!(other_surfaces, 1, "another root's water is untouched");
+
+        let queued = app
+            .world()
+            .get::<WaterLoadingState>(root)
+            .expect("edited water is queued for loading");
+        assert_eq!(queued.zones.len(), 1);
+        assert_eq!(queued.zones[0].water_level, 7.5);
+        assert_eq!(queued.zones[0].water_tiles, vec![(0, 0), (1, 0)]);
+    }
+
+    #[test]
+    fn respawn_water_without_water_only_tears_down() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_asset::<Mesh>()
+            .add_plugins((crate::RuntimeCorePlugin, WaterRenderPlugin));
+        let root = app.world_mut().spawn_empty().id();
+        app.add_systems(
+            Startup,
+            move |mut commands: Commands,
+                  mut meshes: ResMut<Assets<Mesh>>,
+                  mut materials: ResMut<Assets<WaterMaterial>>| {
+                spawn_water_zone(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    &WaterZoneLoadingState {
+                        texture_handle: Handle::default(),
+                        water_tiles: vec![(0, 0)],
+                        wave_height: 5.0,
+                        water_level: 5.0,
+                        wave_height_param: 0.5,
+                        wave_speed: 1.0,
+                        wave_pitch: 20.0,
+                        animation_speed: 3.0,
+                    },
+                    Handle::default(),
+                    root,
+                );
+            },
+        );
+        app.update();
+
+        let dry = map_data(None, Vec::new());
+        app.add_systems(
+            Update,
+            move |mut commands: Commands,
+                  asset_server: Res<AssetServer>,
+                  surfaces: Query<(Entity, &SceneOwner), With<WaterSurface>>| {
+                respawn_water(&mut commands, &asset_server, root, &dry, &surfaces);
+            },
+        );
+        app.update();
+
+        let remaining = app
+            .world_mut()
+            .query::<(Entity, &SceneOwner, &WaterSurface)>()
+            .iter(app.world())
+            .count();
+        assert_eq!(remaining, 0);
+        assert!(app.world().get::<WaterLoadingState>(root).is_none());
     }
 
     fn water_zone(level: f32) -> LifWaterZone {

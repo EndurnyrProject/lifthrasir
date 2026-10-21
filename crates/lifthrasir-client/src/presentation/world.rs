@@ -189,15 +189,9 @@ pub(crate) fn activate_selected_scene(
     commands.insert_resource(CurrentMapAltitude(altitudes.add(RoAltitudeAsset {
         altitude: data.altitude.clone(),
     })));
-    commands.insert_resource(GlobalAmbientLight {
-        color: Color::srgb(
-            data.meta.ambient_color[0],
-            data.meta.ambient_color[1],
-            data.meta.ambient_color[2],
-        ),
-        brightness: data.meta.ambient_brightness,
-        affects_lightmapped_meshes: false,
-    });
+    commands.insert_resource(lifthrasir_runtime::world::lighting::map_ambient_light(
+        &data.meta,
+    ));
     commands.insert_resource(CurrentMapCameraProfile {
         indoor: data.meta.indoor,
         exposure_ev100: data.meta.exposure_ev100,

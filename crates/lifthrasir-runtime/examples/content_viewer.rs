@@ -169,15 +169,9 @@ fn frame_map(
                 .looking_at(center, Vec3::Y);
             exposure.ev100 = data.meta.exposure_ev100;
         }
-        commands.insert_resource(GlobalAmbientLight {
-            color: Color::srgb(
-                data.meta.ambient_color[0],
-                data.meta.ambient_color[1],
-                data.meta.ambient_color[2],
-            ),
-            brightness: data.meta.ambient_brightness,
-            affects_lightmapped_meshes: false,
-        });
+        commands.insert_resource(lifthrasir_runtime::world::lighting::map_ambient_light(
+            &data.meta,
+        ));
     }
 }
 

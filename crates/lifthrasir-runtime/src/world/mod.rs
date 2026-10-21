@@ -1,6 +1,7 @@
 pub mod components;
 pub mod emitters;
 pub mod gltf;
+pub mod lighting;
 pub use emitters::MapEmittersPlugin;
 pub mod loading;
 pub use components::MapSceneHandle;
