@@ -379,6 +379,30 @@ fn isolated_runtime_consumer_does_not_activate_gr2_import() {
 }
 
 #[test]
+fn editor_is_an_app_without_client_or_network_dependencies() {
+    let editor = metadata().package("lifthrasir-editor");
+    assert!(
+        editor
+            .manifest_path
+            .ends_with("apps/lifthrasir-editor/Cargo.toml"),
+        "lifthrasir-editor lives at {}",
+        editor.manifest_path.display()
+    );
+    assert_no_dependency(
+        "lifthrasir-editor",
+        &[
+            "lifthrasir-client",
+            "lifthrasir-client-ui",
+            "lifthrasir",
+            "lifthrasir-ui",
+            "net-contract",
+            "net-aesir",
+            "bevy_quinnet",
+        ],
+    );
+}
+
+#[test]
 fn tooling_is_bevy_free_and_does_not_own_proto_generation() {
     assert_package_present("lifthrasir-tooling");
     assert_no_dependency(

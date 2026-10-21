@@ -1,0 +1,22 @@
+[package]
+name = "lifthrasir-editor"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+bevy_egui = "0.42"
+transform-gizmo-bevy = "0.11"
+bevy_kira_audio = "0.26"
+lifthrasir-assets = { path = "../../crates/lifthrasir-assets" }
+lifthrasir-runtime = { path = "../../crates/lifthrasir-runtime" }
+lifthrasir-data = { path = "../../crates/lifthrasir-data" }
+lifthrasir-tooling = { path = "../../crates/lifthrasir-tooling" }
+ro-formats = { path = "../../crates/ro-formats" }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

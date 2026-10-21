@@ -15,6 +15,7 @@ members = [
     "crates/net-contract",
     "crates/ro-formats",
     "apps/ro-to-lifthrasir-cli",
+    "apps/lifthrasir-editor",
 ]
 
 [workspace.package]
