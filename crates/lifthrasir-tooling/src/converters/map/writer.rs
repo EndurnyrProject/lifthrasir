@@ -112,7 +112,10 @@ fn build_primitive(
     push_geometry_primitive(
         root,
         bin,
-        &format!("terrain primitive '{}'", primitive.texture),
+        &format!(
+            "terrain primitive '{}' chunk {:?}",
+            primitive.texture, primitive.chunk
+        ),
         &GeometryAttributes {
             positions: &positions,
             normals: &normals,

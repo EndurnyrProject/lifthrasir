@@ -3,11 +3,17 @@ use glam::Vec3;
 use ro_formats::{CELL_SIZE, GndSurface, GndTile, RoGround};
 use std::collections::BTreeMap;
 
-/// Terrain geometry batched per ground texture, ready to be written as one
-/// glTF mesh primitive.
+/// Terrain cells per chunk along each axis. A 16x16 chunk keeps frustum
+/// culling useful while each primitive stays a single draw call.
+pub const CHUNK_CELLS: u32 = 16;
+
+/// Terrain geometry batched per `(chunk, ground texture)`, ready to be written
+/// as one glTF mesh primitive.
 #[derive(Debug, Default, Clone)]
 pub struct TerrainPrimitive {
     pub texture: String,
+    /// Chunk coordinate in cells, `[x, y]`.
+    pub chunk: [u32; 2],
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub colors: Vec<[f32; 4]>,
@@ -15,7 +21,7 @@ pub struct TerrainPrimitive {
     pub indices: Vec<u32>,
 }
 
-type Batches = BTreeMap<usize, TerrainPrimitive>;
+type Batches = BTreeMap<(u32, u32, usize), TerrainPrimitive>;
 
 /// Build the ground geometry of a GND, one primitive per ground texture.
 ///
@@ -41,7 +47,23 @@ pub fn build_terrain(ground: &RoGround) -> anyhow::Result<Vec<TerrainPrimitive>>
         );
     }
 
-    let smooth_normals = calculate_smooth_normals(ground, width, height);
+    let corner_positions: Vec<[Vec3; 4]> = (0..height)
+        .flat_map(|y| (0..width).map(move |x| (x, y)))
+        .map(|(x, y)| {
+            let surface = &ground.surfaces[y * width + x];
+            if surface.tile_up < 0 {
+                return [Vec3::ZERO; 4];
+            }
+            let h = &surface.height;
+            [
+                Vec3::from(cell_vertex(x, y, h[0], 0.0, 0.0)),
+                Vec3::from(cell_vertex(x, y, h[1], 1.0, 0.0)),
+                Vec3::from(cell_vertex(x, y, h[3], 1.0, 1.0)),
+                Vec3::from(cell_vertex(x, y, h[2], 0.0, 1.0)),
+            ]
+        })
+        .collect();
+    let smooth_normals = smooth_normals(&corner_positions, width, height);
     let mut batches = Batches::new();
 
     for y in 0..height {
@@ -51,25 +73,23 @@ pub fn build_terrain(ground: &RoGround) -> anyhow::Result<Vec<TerrainPrimitive>>
                 continue;
             }
             let tile = tile_at(ground, surface.tile_up)?;
-            let batch = batch_for(&mut batches, ground, tile)?;
+            let batch = batch_for(&mut batches, ground, tile, x, y)?;
 
             let h = &surface.height;
             let normals = &smooth_normals[y * width + x];
             let vertex_offset = batch.positions.len() as u32;
 
+            // Vertex order [sw, se, ne, nw]; the same 0,1,2,2,3,0 index
+            // pattern every quad uses.
             batch.positions.push(cell_vertex(x, y, h[0], 0.0, 0.0));
             batch.positions.push(cell_vertex(x, y, h[1], 1.0, 0.0));
             batch.positions.push(cell_vertex(x, y, h[3], 1.0, 1.0));
-            batch.positions.push(cell_vertex(x, y, h[3], 1.0, 1.0));
             batch.positions.push(cell_vertex(x, y, h[2], 0.0, 1.0));
-            batch.positions.push(cell_vertex(x, y, h[0], 0.0, 0.0));
 
             batch.normals.push(normals[0].to_array());
             batch.normals.push(normals[1].to_array());
             batch.normals.push(normals[2].to_array());
-            batch.normals.push(normals[2].to_array());
             batch.normals.push(normals[3].to_array());
-            batch.normals.push(normals[0].to_array());
 
             let own_color = gnd_tile_color_to_rgba(&tile.color);
             let corner = |dx: isize, dy: isize| {
@@ -78,18 +98,21 @@ pub fn build_terrain(ground: &RoGround) -> anyhow::Result<Vec<TerrainPrimitive>>
             batch.colors.push(own_color);
             batch.colors.push(corner(1, 0));
             batch.colors.push(corner(1, 1));
-            batch.colors.push(corner(1, 1));
             batch.colors.push(corner(0, 1));
-            batch.colors.push(own_color);
 
             batch.uvs.push([tile.u1, tile.v1]);
             batch.uvs.push([tile.u2, tile.v2]);
             batch.uvs.push([tile.u4, tile.v4]);
-            batch.uvs.push([tile.u4, tile.v4]);
             batch.uvs.push([tile.u3, tile.v3]);
-            batch.uvs.push([tile.u1, tile.v1]);
 
-            batch.indices.extend(vertex_offset..vertex_offset + 6);
+            batch.indices.extend([
+                vertex_offset,
+                vertex_offset + 1,
+                vertex_offset + 2,
+                vertex_offset + 2,
+                vertex_offset + 3,
+                vertex_offset,
+            ]);
         }
     }
 
@@ -135,7 +158,7 @@ fn generate_wall(
 
     let tile = tile_at(ground, tile_index)?;
     let next = &ground.surfaces[next_index];
-    let batch = batch_for(batches, ground, tile)?;
+    let batch = batch_for(batches, ground, tile, x, y)?;
     let vertex_offset = batch.positions.len() as u32;
 
     match direction {
@@ -248,6 +271,8 @@ fn batch_for<'a>(
     batches: &'a mut Batches,
     ground: &RoGround,
     tile: &GndTile,
+    x: usize,
+    y: usize,
 ) -> anyhow::Result<&'a mut TerrainPrimitive> {
     let slot = tile.texture as usize;
     let index = *ground.texture_indexes.get(slot).with_context(|| {
@@ -263,39 +288,28 @@ fn batch_for<'a>(
         )
     })?;
 
-    Ok(batches.entry(index).or_insert_with(|| TerrainPrimitive {
-        texture: texture.clone(),
-        ..Default::default()
-    }))
-}
-
-/// Base normal per cell, from the cross product of the quad's diagonals.
-fn calculate_cell_normals(surfaces: &[GndSurface], width: usize, height: usize) -> Vec<Vec3> {
-    let mut cell_normals = vec![Vec3::ZERO; width * height];
-
-    for y in 0..height {
-        for x in 0..width {
-            let surface = &surfaces[y * width + x];
-            if surface.tile_up < 0 {
-                continue;
-            }
-
-            let sw = Vec3::from(cell_vertex(x, y, surface.height[0], 0.0, 0.0));
-            let se = Vec3::from(cell_vertex(x, y, surface.height[1], 1.0, 0.0));
-            let ne = Vec3::from(cell_vertex(x, y, surface.height[3], 1.0, 1.0));
-            let nw = Vec3::from(cell_vertex(x, y, surface.height[2], 0.0, 1.0));
-
-            cell_normals[y * width + x] = (ne - sw).cross(nw - se).normalize_or_zero();
-        }
-    }
-
-    cell_normals
+    let chunk = [(x as u32) / CHUNK_CELLS, (y as u32) / CHUNK_CELLS];
+    Ok(batches
+        .entry((chunk[0], chunk[1], index))
+        .or_insert_with(|| TerrainPrimitive {
+            texture: texture.clone(),
+            chunk,
+            ..Default::default()
+        }))
 }
 
 /// Smooth each cell's four vertex normals by averaging the cell normals that
-/// touch that vertex.
-fn calculate_smooth_normals(ground: &RoGround, width: usize, height: usize) -> Vec<[Vec3; 4]> {
-    let cells = calculate_cell_normals(&ground.surfaces, width, height);
+/// touch that vertex. `cells` holds each cell's corner positions in
+/// `[sw, se, ne, nw]` order; hole cells contribute a zero normal, as the GND
+/// mesher has always done. Walls are excluded: they keep their hard normals.
+pub fn smooth_normals(cells: &[[Vec3; 4]], width: usize, height: usize) -> Vec<[Vec3; 4]> {
+    let cell_normals: Vec<Vec3> = cells
+        .iter()
+        .map(|corners| {
+            let [sw, se, ne, nw] = *corners;
+            (ne - sw).cross(nw - se).normalize_or_zero()
+        })
+        .collect();
     let mut smooth = vec![[Vec3::ZERO; 4]; width * height];
 
     let average = |neighbours: [Option<usize>; 4]| {
@@ -303,7 +317,7 @@ fn calculate_smooth_normals(ground: &RoGround, width: usize, height: usize) -> V
             .into_iter()
             .flatten()
             .fold((Vec3::ZERO, 0), |(sum, count), idx| {
-                (sum + cells[idx], count + 1)
+                (sum + cell_normals[idx], count + 1)
             });
         (sum / count as f32).normalize_or_zero()
     };
@@ -334,6 +348,124 @@ fn calculate_smooth_normals(ground: &RoGround, width: usize, height: usize) -> V
 mod tests {
     use super::*;
     use ro_formats::{GndSurface, GndTile};
+
+    fn single_texture_ground(width: u32, height: u32) -> RoGround {
+        RoGround {
+            version: "1.7".into(),
+            raw_version: 0x0107,
+            width,
+            height,
+            textures: vec!["a.bmp".into()],
+            texture_indexes: vec![0],
+            tiles: vec![tile(0)],
+            surfaces: (0..width * height).map(|_| flat_surface(0)).collect(),
+            water: None,
+        }
+    }
+
+    #[test]
+    fn terrain_is_split_into_16_cell_chunks_per_texture() {
+        let ground = single_texture_ground(20, 20);
+
+        let mut primitives = build_terrain(&ground).expect("build");
+        primitives.sort_by_key(|primitive| primitive.chunk);
+
+        let chunks: Vec<[u32; 2]> = primitives.iter().map(|p| p.chunk).collect();
+        let mut sorted = chunks.clone();
+        sorted.sort_by_key(|chunk| (chunk[1], chunk[0]));
+        assert_eq!(sorted, vec![[0, 0], [1, 0], [0, 1], [1, 1]]);
+        assert_eq!(primitives.len(), 4, "one primitive per chunk and texture");
+
+        // Cell (17, 3) is 16 cells into x, so it belongs to chunk [1, 0].
+        let chunk = primitives
+            .iter()
+            .find(|primitive| primitive.chunk == [1, 0])
+            .expect("chunk [1, 0]");
+        assert!(
+            chunk
+                .positions
+                .contains(&[17.0 * CELL_SIZE, 0.0, 3.0 * CELL_SIZE]),
+            "cell (17, 3) must land in chunk [1, 0]"
+        );
+        assert_eq!(CHUNK_CELLS, 16);
+    }
+
+    #[test]
+    fn every_ground_quad_uses_four_shared_vertices_and_the_same_indices() {
+        let ground = single_texture_ground(3, 3);
+
+        let primitives = build_terrain(&ground).expect("build");
+        assert_eq!(primitives.len(), 1);
+        let primitive = &primitives[0];
+
+        assert_eq!(primitive.positions.len(), 9 * 4);
+        assert_eq!(primitive.indices.len(), 9 * 6);
+        for quad in primitive.indices.chunks(6) {
+            let base = (quad[0] / 4) * 4;
+            assert_eq!(quad, &[base, base + 1, base + 2, base + 2, base + 3, base]);
+        }
+    }
+
+    #[test]
+    fn smooth_normals_match_the_legacy_averaging() {
+        let mut ground = single_texture_ground(2, 2);
+        ground.surfaces[0].height = [1.0, 2.0, 3.0, 4.0];
+        ground.surfaces[1].height = [2.0, 1.5, 4.5, 3.0];
+        ground.surfaces[2].height = [0.5, 2.5, 1.0, 3.5];
+        ground.surfaces[3].height = [3.0, 3.0, 2.0, 2.0];
+
+        let width = 2;
+        let height = 2;
+        let cells: Vec<[Vec3; 4]> = (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                let h = ground.surfaces[y * width + x].height;
+                [
+                    Vec3::from(cell_vertex(x, y, h[0], 0.0, 0.0)),
+                    Vec3::from(cell_vertex(x, y, h[1], 1.0, 0.0)),
+                    Vec3::from(cell_vertex(x, y, h[3], 1.0, 1.0)),
+                    Vec3::from(cell_vertex(x, y, h[2], 0.0, 1.0)),
+                ]
+            })
+            .collect();
+        let actual = smooth_normals(&cells, width, height);
+
+        // The pre-chunking implementation, kept here as the reference.
+        let cell_normals: Vec<Vec3> = cells
+            .iter()
+            .map(|c| (c[2] - c[0]).cross(c[3] - c[1]).normalize_or_zero())
+            .collect();
+        let average = |neighbours: [Option<usize>; 4]| {
+            let (sum, count) = neighbours
+                .into_iter()
+                .flatten()
+                .fold((Vec3::ZERO, 0), |(sum, count), idx| {
+                    (sum + cell_normals[idx], count + 1)
+                });
+            (sum / count as f32).normalize_or_zero()
+        };
+        let mut expected = vec![[Vec3::ZERO; 4]; width * height];
+        for y in 0..height {
+            for x in 0..width {
+                let idx = y * width + x;
+                let left = (x > 0).then(|| y * width + (x - 1));
+                let right = (x + 1 < width).then(|| y * width + (x + 1));
+                let top = (y > 0).then(|| (y - 1) * width + x);
+                let bottom = (y + 1 < height).then(|| (y + 1) * width + x);
+                let top_left = (y > 0 && x > 0).then(|| (y - 1) * width + (x - 1));
+                let top_right = (y > 0 && x + 1 < width).then(|| (y - 1) * width + (x + 1));
+                let bottom_left = (y + 1 < height && x > 0).then(|| (y + 1) * width + (x - 1));
+                let bottom_right =
+                    (y + 1 < height && x + 1 < width).then(|| (y + 1) * width + (x + 1));
+                expected[idx][0] = average([Some(idx), left, bottom_left, bottom]);
+                expected[idx][1] = average([Some(idx), right, bottom_right, bottom]);
+                expected[idx][2] = average([Some(idx), left, top_left, top]);
+                expected[idx][3] = average([Some(idx), right, top_right, top]);
+            }
+        }
+
+        assert_eq!(actual, expected);
+    }
 
     fn tile(texture: u16) -> GndTile {
         colored_tile(texture, [255, 255, 255, 255])
@@ -422,19 +554,19 @@ mod tests {
 
         assert_eq!(primitives.len(), 2);
         assert_eq!(primitives[0].texture, "a.bmp");
-        assert_eq!(primitives[0].positions.len(), 12);
+        assert_eq!(primitives[0].positions.len(), 8);
         assert_eq!(primitives[0].indices.len(), 12);
 
         let walled = &primitives[1];
         assert_eq!(walled.texture, "b.bmp");
-        assert_eq!(walled.positions.len(), 16);
-        assert_eq!(walled.normals.len(), 16);
-        assert_eq!(walled.colors.len(), 16);
-        assert_eq!(walled.uvs.len(), 16);
+        assert_eq!(walled.positions.len(), 12);
+        assert_eq!(walled.normals.len(), 12);
+        assert_eq!(walled.colors.len(), 12);
+        assert_eq!(walled.uvs.len(), 12);
         assert_eq!(walled.indices.len(), 18);
 
         assert_eq!(
-            &walled.positions[12..],
+            &walled.positions[8..],
             &[
                 [0.0, 0.0, CELL_SIZE],
                 [CELL_SIZE, 0.0, CELL_SIZE],
@@ -442,8 +574,8 @@ mod tests {
                 [CELL_SIZE, -20.0, CELL_SIZE],
             ]
         );
-        assert!(walled.normals[12..].iter().all(|n| *n == [0.0, 0.0, -1.0]));
-        assert_eq!(&walled.indices[12..], &[12, 13, 14, 14, 13, 15]);
+        assert!(walled.normals[8..].iter().all(|n| *n == [0.0, 0.0, -1.0]));
+        assert_eq!(&walled.indices[12..], &[8, 9, 10, 10, 9, 11]);
     }
 
     #[test]
@@ -470,7 +602,7 @@ mod tests {
         assert_eq!(primitives.len(), 1);
         let prim = &primitives[0];
         assert_eq!(prim.texture, "a.bmp");
-        assert_eq!(prim.positions.len(), 24);
+        assert_eq!(prim.positions.len(), 16);
         assert!(
             prim.normals.iter().all(|n| *n == [0.0, -1.0, 0.0]),
             "expected every normal to point at world up (-Y), got {:?}",
@@ -506,7 +638,7 @@ mod tests {
         let primitives = build_terrain(&ground).expect("build");
         assert_eq!(primitives.len(), 1);
         let colors = &primitives[0].colors;
-        assert_eq!(colors.len(), 24);
+        assert_eq!(colors.len(), 16);
 
         let red = [1.0, 0.0, 0.0, 1.0];
         let green = [0.0, 1.0, 0.0, 1.0];
@@ -514,12 +646,12 @@ mod tests {
         let white = [1.0, 1.0, 1.0, 1.0];
 
         // Cell (0,0): each corner takes the color of the tile it lands on,
-        // in vertex order (0,0) (1,0) (1,1) (1,1) (0,1) (0,0).
-        assert_eq!(&colors[0..6], &[red, green, white, white, blue, red]);
+        // in vertex order sw, se, ne, nw.
+        assert_eq!(&colors[0..4], &[red, green, white, blue]);
 
         // Cell (1,1): every non-own corner is out of bounds and falls back
         // to the tile's own color.
-        assert_eq!(&colors[18..24], &[white; 6]);
+        assert_eq!(&colors[12..16], &[white; 4]);
     }
 
     #[test]
@@ -540,6 +672,6 @@ mod tests {
 
         let primitives = build_terrain(&ground).expect("build");
         let red = [1.0, 0.0, 0.0, 1.0];
-        assert_eq!(&primitives[0].colors[..], &[red; 6]);
+        assert_eq!(&primitives[0].colors[..], &[red; 4]);
     }
 }
