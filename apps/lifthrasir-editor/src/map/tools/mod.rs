@@ -3,6 +3,7 @@
 
 pub mod gat;
 pub mod lights;
+pub mod paint;
 pub mod place;
 pub mod sculpt;
 pub mod water;
@@ -38,6 +39,8 @@ pub enum ToolMode {
     Water(water::WaterBrush),
     /// Drags sculpt the terrain.
     Sculpt(sculpt::SculptBrush),
+    /// Drags paint ground tiles with a texture.
+    PaintTile(paint::TileBrush),
 }
 
 /// Ends a placing tool: back to Select with the Move gizmo, so the node just
@@ -93,6 +96,7 @@ impl Plugin for ToolsPlugin {
                 gat::plugin,
                 water::plugin,
                 sculpt::plugin,
+                paint::plugin,
             ))
             .add_systems(
                 EguiPrimaryContextPass,
@@ -169,6 +173,23 @@ fn toolbar(
                     && !sculpting
                 {
                     current = ToolMode::Sculpt(sculpt::SculptBrush::default());
+                }
+                let tiling = matches!(current, ToolMode::PaintTile(_));
+                let ground = match &browser.0 {
+                    Some(AssetRef::GroundTexture(uri)) => Some(uri.clone()),
+                    _ => None,
+                };
+                let paint_tile = ui
+                    .add_enabled(
+                        ground.is_some() || tiling,
+                        egui::Button::selectable(tiling, "Paint tile"),
+                    )
+                    .on_disabled_hover_text("select a ground texture in the browser");
+                if paint_tile.clicked()
+                    && !tiling
+                    && let Some(uri) = ground
+                {
+                    current = ToolMode::PaintTile(paint::TileBrush::new(uri));
                 }
                 ui.separator();
                 ui.toggle_value(&mut outliner.open, "Outliner");

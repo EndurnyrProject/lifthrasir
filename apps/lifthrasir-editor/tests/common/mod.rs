@@ -18,6 +18,7 @@ use lifthrasir_editor::{
         MapEditorPlugin,
         layout::{MapLayout, MapTextureList, resolve_layout, texture_list_from_gltf},
         open::{EditorScreen, OpenMapRequest},
+        terrain::TerrainChunks,
     },
     shell::EditorShellPlugin,
 };
@@ -219,4 +220,33 @@ pub fn load_fixture(app: &mut App) -> (Entity, MapLayout) {
         .insert(MapTextureList(textures));
     let layout = resolve_layout(app.world(), root, FIXTURE_NAME).unwrap();
     (root, layout)
+}
+
+/// Gives every indexed chunk the `StandardMaterial` `PbrPlugin`'s glTF handler
+/// adds in a windowed app; headless apps have no `PbrPlugin`.
+pub fn give_chunks_pbr_materials(app: &mut App) {
+    let chunks = app
+        .world()
+        .resource::<TerrainChunks>()
+        .chunks_in([0, 0], [u32::MAX, u32::MAX]);
+    for (chunk, _) in chunks {
+        let texture = app
+            .world()
+            .load_asset::<Image>("ro://ground/tex/grass01.ktx2");
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial {
+                base_color_texture: Some(texture),
+                perceptual_roughness: 0.9,
+                metallic: 0.0,
+                alpha_mode: AlphaMode::Mask(0.5),
+                double_sided: true,
+                cull_mode: None,
+                ..default()
+            });
+        app.world_mut()
+            .entity_mut(chunk)
+            .insert(MeshMaterial3d(material));
+    }
 }

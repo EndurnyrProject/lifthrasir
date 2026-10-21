@@ -429,6 +429,17 @@ pub fn spawn_chunk(
     Some((entity, mesh))
 }
 
+/// Hides a chunk whose mesh is empty and shows any other.
+pub fn sync_chunk_visibility(world: &mut World, chunk: Entity, empty: bool) {
+    let visibility = match empty {
+        true => Visibility::Hidden,
+        false => Visibility::Inherited,
+    };
+    if let Ok(mut chunk) = world.get_entity_mut(chunk) {
+        chunk.insert(visibility);
+    }
+}
+
 fn empty_chunk_mesh() -> Mesh {
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,

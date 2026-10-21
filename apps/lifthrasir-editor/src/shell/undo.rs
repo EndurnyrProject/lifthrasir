@@ -2,7 +2,7 @@
 //! map nodes by [`EditorNodeId`] so they survive delete then undo.
 
 use super::node::{EditorNodeId, NodeSnapshot, find_node, spawn_node};
-use crate::map::terrain::MeshSnapshot;
+use crate::map::terrain::{MeshSnapshot, sync_chunk_visibility};
 use bevy::{prelude::*, utils::prelude::ShortName};
 use lifthrasir_runtime::world::LifMapData;
 
@@ -258,13 +258,7 @@ impl MeshChunkEdit {
         };
         snapshot.restore(&mut mesh);
         drop(mesh);
-        let visibility = match snapshot.is_empty() {
-            true => Visibility::Hidden,
-            false => Visibility::Inherited,
-        };
-        if let Ok(mut chunk) = world.get_entity_mut(self.chunk) {
-            chunk.insert(visibility);
-        }
+        sync_chunk_visibility(world, self.chunk, snapshot.is_empty());
     }
 }
 

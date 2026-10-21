@@ -115,39 +115,12 @@ fn a_chunk_edit_restores_mesh_bytes_and_hides_an_emptied_chunk() {
     );
 }
 
-/// Gives every indexed chunk the `StandardMaterial` `PbrPlugin`'s glTF handler
-/// adds in a windowed app; headless apps have no `PbrPlugin`.
-fn give_chunks_pbr_materials(app: &mut App) {
-    let (min, max) = ALL;
-    let chunks = app.world().resource::<TerrainChunks>().chunks_in(min, max);
-    for (chunk, _) in chunks {
-        let texture = app
-            .world()
-            .load_asset::<Image>("ro://ground/tex/grass01.ktx2");
-        let material = app
-            .world_mut()
-            .resource_mut::<Assets<StandardMaterial>>()
-            .add(StandardMaterial {
-                base_color_texture: Some(texture),
-                perceptual_roughness: 0.9,
-                metallic: 0.0,
-                alpha_mode: AlphaMode::Mask(0.5),
-                double_sided: true,
-                cull_mode: None,
-                ..default()
-            });
-        app.world_mut()
-            .entity_mut(chunk)
-            .insert(MeshMaterial3d(material));
-    }
-}
-
 #[test]
 fn a_new_chunk_clones_a_terrain_material_with_only_the_texture_swapped() {
     let data_folder = tempfile::tempdir().unwrap();
     let mut app = common::editor_app(data_folder.path());
     let layout: MapLayout = common::open_fixture(&mut app);
-    give_chunks_pbr_materials(&mut app);
+    common::give_chunks_pbr_materials(&mut app);
     let (source, _) = first_chunk(&app);
     let texture = TextureRef {
         name: "dirt".into(),
