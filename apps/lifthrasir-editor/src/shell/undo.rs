@@ -2,6 +2,7 @@
 //! map nodes by [`EditorNodeId`] so they survive delete then undo.
 
 use super::node::{EditorNodeId, NodeSnapshot, find_node, spawn_node};
+use crate::map::terrain::MeshSnapshot;
 use bevy::{prelude::*, utils::prelude::ShortName};
 use lifthrasir_runtime::world::LifMapData;
 
@@ -222,6 +223,66 @@ impl EditOp for MapDataEdit {
 
     fn label(&self) -> &str {
         "Edit map data"
+    }
+}
+
+/// Replaces one terrain chunk mesh. A chunk left empty is hidden, any other
+/// shown; chunk entities are never despawned while the map is open.
+pub struct MeshChunkEdit {
+    chunk: Entity,
+    mesh: Handle<Mesh>,
+    before: MeshSnapshot,
+    after: MeshSnapshot,
+}
+
+impl MeshChunkEdit {
+    pub fn new(
+        chunk: Entity,
+        mesh: Handle<Mesh>,
+        before: MeshSnapshot,
+        after: MeshSnapshot,
+    ) -> Self {
+        Self {
+            chunk,
+            mesh,
+            before,
+            after,
+        }
+    }
+
+    fn write(&self, world: &mut World, snapshot: &MeshSnapshot) {
+        let mut meshes = world.resource_mut::<Assets<Mesh>>();
+        let Some(mut mesh) = meshes.get_mut(&self.mesh) else {
+            error!("Edit terrain: chunk {:?} mesh is gone", self.chunk);
+            return;
+        };
+        snapshot.restore(&mut mesh);
+        drop(mesh);
+        let visibility = match snapshot.is_empty() {
+            true => Visibility::Hidden,
+            false => Visibility::Inherited,
+        };
+        if let Ok(mut chunk) = world.get_entity_mut(self.chunk) {
+            chunk.insert(visibility);
+        }
+    }
+}
+
+impl EditOp for MeshChunkEdit {
+    fn apply(&mut self, world: &mut World) {
+        let after = std::mem::take(&mut self.after);
+        self.write(world, &after);
+        self.after = after;
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        let before = std::mem::take(&mut self.before);
+        self.write(world, &before);
+        self.before = before;
+    }
+
+    fn label(&self) -> &str {
+        "Edit terrain"
     }
 }
 

@@ -23,6 +23,7 @@ impl Plugin for MapEditorPlugin {
             open::plugin,
             save::plugin,
             settings::plugin,
+            terrain::plugin,
             wizard::plugin,
             tools::ToolsPlugin,
         ));
