@@ -38,9 +38,6 @@ impl fmt::Display for Counts {
 
 /// Re-read `glb_path` and assert it round-trips `doc`.
 pub fn validate(glb_path: &Path, doc: &MapDocument) -> anyhow::Result<Counts> {
-    doc.validate()
-        .map_err(|errors| anyhow::anyhow!("invalid map document: {}", errors.join("; ")))?;
-
     let gltf::Gltf { document, blob } =
         gltf::Gltf::open(glb_path).with_context(|| format!("re-reading {}", glb_path.display()))?;
     let blob = blob.with_context(|| format!("{} has no BIN chunk", glb_path.display()))?;
@@ -571,6 +568,23 @@ mod tests {
         std::fs::write(&fixture.path, patched).expect("rewrite glb");
 
         assert_fails(&fixture, lif::EXTENSION_MAP);
+    }
+
+    /// Retail maps predate the editor's `^[a-z0-9_]+$` naming rule and carry
+    /// `@` and `-`; validating a converted glb must not reject them. The rule
+    /// lives in `MapDocument::validate`, which only the editor calls before it
+    /// creates a map.
+    #[test]
+    fn retail_map_names_with_at_signs_and_dashes_still_validate() {
+        let fixture = write_fixture();
+        let mut document = fixture.document();
+        document.name = "pvp_y_1-2".to_string();
+
+        crate::converters::map::writer::write_glb(&fixture.path, &document).expect("rewrite glb");
+        let counts =
+            super::validate(&fixture.path, &document).expect("a retail map name must validate");
+
+        assert_eq!(counts.lights, 2);
     }
 
     #[test]
