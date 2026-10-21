@@ -72,9 +72,12 @@ fn gizmo_drag(
     axes: Query<&GizmoAxis>,
     cameras: Query<&GlobalTransform, With<EditorCamera>>,
     mut props: Query<(&mut Transform, &LifMapNodeIndex), With<LifPropRef>>,
-    mut document: ResMut<EditorDocument>,
+    document: Option<ResMut<EditorDocument>>,
     state: Res<PropGizmo>,
 ) {
+    let Some(mut document) = document else {
+        return;
+    };
     if drag.button != PointerButton::Primary {
         return;
     }
@@ -118,8 +121,11 @@ fn gizmo_drag(
 fn gizmo_drag_end(
     drag: On<Pointer<DragEnd>>,
     mut state: ResMut<PropGizmo>,
-    mut document: ResMut<EditorDocument>,
+    document: Option<ResMut<EditorDocument>>,
 ) {
+    let Some(mut document) = document else {
+        return;
+    };
     if drag.button != PointerButton::Primary {
         return;
     }

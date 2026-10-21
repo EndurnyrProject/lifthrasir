@@ -5,7 +5,7 @@ edition.workspace = true
 
 [features]
 default = ["gui"]
-gui = ["dep:bevy", "dep:clap", "dep:lifthrasir-assets", "dep:lifthrasir-runtime", "dep:toml"]
+gui = ["dep:bevy", "dep:clap", "dep:lifthrasir-assets", "dep:lifthrasir-runtime", "dep:rfd", "dep:toml"]
 
 [[bin]]
 name = "lifthrasir-map-editor"
@@ -19,6 +19,7 @@ clap = { workspace = true, optional = true }
 lifthrasir-data = { path = "../lifthrasir-data" }
 lifthrasir-assets = { path = "../lifthrasir-assets", optional = true }
 lifthrasir-runtime = { path = "../lifthrasir-runtime", optional = true }
+rfd = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

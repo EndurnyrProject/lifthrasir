@@ -42,8 +42,18 @@ impl Plugin for EditorSessionPlugin {
                 )
                     .chain(),
             )
-            .add_systems(Update, undo_redo.in_set(EditorSystems::History))
-            .add_systems(Update, save_document.in_set(EditorSystems::Save));
+            .add_systems(
+                Update,
+                undo_redo
+                    .in_set(EditorSystems::History)
+                    .run_if(resource_exists::<EditorDocument>),
+            )
+            .add_systems(
+                Update,
+                save_document
+                    .in_set(EditorSystems::Save)
+                    .run_if(resource_exists::<EditorDocument>),
+            );
     }
 }
 
@@ -67,6 +77,11 @@ fn save_document(
     if !control_pressed(&keys) || !keys.just_pressed(KeyCode::KeyS) {
         return;
     }
+    save(&mut document, &mut notice);
+}
+
+/// Save the current document and report the result through the editor notice area.
+pub(crate) fn save(document: &mut EditorDocument, notice: &mut EditorNotice) {
     match document.0.save() {
         Ok(()) => notice.show("Saved map GLB"),
         Err(error) => {

@@ -14,7 +14,7 @@ use crate::{
 pub(super) struct EditorCamera;
 
 #[derive(Resource)]
-pub(crate) struct MapAssetPath(pub String);
+pub(crate) struct MapAssetPath(pub Option<String>);
 
 /// Shared grid convention for the viewport and collision tools.
 pub(super) const CELL_SIZE: f32 = 5.0;
@@ -39,9 +39,11 @@ fn setup(mut commands: Commands, map_path: Res<MapAssetPath>) {
         camera_settings(),
         Transform::from_xyz(600.0, 500.0, 700.0).looking_at(Vec3::new(600.0, 0.0, -600.0), Vec3::Y),
     ));
-    commands.spawn(MapSceneRequest {
-        path: format!("ro://{}", map_path.0),
-    });
+    if let Some(path) = &map_path.0 {
+        commands.spawn(MapSceneRequest {
+            path: format!("ro://{path}"),
+        });
+    }
     commands.spawn((InfiniteGrid, grid_settings()));
 }
 

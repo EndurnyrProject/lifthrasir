@@ -36,11 +36,14 @@ impl Plugin for CollisionEditorPlugin {
                 Update,
                 (move_cursor, select_cursor_with_mouse, toggle_cursor_cell)
                     .chain()
-                    .in_set(EditorSystems::Edit),
+                    .in_set(EditorSystems::Edit)
+                    .run_if(resource_exists::<EditorDocument>),
             )
             .add_systems(
                 Update,
-                (sync_cursor, refresh_collision_overlay).in_set(EditorSystems::Present),
+                (sync_cursor, refresh_collision_overlay)
+                    .in_set(EditorSystems::Present)
+                    .run_if(resource_exists::<EditorDocument>),
             );
     }
 }

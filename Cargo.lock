@@ -4828,6 +4828,7 @@ dependencies = [
  "lifthrasir-assets",
  "lifthrasir-data",
  "lifthrasir-runtime",
+ "rfd",
  "serde",
  "serde_json",
  "tempfile",

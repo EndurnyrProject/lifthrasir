@@ -26,9 +26,15 @@ impl Plugin for PropEditorPlugin {
                     delete_selected_prop,
                 )
                     .chain()
-                    .in_set(EditorSystems::Edit),
+                    .in_set(EditorSystems::Edit)
+                    .run_if(resource_exists::<EditorDocument>),
             )
-            .add_systems(Update, sync_document_props.in_set(EditorSystems::Present));
+            .add_systems(
+                Update,
+                sync_document_props
+                    .in_set(EditorSystems::Present)
+                    .run_if(resource_exists::<EditorDocument>),
+            );
     }
 }
 
