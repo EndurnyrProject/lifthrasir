@@ -120,9 +120,16 @@ Consequences worth knowing before changing map code:
   Do not "move all format parsing offline" — it will break walkability,
   grounding and terrain raycast.
 - **Water tile selection happens in the converter, not the runtime.** The
-  runtime has no GND, and GND and GAT heights are independent fields with no
-  transform between them, so selection cannot be recomputed at load. The
-  converter bakes a tile bitmask into `LIF_water`.
+  runtime has no GND, and selection runs on GND heights. GAT heights usually
+  follow the GND surface but retail hand-edits some cells, so they are not a
+  substitute and selection cannot be recomputed at load. The converter bakes
+  a tile bitmask into `LIF_water`.
+- **GAT heights follow the terrain in retail data.** Each GND cell covers
+  2 x 2 GAT cells; a GAT corner height is the bilinear interpolation of the
+  GND cell's four corner heights at that corner (native units, same corner
+  order, no offset). This holds for 95-99.8% of corners on converted retail
+  maps; the rest are hand-edited. Anything that reshapes terrain should
+  rewrite the GAT heights under it with this rule.
 - **Props resolve only to `.glb`.** Conversion fails loudly on a prop it could
   not convert, so a written map glb is loadable by construction.
 - Adding a map feature means extending the **converter schema**
