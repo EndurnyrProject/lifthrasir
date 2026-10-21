@@ -13,6 +13,7 @@ pub fn run(
     vfs: &GrfVfs,
     out_dir: &Path,
     models_dir: &Path,
+    ground_dir: &Path,
     force_models: bool,
 ) -> anyhow::Result<OperationReport> {
     let assets: Vec<_> = vfs.physical_assets().collect();
@@ -29,6 +30,7 @@ pub fn run(
     // One texture pool and one model cache for the whole run: a prop shared
     // by many maps converts once, and parallel maps never step on each other.
     let pool = TexturePool::new(models_dir);
+    let ground_pool = TexturePool::new(ground_dir);
     let cache = ModelCache::default();
     let results: Vec<_> = inventory
         .convertible
@@ -41,6 +43,7 @@ pub fn run(
                 models_dir,
                 force_models,
                 &pool,
+                &ground_pool,
                 &cache,
             )
         })
@@ -53,6 +56,7 @@ pub fn run(
         }
     }
     report.diagnostics.extend(pool.diagnostics());
+    report.diagnostics.extend(ground_pool.diagnostics());
     report.info(format!(
         "maps: {converted} converted, {} failed, {} skipped",
         failures.len(),

@@ -283,14 +283,15 @@ pub fn is_supported_version(bytes: &[u8]) -> anyhow::Result<bool> {
     ))
 }
 
-/// The `<models_dir>/tex/` KTX2 pool shared by every model in one run.
+/// A `<root>/tex/` KTX2 pool shared by every consumer in one run. The prop
+/// converter uses one rooted at `models/`; the map converter uses a second one
+/// rooted at `ground/`, so prop and ground libraries stay separate.
 ///
 /// A texture is read and normalized at most once per run, and rewritten only
 /// when its KTX2 is not already on disk from an earlier run. Two distinct source
 /// names sanitizing to one filename abort the run, extending the per-map guard
-/// in `map::textures::assign_unique_sanitized_names` to pool scope -- across
-/// runs too, where the earlier source name is gone and the already-pooled bytes
-/// are the only evidence left.
+/// to pool scope -- across runs too, where the earlier source name is gone and
+/// the already-pooled bytes are the only evidence left.
 pub struct TexturePool {
     tex_dir: PathBuf,
     state: Mutex<PoolState>,

@@ -30,6 +30,8 @@ enum Command {
         out: PathBuf,
         #[arg(long, default_value = "assets/data/models")]
         models_dir: PathBuf,
+        #[arg(long, default_value = "assets/data/ground")]
+        ground_dir: PathBuf,
         #[arg(long)]
         force_models: bool,
     },
@@ -40,6 +42,8 @@ enum Command {
         out: PathBuf,
         #[arg(long, default_value = "assets/data/models")]
         models_dir: PathBuf,
+        #[arg(long, default_value = "assets/data/ground")]
+        ground_dir: PathBuf,
         #[arg(long)]
         force_models: bool,
     },
@@ -164,6 +168,7 @@ fn main() -> anyhow::Result<()> {
             loader,
             out,
             models_dir,
+            ground_dir,
             force_models,
         } => {
             let config = LoaderConfig::from_path(&loader)?;
@@ -174,6 +179,7 @@ fn main() -> anyhow::Result<()> {
                 &map,
                 &out,
                 &models_dir,
+                &ground_dir,
                 force_models,
             ))?;
         }
@@ -181,6 +187,7 @@ fn main() -> anyhow::Result<()> {
             loader,
             out,
             models_dir,
+            ground_dir,
             force_models,
         } => {
             let config = LoaderConfig::from_path(&loader)?;
@@ -190,6 +197,7 @@ fn main() -> anyhow::Result<()> {
                 &vfs,
                 &out,
                 &models_dir,
+                &ground_dir,
                 force_models,
             ))?;
         }
@@ -300,6 +308,7 @@ mod tests {
             loader,
             out,
             models_dir,
+            ground_dir,
             force_models,
         } = cli.command
         else {
@@ -309,6 +318,7 @@ mod tests {
         assert_eq!(loader, PathBuf::from("assets/convert.toml"));
         assert_eq!(out, PathBuf::from("assets/data/maps"));
         assert_eq!(models_dir, PathBuf::from("assets/data/models"));
+        assert_eq!(ground_dir, PathBuf::from("assets/data/ground"));
         assert!(!force_models);
         assert!(matches!(
             Cli::try_parse_from([

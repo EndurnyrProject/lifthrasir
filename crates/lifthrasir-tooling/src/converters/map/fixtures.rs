@@ -136,7 +136,7 @@ pub fn raw_gat(width: u32, height: u32) -> Vec<u8> {
 pub fn textures() -> Vec<TextureOut> {
     vec![TextureOut {
         source_name: TEXTURE.to_string(),
-        relative_path: "tex/grass01.ktx2".to_string(),
+        relative_path: "ro://ground/tex/grass01.ktx2".to_string(),
     }]
 }
 
@@ -211,7 +211,7 @@ pub fn document_for(
 /// everything it was built from.
 pub fn write_fixture() -> Fixture {
     let dir = tempfile::tempdir().expect("tempdir");
-    write_fixture_ktx2(dir.path(), "tex/grass01.ktx2");
+    write_fixture_ktx2(dir.path(), "ground/tex/grass01.ktx2");
 
     let ground = mini_ground();
     let world = mini_world();
@@ -247,7 +247,7 @@ pub fn write_fixture() -> Fixture {
 fn regenerate_game_engine_fixtures() {
     let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../lifthrasir-runtime/tests/fixtures");
     std::fs::create_dir_all(&out).expect("create fixtures dir");
-    write_fixture_ktx2(&out, "tex/grass01.ktx2");
+    write_fixture_ktx2(&out, "ground/tex/grass01.ktx2");
 
     let mut ground = mini_ground();
     ground.surfaces[1].height = [12.0; 4];

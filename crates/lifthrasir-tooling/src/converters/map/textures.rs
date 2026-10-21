@@ -1,98 +1,44 @@
 use crate::converters::ktx2_out::encode_ktx2;
-use crate::grf_vfs::GrfVfs;
-use anyhow::{Context, bail, ensure};
+use anyhow::{Context, bail};
 use image::{ImageFormat, RgbaImage};
-use std::collections::HashMap;
-use std::path::Path;
 
 /// Runtime magenta-key thresholds, mirrored from
 /// `crates/lifthrasir-assets/src/loaders/pixels.rs::apply_magenta_transparency`.
 const MAGENTA_THRESHOLD: u8 = 240;
 const GREEN_THRESHOLD: u8 = 15;
 
-/// A GND texture name mapped to the KTX2 written for it, relative to the
-/// map's output directory (e.g. `tex/grass01.ktx2`).
+/// The absolute `ro://` prefix every pooled ground texture URI starts with.
+/// The pool itself is rooted at `<ground_dir>` (`assets/data/ground` by
+/// default), so the files live in `ground/tex/` in the runtime namespace.
+pub const GROUND_TEXTURE_URI_PREFIX: &str = "ro://ground/tex/";
+
+/// A GND texture name mapped to the KTX2 written for it. `relative_path` is
+/// the absolute `ro://` URI the map glb references.
 #[derive(Debug, Clone)]
 pub struct TextureOut {
     pub source_name: String,
     pub relative_path: String,
 }
 
-/// Reads every GND-referenced texture through `vfs`, keys out magenta to real
-/// alpha, and writes `tex/<sanitized-name>.ktx2` under `out_dir`.
-pub fn normalize_textures(
-    vfs: &GrfVfs,
+/// Exports every GND-referenced texture through the run-wide ground pool and
+/// rewrites the result to the absolute `ro://ground/tex/` URI the map glb
+/// stores. The pool keys out magenta to real alpha, dedupes across maps and
+/// rejects colliding names.
+pub fn pool_textures(
+    vfs: &impl crate::grf_vfs::AssetRead,
     texture_names: &[String],
-    out_dir: &Path,
-    diagnostics: &mut Vec<crate::Diagnostic>,
+    pool: &crate::converters::model::TexturePool,
 ) -> anyhow::Result<Vec<TextureOut>> {
-    let tex_dir = out_dir.join("tex");
-    std::fs::create_dir_all(&tex_dir).with_context(|| format!("creating {}", tex_dir.display()))?;
-
-    let sanitized_names = assign_unique_sanitized_names(texture_names)?;
-
     texture_names
         .iter()
-        .zip(sanitized_names)
-        .map(|(name, sanitized)| normalize_one(vfs, name, &sanitized, &tex_dir, diagnostics))
+        .map(|name| {
+            let pooled = pool.export(vfs, name)?;
+            Ok(TextureOut {
+                source_name: pooled.source_name,
+                relative_path: format!("{GROUND_TEXTURE_URI_PREFIX}{}.ktx2", sanitize_name(name)),
+            })
+        })
         .collect()
-}
-
-/// Sanitizes every texture name up front and fails loudly if two distinct
-/// source names collide on the same sanitized output filename, so a
-/// collision can never silently overwrite an already-written KTX2.
-fn assign_unique_sanitized_names(texture_names: &[String]) -> anyhow::Result<Vec<String>> {
-    let mut seen: HashMap<String, &str> = HashMap::new();
-    let mut sanitized_names = Vec::with_capacity(texture_names.len());
-
-    for name in texture_names {
-        let sanitized = sanitize_name(name);
-        if let Some(previous) = seen.insert(sanitized.clone(), name) {
-            ensure!(
-                canonical_name(previous) == canonical_name(name),
-                "texture name collision: '{name}' and '{previous}' both sanitize to '{sanitized}.ktx2'"
-            );
-        }
-        sanitized_names.push(sanitized);
-    }
-
-    Ok(sanitized_names)
-}
-
-fn normalize_one(
-    vfs: &GrfVfs,
-    name: &str,
-    sanitized: &str,
-    tex_dir: &Path,
-    diagnostics: &mut Vec<crate::Diagnostic>,
-) -> anyhow::Result<TextureOut> {
-    let logical_path = format!("data/texture/{name}");
-
-    // Some maps reference a texture that is in none of the archives. The map is
-    // otherwise complete, so it gets an obviously wrong stand-in rather than
-    // failing the whole conversion - but every substitution is reported, so a
-    // missing texture cannot pass unnoticed.
-    let ktx2_bytes = match vfs.read(&logical_path) {
-        Some(source_bytes) => texture_bytes_to_ktx2(name, &source_bytes)
-            .with_context(|| format!("converting texture: {logical_path}"))?,
-        None => {
-            diagnostics.push(crate::Diagnostic {
-                level: crate::DiagnosticLevel::Warning,
-                message: format!("  missing texture, using a placeholder: {logical_path}"),
-            });
-            crate::converters::model::fallback_texture_ktx2()
-                .with_context(|| format!("building placeholder for {logical_path}"))?
-        }
-    };
-
-    let file_name = format!("{sanitized}.ktx2");
-    let dest = tex_dir.join(&file_name);
-    std::fs::write(&dest, &ktx2_bytes).with_context(|| format!("writing {}", dest.display()))?;
-
-    Ok(TextureOut {
-        source_name: name.to_string(),
-        relative_path: format!("tex/{file_name}"),
-    })
 }
 
 /// Normalizes one GRF texture into RGBA KTX2 the way the runtime loaders would.
@@ -170,8 +116,8 @@ pub fn canonical_name(name: &str) -> String {
 ///
 /// Roughly half the GRF texture namespace is Korean; those names lose every
 /// character to the ASCII filter, so a short digest of the source name is
-/// appended to keep them apart. `assign_unique_sanitized_names` stays the
-/// loud backstop.
+/// appended to keep them apart. `TexturePool::export` stays the loud
+/// backstop for names that still collide.
 pub fn sanitize_name(name: &str) -> String {
     let sanitized: String = name
         .chars()
@@ -203,7 +149,6 @@ pub fn sanitize_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::GrfEntry;
     use image::Rgba;
     use std::io::Cursor;
 
@@ -286,19 +231,18 @@ mod tests {
     /// otherwise complete, so it converts with an obviously wrong stand-in.
     #[test]
     fn a_missing_texture_becomes_a_placeholder() {
-        let vfs = GrfVfs::open(&[] as &[&GrfEntry]).expect("empty vfs opens");
+        let vfs = crate::converters::model::fixtures::FakeVfs::with(&[]);
         let out = tempfile::tempdir().expect("tempdir");
+        let pool = crate::converters::model::TexturePool::new(out.path());
 
-        let textures = normalize_textures(
-            &vfs,
-            &["grass01.bmp".to_string()],
-            out.path(),
-            &mut Vec::new(),
-        )
-        .expect("a missing texture must not fail the map");
+        let textures = pool_textures(&vfs, &["grass01.bmp".to_string()], &pool)
+            .expect("a missing texture must not fail the map");
 
         assert_eq!(textures.len(), 1);
-        assert_eq!(textures[0].relative_path, "tex/grass01_bmp.ktx2");
+        assert_eq!(
+            textures[0].relative_path,
+            "ro://ground/tex/grass01_bmp.ktx2"
+        );
 
         let written = std::fs::read(out.path().join("tex/grass01_bmp.ktx2")).expect("placeholder");
         assert_eq!(
@@ -326,20 +270,16 @@ mod tests {
             "izlude\\iz_rookie_06.tga".to_string(),
         ];
 
-        let sanitized = assign_unique_sanitized_names(&names).expect("no collision");
-
-        assert_ne!(sanitized[0], sanitized[1]);
+        assert_ne!(sanitize_name(&names[0]), sanitize_name(&names[1]));
     }
 
     #[test]
     fn distinct_subdirs_same_basename_produce_distinct_sanitized_names() {
         let names = vec!["floor\\dirt.bmp".to_string(), "wall\\dirt.bmp".to_string()];
 
-        let sanitized = assign_unique_sanitized_names(&names).expect("no collision");
-
-        assert_ne!(sanitized[0], sanitized[1]);
-        assert_eq!(sanitized[0], "floor_dirt_bmp");
-        assert_eq!(sanitized[1], "wall_dirt_bmp");
+        assert_ne!(sanitize_name(&names[0]), sanitize_name(&names[1]));
+        assert_eq!(sanitize_name(&names[0]), "floor_dirt_bmp");
+        assert_eq!(sanitize_name(&names[1]), "wall_dirt_bmp");
     }
 
     /// Half the GRF texture namespace is EUC-KR; stripping the non-ASCII
@@ -351,10 +291,11 @@ mod tests {
             "필드바닥\\prt_언덕04.bmp".to_string(),
         ];
 
-        let sanitized = assign_unique_sanitized_names(&names).expect("no collision");
+        let left = sanitize_name(&names[0]);
+        let right = sanitize_name(&names[1]);
 
-        assert_ne!(sanitized[0], sanitized[1]);
-        assert!(sanitized[0].is_ascii(), "{}", sanitized[0]);
+        assert_ne!(left, right);
+        assert!(left.is_ascii(), "{left}");
     }
 
     /// `verus\danger03.rsm` names one texture as both `ver_h_03.BMP` and
@@ -369,10 +310,10 @@ mod tests {
             "필드바닥\\prt_초원04.bmp".to_string(),
         ];
 
-        let sanitized = assign_unique_sanitized_names(&names).expect("same file, not a collision");
-
-        assert_eq!(sanitized[0], sanitized[1]);
-        assert_eq!(sanitized[2], sanitized[3]);
+        assert_eq!(canonical_name(&names[0]), canonical_name(&names[1]));
+        assert_eq!(canonical_name(&names[2]), canonical_name(&names[3]));
+        assert_eq!(sanitize_name(&names[0]), sanitize_name(&names[1]));
+        assert_eq!(sanitize_name(&names[2]), sanitize_name(&names[3]));
     }
 
     /// Water textures are JPEG and some maps use them as ground textures.
@@ -398,13 +339,38 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_collision_across_distinct_sources_bails() {
+    fn pool_textures_rejects_a_collision_across_distinct_sources() {
+        let vfs = crate::converters::model::fixtures::FakeVfs::with(&[]);
+        let out = tempfile::tempdir().expect("tempdir");
+        let pool = crate::converters::model::TexturePool::new(out.path());
         let names = vec!["a b.bmp".to_string(), "a_b.bmp".to_string()];
 
-        let err = assign_unique_sanitized_names(&names).expect_err("must collide");
+        let err = pool_textures(&vfs, &names, &pool).expect_err("must collide");
 
         let message = err.to_string();
         assert!(message.contains("a b.bmp"), "unexpected error: {message}");
         assert!(message.contains("a_b.bmp"), "unexpected error: {message}");
+    }
+
+    /// A texture shared by two maps in one run is encoded and written once.
+    #[test]
+    fn a_pooled_texture_is_written_once_per_run() {
+        let vfs = crate::converters::model::fixtures::FakeVfs::with(&[(
+            "data/texture/grass01.bmp",
+            crate::converters::model::fixtures::bmp_bytes([255, 255, 255, 255]),
+        )]);
+        let out = tempfile::tempdir().expect("tempdir");
+        let pool = crate::converters::model::TexturePool::new(out.path());
+
+        let names = vec!["grass01.bmp".to_string(); 2];
+        let textures = pool_textures(&vfs, &names, &pool).expect("two maps share one texture");
+
+        assert_eq!(vfs.reads("data/texture/grass01.bmp"), 1);
+        assert_eq!(
+            textures[0].relative_path,
+            "ro://ground/tex/grass01_bmp.ktx2"
+        );
+        assert_eq!(textures[0].relative_path, textures[1].relative_path);
+        assert!(out.path().join("tex/grass01_bmp.ktx2").is_file());
     }
 }

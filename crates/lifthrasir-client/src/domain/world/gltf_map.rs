@@ -83,15 +83,16 @@ mod tests {
     /// two maps to warp between.
     fn stage_map_into(root: &tempfile::TempDir, map: &str, fixture: &str) {
         let map_dir = root.path().join(format!("maps/{map}"));
-        std::fs::create_dir_all(map_dir.join("tex")).unwrap();
+        std::fs::create_dir_all(&map_dir).unwrap();
+        std::fs::create_dir_all(root.path().join("ground/tex")).unwrap();
         std::fs::copy(
             format!("{FIXTURES}/{fixture}"),
             map_dir.join(format!("{map}.glb")),
         )
         .unwrap();
         std::fs::copy(
-            format!("{FIXTURES}/tex/grass01.ktx2"),
-            map_dir.join("tex/grass01.ktx2"),
+            format!("{FIXTURES}/ground/tex/grass01.ktx2"),
+            root.path().join("ground/tex/grass01.ktx2"),
         )
         .unwrap();
     }
@@ -275,6 +276,17 @@ mod tests {
                 .base_color_texture
                 .clone()
                 .unwrap_or_else(|| panic!("{stage}: the terrain material has no base colour map"));
+
+            let asset_path = app
+                .world()
+                .resource::<AssetServer>()
+                .get_path(image.id())
+                .unwrap_or_else(|| panic!("{stage}: the terrain texture has no asset path"));
+            assert_eq!(
+                asset_path.to_string(),
+                "ro://ground/tex/grass01.ktx2",
+                "{stage}: the terrain texture must resolve to the pooled ground URI"
+            );
 
             let state = app.world().resource::<AssetServer>().load_state(&image);
             assert!(!state.is_failed(), "{stage}: terrain texture {state:?}");

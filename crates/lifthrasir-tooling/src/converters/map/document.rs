@@ -280,9 +280,23 @@ impl MapDocument {
         for light in &self.lights {
             errors.extend(validate_light(light));
         }
-        for (kind, uri) in self.textures.iter().map(|t| ("texture", &t.uri)) {
-            if uri.is_empty() {
-                errors.push(format!("{kind} URI is empty"));
+        for texture in &self.textures {
+            if !texture
+                .uri
+                .starts_with(crate::converters::map::textures::GROUND_TEXTURE_URI_PREFIX)
+            {
+                errors.push(format!(
+                    "texture '{}' URI '{}' must start with {}",
+                    texture.name,
+                    texture.uri,
+                    crate::converters::map::textures::GROUND_TEXTURE_URI_PREFIX
+                ));
+            }
+            if !texture.uri.ends_with(".ktx2") {
+                errors.push(format!(
+                    "texture '{}' URI '{}' must be a .ktx2",
+                    texture.name, texture.uri
+                ));
             }
         }
 

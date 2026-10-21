@@ -334,7 +334,10 @@ fn parse_extras<T: serde::de::DeserializeOwned>(
 mod tests {
     use super::*;
     use bevy::{
-        asset::{AssetApp, AssetPlugin},
+        asset::{
+            AssetApp, AssetPlugin,
+            io::{AssetSourceBuilder, AssetSourceId, file::FileAssetReader},
+        },
         gltf::{GltfAssetLabel, GltfPlugin},
         image::{CompressedImageFormats, ImageLoader, ImagePlugin},
         light::CascadeShadowConfig,
@@ -346,6 +349,12 @@ mod tests {
     const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
     fn test_app() -> App {
         let mut app = App::new();
+        // The regenerated map glbs reference ground textures by absolute
+        // `ro://ground/tex/` URI, which must resolve next to the fixtures.
+        app.register_asset_source(
+            AssetSourceId::Name("ro".into()),
+            AssetSourceBuilder::new(|| Box::new(FileAssetReader::new(FIXTURES))),
+        );
         app.add_plugins((
             MinimalPlugins,
             AssetPlugin {
@@ -427,6 +436,27 @@ mod tests {
             assert_eq!(data.altitude.cells[15].height, [15.0, 16.0, 17.0, 18.0]);
             assert!(!data.altitude.cells[7].cell_type.is_walkable());
         });
+    }
+
+    #[test]
+    fn terrain_materials_reference_the_pooled_ground_texture() {
+        let gltf::Gltf { document, .. } =
+            gltf::Gltf::open(format!("{FIXTURES}/mini_map.glb")).expect("open fixture");
+        let material = document.materials().next().expect("terrain material");
+        let info = material
+            .pbr_metallic_roughness()
+            .base_color_texture()
+            .expect("base colour texture");
+        let image = document
+            .textures()
+            .nth(info.texture().index())
+            .expect("texture")
+            .source();
+
+        let gltf::image::Source::Uri { uri, .. } = image.source() else {
+            panic!("ground textures are external files, not embedded buffers");
+        };
+        assert_eq!(uri, "ro://ground/tex/grass01.ktx2");
     }
 
     #[test]

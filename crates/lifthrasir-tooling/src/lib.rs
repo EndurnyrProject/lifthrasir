@@ -29,18 +29,27 @@ pub fn convert_map(
     map_name: &str,
     out_dir: &Path,
     models_dir: &Path,
+    ground_dir: &Path,
     force_models: bool,
 ) -> anyhow::Result<OperationReport> {
-    converters::map::run(source, map_name, out_dir, models_dir, force_models)
+    converters::map::run(
+        source,
+        map_name,
+        out_dir,
+        models_dir,
+        ground_dir,
+        force_models,
+    )
 }
 
 pub fn convert_maps(
     source: &GrfVfs,
     out_dir: &Path,
     models_dir: &Path,
+    ground_dir: &Path,
     force_models: bool,
 ) -> anyhow::Result<OperationReport> {
-    converters::maps::run(source, out_dir, models_dir, force_models)
+    converters::maps::run(source, out_dir, models_dir, ground_dir, force_models)
 }
 
 pub fn convert_props(

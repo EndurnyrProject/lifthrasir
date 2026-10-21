@@ -26,9 +26,11 @@ pub fn run(
     map_name: &str,
     out_dir: &Path,
     models_dir: &Path,
+    ground_dir: &Path,
     force_models: bool,
 ) -> anyhow::Result<OperationReport> {
     let pool = TexturePool::new(models_dir);
+    let ground_pool = TexturePool::new(ground_dir);
     let cache = ModelCache::default();
     let result = run_shared(
         vfs,
@@ -37,9 +39,12 @@ pub fn run(
         models_dir,
         force_models,
         &pool,
+        &ground_pool,
         &cache,
     );
-    crate::report::add_diagnostics(result, pool.diagnostics())
+    let mut diagnostics = pool.diagnostics();
+    diagnostics.extend(ground_pool.diagnostics());
+    crate::report::add_diagnostics(result, diagnostics)
 }
 
 /// `run` against a run-wide texture pool and model cache, shared by every map
@@ -52,6 +57,7 @@ pub fn run_shared(
     models_dir: &Path,
     force_models: bool,
     pool: &TexturePool,
+    ground_pool: &TexturePool,
     cache: &ModelCache,
 ) -> anyhow::Result<OperationReport> {
     let mut report = OperationReport::default();
@@ -75,8 +81,7 @@ pub fn run_shared(
         let map_dir = out_dir.join(map_name);
         std::fs::create_dir_all(&map_dir)
             .with_context(|| format!("creating {}", map_dir.display()))?;
-        let textures =
-            textures::normalize_textures(vfs, &ground.textures, &map_dir, &mut report.diagnostics)?;
+        let textures = textures::pool_textures(vfs, &ground.textures, ground_pool)?;
 
         let (document, diagnostics) = document::MapDocument::from_retail(document::RetailInputs {
             map_name,
@@ -95,6 +100,7 @@ pub fn run_shared(
 
         let glb_path = map_dir.join(format!("{map_name}.glb"));
         let counts = write_and_validate_glb_atomically(&glb_path, &document)?;
+        remove_stale_texture_dir(&map_dir);
         report.info(format!(
             "{map_name}: {counts}, {} textures, {prop_counts} -> {}",
             textures.len(),
@@ -115,6 +121,19 @@ pub fn run_shared(
             .into())
         }
     }
+}
+
+/// Older converters wrote a per-map `tex/` folder. Ground textures now live in
+/// the shared `ground/tex/` pool, so a stale folder is removed; a write that
+/// failed leaves it alone.
+fn remove_stale_texture_dir(map_dir: &Path) {
+    let tex_dir = map_dir.join("tex");
+    if !tex_dir.is_dir() {
+        return;
+    }
+    // Best effort: the glb is already written, and a leftover directory only
+    // wastes disk.
+    let _ = std::fs::remove_dir_all(&tex_dir);
 }
 
 fn read_source(vfs: &GrfVfs, map_name: &str, extension: &str) -> anyhow::Result<Vec<u8>> {
@@ -341,7 +360,15 @@ mod tests {
         let out = tempfile::tempdir().expect("tempdir");
         let models_dir = out.path().join("models");
 
-        run(&vfs, "prt_fild08", out.path(), &models_dir, false).expect("convert prt_fild08");
+        run(
+            &vfs,
+            "prt_fild08",
+            out.path(),
+            &models_dir,
+            &out.path().join("ground"),
+            false,
+        )
+        .expect("convert prt_fild08");
 
         assert!(out.path().join("prt_fild08/prt_fild08.glb").is_file());
         let textures = std::fs::read_dir(out.path().join("prt_fild08/tex"))
@@ -360,7 +387,15 @@ mod tests {
         let out = tempfile::tempdir().expect("tempdir");
         let models_dir = out.path().join("models");
 
-        run(&vfs, PILOT_MAP, out.path(), &models_dir, false).expect("convert pilot map");
+        run(
+            &vfs,
+            PILOT_MAP,
+            out.path(),
+            &models_dir,
+            &out.path().join("ground"),
+            false,
+        )
+        .expect("convert pilot map");
 
         let refs = prop_model_refs(&out.path().join(format!("{PILOT_MAP}/{PILOT_MAP}.glb")));
         assert!(!refs.is_empty(), "{PILOT_MAP} referenced no props");
