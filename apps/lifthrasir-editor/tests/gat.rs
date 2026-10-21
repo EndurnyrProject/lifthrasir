@@ -1,0 +1,96 @@
+//! A GAT stroke is one undoable map data edit; the saved GAT carries the
+//! painted raw types and the overlay follows undo.
+
+mod common;
+
+use bevy::prelude::*;
+use lifthrasir_editor::{
+    map::{
+        document::collect_document,
+        layout::MapLayout,
+        tools::gat::{GatBrush, GatOverlayMesh, end_stroke, paint_cells},
+    },
+    shell::undo::{UndoStack, undo},
+};
+use lifthrasir_runtime::world::LifMapData;
+
+/// `GRAT`, version, width, height; then 4 heights and the type per cell.
+const HEADER_BYTES: usize = 14;
+const CELL_BYTES: usize = 20;
+
+fn raw_types(app: &App, layout: &MapLayout) -> Vec<u32> {
+    let data = app.world().get::<LifMapData>(layout.root).unwrap();
+    data.altitude
+        .cells
+        .iter()
+        .map(|cell| cell.cell_type.raw())
+        .collect()
+}
+
+fn overlay_vertices(app: &mut App) -> usize {
+    let world = app.world_mut();
+    let handle = world
+        .query_filtered::<&Mesh3d, With<GatOverlayMesh>>()
+        .single(world)
+        .unwrap()
+        .0
+        .clone();
+    world
+        .resource::<Assets<Mesh>>()
+        .get(&handle)
+        .unwrap()
+        .count_vertices()
+}
+
+#[test]
+fn a_stroke_saves_its_raw_types_and_undoes_in_one_step() {
+    let data_folder = tempfile::tempdir().unwrap();
+    let mut app = common::editor_app(data_folder.path());
+    let layout = common::open_fixture(&mut app);
+    let original = raw_types(&app, &layout);
+    let (width, height) = {
+        let altitude = &app.world().get::<LifMapData>(layout.root).unwrap().altitude;
+        (altitude.width, altitude.height)
+    };
+    let center = (width / 2, height / 2);
+    let brush = GatBrush {
+        radius: 1,
+        raw_type: 5,
+    };
+    let index = (center.1 * width + center.0) as usize;
+    assert_ne!(original[index], brush.raw_type);
+
+    let before = app.world().get::<LifMapData>(layout.root).unwrap().clone();
+    let mut data = app.world_mut().get_mut::<LifMapData>(layout.root).unwrap();
+    paint_cells(&mut data.altitude, center, &brush);
+    end_stroke(app.world_mut(), before);
+
+    assert_eq!(
+        app.world().resource::<UndoStack>().undo_label(),
+        Some("Edit map data")
+    );
+    assert_eq!(overlay_vertices(&mut app), 4 * (width * height) as usize);
+    let bytes = collect_document(app.world_mut(), &layout, false)
+        .unwrap()
+        .gat
+        .to_bytes()
+        .unwrap();
+    let at = HEADER_BYTES + index * CELL_BYTES + 16;
+    assert_eq!(&bytes[at..at + 4], &brush.raw_type.to_le_bytes());
+
+    undo(app.world_mut());
+    assert_eq!(raw_types(&app, &layout), original);
+    assert!(app.world().resource::<UndoStack>().is_pristine());
+}
+
+#[test]
+fn a_stroke_that_changes_nothing_is_not_recorded() {
+    let data_folder = tempfile::tempdir().unwrap();
+    let mut app = common::editor_app(data_folder.path());
+    let layout = common::open_fixture(&mut app);
+    let before = app.world().get::<LifMapData>(layout.root).unwrap().clone();
+
+    end_stroke(app.world_mut(), before);
+
+    assert!(app.world().resource::<UndoStack>().is_pristine());
+}

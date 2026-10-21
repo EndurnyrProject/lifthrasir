@@ -1,6 +1,7 @@
 //! Tool modes, the toolbar that switches between them, and the terrain point
 //! under the cursor that tools act on.
 
+pub mod gat;
 pub mod lights;
 pub mod place;
 
@@ -29,6 +30,8 @@ pub enum ToolMode {
     Place(AssetRef),
     /// Clicks add a light above the terrain.
     AddLight(lights::LightKind),
+    /// Drags paint GAT cell types.
+    GatPaint(gat::GatBrush),
 }
 
 /// Ends a placing tool: back to Select with the Move gizmo, so the node just
@@ -78,7 +81,7 @@ pub struct ToolsPlugin;
 impl Plugin for ToolsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ToolMode>()
-            .add_plugins((place::plugin, lights::plugin))
+            .add_plugins((place::plugin, lights::plugin, gat::plugin))
             .add_systems(
                 EguiPrimaryContextPass,
                 toolbar
@@ -130,6 +133,15 @@ fn toolbar(
                         ui.selectable_value(&mut current, ToolMode::AddLight(kind), label);
                     }
                 });
+                ui.separator();
+                let painting = matches!(current, ToolMode::GatPaint(_));
+                if ui
+                    .add(egui::Button::selectable(painting, "GAT paint"))
+                    .clicked()
+                    && !painting
+                {
+                    current = ToolMode::GatPaint(gat::GatBrush::default());
+                }
                 ui.separator();
                 ui.toggle_value(&mut outliner.open, "Outliner");
                 let Some(GizmoChoice(kind)) = &mut choice else {
