@@ -30,7 +30,7 @@ pub fn resolve_effect_catalog(
 pub struct ResolvedEffectCatalog {
     skills: HashMap<u32, EffectDescriptor>,
     skill_units: HashMap<u32, EffectDescriptor>,
-    special: HashMap<u32, EffectDescriptor>,
+    special: BTreeMap<u32, EffectDescriptor>,
     efsts: HashMap<u32, EffectDescriptor>,
 }
 
@@ -73,7 +73,7 @@ impl ResolvedEffectCatalog {
         Ok(Self {
             skills: skills.into_iter().collect(),
             skill_units: skill_units.into_iter().collect(),
-            special: special.into_iter().collect(),
+            special,
             efsts: data.efsts.clone().into_iter().collect(),
         })
     }
@@ -94,6 +94,11 @@ impl ResolvedEffectCatalog {
 
     pub fn special(&self, effect_id: u32) -> Option<&EffectDescriptor> {
         self.special.get(&effect_id)
+    }
+
+    /// Every `special` id, ascending.
+    pub fn special_ids(&self) -> impl Iterator<Item = u32> + '_ {
+        self.special.keys().copied()
     }
 
     pub fn efst(&self, efst_id: u32) -> Option<&EffectDescriptor> {

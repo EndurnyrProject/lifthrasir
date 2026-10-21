@@ -173,3 +173,16 @@ fn resolves_composition_in_order_without_merging_id_namespaces() {
     assert_eq!(resolved.skill_unit(31), None);
     assert_eq!(resolved.skill(999), None);
 }
+
+#[test]
+fn special_ids_list_every_special_entry_in_ascending_order() {
+    let mut data = EffectData::default();
+    for id in [300, 7, 42] {
+        data.special.insert(id, EffectDescriptor::default());
+    }
+    data.skills.insert(5, EffectDescriptor::default());
+
+    let resolved = resolve_effect_catalog(&data).unwrap();
+
+    assert_eq!(resolved.special_ids().collect::<Vec<_>>(), [7, 42, 300]);
+}

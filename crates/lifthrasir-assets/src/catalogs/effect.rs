@@ -35,6 +35,11 @@ impl EffectCatalog {
         self.0.special(effect_id)
     }
 
+    /// Every `special` effect id, ascending.
+    pub fn special_ids(&self) -> impl Iterator<Item = u32> + '_ {
+        self.0.special_ids()
+    }
+
     pub fn efst(&self, efst_id: u32) -> Option<&EffectDescriptor> {
         self.0.efst(efst_id)
     }

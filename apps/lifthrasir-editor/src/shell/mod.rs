@@ -1,5 +1,6 @@
 //! Editor shell: camera, egui layout and input routing.
 
+pub mod browser;
 pub mod camera;
 pub mod node;
 pub mod ui;
@@ -15,7 +16,8 @@ pub struct EditorShellPlugin;
 
 impl Plugin for EditorShellPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<EditorUiArea>()
+        app.add_plugins(browser::BrowserPlugin)
+            .init_resource::<EditorUiArea>()
             .init_resource::<undo::UndoStack>()
             .init_resource::<node::EditorNodeIds>()
             .configure_sets(
