@@ -9,7 +9,9 @@ mod lua;
 mod pack_inputs;
 mod report;
 pub use pack_inputs::collect_entries;
-pub use report::{BatchFailure, Diagnostic, DiagnosticLevel, OperationReport, PackInputs};
+pub use report::{
+    BatchFailure, Diagnostic, DiagnosticLevel, OperationReport, PackInputs, Progress,
+};
 
 pub use config::LoaderConfig;
 pub use converters::model::corpus::{CorpusReport, PreflightReport};
@@ -49,7 +51,35 @@ pub fn convert_maps(
     ground_dir: &Path,
     force_models: bool,
 ) -> anyhow::Result<OperationReport> {
-    converters::maps::run(source, out_dir, models_dir, ground_dir, force_models)
+    convert_maps_with_progress(
+        source,
+        out_dir,
+        models_dir,
+        ground_dir,
+        force_models,
+        &|_| {},
+    )
+}
+
+/// Map conversion that hands each finished map to `progress` as it lands, so a
+/// host can draw a bar and print the map's lines without waiting for the batch.
+/// The callback runs on the converting worker thread and must stay cheap.
+pub fn convert_maps_with_progress(
+    source: &GrfVfs,
+    out_dir: &Path,
+    models_dir: &Path,
+    ground_dir: &Path,
+    force_models: bool,
+    progress: &(dyn Fn(Progress<'_>) + Sync),
+) -> anyhow::Result<OperationReport> {
+    converters::maps::run(
+        source,
+        out_dir,
+        models_dir,
+        ground_dir,
+        force_models,
+        progress,
+    )
 }
 
 pub fn convert_props(

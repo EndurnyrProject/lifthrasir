@@ -11,6 +11,7 @@ path = "src/main.rs"
 lifthrasir-tooling = { path = "../../crates/lifthrasir-tooling" }
 clap = { workspace = true }
 anyhow = { workspace = true }
+indicatif = { workspace = true }
 log = "0.4"
 protox = "0.9"
 prost-build = { workspace = true }

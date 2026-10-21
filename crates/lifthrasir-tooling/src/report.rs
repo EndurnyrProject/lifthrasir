@@ -13,6 +13,16 @@ pub struct Diagnostic {
     pub message: String,
 }
 
+/// One finished step of a batch conversion, handed to a host progress sink.
+///
+/// Progress lives outside [`OperationReport`]: the sink sees it the moment a
+/// step finishes, while the report keeps only what the whole batch produced.
+pub struct Progress<'a> {
+    pub done: usize,
+    pub total: usize,
+    pub diagnostics: &'a [Diagnostic],
+}
+
 /// Primary published artifacts and operation-level diagnostics, not every sidecar/progress tick.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct OperationReport {

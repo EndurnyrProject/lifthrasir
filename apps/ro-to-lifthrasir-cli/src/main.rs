@@ -1,3 +1,4 @@
+mod map_progress;
 mod proto_gen;
 
 use clap::{Parser, Subcommand};
@@ -193,13 +194,18 @@ fn main() -> anyhow::Result<()> {
             let config = LoaderConfig::from_path(&loader)?;
             let grfs = config.grfs_by_priority();
             let vfs = GrfVfs::open(&grfs)?;
-            present(lifthrasir_tooling::convert_maps(
-                &vfs,
-                &out,
-                &models_dir,
-                &ground_dir,
-                force_models,
-            ))?;
+            let progress = map_progress::MapProgress::new();
+            let result = progress.track(|sink| {
+                lifthrasir_tooling::convert_maps_with_progress(
+                    &vfs,
+                    &out,
+                    &models_dir,
+                    &ground_dir,
+                    force_models,
+                    sink,
+                )
+            });
+            present(result)?;
         }
         Command::ConvertProps {
             loader,

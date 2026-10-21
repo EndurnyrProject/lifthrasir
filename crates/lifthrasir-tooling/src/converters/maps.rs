@@ -1,10 +1,11 @@
-use crate::OperationReport;
 use crate::converters::map;
 use crate::converters::model::{ModelCache, TexturePool};
 use crate::grf_vfs::{GrfVfs, PhysicalAsset, effective_entries, normalize_path};
+use crate::{BatchFailure, Diagnostic, DiagnosticLevel, OperationReport, Progress};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A map needs all three of these to be convertible.
 const REQUIRED_EXTENSIONS: [&str; 3] = ["rsw", "gnd", "gat"];
@@ -15,28 +16,43 @@ pub fn run(
     models_dir: &Path,
     ground_dir: &Path,
     force_models: bool,
+    progress: &(dyn Fn(Progress<'_>) + Sync),
 ) -> anyhow::Result<OperationReport> {
     let assets: Vec<_> = vfs.physical_assets().collect();
     let inventory = map_inventory(&assets);
 
+    // Everything a long run has to say goes to the host sink as it happens: a
+    // collected batch stays silent until the end, which looks hung.
     let mut report = OperationReport::default();
-    for (map_name, missing) in &inventory.incomplete {
-        report.info(format!(
-            "skipping map '{map_name}': no {} in the GRFs",
-            missing.join(", ")
-        ));
-    }
+    let total = inventory.convertible.len();
+    let skipped: Vec<_> = inventory
+        .incomplete
+        .iter()
+        .map(|(map_name, missing)| Diagnostic {
+            level: DiagnosticLevel::Info,
+            message: format!(
+                "skipping map '{map_name}': no {} in the GRFs",
+                missing.join(", ")
+            ),
+        })
+        .collect();
+    progress(Progress {
+        done: 0,
+        total,
+        diagnostics: &skipped,
+    });
 
     // One texture pool and one model cache for the whole run: a prop shared
     // by many maps converts once, and parallel maps never step on each other.
     let pool = TexturePool::new(models_dir);
     let ground_pool = TexturePool::new(ground_dir);
     let cache = ModelCache::default();
+    let done = AtomicUsize::new(0);
     let results: Vec<_> = inventory
         .convertible
         .par_iter()
         .map(|map_name| {
-            map::run_shared(
+            let result = map::run_shared(
                 vfs,
                 map_name,
                 out_dir,
@@ -45,14 +61,35 @@ pub fn run(
                 &pool,
                 &ground_pool,
                 &cache,
-            )
+            );
+            progress(Progress {
+                done: done.fetch_add(1, Ordering::Relaxed) + 1,
+                total,
+                diagnostics: reported(&result),
+            });
+            result
         })
         .collect();
     let mut failures = Vec::new();
     let mut converted = 0;
     for result in results {
-        if report.include(result, &mut failures) {
-            converted += 1;
+        match result {
+            Ok(converted_map) => {
+                converted += 1;
+                retain_warnings(&mut report, converted_map.diagnostics);
+                report.outputs.extend(converted_map.outputs);
+            }
+            Err(error) => match error.downcast::<BatchFailure>() {
+                Ok(batch) => {
+                    retain_warnings(&mut report, batch.report.diagnostics);
+                    failures.extend(batch.failures);
+                }
+                Err(error) => {
+                    let message = format!("{error:#}");
+                    report.warning(message.clone());
+                    failures.push(message);
+                }
+            },
         }
     }
     report.diagnostics.extend(pool.diagnostics());
@@ -63,6 +100,27 @@ pub fn run(
         inventory.incomplete.len()
     ));
     report.finish(failures)
+}
+
+/// What one map reported, which a partial failure keeps alongside its errors.
+fn reported(result: &anyhow::Result<OperationReport>) -> &[Diagnostic] {
+    match result {
+        Ok(report) => &report.diagnostics,
+        Err(error) => match error.downcast_ref::<BatchFailure>() {
+            Some(batch) => &batch.report.diagnostics,
+            None => &[],
+        },
+    }
+}
+
+/// Per-map info lines are progress and reach the host through its sink; only
+/// warnings stay in the batch report, which a host renders once the run ends.
+fn retain_warnings(report: &mut OperationReport, diagnostics: Vec<Diagnostic>) {
+    report.diagnostics.extend(
+        diagnostics
+            .into_iter()
+            .filter(|d| d.level == DiagnosticLevel::Warning),
+    );
 }
 
 /// Map names split by whether every source a conversion needs is present.
