@@ -14,7 +14,7 @@ use lifthrasir_assets::{
 use lifthrasir_map_editor::{LifCollisionFlags, MapDocument};
 use lifthrasir_runtime::{
     RuntimeCorePlugin, WorldRenderPlugin,
-    world::{LifMapData, LifPropRef, MapSceneRequest},
+    world::{LifMapData, LifMapNodeIndex, LifPropRef, MapSceneRequest},
 };
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -41,6 +41,25 @@ struct PropCursor;
 
 #[derive(Resource, Default)]
 struct SelectedProp(Option<Entity>);
+
+#[derive(Resource, Default)]
+struct EditorNotice {
+    message: String,
+    expires: Option<Timer>,
+}
+
+impl EditorNotice {
+    fn show(&mut self, message: impl Into<String>) {
+        self.message = message.into();
+        self.expires = Some(Timer::from_seconds(3.0, TimerMode::Once));
+    }
+}
+
+#[derive(Resource, Default)]
+struct PropSaveDebounce(Option<Timer>);
+
+#[derive(Component, Default, Clone)]
+struct NoticeLabel;
 
 #[derive(Component)]
 struct CollisionOverlay {
@@ -70,11 +89,12 @@ fn main() -> Result<()> {
 
     let mut app = App::new();
     register_ro_asset_source(&mut app, Arc::new(RwLock::new(source)));
-    app
-        .insert_resource(EditorDocument(document))
+    app.insert_resource(EditorDocument(document))
         .insert_resource(MapAssetPath(map_path))
         .insert_resource(CursorCell::default())
         .init_resource::<SelectedProp>()
+        .init_resource::<EditorNotice>()
+        .init_resource::<PropSaveDebounce>()
         .add_plugins(
             DefaultPlugins
                 .set(AssetPlugin {
@@ -85,7 +105,7 @@ fn main() -> Result<()> {
                 })
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        title: "Lifthrasir Map Editor — arrows select; Space toggles; Ctrl+Z/Y undo/redo; Ctrl+S saves".into(),
+                        title: "Lifthrasir Map Editor".into(),
                         ..default()
                     }),
                     ..default()
@@ -104,11 +124,13 @@ fn main() -> Result<()> {
                 refresh_collision_overlay,
                 apply_map_lighting,
                 move_selected_prop,
+                delete_selected_prop,
+                auto_save_prop_transform,
                 sync_prop_cursor,
+                update_notice,
                 save_document,
             ),
-        )
-        ;
+        );
     app.add_plugins((
         bevy::picking::mesh_picking::MeshPickingPlugin,
         ContentAssetsPlugin,
@@ -198,12 +220,25 @@ fn move_selected_prop(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     selected: Res<SelectedProp>,
-    mut props: Query<&mut Transform, With<LifPropRef>>,
+    mut document: ResMut<EditorDocument>,
+    mut props: Query<(&mut Transform, &LifMapNodeIndex), With<LifPropRef>>,
 ) {
     let Some(entity) = selected.0 else {
         return;
     };
-    let Ok(mut transform) = props.get_mut(entity) else {
+    if !keys.any_pressed([
+        KeyCode::KeyI,
+        KeyCode::KeyK,
+        KeyCode::KeyJ,
+        KeyCode::KeyL,
+        KeyCode::KeyU,
+        KeyCode::KeyO,
+        KeyCode::KeyQ,
+        KeyCode::KeyE,
+    ]) {
+        return;
+    }
+    let Ok((mut transform, node_index)) = props.get_mut(entity) else {
         return;
     };
     let distance = 20.0 * time.delta_secs();
@@ -230,6 +265,79 @@ fn move_selected_prop(
     }
     if keys.pressed(KeyCode::KeyE) {
         transform.rotate_y(-time.delta_secs());
+    }
+    let translation = transform.translation.to_array();
+    let rotation = transform.rotation.to_array();
+    let scale = transform.scale.to_array();
+    if let Err(error) = document
+        .0
+        .update_prop_transform(node_index.0, translation, rotation, scale)
+    {
+        error!("recording prop transform: {error:#}");
+    }
+}
+
+fn delete_selected_prop(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut document: ResMut<EditorDocument>,
+    selected: Res<SelectedProp>,
+    mut props: Query<(&LifMapNodeIndex, &mut Visibility), With<LifPropRef>>,
+    mut notice: ResMut<EditorNotice>,
+) {
+    if !keys.just_pressed(KeyCode::Delete) {
+        return;
+    }
+    let Some(entity) = selected.0 else {
+        return;
+    };
+    let Ok((node, mut visibility)) = props.get_mut(entity) else {
+        return;
+    };
+    if let Err(error) = document.0.set_prop_deleted(node.0, true) {
+        error!("deleting prop: {error:#}");
+        notice.show(format!("Delete failed: {error}"));
+        return;
+    }
+    *visibility = Visibility::Hidden;
+    notice.show("Deleted prop — Ctrl+S to save");
+}
+
+fn auto_save_prop_transform(
+    keys: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+    mut document: ResMut<EditorDocument>,
+    mut debounce: ResMut<PropSaveDebounce>,
+    mut notice: ResMut<EditorNotice>,
+) {
+    let moving = keys.any_pressed([
+        KeyCode::KeyI,
+        KeyCode::KeyK,
+        KeyCode::KeyJ,
+        KeyCode::KeyL,
+        KeyCode::KeyU,
+        KeyCode::KeyO,
+        KeyCode::KeyQ,
+        KeyCode::KeyE,
+    ]);
+    if moving || !document.0.has_pending_prop_transform() {
+        debounce.0 = None;
+        return;
+    }
+    let timer = debounce
+        .0
+        .get_or_insert_with(|| Timer::from_seconds(0.15, TimerMode::Once));
+    timer.tick(time.delta());
+    if !timer.is_finished() {
+        return;
+    }
+    document.0.commit_pending_prop_transform();
+    debounce.0 = None;
+    match document.0.save() {
+        Ok(()) => notice.show("Saved map GLB"),
+        Err(error) => {
+            error!("saving map: {error:#}");
+            notice.show(format!("Save failed: {error}"));
+        }
     }
 }
 
@@ -275,6 +383,7 @@ fn setup(
         Transform::default(),
     ));
     commands.spawn_scene(command_overlay());
+    commands.spawn_scene(notice_overlay());
     commands.insert_resource(OverlayAssets {
         mesh: meshes.add(Cuboid::new(4.7, 0.15, 4.7)),
         walkable: materials.add(overlay_material(Color::srgb(0.1, 0.95, 0.2))),
@@ -320,11 +429,34 @@ fn command_overlay() -> impl Scene {
     }
 }
 
+fn notice_overlay() -> impl Scene {
+    bsn! {
+        NoticeLabel
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: px(18),
+            left: px(18),
+            padding: UiRect::axes(px(12), px(8)),
+        }
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0))
+        Text("")
+        TextFont {
+            font: FontSourceTemplate::Handle("ro://fonts/space-mono.ttf"),
+            font_size: FontSize::Px(16.0),
+        }
+        TextColor(Color::srgb(0.9, 0.93, 1.0))
+        Pickable::IGNORE
+    }
+}
+
 fn move_camera(
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut cameras: Query<&mut Transform, With<EditorCamera>>,
 ) {
+    if keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
+        return;
+    }
     let Ok(mut transform) = cameras.single_mut() else {
         return;
     };
@@ -474,13 +606,44 @@ fn select_cursor_with_mouse(
     );
 }
 
-fn save_document(keys: Res<ButtonInput<KeyCode>>, mut document: ResMut<EditorDocument>) {
+fn save_document(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut document: ResMut<EditorDocument>,
+    mut notice: ResMut<EditorNotice>,
+) {
     let control = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
     if !control || !keys.just_pressed(KeyCode::KeyS) {
         return;
     }
     if let Err(error) = document.0.save() {
         error!("saving map: {error:#}");
+        notice.show(format!("Save failed: {error}"));
+    } else {
+        notice.show("Saved map GLB");
+    }
+}
+
+fn update_notice(
+    time: Res<Time>,
+    mut notice: ResMut<EditorNotice>,
+    mut labels: Query<(&mut Text, &mut BackgroundColor), With<NoticeLabel>>,
+) {
+    let Some(timer) = notice.expires.as_mut() else {
+        return;
+    };
+    timer.tick(time.delta());
+    if timer.is_finished() {
+        notice.message.clear();
+        notice.expires = None;
+    }
+    let visible = !notice.message.is_empty();
+    for (mut label, mut background) in &mut labels {
+        label.0 = notice.message.clone();
+        background.0 = if visible {
+            Color::srgba(0.02, 0.025, 0.04, 0.88)
+        } else {
+            Color::srgba(0.0, 0.0, 0.0, 0.0)
+        };
     }
 }
 
@@ -488,7 +651,12 @@ fn undo_redo(
     keys: Res<ButtonInput<KeyCode>>,
     mut document: ResMut<EditorDocument>,
     cursor: Res<CursorCell>,
-    mut markers: Query<&mut Transform, With<CollisionCursor>>,
+    selected: Res<SelectedProp>,
+    mut markers: Query<&mut Transform, (With<CollisionCursor>, Without<LifPropRef>)>,
+    mut props: Query<
+        (&mut Transform, &LifMapNodeIndex, &mut Visibility),
+        (With<LifPropRef>, Without<CollisionCursor>),
+    >,
 ) {
     let control = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
     if !control {
@@ -503,6 +671,26 @@ fn undo_redo(
     };
     if !changed {
         return;
+    }
+    for (_, node, mut visibility) in &mut props {
+        *visibility = if document.0.prop_deleted(node.0) {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+    }
+    if let Some(entity) = selected.0
+        && let Ok((mut transform, node, mut visibility)) = props.get_mut(entity)
+        && let Ok((translation, rotation, scale)) = document.0.prop_transform(node.0)
+    {
+        transform.translation = Vec3::from(translation);
+        transform.rotation = Quat::from_array(rotation);
+        transform.scale = Vec3::from(scale);
+        *visibility = if document.0.prop_deleted(node.0) {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
     }
     let Some(cell) = document.0.collision_cell(cursor.x, cursor.y) else {
         return;

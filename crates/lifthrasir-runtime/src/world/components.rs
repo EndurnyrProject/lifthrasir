@@ -39,6 +39,13 @@ pub struct LifEffectEmitter(pub LifEffect);
 #[reflect(Component, Debug, Clone)]
 pub struct LifPropRef(pub LifProp);
 
+/// Original glTF node index for an entity spawned from a Lifthrasir map.
+/// Editor tooling uses this stable identity to write node-transform edits back
+/// into the same GLB document.
+#[derive(Component, Reflect, Debug, Clone, Copy, PartialEq, Eq)]
+#[reflect(Component, Debug, Clone)]
+pub struct LifMapNodeIndex(pub usize);
+
 /// Scene-derived shading input copied to each prop scene root.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct PropSceneContext {

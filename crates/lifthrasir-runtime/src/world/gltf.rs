@@ -25,7 +25,8 @@ impl Plugin for MapGltfPlugin {
             .register_type::<LifMapLoadError>()
             .register_type::<LifAudioEmitter>()
             .register_type::<LifEffectEmitter>()
-            .register_type::<LifPropRef>();
+            .register_type::<LifPropRef>()
+            .register_type::<LifMapNodeIndex>();
     }
 }
 
@@ -106,6 +107,7 @@ impl GltfExtensionHandler for LifExtensionHandler {
         if !self.is_map() {
             return;
         }
+        entity.insert(LifMapNodeIndex(gltf_node.index()));
 
         let Some(extras) = gltf_node.extras().as_ref() else {
             return;

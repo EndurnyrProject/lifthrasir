@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, ensure};
 use lifthrasir_data::lif::{self, LifCollisionCell, LifEditor, LifMap, LifWater};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 /// A converted Lifthrasir map opened independently of its Ragnarok sources.
@@ -14,9 +15,12 @@ pub struct MapDocument {
     pub water: Option<LifWater>,
     pub scene: MapSceneSummary,
     collision_cells: Vec<LifCollisionCell>,
-    undo: Vec<CollisionEdit>,
-    redo: Vec<CollisionEdit>,
+    undo: Vec<DocumentEdit>,
+    redo: Vec<DocumentEdit>,
+    pending_prop_transform: Option<PropTransformEdit>,
+    deleted_props: BTreeSet<usize>,
     dirty: bool,
+    root: serde_json::Value,
     json_chunk: Vec<u8>,
     bin_chunk: Vec<u8>,
 }
@@ -32,10 +36,36 @@ pub struct MapSceneSummary {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct CollisionEdit {
-    index: usize,
-    before: LifCollisionCell,
-    after: LifCollisionCell,
+enum DocumentEdit {
+    Collision {
+        index: usize,
+        before: LifCollisionCell,
+        after: LifCollisionCell,
+    },
+    PropTransform {
+        node_index: usize,
+        before: NodeTransform,
+        after: NodeTransform,
+    },
+    PropDeleted {
+        node_index: usize,
+        before: bool,
+        after: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct NodeTransform {
+    translation: [f32; 3],
+    rotation: [f32; 4],
+    scale: [f32; 3],
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PropTransformEdit {
+    node_index: usize,
+    before: NodeTransform,
+    after: NodeTransform,
 }
 
 impl MapDocument {
@@ -83,7 +113,7 @@ impl MapDocument {
             return Ok(());
         }
         self.collision_cells[index] = cell;
-        self.undo.push(CollisionEdit {
+        self.undo.push(DocumentEdit::Collision {
             index,
             before,
             after: cell,
@@ -96,10 +126,11 @@ impl MapDocument {
     /// Reverts the latest collision-cell edit. Returns `true` when an edit was
     /// available to undo.
     pub fn undo(&mut self) -> bool {
+        self.commit_pending_prop_transform();
         let Some(edit) = self.undo.pop() else {
             return false;
         };
-        self.collision_cells[edit.index] = edit.before;
+        self.apply_edit(edit, false);
         self.redo.push(edit);
         self.dirty = true;
         true
@@ -107,13 +138,191 @@ impl MapDocument {
 
     /// Reapplies the latest reverted collision-cell edit.
     pub fn redo(&mut self) -> bool {
+        self.commit_pending_prop_transform();
         let Some(edit) = self.redo.pop() else {
             return false;
         };
-        self.collision_cells[edit.index] = edit.after;
+        self.apply_edit(edit, true);
         self.undo.push(edit);
         self.dirty = true;
         true
+    }
+
+    /// Replaces a map prop node's glTF local transform. `node_index` is the
+    /// original GLB node identity exposed by the runtime, not an ECS entity.
+    pub fn set_prop_transform(
+        &mut self,
+        node_index: usize,
+        translation: [f32; 3],
+        rotation: [f32; 4],
+        scale: [f32; 3],
+    ) -> Result<()> {
+        let node = self.node_mut(node_index)?;
+        ensure!(
+            node.pointer(&format!("/extras/{}", lif::EXTRAS_PROP))
+                .is_some(),
+            "node {node_index} is not a map prop"
+        );
+        let before = node_transform(node)?;
+        let after = NodeTransform {
+            translation,
+            rotation,
+            scale,
+        };
+        if before == after {
+            return Ok(());
+        }
+        write_node_transform(node, after);
+        self.undo.push(DocumentEdit::PropTransform {
+            node_index,
+            before,
+            after,
+        });
+        self.redo.clear();
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates a prop while an editor gesture is active. Repeated calls for the
+    /// same node coalesce into one future undo entry; call
+    /// [`Self::commit_pending_prop_transform`] after the gesture ends.
+    pub fn update_prop_transform(
+        &mut self,
+        node_index: usize,
+        translation: [f32; 3],
+        rotation: [f32; 4],
+        scale: [f32; 3],
+    ) -> Result<()> {
+        let after = NodeTransform {
+            translation,
+            rotation,
+            scale,
+        };
+        if self
+            .pending_prop_transform
+            .is_some_and(|edit| edit.node_index != node_index)
+        {
+            self.commit_pending_prop_transform();
+        }
+        let before = if let Some(edit) = self.pending_prop_transform {
+            edit.before
+        } else {
+            let before = node_transform(self.node_mut(node_index)?)?;
+            self.redo.clear();
+            before
+        };
+        write_node_transform(self.node_mut(node_index)?, after);
+        self.pending_prop_transform = Some(PropTransformEdit {
+            node_index,
+            before,
+            after,
+        });
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Commits the current transform gesture as one undoable edit.
+    pub fn commit_pending_prop_transform(&mut self) -> bool {
+        let Some(edit) = self.pending_prop_transform.take() else {
+            return false;
+        };
+        if edit.before == edit.after {
+            return false;
+        }
+        self.undo.push(DocumentEdit::PropTransform {
+            node_index: edit.node_index,
+            before: edit.before,
+            after: edit.after,
+        });
+        true
+    }
+
+    pub fn has_pending_prop_transform(&self) -> bool {
+        self.pending_prop_transform.is_some()
+    }
+
+    pub fn set_prop_deleted(&mut self, node_index: usize, deleted: bool) -> Result<()> {
+        self.commit_pending_prop_transform();
+        let node = self.node_mut(node_index)?;
+        ensure!(
+            node.pointer(&format!("/extras/{}", lif::EXTRAS_PROP))
+                .is_some(),
+            "node {node_index} is not a map prop"
+        );
+        let before = self.deleted_props.contains(&node_index);
+        if before == deleted {
+            return Ok(());
+        }
+        if deleted {
+            self.deleted_props.insert(node_index);
+        } else {
+            self.deleted_props.remove(&node_index);
+        }
+        self.undo.push(DocumentEdit::PropDeleted {
+            node_index,
+            before,
+            after: deleted,
+        });
+        self.redo.clear();
+        self.dirty = true;
+        Ok(())
+    }
+
+    pub fn prop_deleted(&self, node_index: usize) -> bool {
+        self.deleted_props.contains(&node_index)
+    }
+
+    /// Returns a prop node's current document transform for synchronizing an
+    /// undo/redo operation back into the live editor scene.
+    pub fn prop_transform(&self, node_index: usize) -> Result<([f32; 3], [f32; 4], [f32; 3])> {
+        let node = self
+            .root
+            .get("nodes")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|nodes| nodes.get(node_index))
+            .with_context(|| format!("map has no node {node_index}"))?;
+        let transform = node_transform(node)?;
+        Ok((transform.translation, transform.rotation, transform.scale))
+    }
+
+    fn apply_edit(&mut self, edit: DocumentEdit, forward: bool) {
+        match edit {
+            DocumentEdit::Collision {
+                index,
+                before,
+                after,
+            } => {
+                self.collision_cells[index] = if forward { after } else { before };
+            }
+            DocumentEdit::PropTransform {
+                node_index,
+                before,
+                after,
+            } => {
+                // A history entry was created only after the node was validated.
+                let node = self.node_mut(node_index).expect("history prop node exists");
+                write_node_transform(node, if forward { after } else { before });
+            }
+            DocumentEdit::PropDeleted {
+                node_index,
+                before,
+                after,
+            } => {
+                if if forward { after } else { before } {
+                    self.deleted_props.insert(node_index);
+                } else {
+                    self.deleted_props.remove(&node_index);
+                }
+            }
+        }
+    }
+
+    fn node_mut(&mut self, node_index: usize) -> Result<&mut serde_json::Value> {
+        self.root
+            .get_mut("nodes")
+            .and_then(serde_json::Value::as_array_mut)
+            .and_then(|nodes| nodes.get_mut(node_index))
+            .with_context(|| format!("map has no node {node_index}"))
     }
 
     /// Atomically writes collision edits back to the source GLB.
@@ -121,10 +330,13 @@ impl MapDocument {
     /// This first save path only changes the fixed-size `LIF_editor` buffer;
     /// terrain/object editing will use a JSON-and-buffer rebuild path later.
     pub fn save(&mut self) -> Result<()> {
+        self.commit_pending_prop_transform();
         let collision = self.editor.collision;
         let bytes =
             lif::LifCollision::encode(&self.collision_cells, collision.width, collision.height)
                 .map_err(anyhow::Error::msg)?;
+        let compacted = compact_deleted_props(&self.root, &self.deleted_props)?;
+        self.json_chunk = serde_json::to_vec(&compacted).context("serializing edited map JSON")?;
         let (start, end) = collision_range(&self.json_chunk, collision)?;
         ensure!(
             end - start == bytes.len(),
@@ -189,11 +401,109 @@ impl MapDocument {
             collision_cells,
             undo: Vec::new(),
             redo: Vec::new(),
+            pending_prop_transform: None,
+            deleted_props: BTreeSet::new(),
             dirty: false,
+            root: root.clone(),
             json_chunk,
             bin_chunk,
         })
     }
+}
+
+fn node_transform(node: &serde_json::Value) -> Result<NodeTransform> {
+    Ok(NodeTransform {
+        translation: json_array(node, "translation", [0.0; 3])?,
+        rotation: json_array(node, "rotation", [0.0, 0.0, 0.0, 1.0])?,
+        scale: json_array(node, "scale", [1.0; 3])?,
+    })
+}
+
+/// Removes deleted map-prop nodes and rewrites map-scene/node child indices.
+/// Map props are leaf nodes, so map GLBs have no skin or animation node refs
+/// to preserve here; those belong to the separately referenced model GLBs.
+fn compact_deleted_props(
+    root: &serde_json::Value,
+    deleted: &BTreeSet<usize>,
+) -> Result<serde_json::Value> {
+    let mut root = root.clone();
+    if deleted.is_empty() {
+        return Ok(root);
+    }
+    let nodes = root
+        .get("nodes")
+        .and_then(serde_json::Value::as_array)
+        .context("map has no nodes")?;
+    let mut remap = vec![None; nodes.len()];
+    let mut kept = Vec::with_capacity(nodes.len() - deleted.len());
+    for (old, node) in nodes.iter().enumerate() {
+        if deleted.contains(&old) {
+            continue;
+        }
+        remap[old] = Some(kept.len());
+        kept.push(node.clone());
+    }
+    for node in &mut kept {
+        remap_index_array(node.get_mut("children"), &remap);
+    }
+    if let Some(scenes) = root
+        .get_mut("scenes")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        for scene in scenes {
+            remap_index_array(scene.get_mut("nodes"), &remap);
+        }
+    }
+    root["nodes"] = serde_json::Value::Array(kept);
+    Ok(root)
+}
+
+fn remap_index_array(value: Option<&mut serde_json::Value>, remap: &[Option<usize>]) {
+    let Some(values) = value.and_then(serde_json::Value::as_array_mut) else {
+        return;
+    };
+    values.retain_mut(|value| {
+        let Some(old) = value.as_u64().map(|index| index as usize) else {
+            return false;
+        };
+        let Some(new) = remap.get(old).and_then(|index| *index) else {
+            return false;
+        };
+        *value = serde_json::json!(new);
+        true
+    });
+}
+
+fn json_array<const N: usize>(
+    node: &serde_json::Value,
+    key: &str,
+    default: [f32; N],
+) -> Result<[f32; N]> {
+    let Some(values) = node.get(key) else {
+        return Ok(default);
+    };
+    let values = values
+        .as_array()
+        .with_context(|| format!("node {key} is not an array"))?;
+    ensure!(
+        values.len() == N,
+        "node {key} has {} values, expected {N}",
+        values.len()
+    );
+    let mut result = default;
+    for (index, value) in values.iter().enumerate() {
+        result[index] = value
+            .as_f64()
+            .map(|value| value as f32)
+            .with_context(|| format!("node {key}[{index}] is not a number"))?;
+    }
+    Ok(result)
+}
+
+fn write_node_transform(node: &mut serde_json::Value, transform: NodeTransform) {
+    node["translation"] = serde_json::json!(transform.translation);
+    node["rotation"] = serde_json::json!(transform.rotation);
+    node["scale"] = serde_json::json!(transform.scale);
 }
 
 const GLB_MAGIC: &[u8; 4] = b"glTF";
@@ -434,5 +744,72 @@ mod tests {
         assert_eq!(document.collision_cell(1, 2), Some(original));
         assert!(document.redo());
         assert_eq!(document.collision_cell(1, 2), Some(edited));
+    }
+
+    #[test]
+    fn prop_transform_is_written_to_the_glb_json() {
+        let directory = write_document(root(lif::FORMAT_VERSION));
+        let path = directory.path().join("map.glb");
+        let mut document = MapDocument::open(&path).expect("document");
+
+        document
+            .set_prop_transform(1, [1.0, 2.0, 3.0], [0.0, 0.0, 0.0, 1.0], [2.0; 3])
+            .expect("prop transform");
+        document.save().expect("save");
+
+        let saved = MapDocument::open(path).expect("reopen");
+        assert_eq!(
+            saved.root.pointer("/nodes/1/translation"),
+            Some(&json!([1.0, 2.0, 3.0]))
+        );
+        assert_eq!(
+            saved.root.pointer("/nodes/1/scale"),
+            Some(&json!([2.0, 2.0, 2.0]))
+        );
+    }
+
+    #[test]
+    fn prop_transform_edits_participate_in_undo_and_redo() {
+        let directory = write_document(root(lif::FORMAT_VERSION));
+        let mut document = MapDocument::open(directory.path().join("map.glb")).expect("document");
+
+        document
+            .set_prop_transform(1, [4.0, 5.0, 6.0], [0.0, 0.0, 0.0, 1.0], [1.0; 3])
+            .expect("edit prop");
+        assert!(document.undo());
+        assert_eq!(
+            document.root.pointer("/nodes/1/translation"),
+            Some(&json!([0.0, 0.0, 0.0]))
+        );
+        assert!(document.redo());
+        assert_eq!(
+            document.root.pointer("/nodes/1/translation"),
+            Some(&json!([4.0, 5.0, 6.0]))
+        );
+    }
+
+    #[test]
+    fn a_prop_transform_gesture_is_one_undo_entry_and_branches_history() {
+        let directory = write_document(root(lif::FORMAT_VERSION));
+        let mut document = MapDocument::open(directory.path().join("map.glb")).expect("document");
+
+        document
+            .update_prop_transform(1, [1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0], [1.0; 3])
+            .expect("first gesture update");
+        document
+            .update_prop_transform(1, [2.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0], [1.0; 3])
+            .expect("second gesture update");
+        assert!(document.commit_pending_prop_transform());
+        assert!(document.undo());
+        assert_eq!(
+            document.root.pointer("/nodes/1/translation"),
+            Some(&json!([0.0, 0.0, 0.0]))
+        );
+
+        document
+            .update_prop_transform(1, [3.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0], [1.0; 3])
+            .expect("branch update");
+        document.commit_pending_prop_transform();
+        assert!(!document.redo(), "a new edit must discard the redo branch");
     }
 }
