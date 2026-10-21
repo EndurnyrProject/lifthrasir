@@ -18,7 +18,6 @@
 //! This assumes Bevy's experimental `GltfLoaderSettings::convert_coordinates`
 //! stays at its default (off); enabling it would add a second rotation.
 
-use crate::converters::map::textures::TextureOut;
 use anyhow::{Context, bail, ensure};
 use glam::{Quat, Vec3};
 use gltf_json as json;
@@ -264,7 +263,8 @@ pub fn push_geometry_primitive(
 /// `texture::Info` a material's `base_color_texture` wants.
 pub fn push_image_and_texture(
     root: &mut json::Root,
-    texture: &TextureOut,
+    name: &str,
+    uri: &str,
     sampler: Option<json::Index<json::texture::Sampler>>,
 ) -> json::texture::Info {
     let image = json::Index::push(
@@ -272,8 +272,8 @@ pub fn push_image_and_texture(
         json::Image {
             buffer_view: None,
             mime_type: Some(json::image::MimeType("image/ktx2".to_string())),
-            uri: Some(texture.relative_path.clone()),
-            name: Some(texture.source_name.clone()),
+            uri: Some(uri.to_string()),
+            name: Some(name.to_string()),
             extensions: None,
             extras: Default::default(),
         },
@@ -283,7 +283,7 @@ pub fn push_image_and_texture(
         json::Texture {
             sampler,
             source: image,
-            name: Some(texture.source_name.clone()),
+            name: Some(name.to_string()),
             extensions: None,
             extras: Default::default(),
         },

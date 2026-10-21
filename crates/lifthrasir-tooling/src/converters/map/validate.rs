@@ -1,18 +1,17 @@
-//! Re-reads a written `.glb` and proves it still says what the sources said.
+//! Re-reads a written `.glb` and proves it still says what the document said.
 //!
 //! Nothing here trusts the writer's in-memory state: the file is parsed back
-//! from disk and every value is compared against the parsed RSW/GND/GAT (and,
-//! for the sun, against the native lighting math). Any mismatch is an error --
-//! a truncated or silently wrong map must never reach the pak.
+//! from disk and every value is compared against the [`MapDocument`] it was
+//! written from. Any mismatch is an error -- a truncated or silently wrong map
+//! must never reach the pak.
 
+use crate::converters::gltf_out::ROOT_FIX;
 use crate::converters::gltf_out::{ensure_close, root_extension, scene_root};
+use crate::converters::map::document::{MapDocument, MapLight, MapNode, MapWater};
 use crate::converters::map::terrain::TerrainPrimitive;
-use crate::converters::map::water;
-use crate::converters::map::writer::{self, MapGlbInputs, ROOT_FIX};
 use anyhow::{Context, bail, ensure};
 use glam::{Quat, Vec3};
 use lifthrasir_data::lif;
-use ro_formats::{RswLight, RswLightObj, RswObject};
 use std::fmt;
 use std::path::Path;
 
@@ -37,30 +36,33 @@ impl fmt::Display for Counts {
     }
 }
 
-/// Re-read `glb_path` and assert it round-trips `inputs`.
-pub fn validate(glb_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<Counts> {
+/// Re-read `glb_path` and assert it round-trips `doc`.
+pub fn validate(glb_path: &Path, doc: &MapDocument) -> anyhow::Result<Counts> {
+    doc.validate()
+        .map_err(|errors| anyhow::anyhow!("invalid map document: {}", errors.join("; ")))?;
+
     let gltf::Gltf { document, blob } =
         gltf::Gltf::open(glb_path).with_context(|| format!("re-reading {}", glb_path.display()))?;
     let blob = blob.with_context(|| format!("{} has no BIN chunk", glb_path.display()))?;
 
     let counts = {
         let root = scene_root(&document)?;
-        validate_nodes(&root, &blob, inputs)?
+        validate_nodes(&root, &blob, doc)?
     };
-    validate_root_extensions(&document.into_json(), &blob, inputs)?;
+    validate_root_extensions(&document.into_json(), &blob, doc)?;
 
     Ok(counts)
 }
 
 /// The scene root's children are, in order: the terrain node (when the map has
-/// geometry), the sun, then one node per emitted RSW object. Walking them in
+/// geometry), then one node per light, prop, sound and effect. Walking them in
 /// that order validates placement and ordering at once.
-fn validate_nodes(root: &gltf::Node, blob: &[u8], inputs: &MapGlbInputs) -> anyhow::Result<Counts> {
+fn validate_nodes(root: &gltf::Node, blob: &[u8], doc: &MapDocument) -> anyhow::Result<Counts> {
     let children: Vec<gltf::Node> = root.children().collect();
     let mut next = 0;
 
-    let primitives: Vec<&TerrainPrimitive> = inputs
-        .primitives
+    let primitives: Vec<&TerrainPrimitive> = doc
+        .terrain
         .iter()
         .filter(|primitive| !primitive.positions.is_empty())
         .collect();
@@ -73,53 +75,39 @@ fn validate_nodes(root: &gltf::Node, blob: &[u8], inputs: &MapGlbInputs) -> anyh
         validate_terrain(node, blob, &primitives)?
     };
 
-    let sun = children.get(next).context("glb has no sun node")?;
-    next += 1;
-    validate_sun(sun, &inputs.world.light)?;
-
-    let objects: Vec<&RswObject> = writer::emitted_objects(inputs.world).collect();
     let emitted = &children[next..];
+    let expected = doc.lights.len() + doc.props.len() + doc.sounds.len() + doc.effects.len();
     ensure!(
-        emitted.len() == objects.len(),
-        "glb has {} object nodes, the RSW emits {}",
-        emitted.len(),
-        objects.len()
+        emitted.len() == expected,
+        "glb has {} object nodes, the document emits {expected}",
+        emitted.len()
     );
 
     let mut counts = Counts {
         meshes,
-        lights: 1,
         ..Default::default()
     };
-    let map_width = inputs.ground.width as f32;
-    let map_height = inputs.ground.height as f32;
+    let mut nodes = emitted.iter();
 
-    for (node, object) in emitted.iter().zip(objects) {
-        match object {
-            RswObject::Light(light) => {
-                validate_point_light(node, light, map_width, map_height, inputs.indoor)?;
-                counts.lights += 1;
-            }
-            RswObject::Sound(sound) => {
-                validate_extras(node, lif::EXTRAS_AUDIO, &writer::lif_audio(sound))?;
-                ensure_position(node, sound.position, map_width, map_height, &sound.name)?;
-                counts.sounds += 1;
-            }
-            RswObject::Effect(effect) => {
-                validate_extras(node, lif::EXTRAS_EFFECT, &writer::lif_effect(effect))?;
-                ensure_position(node, effect.position, map_width, map_height, &effect.name)?;
-                counts.effects += 1;
-            }
-            RswObject::Model(model) => {
-                validate_extras(
-                    node,
-                    lif::EXTRAS_PROP,
-                    &writer::lif_prop(model, inputs.converted_models)?,
-                )?;
-                ensure_position(node, model.position, map_width, map_height, &model.name)?;
-                counts.props += 1;
-            }
-        }
+    for light in &doc.lights {
+        let node = nodes.next().context("glb is missing a light node")?;
+        validate_light(node, light)?;
+        counts.lights += 1;
+    }
+    for prop in &doc.props {
+        let node = nodes.next().context("glb is missing a prop node")?;
+        validate_prop(node, prop)?;
+        counts.props += 1;
+    }
+    for sound in &doc.sounds {
+        let node = nodes.next().context("glb is missing a sound node")?;
+        validate_emitter(node, lif::EXTRAS_AUDIO, sound)?;
+        counts.sounds += 1;
+    }
+    for effect in &doc.effects {
+        let node = nodes.next().context("glb is missing an effect node")?;
+        validate_emitter(node, lif::EXTRAS_EFFECT, effect)?;
+        counts.effects += 1;
     }
 
     Ok(counts)
@@ -134,7 +122,7 @@ fn validate_terrain(
     let primitives: Vec<gltf::Primitive> = mesh.primitives().collect();
     ensure!(
         primitives.len() == expected.len(),
-        "glb terrain has {} primitives, the GND builds {}",
+        "glb terrain has {} primitives, the document builds {}",
         primitives.len(),
         expected.len()
     );
@@ -147,7 +135,7 @@ fn validate_terrain(
             .count();
         ensure!(
             positions == expected.positions.len(),
-            "primitive '{}' has {positions} vertices, the GND builds {}",
+            "primitive '{}' has {positions} vertices, the document builds {}",
             expected.texture,
             expected.positions.len()
         );
@@ -159,7 +147,7 @@ fn validate_terrain(
             .count();
         ensure!(
             indices == expected.indices.len(),
-            "primitive '{}' has {indices} indices, the GND builds {}",
+            "primitive '{}' has {indices} indices, the document builds {}",
             expected.texture,
             expected.indices.len()
         );
@@ -168,63 +156,107 @@ fn validate_terrain(
     Ok(primitives.len())
 }
 
-fn validate_sun(node: &gltf::Node, light: &RswLight) -> anyhow::Result<()> {
-    let punctual = node.light().context("sun node carries no KHR light")?;
-    ensure!(
-        matches!(
-            punctual.kind(),
-            gltf::khr_lights_punctual::Kind::Directional
-        ),
-        "sun node is not a directional light"
-    );
-    ensure!(
-        punctual.color() == light.diffuse,
-        "sun color {:?} differs from the RSW diffuse {:?}",
-        punctual.color(),
-        light.diffuse
-    );
+fn validate_light(node: &gltf::Node, light: &MapLight) -> anyhow::Result<()> {
+    let punctual = node.light().context("light node carries no KHR light")?;
+    match light {
+        MapLight::Sun {
+            rotation,
+            color,
+            lux,
+        } => {
+            ensure!(
+                matches!(
+                    punctual.kind(),
+                    gltf::khr_lights_punctual::Kind::Directional
+                ),
+                "sun node is not a directional light"
+            );
+            ensure!(
+                punctual.color() == *color,
+                "sun color {:?} differs from the document {:?}",
+                punctual.color(),
+                color
+            );
+            ensure!(
+                punctual.intensity() == *lux,
+                "sun intensity {} differs from the document {lux}",
+                punctual.intensity()
+            );
 
-    let (_, rotation, _) = node.transform().decomposed();
-    let world_direction = (ROOT_FIX * Quat::from_array(rotation)) * Vec3::NEG_Z;
-    ensure_close(
-        "sun direction",
-        world_direction,
-        writer::sun_direction(light),
-    )
+            let (_, actual, _) = node.transform().decomposed();
+            let world_direction = (ROOT_FIX * Quat::from_array(actual)) * Vec3::NEG_Z;
+            // The glb rotation already carries the fix, so applying the fix
+            // again recovers the native rotation.
+            let expected = *rotation * Vec3::NEG_Z;
+            ensure_close("sun direction", world_direction, expected)
+        }
+        MapLight::Point {
+            translation,
+            color,
+            candela,
+            range,
+        } => {
+            ensure!(
+                matches!(punctual.kind(), gltf::khr_lights_punctual::Kind::Point),
+                "point light node is not a point light"
+            );
+            ensure!(
+                punctual.color() == *color,
+                "point light color {:?} differs from the document {:?}",
+                punctual.color(),
+                color
+            );
+            ensure!(
+                punctual.intensity() == *candela,
+                "point light intensity {} differs from the document {candela}",
+                punctual.intensity()
+            );
+            ensure!(
+                punctual.range() == Some(*range),
+                "point light range {:?} differs from the document {range}",
+                punctual.range()
+            );
+
+            let (actual, _, _) = node.transform().decomposed();
+            ensure_close(
+                "point light position",
+                ROOT_FIX * Vec3::from(actual),
+                *translation,
+            )
+        }
+    }
 }
 
-fn validate_point_light(
-    node: &gltf::Node,
-    light: &RswLightObj,
-    map_width: f32,
-    map_height: f32,
-    indoor: bool,
-) -> anyhow::Result<()> {
-    let punctual = node
-        .light()
-        .with_context(|| format!("light '{}' carries no KHR light", light.name))?;
-    ensure!(
-        matches!(punctual.kind(), gltf::khr_lights_punctual::Kind::Point),
-        "light '{}' is not a point light",
-        light.name
-    );
-    ensure!(
-        punctual.color() == light.color,
-        "light '{}' color {:?} differs from the RSW {:?}",
-        light.name,
-        punctual.color(),
-        light.color
-    );
-    let expected_range = writer::point_light_range(light, indoor);
-    ensure!(
-        punctual.range() == Some(expected_range),
-        "light '{}' range {:?} differs from the expected {}",
-        light.name,
-        punctual.range(),
-        expected_range
-    );
+fn validate_prop(node: &gltf::Node, expected: &MapNode<lif::LifProp>) -> anyhow::Result<()> {
+    validate_extras(node, lif::EXTRAS_PROP, &expected.payload)?;
+    ensure_position(node, expected.translation, &expected.name)?;
 
-    ensure_position(node, light.position, map_width, map_height, &light.name)
+    let (_, actual, actual_scale) = node.transform().decomposed();
+    ensure_close(
+        &format!("node '{}' scale", expected.name),
+        Vec3::from(actual_scale),
+        expected.scale,
+    )?;
+
+    // Undo the fix on both sides to compare the native placement.
+    let world = ROOT_FIX * Quat::from_array(actual) * ROOT_FIX;
+    let wanted = expected.rotation;
+    for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+        ensure_close(
+            &format!("node '{}' rotation", expected.name),
+            world * axis,
+            wanted * axis,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_emitter<T>(node: &gltf::Node, key: &str, expected: &MapNode<T>) -> anyhow::Result<()>
+where
+    T: serde::de::DeserializeOwned + PartialEq + std::fmt::Debug + serde::Serialize,
+{
+    validate_extras(node, key, &expected.payload)?;
+    ensure_position(node, expected.translation, &expected.name)
 }
 
 fn validate_extras<T>(node: &gltf::Node, key: &str, expected: &T) -> anyhow::Result<()>
@@ -245,24 +277,18 @@ where
 
     ensure!(
         &actual == expected,
-        "node '{}' {key} params {actual:?} differ from the RSW {expected:?}",
+        "node '{}' {key} params {actual:?} differ from the document {expected:?}",
         node_name(node)
     );
     Ok(())
 }
 
-fn ensure_position(
-    node: &gltf::Node,
-    rsw_position: [f32; 3],
-    map_width: f32,
-    map_height: f32,
-    name: &str,
-) -> anyhow::Result<()> {
+fn ensure_position(node: &gltf::Node, world_position: Vec3, name: &str) -> anyhow::Result<()> {
     let (translation, _, _) = node.transform().decomposed();
     ensure_close(
         &format!("node '{name}' position"),
         ROOT_FIX * Vec3::from(translation),
-        writer::rsw_position_to_world(rsw_position, map_width, map_height),
+        world_position,
     )
 }
 
@@ -273,84 +299,60 @@ fn node_name(node: &gltf::Node) -> String {
 fn validate_root_extensions(
     root: &gltf_json::Root,
     blob: &[u8],
-    inputs: &MapGlbInputs,
+    doc: &MapDocument,
 ) -> anyhow::Result<()> {
-    validate_gat_extension(root, blob, inputs.gat_bytes)?;
-    validate_map_extension(root, inputs)?;
-    validate_water_extension(root, blob, inputs)
+    validate_gat_extension(root, blob, doc)?;
+    validate_map_extension(root, doc)?;
+    validate_water_extension(root, blob, doc)
 }
 
-/// The strongest guarantee of the format: the bin chunk still holds the
-/// server's `.gat` file, byte for byte.
+/// The strongest guarantee of the format: the bin chunk holds the document's
+/// `.gat` file, byte for byte.
 fn validate_gat_extension(
     root: &gltf_json::Root,
     blob: &[u8],
-    source: &[u8],
+    doc: &MapDocument,
 ) -> anyhow::Result<()> {
     let gat: lif::LifGat = root_extension(root, lif::EXTENSION_GAT)?;
+    ensure!(
+        gat.width == doc.gat.width && gat.height == doc.gat.height,
+        "{} declares {}x{}, the document GAT is {}x{}",
+        lif::EXTENSION_GAT,
+        gat.width,
+        gat.height,
+        doc.gat.width,
+        doc.gat.height
+    );
+
+    let expected = doc.gat.to_bytes().context("serializing the document GAT")?;
     let embedded = gat_bytes(root, blob, &gat)?;
     ensure!(
-        embedded == source,
-        "{} bufferView holds {} bytes that differ from the {} source .gat bytes",
+        embedded == expected,
+        "{} bufferView holds {} bytes that differ from the {} document .gat bytes",
         lif::EXTENSION_GAT,
         embedded.len(),
-        source.len()
+        expected.len()
     );
     gat.validate(embedded)
         .with_context(|| format!("validating {} dims", lif::EXTENSION_GAT))
 }
 
-fn validate_map_extension(root: &gltf_json::Root, inputs: &MapGlbInputs) -> anyhow::Result<()> {
+fn validate_map_extension(root: &gltf_json::Root, doc: &MapDocument) -> anyhow::Result<()> {
     let map: lif::LifMap = root_extension(root, lif::EXTENSION_MAP)?;
     ensure!(
-        map.format_version == lif::MAP_FORMAT_VERSION,
-        "{} format_version is {}, this converter writes {}",
+        map == doc.meta,
+        "{} {map:?} differs from the document {:?}",
         lif::EXTENSION_MAP,
-        map.format_version,
-        lif::MAP_FORMAT_VERSION
-    );
-    let provenance = map
-        .source
-        .as_ref()
-        .context("converter output must carry LIF_map source provenance")?;
-
-    for (label, actual, source) in [
-        ("rsw", &provenance.rsw_hash, inputs.rsw_bytes),
-        ("gnd", &provenance.gnd_hash, inputs.gnd_bytes),
-        ("gat", &provenance.gat_hash, inputs.gat_bytes),
-    ] {
-        let expected = writer::hash_hex(source);
-        ensure!(
-            *actual == expected,
-            "{} {label}_hash {actual} differs from the source hash {expected}",
-            lif::EXTENSION_MAP
-        );
-    }
-
-    ensure!(
-        map.ambient_color == inputs.world.light.ambient,
-        "{} ambient {:?} differs from the RSW {:?}",
-        lif::EXTENSION_MAP,
-        map.ambient_color,
-        inputs.world.light.ambient
-    );
-    let expected_tint = lif::no_shade_tint(inputs.world.light.ambient, inputs.world.light.diffuse);
-    ensure!(
-        map.no_shade_tint == expected_tint,
-        "{} no-shade tint {:?} differs from the RSW-derived {:?}",
-        lif::EXTENSION_MAP,
-        map.no_shade_tint,
-        expected_tint
+        doc.meta
     );
     Ok(())
 }
 
-/// The writer omits this extension when every resolved zone has level zero;
-/// a glb that carries one anyway is wrong.
+/// A glb declares this extension exactly when the document has water.
 fn validate_water_extension(
     root: &gltf_json::Root,
     blob: &[u8],
-    inputs: &MapGlbInputs,
+    doc: &MapDocument,
 ) -> anyhow::Result<()> {
     let declared = root
         .extensions
@@ -358,37 +360,47 @@ fn validate_water_extension(
         .and_then(|extensions| extensions.others.get(lif::EXTENSION_WATER))
         .is_some();
 
-    let mut expected = water::resolve_water(inputs.ground, &inputs.world.water)?;
-    if expected.zones.iter().all(|zone| zone.level == 0.0) {
+    let Some(expected) = &doc.water else {
         ensure!(
             !declared,
-            "glb declares {} but the resolved water zones have no water level",
+            "glb declares {} but the document has no water",
             lif::EXTENSION_WATER
         );
         return Ok(());
-    }
+    };
 
     let water: lif::LifWater = root_extension(root, lif::EXTENSION_WATER)?;
+    validate_water_mask(root, blob, &water, expected)?;
+
+    let mut expected = expected.zones.clone();
     expected.buffer_view = water.buffer_view;
     ensure!(
         water == expected,
-        "{} {water:?} differs from the resolved source water {expected:?}",
+        "{} {water:?} differs from the document water {expected:?}",
         lif::EXTENSION_WATER
     );
+    Ok(())
+}
 
-    let width = inputs.ground.width as usize;
-    let height = inputs.ground.height as usize;
+fn validate_water_mask(
+    root: &gltf_json::Root,
+    blob: &[u8],
+    water: &lif::LifWater,
+    expected: &MapWater,
+) -> anyhow::Result<()> {
+    let width = expected.zones.width as usize;
+    let height = expected.zones.height as usize;
     ensure!(
-        water.width == inputs.ground.width && water.height == inputs.ground.height,
-        "{} dimensions {}x{} differ from the GND {}x{}",
+        water.width as usize == width && water.height as usize == height,
+        "{} dimensions {}x{} differ from the document {}x{}",
         lif::EXTENSION_WATER,
         water.width,
         water.height,
-        inputs.ground.width,
-        inputs.ground.height
+        width,
+        height
     );
-    let embedded = water_mask_bytes(root, blob, &water)?;
-    let expected_tiles = water::select_water_tiles(inputs.ground, &expected);
+
+    let embedded = water_mask_bytes(root, blob, water)?;
     ensure!(
         embedded.len() == (width * height).div_ceil(8),
         "{} bufferView holds {} bytes, expected {} for {width}x{height}",
@@ -397,8 +409,8 @@ fn validate_water_extension(
         (width * height).div_ceil(8)
     );
     ensure!(
-        lif::decode_water_mask(embedded, width, height) == expected_tiles,
-        "{} mask differs from the GND-corner selection",
+        lif::decode_water_mask(embedded, width, height) == expected.tiles,
+        "{} mask differs from the document's selected tiles",
         lif::EXTENSION_WATER
     );
     Ok(())
@@ -450,12 +462,13 @@ fn gat_bytes<'a>(
 mod tests {
     use super::*;
     use crate::converters::map::fixtures::{Fixture, write_fixture};
+    use ro_formats::RswObject;
 
     #[test]
     fn a_freshly_written_glb_validates_against_its_sources() {
         let fixture = write_fixture();
 
-        let counts = validate(&fixture.path, &fixture.inputs()).expect("validation passes");
+        let counts = validate(&fixture.path, &fixture.document()).expect("validation passes");
 
         assert_eq!(
             counts,
@@ -474,7 +487,7 @@ mod tests {
     }
 
     fn assert_fails(fixture: &Fixture, expected: &str) {
-        let err = validate(&fixture.path, &fixture.inputs()).expect_err("validation must fail");
+        let err = validate(&fixture.path, &fixture.document()).expect_err("validation must fail");
         let message = format!("{err:#}");
         assert!(
             message.contains(expected),
@@ -495,7 +508,7 @@ mod tests {
         let mut fixture = write_fixture();
         fixture.gnd_bytes = b"other-gnd-bytes".to_vec();
 
-        assert_fails(&fixture, "gnd_hash");
+        assert_fails(&fixture, lif::EXTENSION_MAP);
     }
 
     #[test]
@@ -508,7 +521,7 @@ mod tests {
         );
         std::fs::write(&fixture.path, patched).expect("rewrite glb");
 
-        assert_fails(&fixture, "provenance");
+        assert_fails(&fixture, lif::EXTENSION_MAP);
     }
 
     #[test]
@@ -540,7 +553,7 @@ mod tests {
         let mut fixture = write_fixture();
         fixture.world.light.ambient[1] += 0.1;
 
-        assert_fails(&fixture, "ambient");
+        assert_fails(&fixture, lif::EXTENSION_MAP);
     }
 
     #[test]
@@ -559,7 +572,7 @@ mod tests {
         };
         light.position[0] += 5.0;
 
-        assert_fails(&fixture, "'torch' position");
+        assert_fails(&fixture, "point light position");
     }
 
     #[test]

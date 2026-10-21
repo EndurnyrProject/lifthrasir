@@ -200,7 +200,9 @@ fn build_materials(
                 .transpose()?;
             let sampler = animated_materials.contains(&index).then_some(repeat_sampler).flatten();
             let base_color_texture =
-                source.map(|texture| push_image_and_texture(root, texture, sampler));
+                source.map(|texture| {
+                    push_image_and_texture(root, &texture.source_name, &texture.relative_path, sampler)
+                });
             let name = source.map(|texture| texture.source_name.clone());
             Ok(json::Index::push(
                 &mut root.materials,

@@ -69,18 +69,30 @@ pub fn resolve_water(ground: &RoGround, rsw: &RswWater) -> anyhow::Result<LifWat
     })
 }
 
-pub fn select_water_tiles(ground: &RoGround, water: &LifWater) -> Vec<(usize, usize)> {
-    let width = ground.width as usize;
+/// Selects every cell whose highest corner sits strictly above its zone's
+/// wave threshold. The cell heights come from the caller so the converter
+/// (GND) and the editor (its own terrain) share the exact predicate.
+pub fn select_tiles(
+    water: &LifWater,
+    cell_heights: impl Fn(usize, usize) -> [f32; 4],
+) -> Vec<(usize, usize)> {
+    let width = water.width as usize;
 
-    (0..ground.height as usize)
+    (0..water.height as usize)
         .flat_map(|y| (0..width).map(move |x| (x, y)))
         .filter(|&(x, y)| {
             let zone = water.zone_at(x, y);
             let threshold = zone.level - zone.wave_height;
-            let heights = ground.surfaces[y * width + x].height;
+            let heights = cell_heights(x, y);
             heights[0].max(heights[1]).max(heights[2]).max(heights[3]) > threshold
         })
         .collect()
+}
+
+/// The GND adapter over [`select_tiles`].
+pub fn select_water_tiles(ground: &RoGround, water: &LifWater) -> Vec<(usize, usize)> {
+    let width = ground.width as usize;
+    select_tiles(water, |x, y| ground.surfaces[y * width + x].height)
 }
 
 #[cfg(test)]

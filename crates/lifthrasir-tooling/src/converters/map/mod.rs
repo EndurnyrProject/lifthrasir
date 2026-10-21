@@ -1,3 +1,4 @@
+pub mod document;
 #[cfg(test)]
 pub mod fixtures;
 pub mod terrain;
@@ -66,8 +67,6 @@ pub fn run_shared(
         let primitives = terrain::build_terrain(&ground)
             .with_context(|| format!("building terrain of map '{map_name}'"))?;
 
-        report_dropped_objects(&world, &mut report);
-
         let (converted_models, prop_counts) =
             convert_props(vfs, map_name, &world, models_dir, force_models, pool, cache)?;
 
@@ -79,7 +78,7 @@ pub fn run_shared(
         let textures =
             textures::normalize_textures(vfs, &ground.textures, &map_dir, &mut report.diagnostics)?;
 
-        let inputs = writer::MapGlbInputs {
+        let (document, diagnostics) = document::MapDocument::from_retail(document::RetailInputs {
             map_name,
             ground: &ground,
             world: &world,
@@ -90,9 +89,12 @@ pub fn run_shared(
             rsw_bytes: &rsw_bytes,
             converted_models: &converted_models,
             indoor,
-        };
+        })
+        .with_context(|| format!("building the map document for '{map_name}'"))?;
+        report.diagnostics.extend(diagnostics);
+
         let glb_path = map_dir.join(format!("{map_name}.glb"));
-        let counts = write_and_validate_glb_atomically(&glb_path, &inputs)?;
+        let counts = write_and_validate_glb_atomically(&glb_path, &document)?;
         report.info(format!(
             "{map_name}: {counts}, {} textures, {prop_counts} -> {}",
             textures.len(),
@@ -113,27 +115,6 @@ pub fn run_shared(
             .into())
         }
     }
-}
-
-/// Names every object `writer::emitted_objects` drops for carrying a number
-/// glTF cannot express, so corrupt retail records cannot pass unnoticed.
-fn report_dropped_objects(world: &RoWorld, report: &mut OperationReport) {
-    world
-        .objects
-        .iter()
-        .filter(|object| !writer::is_representable(object))
-        .for_each(|object| {
-            report.warning(format!(
-                "  not a finite placement, dropping {}: '{}'",
-                match object {
-                    RswObject::Model(_) => "prop",
-                    RswObject::Light(_) => "light",
-                    RswObject::Sound(_) => "sound",
-                    RswObject::Effect(_) => "effect",
-                },
-                writer::object_name(object)
-            ));
-        });
 }
 
 fn read_source(vfs: &GrfVfs, map_name: &str, extension: &str) -> anyhow::Result<Vec<u8>> {
@@ -179,15 +160,15 @@ fn indoor_table_entry(line: &str) -> Option<String> {
 
 fn write_and_validate_glb_atomically(
     glb_path: &Path,
-    inputs: &writer::MapGlbInputs,
+    doc: &document::MapDocument,
 ) -> anyhow::Result<validate::Counts> {
     let parent = glb_path
         .parent()
         .with_context(|| format!("finding parent for {}", glb_path.display()))?;
     let temporary = tempfile::NamedTempFile::new_in(parent)
         .with_context(|| format!("creating temporary GLB beside {}", glb_path.display()))?;
-    writer::write_glb(temporary.path(), inputs)?;
-    let counts = validate::validate(temporary.path(), inputs)
+    writer::write_glb(temporary.path(), doc)?;
+    let counts = validate::validate(temporary.path(), doc)
         .with_context(|| format!("validating {}", glb_path.display()))?;
     temporary
         .persist(glb_path)
@@ -301,27 +282,13 @@ mod tests {
 
     #[test]
     fn failed_glb_write_leaves_no_destination() {
-        let ground = fixtures::mini_ground();
-        let world = fixtures::mini_world();
-        let primitives = terrain::build_terrain(&ground).expect("terrain");
-        let textures = fixtures::textures();
-        let converted_models = HashSet::from(["prontera\\tree01.rsm".to_string()]);
         let out = tempfile::tempdir().expect("tempdir");
         let glb_path = out.path().join("mini.glb");
-        let inputs = writer::MapGlbInputs {
-            map_name: "mini",
-            ground: &ground,
-            world: &world,
-            primitives: &primitives,
-            textures: &textures,
-            gat_bytes: b"not a GAT",
-            gnd_bytes: b"gnd",
-            rsw_bytes: b"rsw",
-            converted_models: &converted_models,
-            indoor: false,
-        };
+        let mut fixture = fixtures::write_fixture();
+        fixture.textures.clear();
+        let document = fixture.document();
 
-        assert!(write_and_validate_glb_atomically(&glb_path, &inputs).is_err());
+        assert!(write_and_validate_glb_atomically(&glb_path, &document).is_err());
         assert!(!glb_path.exists());
     }
 

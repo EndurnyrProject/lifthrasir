@@ -1,6 +1,7 @@
-//! Assembles the unified per-map `.glb`: terrain primitives, per-texture
-//! materials, `KHR_lights_punctual` lights, RSW emitter/prop nodes and the
-//! `LIF_*` root extensions, all under one identity-transform root node.
+//! Assembles the unified per-map `.glb` from a [`MapDocument`]: terrain
+//! primitives, per-texture materials, `KHR_lights_punctual` lights, emitter/
+//! prop nodes and the `LIF_*` root extensions, all under one identity-transform
+//! root node.
 //!
 //! # Coordinate convention
 //!
@@ -12,156 +13,38 @@
 //! `gltf_out` for the full note.
 
 use crate::converters::gltf_out::{
-    BinChunk, GeometryAttributes, extras_for, glb_container, push_geometry_primitive,
-    push_image_and_texture, to_forward_slashes, to_gltf_quat, to_gltf_vec,
+    BinChunk, GeometryAttributes, ROOT_FIX, extras_for, glb_container, push_geometry_primitive,
+    push_image_and_texture, to_gltf_quat, to_gltf_vec,
 };
+use crate::converters::map::document::{MapDocument, MapLight, MapNode, MapWater, TextureRef};
 use crate::converters::map::terrain::TerrainPrimitive;
-use crate::converters::map::textures::TextureOut;
-use crate::converters::map::water;
 use anyhow::Context;
-use glam::{Mat3, Quat, Vec3};
+use glam::{Quat, Vec3};
 use gltf_json as json;
 use json::validation::{Checked::Valid, USize64};
 use lifthrasir_data::lif;
-use ro_formats::{
-    RoAltitude, RoGround, RoWorld, RswEffect, RswLight, RswLightObj, RswModel, RswObject, RswSound,
-};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 
-pub use crate::converters::gltf_out::{ROOT_FIX, hash_hex};
+#[allow(unused_imports)]
+pub use crate::converters::gltf_out::hash_hex;
+#[allow(unused_imports)]
+pub use crate::converters::map::document::{
+    INDOOR_AMBIENT_BRIGHTNESS, INDOOR_EXPOSURE_EV100, INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE,
+    INDOOR_POINT_LIGHT_RANGE_SCALE, INDOOR_SUN_LUX, OUTDOOR_AMBIENT_BRIGHTNESS,
+    OUTDOOR_EXPOSURE_EV100, POINT_LIGHT_LUX_AT_HALF_RANGE, SUN_MAX_LUX, emitted_objects,
+    is_representable, lif_audio, lif_effect, lif_prop, object_name, point_light_range,
+    rsw_model_rotation, rsw_position_to_world, sun_direction,
+};
 
 /// Historical pre-GLB terrain material constants, originally mirrored from
 /// `game-engine/src/domain/world/terrain.rs`.
-const TERRAIN_ROUGHNESS: f32 = 1.0;
-const TERRAIN_METALLIC: f32 = 0.0;
-const TERRAIN_ALPHA_THRESHOLD: f32 = 0.5;
+pub const TERRAIN_ROUGHNESS: f32 = 1.0;
+pub const TERRAIN_METALLIC: f32 = 0.0;
+pub const TERRAIN_ALPHA_THRESHOLD: f32 = 0.5;
 
-/// Historical pre-GLB lighting constants, originally mirrored from
-/// `game-engine/src/presentation/rendering/lighting.rs`.
-const SUN_MAX_LUX: f32 = 10_000.0;
-const POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 500.0;
-
-/// Indoor lighting/exposure, live-tuned against `prt_cas` at EV100 9.7 (see
-/// `notes/map-lighting-tuning.md`). Point lights get an 18x intensity boost
-/// (`500 -> 9000` lux-at-half-range) and doubled range; the RSW sun is pinned
-/// to a dim interior value; ambient sits at a slightly higher floor.
-const INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 9_000.0;
-const INDOOR_POINT_LIGHT_RANGE_SCALE: f32 = 2.0;
-const INDOOR_SUN_LUX: f32 = 200.0;
-const INDOOR_AMBIENT_BRIGHTNESS: f32 = 100.0;
-/// Indoor maps stay at Bevy's default `Exposure::BLENDER` (9.7), the exposure
-/// the indoor light values were tuned against.
-const INDOOR_EXPOSURE_EV100: f32 = 9.7;
-
-/// Outdoor lighting/exposure. Outdoor maps are idiomatic daylight read at
-/// EV100 10.5. The camera multiplier is `2^-ev100 / 1.2`; EV100 15 (the
-/// original sunny-16 anchor) left even a 30k lux sun below middle grey, and
-/// EV100 12 still read dim for RO's near-full-bright look. At EV100 10.5 the
-/// baked sun (up to `SUN_MAX_LUX`) renders sunlit ground near white while the
-/// ambient floor keeps shadowed terrain readable.
-const OUTDOOR_AMBIENT_BRIGHTNESS: f32 = 2_500.0;
-const OUTDOOR_EXPOSURE_EV100: f32 = 10.5;
-
-/// Everything the writer needs; the caller owns parsing and texture export.
-pub struct MapGlbInputs<'a> {
-    pub map_name: &'a str,
-    pub ground: &'a RoGround,
-    pub world: &'a RoWorld,
-    pub primitives: &'a [TerrainPrimitive],
-    pub textures: &'a [TextureOut],
-    /// Raw source bytes, hashed into `LIF_map` for provenance. The GAT bytes
-    /// are additionally embedded verbatim in the bin chunk.
-    pub gat_bytes: &'a [u8],
-    pub gnd_bytes: &'a [u8],
-    pub rsw_bytes: &'a [u8],
-    /// `RswModel::filename`s the per-map closure already converted to a
-    /// library glb (Converted or Skipped) -- what `lif_prop` flips to
-    /// `ro://models/...` instead of the native `ro://data/model/...` ref.
-    pub converted_models: &'a HashSet<String>,
-    /// Whether this map is listed in `data/indoorrswtable.txt`. Selects the
-    /// indoor lighting/exposure profile and is baked into `LIF_map`.
-    pub indoor: bool,
-}
-
-/// Preserves the historical `game-engine/src/utils/coordinates.rs::rsw_position_to_bevy` math.
-pub fn rsw_position_to_world(position: [f32; 3], map_width: f32, map_height: f32) -> Vec3 {
-    Vec3::new(
-        position[0] + (map_width * 5.0),
-        position[1],
-        position[2] + (map_height * 5.0),
-    )
-}
-
-/// Preserves historical `game-engine/src/utils/coordinates.rs::rsw_to_bevy_transform` math
-/// (mat4.rotateZ, then rotateX, then rotateY).
-pub fn rsw_model_rotation(model: &RswModel) -> Quat {
-    Quat::from_rotation_z(model.rotation[2].to_radians())
-        * Quat::from_rotation_x(model.rotation[0].to_radians())
-        * Quat::from_rotation_y(model.rotation[1].to_radians())
-}
-
-/// Port of Bevy's `Transform::look_to`, used by the native directional light.
-fn look_to_rotation(direction: Vec3, up: Vec3) -> Quat {
-    let back = -direction;
-    let right = up
-        .cross(back)
-        .try_normalize()
-        .unwrap_or_else(|| up.any_orthonormal_vector());
-    let up = back.cross(right);
-    Quat::from_mat3(&Mat3::from_cols(right, up, back))
-}
-
-/// World-space direction the RSW sun shines along, mirroring
-/// `lighting.rs::setup_directional_light`.
-pub fn sun_direction(light: &RswLight) -> Vec3 {
-    let elevation = (90.0 - light.latitude as f32).to_radians();
-    let azimuth = (light.longitude as f32).to_radians();
-
-    Vec3::new(
-        azimuth.cos() * elevation.cos(),
-        elevation.sin(),
-        azimuth.sin() * elevation.cos(),
-    )
-    .normalize()
-}
-
-/// The baked directional (sun) illuminance. Outdoor maps mirror
-/// `lighting.rs::calculate_global_lux` (RSW-derived, read at EV100 10.5). Indoor
-/// maps pin a dim interior value read at EV100 9.7.
-fn sun_illuminance(light: &RswLight, indoor: bool) -> f32 {
-    if indoor {
-        return INDOOR_SUN_LUX;
-    }
-    let diffuse_intensity = light.diffuse.iter().fold(0.0f32, |acc, &x| acc.max(x));
-    SUN_MAX_LUX * diffuse_intensity * light.opacity
-}
-
-/// Candela for a point light, chosen so Bevy's importer (`lumens = candela *
-/// 4 * pi`) lands on the native lumens from `lighting.rs::spawn_point_light`.
-/// Indoor maps use the boosted lux-at-half-range so interiors read at EV100 9.7.
-fn point_light_candela(light: &RswLightObj, indoor: bool) -> f32 {
-    let lux_at_half = if indoor {
-        INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE
-    } else {
-        POINT_LIGHT_LUX_AT_HALF_RANGE
-    };
-    let half_range = 0.5 * light.range;
-    lux_at_half * half_range * half_range
-}
-
-/// The baked point-light cutoff range. Indoor maps widen it so boosted
-/// interior lights still reach the far walls.
-pub fn point_light_range(light: &RswLightObj, indoor: bool) -> f32 {
-    if indoor {
-        light.range * INDOOR_POINT_LIGHT_RANGE_SCALE
-    } else {
-        light.range
-    }
-}
-
-/// Emits the terrain mesh (one primitive per ground texture) and returns its
-/// node, or `None` when the map has no ground geometry at all.
+/// Emits the terrain mesh (one primitive per non-empty primitive) and returns
+/// its node, or `None` when the map has no ground geometry at all.
 fn build_terrain_node(
     root: &mut json::Root,
     bin: &mut BinChunk,
@@ -242,8 +125,8 @@ fn build_primitive(
     )
 }
 
-/// One image + texture + material per exported ground texture, keyed by the
-/// GND texture name the primitives reference.
+/// One image + texture + material per ground texture, keyed by the texture
+/// name the primitives reference.
 ///
 /// The sampler complements the baked mip chain from `ktx2_out.rs`: linear
 /// min/mag/mipmap, clamp-to-edge. Two native `StandardMaterial` fields have no glTF core
@@ -253,7 +136,7 @@ fn build_primitive(
 /// on Bevy's back-face normal flipping.
 fn build_materials(
     root: &mut json::Root,
-    textures: &[TextureOut],
+    textures: &[TextureRef],
 ) -> BTreeMap<String, json::Index<json::Material>> {
     let sampler = json::Index::push(
         &mut root.samplers,
@@ -271,14 +154,15 @@ fn build_materials(
     textures
         .iter()
         .map(|texture| {
-            let base_color_texture = push_image_and_texture(root, texture, Some(sampler));
+            let base_color_texture =
+                push_image_and_texture(root, &texture.name, &texture.uri, Some(sampler));
             let material = json::Index::push(
                 &mut root.materials,
                 json::Material {
                     alpha_cutoff: Some(json::material::AlphaCutoff(TERRAIN_ALPHA_THRESHOLD)),
                     alpha_mode: Valid(json::material::AlphaMode::Mask),
                     double_sided: true,
-                    name: Some(texture.source_name.clone()),
+                    name: Some(texture.name.clone()),
                     pbr_metallic_roughness: json::material::PbrMetallicRoughness {
                         base_color_texture: Some(base_color_texture),
                         metallic_factor: json::material::StrengthFactor(TERRAIN_METALLIC),
@@ -289,7 +173,7 @@ fn build_materials(
                 },
             );
 
-            (texture.source_name.clone(), material)
+            (texture.name.clone(), material)
         })
         .collect()
 }
@@ -311,20 +195,20 @@ fn light_node_extensions(light: json::Index<KhrLight>) -> json::extensions::scen
     }
 }
 
-/// The RSW sun as a `KHR_lights_punctual` directional light. glTF directional
-/// lights shine along their node's local -Z, which is also Bevy's
-/// `Transform::forward`, so the node carries the native `looking_to` rotation
-/// pushed through the root fix.
+/// The directional (sun) light. glTF directional lights shine along their
+/// node's local -Z, which is also Bevy's `Transform::forward`, so the node
+/// carries the native `looking_to` rotation pushed through the root fix.
 fn build_sun_node(
     root: &mut json::Root,
-    light: &RswLight,
-    indoor: bool,
+    rotation: Quat,
+    color: [f32; 3],
+    lux: f32,
 ) -> json::Index<json::Node> {
     let index = push_light(
         root,
         KhrLight {
-            color: light.diffuse,
-            intensity: sun_illuminance(light, indoor),
+            color,
+            intensity: lux,
             range: None,
             spot: None,
             type_: Valid(KhrLightType::Directional),
@@ -334,13 +218,13 @@ fn build_sun_node(
         },
     );
 
-    let rotation = to_gltf_quat(look_to_rotation(sun_direction(light), Vec3::NEG_Y));
-
     json::Index::push(
         &mut root.nodes,
         json::Node {
             name: Some("sun".to_string()),
-            rotation: Some(json::scene::UnitQuaternion(rotation.to_array())),
+            rotation: Some(json::scene::UnitQuaternion(
+                to_gltf_quat(rotation).to_array(),
+            )),
             extensions: Some(light_node_extensions(index)),
             ..Default::default()
         },
@@ -349,204 +233,50 @@ fn build_sun_node(
 
 fn build_point_light_node(
     root: &mut json::Root,
-    light: &RswLightObj,
-    map_width: f32,
-    map_height: f32,
-    indoor: bool,
+    translation: Vec3,
+    color: [f32; 3],
+    candela: f32,
+    range: f32,
 ) -> json::Index<json::Node> {
     let index = push_light(
         root,
         KhrLight {
-            color: light.color,
-            intensity: point_light_candela(light, indoor),
-            range: Some(point_light_range(light, indoor)),
+            color,
+            intensity: candela,
+            range: Some(range),
             spot: None,
             type_: Valid(KhrLightType::Point),
-            name: Some(light.name.clone()),
+            name: Some("point_light".to_string()),
             extensions: None,
             extras: Default::default(),
         },
     );
 
-    let translation = to_gltf_vec(rsw_position_to_world(light.position, map_width, map_height));
-
     json::Index::push(
         &mut root.nodes,
         json::Node {
-            name: Some(light.name.clone()),
-            translation: Some(translation.to_array()),
+            name: Some("point_light".to_string()),
+            translation: Some(to_gltf_vec(translation).to_array()),
             extensions: Some(light_node_extensions(index)),
             ..Default::default()
         },
     )
 }
 
-/// The RSW objects that become nodes, in RSW order.
-///
-/// Rangeless/fileless sounds and models with no filename are dropped, exactly
-/// as `map_sounds.rs::spawn_map_sounds` and `models.rs::load_rsm_assets` drop
-/// them at runtime; emitting them would only create nodes the runtime has to
-/// ignore again. Validation walks the very same list.
-pub fn emitted_objects(world: &RoWorld) -> impl Iterator<Item = &RswObject> {
-    world
-        .objects
-        .iter()
-        .filter(|object| match object {
-            RswObject::Sound(sound) => sound.range > 0.0 && !sound.wav_file.is_empty(),
-            RswObject::Model(model) => !model.filename.is_empty(),
-            _ => true,
-        })
-        .filter(|object| is_representable(object))
-}
-
-/// Whether every number this object contributes to the glb is a real number.
-///
-/// Retail data is not always sane. `t_garden.rsw` places four
-/// `ilusion\waterpond_s_01.rsm2` props whose position, rotation and scale are
-/// literal NaN; `gl_step.rsw` has a light at a NaN height; `ecl_in01.rsw` has
-/// three nameless lights of range 7.2e22, whose candela overflows to infinity.
-/// None of that describes anything the runtime could place, and glTF cannot
-/// even carry it -- JSON has no NaN or infinity, so `serde_json` writes `null`
-/// where a number belongs and the file no longer parses as glTF.
-///
-/// So such an object is dropped like the other unplaceable records above. The
-/// check covers the values actually written, derived ones included, rather
-/// than the raw fields alone: `ecl_in01`'s ranges are finite, and only the
-/// candela computed from them is not.
-pub fn is_representable(object: &RswObject) -> bool {
-    let numbers: Vec<f32> = match object {
-        RswObject::Model(model) => model
-            .position
-            .iter()
-            .chain(&model.rotation)
-            .chain(&model.scale)
-            .copied()
-            .chain([model.anim_speed])
-            .collect(),
-        RswObject::Light(light) => light
-            .position
-            .iter()
-            .chain(&light.color)
-            .copied()
-            .chain([light.range, point_light_candela(light, false)])
-            .collect(),
-        RswObject::Sound(sound) => sound
-            .position
-            .iter()
-            .copied()
-            .chain([sound.volume, sound.range, sound.cycle])
-            .collect(),
-        RswObject::Effect(effect) => effect
-            .position
-            .iter()
-            .chain(&effect.params)
-            .copied()
-            .chain([effect.emit_speed])
-            .collect(),
-    };
-
-    numbers.iter().all(|value| value.is_finite())
-}
-
-/// The RSW name of an object, for reporting.
-pub fn object_name(object: &RswObject) -> &str {
-    match object {
-        RswObject::Model(model) => &model.name,
-        RswObject::Light(light) => &light.name,
-        RswObject::Sound(sound) => &sound.name,
-        RswObject::Effect(effect) => &effect.name,
-    }
-}
-
-pub fn lif_audio(sound: &RswSound) -> lif::LifAudio {
-    lif::LifAudio {
-        name: sound.name.clone(),
-        file: format!("ro://data/wav/{}", to_forward_slashes(&sound.wav_file)),
-        volume: sound.volume,
-        range: sound.range,
-        cycle: sound.cycle,
-    }
-}
-
-pub fn lif_effect(effect: &RswEffect) -> lif::LifEffect {
-    lif::LifEffect {
-        name: effect.name.clone(),
-        effect_type: effect.effect_type,
-        emit_speed: effect.emit_speed,
-        params: effect.params,
-    }
-}
-
-/// `converted` holds the models the per-map closure already turned into a
-/// library glb. Every returned reference ends in `.glb`; a native fallback is
-/// rejected rather than emitted.
-pub fn lif_prop(model: &RswModel, converted: &HashSet<String>) -> anyhow::Result<lif::LifProp> {
-    if !converted.contains(&model.filename) {
-        anyhow::bail!("prop '{}' was not converted to a .glb", model.filename);
-    }
-    Ok(lif::LifProp {
-        model: format!(
-            "ro://models/{}",
-            crate::converters::model::glb_relative_path(&model.filename)
-        ),
-        anim_type: model.anim_type,
-        anim_speed: model.anim_speed,
-    })
-}
-
-/// Lights, sound/effect emitters and prop references, in RSW order.
-fn build_object_nodes(
-    root: &mut json::Root,
-    world: &RoWorld,
-    map_width: f32,
-    map_height: f32,
-    converted_models: &HashSet<String>,
-    indoor: bool,
-) -> anyhow::Result<Vec<json::Index<json::Node>>> {
-    let mut nodes = Vec::new();
-
-    for object in emitted_objects(world) {
-        let node = match object {
-            RswObject::Light(light) => {
-                build_point_light_node(root, light, map_width, map_height, indoor)
-            }
-            RswObject::Sound(sound) => emitter_node(
-                root,
-                &sound.name,
-                rsw_position_to_world(sound.position, map_width, map_height),
-                extras_for(lif::EXTRAS_AUDIO, &lif_audio(sound))?,
-            ),
-            RswObject::Effect(effect) => emitter_node(
-                root,
-                &effect.name,
-                rsw_position_to_world(effect.position, map_width, map_height),
-                extras_for(lif::EXTRAS_EFFECT, &lif_effect(effect))?,
-            ),
-            RswObject::Model(model) => {
-                build_prop_node(root, model, map_width, map_height, converted_models)?
-            }
-        };
-        nodes.push(node);
-    }
-
-    Ok(nodes)
-}
-
 fn emitter_node(
     root: &mut json::Root,
-    name: &str,
-    world_position: Vec3,
-    extras: json::Extras,
-) -> json::Index<json::Node> {
-    json::Index::push(
+    node: &MapNode<impl serde::Serialize>,
+    extras_key: &str,
+) -> anyhow::Result<json::Index<json::Node>> {
+    Ok(json::Index::push(
         &mut root.nodes,
         json::Node {
-            name: Some(name.to_string()),
-            translation: Some(to_gltf_vec(world_position).to_array()),
-            extras,
+            name: Some(node.name.clone()),
+            translation: Some(to_gltf_vec(node.translation).to_array()),
+            extras: extras_for(extras_key, &node.payload)?,
             ..Default::default()
         },
-    )
+    ))
 }
 
 /// Prop node with the RSW placement fully baked, so the runtime only parents
@@ -558,30 +288,61 @@ fn emitter_node(
 /// the emitter nodes, which have no children.
 fn build_prop_node(
     root: &mut json::Root,
-    model: &RswModel,
-    map_width: f32,
-    map_height: f32,
-    converted_models: &HashSet<String>,
+    node: &MapNode<lif::LifProp>,
 ) -> anyhow::Result<json::Index<json::Node>> {
-    let translation = to_gltf_vec(rsw_position_to_world(model.position, map_width, map_height));
-    let rotation = to_gltf_quat(rsw_model_rotation(model)) * ROOT_FIX;
-    let extras = extras_for(lif::EXTRAS_PROP, &lif_prop(model, converted_models)?)?;
+    let rotation = to_gltf_quat(node.rotation) * ROOT_FIX;
+    let extras = extras_for(lif::EXTRAS_PROP, &node.payload)?;
 
     Ok(json::Index::push(
         &mut root.nodes,
         json::Node {
-            name: Some(model.name.clone()),
-            translation: Some(translation.to_array()),
+            name: Some(node.name.clone()),
+            translation: Some(to_gltf_vec(node.translation).to_array()),
             rotation: Some(json::scene::UnitQuaternion(rotation.to_array())),
-            scale: Some(model.scale),
+            scale: Some(node.scale.to_array()),
             extras,
             ..Default::default()
         },
     ))
 }
 
-/// Assemble and write `<out_path>` as a binary glTF.
-pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
+/// Every object node, in document order: lights, props, sounds, effects.
+fn build_object_nodes(
+    root: &mut json::Root,
+    doc: &MapDocument,
+) -> anyhow::Result<Vec<json::Index<json::Node>>> {
+    let mut nodes = Vec::new();
+
+    for light in &doc.lights {
+        nodes.push(match light {
+            MapLight::Sun {
+                rotation,
+                color,
+                lux,
+            } => build_sun_node(root, *rotation, *color, *lux),
+            MapLight::Point {
+                translation,
+                color,
+                candela,
+                range,
+            } => build_point_light_node(root, *translation, *color, *candela, *range),
+        });
+    }
+    for prop in &doc.props {
+        nodes.push(build_prop_node(root, prop)?);
+    }
+    for sound in &doc.sounds {
+        nodes.push(emitter_node(root, sound, lif::EXTRAS_AUDIO)?);
+    }
+    for effect in &doc.effects {
+        nodes.push(emitter_node(root, effect, lif::EXTRAS_EFFECT)?);
+    }
+
+    Ok(nodes)
+}
+
+/// Assemble `doc` into one binary glTF byte buffer.
+pub fn write_map_glb(doc: &MapDocument) -> anyhow::Result<Vec<u8>> {
     let mut root = json::Root {
         asset: json::Asset {
             generator: Some("ro-to-lifthrasir-cli".to_string()),
@@ -592,41 +353,21 @@ pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
     };
     let mut bin = BinChunk::default();
 
-    let materials = build_materials(&mut root, inputs.textures);
+    let materials = build_materials(&mut root, &doc.textures);
     let mut children = Vec::new();
     children.extend(build_terrain_node(
         &mut root,
         &mut bin,
-        inputs.primitives,
+        &doc.terrain,
         &materials,
     )?);
-
-    let map_width = inputs.ground.width as f32;
-    let map_height = inputs.ground.height as f32;
-    children.push(build_sun_node(
-        &mut root,
-        &inputs.world.light,
-        inputs.indoor,
-    ));
-    children.extend(
-        build_object_nodes(
-            &mut root,
-            inputs.world,
-            map_width,
-            map_height,
-            inputs.converted_models,
-            inputs.indoor,
-        )
-        .map_err(|error| {
-            anyhow::anyhow!("building props for map '{}': {error}", inputs.map_name)
-        })?,
-    );
+    children.extend(build_object_nodes(&mut root, doc)?);
 
     let scene_root = json::Index::push(
         &mut root.nodes,
         json::Node {
             children: Some(children),
-            name: Some(inputs.map_name.to_string()),
+            name: Some(doc.name.clone()),
             ..Default::default()
         },
     );
@@ -634,14 +375,14 @@ pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
         &mut root.scenes,
         json::Scene {
             nodes: vec![scene_root],
-            name: Some(inputs.map_name.to_string()),
+            name: Some(doc.name.clone()),
             extensions: None,
             extras: Default::default(),
         },
     );
     root.scene = Some(scene);
 
-    build_root_extensions(&mut root, &mut bin, inputs)?;
+    build_root_extensions(&mut root, &mut bin, doc)?;
 
     root.buffers.push(json::Buffer {
         byte_length: USize64::from(bin.data.len()),
@@ -653,55 +394,41 @@ pub fn write_glb(out_path: &Path, inputs: &MapGlbInputs) -> anyhow::Result<()> {
     root.buffer_views = std::mem::take(&mut bin.views);
 
     let json_bytes = json::serialize::to_vec(&root).context("serializing glTF JSON")?;
-    std::fs::write(out_path, glb_container(&json_bytes, &bin.data))
-        .with_context(|| format!("writing {}", out_path.display()))?;
+    Ok(glb_container(&json_bytes, &bin.data))
+}
 
+/// Assemble `doc` and write it to `<out_path>`.
+pub fn write_glb(out_path: &Path, doc: &MapDocument) -> anyhow::Result<()> {
+    let bytes = write_map_glb(doc)?;
+    std::fs::write(out_path, bytes).with_context(|| format!("writing {}", out_path.display()))?;
     Ok(())
 }
 
-/// Root extensions: `LIF_map` always, `LIF_gat` with the source `.gat` bytes
-/// embedded verbatim in the bin chunk, and `LIF_water` when any resolved zone
-/// declares a non-zero water level.
+/// Root extensions: `LIF_map` always, `LIF_gat` with the map's `.gat` bytes
+/// embedded verbatim in the bin chunk, and `LIF_water` when the document has
+/// water zones.
 fn build_root_extensions(
     root: &mut json::Root,
     bin: &mut BinChunk,
-    inputs: &MapGlbInputs,
+    doc: &MapDocument,
 ) -> anyhow::Result<()> {
-    let altitude = RoAltitude::from_bytes(inputs.gat_bytes)
-        .with_context(|| format!("parsing GAT of map '{}'", inputs.map_name))?;
-    let gat_view = bin.push_view(inputs.gat_bytes, None);
+    let gat_bytes = doc
+        .gat
+        .to_bytes()
+        .with_context(|| format!("serializing GAT of map '{}'", doc.name))?;
+    let gat_view = bin.push_view(&gat_bytes, None);
 
-    let map = lif::LifMap {
-        format_version: lif::MAP_FORMAT_VERSION,
-        source: Some(lif::LifSource {
-            rsw_hash: hash_hex(inputs.rsw_bytes),
-            gnd_hash: hash_hex(inputs.gnd_bytes),
-            gat_hash: hash_hex(inputs.gat_bytes),
-        }),
-        ambient_color: inputs.world.light.ambient,
-        no_shade_tint: lif::no_shade_tint(inputs.world.light.ambient, inputs.world.light.diffuse),
-        indoor: inputs.indoor,
-        ambient_brightness: if inputs.indoor {
-            INDOOR_AMBIENT_BRIGHTNESS
-        } else {
-            OUTDOOR_AMBIENT_BRIGHTNESS
-        },
-        exposure_ev100: if inputs.indoor {
-            INDOOR_EXPOSURE_EV100
-        } else {
-            OUTDOOR_EXPOSURE_EV100
-        },
-    };
     let gat = lif::LifGat {
-        width: altitude.width,
-        height: altitude.height,
+        width: doc.gat.width,
+        height: doc.gat.height,
         buffer_view: gat_view.value() as u32,
     };
 
     let extensions = root.extensions.get_or_insert_with(Default::default);
-    extensions
-        .others
-        .insert(lif::EXTENSION_MAP.to_string(), serde_json::to_value(&map)?);
+    extensions.others.insert(
+        lif::EXTENSION_MAP.to_string(),
+        serde_json::to_value(&doc.meta)?,
+    );
     extensions
         .others
         .insert(lif::EXTENSION_GAT.to_string(), serde_json::to_value(gat)?);
@@ -712,26 +439,31 @@ fn build_root_extensions(
         lif::EXTENSION_GAT.to_string(),
     ];
 
-    let mut resolved_water = water::resolve_water(inputs.ground, &inputs.world.water)?;
-    if resolved_water.zones.iter().any(|zone| zone.level != 0.0) {
-        let width = inputs.ground.width as usize;
-        let height = inputs.ground.height as usize;
-        let mask = lif::encode_water_mask(
-            &water::select_water_tiles(inputs.ground, &resolved_water),
-            width,
-            height,
-        );
-        resolved_water.buffer_view = bin.push_view(&mask, None).value() as usize;
-        root.extensions
-            .get_or_insert_with(Default::default)
-            .others
-            .insert(
-                lif::EXTENSION_WATER.to_string(),
-                serde_json::to_value(resolved_water)?,
-            );
-        root.extensions_used.push(lif::EXTENSION_WATER.to_string());
-    }
+    let Some(water) = &doc.water else {
+        return Ok(());
+    };
+    write_water_extension(root, bin, water)?;
+    root.extensions_used.push(lif::EXTENSION_WATER.to_string());
+    Ok(())
+}
 
+fn write_water_extension(
+    root: &mut json::Root,
+    bin: &mut BinChunk,
+    water: &MapWater,
+) -> anyhow::Result<()> {
+    let width = water.zones.width as usize;
+    let height = water.zones.height as usize;
+    let mask = lif::encode_water_mask(&water.tiles, width, height);
+    let mut zones = water.zones.clone();
+    zones.buffer_view = bin.push_view(&mask, None).value() as usize;
+    root.extensions
+        .get_or_insert_with(Default::default)
+        .others
+        .insert(
+            lif::EXTENSION_WATER.to_string(),
+            serde_json::to_value(zones)?,
+        );
     Ok(())
 }
 
@@ -739,10 +471,12 @@ fn build_root_extensions(
 mod tests {
     use super::*;
     use crate::converters::map::fixtures::{
-        TEXTURE, mini_ground, mini_world, raw_gat, textures, write_fixture, write_fixture_ktx2,
+        TEXTURE, document_for, mini_ground, mini_world, raw_gat, textures, write_fixture,
+        write_fixture_ktx2,
     };
     use crate::converters::map::terrain::build_terrain;
-    use ro_formats::CELL_SIZE;
+    use ro_formats::{CELL_SIZE, RswEffect, RswLightObj, RswModel, RswObject, RswSound};
+    use std::collections::HashSet;
     use std::f32::consts::PI;
 
     /// Retail RSWs carry numbers glTF has no way to express: `t_garden`'s
@@ -956,7 +690,7 @@ mod tests {
     fn lif_water_buffer_view_holds_the_selected_gnd_mask() {
         let mut fixture = write_fixture();
         fixture.ground.surfaces[0].height = [12.0; 4];
-        write_glb(&fixture.path, &fixture.inputs()).expect("rewrite glb");
+        write_glb(&fixture.path, &fixture.document()).expect("rewrite glb");
 
         let (document, buffers) = reopen(&fixture.path);
         let root_json = document.into_json();
@@ -1036,22 +770,21 @@ mod tests {
         world.water.level = 0.0;
         let path = dir.path().join("dry.glb");
 
-        write_glb(
-            &path,
-            &MapGlbInputs {
-                map_name: "dry",
-                ground: &ground,
-                world: &world,
-                primitives: &build_terrain(&ground).expect("terrain"),
-                textures: &textures(),
-                gat_bytes: &raw_gat(4, 4),
-                gnd_bytes: b"gnd",
-                rsw_bytes: b"rsw",
-                converted_models: &HashSet::from(["prontera\\tree01.rsm".to_string()]),
-                indoor: false,
-            },
+        let primitives = build_terrain(&ground).expect("terrain");
+        let document = document_for(
+            "dry",
+            &ground,
+            &world,
+            &primitives,
+            &textures(),
+            &raw_gat(4, 4),
+            b"gnd",
+            b"rsw",
+            &HashSet::from(["prontera\\tree01.rsm".to_string()]),
+            false,
         )
-        .expect("write glb");
+        .expect("document");
+        write_glb(&path, &document).expect("write glb");
 
         let (document, _) = reopen(&path);
         let root_json = document.into_json();
@@ -1132,22 +865,21 @@ mod tests {
         let world = mini_world();
         let path = dir.path().join("indoor.glb");
 
-        write_glb(
-            &path,
-            &MapGlbInputs {
-                map_name: "indoor",
-                ground: &ground,
-                world: &world,
-                primitives: &build_terrain(&ground).expect("terrain"),
-                textures: &textures(),
-                gat_bytes: &raw_gat(ground.width * 2, ground.height * 2),
-                gnd_bytes: b"gnd-bytes",
-                rsw_bytes: b"rsw-bytes",
-                converted_models: &HashSet::from(["prontera\\tree01.rsm".to_string()]),
-                indoor: true,
-            },
+        let primitives = build_terrain(&ground).expect("terrain");
+        let document = document_for(
+            "indoor",
+            &ground,
+            &world,
+            &primitives,
+            &textures(),
+            &raw_gat(ground.width * 2, ground.height * 2),
+            b"gnd-bytes",
+            b"rsw-bytes",
+            &HashSet::from(["prontera\\tree01.rsm".to_string()]),
+            true,
         )
-        .expect("write glb");
+        .expect("document");
+        write_glb(&path, &document).expect("write glb");
 
         let root_json = reopen(&path).0.into_json();
         let extensions = root_json.extensions.as_ref().expect("root extensions");
@@ -1268,24 +1000,21 @@ mod tests {
 
     #[test]
     fn an_unconverted_prop_fails_naming_the_model_and_map() {
-        let dir = tempfile::tempdir().expect("tempdir");
         let ground = mini_ground();
         let world = mini_world();
 
-        let err = write_glb(
-            &dir.path().join("mini.glb"),
-            &MapGlbInputs {
-                map_name: "mini",
-                ground: &ground,
-                world: &world,
-                primitives: &build_terrain(&ground).expect("terrain"),
-                textures: &textures(),
-                gat_bytes: &raw_gat(4, 4),
-                gnd_bytes: b"gnd",
-                rsw_bytes: b"rsw",
-                converted_models: &HashSet::new(),
-                indoor: false,
-            },
+        let primitives = build_terrain(&ground).expect("terrain");
+        let err = document_for(
+            "mini",
+            &ground,
+            &world,
+            &primitives,
+            &textures(),
+            &raw_gat(4, 4),
+            b"gnd",
+            b"rsw",
+            &HashSet::new(),
+            false,
         )
         .expect_err("a native prop reference must fail");
 
@@ -1328,22 +1057,23 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let ground = mini_ground();
 
-        let err = write_glb(
-            &dir.path().join("mini.glb"),
-            &MapGlbInputs {
-                map_name: "mini",
-                ground: &ground,
-                world: &mini_world(),
-                primitives: &build_terrain(&ground).expect("terrain"),
-                textures: &[],
-                gat_bytes: &raw_gat(4, 4),
-                gnd_bytes: b"gnd",
-                rsw_bytes: b"rsw",
-                converted_models: &HashSet::new(),
-                indoor: false,
-            },
+        let world = mini_world();
+        let primitives = build_terrain(&ground).expect("terrain");
+        let document = document_for(
+            "mini",
+            &ground,
+            &world,
+            &primitives,
+            &[],
+            &raw_gat(4, 4),
+            b"gnd",
+            b"rsw",
+            &HashSet::from(["prontera\\tree01.rsm".to_string()]),
+            false,
         )
-        .expect_err("missing texture must fail");
+        .expect("document");
+        let err = write_glb(&dir.path().join("mini.glb"), &document)
+            .expect_err("missing texture must fail");
 
         assert!(err.to_string().contains(TEXTURE), "unexpected error: {err}");
     }

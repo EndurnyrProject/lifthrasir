@@ -3,9 +3,10 @@
 //! raw GAT buffer in the real on-disk layout.
 
 use crate::converters::ktx2_out::encode_ktx2;
+use crate::converters::map::document::{MapDocument, RetailInputs};
 use crate::converters::map::terrain::{TerrainPrimitive, build_terrain};
 use crate::converters::map::textures::TextureOut;
-use crate::converters::map::writer::{MapGlbInputs, write_glb};
+use crate::converters::map::writer::write_glb;
 use image::{Rgba, RgbaImage};
 use lifthrasir_data::lif;
 use ro_formats::{
@@ -160,20 +161,50 @@ pub struct Fixture {
 }
 
 impl Fixture {
-    pub fn inputs(&self) -> MapGlbInputs<'_> {
-        MapGlbInputs {
-            map_name: "mini",
-            ground: &self.ground,
-            world: &self.world,
-            primitives: &self.primitives,
-            textures: &self.textures,
-            gat_bytes: &self.gat,
-            gnd_bytes: &self.gnd_bytes,
-            rsw_bytes: &self.rsw_bytes,
-            converted_models: &self.converted_models,
-            indoor: false,
-        }
+    pub fn document(&self) -> MapDocument {
+        document_for(
+            "mini",
+            &self.ground,
+            &self.world,
+            &self.primitives,
+            &self.textures,
+            &self.gat,
+            &self.gnd_bytes,
+            &self.rsw_bytes,
+            &self.converted_models,
+            false,
+        )
+        .expect("map document")
     }
+}
+
+/// Builds a document from retail-shaped parts without touching the GRFs.
+#[allow(clippy::too_many_arguments)]
+pub fn document_for(
+    map_name: &str,
+    ground: &RoGround,
+    world: &RoWorld,
+    primitives: &[TerrainPrimitive],
+    textures: &[TextureOut],
+    gat: &[u8],
+    gnd_bytes: &[u8],
+    rsw_bytes: &[u8],
+    converted_models: &HashSet<String>,
+    indoor: bool,
+) -> anyhow::Result<MapDocument> {
+    MapDocument::from_retail(RetailInputs {
+        map_name,
+        ground,
+        world,
+        primitives,
+        textures,
+        gat_bytes: gat,
+        gnd_bytes,
+        rsw_bytes,
+        converted_models,
+        indoor,
+    })
+    .map(|(document, _)| document)
 }
 
 /// Writes `mini.glb` (plus its texture KTX2) into a temp dir and hands back
@@ -200,7 +231,7 @@ pub fn write_fixture() -> Fixture {
         textures: textures(),
         converted_models: HashSet::from(["prontera\\tree01.rsm".to_string()]),
     };
-    write_glb(&fixture.path, &fixture.inputs()).expect("write glb");
+    write_glb(&fixture.path, &fixture.document()).expect("write glb");
     fixture
 }
 
@@ -226,22 +257,20 @@ fn regenerate_game_engine_fixtures() {
     let primitives = build_terrain(&ground).expect("terrain");
     let good = out.join("mini_map.glb");
 
-    write_glb(
-        &good,
-        &MapGlbInputs {
-            map_name: "mini_map",
-            ground: &ground,
-            world: &world,
-            primitives: &primitives,
-            textures: &textures(),
-            gat_bytes: &gat,
-            gnd_bytes: b"gnd-bytes",
-            rsw_bytes: b"rsw-bytes",
-            converted_models: &HashSet::from(["prontera\\tree01.rsm".to_string()]),
-            indoor: false,
-        },
+    let document = document_for(
+        "mini_map",
+        &ground,
+        &world,
+        &primitives,
+        &textures(),
+        &gat,
+        b"gnd-bytes",
+        b"rsw-bytes",
+        &HashSet::from(["prontera\\tree01.rsm".to_string()]),
+        false,
     )
-    .expect("write mini_map.glb");
+    .expect("mini_map document");
+    write_glb(&good, &document).expect("write mini_map.glb");
 
     // The same document declaring a format the runtime does not support.
     let version = patched_glb(
