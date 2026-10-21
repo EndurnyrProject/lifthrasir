@@ -6,6 +6,7 @@ use bevy::{
     prelude::*,
     window::PrimaryWindow,
 };
+use bevy_egui::PrimaryEguiContext;
 use bevy_kira_audio::SpatialAudioReceiver;
 use lifthrasir_runtime::audio::ContentAudioListener;
 use std::f32::consts::FRAC_PI_4;
@@ -55,6 +56,9 @@ pub fn spawn_editor_camera(mut commands: Commands) {
         }),
         ContentAudioListener,
         SpatialAudioReceiver,
+        // Explicit, since the preview camera also renders and egui would
+        // otherwise attach to whichever camera it sees first.
+        PrimaryEguiContext,
     ));
 }
 

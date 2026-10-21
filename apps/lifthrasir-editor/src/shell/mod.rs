@@ -3,6 +3,7 @@
 pub mod browser;
 pub mod camera;
 pub mod node;
+pub mod preview;
 pub mod ui;
 pub mod undo;
 

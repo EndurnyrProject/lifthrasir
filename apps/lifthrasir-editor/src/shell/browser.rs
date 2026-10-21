@@ -1,7 +1,10 @@
 //! The asset browser: an index of the `ro://` source's placeable assets and
 //! a filterable left panel to pick one.
 
-use super::ui::{EditorUiArea, EditorUiSet};
+use super::{
+    preview::{PreviewPlugin, PreviewState, preview_ui},
+    ui::{EditorUiArea, EditorUiSet},
+};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use lifthrasir_assets::{
@@ -74,12 +77,13 @@ struct BrowserPanel {
 }
 
 /// Indexes the source at startup, adds effects once the catalog loads, and
-/// draws the browser panel.
+/// draws the browser panel with the selection's preview.
 pub struct BrowserPlugin;
 
 impl Plugin for BrowserPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<AssetIndex>()
+        app.add_plugins(PreviewPlugin)
+            .init_resource::<AssetIndex>()
             .init_resource::<BrowserSelection>()
             .init_resource::<BrowserPanel>()
             .add_systems(Startup, index_source)
@@ -118,6 +122,7 @@ fn index_effects(mut index: ResMut<AssetIndex>, catalog: Res<EffectCatalog>) {
     index.effects = catalog.special_ids().collect();
 }
 
+#[allow(clippy::too_many_arguments)]
 fn browser_panel(
     mut contexts: EguiContexts,
     mut area: ResMut<EditorUiArea>,
@@ -126,7 +131,9 @@ fn browser_panel(
     mut selection: ResMut<BrowserSelection>,
     source: Res<SharedCompositeAssetSource>,
     catalog: Option<Res<EffectCatalog>>,
+    mut preview: ResMut<PreviewState>,
 ) -> Result {
+    let textures = preview.texture_ids(&mut contexts);
     let ctx = contexts.ctx_mut()?;
     let panel = &mut *panel;
     let mut refresh = false;
@@ -151,6 +158,9 @@ fn browser_panel(
                     refresh = ui.button("Refresh").clicked();
                 });
                 ui.separator();
+                egui::Panel::bottom("browser_preview").show(ui, |ui| {
+                    preview_ui(ui, &selection, &mut preview, &textures);
+                });
                 if panel.tab == BrowserTab::Effects && catalog.is_none() {
                     ui.label("Effect catalog loading…");
                     return;

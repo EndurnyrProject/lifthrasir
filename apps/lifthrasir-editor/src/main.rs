@@ -7,7 +7,7 @@ use bevy::{
     gltf::GltfPlugin, image::ImageSamplerDescriptor, picking::mesh_picking::MeshPickingPlugin,
     prelude::*,
 };
-use bevy_egui::EguiPlugin;
+use bevy_egui::{EguiGlobalSettings, EguiPlugin};
 use lifthrasir_assets::{
     ContentAssetsPlugin,
     catalogs::ContentCatalogPlugin,
@@ -54,6 +54,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             })
             .disable::<bevy::audio::AudioPlugin>(),
     )
+    // The editor camera carries `PrimaryEguiContext`; never the preview camera.
+    .insert_resource(EguiGlobalSettings {
+        auto_create_primary_context: false,
+        ..default()
+    })
     .add_plugins((
         ContentAssetsPlugin,
         ContentCatalogPlugin,
