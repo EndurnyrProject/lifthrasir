@@ -37,9 +37,37 @@ pub fn to_gltf_vec(v: Vec3) -> Vec3 {
     Vec3::new(v.x, -v.y, -v.z)
 }
 
-/// Native world rotation -> glTF node rotation.
+/// Native world rotation -> glTF node rotation: `ROOT_FIX⁻¹ * q`, spelled out
+/// as a sign/permutation. Zero components are written as `+0` (`+ 0.0` turns
+/// `-0` into `+0` and leaves every other value alone), so the output does not
+/// depend on how a SIMD product happens to sign its zeros and
+/// `to_gltf_quat(from_gltf_quat(q)) == q` bit for bit for every quaternion
+/// this function wrote.
 pub fn to_gltf_quat(q: Quat) -> Quat {
-    ROOT_FIX.inverse() * q
+    Quat::from_xyzw(-q.w + 0.0, q.z + 0.0, -q.y + 0.0, q.x + 0.0)
+}
+
+/// glTF position -> native world position; the exact inverse of [`to_gltf_vec`].
+pub fn from_gltf_vec(v: Vec3) -> Vec3 {
+    Vec3::new(v.x, -v.y, -v.z)
+}
+
+/// glTF node rotation -> native world rotation (`ROOT_FIX * q`); inverts
+/// [`to_gltf_quat`].
+pub fn from_gltf_quat(q: Quat) -> Quat {
+    Quat::from_xyzw(q.w, -q.z, q.y, -q.x)
+}
+
+/// Native prop rotation -> glTF prop node rotation: the conjugation
+/// `ROOT_FIX⁻¹ * q * ROOT_FIX` spelled out, zeros written as `+0` like
+/// [`to_gltf_quat`].
+pub fn prop_rotation_to_gltf(q: Quat) -> Quat {
+    Quat::from_xyzw(q.x + 0.0, -q.y + 0.0, -q.z + 0.0, q.w + 0.0)
+}
+
+/// glTF prop node rotation -> native rotation; inverts [`prop_rotation_to_gltf`].
+pub fn prop_rotation_from_gltf(q: Quat) -> Quat {
+    Quat::from_xyzw(q.x, -q.y, -q.z, q.w)
 }
 
 /// GRF paths are backslash-separated; the `ro://` namespace is not.
@@ -378,4 +406,95 @@ pub fn glb_container(json_bytes: &[u8], bin: &[u8]) -> Vec<u8> {
     }
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bits(q: Quat) -> [u32; 4] {
+        q.to_array().map(f32::to_bits)
+    }
+
+    /// Non-zero native rotations whose components cover signed zeros, so the
+    /// glTF values the writer emits (and the loader reads back) include both.
+    fn native_rotations() -> Vec<Quat> {
+        const VALUES: [f32; 6] = [0.0, -0.0, 0.5, -0.5, 0.70710677, -1.0];
+        let mut quats = Vec::new();
+        for x in VALUES {
+            for y in VALUES {
+                for z in VALUES {
+                    for w in VALUES {
+                        let q = Quat::from_xyzw(x, y, z, w);
+                        if q.length_squared() > 0.0 {
+                            quats.push(q);
+                        }
+                    }
+                }
+            }
+        }
+        quats
+    }
+
+    #[test]
+    fn vectors_round_trip_bitwise() {
+        let v = Vec3::new(-0.0, 0.0, 12.5);
+        let round = to_gltf_vec(from_gltf_vec(v));
+        assert_eq!(
+            round.to_array().map(f32::to_bits),
+            v.to_array().map(f32::to_bits)
+        );
+    }
+
+    #[test]
+    fn spelled_out_rotations_equal_the_root_fix_products() {
+        for native in native_rotations() {
+            assert_eq!(
+                to_gltf_quat(native).to_array(),
+                (ROOT_FIX.inverse() * native).to_array()
+            );
+            assert_eq!(
+                prop_rotation_to_gltf(native).to_array(),
+                (ROOT_FIX.inverse() * native * ROOT_FIX).to_array()
+            );
+        }
+    }
+
+    #[test]
+    fn loaded_rotations_round_trip_bitwise() {
+        let loaded = [
+            Quat::IDENTITY,
+            Quat::from_array([-0.9238795, 0.0, -0.38268346, 0.0]),
+            Quat::from_array([0.0, 0.0, 0.70710677, -0.70710677]),
+        ];
+        for q in loaded {
+            assert_eq!(bits(to_gltf_quat(from_gltf_quat(q))), bits(q), "{q:?}");
+            assert_eq!(
+                bits(prop_rotation_to_gltf(prop_rotation_from_gltf(q))),
+                bits(q),
+                "{q:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn node_rotations_round_trip_bitwise() {
+        for native in native_rotations() {
+            let gltf = to_gltf_quat(native);
+            assert_eq!(
+                bits(to_gltf_quat(from_gltf_quat(gltf))),
+                bits(gltf),
+                "{native:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn prop_rotations_round_trip_bitwise() {
+        for native in native_rotations() {
+            let gltf = prop_rotation_to_gltf(native);
+            let round = prop_rotation_to_gltf(prop_rotation_from_gltf(gltf));
+            assert_eq!(bits(round), bits(gltf), "{native:?}");
+        }
+    }
 }

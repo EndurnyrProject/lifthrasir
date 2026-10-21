@@ -133,6 +133,28 @@ pub fn build_terrain(ground: &RoGround) -> anyhow::Result<Vec<TerrainPrimitive>>
     Ok(batches.into_values().collect())
 }
 
+/// The chunk a quad was batched into, recovered from its native corners:
+/// the minimum X/Z of its footprint, minus half a cell on an axis where the
+/// footprint has no extent (a wall sits on its owner cell's far edge), divided
+/// by the chunk size. Primitives do not store their chunk in the glb.
+pub fn chunk_of_quad(native_corners: [[f32; 3]; 4]) -> [u32; 2] {
+    let axis = |index: usize| {
+        let (min, max) = native_corners
+            .iter()
+            .map(|corner| corner[index])
+            .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), value| {
+                (min.min(value), max.max(value))
+            });
+        let start = if max > min {
+            min
+        } else {
+            min - CELL_SIZE / 2.0
+        };
+        (start / (CHUNK_CELLS as f32 * CELL_SIZE)).floor() as u32
+    };
+    [axis(0), axis(2)]
+}
+
 enum WallDirection {
     /// Wall on the cell's Y+1 boundary, facing negative Z.
     Front,
@@ -348,6 +370,67 @@ pub fn smooth_normals(cells: &[[Vec3; 4]], width: usize, height: usize) -> Vec<[
 mod tests {
     use super::*;
     use ro_formats::{GndSurface, GndTile};
+
+    #[test]
+    fn chunk_of_quad_recovers_the_chunk_of_ground_quads() {
+        for primitive in build_terrain(&single_texture_ground(20, 20)).expect("build") {
+            for quad in primitive.positions.chunks(4) {
+                let corners = [quad[0], quad[1], quad[2], quad[3]];
+                assert_eq!(chunk_of_quad(corners), primitive.chunk);
+            }
+        }
+    }
+
+    #[test]
+    fn chunk_of_quad_puts_border_walls_in_their_owner_cell_chunk() {
+        let cs = CELL_SIZE;
+        // Front wall of cell (3, 15): on z = 16 cells, the chunk [0, 1] border.
+        let front = [
+            [3.0 * cs, 0.0, 16.0 * cs],
+            [4.0 * cs, 0.0, 16.0 * cs],
+            [3.0 * cs, -20.0, 16.0 * cs],
+            [4.0 * cs, -20.0, 16.0 * cs],
+        ];
+        assert_eq!(chunk_of_quad(front), [0, 0]);
+        // Right wall of cell (15, 3): on x = 16 cells, the chunk [1, 0] border.
+        let right = [
+            [16.0 * cs, 0.0, 3.0 * cs],
+            [16.0 * cs, 0.0, 4.0 * cs],
+            [16.0 * cs, -20.0, 3.0 * cs],
+            [16.0 * cs, -20.0, 4.0 * cs],
+        ];
+        assert_eq!(chunk_of_quad(right), [0, 0]);
+    }
+
+    #[test]
+    fn chunk_of_quad_matches_built_border_walls() {
+        let mut ground = single_texture_ground(17, 17);
+        let owner = 15 * 17 + 15;
+        ground.surfaces[owner].tile_front = 0;
+        ground.surfaces[owner].tile_right = 0;
+        ground.surfaces[owner].height = [-10.0; 4];
+
+        let primitives = build_terrain(&ground).expect("build");
+        let walls: Vec<_> = primitives
+            .iter()
+            .flat_map(|primitive| {
+                primitive
+                    .positions
+                    .chunks(4)
+                    .filter(|quad| {
+                        quad.iter().all(|v| v[0] == quad[0][0])
+                            || quad.iter().all(|v| v[2] == quad[0][2])
+                    })
+                    .map(move |quad| (primitive.chunk, [quad[0], quad[1], quad[2], quad[3]]))
+            })
+            .collect();
+
+        assert_eq!(walls.len(), 2);
+        for (chunk, corners) in walls {
+            assert_eq!(chunk, [0, 0]);
+            assert_eq!(chunk_of_quad(corners), chunk);
+        }
+    }
 
     fn single_texture_ground(width: u32, height: u32) -> RoGround {
         RoGround {

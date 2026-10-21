@@ -13,8 +13,8 @@
 //! `gltf_out` for the full note.
 
 use crate::converters::gltf_out::{
-    BinChunk, GeometryAttributes, ROOT_FIX, extras_for, glb_container, push_geometry_primitive,
-    push_image_and_texture, to_gltf_quat, to_gltf_vec,
+    BinChunk, GeometryAttributes, extras_for, glb_container, prop_rotation_to_gltf,
+    push_geometry_primitive, push_image_and_texture, to_gltf_quat, to_gltf_vec,
 };
 use crate::converters::map::document::{MapDocument, MapLight, MapNode, MapWater, TextureRef};
 use crate::converters::map::terrain::TerrainPrimitive;
@@ -329,13 +329,13 @@ fn emitter_node(
 ///
 /// The prop glb is Y-up (its root carries the native-to-world fix), so the
 /// node must map Y-up model space to the world: the native placement is
-/// conjugated by the fix, `FIX * q * FIX`, rather than only pre-rotated like
+/// conjugated by the fix, `FIX * q * FIX` (`prop_rotation_to_gltf`), rather than only pre-rotated like
 /// the emitter nodes, which have no children.
 fn build_prop_node(
     root: &mut json::Root,
     node: &MapNode<lif::LifProp>,
 ) -> anyhow::Result<json::Index<json::Node>> {
-    let rotation = to_gltf_quat(node.rotation) * ROOT_FIX;
+    let rotation = prop_rotation_to_gltf(node.rotation);
     let extras = extras_for(lif::EXTRAS_PROP, &node.payload)?;
 
     Ok(json::Index::push(
@@ -533,6 +533,7 @@ fn write_water_extension(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::converters::gltf_out::ROOT_FIX;
     use crate::converters::map::fixtures::{
         TEXTURE, document_for, mini_ground, mini_world, raw_gat, textures, write_fixture,
         write_fixture_ktx2,
