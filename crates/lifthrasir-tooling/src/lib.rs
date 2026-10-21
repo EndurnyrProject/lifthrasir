@@ -1,7 +1,7 @@
 //! Offline content conversion, independent of Bevy and client policy.
 
 mod config;
-mod converters;
+pub mod converters;
 mod decompile;
 mod encoding;
 mod grf_vfs;

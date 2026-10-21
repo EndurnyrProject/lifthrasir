@@ -265,7 +265,7 @@ mod tests {
     /// different images, so they must not share a pooled KTX2.
     #[test]
     fn the_same_stem_under_two_extensions_stays_distinct() {
-        let names = vec![
+        let names = [
             "izlude\\iz_rookie_06.bmp".to_string(),
             "izlude\\iz_rookie_06.tga".to_string(),
         ];
@@ -275,7 +275,7 @@ mod tests {
 
     #[test]
     fn distinct_subdirs_same_basename_produce_distinct_sanitized_names() {
-        let names = vec!["floor\\dirt.bmp".to_string(), "wall\\dirt.bmp".to_string()];
+        let names = ["floor\\dirt.bmp".to_string(), "wall\\dirt.bmp".to_string()];
 
         assert_ne!(sanitize_name(&names[0]), sanitize_name(&names[1]));
         assert_eq!(sanitize_name(&names[0]), "floor_dirt_bmp");
@@ -286,7 +286,7 @@ mod tests {
     /// characters alone collapses distinct names onto the same underscore run.
     #[test]
     fn distinct_korean_names_produce_distinct_sanitized_names() {
-        let names = vec![
+        let names = [
             "필드바닥\\prt_초원04.bmp".to_string(),
             "필드바닥\\prt_언덕04.bmp".to_string(),
         ];
@@ -303,7 +303,7 @@ mod tests {
     /// file and must pool as one KTX2 rather than read as a collision.
     #[test]
     fn case_only_spelling_differences_are_one_texture() {
-        let names = vec![
+        let names = [
             "verus\\ver_h_03.BMP".to_string(),
             "verus\\ver_h_03.bmp".to_string(),
             "필드바닥\\PRT_초원04.bmp".to_string(),
