@@ -14,47 +14,71 @@ pub enum GatError {
     ParseError(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GatCellType(u32);
+/// A GAT cell type. The retail file stores one `u32` per cell; the parser keeps
+/// that raw value so a parse/write round trip is byte-exact, and derives the
+/// gameplay flags from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GatCellType {
+    raw: u32,
+    flags: u32,
+}
 
 impl GatCellType {
-    pub const NONE: Self = Self(0);
-    pub const WALKABLE: Self = Self(1 << 0);
-    pub const WATER: Self = Self(1 << 1);
-    pub const SNIPABLE: Self = Self(1 << 2);
+    pub const NONE: Self = Self { raw: 0, flags: 0 };
+    pub const WALKABLE: Self = Self {
+        raw: 0,
+        flags: 1 << 0,
+    };
+    pub const WATER: Self = Self {
+        raw: 0,
+        flags: 1 << 1,
+    };
+    pub const SNIPABLE: Self = Self {
+        raw: 0,
+        flags: 1 << 2,
+    };
+
+    /// The `u32` this cell type was parsed from, or `0` for a flag-only
+    /// constant.
+    pub fn raw(&self) -> u32 {
+        self.raw
+    }
 
     pub fn is_walkable(&self) -> bool {
-        self.0 & Self::WALKABLE.0 != 0
+        self.flags & Self::WALKABLE.flags != 0
     }
 
     pub fn is_water(&self) -> bool {
-        self.0 & Self::WATER.0 != 0
+        self.flags & Self::WATER.flags != 0
     }
 
     pub fn is_snipable(&self) -> bool {
-        self.0 & Self::SNIPABLE.0 != 0
+        self.flags & Self::SNIPABLE.flags != 0
     }
 }
 
 impl From<u32> for GatCellType {
     fn from(raw_type: u32) -> Self {
         let flags = match raw_type {
-            0 => Self::WALKABLE.0 | Self::SNIPABLE.0,
-            1 => Self::NONE.0,
-            2 => Self::WALKABLE.0 | Self::SNIPABLE.0,
-            3 => Self::WALKABLE.0 | Self::SNIPABLE.0 | Self::WATER.0,
-            4 => Self::WALKABLE.0 | Self::SNIPABLE.0,
-            5 => Self::SNIPABLE.0,
-            6 => Self::WALKABLE.0 | Self::SNIPABLE.0,
+            0 => Self::WALKABLE.flags | Self::SNIPABLE.flags,
+            1 => Self::NONE.flags,
+            2 => Self::WALKABLE.flags | Self::SNIPABLE.flags,
+            3 => Self::WALKABLE.flags | Self::SNIPABLE.flags | Self::WATER.flags,
+            4 => Self::WALKABLE.flags | Self::SNIPABLE.flags,
+            5 => Self::SNIPABLE.flags,
+            6 => Self::WALKABLE.flags | Self::SNIPABLE.flags,
             _ => {
                 debug!(
                     "Unknown GAT cell type: {}, treating as non-walkable",
                     raw_type
                 );
-                Self::NONE.0
+                Self::NONE.flags
             }
         };
-        Self(flags)
+        Self {
+            raw: raw_type,
+            flags,
+        }
     }
 }
 
@@ -78,6 +102,35 @@ impl RoAltitude {
             Ok((_, gat)) => Ok(gat),
             Err(e) => Err(GatError::ParseError(e.to_string())),
         }
+    }
+
+    /// Serializes the altitude back into the retail `.gat` layout this parser
+    /// reads: `GRAT`, major, minor, width, height, then per cell four `f32`
+    /// heights and the raw `u32` cell type.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, GatError> {
+        let (major, minor) = self.version.split_once('.').ok_or_else(|| {
+            GatError::ParseError(format!("malformed GAT version '{}'", self.version))
+        })?;
+        let major = major.parse::<u8>().map_err(|_| {
+            GatError::ParseError(format!("malformed GAT major version '{}'", self.version))
+        })?;
+        let minor = minor.parse::<u8>().map_err(|_| {
+            GatError::ParseError(format!("malformed GAT minor version '{}'", self.version))
+        })?;
+
+        let mut bytes = Vec::with_capacity(16 + self.cells.len() * 20);
+        bytes.extend_from_slice(b"GRAT");
+        bytes.push(major);
+        bytes.push(minor);
+        bytes.extend_from_slice(&self.width.to_le_bytes());
+        bytes.extend_from_slice(&self.height.to_le_bytes());
+        for cell in &self.cells {
+            for height in cell.height {
+                bytes.extend_from_slice(&height.to_le_bytes());
+            }
+            bytes.extend_from_slice(&cell.cell_type.raw().to_le_bytes());
+        }
+        Ok(bytes)
     }
 
     pub fn get_cell(&self, x: usize, y: usize) -> Option<&GatCell> {
@@ -284,7 +337,7 @@ mod tests {
         assert!(water.is_water());
         assert!(!water.is_walkable());
 
-        let combined = GatCellType(GatCellType::WALKABLE.0 | GatCellType::WATER.0);
+        let combined = GatCellType::from(3);
         assert!(combined.is_walkable());
         assert!(combined.is_water());
     }
@@ -300,6 +353,44 @@ mod tests {
         assert!(!GatCellType::from(5).is_walkable());
         assert!(GatCellType::from(5).is_snipable());
         assert!(GatCellType::from(6).is_walkable());
+    }
+
+    /// The writer's contract: a parsed file writes back byte for byte.
+    #[test]
+    fn to_bytes_round_trips_every_retail_cell_type() {
+        let mut source = Vec::new();
+        source.extend_from_slice(b"GRAT");
+        source.extend_from_slice(&[1, 2]);
+        source.extend_from_slice(&7u32.to_le_bytes());
+        source.extend_from_slice(&1u32.to_le_bytes());
+        for raw in 0..7u32 {
+            for offset in 0..4 {
+                source.extend_from_slice(&((raw * 4 + offset) as f32).to_le_bytes());
+            }
+            source.extend_from_slice(&raw.to_le_bytes());
+        }
+
+        let altitude = RoAltitude::from_bytes(&source).expect("parse");
+        assert!(!altitude.is_walkable(1, 0));
+        assert_eq!(altitude.cells[3].cell_type.raw(), 3);
+
+        let written = altitude.to_bytes().expect("serialize");
+        assert_eq!(written, source);
+    }
+
+    #[test]
+    fn to_bytes_rejects_a_malformed_version() {
+        let altitude = RoAltitude {
+            version: "x".to_string(),
+            width: 1,
+            height: 1,
+            cells: vec![GatCell {
+                height: [0.0; 4],
+                cell_type: GatCellType::from(0),
+            }],
+        };
+
+        assert!(matches!(altitude.to_bytes(), Err(GatError::ParseError(_))));
     }
 
     #[test]
