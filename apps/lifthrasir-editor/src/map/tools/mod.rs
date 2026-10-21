@@ -6,6 +6,7 @@ pub mod lights;
 pub mod paint;
 pub mod place;
 pub mod sculpt;
+pub mod wall;
 pub mod water;
 
 use super::{layout::MapLayout, open::EditorScreen};
@@ -41,6 +42,8 @@ pub enum ToolMode {
     Sculpt(sculpt::SculptBrush),
     /// Drags paint ground tiles with a texture.
     PaintTile(paint::TileBrush),
+    /// Two edge-adjacent cell clicks add a wall between them.
+    Wall(wall::WallBrush),
 }
 
 /// Ends a placing tool: back to Select with the Move gizmo, so the node just
@@ -97,6 +100,7 @@ impl Plugin for ToolsPlugin {
                 water::plugin,
                 sculpt::plugin,
                 paint::plugin,
+                wall::plugin,
             ))
             .add_systems(
                 EguiPrimaryContextPass,
@@ -187,9 +191,24 @@ fn toolbar(
                     .on_disabled_hover_text("select a ground texture in the browser");
                 if paint_tile.clicked()
                     && !tiling
-                    && let Some(uri) = ground
+                    && let Some(uri) = &ground
                 {
-                    current = ToolMode::PaintTile(paint::TileBrush::new(uri));
+                    current = ToolMode::PaintTile(paint::TileBrush::new(uri.clone()));
+                }
+                let walling = matches!(current, ToolMode::Wall(_));
+                let wall = ui
+                    .add_enabled(
+                        ground.is_some() || walling,
+                        egui::Button::selectable(walling, "Wall"),
+                    )
+                    .on_disabled_hover_text("select a ground texture in the browser");
+                if wall.clicked()
+                    && !walling
+                    && let Some(uri) = &ground
+                {
+                    current = ToolMode::Wall(wall::WallBrush {
+                        texture_uri: uri.clone(),
+                    });
                 }
                 ui.separator();
                 ui.toggle_value(&mut outliner.open, "Outliner");

@@ -155,11 +155,54 @@ pub fn chunk_of_quad(native_corners: [[f32; 3]; 4]) -> [u32; 2] {
     [axis(0), axis(2)]
 }
 
-enum WallDirection {
+/// The cell boundary a wall bridges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WallDirection {
     /// Wall on the cell's Y+1 boundary, facing negative Z.
     Front,
     /// Wall on the cell's X+1 boundary, facing negative X.
     Right,
+}
+
+/// The native positions of the wall quad bridging cell `(x, y)` to its
+/// `direction` neighbour, and its hard normal. `this` and `next` are the two
+/// cells' raw GND corner heights (no smoothing). Shared by the converter and
+/// the editor's wall tool.
+pub fn wall_quad(
+    x: usize,
+    y: usize,
+    direction: WallDirection,
+    this: [f32; 4],
+    next: [f32; 4],
+) -> ([[f32; 3]; 4], [f32; 3]) {
+    match direction {
+        WallDirection::Front => {
+            let base_x = x as f32 * CELL_SIZE;
+            let base_z = (y + 1) as f32 * CELL_SIZE;
+            (
+                [
+                    [base_x, this[2], base_z],
+                    [base_x + CELL_SIZE, this[3], base_z],
+                    [base_x, next[0], base_z],
+                    [base_x + CELL_SIZE, next[1], base_z],
+                ],
+                [0.0, 0.0, -1.0],
+            )
+        }
+        WallDirection::Right => {
+            let base_x = (x + 1) as f32 * CELL_SIZE;
+            let base_z = y as f32 * CELL_SIZE;
+            (
+                [
+                    [base_x, this[1], base_z],
+                    [base_x, this[3], base_z + CELL_SIZE],
+                    [base_x, next[0], base_z],
+                    [base_x, next[2], base_z + CELL_SIZE],
+                ],
+                [-1.0, 0.0, 0.0],
+            )
+        }
+    }
 }
 
 /// Emit the quad bridging a cell to its neighbour, with hard normals and the
@@ -183,38 +226,16 @@ fn generate_wall(
     let batch = batch_for(batches, ground, tile, x, y)?;
     let vertex_offset = batch.positions.len() as u32;
 
+    let (positions, normal) = wall_quad(x, y, direction, surface.height, next.height);
+    batch.positions.extend(positions);
     match direction {
         WallDirection::Front => {
-            let base_x = x as f32 * CELL_SIZE;
-            let base_z = (y + 1) as f32 * CELL_SIZE;
-
-            batch.positions.push([base_x, surface.height[2], base_z]);
-            batch
-                .positions
-                .push([base_x + CELL_SIZE, surface.height[3], base_z]);
-            batch.positions.push([base_x, next.height[0], base_z]);
-            batch
-                .positions
-                .push([base_x + CELL_SIZE, next.height[1], base_z]);
-
             batch.uvs.push([tile.u1, tile.v1]);
             batch.uvs.push([tile.u2, tile.v2]);
             batch.uvs.push([tile.u3, tile.v3]);
             batch.uvs.push([tile.u4, tile.v4]);
         }
         WallDirection::Right => {
-            let base_x = (x + 1) as f32 * CELL_SIZE;
-            let base_z = y as f32 * CELL_SIZE;
-
-            batch.positions.push([base_x, surface.height[1], base_z]);
-            batch
-                .positions
-                .push([base_x, surface.height[3], base_z + CELL_SIZE]);
-            batch.positions.push([base_x, next.height[0], base_z]);
-            batch
-                .positions
-                .push([base_x, next.height[2], base_z + CELL_SIZE]);
-
             batch.uvs.push([tile.u2, tile.v2]);
             batch.uvs.push([tile.u1, tile.v1]);
             batch.uvs.push([tile.u4, tile.v4]);
@@ -222,10 +243,6 @@ fn generate_wall(
         }
     }
 
-    let normal = match direction {
-        WallDirection::Front => [0.0, 0.0, -1.0],
-        WallDirection::Right => [-1.0, 0.0, 0.0],
-    };
     batch.normals.extend(std::iter::repeat_n(normal, 4));
     batch
         .colors
@@ -659,6 +676,67 @@ mod tests {
         );
         assert!(walled.normals[8..].iter().all(|n| *n == [0.0, 0.0, -1.0]));
         assert_eq!(&walled.indices[12..], &[8, 9, 10, 10, 9, 11]);
+    }
+
+    /// A 2x2 ground, corners numbered 1..=16 cell by cell, whose first cell
+    /// has a front and a right wall.
+    fn walled_ground() -> RoGround {
+        let surface = |index: usize, walls: bool| GndSurface {
+            height: std::array::from_fn(|corner| (index * 4 + corner + 1) as f32),
+            tile_up: 0,
+            tile_front: if walls { 0 } else { -1 },
+            tile_right: if walls { 0 } else { -1 },
+        };
+        RoGround {
+            version: "1.7".into(),
+            raw_version: 0x0107,
+            width: 2,
+            height: 2,
+            textures: vec!["a.bmp".into()],
+            texture_indexes: vec![0],
+            tiles: vec![tile(0)],
+            surfaces: (0..4).map(|index| surface(index, index == 0)).collect(),
+            water: None,
+        }
+    }
+
+    const FRONT_WALL: [[f32; 3]; 4] = [
+        [0.0, 3.0, 10.0],
+        [10.0, 4.0, 10.0],
+        [0.0, 9.0, 10.0],
+        [10.0, 10.0, 10.0],
+    ];
+    const RIGHT_WALL: [[f32; 3]; 4] = [
+        [10.0, 2.0, 0.0],
+        [10.0, 4.0, 10.0],
+        [10.0, 5.0, 0.0],
+        [10.0, 7.0, 10.0],
+    ];
+
+    #[test]
+    fn walls_bridge_the_owner_and_neighbour_corner_heights() {
+        let primitives = build_terrain(&walled_ground()).expect("build");
+        let walls = &primitives[0];
+
+        assert_eq!(&walls.positions[16..20], &FRONT_WALL);
+        assert!(walls.normals[16..20].iter().all(|n| *n == [0.0, 0.0, -1.0]));
+        assert_eq!(&walls.positions[20..24], &RIGHT_WALL);
+        assert!(walls.normals[20..24].iter().all(|n| *n == [-1.0, 0.0, 0.0]));
+    }
+
+    #[test]
+    fn wall_quad_reproduces_the_converter_walls() {
+        let ground = walled_ground();
+        let corners = |index: usize| ground.surfaces[index].height;
+
+        assert_eq!(
+            wall_quad(0, 0, WallDirection::Front, corners(0), corners(2)),
+            (FRONT_WALL, [0.0, 0.0, -1.0])
+        );
+        assert_eq!(
+            wall_quad(0, 0, WallDirection::Right, corners(0), corners(1)),
+            (RIGHT_WALL, [-1.0, 0.0, 0.0])
+        );
     }
 
     #[test]

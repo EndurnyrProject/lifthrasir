@@ -8,7 +8,7 @@ use crate::{
         layout::{MapLayout, MapTextureList},
         open::EditorScreen,
         terrain::{
-            MeshSnapshot, TerrainChunks, append_quad, ground_quad_at, remove_quad, spawn_chunk,
+            MeshSnapshot, TerrainChunks, append_quad, ground_quad_of, remove_quad, spawn_chunk,
             sync_chunk_visibility,
         },
     },
@@ -176,7 +176,7 @@ fn paint(world: &mut World, stroke: &mut Stroke, cell: (u32, u32), brush: &TileB
         return;
     };
     let chunk = [cell.0 / CHUNK_CELLS, cell.1 / CHUNK_CELLS];
-    let Some((source, source_mesh, quad)) = ground_quad_of(world, chunk, cell) else {
+    let Some((source, source_mesh, quad)) = ground_quad_of(world, cell) else {
         return;
     };
     let Some(texture) = world
@@ -216,23 +216,6 @@ fn paint(world: &mut World, stroke: &mut Stroke, cell: (u32, u32), brush: &TileB
     }
     sync_chunk_visibility(world, source, source_empty);
     sync_chunk_visibility(world, target, false);
-}
-
-/// The chunk mesh (any texture) of `chunk` holding the ground quad of `cell`.
-fn ground_quad_of(
-    world: &World,
-    chunk: [u32; 2],
-    cell: (u32, u32),
-) -> Option<(Entity, Handle<Mesh>, usize)> {
-    let meshes = world.resource::<Assets<Mesh>>();
-    world
-        .resource::<TerrainChunks>()
-        .chunks_in(chunk, chunk)
-        .into_iter()
-        .find_map(|(entity, handle)| {
-            let quad = ground_quad_at(meshes.get(&handle)?, cell)?;
-            Some((entity, handle, quad))
-        })
 }
 
 /// Keeps `chunk`'s mesh as it was before the stroke first changed it.

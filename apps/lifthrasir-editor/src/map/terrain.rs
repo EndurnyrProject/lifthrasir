@@ -14,7 +14,9 @@ use bevy::{
 };
 use lifthrasir_runtime::world::LifMapData;
 use lifthrasir_tooling::converters::{
-    gltf_out::from_gltf_vec, map::document::TextureRef, map::terrain::chunk_of_quad,
+    gltf_out::from_gltf_vec,
+    map::document::TextureRef,
+    map::terrain::{CHUNK_CELLS, chunk_of_quad},
 };
 use ro_formats::CELL_SIZE;
 use std::collections::BTreeMap;
@@ -330,6 +332,21 @@ pub fn ground_quad_at(mesh: &Mesh, cell: (u32, u32)) -> Option<usize> {
         .0
         .iter()
         .position(|quad| ground_cell(native_quad(quad)) == Some(cell))
+}
+
+/// The chunk mesh (any texture) holding the ground quad of GND cell `cell`,
+/// and that quad; `None` for a hole or a cell off the map.
+pub fn ground_quad_of(world: &World, cell: (u32, u32)) -> Option<(Entity, Handle<Mesh>, usize)> {
+    let chunk = [cell.0 / CHUNK_CELLS, cell.1 / CHUNK_CELLS];
+    let meshes = world.resource::<Assets<Mesh>>();
+    world
+        .resource::<TerrainChunks>()
+        .chunks_in(chunk, chunk)
+        .into_iter()
+        .find_map(|(entity, handle)| {
+            let quad = ground_quad_at(meshes.get(&handle)?, cell)?;
+            Some((entity, handle, quad))
+        })
 }
 
 /// True when quad `quad` of `mesh` is a wall: it has no XZ footprint.
