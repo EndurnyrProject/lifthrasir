@@ -31,6 +31,17 @@ pub enum ToolMode {
     AddLight(lights::LightKind),
 }
 
+/// Ends a placing tool: back to Select with the Move gizmo, so the node just
+/// placed (and selected) can be positioned right away.
+pub fn return_to_move(world: &mut World) {
+    world
+        .resource_mut::<ToolMode>()
+        .set_if_neq(ToolMode::Select);
+    if let Some(mut gizmo) = world.get_resource_mut::<GizmoChoice>() {
+        gizmo.set_if_neq(GizmoChoice(GizmoModeKind::Translate));
+    }
+}
+
 /// The world-space terrain point under the primary window's cursor.
 #[derive(SystemParam)]
 pub struct TerrainCursor<'w, 's> {

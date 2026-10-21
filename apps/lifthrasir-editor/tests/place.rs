@@ -5,7 +5,10 @@ mod common;
 
 use bevy::prelude::*;
 use lifthrasir_editor::{
-    map::{document::collect_document, tools::place::place},
+    map::{
+        document::collect_document,
+        tools::{ToolMode, place::place},
+    },
     shell::{browser::AssetRef, node::EditorNodeId, selection::Selection, undo::undo},
 };
 use lifthrasir_runtime::world::{LifPropRef, PropSceneContext, SceneOwner, props::MapModel};
@@ -82,4 +85,18 @@ fn a_placed_sound_collects_in_the_native_frame() {
     assert_eq!(placed.payload.file, "ro://data/wav/effect/water.wav");
     assert_eq!(placed.name, "water");
     assert_eq!(doc.validate(), Ok(()));
+}
+
+#[test]
+fn placing_returns_to_select_with_the_node_selected() {
+    let data_folder = tempfile::tempdir().unwrap();
+    let mut app = common::editor_app(data_folder.path());
+    common::open_fixture(&mut app);
+    let asset = AssetRef::Sound("ro://data/wav/effect/water.wav".into());
+    *app.world_mut().resource_mut::<ToolMode>() = ToolMode::Place(asset.clone());
+
+    place(app.world_mut(), &asset, Vec3::ZERO);
+
+    assert_eq!(*app.world().resource::<ToolMode>(), ToolMode::Select);
+    assert!(app.world().resource::<Selection>().0.is_some());
 }

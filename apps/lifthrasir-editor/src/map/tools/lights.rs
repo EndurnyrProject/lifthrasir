@@ -2,11 +2,10 @@
 //! with the converter's default values. Also keeps every map light's
 //! `intensity` in step with its authored candela.
 
-use super::{TerrainCursor, ToolMode};
+use super::{TerrainCursor, ToolMode, return_to_move};
 use crate::{
     map::{layout::MapLayout, open::EditorScreen},
     shell::{
-        gizmo::GizmoChoice,
         node::{EditorNodeId, EditorNodeIds, NodePayload, NodeSnapshot},
         selection::Selection,
         ui::viewport_has_pointer,
@@ -17,7 +16,6 @@ use bevy::prelude::*;
 use lifthrasir_runtime::world::{LifMapData, MapLightCandela};
 use lifthrasir_tooling::converters::map::blank::{LightDefaults, default_light};
 use std::f32::consts::{FRAC_PI_2, PI};
-use transform_gizmo_bevy::config::GizmoModeKind;
 
 /// How far above the terrain hit a new light sits, in world units.
 pub const LIGHT_HEIGHT: f32 = 10.0;
@@ -120,12 +118,7 @@ pub fn add_light(world: &mut World, kind: LightKind, hit: Vec3) {
         Box::new(SpawnNode::new(layout.root, layout.map_node, snapshot, None)),
     );
     world.resource_mut::<Selection>().0 = Some(id);
-    world
-        .resource_mut::<ToolMode>()
-        .set_if_neq(ToolMode::Select);
-    if let Some(mut gizmo) = world.get_resource_mut::<GizmoChoice>() {
-        gizmo.set_if_neq(GizmoChoice(GizmoModeKind::Translate));
-    }
+    return_to_move(world);
 }
 
 fn add_on_click(

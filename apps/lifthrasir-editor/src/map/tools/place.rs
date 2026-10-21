@@ -1,7 +1,7 @@
 //! The Place tool: a ghost of the browser asset follows the terrain under the
 //! cursor; a click adds it as one undoable object node under the map node.
 
-use super::{TerrainCursor, ToolMode};
+use super::{TerrainCursor, ToolMode, return_to_move};
 use crate::{
     EditorOnly,
     map::{layout::MapLayout, open::EditorScreen},
@@ -117,7 +117,8 @@ fn snapshot(asset: &AssetRef, id: EditorNodeId, at: Vec3) -> Option<NodeSnapshot
 }
 
 /// Adds `asset` at world point `at` (the map node is identity) as one
-/// undoable step, and selects the new node.
+/// undoable step, selects the new node and returns to the Select tool with
+/// the Move gizmo.
 pub fn place(world: &mut World, asset: &AssetRef, at: Vec3) {
     let Some(layout) = world.get_resource::<MapLayout>().cloned() else {
         return;
@@ -134,6 +135,7 @@ pub fn place(world: &mut World, asset: &AssetRef, at: Vec3) {
         Box::new(SpawnNode::new(layout.root, layout.map_node, snapshot, None)),
     );
     world.resource_mut::<Selection>().0 = Some(id);
+    return_to_move(world);
 }
 
 /// Keeps exactly one ghost, for the asset being placed, and none otherwise.
