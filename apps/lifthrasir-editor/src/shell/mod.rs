@@ -2,8 +2,10 @@
 
 pub mod browser;
 pub mod camera;
+pub mod inspector;
 pub mod node;
 pub mod preview;
+pub mod selection;
 pub mod ui;
 pub mod undo;
 
@@ -11,13 +13,14 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 use ui::{EditorUiArea, EditorUiSet, viewport_has_keyboard, viewport_has_pointer};
 
-/// Camera, undo history, node ids, UI set ordering and the status bar. UI systems run only in
+/// Camera, undo history, node ids, selection, the inspector, UI set ordering
+/// and the status bar. UI systems run only in
 /// `EguiPrimaryContextPass`, so headless apps can add this without egui.
 pub struct EditorShellPlugin;
 
 impl Plugin for EditorShellPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(browser::BrowserPlugin)
+        app.add_plugins((browser::BrowserPlugin, selection::plugin, inspector::plugin))
             .init_resource::<EditorUiArea>()
             .init_resource::<undo::UndoStack>()
             .init_resource::<node::EditorNodeIds>()

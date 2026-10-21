@@ -4,16 +4,24 @@ pub mod document;
 pub mod layout;
 pub mod lighting;
 pub mod open;
+pub mod refresh;
 pub mod save;
+pub mod tools;
 pub mod wizard;
 
 use bevy::prelude::*;
 
-/// Map editing: the start screen, open, save, save-as and the new map wizard.
+/// Map editing: the start screen, open, save, save-as, the new map wizard
+/// and the tools.
 pub struct MapEditorPlugin;
 
 impl Plugin for MapEditorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((open::plugin, save::plugin, wizard::plugin));
+        app.add_plugins((
+            open::plugin,
+            save::plugin,
+            wizard::plugin,
+            tools::ToolsPlugin,
+        ));
     }
 }
