@@ -15,6 +15,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use lifthrasir_assets::source::{AssetSource, SharedCompositeAssetSource};
 use lifthrasir_runtime::world::{LifAudioEmitter, LifEffectEmitter, LifPropRef, MapLightCandela};
+use std::f32::consts::FRAC_PI_2;
 
 type Finish = Box<dyn FnOnce(&mut World) + Send + Sync>;
 
@@ -271,7 +272,17 @@ fn node_ui(
             response
         });
     });
-    transform_ui(ui, Fields::new(commands, gesture, target, transform));
+    let light = children
+        .into_iter()
+        .flatten()
+        .find_map(|&child| lights.get(child).ok().map(|view| (child, view)));
+    let sun = light.is_some_and(|(_, (_, _, sun, _))| sun.is_some());
+    let transform = Fields::new(commands, gesture, target, transform);
+    if sun {
+        sun_ui(ui, transform);
+    } else {
+        transform_ui(ui, transform);
+    }
     if let Some(prop) = prop {
         let missing = !source
             .0
@@ -286,10 +297,6 @@ fn node_ui(
     if let Some(effect) = effect {
         effect_ui(ui, Fields::new(commands, gesture, target, effect));
     }
-    let light = children
-        .into_iter()
-        .flatten()
-        .find_map(|&child| lights.get(child).ok().map(|view| (child, view)));
     if let Some((light, view)) = light {
         light_ui(ui, commands, gesture, (light, *id), view);
     }
@@ -330,6 +337,50 @@ fn transform_ui(ui: &mut egui::Ui, mut fields: Fields<'_, '_, '_, Transform>) {
             fields.add(ui, |ui, t| ui.add(drag(&mut t.scale[axis], 0.01)));
         }
     });
+}
+
+/// The sun has no position: only its elevation above the horizon and its
+/// azimuth, in degrees. They are the negated pitch and the yaw of its YXZ
+/// rotation (a directional light shines along local -Z).
+fn sun_ui(ui: &mut egui::Ui, mut fields: Fields<'_, '_, '_, Transform>) {
+    ui.separator();
+    fields.row(ui, "Elevation", |ui, fields| {
+        fields.add_valid(
+            ui,
+            |ui, t| {
+                let mut degrees = sun_elevation(t.rotation).to_degrees();
+                let response = ui.add(drag(&mut degrees, 0.5).suffix("\u{b0}"));
+                if response.changed() {
+                    t.rotation = with_sun_elevation(t.rotation, degrees.to_radians());
+                }
+                response
+            },
+            |t| (0.0..=FRAC_PI_2).contains(&sun_elevation(t.rotation)),
+        );
+    });
+    fields.row(ui, "Azimuth", |ui, fields| {
+        fields.add(ui, |ui, t| {
+            let (yaw, pitch, roll) = t.rotation.to_euler(EulerRot::YXZ);
+            let mut degrees = yaw.to_degrees();
+            let response = ui.add(drag(&mut degrees, 0.5).suffix("\u{b0}"));
+            if response.changed() {
+                t.rotation = Quat::from_euler(EulerRot::YXZ, degrees.to_radians(), pitch, roll);
+            }
+            response
+        });
+    });
+}
+
+/// The sun's angle above the horizon, in radians.
+fn sun_elevation(rotation: Quat) -> f32 {
+    let (_, pitch, _) = rotation.to_euler(EulerRot::YXZ);
+    -pitch
+}
+
+/// `rotation` with its elevation set to `elevation` radians; yaw and roll kept.
+fn with_sun_elevation(rotation: Quat, elevation: f32) -> Quat {
+    let (yaw, _, roll) = rotation.to_euler(EulerRot::YXZ);
+    Quat::from_euler(EulerRot::YXZ, yaw, -elevation, roll)
 }
 
 /// Model (red when missing from the source) and animation.
@@ -481,4 +532,22 @@ fn angle(ui: &mut egui::Ui, radians: &mut f32) -> egui::Response {
         *radians = degrees.to_radians();
     }
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setting_the_sun_elevation_tilts_its_light_and_keeps_the_azimuth() {
+        let rotation = Quat::from_euler(EulerRot::YXZ, 1.0, -0.3, 0.0);
+
+        let raised = with_sun_elevation(rotation, 60_f32.to_radians());
+
+        let direction = raised * Vec3::NEG_Z;
+        assert!((direction.y + 60_f32.to_radians().sin()).abs() < 1e-5);
+        assert!((sun_elevation(raised) - 60_f32.to_radians()).abs() < 1e-5);
+        let (yaw, _, _) = raised.to_euler(EulerRot::YXZ);
+        assert!((yaw - 1.0).abs() < 1e-5);
+    }
 }
