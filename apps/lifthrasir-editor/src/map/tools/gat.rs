@@ -317,6 +317,18 @@ pub fn rebuild_gat_overlay(world: &mut World, root: Entity) {
     }
 }
 
+/// Rebuilds the overlay of `root` only if it was built; the hook of edits that
+/// move GAT heights without being GAT edits (sculpting).
+pub fn refresh_gat_overlay(world: &mut World, root: Entity) {
+    let built = world
+        .query::<&GatOverlayMesh>()
+        .iter(world)
+        .any(|overlay| overlay.0 == root);
+    if built {
+        rebuild_gat_overlay(world, root);
+    }
+}
+
 fn overlay_visibility(overlay: &GatOverlay) -> Visibility {
     match overlay.visible {
         true => Visibility::Inherited,

@@ -4,6 +4,7 @@
 pub mod gat;
 pub mod lights;
 pub mod place;
+pub mod sculpt;
 pub mod water;
 
 use super::{layout::MapLayout, open::EditorScreen};
@@ -35,6 +36,8 @@ pub enum ToolMode {
     GatPaint(gat::GatBrush),
     /// The water window is open; drags paint water tiles.
     Water(water::WaterBrush),
+    /// Drags sculpt the terrain.
+    Sculpt(sculpt::SculptBrush),
 }
 
 /// Ends a placing tool: back to Select with the Move gizmo, so the node just
@@ -84,7 +87,13 @@ pub struct ToolsPlugin;
 impl Plugin for ToolsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ToolMode>()
-            .add_plugins((place::plugin, lights::plugin, gat::plugin, water::plugin))
+            .add_plugins((
+                place::plugin,
+                lights::plugin,
+                gat::plugin,
+                water::plugin,
+                sculpt::plugin,
+            ))
             .add_systems(
                 EguiPrimaryContextPass,
                 toolbar
@@ -152,6 +161,14 @@ fn toolbar(
                     && !watering
                 {
                     current = ToolMode::Water(water::WaterBrush::default());
+                }
+                let sculpting = matches!(current, ToolMode::Sculpt(_));
+                if ui
+                    .add(egui::Button::selectable(sculpting, "Sculpt"))
+                    .clicked()
+                    && !sculpting
+                {
+                    current = ToolMode::Sculpt(sculpt::SculptBrush::default());
                 }
                 ui.separator();
                 ui.toggle_value(&mut outliner.open, "Outliner");

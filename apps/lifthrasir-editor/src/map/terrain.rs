@@ -103,13 +103,13 @@ fn write_ground_quad(heights: &mut TerrainHeights, quad: [Vec3; 4]) {
 }
 
 /// A quad's four glTF-frame positions in the native frame.
-fn native_quad(quad: &[[f32; 3]; 4]) -> [Vec3; 4] {
+pub(crate) fn native_quad(quad: &[[f32; 3]; 4]) -> [Vec3; 4] {
     quad.map(|p| from_gltf_vec(Vec3::from(p)))
 }
 
 /// The GND cell of a ground quad (native corners): the minimum of its XZ
 /// footprint over the cell size. `None` for a wall, which has no footprint.
-fn ground_cell(quad: [Vec3; 4]) -> Option<(u32, u32)> {
+pub(crate) fn ground_cell(quad: [Vec3; 4]) -> Option<(u32, u32)> {
     let min = quad.iter().copied().reduce(Vec3::min)?;
     let max = quad.iter().copied().reduce(Vec3::max)?;
     if max.x <= min.x || max.z <= min.z || min.x < 0.0 || min.z < 0.0 {
@@ -436,6 +436,76 @@ fn empty_chunk_mesh() -> Mesh {
     );
     MeshSnapshot::default().restore(&mut mesh);
     mesh
+}
+
+/// Synthetic grounds and their chunk meshes as the glTF loader hands them over.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::MeshSnapshot;
+    use bevy::math::Vec3;
+    use lifthrasir_tooling::converters::{
+        gltf_out::to_gltf_vec,
+        map::terrain::{TerrainPrimitive, build_terrain},
+    };
+    use ro_formats::{GndSurface, GndTile, RoGround};
+
+    /// A one-texture, wall-free ground with per-corner native heights.
+    pub fn ground(width: u32, height: u32, corners: impl Fn(usize, usize) -> [f32; 4]) -> RoGround {
+        let tile = GndTile {
+            u1: 0.0,
+            u2: 1.0,
+            u3: 0.0,
+            u4: 1.0,
+            v1: 0.0,
+            v2: 0.0,
+            v3: 1.0,
+            v4: 1.0,
+            texture: 0,
+            color: [255, 255, 255, 255],
+        };
+        let surfaces = (0..(width * height) as usize)
+            .map(|index| GndSurface {
+                height: corners(index % width as usize, index / width as usize),
+                tile_up: 0,
+                tile_front: -1,
+                tile_right: -1,
+            })
+            .collect();
+        RoGround {
+            version: "1.7".into(),
+            raw_version: 0x0107,
+            width,
+            height,
+            textures: vec!["grass".into()],
+            texture_indexes: vec![0],
+            tiles: vec![tile],
+            surfaces,
+            water: None,
+        }
+    }
+
+    /// The ground's chunk primitives as glTF-frame snapshots, chunk order.
+    pub fn chunk_snapshots(ground: &RoGround) -> Vec<MeshSnapshot> {
+        let mut primitives = build_terrain(ground).unwrap();
+        primitives.sort_by_key(|primitive| primitive.chunk);
+        primitives.iter().map(snapshot_of).collect()
+    }
+
+    pub fn snapshot_of(primitive: &TerrainPrimitive) -> MeshSnapshot {
+        let gltf = |values: &[[f32; 3]]| -> Vec<[f32; 3]> {
+            values
+                .iter()
+                .map(|v| to_gltf_vec(Vec3::from(*v)).to_array())
+                .collect()
+        };
+        MeshSnapshot {
+            positions: gltf(&primitive.positions),
+            normals: gltf(&primitive.normals),
+            colors: primitive.colors.clone(),
+            uvs: primitive.uvs.clone(),
+            indices: primitive.indices.clone(),
+        }
+    }
 }
 
 #[cfg(test)]
