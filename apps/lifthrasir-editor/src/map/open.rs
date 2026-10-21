@@ -75,9 +75,10 @@ impl ErrorModal {
 }
 
 /// An action that would discard unsaved changes.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum GuardedAction {
     Open(String),
+    NewMap,
     Quit,
 }
 
@@ -313,6 +314,7 @@ fn menu_bar(
     screen: Res<State<EditorScreen>>,
     layout: Option<Res<MapLayout>>,
     mut picker: ResMut<MapPicker>,
+    mut actions: ResMut<StartScreenActions>,
     mut save_as: ResMut<SaveAsDialog>,
     mut saves: MessageWriter<SaveRequest>,
     mut closes: MessageWriter<WindowCloseRequested>,
@@ -324,7 +326,9 @@ fn menu_bar(
         egui::Panel::top("menu_bar").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    ui.add_enabled(false, egui::Button::new("New map…"));
+                    if ui.button("New map…").clicked() {
+                        actions.new_map_requested = true;
+                    }
                     if ui.button("Open…").clicked() {
                         picker.open = true;
                         picker.maps = None;
@@ -357,6 +361,7 @@ fn map_picker(
     mut contexts: EguiContexts,
     screen: Res<State<EditorScreen>>,
     mut picker: ResMut<MapPicker>,
+    mut actions: ResMut<StartScreenActions>,
     source: Res<SharedCompositeAssetSource>,
     mut opens: MessageWriter<OpenMapRequest>,
 ) -> Result {
@@ -381,7 +386,9 @@ fn map_picker(
     }
     window.show(ctx, |ui| {
         if start {
-            ui.add_enabled(false, egui::Button::new("New map…"));
+            if ui.button("New map…").clicked() {
+                actions.new_map_requested = true;
+            }
             ui.separator();
         }
         ui.horizontal(|ui| {
@@ -412,6 +419,7 @@ fn unsaved_guard(
     mut contexts: EguiContexts,
     mut guard: ResMut<UnsavedGuard>,
     mut undo: ResMut<UndoStack>,
+    mut actions: ResMut<StartScreenActions>,
     mut opens: MessageWriter<OpenMapRequest>,
     mut exit: MessageWriter<AppExit>,
 ) -> Result {
@@ -442,6 +450,7 @@ fn unsaved_guard(
         GuardedAction::Open(path) => {
             opens.write(OpenMapRequest { path });
         }
+        GuardedAction::NewMap => actions.new_map_requested = true,
         GuardedAction::Quit => {
             exit.write(AppExit::Success);
         }
