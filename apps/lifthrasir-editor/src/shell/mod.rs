@@ -1,19 +1,23 @@
 //! Editor shell: camera, egui layout and input routing.
 
 pub mod camera;
+pub mod node;
 pub mod ui;
+pub mod undo;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 use ui::{EditorUiArea, EditorUiSet, viewport_has_keyboard, viewport_has_pointer};
 
-/// Camera, UI set ordering and the status bar. UI systems run only in
+/// Camera, undo history, node ids, UI set ordering and the status bar. UI systems run only in
 /// `EguiPrimaryContextPass`, so headless apps can add this without egui.
 pub struct EditorShellPlugin;
 
 impl Plugin for EditorShellPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EditorUiArea>()
+            .init_resource::<undo::UndoStack>()
+            .init_resource::<node::EditorNodeIds>()
             .configure_sets(
                 EguiPrimaryContextPass,
                 (
@@ -30,7 +34,12 @@ impl Plugin for EditorShellPlugin {
             .add_systems(
                 Update,
                 (
-                    (camera::toggle_camera_mode, camera::fly_move).run_if(viewport_has_keyboard),
+                    (
+                        camera::toggle_camera_mode,
+                        camera::fly_move,
+                        undo::history_keys,
+                    )
+                        .run_if(viewport_has_keyboard),
                     (camera::fly_look_input, camera::orbit_input).run_if(viewport_has_pointer),
                 ),
             )
