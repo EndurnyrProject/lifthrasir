@@ -435,7 +435,7 @@ pub fn rsw_model_rotation(model: &RswModel) -> Quat {
 }
 
 /// Port of Bevy's `Transform::look_to`, used by the native directional light.
-fn look_to_rotation(direction: Vec3, up: Vec3) -> Quat {
+pub(crate) fn look_to_rotation(direction: Vec3, up: Vec3) -> Quat {
     let back = -direction;
     let right = up
         .cross(back)
@@ -462,7 +462,7 @@ pub fn sun_direction(light: &RswLight) -> Vec3 {
 /// The baked directional (sun) illuminance. Outdoor maps mirror
 /// `lighting.rs::calculate_global_lux` (RSW-derived, read at EV100 10.5). Indoor
 /// maps pin a dim interior value read at EV100 9.7.
-fn sun_illuminance(light: &RswLight, indoor: bool) -> f32 {
+pub(crate) fn sun_illuminance(light: &RswLight, indoor: bool) -> f32 {
     if indoor {
         return INDOOR_SUN_LUX;
     }
@@ -473,7 +473,7 @@ fn sun_illuminance(light: &RswLight, indoor: bool) -> f32 {
 /// Candela for a point light, chosen so Bevy's importer (`lumens = candela *
 /// 4 * pi`) lands on the native lumens from `lighting.rs::spawn_point_light`.
 /// Indoor maps use the boosted lux-at-half-range so interiors read at EV100 9.7.
-fn point_light_candela(light: &RswLightObj, indoor: bool) -> f32 {
+pub(crate) fn point_light_candela(light: &RswLightObj, indoor: bool) -> f32 {
     let lux_at_half = if indoor {
         INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE
     } else {

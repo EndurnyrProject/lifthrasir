@@ -487,7 +487,7 @@ fn water_mask_bytes<'a>(
     Ok(&blob[start..end])
 }
 
-fn gat_bytes<'a>(
+pub(crate) fn gat_bytes<'a>(
     root: &gltf_json::Root,
     blob: &'a [u8],
     gat: &lif::LifGat,

@@ -1,3 +1,4 @@
+pub mod blank;
 pub mod document;
 #[cfg(test)]
 pub mod fixtures;
