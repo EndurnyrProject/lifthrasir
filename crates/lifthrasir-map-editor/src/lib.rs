@@ -2,7 +2,8 @@
 //!
 //! This crate deliberately opens converted Lifthrasir map GLBs directly. It
 //! does not read RSW, GND, GAT, or GRF files: those are import-only formats.
-//! The first GUI application will use [`MapDocument`] as its document model.
+//! The GUI uses [`MapDocument`] as its document model. This library contains
+//! no Bevy systems, ECS types, asset-source setup or client/network policy.
 
 mod document;
 

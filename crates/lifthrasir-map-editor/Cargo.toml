@@ -3,15 +3,23 @@ name = "lifthrasir-map-editor"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = ["gui"]
+gui = ["dep:bevy", "dep:clap", "dep:lifthrasir-assets", "dep:lifthrasir-runtime", "dep:toml"]
+
+[[bin]]
+name = "lifthrasir-map-editor"
+path = "src/main.rs"
+required-features = ["gui"]
+
 [dependencies]
 anyhow = { workspace = true }
-bevy = { workspace = true, features = ["bevy_dev_tools", "bevy_gltf", "free_camera", "ktx2", "zstd_rust"] }
-clap = { workspace = true }
-gltf = { workspace = true }
+bevy = { workspace = true, optional = true, features = ["bevy_dev_tools", "bevy_gltf", "free_camera", "ktx2", "zstd_rust"] }
+clap = { workspace = true, optional = true }
 lifthrasir-data = { path = "../lifthrasir-data" }
-lifthrasir-assets = { path = "../lifthrasir-assets" }
-lifthrasir-runtime = { path = "../lifthrasir-runtime" }
+lifthrasir-assets = { path = "../lifthrasir-assets", optional = true }
+lifthrasir-runtime = { path = "../lifthrasir-runtime", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
-toml = { workspace = true }
+toml = { workspace = true, optional = true }
