@@ -25,9 +25,11 @@ Convert the data tables, then convert maps to glTF. Map conversion is required: 
 
 `convert-maps` processes maps in sorted order, continues after individual failures, and exits non-zero if any map failed. Writes are atomic. To convert one map, use `convert-map --map <name>`.
 
+Ground textures are pooled run-wide under `ground/tex/` (`--ground-dir`, default `assets/data/ground`) and referenced by absolute `ro://ground/tex/<name>.ktx2` URI; a map no longer carries its own `tex/` folder, and `convert-maps` removes a stale one left by older converters. Prop textures stay in `models/tex/`.
+
 The runtime loads maps and props as converted GLBs. GND/RSW/RSM/RSM2 parsing is offline-only; the converted map embeds its original GAT data for runtime grounding, raycasts, and pathfinding. Water tile masks are baked during conversion. A missing or invalid map GLB fails to load.
 
-Use `--force-models` after a `lif::FORMAT_VERSION` change. Props are cached in `assets/data/models`, and stale models are rejected at runtime. The format version is shared by maps and models.
+Use `--force-models` after a `lif::MODEL_FORMAT_VERSION` change. Props are cached in `assets/data/models`, and stale models are rejected at runtime. Map and model format versions are independent: bump `lif::MAP_FORMAT_VERSION` for a map schema change and `lif::MODEL_FORMAT_VERSION` for a prop change.
 
 If you need the standalone Hunter trap props or GR2 actors, convert them before packing:
 

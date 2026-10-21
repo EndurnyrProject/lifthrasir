@@ -20,7 +20,7 @@ The client and client UI depend on `net-contract`, not on a transport or codec. 
 
 Maps are converted offline to glTF; the runtime does not parse GND, RSW, RSM, or RSM2. A converted map includes its terrain, lighting, emitters, prop references, water parameters and baked water tile mask, plus the original GAT bytes. Runtime GAT decoding remains necessary for grounding, raycasts, and pathfinding.
 
-A missing or invalid map glTF is a hard failure. Props must also be converted to glTF. When changing the map format, extend the converter schema and glTF writer, and bump `lif::FORMAT_VERSION`. That version is shared by maps and models, so cached models must be reconverted too.
+A missing or invalid map glTF is a hard failure. Props must also be converted to glTF. When changing the map format, extend the converter schema and glTF writer, and bump `lif::MAP_FORMAT_VERSION`; a prop model change bumps `lif::MODEL_FORMAT_VERSION`. The two versions are independent, so a map bump does not invalidate cached models. Ground textures are pooled in `ground/tex/` and referenced by absolute `ro://` URI; prop textures live in `models/tex/`.
 
 ## Shared plugins
 

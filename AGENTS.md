@@ -101,9 +101,12 @@ Maps are **converted offline to glTF**, not loaded from standalone RO map files.
 GND/RSW/RSM/RSM2 parsing is offline-only; embedded GAT decoding remains runtime.
 A map is a single
 `data/maps/<map>/<map>.glb` produced by `ro-to-lifthrasir-cli convert-maps`,
-carrying terrain meshes, baked `KHR_lights_punctual` lighting and ambient,
-sound and effect emitters, prop references, water parameters **plus its baked
-water tile mask**, and the original `.gat` bytes verbatim in the binary chunk.
+carrying chunked indexed terrain meshes, baked `KHR_lights_punctual` lighting
+(sun, point and spot) and ambient, sound and effect emitters, prop references,
+water parameters **plus its baked water tile mask**, and the original `.gat`
+bytes verbatim in the binary chunk. Ground textures are shared across maps in
+the `ground/tex/` pool and referenced by absolute `ro://ground/tex/<name>.ktx2`
+URI; prop textures stay in `models/tex/`.
 
 Consequences worth knowing before changing map code:
 
@@ -124,9 +127,11 @@ Consequences worth knowing before changing map code:
   not convert, so a written map glb is loadable by construction.
 - Adding a map feature means extending the **converter schema**
   (`crates/lifthrasir-data/src/lif.rs`) and the glb writer, not adding a runtime
-  parser. Bump `lif::FORMAT_VERSION` when the schema changes — note it is
-  shared by `LifMap` and `LifModel`, so bumping it invalidates converted
-  **models** as well as maps.
+  parser. Bump `lif::MAP_FORMAT_VERSION` for map schema changes and
+  `lif::MODEL_FORMAT_VERSION` for prop model changes; the two are independent,
+  so a map bump no longer invalidates cached models. `LIF_map.source` (the
+  retail RSW/GND/GAT hashes) is optional: converted maps carry it, editor-
+  authored maps do not.
 
 ### Shared host composition
 
@@ -187,13 +192,15 @@ what is already on disk, and the runtime cannot load an unconverted map:
 cargo run --release -p ro-to-lifthrasir-cli -- convert-maps --force-models
 ```
 
-This writes `assets/data/maps/<map>/<map>.glb` plus its external textures, and the props
-they reference into `assets/data/models`. It processes maps in sorted order,
-logs and continues past failures, and exits non-zero if any map failed; writes
-are atomic so a failed map leaves no partial glb. `--force-models` re-converts
-props that already exist on disk — required after any `lif::FORMAT_VERSION`
-bump, since cached props are otherwise skipped and the runtime rejects stale
-ones. Single map: `convert-map --map <name>`.
+This writes `assets/data/maps/<map>/<map>.glb`, pools its ground textures under
+`assets/data/ground/tex/` (`--ground-dir`, default `assets/data/ground`), and
+converts the props they reference into `assets/data/models`. It removes any
+stale `maps/<map>/tex/` directory left by older converters, processes maps in
+sorted order, logs and continues past failures, and exits non-zero if any map
+failed; writes are atomic so a failed map leaves no partial glb. `--force-models`
+re-converts props that already exist on disk — required after a
+`lif::MODEL_FORMAT_VERSION` bump, since cached props are otherwise skipped and
+the runtime rejects stale ones. Single map: `convert-map --map <name>`.
 
 Convert standalone props before packing too: **`pack` only archives files
 already on disk; it never converts them.** The default set is the ten Hunter
