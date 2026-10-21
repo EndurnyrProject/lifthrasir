@@ -3,6 +3,7 @@ use bevy::{
     asset::AssetPlugin,
     camera::Exposure,
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
+    dev_tools::infinite_grid::{InfiniteGrid, InfiniteGridPlugin, InfiniteGridSettings},
     prelude::*,
     text::{FontSize, FontSourceTemplate},
 };
@@ -130,6 +131,7 @@ fn main() -> Result<()> {
                 }),
         )
         .add_plugins(FreeCameraPlugin)
+        .add_plugins(InfiniteGridPlugin)
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -144,6 +146,7 @@ fn main() -> Result<()> {
                 move_selected_prop,
                 duplicate_selected_prop,
                 delete_selected_prop,
+                toggle_infinite_grid,
                 sync_prop_gizmo,
                 draw_prop_gizmo,
                 sync_prop_cursor,
@@ -549,6 +552,16 @@ fn setup(
         path: format!("ro://{}", map_path.0),
     });
     commands.spawn((
+        InfiniteGrid,
+        InfiniteGridSettings {
+            // Grid spacing is the reciprocal of `scale`: RO collision and
+            // terrain tiles are five world units wide.
+            scale: 0.2,
+            fadeout_distance: 1_500.0,
+            ..default()
+        },
+    ));
+    commands.spawn((
         CollisionCursor,
         Mesh3d(meshes.add(Cuboid::new(5.0, 5.0, 5.0))),
         MeshMaterial3d(materials.add(Color::srgb(1.0, 0.1, 0.1))),
@@ -631,7 +644,7 @@ fn command_overlay() -> impl Scene {
         Pickable::IGNORE
         Children [
             (
-                 Text("Camera\nWASD - move · Space/Ctrl - up/down\nRMB - look · Wheel - speed\n\nCollision\nLMB / arrows - select cell\nF - toggle walkability\nCtrl+Z / Ctrl+Y - undo / redo\nCtrl+S - save\n\nProps\nClick a prop, drag gizmo axis\nI/K J/L U/O - move\nQ/E - rotate · G/R - gizmo mode\nCtrl+D duplicate · Delete remove")
+                 Text("Camera\nWASD - move · Space/Ctrl - up/down\nRMB - look · Wheel - speed\nP - toggle grid\n\nCollision\nLMB / arrows - select cell\nF - toggle walkability\nCtrl+Z / Ctrl+Y - undo / redo\nCtrl+S - save\n\nProps\nClick a prop, drag gizmo axis\nI/K J/L U/O - move\nQ/E - rotate · G/R - gizmo mode\nCtrl+D duplicate · Delete remove")
                 TextFont {
                     font: FontSourceTemplate::Handle("ro://fonts/space-mono.ttf"),
                     font_size: FontSize::Px(14.0),
@@ -682,6 +695,23 @@ fn toggle_cursor_cell(
     if let Err(error) = document.0.set_collision_cell(cursor.x, cursor.y, cell) {
         error!("editing collision: {error:#}");
         return;
+    }
+}
+
+/// Matches Bevy's infinite-grid example: `P` toggles the editor reference
+/// plane without affecting collision editing or map rendering.
+fn toggle_infinite_grid(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut grids: Query<&mut Visibility, With<InfiniteGrid>>,
+) {
+    if !keys.just_pressed(KeyCode::KeyP) {
+        return;
+    }
+    for mut visibility in &mut grids {
+        *visibility = match *visibility {
+            Visibility::Hidden => Visibility::Visible,
+            Visibility::Inherited | Visibility::Visible => Visibility::Hidden,
+        };
     }
 }
 
