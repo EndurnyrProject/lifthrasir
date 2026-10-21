@@ -11,8 +11,8 @@ pub mod terrain;
 pub mod water;
 pub use components::PropSceneContext;
 pub use components::{
-    LifAudioEmitter, LifEffectEmitter, LifMapData, LifMapLoadError, LifPropRef, MapSceneRequest,
-    MapSceneStatus, SceneOwner,
+    EmitterOutput, LifAudioEmitter, LifEffectEmitter, LifMapData, LifMapLoadError, LifPropRef,
+    MapLightCandela, MapSceneRequest, MapSceneStatus, SceneOwner,
 };
 pub use gltf::MapGltfPlugin;
 pub use props::PropRenderPlugin;

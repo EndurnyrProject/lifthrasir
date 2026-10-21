@@ -67,6 +67,18 @@ pub struct MapSceneHandle {
     pub scene: Handle<WorldAsset>,
 }
 
+/// The authored KHR candela of a map point/spot light, on the entity holding
+/// the `PointLight`/`SpotLight`. Bevy stores `candela * 4π` as `intensity`,
+/// which cannot be divided back bit-exactly, so editors save this value.
+#[derive(Component, Reflect, Debug, Clone, Copy, PartialEq)]
+#[reflect(Component, Debug, Clone)]
+pub struct MapLightCandela(pub f32);
+
+/// Links a spawned map sound/effect/ambient-vfx output to its emitter node, so
+/// the output can be released when that node is edited or removed.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmitterOutput(pub Entity);
+
 /// Explicit ownership of a generated map-scene entity.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SceneOwner(pub Entity);

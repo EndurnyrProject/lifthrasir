@@ -25,7 +25,8 @@ impl Plugin for MapGltfPlugin {
             .register_type::<LifMapLoadError>()
             .register_type::<LifAudioEmitter>()
             .register_type::<LifEffectEmitter>()
-            .register_type::<LifPropRef>();
+            .register_type::<LifPropRef>()
+            .register_type::<MapLightCandela>();
     }
 }
 
@@ -170,7 +171,7 @@ impl GltfExtensionHandler for LifExtensionHandler {
     fn on_spawn_light_point(
         &mut self,
         _load_context: &mut LoadContext<'_>,
-        _gltf_node: &gltf::Node,
+        gltf_node: &gltf::Node,
         entity: &mut EntityWorldMut,
     ) {
         if !self.is_usable_map() {
@@ -178,15 +179,15 @@ impl GltfExtensionHandler for LifExtensionHandler {
         }
 
         if let Some(mut light) = entity.get_mut::<PointLight>() {
-            light.radius = POINT_LIGHT_RADIUS;
-            light.shadow_maps_enabled = false;
+            tune_map_point_light(&mut light);
         }
+        insert_candela(gltf_node, entity);
     }
 
     fn on_spawn_light_spot(
         &mut self,
         _load_context: &mut LoadContext<'_>,
-        _gltf_node: &gltf::Node,
+        gltf_node: &gltf::Node,
         entity: &mut EntityWorldMut,
     ) {
         if !self.is_usable_map() {
@@ -194,9 +195,28 @@ impl GltfExtensionHandler for LifExtensionHandler {
         }
 
         if let Some(mut light) = entity.get_mut::<SpotLight>() {
-            light.radius = POINT_LIGHT_RADIUS;
-            light.shadow_maps_enabled = false;
+            tune_map_spot_light(&mut light);
         }
+        insert_candela(gltf_node, entity);
+    }
+}
+
+/// Map point-light tuning, shared by loaded lights and editor-placed ones.
+pub fn tune_map_point_light(light: &mut PointLight) {
+    light.radius = POINT_LIGHT_RADIUS;
+    light.shadow_maps_enabled = false;
+}
+
+/// Map spot-light tuning, identical to [`tune_map_point_light`].
+pub fn tune_map_spot_light(light: &mut SpotLight) {
+    light.radius = POINT_LIGHT_RADIUS;
+    light.shadow_maps_enabled = false;
+}
+
+/// Keeps the authored KHR intensity next to the light it produced.
+fn insert_candela(gltf_node: &gltf::Node, entity: &mut EntityWorldMut) {
+    if let Some(light) = gltf_node.light() {
+        entity.insert(MapLightCandela(light.intensity()));
     }
 }
 
@@ -548,6 +568,35 @@ mod tests {
             assert_eq!(spot.outer_angle, 0.6);
             assert_eq!(spot.radius, POINT_LIGHT_RADIUS);
             assert!(!spot.shadow_maps_enabled);
+        });
+    }
+
+    #[test]
+    fn spot_lights_keep_the_authored_candela() {
+        with_scene_world(&mut test_app(), "mini_map.glb", |world| {
+            let mut query = world.query_filtered::<&MapLightCandela, With<SpotLight>>();
+            let candela = query.single(world).expect("one spot light with candela");
+
+            assert_eq!(*candela, MapLightCandela(50.0));
+        });
+    }
+
+    #[test]
+    fn point_lights_keep_the_candela_the_glb_stores() {
+        let gltf::Gltf { document, .. } =
+            gltf::Gltf::open(format!("{FIXTURES}/mini_map.glb")).expect("open fixture");
+        let written = document
+            .lights()
+            .expect("KHR_lights_punctual")
+            .find(|light| matches!(light.kind(), gltf::khr_lights_punctual::Kind::Point))
+            .expect("point light")
+            .intensity();
+
+        with_scene_world(&mut test_app(), "mini_map.glb", |world| {
+            let mut query = world.query_filtered::<&MapLightCandela, With<PointLight>>();
+            let candela = query.single(world).expect("one point light with candela");
+
+            assert_eq!(*candela, MapLightCandela(written));
         });
     }
 

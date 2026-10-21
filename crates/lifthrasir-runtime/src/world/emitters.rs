@@ -15,7 +15,8 @@ use std::collections::BTreeMap;
 
 use bevy::prelude::*;
 
-use super::components::{LifEffectEmitter, SceneOwner};
+use super::components::{EmitterOutput, LifEffectEmitter, SceneOwner};
+use crate::audio::map_sounds::{GltfMapSoundSpawned, MapSound, MapSoundSource};
 use crate::effects::spawn_effect;
 use crate::effects::{EffectAnchor, MapAmbientVfx};
 use crate::effects::{descriptor_tint, load_effect};
@@ -28,9 +29,13 @@ impl Plugin for MapEmittersPlugin {
         app.add_systems(
             PostUpdate,
             (
-                spawn_gltf_map_effects,
-                crate::audio::map_sounds::spawn_gltf_map_sounds,
+                release_stale_emitter_outputs,
+                (
+                    spawn_gltf_map_effects,
+                    crate::audio::map_sounds::spawn_gltf_map_sounds,
+                ),
             )
+                .chain()
                 .after(bevy::transform::TransformSystems::Propagate),
         )
         .add_systems(
@@ -44,26 +49,60 @@ impl Plugin for MapEmittersPlugin {
 fn cleanup_scene_emitters(
     mut commands: Commands,
     alive: Query<Entity>,
-    owned: Query<(
-        Entity,
-        &SceneOwner,
-        Option<&crate::audio::map_sounds::MapSoundSource>,
-    )>,
+    owned: Query<(Entity, &SceneOwner, Option<&MapSoundSource>)>,
     mut instances: Option<ResMut<Assets<bevy_kira_audio::AudioInstance>>>,
 ) {
     for (entity, owner, sound) in &owned {
         if alive.contains(owner.0) {
             continue;
         }
-        if let Some(handle) = sound.and_then(|sound| sound.instance.as_ref())
-            && let Some(instances) = instances.as_deref_mut()
-            && let Some(mut instance) = instances.get_mut(handle)
-        {
-            instance.stop(bevy_kira_audio::AudioTween::linear(
-                std::time::Duration::from_secs_f32(0.1),
-            ));
-        }
+        stop_sound(sound, instances.as_deref_mut());
         commands.entity(entity).despawn();
+    }
+}
+
+/// Despawns an output whose emitter node is gone or lost its spawned marker,
+/// so the spawn systems that run next rebuild it at the node's position.
+pub fn release_stale_emitter_outputs(
+    mut commands: Commands,
+    emitters: Query<(Has<GltfMapSoundSpawned>, Has<GltfMapEffectSpawned>)>,
+    outputs: Query<(
+        Entity,
+        &EmitterOutput,
+        Has<MapSound>,
+        Option<&MapSoundSource>,
+    )>,
+    mut instances: Option<ResMut<Assets<bevy_kira_audio::AudioInstance>>>,
+) {
+    for (entity, output, is_sound, sound) in &outputs {
+        let spawned = emitters
+            .get(output.0)
+            .is_ok_and(|(sound_spawned, effect_spawned)| {
+                if is_sound {
+                    sound_spawned
+                } else {
+                    effect_spawned
+                }
+            });
+        if spawned {
+            continue;
+        }
+        stop_sound(sound, instances.as_deref_mut());
+        commands.entity(entity).despawn();
+    }
+}
+
+fn stop_sound(
+    sound: Option<&MapSoundSource>,
+    instances: Option<&mut Assets<bevy_kira_audio::AudioInstance>>,
+) {
+    if let Some(handle) = sound.and_then(|sound| sound.instance.as_ref())
+        && let Some(instances) = instances
+        && let Some(mut instance) = instances.get_mut(handle)
+    {
+        instance.stop(bevy_kira_audio::AudioTween::linear(
+            std::time::Duration::from_secs_f32(0.1),
+        ));
     }
 }
 
@@ -78,6 +117,7 @@ fn spawn_map_effect(
     position: Vec3,
     effect: &lifthrasir_data::lif::LifEffect,
     owner: Entity,
+    emitter: Entity,
 ) -> bool {
     let Some(descriptor) = catalog.special(effect.effect_type) else {
         return false;
@@ -92,7 +132,9 @@ fn spawn_map_effect(
             descriptor_tint(descriptor),
             None,
         );
-        commands.entity(spawned).insert(SceneOwner(owner));
+        commands
+            .entity(spawned)
+            .insert((SceneOwner(owner), EmitterOutput(emitter)));
         return true;
     }
 
@@ -107,6 +149,7 @@ fn spawn_map_effect(
     commands.spawn((
         Transform::from_translation(position),
         SceneOwner(owner),
+        EmitterOutput(emitter),
         MapAmbientVfx {
             key: key.to_string(),
             emit_speed: effect.emit_speed,
@@ -156,6 +199,7 @@ pub fn spawn_gltf_map_effects(
             transform.translation(),
             effect,
             owner.0,
+            entity,
         );
 
         if !spawned {

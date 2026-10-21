@@ -231,3 +231,106 @@ fn a_retained_pair_reuses_the_same_scene_but_a_mismatch_fails_explicitly() {
     };
     assert!(error.contains("ro://other.glb") && error.contains("ro://mini_map.glb"));
 }
+
+/// An app whose catalog maps the fixture's effect 12 to a bespoke ambient
+/// output, with one ready `mini_map.glb` root.
+fn app_with_ready_emitters() -> (App, Entity) {
+    use lifthrasir_data::{EffectData, EffectDescriptor, EffectPlacement, GroundAnchor, Visual};
+    let mut app = app();
+    let mut catalog = EffectData::default();
+    catalog.special.insert(
+        12,
+        EffectDescriptor {
+            visuals: vec![Visual::Bespoke("smoke".into())],
+            sound: None,
+            on_trigger: None,
+            placement: EffectPlacement::Ground,
+            color: [1.0; 4],
+            repeating: true,
+            ground_anchor: GroundAnchor::Group,
+        },
+    );
+    app.insert_resource(lifthrasir_assets::catalogs::EffectCatalog::build(&catalog).unwrap());
+    let root = app
+        .world_mut()
+        .spawn(MapSceneRequest {
+            path: "ro://mini_map.glb".into(),
+        })
+        .id();
+    settle(&mut app, root);
+    app.update();
+    (app, root)
+}
+
+/// The single emitter node of the fixture carrying `C`.
+fn emitter_node<C: Component>(app: &mut App) -> Entity {
+    app.world_mut()
+        .query_filtered::<Entity, With<C>>()
+        .single(app.world())
+        .unwrap()
+}
+
+/// Every output linked to `emitter`, with whether it is a map sound.
+fn outputs_of(app: &mut App, emitter: Entity) -> Vec<(Entity, bool, Vec3)> {
+    use lifthrasir_runtime::{audio::map_sounds::MapSound, world::EmitterOutput};
+    app.world_mut()
+        .query::<(Entity, &EmitterOutput, Has<MapSound>, &Transform)>()
+        .iter(app.world())
+        .filter(|(_, output, _, _)| output.0 == emitter)
+        .map(|(entity, _, sound, transform)| (entity, sound, transform.translation))
+        .collect()
+}
+
+#[test]
+fn removing_the_spawned_marker_respawns_a_moved_sound_at_its_new_position() {
+    use lifthrasir_runtime::audio::map_sounds::GltfMapSoundSpawned;
+    use lifthrasir_runtime::world::{LifAudioEmitter, LifEffectEmitter};
+    let (mut app, _) = app_with_ready_emitters();
+    let audio = emitter_node::<LifAudioEmitter>(&mut app);
+    let effect = emitter_node::<LifEffectEmitter>(&mut app);
+    let [(old_sound, true, _)] = outputs_of(&mut app, audio)[..] else {
+        panic!("the audio node must own exactly one map sound");
+    };
+    assert!(matches!(outputs_of(&mut app, effect)[..], [(_, false, _)]));
+
+    let moved = app
+        .world()
+        .get::<GlobalTransform>(audio)
+        .unwrap()
+        .translation()
+        + Vec3::X * 5.0;
+    app.world_mut()
+        .get_mut::<Transform>(audio)
+        .unwrap()
+        .translation
+        .x += 5.0;
+    app.world_mut()
+        .entity_mut(audio)
+        .remove::<GltfMapSoundSpawned>();
+    app.update();
+    app.update();
+
+    let [(new_sound, true, position)] = outputs_of(&mut app, audio)[..] else {
+        panic!("the audio node must own exactly one map sound after the respawn");
+    };
+    assert_ne!(new_sound, old_sound);
+    assert_eq!(position, moved);
+}
+
+#[test]
+fn despawning_an_emitter_releases_only_its_output() {
+    use lifthrasir_runtime::world::{LifAudioEmitter, LifEffectEmitter};
+    let (mut app, root) = app_with_ready_emitters();
+    let audio = emitter_node::<LifAudioEmitter>(&mut app);
+    let effect = emitter_node::<LifEffectEmitter>(&mut app);
+    let effect_outputs = outputs_of(&mut app, effect);
+    assert_eq!(effect_outputs.len(), 1);
+    assert_eq!(outputs_of(&mut app, audio).len(), 1);
+
+    app.world_mut().entity_mut(audio).despawn();
+    app.update();
+
+    assert!(outputs_of(&mut app, audio).is_empty());
+    assert_eq!(outputs_of(&mut app, effect), effect_outputs);
+    assert!(app.world().get_entity(root).is_ok());
+}

@@ -14,7 +14,7 @@ moonshine-tag = "0.5"
 moonshine-kind = "0.5"
 serde = { workspace = true }
 serde_json = { workspace = true }
-gltf = { workspace = true }
+gltf = { workspace = true, features = ["KHR_lights_punctual"] }
 pathfinding = "4.15"
 # Keep only 3d: Hanabi's 2d path also draws world effects through the UI Camera2d.
 bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }

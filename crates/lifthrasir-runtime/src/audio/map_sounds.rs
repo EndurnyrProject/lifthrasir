@@ -1,5 +1,5 @@
 use super::ContentAudioListener;
-use crate::world::{LifAudioEmitter, SceneOwner};
+use crate::world::{EmitterOutput, LifAudioEmitter, SceneOwner};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 use bevy_kira_audio::prelude::AudioControl;
@@ -39,10 +39,12 @@ fn map_sound_bundle(
     range: f32,
     cycle: f32,
     owner: Entity,
+    emitter: Entity,
 ) -> impl Bundle {
     (
         MapSound,
         SceneOwner(owner),
+        EmitterOutput(emitter),
         MapSoundSource {
             handle_path,
             base_volume,
@@ -87,6 +89,7 @@ pub fn spawn_gltf_map_sounds(
             audio.range,
             audio.cycle,
             owner.0,
+            entity,
         ));
         commands.entity(entity).insert(GltfMapSoundSpawned);
     }
@@ -259,7 +262,15 @@ mod tests {
         let source = app
             .world_mut()
             .spawn((
-                map_sound_bundle(position, "ro://sound.wav".into(), 0.5, 10.0, 0.0, owner),
+                map_sound_bundle(
+                    position,
+                    "ro://sound.wav".into(),
+                    0.5,
+                    10.0,
+                    0.0,
+                    owner,
+                    owner,
+                ),
                 GlobalTransform::from_translation(position),
             ))
             .id();
