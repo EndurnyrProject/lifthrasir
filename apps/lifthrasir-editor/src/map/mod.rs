@@ -2,12 +2,17 @@
 
 pub mod document;
 pub mod layout;
+pub mod lighting;
+pub mod open;
+pub mod save;
 
 use bevy::prelude::*;
 
-/// Map editing. Systems arrive with the open/save and tool modules.
+/// Map editing: the start screen, open, save and save-as.
 pub struct MapEditorPlugin;
 
 impl Plugin for MapEditorPlugin {
-    fn build(&self, _app: &mut App) {}
+    fn build(&self, app: &mut App) {
+        app.add_plugins((open::plugin, save::plugin));
+    }
 }

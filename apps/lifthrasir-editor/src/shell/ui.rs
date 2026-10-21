@@ -1,7 +1,11 @@
 //! Editor UI ordering, the shared panel area, the status bar, and the run
 //! conditions that keep viewport input away from egui.
 
-use super::camera::EditorCamera;
+use super::{camera::EditorCamera, undo::UndoStack};
+use crate::{
+    EditorPaths,
+    map::{open::OpenMap, save::map_glb_path},
+};
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContexts, egui, input::EguiWantsInput};
 
@@ -86,19 +90,35 @@ fn viewport_owns_pointer(
     }
 }
 
-/// Bottom status bar: camera mode for now; later tasks add map state.
+/// Bottom status bar: the open map (`*` when unsaved, a note when it is only
+/// in the pak) and the camera mode.
 pub fn status_bar(
     mut contexts: EguiContexts,
     mut area: ResMut<EditorUiArea>,
     cameras: Query<&EditorCamera>,
+    open: Option<Res<OpenMap>>,
+    undo: Res<UndoStack>,
+    paths: Option<Res<EditorPaths>>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let mode = cameras.single().map(|camera| camera.mode).ok();
+    let pak_only = match (&open, &paths) {
+        (Some(open), Some(paths)) => !map_glb_path(&paths.data_folder, &open.name).exists(),
+        _ => false,
+    };
     area.show(ctx, "status_bar", |ui| {
         egui::Panel::bottom("status_bar").show(ui, |ui| {
             ui.horizontal(|ui| {
+                if let Some(open) = &open {
+                    let dirty = if undo.is_dirty() { "*" } else { "" };
+                    ui.label(format!("{}{dirty}", open.name));
+                }
+                if pak_only {
+                    ui.label("(pak only: saving writes a loose copy that shadows the pak)");
+                }
                 if let Some(mode) = mode {
-                    ui.label(format!("Camera: {mode:?} (Tab to toggle)"));
+                    ui.separator();
+                    ui.label(format!("Camera: {mode:?} (C to toggle)"));
                 }
             });
         });

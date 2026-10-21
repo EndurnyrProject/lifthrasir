@@ -39,6 +39,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     title: "Lifthrasir Editor".into(),
                     ..default()
                 }),
+                // Quit goes through the editor's unsaved-changes guard.
+                close_when_requested: false,
                 ..default()
             })
             .set(GltfPlugin {

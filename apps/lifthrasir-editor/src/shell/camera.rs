@@ -10,7 +10,7 @@ use bevy_kira_audio::SpatialAudioReceiver;
 use lifthrasir_runtime::audio::ContentAudioListener;
 use std::f32::consts::FRAC_PI_4;
 
-/// How the camera reacts to input. `Tab` toggles.
+/// How the camera reacts to input. `C` toggles (egui uses Tab for widget focus).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CameraMode {
     /// WASD, Q/E down/up, Shift faster, right-mouse look.
@@ -98,7 +98,7 @@ pub fn toggle_camera_mode(
     keys: Res<ButtonInput<KeyCode>>,
     mut cameras: Query<(&mut EditorCamera, &mut Transform)>,
 ) {
-    if !keys.just_pressed(KeyCode::Tab) {
+    if !keys.just_pressed(KeyCode::KeyC) {
         return;
     }
     for (mut camera, mut transform) in &mut cameras {
