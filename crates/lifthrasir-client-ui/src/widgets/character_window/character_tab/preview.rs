@@ -109,20 +109,19 @@ pub fn preview_frame() -> impl Scene {
         }
         @lifthrasir_ui::widgets::chrome::ignore_picking()
         Children [
-            (
-                CharPreviewFrame
-                Node {
-                    width: px(165),
-                    height: px(220),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(8)),
-                }
-                ThemeBackgroundColor({TOKEN_PANEL_BG})
-                ThemeBorderColor({TOKEN_WINDOW_BORDER})
-            ),
-            @rotate_row(),
+            CharPreviewFrame
+            Node {
+                width: px(165),
+                height: px(220),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: px(1),
+                border_radius: BorderRadius::all(px(8)),
+            }
+            ThemeBackgroundColor({TOKEN_PANEL_BG})
+            ThemeBorderColor({TOKEN_WINDOW_BORDER})
+            --
+            @rotate_row()
         ]
     }
 }
@@ -136,25 +135,21 @@ fn rotate_row() -> impl Scene {
         }
         @lifthrasir_ui::widgets::chrome::ignore_picking()
         Children [
-            (
-                @FeathersButton { @caption: bsn! { @glyph_icon("rotl", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                Node { width: px(24), height: px(20) }
-                on(on_rotate_left)
-            ),
-            (
-                Text({"Rotate".to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(10.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT_DIM})
-                @lifthrasir_ui::widgets::chrome::ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { @glyph_icon("rotr", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                Node { width: px(24), height: px(20) }
-                on(on_rotate_right)
-            ),
+            @FeathersButton { @caption: bsn! { @glyph_icon("rotl", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            Node { width: px(24), height: px(20) }
+            on(on_rotate_left)
+            --
+            Text({"Rotate".to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(10.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT_DIM})
+            @lifthrasir_ui::widgets::chrome::ignore_picking()
+            --
+            @FeathersButton { @caption: bsn! { @glyph_icon("rotr", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            Node { width: px(24), height: px(20) }
+            on(on_rotate_right)
         ]
     }
 }

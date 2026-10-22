@@ -164,14 +164,12 @@ fn invite_button(label: &'static str, action: MenuAction) -> impl Scene {
         action
         @FeathersButton {
             @caption: bsn! {
-                (
-                    Text(label)
-                    TextFont {
-                        font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                        font_size: {FontSize::Px(14.0)},
-                    }
-                    ThemedText
-                )
+                Text(label)
+                TextFont {
+                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                    font_size: {FontSize::Px(14.0)},
+                }
+                ThemedText
             },
             @variant: ButtonVariant::Primary,
         }

@@ -90,7 +90,7 @@ pub(super) fn body(layout: TreeLayout, catalog: Option<&SkillCatalog>) -> impl S
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         @ignore_picking()
-        Children [ @toolbar(), @canvas(layout, cells, connectors), @footer() ]
+        Children [ @toolbar() -- @canvas(layout, cells, connectors) -- @footer() ]
     }
 }
 
@@ -217,26 +217,25 @@ fn toolbar() -> impl Scene {
         }
         @ignore_picking()
         Children [
-            @chrome_text("Requirements flow  →  left to right".to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT),
-            (
-                Node {
-                    margin: {UiRect::left(auto())},
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(8),
-                    padding: {UiRect::axes(px(10), px(5))},
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(8)),
-                }
-                BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.3)})
-                BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-                @ignore_picking()
-                Children [
-                    @chrome_text("Skill Points".to_string(), 9.0, lifthrasir_ui::theme::TEXT_FAINT),
-                    @bank_text(),
-                ]
-            ),
-            @reset_button(),
+            @chrome_text("Requirements flow  →  left to right".to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) --
+            Node {
+                margin: {UiRect::left(auto())},
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: px(8),
+                padding: {UiRect::axes(px(10), px(5))},
+                border: px(1),
+                border_radius: BorderRadius::all(px(8)),
+            }
+            BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.3)})
+            BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
+            @ignore_picking()
+            Children [
+                @chrome_text("Skill Points".to_string(), 9.0, lifthrasir_ui::theme::TEXT_FAINT) --
+                @bank_text()
+            ]
+            --
+            @reset_button()
         ]
     }
 }
@@ -278,34 +277,30 @@ fn canvas(layout: TreeLayout, cells: Vec<CellView>, connectors: Vec<ConnectorVie
         BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
         @ignore_picking()
         Children [
-            (
-                #canvas
-                SkillCanvasViewport
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0), top: px(0),
-                    width: percent(100), height: px(PANE_HEIGHT),
-                    overflow: {Overflow::scroll()},
-                    padding: {UiRect { left: Val::Px(7.0), right: Val::Px(15.0), top: Val::Px(7.0), bottom: Val::Px(15.0) }},
-                }
-                ScrollArea
-                Pickable
-                Children [ @content ]
-            ),
-            (
-                @FeathersScrollbar { @target: #canvas, @orientation: {ControlOrientation::Vertical} }
-                Node {
-                    position_type: PositionType::Absolute,
-                    right: px(3), top: px(4), bottom: px(12), width: px(6),
-                }
-            ),
-            (
-                @FeathersScrollbar { @target: #canvas, @orientation: {ControlOrientation::Horizontal} }
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(4), right: px(12), bottom: px(3), height: px(6),
-                }
-            ),
+            #canvas
+            SkillCanvasViewport
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0), top: px(0),
+                width: percent(100), height: px(PANE_HEIGHT),
+                overflow: {Overflow::scroll()},
+                padding: {UiRect { left: Val::Px(7.0), right: Val::Px(15.0), top: Val::Px(7.0), bottom: Val::Px(15.0) }},
+            }
+            ScrollArea
+            Pickable
+            Children [ @content ]
+            --
+            @FeathersScrollbar { @target: #canvas, @orientation: {ControlOrientation::Vertical} }
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(3), top: px(4), bottom: px(12), width: px(6),
+            }
+            --
+            @FeathersScrollbar { @target: #canvas, @orientation: {ControlOrientation::Horizontal} }
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(4), right: px(12), bottom: px(3), height: px(6),
+            }
         ]
     }
 }
@@ -326,7 +321,7 @@ fn tree_content(
             flex_shrink: 0.0,
         }
         @ignore_picking()
-        Children [ {bands}, {connectors}, {nodes}, {empty_message} ]
+        Children [ {bands} -- {connectors} -- {nodes} -- {empty_message} ]
     }
 }
 
@@ -382,21 +377,19 @@ fn job_band(band: &JobBand) -> impl Scene + use<> {
         ZIndex(0)
         @ignore_picking()
         Children [
-            (
-                Node {
-                    width: percent(100),
-                    height: px(25),
-                    align_items: AlignItems::Center,
-                    padding: {UiRect::horizontal(px(5))},
-                    border_radius: BorderRadius::all(px(7)),
-                }
-                BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.3)})
-                @ignore_picking()
-                Children [
-                    @chrome_text(label, 10.5, lifthrasir_ui::theme::TEXT_DIM),
-                    @job_point_text(band.job_id),
-                ]
-            ),
+            Node {
+                width: percent(100),
+                height: px(25),
+                align_items: AlignItems::Center,
+                padding: {UiRect::horizontal(px(5))},
+                border_radius: BorderRadius::all(px(7)),
+            }
+            BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.3)})
+            @ignore_picking()
+            Children [
+                @chrome_text(label, 10.5, lifthrasir_ui::theme::TEXT_DIM) --
+                @job_point_text(band.job_id)
+            ]
         ]
     }
 }
@@ -423,25 +416,24 @@ fn skill_cell(view: CellView) -> impl Scene {
         on(on_cell_click)
         on(on_cell_drag_start)
         Children [
-            (
-                SkillNodeFrame({view.skill_id})
-                Node {
-                    position_type: PositionType::Relative,
-                    width: px(44), height: px(44),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(10)),
-                }
-                BackgroundColor(lifthrasir_ui::theme::FIELD)
-                BorderColor::all(lifthrasir_ui::theme::STROKE)
-                Outline { width: px(0), offset: px(2), color: Color::NONE }
-                @ignore_picking()
-                Children [ {icon} ]
-            ),
-            @skill_name_text(view.skill_id, view.name),
-            @stepper_row(view.skill_id),
-            @dimmer(view.skill_id),
+            SkillNodeFrame({view.skill_id})
+            Node {
+                position_type: PositionType::Relative,
+                width: px(44), height: px(44),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: px(1),
+                border_radius: BorderRadius::all(px(10)),
+            }
+            BackgroundColor(lifthrasir_ui::theme::FIELD)
+            BorderColor::all(lifthrasir_ui::theme::STROKE)
+            Outline { width: px(0), offset: px(2), color: Color::NONE }
+            @ignore_picking()
+            Children [ {icon} ]
+            --
+            @skill_name_text(view.skill_id, view.name) --
+            @stepper_row(view.skill_id) --
+            @dimmer(view.skill_id)
         ]
     }
 }
@@ -465,9 +457,9 @@ fn stepper_row(skill_id: u32) -> impl Scene {
         Visibility::Hidden
         @ignore_picking()
         Children [
-            @stepper(skill_id, false, false),
-            @skill_level_text(skill_id),
-            @stepper(skill_id, true, false),
+            @stepper(skill_id, false, false) --
+            @skill_level_text(skill_id) --
+            @stepper(skill_id, true, false)
         ]
     }
 }
@@ -593,16 +585,14 @@ fn footer() -> impl Scene {
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         @ignore_picking()
         Children [
-            @staged_count_text(),
-            (
-                Node {
-                    margin: {UiRect::left(auto())},
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::FlexEnd,
-                }
-                @ignore_picking()
-                Children [ @apply_button() ]
-            ),
+            @staged_count_text() --
+            Node {
+                margin: {UiRect::left(auto())},
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::FlexEnd,
+            }
+            @ignore_picking()
+            Children [ @apply_button() ]
         ]
     }
 }

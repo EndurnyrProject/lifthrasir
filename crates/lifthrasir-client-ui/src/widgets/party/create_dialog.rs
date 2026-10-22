@@ -116,10 +116,10 @@ fn card() -> impl Scene {
         BackgroundColor({lifthrasir_ui::theme::GLASS})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Children [
-            @title(),
-            @name_field(),
-            @divider(),
-            @button_row(),
+            @title() --
+            @name_field() --
+            @divider() --
+            @button_row()
         ]
     }
 }
@@ -159,17 +159,15 @@ fn name_field() -> impl Scene {
         BackgroundColor({lifthrasir_ui::theme::FIELD})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Children [
-            (
-                CreatePartyNameField
-                editable
-                TextInput
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(14.0)},
-                }
-                TextColor({lifthrasir_ui::theme::TEXT})
-                Node { flex_grow: 1.0, height: px(18) }
-            ),
+            CreatePartyNameField
+            editable
+            TextInput
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(14.0)},
+            }
+            TextColor({lifthrasir_ui::theme::TEXT})
+            Node { flex_grow: 1.0, height: px(18) }
         ]
     }
 }
@@ -196,19 +194,16 @@ fn button_row() -> impl Scene {
         }
         @ignore_picking()
         Children [
-            (
-                @FeathersButton { @caption: bsn! { (Text("Cancel") ThemedText) } }
-                Node { flex_grow: 1.0, height: px(44), border_radius: BorderRadius::all(px(11)) }
-                on(on_cancel)
-            ),
-            (
-                @FeathersButton {
-                    @caption: bsn! { (Text("Create") ThemedText) },
-                    @variant: ButtonVariant::Primary,
-                }
-                Node { flex_grow: 1.0, height: px(44), border_radius: BorderRadius::all(px(11)) }
-                on(on_create)
-            ),
+            @FeathersButton { @caption: bsn! { Text("Cancel") ThemedText } }
+            Node { flex_grow: 1.0, height: px(44), border_radius: BorderRadius::all(px(11)) }
+            on(on_cancel)
+            --
+            @FeathersButton {
+                @caption: bsn! { Text("Create") ThemedText },
+                @variant: ButtonVariant::Primary,
+            }
+            Node { flex_grow: 1.0, height: px(44), border_radius: BorderRadius::all(px(11)) }
+            on(on_create)
         ]
     }
 }

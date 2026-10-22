@@ -19,7 +19,3 @@ indicatif = { workspace = true }
 tempfile = { workspace = true }
 zip = { workspace = true }
 toml = { workspace = true }
-
-[profile.release]
-strip = true
-lto = true

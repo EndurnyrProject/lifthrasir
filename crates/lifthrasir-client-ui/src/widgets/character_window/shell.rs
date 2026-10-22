@@ -56,10 +56,10 @@ fn window() -> impl Scene {
         Visibility::Hidden
         Pickable
         Children [
-            @titlebar_row(),
-            @tab_strip(),
-            @body_container::<CharacterIdentityMount>(UiRect::axes(px(14), px(8))),
-            @content_region(),
+            @titlebar_row() --
+            @tab_strip() --
+            @body_container::<CharacterIdentityMount>(UiRect::axes(px(14), px(8))) --
+            @content_region()
         ]
     }
 }
@@ -83,22 +83,19 @@ fn titlebar_row() -> impl Scene {
         Pickable
         on(drag_window::<CharacterTitlebar, CharacterWindowRoot>)
         Children [
-            @glyph_icon("user", 16.0, lifthrasir_ui::theme::GOLD),
-            (
-                Text({"Character".to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(15.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                @ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                Node { width: px(22), height: px(22) }
-                on(on_close_click)
-            ),
+            @glyph_icon("user", 16.0, lifthrasir_ui::theme::GOLD) --
+            Text({"Character".to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(15.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            Node { width: px(22), height: px(22) }
+            on(on_close_click)
         ]
     }
 }
@@ -143,9 +140,9 @@ fn content_region() -> impl Scene {
         Node { flex_direction: FlexDirection::Column, flex_grow: 1.0 }
         @ignore_picking()
         Children [
-            @body_container::<CharacterTabBody>(UiRect::axes(px(14), px(10))),
-            @body_container::<BagTabBody>(UiRect::axes(px(14), px(10))),
-            @body_container::<SkillsTabBody>(UiRect::axes(px(14), px(10))),
+            @body_container::<CharacterTabBody>(UiRect::axes(px(14), px(10))) --
+            @body_container::<BagTabBody>(UiRect::axes(px(14), px(10))) --
+            @body_container::<SkillsTabBody>(UiRect::axes(px(14), px(10)))
         ]
     }
 }

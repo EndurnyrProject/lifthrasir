@@ -45,7 +45,7 @@ fn body() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(18), align_items: AlignItems::Start }
         @ignore_picking()
-        Children [ @paperdoll_row(), @attributes::attributes_panel() ]
+        Children [ @paperdoll_row() -- @attributes::attributes_panel() ]
     }
 }
 
@@ -64,9 +64,9 @@ fn paperdoll_row() -> impl Scene {
         }
         @ignore_picking()
         Children [
-            @equip::slot_column(&equip::LEFT_SLOTS),
-            @preview::preview_frame(),
-            @equip::slot_column(&equip::RIGHT_SLOTS),
+            @equip::slot_column(&equip::LEFT_SLOTS) --
+            @preview::preview_frame() --
+            @equip::slot_column(&equip::RIGHT_SLOTS)
         ]
     }
 }

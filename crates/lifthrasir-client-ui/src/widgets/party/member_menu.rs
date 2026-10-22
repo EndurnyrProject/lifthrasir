@@ -92,8 +92,8 @@ fn card(cursor: Vec2) -> impl Scene {
         Pickable
         on(|mut click: On<PointerClick>| click.propagate(false))
         Children [
-            @action_button("Make Leader", on(on_make_leader)),
-            @action_button("Kick", on(on_kick)),
+            @action_button("Make Leader", on(on_make_leader)) --
+            @action_button("Kick", on(on_kick))
         ]
     }
 }
@@ -102,14 +102,12 @@ fn action_button(label: &'static str, observer: impl Scene) -> impl Scene {
     bsn! {
         @FeathersButton {
             @caption: bsn! {
-                (
-                    Text(label)
-                    TextFont {
-                        font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                        font_size: {FontSize::Px(14.0)},
-                    }
-                    ThemedText
-                )
+                Text(label)
+                TextFont {
+                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                    font_size: {FontSize::Px(14.0)},
+                }
+                ThemedText
             },
             @variant: ButtonVariant::Primary,
         }

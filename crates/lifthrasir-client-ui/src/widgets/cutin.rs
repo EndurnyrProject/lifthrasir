@@ -268,7 +268,7 @@ fn static_cutin(path: String) -> impl Scene {
         Visibility::Hidden
         GlobalZIndex(CUTIN_Z)
         @ignore_picking()
-        Children [(
+        Children [
             CutinImage
             ImageNode { image: {path} }
             Node {
@@ -279,7 +279,7 @@ fn static_cutin(path: String) -> impl Scene {
                 height: px(0.0),
             }
             @ignore_picking()
-        )]
+        ]
     }
 }
 
@@ -297,33 +297,30 @@ fn windowed_cutin(path: String) -> impl Scene {
         @ignore_picking()
         on(drag_cutin)
         Children [
-            (
-                CutinTitlebar
-                CutinDragHandle
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0.0),
-                    top: px(0.0),
-                    width: px(0.0),
-                    height: px(TITLEBAR_HEIGHT),
-                    border: {UiRect { bottom: Val::Px(1.0), ..default() }},
-                }
-                ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
-                ThemeBorderColor({TOKEN_WINDOW_BORDER})
-                Pickable
-            ),
-            (
-                CutinImage
-                ImageNode { image: {path} }
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0.0),
-                    top: px(0.0),
-                    width: px(0.0),
-                    height: px(0.0),
-                }
-                @ignore_picking()
-            ),
+            CutinTitlebar
+            CutinDragHandle
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0.0),
+                top: px(0.0),
+                width: px(0.0),
+                height: px(TITLEBAR_HEIGHT),
+                border: {UiRect { bottom: Val::Px(1.0), ..default() }},
+            }
+            ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
+            ThemeBorderColor({TOKEN_WINDOW_BORDER})
+            Pickable
+            --
+            CutinImage
+            ImageNode { image: {path} }
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0.0),
+                top: px(0.0),
+                width: px(0.0),
+                height: px(0.0),
+            }
+            @ignore_picking()
         ]
     }
 }
@@ -343,48 +340,45 @@ fn chromeless_cutin(path: String) -> impl Scene {
         @ignore_picking()
         on(drag_cutin)
         Children [
-            (
-                CutinImage
-                CutinDragHandle
-                ImageNode { image: {path} }
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0.0),
-                    top: px(0.0),
-                    width: px(0.0),
-                    height: px(0.0),
-                }
-                Pickable
-            ),
-            (
-                CutinClose
-                @FeathersButton {
-                    @caption: bsn! {
-                        CutinCloseGlyph
-                        ImageNode {
-                            image: {format!("{}{}.svg", lifthrasir_ui::theme::ICON_DIR, "close")},
-                            color: lifthrasir_ui::theme::TEXT_DIM,
-                        }
-                        Node { width: px(CLOSE_GLYPH_SIZE), height: px(CLOSE_GLYPH_SIZE) }
-                        @ignore_picking()
+            CutinImage
+            CutinDragHandle
+            ImageNode { image: {path} }
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0.0),
+                top: px(0.0),
+                width: px(0.0),
+                height: px(0.0),
+            }
+            Pickable
+            --
+            CutinClose
+            @FeathersButton {
+                @caption: bsn! {
+                    CutinCloseGlyph
+                    ImageNode {
+                        image: {format!("{}{}.svg", lifthrasir_ui::theme::ICON_DIR, "close")},
+                        color: lifthrasir_ui::theme::TEXT_DIM,
                     }
+                    Node { width: px(CLOSE_GLYPH_SIZE), height: px(CLOSE_GLYPH_SIZE) }
+                    @ignore_picking()
                 }
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(CLOSE_BUTTON_OFFSET),
-                    right: px(CLOSE_BUTTON_OFFSET),
-                    width: px(CLOSE_BUTTON_SIZE),
-                    height: px(CLOSE_BUTTON_SIZE),
-                    // Feathers' 8px button padding inflates the laid-out box beyond the
-                    // factor-scaled width at extreme fit-down; zero it so the button's
-                    // computed size matches the fitted dimensions.
-                    padding: UiRect::ZERO,
-                    min_width: px(0.0),
-                    min_height: px(0.0),
-                }
-                ZIndex(1)
-                on(dismiss_cutin)
-            ),
+            }
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(CLOSE_BUTTON_OFFSET),
+                right: px(CLOSE_BUTTON_OFFSET),
+                width: px(CLOSE_BUTTON_SIZE),
+                height: px(CLOSE_BUTTON_SIZE),
+                // Feathers' 8px button padding inflates the laid-out box beyond the
+                // factor-scaled width at extreme fit-down; zero it so the button's
+                // computed size matches the fitted dimensions.
+                padding: UiRect::ZERO,
+                min_width: px(0.0),
+                min_height: px(0.0),
+            }
+            ZIndex(1)
+            on(dismiss_cutin)
         ]
     }
 }

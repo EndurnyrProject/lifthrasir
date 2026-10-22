@@ -62,7 +62,7 @@ fn card(
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
-        Children [ @titlebar(title), @body(catalysts, catalyst_buttons, rows) ]
+        Children [ @titlebar(title) -- @body(catalysts, catalyst_buttons, rows) ]
     }
 }
 
@@ -78,16 +78,14 @@ fn titlebar(title: String) -> impl Scene {
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         @ignore_picking()
         Children [
-            (
-                Text(title)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                @ignore_picking()
-            ),
+            Text(title)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
         ]
     }
 }
@@ -112,7 +110,7 @@ fn body(
             padding: {UiRect::axes(px(14), px(12))},
         }
         @ignore_picking()
-        Children [ {summary}, {chips}, ( @entry_list() Children [ {rows} ] ) ]
+        Children [ {summary} -- {chips} --  @entry_list() Children [ {rows} ]  ]
     }
 }
 

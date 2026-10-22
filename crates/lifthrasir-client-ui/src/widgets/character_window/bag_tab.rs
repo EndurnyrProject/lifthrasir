@@ -289,7 +289,7 @@ fn body(inventory: &Inventory, ui: &BagUi, item_db: Option<&ItemDb>) -> impl Sce
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         @ignore_picking()
-        Children [ @tab_strip(ui.tab, counts), @grid_pane(cells) ]
+        Children [ @tab_strip(ui.tab, counts) -- @grid_pane(cells) ]
     }
 }
 
@@ -336,9 +336,9 @@ fn tab_button(
         Pickable
         on(on_tab_click)
         Children [
-            @glyph_icon(icon, 14.0, lifthrasir_ui::theme::TEXT_DIM),
-            @chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM),
-            @chrome_text(count.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT),
+            @glyph_icon(icon, 14.0, lifthrasir_ui::theme::TEXT_DIM) --
+            @chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) --
+            @chrome_text(count.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT)
         ]
     }
 }
@@ -362,23 +362,22 @@ fn grid_pane(cells: Vec<CellView>) -> impl Scene {
         BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
         @ignore_picking()
         Children [
-            (
-                #grid
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0), top: px(0), right: px(0), bottom: px(0),
-                    overflow: {Overflow::scroll_y()},
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    align_content: AlignContent::FlexStart,
-                    column_gap: px(6),
-                    row_gap: px(6),
-                    padding: {UiRect { left: Val::Px(8.0), right: Val::Px(13.0), top: Val::Px(8.0), bottom: Val::Px(8.0) }},
-                }
-                ScrollArea
-                Pickable
-                Children [ {items}, {empty_msg} ]
-            ),
+            #grid
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0), top: px(0), right: px(0), bottom: px(0),
+                overflow: {Overflow::scroll_y()},
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                align_content: AlignContent::FlexStart,
+                column_gap: px(6),
+                row_gap: px(6),
+                padding: {UiRect { left: Val::Px(8.0), right: Val::Px(13.0), top: Val::Px(8.0), bottom: Val::Px(8.0) }},
+            }
+            ScrollArea
+            Pickable
+            Children [ {items} -- {empty_msg} ]
+            --
             @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
             Node {
                 position_type: PositionType::Absolute,
@@ -422,7 +421,7 @@ fn cell(view: CellView) -> impl Scene {
         Pickable
         on(on_cell_click)
         on(on_cell_drag_start)
-        Children [ {icon}, {amount}, {refine} ]
+        Children [ {icon} -- {amount} -- {refine} ]
     }
 }
 

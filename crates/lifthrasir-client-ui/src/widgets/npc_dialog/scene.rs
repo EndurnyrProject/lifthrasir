@@ -50,7 +50,7 @@ pub fn window(
         }
         GlobalZIndex(WINDOW_Z)
         @ignore_picking()
-        Children [ ( #Card @card(title, text, expect, options) ) ]
+        Children [  #Card @card(title, text, expect, options)  ]
     }
 }
 
@@ -72,7 +72,7 @@ fn card(title: String, text: String, expect: NpcDialogExpect, options: Vec<Strin
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
-        Children [ @titlebar(title), @body_scene(text, expect, options) ]
+        Children [ @titlebar(title) -- @body_scene(text, expect, options) ]
     }
 }
 
@@ -89,23 +89,20 @@ fn titlebar(title: String) -> impl Scene {
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
         Children [
-            (
-                NpcDialogTitle
-                Text(title)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                @ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { @glyph_icon("close", 11.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                Node { width: px(20), height: px(16) }
-                FooterButtonAction::CloseOrCancel
-                on(on_footer_button)
-            ),
+            NpcDialogTitle
+            Text(title)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 11.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            Node { width: px(20), height: px(16) }
+            FooterButtonAction::CloseOrCancel
+            on(on_footer_button)
         ]
     }
 }
@@ -124,7 +121,7 @@ fn body_scene(text: String, expect: NpcDialogExpect, options: Vec<String>) -> im
             padding: {UiRect::axes(px(14), px(12))},
         }
         @ignore_picking()
-        Children [ @dialog_text(text), {input}, @footer_row(expect, options) ]
+        Children [ @dialog_text(text) -- {input} -- @footer_row(expect, options) ]
     }
 }
 

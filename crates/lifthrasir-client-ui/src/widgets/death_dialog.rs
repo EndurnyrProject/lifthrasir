@@ -122,17 +122,14 @@ fn card() -> impl Scene {
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Children [
-            @title("You have died"),
-            (
-                @FeathersButton { @caption: bsn! { @button_label("Return to save point") } }
-                Node { height: px(40) }
-                on(on_return_to_save)
-            ),
-            (
-                @FeathersButton { @caption: bsn! { @button_label("Character Select") } }
-                Node { height: px(40) }
-                on(on_character_select)
-            ),
+            @title("You have died") --
+            @FeathersButton { @caption: bsn! { @button_label("Return to save point") } }
+            Node { height: px(40) }
+            on(on_return_to_save)
+            --
+            @FeathersButton { @caption: bsn! { @button_label("Character Select") } }
+            Node { height: px(40) }
+            on(on_character_select)
         ]
     }
 }

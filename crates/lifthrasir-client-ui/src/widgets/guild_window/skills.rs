@@ -211,30 +211,27 @@ pub(crate) fn skill_grid(rows: Vec<SkillRow>, skill_points: u32) -> impl Scene {
         Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10) }
         @ignore_picking()
         Children [
-            (
-                Node {
-                    width: percent(100),
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::SpaceBetween,
-                    align_items: AlignItems::Center,
-                }
-                @ignore_picking()
-                Children [
-                    @chrome_text("Guild skills".to_string(), 13.0, lifthrasir_ui::theme::TEXT),
-                    @chrome_text(format!("{skill_points} points"), 10.5, lifthrasir_ui::theme::GOLD),
-                ]
-            ),
-            (
-                Node {
-                    width: percent(100),
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    column_gap: px(10),
-                    row_gap: px(10),
-                }
-                @ignore_picking()
-                Children [ {cells} ]
-            ),
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+            }
+            @ignore_picking()
+            Children [
+                @chrome_text("Guild skills".to_string(), 13.0, lifthrasir_ui::theme::TEXT) --
+                @chrome_text(format!("{skill_points} points"), 10.5, lifthrasir_ui::theme::GOLD)
+            ]
+            --
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: px(10),
+                row_gap: px(10),
+            }
+            @ignore_picking()
+            Children [ {cells} ]
         ]
     }
 }
@@ -264,28 +261,25 @@ fn skill_cell(row: SkillRow) -> impl Scene {
         Pickable
         on(on_cell_click)
         Children [
-            (
-                Node {
-                    width: px(44), height: px(44),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(10)),
-                }
-                BackgroundColor(lifthrasir_ui::theme::FIELD)
-                BorderColor::all(lifthrasir_ui::theme::STROKE)
-                @ignore_picking()
-                Children [ {icon} ]
-            ),
-            @chrome_text(row.name, 8.5, lifthrasir_ui::theme::TEXT_FAINT),
-            (
-                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(3) }
-                @ignore_picking()
-                Children [
-                    @chrome_text(format!("{}/{}", row.level, row.max_level), 9.0, level_color),
-                    {upgrade},
-                ]
-            ),
+            Node {
+                width: px(44), height: px(44),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: px(1),
+                border_radius: BorderRadius::all(px(10)),
+            }
+            BackgroundColor(lifthrasir_ui::theme::FIELD)
+            BorderColor::all(lifthrasir_ui::theme::STROKE)
+            @ignore_picking()
+            Children [ {icon} ]
+            --
+            @chrome_text(row.name, 8.5, lifthrasir_ui::theme::TEXT_FAINT) --
+            Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(3) }
+            @ignore_picking()
+            Children [
+                @chrome_text(format!("{}/{}", row.level, row.max_level), 9.0, level_color) --
+                {upgrade}
+            ]
         ]
     }
 }

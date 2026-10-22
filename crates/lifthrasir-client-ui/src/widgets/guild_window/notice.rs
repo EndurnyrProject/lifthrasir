@@ -139,56 +139,49 @@ pub(crate) fn notice_management(subject: String, body: String, is_master: bool) 
         Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(9) }
         @ignore_picking()
         Children [
-            @chrome_text("Guild notice".to_string(), 13.0, lifthrasir_ui::theme::TEXT),
-            (
-                Node { flex_direction: FlexDirection::Column, row_gap: px(5), padding: {UiRect::all(px(10))}, border_radius: BorderRadius::all(px(8)) }
-                BackgroundColor(lifthrasir_ui::theme::FIELD)
-                @ignore_picking()
-                Children [
-                    @chrome_text(subject_display, 12.5, lifthrasir_ui::theme::TEXT),
-                    @chrome_text(body_display, 11.0, lifthrasir_ui::theme::TEXT_DIM),
-                ]
-            ),
-            (
-                GuildNoticeEditControls
-                edit_visibility
-                Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(7), padding: {UiRect::top(px(7))} }
+            @chrome_text("Guild notice".to_string(), 13.0, lifthrasir_ui::theme::TEXT) --
+            Node { flex_direction: FlexDirection::Column, row_gap: px(5), padding: {UiRect::all(px(10))}, border_radius: BorderRadius::all(px(8)) }
+            BackgroundColor(lifthrasir_ui::theme::FIELD)
+            @ignore_picking()
+            Children [
+                @chrome_text(subject_display, 12.5, lifthrasir_ui::theme::TEXT) --
+                @chrome_text(body_display, 11.0, lifthrasir_ui::theme::TEXT_DIM)
+            ]
+            --
+            GuildNoticeEditControls
+            edit_visibility
+            Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(7), padding: {UiRect::top(px(7))} }
+            Pickable
+            Children [
+                @chrome_text("Edit notice".to_string(), 12.0, lifthrasir_ui::theme::TEXT) --
+                GuildNoticeSubjectField
                 Pickable
-                Children [
-                    @chrome_text("Edit notice".to_string(), 12.0, lifthrasir_ui::theme::TEXT),
-                    (
-                        GuildNoticeSubjectField
-                        Pickable
-                        subject_editable
-                        TextInput
-                        TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
-                        TextColor(lifthrasir_ui::theme::TEXT)
-                        BackgroundColor(lifthrasir_ui::theme::FIELD)
-                        Node { width: percent(100), height: px(34), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
-                        BorderColor::all(lifthrasir_ui::theme::STROKE)
-                    ),
-                    (
-                        GuildNoticeBodyField
-                        Pickable
-                        body_editable
-                        TextInput
-                        TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
-                        TextColor(lifthrasir_ui::theme::TEXT)
-                        BackgroundColor(lifthrasir_ui::theme::FIELD)
-                        Node { width: percent(100), height: px(82), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
-                        BorderColor::all(lifthrasir_ui::theme::STROKE)
-                    ),
-                    (
-                        GuildNoticeSave GuildMutationControl
-                        @FeathersButton {
-                            @caption: bsn! { (Text("Save Notice") ThemedText) },
-                            @variant: ButtonVariant::Primary,
-                        }
-                        Node { width: px(130), height: px(34) }
-                        on(on_save_notice)
-                    ),
-                ]
-            ),
+                subject_editable
+                TextInput
+                TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
+                TextColor(lifthrasir_ui::theme::TEXT)
+                BackgroundColor(lifthrasir_ui::theme::FIELD)
+                Node { width: percent(100), height: px(34), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
+                BorderColor::all(lifthrasir_ui::theme::STROKE)
+                --
+                GuildNoticeBodyField
+                Pickable
+                body_editable
+                TextInput
+                TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
+                TextColor(lifthrasir_ui::theme::TEXT)
+                BackgroundColor(lifthrasir_ui::theme::FIELD)
+                Node { width: percent(100), height: px(82), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
+                BorderColor::all(lifthrasir_ui::theme::STROKE)
+                --
+                GuildNoticeSave GuildMutationControl
+                @FeathersButton {
+                    @caption: bsn! { Text("Save Notice") ThemedText },
+                    @variant: ButtonVariant::Primary,
+                }
+                Node { width: px(130), height: px(34) }
+                on(on_save_notice)
+            ]
         ]
     }
 }

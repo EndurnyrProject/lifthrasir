@@ -209,30 +209,27 @@ fn slot_well(spec: SlotSpec) -> impl Scene {
         on(on_slot_hover_over)
         on(on_slot_hover_out)
         Children [
-            ( #Glyph @glyph_icon(spec.glyph, 22.0, lifthrasir_ui::theme::TEXT_FAINT) ),
-            (
-                #Icon
-                ImageNode
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: percent(100),
-                    height: percent(100),
-                }
-                Visibility::Hidden
-                @ignore_picking()
-            ),
-            (
-                #Refine
-                Text("")
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(9.0)},
-                }
-                TextColor({lifthrasir_ui::theme::GOLD})
-                Node { position_type: PositionType::Absolute, left: px(3), top: px(2) }
-                Visibility::Hidden
-                @ignore_picking()
-            ),
+             #Glyph @glyph_icon(spec.glyph, 22.0, lifthrasir_ui::theme::TEXT_FAINT) --
+            #Icon
+            ImageNode
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                height: percent(100),
+            }
+            Visibility::Hidden
+            @ignore_picking()
+            --
+            #Refine
+            Text("")
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(9.0)},
+            }
+            TextColor({lifthrasir_ui::theme::GOLD})
+            Node { position_type: PositionType::Absolute, left: px(3), top: px(2) }
+            Visibility::Hidden
+            @ignore_picking()
         ]
     }
 }

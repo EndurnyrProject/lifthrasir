@@ -143,7 +143,7 @@ pub(super) fn scene(view: SkillInfoView, raise_target: Option<u32>) -> impl Scen
         Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: px(0) }
         @ignore_picking()
         Children [
-            @header,
+            @header --
             @shell::scroll_body(bsn! {
                 Node {
                     flex_direction: FlexDirection::Column,
@@ -153,14 +153,14 @@ pub(super) fn scene(view: SkillInfoView, raise_target: Option<u32>) -> impl Scen
                 }
                 @ignore_picking()
                 Children [
-                    @level_pips(cur, max),
-                    {meta},
-                    {description},
-                    {requires},
-                    {unlocks},
+                    @level_pips(cur, max) --
+                    {meta} --
+                    {description} --
+                    {requires} --
+                    {unlocks}
                 ]
-            }),
-            {footer},
+            }) --
+            {footer}
         ]
     }
 }
@@ -172,13 +172,12 @@ fn level_pips(cur: u32, max: u32) -> impl Scene {
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(11) }
         @ignore_picking()
         Children [
-            @chrome_text("LEVEL".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT),
-            (
-                Node { flex_direction: FlexDirection::Row, flex_grow: 1.0, column_gap: px(3) }
-                @ignore_picking()
-                Children [ {pips} ]
-            ),
-            @chrome_text(format!("{cur}/{max}"), 12.0, lifthrasir_ui::theme::TEXT),
+            @chrome_text("LEVEL".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT) --
+            Node { flex_direction: FlexDirection::Row, flex_grow: 1.0, column_gap: px(3) }
+            @ignore_picking()
+            Children [ {pips} ]
+            --
+            @chrome_text(format!("{cur}/{max}"), 12.0, lifthrasir_ui::theme::TEXT)
         ]
     }
 }
@@ -206,17 +205,15 @@ fn chip_section(label: String, chips: Vec<SkillReqChip>, is_requires: bool) -> i
         Node { flex_direction: FlexDirection::Column }
         @ignore_picking()
         Children [
-            @shell::section_label(label, None),
-            (
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    column_gap: px(7),
-                    row_gap: px(7),
-                }
-                @ignore_picking()
-                Children [ {chip_scenes} ]
-            ),
+            @shell::section_label(label, None) --
+            Node {
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: px(7),
+                row_gap: px(7),
+            }
+            @ignore_picking()
+            Children [ {chip_scenes} ]
         ]
     }
 }
@@ -293,7 +290,7 @@ fn raise_button(skill_id: u32, label: String, disabled: bool) -> impl Scene {
     bsn! {
         RaiseAction { skill_id, disabled }
         @FeathersButton {
-            @caption: bsn! { (Text(label) ThemedText) },
+            @caption: bsn! { Text(label) ThemedText },
             @variant: ButtonVariant::Primary,
         }
         Node { flex_grow: 1.0, height: px(40), border_radius: BorderRadius::all(px(9)) }

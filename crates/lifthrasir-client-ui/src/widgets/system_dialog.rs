@@ -149,13 +149,13 @@ fn card(request: &ShowSystemDialog) -> impl Scene + use<> {
         BackgroundColor({lifthrasir_ui::theme::GLASS})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Children [
-            @badge(severity_icon(request.severity), accent),
-            @card_text(request.kicker.to_uppercase(), lifthrasir_ui::theme::FONT_BODY, 10.0, lifthrasir_ui::theme::GOLD, 16.0),
-            @card_text(request.title.clone(), lifthrasir_ui::theme::FONT_TITLE, 23.0, lifthrasir_ui::theme::DISPLAY_GOLD, 7.0),
-            @message(request.message.clone()),
-            @code_chip(code_text, accent, code_display),
-            @divider(),
-            @button_row(request),
+            @badge(severity_icon(request.severity), accent) --
+            @card_text(request.kicker.to_uppercase(), lifthrasir_ui::theme::FONT_BODY, 10.0, lifthrasir_ui::theme::GOLD, 16.0) --
+            @card_text(request.title.clone(), lifthrasir_ui::theme::FONT_TITLE, 23.0, lifthrasir_ui::theme::DISPLAY_GOLD, 7.0) --
+            @message(request.message.clone()) --
+            @code_chip(code_text, accent, code_display) --
+            @divider() --
+            @button_row(request)
         ]
     }
 }
@@ -187,8 +187,8 @@ fn button_row(request: &ShowSystemDialog) -> impl Scene + use<> {
         }
         @ignore_picking()
         Children [
-            @secondary,
-            @primary_button(request.button_label.clone()),
+            @secondary --
+            @primary_button(request.button_label.clone())
         ]
     }
 }
@@ -275,15 +275,13 @@ fn code_chip(text: String, accent: Color, display: Display) -> impl Scene {
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.30)})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Children [
-            (
-                Text(text)
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(11.0)},
-                }
-                TextColor(accent)
-                @ignore_picking()
-            ),
+            Text(text)
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(11.0)},
+            }
+            TextColor(accent)
+            @ignore_picking()
         ]
     }
 }
@@ -314,16 +312,14 @@ fn primary_button(label: String) -> impl Scene {
                 }
                 @ignore_picking()
                 Children [
-                    (Text(label) ThemedText),
-                    (
-                        Text("Enter")
-                        TextFont {
-                            font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                            font_size: {FontSize::Px(9.5)},
-                        }
-                        TextColor({Color::WHITE.with_alpha(0.55)})
-                        @ignore_picking()
-                    ),
+                    Text(label) ThemedText--
+                    Text("Enter")
+                    TextFont {
+                        font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                        font_size: {FontSize::Px(9.5)},
+                    }
+                    TextColor({Color::WHITE.with_alpha(0.55)})
+                    @ignore_picking()
                 ]
             },
             @variant: ButtonVariant::Primary,
@@ -343,7 +339,7 @@ fn primary_button(label: String) -> impl Scene {
 /// navigates `confirm_state`.
 fn secondary_button(label: String, display: Display) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { (Text(label) ThemedText) } }
+        @FeathersButton { @caption: bsn! { Text(label) ThemedText } }
         Node {
             display: {display},
             flex_grow: 1.0,

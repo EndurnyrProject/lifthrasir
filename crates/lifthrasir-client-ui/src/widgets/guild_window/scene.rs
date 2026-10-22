@@ -37,16 +37,14 @@ fn window() -> impl Scene {
         Visibility::Hidden
         Pickable
         Children [
-            @titlebar::<GuildTitlebar, GuildWindowRoot>("members", "Guild"),
-            (
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Stretch,
-                    padding: {UiRect::all(px(16))},
-                }
-                @ignore_picking()
-                Children [ @guild_panel() ]
-            ),
+            @titlebar::<GuildTitlebar, GuildWindowRoot>("members", "Guild") --
+            Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Stretch,
+                padding: {UiRect::all(px(16))},
+            }
+            @ignore_picking()
+            Children [ @guild_panel() ]
         ]
     }
 }
@@ -55,7 +53,7 @@ fn guild_panel() -> impl Scene {
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10) }
         @ignore_picking()
-        Children [ @header(), @tabs(), @content(), @feedback_banner(), @leave_control() ]
+        Children [ @header() -- @tabs() -- @content() -- @feedback_banner() -- @leave_control() ]
     }
 }
 
@@ -68,16 +66,14 @@ fn leave_control() -> impl Scene {
         }
         Pickable
         Children [
-            (
-                GuildLeaveButton
-                GuildMutationControl
-                @FeathersButton {
-                    @caption: bsn! { (Text("Leave Guild") ThemedText) },
-                    @variant: ButtonVariant::Normal,
-                }
-                Node { width: px(170), height: px(36) }
-                on(super::dialogs::on_leave)
-            ),
+            GuildLeaveButton
+            GuildMutationControl
+            @FeathersButton {
+                @caption: bsn! { Text("Leave Guild") ThemedText },
+                @variant: ButtonVariant::Normal,
+            }
+            Node { width: px(170), height: px(36) }
+            on(super::dialogs::on_leave)
         ]
     }
 }
@@ -94,81 +90,68 @@ fn header() -> impl Scene {
         BackgroundColor(lifthrasir_ui::theme::GLASS_2)
         @ignore_picking()
         Children [
-            (
+            Node {
+                width: px(58), height: px(58),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: px(1),
+                border_radius: BorderRadius::all(px(10)),
+            }
+            BackgroundColor(lifthrasir_ui::theme::FIELD)
+            BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
+            @ignore_picking()
+            Children [
+                GuildHeaderEmblemFallback @title_text("G".to_string(), 22.0, lifthrasir_ui::theme::GOLD)--
+                GuildHeaderEmblemImage
+                ImageNode {}
+                Node { width: px(48), height: px(48) }
+                Visibility::Hidden
+            ]
+            --
+            Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(4) }
+            @ignore_picking()
+            Children [
+                GuildNameText @title_text(String::new(), 21.0, lifthrasir_ui::theme::TEXT)--
+                GuildMasterText @chrome_text(String::new(), 11.5, lifthrasir_ui::theme::TEXT_DIM)--
+                GuildNoticeText @chrome_text(String::new(), 11.0, lifthrasir_ui::theme::TEXT_FAINT)--
+                Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
+                @ignore_picking()
+                Children [
+                    GuildLevelText @chrome_text(String::new(), 10.5, lifthrasir_ui::theme::GOLD)--
+                    GuildExpText @chrome_text(String::new(), 10.5, lifthrasir_ui::theme::TEXT_DIM)
+                ]
+                --
                 Node {
-                    width: px(58), height: px(58),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(10)),
+                    width: percent(100), height: px(7),
+                    border_radius: BorderRadius::all(px(4)),
+                    overflow: {Overflow::clip()},
                 }
                 BackgroundColor(lifthrasir_ui::theme::FIELD)
-                BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
                 @ignore_picking()
                 Children [
-                    (GuildHeaderEmblemFallback @title_text("G".to_string(), 22.0, lifthrasir_ui::theme::GOLD)),
-                    (
-                        GuildHeaderEmblemImage
-                        ImageNode {}
-                        Node { width: px(48), height: px(48) }
-                        Visibility::Hidden
-                    ),
+                    GuildExpFill
+                    Node { width: percent(0), height: percent(100), border_radius: BorderRadius::all(px(4)) }
+                    BackgroundColor(lifthrasir_ui::theme::GOLD)
+                    @ignore_picking()
                 ]
-            ),
-            (
-                Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(4) }
-                @ignore_picking()
-                Children [
-                    (GuildNameText @title_text(String::new(), 21.0, lifthrasir_ui::theme::TEXT)),
-                    (GuildMasterText @chrome_text(String::new(), 11.5, lifthrasir_ui::theme::TEXT_DIM)),
-                    (GuildNoticeText @chrome_text(String::new(), 11.0, lifthrasir_ui::theme::TEXT_FAINT)),
-                    (
-                        Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-                        @ignore_picking()
-                        Children [
-                            (GuildLevelText @chrome_text(String::new(), 10.5, lifthrasir_ui::theme::GOLD)),
-                            (GuildExpText @chrome_text(String::new(), 10.5, lifthrasir_ui::theme::TEXT_DIM)),
-                        ]
-                    ),
-                    (
-                        Node {
-                            width: percent(100), height: px(7),
-                            border_radius: BorderRadius::all(px(4)),
-                            overflow: {Overflow::clip()},
-                        }
-                        BackgroundColor(lifthrasir_ui::theme::FIELD)
-                        @ignore_picking()
-                        Children [
-                            (
-                                GuildExpFill
-                                Node { width: percent(0), height: percent(100), border_radius: BorderRadius::all(px(4)) }
-                                BackgroundColor(lifthrasir_ui::theme::GOLD)
-                                @ignore_picking()
-                            ),
-                        ]
-                    ),
-                ]
-            ),
-            (
-                Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexEnd, row_gap: px(4) }
-                @ignore_picking()
-                Children [
-                    (GuildMemberCountText @chrome_text(String::new(), 12.0, lifthrasir_ui::theme::TEXT)),
-                    (GuildOnlineCountText @chrome_text(String::new(), 11.5, lifthrasir_ui::theme::EMERALD_BRI)),
-                    (GuildSkillPointsText @chrome_text(String::new(), 11.0, lifthrasir_ui::theme::GOLD)),
-                    (
-                        GuildEmblemUploadButton
-                        GuildMutationControl
-                        @FeathersButton {
-                            @caption: bsn! { (Text("Change Emblem") ThemedText) },
-                            @variant: ButtonVariant::Normal,
-                        }
-                        Node { width: px(138), height: px(30) }
-                        Visibility::Hidden
-                        on(super::emblem::on_select_emblem)
-                    ),
-                ]
-            ),
+            ]
+            --
+            Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexEnd, row_gap: px(4) }
+            @ignore_picking()
+            Children [
+                GuildMemberCountText @chrome_text(String::new(), 12.0, lifthrasir_ui::theme::TEXT)--
+                GuildOnlineCountText @chrome_text(String::new(), 11.5, lifthrasir_ui::theme::EMERALD_BRI)--
+                GuildSkillPointsText @chrome_text(String::new(), 11.0, lifthrasir_ui::theme::GOLD)--
+                GuildEmblemUploadButton
+                GuildMutationControl
+                @FeathersButton {
+                    @caption: bsn! { Text("Change Emblem") ThemedText },
+                    @variant: ButtonVariant::Normal,
+                }
+                Node { width: px(138), height: px(30) }
+                Visibility::Hidden
+                on(super::emblem::on_select_emblem)
+            ]
         ]
     }
 }
@@ -178,41 +161,35 @@ fn tabs() -> impl Scene {
         Node { flex_direction: FlexDirection::Row, column_gap: px(6) }
         @ignore_picking()
         Children [
-            (
-                MembersTabButton
-                GuildTabButton
-                @FeathersButton { @caption: bsn! { (Text("Members") ThemedText) } }
-                Node { flex_grow: 1.0, height: px(34) }
-                on(super::select_members)
-            ),
-            (
-                PositionsTabButton
-                GuildTabButton
-                @FeathersButton { @caption: bsn! { (Text("Positions") ThemedText) } }
-                Node { flex_grow: 1.0, height: px(34) }
-                on(super::select_positions)
-            ),
-            (
-                NoticeTabButton
-                GuildTabButton
-                @FeathersButton { @caption: bsn! { (Text("Notice") ThemedText) } }
-                Node { flex_grow: 1.0, height: px(34) }
-                on(super::select_notice)
-            ),
-            (
-                SkillsTabButton
-                GuildTabButton
-                @FeathersButton { @caption: bsn! { (Text("Skills") ThemedText) } }
-                Node { flex_grow: 1.0, height: px(34) }
-                on(super::select_skills)
-            ),
-            (
-                RelationsTabButton
-                GuildTabButton
-                @FeathersButton { @caption: bsn! { (Text("Relations") ThemedText) } }
-                Node { flex_grow: 1.0, height: px(34) }
-                on(super::select_relations)
-            ),
+            MembersTabButton
+            GuildTabButton
+            @FeathersButton { @caption: bsn! { Text("Members") ThemedText } }
+            Node { flex_grow: 1.0, height: px(34) }
+            on(super::select_members)
+            --
+            PositionsTabButton
+            GuildTabButton
+            @FeathersButton { @caption: bsn! { Text("Positions") ThemedText } }
+            Node { flex_grow: 1.0, height: px(34) }
+            on(super::select_positions)
+            --
+            NoticeTabButton
+            GuildTabButton
+            @FeathersButton { @caption: bsn! { Text("Notice") ThemedText } }
+            Node { flex_grow: 1.0, height: px(34) }
+            on(super::select_notice)
+            --
+            SkillsTabButton
+            GuildTabButton
+            @FeathersButton { @caption: bsn! { Text("Skills") ThemedText } }
+            Node { flex_grow: 1.0, height: px(34) }
+            on(super::select_skills)
+            --
+            RelationsTabButton
+            GuildTabButton
+            @FeathersButton { @caption: bsn! { Text("Relations") ThemedText } }
+            Node { flex_grow: 1.0, height: px(34) }
+            on(super::select_relations)
         ]
     }
 }
@@ -222,134 +199,124 @@ fn content() -> impl Scene {
         Node { width: percent(100), height: px(350), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch }
         @ignore_picking()
         Children [
-            (
-                GuildMembersPanel
-                GuildTabPage
+            GuildMembersPanel
+            GuildTabPage
+            Node {
+                width: percent(100),
+                height: percent(100),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Stretch,
+                column_gap: px(4),
+            }
+            @ignore_picking()
+            Children [
+                #members_scroll
                 Node {
-                    width: percent(100),
+                    flex_grow: 1.0,
+                    min_width: px(0),
                     height: percent(100),
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Stretch,
-                    column_gap: px(4),
-                }
-                @ignore_picking()
-                Children [
-                    (
-                        #members_scroll
-                        Node {
-                            flex_grow: 1.0,
-                            min_width: px(0),
-                            height: percent(100),
-                            overflow: {Overflow::scroll_y()},
-                            flex_direction: FlexDirection::Column,
-                            row_gap: px(5),
-                            padding: {UiRect::right(px(6))},
-                        }
-                        ScrollArea
-                        Pickable
-                        Children [
-                            @invite_controls(),
-                            @roster_heading(),
-                            (GuildMembersList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(5) } @ignore_picking()),
-                        ]
-                    ),
-                    @FeathersScrollbar { @target: #members_scroll, @orientation: {ControlOrientation::Vertical} }
-                    Node { width: px(6), height: percent(100) }
-                ]
-            ),
-            (
-                GuildPositionsPanel
-                GuildTabPage
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    display: Display::None,
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Stretch,
-                    column_gap: px(4),
-                    padding: {UiRect::vertical(px(10))},
-                }
-                Visibility::Hidden
-                @ignore_picking()
-                Children [
-                    (
-                        #positions_scroll
-                        Node {
-                            flex_grow: 1.0,
-                            min_width: px(0),
-                            height: percent(100),
-                            overflow: {Overflow::scroll_y()},
-                            flex_direction: FlexDirection::Column,
-                            padding: {UiRect::right(px(6))},
-                        }
-                        ScrollArea
-                        Pickable
-                        Children [ (GuildPositionsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } @ignore_picking()) ]
-                    ),
-                    @FeathersScrollbar { @target: #positions_scroll, @orientation: {ControlOrientation::Vertical} }
-                    Node { width: px(6), height: percent(100) }
-                ]
-            ),
-            (
-                GuildNoticePanel
-                GuildTabPage
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    display: Display::None,
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Stretch,
-                    padding: {UiRect::vertical(px(10))},
-                }
-                Visibility::Hidden
-                @ignore_picking()
-                Children [ (GuildNoticeContent Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(10) } @ignore_picking()) ]
-            ),
-            (
-                GuildSkillsPanel
-                GuildTabPage
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    display: Display::None,
                     overflow: {Overflow::scroll_y()},
                     flex_direction: FlexDirection::Column,
-                    padding: {UiRect::vertical(px(10))},
+                    row_gap: px(5),
+                    padding: {UiRect::right(px(6))},
                 }
-                Visibility::Hidden
                 ScrollArea
                 Pickable
-                Children [ (GuildSkillsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } @ignore_picking()) ]
-            ),
-            (
-                GuildRelationsPanel
-                GuildTabPage
+                Children [
+                    @invite_controls() --
+                    @roster_heading() --
+                    GuildMembersList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(5) } @ignore_picking()
+                ]
+                --
+                @FeathersScrollbar { @target: #members_scroll, @orientation: {ControlOrientation::Vertical} }
+                Node { width: px(6), height: percent(100) }
+            ]
+            --
+            GuildPositionsPanel
+            GuildTabPage
+            Node {
+                width: percent(100),
+                height: percent(100),
+                display: Display::None,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Stretch,
+                column_gap: px(4),
+                padding: {UiRect::vertical(px(10))},
+            }
+            Visibility::Hidden
+            @ignore_picking()
+            Children [
+                #positions_scroll
+                Node {
+                    flex_grow: 1.0,
+                    min_width: px(0),
+                    height: percent(100),
+                    overflow: {Overflow::scroll_y()},
+                    flex_direction: FlexDirection::Column,
+                    padding: {UiRect::right(px(6))},
+                }
+                ScrollArea
+                Pickable
+                Children [ GuildPositionsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } @ignore_picking() ]
+                --
+                @FeathersScrollbar { @target: #positions_scroll, @orientation: {ControlOrientation::Vertical} }
+                Node { width: px(6), height: percent(100) }
+            ]
+            --
+            GuildNoticePanel
+            GuildTabPage
+            Node {
+                width: percent(100),
+                height: percent(100),
+                display: Display::None,
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Stretch,
+                padding: {UiRect::vertical(px(10))},
+            }
+            Visibility::Hidden
+            @ignore_picking()
+            Children [ GuildNoticeContent Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(10) } @ignore_picking() ]
+            --
+            GuildSkillsPanel
+            GuildTabPage
+            Node {
+                width: percent(100),
+                height: percent(100),
+                display: Display::None,
+                overflow: {Overflow::scroll_y()},
+                flex_direction: FlexDirection::Column,
+                padding: {UiRect::vertical(px(10))},
+            }
+            Visibility::Hidden
+            ScrollArea
+            Pickable
+            Children [ GuildSkillsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } @ignore_picking() ]
+            --
+            GuildRelationsPanel
+            GuildTabPage
+            Node {
+                width: percent(100),
+                height: percent(100),
+                display: Display::None,
+                flex_direction: FlexDirection::Column,
+                row_gap: px(10),
+                padding: {UiRect::vertical(px(10))},
+            }
+            Visibility::Hidden
+            Pickable
+            Children [
+                @super::relations::relation_controls() --
+                super::relations::GuildRelationsList
                 Node {
                     width: percent(100),
-                    height: percent(100),
-                    display: Display::None,
+                    flex_grow: 1.0,
+                    min_height: px(0),
+                    overflow: {Overflow::scroll_y()},
                     flex_direction: FlexDirection::Column,
-                    row_gap: px(10),
-                    padding: {UiRect::vertical(px(10))},
                 }
-                Visibility::Hidden
+                ScrollArea
                 Pickable
-                Children [
-                    @super::relations::relation_controls(),
-                    (
-                        super::relations::GuildRelationsList
-                        Node {
-                            width: percent(100),
-                            flex_grow: 1.0,
-                            min_height: px(0),
-                            overflow: {Overflow::scroll_y()},
-                            flex_direction: FlexDirection::Column,
-                        }
-                        ScrollArea
-                        Pickable
-                    ),
-                ]
-            ),
+            ]
         ]
     }
 }
@@ -369,35 +336,32 @@ fn invite_controls() -> impl Scene {
         }
         Pickable
         Children [
-            (
-                GuildInviteNameField
-                Pickable
-                editable
-                TextInput
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                TextColor(lifthrasir_ui::theme::TEXT)
-                BackgroundColor(lifthrasir_ui::theme::FIELD)
-                Node {
-                    flex_grow: 1.0,
-                    height: px(36),
-                    padding: {UiRect::axes(px(10), px(8))},
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(8)),
-                }
-                BorderColor::all(lifthrasir_ui::theme::STROKE)
-            ),
-            (
-                GuildInviteButton
-                @FeathersButton {
-                    @caption: bsn! { (Text("Invite by Name") ThemedText) },
-                    @variant: ButtonVariant::Primary,
-                }
-                Node { width: px(150), height: px(36) }
-                on(super::members::on_invite_by_name)
-            ),
+            GuildInviteNameField
+            Pickable
+            editable
+            TextInput
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(13.0)},
+            }
+            TextColor(lifthrasir_ui::theme::TEXT)
+            BackgroundColor(lifthrasir_ui::theme::FIELD)
+            Node {
+                flex_grow: 1.0,
+                height: px(36),
+                padding: {UiRect::axes(px(10), px(8))},
+                border: px(1),
+                border_radius: BorderRadius::all(px(8)),
+            }
+            BorderColor::all(lifthrasir_ui::theme::STROKE)
+            --
+            GuildInviteButton
+            @FeathersButton {
+                @caption: bsn! { Text("Invite by Name") ThemedText },
+                @variant: ButtonVariant::Primary,
+            }
+            Node { width: px(150), height: px(36) }
+            on(super::members::on_invite_by_name)
         ]
     }
 }
@@ -407,8 +371,8 @@ fn roster_heading() -> impl Scene {
         Node { flex_direction: FlexDirection::Row, padding: {UiRect::horizontal(px(10))} }
         @ignore_picking()
         Children [
-            (Node { flex_grow: 1.0 } @chrome_text("Member / Status".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)),
-            (Node { width: px(210) } @chrome_text("Resources".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)),
+            Node { flex_grow: 1.0 } @chrome_text("Member / Status".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)--
+            Node { width: px(210) } @chrome_text("Resources".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)
         ]
     }
 }
@@ -440,54 +404,47 @@ fn member_row(row: MemberRow) -> impl Scene {
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         @ignore_picking()
         Children [
-            (
-                Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(2) }
-                @ignore_picking()
-                Children [
-                    @chrome_text(row.name, 13.0, lifthrasir_ui::theme::TEXT),
-                    @chrome_text(format!("{} · {} · Lv {}", row.position, row.job, row.level), 10.5, lifthrasir_ui::theme::TEXT_DIM),
-                    @chrome_text(format!("{status} · {}", row.map), 10.0, status_color),
-                ]
-            ),
-            (
-                Node { width: px(210) }
-                @chrome_text(
-                    format!("HP {}/{}  SP {}/{}{}", row.hp.0, row.hp.1, row.sp.0, row.sp.1, ap),
-                    10.5,
-                    lifthrasir_ui::theme::TEXT_DIM,
-                )
-            ),
-            (
-                super::members::GuildExpelControl({row.char_id})
-                Node { width: px(190), flex_direction: FlexDirection::Row, column_gap: px(5) }
+            Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(2) }
+            @ignore_picking()
+            Children [
+                @chrome_text(row.name, 13.0, lifthrasir_ui::theme::TEXT) --
+                @chrome_text(format!("{} · {} · Lv {}", row.position, row.job, row.level), 10.5, lifthrasir_ui::theme::TEXT_DIM) --
+                @chrome_text(format!("{status} · {}", row.map), 10.0, status_color)
+            ]
+            --
+            Node { width: px(210) }
+            @chrome_text(
+                format!("HP {}/{}  SP {}/{}{}", row.hp.0, row.hp.1, row.sp.0, row.sp.1, ap),
+                10.5,
+                lifthrasir_ui::theme::TEXT_DIM,
+            )
+            --
+            super::members::GuildExpelControl({row.char_id})
+            Node { width: px(190), flex_direction: FlexDirection::Row, column_gap: px(5) }
+            Pickable
+            Children [
+                super::members::GuildExpelReasonField({row.char_id})
                 Pickable
-                Children [
-                    (
-                        super::members::GuildExpelReasonField({row.char_id})
-                        Pickable
-                        EditableText::new("")
-                        TextInput
-                        TextFont {
-                            font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                            font_size: {FontSize::Px(11.0)},
-                        }
-                        TextColor(lifthrasir_ui::theme::TEXT)
-                        BackgroundColor(lifthrasir_ui::theme::FIELD)
-                        Node { flex_grow: 1.0, height: px(30), padding: {UiRect::horizontal(px(6))} }
-                        BorderColor::all(lifthrasir_ui::theme::STROKE)
-                    ),
-                    (
-                        super::members::GuildExpelButton({row.char_id})
-                        GuildMutationControl
-                        @FeathersButton {
-                            @caption: bsn! { (Text("Expel") ThemedText) },
-                            @variant: ButtonVariant::Normal,
-                        }
-                        Node { width: px(68), height: px(30) }
-                        on(super::members::on_expel)
-                    ),
-                ]
-            ),
+                EditableText::new("")
+                TextInput
+                TextFont {
+                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                    font_size: {FontSize::Px(11.0)},
+                }
+                TextColor(lifthrasir_ui::theme::TEXT)
+                BackgroundColor(lifthrasir_ui::theme::FIELD)
+                Node { flex_grow: 1.0, height: px(30), padding: {UiRect::horizontal(px(6))} }
+                BorderColor::all(lifthrasir_ui::theme::STROKE)
+                --
+                super::members::GuildExpelButton({row.char_id})
+                GuildMutationControl
+                @FeathersButton {
+                    @caption: bsn! { Text("Expel") ThemedText },
+                    @variant: ButtonVariant::Normal,
+                }
+                Node { width: px(68), height: px(30) }
+                on(super::members::on_expel)
+            ]
         ]
     }
 }
@@ -508,7 +465,7 @@ fn feedback_banner() -> impl Scene {
         BackgroundColor(Color::NONE)
         BorderColor::all(Color::NONE)
         @ignore_picking()
-        Children [ (GuildFeedbackText @chrome_text(String::new(), 11.5, lifthrasir_ui::theme::TEXT)) ]
+        Children [ GuildFeedbackText @chrome_text(String::new(), 11.5, lifthrasir_ui::theme::TEXT) ]
     }
 }
 

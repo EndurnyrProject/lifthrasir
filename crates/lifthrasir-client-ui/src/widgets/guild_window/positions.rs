@@ -802,20 +802,18 @@ pub(crate) fn position_management(
         Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
         @ignore_picking()
         Children [
-            @chrome_text("Positions".to_string(), 13.0, lifthrasir_ui::theme::TEXT),
-            @chrome_text(hint.to_string(), 10.5, lifthrasir_ui::theme::TEXT_DIM),
-            @table_heading(),
-            (Node { flex_direction: FlexDirection::Column, row_gap: px(4) } @ignore_picking() Children [ {rows} ]),
-            (
-                assignment_visibility
-                Node { flex_direction: FlexDirection::Column, row_gap: px(6), padding: {UiRect::top(px(10))}, display: {assignment_display} }
-                @ignore_picking()
-                Children [
-                    @chrome_text("Member assignments".to_string(), 13.0, lifthrasir_ui::theme::TEXT),
-                    @chrome_text("Click a position to assign it. The highlighted one is the member's current position.".to_string(), 10.5, lifthrasir_ui::theme::TEXT_DIM),
-                    (Node { flex_direction: FlexDirection::Column, row_gap: px(4) } @ignore_picking() Children [ {assignments} ]),
-                ]
-            ),
+            @chrome_text("Positions".to_string(), 13.0, lifthrasir_ui::theme::TEXT) --
+            @chrome_text(hint.to_string(), 10.5, lifthrasir_ui::theme::TEXT_DIM) --
+            @table_heading() --
+            Node { flex_direction: FlexDirection::Column, row_gap: px(4) } @ignore_picking() Children [ {rows} ]--
+            assignment_visibility
+            Node { flex_direction: FlexDirection::Column, row_gap: px(6), padding: {UiRect::top(px(10))}, display: {assignment_display} }
+            @ignore_picking()
+            Children [
+                @chrome_text("Member assignments".to_string(), 13.0, lifthrasir_ui::theme::TEXT) --
+                @chrome_text("Click a position to assign it. The highlighted one is the member's current position.".to_string(), 10.5, lifthrasir_ui::theme::TEXT_DIM) --
+                Node { flex_direction: FlexDirection::Column, row_gap: px(4) } @ignore_picking() Children [ {assignments} ]
+            ]
         ]
     }
 }
@@ -833,13 +831,13 @@ fn table_heading() -> impl Scene {
         Node { flex_direction: FlexDirection::Row, column_gap: px(6), padding: {UiRect::horizontal(px(8))} }
         @ignore_picking()
         Children [
-            @label("#", COL_INDEX),
-            (Node { flex_grow: 1.0, min_width: px(0) } @chrome_text("Name".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)),
-            @label("Invite", COL_FLAG),
-            @label("Expel", COL_FLAG),
-            @label("Storage", COL_FLAG),
-            @label("Tax %", COL_TAX),
-            @label("", COL_ACTION),
+            @label("#", COL_INDEX) --
+            Node { flex_grow: 1.0, min_width: px(0) } @chrome_text("Name".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)--
+            @label("Invite", COL_FLAG) --
+            @label("Expel", COL_FLAG) --
+            @label("Storage", COL_FLAG) --
+            @label("Tax %", COL_TAX) --
+            @label("", COL_ACTION)
         ]
     }
 }
@@ -919,73 +917,60 @@ fn position_row(row: PositionRow) -> impl Scene {
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         Children [
-            @cell(COL_INDEX, row.index.to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM),
-            (
-                read_visibility
-                Node { flex_grow: 1.0, min_width: px(0), display: {read_display} }
-                @chrome_text(name, 12.0, name_color)
-            ),
-            (
-                PositionNameField GuildMutationControl
-                edit_visibility
-                @text_field(name_field, auto(), 12.0, edit_display)
-                Node { flex_grow: 1.0, flex_shrink: 1.0, min_width: px(0) }
-            ),
-            (
-                read_visibility
-                Node { display: {read_display} }
-                @cell(COL_FLAG, flag_mark(row.can_invite).to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM)
-            ),
-            (
-                PositionInviteToggle
-                edit_visibility
-                @permission_toggle(edit_display)
-            ),
-            (
-                read_visibility
-                Node { display: {read_display} }
-                @cell(COL_FLAG, flag_mark(row.can_expel).to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM)
-            ),
-            (
-                PositionExpelToggle
-                edit_visibility
-                @permission_toggle(edit_display)
-            ),
-            (
-                read_visibility
-                Node { display: {read_display} }
-                @cell(COL_FLAG, flag_mark(row.can_storage).to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM)
-            ),
-            (
-                PositionStorageToggle
-                edit_visibility
-                @permission_toggle(edit_display)
-            ),
-            (
-                read_visibility
-                Node { display: {read_display} }
-                @cell(COL_TAX, format!("{}%", row.tax), 11.0, lifthrasir_ui::theme::TEXT_DIM)
-            ),
-            (
-                PositionTaxField GuildMutationControl
-                edit_visibility
-                @text_field(tax_field, px(COL_TAX), 11.0, edit_display)
-            ),
-            (
-                read_visibility
-                Node { display: {read_display} }
-                @cell(COL_ACTION, badge.to_string(), 10.0, lifthrasir_ui::theme::GOLD)
-            ),
-            (
-                PositionSave GuildMutationControl
-                edit_visibility
-                @FeathersButton {
-                    @caption: bsn! { (Text("Save") ThemedText) },
-                    @variant: ButtonVariant::Primary,
-                }
-                Node { width: px(COL_ACTION), flex_shrink: 0.0, height: px(ROW_HEIGHT), display: {edit_display} }
-                on(on_save_position)
-            ),
+            @cell(COL_INDEX, row.index.to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM) --
+            read_visibility
+            Node { flex_grow: 1.0, min_width: px(0), display: {read_display} }
+            @chrome_text(name, 12.0, name_color)
+            --
+            PositionNameField GuildMutationControl
+            edit_visibility
+            @text_field(name_field, auto(), 12.0, edit_display)
+            Node { flex_grow: 1.0, flex_shrink: 1.0, min_width: px(0) }
+            --
+            read_visibility
+            Node { display: {read_display} }
+            @cell(COL_FLAG, flag_mark(row.can_invite).to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM)
+            --
+            PositionInviteToggle
+            edit_visibility
+            @permission_toggle(edit_display)
+            --
+            read_visibility
+            Node { display: {read_display} }
+            @cell(COL_FLAG, flag_mark(row.can_expel).to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM)
+            --
+            PositionExpelToggle
+            edit_visibility
+            @permission_toggle(edit_display)
+            --
+            read_visibility
+            Node { display: {read_display} }
+            @cell(COL_FLAG, flag_mark(row.can_storage).to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM)
+            --
+            PositionStorageToggle
+            edit_visibility
+            @permission_toggle(edit_display)
+            --
+            read_visibility
+            Node { display: {read_display} }
+            @cell(COL_TAX, format!("{}%", row.tax), 11.0, lifthrasir_ui::theme::TEXT_DIM)
+            --
+            PositionTaxField GuildMutationControl
+            edit_visibility
+            @text_field(tax_field, px(COL_TAX), 11.0, edit_display)
+            --
+            read_visibility
+            Node { display: {read_display} }
+            @cell(COL_ACTION, badge.to_string(), 10.0, lifthrasir_ui::theme::GOLD)
+            --
+            PositionSave GuildMutationControl
+            edit_visibility
+            @FeathersButton {
+                @caption: bsn! { Text("Save") ThemedText },
+                @variant: ButtonVariant::Primary,
+            }
+            Node { width: px(COL_ACTION), flex_shrink: 0.0, height: px(ROW_HEIGHT), display: {edit_display} }
+            on(on_save_position)
         ]
     }
 }
@@ -1006,8 +991,8 @@ fn assignment_row(row: MemberAssignmentRow) -> impl Scene {
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         Children [
-            (Node { width: px(150), flex_shrink: 0.0 } @chrome_text(row.name, 12.0, lifthrasir_ui::theme::TEXT)),
-            (Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: px(5), row_gap: px(5) } @ignore_picking() Children [ {buttons} ]),
+            Node { width: px(150), flex_shrink: 0.0 } @chrome_text(row.name, 12.0, lifthrasir_ui::theme::TEXT)--
+            Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Row, flex_wrap: FlexWrap::Wrap, column_gap: px(5), row_gap: px(5) } @ignore_picking() Children [ {buttons} ]
         ]
     }
 }
@@ -1026,7 +1011,7 @@ fn assignment_button(
     bsn! {
         AssignmentAction { target_char_id, position_index: {position.index}}
         GuildMutationControl
-        @FeathersButton { @caption: bsn! { (Text(caption) ThemedText) }, @variant: variant }
+        @FeathersButton { @caption: bsn! { Text(caption) ThemedText }, @variant: variant }
         Node { height: px(ROW_HEIGHT), padding: {UiRect::horizontal(px(8))} }
         on(on_assign_member)
     }

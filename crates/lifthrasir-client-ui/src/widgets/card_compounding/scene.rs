@@ -48,48 +48,44 @@ pub(super) fn window(
         Pickable
         on(on_backdrop_click)
         Children [
-            (
-                Node {
-                    width: px(390),
-                    max_height: percent(80),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(10),
-                    padding: {UiRect::all(px(16))},
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(12)),
-                }
-                ThemeBackgroundColor({TOKEN_WINDOW_BG})
-                ThemeBorderColor({TOKEN_WINDOW_BORDER})
-                Pickable
-                on(|mut click: On<PointerClick>| click.propagate(false))
+            Node {
+                width: px(390),
+                max_height: percent(80),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(10),
+                padding: {UiRect::all(px(16))},
+                border: px(1),
+                border_radius: BorderRadius::all(px(12)),
+            }
+            ThemeBackgroundColor({TOKEN_WINDOW_BG})
+            ThemeBorderColor({TOKEN_WINDOW_BORDER})
+            Pickable
+            on(|mut click: On<PointerClick>| click.propagate(false))
+            Children [
+                @title(format!("Compound {card_name}")) --
+                @text("Select equipment for this card.".into()) --
+                Node { height: px(280), min_height: px(0), position_type: PositionType::Relative }
+                @ignore_picking()
                 Children [
-                    @title(format!("Compound {card_name}")),
-                    @text("Select equipment for this card.".into()),
-                    (
-                        Node { height: px(280), min_height: px(0), position_type: PositionType::Relative }
-                        @ignore_picking()
-                        Children [
-                            (
-                                #viewport
-                                Node {
-                                    position_type: PositionType::Absolute,
-                                    left: px(0), right: px(0), top: px(0), bottom: px(0),
-                                    overflow: {Overflow::scroll_y()},
-                                    flex_direction: FlexDirection::Column,
-                                    row_gap: px(4),
-                                }
-                                ScrollArea
-                                Pickable
-                                Children [ {entries}, {empty_text} ]
-                            ),
-                            @FeathersScrollbar { @target: #viewport, @orientation: {ControlOrientation::Vertical} }
-                            Node { position_type: PositionType::Absolute, top: px(0), bottom: px(0), right: px(0), width: px(6) }
-                        ]
-                    ),
-                    {status},
-                    @actions(can_confirm),
+                    #viewport
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(0), right: px(0), top: px(0), bottom: px(0),
+                        overflow: {Overflow::scroll_y()},
+                        flex_direction: FlexDirection::Column,
+                        row_gap: px(4),
+                    }
+                    ScrollArea
+                    Pickable
+                    Children [ {entries} -- {empty_text} ]
+                    --
+                    @FeathersScrollbar { @target: #viewport, @orientation: {ControlOrientation::Vertical} }
+                    Node { position_type: PositionType::Absolute, top: px(0), bottom: px(0), right: px(0), width: px(6) }
                 ]
-            )
+                --
+                {status} --
+                @actions(can_confirm)
+            ]
         ]
     }
 }
@@ -110,7 +106,7 @@ fn target_row(view: CardRowView) -> impl Scene {
         @FeathersButton { @caption: bsn! {
             Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(8) }
             @ignore_picking()
-            Children [ {icon}, @text(label) ]
+            Children [ {icon} -- @text(label) ]
         } }
         CardPickerAction::Select({view.index})
         ButtonVariant::Plain
@@ -133,15 +129,13 @@ fn actions(can_confirm: bool) -> impl Scene {
         Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, column_gap: px(8) }
         @ignore_picking()
         Children [
-            @action_button("Cancel", CardPickerAction::Cancel, true),
-            (
-                @FeathersButton { @caption: bsn! { @text("Confirm".into()) } }
-                CardPickerAction::Confirm
-                ConfirmEnabled(can_confirm)
-                ButtonVariant::Primary
-                Node { min_width: px(90), height: px(30) }
-                on(on_action)
-            ),
+            @action_button("Cancel", CardPickerAction::Cancel, true) --
+            @FeathersButton { @caption: bsn! { @text("Confirm".into()) } }
+            CardPickerAction::Confirm
+            ConfirmEnabled(can_confirm)
+            ButtonVariant::Primary
+            Node { min_width: px(90), height: px(30) }
+            on(on_action)
         ]
     }
 }

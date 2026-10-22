@@ -232,7 +232,7 @@ pub fn update_map_sound_volume(
         let dist = listener_pos.distance(transform.translation());
 
         if dist > src.range {
-            instance.stop(tween.clone());
+            instance.stop(tween);
             src.state = MapSoundState::Silent {
                 timer: Timer::new(src.cycle, TimerMode::Once),
             };
@@ -241,7 +241,7 @@ pub fn update_map_sound_volume(
 
         let gain = distance_gain(dist, src.range);
         let vol = src.base_volume * gain * audio_settings.effective_ambience_volume();
-        instance.set_decibels(amplitude_to_decibels(vol), tween.clone());
+        instance.set_decibels(amplitude_to_decibels(vol), tween);
     }
 }
 

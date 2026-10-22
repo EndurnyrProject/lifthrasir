@@ -75,22 +75,19 @@ where
         Pickable
         on(drag_window::<Tb, Root>)
         Children [
-            @glyph_icon(icon, 16.0, theme::GOLD),
-            (
-                Text(title)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(15.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                @ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, theme::TEXT_DIM) } }
-                Node { width: px(22), height: px(22) }
-                on(close_window::<Root>)
-            ),
+            @glyph_icon(icon, 16.0, theme::GOLD) --
+            Text(title)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(15.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, theme::TEXT_DIM) } }
+            Node { width: px(22), height: px(22) }
+            on(close_window::<Root>)
         ]
     }
 }
