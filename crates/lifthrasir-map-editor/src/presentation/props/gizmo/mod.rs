@@ -58,7 +58,11 @@ fn gizmo_drag_start(
     axes: Query<&GizmoAxis>,
     selected: Res<SelectedProp>,
     mut state: ResMut<PropGizmo>,
+    capture: Option<Res<dear_imgui_bevy::prelude::ImguiInputCapture>>,
 ) {
+    if crate::presentation::ui::pointer_captured(capture.as_deref()) {
+        return;
+    }
     if drag.button != PointerButton::Primary {
         return;
     }
@@ -74,7 +78,11 @@ fn gizmo_drag(
     mut props: Query<(&mut Transform, &LifMapNodeIndex), With<LifPropRef>>,
     document: Option<ResMut<EditorDocument>>,
     state: Res<PropGizmo>,
+    capture: Option<Res<dear_imgui_bevy::prelude::ImguiInputCapture>>,
 ) {
+    if crate::presentation::ui::pointer_captured(capture.as_deref()) {
+        return;
+    }
     let Some(mut document) = document else {
         return;
     };

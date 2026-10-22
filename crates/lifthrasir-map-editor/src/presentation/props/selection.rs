@@ -41,7 +41,11 @@ fn select_prop(
     parents: Query<&ChildOf>,
     props: Query<(), With<LifPropRef>>,
     mut selected: ResMut<SelectedProp>,
+    capture: Option<Res<dear_imgui_bevy::prelude::ImguiInputCapture>>,
 ) {
+    if crate::presentation::ui::pointer_captured(capture.as_deref()) {
+        return;
+    }
     let mut entity = click.entity;
     loop {
         if props.contains(entity) {

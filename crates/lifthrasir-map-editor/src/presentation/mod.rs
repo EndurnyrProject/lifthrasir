@@ -3,11 +3,11 @@
 
 mod collision;
 mod props;
+mod terrain_grid;
 mod ui;
 mod viewport;
 
 use bevy::prelude::*;
-use bevy_feathers::FeathersPlugins;
 
 pub(crate) use viewport::MapAssetPath;
 
@@ -15,10 +15,10 @@ pub(crate) struct EditorPresentationPlugin;
 
 impl Plugin for EditorPresentationPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ui::editor_theme()).add_plugins((
-            FeathersPlugins,
+        app.add_plugins((
             bevy::picking::mesh_picking::MeshPickingPlugin,
             viewport::ViewportPlugin,
+            terrain_grid::TerrainGridPlugin,
             collision::CollisionEditorPlugin,
             props::PropEditorPlugin,
             ui::EditorUiPlugin,

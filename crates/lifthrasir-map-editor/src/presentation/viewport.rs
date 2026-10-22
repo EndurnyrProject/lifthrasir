@@ -1,7 +1,7 @@
+//! Editor camera setup, map activation framing and ambient lighting.
 use bevy::{
     camera::Exposure,
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
-    dev_tools::infinite_grid::{InfiniteGrid, InfiniteGridPlugin, InfiniteGridSettings},
     prelude::*,
 };
 
@@ -23,12 +23,9 @@ pub(super) struct ViewportPlugin;
 
 impl Plugin for ViewportPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((FreeCameraPlugin, InfiniteGridPlugin))
+        app.add_plugins(FreeCameraPlugin)
             .add_systems(Startup, setup)
-            .add_systems(
-                Update,
-                (apply_map_lighting, toggle_infinite_grid).in_set(EditorSystems::Present),
-            );
+            .add_systems(Update, apply_map_lighting.in_set(EditorSystems::Present));
     }
 }
 
@@ -44,7 +41,6 @@ fn setup(mut commands: Commands, map_path: Res<MapAssetPath>) {
             path: format!("ro://{path}"),
         });
     }
-    commands.spawn((InfiniteGrid, grid_settings()));
 }
 
 fn camera_settings() -> FreeCamera {
@@ -54,14 +50,6 @@ fn camera_settings() -> FreeCamera {
         run_speed: 900.0,
         key_up: KeyCode::Space,
         key_down: KeyCode::AltLeft,
-        ..default()
-    }
-}
-
-fn grid_settings() -> InfiniteGridSettings {
-    InfiniteGridSettings {
-        scale: CELL_SIZE.recip(),
-        fadeout_distance: 1_500.0,
         ..default()
     }
 }
@@ -94,52 +82,15 @@ fn apply_map_lighting(
     }
 }
 
-fn toggle_infinite_grid(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut grids: Query<&mut Visibility, With<InfiniteGrid>>,
-) {
-    if !keys.just_pressed(KeyCode::KeyP) {
-        return;
-    }
-    for mut visibility in &mut grids {
-        *visibility = match *visibility {
-            Visibility::Hidden => Visibility::Visible,
-            Visibility::Inherited | Visibility::Visible => Visibility::Hidden,
-        };
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn grid_and_camera_use_editor_conventions() {
-        assert_eq!(grid_settings().scale.recip(), CELL_SIZE);
+    fn camera_uses_editor_conventions() {
         let camera = camera_settings();
         assert_eq!(camera.key_up, KeyCode::Space);
         assert_eq!(camera.key_down, KeyCode::AltLeft);
         assert_eq!(camera.walk_speed, 300.0);
-    }
-
-    #[test]
-    fn grid_toggle_is_an_in_memory_viewport_action() {
-        let mut app = App::new();
-        app.init_resource::<ButtonInput<KeyCode>>()
-            .add_systems(Update, toggle_infinite_grid);
-        let grid = app.world_mut().spawn(InfiniteGrid).id();
-        app.world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(KeyCode::KeyP);
-        app.update();
-        assert_eq!(
-            app.world().get::<Visibility>(grid),
-            Some(&Visibility::Hidden)
-        );
-        app.update();
-        assert_eq!(
-            app.world().get::<Visibility>(grid),
-            Some(&Visibility::Visible)
-        );
     }
 }

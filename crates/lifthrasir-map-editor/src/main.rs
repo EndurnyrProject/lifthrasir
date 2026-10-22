@@ -66,9 +66,11 @@ fn main() -> Result<()> {
 }
 
 fn resolve_map_path(path: PathBuf) -> PathBuf {
-    path.exists()
-        .then_some(path.clone())
-        .unwrap_or_else(|| PathBuf::from("assets").join(path))
+    if path.exists() {
+        path
+    } else {
+        PathBuf::from("assets").join(path)
+    }
 }
 
 /// Convert an on-disk map path into the asset-source-relative path used by `ro://`.

@@ -29,6 +29,25 @@ cargo run -p ro-to-lifthrasir-cli -- convert-map --map prontera --force-models
 
 ## Current controls
 
+### Editor UI
+
+The editor uses Dear ImGui (the game client continues to use Bevy/Feathers).
+The File menu opens and saves converted maps. Clicking **Settings** opens a
+draggable, resizable window with a live terrain-grid thickness slider and color
+picker. Grid appearance changes are session-only; `P` toggles the grid.
+Mouse/keyboard input captured by editor windows is excluded from viewport
+editing and camera controls.
+
+Presentation code is organized by responsibility:
+
+- `src/presentation/ui/`: Dear ImGui composition, windows, file actions, and input capture.
+- `src/presentation/viewport.rs`: camera setup and map lighting/framing.
+- `src/presentation/terrain_grid.rs`: terrain-only grid geometry and appearance.
+- `src/presentation/props/` and `collision.rs`: viewport editing tools.
+
+Dear ImGui's local `imgui.ini` window layout is ignored by Git. Headless UI tests
+disable layout persistence so they do not overwrite the user's window positions.
+
 ### Camera
 
 - `W/A/S/D`: fly relative to the camera orientation

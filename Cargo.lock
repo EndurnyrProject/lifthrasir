@@ -3028,6 +3028,72 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
+name = "dear-imgui-bevy"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c99a996cf4157622b69f8a13713bec727ec37f03923d8992be4bca1401191687"
+dependencies = [
+ "bevy_app",
+ "bevy_asset",
+ "bevy_camera",
+ "bevy_color",
+ "bevy_core_pipeline",
+ "bevy_derive",
+ "bevy_ecs",
+ "bevy_ecs_macro_logic",
+ "bevy_ecs_macros",
+ "bevy_image",
+ "bevy_input",
+ "bevy_macro_utils",
+ "bevy_math",
+ "bevy_mesh",
+ "bevy_platform",
+ "bevy_ptr",
+ "bevy_render",
+ "bevy_shader",
+ "bevy_tasks",
+ "bevy_time",
+ "bevy_utils",
+ "bevy_window",
+ "bytemuck",
+ "dear-imgui-rs",
+]
+
+[[package]]
+name = "dear-imgui-build-support"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "728af47c10cb2b12aa36b942e610f894ecafc5d61d0056ab61f9629f02b3d5dc"
+dependencies = [
+ "cc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "dear-imgui-rs"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40f283479a70f65bb3f1239b48116a65272a51c7d1cda718b6149823fb0f2444"
+dependencies = [
+ "bitflags 2.13.1",
+ "dear-imgui-sys",
+ "parking_lot",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "dear-imgui-sys"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c70a5f41bba03683065fd068881da406d1dfe76ec47fe276837017ac210a46f8"
+dependencies = [
+ "cc",
+ "dear-imgui-build-support",
+ "mint",
+]
+
+[[package]]
 name = "deprecate-until"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4824,8 +4890,9 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
- "bevy_feathers",
  "clap",
+ "dear-imgui-bevy",
+ "dear-imgui-rs",
  "lifthrasir-assets",
  "lifthrasir-data",
  "lifthrasir-runtime",

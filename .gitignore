@@ -124,6 +124,9 @@ Cargo.lock
 
 .bacon-locations
 
+# Dear ImGui's local editor window layout (not project content)
+imgui.ini
+
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
