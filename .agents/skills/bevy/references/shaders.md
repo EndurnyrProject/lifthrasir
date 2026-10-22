@@ -1,6 +1,29 @@
-# Shaders & Custom Materials (Bevy 0.19)
+# Shaders & Custom Materials (Bevy 0.20)
 
-Distilled from the Bevy 0.19 examples in `examples/shader/`, `examples/shader_advanced/`, `examples/ui/ui_material.rs`, and their WGSL in `assets/shaders/`. Key 0.19 changes vs older docs: `ShaderRef` lives in `bevy::shader`; material bind group index in WGSL is the shader-def `#{MATERIAL_BIND_GROUP}` (not hardcoded `@group(2)`); render-world init happens in `RenderStartup` systems (not `FromWorld` + `finish()`); render graph *nodes* are replaced by plain systems added to render schedules (`Core3d`, `RenderGraph`) taking `RenderContext`/`ViewQuery` as system params; bind group layouts are `BindGroupLayoutDescriptor`s resolved via `pipeline_cache.get_bind_group_layout(&desc)`.
+Distilled from the Bevy 0.20 examples in `examples/shader/`, `examples/ui/ui_material.rs`, and their shaders in `assets/shaders/`. Structural facts carried over from 0.19: `ShaderRef` lives in `bevy::shader`; the material bind group index comes from the constant `constants::MATERIAL_BIND_GROUP` (not a hardcoded `@group(2)`); render-world init happens in `RenderStartup` systems (not `FromWorld` + `finish()`); render graph *nodes* are replaced by plain systems added to render schedules (`Core3d`, `RenderGraph`) taking `RenderContext`/`ViewQuery` as system params; bind group layouts are `BindGroupLayoutDescriptor`s resolved via `pipeline_cache.get_bind_group_layout(&desc)`.
+
+## 0.20: shaders are WESL
+
+naga_oil and Bevy's custom WGSL dialect are gone; Bevy's own shaders are written in [WESL](https://wesl-lang.dev). **Rename any custom shader that uses a preprocessor feature from `.wgsl` to `.wesl`.** Plain WGSL with no directives still loads. `ShaderRef` accepts `"shaders/foo.wesl".into()`, a `Handle<Shader>`, or a path; the loader registers `spv`, `wgsl` and `wesl`.
+
+| 0.19 dialect | 0.20 WESL |
+|---|---|
+| `#import bevy_pbr::forward_io::VertexOutput` | `import bevy_pbr::render::forward_io::VertexOutput;` |
+| `#import "shaders/util.wgsl"::hsv_to_rgb` | `import super::util::hsv_to_rgb;` |
+| `#ifdef X … #endif` / `#else` | `@if(X) … @else …` |
+| `@binding(#{MATERIAL_BIND_GROUP})` | `@binding(constants::MATERIAL_BIND_GROUP)` |
+| `#define_import_path` | gone — the module name is the crate + file path |
+
+Rules that break code if ignored:
+
+- Imports come first in the file (before any declaration or `enable` directive) and end with `;`.
+- Module names mirror the shader's path inside its crate: `bevy_pbr::mesh_view_bindings` → `bevy_pbr::render::mesh_view_bindings`, `bevy_pbr::prepass_utils` → `bevy_pbr::prepass::utils`, `bevy_pbr::mesh_functions` → `bevy_pbr::render::mesh_functions`, `bevy_sprite::mesh2d_*` → `bevy_sprite_render::mesh2d::*`, `bevy_ui::ui_vertex_output` → `bevy_ui_render::ui_vertex_output`.
+- Files under `assets/` import each other relatively (`super::util::FOO`); `embedded://bevy_foo/bar.wesl` is importable as `bevy_foo::bar`.
+- `@if`/`@elif`/`@else` attach to whole declarations, struct members, params, imports and statements. Bool shader defs become those flags; `Int`/`UInt` defs are readable as `constants::NAME`.
+- **Shader defs are silently dropped on non-WESL shaders** — the loader logs "Tried to load a non-wesl shader with shader defs" and ignores them. If you push `shader_defs`, the shader must be `.wesl`.
+- The `shader_format_wesl` cargo feature is gone (always on); **GLSL support was removed**. SPIR-V passthrough is unchanged.
+
+The examples below use `.wesl` paths and WESL imports.
 
 ## Material trait + AsBindGroup derive
 
@@ -16,28 +39,29 @@ struct CustomMaterial {
     alpha_mode: AlphaMode,            // plain field: not sent to GPU
 }
 impl Material for CustomMaterial {
-    fn fragment_shader() -> ShaderRef { "shaders/custom_material.wgsl".into() }
+    fn fragment_shader() -> ShaderRef { "shaders/custom_material.wesl".into() }
     fn alpha_mode(&self) -> AlphaMode { self.alpha_mode }
 }
 app.add_plugins(MaterialPlugin::<CustomMaterial>::default());
 ```
 
-WGSL side — bindings live in the material bind group, whose index is injected as a shader def; shader-source imports by quoted path also work:
+WESL side — bindings live in the material bind group, whose index comes from `constants::MATERIAL_BIND_GROUP`:
 
 ```wgsl
-#import bevy_pbr::forward_io::VertexOutput
-#import "shaders/custom_material_import.wgsl"::COLOR_MULTIPLIER
-@group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material_color: vec4<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(1) var material_color_texture: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(2) var material_color_sampler: sampler;
+import bevy_pbr::render::forward_io::VertexOutput;
+import super::custom_material_import::COLOR_MULTIPLIER;
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(0) var<uniform> material_color: vec4<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(1) var material_color_texture: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(2) var material_color_sampler: sampler;
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     return material_color * textureSample(material_color_texture, material_color_sampler, mesh.uv);
 }
 ```
 
-`Option<Handle<Image>>` binds a fallback image when `None` — all dimensions supported (`examples/shader/fallback_image.rs`). Custom vertex shaders that need the model matrix import `bevy_pbr::mesh_functions::{get_world_from_local, mesh_position_local_to_world}` and `view_transformations::position_world_to_clip`.
-Source: `examples/shader/shader_material.rs`, `assets/shaders/custom_material.wgsl`.
+`Option<Handle<Image>>` binds a fallback image when `None` — all dimensions supported (`examples/shader/fallback_image.rs`). Custom vertex shaders that need the model matrix import `bevy_pbr::render::mesh_functions::{get_world_from_local, mesh_position_local_to_world}` and `bevy_pbr::render::view_transformations::position_world_to_clip` (`assets/shaders/custom_stencil.wesl` is the worked example).
+Source: `examples/shader/shader_material.rs`, `assets/shaders/custom_material.wesl`.
 
 ### AsBindGroup attribute reference
 
@@ -49,9 +73,9 @@ Source: `examples/shader/shader_material.rs`, `assets/shaders/custom_material.wg
 - Struct-level `#[bind_group_data(KeyType)]` — non-GPU fields hashed into the specialization key (see Shader defs).
 - Struct-level `#[data(N, GpuStruct, binding_array(M))]` and `#[bindless(...)]` — bindless mode (below).
 
-### Data variants: GLSL and WESL shaders
+### Cross-file imports
 
-`ShaderRef` accepts `.vert`/`.frag` (GLSL) and `.wesl` sources too — same `Material` impl, just point `vertex_shader()`/`fragment_shader()` at them. WESL supports cross-file imports via a held `Handle<Shader>` to the utility module. Source: `examples/shader/shader_material_glsl.rs`, `examples/shader/shader_material_wesl.rs`.
+WESL shaders import each other directly (`import super::util::FOO;`). To share a module that does not sit next to the shader, load it once as a `Handle<Shader>` and point `ShaderRef` at it, so the asset system tracks the dependency. GLSL (`shader_material_glsl.rs` and the `.vert`/`.frag` route) was removed in 0.20. Source: `examples/shader/shader_material_wesl.rs`.
 
 ## ExtendedMaterial (extend StandardMaterial)
 
@@ -63,8 +87,8 @@ use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
 struct MyExtension { #[uniform(100)] quantize_steps: u32 }
 impl MaterialExtension for MyExtension {
-    fn fragment_shader() -> ShaderRef { "shaders/extended_material.wgsl".into() }
-    fn deferred_fragment_shader() -> ShaderRef { "shaders/extended_material.wgsl".into() }
+    fn fragment_shader() -> ShaderRef { "shaders/extended_material.wesl".into() }
+    fn deferred_fragment_shader() -> ShaderRef { "shaders/extended_material.wesl".into() }
 }
 app.add_plugins(MaterialPlugin::<ExtendedMaterial<StandardMaterial, MyExtension>>::default());
 // spawn: MeshMaterial3d(materials.add(ExtendedMaterial { base: StandardMaterial {..}, extension: MyExtension::new(1) }))
@@ -73,31 +97,39 @@ app.add_plugins(MaterialPlugin::<ExtendedMaterial<StandardMaterial, MyExtension>
 The canonical extension shader pattern (works in forward and deferred via `PREPASS_PIPELINE`):
 
 ```wgsl
-#import bevy_pbr::{pbr_fragment::pbr_input_from_standard_material, pbr_functions::alpha_discard}
-#ifdef PREPASS_PIPELINE
-#import bevy_pbr::{prepass_io::{VertexOutput, FragmentOutput}, pbr_deferred_functions::deferred_output}
-#else
-#import bevy_pbr::{forward_io::{VertexOutput, FragmentOutput},
-    pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing}}
-#endif
-@group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> my_extended_material: MyExtendedMaterial;
+import bevy_pbr::render::{
+    pbr_fragment::pbr_input_from_standard_material,
+    pbr_functions::alpha_discard,
+};
+
+@if(PREPASS_PIPELINE)
+import bevy_pbr::{
+    prepass::io::{VertexOutput, FragmentOutput},
+    deferred::functions::deferred_output,
+};
+@else
+import bevy_pbr::render::{
+    forward_io::{VertexOutput, FragmentOutput},
+    pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
+};
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> my_extended_material: MyExtendedMaterial;
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
     pbr_input.material.base_color.b = pbr_input.material.base_color.r;   // pre-lighting tweak
     pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
-#ifdef PREPASS_PIPELINE
+    @if(PREPASS_PIPELINE)
     let out = deferred_output(in, pbr_input);
-#else
+    @else
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);                            // post-lighting tweak here
     out.color = main_pass_post_lighting_processing(pbr_input, out.color); // fog/tonemap/deband
-#endif
     return out;
 }
 ```
 
-Source: `examples/shader/extended_material.rs`, `assets/shaders/extended_material.wgsl`.
+Source: `examples/shader/extended_material.rs`, `assets/shaders/extended_material.wesl`.
 
 ## Bindless materials
 
@@ -113,17 +145,16 @@ struct BindlessMaterial { color: LinearRgba, #[texture(1)] #[sampler(2)] color_t
 WGSL branches on the `BINDLESS` shader def; the per-instance slot comes from the mesh uniform, and index tables map slots to slab indices:
 
 ```wgsl
-#ifdef BINDLESS
-@group(#{MATERIAL_BIND_GROUP}) @binding(0) var<storage> materials: array<MaterialBindings>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(10) var<storage> material_color: binding_array<Color>;
+@if(BINDLESS)
+@group(constants::MATERIAL_BIND_GROUP) @binding(0) var<storage> materials: array<MaterialBindings>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(10) var<storage> material_color: binding_array<Color>;
 // sample: bindless_textures_2d[materials[slot].color_texture] with slot =
 //   mesh[in.instance_index].material_and_lightmap_bind_group_slot & 0xffffu;
-#else
-@group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material_color: Color;
-#endif
+@else
+@group(constants::MATERIAL_BIND_GROUP) @binding(0) var<uniform> material_color: Color;
 ```
 
-Bindless *extensions* must relocate their index table: `#[data(50, MyUniform, binding_array(101))]` + `#[bindless(index_table(range(50..53), binding(100)))]` so they don't collide with StandardMaterial's table at binding 0. Source: `examples/shader/shader_material_bindless.rs`, `assets/shaders/bindless_material.wgsl`, `examples/shader/extended_material_bindless.rs`, `assets/shaders/extended_material_bindless.wgsl`.
+Bindless *extensions* must relocate their index table: `#[data(50, MyUniform, binding_array(101))]` + `#[bindless(index_table(range(50..53), binding(100)))]` so they don't collide with StandardMaterial's table at binding 0. Source: `examples/shader/shader_material_bindless.rs`, `assets/shaders/bindless_material.wesl`, `examples/shader/extended_material_bindless.rs`, `assets/shaders/extended_material_bindless.wesl`.
 
 ## Shader defs + material specialization
 
@@ -139,9 +170,9 @@ struct CustomMaterialKey { is_red: bool }
 impl From<&CustomMaterial> for CustomMaterialKey { /* copy flags */ }
 
 impl Material for CustomMaterial {
-    fn fragment_shader() -> ShaderRef { "shaders/shader_defs.wgsl".into() }
+    fn fragment_shader() -> ShaderRef { "shaders/shader_defs.wesl".into() }
     fn specialize(
-        _pipeline: &MaterialPipeline,                 // NOT generic in 0.19
+        _pipeline: &MaterialPipeline,                 // not generic
         descriptor: &mut RenderPipelineDescriptor,
         _layout: &MeshVertexBufferLayoutRef,
         key: MaterialPipelineKey<Self>,
@@ -154,23 +185,23 @@ impl Material for CustomMaterial {
 }
 ```
 
-WGSL: `#ifdef IS_RED ... #else ... #endif`. Value-carrying defs: `ShaderDefVal::Bool("PARTY_MODE".to_string(), flag)` (`examples/shader/shader_material_wesl.rs`). Source: `examples/shader/shader_defs.rs`, `assets/shaders/shader_defs.wgsl`.
+WESL: `@if(IS_RED) ... @else ...`. Value-carrying defs: `ShaderDefVal::Bool("PARTY_MODE".to_string(), flag)` (`examples/shader/shader_material_wesl.rs`). A bool def also enables the `@if` flag of the same name; `Int`/`UInt` defs are read as `constants::NAME`. Remember the loader drops `shader_defs` on a `.wgsl` file. Source: `examples/shader/shader_defs.rs`, `assets/shaders/shader_defs.wesl`.
 
 ## 2D materials (Material2d)
 
-Same derive, different trait/plugin/components — note the 0.19 module: `bevy::sprite_render`.
+Same derive, different trait/plugin/components — note the module: `bevy::sprite_render` (the re-export of `bevy_sprite_render`).
 
 ```rust
 use bevy::sprite_render::{AlphaMode2d, Material2d, Material2dPlugin};
 impl Material2d for CustomMaterial {
-    fn fragment_shader() -> ShaderRef { "shaders/custom_material_2d.wgsl".into() }
+    fn fragment_shader() -> ShaderRef { "shaders/custom_material_2d.wesl".into() }
     fn alpha_mode(&self) -> AlphaMode2d { AlphaMode2d::Mask(0.5) }
 }
 app.add_plugins(Material2dPlugin::<CustomMaterial>::default());
 // spawn: (Mesh2d(meshes.add(Rectangle::default())), MeshMaterial2d(materials.add(..)))
 ```
 
-WGSL imports change: `#import bevy_sprite::mesh2d_vertex_output::VertexOutput`; for vertex shaders use `bevy_sprite::mesh2d_functions` (`mesh2d_position_local_to_clip`). `Material2d` also has a `specialize` hook with `Material2dKey`. Source: `examples/shader/shader_material_2d.rs`, `assets/shaders/custom_material_2d.wgsl`.
+WESL imports: `import bevy_sprite_render::mesh2d::vertex_output::VertexOutput;`; for vertex shaders use `bevy_sprite_render::mesh2d::functions` (`get_world_from_local`, `mesh2d_position_local_to_clip`) and `bevy_sprite_render::mesh2d::view_bindings::globals`. `Material2d` also has a `specialize` hook with `Material2dKey`. Source: `examples/shader/shader_material_2d.rs`, `assets/shaders/custom_material_2d.wesl`, `assets/shaders/custom_gltf_2d.wesl`.
 
 ## UiMaterial
 
@@ -183,7 +214,7 @@ struct CustomUiMaterial {
     #[uniform(4)] border_color: Vec4,
 }
 impl UiMaterial for CustomUiMaterial {
-    fn fragment_shader() -> ShaderRef { "shaders/custom_ui_material.wgsl".into() }
+    fn fragment_shader() -> ShaderRef { "shaders/custom_ui_material.wesl".into() }
 }
 app.add_plugins(UiMaterialPlugin::<CustomUiMaterial>::default());
 // spawn: (Node { border, border_radius, .. }, MaterialNode(ui_materials.add(..)))
@@ -192,25 +223,29 @@ app.add_plugins(UiMaterialPlugin::<CustomUiMaterial>::default());
 WGSL: UI materials bind at literal `@group(1)`; the vertex output carries UI geometry — `in.uv`, `in.size`, `in.border_widths` (vec4), `in.border_radius` (vec4):
 
 ```wgsl
-#import bevy_ui::ui_vertex_output::UiVertexOutput
+import bevy_ui_render::ui_vertex_output::UiVertexOutput;
+
 @group(1) @binding(0) var<uniform> color: vec4<f32>;
 @fragment fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> { ... }
 ```
 
-Source: `examples/ui/ui_material.rs`, `assets/shaders/custom_ui_material.wgsl`.
+Source: `examples/ui/ui_material.rs`, `assets/shaders/custom_ui_material.wesl`.
 
 ## Animated shaders: the globals binding
 
 No CPU work needed for time-driven effects — `globals.time` ships with the view bindings:
 
 ```wgsl
-#import bevy_pbr::{mesh_view_bindings::globals, forward_io::VertexOutput}
+import bevy_pbr::render::{
+    mesh_view_bindings::globals,
+    forward_io::VertexOutput,
+};
 @fragment fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let t = sin(globals.time * 2.0) * 0.5 + 0.5; ...
 }
 ```
 
-An empty material (`struct CustomMaterial {}` deriving `AsBindGroup`) is fine. Source: `examples/shader/animate_shader.rs`, `assets/shaders/animate_shader.wgsl`. Screen-space UVs from the view uniform: `examples/shader/shader_material_screenspace_texture.rs`.
+An empty material (`struct CustomMaterial {}` deriving `AsBindGroup`) is fine. Source: `examples/shader/animate_shader.rs`, `assets/shaders/animate_shader.wesl`. Screen-space UVs from the view uniform: `examples/shader/shader_material_screenspace_texture.rs`.
 
 ## Alpha modes & the prepass
 
@@ -233,14 +268,14 @@ let vertex_layout = layout.0.get_layout(&[
 descriptor.vertex.buffers = vec![vertex_layout];
 ```
 
-WGSL vertex input: `@location(1) blend_color: vec4<f32>` (plus `@builtin(instance_index)` for `get_world_from_local`). Source: `examples/shader_advanced/custom_vertex_attribute.rs`, `assets/shaders/custom_vertex_attribute.wgsl`.
+WGSL vertex input: `@location(1) blend_color: vec4<f32>` (plus `@builtin(instance_index)` for `get_world_from_local`). Source: `examples/shader_advanced/custom_vertex_attribute.rs`, `assets/shaders/custom_vertex_attribute.wesl`.
 
 ## Automatic instancing + MeshTag
 
 Same `Mesh3d` handle + same material handle ⇒ one draw call, no extra code (works with any material incl. StandardMaterial). Per-instance data rides on `MeshTag(u32)` — read it in the shader:
 
 ```wgsl
-#import bevy_pbr::mesh_functions
+import bevy_pbr::render::mesh_functions;
 let tag = mesh_functions::get_tag(vertex.instance_index);   // or mesh.instance_index in fragment
 ```
 
@@ -257,11 +292,11 @@ struct CustomMaterial { #[storage(0, read_only)] colors: Handle<ShaderBuffer> }
 // update: buffers.get_mut(&material.colors).unwrap().set_data(new_vec);
 ```
 
-WGSL: `@group(#{MATERIAL_BIND_GROUP}) @binding(0) var<storage, read> colors: array<vec4<f32>, 5>;`. Source: `examples/shader/storage_buffer.rs`, `assets/shaders/storage_buffer.wgsl`.
+WESL: `@group(constants::MATERIAL_BIND_GROUP) @binding(0) var<storage, read> colors: array<vec4<f32>, 5>;`. Source: `examples/shader/storage_buffer.rs`, `assets/shaders/storage_buffer.wesl`.
 
 ## Post-processing
 
-Two routes in 0.19:
+Two routes:
 
 **Easy route — `FullscreenMaterial`** (`bevy::core_pipeline::fullscreen_material`): a `Component + ExtractComponent + ShaderType` on the camera; the plugin does extraction, pipeline, and pass for you.
 
@@ -269,7 +304,7 @@ Two routes in 0.19:
 #[derive(Component, ExtractComponent, Clone, Copy, ShaderType, Default)]
 struct FullscreenEffect { intensity: f32 }
 impl FullscreenMaterial for FullscreenEffect {
-    fn fragment_shader() -> ShaderRef { "shaders/fullscreen_effect.wgsl".into() }
+    fn fragment_shader() -> ShaderRef { "shaders/fullscreen_effect.wesl".into() }
     // override schedule()/schedule_configs() to run in Core2d instead of the default Core3d
 }
 app.add_plugins(FullscreenMaterialPlugin::<FullscreenEffect>::default());
@@ -304,7 +339,7 @@ fn post_process_system(
 }
 ```
 
-WGSL: `#import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput`, sample `screen_texture` at `in.uv`. Match the `ColorTargetState::format` to the camera (Rgba8UnormSrgb non-HDR; change if HDR/bloom). Source: `examples/shader_advanced/custom_post_processing.rs`, `assets/shaders/post_processing.wgsl`, `examples/shader_advanced/fullscreen_material.rs`.
+WESL: `import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput;`, sample `screen_texture` at `in.uv`. Match the `ColorTargetState::format` to the camera (Rgba8UnormSrgb non-HDR; change if HDR/bloom). Source: `examples/shader_advanced/custom_post_processing.rs`, `assets/shaders/post_processing.wesl`, `examples/shader_advanced/fullscreen_material.rs`.
 
 ## Compute shaders
 
@@ -381,7 +416,7 @@ type DrawCustom = (SetItemPipeline, SetMeshViewBindGroup<0>,
     SetMeshViewBindingArrayBindGroup<1>, SetMeshBindGroup<2>, DrawMeshInstanced);
 ```
 
-The `RenderCommand::render` impl fetches mesh slices from `MeshAllocator`, sets vertex buffer 0 (mesh) and 1 (instances), then `draw_indexed(.., 0..instance_count)`. Gotchas: the instanced entity needs `NoFrustumCulling` (Bevy culls by the single mesh's Aabb), the camera needs `NoIndirectDrawing` (direct draws), the component needs `impl SyncComponent` + `ExtractComponent`, and queueing reads `ViewKeyCache` per `retained_view_entity` and pushes with `transparent_phase.add_retained(Transparent3d { sorting_info: TransparentSortingInfo3d::Sorted { mesh_center, depth_bias }, .. })`. WGSL: instance attrs are plain `@location(3)/@location(4)` inputs. Source: `examples/shader_advanced/custom_shader_instancing.rs`, `assets/shaders/instancing.wgsl`.
+The `RenderCommand::render` impl fetches mesh slices from `MeshAllocator`, sets vertex buffer 0 (mesh) and 1 (instances), then `draw_indexed(.., 0..instance_count)`. Gotchas: the instanced entity needs `NoFrustumCulling` (Bevy culls by the single mesh's Aabb), the camera needs `NoIndirectDrawing` (direct draws), the component needs `impl SyncComponent` + `ExtractComponent`, and queueing reads `ViewKeyCache` per `retained_view_entity` and pushes with `transparent_phase.add_retained(Transparent3d { sorting_info: TransparentSortingInfo3d::Sorted { mesh_center, depth_bias }, .. })`. WGSL: instance attrs are plain `@location(3)/@location(4)` inputs. Source: `examples/shader_advanced/custom_shader_instancing.rs`, `assets/shaders/instancing.wesl`.
 
 ## Specialized mesh pipelines (full pipeline control, no Material)
 
@@ -416,7 +451,7 @@ impl Specializer<RenderPipeline> for CustomPhaseSpecializer {
 // bin with BinnedRenderPhaseType::NonMesh and AssetId::<Mesh>::invalid().untyped()
 ```
 
-Source: `examples/shader_advanced/custom_phase_item.rs`, `assets/shaders/custom_phase_item.wgsl`.
+Source: `examples/shader_advanced/custom_phase_item.rs`, `assets/shaders/custom_phase_item.wesl`.
 
 ## Custom render phase (your own `Stencil3d`-style pass)
 

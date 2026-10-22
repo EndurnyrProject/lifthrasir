@@ -1,8 +1,10 @@
-# 2D & 3D Rendering, Cameras, Transforms, Gizmos (Bevy 0.19)
+# 2D & 3D Rendering, Cameras, Transforms, Gizmos (Bevy 0.20)
 
 Distilled from the official Bevy examples. Everything below is component-based (no bundles): spawn `Camera2d`, `Camera3d`, `Sprite`, `Mesh3d`, `MeshMaterial3d`, etc. directly. Events are Messages (`MessageReader`/`MessageWriter`). UI lengths use `px(12)` / `percent(100)` helpers.
 
-## 0.19 renames worth memorizing
+**New in 0.20:** custom sprite materials (`SpriteMaterial` + `SpriteMaterialPlugin`) and 2D extended materials (`ExtendedMaterial2d` + `MaterialExtension2d`), a unified sprite render backend (reusing the 3D infrastructure), mesh shaders (`MeshPipelineDescriptor` + `draw_meshtasks`), and `PanOrbitCamera` in `bevy_camera_controller` (`examples/camera/pan_orbit_camera_{minimal,cad,ortho}.rs`). Shader files are WESL now — see `shaders.md`.
+
+## Renames worth memorizing
 
 - `PointLight/SpotLight/DirectionalLight { shadow_maps_enabled: true }` (was `shadows_enabled`).
 - Ambient light resource is `GlobalAmbientLight` (was `AmbientLight`); `GlobalAmbientLight::NONE` to disable.
@@ -159,6 +161,33 @@ let img = asset_server.load_builder()
     .load("path.png");
 ColorMaterial { texture: Some(img), uv_transform: Affine2::from_scale(Vec2::new(2., 3.)), ..default() }
 ```
+
+### Extending a 2D material (0.20)
+
+`ExtendedMaterial2d<B, E>` wraps a base `Material2d` and adds an extension implementing `MaterialExtension2d`; bindings from 100 up are yours (0–99 belong to the base material). This is the 2D analogue of 3D's `ExtendedMaterial`.
+
+```rust
+use bevy::sprite_render::{ExtendedMaterial2d, MaterialExtension2d};
+
+#[derive(AsBindGroup, Reflect, Clone)]
+struct MyExtension { #[uniform(20)] value: Vec4 }
+
+impl MaterialExtension2d for MyExtension {
+    fn fragment_shader() -> Option<ShaderRef> { Some("my_material.wesl".into()) }
+}
+
+let handle = materials.add(ExtendedMaterial2d {
+    base: ColorMaterial::from_color(Color::WHITE),
+    extension: MyExtension { value: Vec4::ZERO },
+});
+commands.spawn((Mesh2d(mesh), MeshMaterial2d(handle)));
+```
+
+`ExtendedMaterial2d` is defined in `bevy_sprite_render::mesh2d::extended_material` (there is no 0.20 example for the mesh variant yet). For a custom material straight on a **sprite** (not a mesh), use `SpriteMaterial(handle)` + `SpriteMaterialPlugin::<M>` with `M: MaterialExtension2d`; the shader can call `bevy_sprite_render::sprite_mesh::functions::{sample_final_color, sample_sprite_texture, get_final_color}`. `examples/shader/sprite_material.rs` is the worked example (bindings start at 20 to avoid the sprite's own).
+
+### Mesh shaders (0.20, advanced)
+
+A `MeshPipelineDescriptor` pairs an optional task shader with a mesh shader (and a fragment shader) into a `RenderPipeline`, so geometry is generated on the GPU and drawn with `pass.draw_mesh_tasks(..)` instead of a vertex shader. Not supported on web, and there is no `StandardMaterial` integration yet. `examples/shader_advanced/mesh_shader_intro.rs`.
 
 Wireframes: `Wireframe2dPlugin` + `Wireframe2dConfig.global` (2D), `WireframePlugin` + `WireframeConfig` (3D); not on wasm. `examples/2d/2d_shapes.rs`, `examples/3d/3d_shapes.rs`
 
@@ -380,7 +409,7 @@ let handle = images.add(image);
 commands.spawn((
     Camera3d::default(),
     Camera { order: -1, clear_color: Color::WHITE.into(), ..default() },
-    RenderTarget::Image(handle.clone().into()),   // separate component in 0.19
+    RenderTarget::Image(handle.clone().into()),   // separate component, not a Camera field
     RenderLayers::layer(1),
 ));
 // use `handle` as base_color_texture / Sprite image / UI image

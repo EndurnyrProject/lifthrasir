@@ -1,6 +1,18 @@
-# Dev Tools, Diagnostics, BRP, Async & Math (Bevy 0.19)
+# Dev Tools, Diagnostics, BRP, Async & Math (Bevy 0.20)
 
-Distilled from the Bevy 0.19 examples tree. Source paths are relative to the Bevy repo.
+Distilled from the Bevy 0.20 examples tree. Source paths are relative to the Bevy repo.
+
+**New in 0.20 for debugging:** `ScheduleBuildSettings::shuffle_seed` (behind the `debug` feature) randomizes system run order while keeping explicit ordering, to surface systems that accidentally depend on each other. Log the seed so a failure is reproducible, and consider the single-threaded executor to remove greedy scheduling:
+
+```rust
+app.edit_schedule(Update, |schedule| {
+    let seed: u64 = rand::random();
+    info!("Update schedule shuffle seed = {seed}");
+    schedule.set_build_settings(ScheduleBuildSettings { shuffle_seed: Some(seed), ..default() });
+});
+```
+
+Also 0.20: panics in systems/commands/observers now reach `FallbackErrorHandler` (see `ecs.md`), and `BevyError::context`/`with_context` attach anyhow-style messages.
 
 ## FPS Overlay (`bevy_dev_tools`)
 

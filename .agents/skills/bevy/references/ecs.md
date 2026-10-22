@@ -1,10 +1,18 @@
-# ECS, App Structure, States & Time (Bevy 0.19)
+# ECS, App Structure, States & Time (Bevy 0.20)
 
-Distilled from the Bevy 0.19 examples tree. Bevy 0.19: bundles are replaced by required components, buffered events are `Message`s, observers take `On<E>`.
+Distilled from the Bevy 0.20 examples tree. Core model since 0.19: bundles are replaced by required components, buffered events are `Message`s, observers take `On<E>`.
+
+**New in 0.20, covered below:** weak ordering (`chain_weak`/`before_weak`/`after_weak`), bulk `despawn_all`, panics routed to the error handler, `BevyError::context`, `#[component(summary_tick)]` per-column change ticks, and `ScheduleBuildSettings::shuffle_seed`.
 
 ## System Ordering & System Sets
 
 Systems in one schedule run in parallel unless ordered. Order with `.chain()`, `.before()`, `.after()`, or group into `SystemSet`s and order the sets once with `configure_sets`.
+
+**`chain_weak()` / `before_weak()` / `after_weak()` (0.20)** request the same order but keep it only between systems whose tracked data access actually conflicts; non-conflicting systems stay free to run in any order. Conflict is decided from ECS access, so an ordering that lives in an atomic, a channel, a `NonSend` resource, or interior mutability on a read-only access is **not** respected. Deferred-effect producers (`Commands`) and exclusive systems are always treated as conflicting. Many built-in sets (render, UI) now use weak ordering — if your system relied on "the previous set finished", say `.after(that_system)` explicitly.
+
+```rust
+app.configure_sets(Update, (MySystems::BeforeRound, MySystems::Round, MySystems::AfterRound).chain_weak());
+```
 
 ```rust
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
@@ -246,7 +254,7 @@ fn run_reenter<S: States>(transition: In<Option<StateTransitionEvent<S>>>, world
 
 `examples/state/custom_transitions.rs`
 
-## Buffered Messages (0.19 naming)
+## Buffered Messages (0.19+ naming)
 
 `#[derive(Message)]` + `add_message::<T>()`. Write with `MessageWriter` (`write` / `write_default`), read with `MessageReader::read()`, read-and-mutate with `MessageMutator` (a reader+writer of the same T in one system would conflict). Chain writer systems before reader systems or readers get a one-frame delay.
 
@@ -407,6 +415,15 @@ commands.entity(parent).add_child(child);   // attach after the fact
 
 `examples/ecs/hierarchy.rs`
 
+### Bulk despawn (0.20)
+
+`despawn_all` / `despawn_all_where` batch-despawning through the ECS instead of N separate `despawn` calls (same behaviour, less overhead). `DespawnOnEnter`/`DespawnOnExit` already use it.
+
+```rust
+commands.despawn_all::<With<Enemy>>();                      // every matching entity
+commands.despawn_all_where::<&Health, With<Enemy>>(|hp| hp.0 <= 0);
+```
+
 ## Change Detection
 
 Mutable deref marks changed regardless of equality — use `set_if_neq` to avoid spurious ticks. Filter with `Changed<T>`/`Added<T>`; inspect without filtering via `Ref<T>` (`is_added`, `is_changed`, and with the `track_location` feature, `changed_by()`).
@@ -422,6 +439,14 @@ fn detect(changed: Query<Ref<MyComponent>, Changed<MyComponent>>, res: Res<MyRes
 ```
 
 Gotcha (project memory): taking `&mut T` out of a `ResMut` every frame = change-tick spam even without writes.
+
+**Per-column change ticks (0.20):** add `#[component(summary_tick)]` to store a per-column tick on top of the per-entity tick, so `Changed<T>` can skip a whole column instead of checking every entity. Writes get more expensive (two ticks), so it pays off only for components queried for changes often but written rarely.
+
+```rust
+#[derive(Component)]
+#[component(summary_tick)]
+struct MeshHandleCache { /* … */ }
+```
 
 `examples/ecs/change_detection.rs`
 
@@ -482,7 +507,26 @@ app.add_systems(PostStartup, failing.pipe(|r: In<Result>| { let _ = r.0.inspect_
 commands.queue_handled(|world: &mut World| -> Result { ... }, |error, ctx| error!("{error}, {ctx}"));
 ```
 
-Note the project rule "critical systems fail loudly" — keep the default panic handler for those; use severities for recoverable paths.
+**Panics are errors in 0.20.** A panic inside a system, command, or observer is caught, converted to `BevyError`, and passed to `FallbackErrorHandler`. That handler defaults to `match_severity`, and the wrapped panic has `Severity::Panic`, so the default still re-panics — the app dies, just through the handler. To keep a long-running tool alive, install a handler that logs instead:
+
+```rust
+use bevy::ecs::error::warn;
+app.set_error_handler(warn);   // log panics as warnings and continue (asserts it runs only once)
+```
+
+**`BevyError::context` / `with_context` (0.20)** attach anyhow-style context, including onto `Option`:
+
+```rust
+fn parse_package() -> Result<Package, BevyError> {
+    let text = std::fs::read_to_string("package.json")
+        .with_context(|| "Failed to read package.json".to_string())?;
+    let parsed: usize = text.parse().context("Failed to parse number")?;
+    Ok(Package { parsed })
+}
+// stacked contexts print as a "Caused by:" list
+```
+
+Note the project rule "critical systems fail loudly" — keep the default panic handler for those; use severities or a logging fallback for recoverable paths.
 
 `examples/ecs/error_handling.rs`
 

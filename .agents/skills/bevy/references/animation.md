@@ -1,6 +1,6 @@
-# Animation (Bevy 0.19)
+# Animation (Bevy 0.20)
 
-Distilled from `examples/animation/` in the Bevy 0.19 tree. All snippets use 0.19 APIs (note: `AnimatedBy` replaces the old `AnimationTarget { player, id }` struct; scenes load via `WorldAssetRoot` / `WorldInstanceReady` instead of `SceneRoot` / `SceneInstanceReady`).
+Distilled from `examples/animation/` in the Bevy 0.20 tree. `AnimatedBy` / `WorldAssetRoot` / `WorldInstanceReady` are unchanged in 0.20 (note: `AnimatedBy` replaces the old `AnimationTarget { player, id }` struct; scenes load via `WorldAssetRoot` / `WorldInstanceReady` instead of `SceneRoot` / `SceneInstanceReady`).
 
 ## Core model
 

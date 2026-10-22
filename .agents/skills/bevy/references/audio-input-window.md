@@ -1,6 +1,8 @@
-# Audio, Input & Windowing (Bevy 0.19)
+# Audio, Input & Windowing (Bevy 0.20)
 
-Distilled from the Bevy 0.19 examples tree. Note: 0.19 renamed buffered Events to **Messages** — use `MessageReader<T>` / `MessageWriter<T>`, never `EventReader`.
+Distilled from the Bevy 0.20 examples tree. Note: since 0.19 buffered Events are **Messages** — use `MessageReader<T>` / `MessageWriter<T>`, never `EventReader`.
+
+**Changed in 0.20 for this area:** `EditableText` (state) and `TextInput` (widget behaviour, `bevy::ui_widgets`, needs `TextInputPlugin`) are now separate components; pointer/click focus moved to `bevy_input_focus::pointer_focus::PointerFocusPlugin`, which must be added explicitly. Window/cursor APIs below are unchanged.
 
 ---
 
@@ -76,7 +78,9 @@ if ctrl && shift && input.just_pressed(KeyCode::KeyA) { /* Ctrl+Shift+A */ }
 
 ### Text input (chat / slash commands)
 
-For typed text (chat box), read `KeyboardInput` messages and extract `Key::Character` from `logical_key` — this respects layout, shift, and dead keys, unlike `KeyCode`:
+Two levels. For a **real editable field**, spawn `EditableText` + `TextInput` and add `TextInputPlugin` (+ `PointerFocusPlugin` and a `TabIndex` so clicking focuses it) — see `ui-picking.md`. Hand-rolling a field is rarely worth it. Examples: `examples/ui/text/{text_input,multiple_text_inputs,multiline_text_input,editable_text_filter,ime_support}.rs`.
+
+For a raw keystroke handler (a chat box you draw yourself), read `KeyboardInput` messages and extract `Key::Character` from `logical_key` — this respects layout, shift, and dead keys, unlike `KeyCode`:
 
 ```rust
 fn chat_typing(mut keyboard: MessageReader<KeyboardInput>) {
@@ -94,7 +98,7 @@ fn chat_typing(mut keyboard: MessageReader<KeyboardInput>) {
 
 Raw event stream (`KeyboardInput` has `key_code`, `logical_key`, `state`, `repeat`, `window`) — `examples/input/keyboard_input_events.rs`, `examples/input/char_input_events.rs`.
 
-**IME** (CJK composition): set `window.ime_enabled = true` (and `ime_position`) while a text field is focused, then read `MessageReader<Ime>` — `Ime::Preedit { value, cursor, .. }` for the in-progress composition, `Ime::Commit { value, .. }` for finalized text. Defined in `crates/bevy_window/src/event.rs`; no dedicated example in 0.19.
+**IME** (CJK composition): set `window.ime_enabled = true` (and `ime_position`) while a text field is focused, then read `MessageReader<Ime>` — `Ime::Preedit { value, cursor, .. }` for the in-progress composition, `Ime::Commit { value, .. }` for finalized text. Defined in `crates/bevy_window/src/event.rs`; `examples/ui/text/ime_support.rs` is the worked example.
 
 ### Mouse
 
@@ -117,7 +121,7 @@ Raw messages when you need per-event data: `MessageReader<MouseButtonInput>`, `M
 
 ### Cursor grab
 
-`CursorOptions` is its own component on the window entity (not a `Window` field in 0.19):
+`CursorOptions` is its own component on the window entity, not a `Window` field:
 
 ```rust
 fn grab(mut cursor: Single<&mut CursorOptions>, key: Res<ButtonInput<KeyCode>>) {
@@ -250,6 +254,6 @@ if input.just_pressed(MouseButton::Left) {
 
 Note this moves the OS window itself — in-game draggable UI panels should keep using bevy_picking drag observers instead. `examples/window/window_drag_move.rs`
 
-### Persisting window settings (0.19 addition)
+### Persisting window settings
 
 `bevy::settings::SettingsPlugin` + a `#[derive(SettingsGroup)]` resource persists position/size/fullscreen across runs; save on `WindowCloseRequested` with `ExitCondition::DontExit` to intercept exit. Lifthrasir already has `bevy-persistent` for this role. `examples/window/persisting_window_settings.rs`

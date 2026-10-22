@@ -1,6 +1,10 @@
-# Bevy UI & Picking (Bevy 0.19)
+# Bevy UI & Picking (Bevy 0.20)
 
 Distilled from the official Bevy examples repo. No bundles: spawn `Node`, `Text`, `ImageNode` etc. as plain components. Picking observers use `On<Pointer<E>>`.
+
+**New in 0.20:** `Val::Em`/`Val::Rem` (`em()`, `rem()`, `EmSize`, `RemSize`), `TextFont::default()` is `FontSize::Rem(1.)`, `BorderRadius` fields are `CornerRadius`, `FixedNode`, `InlineBox`/`InlineImage`, rotation-aware overflow clipping, `EditableText`/`TextInput` split, and pointer focus moved to `PointerFocusPlugin`. Each is covered in its section below.
+
+For declarative UI authoring (`bsn!`, Feathers widgets, contextual theming) use the `bevy-feathers-bsn` skill; this file is the imperative `bevy_ui` surface.
 
 ## Setup fundamentals
 
@@ -12,7 +16,9 @@ commands.spawn((Camera2d, IsDefaultUiCamera));
 commands.spawn((Node { /* root */ ..default() }, UiTargetCamera(camera_entity)));
 ```
 
-`Val` helper functions are idiomatic in 0.19: `px(10)`, `percent(100)`, `auto()`, `vh(20)`. They also build `UiRect`s: `px(10).all()`, `MARGIN.right()`, `auto().horizontal()`.
+`Val` helper functions are idiomatic: `px(10)`, `percent(100)`, `auto()`, `vh(20)`, and since 0.20 `em(1.5)` / `rem(1.5)`. They also build `UiRect`s: `px(10).all()`, `MARGIN.right()`, `auto().horizontal()`.
+
+**Font-relative units (0.20):** `Val::Em` resolves against the node's own `EmSize` (auto-derived from its `TextFont`, and `Node` requires `EmSize`), `Val::Rem` against the global `RemSize` resource (default 20px). Resolving a `Val` by hand now takes both: `val.resolve(scale, base, target, em_size, rem_size)`; `ComputedNode` exposes the `em_size`/`rem_size` it laid out with — read those rather than supplying your own. Propagating `EmSize` down a hierarchy is the app's job, not `bevy_ui`'s.
 `examples/ui/ui_target_camera.rs`, `examples/ui/scroll_and_overflow/scroll.rs`
 
 ## Flex layout
@@ -157,13 +163,34 @@ commands.spawn((
 ```
 
 Key facts:
-- `TextFont.font` is a `FontSource` (`Handle<Font>::into()`); `font_size` is the `FontSize` enum (`Px`, `Vh`, ...), not a bare f32. `TextFont::from_font_size(14.0)` is the shorthand.
+- `TextFont.font` is a `FontSource` (`Handle<Font>::into()`); `font_size` is the `FontSize` enum (`Px`, `Vw`, `Vh`, `VMin`, `VMax`, `Rem`), not a bare f32. `TextFont::from_font_size(14.0)` is the shorthand for `Px`.
+- **`TextFont::default().font_size` is `FontSize::Rem(1.)` since 0.20** (was `Px(20.)`). With the default `RemSize` of 20px nothing changes visually, but default-sized text now scales with `RemSize`. Pin `FontSize::Px(..)` where a fixed size matters.
+- `InlineBox` (from `bevy::text`) on a descendant of a `Text`/`Text2d` reserves space in the text layout for custom content (`InFlow` displaces text, `OutOfFlow` does not); after layout, `TextLayoutInfo::inline_boxes` lists them and drawing is up to you. `InlineImage` (from `bevy::ui`) is the built-in image-in-text case.
 - Rich text = child entities with `TextSpan` (each with its own `TextFont`/`TextColor`). Update by writing through the deref: `**span = format!("{value:.2}")`.
 - Wrapping: constrain width via `Node { max_width: px(300), .. }`; control breaking with `TextLayout { linebreak: LineBreak::WordBoundary | AnyCharacter | WordOrCharacter | NoWrap, ..default() }`.
 - `Underline` / strikethrough components exist; OpenType features via `FontFeatures::builder().enable(FontFeatureTag::SMALL_CAPS).build()`.
 - **UI `Text` vs `Text2d`**: `Text` lives in the UI layout tree (needs a `Node` context, screen-space). `Text2d` (+ `Text2dShadow`, `Anchor`) is a world-space 2D entity positioned with `Transform` — use it for in-world labels, not HUD.
 
 `examples/ui/text/text.rs`, `text_debug.rs`, `text_wrap_debug.rs`, `examples/2d/text2d.rs`
+
+### Editable text input — split in 0.20
+
+`bevy::text::EditableText` is now **state only** (value, cursor, selection); the widget behaviour moved to `bevy::ui_widgets::TextInput`, which needs `TextInputPlugin`. A usable field carries both plus a `TabIndex`:
+
+```rust
+use bevy::text::EditableText;
+use bevy::ui_widgets::{TextInput, TextInputPlugin};
+
+app.add_plugins(TextInputPlugin);
+commands.spawn((
+    EditableText::new(""),
+    TextInput,          // key handling, read-only mode, etc.
+    TabIndex(0),        // required for pointer click-to-focus (see Focus section)
+    Node::default(),
+));
+```
+
+Do not put `Pickable::IGNORE` on an input — it needs the press for focus. `TextEdit`/`TextEditChange` messages report edits if you need to react without polling `EditableText`.
 
 ## Borders, radius, outline, shadow
 
@@ -176,7 +203,9 @@ Key facts:
 )
 ```
 
-`border_radius` is a **field on `Node`** in 0.19 (not a separate component); `BorderRadius::MAX` makes pills/circles. `Outline` color set to `Color::NONE` hides it — cheap hover highlight (`outline.color = RED.into()` on `Interaction`/`Over`). `border_color.set_all(c)` mutates all sides.
+`border_radius` is a **field on `Node`** (not a separate component); `BorderRadius::MAX` makes pills/circles. `Outline` color set to `Color::NONE` hides it — cheap hover highlight (`outline.color = RED.into()` on `Interaction`/`Over`). `border_color.set_all(c)` mutates all sides.
+
+**Elliptical corners (0.20):** each `BorderRadius` field is a `CornerRadius { x: Val, y: Val }`, so a corner can be elliptical. `BorderRadius::all(px(8))` and `::top_right(px(10))` still take `impl Into<CornerRadius>`; for independent axes use `CornerRadius::new(px(10.), px(20.))`. `::MAX` / `::MAX_ELLIPTICAL` / `::ZERO` remain consts; the builder fns are no longer `const`.
 `examples/ui/styling/borders.rs`, `box_shadow.rs`, `examples/ui/scroll_and_overflow/overflow.rs`
 
 ## UI images, atlases, 9-slice
@@ -262,9 +291,18 @@ relative_cursor_position.cursor_over()   // bool
 Global UI multiplier resource: `commands.insert_resource(UiScale(1.25))`. Remember it (and window scale factor) when doing pixel math against `ComputedNode` — computed values are physical px; convert with `computed.inverse_scale_factor()`.
 `examples/ui/ui_scaling.rs`, `examples/ui/scroll_and_overflow/drag_to_scroll.rs`
 
+## `FixedNode` — viewport-anchored nodes (0.20)
+
+Adding `FixedNode` (next to `Node`) positions the node relative to the target camera's viewport instead of its parent, and it inherits none of the parent's layout, clipping or transform context — it behaves like a root node. Use it for HUD overlays that must ignore a scrolling/transformed ancestor. Taffy treats it identically to a root, so it still participates in that camera's layout.
+`examples/ui/layout/fixed_node.rs`
+
 ## Focus and tab navigation
 
-`bevy::input_focus`: add `TabNavigationPlugin`, group focusables under a node with `TabGroup::new(n)` (or `TabGroup::modal()` to trap focus in a dialog), give each widget a `TabIndex` (equal indices = child order). Focus state is the `InputFocus` resource; render a focus ring by comparing `focus.get() == Some(entity)` and inserting/removing an `Outline`. Clicking empty space can clear focus:
+`bevy::input_focus`: add `TabNavigationPlugin`, group focusables under a node with `TabGroup::new(n)` (or `TabGroup::modal()` to trap focus in a dialog), give each widget a `TabIndex(pub i32)` (equal indices = child order). Focus state is the `InputFocus` resource; render a focus ring by comparing `focus.get() == Some(entity)` and inserting/removing an `Outline`.
+
+**Pointer focus is a separate plugin (0.20).** `InputFocusPlugin` no longer installs click-to-focus; `bevy_input_focus::pointer_focus::PointerFocusPlugin` does (and it is not in `DefaultPlugins`). Its `click_to_focus` observer triggers a bubbling `AcquireFocus`; resolving that request to an actual focus **requires a `TabIndex`** on the target or an ancestor — otherwise the request reaches the window and clears focus instead. Net effect: text fields and clickable widgets need `PointerFocusPlugin` installed *and* a `TabIndex`, or clicking them silently does nothing (symptom: keyboard/Enter focus works, clicking doesn't). The observer is idempotent when both plugins register it.
+
+Clicking empty space can clear focus:
 
 ```rust
 .observe(|mut ev: On<Pointer<Click>>, mut focus: ResMut<InputFocus>| {
@@ -304,7 +342,7 @@ Gotchas that bite:
 - **Child nodes re-fire parent hover events.** Text/icons inside a hover target must be `Pickable::IGNORE`, otherwise moving onto the child bubbles a fresh `Over`/`Out` pair on the parent.
 - Full-screen root containers should be `Pickable::IGNORE` so they don't swallow world clicks.
 - `HoverMap` (per-pointer hovered entity map) **always contains the window entity** — exclude it when checking "is the pointer over UI".
-- Sprite picking only hits **opaque pixels** by default (alpha-aware), and in 0.19 sprites need an explicit `Pickable::default()` to be hoverable in the example setup.
+- Sprite picking only hits **opaque pixels** by default (alpha-aware), and sprites need an explicit `Pickable::default()` to be hoverable in the example setup.
 - UI picking respects clipping: content scrolled out of an `Overflow::clip/scroll` area is not hit.
 
 `examples/ui/ui_drag_and_drop.rs`, `examples/picking/dragdrop_picking.rs`, `examples/picking/sprite_picking.rs`
