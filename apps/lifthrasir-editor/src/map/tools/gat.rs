@@ -158,8 +158,8 @@ pub fn regenerate_gat(
 ) -> bool {
     let expected = (altitude.width as usize / 2, altitude.height as usize / 2);
     if (terrain.width, terrain.height) != expected
-        || altitude.width % 2 != 0
-        || altitude.height % 2 != 0
+        || !altitude.width.is_multiple_of(2)
+        || !altitude.height.is_multiple_of(2)
         || altitude.cells.len() != altitude.width as usize * altitude.height as usize
         || terrain.cells.len() != terrain.width * terrain.height
     {
