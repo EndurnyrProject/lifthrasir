@@ -5,9 +5,9 @@ edition.workspace = true
 
 [dependencies]
 bevy = { workspace = true }
-bevy_egui = "0.42"
+bevy_egui = { workspace = true }
 transform-gizmo = "0.11"
-bevy_kira_audio = "0.26"
+bevy_kira_audio = { workspace = true }
 lifthrasir-assets = { path = "../../crates/lifthrasir-assets" }
 lifthrasir-runtime = { path = "../../crates/lifthrasir-runtime" }
 lifthrasir-data = { path = "../../crates/lifthrasir-data" }
@@ -21,4 +21,4 @@ serde = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 # Encodes the fixture water texture; the same crate Bevy decodes it with.
-image = { version = "0.25", default-features = false, features = ["jpeg"] }
+image = { workspace = true, features = ["jpeg"] }

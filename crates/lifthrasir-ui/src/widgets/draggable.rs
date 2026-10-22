@@ -12,7 +12,7 @@ pub struct DraggableWindow {
     pub window_root: Entity,
 }
 
-/// Make `titlebar` drag `window_root` by attaching a `Pointer<Drag>` observer.
+/// Make `titlebar` drag `window_root` by attaching a `PointerDrag` observer.
 ///
 /// Both the titlebar and the window root must be `Pickable` (NOT `Pickable::IGNORE`)
 /// for drag pickups to register, and the window root must be spawned with explicit
@@ -25,7 +25,7 @@ pub fn make_draggable(commands: &mut Commands, titlebar: Entity, window_root: En
         .observe(on_drag);
 }
 
-fn on_drag(drag: On<Pointer<Drag>>, handles: Query<&DraggableWindow>, mut nodes: Query<&mut Node>) {
+fn on_drag(drag: On<PointerDrag>, handles: Query<&DraggableWindow>, mut nodes: Query<&mut Node>) {
     let Ok(handle) = handles.get(drag.entity) else {
         return;
     };

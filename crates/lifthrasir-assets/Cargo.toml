@@ -17,8 +17,8 @@ encoding_rs = { workspace = true }
 ron = { workspace = true }
 resvg = "0.48"
 xbrz-rs = "0.1"
-moonshine-tag = "0.5"
-bevy_common_assets = { version = "0.17", features = ["ron"] }
+moonshine-tag = { workspace = true }
+bevy_common_assets = { workspace = true, features = ["ron"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

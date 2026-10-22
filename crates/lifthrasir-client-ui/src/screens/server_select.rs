@@ -243,7 +243,7 @@ fn spawn_server_row(
         ))
         .id();
     commands.entity(row).observe(
-        move |_: On<Pointer<Click>>, mut writer: MessageWriter<ServerSelectedEvent>| {
+        move |_: On<PointerClick>, mut writer: MessageWriter<ServerSelectedEvent>| {
             writer.write(ServerSelectedEvent {
                 server: server_clone.clone(),
             });
@@ -254,14 +254,14 @@ fn spawn_server_row(
     commands
         .entity(row)
         .observe(
-            move |_: On<Pointer<Over>>, mut borders: Query<&mut BorderColor>| {
+            move |_: On<PointerOver>, mut borders: Query<&mut BorderColor>| {
                 if let Ok(mut border) = borders.get_mut(row) {
                     *border = BorderColor::all(lifthrasir_ui::theme::EMERALD);
                 }
             },
         )
         .observe(
-            move |_: On<Pointer<Out>>, mut borders: Query<&mut BorderColor>| {
+            move |_: On<PointerOut>, mut borders: Query<&mut BorderColor>| {
                 if let Ok(mut border) = borders.get_mut(row) {
                     *border = BorderColor::all(lifthrasir_ui::theme::STROKE);
                 }

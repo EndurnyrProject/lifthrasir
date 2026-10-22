@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::text::{EditableText, FontSize, FontSourceTemplate};
-use bevy::ui_widgets::{ControlOrientation, ScrollArea};
+use bevy::ui_widgets::{ControlOrientation, ScrollArea, TextInput};
 use bevy_feathers::controls::{ButtonVariant, FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
 
@@ -37,15 +37,15 @@ fn window() -> impl Scene {
         Visibility::Hidden
         Pickable
         Children [
-            titlebar::<GuildTitlebar, GuildWindowRoot>("members", "Guild"),
+            @titlebar::<GuildTitlebar, GuildWindowRoot>("members", "Guild"),
             (
                 Node {
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Stretch,
                     padding: {UiRect::all(px(16))},
                 }
-                ignore_picking()
-                Children [ guild_panel() ]
+                @ignore_picking()
+                Children [ @guild_panel() ]
             ),
         ]
     }
@@ -54,8 +54,8 @@ fn window() -> impl Scene {
 fn guild_panel() -> impl Scene {
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10) }
-        ignore_picking()
-        Children [ header(), tabs(), content(), feedback_banner(), leave_control() ]
+        @ignore_picking()
+        Children [ @header(), @tabs(), @content(), @feedback_banner(), @leave_control() ]
     }
 }
 
@@ -92,7 +92,7 @@ fn header() -> impl Scene {
             border_radius: BorderRadius::all(px(10)),
         }
         BackgroundColor(lifthrasir_ui::theme::GLASS_2)
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 Node {
@@ -104,9 +104,9 @@ fn header() -> impl Scene {
                 }
                 BackgroundColor(lifthrasir_ui::theme::FIELD)
                 BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    (GuildHeaderEmblemFallback title_text("G".to_string(), 22.0, lifthrasir_ui::theme::GOLD)),
+                    (GuildHeaderEmblemFallback @title_text("G".to_string(), 22.0, lifthrasir_ui::theme::GOLD)),
                     (
                         GuildHeaderEmblemImage
                         ImageNode {}
@@ -117,17 +117,17 @@ fn header() -> impl Scene {
             ),
             (
                 Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(4) }
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    (GuildNameText title_text(String::new(), 21.0, lifthrasir_ui::theme::TEXT)),
-                    (GuildMasterText chrome_text(String::new(), 11.5, lifthrasir_ui::theme::TEXT_DIM)),
-                    (GuildNoticeText chrome_text(String::new(), 11.0, lifthrasir_ui::theme::TEXT_FAINT)),
+                    (GuildNameText @title_text(String::new(), 21.0, lifthrasir_ui::theme::TEXT)),
+                    (GuildMasterText @chrome_text(String::new(), 11.5, lifthrasir_ui::theme::TEXT_DIM)),
+                    (GuildNoticeText @chrome_text(String::new(), 11.0, lifthrasir_ui::theme::TEXT_FAINT)),
                     (
                         Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-                        ignore_picking()
+                        @ignore_picking()
                         Children [
-                            (GuildLevelText chrome_text(String::new(), 10.5, lifthrasir_ui::theme::GOLD)),
-                            (GuildExpText chrome_text(String::new(), 10.5, lifthrasir_ui::theme::TEXT_DIM)),
+                            (GuildLevelText @chrome_text(String::new(), 10.5, lifthrasir_ui::theme::GOLD)),
+                            (GuildExpText @chrome_text(String::new(), 10.5, lifthrasir_ui::theme::TEXT_DIM)),
                         ]
                     ),
                     (
@@ -137,13 +137,13 @@ fn header() -> impl Scene {
                             overflow: {Overflow::clip()},
                         }
                         BackgroundColor(lifthrasir_ui::theme::FIELD)
-                        ignore_picking()
+                        @ignore_picking()
                         Children [
                             (
                                 GuildExpFill
                                 Node { width: percent(0), height: percent(100), border_radius: BorderRadius::all(px(4)) }
                                 BackgroundColor(lifthrasir_ui::theme::GOLD)
-                                ignore_picking()
+                                @ignore_picking()
                             ),
                         ]
                     ),
@@ -151,11 +151,11 @@ fn header() -> impl Scene {
             ),
             (
                 Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexEnd, row_gap: px(4) }
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    (GuildMemberCountText chrome_text(String::new(), 12.0, lifthrasir_ui::theme::TEXT)),
-                    (GuildOnlineCountText chrome_text(String::new(), 11.5, lifthrasir_ui::theme::EMERALD_BRI)),
-                    (GuildSkillPointsText chrome_text(String::new(), 11.0, lifthrasir_ui::theme::GOLD)),
+                    (GuildMemberCountText @chrome_text(String::new(), 12.0, lifthrasir_ui::theme::TEXT)),
+                    (GuildOnlineCountText @chrome_text(String::new(), 11.5, lifthrasir_ui::theme::EMERALD_BRI)),
+                    (GuildSkillPointsText @chrome_text(String::new(), 11.0, lifthrasir_ui::theme::GOLD)),
                     (
                         GuildEmblemUploadButton
                         GuildMutationControl
@@ -176,7 +176,7 @@ fn header() -> impl Scene {
 fn tabs() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(6) }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 MembersTabButton
@@ -220,7 +220,7 @@ fn tabs() -> impl Scene {
 fn content() -> impl Scene {
     bsn! {
         Node { width: percent(100), height: px(350), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 GuildMembersPanel
@@ -232,7 +232,7 @@ fn content() -> impl Scene {
                     align_items: AlignItems::Stretch,
                     column_gap: px(4),
                 }
-                ignore_picking()
+                @ignore_picking()
                 Children [
                     (
                         #members_scroll
@@ -248,9 +248,9 @@ fn content() -> impl Scene {
                         ScrollArea
                         Pickable
                         Children [
-                            invite_controls(),
-                            roster_heading(),
-                            (GuildMembersList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(5) } ignore_picking()),
+                            @invite_controls(),
+                            @roster_heading(),
+                            (GuildMembersList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(5) } @ignore_picking()),
                         ]
                     ),
                     @FeathersScrollbar { @target: #members_scroll, @orientation: {ControlOrientation::Vertical} }
@@ -270,7 +270,7 @@ fn content() -> impl Scene {
                     padding: {UiRect::vertical(px(10))},
                 }
                 Visibility::Hidden
-                ignore_picking()
+                @ignore_picking()
                 Children [
                     (
                         #positions_scroll
@@ -284,7 +284,7 @@ fn content() -> impl Scene {
                         }
                         ScrollArea
                         Pickable
-                        Children [ (GuildPositionsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
+                        Children [ (GuildPositionsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } @ignore_picking()) ]
                     ),
                     @FeathersScrollbar { @target: #positions_scroll, @orientation: {ControlOrientation::Vertical} }
                     Node { width: px(6), height: percent(100) }
@@ -302,8 +302,8 @@ fn content() -> impl Scene {
                     padding: {UiRect::vertical(px(10))},
                 }
                 Visibility::Hidden
-                ignore_picking()
-                Children [ (GuildNoticeContent Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(10) } ignore_picking()) ]
+                @ignore_picking()
+                Children [ (GuildNoticeContent Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(10) } @ignore_picking()) ]
             ),
             (
                 GuildSkillsPanel
@@ -319,7 +319,7 @@ fn content() -> impl Scene {
                 Visibility::Hidden
                 ScrollArea
                 Pickable
-                Children [ (GuildSkillsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } ignore_picking()) ]
+                Children [ (GuildSkillsList Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(8) } @ignore_picking()) ]
             ),
             (
                 GuildRelationsPanel
@@ -335,7 +335,7 @@ fn content() -> impl Scene {
                 Visibility::Hidden
                 Pickable
                 Children [
-                    super::relations::relation_controls(),
+                    @super::relations::relation_controls(),
                     (
                         super::relations::GuildRelationsList
                         Node {
@@ -372,7 +372,8 @@ fn invite_controls() -> impl Scene {
             (
                 GuildInviteNameField
                 Pickable
-                template_value(editable)
+                editable
+                TextInput
                 TextFont {
                     font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
                     font_size: {FontSize::Px(13.0)},
@@ -404,17 +405,17 @@ fn invite_controls() -> impl Scene {
 fn roster_heading() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, padding: {UiRect::horizontal(px(10))} }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (Node { flex_grow: 1.0 } chrome_text("Member / Status".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)),
-            (Node { width: px(210) } chrome_text("Resources".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)),
+            (Node { flex_grow: 1.0 } @chrome_text("Member / Status".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)),
+            (Node { width: px(210) } @chrome_text("Resources".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT)),
         ]
     }
 }
 
 pub(crate) fn member_rows(rows: Vec<MemberRow>) -> impl Scene {
     let rows: Vec<_> = rows.into_iter().map(member_row).collect();
-    bsn! { Node { flex_direction: FlexDirection::Column, row_gap: px(5) } ignore_picking() Children [ {rows} ] }
+    bsn! { Node { flex_direction: FlexDirection::Column, row_gap: px(5) } @ignore_picking() Children [ {rows} ] }
 }
 
 fn member_row(row: MemberRow) -> impl Scene {
@@ -437,34 +438,35 @@ fn member_row(row: MemberRow) -> impl Scene {
             border_radius: BorderRadius::all(px(8)),
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(2) }
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    chrome_text(row.name, 13.0, lifthrasir_ui::theme::TEXT),
-                    chrome_text(format!("{} · {} · Lv {}", row.position, row.job, row.level), 10.5, lifthrasir_ui::theme::TEXT_DIM),
-                    chrome_text(format!("{status} · {}", row.map), 10.0, status_color),
+                    @chrome_text(row.name, 13.0, lifthrasir_ui::theme::TEXT),
+                    @chrome_text(format!("{} · {} · Lv {}", row.position, row.job, row.level), 10.5, lifthrasir_ui::theme::TEXT_DIM),
+                    @chrome_text(format!("{status} · {}", row.map), 10.0, status_color),
                 ]
             ),
             (
                 Node { width: px(210) }
-                chrome_text(
+                @chrome_text(
                     format!("HP {}/{}  SP {}/{}{}", row.hp.0, row.hp.1, row.sp.0, row.sp.1, ap),
                     10.5,
                     lifthrasir_ui::theme::TEXT_DIM,
                 )
             ),
             (
-                template_value(super::members::GuildExpelControl(row.char_id))
+                super::members::GuildExpelControl({row.char_id})
                 Node { width: px(190), flex_direction: FlexDirection::Row, column_gap: px(5) }
                 Pickable
                 Children [
                     (
-                        template_value(super::members::GuildExpelReasonField(row.char_id))
+                        super::members::GuildExpelReasonField({row.char_id})
                         Pickable
-                        template_value(EditableText::new(""))
+                        EditableText::new("")
+                        TextInput
                         TextFont {
                             font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
                             font_size: {FontSize::Px(11.0)},
@@ -475,7 +477,7 @@ fn member_row(row: MemberRow) -> impl Scene {
                         BorderColor::all(lifthrasir_ui::theme::STROKE)
                     ),
                     (
-                        template_value(super::members::GuildExpelButton(row.char_id))
+                        super::members::GuildExpelButton({row.char_id})
                         GuildMutationControl
                         @FeathersButton {
                             @caption: bsn! { (Text("Expel") ThemedText) },
@@ -505,8 +507,8 @@ fn feedback_banner() -> impl Scene {
         }
         BackgroundColor(Color::NONE)
         BorderColor::all(Color::NONE)
-        ignore_picking()
-        Children [ (GuildFeedbackText chrome_text(String::new(), 11.5, lifthrasir_ui::theme::TEXT)) ]
+        @ignore_picking()
+        Children [ (GuildFeedbackText @chrome_text(String::new(), 11.5, lifthrasir_ui::theme::TEXT)) ]
     }
 }
 
@@ -518,7 +520,7 @@ fn title_text(text: String, size: f32, color: Color) -> impl Scene {
             font_size: {FontSize::Px(size)},
         }
         TextColor(color)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -541,7 +543,7 @@ mod tests {
         use bevy::input::{mouse::MouseScrollUnit, touch::TouchPhase};
         use bevy::picking::{
             backend::HitData,
-            events::Scroll,
+            events::PointerScroll,
             pointer::{Location, PointerId},
         };
         use bevy::ui::OverflowAxis;
@@ -567,25 +569,25 @@ mod tests {
                 ..default()
             });
             let child = app.world_mut().spawn(ChildOf(panel)).id();
-            app.world_mut().trigger(Pointer::new(
-                PointerId::Mouse,
-                Location {
-                    target: bevy::camera::RenderTarget::Window(bevy::window::WindowRef::Entity(
-                        window,
-                    ))
-                    .normalize(None)
-                    .unwrap(),
-                    position: Vec2::ZERO,
-                },
-                Scroll {
-                    unit: MouseScrollUnit::Pixel,
-                    x: 0.0,
-                    y: -40.0,
-                    hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
-                    phase: TouchPhase::Moved,
-                },
-                child,
-            ));
+            app.world_mut().trigger(PointerScroll {
+                entity: child,
+                pointer: Pointer::new(
+                    PointerId::Mouse,
+                    Location {
+                        target: bevy::camera::RenderTarget::Window(
+                            bevy::window::WindowRef::Entity(window),
+                        )
+                        .normalize(None)
+                        .unwrap(),
+                        position: Vec2::ZERO,
+                    },
+                ),
+                unit: MouseScrollUnit::Pixel,
+                x: 0.0,
+                y: -40.0,
+                hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
+                phase: TouchPhase::Moved,
+            });
             assert_eq!(
                 app.world().get::<ScrollPosition>(panel).unwrap().y,
                 40.0,
@@ -727,13 +729,15 @@ mod tests {
         let mut app = app();
         app.add_plugins((
             bevy::text::TextPlugin,
-            bevy::ui_widgets::EditableTextInputPlugin,
+            bevy::ui_widgets::TextInputPlugin,
             crate::focus::UiFocusMirrorPlugin,
+            bevy::picking::DefaultPickingPlugins,
         ));
         app.init_resource::<lifthrasir_client::domain::input::UiFocus>();
         app.init_resource::<bevy::ui::UiScale>();
         app.add_message::<bevy::window::Ime>();
-        app.add_message::<Pointer<Release>>();
+        app.add_message::<bevy::window::WindowEvent>();
+        app.add_message::<PointerRelease>();
         let window = app
             .world_mut()
             .spawn((Window::default(), PrimaryWindow))
@@ -745,21 +749,21 @@ mod tests {
             .single(app.world())
             .unwrap();
 
-        app.world_mut().trigger(Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: RenderTarget::Window(WindowRef::Entity(window))
-                    .normalize(Some(window))
-                    .unwrap(),
-                position: Vec2::new(4.0, 4.0),
-            },
-            Press {
-                button: PointerButton::Primary,
-                hit: HitData::new(window, 0.0, None, None),
-                count: 1,
-            },
-            name_box,
-        ));
+        app.world_mut().trigger(PointerPress {
+            entity: name_box,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: RenderTarget::Window(WindowRef::Entity(window))
+                        .normalize(Some(window))
+                        .unwrap(),
+                    position: Vec2::new(4.0, 4.0),
+                },
+            ),
+            button: PointerButton::Primary,
+            hit: HitData::new(window, 0.0, None, None),
+            count: 1,
+        });
         app.world_mut().flush();
         app.world_mut().write_message(KeyboardInput {
             key_code: KeyCode::KeyV,

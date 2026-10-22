@@ -104,7 +104,7 @@ fn death_dialog() -> impl Scene {
         BackgroundColor({Color::srgba(0.012, 0.027, 0.024, 0.55)})
         GlobalZIndex({DIALOG_Z})
         Pickable
-        Children [ card() ]
+        Children [ @card() ]
     }
 }
 
@@ -122,14 +122,14 @@ fn card() -> impl Scene {
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Children [
-            title("You have died"),
+            @title("You have died"),
             (
-                @FeathersButton { @caption: bsn! { button_label("Return to save point") } }
+                @FeathersButton { @caption: bsn! { @button_label("Return to save point") } }
                 Node { height: px(40) }
                 on(on_return_to_save)
             ),
             (
-                @FeathersButton { @caption: bsn! { button_label("Character Select") } }
+                @FeathersButton { @caption: bsn! { @button_label("Character Select") } }
                 Node { height: px(40) }
                 on(on_character_select)
             ),

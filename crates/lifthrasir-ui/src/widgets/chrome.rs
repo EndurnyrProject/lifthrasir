@@ -35,7 +35,7 @@ pub fn glyph_icon(name: &'static str, size: f32, color: Color) -> impl Scene {
             color: color,
         }
         Node { width: px(size), height: px(size) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -48,7 +48,7 @@ pub fn chrome_text(text: String, size: f32, color: Color) -> impl Scene {
             font_size: {FontSize::Px(size)},
         }
         TextColor(color)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -62,7 +62,7 @@ where
 {
     let title = title.into();
     bsn! {
-        template_value(Tb::default())
+        Tb::default()
         Node {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
@@ -75,7 +75,7 @@ where
         Pickable
         on(drag_window::<Tb, Root>)
         Children [
-            glyph_icon(icon, 16.0, theme::GOLD),
+            @glyph_icon(icon, 16.0, theme::GOLD),
             (
                 Text(title)
                 TextFont {
@@ -84,10 +84,10 @@ where
                 }
                 ThemeTextColor({TOKEN_TEXT})
                 Node { flex_grow: 1.0 }
-                ignore_picking()
+                @ignore_picking()
             ),
             (
-                @FeathersButton { @caption: bsn! { glyph_icon("close", 13.0, theme::TEXT_DIM) } }
+                @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, theme::TEXT_DIM) } }
                 Node { width: px(22), height: px(22) }
                 on(close_window::<Root>)
             ),
@@ -102,12 +102,12 @@ where
     M: Component + Default + Clone + Unpin,
 {
     bsn! {
-        template_value(M::default())
+        M::default()
         Node {
             flex_direction: FlexDirection::Column,
             padding: {padding},
         }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -123,10 +123,10 @@ pub fn close_window<Root: Component>(
 }
 
 /// Drag a single-instance window by its titlebar. `Tb` marks the drag handle and `Root`
-/// the moved window root. `Pointer<Drag>` bubbles up from child buttons, so a drag whose
+/// the moved window root. `PointerDrag` bubbles up from child buttons, so a drag whose
 /// target is not the titlebar itself is ignored.
 pub fn drag_window<Tb: Component, Root: Component>(
-    drag: On<Pointer<Drag>>,
+    drag: On<PointerDrag>,
     titlebars: Query<(), With<Tb>>,
     mut roots: Query<&mut Node, With<Root>>,
 ) {

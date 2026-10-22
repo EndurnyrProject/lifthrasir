@@ -67,7 +67,7 @@ fn linked_client_cannot_auto_register_into_shared_cpu_plugins() {
             observer.system_name()
         );
     }
-    for (info, _) in app.world().iter_resources() {
+    for (_, info, _) in app.world().iter_resources() {
         assert!(
             !info.name().contains("lifthrasir_client::") && !info.name().contains("net_contract::"),
             "client/network resource leaked into shared host: {}",

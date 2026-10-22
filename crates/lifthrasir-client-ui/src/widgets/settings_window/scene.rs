@@ -79,7 +79,7 @@ fn window() -> impl Scene {
         // later in the stack swallows its clicks and drags.
         GlobalZIndex(1000)
         Pickable
-        Children [ titlebar::<SettingsTitlebar, SettingsWindowRoot>("gear", "System Settings"), main_row(), footer() ]
+        Children [ @titlebar::<SettingsTitlebar, SettingsWindowRoot>("gear", "System Settings"), @main_row(), @footer() ]
     }
 }
 
@@ -87,8 +87,8 @@ fn window() -> impl Scene {
 fn main_row() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, height: px(PANE_HEIGHT) }
-        ignore_picking()
-        Children [ rail(), content_pane() ]
+        @ignore_picking()
+        Children [ @rail(), @content_pane() ]
     }
 }
 
@@ -103,18 +103,18 @@ fn rail() -> impl Scene {
             border: {UiRect { right: Val::Px(1.0), ..default() }},
         }
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        ignore_picking()
+        @ignore_picking()
         Children [
-            tab_button(SettingsTab::Graphics, "Graphics"),
-            tab_button(SettingsTab::Sound, "Sound"),
-            tab_button(SettingsTab::Input, "Input"),
+            @tab_button(SettingsTab::Graphics, "Graphics"),
+            @tab_button(SettingsTab::Sound, "Sound"),
+            @tab_button(SettingsTab::Input, "Input"),
         ]
     }
 }
 
 fn tab_button(tab: SettingsTab, label: &'static str) -> impl Scene {
     bsn! {
-        template_value(TabButton(tab))
+        TabButton(tab)
         Node {
             height: px(32),
             flex_shrink: 0.0,
@@ -125,7 +125,7 @@ fn tab_button(tab: SettingsTab, label: &'static str) -> impl Scene {
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         Pickable
         on(on_tab_click)
-        Children [ chrome_text(label.to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) ]
+        Children [ @chrome_text(label.to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) ]
     }
 }
 
@@ -141,7 +141,7 @@ fn content_pane() -> impl Scene {
             min_width: px(0),
             position_type: PositionType::Relative,
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 #pane
@@ -155,7 +155,7 @@ fn content_pane() -> impl Scene {
                 }
                 ScrollArea
                 Pickable
-                Children [ graphics_body(), sound_body(), input_body() ]
+                Children [ @graphics_body(), @sound_body(), @input_body() ]
             ),
             @FeathersScrollbar { @target: #pane, @orientation: {ControlOrientation::Vertical} }
             Node {
@@ -184,41 +184,41 @@ fn graphics_body() -> impl Scene {
         ))
     });
     bsn! {
-        template_value(TabBody(SettingsTab::Graphics))
+        TabBody(SettingsTab::Graphics)
         Node { flex_direction: FlexDirection::Column, row_gap: px(10), flex_shrink: 0.0 }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("GRAPHICS".to_string(), 11.0, lifthrasir_ui::theme::GOLD),
-            section("Display"),
-            row("Display Mode", "How the game fills your screen", segmented()),
-            row("Resolution", "Screen size in pixels", stepper(GraphicsField::Resolution)),
-            section("Quality"),
-            row("Antialiasing", "Smooths jagged edges", stepper(GraphicsField::Antialiasing)),
-            row("Anisotropic Filtering", "Sharpens ground textures at grazing angles", stepper(GraphicsField::Anisotropy)),
-            row("Upscaling", "xBRZ sprite & texture upscaling (applies on map reload)", stepper(GraphicsField::Upscaling)),
+            @chrome_text("GRAPHICS".to_string(), 11.0, lifthrasir_ui::theme::GOLD),
+            @section("Display"),
+            @row("Display Mode", "How the game fills your screen", segmented()),
+            @row("Resolution", "Screen size in pixels", stepper(GraphicsField::Resolution)),
+            @section("Quality"),
+            @row("Antialiasing", "Smooths jagged edges", stepper(GraphicsField::Antialiasing)),
+            @row("Anisotropic Filtering", "Sharpens ground textures at grazing angles", stepper(GraphicsField::Anisotropy)),
+            @row("Upscaling", "xBRZ sprite & texture upscaling (applies on map reload)", stepper(GraphicsField::Upscaling)),
             {dlss},
-            row("Ambient Occlusion", "Contact shadows in crevices (SSAO); forces MSAA off", stepper(GraphicsField::Ssao)),
-            row("Bloom", "Glow around bright lights", switch(GraphicsField::Bloom)),
-            row("Shadows", "Sun shadow casting", switch(GraphicsField::Shadows)),
-            row("VSync", "Sync frames to display refresh", switch(GraphicsField::Vsync)),
-            row("Frame Rate Cap", "Maximum frames per second", stepper(GraphicsField::FpsCap)),
-            section("Interface"),
-            row("UI Scaling", "Scales the interface for high resolutions", stepper(GraphicsField::UiScaling)),
+            @row("Ambient Occlusion", "Contact shadows in crevices (SSAO); forces MSAA off", stepper(GraphicsField::Ssao)),
+            @row("Bloom", "Glow around bright lights", switch(GraphicsField::Bloom)),
+            @row("Shadows", "Sun shadow casting", switch(GraphicsField::Shadows)),
+            @row("VSync", "Sync frames to display refresh", switch(GraphicsField::Vsync)),
+            @row("Frame Rate Cap", "Maximum frames per second", stepper(GraphicsField::FpsCap)),
+            @section("Interface"),
+            @row("UI Scaling", "Scales the interface for high resolutions", stepper(GraphicsField::UiScaling)),
         ]
     }
 }
 
 fn sound_body() -> impl Scene {
     bsn! {
-        template_value(TabBody(SettingsTab::Sound))
+        TabBody(SettingsTab::Sound)
         Node { display: Display::None, flex_direction: FlexDirection::Column, row_gap: px(10), flex_shrink: 0.0 }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("SOUND".to_string(), 11.0, lifthrasir_ui::theme::GOLD),
-            section("Volume Mix"),
-            row("Background Music", "Ambient score & themes", sound_control(AudioChannel::Bgm)),
-            row("Sound Effects", "Hits, skills & impacts", sound_control(AudioChannel::Sfx)),
-            row("Ambient", "World, weather & footsteps", sound_control(AudioChannel::Ambient)),
+            @chrome_text("SOUND".to_string(), 11.0, lifthrasir_ui::theme::GOLD),
+            @section("Volume Mix"),
+            @row("Background Music", "Ambient score & themes", sound_control(AudioChannel::Bgm)),
+            @row("Sound Effects", "Hits, skills & impacts", sound_control(AudioChannel::Sfx)),
+            @row("Ambient", "World, weather & footsteps", sound_control(AudioChannel::Ambient)),
         ]
     }
 }
@@ -235,13 +235,13 @@ fn input_body() -> impl Scene {
         )
         .collect();
     bsn! {
-        template_value(TabBody(SettingsTab::Input))
+        TabBody(SettingsTab::Input)
         Node { display: Display::None, flex_direction: FlexDirection::Column, row_gap: px(10), flex_shrink: 0.0 }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("INPUT".to_string(), 11.0, lifthrasir_ui::theme::GOLD),
-            section("Key Bindings"),
-            bind_header(),
+            @chrome_text("INPUT".to_string(), 11.0, lifthrasir_ui::theme::GOLD),
+            @section("Key Bindings"),
+            @bind_header(),
             {rows},
         ]
     }
@@ -260,13 +260,13 @@ fn section(text: &'static str) -> impl Scene {
             column_gap: px(10),
             margin: {UiRect::top(px(4))},
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text(text.to_string(), 10.0, lifthrasir_ui::theme::GOLD),
+            @chrome_text(text.to_string(), 10.0, lifthrasir_ui::theme::GOLD),
             (
                 Node { flex_grow: 1.0, height: px(1) }
                 BackgroundColor(lifthrasir_ui::theme::GOLD_FAINT)
-                ignore_picking()
+                @ignore_picking()
             ),
         ]
     }
@@ -283,19 +283,19 @@ fn row(label: &'static str, sublabel: &'static str, control: impl Scene) -> impl
             column_gap: px(18),
             min_height: px(46),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 Node { flex_direction: FlexDirection::Column, row_gap: px(3) }
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    chrome_text(label.to_string(), 13.0, lifthrasir_ui::theme::TEXT),
-                    chrome_text(sublabel.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT),
+                    @chrome_text(label.to_string(), 13.0, lifthrasir_ui::theme::TEXT),
+                    @chrome_text(sublabel.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT),
                 ]
             ),
             (
                 Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center }
-                ignore_picking()
+                @ignore_picking()
                 Children [ {control} ]
             ),
         ]
@@ -324,14 +324,14 @@ fn segmented() -> impl Scene {
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [ {buttons} ]
     }
 }
 
 fn segment_button(index: usize, label: &'static str) -> impl Scene {
     bsn! {
-        template_value(SegButton { field: GraphicsField::DisplayMode, index })
+        SegButton { field: GraphicsField::DisplayMode, index }
         Node {
             height: px(30),
             align_items: AlignItems::Center,
@@ -342,7 +342,7 @@ fn segment_button(index: usize, label: &'static str) -> impl Scene {
         BackgroundColor({Color::NONE})
         Pickable
         on(on_segment_click)
-        Children [ chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) ]
+        Children [ @chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) ]
     }
 }
 
@@ -359,11 +359,11 @@ fn stepper(field: GraphicsField) -> impl Scene {
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            stepper_arrow(field, StepDir::Prev),
-            stepper_value(field),
-            stepper_arrow(field, StepDir::Next),
+            @stepper_arrow(field, StepDir::Prev),
+            @stepper_value(field),
+            @stepper_arrow(field, StepDir::Next),
         ]
     }
 }
@@ -371,7 +371,7 @@ fn stepper(field: GraphicsField) -> impl Scene {
 fn stepper_arrow(field: GraphicsField, dir: StepDir) -> impl Scene {
     let glyph = if dir == StepDir::Prev { "<" } else { ">" };
     bsn! {
-        template_value(StepperArrow { field, dir })
+        StepperArrow { field, dir }
         Node {
             width: px(38),
             height: percent(100),
@@ -380,30 +380,30 @@ fn stepper_arrow(field: GraphicsField, dir: StepDir) -> impl Scene {
         }
         Pickable
         on(on_stepper_click)
-        Children [ chrome_text(glyph.to_string(), 14.0, lifthrasir_ui::theme::TEXT_DIM) ]
+        Children [ @chrome_text(glyph.to_string(), 14.0, lifthrasir_ui::theme::TEXT_DIM) ]
     }
 }
 
 /// The stepper's value text; `refresh_graphics` rewrites it.
 fn stepper_value(field: GraphicsField) -> impl Scene {
     bsn! {
-        template_value(StepperValue(field))
+        StepperValue(field)
         Text("")
         TextFont {
             font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(13.0)},
         }
         TextColor(lifthrasir_ui::theme::TEXT)
-        template_value(TextLayout { justify: Justify::Center, ..Default::default() })
+        TextLayout { justify: Justify::Center, linebreak: LineBreak::default() }
         Node { flex_grow: 1.0, justify_content: JustifyContent::Center }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 /// Toggle switch: a pill with a sliding knob, both restyled by `refresh_graphics`.
 fn switch(field: GraphicsField) -> impl Scene {
     bsn! {
-        template_value(SwitchPill(field))
+        SwitchPill(field)
         Node {
             width: px(50),
             height: px(28),
@@ -416,7 +416,7 @@ fn switch(field: GraphicsField) -> impl Scene {
         on(on_switch_click)
         Children [
             (
-                template_value(SwitchKnob(field))
+                SwitchKnob(field)
                 Node {
                     position_type: PositionType::Absolute,
                     top: px(3),
@@ -426,7 +426,7 @@ fn switch(field: GraphicsField) -> impl Scene {
                     border_radius: BorderRadius::all(px(10)),
                 }
                 BackgroundColor(lifthrasir_ui::theme::TEXT_DIM)
-                ignore_picking()
+                @ignore_picking()
             ),
         ]
     }
@@ -440,15 +440,15 @@ fn switch(field: GraphicsField) -> impl Scene {
 fn sound_control(channel: AudioChannel) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center }
-        ignore_picking()
-        Children [ mute_button(channel), slider(channel), percent_readout(channel) ]
+        @ignore_picking()
+        Children [ @mute_button(channel), @slider(channel), @percent_readout(channel) ]
     }
 }
 
 /// A small square button that flips the channel's mute. `refresh_sound` tints it.
 fn mute_button(channel: AudioChannel) -> impl Scene {
     bsn! {
-        template_value(MuteButton(channel))
+        MuteButton(channel)
         Node {
             width: px(30),
             height: px(30),
@@ -462,7 +462,7 @@ fn mute_button(channel: AudioChannel) -> impl Scene {
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Pickable
         on(on_mute_click)
-        Children [ chrome_text("M".to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT) ]
+        Children [ @chrome_text("M".to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT) ]
     }
 }
 
@@ -470,7 +470,7 @@ fn mute_button(channel: AudioChannel) -> impl Scene {
 /// the cursor's `RelativeCursorPosition` to the volume.
 fn slider(channel: AudioChannel) -> impl Scene {
     bsn! {
-        template_value(SliderRail(channel))
+        SliderRail(channel)
         Node { width: px(200), height: px(22), align_items: AlignItems::Center }
         RelativeCursorPosition
         Pickable
@@ -486,10 +486,10 @@ fn slider(channel: AudioChannel) -> impl Scene {
                 }
                 BackgroundColor(lifthrasir_ui::theme::FIELD)
                 BorderColor::all(lifthrasir_ui::theme::STROKE)
-                ignore_picking()
+                @ignore_picking()
                 Children [
                     (
-                        template_value(SliderFill(channel))
+                        SliderFill(channel)
                         Node {
                             position_type: PositionType::Absolute,
                             left: px(0),
@@ -499,12 +499,12 @@ fn slider(channel: AudioChannel) -> impl Scene {
                             border_radius: BorderRadius::all(px(4)),
                         }
                         BackgroundColor(lifthrasir_ui::theme::EMERALD)
-                        ignore_picking()
+                        @ignore_picking()
                     ),
                 ]
             ),
             (
-                template_value(SliderKnob(channel))
+                SliderKnob(channel)
                 Node {
                     position_type: PositionType::Absolute,
                     top: px(3),
@@ -517,7 +517,7 @@ fn slider(channel: AudioChannel) -> impl Scene {
                 }
                 BackgroundColor(lifthrasir_ui::theme::DISPLAY_GOLD)
                 BorderColor::all(lifthrasir_ui::theme::EMERALD_DEEP)
-                ignore_picking()
+                @ignore_picking()
             ),
         ]
     }
@@ -526,16 +526,16 @@ fn slider(channel: AudioChannel) -> impl Scene {
 /// The percent (or "Muted") readout; `refresh_sound` rewrites it.
 fn percent_readout(channel: AudioChannel) -> impl Scene {
     bsn! {
-        template_value(SliderPercent(channel))
+        SliderPercent(channel)
         Text("")
         TextFont {
             font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(13.0)},
         }
         TextColor(lifthrasir_ui::theme::TEXT_DIM)
-        template_value(TextLayout { justify: Justify::Right, ..Default::default() })
+        TextLayout { justify: Justify::Right, linebreak: LineBreak::default() }
         Node { width: px(44), margin: {UiRect::left(px(14))} }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -547,15 +547,15 @@ fn percent_readout(channel: AudioChannel) -> impl Scene {
 fn bind_header() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 Node { flex_grow: 1.0 }
-                ignore_picking()
-                Children [ chrome_text("Action".to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) ]
+                @ignore_picking()
+                Children [ @chrome_text("Action".to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) ]
             ),
-            header_cell("Primary"),
-            header_cell("Secondary"),
+            @header_cell("Primary"),
+            @header_cell("Secondary"),
         ]
     }
 }
@@ -563,8 +563,8 @@ fn bind_header() -> impl Scene {
 fn header_cell(text: &'static str) -> impl Scene {
     bsn! {
         Node { width: px(112), margin: {UiRect::left(px(8))} }
-        ignore_picking()
-        Children [ chrome_text(text.to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) ]
+        @ignore_picking()
+        Children [ @chrome_text(text.to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) ]
     }
 }
 
@@ -576,15 +576,15 @@ fn bind_row(action: PlayerAction, label: String) -> impl Scene {
             align_items: AlignItems::Center,
             min_height: px(38),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 Node { flex_grow: 1.0 }
-                ignore_picking()
-                Children [ chrome_text(label, 13.0, lifthrasir_ui::theme::TEXT) ]
+                @ignore_picking()
+                Children [ @chrome_text(label, 13.0, lifthrasir_ui::theme::TEXT) ]
             ),
-            keycap(action, BindSlot::Primary),
-            keycap(action, BindSlot::Secondary),
+            @keycap(action, BindSlot::Primary),
+            @keycap(action, BindSlot::Secondary),
         ]
     }
 }
@@ -593,7 +593,7 @@ fn bind_row(action: PlayerAction, label: String) -> impl Scene {
 /// starts a rebind capture for this `(action, slot)`.
 fn keycap(action: PlayerAction, slot: BindSlot) -> impl Scene {
     bsn! {
-        template_value(Keycap { action, slot })
+        Keycap { action, slot }
         Node {
             width: px(104),
             height: px(30),
@@ -607,7 +607,7 @@ fn keycap(action: PlayerAction, slot: BindSlot) -> impl Scene {
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Pickable
         on(on_keycap_click)
-        Children [ chrome_text(String::new(), 12.0, lifthrasir_ui::theme::TEXT_DIM) ]
+        Children [ @chrome_text(String::new(), 12.0, lifthrasir_ui::theme::TEXT_DIM) ]
     }
 }
 
@@ -629,24 +629,24 @@ fn footer() -> impl Scene {
         }
         ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
-                @FeathersButton { @caption: bsn! { chrome_text("Reset to Defaults".to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
+                @FeathersButton { @caption: bsn! { @chrome_text("Reset to Defaults".to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
                 Node { height: px(32) }
                 on(on_reset)
             ),
             // Pushes the dirty dot + Cancel/Apply to the right edge.
-            ( Node { flex_grow: 1.0 } ignore_picking() ),
+            ( Node { flex_grow: 1.0 } @ignore_picking() ),
             (
                 DirtyDot
                 Node { width: px(8), height: px(8), border_radius: BorderRadius::all(px(4)) }
                 BackgroundColor(lifthrasir_ui::theme::WARN)
                 Visibility::Hidden
-                ignore_picking()
+                @ignore_picking()
             ),
             (
-                @FeathersButton { @caption: bsn! { chrome_text("Cancel".to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
+                @FeathersButton { @caption: bsn! { @chrome_text("Cancel".to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
                 Node { height: px(32) }
                 on(on_cancel)
             ),
@@ -662,7 +662,7 @@ fn footer() -> impl Scene {
                 BackgroundColor(lifthrasir_ui::theme::EMERALD)
                 Pickable
                 on(on_apply)
-                Children [ chrome_text("Apply".to_string(), 13.0, lifthrasir_ui::theme::EMERALD_INK) ]
+                Children [ @chrome_text("Apply".to_string(), 13.0, lifthrasir_ui::theme::EMERALD_INK) ]
             ),
         ]
     }

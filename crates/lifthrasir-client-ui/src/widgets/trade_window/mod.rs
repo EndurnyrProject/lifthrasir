@@ -381,7 +381,7 @@ fn sync_error(
 }
 
 pub(crate) fn on_bag_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     cells: Query<&TradeBagCell>,
     inventory: Res<Inventory>,
     session: Res<TradeSession>,
@@ -412,7 +412,7 @@ pub(crate) fn on_bag_click(
 }
 
 pub(crate) fn on_own_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     cells: Query<&TradeOwnCell>,
     session: Res<TradeSession>,
     mut remove: MessageWriter<RemoveTradeItem>,
@@ -885,29 +885,29 @@ mod tests {
         assert!(app.world().get::<InteractionDisabled>(confirm).is_none());
     }
 
-    fn click_event(target: Entity) -> Pointer<Click> {
+    fn click_event(target: Entity) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary
-                        .normalize(Some(Entity::PLACEHOLDER))
-                        .unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button: PointerButton::Primary,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: std::time::Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary
+                            .normalize(Some(Entity::PLACEHOLDER))
+                            .unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button: PointerButton::Primary,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: std::time::Duration::ZERO,
+            count: 1,
+        }
     }
 
     #[test]

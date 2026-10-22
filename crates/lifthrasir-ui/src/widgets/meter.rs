@@ -27,7 +27,7 @@ pub fn meter(ratio: f32, fill: Color, label: String) -> impl Scene {
             column_gap: px(9),
             flex_grow: 1.0,
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 Node {
@@ -37,7 +37,7 @@ pub fn meter(ratio: f32, fill: Color, label: String) -> impl Scene {
                     overflow: {Overflow::clip()},
                 }
                 BackgroundColor(TRACK_BG)
-                ignore_picking()
+                @ignore_picking()
                 Children [
                     (
                         Node {
@@ -46,7 +46,7 @@ pub fn meter(ratio: f32, fill: Color, label: String) -> impl Scene {
                             border_radius: BorderRadius::all(px(5)),
                         }
                         BackgroundColor(fill)
-                        ignore_picking()
+                        @ignore_picking()
                     )
                 ]
             ),
@@ -58,7 +58,7 @@ pub fn meter(ratio: f32, fill: Color, label: String) -> impl Scene {
                 }
                 TextColor(theme::TEXT_DIM)
                 Node { min_width: px(64) }
-                ignore_picking()
+                @ignore_picking()
             ),
         ]
     }

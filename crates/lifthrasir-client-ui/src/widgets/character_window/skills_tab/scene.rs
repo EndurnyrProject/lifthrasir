@@ -89,8 +89,8 @@ pub(super) fn body(layout: TreeLayout, catalog: Option<&SkillCatalog>) -> impl S
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
-        ignore_picking()
-        Children [ toolbar(), canvas(layout, cells, connectors), footer() ]
+        @ignore_picking()
+        Children [ @toolbar(), @canvas(layout, cells, connectors), @footer() ]
     }
 }
 
@@ -215,9 +215,9 @@ fn toolbar() -> impl Scene {
             height: px(34),
             column_gap: px(10),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("Requirements flow  →  left to right".to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT),
+            @chrome_text("Requirements flow  →  left to right".to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT),
             (
                 Node {
                     margin: {UiRect::left(auto())},
@@ -230,13 +230,13 @@ fn toolbar() -> impl Scene {
                 }
                 BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.3)})
                 BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    chrome_text("Skill Points".to_string(), 9.0, lifthrasir_ui::theme::TEXT_FAINT),
-                    bank_text(),
+                    @chrome_text("Skill Points".to_string(), 9.0, lifthrasir_ui::theme::TEXT_FAINT),
+                    @bank_text(),
                 ]
             ),
-            reset_button(),
+            @reset_button(),
         ]
     }
 }
@@ -276,7 +276,7 @@ fn canvas(layout: TreeLayout, cells: Vec<CellView>, connectors: Vec<ConnectorVie
         }
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.18)})
         BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 #canvas
@@ -290,7 +290,7 @@ fn canvas(layout: TreeLayout, cells: Vec<CellView>, connectors: Vec<ConnectorVie
                 }
                 ScrollArea
                 Pickable
-                Children [ content ]
+                Children [ @content ]
             ),
             (
                 @FeathersScrollbar { @target: #canvas, @orientation: {ControlOrientation::Vertical} }
@@ -325,14 +325,14 @@ fn tree_content(
             height: {height},
             flex_shrink: 0.0,
         }
-        ignore_picking()
+        @ignore_picking()
         Children [ {bands}, {connectors}, {nodes}, {empty_message} ]
     }
 }
 
 fn connector_segment(view: ConnectorView) -> impl Scene {
     bsn! {
-        template_value(view.marker)
+        view.marker
         Node {
             position_type: PositionType::Absolute,
             left: {Val::Px(view.left)},
@@ -340,9 +340,9 @@ fn connector_segment(view: ConnectorView) -> impl Scene {
             width: {Val::Px(view.width)},
             height: {Val::Px(view.height)},
         }
-        template_value(BackgroundColor(view.color))
+        BackgroundColor({view.color})
         ZIndex(1)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -356,7 +356,7 @@ fn empty_content() -> impl Scene {
         }
         TextColor(lifthrasir_ui::theme::TEXT_FAINT)
         Node { margin: {UiRect::all(auto())} }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -380,7 +380,7 @@ fn job_band(band: &JobBand) -> impl Scene + use<> {
         BackgroundColor({Color::srgba(1.0, 1.0, 1.0, 0.014)})
         BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.05))
         ZIndex(0)
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 Node {
@@ -391,10 +391,10 @@ fn job_band(band: &JobBand) -> impl Scene + use<> {
                     border_radius: BorderRadius::all(px(7)),
                 }
                 BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.3)})
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    chrome_text(label, 10.5, lifthrasir_ui::theme::TEXT_DIM),
-                    job_point_text(band.job_id),
+                    @chrome_text(label, 10.5, lifthrasir_ui::theme::TEXT_DIM),
+                    @job_point_text(band.job_id),
                 ]
             ),
         ]
@@ -404,7 +404,7 @@ fn job_band(band: &JobBand) -> impl Scene + use<> {
 fn skill_cell(view: CellView) -> impl Scene {
     let icon = view.icon.map(|path| EntityScene(skill_icon(path)));
     bsn! {
-        template_value(SkillPanelCell(view.skill_id))
+        SkillPanelCell({view.skill_id})
         Node {
             position_type: PositionType::Absolute,
             left: {Val::Px(view.bounds.x)},
@@ -424,7 +424,7 @@ fn skill_cell(view: CellView) -> impl Scene {
         on(on_cell_drag_start)
         Children [
             (
-                template_value(SkillNodeFrame(view.skill_id))
+                SkillNodeFrame({view.skill_id})
                 Node {
                     position_type: PositionType::Relative,
                     width: px(44), height: px(44),
@@ -436,12 +436,12 @@ fn skill_cell(view: CellView) -> impl Scene {
                 BackgroundColor(lifthrasir_ui::theme::FIELD)
                 BorderColor::all(lifthrasir_ui::theme::STROKE)
                 Outline { width: px(0), offset: px(2), color: Color::NONE }
-                ignore_picking()
+                @ignore_picking()
                 Children [ {icon} ]
             ),
-            skill_name_text(view.skill_id, view.name),
-            stepper_row(view.skill_id),
-            dimmer(view.skill_id),
+            @skill_name_text(view.skill_id, view.name),
+            @stepper_row(view.skill_id),
+            @dimmer(view.skill_id),
         ]
     }
 }
@@ -450,24 +450,24 @@ fn skill_icon(path: String) -> impl Scene {
     bsn! {
         ImageNode { image: {path} }
         Node { width: px(30), height: px(30) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 fn stepper_row(skill_id: u32) -> impl Scene {
     bsn! {
-        template_value(SkillNodeControls(skill_id))
+        SkillNodeControls(skill_id)
         Node {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
             column_gap: px(3),
         }
         Visibility::Hidden
-        ignore_picking()
+        @ignore_picking()
         Children [
-            stepper(skill_id, false, false),
-            skill_level_text(skill_id),
-            stepper(skill_id, true, false),
+            @stepper(skill_id, false, false),
+            @skill_level_text(skill_id),
+            @stepper(skill_id, true, false),
         ]
     }
 }
@@ -485,7 +485,7 @@ pub(super) fn stepper(skill_id: u32, raise: bool, enabled: bool) -> impl Scene {
         Pickable::IGNORE
     };
     bsn! {
-        template_value(SkillPanelStepper { skill_id, raise })
+        SkillPanelStepper { skill_id, raise }
         Node {
             width: px(14), height: px(14),
             align_items: AlignItems::Center,
@@ -493,54 +493,54 @@ pub(super) fn stepper(skill_id: u32, raise: bool, enabled: bool) -> impl Scene {
             border_radius: BorderRadius::MAX,
         }
         BackgroundColor(background)
-        template_value(pickable)
+        pickable
         on(on_stepper)
-        Children [ stepper_glyph(skill_id, raise, glyph.to_string(), enabled) ]
+        Children [ @stepper_glyph(skill_id, raise, glyph.to_string(), enabled) ]
     }
 }
 
 fn skill_name_text(skill_id: u32, name: String) -> impl Scene {
     bsn! {
-        template_value(SkillNodeName(skill_id))
+        SkillNodeName(skill_id)
         Text({name})
         TextFont {
             font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(8.5)},
         }
         TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 fn skill_level_text(skill_id: u32) -> impl Scene {
     bsn! {
-        template_value(SkillNodeLevel(skill_id))
+        SkillNodeLevel(skill_id)
         Text("0/0")
         TextFont {
             font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(9.0)},
         }
         TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 fn stepper_glyph(skill_id: u32, raise: bool, glyph: String, enabled: bool) -> impl Scene {
     bsn! {
-        template_value(SkillStepperGlyph { skill_id, raise })
+        SkillStepperGlyph { skill_id, raise }
         Text({glyph})
         TextFont {
             font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(10.0)},
         }
         TextColor({if enabled { lifthrasir_ui::theme::EMERALD_INK } else { lifthrasir_ui::theme::TEXT_FAINT }})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 fn dimmer(skill_id: u32) -> impl Scene {
     bsn! {
-        template_value(SkillNodeDimmer(skill_id))
+        SkillNodeDimmer(skill_id)
         Node {
             position_type: PositionType::Absolute,
             left: px(0), right: px(0), top: px(0), bottom: px(0),
@@ -555,7 +555,7 @@ fn dimmer(skill_id: u32) -> impl Scene {
 
 fn job_point_text(job_id: u32) -> impl Scene {
     bsn! {
-        template_value(SkillJobPointText(job_id))
+        SkillJobPointText(job_id)
         Text("0 points")
         TextFont {
             font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
@@ -563,7 +563,7 @@ fn job_point_text(job_id: u32) -> impl Scene {
         }
         TextColor(lifthrasir_ui::theme::TEXT_FAINT)
         Node { margin: {UiRect::left(auto())} }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -576,7 +576,7 @@ fn staged_count_text() -> impl Scene {
             font_size: {FontSize::Px(10.0)},
         }
         TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -591,17 +591,17 @@ fn footer() -> impl Scene {
             border: {UiRect { top: Val::Px(1.0), ..default() }},
         }
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            staged_count_text(),
+            @staged_count_text(),
             (
                 Node {
                     margin: {UiRect::left(auto())},
                     flex_direction: FlexDirection::Row,
                     justify_content: JustifyContent::FlexEnd,
                 }
-                ignore_picking()
-                Children [ apply_button() ]
+                @ignore_picking()
+                Children [ @apply_button() ]
             ),
         ]
     }
@@ -616,7 +616,7 @@ fn bank_text() -> impl Scene {
             font_size: {FontSize::Px(16.0)},
         }
         TextColor(lifthrasir_ui::theme::GOLD)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -633,7 +633,7 @@ fn reset_button() -> impl Scene {
         BackgroundColor({lifthrasir_ui::theme::FIELD.with_alpha(0.3)})
         Pickable::IGNORE
         on(on_reset)
-        Children [ chrome_text("Reset Plan".to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM) ]
+        Children [ @chrome_text("Reset Plan".to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM) ]
     }
 }
 
@@ -650,7 +650,7 @@ fn apply_button() -> impl Scene {
         BackgroundColor({lifthrasir_ui::theme::EMERALD.with_alpha(0.3)})
         Pickable::IGNORE
         on(on_apply)
-        Children [ chrome_text("Apply".to_string(), 11.5, lifthrasir_ui::theme::EMERALD_INK) ]
+        Children [ @chrome_text("Apply".to_string(), 11.5, lifthrasir_ui::theme::EMERALD_INK) ]
     }
 }
 

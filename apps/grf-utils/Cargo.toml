@@ -13,7 +13,7 @@ lifthrasir-tooling = { path = "../../crates/lifthrasir-tooling" }
 ro-formats = { path = "../../crates/ro-formats" }
 clap = { workspace = true }
 anyhow = { workspace = true }
-indicatif = "0.18"
+indicatif = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

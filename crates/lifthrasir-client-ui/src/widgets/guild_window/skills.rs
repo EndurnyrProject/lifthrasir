@@ -110,7 +110,7 @@ pub(super) fn request_skill_up(
 }
 
 fn on_skill_up(
-    mut click: On<Pointer<Click>>,
+    mut click: On<PointerClick>,
     buttons: Query<&GuildSkillUpgrade>,
     mut context: GuildMutationContext,
     mut writer: MessageWriter<GuildSkillUpRequested>,
@@ -138,7 +138,7 @@ fn on_skill_up(
 
 /// Secondary-click on a cell opens the info modal for that guild skill.
 fn on_cell_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     cells: Query<&GuildSkillCell>,
     guild: Res<GuildState>,
     catalog: Option<Res<SkillCatalog>>,
@@ -209,7 +209,7 @@ pub(crate) fn skill_grid(rows: Vec<SkillRow>, skill_points: u32) -> impl Scene {
     let cells: Vec<_> = rows.into_iter().map(skill_cell).collect();
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10) }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 Node {
@@ -218,10 +218,10 @@ pub(crate) fn skill_grid(rows: Vec<SkillRow>, skill_points: u32) -> impl Scene {
                     justify_content: JustifyContent::SpaceBetween,
                     align_items: AlignItems::Center,
                 }
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    chrome_text("Guild skills".to_string(), 13.0, lifthrasir_ui::theme::TEXT),
-                    chrome_text(format!("{skill_points} points"), 10.5, lifthrasir_ui::theme::GOLD),
+                    @chrome_text("Guild skills".to_string(), 13.0, lifthrasir_ui::theme::TEXT),
+                    @chrome_text(format!("{skill_points} points"), 10.5, lifthrasir_ui::theme::GOLD),
                 ]
             ),
             (
@@ -232,7 +232,7 @@ pub(crate) fn skill_grid(rows: Vec<SkillRow>, skill_points: u32) -> impl Scene {
                     column_gap: px(10),
                     row_gap: px(10),
                 }
-                ignore_picking()
+                @ignore_picking()
                 Children [ {cells} ]
             ),
         ]
@@ -252,7 +252,7 @@ fn skill_cell(row: SkillRow) -> impl Scene {
         lifthrasir_ui::theme::TEXT_FAINT
     };
     bsn! {
-        template_value(GuildSkillCell(row.skill_id))
+        GuildSkillCell({row.skill_id})
         Node {
             width: px(62),
             flex_direction: FlexDirection::Column,
@@ -274,15 +274,15 @@ fn skill_cell(row: SkillRow) -> impl Scene {
                 }
                 BackgroundColor(lifthrasir_ui::theme::FIELD)
                 BorderColor::all(lifthrasir_ui::theme::STROKE)
-                ignore_picking()
+                @ignore_picking()
                 Children [ {icon} ]
             ),
-            chrome_text(row.name, 8.5, lifthrasir_ui::theme::TEXT_FAINT),
+            @chrome_text(row.name, 8.5, lifthrasir_ui::theme::TEXT_FAINT),
             (
                 Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(3) }
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    chrome_text(format!("{}/{}", row.level, row.max_level), 9.0, level_color),
+                    @chrome_text(format!("{}/{}", row.level, row.max_level), 9.0, level_color),
                     {upgrade},
                 ]
             ),
@@ -292,7 +292,7 @@ fn skill_cell(row: SkillRow) -> impl Scene {
 
 fn upgrade_button(skill_id: u32) -> impl Scene {
     bsn! {
-        template_value(GuildSkillUpgrade(skill_id))
+        GuildSkillUpgrade(skill_id)
         GuildMutationControl
         Node {
             width: px(14), height: px(14),
@@ -303,7 +303,7 @@ fn upgrade_button(skill_id: u32) -> impl Scene {
         BackgroundColor(lifthrasir_ui::theme::EMERALD)
         Pickable
         on(on_skill_up)
-        Children [ chrome_text("+".to_string(), 10.0, lifthrasir_ui::theme::EMERALD_INK) ]
+        Children [ @chrome_text("+".to_string(), 10.0, lifthrasir_ui::theme::EMERALD_INK) ]
     }
 }
 
@@ -311,7 +311,7 @@ fn skill_icon(path: String) -> impl Scene {
     bsn! {
         ImageNode { image: {path} }
         Node { width: px(30), height: px(30) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -448,28 +448,28 @@ mod tests {
         assert_eq!(controls, vec![99_999]);
     }
 
-    fn click_event(target: Entity, button: PointerButton) -> Pointer<Click> {
+    fn click_event(target: Entity, button: PointerButton) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
         use std::time::Duration;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(target)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(target)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: Duration::ZERO,
+            count: 1,
+        }
     }
 
     #[test]

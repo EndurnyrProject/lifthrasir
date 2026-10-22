@@ -110,7 +110,7 @@ fn system_dialog(request: &ShowSystemDialog) -> impl Scene + use<> {
     let kind = request.kind;
     let correlation = request.correlation;
     bsn! {
-        template_value(SystemDialogRoot::new(confirm_state, kind, correlation))
+        SystemDialogRoot::new(confirm_state, kind, correlation)
         Node {
             position_type: PositionType::Absolute,
             width: percent(100),
@@ -121,7 +121,7 @@ fn system_dialog(request: &ShowSystemDialog) -> impl Scene + use<> {
         BackgroundColor({Color::srgba(0.012, 0.027, 0.024, 0.55)})
         GlobalZIndex({DIALOG_Z})
         Pickable
-        Children [ card(request) ]
+        Children [ @card(request) ]
     }
 }
 
@@ -149,13 +149,13 @@ fn card(request: &ShowSystemDialog) -> impl Scene + use<> {
         BackgroundColor({lifthrasir_ui::theme::GLASS})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Children [
-            badge(severity_icon(request.severity), accent),
-            card_text(request.kicker.to_uppercase(), lifthrasir_ui::theme::FONT_BODY, 10.0, lifthrasir_ui::theme::GOLD, 16.0),
-            card_text(request.title.clone(), lifthrasir_ui::theme::FONT_TITLE, 23.0, lifthrasir_ui::theme::DISPLAY_GOLD, 7.0),
-            message(request.message.clone()),
-            code_chip(code_text, accent, code_display),
-            divider(),
-            button_row(request),
+            @badge(severity_icon(request.severity), accent),
+            @card_text(request.kicker.to_uppercase(), lifthrasir_ui::theme::FONT_BODY, 10.0, lifthrasir_ui::theme::GOLD, 16.0),
+            @card_text(request.title.clone(), lifthrasir_ui::theme::FONT_TITLE, 23.0, lifthrasir_ui::theme::DISPLAY_GOLD, 7.0),
+            @message(request.message.clone()),
+            @code_chip(code_text, accent, code_display),
+            @divider(),
+            @button_row(request),
         ]
     }
 }
@@ -185,10 +185,10 @@ fn button_row(request: &ShowSystemDialog) -> impl Scene + use<> {
             flex_direction: FlexDirection::Row,
             column_gap: px(10),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            secondary,
-            primary_button(request.button_label.clone()),
+            @secondary,
+            @primary_button(request.button_label.clone()),
         ]
     }
 }
@@ -206,7 +206,7 @@ fn badge(icon_name: &'static str, accent: Color) -> impl Scene {
         }
         BackgroundColor({lifthrasir_ui::theme::FIELD})
         BorderColor::all(accent.with_alpha(0.4))
-        Children [ severity_glyph(icon_name, accent) ]
+        Children [ @severity_glyph(icon_name, accent) ]
     }
 }
 
@@ -219,7 +219,7 @@ fn severity_glyph(name: &'static str, color: Color) -> impl Scene {
             color: color,
         }
         Node { width: px(30), height: px(30) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -240,7 +240,7 @@ fn card_text(
         }
         TextColor(color)
         Node { margin: {UiRect::top(px(margin_top))} }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -257,7 +257,7 @@ fn message(text: String) -> impl Scene {
             max_width: px(DIALOG_WIDTH - 80.0),
             margin: {UiRect::top(px(11))},
         }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -282,7 +282,7 @@ fn code_chip(text: String, accent: Color, display: Display) -> impl Scene {
                     font_size: {FontSize::Px(11.0)},
                 }
                 TextColor(accent)
-                ignore_picking()
+                @ignore_picking()
             ),
         ]
     }
@@ -297,7 +297,7 @@ fn divider() -> impl Scene {
             margin: {UiRect::vertical(px(20))},
         }
         BackgroundColor({lifthrasir_ui::theme::STROKE_STRONG})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -312,7 +312,7 @@ fn primary_button(label: String) -> impl Scene {
                     align_items: AlignItems::Center,
                     column_gap: px(9),
                 }
-                ignore_picking()
+                @ignore_picking()
                 Children [
                     (Text(label) ThemedText),
                     (
@@ -322,7 +322,7 @@ fn primary_button(label: String) -> impl Scene {
                             font_size: {FontSize::Px(9.5)},
                         }
                         TextColor({Color::WHITE.with_alpha(0.55)})
-                        ignore_picking()
+                        @ignore_picking()
                     ),
                 ]
             },

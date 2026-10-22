@@ -13,9 +13,9 @@
 //! authority that mirrors it onto the window (with its own change detection) and
 //! ensuring the RO cursor wins even over Feathers widgets that set their own.
 
+use bevy::picking::cursor::{EntityCursor, OverrideCursor};
 use bevy::prelude::*;
 use bevy::window::{CustomCursor, CustomCursorImage};
-use bevy_feathers::cursor::{EntityCursor, OverrideCursor};
 use lifthrasir_client::domain::input::{CurrentCursorType, CursorType};
 
 /// `ro://` directory holding the extracted cursor PNGs.

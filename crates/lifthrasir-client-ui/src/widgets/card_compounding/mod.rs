@@ -221,7 +221,7 @@ fn on_action(
     }
 }
 
-fn on_backdrop_click(_: On<Pointer<Click>>, mut commands: Commands) {
+fn on_backdrop_click(_: On<PointerClick>, mut commands: Commands) {
     commands.remove_resource::<ActiveCardPicker>();
 }
 

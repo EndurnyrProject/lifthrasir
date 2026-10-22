@@ -496,7 +496,7 @@ pub fn reset(mut ui: ResMut<SkillPanelUi>, mut staging: ResMut<SkillPanelStaging
 /// `◄`/`►` observer: stages or unstages a level via [`SkillPanelStaging`]. Reads the
 /// player status so `can_raise`'s point/level gates are evaluated from the source.
 fn on_stepper(
-    mut click: On<Pointer<Click>>,
+    mut click: On<PointerClick>,
     steppers: Query<&SkillPanelStepper>,
     tree: Res<SkillTreeState>,
     player: Query<&CharacterStatus, With<LocalPlayer>>,
@@ -523,7 +523,7 @@ fn on_stepper(
 /// [`SkillCastRequested`]. Secondary-click opens the info modal instead.
 #[allow(clippy::too_many_arguments)]
 fn on_cell_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     cells: Query<&SkillPanelCell>,
     mut ui: ResMut<SkillPanelUi>,
     time: Res<Time>,
@@ -577,7 +577,7 @@ fn on_cell_click(
 /// plain click still goes through [`on_cell_click`] since `bevy_picking` only emits
 /// `DragStart` after a press-and-move.
 fn on_cell_drag_start(
-    drag: On<Pointer<DragStart>>,
+    drag: On<PointerDragStart>,
     cells: Query<&SkillPanelCell>,
     mut hotbar_drag: ResMut<HotbarDrag>,
 ) {
@@ -588,14 +588,14 @@ fn on_cell_drag_start(
 }
 
 /// Reset: discard all staged levels without contacting the server.
-fn on_reset(_: On<Pointer<Click>>, mut staging: ResMut<SkillPanelStaging>) {
+fn on_reset(_: On<PointerClick>, mut staging: ResMut<SkillPanelStaging>) {
     staging.clear();
 }
 
 /// Apply: emit one [`SkillLearnRequested`] per staged level in prereq-first order, then
 /// clear staging. The resent `SkillList` reconciles the grid. No-op when empty.
 fn on_apply(
-    _: On<Pointer<Click>>,
+    _: On<PointerClick>,
     mut staging: ResMut<SkillPanelStaging>,
     tree: Res<SkillTreeState>,
     mut writer: MessageWriter<SkillLearnRequested>,
@@ -1964,48 +1964,48 @@ mod tests {
         }
     }
 
-    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: Duration::ZERO,
+            count: 1,
+        }
     }
 
-    fn drag_start_event(target: Entity, window: Entity) -> Pointer<DragStart> {
+    fn drag_start_event(target: Entity, window: Entity) -> PointerDragStart {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            DragStart {
-                button: PointerButton::Primary,
-                hit: HitData::new(target, 0.0, None, None),
-            },
-            target,
-        )
+        PointerDragStart {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button: PointerButton::Primary,
+            hit: HitData::new(target, 0.0, None, None),
+        }
     }
 
     #[test]

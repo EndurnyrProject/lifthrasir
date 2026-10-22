@@ -107,7 +107,7 @@ pub fn preview_frame() -> impl Scene {
             row_gap: px(6),
             padding: {UiRect::horizontal(px(4))},
         }
-        lifthrasir_ui::widgets::chrome::ignore_picking()
+        @lifthrasir_ui::widgets::chrome::ignore_picking()
         Children [
             (
                 CharPreviewFrame
@@ -122,7 +122,7 @@ pub fn preview_frame() -> impl Scene {
                 ThemeBackgroundColor({TOKEN_PANEL_BG})
                 ThemeBorderColor({TOKEN_WINDOW_BORDER})
             ),
-            rotate_row(),
+            @rotate_row(),
         ]
     }
 }
@@ -134,10 +134,10 @@ fn rotate_row() -> impl Scene {
             align_items: AlignItems::Center,
             column_gap: px(8),
         }
-        lifthrasir_ui::widgets::chrome::ignore_picking()
+        @lifthrasir_ui::widgets::chrome::ignore_picking()
         Children [
             (
-                @FeathersButton { @caption: bsn! { glyph_icon("rotl", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
+                @FeathersButton { @caption: bsn! { @glyph_icon("rotl", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
                 Node { width: px(24), height: px(20) }
                 on(on_rotate_left)
             ),
@@ -148,10 +148,10 @@ fn rotate_row() -> impl Scene {
                     font_size: {FontSize::Px(10.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT_DIM})
-                lifthrasir_ui::widgets::chrome::ignore_picking()
+                @lifthrasir_ui::widgets::chrome::ignore_picking()
             ),
             (
-                @FeathersButton { @caption: bsn! { glyph_icon("rotr", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
+                @FeathersButton { @caption: bsn! { @glyph_icon("rotr", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
                 Node { width: px(24), height: px(20) }
                 on(on_rotate_right)
             ),

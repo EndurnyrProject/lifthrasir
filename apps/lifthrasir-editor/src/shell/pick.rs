@@ -1,6 +1,6 @@
 //! Which object node the cursor points at, and the hover/selection outlines.
 //!
-//! The editor picks on its own instead of through `Pointer<Click>`: the ray
+//! The editor picks on its own instead of through `PointerClick`: the ray
 //! only tests object-node meshes and the terrain (so water and effect sprites
 //! never block a pick), double-sided props are hit from both sides, and nodes
 //! whose origin is a few pixels from the cursor (sound and effect handles,

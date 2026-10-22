@@ -65,11 +65,11 @@ pub fn card(edge: EdgeGrade, body: impl Scene) -> impl Scene {
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
-        on(|mut click: On<Pointer<Click>>| click.propagate(false))
+        on(|mut click: On<PointerClick>| click.propagate(false))
         Children [
-            ribbon(edge),
-            close_button(),
-            body,
+            @ribbon(edge),
+            @close_button(),
+            @body,
         ]
     }
 }
@@ -84,7 +84,7 @@ pub fn scroll_body(content: impl Scene) -> impl Scene {
             min_height: px(0),
             position_type: PositionType::Relative,
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 #viewport
@@ -96,7 +96,7 @@ pub fn scroll_body(content: impl Scene) -> impl Scene {
                 }
                 ScrollArea
                 Pickable
-                Children [ content ]
+                Children [ @content ]
             ),
             @FeathersScrollbar { @target: #viewport, @orientation: {ControlOrientation::Vertical} }
             Node {
@@ -122,14 +122,14 @@ fn ribbon(edge: EdgeGrade) -> impl Scene {
             border_radius: BorderRadius::all(px(2)),
         }
         ThemeBackgroundColor({edge.token()})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 /// Close button — `.im-close`. Despawns the modal root on press.
 fn close_button() -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_FAINT) } }
+        @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_FAINT) } }
         Node {
             position_type: PositionType::Absolute,
             top: px(13),
@@ -171,8 +171,8 @@ pub fn header(view: HeaderView) -> impl Scene {
             padding: {UiRect { left: px(20), right: px(20), top: px(20), bottom: px(16) }},
         }
         Children [
-            icon_box(view.icon_path, view.refine, view.sockets_filled, view.sockets_total, view.edge),
-            titles(view.name, view.tags, view.edge),
+            @icon_box(view.icon_path, view.refine, view.sockets_filled, view.sockets_total, view.edge),
+            @titles(view.name, view.tags, view.edge),
         ]
     }
 }
@@ -231,7 +231,7 @@ fn icon_box(
                             font_size: {FontSize::Px(10.0)},
                         }
                         TextColor({lifthrasir_ui::theme::GOLD})
-                        ignore_picking()
+                        @ignore_picking()
                     ),
                 ]
             ),
@@ -258,7 +258,7 @@ fn item_icon(icon_path: String) -> impl Scene {
     bsn! {
         ImageNode { image: {icon_path} }
         Node { width: percent(100), height: percent(100) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -271,7 +271,7 @@ fn socket_pip(filled: bool) -> impl Scene {
     bsn! {
         Node { width: px(4), height: px(4), border_radius: BorderRadius::all(px(1)) }
         BackgroundColor({color})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -295,7 +295,7 @@ fn titles(name: String, tags: Vec<String>, edge: EdgeGrade) -> impl Scene {
                     font_size: {FontSize::Px(18.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
-                ignore_picking()
+                @ignore_picking()
             ),
             (
                 Node {
@@ -330,7 +330,7 @@ fn tag_chip(text: String, edge: EdgeGrade) -> impl Scene {
                     font_size: {FontSize::Px(10.0)},
                 }
                 ThemeTextColor({edge.token()})
-                ignore_picking()
+                @ignore_picking()
             ),
         ]
     }
@@ -359,7 +359,7 @@ pub fn section_label(text: String, counter: Option<String>) -> impl Scene {
                     font_size: {FontSize::Px(9.5)},
                 }
                 ThemeTextColor({TOKEN_TEXT_FAINT})
-                ignore_picking()
+                @ignore_picking()
             ),
             (
                 Node { display: {counter_display} }
@@ -371,7 +371,7 @@ pub fn section_label(text: String, counter: Option<String>) -> impl Scene {
                             font_size: {FontSize::Px(10.0)},
                         }
                         TextColor({lifthrasir_ui::theme::GOLD})
-                        ignore_picking()
+                        @ignore_picking()
                     ),
                 ]
             ),
@@ -396,7 +396,7 @@ pub fn meta_cell(key: String, value: String) -> impl Scene {
                     font_size: {FontSize::Px(8.5)},
                 }
                 ThemeTextColor({TOKEN_TEXT_FAINT})
-                ignore_picking()
+                @ignore_picking()
             ),
             (
                 Text(value)
@@ -405,7 +405,7 @@ pub fn meta_cell(key: String, value: String) -> impl Scene {
                     font_size: {FontSize::Px(13.0)},
                 }
                 ThemeTextColor({TOKEN_TEXT})
-                ignore_picking()
+                @ignore_picking()
             ),
         ]
     }
@@ -435,7 +435,7 @@ pub fn meta_grid(cells: Vec<impl Scene>) -> impl Scene {
 fn meta_grid_slot(cell: impl Scene) -> impl Scene {
     bsn! {
         Node { flex_basis: percent(50), flex_grow: 1.0, min_width: px(0) }
-        Children [ cell ]
+        Children [ @cell ]
     }
 }
 
@@ -445,7 +445,7 @@ pub fn description_section(lines: Vec<ColoredLine>) -> impl Scene {
     let rows: Vec<_> = lines.into_iter().map(colored_line).collect();
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
-        ignore_picking()
+        @ignore_picking()
         Children [ {rows} ]
     }
 }
@@ -467,7 +467,7 @@ fn colored_line(runs: ColoredLine) -> impl Scene {
             font_size: {FontSize::Px(12.0)},
         }
         TextColor(first_color)
-        ignore_picking()
+        @ignore_picking()
         Children [ {spans} ]
     }
 }

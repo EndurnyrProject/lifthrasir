@@ -218,7 +218,7 @@ fn reflect_window_state(
 
 /// A tab-strip button click sets the active tab (never toggles closed).
 fn on_tab_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     buttons: Query<&CharacterTabButton>,
     mut state: ResMut<CharacterWindowState>,
 ) {

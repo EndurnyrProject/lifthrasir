@@ -61,13 +61,13 @@ pub(super) fn window(
                 ThemeBackgroundColor({TOKEN_WINDOW_BG})
                 ThemeBorderColor({TOKEN_WINDOW_BORDER})
                 Pickable
-                on(|mut click: On<Pointer<Click>>| click.propagate(false))
+                on(|mut click: On<PointerClick>| click.propagate(false))
                 Children [
-                    title(format!("Compound {card_name}")),
-                    text("Select equipment for this card.".into()),
+                    @title(format!("Compound {card_name}")),
+                    @text("Select equipment for this card.".into()),
                     (
                         Node { height: px(280), min_height: px(0), position_type: PositionType::Relative }
-                        ignore_picking()
+                        @ignore_picking()
                         Children [
                             (
                                 #viewport
@@ -87,7 +87,7 @@ pub(super) fn window(
                         ]
                     ),
                     {status},
-                    actions(can_confirm),
+                    @actions(can_confirm),
                 ]
             )
         ]
@@ -109,11 +109,11 @@ fn target_row(view: CardRowView) -> impl Scene {
     bsn! {
         @FeathersButton { @caption: bsn! {
             Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(8) }
-            ignore_picking()
-            Children [ {icon}, text(label) ]
+            @ignore_picking()
+            Children [ {icon}, @text(label) ]
         } }
-        template_value(CardPickerAction::Select(view.index))
-        template_value(ButtonVariant::Plain)
+        CardPickerAction::Select({view.index})
+        ButtonVariant::Plain
         Node { width: percent(100), min_height: px(36), justify_content: JustifyContent::FlexStart, padding: {UiRect::horizontal(px(8))} }
         BackgroundColor(bg)
         on(on_action)
@@ -124,21 +124,21 @@ fn item_icon(path: String) -> impl Scene {
     bsn! {
         ImageNode { image: {path} }
         Node { width: px(26), height: px(26) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 fn actions(can_confirm: bool) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd, column_gap: px(8) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            action_button("Cancel", CardPickerAction::Cancel, true),
+            @action_button("Cancel", CardPickerAction::Cancel, true),
             (
-                @FeathersButton { @caption: bsn! { text("Confirm".into()) } }
-                template_value(CardPickerAction::Confirm)
-                template_value(ConfirmEnabled(can_confirm))
-                template_value(ButtonVariant::Primary)
+                @FeathersButton { @caption: bsn! { @text("Confirm".into()) } }
+                CardPickerAction::Confirm
+                ConfirmEnabled(can_confirm)
+                ButtonVariant::Primary
                 Node { min_width: px(90), height: px(30) }
                 on(on_action)
             ),
@@ -148,10 +148,10 @@ fn actions(can_confirm: bool) -> impl Scene {
 
 fn action_button(label: &str, action: CardPickerAction, enabled: bool) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { text(label.to_string()) } }
-        template_value(action)
-        template_value(ConfirmEnabled(enabled))
-        template_value(ButtonVariant::Normal)
+        @FeathersButton { @caption: bsn! { @text(label.to_string()) } }
+        action
+        ConfirmEnabled(enabled)
+        ButtonVariant::Normal
         Node { min_width: px(80), height: px(30) }
         on(on_action)
     }
@@ -162,7 +162,7 @@ fn title(value: String) -> impl Scene {
         Text(value)
         TextFont { font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"), font_size: {FontSize::Px(16.0)} }
         ThemeTextColor({TOKEN_TEXT})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -171,6 +171,6 @@ fn text(value: String) -> impl Scene {
         Text(value)
         TextFont { font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"), font_size: {FontSize::Px(12.0)} }
         ThemeTextColor({TOKEN_TEXT_DIM})
-        ignore_picking()
+        @ignore_picking()
     }
 }

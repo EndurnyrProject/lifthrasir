@@ -15,7 +15,7 @@
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use bevy::text::{EditableText, FontSize, FontSourceTemplate};
-use bevy::ui_widgets::Activate;
+use bevy::ui_widgets::{Activate, TextInput};
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::ThemedText;
 use net_contract::commands::PartyCreateRequested;
@@ -96,7 +96,7 @@ fn create_dialog() -> impl Scene {
         BackgroundColor({Color::srgba(0.012, 0.027, 0.024, 0.55)})
         GlobalZIndex({DIALOG_Z})
         Pickable
-        Children [ card() ]
+        Children [ @card() ]
     }
 }
 
@@ -116,10 +116,10 @@ fn card() -> impl Scene {
         BackgroundColor({lifthrasir_ui::theme::GLASS})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Children [
-            title(),
-            name_field(),
-            divider(),
-            button_row(),
+            @title(),
+            @name_field(),
+            @divider(),
+            @button_row(),
         ]
     }
 }
@@ -134,7 +134,7 @@ fn title() -> impl Scene {
         }
         TextColor({lifthrasir_ui::theme::DISPLAY_GOLD})
         Node { margin: {UiRect::bottom(px(4))} }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -161,7 +161,8 @@ fn name_field() -> impl Scene {
         Children [
             (
                 CreatePartyNameField
-                template_value(editable)
+                editable
+                TextInput
                 TextFont {
                     font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
                     font_size: {FontSize::Px(14.0)},
@@ -182,7 +183,7 @@ fn divider() -> impl Scene {
             margin: {UiRect::vertical(px(20))},
         }
         BackgroundColor({lifthrasir_ui::theme::STROKE_STRONG})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -193,7 +194,7 @@ fn button_row() -> impl Scene {
             flex_direction: FlexDirection::Row,
             column_gap: px(10),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
             (
                 @FeathersButton { @caption: bsn! { (Text("Cancel") ThemedText) } }

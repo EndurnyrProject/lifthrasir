@@ -25,13 +25,13 @@ pub struct MenuTarget(pub u32);
 /// Global (app-wide) observer: a right-click on a row carrying [`PartyMemberRow`]
 /// opens the menu for that member. Left-clicks and marker-less rows are ignored.
 pub fn open(
-    mut click: On<Pointer<Click>>,
+    mut click: On<PointerClick>,
     rows: Query<&PartyMemberRow>,
     child_of: Query<&ChildOf>,
     existing: Query<Entity, With<PartyMemberMenuRoot>>,
     mut commands: Commands,
 ) {
-    if click.event.button != PointerButton::Secondary {
+    if click.button != PointerButton::Secondary {
         return;
     }
     let Some(target) = resolve_target(click.entity, &rows, &child_of) else {
@@ -41,7 +41,7 @@ pub fn open(
     for menu in &existing {
         commands.entity(menu).despawn();
     }
-    commands.spawn_scene(menu(click.pointer_location.position, target));
+    commands.spawn_scene(menu(click.pointer.position, target));
 }
 
 /// Resolve the right-clicked entity to its member char_id: the pickable row entity
@@ -70,7 +70,7 @@ fn menu(cursor: Vec2, target: u32) -> impl Scene {
         GlobalZIndex({MENU_Z})
         Pickable
         on(dismiss_menu)
-        Children [ card(cursor) ]
+        Children [ @card(cursor) ]
     }
 }
 
@@ -90,10 +90,10 @@ fn card(cursor: Vec2) -> impl Scene {
         BackgroundColor({lifthrasir_ui::theme::GLASS})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Pickable
-        on(|mut click: On<Pointer<Click>>| click.propagate(false))
+        on(|mut click: On<PointerClick>| click.propagate(false))
         Children [
-            action_button("Make Leader", on(on_make_leader)),
-            action_button("Kick", on(on_kick)),
+            @action_button("Make Leader", on(on_make_leader)),
+            @action_button("Kick", on(on_kick)),
         ]
     }
 }
@@ -114,7 +114,7 @@ fn action_button(label: &'static str, observer: impl Scene) -> impl Scene {
             @variant: ButtonVariant::Primary,
         }
         Node { height: px(36), border_radius: BorderRadius::all(px(7)) }
-        {observer}
+        @{observer}
     }
 }
 
@@ -149,7 +149,7 @@ fn on_kick(
 }
 
 fn dismiss_menu(
-    _: On<Pointer<Click>>,
+    _: On<PointerClick>,
     menu: Query<Entity, With<PartyMemberMenuRoot>>,
     mut commands: Commands,
 ) {
@@ -163,7 +163,7 @@ mod tests {
     use super::*;
     use bevy::camera::{ImageRenderTarget, NormalizedRenderTarget};
     use bevy::picking::backend::HitData;
-    use bevy::picking::events::{Click, Pointer};
+    use bevy::picking::events::{Pointer, PointerClick};
     use bevy::picking::pointer::{Location, PointerId};
     use bevy::scene::ScenePlugin;
     use std::time::Duration;
@@ -179,24 +179,24 @@ mod tests {
         app
     }
 
-    fn pointer_click(target: Entity, button: PointerButton) -> Pointer<Click> {
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Image(ImageRenderTarget {
-                    handle: Handle::default(),
-                    scale_factor: 1.0,
-                }),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button,
-                hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
-                duration: Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+    fn pointer_click(target: Entity, button: PointerButton) -> PointerClick {
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Image(ImageRenderTarget {
+                        handle: Handle::default(),
+                        scale_factor: 1.0,
+                    }),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
+            duration: Duration::ZERO,
+            count: 1,
+        }
     }
 
     fn menu_root_count(app: &mut App) -> usize {

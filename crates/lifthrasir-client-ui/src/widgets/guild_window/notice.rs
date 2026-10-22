@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::text::{EditableText, FontSize, FontSourceTemplate};
-use bevy::ui_widgets::Activate;
+use bevy::ui_widgets::{Activate, TextInput};
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::ThemedText;
 use lifthrasir_client::domain::guild::GuildState;
@@ -137,29 +137,30 @@ pub(crate) fn notice_management(subject: String, body: String, is_master: bool) 
     };
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(9) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("Guild notice".to_string(), 13.0, lifthrasir_ui::theme::TEXT),
+            @chrome_text("Guild notice".to_string(), 13.0, lifthrasir_ui::theme::TEXT),
             (
                 Node { flex_direction: FlexDirection::Column, row_gap: px(5), padding: {UiRect::all(px(10))}, border_radius: BorderRadius::all(px(8)) }
                 BackgroundColor(lifthrasir_ui::theme::FIELD)
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    chrome_text(subject_display, 12.5, lifthrasir_ui::theme::TEXT),
-                    chrome_text(body_display, 11.0, lifthrasir_ui::theme::TEXT_DIM),
+                    @chrome_text(subject_display, 12.5, lifthrasir_ui::theme::TEXT),
+                    @chrome_text(body_display, 11.0, lifthrasir_ui::theme::TEXT_DIM),
                 ]
             ),
             (
                 GuildNoticeEditControls
-                template_value(edit_visibility)
+                edit_visibility
                 Node { width: percent(100), flex_direction: FlexDirection::Column, align_items: AlignItems::Stretch, row_gap: px(7), padding: {UiRect::top(px(7))} }
                 Pickable
                 Children [
-                    chrome_text("Edit notice".to_string(), 12.0, lifthrasir_ui::theme::TEXT),
+                    @chrome_text("Edit notice".to_string(), 12.0, lifthrasir_ui::theme::TEXT),
                     (
                         GuildNoticeSubjectField
                         Pickable
-                        template_value(subject_editable)
+                        subject_editable
+                        TextInput
                         TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
                         TextColor(lifthrasir_ui::theme::TEXT)
                         BackgroundColor(lifthrasir_ui::theme::FIELD)
@@ -169,7 +170,8 @@ pub(crate) fn notice_management(subject: String, body: String, is_master: bool) 
                     (
                         GuildNoticeBodyField
                         Pickable
-                        template_value(body_editable)
+                        body_editable
+                        TextInput
                         TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.5)} }
                         TextColor(lifthrasir_ui::theme::TEXT)
                         BackgroundColor(lifthrasir_ui::theme::FIELD)

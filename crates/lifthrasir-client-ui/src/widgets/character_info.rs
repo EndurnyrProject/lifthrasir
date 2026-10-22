@@ -8,6 +8,7 @@
 
 use bevy::prelude::*;
 use bevy::settings::{ReflectSettingsGroup, SaveSettings, SettingsGroup};
+use bevy::ui_widgets::Button;
 use lifthrasir_assets::catalogs::job::player_jobs::is_fourth_job;
 use lifthrasir_assets::catalogs::job::registry::JobSpriteRegistry;
 use lifthrasir_client::core::state::GameState;
@@ -765,7 +766,7 @@ fn sync_character_info_mode(
 }
 
 fn on_toggle_minimal(
-    _: On<Pointer<Click>>,
+    _: On<PointerClick>,
     mut settings: ResMut<HudSettings>,
     mut commands: Commands,
 ) {

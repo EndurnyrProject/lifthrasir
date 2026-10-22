@@ -173,10 +173,10 @@ fn chat_tab(
             Node {
                 padding: UiRect::axes(Val::Px(13.0), Val::Px(6.0)),
                 border_radius: BorderRadius {
-                    top_left: Val::Px(8.0),
-                    top_right: Val::Px(8.0),
-                    bottom_left: Val::Px(0.0),
-                    bottom_right: Val::Px(0.0),
+                    top_left: Val::Px(8.0).into(),
+                    top_right: Val::Px(8.0).into(),
+                    bottom_left: Val::Px(0.0).into(),
+                    bottom_right: Val::Px(0.0).into(),
                 },
                 ..default()
             },

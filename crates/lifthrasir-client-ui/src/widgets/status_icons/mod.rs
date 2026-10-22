@@ -216,7 +216,7 @@ fn remaining_label(status: &ActiveStatus, now: Duration) -> String {
 /// Hovering an icon spawns a tooltip child: the status name (or `#efst` when unnamed)
 /// plus a live remaining-time line.
 fn on_icon_hover_over(
-    over: On<Pointer<Over>>,
+    over: On<PointerOver>,
     icons: Query<&StatusIcon>,
     local: Res<LocalStatuses>,
     catalog: Option<Res<StatusIconCatalog>>,
@@ -273,7 +273,7 @@ fn on_icon_hover_over(
 }
 
 fn on_icon_hover_out(
-    _: On<Pointer<Out>>,
+    _: On<PointerOut>,
     tooltips: Query<Entity, With<StatusTooltip>>,
     mut commands: Commands,
 ) {

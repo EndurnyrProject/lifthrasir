@@ -267,7 +267,7 @@ fn static_cutin(path: String) -> impl Scene {
         }
         Visibility::Hidden
         GlobalZIndex(CUTIN_Z)
-        ignore_picking()
+        @ignore_picking()
         Children [(
             CutinImage
             ImageNode { image: {path} }
@@ -278,7 +278,7 @@ fn static_cutin(path: String) -> impl Scene {
                 width: px(0.0),
                 height: px(0.0),
             }
-            ignore_picking()
+            @ignore_picking()
         )]
     }
 }
@@ -294,7 +294,7 @@ fn windowed_cutin(path: String) -> impl Scene {
         }
         Visibility::Hidden
         GlobalZIndex(CUTIN_Z)
-        ignore_picking()
+        @ignore_picking()
         on(drag_cutin)
         Children [
             (
@@ -322,7 +322,7 @@ fn windowed_cutin(path: String) -> impl Scene {
                     width: px(0.0),
                     height: px(0.0),
                 }
-                ignore_picking()
+                @ignore_picking()
             ),
         ]
     }
@@ -340,7 +340,7 @@ fn chromeless_cutin(path: String) -> impl Scene {
         }
         Visibility::Hidden
         GlobalZIndex(CUTIN_Z)
-        ignore_picking()
+        @ignore_picking()
         on(drag_cutin)
         Children [
             (
@@ -366,7 +366,7 @@ fn chromeless_cutin(path: String) -> impl Scene {
                             color: lifthrasir_ui::theme::TEXT_DIM,
                         }
                         Node { width: px(CLOSE_GLYPH_SIZE), height: px(CLOSE_GLYPH_SIZE) }
-                        ignore_picking()
+                        @ignore_picking()
                     }
                 }
                 Node {
@@ -560,7 +560,7 @@ fn layout_cutin(
 /// from either drag handle to the root, so a drag that starts on the mode-4 close
 /// button (which has no handle marker) is rejected here.
 fn drag_cutin(
-    drag: On<Pointer<Drag>>,
+    drag: On<PointerDrag>,
     ui_scale: Res<UiScale>,
     handles: Query<(), With<CutinDragHandle>>,
     mut roots: Query<&mut Node, With<CutinRoot>>,
@@ -1694,26 +1694,26 @@ mod tests {
 
     // ---- Observers ---------------------------------------------------------
 
-    fn drag_event(target: Entity, window: Entity, delta: Vec2) -> Pointer<Drag> {
+    fn drag_event(target: Entity, window: Entity, delta: Vec2) -> PointerDrag {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
 
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Drag {
-                button: PointerButton::Primary,
-                distance: Vec2::ZERO,
-                delta,
-            },
-            target,
-        )
+        PointerDrag {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button: PointerButton::Primary,
+            distance: Vec2::ZERO,
+            delta,
+        }
     }
 
     fn drag_observer_app(ui_scale: f32) -> (App, Entity, Entity) {

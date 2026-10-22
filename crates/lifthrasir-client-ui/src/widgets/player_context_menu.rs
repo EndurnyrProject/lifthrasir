@@ -82,7 +82,7 @@ pub struct MenuEligibility<'w> {
 }
 
 pub fn open_player_menu(
-    mut click: On<Pointer<Click>>,
+    mut click: On<PointerClick>,
     child_of: Query<&ChildOf>,
     nets: Query<&NetworkEntity>,
     state: MenuEligibility,
@@ -93,7 +93,7 @@ pub fn open_player_menu(
     let net = nets.get(root).ok();
     let me = state.session.char_id;
     let actions = eligible_actions(
-        click.event.button,
+        click.button,
         net,
         net.is_some_and(|net| net.gid == me),
         state.party.is_leader(me),
@@ -109,11 +109,7 @@ pub fn open_player_menu(
     for menu in &existing {
         commands.entity(menu).despawn();
     }
-    commands.spawn_scene(context_menu(
-        click.pointer_location.position,
-        target,
-        actions,
-    ));
+    commands.spawn_scene(context_menu(click.pointer.position, target, actions));
 }
 
 fn context_menu(cursor: Vec2, target: u32, actions: PlayerMenuActions) -> impl Scene {
@@ -128,7 +124,7 @@ fn context_menu(cursor: Vec2, target: u32, actions: PlayerMenuActions) -> impl S
         GlobalZIndex({MENU_Z})
         Pickable
         on(dismiss_menu)
-        Children [ card(cursor, actions) ]
+        Children [ @card(cursor, actions) ]
     }
 }
 
@@ -158,14 +154,14 @@ fn card(cursor: Vec2, actions: PlayerMenuActions) -> impl Scene {
         BackgroundColor({lifthrasir_ui::theme::GLASS})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Pickable
-        on(|mut click: On<Pointer<Click>>| click.propagate(false))
+        on(|mut click: On<PointerClick>| click.propagate(false))
         Children [ {buttons} ]
     }
 }
 
 fn invite_button(label: &'static str, action: MenuAction) -> impl Scene {
     bsn! {
-        template_value(action)
+        action
         @FeathersButton {
             @caption: bsn! {
                 (
@@ -238,7 +234,7 @@ fn on_invite(
 }
 
 fn dismiss_menu(
-    _: On<Pointer<Click>>,
+    _: On<PointerClick>,
     menu: Query<Entity, With<PlayerContextMenuRoot>>,
     mut commands: Commands,
 ) {
