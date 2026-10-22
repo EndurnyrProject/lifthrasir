@@ -1,12 +1,21 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "bump-minor-pre-major": true,
+  "separate-pull-requests": true,
   "packages": {
     ".": {
       "release-type": "simple",
       "package-name": "lifthrasir",
       "include-component-in-tag": false,
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "exclude-paths": ["apps/lifthrasir-editor"]
+    },
+    "apps/lifthrasir-editor": {
+      "release-type": "simple",
+      "package-name": "lifthrasir-editor",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     }
   }
 }

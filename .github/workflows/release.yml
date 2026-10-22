@@ -19,8 +19,12 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     outputs:
-      releases_created: ${{ steps.release.outputs.releases_created }}
+      # Un-prefixed outputs belong to the root (client) package only; the
+      # editor's are prefixed with `apps/lifthrasir-editor--`.
+      client_release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      editor_release_created: ${{ steps.release.outputs['apps/lifthrasir-editor--release_created'] }}
+      editor_tag_name: ${{ steps.release.outputs['apps/lifthrasir-editor--tag_name'] }}
     steps:
       - uses: actions/create-github-app-token@v3
         id: app-token
@@ -35,7 +39,7 @@ jobs:
 
   build:
     needs: release-please
-    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    if: ${{ needs.release-please.outputs.client_release_created == 'true' }}
     timeout-minutes: 90
     # DLSS is built for the RTX-capable desktop targets only. macOS cannot
     # compile it (no Vulkan backend / NVIDIA RTX), so it stays DLSS-free.
@@ -155,7 +159,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.name }}
+          name: client-${{ matrix.name }}
           path: ${{ env.ASSET }}
           if-no-files-found: error
 
@@ -172,6 +176,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
+          pattern: client-*
           path: artifacts
           merge-multiple: true
 
@@ -179,6 +184,114 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: gh release upload "${{ needs.release-please.outputs.tag_name }}" artifacts/* --clobber --repo ${{ github.repository }}
+
+  build-editor:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.editor_release_created == 'true' }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: warp-ubuntu-latest-x64-8x
+            target: x86_64-unknown-linux-gnu
+          - name: macos-aarch64
+            os: warp-macos-26-arm64-6x
+            target: aarch64-apple-darwin
+          - name: windows-x86_64
+            os: warp-windows-2025-vs2026-x64-8x
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    env:
+      STAGING: ${{ needs.release-please.outputs.editor_tag_name }}-${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libasound2-dev \
+            libudev-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libgl1-mesa-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: editor-${{ matrix.target }}
+          cache-on-failure: true
+
+      - name: Build
+        run: >
+          cargo build -p lifthrasir-editor
+          --profile dist
+          --locked
+          --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p "$STAGING"
+          cp "target/${{ matrix.target }}/dist/lifthrasir-editor" "$STAGING/"
+          cp -r assets "$STAGING/"
+          cp README.md LICENSE "$STAGING/"
+          tar -czf "$STAGING.tar.gz" "$STAGING"
+          echo "ASSET=$STAGING.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:STAGING | Out-Null
+          Copy-Item "target/${{ matrix.target }}/dist/lifthrasir-editor.exe" "$env:STAGING/"
+          Copy-Item -Recurse assets "$env:STAGING/assets"
+          Copy-Item README.md, LICENSE "$env:STAGING/"
+          Compress-Archive -Path $env:STAGING -DestinationPath "$env:STAGING.zip"
+          "ASSET=$env:STAGING.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: editor-${{ matrix.name }}
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+
+  upload-editor:
+    needs: [release-please, build-editor]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_KEY }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: editor-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh release upload "${{ needs.release-please.outputs.editor_tag_name }}" artifacts/* --clobber --repo ${{ github.repository }}
 
   notify-discord:
     needs: [release-please, upload]
