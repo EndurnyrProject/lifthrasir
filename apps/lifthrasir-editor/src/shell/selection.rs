@@ -3,6 +3,7 @@
 //! clickable.
 
 use super::{
+    gizmo::TransformGizmo,
     node::{EditorNodeId, NodeSnapshot, find_node},
     pick::{Hovered, hover},
     ui::{viewport_has_keyboard, viewport_has_pointer},
@@ -14,7 +15,6 @@ use crate::{
 };
 use bevy::{light::NotShadowCaster, prelude::*};
 use lifthrasir_runtime::world::{LifAudioEmitter, LifEffectEmitter};
-use transform_gizmo_bevy::GizmoTarget;
 
 /// The selected object node, if any.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,10 +136,10 @@ fn select_on_press(
     mouse: Res<ButtonInput<MouseButton>>,
     hovered: Res<Hovered>,
     ids: Query<&EditorNodeId>,
-    gizmos: Query<&GizmoTarget>,
+    gizmo: Option<Res<TransformGizmo>>,
     mut selection: ResMut<Selection>,
 ) {
-    if !mouse.just_pressed(MouseButton::Left) || gizmos.iter().any(GizmoTarget::is_focused) {
+    if !mouse.just_pressed(MouseButton::Left) || gizmo.is_some_and(|gizmo| gizmo.is_focused()) {
         return;
     }
     selection.set_if_neq(Selection(

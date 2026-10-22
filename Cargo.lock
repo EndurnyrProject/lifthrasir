@@ -5066,7 +5066,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "toml",
- "transform-gizmo-bevy",
+ "transform-gizmo",
 ]
 
 [[package]]
@@ -8731,37 +8731,6 @@ dependencies = [
  "epaint",
  "glam 0.32.1",
  "mint",
-]
-
-[[package]]
-name = "transform-gizmo-bevy"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f69289809dbfb76e7bac9de495cf1ebdebe88aa273ef6e23a0f2476bf43b0b49"
-dependencies = [
- "bevy_app",
- "bevy_asset",
- "bevy_camera",
- "bevy_core_pipeline",
- "bevy_derive",
- "bevy_ecs",
- "bevy_image",
- "bevy_input",
- "bevy_log",
- "bevy_math",
- "bevy_mesh",
- "bevy_pbr",
- "bevy_picking",
- "bevy_platform",
- "bevy_reflect",
- "bevy_render",
- "bevy_shader",
- "bevy_transform",
- "bevy_utils",
- "bevy_window",
- "bytemuck",
- "transform-gizmo",
- "uuid",
 ]
 
 [[package]]

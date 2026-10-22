@@ -23,7 +23,7 @@ use bevy::{
     prelude::*,
 };
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-use transform_gizmo_bevy::config::GizmoModeKind;
+use transform_gizmo::config::GizmoModeKind;
 
 /// What a click in the viewport does.
 #[derive(Resource, Default, Debug, Clone, PartialEq)]
