@@ -317,108 +317,6 @@ impl GridThumbnails {
     }
 }
 
-#[cfg(test)]
-mod thumbnail_tests {
-    use super::*;
-
-    #[test]
-    fn offscreen_models_release_scene_but_recycle_camera_and_target() {
-        let mut app = App::new();
-        let root = app.world_mut().spawn_empty().id();
-        let child = app.world_mut().spawn(ChildOf(root)).id();
-        let camera = app
-            .world_mut()
-            .spawn((GridThumbnailCamera, Camera::default()))
-            .id();
-        let image = Handle::<Image>::default();
-        let mut thumbnails = GridThumbnails {
-            active: true,
-            ..default()
-        };
-        thumbnails.models.insert(
-            "model.glb".into(),
-            ModelThumbnail {
-                image: image.clone(),
-                root: Some(root),
-                camera: Some(camera),
-                origin: PREVIEW_ORIGIN,
-            },
-        );
-        thumbnails
-            .ground
-            .insert("ground.ktx2".into(), image.clone());
-        app.insert_resource(thumbnails)
-            .add_systems(Update, spawn_grid_thumbnails);
-        app.update();
-
-        assert!(app.world().get_entity(root).is_err());
-        assert!(app.world().get_entity(child).is_err());
-        assert!(!app.world().get::<Camera>(camera).unwrap().is_active);
-        let thumbnails = app.world().resource::<GridThumbnails>();
-        assert!(thumbnails.models.is_empty());
-        assert!(thumbnails.ground.is_empty());
-        assert_eq!(thumbnails.free_slots.len(), 1);
-        assert_eq!(thumbnails.free_slots[0].camera, Some(camera));
-        assert_eq!(thumbnails.free_slots[0].image, image);
-    }
-
-    #[test]
-    fn visible_thumbnails_are_retained_and_frame_reset_clears_visibility() {
-        let mut app = App::new();
-        let selected_preview = app.world_mut().spawn(PreviewRoot).id();
-        let selected_camera = app.world_mut().spawn(PreviewCamera).id();
-        let pooled_camera = app.world_mut().spawn(GridThumbnailCamera).id();
-        let root = app.world_mut().spawn_empty().id();
-        let camera = app
-            .world_mut()
-            .spawn((GridThumbnailCamera, Camera::default()))
-            .id();
-        let mut thumbnails = GridThumbnails {
-            active: true,
-            ..default()
-        };
-        thumbnails.free_slots.push(ThumbnailSlot {
-            image: Handle::default(),
-            camera: Some(pooled_camera),
-            origin: PREVIEW_ORIGIN,
-        });
-        thumbnails.models.insert(
-            "model.glb".into(),
-            ModelThumbnail {
-                image: Handle::default(),
-                root: Some(root),
-                camera: Some(camera),
-                origin: PREVIEW_ORIGIN,
-            },
-        );
-        thumbnails.visible_models.insert("model.glb".into());
-        thumbnails.visible_ground.insert("ground.ktx2".into());
-        thumbnails
-            .ground
-            .insert("ground.ktx2".into(), Handle::default());
-        app.insert_resource(thumbnails)
-            .add_systems(Update, spawn_grid_thumbnails);
-        app.update();
-        assert!(app.world().get_entity(root).is_ok());
-        assert_eq!(app.world().resource::<GridThumbnails>().free_slots.len(), 1);
-        app.world_mut()
-            .resource_mut::<GridThumbnails>()
-            .begin_frame();
-        app.update();
-        assert!(app.world().get_entity(root).is_err());
-        assert!(app.world().get_entity(camera).is_err());
-        assert!(app.world().get_entity(pooled_camera).is_err());
-        assert!(app.world().get_entity(selected_preview).is_ok());
-        assert!(app.world().get_entity(selected_camera).is_ok());
-        let thumbnails = app.world().resource::<GridThumbnails>();
-        assert!(thumbnails.ground.is_empty());
-        assert!(thumbnails.models.is_empty());
-        assert!(thumbnails.free_slots.is_empty());
-        assert!(thumbnails.pending_models.is_empty());
-        assert_eq!(thumbnails.next_model_origin, 0);
-    }
-}
-
 fn spawn_preview_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let image = images.add(Image::new_target_texture(
         PREVIEW_SIZE,
@@ -645,5 +543,107 @@ pub fn preview_ui(
             state.play |= ui.button("Play").clicked();
         }
         Some(AssetRef::Effect(_)) | None => {}
+    }
+}
+
+#[cfg(test)]
+mod thumbnail_tests {
+    use super::*;
+
+    #[test]
+    fn offscreen_models_release_scene_but_recycle_camera_and_target() {
+        let mut app = App::new();
+        let root = app.world_mut().spawn_empty().id();
+        let child = app.world_mut().spawn(ChildOf(root)).id();
+        let camera = app
+            .world_mut()
+            .spawn((GridThumbnailCamera, Camera::default()))
+            .id();
+        let image = Handle::<Image>::default();
+        let mut thumbnails = GridThumbnails {
+            active: true,
+            ..default()
+        };
+        thumbnails.models.insert(
+            "model.glb".into(),
+            ModelThumbnail {
+                image: image.clone(),
+                root: Some(root),
+                camera: Some(camera),
+                origin: PREVIEW_ORIGIN,
+            },
+        );
+        thumbnails
+            .ground
+            .insert("ground.ktx2".into(), image.clone());
+        app.insert_resource(thumbnails)
+            .add_systems(Update, spawn_grid_thumbnails);
+        app.update();
+
+        assert!(app.world().get_entity(root).is_err());
+        assert!(app.world().get_entity(child).is_err());
+        assert!(!app.world().get::<Camera>(camera).unwrap().is_active);
+        let thumbnails = app.world().resource::<GridThumbnails>();
+        assert!(thumbnails.models.is_empty());
+        assert!(thumbnails.ground.is_empty());
+        assert_eq!(thumbnails.free_slots.len(), 1);
+        assert_eq!(thumbnails.free_slots[0].camera, Some(camera));
+        assert_eq!(thumbnails.free_slots[0].image, image);
+    }
+
+    #[test]
+    fn visible_thumbnails_are_retained_and_frame_reset_clears_visibility() {
+        let mut app = App::new();
+        let selected_preview = app.world_mut().spawn(PreviewRoot).id();
+        let selected_camera = app.world_mut().spawn(PreviewCamera).id();
+        let pooled_camera = app.world_mut().spawn(GridThumbnailCamera).id();
+        let root = app.world_mut().spawn_empty().id();
+        let camera = app
+            .world_mut()
+            .spawn((GridThumbnailCamera, Camera::default()))
+            .id();
+        let mut thumbnails = GridThumbnails {
+            active: true,
+            ..default()
+        };
+        thumbnails.free_slots.push(ThumbnailSlot {
+            image: Handle::default(),
+            camera: Some(pooled_camera),
+            origin: PREVIEW_ORIGIN,
+        });
+        thumbnails.models.insert(
+            "model.glb".into(),
+            ModelThumbnail {
+                image: Handle::default(),
+                root: Some(root),
+                camera: Some(camera),
+                origin: PREVIEW_ORIGIN,
+            },
+        );
+        thumbnails.visible_models.insert("model.glb".into());
+        thumbnails.visible_ground.insert("ground.ktx2".into());
+        thumbnails
+            .ground
+            .insert("ground.ktx2".into(), Handle::default());
+        app.insert_resource(thumbnails)
+            .add_systems(Update, spawn_grid_thumbnails);
+        app.update();
+        assert!(app.world().get_entity(root).is_ok());
+        assert_eq!(app.world().resource::<GridThumbnails>().free_slots.len(), 1);
+        app.world_mut()
+            .resource_mut::<GridThumbnails>()
+            .begin_frame();
+        app.update();
+        assert!(app.world().get_entity(root).is_err());
+        assert!(app.world().get_entity(camera).is_err());
+        assert!(app.world().get_entity(pooled_camera).is_err());
+        assert!(app.world().get_entity(selected_preview).is_ok());
+        assert!(app.world().get_entity(selected_camera).is_ok());
+        let thumbnails = app.world().resource::<GridThumbnails>();
+        assert!(thumbnails.ground.is_empty());
+        assert!(thumbnails.models.is_empty());
+        assert!(thumbnails.free_slots.is_empty());
+        assert!(thumbnails.pending_models.is_empty());
+        assert_eq!(thumbnails.next_model_origin, 0);
     }
 }

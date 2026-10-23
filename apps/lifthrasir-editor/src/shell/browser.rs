@@ -197,16 +197,18 @@ fn browser_panel(
                 let view = matches!(panel.tab, BrowserTab::Models | BrowserTab::Ground)
                     .then_some(panel.asset_view)
                     .unwrap_or(AssetView::List);
-                next_selection = asset_entries_ui(
-                    ui,
-                    &entries,
-                    &selection,
-                    view,
-                    &mut contexts,
-                    &mut thumbnails,
-                    &mut images,
-                    &assets,
-                );
+                next_selection = match view {
+                    AssetView::List => asset_list_ui(ui, &entries, &selection),
+                    AssetView::Grid => asset_grid_ui(
+                        ui,
+                        &entries,
+                        &selection,
+                        &mut contexts,
+                        &mut thumbnails,
+                        &mut images,
+                        &assets,
+                    ),
+                };
             });
     });
     if let Some(asset) = next_selection {
@@ -216,27 +218,6 @@ fn browser_panel(
         *index = build_index(&source, catalog.as_deref());
     }
     Ok(())
-}
-
-/// Draws the current asset set while keeping selection behavior identical in
-/// both arrangements. Grid cells use fixed dimensions, so a long asset path
-/// cannot make neighbouring cells shift.
-fn asset_entries_ui(
-    ui: &mut egui::Ui,
-    entries: &[(String, AssetRef)],
-    selection: &BrowserSelection,
-    view: AssetView,
-    contexts: &mut EguiContexts,
-    thumbnails: &mut GridThumbnails,
-    images: &mut Assets<Image>,
-    assets: &AssetServer,
-) -> Option<AssetRef> {
-    match view {
-        AssetView::List => asset_list_ui(ui, entries, selection),
-        AssetView::Grid => {
-            asset_grid_ui(ui, entries, selection, contexts, thumbnails, images, assets)
-        }
-    }
 }
 
 fn asset_list_ui(
@@ -255,6 +236,8 @@ fn asset_list_ui(
     next_selection
 }
 
+/// Grid cells use fixed dimensions, so a long asset path cannot make
+/// neighbouring cells shift.
 fn asset_grid_ui(
     ui: &mut egui::Ui,
     entries: &[(String, AssetRef)],
