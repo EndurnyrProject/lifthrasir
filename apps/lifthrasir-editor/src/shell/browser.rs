@@ -2,7 +2,7 @@
 //! a filterable left panel to pick one.
 
 use super::{
-    preview::{PreviewPlugin, PreviewState, preview_ui},
+    preview::{GRID_THUMBNAIL_SIZE, GridThumbnails, PreviewPlugin, PreviewState, preview_ui},
     ui::{EditorUiArea, EditorUiSet},
 };
 use crate::map::tools::{ToolMode, place::is_placeable};
@@ -71,10 +71,19 @@ enum BrowserTab {
     Effects,
 }
 
+/// How models and ground textures are arranged in the browser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum AssetView {
+    #[default]
+    List,
+    Grid,
+}
+
 #[derive(Resource, Default)]
 struct BrowserPanel {
     tab: BrowserTab,
     filter: String,
+    asset_view: AssetView,
 }
 
 /// Indexes the source at startup, adds effects once the catalog loads, and
@@ -133,13 +142,18 @@ fn browser_panel(
     source: Res<SharedCompositeAssetSource>,
     catalog: Option<Res<EffectCatalog>>,
     mut preview: ResMut<PreviewState>,
+    mut thumbnails: ResMut<GridThumbnails>,
+    mut images: ResMut<Assets<Image>>,
+    assets: Res<AssetServer>,
     mut mode: ResMut<ToolMode>,
 ) -> Result {
     let textures = preview.texture_ids(&mut contexts);
-    let ctx = contexts.ctx_mut()?;
+    let ctx = contexts.ctx_mut()?.clone();
     let panel = &mut *panel;
+    thumbnails.begin_frame();
     let mut refresh = false;
-    area.show(ctx, "browser", |ui| {
+    let mut next_selection = None;
+    area.show(&ctx, "browser", |ui| {
         egui::Panel::left("browser")
             .resizable(true)
             .default_size(260.0)
@@ -159,6 +173,13 @@ fn browser_panel(
                     ui.text_edit_singleline(&mut panel.filter);
                     refresh = ui.button("Refresh").clicked();
                 });
+                if matches!(panel.tab, BrowserTab::Models | BrowserTab::Ground) {
+                    ui.horizontal(|ui| {
+                        ui.label("View");
+                        ui.selectable_value(&mut panel.asset_view, AssetView::List, "List");
+                        ui.selectable_value(&mut panel.asset_view, AssetView::Grid, "Grid");
+                    });
+                }
                 ui.separator();
                 egui::Panel::bottom("browser_preview").show(ui, |ui| {
                     if let Some(asset) = selection.0.as_ref().filter(|asset| is_placeable(asset))
@@ -173,26 +194,173 @@ fn browser_panel(
                     return;
                 }
                 let entries = entries(&index, panel.tab, &panel.filter.to_lowercase());
-                let row_height = ui.text_style_height(&egui::TextStyle::Button);
-                egui::ScrollArea::vertical().auto_shrink(false).show_rows(
+                let view = matches!(panel.tab, BrowserTab::Models | BrowserTab::Ground)
+                    .then_some(panel.asset_view)
+                    .unwrap_or(AssetView::List);
+                next_selection = asset_entries_ui(
                     ui,
-                    row_height,
-                    entries.len(),
-                    |ui, rows| {
-                        for (label, asset) in &entries[rows] {
-                            let selected = selection.0.as_ref() == Some(asset);
-                            if ui.selectable_label(selected, label).clicked() {
-                                selection.0 = Some(asset.clone());
-                            }
-                        }
-                    },
+                    &entries,
+                    &selection,
+                    view,
+                    &mut contexts,
+                    &mut thumbnails,
+                    &mut images,
+                    &assets,
                 );
             });
     });
+    if let Some(asset) = next_selection {
+        selection.0 = Some(asset);
+    }
     if refresh {
         *index = build_index(&source, catalog.as_deref());
     }
     Ok(())
+}
+
+/// Draws the current asset set while keeping selection behavior identical in
+/// both arrangements. Grid cells use fixed dimensions, so a long asset path
+/// cannot make neighbouring cells shift.
+fn asset_entries_ui(
+    ui: &mut egui::Ui,
+    entries: &[(String, AssetRef)],
+    selection: &BrowserSelection,
+    view: AssetView,
+    contexts: &mut EguiContexts,
+    thumbnails: &mut GridThumbnails,
+    images: &mut Assets<Image>,
+    assets: &AssetServer,
+) -> Option<AssetRef> {
+    match view {
+        AssetView::List => asset_list_ui(ui, entries, selection),
+        AssetView::Grid => {
+            asset_grid_ui(ui, entries, selection, contexts, thumbnails, images, assets)
+        }
+    }
+}
+
+fn asset_list_ui(
+    ui: &mut egui::Ui,
+    entries: &[(String, AssetRef)],
+    selection: &BrowserSelection,
+) -> Option<AssetRef> {
+    let mut next_selection = None;
+    let row_height = ui.text_style_height(&egui::TextStyle::Button);
+    egui::ScrollArea::vertical().auto_shrink(false).show_rows(
+        ui,
+        row_height,
+        entries.len(),
+        |ui, rows| next_selection = select_entries(ui, &entries[rows], selection),
+    );
+    next_selection
+}
+
+fn asset_grid_ui(
+    ui: &mut egui::Ui,
+    entries: &[(String, AssetRef)],
+    selection: &BrowserSelection,
+    contexts: &mut EguiContexts,
+    thumbnails: &mut GridThumbnails,
+    images: &mut Assets<Image>,
+    assets: &AssetServer,
+) -> Option<AssetRef> {
+    let mut next_selection = None;
+    const CELL_WIDTH: f32 = 104.0;
+    const CELL_HEIGHT: f32 = GRID_THUMBNAIL_SIZE as f32 + 28.0;
+    let grid_width = ui.available_width();
+    let columns = ((grid_width + ui.spacing().item_spacing.x)
+        / (CELL_WIDTH + ui.spacing().item_spacing.x))
+        .floor()
+        .max(1.0) as usize;
+    let rows = entries.len().div_ceil(columns);
+    // Without a bounded viewport egui measures every row, which would request
+    // a renderer for the entire model catalog.
+    egui::ScrollArea::vertical()
+        .auto_shrink(false)
+        .max_width(grid_width)
+        .show_rows(ui, CELL_HEIGHT, rows, |ui, rows| {
+            for row in rows {
+                let start = row * columns;
+                let end = (start + columns).min(entries.len());
+                ui.horizontal(|ui| {
+                    for (label, asset) in &entries[start..end] {
+                        let selected = selection.0.as_ref() == Some(asset);
+                        let name = label.rsplit('/').next().unwrap_or(label);
+                        let name = grid_label(name);
+                        let texture = match asset {
+                            AssetRef::Model(uri) => {
+                                Some(thumbnails.model_texture_id(uri, contexts, images))
+                            }
+                            AssetRef::GroundTexture(uri) => {
+                                Some(thumbnails.ground_texture_id(uri, contexts, assets))
+                            }
+                            _ => None,
+                        };
+                        let response = ui
+                            .allocate_ui_with_layout(
+                                egui::vec2(CELL_WIDTH, CELL_HEIGHT),
+                                egui::Layout::top_down(egui::Align::Center),
+                                |ui| {
+                                    let thumbnail = texture.map(|texture| {
+                                        ui.add(
+                                            egui::Image::new(egui::load::SizedTexture::new(
+                                                texture,
+                                                egui::vec2(
+                                                    GRID_THUMBNAIL_SIZE as f32,
+                                                    GRID_THUMBNAIL_SIZE as f32,
+                                                ),
+                                            ))
+                                            .sense(egui::Sense::click()),
+                                        )
+                                    });
+                                    let name = ui.add_sized(
+                                        egui::vec2(CELL_WIDTH, 22.0),
+                                        egui::Button::selectable(selected, name),
+                                    );
+                                    match thumbnail {
+                                        Some(thumbnail) => thumbnail.union(name),
+                                        None => name,
+                                    }
+                                },
+                            )
+                            .inner
+                            .on_hover_text(label);
+                        if response.clicked() {
+                            next_selection = Some(asset.clone());
+                        }
+                    }
+                });
+            }
+        });
+    next_selection
+}
+
+/// Fixed-width buttons must not use an unbounded filename as their desired
+/// width: egui would grow the resizable browser panel to accommodate it.
+fn grid_label(name: &str) -> String {
+    const MAX_CHARS: usize = 14;
+    let mut chars = name.chars();
+    let abbreviated: String = chars.by_ref().take(MAX_CHARS).collect();
+    if chars.next().is_some() {
+        format!("{abbreviated}…")
+    } else {
+        abbreviated
+    }
+}
+
+fn select_entries(
+    ui: &mut egui::Ui,
+    entries: &[(String, AssetRef)],
+    selection: &BrowserSelection,
+) -> Option<AssetRef> {
+    let mut next_selection = None;
+    for (label, asset) in entries {
+        let selected = selection.0.as_ref() == Some(asset);
+        if ui.selectable_label(selected, label).clicked() {
+            next_selection = Some(asset.clone());
+        }
+    }
+    next_selection
 }
 
 /// The tab's entries whose label contains `filter`, as (label, asset).
