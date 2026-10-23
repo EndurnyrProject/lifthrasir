@@ -16,7 +16,8 @@ use {
         },
     },
     lifthrasir_runtime::{
-        rendering::coordinates::world_position_to_spawn_coords, world::terrain::find_path,
+        rendering::coordinates::{spawn_coords_to_world_position, world_position_to_spawn_coords},
+        world::terrain::find_path,
     },
 };
 
@@ -52,44 +53,29 @@ pub fn render_terrain_cursor(mut gizmos: Gizmos, cache: Res<TerrainRaycastCache>
         return;
     };
 
-    let Some((cell_x, cell_y)) = cache.cell_coords else {
+    let Some(cell) = cache.cell_coords else {
         return;
     };
-
-    const RO_UNITS_PER_CELL: f32 = 5.0;
-    const HALF_RO_CELL: f32 = RO_UNITS_PER_CELL / 2.0;
-    let cell_center_x = cell_x as f32 * RO_UNITS_PER_CELL;
-    let cell_center_z = cell_y as f32 * RO_UNITS_PER_CELL;
 
     const MARKER_SIZE: f32 = 0.4;
     let color = Srgba::hex("00FF00").unwrap().with_alpha(0.4);
 
-    let corners = [
-        Vec3::new(
-            cell_center_x - HALF_RO_CELL,
-            world_pos.y,
-            cell_center_z - HALF_RO_CELL,
-        ),
-        Vec3::new(
-            cell_center_x + HALF_RO_CELL,
-            world_pos.y,
-            cell_center_z - HALF_RO_CELL,
-        ),
-        Vec3::new(
-            cell_center_x - HALF_RO_CELL,
-            world_pos.y,
-            cell_center_z + HALF_RO_CELL,
-        ),
-        Vec3::new(
-            cell_center_x + HALF_RO_CELL,
-            world_pos.y,
-            cell_center_z + HALF_RO_CELL,
-        ),
-    ];
-
-    for corner in corners {
+    for corner in cell_marker_corners(cell, world_pos.y) {
         gizmos.sphere(Isometry3d::from_translation(corner), MARKER_SIZE, color);
     }
+}
+
+/// Corners of the cursor marker around a GAT cell, at height `y`. Uses the shared
+/// cell-to-world conversion so the marker follows the world's `-Z` = cell `+y` axis.
+fn cell_marker_corners((cell_x, cell_y): (u16, u16), y: f32) -> [Vec3; 4] {
+    const HALF_CELL: f32 = 2.5;
+    let center = spawn_coords_to_world_position(cell_x, cell_y).with_y(y);
+    [
+        center + Vec3::new(-HALF_CELL, 0.0, -HALF_CELL),
+        center + Vec3::new(HALF_CELL, 0.0, -HALF_CELL),
+        center + Vec3::new(-HALF_CELL, 0.0, HALF_CELL),
+        center + Vec3::new(HALF_CELL, 0.0, HALF_CELL),
+    ]
 }
 
 #[auto_add_system(
@@ -296,4 +282,18 @@ pub fn set_default_cursor_for_character_selection(
     mut cursor_messages: MessageWriter<CursorChangeRequest>,
 ) {
     cursor_messages.write(CursorChangeRequest::new(CursorType::Default));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cursor_marker_surrounds_the_cell_world_position() {
+        let corners = cell_marker_corners((10, 20), 3.0);
+        let center = corners.iter().sum::<Vec3>() / 4.0;
+
+        assert_eq!(center, Vec3::new(50.0, 3.0, -100.0));
+        assert_eq!(world_position_to_spawn_coords(center), (10, 20));
+    }
 }
