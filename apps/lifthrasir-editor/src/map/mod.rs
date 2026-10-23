@@ -6,6 +6,7 @@ pub mod lighting;
 pub mod open;
 pub mod refresh;
 pub mod save;
+pub mod session;
 pub mod settings;
 pub mod terrain;
 pub mod tools;
@@ -22,6 +23,7 @@ impl Plugin for MapEditorPlugin {
         app.add_plugins((
             open::plugin,
             save::plugin,
+            session::plugin,
             settings::plugin,
             terrain::plugin,
             wizard::plugin,
