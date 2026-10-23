@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.14.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.13.0...v0.14.0) (2026-10-23)
+
+
+### Features
+
+* **bevy:** Moved legacy WGSL to WESL ([f20068b](https://github.com/EndurnyrProject/lifthrasir/commit/f20068b212010befc917320f9b5b9c2e62154a24))
+* **bevy:** Updated bevy to 0.20 ([ce6011c](https://github.com/EndurnyrProject/lifthrasir/commit/ce6011c1a195b3c2721aa0ce5547eb6f4ef48cfd))
+* Dropped the transform-gizmo-bevy, using transform-gizmo directly ([c23254c](https://github.com/EndurnyrProject/lifthrasir/commit/c23254cd899c6acb0d48f8486cd5a717ccad074c))
+* **editor:** Adds support to sessions ([e27a342](https://github.com/EndurnyrProject/lifthrasir/commit/e27a342dd242f72459a28dd0428ccf79a836a74f))
+* **editor:** asset index and browser panel ([8cbbe09](https://github.com/EndurnyrProject/lifthrasir/commit/8cbbe0978cd8c7b17f42f595f3cc79a2f49f7c09))
+* **editor:** collect map documents from the live scene with byte-exact saves ([ee00bb4](https://github.com/EndurnyrProject/lifthrasir/commit/ee00bb4e4b5e46c57601b3d3eb3f6000b129b32f))
+* **editor:** limit fps to 60 ([296b59b](https://github.com/EndurnyrProject/lifthrasir/commit/296b59b88dcc76e7c9e985caa24978704095140a))
+* **editor:** scaffold the map editor app with egui shell and camera ([b0ab654](https://github.com/EndurnyrProject/lifthrasir/commit/b0ab654cbc5e2a60f2d98fa0ce21a9290b09a785))
+* **editor:** wall tool sharing the converter's wall geometry ([71efed6](https://github.com/EndurnyrProject/lifthrasir/commit/71efed67dc2eeaf5cacde353dcf37b8d15955ae8))
+* **editor:** water zones, tile recompute and tile painting ([0cc7ba6](https://github.com/EndurnyrProject/lifthrasir/commit/0cc7ba6adc08845a2615cf592c9b112500c8ca78))
+* **effects:** bard and dancer skill effects with pre-re performance fields that follow the performer ([10bf45c](https://github.com/EndurnyrProject/lifthrasir/commit/10bf45c6cfe8e8e8eadfa91de3fa4793ef500640))
+* **inventory:** apply compounded card sockets ([a08dbd5](https://github.com/EndurnyrProject/lifthrasir/commit/a08dbd521c8057d40a15bfd4785560ce71fe5e05))
+* **lif:** split map/model format versions and make map provenance optional ([daa1156](https://github.com/EndurnyrProject/lifthrasir/commit/daa11567a3193d807673b8e14fee2a55e2a0c393))
+* **maps:** spot lights in map documents, glb writer and runtime loader ([147478a](https://github.com/EndurnyrProject/lifthrasir/commit/147478a936a028446b8597f4e97ed3c1fe0c4beb))
+* **net-aesir:** wire card compounding exchange ([233dbad](https://github.com/EndurnyrProject/lifthrasir/commit/233dbad8567b0040ddbcddbc355ee855de55e21e))
+* **net-contract:** add card compounding messages ([ce2f9c2](https://github.com/EndurnyrProject/lifthrasir/commit/ce2f9c2d6d0cd2fb2087a267cb2252bfc4693aae))
+* **pak:** stamp content_version from the build timestamp ([2b044e3](https://github.com/EndurnyrProject/lifthrasir/commit/2b044e36b4b9b0a970104f05ea256231a4e7ca61))
+* **ro-formats:** byte-exact GAT writer and raw cell type retention ([063ad79](https://github.com/EndurnyrProject/lifthrasir/commit/063ad7924e466ea5784083cca828586731522f3a))
+* **runtime:** expose light candela, light tuning and emitter output links ([ffcaba4](https://github.com/EndurnyrProject/lifthrasir/commit/ffcaba4e227955977b4e5da84ed06228d5568129))
+* **runtime:** expose map ambient light and water respawn helpers ([229e706](https://github.com/EndurnyrProject/lifthrasir/commit/229e70682ceb1f168de648fd548633f12214130f))
+* **tooling:** blank map documents, GAT height rule and light defaults ([dc13bf0](https://github.com/EndurnyrProject/lifthrasir/commit/dc13bf06345b07b4699f2983fca1cd851b1e10f2))
+* **tooling:** chunked indexed terrain primitives with shared smooth normals ([d1b1666](https://github.com/EndurnyrProject/lifthrasir/commit/d1b16661f11191ea798938fa2492063003aacd92))
+* **tooling:** pool ground textures with props and reference them by ro:// URI ([e6bb686](https://github.com/EndurnyrProject/lifthrasir/commit/e6bb6866e3e015cb6c7980ebe818d504e611d643))
+* **ui:** add card compounding picker ([d54e91a](https://github.com/EndurnyrProject/lifthrasir/commit/d54e91a5791a85ec3549413efd9146901281e855))
+* **ui:** handle :forbidden_name - [#61](https://github.com/EndurnyrProject/lifthrasir/issues/61) ([36f2d91](https://github.com/EndurnyrProject/lifthrasir/commit/36f2d91614775e289d1209e12bac6d78484bdf48))
+
+
+### Bug Fixes
+
+* BGM volume to decibels - [#60](https://github.com/EndurnyrProject/lifthrasir/issues/60) ([6b99d86](https://github.com/EndurnyrProject/lifthrasir/commit/6b99d86e6eafa418cc2656ea620030594de158d5))
+* Cleaned bevy update warnings ([7c52a81](https://github.com/EndurnyrProject/lifthrasir/commit/7c52a81635d1c92cb5c9b8a21d9554728cbcd896))
+* **dlss:** Bumped DLSS SDK to v310.9.1 for dlss_wgpu 6 ([2ee5861](https://github.com/EndurnyrProject/lifthrasir/commit/2ee5861133d675458bf65993456c7bb3a329a20f))
+* **engine:** camera follow rebind on disconnect - [#62](https://github.com/EndurnyrProject/lifthrasir/issues/62) ([6c993f9](https://github.com/EndurnyrProject/lifthrasir/commit/6c993f91ca13bc5edf140513581678decf198f95))
+* Fixed map converter logs, and added a progress bar ([9841fe2](https://github.com/EndurnyrProject/lifthrasir/commit/9841fe2c27382a0e27558d20fb1242424145a129))
+* Fixed terrain gizmo ([269e298](https://github.com/EndurnyrProject/lifthrasir/commit/269e29837269d29c2fb5b61fff373c22aea248bf))
+* **tooling:** accept retail map names in the document contract ([72d8c51](https://github.com/EndurnyrProject/lifthrasir/commit/72d8c51fd10d6c2f874e60d607abde576b598d0e))
+* **tooling:** keep the editor's map naming rule out of converted-glb validation ([4ba32f2](https://github.com/EndurnyrProject/lifthrasir/commit/4ba32f2bbe8c7ff8b45a6eca29b5afd000e78493))
+* **ui:** allow cards to initiate compounding ([a4baa83](https://github.com/EndurnyrProject/lifthrasir/commit/a4baa8337fe8204209e58e3d335e33d9ad4050f5))
+
 ## [0.13.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.12.0...v0.13.0) (2026-09-25)
 
 
