@@ -90,24 +90,21 @@ fn item_illustration(path: String, edge: shell::EdgeGrade) -> impl Scene {
         }
         BackgroundColor(ILLUSTRATION_PARCHMENT)
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                ItemIllustrationImage
-                ImageNode { image: {path}, color: {ILLUSTRATION_PARCHMENT} }
-                Node { width: px(75), height: px(100) }
-                ignore_picking()
-            ),
-            (
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(6), right: px(6), top: px(6), bottom: px(6),
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(8)),
-                }
-                ThemeBorderColor({edge.token()})
-                ignore_picking()
-            ),
+            ItemIllustrationImage
+            ImageNode { image: {path}, color: {ILLUSTRATION_PARCHMENT} }
+            Node { width: px(75), height: px(100) }
+            @ignore_picking()
+            --
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(6), right: px(6), top: px(6), bottom: px(6),
+                border: px(1),
+                border_radius: BorderRadius::all(px(8)),
+            }
+            ThemeBorderColor({edge.token()})
+            @ignore_picking()
         ]
     }
 }
@@ -131,7 +128,7 @@ fn favorite_star(favorite: bool) -> impl Scene {
         )
     };
     bsn! {
-        template_value(FavoriteStar { lit: favorite })
+        FavoriteStar { lit: favorite }
         Node {
             width: px(42),
             height: px(40),
@@ -143,8 +140,8 @@ fn favorite_star(favorite: bool) -> impl Scene {
         }
         BackgroundColor(bg)
         BorderColor::all(border)
-        ignore_picking()
-        Children [ glyph_icon("star", 15.0, color) ]
+        @ignore_picking()
+        Children [ @glyph_icon("star", 15.0, color) ]
     }
 }
 
@@ -189,20 +186,20 @@ pub(super) fn scene(view: ItemInfoView, action: Option<ItemAction>) -> impl Scen
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: px(0) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            header,
-            shell::scroll_body(bsn! {
+            @header --
+            @shell::scroll_body(bsn! {
                 Node {
                     flex_direction: FlexDirection::Column,
                     flex_shrink: 0.0,
                     row_gap: px(14),
                     padding: {UiRect { left: px(20), right: px(20), top: px(0), bottom: px(6) }},
                 }
-                ignore_picking()
-                Children [ {illustration}, {cards}, {meta}, {description} ]
-            }),
-            {footer},
+                @ignore_picking()
+                Children [ {illustration} -- {cards} -- {meta} -- {description} ]
+            }) --
+            {footer}
         ]
     }
 }
@@ -216,14 +213,12 @@ fn card_slots_section(view: &ItemInfoView) -> impl Scene + use<> {
         .collect();
     bsn! {
         Node { flex_direction: FlexDirection::Column }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            shell::section_label("Card Slots".to_string(), Some(counter)),
-            (
-                Node { flex_direction: FlexDirection::Column, row_gap: px(7) }
-                ignore_picking()
-                Children [ {slots} ]
-            ),
+            @shell::section_label("Card Slots".to_string(), Some(counter)) --
+            Node { flex_direction: FlexDirection::Column, row_gap: px(7) }
+            @ignore_picking()
+            Children [ {slots} ]
         ]
     }
 }
@@ -252,17 +247,15 @@ fn card_slot(name: Option<String>) -> impl Scene {
         }
         BackgroundColor(bg)
         BorderColor::all(border)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text(label)
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(12.0)},
-                }
-                TextColor(color)
-                ignore_picking()
-            ),
+            Text(label)
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(12.0)},
+            }
+            TextColor(color)
+            @ignore_picking()
         ]
     }
 }
@@ -279,9 +272,9 @@ fn action_button(view: &ItemInfoView, action: ItemAction) -> impl Scene {
     };
     let label = action_label(action.kind).to_string();
     bsn! {
-        template_value(template)
+        template
         @FeathersButton {
-            @caption: bsn! { (Text(label) ThemedText) },
+            @caption: bsn! { Text(label) ThemedText },
             @variant: ButtonVariant::Primary,
         }
         Node { flex_grow: 1.0, height: px(40), border_radius: BorderRadius::all(px(9)) }

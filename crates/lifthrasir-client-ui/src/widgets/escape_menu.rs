@@ -144,7 +144,7 @@ fn escape_menu() -> impl Scene {
         BackgroundColor({Color::srgba(0.012, 0.027, 0.024, 0.55)})
         GlobalZIndex({DIALOG_Z})
         Pickable
-        Children [ card() ]
+        Children [ @card() ]
     }
 }
 
@@ -162,27 +162,22 @@ fn card() -> impl Scene {
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Children [
-            title("Menu"),
-            (
-                @FeathersButton { @caption: bsn! { button_label("Return to Character Selection") } }
-                Node { height: px(40) }
-                on(on_character_select)
-            ),
-            (
-                @FeathersButton { @caption: bsn! { button_label("Settings") } }
-                Node { height: px(40) }
-                on(on_settings)
-            ),
-            (
-                @FeathersButton { @caption: bsn! { button_label("Close Game") } }
-                Node { height: px(40) }
-                on(on_close_game)
-            ),
-            (
-                @FeathersButton { @caption: bsn! { button_label("Exit") } }
-                Node { height: px(40) }
-                on(on_exit)
-            ),
+            @title("Menu") --
+            @FeathersButton { @caption: bsn! { @button_label("Return to Character Selection") } }
+            Node { height: px(40) }
+            on(on_character_select)
+            --
+            @FeathersButton { @caption: bsn! { @button_label("Settings") } }
+            Node { height: px(40) }
+            on(on_settings)
+            --
+            @FeathersButton { @caption: bsn! { @button_label("Close Game") } }
+            Node { height: px(40) }
+            on(on_close_game)
+            --
+            @FeathersButton { @caption: bsn! { @button_label("Exit") } }
+            Node { height: px(40) }
+            on(on_exit)
         ]
     }
 }

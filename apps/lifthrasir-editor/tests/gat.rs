@@ -8,11 +8,14 @@ use lifthrasir_editor::{
     map::{
         document::collect_document,
         layout::MapLayout,
-        tools::gat::{GatBrush, GatOverlayChunk, end_stroke, paint_cells},
+        tools::gat::{
+            AutoGatOptions, GatBrush, GatOverlayChunk, auto_gat, end_stroke, paint_cells,
+        },
     },
-    shell::undo::{UndoStack, undo},
+    shell::undo::{UndoStack, redo, undo},
 };
 use lifthrasir_runtime::world::LifMapData;
+use ro_formats::gat::GatCellType;
 
 /// `GRAT`, version, width, height; then 4 heights and the type per cell.
 const HEADER_BYTES: usize = 14;
@@ -93,4 +96,58 @@ fn a_stroke_that_changes_nothing_is_not_recorded() {
     end_stroke(app.world_mut(), before);
 
     assert!(app.world().resource::<UndoStack>().is_pristine());
+}
+
+#[test]
+fn auto_gat_is_one_undoable_map_data_edit() {
+    let data_folder = tempfile::tempdir().unwrap();
+    let mut app = common::editor_app(data_folder.path());
+    let layout = common::open_fixture(&mut app);
+    {
+        let mut data = app.world_mut().get_mut::<LifMapData>(layout.root).unwrap();
+        data.altitude.cells[0].height = [100.0; 4];
+        data.altitude.cells[0].cell_type = GatCellType::from(5);
+    }
+    let corrupted = app
+        .world()
+        .get::<LifMapData>(layout.root)
+        .unwrap()
+        .altitude
+        .to_bytes()
+        .unwrap();
+
+    auto_gat(app.world_mut(), AutoGatOptions::default());
+    let regenerated = app
+        .world()
+        .get::<LifMapData>(layout.root)
+        .unwrap()
+        .altitude
+        .to_bytes()
+        .unwrap();
+    assert_ne!(regenerated, corrupted);
+    assert_eq!(
+        app.world().resource::<UndoStack>().undo_label(),
+        Some("Edit map data")
+    );
+
+    undo(app.world_mut());
+    assert_eq!(
+        app.world()
+            .get::<LifMapData>(layout.root)
+            .unwrap()
+            .altitude
+            .to_bytes()
+            .unwrap(),
+        corrupted
+    );
+    redo(app.world_mut());
+    assert_eq!(
+        app.world()
+            .get::<LifMapData>(layout.root)
+            .unwrap()
+            .altitude
+            .to_bytes()
+            .unwrap(),
+        regenerated
+    );
 }

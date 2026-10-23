@@ -61,7 +61,7 @@ pub(crate) fn register_client_world(app: &mut App) {
 }
 
 fn fail_selected_scene_immediately(
-    inserted: On<Insert, MapSceneStatus>,
+    inserted: On<Insert<MapSceneStatus>>,
     selected: Option<Res<SelectedMapScene>>,
     scenes: Query<(&GltfMapLoader, &MapSceneStatus, Has<LifMapLoadError>)>,
 ) {

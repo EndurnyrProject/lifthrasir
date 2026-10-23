@@ -7,7 +7,7 @@ use bevy_hanabi::{
     AccelModifier, Attribute, ColorOverLifetimeModifier, EffectAsset, EffectMaterial, ExprWriter,
     Gradient, ImageSampleMapping, ParticleEffect, ParticleTextureModifier, SetAttributeModifier,
     SetPositionSphereModifier, SetVelocitySphereModifier, ShapeDimension, SizeOverLifetimeModifier,
-    SpawnerSettings,
+    SlotDimension, SpawnerSettings,
 };
 
 /// Floor for a degenerate (zero) RSW `emit_speed`/`params` magnitude, so a
@@ -108,7 +108,6 @@ fn smoke_effect() -> EffectAsset {
 
     // Texture slot #0 for the soft particle mask; bound per-entity via
     // `EffectMaterial` in the attach system.
-    let texture_slot = writer.lit(0u32).expr();
 
     // Low per-puff opacity so overlapping soft particles accumulate into a
     // volumetric haze rather than reading as individual cards.
@@ -124,7 +123,7 @@ fn smoke_effect() -> EffectAsset {
     size.add_key(1.0, Vec3::splat(3.6));
 
     let mut module = writer.finish();
-    module.add_texture_slot("particle");
+    module.add_texture_slot("particle", SlotDimension::D2);
 
     EffectAsset::new(256, SpawnerSettings::rate(14.0.into()), module)
         .with_name("map_ambient_smoke")
@@ -134,7 +133,7 @@ fn smoke_effect() -> EffectAsset {
         .init(init_lifetime)
         .update(update_rise)
         .render(ParticleTextureModifier {
-            texture_slot,
+            texture_slot: 0,
             sample_mapping: ImageSampleMapping::ModulateOpacityFromR,
         })
         .render(ColorOverLifetimeModifier::new(color))
@@ -174,8 +173,6 @@ fn emitter_effect(emit_speed: f32, params: [f32; 4]) -> EffectAsset {
     );
     let update_rise = AccelModifier::new(writer.lit(Vec3::new(0.0, speed * 0.5, 0.0)).expr());
 
-    let texture_slot = writer.lit(0u32).expr();
-
     let mut color = Gradient::new();
     color.add_key(0.0, Vec4::new(1.0, 1.0, 0.85, 0.0));
     color.add_key(0.2, Vec4::new(1.0, 1.0, 0.85, 0.5));
@@ -188,7 +185,7 @@ fn emitter_effect(emit_speed: f32, params: [f32; 4]) -> EffectAsset {
     size.add_key(1.0, Vec3::splat(1.4));
 
     let mut module = writer.finish();
-    module.add_texture_slot("particle");
+    module.add_texture_slot("particle", SlotDimension::D2);
 
     EffectAsset::new(64, SpawnerSettings::rate(spawn_rate.into()), module)
         .with_name("map_ambient_emitter")
@@ -198,7 +195,7 @@ fn emitter_effect(emit_speed: f32, params: [f32; 4]) -> EffectAsset {
         .init(init_lifetime)
         .update(update_rise)
         .render(ParticleTextureModifier {
-            texture_slot,
+            texture_slot: 0,
             sample_mapping: ImageSampleMapping::ModulateOpacityFromR,
         })
         .render(ColorOverLifetimeModifier::new(color))

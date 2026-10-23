@@ -5,7 +5,7 @@ use lifthrasir_runtime::world::SceneOwner;
 use lifthrasir_runtime::world::water::WaterSurface;
 
 fn attach_client_water_scope(
-    added: On<Add, WaterSurface>,
+    added: On<Add<WaterSurface>>,
     owners: Query<&SceneOwner>,
     scoped: Query<(), With<MapScoped>>,
     mut commands: Commands,

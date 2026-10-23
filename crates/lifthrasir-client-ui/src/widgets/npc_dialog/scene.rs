@@ -49,8 +49,8 @@ pub fn window(
             justify_content: JustifyContent::Center,
         }
         GlobalZIndex(WINDOW_Z)
-        ignore_picking()
-        Children [ ( #Card card(title, text, expect, options) ) ]
+        @ignore_picking()
+        Children [  #Card @card(title, text, expect, options)  ]
     }
 }
 
@@ -72,7 +72,7 @@ fn card(title: String, text: String, expect: NpcDialogExpect, options: Vec<Strin
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
-        Children [ titlebar(title), body_scene(text, expect, options) ]
+        Children [ @titlebar(title) -- @body_scene(text, expect, options) ]
     }
 }
 
@@ -89,23 +89,20 @@ fn titlebar(title: String) -> impl Scene {
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
         Children [
-            (
-                NpcDialogTitle
-                Text(title)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { glyph_icon("close", 11.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                Node { width: px(20), height: px(16) }
-                template_value(FooterButtonAction::CloseOrCancel)
-                on(on_footer_button)
-            ),
+            NpcDialogTitle
+            Text(title)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 11.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            Node { width: px(20), height: px(16) }
+            FooterButtonAction::CloseOrCancel
+            on(on_footer_button)
         ]
     }
 }
@@ -123,8 +120,8 @@ fn body_scene(text: String, expect: NpcDialogExpect, options: Vec<String>) -> im
             row_gap: px(10),
             padding: {UiRect::axes(px(14), px(12))},
         }
-        ignore_picking()
-        Children [ dialog_text(text), {input}, footer_row(expect, options) ]
+        @ignore_picking()
+        Children [ @dialog_text(text) -- {input} -- @footer_row(expect, options) ]
     }
 }
 
@@ -240,7 +237,7 @@ fn footer_row(expect: NpcDialogExpect, options: Vec<String>) -> impl Scene {
             row_gap: {row_gap},
             column_gap: {column_gap},
         }
-        ignore_picking()
+        @ignore_picking()
         Children [ {buttons} ]
     }
 }
@@ -307,9 +304,9 @@ fn footer_button(label: String, action: FooterButtonAction, menu: bool) -> impl 
         JustifyContent::Center
     };
     bsn! {
-        @FeathersButton { @caption: bsn! { chrome_text(label) } }
-        template_value(action)
-        template_value(variant)
+        @FeathersButton { @caption: bsn! { @chrome_text(label) } }
+        action
+        variant
         Node { width: {width}, height: px(24), justify_content: {justify} }
         on(on_footer_button)
     }
@@ -323,7 +320,7 @@ fn chrome_text(text: String) -> impl Scene {
             font_size: {FontSize::Px(11.0)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 

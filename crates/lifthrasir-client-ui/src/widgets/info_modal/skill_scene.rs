@@ -141,26 +141,26 @@ pub(super) fn scene(view: SkillInfoView, raise_target: Option<u32>) -> impl Scen
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: px(0) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            header,
-            shell::scroll_body(bsn! {
+            @header --
+            @shell::scroll_body(bsn! {
                 Node {
                     flex_direction: FlexDirection::Column,
                     flex_shrink: 0.0,
                     row_gap: px(14),
                     padding: {UiRect { left: px(20), right: px(20), top: px(0), bottom: px(6) }},
                 }
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    level_pips(cur, max),
-                    {meta},
-                    {description},
-                    {requires},
-                    {unlocks},
+                    @level_pips(cur, max) --
+                    {meta} --
+                    {description} --
+                    {requires} --
+                    {unlocks}
                 ]
-            }),
-            {footer},
+            }) --
+            {footer}
         ]
     }
 }
@@ -170,15 +170,14 @@ fn level_pips(cur: u32, max: u32) -> impl Scene {
     let pips: Vec<_> = (0..max).map(|i| pip(i < cur)).collect();
     bsn! {
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(11) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("LEVEL".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT),
-            (
-                Node { flex_direction: FlexDirection::Row, flex_grow: 1.0, column_gap: px(3) }
-                ignore_picking()
-                Children [ {pips} ]
-            ),
-            chrome_text(format!("{cur}/{max}"), 12.0, lifthrasir_ui::theme::TEXT),
+            @chrome_text("LEVEL".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT) --
+            Node { flex_direction: FlexDirection::Row, flex_grow: 1.0, column_gap: px(3) }
+            @ignore_picking()
+            Children [ {pips} ]
+            --
+            @chrome_text(format!("{cur}/{max}"), 12.0, lifthrasir_ui::theme::TEXT)
         ]
     }
 }
@@ -192,7 +191,7 @@ fn pip(filled: bool) -> impl Scene {
     bsn! {
         Node { flex_grow: 1.0, height: px(7), border_radius: BorderRadius::all(px(2)) }
         BackgroundColor(color)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -204,19 +203,17 @@ fn chip_section(label: String, chips: Vec<SkillReqChip>, is_requires: bool) -> i
         .collect();
     bsn! {
         Node { flex_direction: FlexDirection::Column }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            shell::section_label(label, None),
-            (
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    column_gap: px(7),
-                    row_gap: px(7),
-                }
-                ignore_picking()
-                Children [ {chip_scenes} ]
-            ),
+            @shell::section_label(label, None) --
+            Node {
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: px(7),
+                row_gap: px(7),
+            }
+            @ignore_picking()
+            Children [ {chip_scenes} ]
         ]
     }
 }
@@ -243,7 +240,7 @@ fn skill_chip(chip: SkillReqChip, is_requires: bool) -> impl Scene {
     };
     let skill_id = chip.skill_id;
     bsn! {
-        template_value(ChipTarget(skill_id))
+        ChipTarget(skill_id)
         Node {
             padding: {UiRect::axes(px(10), px(5))},
             border: px(1),
@@ -253,14 +250,14 @@ fn skill_chip(chip: SkillReqChip, is_requires: bool) -> impl Scene {
         BorderColor::all(border)
         Pickable
         on(on_chip_click)
-        Children [ chrome_text(text, 11.0, color) ]
+        Children [ @chrome_text(text, 11.0, color) ]
     }
 }
 
 /// Rebuilds the modal for the chip's skill. Chips only reference tree skills, so
 /// the rebuilt modal keeps its Raise footer.
 fn on_chip_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     chips: Query<&ChipTarget>,
     catalog: Option<Res<SkillCatalog>>,
     tree: Res<SkillTreeState>,
@@ -291,9 +288,9 @@ fn on_chip_click(
 
 fn raise_button(skill_id: u32, label: String, disabled: bool) -> impl Scene {
     bsn! {
-        template_value(RaiseAction { skill_id, disabled })
+        RaiseAction { skill_id, disabled }
         @FeathersButton {
-            @caption: bsn! { (Text(label) ThemedText) },
+            @caption: bsn! { Text(label) ThemedText },
             @variant: ButtonVariant::Primary,
         }
         Node { flex_grow: 1.0, height: px(40), border_radius: BorderRadius::all(px(9)) }
@@ -479,27 +476,27 @@ mod tests {
         assert!(app.world().resource::<Messages<ShowInfoModal>>().is_empty());
     }
 
-    fn click_event(target: Entity, window: Entity) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button: PointerButton::Primary,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: std::time::Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button: PointerButton::Primary,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: std::time::Duration::ZERO,
+            count: 1,
+        }
     }
 
     fn raise_test_app() -> App {

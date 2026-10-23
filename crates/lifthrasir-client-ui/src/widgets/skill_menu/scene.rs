@@ -40,8 +40,8 @@ pub fn window(
             justify_content: JustifyContent::Center,
         }
         GlobalZIndex(WINDOW_Z)
-        ignore_picking()
-        Children [ card(title, catalysts, catalyst_buttons, rows) ]
+        @ignore_picking()
+        Children [ @card(title, catalysts, catalyst_buttons, rows) ]
     }
 }
 
@@ -62,7 +62,7 @@ fn card(
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
-        Children [ titlebar(title), body(catalysts, catalyst_buttons, rows) ]
+        Children [ @titlebar(title) -- @body(catalysts, catalyst_buttons, rows) ]
     }
 }
 
@@ -76,18 +76,16 @@ fn titlebar(title: String) -> impl Scene {
         }
         ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text(title)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
+            Text(title)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
         ]
     }
 }
@@ -111,8 +109,8 @@ fn body(
             row_gap: px(4),
             padding: {UiRect::axes(px(14), px(12))},
         }
-        ignore_picking()
-        Children [ {summary}, {chips}, ( entry_list() Children [ {rows} ] ) ]
+        @ignore_picking()
+        Children [ {summary} -- {chips} --  @entry_list() Children [ {rows} ]  ]
     }
 }
 
@@ -122,7 +120,7 @@ fn entry_list() -> impl Scene {
             flex_direction: FlexDirection::Column,
             row_gap: px(2),
         }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -135,7 +133,7 @@ fn summary_text(text: String) -> impl Scene {
             font_size: {FontSize::Px(11.0)},
         }
         TextColor(lifthrasir_ui::theme::GOLD)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -152,7 +150,7 @@ fn catalyst_row(buttons: Vec<(String, SkillMenuAction)>) -> impl Scene {
             row_gap: px(4),
             margin: {UiRect { bottom: Val::Px(6.0), ..default() }},
         }
-        ignore_picking()
+        @ignore_picking()
         Children [ {chips} ]
     }
 }
@@ -160,9 +158,9 @@ fn catalyst_row(buttons: Vec<(String, SkillMenuAction)>) -> impl Scene {
 /// A catalyst chip: a small bordered button, sized to its label.
 fn chip(label: String, action: SkillMenuAction) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { row_text(label) } }
-        template_value(action)
-        template_value(ButtonVariant::Normal)
+        @FeathersButton { @caption: bsn! { @row_text(label) } }
+        action
+        ButtonVariant::Normal
         Node {
             height: px(22),
             padding: {UiRect::axes(px(8), px(0))},
@@ -176,9 +174,9 @@ fn chip(label: String, action: SkillMenuAction) -> impl Scene {
 /// the NPC dialogue's MENU rows.
 fn menu_row(label: String, action: SkillMenuAction) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { row_text(label) } }
-        template_value(action)
-        template_value(ButtonVariant::Plain)
+        @FeathersButton { @caption: bsn! { @row_text(label) } }
+        action
+        ButtonVariant::Plain
         Node {
             width: percent(100),
             height: px(24),
@@ -196,6 +194,6 @@ fn row_text(text: String) -> impl Scene {
             font_size: {FontSize::Px(11.0)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
-        ignore_picking()
+        @ignore_picking()
     }
 }

@@ -44,8 +44,10 @@ jobs:
     # DLSS is built for the RTX-capable desktop targets only. macOS cannot
     # compile it (no Vulkan backend / NVIDIA RTX), so it stays DLSS-free.
     env:
-      DLSS_VERSION: "310.5.3"
-      VULKAN_HEADERS_TAG: vulkan-sdk-1.4.313.0
+      # Must match the dlss_wgpu version chart for the locked dlss_wgpu
+      # (6.0.0 for Bevy 0.20). Vulkan headers track its Dockerfile.
+      DLSS_VERSION: "310.9.1"
+      VULKAN_HEADERS_TAG: vulkan-sdk-1.4.335.0
     strategy:
       fail-fast: false
       matrix:

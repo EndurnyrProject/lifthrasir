@@ -152,13 +152,13 @@ fn identity_content(view: IdentityView) -> impl Scene {
         .map(|(ap, max_ap)| EntityScene(ap_line(fraction(ap, max_ap), format!("{ap} / {max_ap}"))));
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(9) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            header_row(view.avatar, view.name, view.class, view.base_level, view.job_level),
-            resources_row(view.zeny, view.weight, view.max_weight),
-            meter_line("HP", fraction(view.hp, view.max_hp), lifthrasir_ui::theme::EMERALD_BRI, format!("{} / {}", view.hp, view.max_hp)),
-            meter_line("SP", fraction(view.sp, view.max_sp), lifthrasir_ui::theme::MANA_BLUE, format!("{} / {}", view.sp, view.max_sp)),
-            {ap},
+            @header_row(view.avatar, view.name, view.class, view.base_level, view.job_level) --
+            @resources_row(view.zeny, view.weight, view.max_weight) --
+            @meter_line("HP", fraction(view.hp, view.max_hp), lifthrasir_ui::theme::EMERALD_BRI, format!("{} / {}", view.hp, view.max_hp)) --
+            @meter_line("SP", fraction(view.sp, view.max_sp), lifthrasir_ui::theme::MANA_BLUE, format!("{} / {}", view.sp, view.max_sp)) --
+            {ap}
         ]
     }
 }
@@ -172,19 +172,18 @@ fn header_row(
 ) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(11) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            avatar_box(avatar),
-            (
-                Node { flex_direction: FlexDirection::Column, row_gap: px(3), flex_grow: 1.0, min_width: px(0) }
-                ignore_picking()
-                Children [
-                    name_text(name),
-                    chrome_text(class, 11.5, lifthrasir_ui::theme::GOLD),
-                ]
-            ),
-            level_chip("Base", base_level),
-            level_chip("Job", job_level),
+            @avatar_box(avatar) --
+            Node { flex_direction: FlexDirection::Column, row_gap: px(3), flex_grow: 1.0, min_width: px(0) }
+            @ignore_picking()
+            Children [
+                @name_text(name) --
+                @chrome_text(class, 11.5, lifthrasir_ui::theme::GOLD)
+            ]
+            --
+            @level_chip("Base", base_level) --
+            @level_chip("Job", job_level)
         ]
     }
 }
@@ -202,17 +201,15 @@ fn avatar_box(letter: String) -> impl Scene {
         }
         BackgroundColor(AVATAR_BG)
         BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text(letter)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(18.0)},
-                }
-                TextColor(lifthrasir_ui::theme::GOLD)
-                ignore_picking()
-            )
+            Text(letter)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(18.0)},
+            }
+            TextColor(lifthrasir_ui::theme::GOLD)
+            @ignore_picking()
         ]
     }
 }
@@ -225,17 +222,17 @@ fn name_text(name: String) -> impl Scene {
             font_size: {FontSize::Px(16.0)},
         }
         TextColor(lifthrasir_ui::theme::EMERALD_BRI)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 fn level_chip(label: &str, level: u32) -> impl Scene + use<> {
     bsn! {
         Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text(label.to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT),
-            chrome_text(level.to_string(), 12.0, lifthrasir_ui::theme::TEXT),
+            @chrome_text(label.to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) --
+            @chrome_text(level.to_string(), 12.0, lifthrasir_ui::theme::TEXT)
         ]
     }
 }
@@ -243,10 +240,10 @@ fn level_chip(label: &str, level: u32) -> impl Scene + use<> {
 fn resources_row(zeny: u32, weight: u32, max_weight: u32) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            stat_pair("Zeny", zeny.to_string()),
-            stat_pair("Weight", format!("{weight} / {max_weight}")),
+            @stat_pair("Zeny", zeny.to_string()) --
+            @stat_pair("Weight", format!("{weight} / {max_weight}"))
         ]
     }
 }
@@ -254,10 +251,10 @@ fn resources_row(zeny: u32, weight: u32, max_weight: u32) -> impl Scene {
 fn stat_pair(label: &str, value: String) -> impl Scene + use<> {
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(6), align_items: AlignItems::Center }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text(label.to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM),
-            chrome_text(value, 11.5, lifthrasir_ui::theme::TEXT),
+            @chrome_text(label.to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM) --
+            @chrome_text(value, 11.5, lifthrasir_ui::theme::TEXT)
         ]
     }
 }
@@ -266,19 +263,18 @@ fn stat_pair(label: &str, value: String) -> impl Scene + use<> {
 fn meter_line(tag: &str, ratio: f32, fill: Color, label: String) -> impl Scene + use<> {
     bsn! {
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(9) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text({tag.to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(10.5)},
-                }
-                TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-                Node { width: px(22) }
-                ignore_picking()
-            ),
-            meter(ratio, fill, label),
+            Text({tag.to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(10.5)},
+            }
+            TextColor(lifthrasir_ui::theme::TEXT_FAINT)
+            Node { width: px(22) }
+            @ignore_picking()
+            --
+            @meter(ratio, fill, label)
         ]
     }
 }
@@ -288,7 +284,7 @@ fn meter_line(tag: &str, ratio: f32, fill: Color, label: String) -> impl Scene +
 fn ap_line(ratio: f32, label: String) -> impl Scene {
     bsn! {
         ApMeter
-        meter_line("AP", ratio, lifthrasir_ui::theme::GOLD, label)
+        @meter_line("AP", ratio, lifthrasir_ui::theme::GOLD, label)
     }
 }
 

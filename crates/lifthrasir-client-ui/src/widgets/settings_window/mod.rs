@@ -169,7 +169,7 @@ fn spawn_settings_root(mut commands: Commands) {
 }
 
 /// Tab click: set the active tab in the draft state.
-fn on_tab_click(click: On<Pointer<Click>>, tabs: Query<&TabButton>, mut ui: ResMut<SettingsUi>) {
+fn on_tab_click(click: On<PointerClick>, tabs: Query<&TabButton>, mut ui: ResMut<SettingsUi>) {
     let Ok(tab) = tabs.get(click.entity) else {
         return;
     };
@@ -179,7 +179,7 @@ fn on_tab_click(click: On<Pointer<Click>>, tabs: Query<&TabButton>, mut ui: ResM
 /// Apply: commit the draft, queue persistence, and request a live re-apply.
 /// No-op when the draft is clean.
 fn on_apply(
-    _: On<Pointer<Click>>,
+    _: On<PointerClick>,
     mut ui: ResMut<SettingsUi>,
     mut graphics: ResMut<GraphicsSettings>,
     mut audio: ResMut<AudioConfig>,
@@ -392,7 +392,7 @@ fn step_field(graphics: &mut GraphicsSettings, field: GraphicsField, dir: StepDi
 
 /// Clicking a segment sets the segmented field to the clicked variant.
 fn on_segment_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     buttons: Query<&SegButton>,
     mut ui: ResMut<SettingsUi>,
 ) {
@@ -406,7 +406,7 @@ fn on_segment_click(
 
 /// Clicking a stepper arrow steps its field one preset.
 fn on_stepper_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     arrows: Query<&StepperArrow>,
     mut ui: ResMut<SettingsUi>,
 ) {
@@ -417,11 +417,7 @@ fn on_stepper_click(
 }
 
 /// Clicking the switch flips its bool field.
-fn on_switch_click(
-    click: On<Pointer<Click>>,
-    pills: Query<&SwitchPill>,
-    mut ui: ResMut<SettingsUi>,
-) {
+fn on_switch_click(click: On<PointerClick>, pills: Query<&SwitchPill>, mut ui: ResMut<SettingsUi>) {
     let Ok(pill) = pills.get(click.entity) else {
         return;
     };
@@ -569,11 +565,7 @@ struct SliderKnob(AudioChannel);
 struct SliderPercent(AudioChannel);
 
 /// Clicking a mute button flips its channel's mute on the draft.
-fn on_mute_click(
-    click: On<Pointer<Click>>,
-    buttons: Query<&MuteButton>,
-    mut ui: ResMut<SettingsUi>,
-) {
+fn on_mute_click(click: On<PointerClick>, buttons: Query<&MuteButton>, mut ui: ResMut<SettingsUi>) {
     let Ok(button) = buttons.get(click.entity) else {
         return;
     };
@@ -599,7 +591,7 @@ fn set_slider_from_cursor(
 
 /// Pressing the rail jumps the volume to the cursor position (click-to-set).
 fn on_slider_press(
-    press: On<Pointer<Press>>,
+    press: On<PointerPress>,
     rails: Query<(&SliderRail, &RelativeCursorPosition)>,
     mut ui: ResMut<SettingsUi>,
 ) {
@@ -608,7 +600,7 @@ fn on_slider_press(
 
 /// Dragging on the rail tracks the cursor (drag-to-set).
 fn on_slider_drag(
-    drag: On<Pointer<Drag>>,
+    drag: On<PointerDrag>,
     rails: Query<(&SliderRail, &RelativeCursorPosition)>,
     mut ui: ResMut<SettingsUi>,
 ) {
@@ -821,7 +813,7 @@ impl Default for Keycap {
 }
 
 /// Clicking a keycap arms a rebind capture for its slot.
-fn on_keycap_click(click: On<Pointer<Click>>, caps: Query<&Keycap>, mut ui: ResMut<SettingsUi>) {
+fn on_keycap_click(click: On<PointerClick>, caps: Query<&Keycap>, mut ui: ResMut<SettingsUi>) {
     let Ok(cap) = caps.get(click.entity) else {
         return;
     };
@@ -1093,28 +1085,28 @@ mod tests {
         assert!(!changed.keybinds);
     }
 
-    fn click_event(target: Entity, window: Entity) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
 
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button: PointerButton::Primary,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: std::time::Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button: PointerButton::Primary,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: std::time::Duration::ZERO,
+            count: 1,
+        }
     }
 
     fn apply_observer_test_app(ui: SettingsUi) -> (App, Entity, Entity) {

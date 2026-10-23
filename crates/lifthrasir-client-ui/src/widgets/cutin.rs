@@ -267,8 +267,8 @@ fn static_cutin(path: String) -> impl Scene {
         }
         Visibility::Hidden
         GlobalZIndex(CUTIN_Z)
-        ignore_picking()
-        Children [(
+        @ignore_picking()
+        Children [
             CutinImage
             ImageNode { image: {path} }
             Node {
@@ -278,8 +278,8 @@ fn static_cutin(path: String) -> impl Scene {
                 width: px(0.0),
                 height: px(0.0),
             }
-            ignore_picking()
-        )]
+            @ignore_picking()
+        ]
     }
 }
 
@@ -294,36 +294,33 @@ fn windowed_cutin(path: String) -> impl Scene {
         }
         Visibility::Hidden
         GlobalZIndex(CUTIN_Z)
-        ignore_picking()
+        @ignore_picking()
         on(drag_cutin)
         Children [
-            (
-                CutinTitlebar
-                CutinDragHandle
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0.0),
-                    top: px(0.0),
-                    width: px(0.0),
-                    height: px(TITLEBAR_HEIGHT),
-                    border: {UiRect { bottom: Val::Px(1.0), ..default() }},
-                }
-                ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
-                ThemeBorderColor({TOKEN_WINDOW_BORDER})
-                Pickable
-            ),
-            (
-                CutinImage
-                ImageNode { image: {path} }
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0.0),
-                    top: px(0.0),
-                    width: px(0.0),
-                    height: px(0.0),
-                }
-                ignore_picking()
-            ),
+            CutinTitlebar
+            CutinDragHandle
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0.0),
+                top: px(0.0),
+                width: px(0.0),
+                height: px(TITLEBAR_HEIGHT),
+                border: {UiRect { bottom: Val::Px(1.0), ..default() }},
+            }
+            ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
+            ThemeBorderColor({TOKEN_WINDOW_BORDER})
+            Pickable
+            --
+            CutinImage
+            ImageNode { image: {path} }
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0.0),
+                top: px(0.0),
+                width: px(0.0),
+                height: px(0.0),
+            }
+            @ignore_picking()
         ]
     }
 }
@@ -340,51 +337,48 @@ fn chromeless_cutin(path: String) -> impl Scene {
         }
         Visibility::Hidden
         GlobalZIndex(CUTIN_Z)
-        ignore_picking()
+        @ignore_picking()
         on(drag_cutin)
         Children [
-            (
-                CutinImage
-                CutinDragHandle
-                ImageNode { image: {path} }
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0.0),
-                    top: px(0.0),
-                    width: px(0.0),
-                    height: px(0.0),
-                }
-                Pickable
-            ),
-            (
-                CutinClose
-                @FeathersButton {
-                    @caption: bsn! {
-                        CutinCloseGlyph
-                        ImageNode {
-                            image: {format!("{}{}.svg", lifthrasir_ui::theme::ICON_DIR, "close")},
-                            color: lifthrasir_ui::theme::TEXT_DIM,
-                        }
-                        Node { width: px(CLOSE_GLYPH_SIZE), height: px(CLOSE_GLYPH_SIZE) }
-                        ignore_picking()
+            CutinImage
+            CutinDragHandle
+            ImageNode { image: {path} }
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0.0),
+                top: px(0.0),
+                width: px(0.0),
+                height: px(0.0),
+            }
+            Pickable
+            --
+            CutinClose
+            @FeathersButton {
+                @caption: bsn! {
+                    CutinCloseGlyph
+                    ImageNode {
+                        image: {format!("{}{}.svg", lifthrasir_ui::theme::ICON_DIR, "close")},
+                        color: lifthrasir_ui::theme::TEXT_DIM,
                     }
+                    Node { width: px(CLOSE_GLYPH_SIZE), height: px(CLOSE_GLYPH_SIZE) }
+                    @ignore_picking()
                 }
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: px(CLOSE_BUTTON_OFFSET),
-                    right: px(CLOSE_BUTTON_OFFSET),
-                    width: px(CLOSE_BUTTON_SIZE),
-                    height: px(CLOSE_BUTTON_SIZE),
-                    // Feathers' 8px button padding inflates the laid-out box beyond the
-                    // factor-scaled width at extreme fit-down; zero it so the button's
-                    // computed size matches the fitted dimensions.
-                    padding: UiRect::ZERO,
-                    min_width: px(0.0),
-                    min_height: px(0.0),
-                }
-                ZIndex(1)
-                on(dismiss_cutin)
-            ),
+            }
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(CLOSE_BUTTON_OFFSET),
+                right: px(CLOSE_BUTTON_OFFSET),
+                width: px(CLOSE_BUTTON_SIZE),
+                height: px(CLOSE_BUTTON_SIZE),
+                // Feathers' 8px button padding inflates the laid-out box beyond the
+                // factor-scaled width at extreme fit-down; zero it so the button's
+                // computed size matches the fitted dimensions.
+                padding: UiRect::ZERO,
+                min_width: px(0.0),
+                min_height: px(0.0),
+            }
+            ZIndex(1)
+            on(dismiss_cutin)
         ]
     }
 }
@@ -560,7 +554,7 @@ fn layout_cutin(
 /// from either drag handle to the root, so a drag that starts on the mode-4 close
 /// button (which has no handle marker) is rejected here.
 fn drag_cutin(
-    drag: On<Pointer<Drag>>,
+    drag: On<PointerDrag>,
     ui_scale: Res<UiScale>,
     handles: Query<(), With<CutinDragHandle>>,
     mut roots: Query<&mut Node, With<CutinRoot>>,
@@ -1694,26 +1688,26 @@ mod tests {
 
     // ---- Observers ---------------------------------------------------------
 
-    fn drag_event(target: Entity, window: Entity, delta: Vec2) -> Pointer<Drag> {
+    fn drag_event(target: Entity, window: Entity, delta: Vec2) -> PointerDrag {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
 
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Drag {
-                button: PointerButton::Primary,
-                distance: Vec2::ZERO,
-                delta,
-            },
-            target,
-        )
+        PointerDrag {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button: PointerButton::Primary,
+            distance: Vec2::ZERO,
+            delta,
+        }
     }
 
     fn drag_observer_app(ui_scale: f32) -> (App, Entity, Entity) {

@@ -4,7 +4,8 @@
 use super::{
     document::collect_document,
     layout::MapLayout,
-    open::{EditorScreen, ErrorModal, OpenMap},
+    open::{EditorOperation, EditorScreen, ErrorModal, OpenMap},
+    session::{EditorSession, record_recent_map},
 };
 use crate::{
     EditorPaths,
@@ -69,13 +70,25 @@ fn save_shortcut(keys: Res<ButtonInput<KeyCode>>, mut saves: MessageWriter<SaveR
     }
 }
 
-fn handle_save_requests(mut requests: MessageReader<SaveRequest>, mut commands: Commands) {
+fn handle_save_requests(
+    mut requests: MessageReader<SaveRequest>,
+    mut commands: Commands,
+    layout: Option<Res<MapLayout>>,
+    mut operation: ResMut<EditorOperation>,
+) {
     for request in requests.read().cloned() {
+        let name = request
+            .save_as
+            .clone()
+            .or_else(|| layout.as_ref().map(|layout| layout.name.clone()))
+            .unwrap_or_else(|| "map".to_string());
+        *operation = EditorOperation::Saving { name };
         commands.queue(move |world: &mut World| {
             if let Err(messages) = save(world, request.save_as.as_deref()) {
                 world
                     .resource_mut::<ErrorModal>()
                     .show("Could not save the map", messages);
+                *world.resource_mut::<EditorOperation>() = EditorOperation::Idle;
             }
         });
     }
@@ -117,6 +130,13 @@ fn save(world: &mut World, save_as: Option<&str>) -> Result<(), Vec<String>> {
         open.path = format!("ro://maps/{name}/{name}.glb");
         open.name = name;
     }
+    let open = world.resource::<OpenMap>();
+    let name = open.name.clone();
+    let open_path = save_as.is_some().then(|| open.path.clone());
+    if let Some(open_path) = open_path {
+        record_recent_map(&mut world.resource_mut::<EditorSession>(), &open_path);
+    }
+    *world.resource_mut::<EditorOperation>() = EditorOperation::Saved { name };
     info!("saved {}", path.display());
     Ok(())
 }

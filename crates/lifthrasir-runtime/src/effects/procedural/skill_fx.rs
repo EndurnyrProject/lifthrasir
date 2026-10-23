@@ -22,7 +22,7 @@ use lifthrasir_assets::catalogs::shader_fx::{ShaderFxEntry, ShaderFxTravel, Text
 /// `kind` uniform selects the per-skill fragment function in the uber-shader, so
 /// a new effect is one WGSL fragment plus one `shader_fx` entry in
 /// `effects.ron`, zero Rust.
-/// Animated by `FactorRamp` via `factor`. See `assets/data/effects/skill_fx.wgsl`.
+/// Animated by `FactorRamp` via `factor`. See `assets/data/effects/skill_fx.wesl`.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct SkillFxMaterial {
     #[uniform(0)]
@@ -36,7 +36,7 @@ pub struct SkillFxMaterial {
 }
 
 /// Packed skill-fx parameters. Field order and types must match the
-/// `SkillFxParams` struct in `skill_fx.wgsl`.
+/// `SkillFxParams` struct in `skill_fx.wesl`.
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct SkillFxParams {
     pub kind: u32,
@@ -49,11 +49,11 @@ pub struct SkillFxParams {
 
 impl Material for SkillFxMaterial {
     fn vertex_shader() -> ShaderRef {
-        "ro://effects/skill_fx.wgsl".into()
+        "ro://effects/skill_fx.wesl".into()
     }
 
     fn fragment_shader() -> ShaderRef {
-        "ro://effects/skill_fx.wgsl".into()
+        "ro://effects/skill_fx.wesl".into()
     }
 
     fn alpha_mode(&self) -> AlphaMode {
@@ -78,7 +78,7 @@ impl FactorMaterial for SkillFxMaterial {
 }
 
 /// `SkillFxParams::kind` value selecting the projectile fragment in the
-/// uber-shader (see `projectile_fragment` in `skill_fx.wgsl`). Kept far above the
+/// uber-shader (see `projectile_fragment` in `skill_fx.wesl`). Kept far above the
 /// per-skill burst kinds so new bursts can grow contiguously from 0.
 const PROJECTILE_KIND: u32 = 100;
 

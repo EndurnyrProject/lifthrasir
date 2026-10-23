@@ -5,10 +5,14 @@
 use super::{TerrainCursor, ToolMode};
 use crate::{
     EditorOnly,
-    map::{layout::MapLayout, open::EditorScreen},
+    map::{
+        layout::MapLayout,
+        open::EditorScreen,
+        terrain::{TerrainHeights, terrain_heights},
+    },
     shell::{
         ui::{EditorUiSet, viewport_has_keyboard},
-        undo::{MapDataEdit, record},
+        undo::{MapDataEdit, commit, record},
     },
 };
 use bevy::{
@@ -16,11 +20,13 @@ use bevy::{
     gizmos::config::GizmoConfigStore,
     light::NotShadowCaster,
     mesh::{Indices, PrimitiveTopology, VertexAttributeValues},
+    picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings},
     prelude::*,
     tasks::{ComputeTaskPool, ParallelSlice, TaskPool},
 };
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-use lifthrasir_runtime::world::LifMapData;
+use lifthrasir_runtime::world::{LifMapData, LifPropRef};
+use lifthrasir_tooling::converters::map::blank::gat_cell_heights;
 use ro_formats::{CELL_SIZE, RoAltitude, gat::GatCellType};
 use std::{collections::HashMap, f32::consts::FRAC_PI_2};
 
@@ -35,6 +41,13 @@ const OVERLAY_LIFT: f32 = 0.1;
 const CORNER_INSET: f32 = 1e-3;
 const OVERLAY_ALPHA: f32 = 0.45;
 const MAX_RADIUS: u32 = 32;
+/// BrowEdit's AutoGat blocks surfaces steeper than about 25.8 degrees.
+const WALKABLE_NORMAL_Y: f32 = 0.9;
+/// Shared edge heights may differ by at most this many native world units.
+const MAX_STEP_HEIGHT: f32 = 5.0;
+/// Starting world Y of Auto GAT's downward prop rays.
+const PROP_RAY_HEIGHT: f32 = 10_000.0;
+
 /// Overlay chunk side in GAT cells: a paint re-uploads only the chunks it
 /// touches (4096 vertices each), not the whole map.
 pub const OVERLAY_CHUNK: u32 = 32;
@@ -46,6 +59,30 @@ const BRUSH_COLOR: Color = Color::srgb(1.0, 1.0, 1.0);
 pub struct GatBrush {
     pub radius: u32,
     pub raw_type: u32,
+}
+
+/// Options used by the bulk Auto GAT recalculation.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AutoGatOptions {
+    /// Copy the terrain's bilinear surface into every GAT sub-cell.
+    pub set_heights: bool,
+    /// Set type 0 on walkable cells and type 1 on steep or discontinuous ones.
+    pub set_walkability: bool,
+    /// Mark GAT cells below their water-zone level as blocked.
+    pub block_under_water: bool,
+    /// Mark cells occupied by loaded prop geometry as blocked.
+    pub block_props: bool,
+}
+
+impl Default for AutoGatOptions {
+    fn default() -> Self {
+        Self {
+            set_heights: true,
+            set_walkability: true,
+            block_under_water: true,
+            block_props: true,
+        }
+    }
 }
 
 impl Default for GatBrush {
@@ -85,6 +122,7 @@ pub(super) fn plugin(app: &mut App) {
     let painting = |mode: Res<ToolMode>| matches!(*mode, ToolMode::GatPaint(_));
     app.init_resource::<GatOverlay>()
         .init_resource::<GatStroke>()
+        .init_resource::<AutoGatOptions>()
         .add_systems(
             Update,
             (
@@ -107,6 +145,172 @@ pub(super) fn plugin(app: &mut App) {
             OnExit(EditorScreen::Editing),
             (drop_stroke, despawn_overlays),
         );
+}
+
+/// Rebuilds GAT heights and/or walkability from terrain data. This is the
+/// data-only half of Auto GAT; prop blocking is applied by [`auto_gat`].
+/// Returns false without changing the altitude if the grids are inconsistent.
+pub fn regenerate_gat(
+    altitude: &mut RoAltitude,
+    terrain: &TerrainHeights,
+    water: Option<&lifthrasir_data::lif::LifWater>,
+    options: AutoGatOptions,
+) -> bool {
+    let expected = (altitude.width as usize / 2, altitude.height as usize / 2);
+    if (terrain.width, terrain.height) != expected
+        || !altitude.width.is_multiple_of(2)
+        || !altitude.height.is_multiple_of(2)
+        || altitude.cells.len() != altitude.width as usize * altitude.height as usize
+        || terrain.cells.len() != terrain.width * terrain.height
+    {
+        return false;
+    }
+
+    if options.set_heights {
+        for (index, cell) in altitude.cells.iter_mut().enumerate() {
+            let (x, y) = (
+                index % altitude.width as usize,
+                index / altitude.width as usize,
+            );
+            cell.height = gat_cell_heights(terrain.get(x / 2, y / 2), x % 2, y % 2);
+        }
+    }
+    if !options.set_walkability {
+        return true;
+    }
+
+    let width = altitude.width as usize;
+    let height = altitude.height as usize;
+    // Classification reads only heights, so updating cell types in place is
+    // independent of traversal order and needs no copy of the whole grid.
+    for y in 0..height {
+        for x in 0..width {
+            let cell = &altitude.cells[y * width + x];
+            let steep = normal_y(cell.height) < WALKABLE_NORMAL_Y;
+            let stepped = has_step(&altitude.cells, width, height, x, y);
+            let submerged = options.block_under_water
+                && water.is_some_and(|water| {
+                    let zone = water.zone_at(x / 2, y / 2);
+                    cell.height.iter().any(|height| *height > zone.level)
+                });
+            altitude.cells[y * width + x].cell_type =
+                GatCellType::from(if steep || stepped || submerged { 1 } else { 0 });
+        }
+    }
+    true
+}
+
+/// Regenerates the open map's GAT as a single undoable operation.
+pub fn auto_gat(world: &mut World, options: AutoGatOptions) {
+    let Some(layout) = world.get_resource::<MapLayout>().cloned() else {
+        return;
+    };
+    let Some(before) = world.get::<LifMapData>(layout.root).cloned() else {
+        return;
+    };
+    let terrain = terrain_heights(world, &layout);
+    let mut after = before.clone();
+    if !regenerate_gat(&mut after.altitude, &terrain, after.water.as_ref(), options) {
+        error!("cannot AutoGat: terrain dimensions do not match the GAT grid");
+        return;
+    }
+    if options.set_walkability && options.block_props {
+        let size = UVec2::new(after.altitude.width, after.altitude.height);
+        match world.run_system_cached_with(auto_gat_prop_cells, size) {
+            Ok(cells) => {
+                let width = after.altitude.width as usize;
+                for (x, y) in cells {
+                    after.altitude.cells[y * width + x].cell_type = GatCellType::from(1);
+                }
+            }
+            Err(error) => {
+                error!("cannot test props for AutoGat: {error}");
+                return;
+            }
+        }
+    }
+    if same_altitude(&before.altitude, &after.altitude) {
+        return;
+    }
+    commit(
+        world,
+        Box::new(MapDataEdit::new(layout.root, before, after).with_hook(refresh_gat_overlay)),
+    );
+}
+
+/// Returns GAT cells whose centre ray hits a descendant mesh of a map prop.
+/// `MeshRayCast` applies the propagated global transform for us.
+fn auto_gat_prop_cells(
+    In(size): In<UVec2>,
+    mut ray_cast: MeshRayCast,
+    props: Query<Entity, With<LifPropRef>>,
+    parents: Query<&ChildOf>,
+) -> Vec<(usize, usize)> {
+    let is_prop_mesh = |mut entity: Entity| loop {
+        if props.contains(entity) {
+            return true;
+        }
+        let Ok(parent) = parents.get(entity) else {
+            return false;
+        };
+        entity = parent.parent();
+    };
+    let settings = MeshRayCastSettings::default().with_filter(&is_prop_mesh);
+    (0..size.y as usize)
+        .flat_map(|y| (0..size.x as usize).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            let origin = Vec3::new(
+                (x as f32 + 0.5) * GAT_CELL_SIZE,
+                PROP_RAY_HEIGHT,
+                -(y as f32 + 0.5) * GAT_CELL_SIZE,
+            );
+            !ray_cast
+                .cast_ray(Ray3d::new(origin, Dir3::NEG_Y), &settings)
+                .is_empty()
+        })
+        .collect()
+}
+
+fn same_altitude(left: &RoAltitude, right: &RoAltitude) -> bool {
+    left.width == right.width
+        && left.height == right.height
+        && left.version == right.version
+        && left.cells.len() == right.cells.len()
+        && left
+            .cells
+            .iter()
+            .zip(&right.cells)
+            .all(|(left, right)| left.height == right.height && left.cell_type == right.cell_type)
+}
+
+fn normal_y([h00, h10, h01, _]: [f32; 4]) -> f32 {
+    let east = Vec3::new(GAT_CELL_SIZE, h10 - h00, 0.0);
+    let north = Vec3::new(0.0, h01 - h00, GAT_CELL_SIZE);
+    east.cross(north).normalize_or_zero().y.abs()
+}
+
+fn has_step(
+    cells: &[ro_formats::gat::GatCell],
+    width: usize,
+    height: usize,
+    x: usize,
+    y: usize,
+) -> bool {
+    let current = &cells[y * width + x].height;
+    let differs = |a: f32, b: f32| (a - b).abs() > MAX_STEP_HEIGHT;
+    (x > 0 && {
+        let west = &cells[y * width + x - 1].height;
+        differs(current[0], west[1]) || differs(current[2], west[3])
+    }) || (x + 1 < width && {
+        let east = &cells[y * width + x + 1].height;
+        differs(current[1], east[0]) || differs(current[3], east[2])
+    }) || (y > 0 && {
+        let south = &cells[(y - 1) * width + x].height;
+        differs(current[0], south[2]) || differs(current[1], south[3])
+    }) || (y + 1 < height && {
+        let north = &cells[(y + 1) * width + x].height;
+        differs(current[2], north[0]) || differs(current[3], north[1])
+    })
 }
 
 /// The GAT cell under world point `world`, or `None` off the map.
@@ -508,6 +712,8 @@ fn options_window(
     mut contexts: EguiContexts,
     mut mode: ResMut<ToolMode>,
     mut overlay: ResMut<GatOverlay>,
+    mut auto_options: ResMut<AutoGatOptions>,
+    mut commands: Commands,
 ) -> Result {
     let ToolMode::GatPaint(mut brush) = *mode else {
         return Ok(());
@@ -529,6 +735,27 @@ fn options_window(
             });
         }
         ui.checkbox(&mut overlay.visible, "Overlay (G)");
+        ui.separator();
+        ui.heading("Auto GAT");
+        ui.checkbox(&mut auto_options.set_heights, "Conform heights to terrain");
+        ui.checkbox(
+            &mut auto_options.set_walkability,
+            "Set walkability from slopes and steps",
+        );
+        ui.add_enabled_ui(auto_options.set_walkability, |ui| {
+            ui.checkbox(
+                &mut auto_options.block_under_water,
+                "Block cells under water",
+            );
+            ui.checkbox(
+                &mut auto_options.block_props,
+                "Block cells occupied by props",
+            );
+        });
+        if ui.button("Regenerate Auto GAT").clicked() {
+            let options = *auto_options;
+            commands.queue(move |world: &mut World| auto_gat(world, options));
+        }
     });
     mode.set_if_neq(ToolMode::GatPaint(brush));
     Ok(())
@@ -547,6 +774,7 @@ fn despawn_overlays(mut commands: Commands, overlays: Query<Entity, With<GatOver
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::map::terrain::TerrainHeights;
     use ro_formats::gat::GatCell;
 
     fn altitude(width: u32, height: u32) -> RoAltitude {
@@ -616,6 +844,96 @@ mod tests {
             .filter(|cell| cell.cell_type.raw() == 1)
             .count();
         assert_eq!(painted, 6);
+    }
+
+    #[test]
+    fn auto_gat_conforms_heights_and_marks_a_flat_surface_walkable() {
+        let mut gat = altitude(4, 2);
+        for cell in &mut gat.cells {
+            cell.cell_type = GatCellType::from(5);
+        }
+        let terrain = TerrainHeights {
+            width: 2,
+            height: 1,
+            cells: vec![[0.0, 2.0, 4.0, 6.0], [6.0, 6.0, 6.0, 6.0]],
+        };
+
+        assert!(regenerate_gat(
+            &mut gat,
+            &terrain,
+            None,
+            AutoGatOptions::default()
+        ));
+
+        assert_eq!(gat.cells[0].height, [0.0, 1.0, 2.0, 3.0]);
+        assert_eq!(gat.cells[1].height, [1.0, 2.0, 3.0, 4.0]);
+        assert!(gat.cells.iter().all(|cell| cell.cell_type.raw() == 0));
+    }
+
+    #[test]
+    fn auto_gat_blocks_steep_and_discontinuous_cells() {
+        let terrain = TerrainHeights {
+            width: 2,
+            height: 1,
+            cells: vec![[0.0; 4]; 2],
+        };
+        let options = AutoGatOptions {
+            set_heights: false,
+            set_walkability: true,
+            block_under_water: false,
+            block_props: false,
+        };
+        let mut cliff = altitude(4, 2);
+        cliff.cells[1].height = [6.0; 4];
+        assert!(regenerate_gat(&mut cliff, &terrain, None, options));
+        assert_eq!(cliff.cells[0].cell_type.raw(), 1);
+        assert_eq!(cliff.cells[1].cell_type.raw(), 1);
+
+        let mut slope = altitude(4, 2);
+        slope.cells[0].height = [0.0, 20.0, 0.0, 20.0];
+        assert!(regenerate_gat(&mut slope, &terrain, None, options));
+        assert_eq!(slope.cells[0].cell_type.raw(), 1);
+    }
+
+    #[test]
+    fn height_only_regeneration_preserves_manual_cell_types() {
+        let mut gat = altitude(2, 2);
+        gat.cells[0].cell_type = GatCellType::from(5);
+        let terrain = TerrainHeights {
+            width: 1,
+            height: 1,
+            cells: vec![[-10.0; 4]],
+        };
+        let options = AutoGatOptions {
+            set_walkability: false,
+            ..default()
+        };
+
+        assert!(regenerate_gat(&mut gat, &terrain, None, options));
+        assert!(gat.cells.iter().all(|cell| cell.height == [-10.0; 4]));
+        assert_eq!(gat.cells[0].cell_type.raw(), 5);
+    }
+
+    #[test]
+    fn invalid_grid_storage_is_rejected_without_partial_edits() {
+        let mut gat = altitude(2, 2);
+        let terrain = TerrainHeights {
+            width: 1,
+            height: 1,
+            cells: Vec::new(),
+        };
+        let before = gat.to_bytes().unwrap();
+
+        assert!(!regenerate_gat(&mut gat, &terrain, None, default()));
+        assert_eq!(gat.to_bytes().unwrap(), before);
+
+        let terrain = TerrainHeights {
+            cells: vec![[0.0; 4]],
+            ..terrain
+        };
+        gat.cells.pop();
+        assert!(!regenerate_gat(&mut gat, &terrain, None, default()));
+        assert_eq!(gat.cells.len(), 3);
     }
 
     #[test]

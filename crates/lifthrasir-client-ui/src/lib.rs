@@ -93,11 +93,14 @@ mod tests {
         app.add_plugins((MinimalPlugins, AssetPlugin::default()));
         install_test_ui_primitives(&mut app);
         let token = lifthrasir_ui::theme::feathers_theme::TOKEN_ACCENT;
-        app.world_mut()
-            .resource_mut::<bevy_feathers::theme::UiTheme>()
-            .0
-            .color
-            .insert(token.clone(), Color::WHITE);
+        let mut theme = app
+            .world_mut()
+            .resource_mut::<bevy_feathers::theme::UiTheme>();
+        lifthrasir_ui::theme::feathers_theme::assign_token(
+            &mut theme.0,
+            token.clone(),
+            Color::WHITE,
+        );
         app.init_resource::<lifthrasir_client::domain::settings::GraphicsSettings>()
             .init_resource::<lifthrasir_client::domain::settings::AudioConfig>()
             .init_resource::<lifthrasir_client::domain::settings::Keybinds>()

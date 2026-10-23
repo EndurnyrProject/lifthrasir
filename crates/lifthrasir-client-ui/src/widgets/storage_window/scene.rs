@@ -135,32 +135,29 @@ pub(crate) fn pane(view: StoragePaneView, side: PaneSide) -> impl Scene {
         }
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.2)})
         BorderColor::all(accent)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            pane_header(view.title, view.subtitle, side),
-            (
-                Node { height: px(268), position_type: PositionType::Relative }
-                ignore_picking()
-                Children [
-                    (
-                        #grid
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: px(0), top: px(0), right: px(0), bottom: px(0),
-                            overflow: {Overflow::scroll_y()},
-                            flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::Stretch,
-                            row_gap: px(6),
-                            padding: {UiRect { left: Val::Px(10.0), right: Val::Px(14.0), top: Val::Px(10.0), bottom: Val::Px(10.0) }},
-                        }
-                        ScrollArea
-                        Pickable
-                        Children [ {cells}, {empty} ]
-                    ),
-                    @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
-                    Node { position_type: PositionType::Absolute, right: px(3), top: px(4), bottom: px(4), width: px(6) }
-                ]
-            ),
+            @pane_header(view.title, view.subtitle, side) --
+            Node { height: px(268), position_type: PositionType::Relative }
+            @ignore_picking()
+            Children [
+                #grid
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0), top: px(0), right: px(0), bottom: px(0),
+                    overflow: {Overflow::scroll_y()},
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Stretch,
+                    row_gap: px(6),
+                    padding: {UiRect { left: Val::Px(10.0), right: Val::Px(14.0), top: Val::Px(10.0), bottom: Val::Px(10.0) }},
+                }
+                ScrollArea
+                Pickable
+                Children [ {cells} -- {empty} ]
+                --
+                @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
+                Node { position_type: PositionType::Absolute, right: px(3), top: px(4), bottom: px(4), width: px(6) }
+            ]
         ]
     }
 }
@@ -180,12 +177,12 @@ fn pane_header(title: &'static str, subtitle: String, side: PaneSide) -> impl Sc
             border: {UiRect { bottom: Val::Px(1.0), ..default() }},
         }
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        ignore_picking()
+        @ignore_picking()
         Children [
-            glyph_icon(icon, 17.0, lifthrasir_ui::theme::GOLD),
-            chrome_text(title.to_string(), 13.0, lifthrasir_ui::theme::TEXT),
-            (Node { flex_grow: 1.0 } ignore_picking()),
-            chrome_text(subtitle, 10.0, lifthrasir_ui::theme::TEXT_DIM),
+            @glyph_icon(icon, 17.0, lifthrasir_ui::theme::GOLD) --
+            @chrome_text(title.to_string(), 13.0, lifthrasir_ui::theme::TEXT) --
+            Node { flex_grow: 1.0 } @ignore_picking()--
+            @chrome_text(subtitle, 10.0, lifthrasir_ui::theme::TEXT_DIM)
         ]
     }
 }
@@ -203,7 +200,7 @@ fn cell(view: StorageCellView) -> impl Scene {
         StorageSelection::Vault(_) => "chevl",
     };
     bsn! {
-        template_value(StorageCell(view.selection))
+        StorageCell({view.selection})
         Node {
             width: percent(100), height: px(52),
             flex_shrink: 0.0,
@@ -220,33 +217,29 @@ fn cell(view: StorageCellView) -> impl Scene {
         Pickable
         on(on_cell_select)
         Children [
-            (
-                ImageNode { image: {view.icon} }
-                Node { width: px(38), height: px(38), flex_shrink: 0.0 }
-                ignore_picking()
-            ),
-            (
-                Node {
-                    flex_grow: 1.0,
-                    min_width: px(0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(2),
-                    overflow: {Overflow::clip()},
-                }
-                ignore_picking()
-                Children [
-                    chrome_text(view.name, 10.5, lifthrasir_ui::theme::TEXT_DIM),
-                    chrome_text(view.category.to_string(), 8.5, lifthrasir_ui::theme::TEXT_FAINT),
-                ]
-            ),
-            {refine}, {amount},
-            (
-                @FeathersButton { @caption: bsn! { glyph_icon(quick_icon, 10.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                template_value(StorageQuickTransfer(view.selection))
-                Node { width: px(24), height: px(24), flex_shrink: 0.0 }
-                on(stop_quick_transfer_propagation)
-                on(on_quick_transfer_activate)
-            ),
+            ImageNode { image: {view.icon} }
+            Node { width: px(38), height: px(38), flex_shrink: 0.0 }
+            @ignore_picking()
+            --
+            Node {
+                flex_grow: 1.0,
+                min_width: px(0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(2),
+                overflow: {Overflow::clip()},
+            }
+            @ignore_picking()
+            Children [
+                @chrome_text(view.name, 10.5, lifthrasir_ui::theme::TEXT_DIM) --
+                @chrome_text(view.category.to_string(), 8.5, lifthrasir_ui::theme::TEXT_FAINT)
+            ]
+            --
+            {refine} -- {amount} --
+            @FeathersButton { @caption: bsn! { @glyph_icon(quick_icon, 10.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            StorageQuickTransfer({view.selection})
+            Node { width: px(24), height: px(24), flex_shrink: 0.0 }
+            on(stop_quick_transfer_propagation)
+            on(on_quick_transfer_activate)
         ]
     }
 }
@@ -262,7 +255,7 @@ fn badge(text: String, refine: bool) -> impl Scene {
         TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(9.0)} }
         TextColor(color)
         Node { min_width: px(18), flex_shrink: 0.0 }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -279,10 +272,10 @@ fn empty_state(message: &'static str, side: PaneSide) -> impl Scene {
             justify_content: JustifyContent::Center,
             row_gap: px(11),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            glyph_icon(icon, 28.0, lifthrasir_ui::theme::TEXT_FAINT),
-            chrome_text(message.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT),
+            @glyph_icon(icon, 28.0, lifthrasir_ui::theme::TEXT_FAINT) --
+            @chrome_text(message.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT)
         ]
     }
 }
@@ -309,23 +302,20 @@ pub(crate) fn window() -> impl Scene {
         Visibility::Hidden
         Pickable
         Children [
-            storage_titlebar(),
-            filter_strip(),
-            panes_shell(),
-            (
-                StorageErrorHost
-                Node { min_height: px(20), padding: {UiRect::horizontal(px(14))} }
-                ignore_picking()
-            ),
-            footer(),
-            (
-                StorageOverlayHost
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0), right: px(0), top: px(0), bottom: px(0),
-                }
-                ignore_picking()
-            ),
+            @storage_titlebar() --
+            @filter_strip() --
+            @panes_shell() --
+            StorageErrorHost
+            Node { min_height: px(20), padding: {UiRect::horizontal(px(14))} }
+            @ignore_picking()
+            --
+            @footer() --
+            StorageOverlayHost
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0), right: px(0), top: px(0), bottom: px(0),
+            }
+            @ignore_picking()
         ]
     }
 }
@@ -345,21 +335,18 @@ fn storage_titlebar() -> impl Scene {
         Pickable
         on(drag_window::<StorageWindowTitlebar, StorageWindowRoot>)
         Children [
-            glyph_icon("vault", 16.0, lifthrasir_ui::theme::GOLD),
-            (
-                StorageWindowTitle
-                Text("Storage Vault")
-                TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_TITLE), font_size: {FontSize::Px(15.0)} }
-                TextColor({lifthrasir_ui::theme::TEXT})
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
-            (
-                StorageCloseControl
-                @FeathersButton { @caption: bsn! { glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                Node { width: px(22), height: px(22) }
-                on(on_storage_close)
-            ),
+            @glyph_icon("vault", 16.0, lifthrasir_ui::theme::GOLD) --
+            StorageWindowTitle
+            Text("Storage Vault")
+            TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_TITLE), font_size: {FontSize::Px(15.0)} }
+            TextColor({lifthrasir_ui::theme::TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            StorageCloseControl
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            Node { width: px(22), height: px(22) }
+            on(on_storage_close)
         ]
     }
 }
@@ -374,14 +361,14 @@ fn filter_strip() -> impl Scene {
             border: {UiRect { bottom: Val::Px(1.0), ..default() }},
         }
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        ignore_picking()
+        @ignore_picking()
         Children [
-            category_button("All", StorageCategory::All, true),
-            category_button("Use", StorageCategory::Use, false),
-            category_button("Etc", StorageCategory::Etc, false),
-            category_button("Equip", StorageCategory::Equip, false),
-            (Node { flex_grow: 1.0 } ignore_picking()),
-            search_field(),
+            @category_button("All", StorageCategory::All, true) --
+            @category_button("Use", StorageCategory::Use, false) --
+            @category_button("Etc", StorageCategory::Etc, false) --
+            @category_button("Equip", StorageCategory::Equip, false) --
+            Node { flex_grow: 1.0 } @ignore_picking()--
+            @search_field()
         ]
     }
 }
@@ -393,8 +380,8 @@ fn category_button(label: &'static str, category: StorageCategory, active: bool)
         lifthrasir_ui::theme::FIELD
     };
     bsn! {
-        @FeathersButton { @caption: bsn! { chrome_text(label.to_string(), 11.0, lifthrasir_ui::theme::TEXT) } }
-        template_value(StorageCategoryButton(category))
+        @FeathersButton { @caption: bsn! { @chrome_text(label.to_string(), 11.0, lifthrasir_ui::theme::TEXT) } }
+        StorageCategoryButton(category)
         Node { height: px(30), padding: {UiRect::horizontal(px(12))} }
         BackgroundColor(bg)
         on(on_category_activate)
@@ -416,29 +403,26 @@ fn search_field() -> impl Scene {
         BackgroundColor({lifthrasir_ui::theme::FIELD})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         Children [
-            glyph_icon("search", 13.0, lifthrasir_ui::theme::TEXT_FAINT),
-            (
-                #search
-                StorageSearchField
-                EditableText
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(12.0)},
-                }
-                TextColor({lifthrasir_ui::theme::TEXT})
-                Node { flex_grow: 1.0, min_width: px(0), height: px(18) }
-            ),
-            (
-                StorageSearchPlaceholder
-                Text("Search items…")
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(12.0)},
-                }
-                TextColor({lifthrasir_ui::theme::TEXT_FAINT})
-                Node { position_type: PositionType::Absolute, left: px(32), top: px(7) }
-                ignore_picking()
-            ),
+            @glyph_icon("search", 13.0, lifthrasir_ui::theme::TEXT_FAINT) --
+            #search
+            StorageSearchField
+            EditableText
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(12.0)},
+            }
+            TextColor({lifthrasir_ui::theme::TEXT})
+            Node { flex_grow: 1.0, min_width: px(0), height: px(18) }
+            --
+            StorageSearchPlaceholder
+            Text("Search items…")
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(12.0)},
+            }
+            TextColor({lifthrasir_ui::theme::TEXT_FAINT})
+            Node { position_type: PositionType::Absolute, left: px(32), top: px(7) }
+            @ignore_picking()
         ]
     }
 }
@@ -451,11 +435,11 @@ fn panes_shell() -> impl Scene {
             column_gap: px(10),
             padding: {UiRect::all(px(14))},
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (StorageBagHost Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0) } ignore_picking()),
-            transfer_column(),
-            (StorageVaultHost Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0) } ignore_picking()),
+            StorageBagHost Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0) } @ignore_picking()--
+            @transfer_column() --
+            StorageVaultHost Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0) } @ignore_picking()
         ]
     }
 }
@@ -470,19 +454,19 @@ fn transfer_column() -> impl Scene {
             justify_content: JustifyContent::Center,
             row_gap: px(8),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            transfer_button(StorageTransferDirection::Deposit, "chevr"),
-            chrome_text("Move".to_string(), 9.0, lifthrasir_ui::theme::TEXT_FAINT),
-            transfer_button(StorageTransferDirection::Withdraw, "chevl"),
+            @transfer_button(StorageTransferDirection::Deposit, "chevr") --
+            @chrome_text("Move".to_string(), 9.0, lifthrasir_ui::theme::TEXT_FAINT) --
+            @transfer_button(StorageTransferDirection::Withdraw, "chevl")
         ]
     }
 }
 
 fn transfer_button(direction: StorageTransferDirection, icon: &'static str) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { glyph_icon(icon, 18.0, lifthrasir_ui::theme::TEXT_FAINT) } }
-        template_value(StorageTransferButton { direction, enabled: false })
+        @FeathersButton { @caption: bsn! { @glyph_icon(icon, 18.0, lifthrasir_ui::theme::TEXT_FAINT) } }
+        StorageTransferButton { direction, enabled: false }
         Node { width: px(42), height: px(42), border_radius: BorderRadius::all(px(10)) }
         BackgroundColor({lifthrasir_ui::theme::FIELD})
         on(on_transfer_activate)
@@ -499,15 +483,13 @@ fn footer() -> impl Scene {
             border: {UiRect { top: Val::Px(1.0), ..default() }},
         }
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                StorageCloseControl
-                @FeathersButton { @caption: bsn! { chrome_text("Close".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
-                Node { width: px(96), height: px(36) }
-                BackgroundColor({lifthrasir_ui::theme::EMERALD})
-                on(on_storage_close)
-            ),
+            StorageCloseControl
+            @FeathersButton { @caption: bsn! { @chrome_text("Close".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
+            Node { width: px(96), height: px(36) }
+            BackgroundColor({lifthrasir_ui::theme::EMERALD})
+            on(on_storage_close)
         ]
     }
 }
@@ -517,7 +499,7 @@ pub(crate) fn error_message(message: String) -> impl Scene {
         Text(message)
         TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(11.0)} }
         TextColor({lifthrasir_ui::theme::BAD})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -532,52 +514,44 @@ pub(crate) fn amount_overlay(amount: String, error: Option<String>) -> impl Scen
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.55)})
         Pickable
         Children [
-            (
-                Node {
-                    width: px(280),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(12),
-                    padding: {UiRect::all(px(20))},
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(12)),
-                }
-                BackgroundColor({lifthrasir_ui::theme::GLASS_2})
-                BorderColor::all(lifthrasir_ui::theme::STROKE_STRONG)
+            Node {
+                width: px(280),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(12),
+                padding: {UiRect::all(px(20))},
+                border: px(1),
+                border_radius: BorderRadius::all(px(12)),
+            }
+            BackgroundColor({lifthrasir_ui::theme::GLASS_2})
+            BorderColor::all(lifthrasir_ui::theme::STROKE_STRONG)
+            Children [
+                @chrome_text("Transfer amount".to_string(), 14.0, lifthrasir_ui::theme::TEXT) --
+                StorageAmountField
+                EditableText::new(amount)
+                EditableTextFilter::new(|c| c.is_ascii_digit())
+                AutoFocus
+                TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(13.0)} }
+                TextColor({lifthrasir_ui::theme::TEXT})
+                Node { height: px(34), padding: {UiRect::axes(px(10), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
+                BackgroundColor({lifthrasir_ui::theme::FIELD})
+                BorderColor::all(lifthrasir_ui::theme::STROKE)
+                --
+                {error} --
+                Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
+                @ignore_picking()
                 Children [
-                    chrome_text("Transfer amount".to_string(), 14.0, lifthrasir_ui::theme::TEXT),
-                    (
-                        StorageAmountField
-                        template_value(EditableText::new(amount))
-                        template_value(EditableTextFilter::new(|c| c.is_ascii_digit()))
-                        AutoFocus
-                        TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(13.0)} }
-                        TextColor({lifthrasir_ui::theme::TEXT})
-                        Node { height: px(34), padding: {UiRect::axes(px(10), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
-                        BackgroundColor({lifthrasir_ui::theme::FIELD})
-                        BorderColor::all(lifthrasir_ui::theme::STROKE)
-                    ),
-                    {error},
-                    (
-                        Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
-                        ignore_picking()
-                        Children [
-                            (
-                                StorageAmountCancel
-                                @FeathersButton { @caption: bsn! { chrome_text("Cancel".to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                                Node { flex_grow: 1.0, height: px(34) }
-                                on(on_amount_cancel)
-                            ),
-                            (
-                                StorageAmountConfirm
-                                @FeathersButton { @caption: bsn! { chrome_text("Transfer".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
-                                Node { flex_grow: 1.0, height: px(34) }
-                                BackgroundColor({lifthrasir_ui::theme::EMERALD})
-                                on(on_amount_confirm)
-                            ),
-                        ]
-                    ),
+                    StorageAmountCancel
+                    @FeathersButton { @caption: bsn! { @chrome_text("Cancel".to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
+                    Node { flex_grow: 1.0, height: px(34) }
+                    on(on_amount_cancel)
+                    --
+                    StorageAmountConfirm
+                    @FeathersButton { @caption: bsn! { @chrome_text("Transfer".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
+                    Node { flex_grow: 1.0, height: px(34) }
+                    BackgroundColor({lifthrasir_ui::theme::EMERALD})
+                    on(on_amount_confirm)
                 ]
-            ),
+            ]
         ]
     }
 }

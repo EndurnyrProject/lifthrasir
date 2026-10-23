@@ -44,8 +44,8 @@ pub fn rebuild_character_body(
 fn body() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(18), align_items: AlignItems::Start }
-        ignore_picking()
-        Children [ paperdoll_row(), attributes::attributes_panel() ]
+        @ignore_picking()
+        Children [ @paperdoll_row() -- @attributes::attributes_panel() ]
     }
 }
 
@@ -62,11 +62,11 @@ fn paperdoll_row() -> impl Scene {
             flex_shrink: 0.0,
             flex_basis: px(432),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            equip::slot_column(&equip::LEFT_SLOTS),
-            preview::preview_frame(),
-            equip::slot_column(&equip::RIGHT_SLOTS),
+            @equip::slot_column(&equip::LEFT_SLOTS) --
+            @preview::preview_frame() --
+            @equip::slot_column(&equip::RIGHT_SLOTS)
         ]
     }
 }

@@ -27,7 +27,7 @@ dlss = ["bevy/dlss", "lifthrasir-client/dlss", "lifthrasir-client-ui/dlss"]
 [dependencies]
 bevy = { workspace = true }
 bevy_framepace = { workspace = true }
-bevy_brp_extras = { version = "0.22.3", optional = true }
+bevy_brp_extras = { workspace = true, optional = true }
 lifthrasir-client = { path = "../../crates/lifthrasir-client" }
 net-contract = { path = "../../crates/net-contract" }
 lifthrasir-assets = { path = "../../crates/lifthrasir-assets" }

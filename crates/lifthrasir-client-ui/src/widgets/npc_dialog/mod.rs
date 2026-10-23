@@ -214,7 +214,7 @@ fn typewriter_reveal(
 
 /// Click-to-skip: clicking the dialogue text jumps straight to the full line.
 fn on_text_click(
-    mut click: On<Pointer<Click>>,
+    mut click: On<PointerClick>,
     mut commands: Commands,
     mut texts: Query<(
         &mut Typewriter,

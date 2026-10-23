@@ -1,6 +1,6 @@
-# Assets, Scenes & Reflection (Bevy 0.19)
+# Assets, Scenes & Reflection (Bevy 0.20)
 
-Distilled from the Bevy 0.19.0 examples repo. Key 0.19 renames to internalize up front:
+Distilled from the Bevy 0.20 examples tree. Key renames to internalize up front:
 
 - `asset_server.load_with_settings(..)` is gone — use the **`load_builder()`** fluent API (`.with_settings(..)`, `.with_guard(..)`, then `.load(path)`).
 - "Scenes" now means **BSN** (`bsn!`, `Scene`, `SceneList`). The old serialized-scene system was renamed to **world serialization**: `DynamicScene` → `DynamicWorld`, `DynamicSceneBuilder` → `DynamicWorldBuilder`, `DynamicSceneRoot` → `DynamicWorldRoot`, `SceneRoot` → `WorldAssetRoot`, `SceneFilter` → `WorldFilter`.
@@ -277,26 +277,34 @@ Controls where asset data lives after extraction: `RENDER_WORLD` (GPU only — C
 
 ## Scenes
 
-### BSN scenes (the 0.19 "Scene")
+### BSN scenes (the current "Scene")
 
 Declarative entity trees via `bsn!` / `bsn_list!`; spawn a scene-returning function with `.spawn()` as a system. Source: `examples/scene/bsn.rs` (full patterns in the `bevy-feathers-bsn` skill).
 
 ```rust
-fn main_scene() -> impl SceneList { bsn_list![Camera2d, ui()] }
+fn main_scene() -> impl SceneList {
+    bsn_list! {
+        Camera2d
+        --
+        @ui()
+    }
+}
 
 fn ui() -> impl Scene {
     bsn! {
         Node { width: percent(100), align_items: AlignItems::Center }
-        Children [(
+        Children [
             Button
-            on(|_: On<Pointer<Press>>| println!("pressed"))
-            Children [( Text("Ok") )]
-        )]
+            on(|_: On<PointerPress>| println!("pressed"))
+            Children [ Text("Ok") ]
+        ]
     }
 }
 
 app.add_systems(Startup, main_scene.spawn());
 ```
+
+0.20 syntax rules: scene includes need `@` (`@ui()`, `@scene_var`, `@{expr}`), list entities are separated by `--` (commas and grouping parens are deprecated), `template_value` is deprecated, and use `bsn_list! { }` braces rather than `[ ]`. `Ready` is triggered per entity after it and all descendants are spawned, which is where spawned-scene logic belongs.
 
 ### World serialization (formerly DynamicScene)
 

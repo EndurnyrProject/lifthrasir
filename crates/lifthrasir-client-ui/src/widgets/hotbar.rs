@@ -523,7 +523,7 @@ fn set_text(text: &mut Text, value: String) {
 /// Primary-click activates a filled slot through the shared seam; secondary-click
 /// clears it. Empty slots do nothing.
 fn on_slot_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     cells: Query<&HotbarSlotUi>,
     mut hotbar: ResMut<Hotbar>,
     mut activated: MessageWriter<HotbarSlotActivated>,
@@ -546,7 +546,7 @@ fn on_slot_click(
 /// Hovering a filled slot spawns a name toast centered above it; empty or
 /// unresolved slots show nothing.
 fn on_slot_hover_over(
-    over: On<Pointer<Over>>,
+    over: On<PointerOver>,
     cells: Query<&HotbarSlotUi>,
     hotbar: Res<Hotbar>,
     lookup: HotbarItemLookup,
@@ -594,7 +594,7 @@ fn on_slot_hover_over(
 
 /// Leaving a slot despawns any visible name toast (only one is shown at a time).
 fn on_slot_hover_out(
-    _: On<Pointer<Out>>,
+    _: On<PointerOut>,
     tooltips: Query<Entity, With<HotbarTooltip>>,
     mut commands: Commands,
 ) {
@@ -605,7 +605,7 @@ fn on_slot_hover_out(
 
 /// A filled slot is a drag source for swapping: its payload is its current slot.
 fn on_slot_drag_start(
-    drag: On<Pointer<DragStart>>,
+    drag: On<PointerDragStart>,
     cells: Query<&HotbarSlotUi>,
     hotbar: Res<Hotbar>,
     mut state: ResMut<HotbarDrag>,
@@ -623,7 +623,7 @@ fn on_slot_drag_start(
 // NOTE: drag-hover highlight deferred — `update_hotbar` repaints the border
 // every frame, so a `.drag` hover tint would need it to read picking hover state.
 fn on_slot_drag_drop(
-    drop: On<Pointer<DragDrop>>,
+    drop: On<PointerDragDrop>,
     cells: Query<&HotbarSlotUi>,
     mut state: ResMut<HotbarDrag>,
     mut hotbar: ResMut<Hotbar>,
@@ -649,7 +649,7 @@ fn unregister_target(source: Option<usize>, dropped_on_slot: bool) -> Option<usi
 /// Unregisters the source slot if the drag ended off the bar, then clears the
 /// transient drag state. Runs for every drag (including window-sourced ones,
 /// whose `source` is `None`).
-fn reset_drag(_: On<Pointer<DragEnd>>, mut state: ResMut<HotbarDrag>, mut hotbar: ResMut<Hotbar>) {
+fn reset_drag(_: On<PointerDragEnd>, mut state: ResMut<HotbarDrag>, mut hotbar: ResMut<Hotbar>) {
     if let Some(slot) = unregister_target(state.source, state.dropped_on_slot) {
         hotbar.clear(slot);
     }
@@ -938,27 +938,27 @@ mod tests {
         );
     }
 
-    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: std::time::Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: std::time::Duration::ZERO,
+            count: 1,
+        }
     }
 
     fn activations(app: &App) -> Vec<usize> {
@@ -1102,24 +1102,24 @@ mod tests {
         assert!(bar.slots.iter().all(|s| s.is_none()));
     }
 
-    fn drag_end_event(target: Entity, window: Entity) -> Pointer<DragEnd> {
+    fn drag_end_event(target: Entity, window: Entity) -> PointerDragEnd {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            DragEnd {
-                button: PointerButton::Primary,
-                distance: Vec2::ZERO,
-            },
-            target,
-        )
+        PointerDragEnd {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button: PointerButton::Primary,
+            distance: Vec2::ZERO,
+        }
     }
 
     #[test]

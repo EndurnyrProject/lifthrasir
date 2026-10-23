@@ -102,14 +102,14 @@ fn window() -> impl Scene {
         Visibility::Hidden
         Pickable
         Children [
-            titlebar::<PartyTitlebar, PartyWindowRoot>("members", "Party"),
-            body_container::<PartyWindowBody>(UiRect {
+            @titlebar::<PartyTitlebar, PartyWindowRoot>("members", "Party") --
+            @body_container::<PartyWindowBody>(UiRect {
                 left: Val::Px(14.0),
                 right: Val::Px(14.0),
                 top: Val::Px(12.0),
                 bottom: Val::Px(10.0),
-            }),
-            footer(),
+            }) --
+            @footer()
         ]
     }
 }
@@ -125,13 +125,11 @@ fn footer() -> impl Scene {
             padding: {UiRect { left: Val::Px(14.0), right: Val::Px(14.0), bottom: Val::Px(14.0), ..default() }},
         }
         Visibility::Hidden
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                @FeathersButton { @caption: bsn! { button_label("Leave Party") } }
-                Node { flex_grow: 1.0, height: px(32) }
-                on(on_leave)
-            ),
+            @FeathersButton { @caption: bsn! { @button_label("Leave Party") } }
+            Node { flex_grow: 1.0, height: px(32) }
+            on(on_leave)
         ]
     }
 }
@@ -151,8 +149,8 @@ pub(crate) fn body(
     let options = is_leader.then(|| EntityScene(options_row()));
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
-        ignore_picking()
-        Children [ {header_scene}, {empty}, {row_scenes}, {options} ]
+        @ignore_picking()
+        Children [ {header_scene} -- {empty} -- {row_scenes} -- {options} ]
     }
 }
 
@@ -171,25 +169,20 @@ fn options_row() -> impl Scene {
             margin: {UiRect::bottom(px(4))},
         }
         BackgroundColor(lifthrasir_ui::theme::GLASS_2)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("Party options".to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM),
-            (
-                Node { flex_direction: FlexDirection::Row, column_gap: px(16) }
-                ignore_picking()
-                Children [
-                    (
-                        @FeathersCheckbox { @caption: bsn! { Text("EXP Share") ThemedText } }
-                        ExpShareToggle
-                        on(on_exp_share_changed)
-                    ),
-                    (
-                        @FeathersCheckbox { @caption: bsn! { Text("Item Share") ThemedText } }
-                        ItemShareToggle
-                        on(on_item_share_changed)
-                    ),
-                ]
-            ),
+            @chrome_text("Party options".to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM) --
+            Node { flex_direction: FlexDirection::Row, column_gap: px(16) }
+            @ignore_picking()
+            Children [
+                @FeathersCheckbox { @caption: bsn! { Text("EXP Share") ThemedText } }
+                ExpShareToggle
+                on(on_exp_share_changed)
+                --
+                @FeathersCheckbox { @caption: bsn! { Text("Item Share") ThemedText } }
+                ItemShareToggle
+                on(on_item_share_changed)
+            ]
         ]
     }
 }
@@ -221,21 +214,18 @@ fn on_item_share_changed(
 fn empty_state() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Node { flex_direction: FlexDirection::Column, row_gap: px(2) }
-                ignore_picking()
-                Children [
-                    title_text("Create a party".to_string(), 15.0, lifthrasir_ui::theme::GOLD),
-                    chrome_text("You are not in a party yet.".to_string(), 11.5, lifthrasir_ui::theme::TEXT_DIM),
-                ]
-            ),
-            (
-                @FeathersButton { @caption: bsn! { button_label("Create a party") } }
-                Node { height: px(32) }
-                on(super::create_dialog::open_create_dialog)
-            ),
+            Node { flex_direction: FlexDirection::Column, row_gap: px(2) }
+            @ignore_picking()
+            Children [
+                @title_text("Create a party".to_string(), 15.0, lifthrasir_ui::theme::GOLD) --
+                @chrome_text("You are not in a party yet.".to_string(), 11.5, lifthrasir_ui::theme::TEXT_DIM)
+            ]
+            --
+            @FeathersButton { @caption: bsn! { @button_label("Create a party") } }
+            Node { height: px(32) }
+            on(super::create_dialog::open_create_dialog)
         ]
     }
 }
@@ -253,38 +243,31 @@ fn header_band(header: RosterHeader) -> impl Scene {
             margin: {UiRect::bottom(px(4))},
         }
         BackgroundColor(lifthrasir_ui::theme::GLASS_2)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Node { flex_direction: FlexDirection::Column, row_gap: px(3) }
-                ignore_picking()
+            Node { flex_direction: FlexDirection::Column, row_gap: px(3) }
+            @ignore_picking()
+            Children [
+                @title_text(header.name, 15.0, lifthrasir_ui::theme::TEXT) --
+                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(4) }
+                @ignore_picking()
                 Children [
-                    title_text(header.name, 15.0, lifthrasir_ui::theme::TEXT),
-                    (
-                        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(4) }
-                        ignore_picking()
-                        Children [
-                            glyph_icon("crown", 12.0, lifthrasir_ui::theme::GOLD),
-                            chrome_text(format!("Leader {}", header.leader_name), 11.5, lifthrasir_ui::theme::TEXT_DIM),
-                        ]
-                    ),
+                    @glyph_icon("crown", 12.0, lifthrasir_ui::theme::GOLD) --
+                    @chrome_text(format!("Leader {}", header.leader_name), 11.5, lifthrasir_ui::theme::TEXT_DIM)
                 ]
-            ),
-            (
-                Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexEnd, row_gap: px(3) }
-                ignore_picking()
+            ]
+            --
+            Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexEnd, row_gap: px(3) }
+            @ignore_picking()
+            Children [
+                @chrome_text(format!("{}/{PARTY_MAX} members", header.members), 11.5, lifthrasir_ui::theme::TEXT) --
+                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(5) }
+                @ignore_picking()
                 Children [
-                    chrome_text(format!("{}/{PARTY_MAX} members", header.members), 11.5, lifthrasir_ui::theme::TEXT),
-                    (
-                        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(5) }
-                        ignore_picking()
-                        Children [
-                            online_dot(true),
-                            chrome_text(format!("{} active", header.active), 11.5, lifthrasir_ui::theme::EMERALD_BRI),
-                        ]
-                    ),
+                    @online_dot(true) --
+                    @chrome_text(format!("{} active", header.active), 11.5, lifthrasir_ui::theme::EMERALD_BRI)
                 ]
-            ),
+            ]
         ]
     }
 }
@@ -310,32 +293,28 @@ fn member_row(row: RosterRow) -> impl Scene {
             border_radius: BorderRadius::all(px(7)),
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
-        {picking}
-        {marker}
+        @{picking}
+        @{marker}
         Children [
-            online_dot(row.online),
-            (
-                Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(2) }
-                ignore_picking()
+            @online_dot(row.online) --
+            Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(2) }
+            @ignore_picking()
+            Children [
+                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(4) }
+                @ignore_picking()
+                Children [ @chrome_text(row.name, 13.0, lifthrasir_ui::theme::TEXT) -- {crown} ]
+                --
+                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(4) }
+                @ignore_picking()
                 Children [
-                    (
-                        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(4) }
-                        ignore_picking()
-                        Children [ chrome_text(row.name, 13.0, lifthrasir_ui::theme::TEXT), {crown} ]
-                    ),
-                    (
-                        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(4) }
-                        ignore_picking()
-                        Children [
-                            chrome_text(format!("Lv {}", row.level), 11.0, lifthrasir_ui::theme::GOLD),
-                            chrome_text(row.job_name, 11.0, lifthrasir_ui::theme::TEXT_DIM),
-                            glyph_icon("pin", 11.0, lifthrasir_ui::theme::TEXT_FAINT),
-                            chrome_text(row.map, 11.0, lifthrasir_ui::theme::TEXT_DIM),
-                        ]
-                    ),
+                    @chrome_text(format!("Lv {}", row.level), 11.0, lifthrasir_ui::theme::GOLD) --
+                    @chrome_text(row.job_name, 11.0, lifthrasir_ui::theme::TEXT_DIM) --
+                    @glyph_icon("pin", 11.0, lifthrasir_ui::theme::TEXT_FAINT) --
+                    @chrome_text(row.map, 11.0, lifthrasir_ui::theme::TEXT_DIM)
                 ]
-            ),
-            resource_cell(row.resources, row.on_screen),
+            ]
+            --
+            @resource_cell(row.resources, row.on_screen)
         ]
     }
 }
@@ -385,8 +364,8 @@ fn resource_cell(resources: Option<MemberResources>, on_screen: bool) -> impl Sc
             align_items: AlignItems::FlexEnd,
             row_gap: px(3),
         }
-        ignore_picking()
-        Children [ {hp}, {sp}, {ap}, {offline}, {chip} ]
+        @ignore_picking()
+        Children [ {hp} -- {sp} -- {ap} -- {offline} -- {chip} ]
     }
 }
 
@@ -401,22 +380,19 @@ fn resource_meter(label: &'static str, value: ResourceValue, color: Color) -> im
             align_items: AlignItems::Center,
             column_gap: px(4),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text(label.to_string(), 9.5, color),
-            (
-                Node { flex_grow: 1.0, height: px(6), border_radius: BorderRadius::all(px(3)) }
-                BackgroundColor(lifthrasir_ui::theme::GLASS_2)
-                ignore_picking()
-                Children [
-                    (
-                        Node { width: percent(percent_full), height: percent(100), border_radius: BorderRadius::all(px(3)) }
-                        BackgroundColor(color)
-                        ignore_picking()
-                    ),
-                ]
-            ),
-            chrome_text(format!("{} / {}", value.current, value.max), 9.5, lifthrasir_ui::theme::TEXT_DIM),
+            @chrome_text(label.to_string(), 9.5, color) --
+            Node { flex_grow: 1.0, height: px(6), border_radius: BorderRadius::all(px(3)) }
+            BackgroundColor(lifthrasir_ui::theme::GLASS_2)
+            @ignore_picking()
+            Children [
+                Node { width: percent(percent_full), height: percent(100), border_radius: BorderRadius::all(px(3)) }
+                BackgroundColor(color)
+                @ignore_picking()
+            ]
+            --
+            @chrome_text(format!("{} / {}", value.current, value.max), 9.5, lifthrasir_ui::theme::TEXT_DIM)
         ]
     }
 }
@@ -450,7 +426,7 @@ fn online_dot(online: bool) -> impl Scene {
     bsn! {
         Node { width: px(8), height: px(8), border_radius: BorderRadius::all(px(4)) }
         BackgroundColor(color)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -472,7 +448,7 @@ fn title_text(text: String, size: f32, color: Color) -> impl Scene {
             font_size: {FontSize::Px(size)},
         }
         TextColor(color)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 

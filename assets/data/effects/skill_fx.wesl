@@ -9,8 +9,10 @@
 // fallback): cross-file `ro://` shader imports are unproven in this codebase, and
 // this keeps the whole dispatch in one place. `shape: vec4<f32>` carries per-kind
 // scalars whose meaning is documented in each fragment function's header.
-#import bevy_pbr::mesh_functions::get_world_from_local
-#import bevy_pbr::mesh_view_bindings::{view, globals}
+import bevy_pbr::render::{
+    mesh_functions::get_world_from_local,
+    mesh_view_bindings::{view, globals},
+};
 
 const TAU: f32 = 6.28318530718;
 
@@ -23,12 +25,12 @@ struct SkillFxParams {
     factor: f32,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: SkillFxParams;
+@group(constants::MATERIAL_BIND_GROUP) @binding(0) var<uniform> material: SkillFxParams;
 // Optional classic GRF effect texture (SkillFxMaterial binding 1/2). Declared
 // for the bind-group layout; fragments start sampling it in a later task. When
 // the material carries no texture, Bevy binds the fallback image here.
-@group(#{MATERIAL_BIND_GROUP}) @binding(1) var fx_texture: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(2) var fx_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(1) var fx_texture: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(2) var fx_sampler: sampler;
 
 struct Vertex {
     @builtin(instance_index) instance_index: u32,

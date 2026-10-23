@@ -161,7 +161,7 @@ fn close_on_escape(
 /// backdrop is not clickable. The card scene stops click propagation, so this only
 /// fires for clicks outside it.
 fn close_on_backdrop_click(
-    _: On<Pointer<Click>>,
+    _: On<PointerClick>,
     root: Query<Entity, With<InfoModalRoot>>,
     mut commands: Commands,
 ) {
@@ -185,7 +185,7 @@ fn info_modal(edge: shell::EdgeGrade, body: impl Scene) -> impl Scene {
         GlobalZIndex({INFO_MODAL_Z})
         Pickable
         on(close_on_backdrop_click)
-        Children [ shell::card(edge, body) ]
+        Children [ @shell::card(edge, body) ]
     }
 }
 
@@ -370,27 +370,27 @@ mod tests {
         assert!(roots(&mut app).is_empty());
     }
 
-    fn click_event(target: Entity, window: Entity) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button: PointerButton::Primary,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: std::time::Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button: PointerButton::Primary,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: std::time::Duration::ZERO,
+            count: 1,
+        }
     }
 
     #[test]

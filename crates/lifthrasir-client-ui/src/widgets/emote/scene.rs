@@ -58,7 +58,7 @@ fn window() -> impl Scene {
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Visibility::Hidden
         Pickable
-        Children [ titlebar(), grid(cells) ]
+        Children [ @titlebar() -- @grid(cells) ]
     }
 }
 
@@ -73,23 +73,20 @@ fn titlebar() -> impl Scene {
         }
         ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text("Emotes")
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(15.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                Node { width: px(22), height: px(22) }
-                on(close_window::<EmotePickerRoot>)
-            ),
+            Text("Emotes")
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(15.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            Node { width: px(22), height: px(22) }
+            on(close_window::<EmotePickerRoot>)
         ]
     }
 }
@@ -106,7 +103,7 @@ where
             row_gap: px(CELL_GAP),
             padding: {UiRect::all(px(GRID_PADDING))},
         }
-        ignore_picking()
+        @ignore_picking()
         Children [ {cells} ]
     }
 }
@@ -116,8 +113,8 @@ where
 /// [`populate_emote_thumbnails`](super) once `EmoteAssets` exists.
 fn emote_cell(id: u32) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { thumbnail() } }
-        template_value(EmoteButton(id))
+        @FeathersButton { @caption: bsn! { @thumbnail() } }
+        EmoteButton(id)
         Node {
             width: px(CELL_SIZE),
             height: px(CELL_SIZE),

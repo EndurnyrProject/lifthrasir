@@ -293,7 +293,7 @@ fn rebuild_body(
 /// with its bag action, a `Cart` cell info-only; empty cells are inert on either
 /// button.
 fn on_cell_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     cells: Query<&CartCell>,
     mut ui: ResMut<CartUi>,
     inventory: Res<Inventory>,
@@ -798,28 +798,28 @@ mod tests {
         assert!(emitted.is_empty());
     }
 
-    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
 
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: std::time::Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: std::time::Duration::ZERO,
+            count: 1,
+        }
     }
 
     fn cell_click_app() -> App {

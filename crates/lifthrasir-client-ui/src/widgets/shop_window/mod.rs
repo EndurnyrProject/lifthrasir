@@ -559,7 +559,7 @@ pub(super) fn on_shop_button(
 /// attached elsewhere; other shop buttons (tab switch, qty steppers, cart
 /// controls) stay untouched.
 pub(super) fn on_shop_row_secondary_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     actions: Query<&ShopButtonAction>,
     session: Option<Res<ShopSession>>,
     inventory: Res<Inventory>,
@@ -1083,28 +1083,28 @@ mod tests {
         app.update();
     }
 
-    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
 
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: std::time::Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: std::time::Duration::ZERO,
+            count: 1,
+        }
     }
 
     fn row_click_app() -> App {
@@ -1216,27 +1216,27 @@ mod tests {
         );
     }
 
-    fn press_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Press> {
+    fn press_event(target: Entity, window: Entity, button: PointerButton) -> PointerPress {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
 
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Press {
-                button,
-                hit: HitData::new(target, 0.0, None, None),
-                count: 1,
-            },
-            target,
-        )
+        PointerPress {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(target, 0.0, None, None),
+            count: 1,
+        }
     }
 
     /// Drives a real press-then-click through `bevy_ui_widgets`' actual `ButtonPlugin`

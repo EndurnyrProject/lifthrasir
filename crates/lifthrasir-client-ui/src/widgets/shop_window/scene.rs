@@ -46,7 +46,7 @@ pub fn window(title: String) -> impl Scene {
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
-        Children [ titlebar(title), body_container::<ShopWindowBody>(UiRect::axes(Val::Px(14.0), Val::Px(12.0))) ]
+        Children [ @titlebar(title) -- @body_container::<ShopWindowBody>(UiRect::axes(Val::Px(14.0), Val::Px(12.0))) ]
     }
 }
 
@@ -65,22 +65,19 @@ fn titlebar(title: String) -> impl Scene {
         Pickable
         on(drag_window::<ShopWindowTitlebar, ShopWindowRoot>)
         Children [
-            glyph_icon("rune", 13.0, lifthrasir_ui::theme::GOLD),
-            (
-                Text(title)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { glyph_icon("close", 11.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                Node { width: px(20), height: px(16) }
-                on(on_shop_close_button)
-            ),
+            @glyph_icon("rune", 13.0, lifthrasir_ui::theme::GOLD) --
+            Text(title)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 11.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            Node { width: px(20), height: px(16) }
+            on(on_shop_close_button)
         ]
     }
 }
@@ -425,18 +422,18 @@ pub fn body(
             flex_direction: FlexDirection::Column,
             row_gap: px(12),
         }
-        ignore_picking()
-        Children [ tab_strip(tab), content_row(tab, rows, detail, cart), footer(footer_data), {overlay} ]
+        @ignore_picking()
+        Children [ @tab_strip(tab) -- @content_row(tab, rows, detail, cart) -- @footer(footer_data) -- {overlay} ]
     }
 }
 
 fn tab_strip(tab: ShopTab) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(6) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            tab_button("Buy", ShopTab::Buy, tab == ShopTab::Buy),
-            tab_button("Sell", ShopTab::Sell, tab == ShopTab::Sell),
+            @tab_button("Buy", ShopTab::Buy, tab == ShopTab::Buy) --
+            @tab_button("Sell", ShopTab::Sell, tab == ShopTab::Sell)
         ]
     }
 }
@@ -448,8 +445,8 @@ fn tab_button(label: &'static str, target: ShopTab, active: bool) -> impl Scene 
         lifthrasir_ui::theme::FIELD
     };
     bsn! {
-        @FeathersButton { @caption: bsn! { chrome_text(label.to_string()) } }
-        template_value(ShopButtonAction::SwitchTab(target))
+        @FeathersButton { @caption: bsn! { @chrome_text(label.to_string()) } }
+        ShopButtonAction::SwitchTab(target)
         Node { flex_grow: 1.0, height: px(26) }
         BackgroundColor(bg)
         on(on_shop_button)
@@ -467,8 +464,8 @@ fn content_row(
             flex_direction: FlexDirection::Row,
             column_gap: px(12),
         }
-        ignore_picking()
-        Children [ grid_pane(tab, rows), side_column(tab, detail, cart) ]
+        @ignore_picking()
+        Children [ @grid_pane(tab, rows) -- @side_column(tab, detail, cart) ]
     }
 }
 
@@ -499,8 +496,8 @@ fn grid_pane(tab: ShopTab, rows: Vec<RowView>) -> impl Scene {
         }
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.22)})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
-        Children [ pane_head(label.to_string(), count), stock_list(rows) ]
+        @ignore_picking()
+        Children [ @pane_head(label.to_string(), count) -- @stock_list(rows) ]
     }
 }
 
@@ -513,27 +510,24 @@ fn pane_head(label: String, count: String) -> impl Scene {
             border: {UiRect { bottom: Val::Px(1.0), ..default() }},
         }
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text(label)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                ignore_picking()
-            ),
-            (Node { flex_grow: 1.0 } ignore_picking()),
-            (
-                Text(count)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(10.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT_DIM})
-                ignore_picking()
-            ),
+            Text(label)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            @ignore_picking()
+            --
+            Node { flex_grow: 1.0 } @ignore_picking()--
+            Text(count)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(10.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT_DIM})
+            @ignore_picking()
         ]
     }
 }
@@ -552,22 +546,21 @@ fn stock_list(rows: Vec<RowView>) -> impl Scene {
             min_height: px(0),
             position_type: PositionType::Relative,
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                #inner
-                Node {
-                    flex_grow: 1.0,
-                    min_height: px(0),
-                    overflow: {Overflow::scroll_y()},
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(5),
-                    padding: {UiRect { left: Val::Px(9.0), right: Val::Px(12.0), top: Val::Px(9.0), bottom: Val::Px(9.0) }},
-                }
-                ScrollArea
-                Pickable
-                Children [ {items}, {empty_msg} ]
-            ),
+            #inner
+            Node {
+                flex_grow: 1.0,
+                min_height: px(0),
+                overflow: {Overflow::scroll_y()},
+                flex_direction: FlexDirection::Column,
+                row_gap: px(5),
+                padding: {UiRect { left: Val::Px(9.0), right: Val::Px(12.0), top: Val::Px(9.0), bottom: Val::Px(9.0) }},
+            }
+            ScrollArea
+            Pickable
+            Children [ {items} -- {empty_msg} ]
+            --
             @FeathersScrollbar { @target: #inner, @orientation: {ControlOrientation::Vertical} }
             Node {
                 position_type: PositionType::Absolute,
@@ -609,25 +602,24 @@ fn stock_row(view: RowView) -> impl Scene {
                     align_items: AlignItems::Center,
                     column_gap: px(10),
                 }
-                ignore_picking()
+                @ignore_picking()
                 Children [
-                    row_well(view.icon),
-                    (
-                        Node {
-                            flex_grow: 1.0,
-                            min_width: px(0),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: px(2),
-                        }
-                        ignore_picking()
-                        Children [ row_name(view.name), {subtitle} ]
-                    ),
-                    {cart},
-                    row_price(price_text),
+                    @row_well(view.icon) --
+                    Node {
+                        flex_grow: 1.0,
+                        min_width: px(0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: px(2),
+                    }
+                    @ignore_picking()
+                    Children [ @row_name(view.name) -- {subtitle} ]
+                    --
+                    {cart} --
+                    @row_price(price_text)
                 ]
             }
         }
-        template_value(action)
+        action
         Node {
             width: percent(100),
             height: px(52),
@@ -656,7 +648,7 @@ fn row_well(icon: Option<String>) -> impl Scene {
         }
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.40)})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [ {inner} ]
     }
 }
@@ -676,7 +668,7 @@ fn cell_icon(path: String) -> impl Scene {
             width: percent(86),
             height: percent(86),
         }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -701,7 +693,7 @@ fn row_name(name: String) -> impl Scene {
             font_size: {FontSize::Px(12.5)},
         }
         ThemeTextColor({TOKEN_TEXT})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -713,7 +705,7 @@ fn row_sub(text: String) -> impl Scene {
             font_size: {FontSize::Px(9.5)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -727,7 +719,7 @@ fn row_price(text: String) -> impl Scene {
         }
         ThemeTextColor({TOKEN_ACCENT})
         Node { flex_shrink: 0.0 }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -749,7 +741,7 @@ fn cart_pill(text: String) -> impl Scene {
             border_radius: BorderRadius::all(px(5)),
         }
         BackgroundColor(lifthrasir_ui::theme::EMERALD)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -759,7 +751,7 @@ fn card_row(cards: Vec<bool>) -> impl Scene {
     let pips: Vec<_> = cards.into_iter().map(card_pip).collect();
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(2) }
-        ignore_picking()
+        @ignore_picking()
         Children [ {pips} ]
     }
 }
@@ -777,7 +769,7 @@ fn card_pip(filled: bool) -> impl Scene {
             font_size: {FontSize::Px(9.0)},
         }
         TextColor(color)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -794,8 +786,8 @@ fn side_column(tab: ShopTab, detail: Option<DetailView>, cart: CartView) -> impl
         }
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.22)})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
-        Children [ detail_panel(tab, detail), cart_panel(cart) ]
+        @ignore_picking()
+        Children [ @detail_panel(tab, detail) -- @cart_panel(cart) ]
     }
 }
 
@@ -817,8 +809,8 @@ fn detail_panel(tab: ShopTab, detail: Option<DetailView>) -> impl Scene {
             border: {UiRect { bottom: Val::Px(1.0), ..default() }},
         }
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
-        Children [ {filled}, {empty_msg} ]
+        @ignore_picking()
+        Children [ {filled} -- {empty_msg} ]
     }
 }
 
@@ -850,53 +842,48 @@ fn detail_content(view: DetailView) -> impl Scene {
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: px(11),
+                align_items: AlignItems::FlexStart,
+            }
+            @ignore_picking()
+            Children [
                 Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: px(11),
-                    align_items: AlignItems::FlexStart,
+                    width: px(50),
+                    height: px(50),
+                    flex_shrink: 0.0,
+                    position_type: PositionType::Relative,
+                    border: px(1),
+                    border_radius: BorderRadius::all(px(9)),
                 }
-                ignore_picking()
-                Children [
-                    (
-                        Node {
-                            width: px(50),
-                            height: px(50),
-                            flex_shrink: 0.0,
-                            position_type: PositionType::Relative,
-                            border: px(1),
-                            border_radius: BorderRadius::all(px(9)),
-                        }
-                        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.42)})
-                        BorderColor::all(lifthrasir_ui::theme::STROKE)
-                        ignore_picking()
-                        Children [ {icon} ]
-                    ),
-                    (
-                        Text({view.name})
-                        TextFont {
-                            font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                            font_size: {FontSize::Px(14.0)},
-                        }
-                        ThemeTextColor({TOKEN_TEXT})
-                        Node { flex_grow: 1.0 }
-                        ignore_picking()
-                    ),
-                ]
-            ),
-            (
-                Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
-                ignore_picking()
-                Children [
-                    stat_box(price_label.to_string(), format!("{}z", view.price)),
-                    stat_box(stock_label.to_string(), stock_value),
-                ]
-            ),
-            {cards},
-            {description},
-            add_row(view.pending_qty, add_label, add_bg),
+                BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.42)})
+                BorderColor::all(lifthrasir_ui::theme::STROKE)
+                @ignore_picking()
+                Children [ {icon} ]
+                --
+                Text({view.name})
+                TextFont {
+                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                    font_size: {FontSize::Px(14.0)},
+                }
+                ThemeTextColor({TOKEN_TEXT})
+                Node { flex_grow: 1.0 }
+                @ignore_picking()
+            ]
+            --
+            Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
+            @ignore_picking()
+            Children [
+                @stat_box(price_label.to_string(), format!("{}z", view.price)) --
+                @stat_box(stock_label.to_string(), stock_value)
+            ]
+            --
+            {cards} --
+            {description} --
+            @add_row(view.pending_qty, add_label, add_bg)
         ]
     }
 }
@@ -916,26 +903,23 @@ fn stat_box(label: String, value: String) -> impl Scene {
         }
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.26)})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text(label)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(8.5)},
-                }
-                ThemeTextColor({TOKEN_TEXT_DIM})
-                ignore_picking()
-            ),
-            (
-                Text(value)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_ACCENT})
-                ignore_picking()
-            ),
+            Text(label)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(8.5)},
+            }
+            ThemeTextColor({TOKEN_TEXT_DIM})
+            @ignore_picking()
+            --
+            Text(value)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            ThemeTextColor({TOKEN_ACCENT})
+            @ignore_picking()
         ]
     }
 }
@@ -949,8 +933,8 @@ fn add_row(qty: u32, label: String, bg: Color) -> impl Scene {
             align_items: AlignItems::Center,
             column_gap: px(8),
         }
-        ignore_picking()
-        Children [ stepper(qty), add_to_cart_button(label, bg) ]
+        @ignore_picking()
+        Children [ @stepper(qty) -- @add_to_cart_button(label, bg) ]
     }
 }
 
@@ -967,19 +951,19 @@ fn stepper(qty: u32) -> impl Scene {
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            stepper_button("minus", ShopButtonAction::PendingDec),
-            stepper_value(qty),
-            stepper_button("plus", ShopButtonAction::PendingInc),
+            @stepper_button("minus", ShopButtonAction::PendingDec) --
+            @stepper_value(qty) --
+            @stepper_button("plus", ShopButtonAction::PendingInc)
         ]
     }
 }
 
 fn stepper_button(icon_name: &'static str, action: ShopButtonAction) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { glyph_icon(icon_name, 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
-        template_value(action)
+        @FeathersButton { @caption: bsn! { @glyph_icon(icon_name, 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
+        action
         Node { width: px(26), height: px(28) }
         on(on_shop_button)
     }
@@ -999,14 +983,14 @@ fn stepper_value(qty: u32) -> impl Scene {
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
         }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 fn add_to_cart_button(label: String, bg: Color) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { chrome_text(label) } }
-        template_value(ShopButtonAction::AddToCart)
+        @FeathersButton { @caption: bsn! { @chrome_text(label) } }
+        ShopButtonAction::AddToCart
         Node {
             flex_grow: 1.0,
             height: px(30),
@@ -1020,26 +1004,23 @@ fn add_to_cart_button(label: String, bg: Color) -> impl Scene {
 fn meta_row(label: String, value: String) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text(label)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(10.5)},
-                }
-                ThemeTextColor({TOKEN_TEXT_DIM})
-                ignore_picking()
-            ),
-            (
-                Text(value)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(11.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                ignore_picking()
-            ),
+            Text(label)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(10.5)},
+            }
+            ThemeTextColor({TOKEN_TEXT_DIM})
+            @ignore_picking()
+            --
+            Text(value)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(11.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            @ignore_picking()
         ]
     }
 }
@@ -1052,7 +1033,7 @@ fn muted_text(text: String) -> impl Scene {
             font_size: {FontSize::Px(11.0)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -1075,42 +1056,40 @@ fn cart_panel(view: CartView) -> impl Scene {
             flex_grow: 1.0,
             min_height: px(0),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            basket_head(header),
-            (
+            @basket_head(header) --
+            Node {
+                flex_grow: 1.0,
+                min_height: px(0),
+                position_type: PositionType::Relative,
+            }
+            @ignore_picking()
+            Children [
+                #basket
                 Node {
                     flex_grow: 1.0,
                     min_height: px(0),
-                    position_type: PositionType::Relative,
+                    overflow: {Overflow::scroll_y()},
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(6),
+                    padding: {UiRect { left: Val::Px(11.0), right: Val::Px(13.0), top: Val::Px(2.0), bottom: Val::Px(4.0) }},
                 }
-                ignore_picking()
-                Children [
-                    (
-                        #basket
-                        Node {
-                            flex_grow: 1.0,
-                            min_height: px(0),
-                            overflow: {Overflow::scroll_y()},
-                            flex_direction: FlexDirection::Column,
-                            row_gap: px(6),
-                            padding: {UiRect { left: Val::Px(11.0), right: Val::Px(13.0), top: Val::Px(2.0), bottom: Val::Px(4.0) }},
-                        }
-                        ScrollArea
-                        Pickable
-                        Children [ {rows}, {empty_msg} ]
-                    ),
-                    @FeathersScrollbar { @target: #basket, @orientation: {ControlOrientation::Vertical} }
-                    Node {
-                        position_type: PositionType::Absolute,
-                        right: px(2),
-                        top: px(2),
-                        bottom: px(2),
-                        width: px(5),
-                    }
-                ]
-            ),
-            subtotal_row(subtotal_label, total),
+                ScrollArea
+                Pickable
+                Children [ {rows} -- {empty_msg} ]
+                --
+                @FeathersScrollbar { @target: #basket, @orientation: {ControlOrientation::Vertical} }
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: px(2),
+                    top: px(2),
+                    bottom: px(2),
+                    width: px(5),
+                }
+            ]
+            --
+            @subtotal_row(subtotal_label, total)
         ]
     }
 }
@@ -1124,7 +1103,7 @@ fn basket_head(text: String) -> impl Scene {
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
         Node { padding: {UiRect::axes(px(13), px(8))} }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -1138,26 +1117,23 @@ fn subtotal_row(label: String, total: u64) -> impl Scene {
             border: {UiRect { top: Val::Px(1.0), ..default() }},
         }
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text(label)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(9.5)},
-                }
-                ThemeTextColor({TOKEN_TEXT_DIM})
-                ignore_picking()
-            ),
-            (
-                Text({format!("{total}z")})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(14.0)},
-                }
-                ThemeTextColor({TOKEN_ACCENT})
-                ignore_picking()
-            ),
+            Text(label)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(9.5)},
+            }
+            ThemeTextColor({TOKEN_TEXT_DIM})
+            @ignore_picking()
+            --
+            Text({format!("{total}z")})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(14.0)},
+            }
+            ThemeTextColor({TOKEN_ACCENT})
+            @ignore_picking()
         ]
     }
 }
@@ -1176,47 +1152,43 @@ fn cart_line(view: CartLineView) -> impl Scene {
         }
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.26)})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text({view.name})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(11.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
-            small_icon_button("minus", ShopButtonAction::DecQty(key)),
-            (
-                Text({view.qty.to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(11.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                ignore_picking()
-            ),
-            small_icon_button("plus", ShopButtonAction::IncQty(key)),
-            small_icon_button("trash", ShopButtonAction::RemoveLine(key)),
-            (
-                Text({format!("{total}z")})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(11.0)},
-                }
-                ThemeTextColor({TOKEN_ACCENT})
-                ignore_picking()
-            ),
+            Text({view.name})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(11.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @small_icon_button("minus", ShopButtonAction::DecQty(key)) --
+            Text({view.qty.to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(11.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            @ignore_picking()
+            --
+            @small_icon_button("plus", ShopButtonAction::IncQty(key)) --
+            @small_icon_button("trash", ShopButtonAction::RemoveLine(key)) --
+            Text({format!("{total}z")})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(11.0)},
+            }
+            ThemeTextColor({TOKEN_ACCENT})
+            @ignore_picking()
         ]
     }
 }
 
 fn small_icon_button(icon_name: &'static str, action: ShopButtonAction) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { glyph_icon(icon_name, 10.0, lifthrasir_ui::theme::TEXT_DIM) } }
-        template_value(action)
+        @FeathersButton { @caption: bsn! { @glyph_icon(icon_name, 10.0, lifthrasir_ui::theme::TEXT_DIM) } }
+        action
         Node { width: px(18), height: px(16) }
         on(on_shop_button)
     }
@@ -1235,13 +1207,13 @@ fn footer(view: FooterView) -> impl Scene {
             border: {UiRect { top: Val::Px(1.0), ..default() }},
         }
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        ignore_picking()
+        @ignore_picking()
         Children [
-            zeny_display(view.zeny),
-            (Node { flex_grow: 1.0 } ignore_picking()),
-            {warn},
-            {total},
-            cta_button(view.buy, view.cta_label, view.cta_enabled),
+            @zeny_display(view.zeny) --
+            Node { flex_grow: 1.0 } @ignore_picking()--
+            {warn} --
+            {total} --
+            @cta_button(view.buy, view.cta_label, view.cta_enabled)
         ]
     }
 }
@@ -1255,33 +1227,28 @@ fn zeny_display(zeny: u32) -> impl Scene {
             align_items: AlignItems::Center,
             column_gap: px(8),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            glyph_icon("coin", 16.0, lifthrasir_ui::theme::GOLD),
-            (
-                Node { flex_direction: FlexDirection::Column, row_gap: px(1) }
-                ignore_picking()
-                Children [
-                    (
-                        Text({"YOUR ZENY".to_string()})
-                        TextFont {
-                            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                            font_size: {FontSize::Px(9.0)},
-                        }
-                        ThemeTextColor({TOKEN_TEXT_DIM})
-                        ignore_picking()
-                    ),
-                    (
-                        Text({format!("{zeny}z")})
-                        TextFont {
-                            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                            font_size: {FontSize::Px(13.0)},
-                        }
-                        TextColor(lifthrasir_ui::theme::GOLD)
-                        ignore_picking()
-                    ),
-                ]
-            ),
+            @glyph_icon("coin", 16.0, lifthrasir_ui::theme::GOLD) --
+            Node { flex_direction: FlexDirection::Column, row_gap: px(1) }
+            @ignore_picking()
+            Children [
+                Text({"YOUR ZENY".to_string()})
+                TextFont {
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                    font_size: {FontSize::Px(9.0)},
+                }
+                ThemeTextColor({TOKEN_TEXT_DIM})
+                @ignore_picking()
+                --
+                Text({format!("{zeny}z")})
+                TextFont {
+                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                    font_size: {FontSize::Px(13.0)},
+                }
+                TextColor(lifthrasir_ui::theme::GOLD)
+                @ignore_picking()
+            ]
         ]
     }
 }
@@ -1293,18 +1260,16 @@ fn warning_text() -> impl Scene {
             align_items: AlignItems::Center,
             column_gap: px(4),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            glyph_icon("warn", 12.0, lifthrasir_ui::theme::BAD),
-            (
-                Text({"Not enough zeny".to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(12.0)},
-                }
-                TextColor(lifthrasir_ui::theme::BAD)
-                ignore_picking()
-            ),
+            @glyph_icon("warn", 12.0, lifthrasir_ui::theme::BAD) --
+            Text({"Not enough zeny".to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(12.0)},
+            }
+            TextColor(lifthrasir_ui::theme::BAD)
+            @ignore_picking()
         ]
     }
 }
@@ -1325,26 +1290,23 @@ fn total_text(buy: bool, total: u64) -> impl Scene {
     };
     bsn! {
         Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexEnd }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text({label.to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(10.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT_DIM})
-                ignore_picking()
-            ),
-            (
-                Text({format!("{sign}{total}z")})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                TextColor(color)
-                ignore_picking()
-            ),
+            Text({label.to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(10.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT_DIM})
+            @ignore_picking()
+            --
+            Text({format!("{sign}{total}z")})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            TextColor(color)
+            @ignore_picking()
         ]
     }
 }
@@ -1360,8 +1322,8 @@ fn cta_button(buy: bool, label: String, enabled: bool) -> impl Scene {
         lifthrasir_ui::theme::FIELD
     };
     bsn! {
-        @FeathersButton { @caption: bsn! { chrome_text(label) } }
-        template_value(ShopButtonAction::OpenConfirm)
+        @FeathersButton { @caption: bsn! { @chrome_text(label) } }
+        ShopButtonAction::OpenConfirm
         Node { height: px(30), padding: {UiRect::horizontal(px(16))} }
         BackgroundColor(bg)
         on(on_shop_button)
@@ -1376,7 +1338,7 @@ fn chrome_text(text: String) -> impl Scene {
             font_size: {FontSize::Px(11.0)},
         }
         ThemeTextColor({TOKEN_TEXT_DIM})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -1403,7 +1365,7 @@ fn confirm_overlay(buy: bool, lines: Vec<CartLineView>, total: u64) -> impl Scen
         }
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.55)})
         Pickable
-        Children [ confirm_card(title.to_string(), lines, total, buy) ]
+        Children [ @confirm_card(title.to_string(), lines, total, buy) ]
     }
 }
 
@@ -1435,22 +1397,20 @@ fn confirm_card(title: String, lines: Vec<CartLineView>, total: u64, buy: bool) 
         BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
         Pickable
         Children [
-            (
-                Text(title)
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(15.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                ignore_picking()
-            ),
-            (
-                Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
-                ignore_picking()
-                Children [ {rows} ]
-            ),
-            meta_row(total_label.to_string(), format!("{sign}{total}z")),
-            confirm_actions(confirm_label.to_string(), confirm_bg),
+            Text(title)
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(15.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            @ignore_picking()
+            --
+            Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
+            @ignore_picking()
+            Children [ {rows} ]
+            --
+            @meta_row(total_label.to_string(), format!("{sign}{total}z")) --
+            @confirm_actions(confirm_label.to_string(), confirm_bg)
         ]
     }
 }
@@ -1459,26 +1419,23 @@ fn confirm_line(view: CartLineView) -> impl Scene {
     let total = view.unit_price as u64 * view.qty as u64;
     bsn! {
         Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Text({format!("{} x{}", view.name, view.qty)})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(11.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                ignore_picking()
-            ),
-            (
-                Text({format!("{total}z")})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(11.0)},
-                }
-                ThemeTextColor({TOKEN_ACCENT})
-                ignore_picking()
-            ),
+            Text({format!("{} x{}", view.name, view.qty)})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(11.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            @ignore_picking()
+            --
+            Text({format!("{total}z")})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(11.0)},
+            }
+            ThemeTextColor({TOKEN_ACCENT})
+            @ignore_picking()
         ]
     }
 }
@@ -1486,21 +1443,18 @@ fn confirm_line(view: CartLineView) -> impl Scene {
 fn confirm_actions(confirm_label: String, confirm_bg: Color) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                @FeathersButton { @caption: bsn! { chrome_text("Cancel".to_string()) } }
-                template_value(ShopButtonAction::CancelConfirm)
-                Node { flex_grow: 1.0, height: px(28) }
-                on(on_shop_button)
-            ),
-            (
-                @FeathersButton { @caption: bsn! { chrome_text(confirm_label) } }
-                template_value(ShopButtonAction::ConfirmTrade)
-                Node { flex_grow: 1.0, height: px(28) }
-                BackgroundColor(confirm_bg)
-                on(on_shop_button)
-            ),
+            @FeathersButton { @caption: bsn! { @chrome_text("Cancel".to_string()) } }
+            ShopButtonAction::CancelConfirm
+            Node { flex_grow: 1.0, height: px(28) }
+            on(on_shop_button)
+            --
+            @FeathersButton { @caption: bsn! { @chrome_text(confirm_label) } }
+            ShopButtonAction::ConfirmTrade
+            Node { flex_grow: 1.0, height: px(28) }
+            BackgroundColor(confirm_bg)
+            on(on_shop_button)
         ]
     }
 }

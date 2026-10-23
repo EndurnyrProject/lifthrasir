@@ -66,13 +66,13 @@ fn window() -> impl Scene {
         Visibility::Hidden
         Pickable
         Children [
-            titlebar::<CartWindowTitlebar, CartWindowRoot>("cart", "Pushcart"),
-            body_container::<CartWindowBody>(UiRect {
+            @titlebar::<CartWindowTitlebar, CartWindowRoot>("cart", "Pushcart") --
+            @body_container::<CartWindowBody>(UiRect {
                 left: Val::Px(14.0),
                 right: Val::Px(14.0),
                 top: Val::Px(12.0),
                 bottom: Val::Px(14.0),
-            }),
+            })
         ]
     }
 }
@@ -97,8 +97,8 @@ pub fn body(
         .map(|status| EntityScene(mounted_body(inventory, cart, cart_ui, status, item_db)));
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(12) }
-        ignore_picking()
-        Children [ {prompt}, {mounted_view} ]
+        @ignore_picking()
+        Children [ {prompt} -- {mounted_view} ]
     }
 }
 
@@ -120,23 +120,22 @@ fn mount_prompt(error: Option<CartMountRejection>) -> impl Scene {
             row_gap: px(10),
             padding: {UiRect::vertical(px(10))},
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("You have no pushcart mounted.".to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM),
-            (
-                @FeathersButton { @caption: bsn! { chrome_text("Mount Pushcart".to_string(), 13.0, lifthrasir_ui::theme::TEXT) } }
-                template_value(MountToggleButton { mount: true })
-                Node {
-                    height: px(32),
-                    padding: {UiRect::horizontal(px(18))},
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    border_radius: BorderRadius::all(px(7)),
-                }
-                BackgroundColor(lifthrasir_ui::theme::EMERALD_INK)
-                on(on_mount_toggle)
-            ),
-            {hint},
+            @chrome_text("You have no pushcart mounted.".to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) --
+            @FeathersButton { @caption: bsn! { @chrome_text("Mount Pushcart".to_string(), 13.0, lifthrasir_ui::theme::TEXT) } }
+            MountToggleButton { mount: true }
+            Node {
+                height: px(32),
+                padding: {UiRect::horizontal(px(18))},
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border_radius: BorderRadius::all(px(7)),
+            }
+            BackgroundColor(lifthrasir_ui::theme::EMERALD_INK)
+            on(on_mount_toggle)
+            --
+            {hint}
         ]
     }
 }
@@ -310,13 +309,13 @@ fn mounted_body(
     });
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(12) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            panes_row(bag, cart_items),
-            detail_strip(detail, qty, can_move),
-            footer(footer_data),
-            {hint},
-            unmount_button(cart_empty),
+            @panes_row(bag, cart_items) --
+            @detail_strip(detail, qty, can_move) --
+            @footer(footer_data) --
+            {hint} --
+            @unmount_button(cart_empty)
         ]
     }
 }
@@ -328,8 +327,8 @@ fn unmount_button(cart_empty: bool) -> impl Scene {
         lifthrasir_ui::theme::TEXT_FAINT
     };
     bsn! {
-        @FeathersButton { @caption: bsn! { chrome_text("Unmount".to_string(), 12.0, label_color) } }
-        template_value(MountToggleButton { mount: false })
+        @FeathersButton { @caption: bsn! { @chrome_text("Unmount".to_string(), 12.0, label_color) } }
+        MountToggleButton { mount: false }
         Node {
             height: px(30),
             align_self: AlignSelf::FlexStart,
@@ -349,11 +348,11 @@ fn panes_row(bag: Vec<CellView>, cart: Vec<CellView>) -> impl Scene {
     let cart_count = cart.len();
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(10), align_items: AlignItems::Stretch }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            pane("Bag".to_string(), bag_count.to_string(), bag),
-            mover_column(),
-            pane("Cart".to_string(), format!("{cart_count} / {CART_MAX_SLOTS}"), cart),
+            @pane("Bag".to_string(), bag_count.to_string(), bag) --
+            @mover_column() --
+            @pane("Cart".to_string(), format!("{cart_count} / {CART_MAX_SLOTS}"), cart)
         ]
     }
 }
@@ -373,47 +372,44 @@ fn pane(title: String, subtitle: String, cells: Vec<CellView>) -> impl Scene {
             flex_direction: FlexDirection::Column,
             row_gap: px(6),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            pane_head(title, subtitle),
-            (
+            @pane_head(title, subtitle) --
+            Node {
+                height: px(PANE_HEIGHT),
+                position_type: PositionType::Relative,
+                border: px(1),
+                border_radius: BorderRadius::all(px(8)),
+            }
+            BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.18)})
+            BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
+            @ignore_picking()
+            Children [
+                #grid
                 Node {
-                    height: px(PANE_HEIGHT),
-                    position_type: PositionType::Relative,
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(8)),
+                    position_type: PositionType::Absolute,
+                    left: px(0), top: px(0), right: px(0), bottom: px(0),
+                    overflow: {Overflow::scroll_y()},
+                    flex_direction: FlexDirection::Row,
+                    flex_wrap: FlexWrap::Wrap,
+                    align_content: AlignContent::FlexStart,
+                    column_gap: px(6),
+                    row_gap: px(6),
+                    padding: {UiRect { left: Val::Px(8.0), right: Val::Px(13.0), top: Val::Px(8.0), bottom: Val::Px(8.0) }},
                 }
-                BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.18)})
-                BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-                ignore_picking()
-                Children [
-                    (
-                        #grid
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: px(0), top: px(0), right: px(0), bottom: px(0),
-                            overflow: {Overflow::scroll_y()},
-                            flex_direction: FlexDirection::Row,
-                            flex_wrap: FlexWrap::Wrap,
-                            align_content: AlignContent::FlexStart,
-                            column_gap: px(6),
-                            row_gap: px(6),
-                            padding: {UiRect { left: Val::Px(8.0), right: Val::Px(13.0), top: Val::Px(8.0), bottom: Val::Px(8.0) }},
-                        }
-                        ScrollArea
-                        Pickable
-                        Children [ {items}, {empty_msg} ]
-                    ),
-                    @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
-                    Node {
-                        position_type: PositionType::Absolute,
-                        right: px(3),
-                        top: px(4),
-                        bottom: px(4),
-                        width: px(6),
-                    }
-                ]
-            ),
+                ScrollArea
+                Pickable
+                Children [ {items} -- {empty_msg} ]
+                --
+                @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: px(3),
+                    top: px(4),
+                    bottom: px(4),
+                    width: px(6),
+                }
+            ]
         ]
     }
 }
@@ -425,10 +421,10 @@ fn pane_head(title: String, subtitle: String) -> impl Scene {
             align_items: AlignItems::Center,
             justify_content: JustifyContent::SpaceBetween,
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text(title, 12.0, lifthrasir_ui::theme::TEXT),
-            chrome_text(subtitle, 10.0, lifthrasir_ui::theme::TEXT_FAINT),
+            @chrome_text(title, 12.0, lifthrasir_ui::theme::TEXT) --
+            @chrome_text(subtitle, 10.0, lifthrasir_ui::theme::TEXT_FAINT)
         ]
     }
 }
@@ -446,10 +442,10 @@ fn mover_column() -> impl Scene {
             width: px(24),
             flex_shrink: 0.0,
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            glyph_icon("chevr", 16.0, lifthrasir_ui::theme::TEXT_DIM),
-            glyph_icon("chevl", 16.0, lifthrasir_ui::theme::TEXT_DIM),
+            @glyph_icon("chevr", 16.0, lifthrasir_ui::theme::TEXT_DIM) --
+            @glyph_icon("chevl", 16.0, lifthrasir_ui::theme::TEXT_DIM)
         ]
     }
 }
@@ -472,7 +468,7 @@ fn cell(view: CellView) -> impl Scene {
     let amount = (view.amount > 1).then(|| EntityScene(amount_badge(view.amount.to_string())));
     let refine = (view.refine > 0).then(|| EntityScene(refine_badge(format!("+{}", view.refine))));
     bsn! {
-        template_value(CartCell { side: view.side, index: view.index })
+        CartCell { side: {view.side}, index: {view.index}}
         Node {
             width: px(CELL_SIZE),
             height: px(CELL_SIZE),
@@ -484,7 +480,7 @@ fn cell(view: CellView) -> impl Scene {
         BorderColor::all(border)
         Pickable
         on(on_cell_click)
-        Children [ {icon}, {amount}, {refine} ]
+        Children [ {icon} -- {amount} -- {refine} ]
     }
 }
 
@@ -498,7 +494,7 @@ fn cell_icon(path: String) -> impl Scene {
             width: percent(100),
             height: percent(100),
         }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -512,7 +508,7 @@ fn amount_badge(text: String) -> impl Scene {
         }
         TextColor(lifthrasir_ui::theme::TEXT)
         Node { position_type: PositionType::Absolute, right: px(1), bottom: px(0) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -526,7 +522,7 @@ fn refine_badge(text: String) -> impl Scene {
         }
         TextColor(lifthrasir_ui::theme::GOLD)
         Node { position_type: PositionType::Absolute, left: px(1), top: px(0) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -562,29 +558,27 @@ fn detail_strip(detail: Option<DetailView>, qty: u16, can_move: bool) -> impl Sc
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Node {
-                    width: px(40),
-                    height: px(40),
-                    flex_shrink: 0.0,
-                    position_type: PositionType::Relative,
-                    border: px(1),
-                    border_radius: BorderRadius::all(px(6)),
-                }
-                BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.40)})
-                BorderColor::all(lifthrasir_ui::theme::STROKE)
-                ignore_picking()
-                Children [ {icon} ]
-            ),
-            (
-                Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Column, row_gap: px(2) }
-                ignore_picking()
-                Children [ chrome_text(name, 12.5, name_color), {type_label} ]
-            ),
-            stepper(qty),
-            move_button(can_move),
+            Node {
+                width: px(40),
+                height: px(40),
+                flex_shrink: 0.0,
+                position_type: PositionType::Relative,
+                border: px(1),
+                border_radius: BorderRadius::all(px(6)),
+            }
+            BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.40)})
+            BorderColor::all(lifthrasir_ui::theme::STROKE)
+            @ignore_picking()
+            Children [ {icon} ]
+            --
+            Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Column, row_gap: px(2) }
+            @ignore_picking()
+            Children [ @chrome_text(name, 12.5, name_color) -- {type_label} ]
+            --
+            @stepper(qty) --
+            @move_button(can_move)
         ]
     }
 }
@@ -602,19 +596,19 @@ fn stepper(qty: u16) -> impl Scene {
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            stepper_button("minus", false),
-            stepper_value(qty),
-            stepper_button("plus", true),
+            @stepper_button("minus", false) --
+            @stepper_value(qty) --
+            @stepper_button("plus", true)
         ]
     }
 }
 
 fn stepper_button(icon_name: &'static str, inc: bool) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { glyph_icon(icon_name, 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
-        template_value(QtyButton { inc })
+        @FeathersButton { @caption: bsn! { @glyph_icon(icon_name, 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
+        QtyButton { inc }
         Node { width: px(26), height: px(28) }
         on(on_qty_step)
     }
@@ -634,7 +628,7 @@ fn stepper_value(qty: u16) -> impl Scene {
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
         }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -648,7 +642,7 @@ fn move_button(enabled: bool) -> impl Scene {
         lifthrasir_ui::theme::FIELD
     };
     bsn! {
-        @FeathersButton { @caption: bsn! { chrome_text("Move".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
+        @FeathersButton { @caption: bsn! { @chrome_text("Move".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
         Node {
             height: px(30),
             flex_shrink: 0.0,
@@ -674,12 +668,12 @@ fn footer(view: FooterView) -> impl Scene {
             border: {UiRect { top: Val::Px(1.0), ..default() }},
         }
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        ignore_picking()
+        @ignore_picking()
         Children [
-            meter("Weight".to_string(), view.body_weight, view.body_max, lifthrasir_ui::theme::EMERALD),
-            meter("Cart".to_string(), view.cart_weight, view.cart_max, lifthrasir_ui::theme::GOLD),
-            slot_display(view.cart_slots),
-            zeny_display(view.zeny),
+            @meter("Weight".to_string(), view.body_weight, view.body_max, lifthrasir_ui::theme::EMERALD) --
+            @meter("Cart".to_string(), view.cart_weight, view.cart_max, lifthrasir_ui::theme::GOLD) --
+            @slot_display(view.cart_slots) --
+            @zeny_display(view.zeny)
         ]
     }
 }
@@ -695,28 +689,23 @@ fn meter(label: String, current: u32, max: u32, fill: Color) -> impl Scene {
     let value = format!("{current} / {max}");
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(3), flex_grow: 1.0, flex_basis: px(0), min_width: px(0) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-                ignore_picking()
-                Children [
-                    chrome_text(label, 9.5, lifthrasir_ui::theme::TEXT_DIM),
-                    chrome_text(value, 9.5, lifthrasir_ui::theme::TEXT),
-                ]
-            ),
-            (
-                Node { height: px(6), border_radius: BorderRadius::all(px(3)) }
-                BackgroundColor(lifthrasir_ui::theme::FIELD)
-                ignore_picking()
-                Children [
-                    (
-                        Node { width: {Val::Percent(ratio * 100.0)}, height: percent(100), border_radius: BorderRadius::all(px(3)) }
-                        BackgroundColor(fill)
-                        ignore_picking()
-                    ),
-                ]
-            ),
+            Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
+            @ignore_picking()
+            Children [
+                @chrome_text(label, 9.5, lifthrasir_ui::theme::TEXT_DIM) --
+                @chrome_text(value, 9.5, lifthrasir_ui::theme::TEXT)
+            ]
+            --
+            Node { height: px(6), border_radius: BorderRadius::all(px(3)) }
+            BackgroundColor(lifthrasir_ui::theme::FIELD)
+            @ignore_picking()
+            Children [
+                Node { width: {Val::Percent(ratio * 100.0)}, height: percent(100), border_radius: BorderRadius::all(px(3)) }
+                BackgroundColor(fill)
+                @ignore_picking()
+            ]
         ]
     }
 }
@@ -725,10 +714,10 @@ fn meter(label: String, current: u32, max: u32, fill: Color) -> impl Scene {
 fn slot_display(used: usize) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(1), align_items: AlignItems::FlexEnd }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("SLOTS".to_string(), 9.0, lifthrasir_ui::theme::TEXT_DIM),
-            chrome_text(format!("{used} / {CART_MAX_SLOTS}"), 12.0, lifthrasir_ui::theme::TEXT),
+            @chrome_text("SLOTS".to_string(), 9.0, lifthrasir_ui::theme::TEXT_DIM) --
+            @chrome_text(format!("{used} / {CART_MAX_SLOTS}"), 12.0, lifthrasir_ui::theme::TEXT)
         ]
     }
 }
@@ -737,18 +726,16 @@ fn slot_display(used: usize) -> impl Scene {
 fn zeny_display(zeny: u32) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(6) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            glyph_icon("coin", 14.0, lifthrasir_ui::theme::GOLD),
-            (
-                Text({format!("{zeny}z")})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(12.0)},
-                }
-                TextColor(lifthrasir_ui::theme::GOLD)
-                ignore_picking()
-            ),
+            @glyph_icon("coin", 14.0, lifthrasir_ui::theme::GOLD) --
+            Text({format!("{zeny}z")})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(12.0)},
+            }
+            TextColor(lifthrasir_ui::theme::GOLD)
+            @ignore_picking()
         ]
     }
 }
@@ -761,7 +748,7 @@ fn muted_text(text: String) -> impl Scene {
             font_size: {FontSize::Px(12.0)},
         }
         TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 

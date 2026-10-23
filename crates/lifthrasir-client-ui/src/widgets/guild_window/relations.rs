@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{EditableText, FontSize, FontSourceTemplate};
-use bevy::ui_widgets::Activate;
+use bevy::ui_widgets::{Activate, TextInput};
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::ThemedText;
 use lifthrasir_client::domain::guild::GuildState;
@@ -292,7 +292,7 @@ pub(crate) fn relation_controls() -> impl Scene {
         Node { width: percent(100), display: Display::None, flex_direction: FlexDirection::Column, row_gap: px(8) }
         Visibility::Hidden
         Pickable
-        Children [ alliance_request_control(), antagonist_declaration_control() ]
+        Children [ @alliance_request_control() -- @antagonist_declaration_control() ]
     }
 }
 
@@ -303,32 +303,28 @@ fn alliance_request_control() -> impl Scene {
     };
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(4) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("Alliance request".to_string(), 11.0, lifthrasir_ui::theme::GOLD),
-            chrome_text("Online guild master's character name".to_string(), 9.5, lifthrasir_ui::theme::TEXT_DIM),
-            (
-                Node { width: percent(100), flex_direction: FlexDirection::Row, column_gap: px(8), align_items: AlignItems::Center }
+            @chrome_text("Alliance request".to_string(), 11.0, lifthrasir_ui::theme::GOLD) --
+            @chrome_text("Online guild master's character name".to_string(), 9.5, lifthrasir_ui::theme::TEXT_DIM) --
+            Node { width: percent(100), flex_direction: FlexDirection::Row, column_gap: px(8), align_items: AlignItems::Center }
+            Pickable
+            Children [
+                GuildAllianceNameField
                 Pickable
-                Children [
-                    (
-                        GuildAllianceNameField
-                        Pickable
-                        template_value(editable)
-                        TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.0)} }
-                        TextColor(lifthrasir_ui::theme::TEXT)
-                        BackgroundColor(lifthrasir_ui::theme::FIELD)
-                        Node { flex_grow: 1.0, height: px(34), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(8)) }
-                        BorderColor::all(lifthrasir_ui::theme::STROKE)
-                    ),
-                    (
-                        GuildMutationControl
-                        @FeathersButton { @caption: bsn! { (Text("Request Alliance") ThemedText) }, @variant: ButtonVariant::Primary }
-                        Node { width: px(155), height: px(34) }
-                        on(on_request_alliance)
-                    ),
-                ]
-            ),
+                editable
+                TextInput
+                TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.0)} }
+                TextColor(lifthrasir_ui::theme::TEXT)
+                BackgroundColor(lifthrasir_ui::theme::FIELD)
+                Node { flex_grow: 1.0, height: px(34), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(8)) }
+                BorderColor::all(lifthrasir_ui::theme::STROKE)
+                --
+                GuildMutationControl
+                @FeathersButton { @caption: bsn! { Text("Request Alliance") ThemedText }, @variant: ButtonVariant::Primary }
+                Node { width: px(155), height: px(34) }
+                on(on_request_alliance)
+            ]
         ]
     }
 }
@@ -340,32 +336,28 @@ fn antagonist_declaration_control() -> impl Scene {
     };
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(4) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("Declare antagonist".to_string(), 11.0, lifthrasir_ui::theme::GOLD),
-            chrome_text("Character name from the target guild".to_string(), 9.5, lifthrasir_ui::theme::TEXT_DIM),
-            (
-                Node { width: percent(100), flex_direction: FlexDirection::Row, column_gap: px(8), align_items: AlignItems::Center }
+            @chrome_text("Declare antagonist".to_string(), 11.0, lifthrasir_ui::theme::GOLD) --
+            @chrome_text("Character name from the target guild".to_string(), 9.5, lifthrasir_ui::theme::TEXT_DIM) --
+            Node { width: percent(100), flex_direction: FlexDirection::Row, column_gap: px(8), align_items: AlignItems::Center }
+            Pickable
+            Children [
+                GuildAntagonistNameField
                 Pickable
-                Children [
-                    (
-                        GuildAntagonistNameField
-                        Pickable
-                        template_value(editable)
-                        TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.0)} }
-                        TextColor(lifthrasir_ui::theme::TEXT)
-                        BackgroundColor(lifthrasir_ui::theme::FIELD)
-                        Node { flex_grow: 1.0, height: px(34), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(8)) }
-                        BorderColor::all(lifthrasir_ui::theme::STROKE)
-                    ),
-                    (
-                        GuildMutationControl
-                        @FeathersButton { @caption: bsn! { (Text("Declare Antagonist") ThemedText) }, @variant: ButtonVariant::Primary }
-                        Node { width: px(155), height: px(34) }
-                        on(on_declare_antagonist)
-                    ),
-                ]
-            ),
+                editable
+                TextInput
+                TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(12.0)} }
+                TextColor(lifthrasir_ui::theme::TEXT)
+                BackgroundColor(lifthrasir_ui::theme::FIELD)
+                Node { flex_grow: 1.0, height: px(34), padding: {UiRect::axes(px(9), px(7))}, border: px(1), border_radius: BorderRadius::all(px(8)) }
+                BorderColor::all(lifthrasir_ui::theme::STROKE)
+                --
+                GuildMutationControl
+                @FeathersButton { @caption: bsn! { Text("Declare Antagonist") ThemedText }, @variant: ButtonVariant::Primary }
+                Node { width: px(155), height: px(34) }
+                on(on_declare_antagonist)
+            ]
         ]
     }
 }
@@ -398,11 +390,11 @@ pub(crate) fn relation_lists(relations: Vec<GuildRelationInfo>, can_manage: bool
     });
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(10) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            relation_section(format!("Allies ({})", allies.len()), allies),
-            relation_section(format!("Antagonists ({})", antagonists.len()), antagonists),
-            {unsupported_section},
+            @relation_section(format!("Allies ({})", allies.len()), allies) --
+            @relation_section(format!("Antagonists ({})", antagonists.len()), antagonists) --
+            {unsupported_section}
         ]
     }
 }
@@ -417,11 +409,11 @@ fn relation_section<S: Scene>(title: String, rows: Vec<S>) -> impl Scene {
     });
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(5) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text(title, 12.5, lifthrasir_ui::theme::TEXT),
-            {empty},
-            (Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(5) } ignore_picking() Children [ {rows} ]),
+            @chrome_text(title, 12.5, lifthrasir_ui::theme::TEXT) --
+            {empty} --
+            Node { width: percent(100), flex_direction: FlexDirection::Column, row_gap: px(5) } @ignore_picking() Children [ {rows} ]
         ]
     }
 }
@@ -440,17 +432,15 @@ fn ally_row(relation: GuildRelationInfo, can_manage: bool) -> impl Scene {
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Row, align_items: AlignItems::Center, padding: {UiRect::axes(px(10), px(7))}, border_radius: BorderRadius::all(px(8)) }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (Node { flex_grow: 1.0 } chrome_text(relation.name.clone(), 12.0, lifthrasir_ui::theme::TEXT)),
-            (
-                template_value(GuildAllianceBreakButton { guild_id: relation.guild_id, guild_name: relation.name })
-                GuildMutationControl
-                template_value(visibility)
-                @FeathersButton { @caption: bsn! { (Text("Break Alliance") ThemedText) }, @variant: ButtonVariant::Normal }
-                Node { width: px(125), height: px(30), display: {display} }
-                on(on_break_alliance)
-            ),
+            Node { flex_grow: 1.0 } @chrome_text(relation.name.clone(), 12.0, lifthrasir_ui::theme::TEXT)--
+            GuildAllianceBreakButton { guild_id: {relation.guild_id}, guild_name: {relation.name.clone()}}
+            GuildMutationControl
+            visibility
+            @FeathersButton { @caption: bsn! { Text("Break Alliance") ThemedText }, @variant: ButtonVariant::Normal }
+            Node { width: px(125), height: px(30), display: {display} }
+            on(on_break_alliance)
         ]
     }
 }
@@ -469,17 +459,15 @@ fn antagonist_row(relation: GuildRelationInfo, can_manage: bool) -> impl Scene {
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Row, align_items: AlignItems::Center, padding: {UiRect::axes(px(10), px(7))}, border_radius: BorderRadius::all(px(8)) }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (Node { flex_grow: 1.0 } chrome_text(relation.name, 12.0, lifthrasir_ui::theme::TEXT)),
-            (
-                template_value(GuildAntagonistRemoveButton { guild_id: relation.guild_id })
-                GuildMutationControl
-                template_value(visibility)
-                @FeathersButton { @caption: bsn! { (Text("Remove") ThemedText) }, @variant: ButtonVariant::Normal }
-                Node { width: px(90), height: px(30), display: {display} }
-                on(on_remove_antagonist)
-            ),
+            Node { flex_grow: 1.0 } @chrome_text(relation.name, 12.0, lifthrasir_ui::theme::TEXT)--
+            GuildAntagonistRemoveButton { guild_id: {relation.guild_id}}
+            GuildMutationControl
+            visibility
+            @FeathersButton { @caption: bsn! { Text("Remove") ThemedText }, @variant: ButtonVariant::Normal }
+            Node { width: px(90), height: px(30), display: {display} }
+            on(on_remove_antagonist)
         ]
     }
 }
@@ -488,10 +476,10 @@ fn unsupported_row(relation: GuildRelationInfo, value: i32) -> impl Scene {
     bsn! {
         Node { width: percent(100), flex_direction: FlexDirection::Column, padding: {UiRect::axes(px(10), px(7))}, row_gap: px(2), border_radius: BorderRadius::all(px(8)) }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text(relation.name, 12.0, lifthrasir_ui::theme::TEXT),
-            chrome_text(format!("Unsupported relation type {value} · read-only"), 9.5, lifthrasir_ui::theme::WARN),
+            @chrome_text(relation.name, 12.0, lifthrasir_ui::theme::TEXT) --
+            @chrome_text(format!("Unsupported relation type {value} · read-only"), 9.5, lifthrasir_ui::theme::WARN)
         ]
     }
 }

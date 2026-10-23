@@ -312,7 +312,7 @@ fn spawn_field(
         ChildOf(field),
     ));
     commands.entity(field).observe(
-        move |_: On<Pointer<Click>>, mut fields: Query<(&mut TextField, &LoginField)>| {
+        move |_: On<PointerClick>, mut fields: Query<(&mut TextField, &LoginField)>| {
             for (mut field, field_kind) in &mut fields {
                 field.focused = *field_kind == kind;
             }
@@ -349,7 +349,7 @@ fn login_error_text(error: &NetworkError) -> String {
 }
 
 fn submit_button(
-    _click: On<Pointer<Click>>,
+    _click: On<PointerClick>,
     fields: Query<(&TextField, &LoginField)>,
     mut writer: MessageWriter<LoginAttemptEvent>,
 ) {
@@ -358,7 +358,7 @@ fn submit_button(
 }
 
 fn open_settings(
-    _: On<Pointer<Click>>,
+    _: On<PointerClick>,
     mut window: Query<&mut Visibility, With<SettingsWindowRoot>>,
 ) {
     if let Ok(mut visibility) = window.single_mut() {

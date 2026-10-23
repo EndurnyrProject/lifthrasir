@@ -151,7 +151,7 @@ fn show_character_select_screen(
         ))
         .id();
     commands.entity(root).observe(
-        |_: On<Pointer<Click>>,
+        |_: On<PointerClick>,
          mut pending: ResMut<PendingDeletion>,
          mut feedback: ResMut<DeletionFeedback>| {
             pending.0 = None;
@@ -428,7 +428,7 @@ fn spawn_header(commands: &mut Commands, assets: &AssetServer, parent: Entity) {
         ChildOf(back),
     ));
     commands.entity(back).observe(
-        |mut click: On<Pointer<Click>>, mut next: ResMut<NextState<GameState>>| {
+        |mut click: On<PointerClick>, mut next: ResMut<NextState<GameState>>| {
             click.propagate(false);
             next.set(GameState::ServerSelection);
         },
@@ -621,7 +621,7 @@ fn spawn_occupied_slot(
         ))
         .id();
     commands.entity(card).observe(
-        move |mut click: On<Pointer<Click>>,
+        move |mut click: On<PointerClick>,
               mut selected_slot: ResMut<SelectedSlot>,
               mut pending: ResMut<PendingDeletion>,
               mut feedback: ResMut<DeletionFeedback>| {
@@ -776,7 +776,7 @@ fn spawn_vacant_slot(
         .id();
     if can_create {
         commands.entity(card).observe(
-            move |mut click: On<Pointer<Click>>,
+            move |mut click: On<PointerClick>,
                   mut commands: Commands,
                   mut pending: ResMut<PendingDeletion>,
                   mut feedback: ResMut<DeletionFeedback>,
@@ -1330,8 +1330,7 @@ fn spawn_footer(
     ));
     if !deletion_pending {
         commands.entity(enter).observe(
-            move |mut click: On<Pointer<Click>>,
-                  mut writer: MessageWriter<SelectCharacterEvent>| {
+            move |mut click: On<PointerClick>, mut writer: MessageWriter<SelectCharacterEvent>| {
                 click.propagate(false);
                 writer.write(SelectCharacterEvent { slot });
             },
@@ -1385,7 +1384,7 @@ fn spawn_footer(
     }
     if can_delete {
         commands.entity(delete).observe(
-            move |mut click: On<Pointer<Click>>,
+            move |mut click: On<PointerClick>,
                   mut pending: ResMut<PendingDeletion>,
                   mut feedback: ResMut<DeletionFeedback>,
                   mut writer: MessageWriter<DeleteCharacterRequestEvent>| {

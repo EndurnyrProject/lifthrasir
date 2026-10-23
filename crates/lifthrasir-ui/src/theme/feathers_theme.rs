@@ -5,8 +5,9 @@
 //! Window nodes reference the `TOKEN_*` constants below; Feathers controls keep their
 //! own token names, remapped here onto the Endurnir colors.
 
+use bevy::prelude::Color;
 use bevy_feathers::dark_theme::create_dark_theme;
-use bevy_feathers::theme::{ThemeToken, UiTheme};
+use bevy_feathers::theme::{SemanticToken, ThemeProps, ThemeToken, UiTheme};
 use bevy_feathers::tokens;
 
 use super::{
@@ -33,38 +34,49 @@ pub const TOKEN_RARITY_FINE: ThemeToken = ThemeToken::new_static("norse.rarity.f
 pub const TOKEN_RARITY_MAGIC: ThemeToken = ThemeToken::new_static("norse.rarity.magic");
 pub const TOKEN_RARITY_RARE: ThemeToken = ThemeToken::new_static("norse.rarity.rare");
 
+/// Point `design` at a dedicated semantic token and give that token `color`.
+///
+/// Feathers 0.20 splits theming into a design-token to semantic-token map plus a
+/// semantic-token to color base map. Giving every design token its own semantic
+/// token keeps the Endurnir palette overriding exactly one design token, instead
+/// of leaking a color into every control that shares a Feathers semantic token.
+pub fn assign_token(theme: &mut ThemeProps, design: ThemeToken, color: Color) {
+    let semantic = SemanticToken::new(design.to_string().into());
+    theme.token_assignments.insert(design, semantic.clone());
+    theme.semantic_base.insert(semantic, color);
+}
+
 /// Build the Norse [`UiTheme`]: start from the Feathers dark theme (so every control
 /// token is populated) and remap the relevant tokens onto the Endurnir palette, then
 /// add the Norse window and rarity tokens.
 pub fn norse_theme() -> UiTheme {
-    let mut theme = UiTheme(create_dark_theme());
-    let color = &mut theme.0.color;
+    let mut theme = create_dark_theme();
 
-    color.insert(TOKEN_WINDOW_BG, GLASS);
-    color.insert(TOKEN_WINDOW_BORDER, GOLD_FAINT);
-    color.insert(TOKEN_TITLEBAR_BG, GLASS_2);
-    color.insert(TOKEN_PANEL_BG, FIELD);
-    color.insert(TOKEN_PANEL_BORDER, STROKE);
-    color.insert(TOKEN_ACCENT, GOLD);
-    color.insert(TOKEN_TEXT, TEXT);
-    color.insert(TOKEN_TEXT_DIM, TEXT_DIM);
-    color.insert(TOKEN_TEXT_FAINT, TEXT_FAINT);
+    assign_token(&mut theme, TOKEN_WINDOW_BG, GLASS);
+    assign_token(&mut theme, TOKEN_WINDOW_BORDER, GOLD_FAINT);
+    assign_token(&mut theme, TOKEN_TITLEBAR_BG, GLASS_2);
+    assign_token(&mut theme, TOKEN_PANEL_BG, FIELD);
+    assign_token(&mut theme, TOKEN_PANEL_BORDER, STROKE);
+    assign_token(&mut theme, TOKEN_ACCENT, GOLD);
+    assign_token(&mut theme, TOKEN_TEXT, TEXT);
+    assign_token(&mut theme, TOKEN_TEXT_DIM, TEXT_DIM);
+    assign_token(&mut theme, TOKEN_TEXT_FAINT, TEXT_FAINT);
 
-    color.insert(TOKEN_RARITY_COMMON, RARITY_COMMON);
-    color.insert(TOKEN_RARITY_FINE, RARITY_FINE);
-    color.insert(TOKEN_RARITY_MAGIC, RARITY_MAGIC);
-    color.insert(TOKEN_RARITY_RARE, RARITY_RARE);
+    assign_token(&mut theme, TOKEN_RARITY_COMMON, RARITY_COMMON);
+    assign_token(&mut theme, TOKEN_RARITY_FINE, RARITY_FINE);
+    assign_token(&mut theme, TOKEN_RARITY_MAGIC, RARITY_MAGIC);
+    assign_token(&mut theme, TOKEN_RARITY_RARE, RARITY_RARE);
 
-    color.insert(tokens::WINDOW_BG, GLASS);
-    color.insert(tokens::TEXT_MAIN, TEXT);
-    color.insert(tokens::TEXT_DIM, TEXT_DIM);
-    color.insert(tokens::FOCUS_RING, EMERALD);
-    color.insert(tokens::BUTTON_BG, FIELD);
-    color.insert(tokens::BUTTON_BG_HOVER, GLASS_2);
-    color.insert(tokens::BUTTON_BG_PRESSED, EMERALD);
-    color.insert(tokens::BUTTON_TEXT, TEXT);
+    assign_token(&mut theme, tokens::WINDOW_BG, GLASS);
+    assign_token(&mut theme, tokens::TEXT_MAIN, TEXT);
+    assign_token(&mut theme, tokens::TEXT_DIM, TEXT_DIM);
+    assign_token(&mut theme, tokens::FOCUS_RING, EMERALD);
+    assign_token(&mut theme, tokens::BUTTON_BG, FIELD);
+    assign_token(&mut theme, tokens::BUTTON_BG_HOVER, GLASS_2);
+    assign_token(&mut theme, tokens::BUTTON_BG_PRESSED, EMERALD);
+    assign_token(&mut theme, tokens::BUTTON_TEXT, TEXT);
 
-    theme
+    UiTheme(theme)
 }
 
 #[cfg(test)]

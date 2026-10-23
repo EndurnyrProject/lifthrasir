@@ -88,7 +88,7 @@ fn attach_portal_visuals(
 }
 
 /// Unlit swirl-tunnel material for the portal surface. See
-/// `assets/data/effects/portal.wgsl`.
+/// `assets/data/effects/portal.wesl`.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct PortalMaterial {
     #[uniform(0)]
@@ -99,7 +99,7 @@ pub struct PortalMaterial {
 }
 
 /// Packed portal shader parameters. Field order and types must match the
-/// `PortalParams` struct in `portal.wgsl`.
+/// `PortalParams` struct in `portal.wesl`.
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct PortalParams {
     pub primary_color: Vec4,
@@ -114,7 +114,7 @@ pub struct PortalParams {
 
 impl Material for PortalMaterial {
     fn fragment_shader() -> ShaderRef {
-        "ro://effects/portal.wgsl".into()
+        "ro://effects/portal.wesl".into()
     }
 
     fn alpha_mode(&self) -> AlphaMode {

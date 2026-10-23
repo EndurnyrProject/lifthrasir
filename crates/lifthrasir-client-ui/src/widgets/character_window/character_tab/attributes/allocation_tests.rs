@@ -1,28 +1,28 @@
 use crate::widgets::character_window::character_tab::attributes::*;
 use net_contract::events::StatRaised;
 
-fn click(target: Entity) -> Pointer<Click> {
+fn click(target: Entity) -> PointerClick {
     use bevy::camera::NormalizedRenderTarget;
     use bevy::picking::backend::HitData;
     use bevy::picking::pointer::{Location, PointerId};
     use bevy::window::WindowRef;
 
-    Pointer::new(
-        PointerId::Mouse,
-        Location {
-            target: NormalizedRenderTarget::Window(
-                WindowRef::Primary.normalize(Some(target)).unwrap(),
-            ),
-            position: Vec2::ZERO,
-        },
-        Click {
-            button: PointerButton::Primary,
-            hit: HitData::new(target, 0.0, None, None),
-            duration: std::time::Duration::ZERO,
-            count: 1,
-        },
-        target,
-    )
+    PointerClick {
+        entity: target,
+        pointer: Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(target)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+        ),
+        button: PointerButton::Primary,
+        hit: HitData::new(target, 0.0, None, None),
+        duration: std::time::Duration::ZERO,
+        count: 1,
+    }
 }
 
 fn allocation_app() -> (App, Entity, Entity) {

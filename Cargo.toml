@@ -24,20 +24,31 @@ edition = "2024"
 
 [workspace.dependencies]
 anyhow = "1.0"
-bevy = { version = "0.19.0", features = [
+bevy = { version = "0.20.0", features = [
     "bmp",
     "bevy_settings",
+    "custom_cursor",
     "jpeg",
     "wayland",
     "mesh_picking",
 ] }
-bevy_auto_plugin = "0.11"
-bevy_feathers = { version = "0.19.0", features = ["custom_cursor"] }
-bevy_framepace = "0.22.0"
-bevy_quinnet = "0.21.0"
+bevy_auto_plugin = "0.12"
+bevy_brp_extras = "0.23.0"
+bevy_common_assets = "0.18"
+bevy_egui = "0.43"
+bevy_feathers = "0.20.0"
+# Pinned to PR #81 (branch bevy0p20) until a Bevy 0.20 release ships.
+bevy_framepace = { git = "https://github.com/martinfrances107/bevy_framepace", rev = "a6e0e7cd57d5" }
+# Keep only 3d: Hanabi's 2d path also draws world effects through the UI Camera2d.
+# Pinned to main (PR #576 merged, Bevy 0.20) until 0.20 releases.
+bevy_hanabi = { git = "https://github.com/djeedai/bevy_hanabi", rev = "77630ff1eed8", default-features = false, features = [
+    "3d",
+] }
+bevy_kira_audio = { version = "0.27", features = ["mp3", "wav", "ogg"] }
+bevy_quinnet = "0.22.0"
 clap = { version = "4.5", features = ["derive"] }
 encoding_rs = "0.8.35"
-glam = "0.32"
+glam = "0.33"
 # `default-features = false` drops gltf's `import`/`utils` (base64 + image +
 # urlencoding); crates that need the importer opt back in explicitly.
 gltf = { version = "1.4.1", default-features = false, features = [
@@ -48,8 +59,12 @@ gltf = { version = "1.4.1", default-features = false, features = [
 gltf-json = { version = "1.4.1", features = ["extensions", "extras", "names"] }
 image = "0.25.8"
 indicatif = "0.18"
-iyes_progress = "0.17"
-leafwing-input-manager = "0.21"
+iyes_progress = "0.18"
+leafwing-input-manager = "0.22"
+log = "0.4"
+moonshine-behavior = "0.6"
+moonshine-kind = "0.6"
+moonshine-tag = "0.6"
 prost = "0.14"
 prost-build = "0.14"
 regex = "1.12"

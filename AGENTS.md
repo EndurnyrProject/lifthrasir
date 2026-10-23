@@ -2,8 +2,10 @@
 
 ## Skills to use
 
-- Load the bevy-cheatbook skill
-- When working with UI, load the bevy-feathers-bsn skill
+- Load the bevy skill for any Bevy work (ECS, rendering, UI, assets, shaders) — it is the current 0.20 reference
+- When working with UI, also load the bevy-feathers-bsn skill (BSN scenes, Feathers widgets, theming)
+- When touching third-party crate wiring, load the lifthrasir-bevy-plugins skill
+- Load the bevy-cheatbook skill only to translate stale cheatbook-era snippets; its API syntax is 0.18-era
 - Always Load the ponytail skill, it helps you to be more token efficient
 
 ---
@@ -28,7 +30,7 @@
 
 ### Core Technologies
 - **Rust**: Primary programming language for game engine
-- **Bevy 0.19.0**: ECS-based game engine for rendering, game logic, and UI
+- **Bevy 0.20.0**: ECS-based game engine for rendering, game logic, and UI (UI authored with BSN + `bevy_feathers`)
 
 ### Key Paradigms
 - **Entity Component System (ECS)**: Bevy's core architecture pattern
@@ -298,7 +300,7 @@ DLSS_SDK=/path/to/dlss-sdk VULKAN_SDK=/path/to/vulkan \
 ```
 
 Prerequisites on the target machine:
-- **NVIDIA DLSS Super Resolution SDK v310.5.3** — download separately (it is not redistributable) and point `DLSS_SDK` at its absolute path.
+- **NVIDIA DLSS Super Resolution SDK v310.9.1** (required by `dlss_wgpu` 6.0, which Bevy 0.20 uses; other SDK versions fail to compile) — clone [NVIDIA/DLSS at `v310.9.1`](https://github.com/NVIDIA/DLSS/tree/v310.9.1) (it is not redistributable) and point `DLSS_SDK` at its absolute path. Re-check the `dlss_wgpu` version chart on every Bevy upgrade.
 - **Vulkan SDK** — with `VULKAN_SDK` set.
 - **Clang** — required by `bindgen` when building the SDK wrapper.
 
@@ -306,7 +308,7 @@ At runtime DLSS degrades gracefully: if the GPU/driver does not support it, the 
 
 **Licensing / distribution (settle before any public release):**
 - The DLSS SDK license text (DLSS Programming Guide §9.5) must ship alongside any distributed binary.
-- The proprietary `nvngx_dlss` runtime libraries must be packaged next to the binary.
+- The proprietary DLSS runtime library must be packaged next to the binary: `nvngx_dlss.dll` (Windows) or `libnvidia-ngx-dlss.so.310.9.1` (Linux), from `$DLSS_SDK/lib/<platform>/rel/`.
 - The binary is already GPL-3.0 (via the xBRZ `xbrz-rs` crate); GPL plus the proprietary DLSS blob loaded at runtime is a known gray area — resolve it before distributing publicly.
 
 Manual verification checklist: `specs/2026-06-28-dlss/design.md` → "Testing".
@@ -381,6 +383,6 @@ cargo check
 4. Think before writing: Is there a simpler way to achieve this?
 5. Keep functions simple and pure, prevent the creation of god functions with several parameters.
 6. Prefer splitting code in modules instead of god files.
-7. Always consult the bevy cheatbook https://bevy-cheatbook.github.io/
+7. The bevy cheatbook (https://bevy-cheatbook.github.io/) is unmaintained and ~0.14-era: trust its concepts, not its API syntax, and prefer the bevy skill or docs.rs for names.
 8. Consult bevy examples, they are very helpful https://github.com/bevyengine/bevy/tree/latest/examples#examples
 9. Also check the bevy documentation for up-to-date function https://docs.rs/bevy/latest/bevy/

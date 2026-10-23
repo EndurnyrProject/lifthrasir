@@ -158,7 +158,7 @@ pub fn reset(mut ui: ResMut<BagUi>) {
 // ---------------------------------------------------------------------------
 
 /// Tab click: set the active tab and clear the current selection.
-fn on_tab_click(click: On<Pointer<Click>>, tabs: Query<&BagTab>, mut ui: ResMut<BagUi>) {
+fn on_tab_click(click: On<PointerClick>, tabs: Query<&BagTab>, mut ui: ResMut<BagUi>) {
     let Ok(tab) = tabs.get(click.entity) else {
         return;
     };
@@ -170,7 +170,7 @@ fn on_tab_click(click: On<Pointer<Click>>, tabs: Query<&BagTab>, mut ui: ResMut<
 /// drop assigns it. A plain click still goes through `on_cell_click` since
 /// `bevy_picking` only emits `DragStart` after a press-and-move.
 fn on_cell_drag_start(
-    drag: On<Pointer<DragStart>>,
+    drag: On<PointerDragStart>,
     cells: Query<&BagCell>,
     inventory: Res<Inventory>,
     mut hotbar_drag: ResMut<HotbarDrag>,
@@ -189,7 +189,7 @@ fn on_cell_drag_start(
 /// empty cells are inert on either button.
 #[allow(clippy::too_many_arguments)]
 fn on_cell_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     cells: Query<&BagCell>,
     mut ui: ResMut<BagUi>,
     time: Res<Time>,
@@ -288,8 +288,8 @@ fn body(inventory: &Inventory, ui: &BagUi, item_db: Option<&ItemDb>) -> impl Sce
 
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
-        ignore_picking()
-        Children [ tab_strip(ui.tab, counts), grid_pane(cells) ]
+        @ignore_picking()
+        Children [ @tab_strip(ui.tab, counts) -- @grid_pane(cells) ]
     }
 }
 
@@ -303,7 +303,7 @@ fn tab_strip(active: ItemCategory, counts: [usize; 3]) -> impl Scene {
         .collect();
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(6), padding: {UiRect::vertical(px(4))} }
-        ignore_picking()
+        @ignore_picking()
         Children [ {buttons} ]
     }
 }
@@ -321,7 +321,7 @@ fn tab_button(
         lifthrasir_ui::theme::FIELD
     };
     bsn! {
-        template_value(BagTab(category))
+        BagTab(category)
         Node {
             flex_grow: 1.0,
             flex_basis: px(0),
@@ -336,9 +336,9 @@ fn tab_button(
         Pickable
         on(on_tab_click)
         Children [
-            glyph_icon(icon, 14.0, lifthrasir_ui::theme::TEXT_DIM),
-            chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM),
-            chrome_text(count.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT),
+            @glyph_icon(icon, 14.0, lifthrasir_ui::theme::TEXT_DIM) --
+            @chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) --
+            @chrome_text(count.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT)
         ]
     }
 }
@@ -360,25 +360,24 @@ fn grid_pane(cells: Vec<CellView>) -> impl Scene {
         }
         BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.18)})
         BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                #grid
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0), top: px(0), right: px(0), bottom: px(0),
-                    overflow: {Overflow::scroll_y()},
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    align_content: AlignContent::FlexStart,
-                    column_gap: px(6),
-                    row_gap: px(6),
-                    padding: {UiRect { left: Val::Px(8.0), right: Val::Px(13.0), top: Val::Px(8.0), bottom: Val::Px(8.0) }},
-                }
-                ScrollArea
-                Pickable
-                Children [ {items}, {empty_msg} ]
-            ),
+            #grid
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0), top: px(0), right: px(0), bottom: px(0),
+                overflow: {Overflow::scroll_y()},
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                align_content: AlignContent::FlexStart,
+                column_gap: px(6),
+                row_gap: px(6),
+                padding: {UiRect { left: Val::Px(8.0), right: Val::Px(13.0), top: Val::Px(8.0), bottom: Val::Px(8.0) }},
+            }
+            ScrollArea
+            Pickable
+            Children [ {items} -- {empty_msg} ]
+            --
             @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
             Node {
                 position_type: PositionType::Absolute,
@@ -409,7 +408,7 @@ fn cell(view: CellView) -> impl Scene {
     let amount = (view.amount > 1).then(|| EntityScene(amount_badge(view.amount.to_string())));
     let refine = (view.refine > 0).then(|| EntityScene(refine_badge(format!("+{}", view.refine))));
     bsn! {
-        template_value(BagCell { index: view.index })
+        BagCell { index: {view.index}}
         Node {
             width: px(CELL_SIZE),
             height: px(CELL_SIZE),
@@ -422,7 +421,7 @@ fn cell(view: CellView) -> impl Scene {
         Pickable
         on(on_cell_click)
         on(on_cell_drag_start)
-        Children [ {icon}, {amount}, {refine} ]
+        Children [ {icon} -- {amount} -- {refine} ]
     }
 }
 
@@ -436,7 +435,7 @@ fn cell_icon(path: String) -> impl Scene {
             width: percent(100),
             height: percent(100),
         }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -450,7 +449,7 @@ fn amount_badge(text: String) -> impl Scene {
         }
         TextColor(lifthrasir_ui::theme::TEXT)
         Node { position_type: PositionType::Absolute, right: px(1), bottom: px(0) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -464,7 +463,7 @@ fn refine_badge(text: String) -> impl Scene {
         }
         TextColor(lifthrasir_ui::theme::GOLD)
         Node { position_type: PositionType::Absolute, left: px(1), top: px(0) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -476,7 +475,7 @@ fn muted_text(text: String) -> impl Scene {
             font_size: {FontSize::Px(12.0)},
         }
         TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -670,27 +669,27 @@ mod tests {
         );
     }
 
-    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: Duration::ZERO,
+            count: 1,
+        }
     }
 
     fn cell_click_app() -> App {

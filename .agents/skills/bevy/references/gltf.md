@@ -1,6 +1,6 @@
-# glTF (Bevy 0.19)
+# glTF (Bevy 0.20)
 
-Reference distilled from `bevy/examples/gltf/`. Verified 0.19 facts: scenes spawn via `WorldAssetRoot` (was `SceneRoot`), spawn-complete signal is `WorldInstanceReady` (was `SceneInstanceReady`, now in `bevy::world_serialization`), no bundles, observers use `On<...>`.
+Reference distilled from `examples/gltf/` in the Bevy 0.20 tree (unchanged from 0.19 for these APIs). Facts: scenes spawn via `WorldAssetRoot` (was `SceneRoot`), spawn-complete signal is `WorldInstanceReady` (was `SceneInstanceReady`, now in `bevy::world_serialization`), no bundles, observers use `On<...>`.
 
 ## Loading a scene: `GltfAssetLabel` + `WorldAssetRoot`
 

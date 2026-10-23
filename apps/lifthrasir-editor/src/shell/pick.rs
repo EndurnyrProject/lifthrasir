@@ -1,6 +1,6 @@
 //! Which object node the cursor points at, and the hover/selection outlines.
 //!
-//! The editor picks on its own instead of through `Pointer<Click>`: the ray
+//! The editor picks on its own instead of through `PointerClick`: the ray
 //! only tests object-node meshes and the terrain (so water and effect sprites
 //! never block a pick), double-sided props are hit from both sides, and nodes
 //! whose origin is a few pixels from the cursor (sound and effect handles,
@@ -121,12 +121,17 @@ impl ObjectPicker<'_, '_> {
 
 /// RO props are often double-sided; without this the ray misses them from
 /// behind.
-fn pick_backfaces(
-    mut commands: Commands,
-    meshes: Query<Entity, (Added<Mesh3d>, Without<RayCastBackfaces>)>,
-) {
-    for mesh in &meshes {
-        commands.entity(mesh).insert(RayCastBackfaces);
+fn pick_backfaces(world: &mut World) {
+    // This is deliberately exclusive rather than deferred. Grid thumbnails
+    // can be despawned while scrolling; a queued insert for one of their
+    // just-loaded meshes would otherwise target an invalid entity at the end
+    // of this schedule.
+    let meshes: Vec<Entity> = world
+        .query_filtered::<Entity, (Added<Mesh3d>, Without<RayCastBackfaces>)>()
+        .iter(world)
+        .collect();
+    for mesh in meshes {
+        world.entity_mut(mesh).insert(RayCastBackfaces);
     }
 }
 

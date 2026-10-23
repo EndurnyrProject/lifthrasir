@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use bevy::ecs::system::SystemParam;
 use bevy::input_focus::AutoFocus;
+use bevy::ui_widgets::TextInput;
 use bevy::{
     prelude::*,
     text::{EditableText, TextCursorStyle},
@@ -414,6 +415,7 @@ fn spawn_form_rail(
                 max_characters: Some(NAME_MAX),
                 ..default()
             },
+            TextInput,
             TextFont {
                 font: assets.load(lifthrasir_ui::theme::FONT_BODY).into(),
                 font_size: 14.0.into(),
@@ -572,7 +574,7 @@ fn spawn_sex_segment(
         ));
         commands
             .entity(button)
-            .observe(move |_: On<Pointer<Click>>, mut form: ResMut<CreationForm>| form.0.sex = sex);
+            .observe(move |_: On<PointerClick>, mut form: ResMut<CreationForm>| form.0.sex = sex);
     }
 }
 
@@ -634,12 +636,12 @@ fn spawn_style_stepper(
     let next = step_button(commands, assets, row, "chevron-right");
     commands
         .entity(prev)
-        .observe(|_: On<Pointer<Click>>, mut form: ResMut<CreationForm>| {
+        .observe(|_: On<PointerClick>, mut form: ResMut<CreationForm>| {
             form.0.hair_style = cycle(form.0.hair_style, -1, HAIR_STYLE_MIN, HAIR_STYLE_MAX);
         });
     commands
         .entity(next)
-        .observe(|_: On<Pointer<Click>>, mut form: ResMut<CreationForm>| {
+        .observe(|_: On<PointerClick>, mut form: ResMut<CreationForm>| {
             form.0.hair_style = cycle(form.0.hair_style, 1, HAIR_STYLE_MIN, HAIR_STYLE_MAX);
         });
 }
@@ -677,7 +679,7 @@ fn spawn_swatches(commands: &mut Commands, parent: Entity, selected: u16) {
             ))
             .id();
         commands.entity(swatch).observe(
-            move |_: On<Pointer<Click>>, mut form: ResMut<CreationForm>| {
+            move |_: On<PointerClick>, mut form: ResMut<CreationForm>| {
                 form.0.hair_color = color as u16;
             },
         );
@@ -966,13 +968,13 @@ fn return_to_character_select(
     }
 }
 
-fn return_on_click(mut click: On<Pointer<Click>>, mut next: ResMut<NextState<GameState>>) {
+fn return_on_click(mut click: On<PointerClick>, mut next: ResMut<NextState<GameState>>) {
     click.propagate(false);
     next.set(GameState::CharacterSelection);
 }
 
 fn create_character(
-    _click: On<Pointer<Click>>,
+    _click: On<PointerClick>,
     form: Res<CreationForm>,
     slot: Res<CreationSlot>,
     names: Query<&EditableText, With<NameField>>,
@@ -985,7 +987,7 @@ fn create_character(
     }
 }
 
-fn randomize_form(_click: On<Pointer<Click>>, mut form: ResMut<CreationForm>) {
+fn randomize_form(_click: On<PointerClick>, mut form: ResMut<CreationForm>) {
     let seed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_nanos() as u64);
@@ -1097,18 +1099,20 @@ mod tests {
             bevy::input_focus::InputFocusPlugin,
             bevy::input_focus::InputDispatchPlugin,
             bevy::text::TextPlugin,
-            bevy::ui_widgets::EditableTextInputPlugin,
+            bevy::ui_widgets::TextInputPlugin,
+            bevy::picking::DefaultPickingPlugins,
         ));
         app.init_resource::<bevy::ui::UiScale>();
         app.add_message::<bevy::window::Ime>();
-        app.add_message::<bevy::picking::events::Pointer<bevy::picking::events::Release>>();
+        app.add_message::<bevy::window::WindowEvent>();
+        app.add_message::<bevy::picking::events::PointerRelease>();
         let window = app
             .world_mut()
             .spawn((Window::default(), PrimaryWindow))
             .id();
         let field = app
             .world_mut()
-            .spawn((NameField, EditableText::default()))
+            .spawn((NameField, EditableText::default(), TextInput))
             .id();
 
         assert_eq!(

@@ -4,7 +4,7 @@ use lifthrasir_runtime::actors::ActorVisualRoot;
 
 /// Gameplay interaction is attached by the client, never by shared rendering.
 #[auto_observer(plugin = crate::domain::entities::sprite_rendering::plugin::SpriteRenderingDomainPlugin)]
-fn attach_actor_visual_observers(added: On<Add, ActorVisualRoot>, mut commands: Commands) {
+fn attach_actor_visual_observers(added: On<Add<ActorVisualRoot>>, mut commands: Commands) {
     commands
         .entity(added.entity)
         .observe(on_sprite_over)
@@ -50,7 +50,7 @@ fn pick_root(
 
 #[allow(clippy::too_many_arguments)]
 pub fn on_sprite_over(
-    over: On<Pointer<Over>>,
+    over: On<PointerOver>,
     visuals: Query<&ActorVisualRoot>,
     mut commands: Commands,
     child_of: Query<&ChildOf>,
@@ -91,7 +91,7 @@ pub fn on_sprite_over(
 
 #[allow(clippy::too_many_arguments)]
 pub fn on_sprite_out(
-    out: On<Pointer<Out>>,
+    out: On<PointerOut>,
     visuals: Query<&ActorVisualRoot>,
     mut commands: Commands,
     child_of: Query<&ChildOf>,
@@ -127,7 +127,7 @@ pub fn on_sprite_out(
 
 #[allow(clippy::too_many_arguments)]
 pub fn on_sprite_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     visuals: Query<&ActorVisualRoot>,
     child_of: Query<&ChildOf>,
     roots: PickRoots,
@@ -142,7 +142,7 @@ pub fn on_sprite_click(
     mut locked: ResMut<LockedTarget>,
     mut pending: ResMut<PendingPickups>,
 ) {
-    if click.event.button != PointerButton::Primary {
+    if click.button != PointerButton::Primary {
         return;
     }
 

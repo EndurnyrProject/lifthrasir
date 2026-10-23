@@ -65,11 +65,11 @@ pub fn card(edge: EdgeGrade, body: impl Scene) -> impl Scene {
         ThemeBackgroundColor({TOKEN_WINDOW_BG})
         ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Pickable
-        on(|mut click: On<Pointer<Click>>| click.propagate(false))
+        on(|mut click: On<PointerClick>| click.propagate(false))
         Children [
-            ribbon(edge),
-            close_button(),
-            body,
+            @ribbon(edge) --
+            @close_button() --
+            @body
         ]
     }
 }
@@ -84,20 +84,19 @@ pub fn scroll_body(content: impl Scene) -> impl Scene {
             min_height: px(0),
             position_type: PositionType::Relative,
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                #viewport
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0), top: px(0), right: px(0), bottom: px(0),
-                    overflow: {Overflow::scroll_y()},
-                    flex_direction: FlexDirection::Column,
-                }
-                ScrollArea
-                Pickable
-                Children [ content ]
-            ),
+            #viewport
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0), top: px(0), right: px(0), bottom: px(0),
+                overflow: {Overflow::scroll_y()},
+                flex_direction: FlexDirection::Column,
+            }
+            ScrollArea
+            Pickable
+            Children [ @content ]
+            --
             @FeathersScrollbar { @target: #viewport, @orientation: {ControlOrientation::Vertical} }
             Node {
                 position_type: PositionType::Absolute,
@@ -122,14 +121,14 @@ fn ribbon(edge: EdgeGrade) -> impl Scene {
             border_radius: BorderRadius::all(px(2)),
         }
         ThemeBackgroundColor({edge.token()})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
 /// Close button — `.im-close`. Despawns the modal root on press.
 fn close_button() -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_FAINT) } }
+        @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_FAINT) } }
         Node {
             position_type: PositionType::Absolute,
             top: px(13),
@@ -171,8 +170,8 @@ pub fn header(view: HeaderView) -> impl Scene {
             padding: {UiRect { left: px(20), right: px(20), top: px(20), bottom: px(16) }},
         }
         Children [
-            icon_box(view.icon_path, view.refine, view.sockets_filled, view.sockets_total, view.edge),
-            titles(view.name, view.tags, view.edge),
+            @icon_box(view.icon_path, view.refine, view.sockets_filled, view.sockets_total, view.edge) --
+            @titles(view.name, view.tags, view.edge)
         ]
     }
 }
@@ -212,42 +211,37 @@ fn icon_box(
         BackgroundColor({Color::BLACK.with_alpha(0.42)})
         ThemeBorderColor({edge.token()})
         Children [
-            {icon},
-            (
-                Node {
-                    display: {refine_display},
-                    position_type: PositionType::Absolute,
-                    left: px(4),
-                    top: px(4),
-                    padding: {UiRect::axes(px(5), px(2))},
-                    border_radius: BorderRadius::all(px(4)),
+            {icon} --
+            Node {
+                display: {refine_display},
+                position_type: PositionType::Absolute,
+                left: px(4),
+                top: px(4),
+                padding: {UiRect::axes(px(5), px(2))},
+                border_radius: BorderRadius::all(px(4)),
+            }
+            BackgroundColor({Color::srgba(0.086, 0.063, 0.012, 0.88)})
+            Children [
+                Text(refine_text)
+                TextFont {
+                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                    font_size: {FontSize::Px(10.0)},
                 }
-                BackgroundColor({Color::srgba(0.086, 0.063, 0.012, 0.88)})
-                Children [
-                    (
-                        Text(refine_text)
-                        TextFont {
-                            font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                            font_size: {FontSize::Px(10.0)},
-                        }
-                        TextColor({lifthrasir_ui::theme::GOLD})
-                        ignore_picking()
-                    ),
-                ]
-            ),
-            (
-                Node {
-                    display: {pips_display},
-                    position_type: PositionType::Absolute,
-                    bottom: px(4),
-                    left: px(0),
-                    right: px(0),
-                    flex_direction: FlexDirection::Row,
-                    justify_content: JustifyContent::Center,
-                    column_gap: px(2),
-                }
-                Children [ {pips} ]
-            ),
+                TextColor({lifthrasir_ui::theme::GOLD})
+                @ignore_picking()
+            ]
+            --
+            Node {
+                display: {pips_display},
+                position_type: PositionType::Absolute,
+                bottom: px(4),
+                left: px(0),
+                right: px(0),
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::Center,
+                column_gap: px(2),
+            }
+            Children [ {pips} ]
         ]
     }
 }
@@ -258,7 +252,7 @@ fn item_icon(icon_path: String) -> impl Scene {
     bsn! {
         ImageNode { image: {icon_path} }
         Node { width: percent(100), height: percent(100) }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -271,7 +265,7 @@ fn socket_pip(filled: bool) -> impl Scene {
     bsn! {
         Node { width: px(4), height: px(4), border_radius: BorderRadius::all(px(1)) }
         BackgroundColor({color})
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -288,24 +282,21 @@ fn titles(name: String, tags: Vec<String>, edge: EdgeGrade) -> impl Scene {
             row_gap: px(7),
         }
         Children [
-            (
-                Text(name)
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_TITLE),
-                    font_size: {FontSize::Px(18.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                ignore_picking()
-            ),
-            (
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    column_gap: px(8),
-                    row_gap: px(6),
-                }
-                Children [ {tag_scenes} ]
-            ),
+            Text(name)
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_TITLE),
+                font_size: {FontSize::Px(18.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            @ignore_picking()
+            --
+            Node {
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: px(8),
+                row_gap: px(6),
+            }
+            Children [ {tag_scenes} ]
         ]
     }
 }
@@ -323,15 +314,13 @@ fn tag_chip(text: String, edge: EdgeGrade) -> impl Scene {
         BackgroundColor({Color::WHITE.with_alpha(0.04)})
         ThemeBorderColor({edge.token()})
         Children [
-            (
-                Text(text)
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(10.0)},
-                }
-                ThemeTextColor({edge.token()})
-                ignore_picking()
-            ),
+            Text(text)
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(10.0)},
+            }
+            ThemeTextColor({edge.token()})
+            @ignore_picking()
         ]
     }
 }
@@ -352,29 +341,24 @@ pub fn section_label(text: String, counter: Option<String>) -> impl Scene {
             margin: {UiRect::bottom(px(9))},
         }
         Children [
-            (
-                Text({text.to_uppercase()})
+            Text({text.to_uppercase()})
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(9.5)},
+            }
+            ThemeTextColor({TOKEN_TEXT_FAINT})
+            @ignore_picking()
+            --
+            Node { display: {counter_display} }
+            Children [
+                Text(counter_text)
                 TextFont {
                     font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(9.5)},
+                    font_size: {FontSize::Px(10.0)},
                 }
-                ThemeTextColor({TOKEN_TEXT_FAINT})
-                ignore_picking()
-            ),
-            (
-                Node { display: {counter_display} }
-                Children [
-                    (
-                        Text(counter_text)
-                        TextFont {
-                            font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                            font_size: {FontSize::Px(10.0)},
-                        }
-                        TextColor({lifthrasir_ui::theme::GOLD})
-                        ignore_picking()
-                    ),
-                ]
-            ),
+                TextColor({lifthrasir_ui::theme::GOLD})
+                @ignore_picking()
+            ]
         ]
     }
 }
@@ -389,24 +373,21 @@ pub fn meta_cell(key: String, value: String) -> impl Scene {
         }
         BackgroundColor({Color::srgba(0.039, 0.059, 0.051, 0.9)})
         Children [
-            (
-                Text({key.to_uppercase()})
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(8.5)},
-                }
-                ThemeTextColor({TOKEN_TEXT_FAINT})
-                ignore_picking()
-            ),
-            (
-                Text(value)
-                TextFont {
-                    font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                ignore_picking()
-            ),
+            Text({key.to_uppercase()})
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(8.5)},
+            }
+            ThemeTextColor({TOKEN_TEXT_FAINT})
+            @ignore_picking()
+            --
+            Text(value)
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(13.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            @ignore_picking()
         ]
     }
 }
@@ -435,7 +416,7 @@ pub fn meta_grid(cells: Vec<impl Scene>) -> impl Scene {
 fn meta_grid_slot(cell: impl Scene) -> impl Scene {
     bsn! {
         Node { flex_basis: percent(50), flex_grow: 1.0, min_width: px(0) }
-        Children [ cell ]
+        Children [ @cell ]
     }
 }
 
@@ -445,7 +426,7 @@ pub fn description_section(lines: Vec<ColoredLine>) -> impl Scene {
     let rows: Vec<_> = lines.into_iter().map(colored_line).collect();
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
-        ignore_picking()
+        @ignore_picking()
         Children [ {rows} ]
     }
 }
@@ -467,7 +448,7 @@ fn colored_line(runs: ColoredLine) -> impl Scene {
             font_size: {FontSize::Px(12.0)},
         }
         TextColor(first_color)
-        ignore_picking()
+        @ignore_picking()
         Children [ {spans} ]
     }
 }

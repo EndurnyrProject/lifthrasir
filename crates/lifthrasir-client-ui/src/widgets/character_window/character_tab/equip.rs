@@ -181,7 +181,7 @@ pub fn slot_column(slots: &'static [SlotSpec]) -> impl Scene {
             justify_content: JustifyContent::SpaceBetween,
             row_gap: px(6),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [ {wells} ]
     }
 }
@@ -192,7 +192,7 @@ pub fn slot_column(slots: &'static [SlotSpec]) -> impl Scene {
 /// hover / double-click observers. The item name shows on hover, not as a caption.
 fn slot_well(spec: SlotSpec) -> impl Scene {
     bsn! {
-        template_value(spec.kind)
+        spec.kind
         Node {
             width: px(40),
             height: px(40),
@@ -209,30 +209,27 @@ fn slot_well(spec: SlotSpec) -> impl Scene {
         on(on_slot_hover_over)
         on(on_slot_hover_out)
         Children [
-            ( #Glyph glyph_icon(spec.glyph, 22.0, lifthrasir_ui::theme::TEXT_FAINT) ),
-            (
-                #Icon
-                ImageNode
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: percent(100),
-                    height: percent(100),
-                }
-                Visibility::Hidden
-                ignore_picking()
-            ),
-            (
-                #Refine
-                Text("")
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(9.0)},
-                }
-                TextColor({lifthrasir_ui::theme::GOLD})
-                Node { position_type: PositionType::Absolute, left: px(3), top: px(2) }
-                Visibility::Hidden
-                ignore_picking()
-            ),
+             #Glyph @glyph_icon(spec.glyph, 22.0, lifthrasir_ui::theme::TEXT_FAINT) --
+            #Icon
+            ImageNode
+            Node {
+                position_type: PositionType::Absolute,
+                width: percent(100),
+                height: percent(100),
+            }
+            Visibility::Hidden
+            @ignore_picking()
+            --
+            #Refine
+            Text("")
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(9.0)},
+            }
+            TextColor({lifthrasir_ui::theme::GOLD})
+            Node { position_type: PositionType::Absolute, left: px(3), top: px(2) }
+            Visibility::Hidden
+            @ignore_picking()
         ]
     }
 }
@@ -349,7 +346,7 @@ pub struct CharEquipSlotTooltip;
 /// info modal instead. Empty slots are inert on either button.
 #[allow(clippy::too_many_arguments)]
 fn on_slot_click(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     slots: Query<&CharEquippedIndex>,
     time: Res<Time>,
     mut last: ResMut<CharLastSlotClick>,
@@ -388,7 +385,7 @@ fn on_slot_click(
 
 /// Hovering a filled slot spawns a `name · slot type · refine` tooltip.
 fn on_slot_hover_over(
-    over: On<Pointer<Over>>,
+    over: On<PointerOver>,
     slots: Query<(&CharEquipSlotKind, &CharEquippedIndex)>,
     inventory: Res<Inventory>,
     item_db: Option<Res<ItemDb>>,
@@ -422,7 +419,7 @@ fn on_slot_hover_over(
 }
 
 fn on_slot_hover_out(
-    _: On<Pointer<Out>>,
+    _: On<PointerOut>,
     tooltips: Query<Entity, With<CharEquipSlotTooltip>>,
     mut commands: Commands,
 ) {
@@ -634,27 +631,27 @@ mod tests {
         );
     }
 
-    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: Duration::ZERO,
+            count: 1,
+        }
     }
 
     fn slot_click_app() -> App {

@@ -1,17 +1,19 @@
 ---
 name: bevy-cheatbook
-description: Use when writing or reviewing Bevy 0.18 ECS code (systems, queries, components, bundles, plugins, states, events/messages, observers, transforms, hierarchy, change detection, run conditions, fixed timestep) or when adapting examples from the outdated Unofficial Bevy Cheat Book to current 0.18 APIs.
+description: Use as a stale-pattern triage table when reading Unofficial Bevy Cheat Book material (targeting ~Bevy 0.14-0.15) or 0.18-era code, to translate identifiers and concepts into current Bevy. Validated against Bevy 0.18.1, with a 0.20 addendum. For authoritative current API guidance prefer the `bevy` skill.
 ---
 
-# Bevy Cheatbook (verified for Bevy 0.18)
+# Bevy Cheatbook triage (verified for 0.18, addendum for 0.20)
 
-## Overview
+## Read this first
 
-Distilled ECS concepts and pitfalls from the Unofficial Bevy Cheat Book, with all API syntax verified against **Bevy 0.18.1**.
+**This skill is a parrot-to-triage table, not the current API reference.** It was verified against **Bevy 0.18.1**; the project is now on **0.20**. Its value is the ECS *concepts* (mental model, scheduling, change detection, transform/visibility gotchas) and the stale-identifier mapping. For anything version-sensitive, use the `bevy` skill (0.20 facet files) or the crate docs, and treat a match against the table below as "this snippet predates current Bevy".
 
-**The Cheat Book is unmaintained — its pages target ~Bevy 0.14–0.15.** Its *concepts* (ECS mental model, scheduling, change detection, transform/visibility gotchas) are still correct. Its *API names* are largely stale. When you read the book online, trust the ideas, not the code. This skill carries the current syntax.
+**0.20 additions that are NOT in this file** (see the `bevy` skill and `bevy/references/ecs.md`): `chain_weak()`/`before_weak()`/`after_weak()` weak ordering, bulk `despawn_all`/`despawn_all_where`, panics in systems/commands/observers routed to `FallbackErrorHandler`, `BevyError::context`/`with_context`, `#[component(summary_tick)]`, and `ScheduleBuildSettings::shuffle_seed`. BSN syntax also changed in 0.20 (see `bevy-feathers-bsn`).
 
-**Before quoting any cheatbook code snippet, run the triage table below.** If an identifier matches a "stale" cell, the snippet is wrong for 0.18.
+**The Cheat Book itself is unmaintained — its pages target ~Bevy 0.14–0.15.** Trust its ideas, not its code.
+
+**Before quoting any cheatbook code snippet, run the triage table below.** If an identifier matches a "stale" cell, the snippet predates 0.18 (and therefore 0.20).
 
 ## Stale → 0.18 Triage (top offenders)
 

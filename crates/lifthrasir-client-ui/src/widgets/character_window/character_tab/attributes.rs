@@ -256,7 +256,7 @@ fn head(text: &'static str) -> impl Scene {
         }
         TextColor(lifthrasir_ui::theme::GOLD)
         Node { margin: {UiRect::bottom(px(4))} }
-        ignore_picking()
+        @ignore_picking()
     }
 }
 
@@ -265,14 +265,12 @@ fn head(text: &'static str) -> impl Scene {
 pub fn attributes_panel() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(12), flex_grow: 1.0, flex_basis: px(0) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            ledger(),
-            commit_row(),
-            (
-                CharAllocationFeedback
-                chrome_text(String::new(), 11.0, lifthrasir_ui::theme::GOLD)
-            ),
+            @ledger() --
+            @commit_row() --
+            CharAllocationFeedback
+            @chrome_text(String::new(), 11.0, lifthrasir_ui::theme::GOLD)
         ]
     }
 }
@@ -280,8 +278,8 @@ pub fn attributes_panel() -> impl Scene {
 fn ledger() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(16) }
-        ignore_picking()
-        Children [ rail(), combat() ]
+        @ignore_picking()
+        Children [ @rail() -- @combat() ]
     }
 }
 
@@ -295,8 +293,8 @@ fn rail() -> impl Scene {
             flex_direction: FlexDirection::Column,
             row_gap: px(6),
         }
-        ignore_picking()
-        Children [ head("ATTRIBUTES"), {rows}, bank() ]
+        @ignore_picking()
+        Children [ @head("ATTRIBUTES") -- {rows} -- @bank() ]
     }
 }
 
@@ -311,19 +309,17 @@ fn bank() -> impl Scene {
             border_radius: BorderRadius::all(px(6)),
         }
         BackgroundColor(lifthrasir_ui::theme::FIELD)
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text("Status Point".to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM),
-            (
-                Text({"0".to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                TextColor(lifthrasir_ui::theme::GOLD)
-                CharPointBank
-                ignore_picking()
-            ),
+            @chrome_text("Status Point".to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM) --
+            Text({"0".to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            TextColor(lifthrasir_ui::theme::GOLD)
+            CharPointBank
+            @ignore_picking()
         ]
     }
 }
@@ -336,36 +332,32 @@ fn stat_row(stat: StatusParameter) -> impl Scene {
             align_items: AlignItems::Center,
             column_gap: px(6),
         }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                chrome_text(stat.name().to_string(), 11.5, lifthrasir_ui::theme::TEXT_DIM)
-                Node { width: px(34) }
-            ),
-            (
-                template_value(CharStatValue(stat))
-                Text({"0".to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(13.0)},
-                }
-                TextColor(lifthrasir_ui::theme::TEXT)
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
-            stepper(stat, false),
-            stepper(stat, true),
-            (
-                template_value(CharCostLabel(stat))
-                Text({"".to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(10.5)},
-                }
-                TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-                Node { width: px(34) }
-                ignore_picking()
-            ),
+            @chrome_text(stat.name().to_string(), 11.5, lifthrasir_ui::theme::TEXT_DIM)
+            Node { width: px(34) }
+            --
+            CharStatValue(stat)
+            Text({"0".to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(13.0)},
+            }
+            TextColor(lifthrasir_ui::theme::TEXT)
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @stepper(stat, false) --
+            @stepper(stat, true) --
+            CharCostLabel(stat)
+            Text({"".to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(10.5)},
+            }
+            TextColor(lifthrasir_ui::theme::TEXT_FAINT)
+            Node { width: px(34) }
+            @ignore_picking()
         ]
     }
 }
@@ -373,7 +365,7 @@ fn stat_row(stat: StatusParameter) -> impl Scene {
 fn stepper(stat: StatusParameter, raise: bool) -> impl Scene {
     let glyph = if raise { "+" } else { "\u{2212}" };
     bsn! {
-        template_value(CharStepper { stat, raise })
+        CharStepper { stat, raise }
         Node {
             width: px(20),
             height: px(20),
@@ -384,7 +376,7 @@ fn stepper(stat: StatusParameter, raise: bool) -> impl Scene {
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         Pickable
         on(on_char_stepper)
-        Children [ chrome_text(glyph.to_string(), 13.0, lifthrasir_ui::theme::TEXT) ]
+        Children [ @chrome_text(glyph.to_string(), 13.0, lifthrasir_ui::theme::TEXT) ]
     }
 }
 
@@ -410,27 +402,25 @@ fn combat() -> impl Scene {
             flex_direction: FlexDirection::Column,
             row_gap: px(6),
         }
-        ignore_picking()
-        Children [ head("COMBAT"), {cells} ]
+        @ignore_picking()
+        Children [ @head("COMBAT") -- {cells} ]
     }
 }
 
 fn combat_cell(label: &'static str, cell: CharCombatCell) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            chrome_text(label.to_string(), 11.5, lifthrasir_ui::theme::TEXT_DIM),
-            (
-                template_value(cell)
-                Text({"0".to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                    font_size: {FontSize::Px(12.0)},
-                }
-                TextColor(lifthrasir_ui::theme::TEXT)
-                ignore_picking()
-            ),
+            @chrome_text(label.to_string(), 11.5, lifthrasir_ui::theme::TEXT_DIM) --
+            cell
+            Text({"0".to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
+                font_size: {FontSize::Px(12.0)},
+            }
+            TextColor(lifthrasir_ui::theme::TEXT)
+            @ignore_picking()
         ]
     }
 }
@@ -438,18 +428,15 @@ fn combat_cell(label: &'static str, cell: CharCombatCell) -> impl Scene {
 fn commit_row() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            (
-                commit_button(lifthrasir_ui::theme::FIELD)
-                on(on_char_reset)
-                Children [ chrome_text("Reset".to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) ]
-            ),
-            (
-                commit_button(lifthrasir_ui::theme::EMERALD)
-                on(on_char_save)
-                Children [ chrome_text("Save".to_string(), 13.0, lifthrasir_ui::theme::EMERALD_INK) ]
-            ),
+            @commit_button(lifthrasir_ui::theme::FIELD)
+            on(on_char_reset)
+            Children [ @chrome_text("Reset".to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) ]
+            --
+            @commit_button(lifthrasir_ui::theme::EMERALD)
+            on(on_char_save)
+            Children [ @chrome_text("Save".to_string(), 13.0, lifthrasir_ui::theme::EMERALD_INK) ]
         ]
     }
 }
@@ -478,7 +465,7 @@ fn commit_button(bg: Color) -> impl Scene {
 /// `+`/`−` observer: mutates `CharStatStaging` via the staging helpers. Reads every
 /// primary base from `CharacterStatus` so no stat is ever missing from the bases.
 fn on_char_stepper(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     steppers: Query<&CharStepper>,
     player: Query<&CharacterStatus, With<LocalPlayer>>,
     mut staging: ResMut<CharStatStaging>,
@@ -499,7 +486,7 @@ fn on_char_stepper(
 
 /// Submit the draft once, retaining each stat ID until its acknowledgment arrives.
 fn on_char_save(
-    _: On<Pointer<Click>>,
+    _: On<PointerClick>,
     mut staging: ResMut<CharStatStaging>,
     mut writer: MessageWriter<StatIncreaseRequested>,
 ) {
@@ -515,7 +502,7 @@ fn on_char_save(
 }
 
 /// Reset: discard all staged points without contacting the server.
-fn on_char_reset(_: On<Pointer<Click>>, mut staging: ResMut<CharStatStaging>) {
+fn on_char_reset(_: On<PointerClick>, mut staging: ResMut<CharStatStaging>) {
     staging.clear();
 }
 

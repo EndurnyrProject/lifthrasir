@@ -4,7 +4,7 @@ use lifthrasir_client::core::state::GameState;
 /// Loaded through the `ro://` composite source. Paths are joined onto the data
 /// folder root (`assets/data`), so the bare filename maps to `assets/data/main_bg.png`.
 const BACKGROUND_IMAGE: &str = "ro://main_bg.png";
-const BLUR_SHADER: &str = "ro://shaders/menu_background_blur.wgsl";
+const BLUR_SHADER: &str = "ro://shaders/menu_background_blur.wesl";
 
 pub struct MenuBackgroundPlugin;
 

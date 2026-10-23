@@ -1,5 +1,5 @@
 //! The persistent Console chrome, authored as one `bsn!` tree: root, a draggable
-//! titlebar (reusing [`chrome::titlebar`]), an inline tab strip, the identity-strip
+//! @titlebar(reusing [`chrome::titlebar`]), an inline tab strip, the identity-strip
 //! mount, and the three empty tab-body containers. Live content is projected into
 //! the mount and bodies by the per-tab rebuild systems (later tasks); this file only
 //! builds the furniture.
@@ -56,10 +56,10 @@ fn window() -> impl Scene {
         Visibility::Hidden
         Pickable
         Children [
-            titlebar_row(),
-            tab_strip(),
-            body_container::<CharacterIdentityMount>(UiRect::axes(px(14), px(8))),
-            content_region(),
+            @titlebar_row() --
+            @tab_strip() --
+            @body_container::<CharacterIdentityMount>(UiRect::axes(px(14), px(8))) --
+            @content_region()
         ]
     }
 }
@@ -83,22 +83,19 @@ fn titlebar_row() -> impl Scene {
         Pickable
         on(drag_window::<CharacterTitlebar, CharacterWindowRoot>)
         Children [
-            glyph_icon("user", 16.0, lifthrasir_ui::theme::GOLD),
-            (
-                Text({"Character".to_string()})
-                TextFont {
-                    font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                    font_size: {FontSize::Px(15.0)},
-                }
-                ThemeTextColor({TOKEN_TEXT})
-                Node { flex_grow: 1.0 }
-                ignore_picking()
-            ),
-            (
-                @FeathersButton { @caption: bsn! { glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                Node { width: px(22), height: px(22) }
-                on(on_close_click)
-            ),
+            @glyph_icon("user", 16.0, lifthrasir_ui::theme::GOLD) --
+            Text({"Character".to_string()})
+            TextFont {
+                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
+                font_size: {FontSize::Px(15.0)},
+            }
+            ThemeTextColor({TOKEN_TEXT})
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
+            Node { width: px(22), height: px(22) }
+            on(on_close_click)
         ]
     }
 }
@@ -114,14 +111,14 @@ fn tab_strip() -> impl Scene {
             column_gap: px(6),
             padding: {UiRect::axes(px(14), px(6))},
         }
-        ignore_picking()
+        @ignore_picking()
         Children [ {buttons} ]
     }
 }
 
 fn tab_button(label: &'static str, tab: CharacterTab) -> impl Scene {
     bsn! {
-        template_value(CharacterTabButton(tab))
+        CharacterTabButton(tab)
         Node {
             flex_grow: 1.0,
             flex_basis: px(0),
@@ -133,7 +130,7 @@ fn tab_button(label: &'static str, tab: CharacterTab) -> impl Scene {
         BackgroundColor(lifthrasir_ui::theme::FIELD)
         Pickable
         on(on_tab_click)
-        Children [ chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) ]
+        Children [ @chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) ]
     }
 }
 
@@ -141,11 +138,11 @@ fn tab_button(label: &'static str, tab: CharacterTab) -> impl Scene {
 fn content_region() -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Column, flex_grow: 1.0 }
-        ignore_picking()
+        @ignore_picking()
         Children [
-            body_container::<CharacterTabBody>(UiRect::axes(px(14), px(10))),
-            body_container::<BagTabBody>(UiRect::axes(px(14), px(10))),
-            body_container::<SkillsTabBody>(UiRect::axes(px(14), px(10))),
+            @body_container::<CharacterTabBody>(UiRect::axes(px(14), px(10))) --
+            @body_container::<BagTabBody>(UiRect::axes(px(14), px(10))) --
+            @body_container::<SkillsTabBody>(UiRect::axes(px(14), px(10)))
         ]
     }
 }

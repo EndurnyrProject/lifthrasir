@@ -8,6 +8,27 @@ use bevy::{
 };
 use std::time::Duration;
 
+/// Build the pointer click event Bevy's picking emits for the primary button.
+fn pointer_click(entity: Entity) -> PointerClick {
+    PointerClick {
+        entity,
+        pointer: Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Image(ImageRenderTarget {
+                    handle: Handle::default(),
+                    scale_factor: 1.0,
+                }),
+                position: Vec2::ZERO,
+            },
+        ),
+        button: PointerButton::Primary,
+        hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
+        duration: Duration::ZERO,
+        count: 1,
+    }
+}
+
 #[test]
 fn client_attaches_interaction_to_explicit_visual_root_mappings() {
     let mut app = App::new();
@@ -29,23 +50,7 @@ fn client_attaches_interaction_to_explicit_visual_root_mappings() {
         .spawn((ChildOf(unrelated_parent), ActorVisualRoot(owner)))
         .id();
     app.world_mut().flush();
-    app.world_mut().trigger(Pointer::new(
-        PointerId::Mouse,
-        Location {
-            target: NormalizedRenderTarget::Image(ImageRenderTarget {
-                handle: Handle::default(),
-                scale_factor: 1.0,
-            }),
-            position: Vec2::ZERO,
-        },
-        Click {
-            button: PointerButton::Primary,
-            hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
-            duration: Duration::ZERO,
-            count: 1,
-        },
-        body,
-    ));
+    app.world_mut().trigger(pointer_click(body));
     let messages = app.world().resource::<Messages<AttackRequested>>();
     let requests: Vec<_> = messages.iter_current_update_messages().collect();
     assert_eq!(requests.len(), 1);
@@ -84,23 +89,7 @@ fn nested_gltf_and_direct_sprite_picks_target_the_network_owner() {
                 .spawn(ChildOf(parent))
                 .observe(on_sprite_click)
                 .id();
-            app.world_mut().trigger(Pointer::new(
-                PointerId::Mouse,
-                Location {
-                    target: NormalizedRenderTarget::Image(ImageRenderTarget {
-                        handle: Handle::default(),
-                        scale_factor: 1.0,
-                    }),
-                    position: Vec2::ZERO,
-                },
-                Click {
-                    button: PointerButton::Primary,
-                    hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
-                    duration: Duration::ZERO,
-                    count: 1,
-                },
-                mesh,
-            ));
+            app.world_mut().trigger(pointer_click(mesh));
             if kind == ObjectType::Npc {
                 let messages = app.world().resource::<Messages<TalkToNpc>>();
                 let requests: Vec<_> = messages.iter_current_update_messages().collect();

@@ -65,11 +65,11 @@ pub struct WaterData {
 
 impl MaterialExtension for WaterExtension {
     fn fragment_shader() -> ShaderRef {
-        "ro://shaders/water.wgsl".into()
+        "ro://shaders/water.wesl".into()
     }
 
     fn vertex_shader() -> ShaderRef {
-        "ro://shaders/water.wgsl".into()
+        "ro://shaders/water.wesl".into()
     }
 }
 

@@ -571,7 +571,7 @@ pub(crate) fn on_category_activate(
 /// instead; empty cells are inert on either button.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn on_cell_select(
-    click: On<Pointer<Click>>,
+    click: On<PointerClick>,
     cells: Query<&StorageCell>,
     time: Res<Time>,
     data: StorageData,
@@ -627,7 +627,7 @@ pub(crate) fn on_cell_select(
     }
 }
 
-pub(crate) fn stop_quick_transfer_propagation(mut click: On<Pointer<Click>>) {
+pub(crate) fn stop_quick_transfer_propagation(mut click: On<PointerClick>) {
     click.propagate(false);
 }
 
@@ -1051,28 +1051,28 @@ mod tests {
         }
     }
 
-    fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer<Click> {
+    fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
         use bevy::picking::pointer::{Location, PointerId};
         use bevy::window::WindowRef;
 
-        Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-            Click {
-                button,
-                hit: HitData::new(target, 0.0, None, None),
-                duration: Duration::ZERO,
-                count: 1,
-            },
-            target,
-        )
+        PointerClick {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button,
+            hit: HitData::new(target, 0.0, None, None),
+            duration: Duration::ZERO,
+            count: 1,
+        }
     }
 
     #[test]

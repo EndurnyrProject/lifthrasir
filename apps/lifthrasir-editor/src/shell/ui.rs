@@ -4,7 +4,10 @@
 use super::{camera::EditorCamera, undo::UndoStack};
 use crate::{
     EditorPaths,
-    map::{open::OpenMap, save::map_glb_path},
+    map::{
+        open::{EditorOperation, OpenMap},
+        save::map_glb_path,
+    },
 };
 use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContexts, egui, input::EguiWantsInput};
@@ -140,6 +143,7 @@ pub fn status_bar(
     open: Option<Res<OpenMap>>,
     undo: Res<UndoStack>,
     paths: Option<Res<EditorPaths>>,
+    operation: Option<Res<EditorOperation>>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let mode = cameras.single().map(|camera| camera.mode).ok();
@@ -160,6 +164,25 @@ pub fn status_bar(
                 if let Some(mode) = mode {
                     ui.separator();
                     ui.label(format!("Camera: {mode:?} (C to toggle)"));
+                }
+                if let Some(operation) = operation {
+                    match &*operation {
+                        EditorOperation::Idle => {}
+                        EditorOperation::Loading { name } => {
+                            ui.separator();
+                            ui.spinner();
+                            ui.label(format!("Loading {name}…"));
+                        }
+                        EditorOperation::Saving { name } => {
+                            ui.separator();
+                            ui.spinner();
+                            ui.label(format!("Saving {name}…"));
+                        }
+                        EditorOperation::Saved { name } => {
+                            ui.separator();
+                            ui.label(format!("Saved {name}"));
+                        }
+                    }
                 }
             });
         });
