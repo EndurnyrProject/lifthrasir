@@ -10,6 +10,7 @@ use super::{
     lighting::apply_map_lighting,
     save::SaveAsDialog,
     save::SaveRequest,
+    session::{EditorSession, persist_preferences, record_recent_map},
     settings::MapSettingsWindow,
 };
 use crate::shell::{
@@ -46,6 +47,23 @@ pub struct OpenMap {
     pub path: String,
     pub name: String,
     pub root: Entity,
+}
+
+/// Work currently being performed by the editor. Loading can span many frames;
+/// saving also reports completion so an expensive write never looks ignored.
+#[derive(Resource, Debug, Clone, Default)]
+pub enum EditorOperation {
+    #[default]
+    Idle,
+    Loading {
+        name: String,
+    },
+    Saving {
+        name: String,
+    },
+    Saved {
+        name: String,
+    },
 }
 
 /// Opens `path` (`ro://maps/<n>/<n>.glb`), through the unsaved-changes guard.
@@ -106,6 +124,7 @@ pub(super) fn plugin(app: &mut App) {
         .init_resource::<StartScreenActions>()
         .init_resource::<ErrorModal>()
         .init_resource::<UnsavedGuard>()
+        .init_resource::<EditorOperation>()
         .init_resource::<MapPicker>()
         .add_systems(
             Update,
@@ -137,6 +156,7 @@ fn request_open(
     mut errors: ResMut<ErrorModal>,
     mut picker: ResMut<MapPicker>,
     mut next: ResMut<NextState<EditorScreen>>,
+    mut operation: ResMut<EditorOperation>,
     open: Option<Res<OpenMap>>,
     assets: Res<AssetServer>,
 ) {
@@ -165,7 +185,12 @@ fn request_open(
         .spawn((MapSceneRequest { path: path.clone() }, Transform::IDENTITY))
         .id();
     commands.insert_resource(OpeningGltf(assets.load(path.clone())));
-    commands.insert_resource(OpenMap { path, name, root });
+    commands.insert_resource(OpenMap {
+        path,
+        name: name.clone(),
+        root,
+    });
+    *operation = EditorOperation::Loading { name };
     picker.open = false;
     next.set(EditorScreen::Loading);
 }
@@ -205,9 +230,15 @@ fn finish_open(world: &mut World) {
     }
     match prepare_map(world, &open) {
         Ok(false) => {}
-        Ok(true) => world
-            .resource_mut::<NextState<EditorScreen>>()
-            .set(EditorScreen::Editing),
+        Ok(true) => {
+            world
+                .resource_mut::<NextState<EditorScreen>>()
+                .set(EditorScreen::Editing);
+            let path = open.path.clone();
+            let mut session = world.resource_mut::<EditorSession>();
+            record_recent_map(&mut session, &path);
+            *world.resource_mut::<EditorOperation>() = EditorOperation::Idle;
+        }
         Err(error) => fail_open(world, &open, error),
     }
 }
@@ -293,6 +324,7 @@ fn fail_open(world: &mut World, open: &OpenMap, error: String) {
     world
         .resource_mut::<ErrorModal>()
         .show(format!("Could not open {}", open.path), vec![error]);
+    *world.resource_mut::<EditorOperation>() = EditorOperation::Idle;
 }
 
 /// Map names with a `maps/<n>/<n>.glb` in the source, sorted.
@@ -318,7 +350,9 @@ fn menu_bar(
     mut actions: ResMut<StartScreenActions>,
     mut save_as: ResMut<SaveAsDialog>,
     mut settings: ResMut<MapSettingsWindow>,
+    mut session: ResMut<EditorSession>,
     mut saves: MessageWriter<SaveRequest>,
+    mut opens: MessageWriter<OpenMapRequest>,
     mut closes: MessageWriter<WindowCloseRequested>,
     windows: Query<Entity, With<PrimaryWindow>>,
 ) -> Result {
@@ -335,6 +369,18 @@ fn menu_bar(
                         picker.open = true;
                         picker.maps = None;
                     }
+                    ui.menu_button("Open recent", |ui| {
+                        if session.preferences.recent_maps.is_empty() {
+                            ui.label("No recent maps");
+                        }
+                        for path in &session.preferences.recent_maps {
+                            let label = map_name_from_path(path).unwrap_or_else(|| path.clone());
+                            if ui.button(label).clicked() {
+                                opens.write(OpenMapRequest { path: path.clone() });
+                                ui.close();
+                            }
+                        }
+                    });
                     if ui.add_enabled(editing, egui::Button::new("Save")).clicked() {
                         saves.write(SaveRequest { save_as: None });
                     }
@@ -344,6 +390,14 @@ fn menu_bar(
                         && let Some(layout) = &layout
                     {
                         save_as.open(&layout.name);
+                    }
+                    ui.separator();
+                    let response = ui.checkbox(
+                        &mut session.preferences.reopen_last_session,
+                        "Reopen last map at startup",
+                    );
+                    if response.changed() {
+                        persist_preferences(&session);
                     }
                     ui.separator();
                     if ui.button("Quit").clicked() {
