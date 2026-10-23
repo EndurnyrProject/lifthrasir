@@ -58,6 +58,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             })
             .disable::<bevy::audio::AudioPlugin>(),
     )
+    .add_plugins(bevy_framepace::FramepacePlugin)
+    .insert_resource(bevy_framepace::FramepaceSettings {
+        limiter: bevy_framepace::Limiter::from_framerate(60.0),
+    })
     // The editor camera carries `PrimaryEguiContext`; never the preview camera.
     .insert_resource(EguiGlobalSettings {
         auto_create_primary_context: false,
