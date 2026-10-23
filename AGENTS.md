@@ -300,7 +300,7 @@ DLSS_SDK=/path/to/dlss-sdk VULKAN_SDK=/path/to/vulkan \
 ```
 
 Prerequisites on the target machine:
-- **NVIDIA DLSS Super Resolution SDK v310.5.3** — download separately (it is not redistributable) and point `DLSS_SDK` at its absolute path.
+- **NVIDIA DLSS Super Resolution SDK v310.9.1** (required by `dlss_wgpu` 6.0, which Bevy 0.20 uses; other SDK versions fail to compile) — clone [NVIDIA/DLSS at `v310.9.1`](https://github.com/NVIDIA/DLSS/tree/v310.9.1) (it is not redistributable) and point `DLSS_SDK` at its absolute path. Re-check the `dlss_wgpu` version chart on every Bevy upgrade.
 - **Vulkan SDK** — with `VULKAN_SDK` set.
 - **Clang** — required by `bindgen` when building the SDK wrapper.
 
@@ -308,7 +308,7 @@ At runtime DLSS degrades gracefully: if the GPU/driver does not support it, the 
 
 **Licensing / distribution (settle before any public release):**
 - The DLSS SDK license text (DLSS Programming Guide §9.5) must ship alongside any distributed binary.
-- The proprietary `nvngx_dlss` runtime libraries must be packaged next to the binary.
+- The proprietary DLSS runtime library must be packaged next to the binary: `nvngx_dlss.dll` (Windows) or `libnvidia-ngx-dlss.so.310.9.1` (Linux), from `$DLSS_SDK/lib/<platform>/rel/`.
 - The binary is already GPL-3.0 (via the xBRZ `xbrz-rs` crate); GPL plus the proprietary DLSS blob loaded at runtime is a known gray area — resolve it before distributing publicly.
 
 Manual verification checklist: `specs/2026-06-28-dlss/design.md` → "Testing".
