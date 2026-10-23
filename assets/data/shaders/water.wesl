@@ -1,9 +1,7 @@
-#import bevy_pbr::{
+import bevy_pbr::render::{
     forward_io::{Vertex, VertexOutput, FragmentOutput},
     mesh_functions::{get_world_from_local, mesh_position_local_to_clip},
-    pbr_fragment::pbr_input_from_standard_material,
-    pbr_functions::alpha_discard,
-}
+};
 
 // Smaller values = more texture repetition
 const TEXTURE_WORLD_SCALE: f32 = 100.0;
@@ -72,17 +70,16 @@ struct WaterData {
     tile_coords: vec4<f32>, // xy = tile position, zw = texture scale
 };
 
-// Bevy 0.17: StandardMaterial in @group(3) bindings 0-12
-// MaterialExtension in @group(3) bindings 100+ to avoid conflicts
-@group(3) @binding(100)
+// StandardMaterial owns material bindings 0-99; the extension uses 100+.
+@group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> water: WaterData;
-@group(3) @binding(101)
+@group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var water_texture: texture_2d<f32>;
-@group(3) @binding(102)
+@group(constants::MATERIAL_BIND_GROUP) @binding(102)
 var water_sampler: sampler;
-@group(3) @binding(103)
+@group(constants::MATERIAL_BIND_GROUP) @binding(103)
 var normal_map: texture_2d<f32>;
-@group(3) @binding(104)
+@group(constants::MATERIAL_BIND_GROUP) @binding(104)
 var normal_sampler: sampler;
 
 
@@ -200,13 +197,12 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     let tangent = vec3<f32>(1.0, 0.0, 0.0);
     let bitangent = vec3<f32>(0.0, 0.0, 1.0);
 
-    #ifdef VERTEX_TANGENTS
     // Store tangent in the existing tangent output
+    @if(VERTEX_TANGENTS)
     out.world_tangent = vec4<f32>(
         normalize((world_from_local * vec4<f32>(tangent, 0.0)).xyz),
         1.0
     );
-    #endif
 
     // Calculate UVs from world position for seamless tiling
     // This creates a continuous UV space across all water tiles
@@ -246,14 +242,15 @@ fn fragment(
     // Construct TBN matrix for transforming normal from tangent to world space
     let N = normalize(in.world_normal.xyz);
 
-    #ifdef VERTEX_TANGENTS
-        let T = normalize(in.world_tangent.xyz);
-        let B = normalize(cross(N, T) * in.world_tangent.w);
-    #else
-        // Fallback if tangents aren't available
-        let T = normalize(vec3<f32>(1.0, 0.0, 0.0));
-        let B = normalize(cross(N, T));
-    #endif
+    // Fallback to a fixed X tangent if tangents aren't available
+    @if(VERTEX_TANGENTS)
+    let T = normalize(in.world_tangent.xyz);
+    @else
+    let T = normalize(vec3<f32>(1.0, 0.0, 0.0));
+    @if(VERTEX_TANGENTS)
+    let B = normalize(cross(N, T) * in.world_tangent.w);
+    @else
+    let B = normalize(cross(N, T));
 
     // Transform the normal from tangent space to world space
     let final_normal = normalize(

@@ -5,8 +5,10 @@
 // and colour are data-driven via PortalParams. Dropped from the original:
 // view-parallax, screen-warp refraction and the stencil pass (RO's camera angle
 // is fixed, so the per-layer depth scroll carries the tunnel look on its own).
-#import bevy_pbr::forward_io::VertexOutput
-#import bevy_pbr::mesh_view_bindings::globals
+import bevy_pbr::render::{
+    forward_io::VertexOutput,
+    mesh_view_bindings::globals,
+};
 
 struct PortalParams {
     primary_color: vec4<f32>,
@@ -16,9 +18,9 @@ struct PortalParams {
     motion: vec4<f32>,  // x=speed_scale y=spin z=inward w=base_motion
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: PortalParams;
-@group(#{MATERIAL_BIND_GROUP}) @binding(1) var noise_tex: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(2) var noise_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(0) var<uniform> material: PortalParams;
+@group(constants::MATERIAL_BIND_GROUP) @binding(1) var noise_tex: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(2) var noise_sampler: sampler;
 
 const PI: f32 = 3.14159265;
 const SHAPE_WARP: f32 = 0.1;

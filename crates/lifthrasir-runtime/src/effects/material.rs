@@ -21,7 +21,7 @@ pub struct EffectMaterial {
 
 impl Material for EffectMaterial {
     fn fragment_shader() -> ShaderRef {
-        "ro://shaders/effect.wgsl".into()
+        "ro://shaders/effect.wesl".into()
     }
 
     fn alpha_mode(&self) -> AlphaMode {
