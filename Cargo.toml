@@ -24,7 +24,12 @@ edition = "2024"
 
 [workspace.dependencies]
 anyhow = "1.0"
-bevy = { version = "0.20.0", features = [
+# Audio is provided exclusively by bevy_kira_audio. Keep Bevy's default feature
+# set minus its unused rodio-based audio backend.
+bevy = { version = "0.20.0", default-features = false, features = [
+    "2d",
+    "3d",
+    "ui",
     "bmp",
     "bevy_settings",
     "custom_cursor",
