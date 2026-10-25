@@ -858,32 +858,104 @@ fn cell_anchored_vfx_only_spawns_one_placeholder_per_visible_cell() {
 }
 
 #[test]
-fn pre_renewal_song_field_plays_its_skill_units_visual() {
-    const POEM_OF_BRAGI: u32 = 321; // one-shot `skills` cast + looping field
+fn performance_fields_cover_every_server_cell_even_when_cells_are_invisible() {
+    for skill_id in [
+        306, 307, 308, 309, 310, 311, 312, 313, 317, 319, 320, 321, 322, 325, 327, 328, 329, 330,
+    ] {
+        let mut app = test_app(seeded_catalog());
+        let cells = (37..=43)
+            .flat_map(|x| (47..=53).map(move |y| cell(x * 100 + y, x as i32, y as i32, false)))
+            .collect();
+        app.world_mut().write_message(SkillUnitSpawned {
+            group: group(1, skill_id, cells),
+        });
+        app.update();
+
+        assert_eq!(
+            effects(&mut app),
+            49,
+            "skill {skill_id} covers its 7x7 field"
+        );
+        let mut effects = app.world_mut().query::<(&ActiveEffect, &ChildOf)>();
+        let mut covered = std::collections::HashSet::new();
+        for (effect, child_of) in effects.iter(app.world()) {
+            assert!(effect.repeating, "the field visual loops until despawn");
+            let cell = app
+                .world()
+                .get::<SkillUnitCell>(child_of.parent())
+                .expect("each visual follows a server cell, not the group center");
+            assert!(covered.insert(cell.cell_id), "one motif per cell");
+        }
+    }
+}
+
+#[test]
+fn idun_footprint_visuals_follow_moves_and_cell_despawns() {
     let mut app = test_app(seeded_catalog());
     app.world_mut().write_message(SkillUnitSpawned {
         group: group(
             1,
-            POEM_OF_BRAGI,
-            vec![cell(100, 40, 50, false), cell(101, 41, 50, false)],
+            322,
+            vec![cell(100, 40, 50, false), cell(101, 43, 52, false)],
         ),
     });
     app.update();
+    assert_eq!(
+        effects(&mut app),
+        2,
+        "use only the supplied footprint cells"
+    );
+    let visuals: Vec<_> = app
+        .world_mut()
+        .query_filtered::<Entity, With<ActiveEffect>>()
+        .iter(app.world())
+        .collect();
 
+    app.world_mut().write_message(SkillUnitMoved {
+        group_id: 1,
+        center_x: 42,
+        center_y: 51,
+        cells: vec![cell(100, 42, 51, false), cell(101, 45, 53, false)],
+    });
+    app.update();
+    for visual in visuals {
+        let world = app.world();
+        let cell_entity = world.get::<ChildOf>(visual).expect("same visual").parent();
+        let cell = world.get::<SkillUnitCell>(cell_entity).unwrap();
+        let root = world.get::<ChildOf>(cell_entity).unwrap().parent();
+        let position = world.get::<Transform>(root).unwrap().translation
+            + world.get::<Transform>(cell_entity).unwrap().translation
+            + world.get::<Transform>(visual).unwrap().translation;
+        let expected = if cell.cell_id == 100 {
+            (42, 51)
+        } else {
+            (45, 53)
+        };
+        assert_eq!(
+            position,
+            spawn_coords_to_world_position(expected.0, expected.1)
+        );
+    }
+
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![100],
+        reason: SkillUnitDespawnReason::Canceled,
+    });
+    app.update();
     assert_eq!(
         effects(&mut app),
         1,
-        "one looping visual at the field center"
+        "a removed cell takes its visual with it"
     );
-    let mut effects = app.world_mut().query::<(&ActiveEffect, &ChildOf)>();
-    let (effect, child_of) = effects.single(app.world()).expect("one effect");
-    assert!(effect.repeating, "the field visual loops until despawn");
-    assert!(
-        app.world()
-            .get::<SkillUnitGroup>(child_of.parent())
-            .is_some(),
-        "the visual rides on the group root, so it follows SkillUnitMoved"
-    );
+    app.world_mut().write_message(SkillUnitDespawned {
+        group_id: 1,
+        cell_ids: vec![101],
+        reason: SkillUnitDespawnReason::Canceled,
+    });
+    app.update();
+    assert_eq!(effects(&mut app), 0, "the last visual is removed");
+    assert_eq!(roots(&mut app), 0, "the empty group is removed");
 }
 
 #[test]

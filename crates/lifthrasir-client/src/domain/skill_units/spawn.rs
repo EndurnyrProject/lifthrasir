@@ -198,9 +198,9 @@ fn spawn_group(
                 root,
             );
         }
-        GroundAnchor::Cell => {
+        GroundAnchor::Cell | GroundAnchor::Footprint => {
             for (cell_entity, cell) in &cell_entities {
-                if cell.flags.visible {
+                if cell.flags.visible || descriptor.ground_anchor == GroundAnchor::Footprint {
                     spawn_effect_child(
                         commands,
                         asset_server,

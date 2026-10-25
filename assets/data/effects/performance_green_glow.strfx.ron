@@ -1,6 +1,6 @@
-// Eternal Chaos / Please Don't Forget Me field: hovering green light streaks.
+// Eternal Chaos / Please Don't Forget Me: one green streak per footprint cell.
 // Motif reference: roBrowserLegacy src/Renderer/Effects/Songs.js (EtChaosEffects, ForgetEffects).
-// Group-centered approximation; black-backed lens textures need additive blending.
+// Black-backed lens textures need additive blending.
 (
     fps: 30,
     layers: [
@@ -8,27 +8,9 @@
             textures: ["ro://data/texture/effect/lens_g.bmp"],
             blend: Add,
             keys: [
-                (at: 0, offset: (279.0, 275.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
-                (at: 60, offset: (279.0, 263.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
-                (at: 120, offset: (279.0, 275.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/lens_g.bmp"],
-            blend: Add,
-            keys: [
-                (at: 0, offset: (319.0, 255.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
-                (at: 60, offset: (319.0, 267.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
-                (at: 120, offset: (319.0, 255.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/lens_g.bmp"],
-            blend: Add,
-            keys: [
-                (at: 0, offset: (359.0, 275.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
-                (at: 60, offset: (359.0, 263.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
-                (at: 120, offset: (359.0, 275.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
+                (at: 0, offset: (319.0, 275.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
+                (at: 60, offset: (319.0, 263.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
+                (at: 120, offset: (319.0, 275.0), quad: (16.0, 32.0), color: (255, 255, 255, 180)),
             ],
         ),
     ],

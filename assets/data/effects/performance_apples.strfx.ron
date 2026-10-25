@@ -1,6 +1,5 @@
-// Apple of Idun field: retail yellow apples, not green-tinted notes.
+// Apple of Idun field: one retail yellow apple per server footprint cell.
 // Motif reference: roBrowserLegacy src/Renderer/Effects/Songs.js (AppleEffects).
-// Group-centered hovering approximation; the existing skill-unit owns the loop.
 // The apple occupies only the middle of its 103x103 magenta-keyed texture.
 (
     fps: 30,
@@ -9,27 +8,9 @@
             textures: ["ro://data/texture/effect/idun_apple.bmp"],
             blend: Blend,
             keys: [
-                (at: 0, offset: (279.0, 275.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
-                (at: 60, offset: (279.0, 263.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
-                (at: 120, offset: (279.0, 275.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/idun_apple.bmp"],
-            blend: Blend,
-            keys: [
-                (at: 0, offset: (319.0, 255.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
-                (at: 60, offset: (319.0, 267.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
-                (at: 120, offset: (319.0, 255.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/idun_apple.bmp"],
-            blend: Blend,
-            keys: [
-                (at: 0, offset: (359.0, 275.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
-                (at: 60, offset: (359.0, 263.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
-                (at: 120, offset: (359.0, 275.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
+                (at: 0, offset: (319.0, 275.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
+                (at: 60, offset: (319.0, 263.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
+                (at: 120, offset: (319.0, 275.0), quad: (64.0, 64.0), color: (255, 255, 255, 220)),
             ],
         ),
     ],

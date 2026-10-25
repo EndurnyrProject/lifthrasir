@@ -2,9 +2,10 @@
 //!
 //! Visuals are attached as effect children of the group root (for a
 //! `GroundAnchor::Group` skill like Storm Gust) or of each visible cell (for a
-//! `GroundAnchor::Cell` skill like Ice Wall). They are children rather than
-//! entity-anchored effects because `EffectAnchor::Entity` only follows the
-//! anchor's transform and does not tear down when the anchor dies; parenting
+//! `GroundAnchor::Cell` skill like Ice Wall). Performance fields use
+//! `GroundAnchor::Footprint` to cover even invisible gameplay cells. Visuals
+//! are children rather than entity-anchored effects because `EffectAnchor::Entity`
+//! only follows the anchor's transform and does not tear down when it dies; parenting
 //! makes the recursive group despawn remove every visual, which is the invariant.
 
 use bevy::mesh::ConeAnchor;

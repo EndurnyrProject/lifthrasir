@@ -1,6 +1,6 @@
-// The Ring of Nibelungen field: retail twirl motif.
+// The Ring of Nibelungen field: one retail twirl per server footprint cell.
 // Motif reference: roBrowserLegacy src/Renderer/Effects/Songs.js (NibelungEffects).
-// Group-centered approximation; additive blending removes the black background.
+// Additive blending removes the black background.
 (
     fps: 30,
     layers: [
@@ -8,27 +8,9 @@
             textures: ["ro://data/texture/effect/twirl.bmp"],
             blend: Add,
             keys: [
-                (at: 0, offset: (279.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
-                (at: 60, offset: (279.0, 263.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
-                (at: 120, offset: (279.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/twirl.bmp"],
-            blend: Add,
-            keys: [
-                (at: 0, offset: (319.0, 255.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
-                (at: 60, offset: (319.0, 267.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
-                (at: 120, offset: (319.0, 255.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/twirl.bmp"],
-            blend: Add,
-            keys: [
-                (at: 0, offset: (359.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
-                (at: 60, offset: (359.0, 263.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
-                (at: 120, offset: (359.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
+                (at: 0, offset: (319.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
+                (at: 60, offset: (319.0, 263.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
+                (at: 120, offset: (319.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 180)),
             ],
         ),
     ],

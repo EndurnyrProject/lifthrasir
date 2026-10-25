@@ -1,6 +1,5 @@
-// Lullaby field: hovering sleep symbols.
+// Lullaby field: one retail sleep symbol per server footprint cell.
 // Motif reference: roBrowserLegacy src/Renderer/Effects/Songs.js (LullabyEffects).
-// Group-centered approximation using the retail magenta-keyed texture.
 (
     fps: 30,
     layers: [
@@ -8,27 +7,9 @@
             textures: ["ro://data/texture/effect/zz.bmp"],
             blend: Blend,
             keys: [
-                (at: 0, offset: (279.0, 275.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
-                (at: 60, offset: (279.0, 263.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
-                (at: 120, offset: (279.0, 275.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/zz.bmp"],
-            blend: Blend,
-            keys: [
-                (at: 0, offset: (319.0, 255.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
-                (at: 60, offset: (319.0, 267.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
-                (at: 120, offset: (319.0, 255.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/zz.bmp"],
-            blend: Blend,
-            keys: [
-                (at: 0, offset: (359.0, 275.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
-                (at: 60, offset: (359.0, 263.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
-                (at: 120, offset: (359.0, 275.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
+                (at: 0, offset: (319.0, 275.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
+                (at: 60, offset: (319.0, 263.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
+                (at: 120, offset: (319.0, 275.0), quad: (48.0, 48.0), color: (255, 255, 255, 200)),
             ],
         ),
     ],

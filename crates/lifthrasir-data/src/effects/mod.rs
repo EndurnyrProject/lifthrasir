@@ -19,13 +19,16 @@ pub enum EffectPlacement {
     Ground,
 }
 
-/// Where a ground skill's persistent visual anchors: once at the skill-unit
-/// group center, or once per skill-unit cell.
+/// Where a ground skill's persistent visual anchors within its server footprint.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GroundAnchor {
     #[default]
     Group,
+    /// One visual per cell marked visible by the server, such as Ice Wall.
     Cell,
+    /// One visual per occupied cell, including invisible gameplay cells in
+    /// performance fields. This does not make the cells targetable or blocking.
+    Footprint,
 }
 
 /// One visual layer of an effect. A descriptor's `visuals` list is the ordered

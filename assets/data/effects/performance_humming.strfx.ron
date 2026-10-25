@@ -1,6 +1,5 @@
-// Humming field: retail melody_a musical symbol.
+// Humming field: one retail melody_a symbol per server footprint cell.
 // Motif reference: roBrowserLegacy src/Renderer/Effects/Songs.js (HummingEffects).
-// Group-centered hovering approximation, not the generic note_1.str burst.
 (
     fps: 30,
     layers: [
@@ -8,27 +7,9 @@
             textures: ["ro://data/texture/effect/melody_a.bmp"],
             blend: Blend,
             keys: [
-                (at: 0, offset: (279.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
-                (at: 60, offset: (279.0, 263.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
-                (at: 120, offset: (279.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/melody_a.bmp"],
-            blend: Blend,
-            keys: [
-                (at: 0, offset: (319.0, 255.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
-                (at: 60, offset: (319.0, 267.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
-                (at: 120, offset: (319.0, 255.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
-            ],
-        ),
-        (
-            textures: ["ro://data/texture/effect/melody_a.bmp"],
-            blend: Blend,
-            keys: [
-                (at: 0, offset: (359.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
-                (at: 60, offset: (359.0, 263.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
-                (at: 120, offset: (359.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
+                (at: 0, offset: (319.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
+                (at: 60, offset: (319.0, 263.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
+                (at: 120, offset: (319.0, 275.0), quad: (28.0, 28.0), color: (255, 255, 255, 200)),
             ],
         ),
     ],
