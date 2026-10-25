@@ -50,6 +50,7 @@ fn skill_unit_phase(value: i32) -> SkillUnitPhase {
         Ok(net::SkillUnitPhase::Used) => SkillUnitPhase::Used,
         Ok(net::SkillUnitPhase::Sprung) => SkillUnitPhase::Sprung,
         Ok(net::SkillUnitPhase::Captured) => SkillUnitPhase::Captured,
+        Ok(net::SkillUnitPhase::Opening) => SkillUnitPhase::Opening,
     }
 }
 

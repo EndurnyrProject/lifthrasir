@@ -21,6 +21,14 @@ fn cast_failure_message(reason: SkillCastFailureReason) -> &'static str {
         SkillCastFailureReason::Busy => "You cannot cast a skill right now.",
         SkillCastFailureReason::WrongWeapon => "You need a different weapon to cast this skill.",
         SkillCastFailureReason::VersusMapOnly => "This skill can only be used in versus areas.",
+        SkillCastFailureReason::NpcNearby => "An NPC is too close.",
+        SkillCastFailureReason::Overweight => "You are carrying too much weight.",
+        SkillCastFailureReason::ToTarget => "This skill cannot be used on that target.",
+        SkillCastFailureReason::HpInsufficient => "Your HP is too high to cast this skill.",
+        SkillCastFailureReason::Spirits => "You do not have enough spirit spheres.",
+        SkillCastFailureReason::Cart => "You need a pushcart to cast this skill.",
+        SkillCastFailureReason::NeedEquipment => "You need the required equipment equipped.",
+        SkillCastFailureReason::Failed => "The skill failed.",
         SkillCastFailureReason::Unspecified => "The skill cast failed.",
     }
 }

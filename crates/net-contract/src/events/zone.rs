@@ -382,6 +382,14 @@ pub enum SkillCastFailureReason {
     Busy,
     WrongWeapon,
     VersusMapOnly,
+    NpcNearby,
+    Overweight,
+    ToTarget,
+    HpInsufficient,
+    Spirits,
+    Cart,
+    NeedEquipment,
+    Failed,
 }
 
 /// A player-initiated skill cast was rejected by the server.

@@ -23,7 +23,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -722,6 +722,32 @@ pub mod envelope {
         /// s2c zone world
         #[prost(message, tag = "218")]
         SkillUnitMove(super::SkillUnitMove),
+        /// s2c zone gameplay
+        #[prost(message, tag = "219")]
+        ItemSkillReady(super::ItemSkillReady),
+        /// c2s zone
+        #[prost(message, tag = "220")]
+        MemoRequest(super::MemoRequest),
+        /// 221: an inventory add was refused, with the reference reason
+        ///
+        /// s2c zone gameplay
+        #[prost(message, tag = "221")]
+        ItemAddFailed(super::ItemAddFailed),
+        /// 222: a client string-table notice the reference sends for a refused request
+        ///
+        /// s2c zone gameplay
+        #[prost(message, tag = "222")]
+        SystemNotice(super::SystemNotice),
+        /// 223: the player closed the NPC shop window without a deal
+        ///
+        /// c2s zone
+        #[prost(message, tag = "223")]
+        NpcShopClose(super::NpcShopClose),
+        /// 224: the server cancelled the player's running progress bar
+        ///
+        /// s2c zone world
+        #[prost(message, tag = "224")]
+        ProgressBarAbort(super::ProgressBarAbort),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -1345,6 +1371,23 @@ pub struct ProgressBar {
     #[prost(uint32, tag = "3")]
     pub npc_id: u32,
 }
+/// Server -> client, cancels the running ProgressBar (an item use or a walk
+/// request during the bar). The client removes the bar and reports it with
+/// NpcInteract.progress for `npc_id`; reported before the bar fills, the server
+/// ends the script.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ProgressBarAbort {
+    #[prost(uint32, tag = "1")]
+    pub npc_id: u32,
+}
+/// Client -> server, the player closed the NPC shop window opened by
+/// NpcShopOpen without buying or selling. A buy or sell also closes it; the
+/// client must click the shop again to deal again.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct NpcShopClose {
+    #[prost(uint64, tag = "1")]
+    pub unit_id: u64,
+}
 /// Server -> client, open the navigation window / update its server-authoritative
 /// route. Sent only to the invoking player. The legacy target fields stay intact
 /// for existing script content; `legs` is the route detail and `destination` is
@@ -1574,6 +1617,65 @@ pub struct Knockback {
     pub dst_y: u32,
 }
 /// Client -> server, cast a skill at a target (replaces RO CZ_USE_SKILL 0x0113).
+/// Server -> client, an item has granted one pending skill cast. The client
+/// selects a target and sends SkillCast or GroundSkillCast with this id and level;
+/// SELF skills send SkillCast with the owner's unit id. This is not a learned
+/// skill and must not be added to the skill window.
+/// Client contract: the target must already be within the skill's range. The
+/// server spends the item when the cast begins and, like the reference, never
+/// walks the player into range for an item skill, so an out-of-range request
+/// consumes the item and casts nothing.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ItemSkillReady {
+    #[prost(uint32, tag = "1")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "2")]
+    pub level: u32,
+    #[prost(enumeration = "item_skill_ready::TargetKind", tag = "3")]
+    pub target_kind: i32,
+}
+/// Nested message and enum types in `ItemSkillReady`.
+pub mod item_skill_ready {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum TargetKind {
+        Self_ = 0,
+        Unit = 1,
+        Ground = 2,
+    }
+    impl TargetKind {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Self_ => "SELF",
+                Self::Unit => "UNIT",
+                Self::Ground => "GROUND",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "SELF" => Some(Self::Self_),
+                "UNIT" => Some(Self::Unit),
+                "GROUND" => Some(Self::Ground),
+                _ => None,
+            }
+        }
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SkillCast {
     #[prost(uint32, tag = "1")]
@@ -1678,6 +1780,10 @@ pub struct SkillDamage {
     pub src_delay: u32,
     #[prost(uint32, tag = "10")]
     pub dst_delay: u32,
+    /// True for a missed skill hit (including Magic Rod interception), not merely
+    /// for any zero-damage result. Render a miss instead of a numeric zero.
+    #[prost(bool, tag = "11")]
+    pub missed: bool,
 }
 /// Server -> client, no-damage skill effect (replaces RO ZC_USE_SKILL 0x011A).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1777,8 +1883,19 @@ pub struct UnequipResult {
     #[prost(uint32, tag = "3")]
     pub result: u32,
 }
+/// One random option slot of an item: the option id (an index into the
+/// client's option table), its rolled value and its parameter.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ItemOption {
+    #[prost(int32, tag = "1")]
+    pub id: i32,
+    #[prost(int32, tag = "2")]
+    pub value: i32,
+    #[prost(int32, tag = "3")]
+    pub param: i32,
+}
 /// One inventory slot within an InventoryList.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InventoryItem {
     #[prost(uint32, tag = "1")]
     pub index: u32,
@@ -1815,6 +1932,10 @@ pub struct InventoryItem {
     pub creator_id: u32,
     #[prost(enumeration = "CreatorKind", tag = "17")]
     pub creator_kind: i32,
+    /// The item's random option slots in order; a slot with id 0 is empty and the
+    /// slots after the last one listed are empty.
+    #[prost(message, repeated, tag = "18")]
+    pub options: ::prost::alloc::vec::Vec<ItemOption>,
 }
 /// Server -> client, the full inventory dump (collapses RO ZC_INVENTORY_START/
 /// ITEMLIST_NORMAL/ITEMLIST_EQUIP/END 0x0B08-0x0B0B).
@@ -1826,7 +1947,7 @@ pub struct InventoryList {
     pub equip: ::prost::alloc::vec::Vec<InventoryItem>,
 }
 /// Server -> client, an item was added to the inventory (replaces RO ZC_ITEM_PICKUP_ACK 0x0A37).
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ItemAdded {
     #[prost(uint32, tag = "1")]
     pub index: u32,
@@ -1861,6 +1982,25 @@ pub struct ItemAdded {
     pub creator_id: u32,
     #[prost(enumeration = "CreatorKind", tag = "16")]
     pub creator_kind: i32,
+    /// The item's random option slots in order; a slot with id 0 is empty and the
+    /// slots after the last one listed are empty.
+    #[prost(message, repeated, tag = "17")]
+    pub options: ::prost::alloc::vec::Vec<ItemOption>,
+}
+/// Server -> client, an inventory add was refused. Carries only the reason, as
+/// the reference's `clif_additem(sd, 0, 0, reason)` does; the client shows its
+/// "cannot carry" notice.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ItemAddFailed {
+    #[prost(enumeration = "ItemAddResult", tag = "1")]
+    pub result: i32,
+}
+/// Server -> client, caster-only: a client string-table notice the reference
+/// sends with `clif_msg`, `clif_msg_color` or `clif_skill_teleportmessage`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SystemNotice {
+    #[prost(enumeration = "SystemNoticeId", tag = "1")]
+    pub id: i32,
 }
 /// Server -> client, an item was removed from the inventory (replaces RO ZC_DELETE_ITEM_FROM_BODY 0x07FA).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1896,7 +2036,7 @@ pub struct CartInfo {
     pub max_weight: u32,
 }
 /// Server -> client, an item was added to the cart. Mirrors ItemAdded.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CartItemAdded {
     #[prost(uint32, tag = "1")]
     pub index: u32,
@@ -1931,6 +2071,10 @@ pub struct CartItemAdded {
     pub creator_id: u32,
     #[prost(enumeration = "CreatorKind", tag = "16")]
     pub creator_kind: i32,
+    /// The item's random option slots in order; a slot with id 0 is empty and the
+    /// slots after the last one listed are empty.
+    #[prost(message, repeated, tag = "17")]
+    pub options: ::prost::alloc::vec::Vec<ItemOption>,
 }
 /// Server -> client, an item was removed from the cart. Mirrors ItemRemoved.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2047,7 +2191,7 @@ pub struct VendingBoardRemoved {
     pub unit_id: u64,
 }
 /// One item on display in a vending shop. Mirrors InventoryItem's display fields plus a price.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VendingShopItem {
     #[prost(uint32, tag = "1")]
     pub index: u32,
@@ -2073,6 +2217,10 @@ pub struct VendingShopItem {
     pub creator_id: u32,
     #[prost(enumeration = "CreatorKind", tag = "12")]
     pub creator_kind: i32,
+    /// The item's random option slots in order; a slot with id 0 is empty and the
+    /// slots after the last one listed are empty.
+    #[prost(message, repeated, tag = "13")]
+    pub options: ::prost::alloc::vec::Vec<ItemOption>,
 }
 /// Server -> client, the full item list of a vendor's shop (reply to VendingListRequest).
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2327,7 +2475,9 @@ pub struct UseItem {
     #[prost(uint32, tag = "1")]
     pub index: u32,
 }
-/// Server -> client, result of a use-item attempt; reason 0 = ok, else the rejection code.
+/// Server -> client, result of a use-item attempt; reason 0 = ok, else the rejection code:
+/// 1 item not found, 2 not usable, 3 refused, 4 item use disabled, 5 the map restricts
+/// the item (the client shows "This item cannot be used within this area").
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ItemUseResult {
     #[prost(uint32, tag = "1")]
@@ -2997,7 +3147,7 @@ pub struct StorageCloseRequest {
     pub kind: i32,
 }
 /// Server -> client, an item was added to storage. Mirrors CartItemAdded.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StorageItemAdded {
     #[prost(uint32, tag = "1")]
     pub index: u32,
@@ -3034,6 +3184,10 @@ pub struct StorageItemAdded {
     pub creator_kind: i32,
     #[prost(enumeration = "StorageKind", tag = "17")]
     pub kind: i32,
+    /// The item's random option slots in order; a slot with id 0 is empty and the
+    /// slots after the last one listed are empty.
+    #[prost(message, repeated, tag = "18")]
+    pub options: ::prost::alloc::vec::Vec<ItemOption>,
 }
 /// Server -> client, an item was removed from storage. Mirrors CartItemRemoved.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3345,6 +3499,9 @@ pub struct SkillMenu {
     pub kind: i32,
     #[prost(uint32, repeated, tag = "3")]
     pub entry_ids: ::prost::alloc::vec::Vec<u32>,
+    /// For OPTIONS, one display label per entry_id in the same order.
+    #[prost(string, repeated, tag = "4")]
+    pub labels: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// Nested message and enum types in `SkillMenu`.
 pub mod skill_menu {
@@ -3365,6 +3522,8 @@ pub mod skill_menu {
         Items = 1,
         /// entry_ids identify inventory slots rather than items.
         InventorySlots = 2,
+        /// Server-labelled options; ids have no client-side catalog meaning.
+        Options = 3,
     }
     impl Kind {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -3376,6 +3535,7 @@ pub mod skill_menu {
                 Self::Skills => "SKILLS",
                 Self::Items => "ITEMS",
                 Self::InventorySlots => "INVENTORY_SLOTS",
+                Self::Options => "OPTIONS",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3384,11 +3544,16 @@ pub mod skill_menu {
                 "SKILLS" => Some(Self::Skills),
                 "ITEMS" => Some(Self::Items),
                 "INVENTORY_SLOTS" => Some(Self::InventorySlots),
+                "OPTIONS" => Some(Self::Options),
                 _ => None,
             }
         }
     }
 }
+/// Client -> server. Remember the authenticated character's current map/cell
+/// as its newest Warp Portal memo point. No client-supplied position is trusted.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct MemoRequest {}
 /// Client -> server, the player's choice from the pending SkillMenu. `src_skill_id`
 /// must match the offer the server is holding and `selected_id` must be one of its
 /// entry_ids; a stale or forged reply is dropped. A reply with `cancel` set closes
@@ -3417,12 +3582,17 @@ pub struct ProductionResult {
     pub item_id: u32,
 }
 /// Server -> client, caster-only feedback when an attempted skill cast is rejected.
+/// UNSPECIFIED is the generic "skill failed" message.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SkillCastFailed {
     #[prost(uint32, tag = "1")]
     pub skill_id: u32,
     #[prost(enumeration = "SkillCastFailureReason", tag = "2")]
     pub reason: i32,
+    /// Reason-specific number: the spheres required (SPIRITS) or the item id
+    /// (NEED_EQUIPMENT); 0 otherwise.
+    #[prost(uint32, tag = "3")]
+    pub detail: u32,
 }
 /// Client -> server. The authenticated character's sole Homunculus is implicit;
 /// requests intentionally carry no owner or companion selector.
@@ -4087,6 +4257,101 @@ impl NavigationEndReason {
         }
     }
 }
+/// Why an inventory add was refused. Mirrors the reference `e_additem_result`
+/// codes; SUCCESS is present so the enum is a faithful mirror and is never sent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ItemAddResult {
+    Success = 0,
+    Invalid = 1,
+    Overweight = 2,
+    Item = 3,
+    Overitem = 4,
+    Overamount = 5,
+    RefusedTime = 6,
+    Stacklimit = 7,
+}
+impl ItemAddResult {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Success => "ITEM_ADD_RESULT_SUCCESS",
+            Self::Invalid => "ITEM_ADD_RESULT_INVALID",
+            Self::Overweight => "ITEM_ADD_RESULT_OVERWEIGHT",
+            Self::Item => "ITEM_ADD_RESULT_ITEM",
+            Self::Overitem => "ITEM_ADD_RESULT_OVERITEM",
+            Self::Overamount => "ITEM_ADD_RESULT_OVERAMOUNT",
+            Self::RefusedTime => "ITEM_ADD_RESULT_REFUSED_TIME",
+            Self::Stacklimit => "ITEM_ADD_RESULT_STACKLIMIT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ITEM_ADD_RESULT_SUCCESS" => Some(Self::Success),
+            "ITEM_ADD_RESULT_INVALID" => Some(Self::Invalid),
+            "ITEM_ADD_RESULT_OVERWEIGHT" => Some(Self::Overweight),
+            "ITEM_ADD_RESULT_ITEM" => Some(Self::Item),
+            "ITEM_ADD_RESULT_OVERITEM" => Some(Self::Overitem),
+            "ITEM_ADD_RESULT_OVERAMOUNT" => Some(Self::Overamount),
+            "ITEM_ADD_RESULT_REFUSED_TIME" => Some(Self::RefusedTime),
+            "ITEM_ADD_RESULT_STACKLIMIT" => Some(Self::Stacklimit),
+            _ => None,
+        }
+    }
+}
+/// A client string-table notice. Each value names the reference message the
+/// client shows; the colour, where the reference sends one, follows the value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SystemNoticeId {
+    Unspecified = 0,
+    /// MSI_BUSY: the player is busy (an NPC dialog refusing an item or skill).
+    Busy = 1,
+    /// MSI_IMPOSSIBLE_SKILL_AREA, shown cyan: the skill cannot be used in this area.
+    ImpossibleSkillArea = 2,
+    /// MSI_CAN_NOT_EQUIP_ITEM, shown red: equipment cannot change right now.
+    CanNotEquipItem = 3,
+    /// NOTIFY_MAPINFO_CANT_TP: teleporting is not allowed on this map.
+    MapCantTeleport = 4,
+    /// NOTIFY_MAPINFO_CANT_MEMO: memorizing is not allowed on this map.
+    MapCantMemo = 5,
+    /// NOTIFY_MAPINFO_CANT_USE_SKILL: the skill cannot be used on this map.
+    MapCantUseSkill = 6,
+}
+impl SystemNoticeId {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SYSTEM_NOTICE_ID_UNSPECIFIED",
+            Self::Busy => "SYSTEM_NOTICE_ID_BUSY",
+            Self::ImpossibleSkillArea => "SYSTEM_NOTICE_ID_IMPOSSIBLE_SKILL_AREA",
+            Self::CanNotEquipItem => "SYSTEM_NOTICE_ID_CAN_NOT_EQUIP_ITEM",
+            Self::MapCantTeleport => "SYSTEM_NOTICE_ID_MAP_CANT_TELEPORT",
+            Self::MapCantMemo => "SYSTEM_NOTICE_ID_MAP_CANT_MEMO",
+            Self::MapCantUseSkill => "SYSTEM_NOTICE_ID_MAP_CANT_USE_SKILL",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SYSTEM_NOTICE_ID_UNSPECIFIED" => Some(Self::Unspecified),
+            "SYSTEM_NOTICE_ID_BUSY" => Some(Self::Busy),
+            "SYSTEM_NOTICE_ID_IMPOSSIBLE_SKILL_AREA" => Some(Self::ImpossibleSkillArea),
+            "SYSTEM_NOTICE_ID_CAN_NOT_EQUIP_ITEM" => Some(Self::CanNotEquipItem),
+            "SYSTEM_NOTICE_ID_MAP_CANT_TELEPORT" => Some(Self::MapCantTeleport),
+            "SYSTEM_NOTICE_ID_MAP_CANT_MEMO" => Some(Self::MapCantMemo),
+            "SYSTEM_NOTICE_ID_MAP_CANT_USE_SKILL" => Some(Self::MapCantUseSkill),
+            _ => None,
+        }
+    }
+}
 /// Outcome of a cart mount attempt. Values are prefixed because proto3 enum
 /// constants share the package namespace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -4709,6 +4974,8 @@ pub enum SkillUnitPhase {
     Used = 1,
     Sprung = 2,
     Captured = 3,
+    /// The unit exists but cannot yet accept entry.
+    Opening = 4,
 }
 impl SkillUnitPhase {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4721,6 +4988,7 @@ impl SkillUnitPhase {
             Self::Used => "SKILL_UNIT_PHASE_USED",
             Self::Sprung => "SKILL_UNIT_PHASE_SPRUNG",
             Self::Captured => "SKILL_UNIT_PHASE_CAPTURED",
+            Self::Opening => "SKILL_UNIT_PHASE_OPENING",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4730,6 +4998,7 @@ impl SkillUnitPhase {
             "SKILL_UNIT_PHASE_USED" => Some(Self::Used),
             "SKILL_UNIT_PHASE_SPRUNG" => Some(Self::Sprung),
             "SKILL_UNIT_PHASE_CAPTURED" => Some(Self::Captured),
+            "SKILL_UNIT_PHASE_OPENING" => Some(Self::Opening),
             _ => None,
         }
     }
@@ -4818,6 +5087,8 @@ pub enum SkillCastFailureReason {
     InsufficientSp = 2,
     InsufficientZeny = 3,
     NoAmmo = 4,
+    /// A cooldown or the act delay is still running; sent only to a player who
+    /// turned delay notices on (@showdelay).
     OnCooldown = 5,
     InvalidTarget = 6,
     NotLearned = 7,
@@ -4825,6 +5096,22 @@ pub enum SkillCastFailureReason {
     Busy = 9,
     WrongWeapon = 10,
     VersusMapOnly = 11,
+    /// An NPC stands within 3 cells: no vending stall or chat room here.
+    NpcNearby = 12,
+    /// At least 90 percent of carrying capacity.
+    Overweight = 13,
+    /// The skill cannot be used on this target (a boss, for example).
+    ToTarget = 14,
+    /// The caster's HP is above the share of maximum HP the skill allows.
+    HpInsufficient = 15,
+    /// Not enough spirit spheres; `detail` is the number required.
+    Spirits = 16,
+    /// The skill needs a pushcart.
+    Cart = 17,
+    /// The skill needs an equipped item; `detail` is its item id.
+    NeedEquipment = 18,
+    /// A plain failure the skill reports instead of UNSPECIFIED's generic one.
+    Failed = 19,
 }
 impl SkillCastFailureReason {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4845,6 +5132,14 @@ impl SkillCastFailureReason {
             Self::Busy => "SKILL_CAST_FAILURE_REASON_BUSY",
             Self::WrongWeapon => "SKILL_CAST_FAILURE_REASON_WRONG_WEAPON",
             Self::VersusMapOnly => "SKILL_CAST_FAILURE_REASON_VERSUS_MAP_ONLY",
+            Self::NpcNearby => "SKILL_CAST_FAILURE_REASON_NPC_NEARBY",
+            Self::Overweight => "SKILL_CAST_FAILURE_REASON_OVERWEIGHT",
+            Self::ToTarget => "SKILL_CAST_FAILURE_REASON_TO_TARGET",
+            Self::HpInsufficient => "SKILL_CAST_FAILURE_REASON_HP_INSUFFICIENT",
+            Self::Spirits => "SKILL_CAST_FAILURE_REASON_SPIRITS",
+            Self::Cart => "SKILL_CAST_FAILURE_REASON_CART",
+            Self::NeedEquipment => "SKILL_CAST_FAILURE_REASON_NEED_EQUIPMENT",
+            Self::Failed => "SKILL_CAST_FAILURE_REASON_FAILED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4862,6 +5157,14 @@ impl SkillCastFailureReason {
             "SKILL_CAST_FAILURE_REASON_BUSY" => Some(Self::Busy),
             "SKILL_CAST_FAILURE_REASON_WRONG_WEAPON" => Some(Self::WrongWeapon),
             "SKILL_CAST_FAILURE_REASON_VERSUS_MAP_ONLY" => Some(Self::VersusMapOnly),
+            "SKILL_CAST_FAILURE_REASON_NPC_NEARBY" => Some(Self::NpcNearby),
+            "SKILL_CAST_FAILURE_REASON_OVERWEIGHT" => Some(Self::Overweight),
+            "SKILL_CAST_FAILURE_REASON_TO_TARGET" => Some(Self::ToTarget),
+            "SKILL_CAST_FAILURE_REASON_HP_INSUFFICIENT" => Some(Self::HpInsufficient),
+            "SKILL_CAST_FAILURE_REASON_SPIRITS" => Some(Self::Spirits),
+            "SKILL_CAST_FAILURE_REASON_CART" => Some(Self::Cart),
+            "SKILL_CAST_FAILURE_REASON_NEED_EQUIPMENT" => Some(Self::NeedEquipment),
+            "SKILL_CAST_FAILURE_REASON_FAILED" => Some(Self::Failed),
             _ => None,
         }
     }

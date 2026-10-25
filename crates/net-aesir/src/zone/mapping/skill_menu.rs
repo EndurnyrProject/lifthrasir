@@ -26,6 +26,7 @@ mod tests {
             src_skill_id: 98,
             kind,
             entry_ids: vec![1201, 1202],
+            labels: vec![],
         })
     }
 

@@ -93,6 +93,14 @@ pub fn skill_cast_failed(f: net::SkillCastFailed) -> SkillCastFailed {
         net::SkillCastFailureReason::Busy => SkillCastFailureReason::Busy,
         net::SkillCastFailureReason::WrongWeapon => SkillCastFailureReason::WrongWeapon,
         net::SkillCastFailureReason::VersusMapOnly => SkillCastFailureReason::VersusMapOnly,
+        net::SkillCastFailureReason::NpcNearby => SkillCastFailureReason::NpcNearby,
+        net::SkillCastFailureReason::Overweight => SkillCastFailureReason::Overweight,
+        net::SkillCastFailureReason::ToTarget => SkillCastFailureReason::ToTarget,
+        net::SkillCastFailureReason::HpInsufficient => SkillCastFailureReason::HpInsufficient,
+        net::SkillCastFailureReason::Spirits => SkillCastFailureReason::Spirits,
+        net::SkillCastFailureReason::Cart => SkillCastFailureReason::Cart,
+        net::SkillCastFailureReason::NeedEquipment => SkillCastFailureReason::NeedEquipment,
+        net::SkillCastFailureReason::Failed => SkillCastFailureReason::Failed,
     };
 
     SkillCastFailed {
@@ -232,6 +240,7 @@ mod tests {
             r#type: 8,
             src_delay: 50,
             dst_delay: 60,
+            ..Default::default()
         });
 
         assert_eq!(received.skill_id, 5);

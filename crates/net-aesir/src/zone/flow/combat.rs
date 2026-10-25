@@ -163,6 +163,7 @@ mod tests {
             Body::SkillCastFailed(net::SkillCastFailed {
                 skill_id: 12,
                 reason: net::SkillCastFailureReason::MissingCatalyst as i32,
+                detail: 0,
             }),
         )]);
 

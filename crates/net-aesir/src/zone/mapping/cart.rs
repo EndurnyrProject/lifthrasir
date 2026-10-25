@@ -87,6 +87,7 @@ mod tests {
             signer_name: String::new(),
             creator_id: 0,
             creator_kind: 0,
+            options: vec![],
         }
     }
 
@@ -125,6 +126,7 @@ mod tests {
             signer_name: String::new(),
             creator_id: 0,
             creator_kind: 0,
+            options: vec![],
         });
 
         assert_eq!(added.item.index, 3);

@@ -51,7 +51,12 @@ fn spawn_group_detonation(
     map_altitude: Option<&CurrentMapAltitude>,
     altitude_assets: Option<&Assets<RoAltitudeAsset>>,
 ) {
-    if group.phase == SkillUnitPhase::Active {
+    // ACTIVE and OPENING units have not triggered yet: OPENING means the unit
+    // exists but cannot accept entry until it finishes arming.
+    if matches!(
+        group.phase,
+        SkillUnitPhase::Active | SkillUnitPhase::Opening
+    ) {
         return;
     }
     let Some(descriptor) = catalog.and_then(|catalog| catalog.skill(group.skill_id)) else {

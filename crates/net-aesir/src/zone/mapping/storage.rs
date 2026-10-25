@@ -125,6 +125,7 @@ mod tests {
                 signer_name: String::new(),
                 creator_id: 0,
                 creator_kind: 0,
+                options: vec![],
             }],
             kind: net::StorageKind::Personal as i32,
         })
@@ -166,6 +167,7 @@ mod tests {
             signer_name: String::new(),
             creator_id: 0,
             creator_kind: 0,
+            options: vec![],
             kind: net::StorageKind::Personal as i32,
         })
         .unwrap();

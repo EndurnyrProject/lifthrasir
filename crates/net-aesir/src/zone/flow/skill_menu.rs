@@ -57,6 +57,7 @@ mod tests {
             src_skill_id: 98,
             kind: net::skill_menu::Kind::Items as i32,
             entry_ids: vec![1201],
+            labels: vec![],
         }));
 
         assert_eq!(offers.len(), 1);

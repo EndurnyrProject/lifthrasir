@@ -30,6 +30,8 @@ pub enum SkillUnitPhase {
     Used,
     Sprung,
     Captured,
+    /// The unit exists but cannot yet accept entry.
+    Opening,
 }
 
 /// A server-authoritative skill-unit group (e.g. one Storm Gust cast, one Ice Wall).
