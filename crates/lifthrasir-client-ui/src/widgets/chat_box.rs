@@ -11,6 +11,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use bevy::text::EditableText;
+use bevy::ui_widgets::TextInput;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::character::chat::ChatSendRequested;
 use lifthrasir_client::domain::emote::EmoteRequested;
@@ -300,6 +301,7 @@ fn spawn_input(commands: &mut Commands, chat_box: Entity, font: Handle<Font>) {
                 max_characters: Some(CHAT_MAX_CHARS),
                 ..default()
             },
+            TextInput,
             Pickable::default(),
             TextFont {
                 font: font.clone().into(),
@@ -513,6 +515,31 @@ mod tests {
             );
         }
         queue.apply(app.world_mut());
+    }
+
+    #[test]
+    fn chat_input_is_a_text_input_widget() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.init_asset::<Font>();
+        let root = app.world_mut().spawn_empty().id();
+        let asset_server = app.world().resource::<AssetServer>().clone();
+        let mut queue = CommandQueue::default();
+        {
+            let mut commands = Commands::new(&mut queue, app.world());
+            spawn_chat_box(&mut commands, root, &asset_server);
+        }
+        queue.apply(app.world_mut());
+
+        let inputs = app
+            .world_mut()
+            .query_filtered::<(), (With<ChatInput>, With<TextInput>)>()
+            .iter(app.world())
+            .count();
+        assert_eq!(
+            inputs, 1,
+            "0.20 TextInputPlugin ignores fields without TextInput"
+        );
     }
 
     #[test]

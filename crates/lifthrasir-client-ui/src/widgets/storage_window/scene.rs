@@ -1,7 +1,7 @@
 use bevy::input_focus::AutoFocus;
 use bevy::scene::EntityScene;
 use bevy::text::{EditableText, EditableTextFilter, FontSize, FontSourceTemplate};
-use bevy::ui_widgets::{ControlOrientation, ScrollArea};
+use bevy::ui_widgets::{ControlOrientation, ScrollArea, TextInput};
 use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
@@ -407,6 +407,7 @@ fn search_field() -> impl Scene {
             #search
             StorageSearchField
             EditableText
+            TextInput
             TextFont {
                 font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
                 font_size: {FontSize::Px(12.0)},
@@ -528,6 +529,7 @@ pub(crate) fn amount_overlay(amount: String, error: Option<String>) -> impl Scen
                 @chrome_text("Transfer amount".to_string(), 14.0, lifthrasir_ui::theme::TEXT) --
                 StorageAmountField
                 EditableText::new(amount)
+                TextInput
                 EditableTextFilter::new(|c| c.is_ascii_digit())
                 AutoFocus
                 TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(13.0)} }

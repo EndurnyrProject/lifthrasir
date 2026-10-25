@@ -7,6 +7,7 @@
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{EditableText, FontSize, FontSourceTemplate};
+use bevy::ui_widgets::TextInput;
 use bevy_feathers::controls::{ButtonVariant, FeathersButton};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
 use net_contract::dto::NpcDialogExpect;
@@ -131,6 +132,7 @@ fn input_field() -> impl Scene {
     bsn! {
         NpcInputField
         EditableText
+        TextInput
         TextFont {
             font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
             font_size: {FontSize::Px(13.0)},
