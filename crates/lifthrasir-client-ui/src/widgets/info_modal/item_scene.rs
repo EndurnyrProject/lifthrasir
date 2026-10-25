@@ -1,5 +1,5 @@
 //! Item info modal content: renders an [`ItemInfoView`] through the shell chrome —
-//! header, card slots, meta grid, and description — plus a footer whose action the
+//! header, card slots, compact metadata, and vellum description, plus a footer whose action the
 //! summoning surface chose (`ItemAction`). Optional sections (cards, meta,
 //! description, footer) are omitted entirely when their view field is empty, rather
 //! than spawned as empty wrappers.
@@ -22,7 +22,7 @@ use lifthrasir_client::domain::inventory::{Inventory, UseItemRequested};
 
 use lifthrasir_ui::widgets::chrome::{glyph_icon, ignore_picking};
 
-use crate::widgets::info_modal::shell::{self, HeaderView};
+use crate::widgets::info_modal::shell::{self, HeaderView, PARCHMENT as ILLUSTRATION_PARCHMENT};
 use crate::widgets::info_modal::view::ItemInfoView;
 use crate::widgets::info_modal::{InfoModalRoot, ItemAction, ItemActionKind};
 
@@ -65,8 +65,6 @@ impl Default for FooterAction {
 pub(super) struct FavoriteStar {
     pub lit: bool,
 }
-
-const ILLUSTRATION_PARCHMENT: Color = Color::srgb_u8(0xe8, 0xdd, 0xc2);
 
 /// Marks the parchment plate holding the native RO collection illustration.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -158,17 +156,9 @@ pub(super) fn scene(view: ItemInfoView, action: Option<ItemAction>) -> impl Scen
         tags: view.tags.clone(),
     });
     let cards = (view.sockets_total > 0).then(|| EntityScene(card_slots_section(&view)));
-    let meta = (!view.meta.is_empty()).then(|| {
-        EntityScene(shell::meta_grid(
-            view.meta
-                .iter()
-                .cloned()
-                .map(|(key, value)| shell::meta_cell(key, value))
-                .collect(),
-        ))
-    });
+    let meta = (!view.meta.is_empty()).then(|| EntityScene(shell::metadata_row(view.meta.clone())));
     let description = (!view.description.is_empty())
-        .then(|| EntityScene(shell::description_section(view.description.clone())));
+        .then(|| EntityScene(super::description::scene(view.description.clone())));
     let illustration = view
         .illustration_path
         .clone()
@@ -450,6 +440,96 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn weight_and_price_share_a_compact_wrapping_row() {
+        let mut app = test_app();
+        let mut view = empty_view();
+        view.meta = vec![
+            ("Weight".to_string(), "10".to_string()),
+            ("Price".to_string(), "50 z".to_string()),
+        ];
+        app.world_mut().spawn_scene(scene(view, None)).unwrap();
+        app.update();
+
+        let cells: Vec<_> = app
+            .world_mut()
+            .query::<(&Text, &ChildOf)>()
+            .iter(app.world())
+            .filter(|(text, _)| matches!(text.0.as_str(), "WEIGHT" | "PRICE"))
+            .map(|(_, parent)| parent.parent())
+            .collect();
+        assert_eq!(cells.len(), 2);
+        let row = app.world().get::<ChildOf>(cells[0]).unwrap().parent();
+        for cell in cells {
+            assert_eq!(
+                app.world().get::<Node>(cell).unwrap().flex_direction,
+                FlexDirection::Row
+            );
+            assert_eq!(app.world().get::<ChildOf>(cell).unwrap().parent(), row);
+        }
+        let node = app.world().get::<Node>(row).unwrap();
+        assert_eq!(node.flex_direction, FlexDirection::Row);
+        assert_eq!(node.flex_wrap, FlexWrap::Wrap);
+        let values = texts(&mut app);
+        assert!(values.contains(&"10".to_string()));
+        assert!(values.contains(&"50 z".to_string()));
+    }
+
+    #[test]
+    fn description_uses_vellum_with_readable_body_and_highlights() {
+        use bevy::color::Luminance;
+
+        let mut app = test_app();
+        let mut view = empty_view();
+        view.description = vec![
+            lifthrasir_ui::rich_text::parse_color_codes(
+                "Restores ^00ff00HP^000000.",
+                lifthrasir_ui::theme::TEXT_DIM,
+            ),
+            vec![(lifthrasir_ui::theme::TEXT_DIM, "Weight: 10".to_string())],
+        ];
+        app.world_mut().spawn_scene(scene(view, None)).unwrap();
+        app.update();
+
+        let (body, body_color) = app
+            .world_mut()
+            .query::<(Entity, &Text, &TextColor)>()
+            .iter(app.world())
+            .find(|(_, text, _)| text.0 == "Restores ")
+            .map(|(entity, _, color)| (entity, color.0))
+            .unwrap();
+        let mut ancestor = body;
+        while let Some(parent) = app.world().get::<ChildOf>(ancestor) {
+            ancestor = parent.parent();
+            if app
+                .world()
+                .get::<BackgroundColor>(ancestor)
+                .is_some_and(|bg| bg.0 == ILLUSTRATION_PARCHMENT)
+            {
+                break;
+            }
+        }
+        assert_eq!(
+            app.world().get::<BackgroundColor>(ancestor).map(|bg| bg.0),
+            Some(ILLUSTRATION_PARCHMENT)
+        );
+
+        let mut colors = vec![body_color];
+        colors.extend(
+            app.world_mut()
+                .query::<(&TextSpan, &TextColor)>()
+                .iter(app.world())
+                .map(|(_, color)| color.0),
+        );
+        assert_eq!(colors.len(), 3);
+        for color in colors {
+            let contrast = (ILLUSTRATION_PARCHMENT.to_linear().luminance() + 0.05)
+                / (color.to_linear().luminance() + 0.05);
+            assert!(contrast >= 4.5, "{color:?}: contrast {contrast}");
+        }
+        assert!(texts(&mut app).contains(&"Weight: 10".to_string()));
     }
 
     #[test]

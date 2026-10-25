@@ -1,7 +1,6 @@
 //! Skill info modal content: renders a [`SkillInfoView`] through the shell chrome —
-//! header (kind + state tag) → level pips → meta grid (SP cost, range) → colored
-//! description → Requires/Unlocks chips. Chip clicks build the view for their
-//! skill id and write [`ShowInfoModal`]; rebuilding the modal on that message is
+//! header (kind + state tag) → compact stats → vellum description → Requires/Unlocks
+//! chips. Chip clicks build the view for their skill id and write [`ShowInfoModal`]; rebuilding the modal on that message is
 //! the whole navigation model — there is no back stack.
 //!
 //! The footer Raise button stages `+1` in [`SkillPanelStaging`] — the same path the
@@ -98,17 +97,9 @@ pub(super) fn scene(view: SkillInfoView, raise_target: Option<u32>) -> impl Scen
         tags: vec![view.kind.clone(), tag],
     });
 
-    let mut meta_cells = Vec::new();
-    if let Some(sp) = view.sp_cost.clone() {
-        meta_cells.push(shell::meta_cell("SP Cost".to_string(), sp));
-    }
-    if let Some(range) = view.range.clone() {
-        meta_cells.push(shell::meta_cell("Range".to_string(), range));
-    }
-    let meta = (!meta_cells.is_empty()).then(|| EntityScene(shell::meta_grid(meta_cells)));
-
+    let stats = skill_stats(&view);
     let description = (!view.description.is_empty())
-        .then(|| EntityScene(shell::description_section(view.description.clone())));
+        .then(|| EntityScene(super::description::scene(view.description.clone())));
 
     let requires = (!view.requires.is_empty()).then(|| {
         EntityScene(chip_section(
@@ -153,8 +144,7 @@ pub(super) fn scene(view: SkillInfoView, raise_target: Option<u32>) -> impl Scen
                 }
                 @ignore_picking()
                 Children [
-                    @level_pips(cur, max) --
-                    {meta} --
+                    @stats --
                     {description} --
                     {requires} --
                     {unlocks}
@@ -165,34 +155,16 @@ pub(super) fn scene(view: SkillInfoView, raise_target: Option<u32>) -> impl Scen
     }
 }
 
-/// `LEVEL [pips] cur/max` — `.im-lv`.
-fn level_pips(cur: u32, max: u32) -> impl Scene {
-    let pips: Vec<_> = (0..max).map(|i| pip(i < cur)).collect();
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(11) }
-        @ignore_picking()
-        Children [
-            @chrome_text("LEVEL".to_string(), 9.5, lifthrasir_ui::theme::TEXT_FAINT) --
-            Node { flex_direction: FlexDirection::Row, flex_grow: 1.0, column_gap: px(3) }
-            @ignore_picking()
-            Children [ {pips} ]
-            --
-            @chrome_text(format!("{cur}/{max}"), 12.0, lifthrasir_ui::theme::TEXT)
-        ]
+/// A single compact stats row, wrapping only when the available width requires it.
+fn skill_stats(view: &SkillInfoView) -> impl Scene {
+    let mut stats = vec![("Level".to_string(), view.level_line.clone())];
+    if let Some(sp) = &view.sp_cost {
+        stats.push(("SP Cost".to_string(), sp.clone()));
     }
-}
-
-fn pip(filled: bool) -> impl Scene {
-    let color = if filled {
-        lifthrasir_ui::theme::EMERALD_BRI
-    } else {
-        lifthrasir_ui::theme::STROKE_STRONG
-    };
-    bsn! {
-        Node { flex_grow: 1.0, height: px(7), border_radius: BorderRadius::all(px(2)) }
-        BackgroundColor(color)
-        @ignore_picking()
+    if let Some(range) = &view.range {
+        stats.push(("Range".to_string(), range.clone()));
     }
+    shell::metadata_row(stats)
 }
 
 /// A Requires or Unlocks section: a label followed by wrapping chips.
@@ -406,6 +378,31 @@ mod tests {
             "{texts:?}"
         );
         assert!(texts.contains(&"Raise to Lv 4".to_string()), "{texts:?}");
+    }
+
+    #[test]
+    fn level_sp_and_range_share_a_compact_wrapping_row() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(scene(full_view(), None))
+            .unwrap();
+        app.update();
+
+        let labels: Vec<_> = app
+            .world_mut()
+            .query::<(&Text, &ChildOf)>()
+            .iter(app.world())
+            .filter(|(text, _)| matches!(text.0.as_str(), "LEVEL" | "SP COST" | "RANGE"))
+            .map(|(_, parent)| parent.parent())
+            .collect();
+        assert_eq!(labels.len(), 3);
+        let row = app.world().get::<ChildOf>(labels[0]).unwrap().parent();
+        for label in labels {
+            assert_eq!(app.world().get::<ChildOf>(label).unwrap().parent(), row);
+        }
+        let node = app.world().get::<Node>(row).unwrap();
+        assert_eq!(node.flex_direction, FlexDirection::Row);
+        assert_eq!(node.flex_wrap, FlexWrap::Wrap);
     }
 
     fn chip_app() -> App {

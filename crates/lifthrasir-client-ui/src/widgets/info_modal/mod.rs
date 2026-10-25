@@ -20,6 +20,7 @@ use lifthrasir_client::domain::inventory::{Item, ItemCategory};
 
 use crate::widgets::system_dialog;
 
+mod description;
 mod item_scene;
 pub mod shell;
 mod skill_scene;

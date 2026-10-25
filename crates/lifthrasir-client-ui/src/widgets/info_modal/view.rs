@@ -403,12 +403,7 @@ pub fn build_skill_view(
         .and_then(|m| level_value(&m.attack_range, effective))
         .map(|v| v.to_string());
     let description = meta
-        .map(|m| {
-            m.description
-                .iter()
-                .map(|line| parse_color_codes(line, lifthrasir_ui::theme::TEXT_DIM))
-                .collect()
-        })
+        .map(|m| super::description::parse(&m.description, &m.display_name))
         .unwrap_or_default();
 
     let (can_raise, points_left) = match status {
@@ -441,12 +436,7 @@ pub fn guild_skill_view(skill: &GuildSkillInfo, catalog: Option<&SkillCatalog>) 
     let skill_id = skill.skill_id;
     let meta = catalog.and_then(|c| c.get(skill_id));
     let description = meta
-        .map(|m| {
-            m.description
-                .iter()
-                .map(|line| parse_color_codes(line, lifthrasir_ui::theme::TEXT_DIM))
-                .collect()
-        })
+        .map(|m| super::description::parse(&m.description, &m.display_name))
         .unwrap_or_default();
     SkillInfoView {
         icon_path: catalog.and_then(|c| c.icon_path(skill_id)),

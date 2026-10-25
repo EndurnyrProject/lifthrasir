@@ -1,5 +1,5 @@
 //! Shared chrome for the info modal: the fixed-size card, edge-grade ribbon, close
-//! button, header, section label, meta-grid cell, and footer bar. Faithful to
+//! button, header, section label, compact metadata row, and footer bar. Faithful to
 //! `info-modals.css` (`.im-modal` / `.im-head` / `.im-sec` / `.im-meta` / `.im-foot`
 //! / `.im-edge-*`) using the project's existing window and rarity theme tokens.
 
@@ -14,7 +14,7 @@ use lifthrasir_ui::theme::feathers_theme::{
     TOKEN_RARITY_COMMON, TOKEN_RARITY_FINE, TOKEN_RARITY_MAGIC, TOKEN_RARITY_RARE, TOKEN_TEXT,
     TOKEN_TEXT_FAINT, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
 };
-use lifthrasir_ui::widgets::chrome::{glyph_icon, ignore_picking};
+use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 
 use crate::widgets::info_modal::InfoModalRoot;
 use crate::widgets::info_modal::view::ColoredLine;
@@ -25,6 +25,9 @@ pub const MODAL_HEIGHT: f32 = 600.0;
 
 /// Icon box side — `.im-icon { width/height: 62px; }`.
 pub const ICON_BOX_SIZE: f32 = 62.0;
+
+/// Warm vellum shared by native item illustrations and skill descriptions.
+pub(super) const PARCHMENT: Color = Color::srgb_u8(0xe8, 0xdd, 0xc2);
 
 /// Rarity/state accent driving the top ribbon, icon border, and tag color — mirrors
 /// `.im-edge-*` in `info-modals.css`, mapped onto the project's existing rarity
@@ -125,7 +128,7 @@ fn ribbon(edge: EdgeGrade) -> impl Scene {
     }
 }
 
-/// Close button — `.im-close`. Despawns the modal root on press.
+/// Close button above the body so overlapping header nodes cannot intercept hits.
 fn close_button() -> impl Scene {
     bsn! {
         @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_FAINT) } }
@@ -133,10 +136,11 @@ fn close_button() -> impl Scene {
             position_type: PositionType::Absolute,
             top: px(13),
             right: px(13),
-            width: px(26),
-            height: px(26),
+            width: px(30),
+            height: px(30),
             border_radius: BorderRadius::all(px(7)),
         }
+        ZIndex(1)
         on(close_modal)
     }
 }
@@ -167,7 +171,7 @@ pub fn header(view: HeaderView) -> impl Scene {
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::FlexStart,
             column_gap: px(14),
-            padding: {UiRect { left: px(20), right: px(20), top: px(20), bottom: px(16) }},
+            padding: {UiRect { left: px(20), right: px(55), top: px(20), bottom: px(16) }},
         }
         Children [
             @icon_box(view.icon_path, view.refine, view.sockets_filled, view.sockets_total, view.edge) --
@@ -363,60 +367,36 @@ pub fn section_label(text: String, counter: Option<String>) -> impl Scene {
     }
 }
 
-/// One cell of the two-column meta grid — `.im-meta .cell`.
-pub fn meta_cell(key: String, value: String) -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Column,
-            row_gap: px(4),
-            padding: {UiRect::axes(px(12), px(10))},
-        }
-        BackgroundColor({Color::srgba(0.039, 0.059, 0.051, 0.9)})
-        Children [
-            Text({key.to_uppercase()})
-            TextFont {
-                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                font_size: {FontSize::Px(8.5)},
-            }
-            ThemeTextColor({TOKEN_TEXT_FAINT})
-            @ignore_picking()
-            --
-            Text(value)
-            TextFont {
-                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                font_size: {FontSize::Px(13.0)},
-            }
-            ThemeTextColor({TOKEN_TEXT})
-            @ignore_picking()
-        ]
-    }
-}
-
-/// The two-column meta grid wrapping a set of [`meta_cell`] entries — `.im-meta`.
-/// Built from flex rows (not `Display::Grid`) so it stays consistent with the rest
-/// of the window chrome, which is flex-only.
-pub fn meta_grid(cells: Vec<impl Scene>) -> impl Scene {
-    let slots = cells.into_iter().map(meta_grid_slot).collect::<Vec<_>>();
+/// Compact item/skill metadata, wrapping only when available width requires it.
+pub fn metadata_row(entries: Vec<(String, String)>) -> impl Scene {
+    let cells: Vec<_> = entries
+        .into_iter()
+        .map(|(key, value)| metadata_cell(key, value))
+        .collect();
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
             flex_wrap: FlexWrap::Wrap,
-            column_gap: px(1),
-            row_gap: px(1),
-            border: px(1),
-            border_radius: BorderRadius::all(px(11)),
-            overflow: Overflow::clip(),
+            align_items: AlignItems::Center,
+            column_gap: px(20),
+            row_gap: px(8),
+            padding: {UiRect::vertical(px(8))},
+            border: {UiRect::bottom(px(1))},
         }
-        BackgroundColor({lifthrasir_ui::theme::STROKE})
         BorderColor::all(lifthrasir_ui::theme::STROKE)
-        Children [ {slots} ]
+        @ignore_picking()
+        Children [ {cells} ]
     }
 }
 
-fn meta_grid_slot(cell: impl Scene) -> impl Scene {
+fn metadata_cell(key: String, value: String) -> impl Scene {
     bsn! {
-        Node { flex_basis: percent(50), flex_grow: 1.0, min_width: px(0) }
-        Children [ @cell ]
+        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(6) }
+        @ignore_picking()
+        Children [
+            @chrome_text(key.to_uppercase(), 9.5, lifthrasir_ui::theme::TEXT_DIM) --
+            @chrome_text(value, 12.0, lifthrasir_ui::theme::TEXT)
+        ]
     }
 }
 
@@ -489,6 +469,35 @@ mod tests {
         assert_eq!(EdgeGrade::Fine.token(), TOKEN_RARITY_FINE);
         assert_eq!(EdgeGrade::Magic.token(), TOKEN_RARITY_MAGIC);
         assert_eq!(EdgeGrade::Rare.token(), TOKEN_RARITY_RARE);
+    }
+
+    #[test]
+    fn close_button_stays_above_content_and_activates_its_own_handler() {
+        use bevy::scene::ScenePlugin;
+
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        let root = app
+            .world_mut()
+            .spawn_scene(card(EdgeGrade::Fine, bsn! { Node }))
+            .unwrap()
+            .id();
+        app.world_mut().entity_mut(root).insert(InfoModalRoot);
+        app.update();
+
+        let button = app
+            .world_mut()
+            .query_filtered::<Entity, With<bevy::ui_widgets::Button>>()
+            .single(app.world())
+            .unwrap();
+        let layer = app.world().get::<ZIndex>(button).map_or(0, |z| z.0);
+        assert!(layer > 0, "close control must receive hits before the body");
+
+        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut().flush();
+        assert!(app.world().get_entity(root).is_err());
     }
 
     #[test]
