@@ -77,6 +77,15 @@ pub struct PlaySkillSfx {
     pub sound: String,
 }
 
+/// Control one cancellable skill sound per emitter, separate from its normal SFX.
+/// Replacing or stopping this voice never stops other sounds on the SFX channel.
+#[derive(Message, Debug, Clone, Reflect)]
+#[reflect(Debug)]
+pub enum ControlSkillSfx {
+    Play { emitter: Entity, sound: String },
+    Stop { emitter: Entity },
+}
+
 /// Request an unanchored sound relative to the content wav directory.
 #[derive(Message, Debug, Clone, Reflect)]
 #[reflect(Debug)]

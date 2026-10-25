@@ -19,7 +19,8 @@ impl Plugin for EffectsPlugin {
             .add_systems(
                 Update,
                 (
-                    on_skill_effect,
+                    on_skill_effect
+                        .before(lifthrasir_runtime::audio::controlled_sfx::control_skill_sfx),
                     on_skill_damage,
                     on_ground_skill,
                     on_special_effect,

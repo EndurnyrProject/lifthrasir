@@ -44,6 +44,7 @@ impl Plugin for RuntimeCorePlugin {
             .add_message::<MuteBgmEvent>()
             .add_message::<PlayMobSfx>()
             .add_message::<PlaySkillSfx>()
+            .add_message::<ControlSkillSfx>()
             .add_message::<PlaySoundEffect>()
             .add_message::<SetSfxVolumeEvent>()
             .add_message::<MuteSfxEvent>()

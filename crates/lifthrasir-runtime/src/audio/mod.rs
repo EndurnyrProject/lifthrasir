@@ -1,3 +1,4 @@
+pub mod controlled_sfx;
 pub mod events;
 pub mod map_sounds;
 pub mod playback;

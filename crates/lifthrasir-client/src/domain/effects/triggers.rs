@@ -14,7 +14,7 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use lifthrasir_data::{EffectDescriptor, EffectPlacement};
+use lifthrasir_data::{EffectDescriptor, EffectPlacement, GroundAnchor};
 use lifthrasir_runtime::effects::{descriptor_tint, load_effect};
 use moonshine_behavior::prelude::BehaviorMut;
 
@@ -27,7 +27,7 @@ use lifthrasir_assets::catalogs::{effect::EffectCatalog, shader_fx::ShaderFxCata
 #[cfg(test)]
 use lifthrasir_assets::effects::asset::LoadedEffectAsset;
 use lifthrasir_assets::loaders::RoAltitudeAsset;
-use lifthrasir_runtime::audio::events::PlaySkillSfx;
+use lifthrasir_runtime::audio::events::{ControlSkillSfx, PlaySkillSfx};
 use lifthrasir_runtime::effects::EffectAnchor;
 use lifthrasir_runtime::effects::events::PlayProceduralVfx;
 use lifthrasir_runtime::effects::playback::spawn_effect;
@@ -210,6 +210,7 @@ pub struct EffectSpawnCtx<'w, 's> {
     behaviors: Query<'w, 's, BehaviorMut<AnimationState>>,
     transforms: Query<'w, 's, &'static Transform>,
     sfx: MessageWriter<'w, PlaySkillSfx>,
+    controlled_sfx: MessageWriter<'w, ControlSkillSfx>,
 }
 
 /// `SkillEffectShown` — a no-damage skill effect: spawn anchored per placement,
@@ -234,6 +235,17 @@ pub fn on_skill_effect(
                 target,
                 0,
             );
+        }
+
+        // Adaptation has no cast artwork, but its successful server response
+        // must still end this caster's performance audio.
+        if event.skill_id == 304 {
+            if event.result == 1
+                && let Some(emitter) = src
+            {
+                ctx.controlled_sfx.write(ControlSkillSfx::Stop { emitter });
+            }
+            continue;
         }
 
         let Some(descriptor) = ctx.catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
@@ -265,7 +277,27 @@ pub fn on_skill_effect(
             None,
         );
 
-        play_procedural_sound(&mut ctx.sfx, shader_fx, descriptor, emitter);
+        let performance = ctx
+            .catalog
+            .as_ref()
+            .and_then(|catalog| catalog.skill_unit(event.skill_id))
+            .is_some_and(|field| field.ground_anchor == GroundAnchor::Footprint);
+        if performance {
+            if event.result == 1
+                && let Some(emitter) = src
+            {
+                let request = match &descriptor.sound {
+                    Some(sound) => ControlSkillSfx::Play {
+                        emitter,
+                        sound: sound.clone(),
+                    },
+                    None => ControlSkillSfx::Stop { emitter },
+                };
+                ctx.controlled_sfx.write(request);
+            }
+        } else {
+            play_procedural_sound(&mut ctx.sfx, shader_fx, descriptor, emitter);
+        }
         emit_procedural_vfx(
             &mut proc_vfx,
             &ctx.transforms,
@@ -543,6 +575,7 @@ mod tests {
             .add_message::<GroundSkillPlaced>()
             .add_message::<DisplayDamageNumber>()
             .add_message::<PlaySkillSfx>()
+            .add_message::<ControlSkillSfx>()
             .add_message::<PlayProceduralVfx>()
             .add_message::<SpecialEffectShown>()
             .init_resource::<EntityRegistry>()
@@ -584,6 +617,62 @@ mod tests {
                 EffectAnchor::Entity(_) => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn performance_sound_is_not_fire_and_forget() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_effect);
+        let caster = spawn_unit(&mut app, 100);
+        app.world_mut().write_message(SkillEffectShown {
+            skill_id: 322,
+            level: 1,
+            src_id: 100,
+            target_id: 100,
+            result: 1,
+        });
+        app.update();
+
+        let sounds = app.world().resource::<Messages<PlaySkillSfx>>();
+        assert_eq!(
+            sounds.get_cursor().read(sounds).count(),
+            0,
+            "a performance needs cancellable audio, not a fire-and-forget sound"
+        );
+        let controlled = app.world().resource::<Messages<ControlSkillSfx>>();
+        let mut cursor = controlled.get_cursor();
+        let requests: Vec<_> = cursor.read(controlled).collect();
+        assert!(matches!(
+            requests.as_slice(),
+            [ControlSkillSfx::Play { emitter, .. }] if *emitter == caster
+        ));
+    }
+
+    #[test]
+    fn only_successful_adaptation_stops_its_casters_sound_without_a_catalog() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_effect);
+        spawn_unit(&mut app, 100);
+        let other_caster = spawn_unit(&mut app, 200);
+        app.world_mut().remove_resource::<EffectCatalog>();
+        for (src_id, result) in [(100, 0), (200, 1)] {
+            app.world_mut().write_message(SkillEffectShown {
+                skill_id: 304,
+                level: 1,
+                src_id,
+                target_id: src_id,
+                result,
+            });
+        }
+        app.update();
+
+        let controlled = app.world().resource::<Messages<ControlSkillSfx>>();
+        let mut cursor = controlled.get_cursor();
+        let requests: Vec<_> = cursor.read(controlled).collect();
+        assert!(matches!(
+            requests.as_slice(),
+            [ControlSkillSfx::Stop { emitter }] if *emitter == other_caster
+        ));
     }
 
     #[test]
