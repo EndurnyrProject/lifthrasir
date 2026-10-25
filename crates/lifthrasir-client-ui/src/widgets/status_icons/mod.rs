@@ -1,21 +1,27 @@
 //! Status-effect icon bar: a top-right, wrapping row of the local player's active
 //! statuses. Icons are stable, diff-synced children (so blink/hover survive frames),
-//! rendered from the real RO TGA when the catalog resolves one and a themed placeholder
-//! tile otherwise. Timed icons blink in their final seconds; hovering shows a live
-//! name + countdown tooltip.
+//! rendered from retail status textures or the active performance's skill icon,
+//! with a themed placeholder when unavailable. Timed icons blink in their final
+//! seconds; hovering shows a live name + countdown tooltip.
 
+mod presentation;
 mod scene;
+
+#[cfg(test)]
+mod tests;
 
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use bevy::prelude::*;
+use lifthrasir_assets::catalogs::skill::SkillCatalog;
 use lifthrasir_assets::catalogs::status::catalog::StatusIconCatalog;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::character::states::status_icons::{
     ActiveStatus, LocalStatuses,
 };
 
+use crate::widgets::status_icons::presentation::{StatusPresentation, resolve_status_presentation};
 use crate::widgets::status_icons::scene::{ICON_SIZE, blink_alpha, diff_efsts, format_remaining};
 
 /// Marks the absolute-positioned container that holds the icon children.
@@ -26,6 +32,7 @@ pub struct StatusIconBar;
 #[derive(Component)]
 pub struct StatusIcon {
     pub efst: u32,
+    presentation: StatusPresentation,
 }
 
 /// Marks a hover tooltip so it can be despawned on hover-out.
@@ -77,18 +84,18 @@ pub fn spawn_status_bar(commands: &mut Commands, parent: Entity) {
 }
 
 /// Diffs `LocalStatuses` against the rendered `StatusIcon` children, spawning icons for
-/// newly-active statuses and despawning icons for gone ones. No rebuild of unchanged
-/// icons, so blink state and hover stay stable.
+/// newly-active statuses and despawning icons for gone ones. Rebuild only when the
+/// resolved artwork or name changes, including song changes and late catalogs.
 fn sync_status_icons(
     mut commands: Commands,
     local: Res<LocalStatuses>,
-    catalog: Option<Res<StatusIconCatalog>>,
+    catalogs: (Option<Res<StatusIconCatalog>>, Option<Res<SkillCatalog>>),
     asset_server: Res<AssetServer>,
     bar: Query<Entity, With<StatusIconBar>>,
     icons: Query<(Entity, &StatusIcon)>,
     mut logged: Local<HashSet<u32>>,
 ) {
-    let Some(catalog) = catalog else {
+    let (Some(catalog), skills) = catalogs else {
         return;
     };
     let Ok(bar) = bar.single() else {
@@ -102,7 +109,24 @@ fn sync_status_icons(
     let active: HashSet<u32> = local.active.keys().copied().collect();
     let existing: HashSet<u32> = existing_entities.keys().copied().collect();
 
-    let (to_add, to_remove) = diff_efsts(&active, &existing);
+    let (mut to_add, to_remove) = diff_efsts(&active, &existing);
+    for (entity, icon) in &icons {
+        let Some(status) = local.active.get(&icon.efst) else {
+            continue;
+        };
+        let presentation = resolve_status_presentation(
+            icon.efst,
+            status.source_skill_id,
+            &catalog,
+            skills.as_deref(),
+        );
+        if icon.presentation == presentation {
+            continue;
+        }
+        commands.entity(entity).despawn();
+        to_add.push(icon.efst);
+    }
+    to_add.sort_unstable();
 
     for efst in to_remove {
         if let Some(entity) = existing_entities.get(&efst) {
@@ -114,29 +138,37 @@ fn sync_status_icons(
             &mut commands,
             bar,
             efst,
-            &catalog,
+            resolve_status_presentation(
+                efst,
+                local
+                    .active
+                    .get(&efst)
+                    .and_then(|status| status.source_skill_id),
+                &catalog,
+                skills.as_deref(),
+            ),
             &asset_server,
             &mut logged,
         );
     }
 }
 
-/// Spawns a single 32x32 icon under the bar: the real TGA when the catalog resolves a
-/// path, otherwise a themed placeholder tile. Hover observers attach either way.
+/// Spawns a single 32x32 icon under the bar using the resolved retail image or a
+/// themed placeholder tile. Hover observers attach either way.
 fn spawn_status_icon(
     commands: &mut Commands,
     bar: Entity,
     efst: u32,
-    catalog: &StatusIconCatalog,
+    presentation: StatusPresentation,
     asset_server: &AssetServer,
     logged: &mut HashSet<u32>,
 ) {
-    let mut icon = commands.spawn((StatusIcon { efst }, ChildOf(bar)));
+    let mut icon = commands.spawn(ChildOf(bar));
 
-    match catalog.icon_path(efst) {
+    match &presentation.image_path {
         Some(path) => {
             icon.insert((
-                ImageNode::new(asset_server.load(&path)),
+                ImageNode::new(asset_server.load(path)),
                 Node {
                     width: Val::Px(ICON_SIZE),
                     height: Val::Px(ICON_SIZE),
@@ -156,12 +188,13 @@ fn spawn_status_icon(
                 BackgroundColor(lifthrasir_ui::theme::FIELD),
                 BorderColor::all(lifthrasir_ui::theme::STROKE),
             ));
-            if catalog.name(efst).is_none() && logged.insert(efst) {
+            if presentation.name == format!("#{efst}") && logged.insert(efst) {
                 warn!("Status effect EFST {efst} has no catalog entry (no icon, no name)");
             }
         }
     }
 
+    icon.insert(StatusIcon { efst, presentation });
     icon.observe(on_icon_hover_over);
     icon.observe(on_icon_hover_out);
 }
@@ -219,7 +252,6 @@ fn on_icon_hover_over(
     over: On<PointerOver>,
     icons: Query<&StatusIcon>,
     local: Res<LocalStatuses>,
-    catalog: Option<Res<StatusIconCatalog>>,
     asset_server: Res<AssetServer>,
     time: Res<Time>,
     mut commands: Commands,
@@ -229,11 +261,7 @@ fn on_icon_hover_over(
     };
     let efst = icon.efst;
 
-    let name = catalog
-        .as_ref()
-        .and_then(|c| c.name(efst))
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("#{efst}"));
+    let name = icon.presentation.name.clone();
     let time_text = local
         .active
         .get(&efst)

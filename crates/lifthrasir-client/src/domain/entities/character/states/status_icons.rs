@@ -25,6 +25,7 @@ pub struct ActiveStatus {
     pub total_ms: u32,
     pub expires_at: Option<Duration>,
     pub permanent: bool,
+    pub source_skill_id: Option<u32>,
 }
 
 /// Folds the widened `StatusEffectChanged` events for the local player into
@@ -54,6 +55,7 @@ pub fn track_local_status_icons(
             event.efst,
             ActiveStatus {
                 total_ms: event.total_ms,
+                source_skill_id: event.source_skill_id,
                 permanent: event.remain_ms == 0,
                 expires_at: (event.remain_ms != 0)
                     .then(|| time.elapsed() + Duration::from_millis(event.remain_ms as u64)),
@@ -137,11 +139,32 @@ mod tests {
                 on,
                 total_ms: remain_ms,
                 remain_ms,
+                source_skill_id: None,
             });
     }
 
     fn active(app: &App) -> &HashMap<u32, ActiveStatus> {
         &app.world().resource::<LocalStatuses>().active
+    }
+
+    #[test]
+    fn performing_refresh_replaces_its_skill_and_off_removes_it() {
+        let mut app = app();
+        for skill_id in [322, 321] {
+            app.world_mut().write_message(StatusEffectChanged {
+                unit_id: CHAR_ID,
+                efst: 69,
+                on: true,
+                total_ms: 60_000,
+                remain_ms: 60_000,
+                source_skill_id: Some(skill_id),
+            });
+            app.update();
+            assert_eq!(active(&app)[&69].source_skill_id, Some(skill_id));
+        }
+        emit_status(&mut app, CHAR_ID, 69, false, 0);
+        app.update();
+        assert!(!active(&app).contains_key(&69));
     }
 
     #[test]

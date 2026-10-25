@@ -60,6 +60,7 @@ mod tests {
                 on,
                 total_ms: 0,
                 remain_ms: 0,
+                source_skill_id: None,
             });
         app.update();
     }

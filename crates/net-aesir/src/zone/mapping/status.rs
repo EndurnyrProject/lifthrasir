@@ -1,6 +1,8 @@
 use crate::proto::aesir::net;
 use net_contract::events::{SpiritSphereChanged, StatusEffectChanged, UnitStateChanged};
 
+/// Preserve the performing status's skill ID without interpreting other
+/// statuses' `val1` parameters as skill-icon metadata.
 pub fn status_change(s: net::StatusChange) -> StatusEffectChanged {
     StatusEffectChanged {
         unit_id: s.unit_id,
@@ -8,6 +10,10 @@ pub fn status_change(s: net::StatusChange) -> StatusEffectChanged {
         on: s.on,
         total_ms: s.total_ms,
         remain_ms: s.remain_ms,
+        source_skill_id: (s.efst == 69 && s.on)
+            .then_some(s.val1)
+            .and_then(|value| u32::try_from(value).ok())
+            .filter(|id| *id != 0),
     }
 }
 
@@ -86,6 +92,29 @@ mod tests {
 
         assert_eq!(timed.total_ms, 60_000);
         assert_eq!(timed.remain_ms, 45_000);
+    }
+
+    #[test]
+    fn performing_status_carries_only_a_valid_active_skill_id() {
+        for (efst, on, val1, expected) in [
+            (69, true, 322, Some(322)),
+            (69, true, 321, Some(321)),
+            (69, true, 0, None),
+            (69, true, -1, None),
+            (69, false, 322, None),
+            (73, true, 322, None),
+        ] {
+            let mapped = status_change(net::StatusChange {
+                efst,
+                on,
+                val1,
+                ..Default::default()
+            });
+            assert_eq!(
+                mapped.source_skill_id, expected,
+                "EFST {efst}, on={on}, val1={val1}"
+            );
+        }
     }
 
     #[test]

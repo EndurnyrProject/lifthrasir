@@ -160,6 +160,8 @@ pub struct StatusEffectChanged {
     pub total_ms: u32,
     /// Remaining duration in ms at the time of this event; `0` = infinite/permanent.
     pub remain_ms: u32,
+    /// Skill represented by this status, when available (such as an active performance).
+    pub source_skill_id: Option<u32>,
 }
 
 /// A fire-and-forget visual effect (rAthena `EF_*` id) triggered by `source_id`.
