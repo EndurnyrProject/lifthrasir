@@ -336,11 +336,16 @@ pub fn on_skill_damage(
         // their total across `div` staggered numbers so they read as N hits.
         let hits = split_hits(event.damage, event.div);
         let hit_count = hits.len() as u32;
+        let (hits, damage_type) = if event.missed {
+            (vec![0], DamageDisplayType::Miss)
+        } else {
+            (hits, DamageDisplayType::Normal)
+        };
         for (i, amount) in hits.into_iter().enumerate() {
             damage_display.write(DisplayDamageNumber {
                 entity: target,
                 amount,
-                damage_type: DamageDisplayType::Normal,
+                damage_type,
                 delay_secs: i as f32 * HIT_STAGGER_SECS,
             });
         }
@@ -676,6 +681,71 @@ mod tests {
     }
 
     #[test]
+    fn missed_multi_hit_skill_emits_one_miss_instead_of_zero_damage_hits() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+        let target = spawn_unit(&mut app, 200);
+        spawn_unit(&mut app, 100);
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 11,
+            level: 1,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 0,
+            div: 3,
+            type_: 0,
+            src_delay: 200,
+            dst_delay: 100,
+            missed: true,
+        });
+        app.update();
+
+        let messages = app.world().resource::<Messages<DisplayDamageNumber>>();
+        let emitted: Vec<_> = messages.iter_current_update_messages().collect();
+        assert_eq!(emitted.len(), 1);
+        assert_eq!(emitted[0].entity, target);
+        assert_eq!(emitted[0].damage_type, DamageDisplayType::Miss);
+        assert_eq!(emitted[0].amount, 0);
+        assert_eq!(emitted[0].delay_secs, 0.0);
+        let vfx = app.world().resource::<Messages<PlayProceduralVfx>>();
+        let effects: Vec<_> = vfx.iter_current_update_messages().collect();
+        assert_eq!(effects.len(), 1);
+        assert_eq!(
+            effects[0].hits, 3,
+            "cast visuals retain the original hit count"
+        );
+    }
+
+    #[test]
+    fn zero_damage_skill_without_missed_flag_still_displays_a_normal_hit() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+        spawn_unit(&mut app, 200);
+        spawn_unit(&mut app, 100);
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 28,
+            level: 1,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 0,
+            div: 1,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+            missed: false,
+        });
+        app.update();
+
+        let messages = app.world().resource::<Messages<DisplayDamageNumber>>();
+        let emitted: Vec<_> = messages.iter_current_update_messages().collect();
+        assert_eq!(emitted.len(), 1);
+        assert_eq!(emitted[0].damage_type, DamageDisplayType::Normal);
+        assert_eq!(emitted[0].amount, 0);
+    }
+
+    #[test]
     fn skill_damage_spawns_effect_and_emits_damage_number() {
         let mut app = test_app();
         app.add_systems(Update, on_skill_damage);
@@ -685,6 +755,7 @@ mod tests {
 
         app.world_mut().write_message(SkillDamageReceived {
             skill_id: 28, // AL_HEAL (seeded Target)
+            missed: false,
             level: 1,
             src_id: 100,
             target_id: 200,
@@ -721,6 +792,7 @@ mod tests {
 
         app.world_mut().write_message(SkillDamageReceived {
             skill_id: 83, // WZ_METEOR
+            missed: false,
             level: 10,
             src_id: 100,
             target_id: 200,
@@ -767,6 +839,7 @@ mod tests {
 
         app.world_mut().write_message(SkillDamageReceived {
             skill_id: 28, // AL_HEAL (seeded Target); catalog entry irrelevant here
+            missed: false,
             level: 1,
             src_id: 100,
             target_id: 200,
@@ -846,6 +919,7 @@ mod tests {
             target_id: 200,
             server_tick: 0,
             damage: 100,
+            missed: false,
             div: 3,
             type_: 0,
             src_delay: 0,
@@ -877,6 +951,7 @@ mod tests {
 
         app.world_mut().write_message(SkillDamageReceived {
             skill_id: 89, // WZ_STORMGUST (seeded skills entry, repeating: true)
+            missed: false,
             level: 10,
             src_id: 100,
             target_id: 200,
@@ -1035,6 +1110,7 @@ mod tests {
 
         app.world_mut().write_message(SkillDamageReceived {
             skill_id: 91, // WZ_HEAVENDRIVE (seeded Ground)
+            missed: false,
             level: 5,
             src_id: 100,
             target_id: 200,
@@ -1103,6 +1179,7 @@ mod tests {
         for tick in 0..3u64 {
             app.world_mut().write_message(SkillDamageReceived {
                 skill_id: 254,
+                missed: false,
                 level: 10,
                 src_id: 100,
                 target_id: 200,
@@ -1170,6 +1247,7 @@ mod tests {
 
         app.world_mut().write_message(SkillDamageReceived {
             skill_id: 999_999, // not in the catalog (e.g. Bash has no STR effect)
+            missed: false,
             level: 1,
             src_id: 100,
             target_id: 200,
@@ -1220,6 +1298,7 @@ mod tests {
 
         app.world_mut().write_message(SkillDamageReceived {
             skill_id: 9999,
+            missed: false,
             level: 1,
             src_id: 100,
             target_id: 200,
@@ -1263,6 +1342,7 @@ mod tests {
 
         app.world_mut().write_message(SkillDamageReceived {
             skill_id: 11, // MG_NAPALMBEAT — procedural vfx "napalm_beat", no STR effect
+            missed: false,
             level: 1,
             src_id: 100,
             target_id: 200,
@@ -1326,6 +1406,7 @@ mod tests {
             target_id: 200,
             server_tick: 0,
             damage: 50,
+            missed: false,
             div: 1,
             type_: 0,
             src_delay: 0,

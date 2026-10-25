@@ -43,6 +43,7 @@ pub struct ActiveSkillMenu {
     pub src_skill_id: u32,
     pub kind: SkillMenuKind,
     pub entry_ids: Vec<u32>,
+    pub labels: Vec<String>,
     pub catalysts: Vec<u32>,
 }
 
@@ -91,6 +92,7 @@ fn open_menu(mut offers: MessageReader<SkillMenuOffered>, mut commands: Commands
         src_skill_id: offer.src_skill_id,
         kind: offer.kind,
         entry_ids: offer.entry_ids.clone(),
+        labels: offer.labels.clone(),
         catalysts: Vec::new(),
     });
 }
@@ -152,11 +154,15 @@ fn entry_rows(
     let mut rows: Vec<_> = menu
         .entry_ids
         .iter()
-        .map(|&id| {
-            (
-                entry_label(menu.kind, id, inventory, item_db, skills),
-                SkillMenuAction::Select(id),
-            )
+        .enumerate()
+        .map(|(index, &id)| {
+            let label = menu
+                .labels
+                .get(index)
+                .filter(|label| menu.kind == SkillMenuKind::Options && !label.trim().is_empty())
+                .cloned()
+                .unwrap_or_else(|| entry_label(menu.kind, id, inventory, item_db, skills));
+            (label, SkillMenuAction::Select(id))
         })
         .collect();
     rows.push(("Cancel".to_string(), SkillMenuAction::Cancel));
@@ -178,6 +184,7 @@ fn entry_label(
             .map(|meta| meta.display_name.clone())
             .unwrap_or_else(|| format!("Skill #{id}")),
         SkillMenuKind::Items => item_name(id, true, item_db),
+        SkillMenuKind::Options => format!("Option #{id}"),
         SkillMenuKind::InventorySlots => inventory
             .get(id as u16)
             .map(|item| {
@@ -392,8 +399,40 @@ mod tests {
             src_skill_id: 98,
             kind,
             entry_ids,
+            labels: Vec::new(),
             catalysts,
         }
+    }
+
+    #[test]
+    fn option_offer_displays_server_labels_and_answers_with_the_entry_id() {
+        let mut app = App::new();
+        app.add_message::<SkillMenuOffered>()
+            .add_systems(Update, open_menu);
+        app.world_mut().write_message(SkillMenuOffered {
+            src_skill_id: 27,
+            kind: SkillMenuKind::Options,
+            entry_ids: vec![7, 0, 8, 9],
+            labels: vec!["Prontera".into(), "Geffen".into(), "".into()],
+        });
+        app.update();
+
+        let mut pending = app.world().resource::<ActiveSkillMenu>().clone();
+        let rows = entry_rows(&pending, &Inventory::default(), None, None);
+        assert_eq!(
+            rows,
+            vec![
+                ("Prontera".into(), SkillMenuAction::Select(7)),
+                ("Geffen".into(), SkillMenuAction::Select(0)),
+                ("Option #8".into(), SkillMenuAction::Select(8)),
+                ("Option #9".into(), SkillMenuAction::Select(9)),
+                ("Cancel".into(), SkillMenuAction::Cancel),
+            ]
+        );
+        let answer = apply_row(rows[1].1, &mut pending).expect("selection answers");
+        assert_eq!(answer.src_skill_id, 27);
+        assert_eq!(answer.selected_id, 0);
+        assert!(!answer.cancel);
     }
 
     #[test]
@@ -726,6 +765,7 @@ mod tests {
                 src_skill_id: 98,
                 kind: SkillMenuKind::Items,
                 entry_ids: vec![1201, 1202],
+                labels: vec![],
             });
         app.update();
 
@@ -748,6 +788,7 @@ mod tests {
                 src_skill_id: 40,
                 kind: SkillMenuKind::InventorySlots,
                 entry_ids: vec![3],
+                labels: vec![],
             });
         app.update();
 

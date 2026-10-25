@@ -406,6 +406,7 @@ mod tests {
                 type_: 0,
                 src_delay: 0,
                 dst_delay: 0,
+                missed: false,
             });
             app.update();
         }

@@ -8,12 +8,14 @@ pub fn skill_menu(m: net::SkillMenu) -> SkillMenuOffered {
     let kind = match net::skill_menu::Kind::try_from(m.kind) {
         Ok(net::skill_menu::Kind::Skills) => SkillMenuKind::Skills,
         Ok(net::skill_menu::Kind::InventorySlots) => SkillMenuKind::InventorySlots,
+        Ok(net::skill_menu::Kind::Options) => SkillMenuKind::Options,
         _ => SkillMenuKind::Items,
     };
     SkillMenuOffered {
         src_skill_id: m.src_skill_id,
         kind,
         entry_ids: m.entry_ids,
+        labels: m.labels,
     }
 }
 

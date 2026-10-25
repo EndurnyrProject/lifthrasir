@@ -294,6 +294,8 @@ pub struct SkillDamageReceived {
     pub type_: u32,
     pub src_delay: u32,
     pub dst_delay: u32,
+    /// A miss is distinct from a successful hit dealing zero damage.
+    pub missed: bool,
 }
 
 /// No-damage skill effect.
@@ -403,6 +405,8 @@ pub enum SkillCastFailureReason {
 pub struct SkillCastFailed {
     pub skill_id: u32,
     pub reason: SkillCastFailureReason,
+    /// Required sphere count for `Spirits`, item id for `NeedEquipment`, otherwise zero.
+    pub detail: u32,
 }
 
 /// One learned skill within a SkillListReceived.

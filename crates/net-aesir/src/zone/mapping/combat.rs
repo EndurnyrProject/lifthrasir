@@ -52,6 +52,7 @@ pub fn skill_damage(s: net::SkillDamage) -> SkillDamageReceived {
         type_: s.r#type,
         src_delay: s.src_delay,
         dst_delay: s.dst_delay,
+        missed: s.missed,
     }
 }
 
@@ -106,6 +107,7 @@ pub fn skill_cast_failed(f: net::SkillCastFailed) -> SkillCastFailed {
     SkillCastFailed {
         skill_id: f.skill_id,
         reason,
+        detail: f.detail,
     }
 }
 

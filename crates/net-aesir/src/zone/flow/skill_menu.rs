@@ -67,6 +67,21 @@ mod tests {
     }
 
     #[test]
+    fn server_labelled_options_keep_their_kind() {
+        let offers = drained(Body::SkillMenu(net::SkillMenu {
+            src_skill_id: 27,
+            kind: net::skill_menu::Kind::Options as i32,
+            entry_ids: vec![7, 2],
+            labels: vec!["Prontera".into(), "Geffen".into()],
+        }));
+
+        assert_eq!(offers.len(), 1);
+        assert_eq!(offers[0].kind, SkillMenuKind::Options);
+        assert_eq!(offers[0].entry_ids, vec![7, 2]);
+        assert_eq!(offers[0].labels, vec!["Prontera", "Geffen"]);
+    }
+
+    #[test]
     fn unrelated_body_produces_nothing() {
         assert!(drained(Body::MountResult(net::MountResult { result: 0 })).is_empty());
     }

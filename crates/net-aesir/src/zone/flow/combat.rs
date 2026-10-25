@@ -178,6 +178,46 @@ mod tests {
     }
 
     #[test]
+    fn skill_damage_distinguishes_misses_from_zero_damage_hits() {
+        for missed in [true, false] {
+            let app = drain(vec![(
+                GAMEPLAY,
+                Body::SkillDamage(net::SkillDamage {
+                    skill_id: 5,
+                    damage: 0,
+                    missed,
+                    ..Default::default()
+                }),
+            )]);
+            let damage = app.world().resource::<Messages<SkillDamageReceived>>();
+            let events: Vec<_> = damage.iter_current_update_messages().collect();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].missed, missed);
+        }
+    }
+
+    #[test]
+    fn cast_failure_preserves_reason_specific_detail() {
+        for (reason, detail) in [
+            (net::SkillCastFailureReason::Spirits, 5),
+            (net::SkillCastFailureReason::NeedEquipment, 1201),
+        ] {
+            let app = drain(vec![(
+                GAMEPLAY,
+                Body::SkillCastFailed(net::SkillCastFailed {
+                    skill_id: 12,
+                    reason: reason as i32,
+                    detail,
+                }),
+            )]);
+            let failures = app.world().resource::<Messages<SkillCastFailed>>();
+            let events: Vec<_> = failures.iter_current_update_messages().collect();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].detail, detail);
+        }
+    }
+
+    #[test]
     fn skill_list_on_bulk_channel_still_drains() {
         use crate::channels::BULK;
         let app = drain(vec![(BULK, Body::SkillList(net::SkillList::default()))]);

@@ -6,7 +6,11 @@ use net_contract::events::{
     ChatHeard, LearnSkillResultReceived, ProductionResult, SkillCastFailed, SkillCastFailureReason,
 };
 
-fn cast_failure_message(reason: SkillCastFailureReason) -> &'static str {
+fn cast_failure_message(
+    reason: SkillCastFailureReason,
+    detail: u32,
+    item_db: Option<&ItemDb>,
+) -> String {
     match reason {
         SkillCastFailureReason::MissingCatalyst => {
             "You are missing a catalyst required to cast this skill."
@@ -25,12 +29,23 @@ fn cast_failure_message(reason: SkillCastFailureReason) -> &'static str {
         SkillCastFailureReason::Overweight => "You are carrying too much weight.",
         SkillCastFailureReason::ToTarget => "This skill cannot be used on that target.",
         SkillCastFailureReason::HpInsufficient => "Your HP is too high to cast this skill.",
+        SkillCastFailureReason::Spirits if detail > 0 => {
+            return format!("You need {detail} spirit spheres to cast this skill.");
+        }
         SkillCastFailureReason::Spirits => "You do not have enough spirit spheres.",
         SkillCastFailureReason::Cart => "You need a pushcart to cast this skill.",
+        SkillCastFailureReason::NeedEquipment if detail > 0 => {
+            let name = item_db
+                .and_then(|db| db.name(detail, true))
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("item #{detail}"));
+            return format!("You need {name} equipped to cast this skill.");
+        }
         SkillCastFailureReason::NeedEquipment => "You need the required equipment equipped.",
         SkillCastFailureReason::Failed => "The skill failed.",
         SkillCastFailureReason::Unspecified => "The skill cast failed.",
     }
+    .to_string()
 }
 
 #[auto_add_system(
@@ -40,11 +55,12 @@ fn cast_failure_message(reason: SkillCastFailureReason) -> &'static str {
 pub fn report_skill_cast_failure(
     mut failures: MessageReader<SkillCastFailed>,
     mut chat: MessageWriter<ChatHeard>,
+    item_db: Option<Res<ItemDb>>,
 ) {
     for failure in failures.read() {
         chat.write(ChatHeard {
             gid: 0,
-            message: cast_failure_message(failure.reason).to_string(),
+            message: cast_failure_message(failure.reason, failure.detail, item_db.as_deref()),
         });
     }
 }
@@ -221,6 +237,68 @@ mod tests {
     }
 
     #[test]
+    fn cast_failure_reports_required_spheres_and_equipment() {
+        let mut app = App::new();
+        app.add_message::<SkillCastFailed>()
+            .add_message::<ChatHeard>()
+            .insert_resource(item_db_with(1201, "Knife"))
+            .add_systems(Update, report_skill_cast_failure);
+        for (reason, detail) in [
+            (SkillCastFailureReason::Spirits, 5),
+            (SkillCastFailureReason::NeedEquipment, 1201),
+            (SkillCastFailureReason::NeedEquipment, 999),
+            (SkillCastFailureReason::Spirits, 0),
+            (SkillCastFailureReason::NeedEquipment, 0),
+        ] {
+            app.world_mut().write_message(SkillCastFailed {
+                skill_id: 12,
+                reason,
+                detail,
+            });
+        }
+        app.update();
+
+        let chat = app.world().resource::<Messages<ChatHeard>>();
+        let messages: Vec<_> = chat
+            .iter_current_update_messages()
+            .map(|m| m.message.as_str())
+            .collect();
+        assert_eq!(
+            messages,
+            vec![
+                "You need 5 spirit spheres to cast this skill.",
+                "You need Knife equipped to cast this skill.",
+                "You need item #999 equipped to cast this skill.",
+                "You do not have enough spirit spheres.",
+                "You need the required equipment equipped.",
+            ]
+        );
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<Messages<ChatHeard>>()
+                .iter_current_update_messages()
+                .count(),
+            0
+        );
+
+        app.world_mut().remove_resource::<ItemDb>();
+        app.world_mut().write_message(SkillCastFailed {
+            skill_id: 12,
+            reason: SkillCastFailureReason::NeedEquipment,
+            detail: 1201,
+        });
+        app.update();
+        let chat = app.world().resource::<Messages<ChatHeard>>();
+        let messages: Vec<_> = chat.iter_current_update_messages().collect();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(
+            messages[0].message,
+            "You need item #1201 equipped to cast this skill."
+        );
+    }
+
+    #[test]
     fn missing_catalyst_reports_chat_feedback() {
         let mut app = App::new();
         app.add_message::<SkillCastFailed>()
@@ -232,6 +310,7 @@ mod tests {
             .write(SkillCastFailed {
                 skill_id: 12,
                 reason: SkillCastFailureReason::MissingCatalyst,
+                detail: 0,
             });
 
         app.update();

@@ -11,6 +11,8 @@ pub enum SkillMenuKind {
     Items,
     /// Inventory slot indices (e.g. the items `MC_IDENTIFY` can identify).
     InventorySlots,
+    /// Server-labelled options whose ids have no catalog meaning.
+    Options,
 }
 
 /// The server offers a list of choices on behalf of a skill; the client renders
@@ -22,4 +24,6 @@ pub struct SkillMenuOffered {
     pub src_skill_id: u32,
     pub kind: SkillMenuKind,
     pub entry_ids: Vec<u32>,
+    /// Positional display labels for `Options`, in the same order as `entry_ids`.
+    pub labels: Vec<String>,
 }
