@@ -748,7 +748,7 @@ pub mod envelope {
         /// s2c zone world
         #[prost(message, tag = "224")]
         ProgressBarAbort(super::ProgressBarAbort),
-        /// 225-227: negotiated vending setup and correlated settlement
+        /// 225-227: paid vending setup and correlated settlement
         ///
         /// s2c zone world
         #[prost(message, tag = "225")]
@@ -2141,7 +2141,7 @@ pub struct MoveFromCartRequest {
     pub amount: u32,
 }
 /// Server -> client, a paid MC_VENDING use granted preparation. Canceling this
-/// setup does not refund the skill cost. Requires FEATURE_CAPABILITY_VENDING_V2.
+/// setup does not refund the skill cost.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VendingSetupReady {
     /// Opaque grant token, valid only for this preparation in the owning session.
@@ -2174,8 +2174,8 @@ pub struct VendingEntry {
     #[prost(uint32, tag = "3")]
     pub price: u32,
 }
-/// Client -> server, submit listings against a paid preparation grant. Requires
-/// FEATURE_CAPABILITY_VENDING_V2; this does not cast or charge for the skill.
+/// Client -> server, submit listings against a paid preparation grant.
+/// This does not cast or charge for the skill.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VendingOpenRequest {
     #[prost(string, tag = "1")]
@@ -2211,7 +2211,7 @@ pub struct VendingOpenResult {
     pub vendor_unit_id: u64,
 }
 /// Client -> server, cancel preparation or close a particular owned shop. An old
-/// request must not close a replacement instance. Requires the V2 capability.
+/// request must not close a replacement instance.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VendingCloseRequest {
     #[prost(uint64, tag = "1")]
@@ -2272,8 +2272,8 @@ pub struct VendingBuy {
     #[prost(uint32, tag = "3")]
     pub expected_unit_price: u32,
 }
-/// Client -> server, atomic checkout against one shop instance. Requires V2 and
-/// a nonzero session-monotonic request ID; never retry an unconfirmed purchase.
+/// Client -> server, atomic checkout against one shop instance. Requires a
+/// nonzero session-monotonic request ID; never retry an unconfirmed purchase.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VendingPurchaseRequest {
     #[prost(uint64, tag = "1")]
@@ -4202,7 +4202,6 @@ pub struct WaitingRoomChat {
 pub enum FeatureCapability {
     Unspecified = 0,
     SkillTextInput = 1,
-    VendingV2 = 2,
 }
 impl FeatureCapability {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4213,7 +4212,6 @@ impl FeatureCapability {
         match self {
             Self::Unspecified => "FEATURE_CAPABILITY_UNSPECIFIED",
             Self::SkillTextInput => "FEATURE_CAPABILITY_SKILL_TEXT_INPUT",
-            Self::VendingV2 => "FEATURE_CAPABILITY_VENDING_V2",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4221,7 +4219,6 @@ impl FeatureCapability {
         match value {
             "FEATURE_CAPABILITY_UNSPECIFIED" => Some(Self::Unspecified),
             "FEATURE_CAPABILITY_SKILL_TEXT_INPUT" => Some(Self::SkillTextInput),
-            "FEATURE_CAPABILITY_VENDING_V2" => Some(Self::VendingV2),
             _ => None,
         }
     }
