@@ -13,6 +13,7 @@ mod shop;
 mod skill_units;
 mod storage;
 mod trade;
+mod vending;
 
 pub use cart::*;
 pub use char_types::*;
@@ -27,3 +28,4 @@ pub use shop::*;
 pub use skill_units::*;
 pub use storage::*;
 pub use trade::*;
+pub use vending::*;

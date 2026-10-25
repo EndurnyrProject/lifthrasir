@@ -1,6 +1,9 @@
 //! Outbound command Messages (client to server).
 
-use crate::dto::{BuyEntry, NavigationTarget, NpcResponse, SellEntry, StorageKind};
+use crate::dto::{
+    BuyEntry, NavigationTarget, NpcResponse, SellEntry, StorageKind, VendingBuyLine,
+    VendingCloseTarget, VendingOffer,
+};
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
@@ -551,3 +554,40 @@ pub struct ConfirmTrade;
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct CancelTrade;
+
+/// Submit listings against a paid server setup grant without recasting the skill.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct OpenVendingRequested {
+    pub request_id: u64,
+    pub setup_id: String,
+    pub title: String,
+    pub entries: Vec<VendingOffer>,
+}
+
+/// Browse one displayed shop; an absent expected ID is only for owner recovery.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ListVendingRequested {
+    pub request_id: u64,
+    pub vendor_unit_id: u64,
+    pub expected_shop_id: Option<String>,
+}
+
+/// Confirm quantities and quoted unit prices against one particular shop.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct PurchaseVendingRequested {
+    pub request_id: u64,
+    pub vendor_unit_id: u64,
+    pub shop_id: String,
+    pub items: Vec<VendingBuyLine>,
+}
+
+/// Cancel a particular setup or close a particular owned shop, never its replacement.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct CloseVendingRequested {
+    pub request_id: u64,
+    pub target: VendingCloseTarget,
+}

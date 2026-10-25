@@ -20,6 +20,13 @@ pub struct ZoneSession {
 #[auto_init_resource(plugin = crate::NetContractPlugin)]
 pub struct ZoneSessionGeneration(pub u64);
 
+/// Whether the current adapter session negotiated reliable vending support.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[auto_init_resource(plugin = crate::NetContractPlugin)]
+pub struct VendingProtocolSupport {
+    pub supported: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionTokens {
     pub login_id1: u32,

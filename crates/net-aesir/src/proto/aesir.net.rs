@@ -23,7 +23,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -280,10 +280,10 @@ pub mod envelope {
         /// s2c zone world
         #[prost(message, tag = "94")]
         VendingBoardRemoved(super::VendingBoardRemoved),
-        /// s2c zone bulk
+        /// s2c zone world
         #[prost(message, tag = "95")]
         VendingList(super::VendingList),
-        /// s2c zone gameplay
+        /// s2c zone world
         #[prost(message, tag = "96")]
         VendingSaleReport(super::VendingSaleReport),
         /// 97-101: npc shop (server->client window/result + client buy/sell intents)
@@ -385,7 +385,7 @@ pub mod envelope {
         /// s2c zone gameplay
         #[prost(message, tag = "125")]
         CartMountResult(super::CartMountResult),
-        /// s2c zone gameplay
+        /// s2c zone world
         #[prost(message, tag = "126")]
         VendingOpenResult(super::VendingOpenResult),
         /// 127-128: emotes (client intent + server->client display)
@@ -748,6 +748,17 @@ pub mod envelope {
         /// s2c zone world
         #[prost(message, tag = "224")]
         ProgressBarAbort(super::ProgressBarAbort),
+        /// 225-227: negotiated vending setup and correlated settlement
+        ///
+        /// s2c zone world
+        #[prost(message, tag = "225")]
+        VendingSetupReady(super::VendingSetupReady),
+        /// s2c zone world
+        #[prost(message, tag = "226")]
+        VendingPurchaseResult(super::VendingPurchaseResult),
+        /// s2c zone world
+        #[prost(message, tag = "227")]
+        VendingCloseResult(super::VendingCloseResult),
     }
 }
 /// Client -> server, first message on the Control channel after connect.
@@ -1090,6 +1101,7 @@ pub struct EnterAck {
     pub x: u32,
     #[prost(uint32, tag = "3")]
     pub y: u32,
+    /// RO network direction order: 0=N, 1=NW, 2=W, 3=SW, 4=S, 5=SE, 6=E, 7=NE.
     #[prost(uint32, tag = "4")]
     pub dir: u32,
     #[prost(uint64, tag = "5")]
@@ -1156,6 +1168,7 @@ pub struct UnitSpawn {
     pub x: u32,
     #[prost(uint32, tag = "6")]
     pub y: u32,
+    /// RO network direction order: 0=N, 1=NW, 2=W, 3=SW, 4=S, 5=SE, 6=E, 7=NE.
     #[prost(uint32, tag = "7")]
     pub dir: u32,
     #[prost(uint32, tag = "8")]
@@ -1553,6 +1566,7 @@ pub struct SnapshotEntity {
     pub x: u32,
     #[prost(uint32, tag = "3")]
     pub y: u32,
+    /// RO network direction order: 0=N, 1=NW, 2=W, 3=SW, 4=S, 5=SE, 6=E, 7=NE.
     #[prost(uint32, tag = "4")]
     pub dir: u32,
     #[prost(uint32, tag = "5")]
@@ -2126,8 +2140,31 @@ pub struct MoveFromCartRequest {
     #[prost(uint32, tag = "2")]
     pub amount: u32,
 }
-/// One line of a vending shop the merchant wants to open: a cart slot, how many
-/// to sell, and the per-unit price.
+/// Server -> client, a paid MC_VENDING use granted preparation. Canceling this
+/// setup does not refund the skill cost. Requires FEATURE_CAPABILITY_VENDING_V2.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingSetupReady {
+    /// Opaque grant token, valid only for this preparation in the owning session.
+    #[prost(string, tag = "1")]
+    pub setup_id: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub max_slots: u32,
+    #[prost(uint32, tag = "3")]
+    pub min_unit_price: u32,
+    #[prost(uint32, tag = "4")]
+    pub max_unit_price: u32,
+    /// UTF-8 bytes, excluding any legacy string terminator.
+    #[prost(uint32, tag = "5")]
+    pub max_title_bytes: u32,
+    /// Raw server cart slots, without the +2 used by ordinary cart packets.
+    #[prost(uint32, repeated, tag = "6")]
+    pub sellable_cart_indices: ::prost::alloc::vec::Vec<u32>,
+    /// Actual SP already consumed by the normal skill requirement stage.
+    #[prost(uint32, tag = "7")]
+    pub sp_spent: u32,
+}
+/// One listing: a raw server cart slot (not an ordinary cart-packet index),
+/// quantity, and per-unit price. Zero-price listings are permitted by policy.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VendingEntry {
     #[prost(uint32, tag = "1")]
@@ -2137,60 +2174,157 @@ pub struct VendingEntry {
     #[prost(uint32, tag = "3")]
     pub price: u32,
 }
-/// Client -> server, open a vending shop selling the given cart items under a title.
+/// Client -> server, submit listings against a paid preparation grant. Requires
+/// FEATURE_CAPABILITY_VENDING_V2; this does not cast or charge for the skill.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VendingOpenRequest {
     #[prost(string, tag = "1")]
     pub title: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "2")]
     pub entries: ::prost::alloc::vec::Vec<VendingEntry>,
+    /// Nonzero, monotonically allocated within the client zone session.
+    #[prost(uint64, tag = "3")]
+    pub request_id: u64,
+    #[prost(string, tag = "4")]
+    pub setup_id: ::prost::alloc::string::String,
 }
-/// Server -> client, outcome of a vending open attempt.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+/// Server -> client, correlated open outcome and accepted listing snapshot.
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VendingOpenResult {
     #[prost(enumeration = "VendingOpenResultCode", tag = "1")]
     pub result: i32,
+    #[prost(uint64, tag = "2")]
+    pub request_id: u64,
+    #[prost(string, tag = "3")]
+    pub setup_id: ::prost::alloc::string::String,
+    /// Whether a rejected submission may be edited and resubmitted without recast.
+    #[prost(bool, tag = "4")]
+    pub setup_active: bool,
+    /// Success-only fields; the server normalizes the title and unit prices.
+    #[prost(string, tag = "5")]
+    pub shop_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub title: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "7")]
+    pub items: ::prost::alloc::vec::Vec<VendingShopItem>,
+    #[prost(uint64, tag = "8")]
+    pub vendor_unit_id: u64,
 }
-/// Client -> server, close the player's own vending shop.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct VendingCloseRequest {}
-/// Client -> server, request the item list of a nearby vendor's shop.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+/// Client -> server, cancel preparation or close a particular owned shop. An old
+/// request must not close a replacement instance. Requires the V2 capability.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingCloseRequest {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(oneof = "vending_close_request::Target", tags = "2, 3")]
+    pub target: ::core::option::Option<vending_close_request::Target>,
+}
+/// Nested message and enum types in `VendingCloseRequest`.
+pub mod vending_close_request {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Target {
+        #[prost(string, tag = "2")]
+        SetupId(::prost::alloc::string::String),
+        #[prost(string, tag = "3")]
+        ShopId(::prost::alloc::string::String),
+    }
+}
+/// Server -> client, explicit close/cancel outcome. Echoes the attempted target,
+/// even when that instance no longer exists; never substitutes a current token.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingCloseResult {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(enumeration = "VendingCloseResultCode", tag = "4")]
+    pub result: i32,
+    #[prost(oneof = "vending_close_result::Target", tags = "2, 3")]
+    pub target: ::core::option::Option<vending_close_result::Target>,
+}
+/// Nested message and enum types in `VendingCloseResult`.
+pub mod vending_close_result {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Target {
+        #[prost(string, tag = "2")]
+        SetupId(::prost::alloc::string::String),
+        #[prost(string, tag = "3")]
+        ShopId(::prost::alloc::string::String),
+    }
+}
+/// Client -> server, request a shop snapshot. Empty expected_shop_id is allowed
+/// only for the owner's reconciliation query, not to browse a replacement shop.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VendingListRequest {
     #[prost(uint64, tag = "1")]
     pub vendor_unit_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub request_id: u64,
+    #[prost(string, tag = "3")]
+    pub expected_shop_id: ::prost::alloc::string::String,
 }
-/// One line of a buy request: which shop entry and how many units to buy.
+/// One checkout line. Echo the opaque index and unit price from the snapshot;
+/// a changed quote rejects the whole purchase rather than silently repricing it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VendingBuy {
     #[prost(uint32, tag = "1")]
     pub index: u32,
     #[prost(uint32, tag = "2")]
     pub amount: u32,
+    #[prost(uint32, tag = "3")]
+    pub expected_unit_price: u32,
 }
-/// Client -> server, buy items from a vendor's shop.
+/// Client -> server, atomic checkout against one shop instance. Requires V2 and
+/// a nonzero session-monotonic request ID; never retry an unconfirmed purchase.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VendingPurchaseRequest {
     #[prost(uint64, tag = "1")]
     pub vendor_unit_id: u64,
     #[prost(message, repeated, tag = "2")]
     pub items: ::prost::alloc::vec::Vec<VendingBuy>,
+    #[prost(uint64, tag = "3")]
+    pub request_id: u64,
+    #[prost(string, tag = "4")]
+    pub shop_id: ::prost::alloc::string::String,
 }
-/// Server -> client, a vending shop board appeared over a merchant (area broadcast / on view enter).
+/// Server -> client, definitive checkout outcome. Existing item and zeny deltas
+/// alone change possessions; this result only settles the matching request.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VendingPurchaseResult {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub vendor_unit_id: u64,
+    #[prost(string, tag = "3")]
+    pub shop_id: ::prost::alloc::string::String,
+    #[prost(enumeration = "VendingPurchaseResultCode", tag = "4")]
+    pub result: i32,
+    /// Actual buyer debit on success, before any seller-side tax.
+    #[prost(uint64, tag = "5")]
+    pub total_charged: u64,
+}
+/// Server -> client, a shop board appeared (area broadcast / view entry).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VendingBoardShown {
     #[prost(uint64, tag = "1")]
     pub unit_id: u64,
     #[prost(string, tag = "2")]
     pub title: ::prost::alloc::string::String,
+    /// Opaque, never reused for a later shop owned by the same vendor.
+    #[prost(string, tag = "3")]
+    pub shop_id: ::prost::alloc::string::String,
 }
-/// Server -> client, a vending shop board was removed (close / sold out / out of view).
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+/// Server -> client, a particular shop closed. A unit despawn independently
+/// removes an out-of-view board without implying an owner's successful close.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VendingBoardRemoved {
     #[prost(uint64, tag = "1")]
     pub unit_id: u64,
+    #[prost(string, tag = "2")]
+    pub shop_id: ::prost::alloc::string::String,
+    #[prost(enumeration = "VendingCloseReason", tag = "3")]
+    pub reason: i32,
 }
-/// One item on display in a vending shop. Mirrors InventoryItem's display fields plus a price.
+/// One item instance on display. Its index is an opaque listing identity, not an
+/// ordinary cart-packet index; buyers echo it unchanged in VendingBuy.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VendingShopItem {
     #[prost(uint32, tag = "1")]
@@ -2221,8 +2355,11 @@ pub struct VendingShopItem {
     /// slots after the last one listed are empty.
     #[prost(message, repeated, tag = "13")]
     pub options: ::prost::alloc::vec::Vec<ItemOption>,
+    #[prost(uint32, tag = "14")]
+    pub enchant_grade: u32,
 }
-/// Server -> client, the full item list of a vendor's shop (reply to VendingListRequest).
+/// Server -> client, explicit browse outcome. Request ID zero is reserved for an
+/// unsolicited own-shop reconciliation snapshot after loading a map.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VendingList {
     #[prost(uint64, tag = "1")]
@@ -2231,8 +2368,18 @@ pub struct VendingList {
     pub title: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "3")]
     pub items: ::prost::alloc::vec::Vec<VendingShopItem>,
+    #[prost(uint64, tag = "4")]
+    pub request_id: u64,
+    #[prost(string, tag = "5")]
+    pub shop_id: ::prost::alloc::string::String,
+    #[prost(enumeration = "VendingListResultCode", tag = "6")]
+    pub result: i32,
+    /// Private owner counter, zero in other players' browse replies.
+    #[prost(uint64, tag = "7")]
+    pub total_earned: u64,
 }
-/// Server -> client (seller), a unit of the shop was sold.
+/// Server -> client (seller), one sold listing line. Reports and closure share
+/// the shop identity; a final report may describe the most recently closed shop.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct VendingSaleReport {
     #[prost(uint32, tag = "1")]
@@ -2241,10 +2388,19 @@ pub struct VendingSaleReport {
     pub nameid: u32,
     #[prost(uint32, tag = "3")]
     pub amount: u32,
+    /// Established per-line report value; do not sum it to reconstruct net credit.
     #[prost(uint32, tag = "4")]
     pub zeny_gained: u32,
     #[prost(string, tag = "5")]
     pub buyer_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub shop_id: ::prost::alloc::string::String,
+    /// Per-shop monotonically increasing sale ID, shared by this purchase's lines.
+    #[prost(uint64, tag = "7")]
+    pub sale_sequence: u64,
+    /// Actual cumulative seller net credit, authoritative even across tax stages.
+    #[prost(uint64, tag = "8")]
+    pub total_earned: u64,
 }
 /// Client -> server, request a trade with the nearby unit identified by target_gid.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -4046,6 +4202,7 @@ pub struct WaitingRoomChat {
 pub enum FeatureCapability {
     Unspecified = 0,
     SkillTextInput = 1,
+    VendingV2 = 2,
 }
 impl FeatureCapability {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4056,6 +4213,7 @@ impl FeatureCapability {
         match self {
             Self::Unspecified => "FEATURE_CAPABILITY_UNSPECIFIED",
             Self::SkillTextInput => "FEATURE_CAPABILITY_SKILL_TEXT_INPUT",
+            Self::VendingV2 => "FEATURE_CAPABILITY_VENDING_V2",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4063,6 +4221,7 @@ impl FeatureCapability {
         match value {
             "FEATURE_CAPABILITY_UNSPECIFIED" => Some(Self::Unspecified),
             "FEATURE_CAPABILITY_SKILL_TEXT_INPUT" => Some(Self::SkillTextInput),
+            "FEATURE_CAPABILITY_VENDING_V2" => Some(Self::VendingV2),
             _ => None,
         }
     }
@@ -4420,8 +4579,8 @@ impl MountResultCode {
         }
     }
 }
-/// Outcome of a vending open attempt. Values are prefixed because proto3 enum
-/// constants share the package namespace.
+/// Outcome of a vending open attempt. Existing values retain their numbering;
+/// VEND_OK is authoritative only with matching identity and an accepted snapshot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum VendingOpenResultCode {
@@ -4435,6 +4594,22 @@ pub enum VendingOpenResultCode {
     VendInsufficientStock = 7,
     VendInvalidState = 8,
     VendInsufficientSp = 9,
+    VendNpcNearby = 10,
+    VendMapRestricted = 11,
+    VendCellRestricted = 12,
+    VendInvalidTitle = 13,
+    VendNoItems = 14,
+    VendDuplicateSlot = 15,
+    VendItemUnidentified = 16,
+    VendItemBroken = 17,
+    VendItemRental = 18,
+    VendItemBound = 19,
+    VendItemUntradeable = 20,
+    VendSetupExpired = 21,
+    VendForbidden = 22,
+    VendZenyLimit = 23,
+    VendPersistenceFailed = 24,
+    VendInvalidRequest = 25,
 }
 impl VendingOpenResultCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4453,6 +4628,22 @@ impl VendingOpenResultCode {
             Self::VendInsufficientStock => "VEND_INSUFFICIENT_STOCK",
             Self::VendInvalidState => "VEND_INVALID_STATE",
             Self::VendInsufficientSp => "VEND_INSUFFICIENT_SP",
+            Self::VendNpcNearby => "VEND_NPC_NEARBY",
+            Self::VendMapRestricted => "VEND_MAP_RESTRICTED",
+            Self::VendCellRestricted => "VEND_CELL_RESTRICTED",
+            Self::VendInvalidTitle => "VEND_INVALID_TITLE",
+            Self::VendNoItems => "VEND_NO_ITEMS",
+            Self::VendDuplicateSlot => "VEND_DUPLICATE_SLOT",
+            Self::VendItemUnidentified => "VEND_ITEM_UNIDENTIFIED",
+            Self::VendItemBroken => "VEND_ITEM_BROKEN",
+            Self::VendItemRental => "VEND_ITEM_RENTAL",
+            Self::VendItemBound => "VEND_ITEM_BOUND",
+            Self::VendItemUntradeable => "VEND_ITEM_UNTRADEABLE",
+            Self::VendSetupExpired => "VEND_SETUP_EXPIRED",
+            Self::VendForbidden => "VEND_FORBIDDEN",
+            Self::VendZenyLimit => "VEND_ZENY_LIMIT",
+            Self::VendPersistenceFailed => "VEND_PERSISTENCE_FAILED",
+            Self::VendInvalidRequest => "VEND_INVALID_REQUEST",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4468,6 +4659,238 @@ impl VendingOpenResultCode {
             "VEND_INSUFFICIENT_STOCK" => Some(Self::VendInsufficientStock),
             "VEND_INVALID_STATE" => Some(Self::VendInvalidState),
             "VEND_INSUFFICIENT_SP" => Some(Self::VendInsufficientSp),
+            "VEND_NPC_NEARBY" => Some(Self::VendNpcNearby),
+            "VEND_MAP_RESTRICTED" => Some(Self::VendMapRestricted),
+            "VEND_CELL_RESTRICTED" => Some(Self::VendCellRestricted),
+            "VEND_INVALID_TITLE" => Some(Self::VendInvalidTitle),
+            "VEND_NO_ITEMS" => Some(Self::VendNoItems),
+            "VEND_DUPLICATE_SLOT" => Some(Self::VendDuplicateSlot),
+            "VEND_ITEM_UNIDENTIFIED" => Some(Self::VendItemUnidentified),
+            "VEND_ITEM_BROKEN" => Some(Self::VendItemBroken),
+            "VEND_ITEM_RENTAL" => Some(Self::VendItemRental),
+            "VEND_ITEM_BOUND" => Some(Self::VendItemBound),
+            "VEND_ITEM_UNTRADEABLE" => Some(Self::VendItemUntradeable),
+            "VEND_SETUP_EXPIRED" => Some(Self::VendSetupExpired),
+            "VEND_FORBIDDEN" => Some(Self::VendForbidden),
+            "VEND_ZENY_LIMIT" => Some(Self::VendZenyLimit),
+            "VEND_PERSISTENCE_FAILED" => Some(Self::VendPersistenceFailed),
+            "VEND_INVALID_REQUEST" => Some(Self::VendInvalidRequest),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VendingCloseResultCode {
+    VendCloseUnspecified = 0,
+    VendCloseShopClosed = 1,
+    VendCloseSetupCanceled = 2,
+    VendCloseAlreadyClosed = 3,
+    VendCloseInvalidTarget = 4,
+    VendCloseForbidden = 5,
+    VendCloseInvalidRequest = 6,
+    VendCloseInternalError = 7,
+}
+impl VendingCloseResultCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::VendCloseUnspecified => "VEND_CLOSE_UNSPECIFIED",
+            Self::VendCloseShopClosed => "VEND_CLOSE_SHOP_CLOSED",
+            Self::VendCloseSetupCanceled => "VEND_CLOSE_SETUP_CANCELED",
+            Self::VendCloseAlreadyClosed => "VEND_CLOSE_ALREADY_CLOSED",
+            Self::VendCloseInvalidTarget => "VEND_CLOSE_INVALID_TARGET",
+            Self::VendCloseForbidden => "VEND_CLOSE_FORBIDDEN",
+            Self::VendCloseInvalidRequest => "VEND_CLOSE_INVALID_REQUEST",
+            Self::VendCloseInternalError => "VEND_CLOSE_INTERNAL_ERROR",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VEND_CLOSE_UNSPECIFIED" => Some(Self::VendCloseUnspecified),
+            "VEND_CLOSE_SHOP_CLOSED" => Some(Self::VendCloseShopClosed),
+            "VEND_CLOSE_SETUP_CANCELED" => Some(Self::VendCloseSetupCanceled),
+            "VEND_CLOSE_ALREADY_CLOSED" => Some(Self::VendCloseAlreadyClosed),
+            "VEND_CLOSE_INVALID_TARGET" => Some(Self::VendCloseInvalidTarget),
+            "VEND_CLOSE_FORBIDDEN" => Some(Self::VendCloseForbidden),
+            "VEND_CLOSE_INVALID_REQUEST" => Some(Self::VendCloseInvalidRequest),
+            "VEND_CLOSE_INTERNAL_ERROR" => Some(Self::VendCloseInternalError),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VendingPurchaseResultCode {
+    VendPurchaseUnspecified = 0,
+    VendPurchaseOk = 1,
+    VendPurchaseNotOpen = 2,
+    VendPurchaseShopChanged = 3,
+    VendPurchasePriceChanged = 4,
+    VendPurchaseInsufficientStock = 5,
+    VendPurchaseInvalidLine = 6,
+    VendPurchaseInvalidAmount = 7,
+    VendPurchaseNotEnoughZeny = 8,
+    VendPurchaseOverweight = 9,
+    VendPurchaseNoSlots = 10,
+    VendPurchaseStackLimit = 11,
+    VendPurchaseSellerZenyLimit = 12,
+    VendPurchaseForbidden = 13,
+    VendPurchaseOutOfRange = 14,
+    VendPurchaseWrongMap = 15,
+    VendPurchaseSelfPurchase = 16,
+    VendPurchaseInvalidRequest = 17,
+    VendPurchasePersistenceFailed = 18,
+    VendPurchaseInternalError = 19,
+    VendPurchaseStaleRequest = 20,
+    VendPurchaseInvalidState = 21,
+}
+impl VendingPurchaseResultCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::VendPurchaseUnspecified => "VEND_PURCHASE_UNSPECIFIED",
+            Self::VendPurchaseOk => "VEND_PURCHASE_OK",
+            Self::VendPurchaseNotOpen => "VEND_PURCHASE_NOT_OPEN",
+            Self::VendPurchaseShopChanged => "VEND_PURCHASE_SHOP_CHANGED",
+            Self::VendPurchasePriceChanged => "VEND_PURCHASE_PRICE_CHANGED",
+            Self::VendPurchaseInsufficientStock => "VEND_PURCHASE_INSUFFICIENT_STOCK",
+            Self::VendPurchaseInvalidLine => "VEND_PURCHASE_INVALID_LINE",
+            Self::VendPurchaseInvalidAmount => "VEND_PURCHASE_INVALID_AMOUNT",
+            Self::VendPurchaseNotEnoughZeny => "VEND_PURCHASE_NOT_ENOUGH_ZENY",
+            Self::VendPurchaseOverweight => "VEND_PURCHASE_OVERWEIGHT",
+            Self::VendPurchaseNoSlots => "VEND_PURCHASE_NO_SLOTS",
+            Self::VendPurchaseStackLimit => "VEND_PURCHASE_STACK_LIMIT",
+            Self::VendPurchaseSellerZenyLimit => "VEND_PURCHASE_SELLER_ZENY_LIMIT",
+            Self::VendPurchaseForbidden => "VEND_PURCHASE_FORBIDDEN",
+            Self::VendPurchaseOutOfRange => "VEND_PURCHASE_OUT_OF_RANGE",
+            Self::VendPurchaseWrongMap => "VEND_PURCHASE_WRONG_MAP",
+            Self::VendPurchaseSelfPurchase => "VEND_PURCHASE_SELF_PURCHASE",
+            Self::VendPurchaseInvalidRequest => "VEND_PURCHASE_INVALID_REQUEST",
+            Self::VendPurchasePersistenceFailed => "VEND_PURCHASE_PERSISTENCE_FAILED",
+            Self::VendPurchaseInternalError => "VEND_PURCHASE_INTERNAL_ERROR",
+            Self::VendPurchaseStaleRequest => "VEND_PURCHASE_STALE_REQUEST",
+            Self::VendPurchaseInvalidState => "VEND_PURCHASE_INVALID_STATE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VEND_PURCHASE_UNSPECIFIED" => Some(Self::VendPurchaseUnspecified),
+            "VEND_PURCHASE_OK" => Some(Self::VendPurchaseOk),
+            "VEND_PURCHASE_NOT_OPEN" => Some(Self::VendPurchaseNotOpen),
+            "VEND_PURCHASE_SHOP_CHANGED" => Some(Self::VendPurchaseShopChanged),
+            "VEND_PURCHASE_PRICE_CHANGED" => Some(Self::VendPurchasePriceChanged),
+            "VEND_PURCHASE_INSUFFICIENT_STOCK" => {
+                Some(Self::VendPurchaseInsufficientStock)
+            }
+            "VEND_PURCHASE_INVALID_LINE" => Some(Self::VendPurchaseInvalidLine),
+            "VEND_PURCHASE_INVALID_AMOUNT" => Some(Self::VendPurchaseInvalidAmount),
+            "VEND_PURCHASE_NOT_ENOUGH_ZENY" => Some(Self::VendPurchaseNotEnoughZeny),
+            "VEND_PURCHASE_OVERWEIGHT" => Some(Self::VendPurchaseOverweight),
+            "VEND_PURCHASE_NO_SLOTS" => Some(Self::VendPurchaseNoSlots),
+            "VEND_PURCHASE_STACK_LIMIT" => Some(Self::VendPurchaseStackLimit),
+            "VEND_PURCHASE_SELLER_ZENY_LIMIT" => Some(Self::VendPurchaseSellerZenyLimit),
+            "VEND_PURCHASE_FORBIDDEN" => Some(Self::VendPurchaseForbidden),
+            "VEND_PURCHASE_OUT_OF_RANGE" => Some(Self::VendPurchaseOutOfRange),
+            "VEND_PURCHASE_WRONG_MAP" => Some(Self::VendPurchaseWrongMap),
+            "VEND_PURCHASE_SELF_PURCHASE" => Some(Self::VendPurchaseSelfPurchase),
+            "VEND_PURCHASE_INVALID_REQUEST" => Some(Self::VendPurchaseInvalidRequest),
+            "VEND_PURCHASE_PERSISTENCE_FAILED" => {
+                Some(Self::VendPurchasePersistenceFailed)
+            }
+            "VEND_PURCHASE_INTERNAL_ERROR" => Some(Self::VendPurchaseInternalError),
+            "VEND_PURCHASE_STALE_REQUEST" => Some(Self::VendPurchaseStaleRequest),
+            "VEND_PURCHASE_INVALID_STATE" => Some(Self::VendPurchaseInvalidState),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VendingCloseReason {
+    VendClosureUnspecified = 0,
+    VendClosureUserClosed = 1,
+    VendClosureSoldOut = 2,
+    VendClosureDisconnected = 3,
+    VendClosureJobChanged = 4,
+    VendClosureRelocated = 5,
+    VendClosureInvalidated = 6,
+}
+impl VendingCloseReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::VendClosureUnspecified => "VEND_CLOSURE_UNSPECIFIED",
+            Self::VendClosureUserClosed => "VEND_CLOSURE_USER_CLOSED",
+            Self::VendClosureSoldOut => "VEND_CLOSURE_SOLD_OUT",
+            Self::VendClosureDisconnected => "VEND_CLOSURE_DISCONNECTED",
+            Self::VendClosureJobChanged => "VEND_CLOSURE_JOB_CHANGED",
+            Self::VendClosureRelocated => "VEND_CLOSURE_RELOCATED",
+            Self::VendClosureInvalidated => "VEND_CLOSURE_INVALIDATED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VEND_CLOSURE_UNSPECIFIED" => Some(Self::VendClosureUnspecified),
+            "VEND_CLOSURE_USER_CLOSED" => Some(Self::VendClosureUserClosed),
+            "VEND_CLOSURE_SOLD_OUT" => Some(Self::VendClosureSoldOut),
+            "VEND_CLOSURE_DISCONNECTED" => Some(Self::VendClosureDisconnected),
+            "VEND_CLOSURE_JOB_CHANGED" => Some(Self::VendClosureJobChanged),
+            "VEND_CLOSURE_RELOCATED" => Some(Self::VendClosureRelocated),
+            "VEND_CLOSURE_INVALIDATED" => Some(Self::VendClosureInvalidated),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VendingListResultCode {
+    VendListUnspecified = 0,
+    VendListOk = 1,
+    VendListNotOpen = 2,
+    VendListShopChanged = 3,
+    VendListForbidden = 4,
+    VendListInvalidRequest = 5,
+    VendListInternalError = 6,
+}
+impl VendingListResultCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::VendListUnspecified => "VEND_LIST_UNSPECIFIED",
+            Self::VendListOk => "VEND_LIST_OK",
+            Self::VendListNotOpen => "VEND_LIST_NOT_OPEN",
+            Self::VendListShopChanged => "VEND_LIST_SHOP_CHANGED",
+            Self::VendListForbidden => "VEND_LIST_FORBIDDEN",
+            Self::VendListInvalidRequest => "VEND_LIST_INVALID_REQUEST",
+            Self::VendListInternalError => "VEND_LIST_INTERNAL_ERROR",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VEND_LIST_UNSPECIFIED" => Some(Self::VendListUnspecified),
+            "VEND_LIST_OK" => Some(Self::VendListOk),
+            "VEND_LIST_NOT_OPEN" => Some(Self::VendListNotOpen),
+            "VEND_LIST_SHOP_CHANGED" => Some(Self::VendListShopChanged),
+            "VEND_LIST_FORBIDDEN" => Some(Self::VendListForbidden),
+            "VEND_LIST_INVALID_REQUEST" => Some(Self::VendListInvalidRequest),
+            "VEND_LIST_INTERNAL_ERROR" => Some(Self::VendListInternalError),
             _ => None,
         }
     }
