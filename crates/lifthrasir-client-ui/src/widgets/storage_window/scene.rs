@@ -128,6 +128,7 @@ pub(crate) fn pane(view: StoragePaneView, side: PaneSide) -> impl Scene {
     };
     bsn! {
         Node {
+            width: percent(100),
             flex_direction: FlexDirection::Column,
             min_width: px(0),
             border: px(1),
@@ -672,6 +673,28 @@ mod tests {
         assert!(!texts.iter().any(|text| text.contains("Idunn")
             || text.contains("Zeny")
             || text.contains("Keeper")));
+    }
+
+    #[test]
+    fn panes_fill_their_host_columns_instead_of_shrinking_to_their_headers() {
+        let mut app = test_app();
+        for side in [PaneSide::Bag, PaneSide::Vault] {
+            let entity = app
+                .world_mut()
+                .spawn_scene(pane(
+                    StoragePaneView {
+                        title: "Storage",
+                        subtitle: "0 / 600".to_string(),
+                        cells: vec![],
+                        empty_message: "Nothing here yet.",
+                    },
+                    side,
+                ))
+                .unwrap()
+                .id();
+
+            assert_eq!(app.world().get::<Node>(entity).unwrap().width, percent(100));
+        }
     }
 
     #[test]
