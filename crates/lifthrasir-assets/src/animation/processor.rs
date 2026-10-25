@@ -1,4 +1,5 @@
 use bevy::asset::RenderAssetUsages;
+use bevy::image::{ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use moonshine_tag::Tag;
@@ -98,7 +99,7 @@ impl RoAnimationProcessor {
             upscaling,
         );
 
-        Image::new(
+        let mut image = Image::new(
             Extent3d {
                 width,
                 height,
@@ -108,7 +109,9 @@ impl RoAnimationProcessor {
             rgba_data,
             TextureFormat::Rgba8UnormSrgb,
             RenderAssetUsages::default(),
-        )
+        );
+        image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor::nearest());
+        image
     }
 
     /// Create ActionData for each action in the ACT file.
@@ -310,6 +313,16 @@ mod tests {
         let image = RoAnimationProcessor::frame_to_image(&frame, None, None, Upscaling::Off);
         assert_eq!(image.texture_descriptor.size.width, 2);
         assert_eq!(image.texture_descriptor.size.height, 2);
+    }
+
+    #[test]
+    fn frame_to_image_uses_nearest_sampling() {
+        let image =
+            RoAnimationProcessor::frame_to_image(&rgba_frame(1, 1), None, None, Upscaling::Off);
+        assert_eq!(
+            image.sampler,
+            ImageSampler::Descriptor(ImageSamplerDescriptor::nearest())
+        );
     }
 
     #[test]
