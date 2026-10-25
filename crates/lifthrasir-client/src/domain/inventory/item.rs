@@ -27,11 +27,12 @@ pub struct Item {
     pub bound: u8,
 }
 
-#[derive(Debug, Clone, Default)]
+/// One random option slot; mirrors the wire fields (id `0` is an empty slot).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ItemOption {
-    pub index: u16,
-    pub value: u16,
-    pub param: u8,
+    pub id: i32,
+    pub value: i32,
+    pub param: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -156,6 +156,7 @@ pub(super) fn scene(view: ItemInfoView, action: Option<ItemAction>) -> impl Scen
         tags: view.tags.clone(),
     });
     let cards = (view.sockets_total > 0).then(|| EntityScene(card_slots_section(&view)));
+    let options = (!view.options.is_empty()).then(|| EntityScene(options_section(&view.options)));
     let meta = (!view.meta.is_empty()).then(|| EntityScene(shell::metadata_row(view.meta.clone())));
     let description = (!view.description.is_empty())
         .then(|| EntityScene(super::description::scene(view.description.clone())));
@@ -187,7 +188,7 @@ pub(super) fn scene(view: ItemInfoView, action: Option<ItemAction>) -> impl Scen
                     padding: {UiRect { left: px(20), right: px(20), top: px(0), bottom: px(6) }},
                 }
                 @ignore_picking()
-                Children [ {illustration} -- {cards} -- {meta} -- {description} ]
+                Children [ {illustration} -- {cards} -- {options} -- {meta} -- {description} ]
             }) --
             {footer}
         ]
@@ -209,6 +210,43 @@ fn card_slots_section(view: &ItemInfoView) -> impl Scene + use<> {
             Node { flex_direction: FlexDirection::Column, row_gap: px(7) }
             @ignore_picking()
             Children [ {slots} ]
+        ]
+    }
+}
+
+/// The Random Options section: one row per crafted option, in slot order.
+fn options_section(options: &[String]) -> impl Scene + use<> {
+    let rows: Vec<_> = options.iter().cloned().map(option_row).collect();
+    bsn! {
+        Node { flex_direction: FlexDirection::Column }
+        @ignore_picking()
+        Children [
+            @shell::section_label("RANDOM OPTIONS".to_string(), None) --
+            Node { flex_direction: FlexDirection::Column, row_gap: px(7) }
+            @ignore_picking()
+            Children [ {rows} ]
+        ]
+    }
+}
+
+fn option_row(label: String) -> impl Scene {
+    bsn! {
+        Node {
+            padding: {UiRect::axes(px(11), px(9))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(9)),
+        }
+        BackgroundColor(Color::srgba(0.851, 0.643, 0.255, 0.06))
+        BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
+        @ignore_picking()
+        Children [
+            Text(label)
+            TextFont {
+                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+                font_size: {FontSize::Px(12.0)},
+            }
+            TextColor(lifthrasir_ui::theme::TEXT)
+            @ignore_picking()
         ]
     }
 }
@@ -360,6 +398,7 @@ mod tests {
             sockets_filled: 1,
             sockets_total: 2,
             cards: vec!["Poring Card".to_string()],
+            options: vec!["STR + 5".to_string()],
             description: vec![vec![(
                 lifthrasir_ui::theme::TEXT_DIM,
                 "Restores HP.".to_string(),
@@ -382,6 +421,7 @@ mod tests {
             sockets_filled: 0,
             sockets_total: 0,
             cards: vec![],
+            options: vec![],
             description: vec![],
             meta: vec![],
         }
@@ -440,6 +480,34 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn random_options_render_as_a_section() {
+        let mut app = test_app();
+        let mut view = empty_view();
+        view.options = vec!["STR + 5".to_string(), "MHP + 4%".to_string()];
+        app.world_mut().spawn_scene(scene(view, None)).unwrap();
+        app.update();
+
+        let rendered = texts(&mut app);
+        assert!(
+            rendered.contains(&"RANDOM OPTIONS".to_string()),
+            "{rendered:?}"
+        );
+        assert!(rendered.contains(&"STR + 5".to_string()), "{rendered:?}");
+        assert!(rendered.contains(&"MHP + 4%".to_string()), "{rendered:?}");
+    }
+
+    #[test]
+    fn item_without_options_omits_the_section() {
+        let mut app = test_app();
+        app.world_mut()
+            .spawn_scene(scene(empty_view(), None))
+            .unwrap();
+        app.update();
+
+        assert!(!texts(&mut app).contains(&"RANDOM OPTIONS".to_string()));
     }
 
     #[test]

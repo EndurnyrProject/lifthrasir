@@ -605,6 +605,7 @@ mod tests {
             weight: 10,
             identified: true,
             cards: vec![],
+            options: vec![],
         }
     }
 

@@ -20,6 +20,7 @@ use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use leafwing_input_manager::prelude::ActionState;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
+use lifthrasir_assets::catalogs::random_option::RandomOptionDb;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::cart::Cart;
 use lifthrasir_client::domain::entities::character::components::UnitState;
@@ -292,6 +293,7 @@ fn rebuild_body(
 /// Secondary-click opens the info modal for a filled cell instead: a `Bag` cell
 /// with its bag action, a `Cart` cell info-only; empty cells are inert on either
 /// button.
+#[allow(clippy::too_many_arguments)]
 fn on_cell_click(
     click: On<PointerClick>,
     cells: Query<&CartCell>,
@@ -299,6 +301,7 @@ fn on_cell_click(
     inventory: Res<Inventory>,
     cart: Res<Cart>,
     item_db: Option<Res<ItemDb>>,
+    option_db: Option<Res<RandomOptionDb>>,
     mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
@@ -311,11 +314,11 @@ fn on_cell_click(
         };
         let content = match cell.side {
             Side::Bag => inventory.get(cell.index).map(|item| InfoContent::Item {
-                view: view::inventory_item_view(item, item_db),
+                view: view::inventory_item_view(item, item_db, option_db.as_deref()),
                 action: ItemAction::for_bag_item(item),
             }),
             Side::Cart => cart.get(cell.index).map(|item| InfoContent::Item {
-                view: view::cart_item_view(item, item_db),
+                view: view::cart_item_view(item, item_db, option_db.as_deref()),
                 action: None,
             }),
         };
@@ -455,6 +458,7 @@ mod tests {
             identified: true,
             refine: 0,
             cards: vec![],
+            options: vec![],
             attribute: 0,
             expire_time: 0,
             weight: 10,

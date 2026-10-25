@@ -1,3 +1,4 @@
+use super::inventory::item_options;
 use crate::proto::aesir::net;
 use bevy::prelude::warn;
 use net_contract::dto::{StorageItem, StorageKind};
@@ -38,6 +39,7 @@ fn storage_item(item: net::InventoryItem) -> StorageItem {
         weight: item.weight,
         identified: item.identified,
         cards: item.cards,
+        options: item_options(item.options),
     }
 }
 
@@ -57,6 +59,7 @@ pub fn storage_item_added(added: net::StorageItemAdded) -> Option<StorageItemAdd
             weight: added.weight,
             identified: added.identified,
             cards: added.cards,
+            options: item_options(added.options),
         },
     })
 }
@@ -125,7 +128,11 @@ mod tests {
                 signer_name: String::new(),
                 creator_id: 0,
                 creator_kind: 0,
-                options: vec![],
+                options: vec![net::ItemOption {
+                    id: 3,
+                    value: 5,
+                    param: 0,
+                }],
             }],
             kind: net::StorageKind::Personal as i32,
         })
@@ -146,6 +153,14 @@ mod tests {
         assert_eq!(item.weight, 15);
         assert!(item.identified);
         assert_eq!(item.cards, vec![4001, 4002]);
+        assert_eq!(
+            item.options,
+            vec![net_contract::dto::ItemOption {
+                id: 3,
+                value: 5,
+                param: 0
+            }]
+        );
     }
 
     #[test]
@@ -167,7 +182,11 @@ mod tests {
             signer_name: String::new(),
             creator_id: 0,
             creator_kind: 0,
-            options: vec![],
+            options: vec![net::ItemOption {
+                id: 9,
+                value: 4,
+                param: 0,
+            }],
             kind: net::StorageKind::Personal as i32,
         })
         .unwrap();
@@ -185,6 +204,14 @@ mod tests {
         assert_eq!(item.weight, 20);
         assert!(item.identified);
         assert_eq!(item.cards, vec![4003, 4004]);
+        assert_eq!(
+            item.options,
+            vec![net_contract::dto::ItemOption {
+                id: 9,
+                value: 4,
+                param: 0
+            }]
+        );
     }
 
     #[test]

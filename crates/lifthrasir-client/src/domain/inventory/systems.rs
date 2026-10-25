@@ -1,10 +1,21 @@
-use crate::domain::inventory::item::Item;
+use crate::domain::inventory::item::{Item, ItemOption};
 use crate::domain::inventory::resource::Inventory;
 use bevy::prelude::*;
 use net_contract::events::{
     CardComposeOutcome, CardCompositionFinished, InventoryReceived, ItemAdded, ItemBound,
     ItemRemoved, ZoneInventoryItem,
 };
+
+fn to_item_options(options: &[net_contract::dto::ItemOption]) -> Vec<ItemOption> {
+    options
+        .iter()
+        .map(|option| ItemOption {
+            id: option.id,
+            value: option.value,
+            param: option.param,
+        })
+        .collect()
+}
 
 /// Maps a proto-shaped inventory slot onto the domain `Item`.
 ///
@@ -26,7 +37,7 @@ fn to_item(slot: &ZoneInventoryItem) -> Item {
         wear_state: slot.location,
         refine: slot.refine as u8,
         cards,
-        options: vec![],
+        options: to_item_options(&slot.options),
         expire_time: slot.expire_time as u32,
         view_sprite: slot.look as u16,
         identified: slot.identified,
@@ -51,7 +62,7 @@ fn item_from_added(a: &ItemAdded) -> Item {
         wear_state: a.location,
         refine: a.refine as u8,
         cards: std::array::from_fn(|i| a.cards.get(i).copied().unwrap_or(0)),
-        options: vec![],
+        options: to_item_options(&a.options),
         expire_time: a.expire_time as u32,
         view_sprite: a.look as u16,
         identified: a.identified,
@@ -148,6 +159,7 @@ mod tests {
             attribute: 0,
             refine: 0,
             cards: vec![],
+            options: vec![],
             expire_time: 0,
             bound: 0,
             favorite: false,
@@ -171,6 +183,37 @@ mod tests {
         let inventory = app.world().resource::<Inventory>();
         assert!(inventory.get(2).unwrap().favorite);
         assert!(!inventory.get(3).unwrap().favorite);
+    }
+
+    #[test]
+    fn dump_and_delta_carry_random_options() {
+        let mut app = app_with_inventory();
+
+        let mut with_options = slot(2, 1);
+        with_options.options = vec![net_contract::dto::ItemOption {
+            id: 3,
+            value: 5,
+            param: 0,
+        }];
+        app.world_mut().write_message(dump(vec![with_options]));
+        app.update();
+
+        let inventory = app.world().resource::<Inventory>();
+        let option = inventory.get(2).unwrap().options[0];
+        assert_eq!((option.id, option.value, option.param), (3, 5, 0));
+
+        let mut delta = added(3, 1);
+        delta.options = vec![net_contract::dto::ItemOption {
+            id: 9,
+            value: -2,
+            param: 1,
+        }];
+        app.world_mut().write_message(delta);
+        app.update();
+
+        let inventory = app.world().resource::<Inventory>();
+        let option = inventory.get(3).unwrap().options[0];
+        assert_eq!((option.id, option.value, option.param), (9, -2, 1));
     }
 
     #[test]
@@ -199,6 +242,7 @@ mod tests {
             attribute: 0,
             refine: 0,
             cards: vec![],
+            options: vec![],
             location: 0,
             type_: 0,
             result: 0,

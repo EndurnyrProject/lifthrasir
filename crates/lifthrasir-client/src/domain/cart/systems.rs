@@ -52,6 +52,7 @@ mod tests {
             identified: true,
             refine: 0,
             cards: vec![],
+            options: vec![],
             attribute: 0,
             expire_time: 0,
             weight,

@@ -65,6 +65,18 @@ mod tests {
     }
 
     #[test]
+    fn random_option_data_round_trip() {
+        let mut original = RandomOptionData::default();
+        original.names.insert(3, "STR + %d".to_string());
+        original.names.insert(9, "MHP + %d%%".to_string());
+
+        let serialized = ron::to_string(&original).expect("serialize");
+        let deserialized: RandomOptionData = ron::from_str(&serialized).expect("deserialize");
+
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
     fn accessory_data_round_trip() {
         let mut original = AccessoryData::default();
         original.names.insert(1, "_고글".to_string());

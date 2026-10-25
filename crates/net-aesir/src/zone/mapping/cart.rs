@@ -1,3 +1,4 @@
+use super::inventory::item_options;
 use crate::proto::aesir::net;
 use net_contract::dto::CartItem;
 use net_contract::events::{
@@ -20,6 +21,7 @@ fn cart_item(i: net::InventoryItem) -> CartItem {
         identified: i.identified,
         refine: i.refine,
         cards: i.cards,
+        options: item_options(i.options),
         attribute: i.attribute,
         expire_time: i.expire_time,
         weight: i.weight,
@@ -35,6 +37,7 @@ pub fn cart_item_added(a: net::CartItemAdded) -> CartItemAdded {
             identified: a.identified,
             refine: a.refine,
             cards: a.cards,
+            options: item_options(a.options),
             attribute: a.attribute,
             expire_time: a.expire_time,
             weight: a.weight,
@@ -87,7 +90,11 @@ mod tests {
             signer_name: String::new(),
             creator_id: 0,
             creator_kind: 0,
-            options: vec![],
+            options: vec![net::ItemOption {
+                id: 3,
+                value: 5,
+                param: 0,
+            }],
         }
     }
 
@@ -102,6 +109,14 @@ mod tests {
         assert_eq!(loaded.items.len(), 2);
         assert_eq!(loaded.items[0].nameid, 501);
         assert_eq!(loaded.items[0].weight, 15);
+        assert_eq!(
+            loaded.items[0].options,
+            vec![net_contract::dto::ItemOption {
+                id: 3,
+                value: 5,
+                param: 0
+            }]
+        );
         assert_eq!(loaded.items[1].nameid, 502);
         assert_eq!(loaded.current_weight, 30);
         assert_eq!(loaded.max_weight, 8000);
@@ -126,7 +141,11 @@ mod tests {
             signer_name: String::new(),
             creator_id: 0,
             creator_kind: 0,
-            options: vec![],
+            options: vec![net::ItemOption {
+                id: 9,
+                value: 4,
+                param: 0,
+            }],
         });
 
         assert_eq!(added.item.index, 3);
@@ -134,6 +153,14 @@ mod tests {
         assert_eq!(added.item.nameid, 501);
         assert_eq!(added.item.cards, vec![10]);
         assert_eq!(added.item.weight, 20);
+        assert_eq!(
+            added.item.options,
+            vec![net_contract::dto::ItemOption {
+                id: 9,
+                value: 4,
+                param: 0
+            }]
+        );
     }
 
     #[test]

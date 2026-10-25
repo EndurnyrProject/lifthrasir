@@ -15,6 +15,17 @@ pub fn inventory_list(l: net::InventoryList) -> InventoryReceived {
     }
 }
 
+pub(super) fn item_options(options: Vec<net::ItemOption>) -> Vec<net_contract::dto::ItemOption> {
+    options
+        .into_iter()
+        .map(|option| net_contract::dto::ItemOption {
+            id: option.id,
+            value: option.value,
+            param: option.param,
+        })
+        .collect()
+}
+
 pub(super) fn inventory_item(i: net::InventoryItem) -> ZoneInventoryItem {
     ZoneInventoryItem {
         index: i.index,
@@ -26,6 +37,7 @@ pub(super) fn inventory_item(i: net::InventoryItem) -> ZoneInventoryItem {
         attribute: i.attribute,
         refine: i.refine,
         cards: i.cards,
+        options: item_options(i.options),
         expire_time: i.expire_time,
         bound: i.bound,
         favorite: i.favorite,
@@ -42,6 +54,7 @@ pub fn item_added(a: net::ItemAdded) -> ItemAdded {
         attribute: a.attribute,
         refine: a.refine,
         cards: a.cards,
+        options: item_options(a.options),
         location: a.location,
         type_: a.r#type,
         result: a.result,
@@ -266,6 +279,44 @@ mod tests {
     }
 
     #[test]
+    fn inventory_item_preserves_random_options_in_order() {
+        let mut item = sample_item(5, 1201);
+        item.options = vec![
+            net::ItemOption {
+                id: 3,
+                value: 5,
+                param: 0,
+            },
+            net::ItemOption {
+                id: 9,
+                value: -2,
+                param: 1,
+            },
+        ];
+
+        let received = inventory_list(net::InventoryList {
+            normal: vec![item],
+            equip: vec![],
+        });
+
+        assert_eq!(
+            received.items[0].options,
+            vec![
+                net_contract::dto::ItemOption {
+                    id: 3,
+                    value: 5,
+                    param: 0
+                },
+                net_contract::dto::ItemOption {
+                    id: 9,
+                    value: -2,
+                    param: 1
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn item_added_maps_type_and_result() {
         let added = item_added(net::ItemAdded {
             index: 3,
@@ -284,7 +335,11 @@ mod tests {
             signer_name: String::new(),
             creator_id: 0,
             creator_kind: 0,
-            options: vec![],
+            options: vec![net::ItemOption {
+                id: 13,
+                value: 7,
+                param: 0,
+            }],
         });
 
         assert_eq!(added.index, 3);
@@ -293,6 +348,14 @@ mod tests {
         assert_eq!(added.type_, 2);
         assert_eq!(added.result, 0);
         assert_eq!(added.cards, vec![10]);
+        assert_eq!(
+            added.options,
+            vec![net_contract::dto::ItemOption {
+                id: 13,
+                value: 7,
+                param: 0
+            }]
+        );
     }
 
     #[test]

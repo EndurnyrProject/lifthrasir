@@ -31,6 +31,17 @@ pub struct ItemData {
     pub items: BTreeMap<u32, ItemInfo>,
 }
 
+/// Random option display templates decoded from the client's
+/// `enumvar.lub` + `addrandomoptionnametable.lub`.
+///
+/// Maps option id -> printf-style template with one `%d` for the rolled value
+/// (for example `"STR + %d"` or `"ATK + %d%%"`). Keyed by `BTreeMap` for
+/// stable, key-ordered RON diffs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RandomOptionData {
+    pub names: BTreeMap<u32, String>,
+}
+
 /// Accessory (headgear) sprite-name table decoded from `accessoryid.lub` + `accname.lub`.
 /// Maps a view id to its sprite name (EUC-KR decoded, leading separator preserved verbatim).
 /// Keyed by `BTreeMap` for stable, key-ordered RON diffs.

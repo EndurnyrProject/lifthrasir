@@ -5,6 +5,7 @@ use bevy::text::EditableText;
 use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::Activate;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
+use lifthrasir_assets::catalogs::random_option::RandomOptionDb;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::inventory::item::item_category;
 use lifthrasir_client::domain::inventory::{Inventory, Item, ItemCategory};
@@ -576,6 +577,7 @@ pub(crate) fn on_cell_select(
     time: Res<Time>,
     data: StorageData,
     item_db: Option<Res<ItemDb>>,
+    option_db: Option<Res<RandomOptionDb>>,
     mut ui: ResMut<StorageUi>,
     mut writers: StorageWriters,
     mut info_writer: MessageWriter<ShowInfoModal>,
@@ -592,11 +594,11 @@ pub(crate) fn on_cell_select(
             StorageSelection::Bag(index) => data
                 .inventory
                 .get(index)
-                .map(|item| view::inventory_item_view(item, item_db)),
+                .map(|item| view::inventory_item_view(item, item_db, option_db.as_deref())),
             StorageSelection::Vault(index) => data
                 .storage
                 .get(index)
-                .map(|item| view::storage_item_view(item, item_db)),
+                .map(|item| view::storage_item_view(item, item_db, option_db.as_deref())),
         };
         if let Some(view) = view {
             info_writer.write(ShowInfoModal {
@@ -1048,6 +1050,7 @@ mod tests {
             weight: 0,
             identified: true,
             cards: vec![],
+            options: vec![],
         }
     }
 
@@ -2206,6 +2209,7 @@ mod tests {
             attribute: 0,
             refine: 0,
             cards: vec![],
+            options: vec![],
             location: 0,
             type_: 0,
             result: 0,

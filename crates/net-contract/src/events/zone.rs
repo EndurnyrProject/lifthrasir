@@ -2,7 +2,8 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
 use crate::dto::{
-    SkillUnitCellState, SkillUnitDespawnReason, SkillUnitGroupState, SkillUnitUpdateReason,
+    ItemOption, SkillUnitCellState, SkillUnitDespawnReason, SkillUnitGroupState,
+    SkillUnitUpdateReason,
 };
 
 /// Zone entry accepted: AID folded into EnterAck (collapses ZC_ACCEPT_ENTER + ZC_AID).
@@ -213,6 +214,8 @@ pub struct ZoneInventoryItem {
     pub attribute: u32,
     pub refine: u32,
     pub cards: Vec<u32>,
+    /// Random option slots in order; id `0` is an empty slot.
+    pub options: Vec<ItemOption>,
     pub expire_time: u64,
     /// Bound type: 0 = none, 1 = account, 2 = guild,
     /// 3 = party, 4 = character.
@@ -475,6 +478,8 @@ pub struct ItemAdded {
     pub attribute: u32,
     pub refine: u32,
     pub cards: Vec<u32>,
+    /// Random option slots in order; id `0` is an empty slot.
+    pub options: Vec<ItemOption>,
     pub location: u32,
     pub type_: u32,
     pub result: u32,

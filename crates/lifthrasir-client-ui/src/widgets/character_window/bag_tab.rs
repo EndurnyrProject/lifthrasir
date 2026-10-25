@@ -20,6 +20,7 @@ use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
+use lifthrasir_assets::catalogs::random_option::RandomOptionDb;
 use lifthrasir_assets::paths::item_icon_path;
 use lifthrasir_client::domain::equipment::{EquipItemRequested, UnequipItemRequested};
 use lifthrasir_client::domain::hotbar::HotbarSlot;
@@ -196,6 +197,7 @@ fn on_cell_click(
     mut last: ResMut<LastBagClick>,
     inventory: Res<Inventory>,
     item_db: Option<Res<ItemDb>>,
+    option_db: Option<Res<RandomOptionDb>>,
     mut use_writer: MessageWriter<UseItemRequested>,
     mut equip_writer: MessageWriter<EquipItemRequested>,
     mut unequip_writer: MessageWriter<UnequipItemRequested>,
@@ -212,7 +214,7 @@ fn on_cell_click(
         if let Some(item) = inventory.get(cell.index) {
             info_writer.write(ShowInfoModal {
                 content: InfoContent::Item {
-                    view: view::inventory_item_view(item, item_db),
+                    view: view::inventory_item_view(item, item_db, option_db.as_deref()),
                     action: ItemAction::for_bag_item(item),
                 },
             });

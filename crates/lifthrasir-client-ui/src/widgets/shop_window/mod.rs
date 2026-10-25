@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
+use lifthrasir_assets::catalogs::random_option::RandomOptionDb;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
 use lifthrasir_client::domain::entities::components::EntityName;
@@ -564,6 +565,7 @@ pub(super) fn on_shop_row_secondary_click(
     session: Option<Res<ShopSession>>,
     inventory: Res<Inventory>,
     item_db: Option<Res<ItemDb>>,
+    option_db: Option<Res<RandomOptionDb>>,
     mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     if click.button != PointerButton::Secondary {
@@ -592,7 +594,7 @@ pub(super) fn on_shop_row_secondary_click(
                 return;
             };
             InfoContent::Item {
-                view: view::inventory_item_view(item, item_db),
+                view: view::inventory_item_view(item, item_db, option_db.as_deref()),
                 action: ItemAction::for_bag_item(item),
             }
         }

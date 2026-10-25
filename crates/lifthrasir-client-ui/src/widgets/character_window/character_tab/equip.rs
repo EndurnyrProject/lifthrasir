@@ -19,6 +19,7 @@ use bevy::prelude::*;
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
+use lifthrasir_assets::catalogs::random_option::RandomOptionDb;
 use lifthrasir_assets::paths::item_icon_path;
 use lifthrasir_client::domain::equipment::UnequipItemRequested;
 use lifthrasir_client::domain::equipment::location::{
@@ -352,6 +353,7 @@ fn on_slot_click(
     mut last: ResMut<CharLastSlotClick>,
     inventory: Res<Inventory>,
     item_db: Option<Res<ItemDb>>,
+    option_db: Option<Res<RandomOptionDb>>,
     mut unequip: MessageWriter<UnequipItemRequested>,
     mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
@@ -366,7 +368,7 @@ fn on_slot_click(
         if let Some(item) = inventory.get(equipped.0) {
             info_writer.write(ShowInfoModal {
                 content: InfoContent::Item {
-                    view: view::inventory_item_view(item, item_db),
+                    view: view::inventory_item_view(item, item_db, option_db.as_deref()),
                     action: Some(ItemAction::unequip(equipped.0)),
                 },
             });

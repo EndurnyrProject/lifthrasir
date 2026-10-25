@@ -1,5 +1,7 @@
 //! Protocol-neutral cart item type.
 
+use crate::dto::ItemOption;
+
 /// One cart slot, mirroring the inventory item shape plus a per-unit `weight`
 /// so the `Cart` resource can adjust its weight aggregate on removal.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -10,6 +12,8 @@ pub struct CartItem {
     pub identified: bool,
     pub refine: u32,
     pub cards: Vec<u32>,
+    /// Random option slots in order; id `0` is an empty slot.
+    pub options: Vec<ItemOption>,
     pub attribute: u32,
     pub expire_time: u64,
     pub weight: u32,
@@ -28,6 +32,11 @@ mod tests {
             identified: true,
             refine: 4,
             cards: vec![4001, 4002],
+            options: vec![ItemOption {
+                id: 3,
+                value: 5,
+                param: 0,
+            }],
             attribute: 0,
             expire_time: 0,
             weight: 10,
@@ -47,6 +56,7 @@ mod tests {
             identified: true,
             refine: 4,
             cards: vec![],
+            options: vec![],
             attribute: 0,
             expire_time: 0,
             weight: 10,

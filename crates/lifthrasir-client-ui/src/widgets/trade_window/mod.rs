@@ -647,6 +647,7 @@ mod tests {
                 attribute: 0,
                 refine: 0,
                 cards: vec![],
+                options: vec![],
                 expire_time: 0,
                 bound: 0,
                 favorite: false,

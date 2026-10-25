@@ -12,6 +12,7 @@
 use bevy::prelude::Color;
 
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
+use lifthrasir_assets::catalogs::random_option::RandomOptionDb;
 use lifthrasir_assets::catalogs::skill::registry::SkillCatalog;
 use lifthrasir_assets::paths::{item_collection_path, item_icon_path};
 use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
@@ -52,6 +53,9 @@ pub struct ItemInfoView {
     pub sockets_filled: u8,
     pub sockets_total: u8,
     pub cards: Vec<String>,
+    /// Rendered random option lines, in slot order. Empty for unidentified
+    /// items and for items without options.
+    pub options: Vec<String>,
     pub description: Vec<ColoredLine>,
     /// Contextual `(label, value)` meta-grid rows — weight for storage/cart items,
     /// price for shop stock, empty otherwise.
@@ -97,6 +101,7 @@ struct ResolvedItem<'a> {
     favorite: Option<bool>,
     refine: u8,
     cards: &'a [u32],
+    options: Vec<String>,
     wear_mask: u32,
     category_label: Option<&'static str>,
     weight: Option<u32>,
@@ -105,7 +110,11 @@ struct ResolvedItem<'a> {
 
 /// View for an item in the bag, whether inspected from the inventory, an equipped
 /// slot, or the storage/cart/shop bag side.
-pub fn inventory_item_view(item: &Item, item_db: &ItemDb) -> ItemInfoView {
+pub fn inventory_item_view(
+    item: &Item,
+    item_db: &ItemDb,
+    option_db: Option<&RandomOptionDb>,
+) -> ItemInfoView {
     item_view_from_resolved(
         ResolvedItem {
             item_id: item.item_id,
@@ -113,6 +122,7 @@ pub fn inventory_item_view(item: &Item, item_db: &ItemDb) -> ItemInfoView {
             favorite: Some(item.favorite),
             refine: item.refine,
             cards: &item.cards,
+            options: domain_option_lines(&item.options, option_db),
             wear_mask: item.location,
             category_label: Some(category_label(item.category())),
             weight: None,
@@ -123,7 +133,11 @@ pub fn inventory_item_view(item: &Item, item_db: &ItemDb) -> ItemInfoView {
 }
 
 /// View for an item in the storage vault; carries its weight.
-pub fn storage_item_view(item: &StorageItem, item_db: &ItemDb) -> ItemInfoView {
+pub fn storage_item_view(
+    item: &StorageItem,
+    item_db: &ItemDb,
+    option_db: Option<&RandomOptionDb>,
+) -> ItemInfoView {
     item_view_from_resolved(
         ResolvedItem {
             item_id: item.nameid,
@@ -131,6 +145,7 @@ pub fn storage_item_view(item: &StorageItem, item_db: &ItemDb) -> ItemInfoView {
             favorite: None,
             refine: item.refine as u8,
             cards: &item.cards,
+            options: wire_option_lines(&item.options, option_db),
             wear_mask: item.location,
             category_label: Some(category_label(item_category(item.type_))),
             weight: Some(item.weight),
@@ -141,7 +156,11 @@ pub fn storage_item_view(item: &StorageItem, item_db: &ItemDb) -> ItemInfoView {
 }
 
 /// View for an item in the cart; carries its weight.
-pub fn cart_item_view(item: &CartItem, item_db: &ItemDb) -> ItemInfoView {
+pub fn cart_item_view(
+    item: &CartItem,
+    item_db: &ItemDb,
+    option_db: Option<&RandomOptionDb>,
+) -> ItemInfoView {
     item_view_from_resolved(
         ResolvedItem {
             item_id: item.nameid,
@@ -149,6 +168,7 @@ pub fn cart_item_view(item: &CartItem, item_db: &ItemDb) -> ItemInfoView {
             favorite: None,
             refine: item.refine as u8,
             cards: &item.cards,
+            options: wire_option_lines(&item.options, option_db),
             wear_mask: 0,
             category_label: None,
             weight: Some(item.weight),
@@ -167,6 +187,7 @@ pub fn shop_item_view(nameid: u32, price: Option<u32>, item_db: &ItemDb) -> Item
             favorite: None,
             refine: 0,
             cards: &[],
+            options: Vec::new(),
             wear_mask: 0,
             category_label: None,
             weight: None,
@@ -226,6 +247,53 @@ fn card_names(card_ids: &[u32], slot_count: u8, item_db: &ItemDb) -> Vec<String>
         .collect()
 }
 
+/// Rendered random option lines, in slot order. A slot with id `0` is empty and
+/// is skipped. An id with no template in the (optional) option catalog falls back
+/// to the raw id and value rather than being dropped, so an older pak still shows
+/// that the item is crafted.
+fn option_line(
+    option: &net_contract::dto::ItemOption,
+    option_db: Option<&RandomOptionDb>,
+) -> Option<String> {
+    if option.id == 0 {
+        return None;
+    }
+    Some(
+        option_db
+            .and_then(|db| db.line(option.id, option.value))
+            .unwrap_or_else(|| format!("Option #{}: {}", option.id, option.value)),
+    )
+}
+
+fn wire_option_lines(
+    options: &[net_contract::dto::ItemOption],
+    option_db: Option<&RandomOptionDb>,
+) -> Vec<String> {
+    options
+        .iter()
+        .filter_map(|option| option_line(option, option_db))
+        .collect()
+}
+
+fn domain_option_lines(
+    options: &[lifthrasir_client::domain::inventory::ItemOption],
+    option_db: Option<&RandomOptionDb>,
+) -> Vec<String> {
+    options
+        .iter()
+        .filter_map(|option| {
+            option_line(
+                &net_contract::dto::ItemOption {
+                    id: option.id,
+                    value: option.value,
+                    param: option.param,
+                },
+                option_db,
+            )
+        })
+        .collect()
+}
+
 /// An `item_id` absent from `item_db` still yields a view — `Item #<id>`, no
 /// description — rather than panicking.
 fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfoView {
@@ -249,14 +317,21 @@ fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfo
     let icon_path = resource.map(item_icon_path);
     let illustration_path = resource.map(item_collection_path);
 
-    let (refine, sockets_filled, sockets_total, cards, edge) = if identified {
+    let (refine, sockets_filled, sockets_total, cards, options, edge) = if identified {
         let slot_count = item_db.slot_count(resolved.item_id).unwrap_or(0);
         let cards = card_names(resolved.cards, slot_count, item_db);
         let refine = (resolved.refine > 0).then_some(resolved.refine as i32);
         let edge = item_edge_grade(resolved.refine, !cards.is_empty());
-        (refine, cards.len() as u8, slot_count, cards, edge)
+        (
+            refine,
+            cards.len() as u8,
+            slot_count,
+            cards,
+            resolved.options,
+            edge,
+        )
     } else {
-        (None, 0, 0, Vec::new(), EdgeGrade::Common)
+        (None, 0, 0, Vec::new(), Vec::new(), EdgeGrade::Common)
     };
 
     let mut tags = Vec::new();
@@ -289,6 +364,7 @@ fn item_view_from_resolved(resolved: ResolvedItem, item_db: &ItemDb) -> ItemInfo
         sockets_filled,
         sockets_total,
         cards,
+        options,
         description,
         meta,
     }
@@ -512,6 +588,29 @@ mod tests {
         ItemDb::from_item_data(data)
     }
 
+    fn option_db() -> RandomOptionDb {
+        let mut data = lifthrasir_data::RandomOptionData::default();
+        data.names.insert(3, "STR + %d".to_string());
+        data.names.insert(9, "MHP + %d%%".to_string());
+        RandomOptionDb::from_random_option_data(data)
+    }
+
+    fn option(id: i32, value: i32) -> lifthrasir_client::domain::inventory::ItemOption {
+        lifthrasir_client::domain::inventory::ItemOption {
+            id,
+            value,
+            param: 0,
+        }
+    }
+
+    fn wire_option(id: i32, value: i32) -> net_contract::dto::ItemOption {
+        net_contract::dto::ItemOption {
+            id,
+            value,
+            param: 0,
+        }
+    }
+
     fn equip_item(index: u16, refine: u8, cards: [u32; 4], identified: bool) -> Item {
         Item {
             index,
@@ -541,6 +640,7 @@ mod tests {
             weight,
             identified: true,
             cards: vec![],
+            options: vec![],
         }
     }
 
@@ -552,6 +652,7 @@ mod tests {
             identified: true,
             refine: 0,
             cards: vec![],
+            options: vec![],
             attribute: 0,
             expire_time: 0,
             weight,
@@ -569,7 +670,7 @@ mod tests {
 
     #[test]
     fn identified_equip_grades_by_refine_and_cards() {
-        let view = inventory_item_view(&equip_item(2, 7, [4001, 0, 0, 0], true), &item_db());
+        let view = inventory_item_view(&equip_item(2, 7, [4001, 0, 0, 0], true), &item_db(), None);
 
         assert_eq!(view.edge, EdgeGrade::Rare);
         assert_eq!(view.refine, Some(7));
@@ -580,7 +681,7 @@ mod tests {
 
     #[test]
     fn unidentified_item_suppresses_refine_cards_and_pips() {
-        let view = inventory_item_view(&equip_item(2, 7, [4001, 0, 0, 0], false), &item_db());
+        let view = inventory_item_view(&equip_item(2, 7, [4001, 0, 0, 0], false), &item_db(), None);
 
         assert!(!view.identified);
         assert_eq!(view.name, "Round Shield");
@@ -600,7 +701,7 @@ mod tests {
             ..Default::default()
         };
 
-        let view = inventory_item_view(&item, &item_db());
+        let view = inventory_item_view(&item, &item_db(), None);
 
         assert_eq!(view.name, "Item #9999");
         assert!(view.description.is_empty());
@@ -610,14 +711,71 @@ mod tests {
 
     #[test]
     fn inventory_item_carries_no_meta() {
-        let view = inventory_item_view(&equip_item(2, 0, [0; 4], true), &item_db());
+        let view = inventory_item_view(&equip_item(2, 0, [0; 4], true), &item_db(), None);
 
         assert!(view.meta.is_empty());
     }
 
     #[test]
+    fn random_options_render_in_slot_order() {
+        let mut item = equip_item(2, 0, [0; 4], true);
+        item.options = vec![option(3, 5), option(0, 0), option(9, 4)];
+
+        let view = inventory_item_view(&item, &item_db(), Some(&option_db()));
+
+        assert_eq!(
+            view.options,
+            vec!["STR + 5".to_string(), "MHP + 4%".to_string()]
+        );
+    }
+
+    #[test]
+    fn unknown_option_id_falls_back_to_raw_id_and_value() {
+        let mut item = equip_item(2, 0, [0; 4], true);
+        item.options = vec![option(9999, 7)];
+
+        let view = inventory_item_view(&item, &item_db(), Some(&option_db()));
+
+        assert_eq!(view.options, vec!["Option #9999: 7".to_string()]);
+    }
+
+    #[test]
+    fn missing_option_catalog_still_shows_options() {
+        let mut item = equip_item(2, 0, [0; 4], true);
+        item.options = vec![option(3, 5)];
+
+        let view = inventory_item_view(&item, &item_db(), None);
+
+        assert_eq!(view.options, vec!["Option #3: 5".to_string()]);
+    }
+
+    #[test]
+    fn unidentified_item_suppresses_random_options() {
+        let mut item = equip_item(2, 0, [0; 4], false);
+        item.options = vec![option(3, 5)];
+
+        let view = inventory_item_view(&item, &item_db(), Some(&option_db()));
+
+        assert!(view.options.is_empty());
+    }
+
+    #[test]
+    fn storage_and_cart_items_carry_random_options() {
+        let mut stored = storage_item(3, 25);
+        stored.options = vec![wire_option(3, 5)];
+        let mut carted = cart_item(1, 30);
+        carted.options = vec![wire_option(9, 4)];
+
+        let stored_view = storage_item_view(&stored, &item_db(), Some(&option_db()));
+        let cart_view = cart_item_view(&carted, &item_db(), Some(&option_db()));
+
+        assert_eq!(stored_view.options, vec!["STR + 5".to_string()]);
+        assert_eq!(cart_view.options, vec!["MHP + 4%".to_string()]);
+    }
+
+    #[test]
     fn storage_item_carries_weight_meta() {
-        let view = storage_item_view(&storage_item(3, 25), &item_db());
+        let view = storage_item_view(&storage_item(3, 25), &item_db(), None);
 
         assert_eq!(view.meta, vec![("Weight".to_string(), "25".to_string())]);
         assert_eq!(view.favorite, None);
@@ -625,7 +783,7 @@ mod tests {
 
     #[test]
     fn cart_item_carries_weight_meta() {
-        let view = cart_item_view(&cart_item(1, 30), &item_db());
+        let view = cart_item_view(&cart_item(1, 30), &item_db(), None);
 
         assert_eq!(view.meta, vec![("Weight".to_string(), "30".to_string())]);
         assert_eq!(view.favorite, None);
@@ -653,21 +811,27 @@ mod tests {
         let mut item = equip_item(2, 0, [0; 4], true);
         item.favorite = true;
 
-        assert_eq!(inventory_item_view(&item, &item_db()).favorite, Some(true));
+        assert_eq!(
+            inventory_item_view(&item, &item_db(), None).favorite,
+            Some(true)
+        );
         item.favorite = false;
-        assert_eq!(inventory_item_view(&item, &item_db()).favorite, Some(false));
+        assert_eq!(
+            inventory_item_view(&item, &item_db(), None).favorite,
+            Some(false)
+        );
     }
 
     #[test]
     fn equips_to_tags_decode_from_wear_mask() {
-        let view = inventory_item_view(&equip_item(2, 0, [0; 4], true), &item_db());
+        let view = inventory_item_view(&equip_item(2, 0, [0; 4], true), &item_db(), None);
 
         assert!(view.tags.contains(&"Shield".to_string()));
     }
 
     #[test]
     fn description_carries_color_runs() {
-        let view = inventory_item_view(&equip_item(2, 0, [0; 4], true), &item_db());
+        let view = inventory_item_view(&equip_item(2, 0, [0; 4], true), &item_db(), None);
 
         assert_eq!(
             view.description,
