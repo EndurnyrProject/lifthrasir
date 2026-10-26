@@ -28,6 +28,7 @@ const PICK_RADIUS: f32 = 12.0;
 const OCCLUSION_SLACK: f32 = 5.0;
 const HOVER_COLOR: Color = Color::srgb(1.0, 1.0, 1.0);
 const SELECTED_COLOR: Color = Color::srgb(1.0, 0.6, 0.1);
+const ACTIVE_COLOR: Color = Color::srgb(1.0, 0.85, 0.3);
 /// Outline radius for a node without mesh bounds (the sun).
 const POINT_OUTLINE_RADIUS: f32 = 2.0;
 
@@ -184,15 +185,19 @@ fn draw_outlines(
     aabbs: Query<(&Aabb, &GlobalTransform)>,
     globals: Query<&GlobalTransform>,
 ) {
-    let selected = selection
+    let selected = ids
+        .iter()
+        .filter(|(_, id)| selection.contains(**id))
+        .map(|(entity, id)| {
+            let active = selection.active() == Some(*id);
+            (entity, if active { ACTIVE_COLOR } else { SELECTED_COLOR })
+        });
+    let outlines = hovered
         .0
-        .and_then(|id| ids.iter().find(|(_, node)| **node == id))
-        .map(|(entity, _)| entity);
-    let outlines = [(hovered.0, HOVER_COLOR), (selected, SELECTED_COLOR)];
+        .map(|node| (node, HOVER_COLOR))
+        .into_iter()
+        .chain(selected);
     for (node, color) in outlines {
-        let Some(node) = node else {
-            continue;
-        };
         if let Some((min, max)) = bounds_of(node, &children, &aabbs) {
             let box_transform =
                 Transform::from_translation((min + max) * 0.5).with_scale(max - min);

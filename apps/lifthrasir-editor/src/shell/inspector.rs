@@ -215,12 +215,12 @@ fn inspector(
     if gesture
         .0
         .as_ref()
-        .is_some_and(|active| Some(active.node) != selection.0)
+        .is_some_and(|active| Some(active.node) != selection.active())
     {
         gesture.finish(&mut commands);
     }
     let node = selection
-        .0
+        .active()
         .and_then(|id| nodes.iter().find(|node| *node.1 == id));
     let sun = suns
         .iter()
@@ -243,11 +243,15 @@ fn inspector(
                     ui.label("Nothing selected");
                     return;
                 };
+                let count = selection.nodes().len();
+                if count > 1 {
+                    ui.label(format!("{count} selected (editing the active node)"));
+                }
                 node_ui(ui, &mut commands, &mut gesture, &source, &lights, node);
             });
     });
     if select_sun {
-        selection.0 = sun;
+        selection.replace(sun);
     }
     Ok(())
 }

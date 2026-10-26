@@ -10,7 +10,10 @@ use super::{
 };
 use crate::{
     EditorPaths,
-    shell::{ui::EditorUiSet, undo::UndoStack},
+    shell::{
+        ui::{EditorUiSet, command_modifier},
+        undo::UndoStack,
+    },
 };
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
@@ -60,13 +63,7 @@ pub(super) fn plugin(app: &mut App) {
 
 /// Ctrl/Cmd+S.
 fn save_shortcut(keys: Res<ButtonInput<KeyCode>>, mut saves: MessageWriter<SaveRequest>) {
-    let modifier = keys.any_pressed([
-        KeyCode::ControlLeft,
-        KeyCode::ControlRight,
-        KeyCode::SuperLeft,
-        KeyCode::SuperRight,
-    ]);
-    if modifier && keys.just_pressed(KeyCode::KeyS) {
+    if command_modifier(&keys) && keys.just_pressed(KeyCode::KeyS) {
         saves.write(SaveRequest { save_as: None });
     }
 }

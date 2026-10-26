@@ -5,6 +5,7 @@ pub mod camera;
 pub mod fonts;
 pub mod gizmo;
 pub mod inspector;
+pub mod marquee;
 pub mod node;
 pub mod outliner;
 pub mod pick;
@@ -27,6 +28,7 @@ impl Plugin for EditorShellPlugin {
         app.add_plugins((
             browser::BrowserPlugin,
             pick::plugin,
+            marquee::plugin,
             outliner::plugin,
             selection::plugin,
             inspector::plugin,

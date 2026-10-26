@@ -97,5 +97,5 @@ fn placing_a_light_returns_to_select_with_the_light_selected() {
     add_light(app.world_mut(), LightKind::Point, Vec3::ZERO);
 
     assert_eq!(*app.world().resource::<ToolMode>(), ToolMode::Select);
-    assert!(app.world().resource::<Selection>().0.is_some());
+    assert!(app.world().resource::<Selection>().active().is_some());
 }

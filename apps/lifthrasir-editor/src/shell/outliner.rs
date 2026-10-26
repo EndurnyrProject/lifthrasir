@@ -6,7 +6,7 @@ use super::{
     camera::{EditorCamera, focus_on},
     node::{EditorNodeId, KindFlags, LightFlags, NodeKind, node_kind},
     pick::node_bounds,
-    selection::Selection,
+    selection::{Selection, extends_selection},
     ui::EditorUiSet,
 };
 use crate::map::{layout::MapLayout, open::EditorScreen};
@@ -65,7 +65,7 @@ pub(super) fn plugin(app: &mut App) {
 /// that fits its bounds, keeping the camera's rotation.
 pub fn go_to(world: &mut World, entity: Entity) {
     let id = world.get::<EditorNodeId>(entity).copied();
-    world.resource_mut::<Selection>().0 = id;
+    world.resource_mut::<Selection>().replace(id);
     let Some(origin) = world
         .get::<GlobalTransform>(entity)
         .map(|g| g.translation())
@@ -86,6 +86,15 @@ pub fn go_to(world: &mut World, entity: Entity) {
     }
 }
 
+/// Shift/Ctrl-click: toggles an object node in the selection without moving
+/// the camera.
+fn toggle_in_selection(world: &mut World, entity: Entity) {
+    let Some(id) = world.get::<EditorNodeId>(entity).copied() else {
+        return;
+    };
+    world.resource_mut::<Selection>().toggle(id);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn outliner_window(
     mut contexts: EguiContexts,
@@ -93,6 +102,7 @@ fn outliner_window(
     mut commands: Commands,
     layout: Option<Res<MapLayout>>,
     selection: Res<Selection>,
+    keys: Res<ButtonInput<KeyCode>>,
     children: Query<&Children>,
     nodes: Query<NodeRow<'static>>,
     lights: Query<LightFlags>,
@@ -142,7 +152,7 @@ fn outliner_window(
             entity: node,
             label: name.map_or_else(|| format!("{kind:?}"), Name::to_string),
             hint: prop.map(|prop| prop.0.model.clone()),
-            selected: selection.0 == Some(*id),
+            selected: selection.contains(*id),
         });
     }
     let mut clicked = None;
@@ -179,7 +189,12 @@ fn outliner_window(
                 }
             });
         });
-    if let Some(entity) = clicked {
+    let Some(entity) = clicked else {
+        return Ok(());
+    };
+    if extends_selection(&keys) {
+        commands.queue(move |world: &mut World| toggle_in_selection(world, entity));
+    } else {
         commands.queue(move |world: &mut World| go_to(world, entity));
     }
     Ok(())

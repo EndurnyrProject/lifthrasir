@@ -23,7 +23,7 @@ fn going_to_a_sound_selects_it_and_centres_the_camera_on_it() {
 
     go_to(app.world_mut(), sound);
 
-    assert_eq!(app.world().resource::<Selection>().0, Some(id));
+    assert_eq!(app.world().resource::<Selection>().active(), Some(id));
     let (camera, transform) = app
         .world_mut()
         .query::<(&EditorCamera, &Transform)>()

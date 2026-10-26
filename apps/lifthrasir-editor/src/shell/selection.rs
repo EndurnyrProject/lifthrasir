@@ -1,13 +1,14 @@
-//! The selected object node, selecting the hovered node on press, delete,
-//! and the editor-only handles that make lights and emitters visible and
-//! clickable.
+//! The ordered set of selected object nodes with one active node, selecting
+//! the hovered node on press (modifier-click toggles), select all, invert,
+//! delete, and the editor-only handles that make lights and emitters visible
+//! and clickable.
 
 use super::{
     gizmo::TransformGizmo,
     node::{EditorNodeId, NodeSnapshot, find_node},
     pick::{Hovered, hover},
-    ui::{viewport_has_keyboard, viewport_has_pointer},
-    undo::{DespawnNode, commit},
+    ui::{command_modifier, viewport_has_keyboard, viewport_has_pointer},
+    undo::{Batch, DespawnNode, EditOp, commit},
 };
 use crate::{
     EditorOnly,
@@ -16,9 +17,114 @@ use crate::{
 use bevy::{light::NotShadowCaster, prelude::*};
 use lifthrasir_runtime::world::{LifAudioEmitter, LifEffectEmitter};
 
-/// The selected object node, if any.
-#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Selection(pub Option<EditorNodeId>);
+/// The selected object nodes in selection order, and the active one the
+/// inspector and gizmo act on. The active node is always selected.
+#[derive(Resource, Default, Debug, Clone, PartialEq, Eq)]
+pub struct Selection {
+    nodes: Vec<EditorNodeId>,
+    active: Option<EditorNodeId>,
+}
+
+impl Selection {
+    pub fn active(&self) -> Option<EditorNodeId> {
+        self.active
+    }
+
+    pub fn nodes(&self) -> &[EditorNodeId] {
+        &self.nodes
+    }
+
+    pub fn contains(&self, id: EditorNodeId) -> bool {
+        self.nodes.contains(&id)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.nodes.clear();
+        self.active = None;
+    }
+
+    /// Selects exactly `ids`, the last becoming active.
+    pub fn replace(&mut self, ids: impl IntoIterator<Item = EditorNodeId>) {
+        self.clear();
+        self.extend(ids);
+    }
+
+    /// Adds `ids` after the current selection, the last new one becoming active.
+    pub fn extend(&mut self, ids: impl IntoIterator<Item = EditorNodeId>) {
+        for id in ids {
+            if !self.contains(id) {
+                self.nodes.push(id);
+            }
+            self.active = Some(id);
+        }
+    }
+
+    /// Deselects `id` if selected, otherwise selects it and makes it active.
+    /// Deselecting the active node activates the most recent remaining one.
+    pub fn toggle(&mut self, id: EditorNodeId) {
+        if self.contains(id) {
+            self.remove(&[id]);
+        } else {
+            self.extend([id]);
+        }
+    }
+
+    /// Removes `ids` from the selection, keeping the active node if it survives.
+    pub fn remove(&mut self, ids: &[EditorNodeId]) {
+        self.nodes.retain(|node| !ids.contains(node));
+        if self.active.is_some_and(|active| ids.contains(&active)) {
+            self.active = self.nodes.last().copied();
+        }
+    }
+
+    /// Selects every node of `all` that is not selected now, in `all` order.
+    pub fn invert(&mut self, all: &[EditorNodeId]) {
+        let unselected: Vec<_> = all
+            .iter()
+            .copied()
+            .filter(|id| !self.contains(*id))
+            .collect();
+        self.replace(unselected);
+    }
+}
+
+/// Every selectable object node of the open map, in child order.
+pub fn all_nodes(world: &World) -> Vec<EditorNodeId> {
+    let Some(layout) = world.get_resource::<MapLayout>() else {
+        return Vec::new();
+    };
+    world
+        .get::<Children>(layout.map_node)
+        .into_iter()
+        .flatten()
+        .filter(|&&child| Some(child) != layout.terrain_node)
+        .filter_map(|&child| world.get::<EditorNodeId>(child).copied())
+        .collect()
+}
+
+pub fn select_all(world: &mut World) {
+    let all = all_nodes(world);
+    world.resource_mut::<Selection>().replace(all);
+}
+
+pub fn invert_selection(world: &mut World) {
+    let all = all_nodes(world);
+    world.resource_mut::<Selection>().invert(&all);
+}
+
+/// Whether a modifier that extends the selection (Shift or Ctrl) is held.
+pub fn extends_selection(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.any_pressed([
+        KeyCode::ShiftLeft,
+        KeyCode::ShiftRight,
+        KeyCode::ControlLeft,
+        KeyCode::ControlRight,
+    ])
+}
 
 /// The clickable stand-in for a light or emitter node, which has no mesh.
 #[derive(Component)]
@@ -61,7 +167,7 @@ pub(super) fn plugin(app: &mut App) {
 }
 
 fn clear_selection(mut selection: ResMut<Selection>) {
-    selection.0 = None;
+    selection.clear();
 }
 
 /// Gives every new light (point/spot) or emitter node one handle child:
@@ -130,10 +236,12 @@ pub fn object_node(
     }
 }
 
-/// A left press selects the hovered object node, or clears the selection
-/// over anything else. Presses on the transform gizmo are left to it.
+/// A left press selects the hovered object node (Shift/Ctrl toggles it in the
+/// selection). A press over nothing is left to the marquee, which clears the
+/// selection on release. Presses on the transform gizmo are left to it.
 fn select_on_press(
     mouse: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
     hovered: Res<Hovered>,
     ids: Query<&EditorNodeId>,
     gizmo: Option<Res<TransformGizmo>>,
@@ -142,44 +250,103 @@ fn select_on_press(
     if !mouse.just_pressed(MouseButton::Left) || gizmo.is_some_and(|gizmo| gizmo.is_focused()) {
         return;
     }
-    selection.set_if_neq(Selection(
-        hovered.0.and_then(|node| ids.get(node).ok().copied()),
-    ));
+    let Some(id) = hovered.0.and_then(|node| ids.get(node).ok().copied()) else {
+        return;
+    };
+    if extends_selection(&keys) {
+        selection.toggle(id);
+    } else if selection.nodes() != [id] {
+        selection.replace([id]);
+    }
 }
 
-/// Escape clears the selection; Delete/Backspace deletes the selected node.
+/// Escape clears the selection; Delete/Backspace deletes it; Ctrl+A selects
+/// every node and Ctrl+I inverts the selection.
 fn selection_keys(
     keys: Res<ButtonInput<KeyCode>>,
     mut selection: ResMut<Selection>,
     mut commands: Commands,
 ) {
     if keys.just_pressed(KeyCode::Escape) {
-        selection.0 = None;
+        selection.clear();
     }
     if keys.any_just_pressed([KeyCode::Delete, KeyCode::Backspace]) {
         commands.queue(delete_selected);
     }
+    let ctrl = command_modifier(&keys);
+    if ctrl && keys.just_pressed(KeyCode::KeyA) {
+        commands.queue(select_all);
+    }
+    if ctrl && keys.just_pressed(KeyCode::KeyI) {
+        commands.queue(invert_selection);
+    }
 }
 
-/// Deletes the selected node as one undoable step and clears the selection.
-/// Refuses nodes a snapshot cannot restore (the sun).
+/// Deletes the selected nodes as one undoable step and deselects them.
+/// Nodes a snapshot cannot restore (the sun) are refused and stay selected.
 pub fn delete_selected(world: &mut World) {
-    let Some(id) = world.resource::<Selection>().0 else {
-        return;
-    };
     let Some(layout) = world.get_resource::<MapLayout>().cloned() else {
         return;
     };
-    let Some(node) = find_node(world, id) else {
-        return;
-    };
-    if NodeSnapshot::capture(world, node).is_none() {
-        warn!("node {id:?} cannot be deleted");
+    let selected = world.resource::<Selection>().nodes().to_vec();
+    let mut deleted = Vec::new();
+    let mut ops: Vec<Box<dyn EditOp>> = Vec::new();
+    for id in selected {
+        let restorable =
+            find_node(world, id).is_some_and(|node| NodeSnapshot::capture(world, node).is_some());
+        if !restorable {
+            warn!("node {id:?} cannot be deleted");
+            continue;
+        }
+        deleted.push(id);
+        ops.push(Box::new(DespawnNode::new(layout.root, layout.map_node, id)));
+    }
+    if ops.is_empty() {
         return;
     }
-    commit(
-        world,
-        Box::new(DespawnNode::new(layout.root, layout.map_node, id)),
-    );
-    world.resource_mut::<Selection>().0 = None;
+    commit(world, Box::new(Batch(ops)));
+    world.resource_mut::<Selection>().remove(&deleted);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const A: EditorNodeId = EditorNodeId(1);
+    const B: EditorNodeId = EditorNodeId(2);
+    const C: EditorNodeId = EditorNodeId(3);
+
+    #[test]
+    fn toggling_keeps_order_and_moves_the_active_node() {
+        let mut selection = Selection::default();
+        selection.extend([A, B, C]);
+        assert_eq!(selection.active(), Some(C));
+
+        selection.toggle(C);
+        assert_eq!(selection.nodes(), [A, B]);
+        assert_eq!(selection.active(), Some(B));
+
+        selection.toggle(A);
+        selection.toggle(A);
+        assert_eq!(selection.nodes(), [B, A]);
+        assert_eq!(selection.active(), Some(A));
+
+        selection.toggle(A);
+        selection.toggle(B);
+        assert!(selection.is_empty());
+        assert_eq!(selection.active(), None);
+    }
+
+    #[test]
+    fn invert_selects_exactly_the_unselected_nodes() {
+        let mut selection = Selection::default();
+        selection.replace([B]);
+
+        selection.invert(&[A, B, C]);
+
+        assert_eq!(selection.nodes(), [A, C]);
+        assert_eq!(selection.active(), Some(C));
+        selection.invert(&[A, B, C]);
+        assert_eq!(selection.nodes(), [B]);
+    }
 }

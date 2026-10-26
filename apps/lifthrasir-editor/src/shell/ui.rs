@@ -113,6 +113,16 @@ impl ViewportCursor<'_, '_> {
     }
 }
 
+/// Whether Ctrl (or Cmd) is held, the modifier of editor shortcuts.
+pub fn command_modifier(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.any_pressed([
+        KeyCode::ControlLeft,
+        KeyCode::ControlRight,
+        KeyCode::SuperLeft,
+        KeyCode::SuperRight,
+    ])
+}
+
 /// True when egui is not taking keyboard input. Without egui the viewport owns it.
 pub fn viewport_has_keyboard(egui: Option<Res<EguiWantsInput>>) -> bool {
     !egui.is_some_and(|egui| egui.wants_any_keyboard_input())
