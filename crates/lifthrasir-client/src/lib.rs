@@ -28,6 +28,7 @@ pub use crate::domain::settings::SettingsRuntimePlugin;
 pub use crate::domain::skill_units::SkillUnitsPlugin;
 pub use crate::domain::storage::StoragePlugin;
 pub use crate::domain::trade::TradePlugin;
+pub use crate::domain::vending::VendingPlugin;
 pub use crate::domain::world::GltfMapPlugin;
 pub use crate::domain::world::WorldDomainPlugin;
 pub use crate::infrastructure::assets::ClientConfigPlugin;
@@ -63,6 +64,7 @@ impl PluginGroup for ClientPlugins {
             .add(CartPlugin)
             .add(StoragePlugin)
             .add(TradePlugin)
+            .add(VendingPlugin)
             .add(EmotePlugin)
             .add(PartyPlugin)
             .add(GuildPlugin)

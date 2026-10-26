@@ -20,4 +20,5 @@ pub mod skill_units;
 pub mod storage;
 pub mod system_sets;
 pub mod trade;
+pub mod vending;
 pub mod world;
