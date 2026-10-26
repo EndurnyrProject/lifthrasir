@@ -34,6 +34,7 @@ pub mod status_icons;
 pub mod storage_window;
 pub mod system_dialog;
 pub mod trade_window;
+pub mod vending_window;
 
 pub struct InGameHudPlugin;
 
@@ -58,6 +59,7 @@ impl Plugin for InGameHudPlugin {
             storage_window::StorageWindowPlugin,
         ));
         app.add_plugins(trade_window::TradeWindowPlugin);
+        app.add_plugins(vending_window::VendingWindowPlugin);
         app.add_plugins(card_compounding::CardCompoundingPlugin);
         app.add_plugins(skill_menu::SkillMenuPlugin);
         app.add_plugins(navigation::NavigationUiPlugin);

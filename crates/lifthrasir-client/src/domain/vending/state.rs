@@ -527,6 +527,14 @@ impl VendingState {
         self.purchase.is_some()
     }
 
+    pub fn open_pending(&self) -> bool {
+        self.opening.is_some()
+    }
+
+    pub fn close_pending(&self) -> bool {
+        self.closing.is_some()
+    }
+
     pub fn owner_authority_unconfirmed(&self) -> bool {
         self.owner_unconfirmed
     }
