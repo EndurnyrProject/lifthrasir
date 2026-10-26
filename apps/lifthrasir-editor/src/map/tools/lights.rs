@@ -117,7 +117,7 @@ pub fn add_light(world: &mut World, kind: LightKind, hit: Vec3) {
         world,
         Box::new(SpawnNode::new(layout.root, layout.map_node, snapshot, None)),
     );
-    world.resource_mut::<Selection>().0 = Some(id);
+    world.resource_mut::<Selection>().replace([id]);
     return_to_move(world);
 }
 

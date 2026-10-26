@@ -14,7 +14,7 @@ use lifthrasir_editor::{
 use lifthrasir_runtime::world::{LifPropRef, PropSceneContext, SceneOwner, props::MapModel};
 
 fn selected_node(app: &mut App) -> Entity {
-    let id = app.world().resource::<Selection>().0.unwrap();
+    let id = app.world().resource::<Selection>().active().unwrap();
     app.world_mut()
         .query::<(Entity, &EditorNodeId)>()
         .iter(app.world())
@@ -98,5 +98,5 @@ fn placing_returns_to_select_with_the_node_selected() {
     place(app.world_mut(), &asset, Vec3::ZERO);
 
     assert_eq!(*app.world().resource::<ToolMode>(), ToolMode::Select);
-    assert!(app.world().resource::<Selection>().0.is_some());
+    assert!(app.world().resource::<Selection>().active().is_some());
 }

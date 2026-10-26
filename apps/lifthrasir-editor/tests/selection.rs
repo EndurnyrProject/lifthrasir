@@ -13,7 +13,10 @@ use lifthrasir_editor::{
     },
     shell::{
         node::EditorNodeId,
-        selection::{EditorHandle, Selection, delete_selected, object_node},
+        selection::{
+            EditorHandle, Selection, all_nodes, delete_selected, invert_selection, object_node,
+            select_all,
+        },
         undo::{ComponentEdit, UndoStack, commit, undo},
     },
 };
@@ -144,11 +147,13 @@ fn deleting_a_prop_is_undoable_and_the_sun_cannot_be_deleted() {
     let prop = node_with::<LifPropRef>(&app, &layout);
     let prop_id = *app.world().get::<EditorNodeId>(prop).unwrap();
 
-    app.world_mut().resource_mut::<Selection>().0 = Some(prop_id);
+    app.world_mut()
+        .resource_mut::<Selection>()
+        .replace([prop_id]);
     delete_selected(app.world_mut());
 
     assert!(app.world().get_entity(prop).is_err());
-    assert_eq!(app.world().resource::<Selection>().0, None);
+    assert!(app.world().resource::<Selection>().is_empty());
     undo(app.world_mut());
     let restored = app
         .world_mut()
@@ -161,9 +166,37 @@ fn deleting_a_prop_is_undoable_and_the_sun_cannot_be_deleted() {
     let sun = node_with_child::<DirectionalLight>(&app, &layout);
     let sun_id = *app.world().get::<EditorNodeId>(sun).unwrap();
     app.world_mut().resource_mut::<UndoStack>().clear();
-    app.world_mut().resource_mut::<Selection>().0 = Some(sun_id);
+    app.world_mut()
+        .resource_mut::<Selection>()
+        .replace([sun_id]);
     delete_selected(app.world_mut());
 
     assert!(app.world().get_entity(sun).is_ok());
     assert!(app.world().resource::<UndoStack>().is_pristine());
+}
+
+#[test]
+fn select_all_invert_and_multi_delete_are_one_undo_step() {
+    let data_folder = tempfile::tempdir().unwrap();
+    let mut app = common::editor_app(data_folder.path());
+    common::open_fixture(&mut app);
+    app.update();
+    let all = all_nodes(app.world());
+    assert!(all.len() > 2);
+
+    select_all(app.world_mut());
+    assert_eq!(app.world().resource::<Selection>().nodes(), all);
+    invert_selection(app.world_mut());
+    assert!(app.world().resource::<Selection>().is_empty());
+    invert_selection(app.world_mut());
+    assert_eq!(app.world().resource::<Selection>().nodes(), all);
+
+    app.world_mut().resource_mut::<UndoStack>().clear();
+    delete_selected(app.world_mut());
+    let left = all_nodes(app.world());
+    assert_eq!(left.len(), 1, "only the sun survives");
+    assert_eq!(app.world().resource::<Selection>().nodes(), left);
+
+    undo(app.world_mut());
+    assert_eq!(all_nodes(app.world()).len(), all.len());
 }

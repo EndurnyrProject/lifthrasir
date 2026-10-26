@@ -1,14 +1,18 @@
-//! Move/rotate/scale handles on the selected node, through the Bevy-free
+//! Move/rotate/scale handles on the selected nodes, through the Bevy-free
 //! `transform-gizmo` core: Bevy feeds it the editor camera and cursor, and
-//! egui paints it clipped to the viewport. One drag records one
-//! `ComponentEdit<Transform>`.
+//! egui paints it clipped to the viewport. With several nodes selected the
+//! gizmo sits at their median and transforms them together. One drag records
+//! one `ComponentEdit<Transform>` per moved node, as a single undo step.
 
 use super::{
     camera::EditorCamera,
     node::{EditorNodeId, KindFlags, LightFlags, NodeKind, find_node, node_kind},
     selection::Selection,
-    ui::{EditorUiArea, EditorUiSet, ViewportCursor, viewport_has_keyboard, viewport_has_pointer},
-    undo::{ComponentEdit, record},
+    ui::{
+        EditorUiArea, EditorUiSet, ViewportCursor, command_modifier, viewport_has_keyboard,
+        viewport_has_pointer,
+    },
+    undo::{Batch, ComponentEdit, EditOp, record},
 };
 use crate::map::{open::EditorScreen, refresh::after_node_edit, tools::ToolMode};
 use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
@@ -41,28 +45,29 @@ impl Default for GizmoChoice {
     }
 }
 
-/// The gizmo, the entity it moves and the modes it shows.
+/// The gizmo, the entities it moves and the modes it shows.
 #[derive(Resource, Default)]
 pub struct TransformGizmo {
     gizmo: Gizmo,
-    target: Option<Entity>,
+    targets: Vec<Entity>,
     modes: EnumSet<GizmoMode>,
 }
 
 impl TransformGizmo {
     /// True when the pointer is over a handle of the shown gizmo.
     pub fn is_focused(&self) -> bool {
-        self.target.is_some() && self.gizmo.is_focused()
+        !self.targets.is_empty() && self.gizmo.is_focused()
     }
 }
 
-/// The drag in progress: the node and its transform when the drag started.
+/// The drag in progress: each moved node and its transform when the drag
+/// started.
 #[derive(Resource, Default)]
-struct Drag(Option<(EditorNodeId, Transform)>);
+struct Drag(Option<Vec<(EditorNodeId, Transform)>>);
 
 type NodeQuery<'a> = (Entity, &'a EditorNodeId, KindFlags<'a>);
 
-/// The gizmo on the selected node. Needs a render app and picking, so the
+/// The gizmo on the selected nodes. Needs a render app and picking, so the
 /// binary adds it; headless apps leave it out.
 pub struct GizmoPlugin;
 
@@ -91,13 +96,7 @@ impl Plugin for GizmoPlugin {
 
 /// 1/2/3 pick translate/rotate/scale (WASD/Q/E move the camera).
 fn choice_keys(keys: Res<ButtonInput<KeyCode>>, mut choice: ResMut<GizmoChoice>) {
-    let modifier = keys.any_pressed([
-        KeyCode::ControlLeft,
-        KeyCode::ControlRight,
-        KeyCode::SuperLeft,
-        KeyCode::SuperRight,
-    ]);
-    if modifier {
+    if command_modifier(&keys) {
         return;
     }
     let picked = [
@@ -112,9 +111,9 @@ fn choice_keys(keys: Res<ButtonInput<KeyCode>>, mut choice: ResMut<GizmoChoice>)
     }
 }
 
-/// The selected node, while the Select tool edits a map.
+/// The selected nodes, while the Select tool edits a map.
 #[derive(SystemParam)]
-struct SelectedNode<'w, 's> {
+struct SelectedNodes<'w, 's> {
     selection: Res<'w, Selection>,
     mode: Res<'w, ToolMode>,
     screen: Res<'w, State<EditorScreen>>,
@@ -122,17 +121,24 @@ struct SelectedNode<'w, 's> {
     lights: Query<'w, 's, LightFlags>,
 }
 
-impl SelectedNode<'_, '_> {
-    /// The selected node's entity and kind; `None` outside the Select tool.
-    fn get(&self) -> Option<(Entity, NodeKind)> {
+impl SelectedNodes<'_, '_> {
+    /// The selected nodes' entities and kinds, the active node first; empty
+    /// outside the Select tool.
+    fn get(&self) -> Vec<(Entity, NodeKind)> {
         let editing = *self.mode == ToolMode::Select && *self.screen.get() == EditorScreen::Editing;
-        self.selection
-            .0
-            .filter(|_| editing)
-            .and_then(|id| self.nodes.iter().find(|node| *node.1 == id))
-            .and_then(|(entity, _, flags)| {
+        if !editing {
+            return Vec::new();
+        }
+        let active = self.selection.active();
+        let others = self.selection.nodes().iter().copied();
+        active
+            .into_iter()
+            .chain(others.filter(|&id| Some(id) != active))
+            .filter_map(|id| {
+                let (entity, _, flags) = self.nodes.iter().find(|node| *node.1 == id)?;
                 node_kind(flags, &self.lights).map(|kind| (entity, kind))
             })
+            .collect()
     }
 }
 
@@ -180,30 +186,42 @@ impl GizmoInput<'_, '_> {
     }
 }
 
-/// Targets the selected node only (in the Select tool while editing) and
-/// restricts the gizmo to the chosen mode, or the node kind's first allowed
-/// mode. Frozen during a drag.
+/// The mode to show for `selected` (the active node first): the chosen one
+/// if any node allows it, else the active node's first allowed mode.
+fn gizmo_mode(selected: &[(Entity, NodeKind)], chosen: GizmoModeKind) -> Option<GizmoModeKind> {
+    let (_, active_kind) = selected.first()?;
+    let any_allows = selected
+        .iter()
+        .any(|(_, kind)| allowed_modes(*kind).contains(&chosen));
+    Some(if any_allows {
+        chosen
+    } else {
+        allowed_modes(*active_kind)[0]
+    })
+}
+
+/// Targets the selected nodes that allow the shown mode (in the Select tool
+/// while editing). Frozen during a drag.
 fn sync_target(
     drag: Res<Drag>,
-    selected: SelectedNode,
+    selected: SelectedNodes,
     choice: Res<GizmoChoice>,
     mut gizmo: ResMut<TransformGizmo>,
 ) {
     if drag.0.is_some() {
         return;
     }
-    let wanted = selected.get();
-    gizmo.target = wanted.map(|(entity, _)| entity);
-    let Some((_, kind)) = wanted else {
+    let selected = selected.get();
+    let Some(mode) = gizmo_mode(&selected, choice.0) else {
+        gizmo.targets.clear();
         return;
     };
-    let allowed = allowed_modes(kind);
-    let active = if allowed.contains(&choice.0) {
-        choice.0
-    } else {
-        allowed[0]
-    };
-    gizmo.modes = GizmoMode::all_from_kind(active);
+    gizmo.targets = selected
+        .iter()
+        .filter(|(_, kind)| allowed_modes(*kind).contains(&mode))
+        .map(|(entity, _)| *entity)
+        .collect();
+    gizmo.modes = GizmoMode::all_from_kind(mode);
 }
 
 /// A left press on the hovered gizmo, over the viewport, starts a drag.
@@ -216,10 +234,13 @@ fn start_drag(
     if drag.0.is_some() || !mouse.just_pressed(MouseButton::Left) || !gizmo.is_focused() {
         return;
     }
-    let Some(Ok((id, transform))) = gizmo.target.map(|entity| nodes.get(entity)) else {
-        return;
-    };
-    drag.0 = Some((*id, *transform));
+    let started: Vec<_> = gizmo
+        .targets
+        .iter()
+        .filter_map(|&entity| nodes.get(entity).ok())
+        .map(|(id, transform)| (*id, *transform))
+        .collect();
+    drag.0 = (!started.is_empty()).then_some(started);
 }
 
 /// Feeds the editor camera and cursor to the gizmo and applies what a drag
@@ -231,19 +252,25 @@ fn update_gizmo(
     mut last_cursor: Local<Vec2>,
 ) {
     let interaction = input.interaction(&mut last_cursor);
-    let Some(target) = state.target else {
+    if state.targets.is_empty() {
+        return;
+    }
+    let Some(config) = input.config(state.modes) else {
         return;
     };
-    let (Some(config), Ok(mut transform)) = (input.config(state.modes), transforms.get_mut(target))
-    else {
-        return;
-    };
+    let (targets, current): (Vec<Entity>, Vec<GizmoTransform>) = state
+        .targets
+        .iter()
+        .filter_map(|&target| Some((target, to_gizmo(transforms.get(target).ok()?))))
+        .unzip();
     state.gizmo.update_config(config);
-    let Some((_, updated)) = state.gizmo.update(interaction, &[to_gizmo(&transform)]) else {
+    let Some((_, updated)) = state.gizmo.update(interaction, &current) else {
         return;
     };
-    if let Some(result) = updated.first() {
-        *transform = from_gizmo(result);
+    for (&target, result) in targets.iter().zip(&updated) {
+        if let Ok(mut transform) = transforms.get_mut(target) {
+            *transform = from_gizmo(result);
+        }
     }
 }
 
@@ -253,7 +280,7 @@ fn draw_gizmo(
     area: Res<EditorUiArea>,
     state: Res<TransformGizmo>,
 ) -> Result {
-    let (Some(_), Some(clip)) = (state.target, area.viewport()) else {
+    let Some(clip) = area.viewport().filter(|_| !state.targets.is_empty()) else {
         return Ok(());
     };
     let ctx = contexts.ctx_mut()?;
@@ -283,29 +310,33 @@ fn continue_drag(
     mut drag: ResMut<Drag>,
     mut commands: Commands,
 ) {
-    let Some((id, before)) = drag.0 else {
-        return;
-    };
     if mouse.pressed(MouseButton::Left) {
         return;
     }
-    drag.0 = None;
-    commands.queue(move |world: &mut World| finish_drag(world, id, before));
+    let Some(started) = drag.0.take() else {
+        return;
+    };
+    commands.queue(move |world: &mut World| finish_drag(world, started));
 }
 
-fn finish_drag(world: &mut World, id: EditorNodeId, before: Transform) {
-    let Some(node) = find_node(world, id) else {
-        return;
-    };
-    let Some(after) = world.get::<Transform>(node).copied() else {
-        return;
-    };
-    if after == before {
-        return;
+fn finish_drag(world: &mut World, started: Vec<(EditorNodeId, Transform)>) {
+    let mut ops: Vec<Box<dyn EditOp>> = Vec::new();
+    for (id, before) in started {
+        let Some(node) = find_node(world, id) else {
+            continue;
+        };
+        let after = world.get::<Transform>(node).copied();
+        let Some(after) = after.filter(|after| *after != before) else {
+            continue;
+        };
+        after_node_edit(world, node);
+        ops.push(Box::new(
+            ComponentEdit::new(id, before, after).with_hook(after_node_edit),
+        ));
     }
-    after_node_edit(world, node);
-    let edit = ComponentEdit::new(id, before, after).with_hook(after_node_edit);
-    record(world, Box::new(edit));
+    if !ops.is_empty() {
+        record(world, Box::new(Batch(ops)));
+    }
 }
 
 fn dmat4(matrix: Mat4) -> DMat4 {
@@ -350,6 +381,20 @@ mod tests {
         };
 
         assert_eq!(from_gizmo(&to_gizmo(&transform)), transform);
+    }
+
+    #[test]
+    fn the_mode_follows_the_choice_unless_no_selected_node_allows_it() {
+        let entity = Entity::from_raw_u32(1).unwrap();
+        let mixed = [(entity, NodeKind::Sound), (entity, NodeKind::Prop)];
+
+        assert_eq!(gizmo_mode(&mixed, Rotate), Some(Rotate));
+        assert_eq!(gizmo_mode(&mixed[..1], Rotate), Some(Translate));
+        assert_eq!(
+            gizmo_mode(&[(entity, NodeKind::Sun)], Translate),
+            Some(Rotate)
+        );
+        assert_eq!(gizmo_mode(&[], Translate), None);
     }
 
     #[test]

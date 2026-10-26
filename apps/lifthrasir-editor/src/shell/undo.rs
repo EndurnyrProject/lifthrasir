@@ -1,7 +1,10 @@
 //! Undo history. Every user gesture commits exactly one [`EditOp`]; ops address
 //! map nodes by [`EditorNodeId`] so they survive delete then undo.
 
-use super::node::{EditorNodeId, NodeSnapshot, find_node, spawn_node};
+use super::{
+    node::{EditorNodeId, NodeSnapshot, find_node, spawn_node},
+    ui::command_modifier,
+};
 use crate::map::terrain::{MeshSnapshot, sync_chunk_visibility};
 use bevy::{prelude::*, utils::prelude::ShortName};
 use lifthrasir_runtime::world::LifMapData;
@@ -392,13 +395,7 @@ enum HistoryKey {
 
 /// Ctrl/Cmd+Z undoes; Ctrl/Cmd+Y and Ctrl/Cmd+Shift+Z redo.
 fn history_key(keys: &ButtonInput<KeyCode>) -> Option<HistoryKey> {
-    let modifier = keys.any_pressed([
-        KeyCode::ControlLeft,
-        KeyCode::ControlRight,
-        KeyCode::SuperLeft,
-        KeyCode::SuperRight,
-    ]);
-    if !modifier {
+    if !command_modifier(keys) {
         return None;
     }
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
