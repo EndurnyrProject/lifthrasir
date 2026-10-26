@@ -7,6 +7,10 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    # Every PR touches Cargo.lock, so each merge would make Dependabot rebase
+    # (and re-run CI on) every other open PR. Rebase on demand instead with
+    # `@dependabot rebase`; master CI validates the merged result.
+    rebase-strategy: disabled
     commit-message:
       prefix: "chore(deps)"
     groups:
@@ -27,6 +31,9 @@ updates:
         update-types:
           - minor
           - patch
+      cargo-major:
+        update-types:
+          - major
 
   - package-ecosystem: github-actions
     directory: /
