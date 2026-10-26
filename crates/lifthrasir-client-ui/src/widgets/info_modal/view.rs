@@ -21,7 +21,9 @@ use lifthrasir_client::domain::inventory::item::item_category;
 use lifthrasir_client::domain::inventory::{Item, ItemCategory};
 use lifthrasir_client::domain::skill::{SkillNode, SkillTreeState};
 use lifthrasir_runtime::actors::EquipmentSlot;
-use net_contract::dto::{CartItem, GuildSkillInfo, StorageItem};
+use net_contract::dto::{
+    CartItem, GuildSkillInfo, StorageItem, VendingCreatorKind, VendingListing,
+};
 
 use crate::widgets::character_window::{SkillPanelStaging, skill_name};
 use lifthrasir_ui::rich_text::parse_color_codes;
@@ -195,6 +197,75 @@ pub fn shop_item_view(nameid: u32, price: Option<u32>, item_db: &ItemDb) -> Item
         },
         item_db,
     )
+}
+
+/// Broken-items bit of the wire item attribute byte.
+const BROKEN_ATTRIBUTE: u32 = 0x01;
+
+/// Full instance view for another player's vendor stock. It carries the price and
+/// the instance's own metadata as context; it never implies bag ownership, so no
+/// equip/use/compound action applies.
+pub fn vending_item_view(
+    item: &VendingListing,
+    item_db: &ItemDb,
+    option_db: Option<&RandomOptionDb>,
+) -> ItemInfoView {
+    let mut view = item_view_from_resolved(
+        ResolvedItem {
+            item_id: item.nameid,
+            identified: item.identified,
+            favorite: None,
+            refine: item.refine as u8,
+            cards: &item.cards,
+            options: wire_option_lines(&item.options, option_db),
+            wear_mask: 0,
+            category_label: Some(category_label(item_category(item.type_))),
+            weight: None,
+            price: Some(item.price),
+        },
+        item_db,
+    );
+
+    if item.attribute & BROKEN_ATTRIBUTE != 0 {
+        view.tags.push("Broken".to_string());
+    }
+    if let Some(grade) = enchant_grade_label(item.enchant_grade) {
+        view.tags.push(grade);
+    }
+
+    let creator = match item.creator_kind {
+        VendingCreatorKind::None => (None, None),
+        VendingCreatorKind::Signed => (Some("Signature"), creator_text(item)),
+        VendingCreatorKind::Forged => (Some("Forged by"), creator_text(item)),
+        VendingCreatorKind::Unknown(code) => (Some("Creator"), Some(format!("Unknown ({code})"))),
+    };
+    if let (Some(label), Some(value)) = creator {
+        view.meta.push((label.to_string(), value));
+    }
+
+    view
+}
+
+/// Reference enchant grades; a value with no verified name keeps its number.
+fn enchant_grade_label(grade: u32) -> Option<String> {
+    match grade {
+        0 => None,
+        1 => Some("Grade D".to_string()),
+        2 => Some("Grade C".to_string()),
+        3 => Some("Grade B".to_string()),
+        4 => Some("Grade A".to_string()),
+        other => Some(format!("Grade #{other}")),
+    }
+}
+
+fn creator_text(item: &VendingListing) -> Option<String> {
+    let name = item.signer_name.trim();
+    match (name.is_empty(), item.creator_id) {
+        (true, 0) => None,
+        (true, id) => Some(format!("#{id}")),
+        (false, 0) => Some(name.to_string()),
+        (false, id) => Some(format!("{name} (#{id})")),
+    }
 }
 
 fn category_label(category: ItemCategory) -> &'static str {
@@ -820,6 +891,202 @@ mod tests {
             inventory_item_view(&item, &item_db(), None).favorite,
             Some(false)
         );
+    }
+
+    // -----------------------------------------------------------------
+    // Vending stock fixtures and tests.
+    // -----------------------------------------------------------------
+
+    fn vending_listing() -> VendingListing {
+        VendingListing {
+            index: 3,
+            nameid: 2104,
+            type_: 5,
+            amount: 1,
+            identified: true,
+            attribute: 0,
+            refine: 0,
+            cards: vec![],
+            options: vec![],
+            price: 5_000,
+            signer_name: String::new(),
+            creator_id: 0,
+            creator_kind: VendingCreatorKind::None,
+            enchant_grade: 0,
+        }
+    }
+
+    #[test]
+    fn vending_listing_carries_price_and_instance_metadata() {
+        let mut item = vending_listing();
+        item.refine = 7;
+        item.cards = vec![4001, 0];
+        item.options = vec![wire_option(3, 5), wire_option(9, -4)];
+        item.creator_kind = VendingCreatorKind::Signed;
+        item.signer_name = "Odin".into();
+        item.creator_id = 42;
+        item.enchant_grade = 2;
+
+        let view = vending_item_view(&item, &item_db(), Some(&option_db()));
+
+        assert_eq!(view.name, "Buckler");
+        assert_eq!(view.refine, Some(7));
+        assert_eq!(view.cards, vec!["Poring Card".to_string()]);
+        assert_eq!(
+            view.options,
+            vec!["STR + 5".to_string(), "MHP + -4%".to_string()]
+        );
+        assert_eq!(view.meta[0], ("Price".to_string(), "5000z".to_string()));
+        assert_eq!(
+            view.meta[1],
+            ("Signature".to_string(), "Odin (#42)".to_string())
+        );
+        assert!(view.tags.contains(&"Grade C".to_string()));
+        assert_eq!(view.favorite, None);
+    }
+
+    #[test]
+    fn same_nameid_instances_stay_distinguishable() {
+        let plain = vending_listing();
+        let mut refined = plain.clone();
+        refined.refine = 4;
+        let mut carded = plain.clone();
+        carded.cards = vec![4001];
+        let mut optimised = plain.clone();
+        optimised.options = vec![wire_option(3, 5)];
+        let mut forged = plain.clone();
+        forged.creator_kind = VendingCreatorKind::Forged;
+        forged.signer_name = "Loki".into();
+        let mut broken = plain.clone();
+        broken.attribute = 1;
+        let mut graded = plain.clone();
+        graded.enchant_grade = 4;
+
+        let views: Vec<ItemInfoView> = [plain, refined, carded, optimised, forged, broken, graded]
+            .iter()
+            .map(|item| vending_item_view(item, &item_db(), Some(&option_db())))
+            .collect();
+
+        for (index, view) in views.iter().enumerate() {
+            assert_eq!(view.name, "Buckler", "instance {index} keeps the name");
+        }
+        assert_eq!(views[0].refine, None);
+        assert_eq!(views[1].refine, Some(4));
+        assert_eq!(views[2].sockets_filled, 1);
+        assert_eq!(views[3].options, vec!["STR + 5".to_string()]);
+        assert_eq!(
+            views[4].meta,
+            vec![
+                ("Price".to_string(), "5000z".to_string()),
+                ("Forged by".to_string(), "Loki".to_string()),
+            ]
+        );
+        assert!(views[5].tags.contains(&"Broken".to_string()));
+        assert!(views[6].tags.contains(&"Grade A".to_string()));
+        assert_eq!(views[0].edge, EdgeGrade::Common);
+        assert_eq!(views[1].edge, EdgeGrade::Fine);
+    }
+
+    #[test]
+    fn broken_bit_only_marks_actual_broken_items() {
+        let mut item = vending_listing();
+        assert!(
+            !vending_item_view(&item, &item_db(), None)
+                .tags
+                .contains(&"Broken".to_string())
+        );
+
+        item.attribute = 2;
+        assert!(
+            !vending_item_view(&item, &item_db(), None)
+                .tags
+                .contains(&"Broken".to_string())
+        );
+
+        item.attribute = 3;
+        assert!(
+            vending_item_view(&item, &item_db(), None)
+                .tags
+                .contains(&"Broken".to_string())
+        );
+    }
+
+    #[test]
+    fn enchant_grades_use_verified_names_and_keep_unknown_numbers() {
+        let mut item = vending_listing();
+        let mut grades = Vec::new();
+        for grade in 0..=5 {
+            item.enchant_grade = grade;
+            let view = vending_item_view(&item, &item_db(), None);
+            grades.push(view.tags.into_iter().find(|tag| tag.starts_with("Grade")));
+        }
+        assert_eq!(
+            grades,
+            vec![
+                None,
+                Some("Grade D".to_string()),
+                Some("Grade C".to_string()),
+                Some("Grade B".to_string()),
+                Some("Grade A".to_string()),
+                Some("Grade #5".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn unknown_creator_kind_and_unsigned_creators_are_visible() {
+        let mut item = vending_listing();
+        item.creator_kind = VendingCreatorKind::Unknown(9);
+        let view = vending_item_view(&item, &item_db(), None);
+        assert_eq!(
+            view.meta[1],
+            ("Creator".to_string(), "Unknown (9)".to_string())
+        );
+
+        item.creator_kind = VendingCreatorKind::Signed;
+        assert_eq!(
+            vending_item_view(&item, &item_db(), None).meta.len(),
+            1,
+            "a signature without a name adds nothing"
+        );
+
+        item.creator_id = 77;
+        assert_eq!(
+            vending_item_view(&item, &item_db(), None).meta[1],
+            ("Signature".to_string(), "#77".to_string())
+        );
+    }
+
+    #[test]
+    fn unidentified_vending_stock_suppresses_instance_details() {
+        let mut item = vending_listing();
+        item.identified = false;
+        item.refine = 7;
+        item.cards = vec![4001];
+        item.options = vec![wire_option(3, 5)];
+
+        let view = vending_item_view(&item, &item_db(), Some(&option_db()));
+
+        assert!(!view.identified);
+        assert_eq!(view.name, "Round Shield");
+        assert_eq!(view.refine, None);
+        assert!(view.cards.is_empty());
+        assert!(view.options.is_empty());
+        assert_eq!(view.meta, vec![("Price".to_string(), "5000z".to_string())]);
+    }
+
+    #[test]
+    fn unknown_vending_stock_keeps_placeholders_and_option_fallback() {
+        let mut item = vending_listing();
+        item.nameid = 9999;
+        item.options = vec![wire_option(9999, 7)];
+
+        let view = vending_item_view(&item, &item_db(), Some(&option_db()));
+
+        assert_eq!(view.name, "Item #9999");
+        assert!(view.description.is_empty());
+        assert_eq!(view.options, vec!["Option #9999: 7".to_string()]);
+        assert_eq!(view.meta, vec![("Price".to_string(), "5000z".to_string())]);
     }
 
     #[test]
