@@ -1673,7 +1673,7 @@ dependencies = [
  "approx",
  "bevy_reflect",
  "derive_more",
- "glam 0.33.5",
+ "glam 0.33.12",
  "libm",
  "rand 0.10.2",
  "serde",
@@ -1702,7 +1702,7 @@ dependencies = [
  "bytemuck",
  "derive_more",
  "encase",
- "glam 0.33.5",
+ "glam 0.33.12",
  "half",
  "hexasphere",
  "serde",
@@ -1882,7 +1882,7 @@ dependencies = [
  "downcast-rs 2.0.2",
  "erased-serde",
  "foldhash 0.2.0",
- "glam 0.33.5",
+ "glam 0.33.12",
  "indexmap",
  "inventory",
  "petgraph",
@@ -1975,7 +1975,7 @@ dependencies = [
  "derive_more",
  "downcast-rs 2.0.2",
  "encase",
- "glam 0.33.5",
+ "glam 0.33.12",
  "image",
  "indexmap",
  "itertools 0.14.0",
@@ -4110,9 +4110,9 @@ dependencies = [
 
 [[package]]
 name = "glam"
-version = "0.33.5"
+version = "0.33.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c426daf70099baff33fac0ba85151c42424861c56828cef9ba02dacb78eb6b26"
+checksum = "37bfe73dc8ec21f54d181e5a60554327ec3f1c600c455a75ccbfc65d2106a6c4"
 dependencies = [
  "approx",
  "bytemuck",
@@ -4122,6 +4122,12 @@ dependencies = [
  "rand 0.10.2",
  "serde_core",
 ]
+
+[[package]]
+name = "glam"
+version = "0.34.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc148d4ddd3930c52f9e5ae79b89805c6f07e9ff417e7b083e0348cea60a5aba"
 
 [[package]]
 name = "glifo"
@@ -4339,7 +4345,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "163385eff5a0cf606ebe2c10b3a44ab02f4306e83fbd068a64f5e1d72a3049ac"
 dependencies = [
  "constgebra",
- "glam 0.33.5",
+ "glam 0.33.12",
  "tinyvec",
 ]
 
@@ -4853,7 +4859,7 @@ checksum = "153de98083c9db32772ea9110826344c9c498c150add69d0f14c59dc5e78efa9"
 dependencies = [
  "atomic-arena",
  "cpal 0.18.2",
- "glam 0.33.5",
+ "glam 0.33.12",
  "mint",
  "pastey 0.2.3",
  "rtrb",
@@ -5230,7 +5236,7 @@ dependencies = [
  "blake3",
  "encoding_rs",
  "gag",
- "glam 0.33.5",
+ "glam 0.34.1",
  "gltf",
  "gltf-json",
  "image",
@@ -5746,7 +5752,7 @@ dependencies = [
  "glam 0.30.10",
  "glam 0.31.1",
  "glam 0.32.1",
- "glam 0.33.5",
+ "glam 0.33.12",
  "matrixmultiply",
  "nalgebra-macros",
  "num-complex",
@@ -7457,7 +7463,7 @@ dependencies = [
  "crc32fast",
  "encoding_rs",
  "flate2",
- "glam 0.33.5",
+ "glam 0.34.1",
  "nalgebra",
  "nom 8.0.0",
  "thiserror 2.0.21",
