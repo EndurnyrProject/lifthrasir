@@ -8,6 +8,7 @@ use crate::domain::hotbar::model::{Hotbar, HotbarSlot};
 use crate::domain::input::{HOTBAR_ACTIONS, PlayerAction, ui_unfocused};
 use crate::domain::inventory::{Inventory, UseItemRequested};
 use crate::domain::skill::SkillCastRequested;
+use crate::domain::vending::{VENDING_SKILL_ID, VendingIntent};
 use net_contract::events::ChatHeard;
 
 #[derive(Message, Debug, Clone)]
@@ -44,6 +45,7 @@ pub fn dispatch_hotbar_activation(
     hotbar: Res<Hotbar>,
     inventory: Res<Inventory>,
     mut cast: MessageWriter<SkillCastRequested>,
+    mut vending: MessageWriter<VendingIntent>,
     mut use_item: MessageWriter<UseItemRequested>,
     mut chat: MessageWriter<ChatHeard>,
 ) {
@@ -52,6 +54,9 @@ pub fn dispatch_hotbar_activation(
             continue;
         };
         match slot {
+            HotbarSlot::Skill(id) if id == VENDING_SKILL_ID => {
+                vending.write(VendingIntent::EnterSeller);
+            }
             HotbarSlot::Skill(id) => {
                 cast.write(SkillCastRequested { skill_id: id });
             }
@@ -81,6 +86,7 @@ mod tests {
         let mut app = App::new();
         app.add_message::<HotbarSlotActivated>()
             .add_message::<SkillCastRequested>()
+            .add_message::<VendingIntent>()
             .add_message::<UseItemRequested>()
             .add_message::<ChatHeard>()
             .init_resource::<Hotbar>()

@@ -153,6 +153,7 @@ mod tests {
         app.add_message::<SkillCastRequested>()
             .add_message::<SkillCastResolved>()
             .add_message::<ChatHeard>()
+            .init_resource::<crate::domain::vending::VendingState>()
             .init_resource::<SkillTreeState>()
             .init_resource::<SkillCooldownTracker>()
             .init_resource::<TargetingMode>()

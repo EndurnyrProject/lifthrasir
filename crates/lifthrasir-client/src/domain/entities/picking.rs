@@ -141,8 +141,12 @@ pub fn on_sprite_click(
     mut skills: MessageWriter<SkillCastResolved>,
     mut locked: ResMut<LockedTarget>,
     mut pending: ResMut<PendingPickups>,
+    vending: Res<crate::domain::vending::VendingState>,
 ) {
     if click.button != PointerButton::Primary {
+        return;
+    }
+    if vending.gameplay_locked() {
         return;
     }
 

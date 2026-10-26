@@ -41,8 +41,12 @@ use {
 #[auto_observer(plugin = crate::domain::entities::movement::plugin::MovementDomainPlugin)]
 pub fn send_movement_requests_observer(
     trigger: On<MovementRequested>,
+    vending: Res<crate::domain::vending::VendingState>,
     mut moves: MessageWriter<MoveRequested>,
 ) {
+    if vending.gameplay_locked() {
+        return;
+    }
     let event = trigger.event();
     debug!(
         "Requesting movement for {:?} to ({}, {}) dir {}",

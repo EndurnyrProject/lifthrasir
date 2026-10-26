@@ -28,6 +28,7 @@ use lifthrasir_client::domain::entities::character::components::status::Characte
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
 use lifthrasir_client::domain::inventory::Inventory;
+use lifthrasir_client::domain::vending::{VendingIntent, VendingState};
 use net_contract::commands::{MountCart, MoveFromCart, MoveToCart};
 use net_contract::events::{CartMountRejection, CartMountResult};
 
@@ -84,6 +85,15 @@ pub struct QtyButton {
 /// RO caps the cart at 100 slots; used both to disable the Move button and to
 /// label the Cart pane header.
 pub(crate) const CART_MAX_SLOTS: usize = 100;
+
+/// The pushcart window's "Set Up Shop" affordance: it asks the domain for the
+/// seller flow instead of casting the skill from the cart UI.
+#[derive(Component, Default, Clone)]
+pub struct SetUpShopButton;
+
+fn on_set_up_shop(_: On<Activate>, mut vending: MessageWriter<VendingIntent>) {
+    vending.write(VendingIntent::EnterSeller);
+}
 
 /// The move a Bag/Cart selection resolves to. Bag selections move *into* the
 /// cart; Cart selections move *out of* it.
@@ -362,9 +372,13 @@ fn on_move(
     ui: Res<CartUi>,
     inventory: Res<Inventory>,
     cart: Res<Cart>,
+    vending: Res<VendingState>,
     mut to_cart: MessageWriter<MoveToCart>,
     mut from_cart: MessageWriter<MoveFromCart>,
 ) {
+    if vending.cart_transfers_locked() {
+        return;
+    }
     if !move_enabled(ui.selected, ui.qty, &inventory, &cart) {
         return;
     }
@@ -413,11 +427,15 @@ fn on_mount_toggle(
     activate: On<Activate>,
     buttons: Query<&MountToggleButton>,
     cart: Res<Cart>,
+    vending: Res<VendingState>,
     mut writer: MessageWriter<MountCart>,
 ) {
     let Ok(button) = buttons.get(activate.entity) else {
         return;
     };
+    if vending.cart_transfers_locked() {
+        return;
+    }
     if !mount_command_allowed(button.mount, cart.is_empty()) {
         return;
     }
@@ -506,6 +524,7 @@ mod tests {
 
     fn trigger_toggle(cart: Cart, mount: bool) -> Vec<bool> {
         let mut app = App::new();
+        app.init_resource::<VendingState>();
         app.add_message::<MountCart>();
         app.insert_resource(cart);
         let button = app
@@ -523,6 +542,61 @@ mod tests {
     }
 
     #[test]
+    fn mount_and_unmount_are_refused_while_a_shop_holds_the_cart() {
+        for mount in [true, false] {
+            let mut app = App::new();
+            app.add_message::<MountCart>()
+                .insert_resource(Cart::default())
+                .insert_resource(vending_with_setup());
+            let button = app
+                .world_mut()
+                .spawn(MountToggleButton { mount })
+                .observe(on_mount_toggle)
+                .id();
+            app.world_mut().trigger(Activate { entity: button });
+            assert!(drain_mount_cmds(&mut app).is_empty());
+        }
+    }
+
+    #[test]
+    fn the_shop_affordance_enters_the_seller_flow() {
+        let mut app = App::new();
+        app.init_resource::<VendingState>()
+            .add_message::<VendingIntent>();
+        let button = app
+            .world_mut()
+            .spawn(SetUpShopButton)
+            .observe(on_set_up_shop)
+            .id();
+        app.world_mut().trigger(Activate { entity: button });
+        let written: Vec<VendingIntent> = app
+            .world_mut()
+            .resource_mut::<Messages<VendingIntent>>()
+            .drain()
+            .collect();
+        assert_eq!(written, vec![VendingIntent::EnterSeller]);
+    }
+
+    fn vending_with_setup() -> VendingState {
+        let mut state = VendingState::default();
+        state.apply(&net_contract::events::VendingIngress {
+            generation: net_contract::state::ZoneSessionGeneration::default(),
+            payload: net_contract::events::VendingIngressPayload::SetupReady(
+                net_contract::dto::VendingSetup {
+                    setup_id: "setup-1".into(),
+                    max_slots: 12,
+                    min_unit_price: 0,
+                    max_unit_price: 1_000_000_000,
+                    max_title_bytes: 79,
+                    sellable_cart_indices: vec![2],
+                    sp_spent: 30,
+                },
+            ),
+        });
+        state
+    }
+
+    #[test]
     fn unmount_button_emits_mount_false_when_cart_empty() {
         assert_eq!(trigger_toggle(Cart::default(), false), vec![false]);
     }
@@ -537,6 +611,7 @@ mod tests {
     #[test]
     fn reset_restores_default_selection_and_qty() {
         let mut app = App::new();
+        app.init_resource::<VendingState>();
         app.insert_resource(CartUi {
             selected: Some((Side::Cart, 3)),
             qty: 12,
@@ -550,6 +625,7 @@ mod tests {
 
     fn run_mount_result(outcome: Result<(), CartMountRejection>) -> Option<CartMountRejection> {
         let mut app = App::new();
+        app.init_resource::<VendingState>();
         app.add_message::<CartMountResult>();
         app.init_resource::<CartUi>();
         app.add_systems(Update, apply_mount_result);
@@ -571,6 +647,7 @@ mod tests {
     #[test]
     fn apply_mount_result_clears_error_on_success() {
         let mut app = App::new();
+        app.init_resource::<VendingState>();
         app.add_message::<CartMountResult>();
         app.insert_resource(CartUi {
             mount_error: Some(CartMountRejection::AlreadyMounted),
@@ -742,6 +819,7 @@ mod tests {
         cart: Cart,
     ) -> Vec<Emitted> {
         let mut app = App::new();
+        app.init_resource::<VendingState>();
         app.add_message::<MoveToCart>();
         app.add_message::<MoveFromCart>();
         app.insert_resource(CartUi {
@@ -828,6 +906,7 @@ mod tests {
 
     fn cell_click_app() -> App {
         let mut app = App::new();
+        app.init_resource::<VendingState>();
         app.add_message::<ShowInfoModal>();
         app.init_resource::<CartUi>();
         app.init_resource::<Inventory>();

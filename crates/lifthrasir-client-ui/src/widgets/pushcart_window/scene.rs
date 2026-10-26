@@ -30,8 +30,8 @@ use lifthrasir_ui::widgets::chrome::{
 
 use crate::widgets::pushcart_window::{
     CART_MAX_SLOTS, CartCell, CartWindowBody, CartWindowRoot, CartWindowTitlebar,
-    MountToggleButton, QtyButton, Side, move_enabled, on_cell_click, on_mount_toggle, on_move,
-    on_qty_step,
+    MountToggleButton, QtyButton, SetUpShopButton, Side, move_enabled, on_cell_click,
+    on_mount_toggle, on_move, on_qty_step, on_set_up_shop,
 };
 
 const WINDOW_LEFT: f32 = 360.0;
@@ -315,8 +315,32 @@ fn mounted_body(
             @detail_strip(detail, qty, can_move) --
             @footer(footer_data) --
             {hint} --
-            @unmount_button(cart_empty)
+            Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
+            @ignore_picking()
+            Children [
+                @set_up_shop_button() --
+                @unmount_button(cart_empty)
+            ]
         ]
+    }
+}
+
+/// "Set Up Shop": asks the domain for the seller flow; the editor appears only
+/// once the server grants a paid setup.
+fn set_up_shop_button() -> impl Scene {
+    bsn! {
+        @FeathersButton { @caption: bsn! { @chrome_text("Set Up Shop".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
+        SetUpShopButton
+        Node {
+            height: px(30),
+            align_self: AlignSelf::FlexStart,
+            padding: {UiRect::horizontal(px(16))},
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border_radius: BorderRadius::all(px(7)),
+        }
+        BackgroundColor(lifthrasir_ui::theme::EMERALD_INK)
+        on(on_set_up_shop)
     }
 }
 

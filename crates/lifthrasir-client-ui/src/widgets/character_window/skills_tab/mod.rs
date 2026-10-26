@@ -17,6 +17,7 @@ use lifthrasir_client::domain::entities::character::events::SkillLearnRequested;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::hotbar::HotbarSlot;
 use lifthrasir_client::domain::skill::{SkillCastRequested, SkillTreeState};
+use lifthrasir_client::domain::vending::{VENDING_SKILL_ID, VendingIntent};
 
 use crate::widgets::hotbar::HotbarDrag;
 use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view};
@@ -533,6 +534,7 @@ fn on_cell_click(
     staging: Res<SkillPanelStaging>,
     player: Query<&CharacterStatus, With<LocalPlayer>>,
     mut cast_writer: MessageWriter<SkillCastRequested>,
+    mut vending_writer: MessageWriter<VendingIntent>,
     mut info_writer: MessageWriter<ShowInfoModal>,
 ) {
     let Ok(cell) = cells.get(click.entity) else {
@@ -565,7 +567,12 @@ fn on_cell_click(
     }
     let now = time.elapsed();
     if is_cast_double_click(&last, cell.0, now) {
-        cast_writer.write(SkillCastRequested { skill_id: cell.0 });
+        // The vending skill reveals an existing setup/monitor instead of recasting.
+        if cell.0 == VENDING_SKILL_ID {
+            vending_writer.write(VendingIntent::EnterSeller);
+        } else {
+            cast_writer.write(SkillCastRequested { skill_id: cell.0 });
+        }
     }
     *last = LastSkillPanelClick {
         skill_id: cell.0,
@@ -621,6 +628,8 @@ mod tests {
     #[test]
     fn register_initializes_skills_tab_resources() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         register(&mut app);
 
         assert!(app.world().contains_resource::<SkillPanelUi>());
@@ -940,6 +949,8 @@ mod tests {
 
     fn skills_app() -> App {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
         app.init_asset::<Image>();
         app.init_asset::<Font>();
@@ -1085,6 +1096,9 @@ mod tests {
         use bevy::picking::pointer::PointerId;
 
         let mut app = App::new();
+
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         app.init_resource::<SkillPanelUi>();
         app.add_systems(Update, sync_hovered_skill);
         let cell = app.world_mut().spawn(SkillPanelCell(7)).id();
@@ -2086,6 +2100,8 @@ mod tests {
     #[test]
     fn disabled_stepper_arrows_are_not_pickable() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
         app.init_asset::<Image>();
         app.init_asset::<Font>();
@@ -2110,6 +2126,8 @@ mod tests {
     #[test]
     fn secondary_stepper_click_bubbles_to_cell_without_changing_staging() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         app.add_message::<SkillCastRequested>();
         app.add_message::<ShowInfoModal>();
         app.init_resource::<SkillPanelStaging>();
@@ -2155,6 +2173,8 @@ mod tests {
     #[test]
     fn primary_stepper_click_changes_staging_without_reaching_the_cell() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         app.add_message::<SkillCastRequested>();
         app.add_message::<ShowInfoModal>();
         app.init_resource::<SkillPanelStaging>();
@@ -2217,6 +2237,8 @@ mod tests {
     #[test]
     fn decrement_observer_rejects_prerequisite_until_dependent_is_removed() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         app.init_resource::<SkillPanelStaging>();
         app.insert_resource(tree(&[
             (1, node(0, 5, 7)),
@@ -2256,6 +2278,8 @@ mod tests {
     #[test]
     fn on_apply_emits_ordered_events_and_clears() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         app.add_plugins(MinimalPlugins);
         app.add_message::<SkillLearnRequested>();
         app.init_resource::<SkillPanelStaging>();
@@ -2285,6 +2309,8 @@ mod tests {
     #[test]
     fn secondary_click_on_cell_opens_info_modal_without_selecting() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         app.add_plugins(MinimalPlugins);
         app.add_message::<SkillCastRequested>();
         app.add_message::<ShowInfoModal>();
@@ -2318,6 +2344,8 @@ mod tests {
     #[test]
     fn primary_click_on_cell_still_selects_and_does_not_open_the_modal() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
+        app.add_message::<lifthrasir_client::domain::vending::VendingIntent>();
         app.add_plugins(MinimalPlugins);
         app.add_message::<SkillCastRequested>();
         app.add_message::<ShowInfoModal>();

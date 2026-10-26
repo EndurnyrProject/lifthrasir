@@ -79,6 +79,7 @@ pub struct MenuEligibility<'w> {
     guild: Res<'w, GuildState>,
     guild_ui: Res<'w, GuildUi>,
     trade: Res<'w, TradeSession>,
+    vending: Res<'w, lifthrasir_client::domain::vending::VendingState>,
 }
 
 pub fn open_player_menu(
@@ -92,7 +93,7 @@ pub fn open_player_menu(
     let root = pick_root(click.entity, &child_of);
     let net = nets.get(root).ok();
     let me = state.session.char_id;
-    let actions = eligible_actions(
+    let mut actions = eligible_actions(
         click.button,
         net,
         net.is_some_and(|net| net.gid == me),
@@ -100,6 +101,10 @@ pub fn open_player_menu(
         state.guild_ui.pending.is_none() && state.guild.can_invite(me),
         !state.trade.is_open(),
     );
+    // A vendor's shop locks trading out; the server enforces it too.
+    if state.vending.gameplay_locked() {
+        actions.trade = false;
+    }
     if !actions.any() {
         return;
     }
@@ -273,6 +278,7 @@ mod tests {
 
     fn rendered_actions(actions: PlayerMenuActions) -> Vec<String> {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
         app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
         app.init_asset::<Image>();
         app.init_asset::<Font>();
@@ -387,6 +393,7 @@ mod tests {
     #[test]
     fn trade_action_sends_clicked_gid_and_closes_menu() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
         app.add_message::<PartyInviteRequested>()
             .add_message::<GuildInviteRequested>()
             .add_message::<RequestTrade>()
@@ -417,6 +424,7 @@ mod tests {
     #[test]
     fn stale_trade_menu_cannot_send_while_session_open() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
         app.add_message::<PartyInviteRequested>()
             .add_message::<GuildInviteRequested>()
             .add_message::<RequestTrade>()
@@ -441,6 +449,7 @@ mod tests {
     #[test]
     fn party_action_preserves_the_existing_command_payload() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
         app.add_message::<PartyInviteRequested>()
             .add_message::<RequestTrade>()
             .add_message::<GuildInviteRequested>()
@@ -469,6 +478,7 @@ mod tests {
     #[test]
     fn guild_action_uses_the_same_invite_request_as_by_name() {
         let mut app = App::new();
+        app.init_resource::<lifthrasir_client::domain::vending::VendingState>();
         app.add_message::<PartyInviteRequested>()
             .add_message::<RequestTrade>()
             .add_message::<GuildInviteRequested>()
