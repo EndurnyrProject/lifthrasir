@@ -3,14 +3,16 @@
 //! an editable one.
 
 use super::{
+    autosave::Autosave,
     document::SaveError,
     layout::{
         MapLayout, MapTextureList, map_name_from_path, resolve_layout, texture_list_from_gltf,
     },
     lighting::apply_map_lighting,
+    preferences_window::PreferencesWindow,
     save::SaveAsDialog,
     save::SaveRequest,
-    session::{EditorSession, persist_preferences, record_recent_map},
+    session::{EditorSession, record_recent_map},
     settings::MapSettingsWindow,
 };
 use crate::shell::{
@@ -350,7 +352,8 @@ fn menu_bar(
     mut actions: ResMut<StartScreenActions>,
     mut save_as: ResMut<SaveAsDialog>,
     mut settings: ResMut<MapSettingsWindow>,
-    mut session: ResMut<EditorSession>,
+    session: Res<EditorSession>,
+    mut preferences: ResMut<PreferencesWindow>,
     mut saves: MessageWriter<SaveRequest>,
     mut opens: MessageWriter<OpenMapRequest>,
     mut closes: MessageWriter<WindowCloseRequested>,
@@ -392,20 +395,15 @@ fn menu_bar(
                         save_as.open(&layout.name);
                     }
                     ui.separator();
-                    let response = ui.checkbox(
-                        &mut session.preferences.reopen_last_session,
-                        "Reopen last map at startup",
-                    );
-                    if response.changed() {
-                        persist_preferences(&session);
-                    }
-                    ui.separator();
                     if ui.button("Quit").clicked() {
                         for window in &windows {
                             closes.write(WindowCloseRequested { window });
                         }
                     }
                 });
+                if ui.button("Settings").clicked() {
+                    preferences.open = true;
+                }
                 ui.menu_button("Map", |ui| {
                     if ui
                         .add_enabled(editing, egui::Button::new("Map settings…"))
@@ -479,10 +477,13 @@ fn map_picker(
 }
 
 /// Asks to discard unsaved changes before the guarded action runs.
+#[allow(clippy::too_many_arguments)]
 fn unsaved_guard(
     mut contexts: EguiContexts,
     mut guard: ResMut<UnsavedGuard>,
     mut undo: ResMut<UndoStack>,
+    mut autosave: ResMut<Autosave>,
+    layout: Option<Res<MapLayout>>,
     mut actions: ResMut<StartScreenActions>,
     mut opens: MessageWriter<OpenMapRequest>,
     mut exit: MessageWriter<AppExit>,
@@ -510,6 +511,9 @@ fn unsaved_guard(
     }
     guard.0 = None;
     undo.clear();
+    if let Some(layout) = layout {
+        autosave.forget(&layout.name);
+    }
     match action {
         GuardedAction::Open(path) => {
             opens.write(OpenMapRequest { path });

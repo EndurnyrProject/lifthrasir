@@ -2,6 +2,7 @@
 //! references and write the glb atomically into the loose `data_folder`.
 
 use super::{
+    autosave::Autosave,
     document::collect_document,
     layout::MapLayout,
     open::{EditorOperation, EditorScreen, ErrorModal, OpenMap},
@@ -123,6 +124,15 @@ fn save(world: &mut World, save_as: Option<&str>) -> Result<(), Vec<String>> {
         .map_err(|error| vec![format!("writing {}: {error}", path.display())])?;
 
     world.resource_mut::<UndoStack>().mark_saved();
+    // The edits are on disk: the recovery snapshots of both names are stale.
+    let previous = world
+        .get_resource::<MapLayout>()
+        .map(|open| open.name.clone());
+    let mut autosave = world.resource_mut::<Autosave>();
+    autosave.forget(&layout.name);
+    if let Some(previous) = previous {
+        autosave.forget(&previous);
+    }
     if save_as.is_some() {
         let name = layout.name.clone();
         world.insert_resource(layout);

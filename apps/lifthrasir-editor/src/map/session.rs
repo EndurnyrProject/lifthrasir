@@ -16,6 +16,8 @@ const MAX_RECENT_MAPS: usize = 10;
 pub struct EditorPreferences {
     pub reopen_last_session: bool,
     pub recent_maps: Vec<String>,
+    pub autosave_enabled: bool,
+    pub autosave_interval_secs: u32,
 }
 
 impl Default for EditorPreferences {
@@ -23,6 +25,8 @@ impl Default for EditorPreferences {
         Self {
             reopen_last_session: true,
             recent_maps: Vec::new(),
+            autosave_enabled: true,
+            autosave_interval_secs: 60,
         }
     }
 }
@@ -99,14 +103,18 @@ fn reopen_last_map(
 }
 
 fn preferences_path() -> PathBuf {
+    editor_config_dir().join("preferences.toml")
+}
+
+/// Per-user editor folder: preferences and autosave recovery snapshots.
+pub(super) fn editor_config_dir() -> PathBuf {
     if let Some(directory) = std::env::var_os("LIFTHRASIR_EDITOR_CONFIG_DIR") {
-        return PathBuf::from(directory).join("preferences.toml");
+        return PathBuf::from(directory);
     }
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("lifthrasir")
         .join("editor")
-        .join("preferences.toml")
 }
 
 fn read_preferences(path: &Path) -> EditorPreferences {
@@ -166,6 +174,8 @@ mod tests {
         let preferences = EditorPreferences {
             reopen_last_session: false,
             recent_maps: vec!["ro://maps/mini/mini.glb".into()],
+            autosave_enabled: false,
+            autosave_interval_secs: 15,
         };
 
         write_preferences(&path, &preferences).unwrap();
