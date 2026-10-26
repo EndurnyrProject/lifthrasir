@@ -55,8 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .set(bevy::log::LogPlugin {
                 filter: format!("{},bevy_hanabi::render=off", bevy::log::DEFAULT_FILTER),
                 ..default()
-            })
-            .disable::<bevy::audio::AudioPlugin>(),
+            }),
     )
     .add_plugins(bevy_framepace::FramepacePlugin)
     .insert_resource(bevy_framepace::FramepaceSettings {
