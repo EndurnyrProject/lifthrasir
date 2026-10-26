@@ -15,6 +15,15 @@ pub(super) fn open_pak(path: &Path) -> Result<ZipArchive<fs::File>> {
         .with_context(|| format!("Failed to read pak zip structure: {}", path.display()))
 }
 
+/// Every entry name in the archive. `zip` 9 reports undecodable names as errors instead
+/// of silently lossy-decoding them, so a bad name fails the whole operation.
+pub(super) fn entry_names(archive: &ZipArchive<fs::File>) -> Result<Vec<String>> {
+    archive
+        .file_names()
+        .map(|name| Ok(name?.into_owned()))
+        .collect()
+}
+
 fn read_manifest(archive: &mut ZipArchive<fs::File>) -> Result<PakManifest> {
     let mut entry = archive
         .by_name(MANIFEST_ENTRY)
@@ -145,17 +154,15 @@ fn stream_merge(
 
     let tombstones = read_tombstones(&mut patch_archive)?;
 
-    let patch_names: Vec<String> = patch_archive
-        .file_names()
-        .filter(|name| *name != MANIFEST_ENTRY && *name != TOMBSTONE_ENTRY)
-        .map(String::from)
+    let patch_names: Vec<String> = entry_names(&patch_archive)?
+        .into_iter()
+        .filter(|name| name != MANIFEST_ENTRY && name != TOMBSTONE_ENTRY)
         .collect();
     let patch_name_set: HashSet<&str> = patch_names.iter().map(String::as_str).collect();
 
-    let main_names: Vec<String> = main_archive
-        .file_names()
-        .filter(|name| *name != MANIFEST_ENTRY)
-        .map(String::from)
+    let main_names: Vec<String> = entry_names(&main_archive)?
+        .into_iter()
+        .filter(|name| name != MANIFEST_ENTRY)
         .collect();
     let survivor_names: Vec<&String> = main_names
         .iter()

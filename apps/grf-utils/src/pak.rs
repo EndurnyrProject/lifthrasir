@@ -106,7 +106,10 @@ mod tests {
     fn read_all_entries(path: &Path) -> std::collections::HashMap<String, Vec<u8>> {
         let file = fs::File::open(path).unwrap();
         let mut archive = zip::ZipArchive::new(file).unwrap();
-        let names: Vec<String> = archive.file_names().map(String::from).collect();
+        let names: Vec<String> = archive
+            .file_names()
+            .map(|n| n.unwrap().into_owned())
+            .collect();
 
         names
             .into_iter()

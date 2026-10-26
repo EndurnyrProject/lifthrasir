@@ -15,7 +15,7 @@ moonshine-kind = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 gltf = { workspace = true, features = ["KHR_lights_punctual"] }
-pathfinding = "4.15"
+pathfinding = "4.16"
 bevy_hanabi = { workspace = true }
 
 [features]

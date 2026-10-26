@@ -13,6 +13,6 @@ clap = { workspace = true }
 anyhow = { workspace = true }
 indicatif = { workspace = true }
 log = { workspace = true }
-protox = "0.9"
+protox = "0.10"
 prost-build = { workspace = true }
 tempfile = { workspace = true }

@@ -1,4 +1,4 @@
-use crate::merge::{open_pak, suffixed, tmp_path_for};
+use crate::merge::{entry_names, open_pak, suffixed, tmp_path_for};
 use crate::{FORMAT_VERSION, MANIFEST_ENTRY, PakManifest, SourceEntries};
 use anyhow::{Context, Result};
 use std::collections::{HashMap, hash_map::Entry};
@@ -243,7 +243,7 @@ fn write_pak_sharded(
 
         for part_path in &part_paths {
             let mut part_archive = open_pak(part_path)?;
-            let names: Vec<String> = part_archive.file_names().map(String::from).collect();
+            let names = entry_names(&part_archive)?;
             for name in &names {
                 let part_entry = part_archive
                     .by_name(name)

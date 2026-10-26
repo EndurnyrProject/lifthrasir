@@ -54,7 +54,12 @@ impl PakReader {
                     path.display()
                 ))
             })?;
-            let entry_name = normalize_path(entry.name());
+            let entry_name = normalize_path(&entry.name().map_err(|e| {
+                PakError::Archive(format!(
+                    "Failed to decode entry name at index {index} in '{}': {e}",
+                    path.display()
+                ))
+            })?);
             if !entry_name.starts_with(LIFTHRASIR_PREFIX) {
                 index_by_name.insert(entry_name, index);
             }
