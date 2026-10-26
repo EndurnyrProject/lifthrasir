@@ -18,6 +18,7 @@ pub mod mob_health_bars;
 pub mod nameplates;
 pub mod progress_bar;
 pub mod skill_cast_labels;
+pub mod vending_boards;
 
 /// Query filter for the in-game 3D camera that worldspace overlays project
 /// against, excluding the equipment-window preview camera.
@@ -48,6 +49,7 @@ impl Plugin for WorldspaceUiPlugin {
             mob_health_bars::MobHealthBarPlugin,
             skill_cast_labels::SkillCastLabelPlugin,
             progress_bar::NpcProgressBarPlugin,
+            vending_boards::VendingBoardPlugin,
         ));
     }
 }
