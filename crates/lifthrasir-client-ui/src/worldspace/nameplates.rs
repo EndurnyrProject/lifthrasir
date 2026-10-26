@@ -24,8 +24,8 @@ const PARTY_FONT_SIZE: f32 = 11.0;
 /// the character's feet. NOTE: fixed screen offset, not zoom-scaled — tune live via
 /// BRP if it drifts off the sprite's feet.
 const NAMEPLATE_FOOT_GAP: f32 = 6.0;
-/// Above the world camera, below the fade overlay (`i32::MAX - 1`) and cursor.
-const NAMEPLATE_Z: i32 = 100;
+/// The base overlay layer; see [`super::WORLD_OVERLAY_Z`].
+const NAMEPLATE_Z: i32 = super::WORLD_OVERLAY_Z + 100;
 
 pub struct NameplatePlugin;
 

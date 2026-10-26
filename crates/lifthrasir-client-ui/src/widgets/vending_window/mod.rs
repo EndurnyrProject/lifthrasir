@@ -1,5 +1,10 @@
-//! Vending window: the seller's setup editor, its read-only monitor, and the
-//! shared vending feedback line.
+//! Vending window: the seller's setup editor, its read-only monitor, the
+//! buyer's basket, and the shared vending feedback line.
+//!
+//! The window has two panels. The left one ([`source`]) shows what can be
+//! dragged in: the cart's sellable stock during setup, the vendor's listings
+//! while browsing. The right one is the editor, monitor or basket. Items move
+//! between them by drag-and-drop or double-click ([`drag`]).
 //!
 //! Authority stays in [`VendingState`] and the server: this module only projects
 //! that state into a window and turns affordances into [`VendingIntent`]s. It
@@ -10,9 +15,7 @@
 //! set of drafted cart slots), so a focused quantity/price/title field survives
 //! typing and every unrelated inventory, zeny, or sale update.
 
-use std::collections::HashSet;
-
-use bevy::input_focus::InputFocus;
+use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui_widgets::Activate;
@@ -23,20 +26,26 @@ use lifthrasir_client::domain::cart::Cart;
 use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::vending::{
-    RevealVendingSeller, VendingIntent, VendingNotice, VendingState,
+    RevealVendingSeller, VendingIntent, VendingNotice, VendingState, VendingSystems,
 };
-use net_contract::dto::{VendingCloseTarget, VendingOffer, VendingPurchaseOutcome, VendingSetup};
+use net_contract::dto::{VendingCloseTarget, VendingListOutcome, VendingPurchaseOutcome};
 use net_contract::events::ChatHeard;
 
 pub mod buyer;
+pub mod cells;
+pub mod drag;
 pub mod feedback;
 pub mod scene;
+pub mod seller;
+pub mod source;
 
 #[cfg(test)]
 mod tests;
 
 use buyer::BuyerBasket;
+use cells::{ItemCellView, item_icon, item_name};
 use feedback::vending_notice_text;
+pub use seller::{DraftRow, SellerDraft, clamp_title};
 
 use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view};
 
@@ -93,23 +102,23 @@ pub struct VendingRowRemove {
     pub cart_index: u32,
 }
 
-/// One selectable sellable cart slot.
-#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VendingStockCell {
-    pub cart_index: u32,
-}
-
 /// The submit affordance of the editor.
 #[derive(Component, Default, Clone)]
 pub struct VendingOpenButton;
 
-/// One listing row of the buyer body, keyed by its opaque listing index.
+/// One basket row, keyed by its opaque listing index.
 #[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VendingBasketRow {
     pub index: u32,
 }
 
-/// One quantity stepper of a buyer listing row.
+/// The remove affordance of a basket row.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BasketRemove {
+    pub index: u32,
+}
+
+/// One quantity stepper of a basket row.
 #[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BasketStep {
     pub index: u32,
@@ -119,133 +128,6 @@ pub struct BasketStep {
 /// The cancel affordance of the editor.
 #[derive(Component, Default, Clone)]
 pub struct VendingCancelButton;
-
-/// One listed cart slot with its drafted quantity and price.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DraftRow {
-    pub cart_index: u32,
-    pub amount: u32,
-    pub price: u32,
-}
-
-/// The seller's unsent listings. Holds no authoritative inventory or zeny.
-#[derive(Resource, Debug, Default, Clone, PartialEq, Eq)]
-pub struct SellerDraft {
-    pub title: String,
-    pub rows: Vec<DraftRow>,
-}
-
-impl SellerDraft {
-    /// The listings as they will be submitted, in draft order.
-    pub fn offers(&self) -> Vec<VendingOffer> {
-        self.rows
-            .iter()
-            .map(|row| VendingOffer {
-                cart_index: row.cart_index,
-                amount: row.amount,
-                price: row.price,
-            })
-            .collect()
-    }
-
-    pub fn row(&self, cart_index: u32) -> Option<&DraftRow> {
-        self.rows.iter().find(|row| row.cart_index == cart_index)
-    }
-
-    /// Adds one sellable slot, or removes it when already drafted.
-    pub fn toggle(&mut self, cart_index: u32, setup: &VendingSetup) {
-        if let Some(position) = self
-            .rows
-            .iter()
-            .position(|row| row.cart_index == cart_index)
-        {
-            self.rows.remove(position);
-            return;
-        }
-        if self.rows.len() >= setup.max_slots as usize {
-            return;
-        }
-        self.rows.push(DraftRow {
-            cart_index,
-            amount: 1,
-            price: setup.min_unit_price,
-        });
-    }
-
-    pub fn reset(&mut self) {
-        *self = Self::default();
-    }
-
-    /// Local pre-flight only: the server validates again at open time.
-    pub fn validate(&self, setup: &VendingSetup, cart: &Cart) -> Result<(), String> {
-        let title = self.title.trim();
-        if title.is_empty() {
-            return Err("Enter a shop title.".to_string());
-        }
-        if title.chars().any(char::is_control) {
-            return Err("The shop title cannot contain control characters.".to_string());
-        }
-        if title.len() > setup.max_title_bytes as usize {
-            return Err(format!(
-                "The shop title must fit in {} bytes.",
-                setup.max_title_bytes
-            ));
-        }
-        if self.rows.is_empty() {
-            return Err("List at least one item.".to_string());
-        }
-        if self.rows.len() > setup.max_slots as usize {
-            return Err(format!(
-                "A shop can list at most {} items.",
-                setup.max_slots
-            ));
-        }
-
-        let mut seen = HashSet::new();
-        for row in &self.rows {
-            if !seen.insert(row.cart_index) {
-                return Err("Each cart slot can be listed only once.".to_string());
-            }
-            if !setup.sellable_cart_indices.contains(&row.cart_index) {
-                return Err("That cart slot cannot be sold.".to_string());
-            }
-            let Ok(index) = u16::try_from(row.cart_index) else {
-                return Err("That cart slot does not exist.".to_string());
-            };
-            let Some(item) = cart.get(index) else {
-                return Err("That cart slot no longer holds an item.".to_string());
-            };
-            if row.amount == 0 || row.amount > item.amount {
-                return Err(format!("Quantity must be between 1 and {}.", item.amount));
-            }
-            if row.price < setup.min_unit_price {
-                return Err(format!("Price must be at least {}.", setup.min_unit_price));
-            }
-            if row.price > setup.max_unit_price {
-                return Err(format!("Price must be at most {}.", setup.max_unit_price));
-            }
-        }
-        Ok(())
-    }
-}
-
-/// Truncates to `max_bytes` on a character boundary, so the submitted title is
-/// always valid UTF-8 and never longer than the negotiated limit.
-pub fn clamp_title(title: &str, max_bytes: u32) -> String {
-    let max_bytes = max_bytes as usize;
-    if title.len() <= max_bytes {
-        return title.to_string();
-    }
-    let mut end = 0;
-    for (index, ch) in title.char_indices() {
-        let next = index + ch.len_utf8();
-        if next > max_bytes {
-            break;
-        }
-        end = next;
-    }
-    title[..end].to_string()
-}
 
 /// Body identity: what is shown, which shop or setup it belongs to, and the rows
 /// it renders (cart slots for the editor, staged quantities for the basket).
@@ -271,6 +153,12 @@ pub struct VendingUi {
     last_browse: Option<net_contract::dto::VendingSnapshot>,
     error: Option<String>,
     pending_close: bool,
+    /// The left panel's rendered identity; see [`source::SourceStructure`].
+    source_structure: Option<source::SourceStructure>,
+    /// The item under the pointer in the left panel, for its info line.
+    hovered: Option<drag::DragSource>,
+    /// A freshly listed row whose price field should take focus once spawned.
+    focus_price: Option<u32>,
 }
 
 impl VendingUi {
@@ -298,19 +186,34 @@ impl Plugin for VendingWindowPlugin {
         app.init_resource::<SellerDraft>()
             .init_resource::<BuyerBasket>()
             .init_resource::<VendingUi>()
+            .init_resource::<drag::VendingDrag>()
+            .init_resource::<drag::LastVendingClick>()
             .add_systems(
                 Update,
                 (
-                    reveal_on_intent,
-                    sync_window_state,
-                    sync_browse_basket,
-                    settle_buyer_basket,
-                    rebuild_content,
-                    sync_texts,
-                    deliver_vending_feedback,
-                    cancel_on_escape,
+                    (
+                        reveal_on_intent,
+                        sync_window_state,
+                        sync_browse_basket,
+                        settle_buyer_basket,
+                        rebuild_content,
+                        source::rebuild_source,
+                        focus_new_price_field,
+                    )
+                        .chain(),
+                    (
+                        sync_texts,
+                        source::sync_source_info,
+                        drag::highlight_drop_zones,
+                        drag::end_drag_on_release,
+                        drag::update_vending_ghost,
+                        deliver_vending_feedback,
+                        cancel_on_escape,
+                    )
+                        .chain(),
                 )
                     .chain()
+                    .after(VendingSystems::Projection)
                     .run_if(in_state(GameState::InGame)),
             )
             .add_systems(OnExit(GameState::InGame), reset_vending_ui);
@@ -335,8 +238,26 @@ fn reset_vending_ui(
     *ui = VendingUi::default();
 }
 
-fn reveal_on_intent(mut reveals: MessageReader<RevealVendingSeller>, mut ui: ResMut<VendingUi>) {
-    if reveals.read().count() != 0 {
+/// Shows the window for a seller reveal or a freshly loaded vendor shop.
+///
+/// Browse results are the only list notices (owner reconciliation emits none),
+/// so a successful one means the player asked to see that shop.
+fn reveal_on_intent(
+    mut reveals: MessageReader<RevealVendingSeller>,
+    mut notices: MessageReader<VendingNotice>,
+    mut ui: ResMut<VendingUi>,
+) {
+    let seller = reveals.read().count() != 0;
+    let browse_loaded = notices.read().any(|notice| {
+        matches!(
+            notice,
+            VendingNotice::List {
+                outcome: VendingListOutcome::Success,
+                ..
+            }
+        )
+    });
+    if seller || browse_loaded {
         ui.visible = true;
     }
 }
@@ -474,11 +395,11 @@ fn rebuild_content(
     match mode {
         Some(Mode::Setup) => {
             let Some(setup) = state.setup() else { return };
-            let stock = stock_views(setup, &draft, &cart, &item_db);
             let rows = draft_views(&draft, &cart, &item_db);
             let note = format!("SP already paid: {}", setup.sp_spent);
+            let slots = format!("{} / {} slots", draft.rows.len(), setup.max_slots);
             commands
-                .spawn_scene(scene::editor(stock, rows, draft.title.clone(), note, error))
+                .spawn_scene(scene::editor(rows, draft.title.clone(), note, slots, error))
                 .insert(ChildOf(host));
         }
         Some(Mode::Shop) => {
@@ -494,7 +415,7 @@ fn rebuild_content(
         }
         Some(Mode::Browse) => {
             let Some(shop) = state.browse() else { return };
-            let rows = browse_views(shop, &basket, &item_db);
+            let rows = basket_views(shop, &basket, &item_db);
             let total = basket.total(shop);
             let note = match total {
                 Some(total) => format!("Total {}z", total),
@@ -538,27 +459,6 @@ fn absorb_typed_fields(
     }
 }
 
-fn stock_views(
-    setup: &VendingSetup,
-    draft: &SellerDraft,
-    cart: &Cart,
-    item_db: &ItemDb,
-) -> Vec<scene::StockCellView> {
-    setup
-        .sellable_cart_indices
-        .iter()
-        .filter_map(|&cart_index| {
-            let item = cart.get(u16::try_from(cart_index).ok()?)?;
-            Some(scene::StockCellView {
-                cart_index,
-                label: item_label(item_db, item),
-                amount: item.amount,
-                selected: draft.row(cart_index).is_some(),
-            })
-        })
-        .collect()
-}
-
 fn draft_views(draft: &SellerDraft, cart: &Cart, item_db: &ItemDb) -> Vec<scene::DraftRowView> {
     draft
         .rows
@@ -567,7 +467,12 @@ fn draft_views(draft: &SellerDraft, cart: &Cart, item_db: &ItemDb) -> Vec<scene:
             let item = cart.get(u16::try_from(row.cart_index).ok()?)?;
             Some(scene::DraftRowView {
                 cart_index: row.cart_index,
-                label: item_label(item_db, item),
+                cell: ItemCellView {
+                    icon: item_icon(item_db, item.nameid, item.identified),
+                    refine: item.refine,
+                    ..default()
+                },
+                label: item_name(item_db, item.nameid, item.identified),
                 stock: item.amount,
                 amount_input: row.amount.to_string(),
                 price_input: row.price.to_string(),
@@ -583,32 +488,42 @@ fn shop_views(
     shop.items
         .iter()
         .map(|item| scene::ShopRowView {
-            label: item_db
-                .name(item.nameid, item.identified)
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("Item #{}", item.nameid)),
+            index: item.index,
+            cell: ItemCellView {
+                icon: item_icon(item_db, item.nameid, item.identified),
+                refine: item.refine,
+                ..default()
+            },
+            label: item_name(item_db, item.nameid, item.identified),
             amount: item.amount,
             price: item.price,
         })
         .collect()
 }
 
-fn browse_views(
+/// One row per staged basket line, in staging order.
+fn basket_views(
     shop: &net_contract::dto::VendingSnapshot,
     basket: &BuyerBasket,
     item_db: &ItemDb,
-) -> Vec<scene::BrowseRowView> {
-    shop.items
+) -> Vec<scene::BasketRowView> {
+    basket
+        .lines()
         .iter()
-        .map(|item| scene::BrowseRowView {
-            index: item.index,
-            label: item_db
-                .name(item.nameid, item.identified)
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("Item #{}", item.nameid)),
-            stock: item.amount,
-            price: item.price,
-            quantity: basket.quantity(item.index),
+        .filter_map(|line| {
+            let listing = shop.items.iter().find(|item| item.index == line.index)?;
+            Some(scene::BasketRowView {
+                index: line.index,
+                cell: ItemCellView {
+                    icon: item_icon(item_db, listing.nameid, listing.identified),
+                    refine: listing.refine,
+                    ..default()
+                },
+                label: item_name(item_db, listing.nameid, listing.identified),
+                price: listing.price,
+                quantity: line.amount,
+                line_total: u64::from(listing.price) * u64::from(line.amount),
+            })
         })
         .collect()
 }
@@ -620,22 +535,16 @@ fn sale_views(
     sales
         .iter()
         .map(|sale| scene::SaleRowView {
-            label: item_db
-                .name(sale.nameid, true)
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("Item #{}", sale.nameid)),
+            cell: ItemCellView {
+                icon: item_icon(item_db, sale.nameid, true),
+                ..default()
+            },
+            label: item_name(item_db, sale.nameid, true),
             amount: sale.amount,
             zeny: sale.zeny_gained,
             buyer: sale.buyer_name.clone(),
         })
         .collect()
-}
-
-fn item_label(item_db: &ItemDb, item: &net_contract::dto::CartItem) -> String {
-    item_db
-        .name(item.nameid, item.identified)
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("Item #{}", item.nameid))
 }
 
 fn sync_texts(
@@ -662,34 +571,32 @@ fn sync_texts(
     }
 }
 
-pub fn on_stock_toggled(
-    activate: On<Activate>,
-    cells: Query<&VendingStockCell>,
-    state: Res<VendingState>,
-    mut draft: ResMut<SellerDraft>,
-) {
-    let Ok(cell) = cells.get(activate.entity) else {
-        return;
-    };
-    let Some(setup) = state.setup() else {
-        return;
-    };
-    draft.toggle(cell.cart_index, setup);
-}
-
 pub fn on_row_removed(
     activate: On<Activate>,
     removals: Query<&VendingRowRemove>,
-    state: Res<VendingState>,
     mut draft: ResMut<SellerDraft>,
 ) {
-    let Ok(removal) = removals.get(activate.entity) else {
+    if let Ok(removal) = removals.get(activate.entity) {
+        draft.remove(removal.cart_index);
+    }
+}
+
+/// Focuses the price field of a row just listed by a drop or double-click.
+fn focus_new_price_field(
+    mut ui: ResMut<VendingUi>,
+    fields: Query<(Entity, &VendingDraftField), Added<VendingDraftField>>,
+    mut focus: ResMut<InputFocus>,
+) {
+    let Some(cart_index) = ui.focus_price else {
         return;
     };
-    let Some(setup) = state.setup() else {
-        return;
-    };
-    draft.toggle(removal.cart_index, setup);
+    let price = fields
+        .iter()
+        .find(|(_, field)| field.cart_index == cart_index && field.kind == DraftFieldKind::Price);
+    if let Some((entity, _)) = price {
+        focus.set(entity, FocusCause::Navigated);
+        ui.focus_price = None;
+    }
 }
 
 #[expect(
@@ -865,43 +772,72 @@ fn settle_buyer_basket(mut notices: MessageReader<VendingNotice>, mut basket: Re
     }
 }
 
-/// A row click stages or clears one listing; a secondary click inspects the
-/// exact instance on display, with no bag actions.
-pub fn on_listing_click(
+/// The details view for a vending item: a cart item with its cards and
+/// options, or a vendor/own-shop listing with its price and creator.
+pub fn inspect_view(
+    source: drag::DragSource,
+    state: &VendingState,
+    cart: &Cart,
+    item_db: &ItemDb,
+    option_db: Option<&RandomOptionDb>,
+) -> Option<view::ItemInfoView> {
+    let listing_in = |shop: Option<&net_contract::dto::VendingSnapshot>| {
+        shop?
+            .items
+            .iter()
+            .find(|item| item.index == source.index)
+            .map(|item| view::vending_item_view(item, item_db, option_db))
+    };
+    match source.kind {
+        drag::DragKind::Stock | drag::DragKind::Draft => {
+            let item = cart.get(u16::try_from(source.index).ok()?)?;
+            Some(view::cart_item_view(item, item_db, option_db))
+        }
+        drag::DragKind::Listing | drag::DragKind::Basket => listing_in(state.browse()),
+        drag::DragKind::Shop => listing_in(state.active_shop()),
+    }
+}
+
+/// A secondary click on any vending item opens its details. Info only: vending
+/// items are never in the bag, so no equip/use/compound action applies.
+pub fn on_item_inspect(
     click: On<PointerClick>,
-    rows: Query<&VendingBasketRow>,
+    sources: Query<&drag::DragSource>,
     state: Res<VendingState>,
+    cart: Res<Cart>,
     item_db: Res<ItemDb>,
     option_db: Option<Res<RandomOptionDb>>,
-    mut basket: ResMut<BuyerBasket>,
     mut info: MessageWriter<ShowInfoModal>,
 ) {
-    let Ok(row) = rows.get(click.entity) else {
+    if click.button != PointerButton::Secondary {
+        return;
+    }
+    let Ok(source) = sources.get(click.entity) else {
         return;
     };
-    let Some(shop) = state.browse() else {
+    let Some(view) = inspect_view(*source, &state, &cart, &item_db, option_db.as_deref()) else {
         return;
     };
-    match click.button {
-        PointerButton::Secondary => {
-            let Some(listing) = shop.items.iter().find(|item| item.index == row.index) else {
-                return;
-            };
-            info.write(ShowInfoModal {
-                content: InfoContent::Item {
-                    view: view::vending_item_view(listing, &item_db, option_db.as_deref()),
-                    action: None,
-                },
-            });
-        }
-        PointerButton::Primary => {
-            if state.purchase_pending() {
-                return;
-            }
-            let staged = basket.quantity(row.index) == 0;
-            basket.set_quantity(shop, row.index, u32::from(staged));
-        }
-        _ => {}
+    info.write(ShowInfoModal {
+        content: InfoContent::Item { view, action: None },
+    });
+}
+
+/// The basket row's remove button.
+pub fn on_basket_remove(
+    activate: On<Activate>,
+    removals: Query<&BasketRemove>,
+    state: Res<VendingState>,
+    mut basket: ResMut<BuyerBasket>,
+) {
+    let Ok(removal) = removals.get(activate.entity) else {
+        return;
+    };
+    if state.purchase_pending() {
+        return;
+    }
+    if let Some(shop) = state.browse() {
+        basket.set_quantity(shop, removal.index, 0);
     }
 }
 

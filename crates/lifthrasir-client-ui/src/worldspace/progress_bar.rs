@@ -27,8 +27,8 @@ const BAR_HEIGHT: f32 = 7.0;
 /// Pixels above the player's projected origin; matches the skill cast bar so the
 /// two read at the same height over the head.
 const BAR_HEAD_GAP: f32 = 88.0;
-/// Just above the skill cast bar (160) so a progressbar reads over a stray cast.
-const BAR_Z: i32 = 161;
+/// Just above the skill cast bar (+160) so a progressbar reads over a stray cast.
+const BAR_Z: i32 = super::WORLD_OVERLAY_Z + 161;
 
 /// Present only while a `progressbar` is live. Carries the owning `npc_id` and
 /// gates the NPC dialogue widget's ESC handler so the bar owns cancel.

@@ -91,6 +91,7 @@ fn app() -> App {
         .init_resource::<ItemDb>()
         .init_resource::<InputFocus>()
         .init_resource::<ButtonInput<KeyCode>>()
+        .init_resource::<UiScale>()
         .init_resource::<ZoneSessionGeneration>()
         .add_message::<lifthrasir_client::domain::skill::SkillCastRequested>()
         .add_message::<net_contract::events::ZoneDisconnected>()
@@ -356,5 +357,52 @@ fn a_focused_field_survives_unrelated_sales_and_board_events() {
             .get::<EditableText>(field)
             .map(|text| text.value().to_string()),
         Some("Draft title".to_string())
+    );
+}
+
+fn browse(app: &mut App) {
+    app.world_mut().write_message(VendingIntent::Browse {
+        vendor_unit_id: VENDOR,
+        shop_id: SHOP_ID.into(),
+    });
+    app.update();
+    let requests: Vec<u64> = app
+        .world_mut()
+        .resource_mut::<Messages<ListVendingRequested>>()
+        .drain()
+        .map(|command| command.request_id)
+        .collect();
+    assert_eq!(requests.len(), 1);
+    push(
+        app,
+        VendingIngressPayload::ListResult {
+            request_id: requests[0],
+            vendor_unit_id: VENDOR,
+            outcome: VendingListOutcome::Success,
+            snapshot: Some(shop_snapshot()),
+        },
+    );
+    app.update();
+}
+
+#[test]
+fn a_loaded_vendor_shop_opens_the_buyer_window_every_time() {
+    let mut app = app();
+
+    browse(&mut app);
+    assert!(state(&app).browse().is_some());
+    assert!(
+        app.world().resource::<VendingUi>().is_visible(),
+        "a loaded vendor shop must open the buyer window"
+    );
+
+    let button = app.world_mut().spawn_empty().observe(on_close_button).id();
+    app.world_mut().trigger(Activate { entity: button });
+    assert!(!app.world().resource::<VendingUi>().is_visible());
+
+    browse(&mut app);
+    assert!(
+        app.world().resource::<VendingUi>().is_visible(),
+        "clicking the same vendor again reopens the closed window"
     );
 }

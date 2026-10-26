@@ -18,13 +18,14 @@ use net_contract::dto::{
 use net_contract::events::{ChatHeard, VendingIngress, VendingIngressPayload};
 use net_contract::state::ZoneSessionGeneration;
 
+use super::drag::{DragKind, DragSource, DropAction, DropZone, VendingDrag};
 use super::feedback::vending_notice_text;
 use super::scene;
 use super::{
     DraftFieldKind, DraftRow, SellerDraft, VendingDraftField, VendingModeNote, VendingRowRemove,
-    VendingStockCell, VendingTitleField, VendingUi, VendingWindowRoot, cancel_on_escape,
-    deliver_vending_feedback, on_cancel_setup, on_close_shop, on_open_shop, on_row_removed,
-    on_stock_toggled, rebuild_content, sync_texts, sync_window_state,
+    VendingTitleField, VendingUi, VendingWindowRoot, cancel_on_escape, deliver_vending_feedback,
+    on_cancel_setup, on_close_shop, on_open_shop, on_row_removed, rebuild_content, sync_texts,
+    sync_window_state,
 };
 
 const SETUP_ID: &str = "setup-1";
@@ -153,12 +154,15 @@ fn app(state: VendingState) -> App {
         .insert_resource(SellerDraft::default())
         .init_resource::<super::buyer::BuyerBasket>()
         .insert_resource(VendingUi::default())
+        .init_resource::<VendingDrag>()
+        .init_resource::<super::drag::LastVendingClick>()
         .init_resource::<InputFocus>()
         .init_resource::<ButtonInput<KeyCode>>()
         .add_message::<VendingIntent>()
         .add_message::<VendingNotice>()
         .add_message::<RevealVendingSeller>()
-        .add_message::<ChatHeard>();
+        .add_message::<ChatHeard>()
+        .add_message::<super::ShowInfoModal>();
     app
 }
 
@@ -194,39 +198,73 @@ fn offers_follow_draft_order() {
 }
 
 #[test]
-fn toggle_adds_and_removes_one_sellable_slot_within_the_slot_cap() {
-    let cart = cart();
+fn add_lists_the_whole_stack_once_within_the_slot_cap() {
     let mut draft = SellerDraft::default();
-
     let live = setup();
-    draft.toggle(2, &live);
+
+    assert_eq!(draft.add(2, 3, &live), Ok(true));
     assert_eq!(
         draft.rows,
         vec![DraftRow {
             cart_index: 2,
-            amount: 1,
+            amount: 3,
             price: 0
-        }]
+        }],
+        "the whole stack at the minimum price"
     );
-    draft.toggle(3, &live);
-    assert_eq!(draft.rows.len(), 2);
-    draft.toggle(2, &setup());
-    assert_eq!(
-        draft.rows,
-        vec![DraftRow {
-            cart_index: 3,
-            amount: 1,
-            price: 0
-        }]
-    );
+    assert_eq!(draft.add(2, 3, &live), Ok(false), "already listed");
+    assert!(draft.add(9, 1, &live).is_err(), "not a sellable slot");
 
     let full = VendingSetup {
         max_slots: 1,
         ..live.clone()
     };
-    draft.toggle(2, &full);
-    assert_eq!(draft.rows.len(), 1, "cap already reached");
-    assert!(draft.validate(&full, &cart).is_err());
+    assert!(draft.add(3, 1, &full).is_err(), "cap already reached");
+    assert_eq!(draft.rows.len(), 1);
+
+    assert!(draft.remove(2));
+    assert!(!draft.remove(2), "removing twice is a no-op");
+    assert!(draft.rows.is_empty());
+}
+
+#[test]
+fn each_drop_zone_accepts_only_its_own_payload() {
+    let kinds = [
+        DragKind::Stock,
+        DragKind::Draft,
+        DragKind::Listing,
+        DragKind::Basket,
+    ];
+    let zones = [
+        DropZone::SetupListings,
+        DropZone::CartStock,
+        DropZone::Basket,
+        DropZone::VendorListing,
+    ];
+    for zone in zones {
+        for kind in kinds {
+            let action = super::drag::drop_action(zone, DragSource { kind, index: 7 });
+            let expected = match (zone, kind) {
+                (DropZone::SetupListings, DragKind::Stock) => Some(DropAction::List(7)),
+                (DropZone::CartStock, DragKind::Draft) => Some(DropAction::Unlist(7)),
+                (DropZone::Basket, DragKind::Listing) => Some(DropAction::AddToBasket(7)),
+                (DropZone::VendorListing, DragKind::Basket) => {
+                    Some(DropAction::RemoveFromBasket(7))
+                }
+                _ => None,
+            };
+            assert_eq!(action, expected, "{zone:?} <- {kind:?}");
+        }
+    }
+
+    let shortcut = |kind| super::drag::shortcut_action(DragSource { kind, index: 7 });
+    assert_eq!(shortcut(DragKind::Stock), Some(DropAction::List(7)));
+    assert_eq!(
+        shortcut(DragKind::Listing),
+        Some(DropAction::AddToBasket(7))
+    );
+    assert_eq!(shortcut(DragKind::Draft), None, "rows have no double-click");
+    assert_eq!(shortcut(DragKind::Basket), None);
 }
 
 #[test]
@@ -330,7 +368,14 @@ fn titles_are_clamped_on_a_character_boundary() {
 fn spawn_window(app: &mut App) {
     app.add_systems(
         Update,
-        (sync_window_state, rebuild_content, sync_texts).chain(),
+        (
+            sync_window_state,
+            rebuild_content,
+            super::source::rebuild_source,
+            super::focus_new_price_field,
+            sync_texts,
+        )
+            .chain(),
     );
     app.world_mut()
         .spawn_scene(scene::window())
@@ -358,27 +403,161 @@ fn texts<M: Component>(app: &mut App) -> Vec<String> {
     query.iter(world).map(|text| text.0.clone()).collect()
 }
 
-#[test]
-fn stock_selection_toggles_drafted_rows() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
-    let cell = app
-        .world_mut()
-        .spawn(VendingStockCell { cart_index: 2 })
-        .observe(on_stock_toggled)
-        .id();
+fn source_entity(app: &mut App, kind: DragKind, index: u32) -> Entity {
+    let world = app.world_mut();
+    world
+        .query::<(Entity, &DragSource)>()
+        .iter(world)
+        .find(|(_, source)| **source == DragSource { kind, index })
+        .map(|(entity, _)| entity)
+        .unwrap_or_else(|| panic!("no {kind:?} source for {index}"))
+}
 
-    app.world_mut().trigger(Activate { entity: cell });
+fn sources(app: &mut App, kind: DragKind) -> usize {
+    let world = app.world_mut();
+    world
+        .query::<&DragSource>()
+        .iter(world)
+        .filter(|source| source.kind == kind)
+        .count()
+}
+
+fn zone_entity(app: &mut App, zone: DropZone) -> Entity {
+    let world = app.world_mut();
+    world
+        .query::<(Entity, &DropZone)>()
+        .iter(world)
+        .find(|(_, found)| **found == zone)
+        .map(|(entity, _)| entity)
+        .unwrap_or_else(|| panic!("no {zone:?} zone"))
+}
+
+fn draft_rows(app: &App) -> Vec<DraftRow> {
+    app.world().resource::<SellerDraft>().rows.clone()
+}
+
+#[test]
+fn dragging_stock_onto_the_listings_lists_it_and_back_unlists_it() {
+    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
+    spawn_window(&mut app);
+    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
+
+    let stock = source_entity(&mut app, DragKind::Stock, 2);
+    app.world_mut().trigger(drag_start(stock, window));
     assert_eq!(
-        app.world().resource::<SellerDraft>().rows,
+        app.world().resource::<VendingDrag>().payload,
+        Some(DragSource {
+            kind: DragKind::Stock,
+            index: 2
+        })
+    );
+
+    // The drop lands on the hint inside the zone and bubbles up to it.
+    let zone = zone_entity(&mut app, DropZone::SetupListings);
+    let hint = app
+        .world()
+        .entity(zone)
+        .get::<Children>()
+        .expect("drop hint")[0];
+    app.world_mut().trigger(drag_drop(hint, stock, window));
+    assert_eq!(
+        draft_rows(&app),
         vec![DraftRow {
             cart_index: 2,
-            amount: 1,
+            amount: 3,
             price: 0
         }]
     );
 
-    app.world_mut().trigger(Activate { entity: cell });
-    assert!(app.world().resource::<SellerDraft>().rows.is_empty());
+    app.update();
+    let price = {
+        let world = app.world_mut();
+        world
+            .query::<(Entity, &VendingDraftField)>()
+            .iter(world)
+            .find(|(_, field)| field.cart_index == 2 && field.kind == DraftFieldKind::Price)
+            .map(|(entity, _)| entity)
+            .expect("price field")
+    };
+    assert_eq!(
+        app.world().resource::<InputFocus>().get(),
+        Some(price),
+        "the new row's price takes focus"
+    );
+
+    let handle = source_entity(&mut app, DragKind::Draft, 2);
+    app.world_mut().trigger(drag_start(handle, window));
+    let stock_panel = zone_entity(&mut app, DropZone::CartStock);
+    app.world_mut()
+        .trigger(drag_drop(stock_panel, handle, window));
+    assert!(draft_rows(&app).is_empty(), "dropped back on the stock");
+}
+
+#[test]
+fn a_double_clicked_stock_cell_lists_it_like_a_drop() {
+    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
+    spawn_window(&mut app);
+    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
+    let stock = source_entity(&mut app, DragKind::Stock, 3);
+
+    app.world_mut()
+        .trigger(click_event(stock, window, PointerButton::Primary));
+    assert!(draft_rows(&app).is_empty(), "a single click only selects");
+
+    app.world_mut()
+        .trigger(click_event(stock, window, PointerButton::Primary));
+    assert_eq!(
+        draft_rows(&app),
+        vec![DraftRow {
+            cart_index: 3,
+            amount: 1,
+            price: 0
+        }]
+    );
+}
+
+#[test]
+fn a_full_shop_refuses_a_drop_with_a_message() {
+    let full = VendingSetup {
+        max_slots: 1,
+        ..setup()
+    };
+    let mut app = app(state_with(VendingIngressPayload::SetupReady(full)));
+    spawn_window(&mut app);
+    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0)]).rows;
+    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
+    let stock = source_entity(&mut app, DragKind::Stock, 3);
+
+    app.world_mut()
+        .trigger(click_event(stock, window, PointerButton::Primary));
+    app.world_mut()
+        .trigger(click_event(stock, window, PointerButton::Primary));
+    assert_eq!(draft_rows(&app).len(), 1);
+    assert_eq!(
+        app.world().resource::<VendingUi>().error(),
+        Some("A shop can list at most 1 items.")
+    );
+}
+
+#[test]
+fn a_released_button_ends_any_drag() {
+    let mut app = app(VendingState::default());
+    app.add_systems(Update, super::drag::end_drag_on_release);
+    let payload = Some(DragSource::default());
+
+    app.init_resource::<ButtonInput<MouseButton>>();
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .press(MouseButton::Left);
+    app.world_mut().resource_mut::<VendingDrag>().payload = payload;
+    app.update();
+    assert_eq!(app.world().resource::<VendingDrag>().payload, payload);
+
+    app.world_mut()
+        .resource_mut::<ButtonInput<MouseButton>>()
+        .release(MouseButton::Left);
+    app.update();
+    assert_eq!(app.world().resource::<VendingDrag>().payload, None);
 }
 
 #[test]
@@ -629,7 +808,7 @@ fn the_editor_only_appears_with_an_authoritative_setup() {
     let mut idle = app(VendingState::default());
     spawn_window(&mut idle);
     assert!(!idle.world().resource::<VendingUi>().is_visible());
-    assert_eq!(count::<VendingStockCell>(&mut idle), 0);
+    assert_eq!(sources(&mut idle, DragKind::Stock), 0);
     assert!(all_hidden(idle.world_mut()));
 
     let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
@@ -646,11 +825,7 @@ fn the_editor_only_appears_with_an_authoritative_setup() {
 fn one_stock_cell_per_sellable_slot_and_one_row_per_drafted_slot() {
     let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
     spawn_window(&mut app);
-    assert_eq!(
-        count::<VendingStockCell>(&mut app),
-        2,
-        "both sellable slots"
-    );
+    assert_eq!(sources(&mut app, DragKind::Stock), 2, "both sellable slots");
     assert_eq!(count::<VendingDraftField>(&mut app), 0);
 
     app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0)]).rows;
@@ -731,7 +906,7 @@ fn an_accepted_shop_replaces_the_editor_with_the_monitor() {
     app.update();
 
     assert_eq!(
-        count::<VendingStockCell>(&mut app),
+        sources(&mut app, DragKind::Stock),
         0,
         "monitor is read-only"
     );
@@ -847,6 +1022,41 @@ fn click_event(target: Entity, window: Entity, button: PointerButton) -> Pointer
         hit: HitData::new(target, 0.0, None, None),
         duration: std::time::Duration::ZERO,
         count: 1,
+    }
+}
+
+fn primary_pointer(window: Entity) -> Pointer {
+    use bevy::camera::NormalizedRenderTarget;
+    use bevy::picking::pointer::{Location, PointerId};
+    use bevy::window::WindowRef;
+
+    Pointer::new(
+        PointerId::Mouse,
+        Location {
+            target: NormalizedRenderTarget::Window(
+                WindowRef::Primary.normalize(Some(window)).unwrap(),
+            ),
+            position: Vec2::ZERO,
+        },
+    )
+}
+
+fn drag_start(target: Entity, window: Entity) -> PointerDragStart {
+    PointerDragStart {
+        entity: target,
+        pointer: primary_pointer(window),
+        button: PointerButton::Primary,
+        hit: bevy::picking::backend::HitData::new(target, 0.0, None, None),
+    }
+}
+
+fn drag_drop(target: Entity, dropped: Entity, window: Entity) -> PointerDragDrop {
+    PointerDragDrop {
+        entity: target,
+        pointer: primary_pointer(window),
+        button: PointerButton::Primary,
+        dropped,
+        hit: bevy::picking::backend::HitData::new(target, 0.0, None, None),
     }
 }
 
@@ -1073,37 +1283,28 @@ fn a_refreshed_shop_clamps_the_basket_and_explains_it() {
     );
 }
 
+fn basket_quantity(app: &App, index: u32) -> u32 {
+    app.world()
+        .resource::<super::buyer::BuyerBasket>()
+        .quantity(index)
+}
+
 #[test]
-fn a_row_click_stages_or_inspects_without_bag_actions() {
+fn a_listing_double_click_stages_and_right_click_inspects_without_bag_actions() {
     let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
-    app.add_message::<super::ShowInfoModal>();
+    spawn_window(&mut app);
     let window = app.world_mut().spawn(bevy::window::Window::default()).id();
-    let row = app
-        .world_mut()
-        .spawn((super::VendingBasketRow { index: 2 }, Pickable::default()))
-        .observe(super::on_listing_click)
-        .id();
+    let listing = source_entity(&mut app, DragKind::Listing, 2);
 
     app.world_mut()
-        .trigger(click_event(row, window, PointerButton::Primary));
-    assert_eq!(
-        app.world()
-            .resource::<super::buyer::BuyerBasket>()
-            .quantity(2),
-        1
-    );
+        .trigger(click_event(listing, window, PointerButton::Primary));
+    assert_eq!(basket_quantity(&app, 2), 0, "a single click only selects");
     app.world_mut()
-        .trigger(click_event(row, window, PointerButton::Primary));
-    assert_eq!(
-        app.world()
-            .resource::<super::buyer::BuyerBasket>()
-            .quantity(2),
-        0,
-        "a second primary click clears the row"
-    );
+        .trigger(click_event(listing, window, PointerButton::Primary));
+    assert_eq!(basket_quantity(&app, 2), 1);
 
     app.world_mut()
-        .trigger(click_event(row, window, PointerButton::Secondary));
+        .trigger(click_event(listing, window, PointerButton::Secondary));
     let written: Vec<super::ShowInfoModal> = app
         .world_mut()
         .resource_mut::<Messages<super::ShowInfoModal>>()
@@ -1116,4 +1317,118 @@ fn a_row_click_stages_or_inspects_without_bag_actions() {
     assert_eq!(view.name, "Red Potion");
     assert_eq!(view.meta[0], ("Price".to_string(), "500z".to_string()));
     assert!(action.is_none(), "vendor stock offers no bag action");
+}
+
+#[test]
+fn dragging_listings_into_the_basket_stages_up_to_stock_and_back_removes() {
+    let mut app = app(browse_state(vec![buyable(2, 2, 500)]));
+    spawn_window(&mut app);
+    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
+    let listing = source_entity(&mut app, DragKind::Listing, 2);
+    let basket = zone_entity(&mut app, DropZone::Basket);
+
+    for _ in 0..3 {
+        app.world_mut().trigger(drag_start(listing, window));
+        app.world_mut().trigger(drag_drop(basket, listing, window));
+    }
+    assert_eq!(basket_quantity(&app, 2), 2, "capped at the listing's stock");
+
+    app.update();
+    let handle = source_entity(&mut app, DragKind::Basket, 2);
+    app.world_mut().trigger(drag_start(handle, window));
+    let vendor = zone_entity(&mut app, DropZone::VendorListing);
+    app.world_mut().trigger(drag_drop(vendor, handle, window));
+    assert_eq!(basket_quantity(&app, 2), 0, "dropped back on the shop");
+}
+
+#[test]
+fn staging_is_inert_while_a_purchase_is_pending() {
+    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
+    spawn_window(&mut app);
+    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
+    assert!(
+        app.world_mut()
+            .resource_mut::<VendingState>()
+            .begin_purchase(VENDOR_ID, SHOP_ID, 0.0)
+            .is_some()
+    );
+    let listing = source_entity(&mut app, DragKind::Listing, 2);
+    let basket = zone_entity(&mut app, DropZone::Basket);
+
+    app.world_mut().trigger(drag_start(listing, window));
+    app.world_mut().trigger(drag_drop(basket, listing, window));
+    assert_eq!(basket_quantity(&app, 2), 0);
+}
+
+#[test]
+fn right_click_details_resolve_every_vending_surface() {
+    let item_db = item_db();
+    let mut cart = cart();
+    let mut buckler = cart_item(3, 2104, 1);
+    buckler.cards = vec![4001];
+    cart.upsert(buckler);
+    let source = |kind, index| DragSource { kind, index };
+
+    let seller = VendingState::default();
+    for kind in [DragKind::Stock, DragKind::Draft] {
+        let view = super::inspect_view(source(kind, 3), &seller, &cart, &item_db, None)
+            .expect("cart item details");
+        assert_eq!(view.name, "Buckler");
+        assert_eq!(view.cards, vec!["Card #4001".to_string()], "{kind:?}");
+    }
+    assert!(
+        super::inspect_view(source(DragKind::Stock, 9), &seller, &cart, &item_db, None).is_none(),
+        "an empty cart slot has no details"
+    );
+
+    let buyer = browse_state(vec![buyable(2, 3, 500)]);
+    for kind in [DragKind::Listing, DragKind::Basket] {
+        let view = super::inspect_view(source(kind, 2), &buyer, &cart, &item_db, None)
+            .expect("vendor listing details");
+        assert_eq!(view.name, "Red Potion");
+        assert_eq!(view.meta[0], ("Price".to_string(), "500z".to_string()));
+    }
+
+    let mut own = state_with(VendingIngressPayload::SetupReady(setup()));
+    let request_id = own.begin_open(SETUP_ID, 0.0).expect("open request");
+    own.apply(&VendingIngress {
+        generation: ZoneSessionGeneration::default(),
+        payload: VendingIngressPayload::OpenResult {
+            request_id,
+            setup_id: SETUP_ID.into(),
+            setup_active: false,
+            outcome: VendingOpenOutcome::Success,
+            snapshot: Some(snapshot()),
+        },
+    });
+    let view = super::inspect_view(source(DragKind::Shop, 2), &own, &cart, &item_db, None)
+        .expect("own shop listing details");
+    assert_eq!(view.name, "Red Potion");
+    assert!(
+        super::inspect_view(source(DragKind::Listing, 2), &own, &cart, &item_db, None).is_none(),
+        "the seller is not browsing anyone"
+    );
+}
+
+#[test]
+fn right_clicking_a_stock_cell_opens_its_details_without_actions() {
+    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
+    spawn_window(&mut app);
+    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
+    let stock = source_entity(&mut app, DragKind::Stock, 2);
+
+    app.world_mut()
+        .trigger(click_event(stock, window, PointerButton::Secondary));
+    let written: Vec<super::ShowInfoModal> = app
+        .world_mut()
+        .resource_mut::<Messages<super::ShowInfoModal>>()
+        .drain()
+        .collect();
+    assert_eq!(written.len(), 1);
+    let super::InfoContent::Item { view, action } = &written[0].content else {
+        panic!("expected an item view");
+    };
+    assert_eq!(view.name, "Red Potion");
+    assert!(action.is_none(), "cart stock offers no bag action");
+    assert!(draft_rows(&app).is_empty(), "inspecting never lists");
 }

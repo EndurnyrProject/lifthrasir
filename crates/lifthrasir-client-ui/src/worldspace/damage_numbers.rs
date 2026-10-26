@@ -17,8 +17,8 @@ const FONT_SIZE: f32 = 18.0;
 const CRIT_FONT_SIZE: f32 = 22.0;
 /// Pixels above the entity origin where a number first appears.
 const SPAWN_OFFSET_Y: f32 = 30.0;
-/// Above nameplates so a number reads over a name; below fade/cursor.
-const DAMAGE_Z: i32 = 150;
+/// Above nameplates so a number reads over a name.
+const DAMAGE_Z: i32 = super::WORLD_OVERLAY_Z + 150;
 
 pub struct DamageNumberPlugin;
 

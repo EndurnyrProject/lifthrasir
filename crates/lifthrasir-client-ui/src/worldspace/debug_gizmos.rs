@@ -12,8 +12,8 @@ use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};
 
 const LABEL_FONT_SIZE: f32 = 11.0;
 const LABEL_WIDTH: f32 = 260.0;
-/// Above the world camera, below nameplates (`100`) so nameplates stay readable.
-const LABEL_Z: i32 = 90;
+/// Below nameplates (+100) so nameplates stay readable.
+const LABEL_Z: i32 = super::WORLD_OVERLAY_Z + 90;
 /// Pixels below the object's projected origin, so the label clears the gizmo.
 const LABEL_GAP: f32 = 4.0;
 const LIGHT_GIZMO_RADIUS: f32 = 0.6;

@@ -24,8 +24,8 @@ const INSTANT_LABEL_SECS: f32 = 0.6;
 /// body centre, so this clears the head. NOTE: fixed screen offset, not
 /// zoom-scaled — tune live via BRP if it drifts off the head.
 const LABEL_HEAD_GAP: f32 = 88.0;
-/// Above nameplates (100) so a cast reads over a name; below fade/cursor.
-const LABEL_Z: i32 = 160;
+/// Above nameplates (+100) so a cast reads over a name.
+const LABEL_Z: i32 = super::WORLD_OVERLAY_Z + 160;
 const CAST_BAR_WIDTH: f32 = 130.0;
 const CAST_BAR_HEIGHT: f32 = 5.0;
 

@@ -1,4 +1,5 @@
-//! BSN scenes for the vending window: one chrome shell and its two bodies.
+//! BSN scenes for the vending window: the chrome shell and the right panel's
+//! editor, monitor and basket bodies. The left panel lives in [`super::source`].
 //!
 //! The chrome and the content host are spawned once; `rebuild_content` refills
 //! the host from the current domain state. Typed fields therefore live only
@@ -17,32 +18,32 @@ use lifthrasir_ui::theme::feathers_theme::{
 };
 use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 
+use crate::widgets::vending_window::cells::{ItemCellView, item_cell};
+use crate::widgets::vending_window::drag::{
+    DragKind, DragSource, DropZone, on_drag_start, on_zone_drop,
+};
+use crate::widgets::vending_window::source::VendingSourceHost;
 use crate::widgets::vending_window::{
-    BasketStep, DraftFieldKind, VendingBasketRow, VendingCancelButton, VendingContentHost,
-    VendingDraftField, VendingErrorLine, VendingModeNote, VendingOpenButton, VendingRowRemove,
-    VendingStockCell, VendingTitle, VendingTitleField, VendingWindowBody, VendingWindowRoot,
-    VendingWindowTitlebar, on_basket_refresh, on_basket_step, on_cancel_setup, on_checkout,
-    on_close_button, on_close_shop, on_listing_click, on_open_shop, on_row_removed,
-    on_stock_toggled,
+    BasketRemove, BasketStep, DraftFieldKind, VendingBasketRow, VendingCancelButton,
+    VendingContentHost, VendingDraftField, VendingErrorLine, VendingModeNote, VendingOpenButton,
+    VendingRowRemove, VendingTitle, VendingTitleField, VendingWindowBody, VendingWindowRoot,
+    VendingWindowTitlebar, on_basket_refresh, on_basket_remove, on_basket_step, on_cancel_setup,
+    on_checkout, on_close_button, on_close_shop, on_item_inspect, on_open_shop, on_row_removed,
 };
 
 const WINDOW_LEFT: f32 = 250.0;
 const WINDOW_TOP: f32 = 80.0;
-const WINDOW_WIDTH: f32 = 468.0;
-
-/// One sellable cart slot offered as a stock cell.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StockCellView {
-    pub cart_index: u32,
-    pub label: String,
-    pub amount: u32,
-    pub selected: bool,
-}
+/// Width of the right panel; the window grows by the left panel when it shows.
+const MAIN_WIDTH: f32 = 420.0;
+/// Minimum height of the setup editor's drop zone, so an empty shop is an
+/// obvious target.
+const LISTINGS_MIN_HEIGHT: f32 = 150.0;
 
 /// One listing being drafted, with its current typed values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftRowView {
     pub cart_index: u32,
+    pub cell: ItemCellView,
     pub label: String,
     pub stock: u32,
     pub amount_input: String,
@@ -52,24 +53,28 @@ pub struct DraftRowView {
 /// One accepted listing shown in the read-only monitor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShopRowView {
+    pub index: u32,
+    pub cell: ItemCellView,
     pub label: String,
     pub amount: u32,
     pub price: u32,
 }
 
-/// One listing row of the buyer body.
+/// One staged basket line.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BrowseRowView {
+pub struct BasketRowView {
     pub index: u32,
+    pub cell: ItemCellView,
     pub label: String,
-    pub stock: u32,
     pub price: u32,
     pub quantity: u32,
+    pub line_total: u64,
 }
 
 /// One reported sale shown under the monitor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SaleRowView {
+    pub cell: ItemCellView,
     pub label: String,
     pub amount: u32,
     pub zeny: u32,
@@ -84,7 +89,6 @@ pub fn window() -> impl Scene {
             position_type: PositionType::Absolute,
             left: px(WINDOW_LEFT),
             top: px(WINDOW_TOP),
-            width: px(WINDOW_WIDTH),
             flex_direction: FlexDirection::Column,
             border: px(1),
             border_radius: BorderRadius::all(px(12)),
@@ -136,48 +140,45 @@ fn body() -> impl Scene {
     bsn! {
         VendingWindowBody
         Node {
-            flex_direction: FlexDirection::Column,
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::FlexStart,
             padding: {UiRect::all(px(14))},
-            row_gap: px(10),
+            column_gap: px(12),
         }
         @ignore_picking()
         Children [
+            VendingSourceHost
+            Node { display: Display::None, flex_direction: FlexDirection::Column }
+            @ignore_picking() --
             VendingContentHost
-            Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
+            Node { width: px(MAIN_WIDTH), flex_direction: FlexDirection::Column, row_gap: px(10) }
             @ignore_picking()
         ]
     }
 }
 
-/// The setup editor: sellable stock, the title, and the drafted listings.
+/// The setup editor: the title, the drafted listings (a drop zone for cart
+/// stock), the slot count, and submission.
 pub fn editor(
-    stock: Vec<StockCellView>,
     rows: Vec<DraftRowView>,
     title: String,
     note: String,
+    slots: String,
     error: Option<String>,
 ) -> impl Scene {
-    let cells: Vec<_> = stock.into_iter().map(stock_cell).collect();
     let listings: Vec<_> = rows.into_iter().map(draft_row).collect();
     let empty = listings
         .is_empty()
-        .then(|| EntityScene(muted("No items listed yet.".to_string())));
+        .then(|| EntityScene(drop_hint("Drag items here from your cart.".to_string())));
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         @ignore_picking()
         Children [
-            @mode_note(note) --
-            Node {
-                flex_direction: FlexDirection::Row,
-                flex_wrap: FlexWrap::Wrap,
-                column_gap: px(6),
-                row_gap: px(6),
-            }
-            @ignore_picking()
-            Children [ {cells} ] --
             @section_label("Shop title".to_string()) --
             @title_field(title) --
+            DropZone::SetupListings
             Node {
+                min_height: px(LISTINGS_MIN_HEIGHT),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(6),
                 padding: {UiRect::all(px(8))},
@@ -185,12 +186,15 @@ pub fn editor(
                 border_radius: BorderRadius::all(px(8)),
             }
             ThemeBackgroundColor({TOKEN_PANEL_BG})
+            BorderColor::all(theme::GOLD_FAINT)
+            Pickable
+            on(on_zone_drop)
+            Children [ {listings} -- {empty} ] --
+            Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
             @ignore_picking()
             Children [
-                @section_label("Listings".to_string()) --
-                Node { flex_direction: FlexDirection::Column, row_gap: px(6) }
-                @ignore_picking()
-                Children [ {listings} -- {empty} ]
+                @chrome_text(slots, 11.0, theme::TEXT_DIM) --
+                @mode_note(note)
             ] --
             @error_line(error) --
             Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
@@ -209,6 +213,20 @@ pub fn editor(
                 on(on_open_shop)
             ]
         ]
+    }
+}
+
+/// A centred faint line telling the player where to drop.
+fn drop_hint(text: String) -> impl Scene {
+    bsn! {
+        Node {
+            flex_grow: 1.0,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            padding: {UiRect::all(px(16))},
+        }
+        @ignore_picking()
+        Children [ @chrome_text(text, 12.0, theme::TEXT_FAINT) ]
     }
 }
 
@@ -304,23 +322,6 @@ fn muted(text: String) -> impl Scene {
     chrome_text(text, 12.0, theme::TEXT_DIM)
 }
 
-fn stock_cell(cell: StockCellView) -> impl Scene {
-    let label = format!("{} x{}", cell.label, cell.amount);
-    let cart_index = cell.cart_index;
-    let background = if cell.selected {
-        theme::EMERALD
-    } else {
-        theme::GLASS_2
-    };
-    bsn! {
-        VendingStockCell { cart_index: cart_index }
-        @FeathersButton { @caption: bsn! { @chrome_text(label, 12.0, theme::TEXT) } }
-        Node { height: px(28), padding: {UiRect::axes(px(8), px(4))} }
-        BackgroundColor(background)
-        on(on_stock_toggled)
-    }
-}
-
 fn title_field(title: String) -> impl Scene {
     bsn! {
         VendingTitleField
@@ -343,21 +344,33 @@ fn title_field(title: String) -> impl Scene {
     }
 }
 
+/// One drafted listing: its icon (the drag handle back to the stock panel),
+/// name, quantity and price fields, and a remove button.
 fn draft_row(row: DraftRowView) -> impl Scene {
-    let label = format!("{} (x{})", row.label, row.stock);
     let cart_index = row.cart_index;
+    let stock = format!("{} in cart", row.stock);
     bsn! {
         Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(6) }
         @ignore_picking()
         Children [
-            Node { flex_grow: 1.0, min_width: px(0) }
+            @item_cell(row.cell)
+            DragSource { kind: DragKind::Draft, index: cart_index }
+            Pickable
+            on(on_drag_start)
+            on(on_item_inspect) --
+            Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Column, overflow: {Overflow::clip()} }
             @ignore_picking()
-            Children [ @chrome_text(label, 12.0, theme::TEXT) ] --
-            @draft_field(cart_index, DraftFieldKind::Amount, row.amount_input, 52.0) --
+            Children [
+                @chrome_text(row.label, 12.0, theme::TEXT) --
+                @chrome_text(stock, 10.0, theme::TEXT_FAINT)
+            ] --
+            @draft_field(cart_index, DraftFieldKind::Amount, row.amount_input, 48.0) --
+            @chrome_text("x".to_string(), 11.0, theme::TEXT_FAINT) --
             @draft_field(cart_index, DraftFieldKind::Price, row.price_input, 84.0) --
-            @FeathersButton { @caption: bsn! { @chrome_text("Remove".to_string(), 11.0, theme::TEXT_DIM) } }
-            Node { height: px(26) }
+            @chrome_text("z".to_string(), 11.0, theme::GOLD) --
             VendingRowRemove { cart_index: cart_index }
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 11.0, theme::TEXT_DIM) } }
+            Node { width: px(24), height: px(24) }
             on(on_row_removed)
         ]
     }
@@ -386,24 +399,42 @@ fn draft_field(cart_index: u32, kind: DraftFieldKind, value: String, width: f32)
     }
 }
 
+/// One listing of the seller's open shop; its icon opens the item details.
 fn shop_row(row: ShopRowView) -> impl Scene {
+    let index = row.index;
     let detail = format!("x{}  -  {}z each", row.amount, row.price);
-    row_line(row.label, detail, theme::TEXT)
+    bsn! {
+        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(8) }
+        @ignore_picking()
+        Children [
+            @item_cell(row.cell)
+            DragSource { kind: DragKind::Shop, index: index }
+            Pickable
+            on(on_item_inspect) --
+            Node { flex_grow: 1.0, min_width: px(0), overflow: {Overflow::clip()} }
+            @ignore_picking()
+            Children [ @chrome_text(row.label, 12.0, theme::TEXT) ] --
+            @chrome_text(detail, 12.0, theme::TEXT_DIM)
+        ]
+    }
 }
 
 fn sale_row(sale: SaleRowView) -> impl Scene {
     let detail = format!("x{}  -  {}z  -  {}", sale.amount, sale.zeny, sale.buyer);
-    row_line(sale.label, detail, theme::TEXT)
+    icon_row(sale.cell, sale.label, detail)
 }
 
-fn row_line(label: String, detail: String, color: Color) -> impl Scene {
+/// A read-only row: item icon, name, and a dim detail on the right.
+fn icon_row(cell: ItemCellView, label: String, detail: String) -> impl Scene {
     bsn! {
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(6) }
+        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(8) }
         @ignore_picking()
         Children [
-            Node { flex_grow: 1.0, min_width: px(0) }
+            @item_cell(cell)
+            @ignore_picking() --
+            Node { flex_grow: 1.0, min_width: px(0), overflow: {Overflow::clip()} }
             @ignore_picking()
-            Children [ @chrome_text(label, 12.0, color) ] --
+            Children [ @chrome_text(label, 12.0, theme::TEXT) ] --
             @chrome_text(detail, 12.0, theme::TEXT_DIM)
         ]
     }
@@ -423,25 +454,27 @@ fn error_line(error: Option<String>) -> impl Scene {
     }
 }
 
-/// The buyer body: one row per listing, the staged total, and checkout.
+/// The buyer's basket: staged lines (a drop zone for the vendor's listings),
+/// the total, and checkout.
 pub fn buyer(
-    rows: Vec<BrowseRowView>,
+    rows: Vec<BasketRowView>,
     note: String,
     guidance: Option<String>,
     error: Option<String>,
 ) -> impl Scene {
-    let rows: Vec<_> = rows.into_iter().map(browse_row).collect();
+    let rows: Vec<_> = rows.into_iter().map(basket_row).collect();
     let guidance = guidance.map(|text| EntityScene(muted(text)));
     let empty = rows
         .is_empty()
-        .then(|| EntityScene(muted("This shop has nothing left.".to_string())));
+        .then(|| EntityScene(drop_hint("Drag items here from the shop.".to_string())));
     bsn! {
         Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
         @ignore_picking()
         Children [
-            @plain_note(note) --
-            {guidance} --
+            @section_label("Your purchase".to_string()) --
+            DropZone::Basket
             Node {
+                min_height: px(LISTINGS_MIN_HEIGHT),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(6),
                 padding: {UiRect::all(px(8))},
@@ -449,13 +482,14 @@ pub fn buyer(
                 border_radius: BorderRadius::all(px(8)),
             }
             ThemeBackgroundColor({TOKEN_PANEL_BG})
+            BorderColor::all(theme::GOLD_FAINT)
+            Pickable
+            on(on_zone_drop)
+            Children [ {rows} -- {empty} ] --
+            Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::FlexEnd }
             @ignore_picking()
-            Children [
-                @section_label("For sale".to_string()) --
-                Node { flex_direction: FlexDirection::Column, row_gap: px(6) }
-                @ignore_picking()
-                Children [ {rows} -- {empty} ]
-            ] --
+            Children [ @plain_note(note) ] --
+            {guidance} --
             @error_line(error) --
             Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
             @ignore_picking()
@@ -474,41 +508,47 @@ pub fn buyer(
     }
 }
 
-fn browse_row(view: BrowseRowView) -> impl Scene {
+/// One staged line: icon (drag it back to the shop to remove), name and unit
+/// price, a quantity stepper, the line total, and a remove button.
+fn basket_row(view: BasketRowView) -> impl Scene {
     let index = view.index;
-    let detail = format!("{} / x{} at {}z", view.label, view.stock, view.price);
-    let staged = if view.quantity == 0 {
-        "Not in basket".to_string()
-    } else {
-        format!("In basket: x{}", view.quantity)
-    };
+    let unit = format!("{}z each", view.price);
+    let quantity = view.quantity.to_string();
+    let total = format!("{}z", view.line_total);
     bsn! {
         VendingBasketRow { index }
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(6),
-            padding: {UiRect::axes(px(6), px(4))},
-            border_radius: BorderRadius::all(px(6)),
-        }
-        BackgroundColor({theme::GLASS_2})
-        Pickable::default()
-        on(on_listing_click)
+        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(6) }
+        @ignore_picking()
         Children [
-            Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Column, row_gap: px(2) }
+            @item_cell(view.cell)
+            DragSource { kind: DragKind::Basket, index: index }
+            Pickable
+            on(on_drag_start)
+            on(on_item_inspect) --
+            Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Column, overflow: {Overflow::clip()} }
             @ignore_picking()
             Children [
-                @chrome_text(detail, 12.0, theme::TEXT) --
-                @chrome_text(staged, 11.0, theme::TEXT_DIM)
+                @chrome_text(view.label, 12.0, theme::TEXT) --
+                @chrome_text(unit, 10.0, theme::TEXT_FAINT)
             ] --
             BasketStep { index, up: false }
-            @FeathersButton { @caption: bsn! { @chrome_text("-".to_string(), 12.0, theme::TEXT) } }
-            Node { width: px(26), height: px(26) }
+            @FeathersButton { @caption: bsn! { @glyph_icon("minus", 10.0, theme::TEXT) } }
+            Node { width: px(22), height: px(22) }
             on(on_basket_step) --
+            Node { min_width: px(24), justify_content: JustifyContent::Center }
+            @ignore_picking()
+            Children [ @chrome_text(quantity, 12.0, theme::TEXT) ] --
             BasketStep { index, up: true }
-            @FeathersButton { @caption: bsn! { @chrome_text("+".to_string(), 12.0, theme::TEXT) } }
-            Node { width: px(26), height: px(26) }
-            on(on_basket_step)
+            @FeathersButton { @caption: bsn! { @glyph_icon("plus", 10.0, theme::TEXT) } }
+            Node { width: px(22), height: px(22) }
+            on(on_basket_step) --
+            Node { min_width: px(64), justify_content: JustifyContent::FlexEnd }
+            @ignore_picking()
+            Children [ @chrome_text(total, 12.0, theme::GOLD) ] --
+            BasketRemove { index }
+            @FeathersButton { @caption: bsn! { @glyph_icon("close", 11.0, theme::TEXT_DIM) } }
+            Node { width: px(24), height: px(24) }
+            on(on_basket_remove)
         ]
     }
 }

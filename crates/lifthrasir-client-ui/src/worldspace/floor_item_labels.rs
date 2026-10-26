@@ -16,8 +16,8 @@ const FLOOR_ITEM_LABEL_WIDTH: f32 = 220.0;
 const FLOOR_ITEM_LABEL_FONT_SIZE: f32 = 13.0;
 /// Pixels above the item's projected origin, so the label reads over the drop.
 const FLOOR_ITEM_LABEL_GAP: f32 = 18.0;
-/// Above the world camera, below the fade overlay (`i32::MAX - 1`) and cursor.
-const FLOOR_ITEM_LABEL_Z: i32 = 100;
+/// Level with nameplates; see [`super::WORLD_OVERLAY_Z`].
+const FLOOR_ITEM_LABEL_Z: i32 = super::WORLD_OVERLAY_Z + 100;
 
 pub struct FloorItemLabelPlugin;
 

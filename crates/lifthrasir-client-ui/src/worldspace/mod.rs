@@ -24,6 +24,12 @@ pub mod vending_boards;
 /// against, excluding the equipment-window preview camera.
 pub type WorldCameraFilter = (With<Camera3d>, Without<EquipmentPreviewCamera>);
 
+/// Stacking base for every world-anchored overlay: below the HUD windows
+/// (default 0) and NPC cut-ins (-1), so a window covering an overlay hides it
+/// and takes its clicks. Each overlay adds a small offset to keep their order.
+/// UI always draws over the 3D world, whatever the value.
+pub const WORLD_OVERLAY_Z: i32 = -1000;
+
 /// Shared font handle for nameplates and damage numbers, loaded once at startup.
 #[derive(Resource)]
 pub struct WorldspaceFont(pub Handle<Font>);

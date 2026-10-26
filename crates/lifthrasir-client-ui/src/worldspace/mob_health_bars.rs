@@ -20,8 +20,8 @@ const BAR_HEAD_GAP: f32 = 74.0;
 const LINGER_SECS: f32 = 5.0;
 /// Fade-out window at the end of the linger.
 const FADE_SECS: f32 = 0.8;
-/// Above nameplates (100), below damage numbers (150).
-const BAR_Z: i32 = 120;
+/// Above nameplates (+100), below damage numbers (+150).
+const BAR_Z: i32 = super::WORLD_OVERLAY_Z + 120;
 
 pub struct MobHealthBarPlugin;
 

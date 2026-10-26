@@ -98,5 +98,6 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     pushcart_window::spawn_pushcart_window(&mut commands, root);
     storage_window::scene::build(&mut commands, root);
     trade_window::scene::build(&mut commands, root);
+    vending_window::spawn_vending_window(&mut commands, root);
     status_icons::spawn_status_bar(&mut commands, root);
 }
