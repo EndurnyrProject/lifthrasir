@@ -22,6 +22,7 @@ pub mod stats;
 pub mod status;
 pub mod storage;
 pub mod trade;
+pub mod vending;
 pub mod viewpoint;
 pub mod visibility;
 pub mod warp;

@@ -17,4 +17,5 @@ pub mod skill_menu;
 pub mod social;
 pub mod storage;
 pub mod trade;
+pub mod vending;
 pub mod visibility;
