@@ -16,6 +16,7 @@ use lifthrasir_editor::{
     EditorPaths,
     map::{
         MapEditorPlugin,
+        autosave::Autosave,
         layout::{MapLayout, MapTextureList, resolve_layout, texture_list_from_gltf},
         open::{EditorScreen, OpenMapRequest},
         terrain::TerrainChunks,
@@ -125,7 +126,8 @@ pub fn editor_app(data_folder: &Path) -> App {
     .init_asset::<bevy::animation::AnimationClip>()
     .insert_resource(EditorPaths {
         data_folder: data_folder.to_path_buf(),
-    });
+    })
+    .insert_resource(Autosave::new(data_folder.join(".recovery")));
     finish(app)
 }
 
@@ -134,6 +136,11 @@ pub fn open_fixture(app: &mut App) -> MapLayout {
     app.world_mut().write_message(OpenMapRequest {
         path: FIXTURE_MAP_PATH.into(),
     });
+    wait_for_editing(app)
+}
+
+/// Updates until the editor reaches `Editing`, then returns the layout.
+pub fn wait_for_editing(app: &mut App) -> MapLayout {
     let deadline = Instant::now() + Duration::from_secs(10);
     while *app.world().resource::<State<EditorScreen>>().get() != EditorScreen::Editing {
         assert!(Instant::now() < deadline, "the fixture never opened");

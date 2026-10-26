@@ -308,6 +308,9 @@ pub struct UndoStack {
     undone: Vec<Box<dyn EditOp>>,
     /// `done.len()` at the last save; `None` once that state is unreachable.
     saved_at: Option<usize>,
+    /// Bumped by every push, undo and redo, so watchers can tell that the
+    /// document changed even when `done.len()` did not.
+    revision: u64,
 }
 
 impl Default for UndoStack {
@@ -316,6 +319,7 @@ impl Default for UndoStack {
             done: Vec::new(),
             undone: Vec::new(),
             saved_at: Some(0),
+            revision: 0,
         }
     }
 }
@@ -329,6 +333,11 @@ impl UndoStack {
     /// True when nothing has been edited since the open.
     pub fn is_pristine(&self) -> bool {
         self.done.is_empty()
+    }
+
+    /// Changes whenever the document does; not comparable across `clear`.
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     pub fn mark_saved(&mut self) {
@@ -354,6 +363,7 @@ impl UndoStack {
         }
         self.done.push(op);
         self.undone.clear();
+        self.revision += 1;
     }
 }
 
@@ -373,7 +383,9 @@ pub fn undo(world: &mut World) {
         return;
     };
     op.undo(world);
-    world.resource_mut::<UndoStack>().undone.push(op);
+    let mut stack = world.resource_mut::<UndoStack>();
+    stack.undone.push(op);
+    stack.revision += 1;
 }
 
 pub fn redo(world: &mut World) {
@@ -381,7 +393,9 @@ pub fn redo(world: &mut World) {
         return;
     };
     op.apply(world);
-    world.resource_mut::<UndoStack>().done.push(op);
+    let mut stack = world.resource_mut::<UndoStack>();
+    stack.done.push(op);
+    stack.revision += 1;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
