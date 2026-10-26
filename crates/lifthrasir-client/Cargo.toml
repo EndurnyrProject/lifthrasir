@@ -20,7 +20,7 @@ bevy_common_assets = { workspace = true, features = ["toml", "ron"] }
 iyes_progress = { workspace = true }
 bevy_kira_audio = { workspace = true }
 bevy_framepace = { workspace = true }
-dirs = "6"
+dirs = "7"
 leafwing-input-manager = { workspace = true }
 
 # Parsing and data processing

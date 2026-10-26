@@ -48,7 +48,7 @@ bevy_kira_audio = { version = "0.27", features = ["mp3", "wav", "ogg"] }
 bevy_quinnet = "0.22.0"
 clap = { version = "4.5", features = ["derive"] }
 encoding_rs = "0.8.35"
-glam = "0.33"
+glam = "0.34"
 # `default-features = false` drops gltf's `import`/`utils` (base64 + image +
 # urlencoding); crates that need the importer opt back in explicitly.
 gltf = { version = "1.4.1", default-features = false, features = [
@@ -76,7 +76,7 @@ serde_json = "1.0"
 tempfile = "3"
 thiserror = "2.0"
 toml = "1.1.2"
-zip = { version = "8.6.0", default-features = false, features = ["zstd"] }
+zip = { version = "9.0.5", default-features = false, features = ["zstd"] }
 
 [profile.dev.package."*"]
 opt-level = 3

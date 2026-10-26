@@ -22,7 +22,7 @@ gag = "1.0"
 rayon = "1"
 tempfile = { workspace = true }
 image = { workspace = true }
-zstd = "0.13"
+zstd = "0.14"
 blake3 = "1.8"
 gltf-json = { workspace = true, features = ["KHR_lights_punctual", "KHR_materials_unlit"] }
 gltf = { workspace = true, features = ["import", "utils", "KHR_lights_punctual", "KHR_materials_unlit"] }
