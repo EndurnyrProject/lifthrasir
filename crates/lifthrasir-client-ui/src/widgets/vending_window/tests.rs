@@ -13,7 +13,7 @@ use lifthrasir_client::domain::vending::{
 use lifthrasir_data::{ItemData, ItemInfo};
 use net_contract::dto::{
     CartItem, VendingCloseOutcome, VendingCloseTarget, VendingListing, VendingOpenOutcome,
-    VendingSetup, VendingSnapshot,
+    VendingPurchaseOutcome, VendingSetup, VendingSnapshot,
 };
 use net_contract::events::{ChatHeard, VendingIngress, VendingIngressPayload};
 use net_contract::state::ZoneSessionGeneration;
@@ -28,6 +28,7 @@ use super::{
 };
 
 const SETUP_ID: &str = "setup-1";
+const VENDOR_ID: u64 = 5;
 const SHOP_ID: &str = "shop-1";
 
 fn cart_item(index: u32, nameid: u32, amount: u32) -> CartItem {
@@ -150,6 +151,7 @@ fn app(state: VendingState) -> App {
         .insert_resource(cart())
         .insert_resource(item_db())
         .insert_resource(SellerDraft::default())
+        .init_resource::<super::buyer::BuyerBasket>()
         .insert_resource(VendingUi::default())
         .init_resource::<InputFocus>()
         .init_resource::<ButtonInput<KeyCode>>()
@@ -772,4 +774,346 @@ fn a_settled_close_makes_the_affordance_usable_again() {
     app.update();
     app.world_mut().trigger(Activate { entity: cancel });
     assert_eq!(intents(&mut app).len(), 1);
+}
+
+fn browse_state(items: Vec<VendingListing>) -> VendingState {
+    let mut state = VendingState::default();
+    state.begin_browse(VENDOR_ID).expect("browse request");
+    state.apply(&VendingIngress {
+        generation: ZoneSessionGeneration::default(),
+        payload: VendingIngressPayload::ListResult {
+            request_id: 1,
+            vendor_unit_id: VENDOR_ID,
+            outcome: net_contract::dto::VendingListOutcome::Success,
+            snapshot: Some(VendingSnapshot {
+                vendor_unit_id: VENDOR_ID,
+                shop_id: SHOP_ID.into(),
+                title: "Potions".into(),
+                items,
+                total_earned: 0,
+            }),
+        },
+    });
+    state
+}
+
+fn buyable(index: u32, amount: u32, price: u32) -> VendingListing {
+    VendingListing {
+        index,
+        nameid: 501,
+        type_: 0,
+        amount,
+        identified: true,
+        attribute: 0,
+        refine: 0,
+        cards: vec![],
+        options: vec![],
+        price,
+        signer_name: String::new(),
+        creator_id: 0,
+        creator_kind: net_contract::dto::VendingCreatorKind::None,
+        enchant_grade: 0,
+    }
+}
+
+fn with_zeny(app: &mut App, zeny: u32) {
+    app.world_mut().spawn((
+        lifthrasir_client::domain::entities::markers::LocalPlayer,
+        lifthrasir_client::domain::entities::character::components::status::CharacterStatus {
+            zeny,
+            ..Default::default()
+        },
+    ));
+}
+
+fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
+    use bevy::camera::NormalizedRenderTarget;
+    use bevy::picking::backend::HitData;
+    use bevy::picking::pointer::{Location, PointerId};
+    use bevy::window::WindowRef;
+
+    PointerClick {
+        entity: target,
+        pointer: Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+        ),
+        button,
+        hit: HitData::new(target, 0.0, None, None),
+        duration: std::time::Duration::ZERO,
+        count: 1,
+    }
+}
+
+#[test]
+fn checkout_emits_one_confirmed_basket_quoted_from_the_shop() {
+    let mut app = app(browse_state(vec![buyable(2, 3, 500), buyable(3, 1, 750)]));
+    with_zeny(&mut app, 2_000);
+    app.add_systems(Update, super::sync_browse_basket);
+    app.update();
+
+    for (index, up) in [(2, true), (2, true), (3, true)] {
+        let step = app
+            .world_mut()
+            .spawn(super::BasketStep { index, up })
+            .observe(super::on_basket_step)
+            .id();
+        app.world_mut().trigger(Activate { entity: step });
+    }
+    let shop = app
+        .world()
+        .resource::<VendingState>()
+        .browse()
+        .unwrap()
+        .clone();
+    assert_eq!(
+        app.world()
+            .resource::<super::buyer::BuyerBasket>()
+            .total(&shop),
+        Some(1_750)
+    );
+
+    let checkout = app
+        .world_mut()
+        .spawn_empty()
+        .observe(super::on_checkout)
+        .id();
+    app.world_mut().trigger(Activate { entity: checkout });
+
+    let written = intents(&mut app);
+    assert_eq!(written.len(), 1);
+    let VendingIntent::Purchase {
+        vendor_unit_id,
+        shop_id,
+        items,
+    } = &written[0]
+    else {
+        panic!("expected a purchase intent, got {:?}", written[0]);
+    };
+    assert_eq!((*vendor_unit_id, shop_id.as_str()), (VENDOR_ID, SHOP_ID));
+    assert_eq!(items.len(), 2);
+    assert_eq!(
+        (
+            items[0].index,
+            items[0].amount,
+            items[0].expected_unit_price
+        ),
+        (2, 2, 500)
+    );
+    assert_eq!(
+        (
+            items[1].index,
+            items[1].amount,
+            items[1].expected_unit_price
+        ),
+        (3, 1, 750)
+    );
+
+    // While the domain tracks that purchase, a second confirmation is inert.
+    assert!(
+        app.world_mut()
+            .resource_mut::<VendingState>()
+            .begin_purchase(VENDOR_ID, SHOP_ID, 0.0)
+            .is_some()
+    );
+    app.world_mut().trigger(Activate { entity: checkout });
+    assert!(intents(&mut app).is_empty());
+}
+
+#[test]
+fn checkout_refuses_an_empty_basket_and_short_funds() {
+    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
+    with_zeny(&mut app, 200);
+    let checkout = app
+        .world_mut()
+        .spawn_empty()
+        .observe(super::on_checkout)
+        .id();
+    app.world_mut().trigger(Activate { entity: checkout });
+    assert!(intents(&mut app).is_empty());
+    assert_eq!(
+        app.world().resource::<VendingUi>().error(),
+        Some("Choose at least one item.")
+    );
+
+    let shop = app
+        .world()
+        .resource::<VendingState>()
+        .browse()
+        .unwrap()
+        .clone();
+    app.world_mut()
+        .resource_mut::<super::buyer::BuyerBasket>()
+        .set_quantity(&shop, 2, 1);
+    app.world_mut().trigger(Activate { entity: checkout });
+    assert!(intents(&mut app).is_empty(), "200z cannot buy a 500z item");
+    assert_eq!(
+        app.world().resource::<VendingUi>().error(),
+        Some("You need 300 more zeny.")
+    );
+}
+
+#[test]
+fn a_settled_success_clears_the_basket_and_a_failure_keeps_it() {
+    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
+    app.add_systems(
+        Update,
+        (super::sync_browse_basket, super::settle_buyer_basket).chain(),
+    );
+    app.update();
+    let shop = app
+        .world()
+        .resource::<VendingState>()
+        .browse()
+        .unwrap()
+        .clone();
+    app.world_mut()
+        .resource_mut::<super::buyer::BuyerBasket>()
+        .set_quantity(&shop, 2, 2);
+    assert_eq!(
+        app.world()
+            .resource::<super::buyer::BuyerBasket>()
+            .lines()
+            .len(),
+        1
+    );
+
+    app.world_mut()
+        .resource_mut::<Messages<VendingNotice>>()
+        .write(VendingNotice::Purchase {
+            request_id: 4,
+            vendor_unit_id: VENDOR_ID,
+            shop_id: SHOP_ID.into(),
+            outcome: VendingPurchaseOutcome::NotEnoughZeny,
+        });
+    app.update();
+    assert_eq!(
+        app.world()
+            .resource::<super::buyer::BuyerBasket>()
+            .lines()
+            .len(),
+        1,
+        "a failed checkout keeps the basket"
+    );
+
+    app.world_mut()
+        .resource_mut::<Messages<VendingNotice>>()
+        .write(VendingNotice::Purchase {
+            request_id: 5,
+            vendor_unit_id: VENDOR_ID,
+            shop_id: SHOP_ID.into(),
+            outcome: VendingPurchaseOutcome::Success,
+        });
+    app.update();
+    assert!(
+        app.world()
+            .resource::<super::buyer::BuyerBasket>()
+            .is_empty(),
+        "a completed checkout clears the basket"
+    );
+}
+
+#[test]
+fn a_refreshed_shop_clamps_the_basket_and_explains_it() {
+    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
+    with_zeny(&mut app, 2_000);
+    app.add_systems(Update, super::sync_browse_basket);
+    app.update();
+
+    let shop = app
+        .world()
+        .resource::<VendingState>()
+        .browse()
+        .unwrap()
+        .clone();
+    app.world_mut()
+        .resource_mut::<super::buyer::BuyerBasket>()
+        .set_quantity(&shop, 2, 3);
+
+    let refresh = app
+        .world_mut()
+        .resource_mut::<VendingState>()
+        .begin_browse(VENDOR_ID)
+        .expect("refresh request");
+    {
+        let mut state = app.world_mut().resource_mut::<VendingState>();
+        state.apply(&VendingIngress {
+            generation: ZoneSessionGeneration::default(),
+            payload: VendingIngressPayload::ListResult {
+                request_id: refresh,
+                vendor_unit_id: VENDOR_ID,
+                outcome: net_contract::dto::VendingListOutcome::Success,
+                snapshot: Some(VendingSnapshot {
+                    vendor_unit_id: VENDOR_ID,
+                    shop_id: SHOP_ID.into(),
+                    title: "Potions".into(),
+                    items: vec![buyable(2, 1, 500)],
+                    total_earned: 0,
+                }),
+            },
+        });
+    }
+    app.update();
+
+    assert_eq!(
+        app.world()
+            .resource::<super::buyer::BuyerBasket>()
+            .quantity(2),
+        1,
+        "reduced stock is clamped"
+    );
+    assert_eq!(
+        app.world().resource::<VendingUi>().error(),
+        Some("Only 1 of Item #501 remain.")
+    );
+}
+
+#[test]
+fn a_row_click_stages_or_inspects_without_bag_actions() {
+    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
+    app.add_message::<super::ShowInfoModal>();
+    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
+    let row = app
+        .world_mut()
+        .spawn((super::VendingBasketRow { index: 2 }, Pickable::default()))
+        .observe(super::on_listing_click)
+        .id();
+
+    app.world_mut()
+        .trigger(click_event(row, window, PointerButton::Primary));
+    assert_eq!(
+        app.world()
+            .resource::<super::buyer::BuyerBasket>()
+            .quantity(2),
+        1
+    );
+    app.world_mut()
+        .trigger(click_event(row, window, PointerButton::Primary));
+    assert_eq!(
+        app.world()
+            .resource::<super::buyer::BuyerBasket>()
+            .quantity(2),
+        0,
+        "a second primary click clears the row"
+    );
+
+    app.world_mut()
+        .trigger(click_event(row, window, PointerButton::Secondary));
+    let written: Vec<super::ShowInfoModal> = app
+        .world_mut()
+        .resource_mut::<Messages<super::ShowInfoModal>>()
+        .drain()
+        .collect();
+    assert_eq!(written.len(), 1);
+    let super::InfoContent::Item { view, action } = &written[0].content else {
+        panic!("expected an item view");
+    };
+    assert_eq!(view.name, "Red Potion");
+    assert_eq!(view.meta[0], ("Price".to_string(), "500z".to_string()));
+    assert!(action.is_none(), "vendor stock offers no bag action");
 }

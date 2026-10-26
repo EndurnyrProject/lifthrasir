@@ -17,21 +17,28 @@ use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui_widgets::Activate;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
+use lifthrasir_assets::catalogs::random_option::RandomOptionDb;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::cart::Cart;
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::vending::{
     RevealVendingSeller, VendingIntent, VendingNotice, VendingState,
 };
-use net_contract::dto::{VendingCloseTarget, VendingOffer, VendingSetup};
+use net_contract::dto::{VendingCloseTarget, VendingOffer, VendingPurchaseOutcome, VendingSetup};
 use net_contract::events::ChatHeard;
 
+pub mod buyer;
 pub mod feedback;
 pub mod scene;
 
 #[cfg(test)]
 mod tests;
 
+use buyer::BuyerBasket;
 use feedback::vending_notice_text;
+
+use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view};
 
 /// Marks the window root so visibility, drag, and close act on this window only.
 #[derive(Component, Default, Clone)]
@@ -95,6 +102,19 @@ pub struct VendingStockCell {
 /// The submit affordance of the editor.
 #[derive(Component, Default, Clone)]
 pub struct VendingOpenButton;
+
+/// One listing row of the buyer body, keyed by its opaque listing index.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VendingBasketRow {
+    pub index: u32,
+}
+
+/// One quantity stepper of a buyer listing row.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BasketStep {
+    pub index: u32,
+    pub up: bool,
+}
 
 /// The cancel affordance of the editor.
 #[derive(Component, Default, Clone)]
@@ -227,11 +247,16 @@ pub fn clamp_title(title: &str, max_bytes: u32) -> String {
     title[..end].to_string()
 }
 
+/// Body identity: what is shown, which shop or setup it belongs to, and the rows
+/// it renders (cart slots for the editor, staged quantities for the basket).
+type Structure = (Mode, String, Vec<(u32, u32)>);
+
 /// Which body the window is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     Setup,
     Shop,
+    Browse,
 }
 
 /// What the window currently shows, and whether the player wants it open.
@@ -241,7 +266,9 @@ pub struct VendingUi {
     mode: Option<Mode>,
     /// The structural identity of the rendered body, so unrelated updates do not
     /// respawn (and thereby unfocus) typed fields.
-    structure: Option<(Mode, String, Vec<u32>)>,
+    structure: Option<Structure>,
+    /// The browse snapshot the basket was last reconciled against.
+    last_browse: Option<net_contract::dto::VendingSnapshot>,
     error: Option<String>,
     pending_close: bool,
 }
@@ -269,12 +296,15 @@ pub struct VendingWindowPlugin;
 impl Plugin for VendingWindowPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SellerDraft>()
+            .init_resource::<BuyerBasket>()
             .init_resource::<VendingUi>()
             .add_systems(
                 Update,
                 (
                     reveal_on_intent,
                     sync_window_state,
+                    sync_browse_basket,
+                    settle_buyer_basket,
                     rebuild_content,
                     sync_texts,
                     deliver_vending_feedback,
@@ -295,8 +325,13 @@ pub fn spawn_vending_window(commands: &mut Commands, parent: Entity) {
         .insert(ChildOf(parent));
 }
 
-fn reset_vending_ui(mut draft: ResMut<SellerDraft>, mut ui: ResMut<VendingUi>) {
+fn reset_vending_ui(
+    mut draft: ResMut<SellerDraft>,
+    mut basket: ResMut<BuyerBasket>,
+    mut ui: ResMut<VendingUi>,
+) {
     draft.reset();
+    basket.clear();
     *ui = VendingUi::default();
 }
 
@@ -319,13 +354,7 @@ fn sync_window_state(
         ui.pending_close = false;
     }
 
-    let mode = if state.setup().is_some() {
-        Some(Mode::Setup)
-    } else if state.active_shop().is_some() {
-        Some(Mode::Shop)
-    } else {
-        None
-    };
+    let mode = current_mode(&state);
 
     // A new authoritative setup always opens the editor; leaving vending hides it.
     if ui.mode != mode {
@@ -350,6 +379,7 @@ fn sync_window_state(
     let label = match mode {
         Some(Mode::Setup) => "Set Up Shop",
         Some(Mode::Shop) => "My Shop",
+        Some(Mode::Browse) => "Vendor",
         None => "Vending",
     };
     for mut title in &mut titles {
@@ -359,14 +389,39 @@ fn sync_window_state(
     }
 }
 
+/// Setup preparation wins over everything: the seller editor is authoritative.
+fn current_mode(state: &VendingState) -> Option<Mode> {
+    if state.setup().is_some() {
+        return Some(Mode::Setup);
+    }
+    if state.browse().is_some() {
+        return Some(Mode::Browse);
+    }
+    state.active_shop().map(|_| Mode::Shop)
+}
+
 fn state_identity(state: &VendingState) -> (Option<Mode>, String) {
-    if let Some(setup) = state.setup() {
-        return (Some(Mode::Setup), setup.setup_id.clone());
+    match current_mode(state) {
+        Some(Mode::Setup) => (
+            Some(Mode::Setup),
+            state
+                .setup()
+                .map_or_else(String::new, |setup| setup.setup_id.clone()),
+        ),
+        Some(Mode::Shop) => (
+            Some(Mode::Shop),
+            state
+                .active_shop()
+                .map_or_else(String::new, |shop| shop.shop_id.clone()),
+        ),
+        Some(Mode::Browse) => (
+            Some(Mode::Browse),
+            state
+                .browse()
+                .map_or_else(String::new, |shop| shop.shop_id.clone()),
+        ),
+        None => (None, String::new()),
     }
-    if let Some(shop) = state.active_shop() {
-        return (Some(Mode::Shop), shop.shop_id.clone());
-    }
-    (None, String::new())
 }
 
 #[expect(
@@ -380,13 +435,23 @@ fn rebuild_content(
     item_db: Res<ItemDb>,
     mut ui: ResMut<VendingUi>,
     mut draft: ResMut<SellerDraft>,
+    basket: Res<BuyerBasket>,
+    statuses: Query<&CharacterStatus, With<LocalPlayer>>,
     fields: Query<(&VendingDraftField, &EditableText)>,
     title_fields: Query<&EditableText, With<VendingTitleField>>,
     hosts: Query<(Entity, Option<&Children>), With<VendingContentHost>>,
     new_hosts: Query<(), Added<VendingContentHost>>,
 ) {
     let (mode, identity) = state_identity(&state);
-    let membership: Vec<u32> = draft.rows.iter().map(|row| row.cart_index).collect();
+    let membership: Vec<(u32, u32)> = match mode {
+        Some(Mode::Setup) => draft.rows.iter().map(|row| (row.cart_index, 0)).collect(),
+        Some(Mode::Browse) => basket
+            .lines()
+            .iter()
+            .map(|line| (line.index, line.amount))
+            .collect(),
+        _ => Vec::new(),
+    };
     let structure = mode.map(|mode| (mode, identity, membership));
     if structure == ui.structure && new_hosts.is_empty() {
         return;
@@ -425,6 +490,22 @@ fn rebuild_content(
             let note = format!("Earned {}z", shop.total_earned);
             commands
                 .spawn_scene(scene::monitor(rows, sales, note, error))
+                .insert(ChildOf(host));
+        }
+        Some(Mode::Browse) => {
+            let Some(shop) = state.browse() else { return };
+            let rows = browse_views(shop, &basket, &item_db);
+            let total = basket.total(shop);
+            let note = match total {
+                Some(total) => format!("Total {}z", total),
+                None => "Total -".to_string(),
+            };
+            let zeny = u64::from(statuses.iter().next().map_or(0, |status| status.zeny));
+            let guidance = total.and_then(|total| {
+                (total > zeny).then(|| format!("You need {} more zeny.", total - zeny))
+            });
+            commands
+                .spawn_scene(scene::buyer(rows, note, guidance, error))
                 .insert(ChildOf(host));
         }
         None => {}
@@ -508,6 +589,26 @@ fn shop_views(
                 .unwrap_or_else(|| format!("Item #{}", item.nameid)),
             amount: item.amount,
             price: item.price,
+        })
+        .collect()
+}
+
+fn browse_views(
+    shop: &net_contract::dto::VendingSnapshot,
+    basket: &BuyerBasket,
+    item_db: &ItemDb,
+) -> Vec<scene::BrowseRowView> {
+    shop.items
+        .iter()
+        .map(|item| scene::BrowseRowView {
+            index: item.index,
+            label: item_db
+                .name(item.nameid, item.identified)
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("Item #{}", item.nameid)),
+            stock: item.amount,
+            price: item.price,
+            quantity: basket.quantity(item.index),
         })
         .collect()
 }
@@ -719,4 +820,145 @@ fn deliver_vending_feedback(
             message: vending_notice_text(notice),
         });
     }
+}
+
+/// Binds the basket to the shop being browsed and re-applies it to a refreshed
+/// snapshot, explaining every dropped, re-priced, or clamped row.
+fn sync_browse_basket(
+    state: Res<VendingState>,
+    mut basket: ResMut<BuyerBasket>,
+    mut ui: ResMut<VendingUi>,
+) {
+    let Some(current) = state.browse().cloned() else {
+        ui.last_browse = None;
+        return;
+    };
+    if ui.last_browse.as_ref() == Some(&current) {
+        return;
+    }
+    let previous = ui.last_browse.take();
+    let same_shop = previous.as_ref().is_some_and(|previous| {
+        previous.shop_id == current.shop_id && previous.vendor_unit_id == current.vendor_unit_id
+    });
+    if !state.purchase_pending() {
+        basket.bind(current.vendor_unit_id, &current.shop_id);
+    }
+    if let Some(previous) = previous.filter(|_| same_shop && !state.purchase_pending()) {
+        let messages = basket.reconcile(&previous, &current);
+        if !messages.is_empty() {
+            ui.set_error(Some(messages.join(" ")));
+        }
+    }
+    ui.last_browse = Some(current);
+}
+
+/// A settled checkout clears the basket it bought from.
+fn settle_buyer_basket(mut notices: MessageReader<VendingNotice>, mut basket: ResMut<BuyerBasket>) {
+    for notice in notices.read() {
+        if let VendingNotice::Purchase {
+            outcome: VendingPurchaseOutcome::Success,
+            ..
+        } = notice
+        {
+            basket.clear();
+        }
+    }
+}
+
+/// A row click stages or clears one listing; a secondary click inspects the
+/// exact instance on display, with no bag actions.
+pub fn on_listing_click(
+    click: On<PointerClick>,
+    rows: Query<&VendingBasketRow>,
+    state: Res<VendingState>,
+    item_db: Res<ItemDb>,
+    option_db: Option<Res<RandomOptionDb>>,
+    mut basket: ResMut<BuyerBasket>,
+    mut info: MessageWriter<ShowInfoModal>,
+) {
+    let Ok(row) = rows.get(click.entity) else {
+        return;
+    };
+    let Some(shop) = state.browse() else {
+        return;
+    };
+    match click.button {
+        PointerButton::Secondary => {
+            let Some(listing) = shop.items.iter().find(|item| item.index == row.index) else {
+                return;
+            };
+            info.write(ShowInfoModal {
+                content: InfoContent::Item {
+                    view: view::vending_item_view(listing, &item_db, option_db.as_deref()),
+                    action: None,
+                },
+            });
+        }
+        PointerButton::Primary => {
+            if state.purchase_pending() {
+                return;
+            }
+            let staged = basket.quantity(row.index) == 0;
+            basket.set_quantity(shop, row.index, u32::from(staged));
+        }
+        _ => {}
+    }
+}
+
+pub fn on_basket_step(
+    activate: On<Activate>,
+    steps: Query<&BasketStep>,
+    state: Res<VendingState>,
+    mut basket: ResMut<BuyerBasket>,
+) {
+    let Ok(step) = steps.get(activate.entity) else {
+        return;
+    };
+    if state.purchase_pending() {
+        return;
+    }
+    let Some(shop) = state.browse() else {
+        return;
+    };
+    basket.step(shop, step.index, step.up);
+}
+
+pub fn on_basket_refresh(_: On<Activate>, mut intents: MessageWriter<VendingIntent>) {
+    intents.write(VendingIntent::Refresh);
+}
+
+/// Confirms the staged quantities and quoted prices in exactly one request.
+pub fn on_checkout(
+    _: On<Activate>,
+    state: Res<VendingState>,
+    statuses: Query<&CharacterStatus, With<LocalPlayer>>,
+    basket: Res<BuyerBasket>,
+    mut ui: ResMut<VendingUi>,
+    mut intents: MessageWriter<VendingIntent>,
+) {
+    if state.purchase_pending() {
+        return;
+    }
+    let Some(shop) = state.browse() else {
+        return;
+    };
+    if basket.is_empty() {
+        ui.set_error(Some("Choose at least one item.".to_string()));
+        return;
+    }
+    let Some(total) = basket.total(shop) else {
+        ui.set_error(Some("The basket no longer matches this shop.".to_string()));
+        return;
+    };
+    let zeny = u64::from(statuses.iter().next().map_or(0, |status| status.zeny));
+    if total > zeny {
+        ui.set_error(Some(format!("You need {} more zeny.", total - zeny)));
+        return;
+    }
+    ui.set_error(None);
+    intents.write(VendingIntent::Purchase {
+        vendor_unit_id: shop.vendor_unit_id,
+        shop_id: shop.shop_id.clone(),
+        items: basket.to_buy_lines(shop),
+    });
 }

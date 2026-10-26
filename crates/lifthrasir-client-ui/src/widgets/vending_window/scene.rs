@@ -18,10 +18,11 @@ use lifthrasir_ui::theme::feathers_theme::{
 use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 
 use crate::widgets::vending_window::{
-    DraftFieldKind, VendingCancelButton, VendingContentHost, VendingDraftField, VendingErrorLine,
-    VendingModeNote, VendingOpenButton, VendingRowRemove, VendingStockCell, VendingTitle,
-    VendingTitleField, VendingWindowBody, VendingWindowRoot, VendingWindowTitlebar,
-    on_cancel_setup, on_close_button, on_close_shop, on_open_shop, on_row_removed,
+    BasketStep, DraftFieldKind, VendingBasketRow, VendingCancelButton, VendingContentHost,
+    VendingDraftField, VendingErrorLine, VendingModeNote, VendingOpenButton, VendingRowRemove,
+    VendingStockCell, VendingTitle, VendingTitleField, VendingWindowBody, VendingWindowRoot,
+    VendingWindowTitlebar, on_basket_refresh, on_basket_step, on_cancel_setup, on_checkout,
+    on_close_button, on_close_shop, on_listing_click, on_open_shop, on_row_removed,
     on_stock_toggled,
 };
 
@@ -54,6 +55,16 @@ pub struct ShopRowView {
     pub label: String,
     pub amount: u32,
     pub price: u32,
+}
+
+/// One listing row of the buyer body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowseRowView {
+    pub index: u32,
+    pub label: String,
+    pub stock: u32,
+    pub price: u32,
+    pub quantity: u32,
 }
 
 /// One reported sale shown under the monitor.
@@ -408,6 +419,108 @@ fn error_line(error: Option<String>) -> impl Scene {
             font_size: {FontSize::Px(12.0)},
         }
         TextColor({theme::GOLD})
+        @ignore_picking()
+    }
+}
+
+/// The buyer body: one row per listing, the staged total, and checkout.
+pub fn buyer(
+    rows: Vec<BrowseRowView>,
+    note: String,
+    guidance: Option<String>,
+    error: Option<String>,
+) -> impl Scene {
+    let rows: Vec<_> = rows.into_iter().map(browse_row).collect();
+    let guidance = guidance.map(|text| EntityScene(muted(text)));
+    let empty = rows
+        .is_empty()
+        .then(|| EntityScene(muted("This shop has nothing left.".to_string())));
+    bsn! {
+        Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
+        @ignore_picking()
+        Children [
+            @plain_note(note) --
+            {guidance} --
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: px(6),
+                padding: {UiRect::all(px(8))},
+                border: px(1),
+                border_radius: BorderRadius::all(px(8)),
+            }
+            ThemeBackgroundColor({TOKEN_PANEL_BG})
+            @ignore_picking()
+            Children [
+                @section_label("For sale".to_string()) --
+                Node { flex_direction: FlexDirection::Column, row_gap: px(6) }
+                @ignore_picking()
+                Children [ {rows} -- {empty} ]
+            ] --
+            @error_line(error) --
+            Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
+            @ignore_picking()
+            Children [
+                @FeathersButton { @caption: bsn! { @chrome_text("Refresh".to_string(), 12.0, theme::TEXT_DIM) } }
+                Node { height: px(34) }
+                on(on_basket_refresh) --
+                Node { flex_grow: 1.0 }
+                @ignore_picking() --
+                @FeathersButton { @caption: bsn! { @chrome_text("Buy".to_string(), 12.0, theme::TEXT) } }
+                Node { width: px(120), height: px(34) }
+                BackgroundColor({theme::EMERALD})
+                on(on_checkout)
+            ]
+        ]
+    }
+}
+
+fn browse_row(view: BrowseRowView) -> impl Scene {
+    let index = view.index;
+    let detail = format!("{} / x{} at {}z", view.label, view.stock, view.price);
+    let staged = if view.quantity == 0 {
+        "Not in basket".to_string()
+    } else {
+        format!("In basket: x{}", view.quantity)
+    };
+    bsn! {
+        VendingBasketRow { index }
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: px(6),
+            padding: {UiRect::axes(px(6), px(4))},
+            border_radius: BorderRadius::all(px(6)),
+        }
+        BackgroundColor({theme::GLASS_2})
+        Pickable::default()
+        on(on_listing_click)
+        Children [
+            Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Column, row_gap: px(2) }
+            @ignore_picking()
+            Children [
+                @chrome_text(detail, 12.0, theme::TEXT) --
+                @chrome_text(staged, 11.0, theme::TEXT_DIM)
+            ] --
+            BasketStep { index, up: false }
+            @FeathersButton { @caption: bsn! { @chrome_text("-".to_string(), 12.0, theme::TEXT) } }
+            Node { width: px(26), height: px(26) }
+            on(on_basket_step) --
+            BasketStep { index, up: true }
+            @FeathersButton { @caption: bsn! { @chrome_text("+".to_string(), 12.0, theme::TEXT) } }
+            Node { width: px(26), height: px(26) }
+            on(on_basket_step)
+        ]
+    }
+}
+
+fn plain_note(note: String) -> impl Scene {
+    bsn! {
+        Text(note)
+        TextFont {
+            font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
+            font_size: {FontSize::Px(12.0)},
+        }
+        ThemeTextColor({TOKEN_TEXT})
         @ignore_picking()
     }
 }
