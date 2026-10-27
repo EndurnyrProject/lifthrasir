@@ -20,6 +20,10 @@ mod tests {
         app.add_plugins(NetContractPlugin);
         assert!(
             app.world()
+                .contains_resource::<Messages<commands::MemoRequested>>()
+        );
+        assert!(
+            app.world()
                 .contains_resource::<Messages<events::ItemSkillOffered>>()
         );
         assert!(

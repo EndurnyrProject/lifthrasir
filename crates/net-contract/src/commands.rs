@@ -80,6 +80,11 @@ pub struct EmoteSent {
     pub emote_type: u32,
 }
 
+/// Remember the authenticated character's current location as a Warp Portal memo.
+#[derive(Message, Debug, Clone, Copy)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct MemoRequested;
+
 /// Request to cast a single-target skill (`skill_id` at `level`) at `target_id`.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

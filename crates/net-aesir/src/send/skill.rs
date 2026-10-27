@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::{QuinnetClient, client_connected};
-use net_contract::commands::{GroundSkillCastRequested, SkillCastRequested};
+use net_contract::commands::{GroundSkillCastRequested, MemoRequested, SkillCastRequested};
 
 use crate::channels::GAMEPLAY;
 use crate::envelope::Body;
-use crate::proto::aesir::net::{GroundSkillCast, SkillCast};
+use crate::proto::aesir::net::{GroundSkillCast, MemoRequest, SkillCast};
 use crate::zone::{QuicZoneState, ZonePhase};
 
 fn skill_cast_body(c: &SkillCastRequested) -> Body {
@@ -67,9 +67,39 @@ pub fn send_ground_skill_cast_requests(
     }
 }
 
+fn memo_body() -> Body {
+    Body::MemoRequest(MemoRequest {})
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_memo_requests(
+    mut events: MessageReader<MemoRequested>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        events.clear();
+        return;
+    }
+    for _ in events.read() {
+        if let Err(error) = zone.send(&mut client, GAMEPLAY, memo_body()) {
+            error!("failed to send MemoRequest: {error}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn memo_body_has_no_client_supplied_position() {
+        assert!(matches!(memo_body(), Body::MemoRequest(MemoRequest {})));
+    }
 
     #[test]
     fn skill_cast_body_carries_skill_level_and_target() {

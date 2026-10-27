@@ -15,7 +15,7 @@ use bevy::ui_widgets::TextInput;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::character::chat::ChatSendRequested;
 use lifthrasir_client::domain::emote::EmoteRequested;
-use net_contract::commands::MountPeco;
+use net_contract::commands::{MemoRequested, MountPeco};
 use net_contract::events::ChatHeard;
 
 use crate::widgets::emote::slash::parse_emote_slash;
@@ -61,6 +61,8 @@ pub(crate) struct ChatInputWriters<'w> {
     mount: MessageWriter<'w, MountPeco>,
     navi: MessageWriter<'w, NaviSlash>,
     guild: MessageWriter<'w, GuildSlashSubmitted>,
+    memo: MessageWriter<'w, MemoRequested>,
+    feedback: MessageWriter<'w, ChatHeard>,
 }
 
 pub struct ChatBoxPlugin;
@@ -445,7 +447,8 @@ fn append_incoming_chat(
 ///   (`parse_party_slash`) is queued as `PartySlashSubmitted`; then `/trade <name>`
 ///   (`parse_trade_slash`) is queued as `TradeSlashSubmitted`; then a recognized navigation
 ///   slash (`parse_navi_slash`) is queued as `NaviSlash`; `/guild` is queued as
-///   `GuildSlashSubmitted` (including syntax errors); otherwise it is sent as normal chat.
+///   `GuildSlashSubmitted` (including syntax errors). `/memo` sends a memo request;
+///   arguments produce usage feedback. Everything else is sent as normal chat.
 ///
 pub(crate) fn chat_input_control(
     keys: Res<ButtonInput<KeyCode>>,
@@ -486,6 +489,15 @@ pub(crate) fn chat_input_control(
                 writers.navi.write(slash);
             } else if let Some(slash) = parse_guild_slash(message) {
                 writers.guild.write(slash);
+            } else if message.split_whitespace().next() == Some("/memo") {
+                if message == "/memo" {
+                    writers.memo.write(MemoRequested);
+                } else {
+                    writers.feedback.write(ChatHeard {
+                        gid: 0,
+                        message: "Usage: /memo".into(),
+                    });
+                }
             } else {
                 writers.chat.write(ChatSendRequested {
                     message: message.to_string(),
@@ -567,6 +579,8 @@ mod tests {
         app.init_resource::<ButtonInput<KeyCode>>();
         app.init_resource::<InputFocus>();
         app.add_message::<ChatSendRequested>();
+        app.add_message::<net_contract::commands::MemoRequested>();
+        app.add_message::<ChatHeard>();
         app.add_message::<PartySlashSubmitted>();
         app.add_message::<TradeSlashSubmitted>();
         app.add_message::<GuildSlashSubmitted>();
@@ -579,6 +593,35 @@ mod tests {
             .spawn((ChatInput, EditableText::new(initial_text)))
             .id();
         (app, chat)
+    }
+
+    #[test]
+    fn memo_slash_is_a_request_not_broadcast_chat() {
+        for (text, requests) in [("/memo", 1), ("/memo prontera", 0)] {
+            let (mut app, chat) = chat_control_app(text);
+            app.world_mut()
+                .resource_mut::<InputFocus>()
+                .set(chat, FocusCause::Navigated);
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::Enter);
+            app.update();
+            assert!(chat_messages(&app).is_empty());
+            assert_eq!(
+                app.world()
+                    .resource::<Messages<net_contract::commands::MemoRequested>>()
+                    .iter_current_update_messages()
+                    .count(),
+                requests
+            );
+            assert_eq!(
+                app.world()
+                    .resource::<Messages<ChatHeard>>()
+                    .iter_current_update_messages()
+                    .count(),
+                1 - requests
+            );
+        }
     }
 
     fn chat_messages(app: &App) -> Vec<ChatSendRequested> {
