@@ -1,5 +1,4 @@
-// TODO: Wire GameMode, card compounding, vending SP errors, guild alliances, and
-// guild storage through the net-contract adapter boundary.
+// TODO: Wire GameMode through the net-contract adapter boundary.
 pub mod aesir {
     pub mod net {
         #![allow(clippy::all)]

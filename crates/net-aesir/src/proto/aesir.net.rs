@@ -762,25 +762,20 @@ pub mod envelope {
     }
 }
 /// Client -> server, first message on the Control channel after connect.
-/// Capabilities are optional and do not change the protocol-version baseline.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Hello {
     #[prost(uint32, tag = "1")]
     pub protocol_version: u32,
     #[prost(string, tag = "2")]
     pub build: ::prost::alloc::string::String,
-    #[prost(enumeration = "FeatureCapability", repeated, tag = "3")]
-    pub capabilities: ::prost::alloc::vec::Vec<i32>,
 }
-/// Server -> client, response to Hello with the negotiated capability intersection.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+/// Server -> client, response to Hello.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HelloAck {
     #[prost(uint32, tag = "1")]
     pub protocol_version: u32,
     #[prost(bool, tag = "2")]
     pub accepted: bool,
-    #[prost(enumeration = "FeatureCapability", repeated, tag = "3")]
-    pub capabilities: ::prost::alloc::vec::Vec<i32>,
     /// Active ruleset; omitted values default to renewal for compatibility.
     #[prost(enumeration = "GameMode", tag = "4")]
     pub mode: i32,
@@ -4195,33 +4190,6 @@ pub struct WaitingRoomChat {
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub message: ::prost::alloc::string::String,
-}
-/// Optional features advertised in Hello; HelloAck returns the negotiated intersection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum FeatureCapability {
-    Unspecified = 0,
-    SkillTextInput = 1,
-}
-impl FeatureCapability {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "FEATURE_CAPABILITY_UNSPECIFIED",
-            Self::SkillTextInput => "FEATURE_CAPABILITY_SKILL_TEXT_INPUT",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "FEATURE_CAPABILITY_UNSPECIFIED" => Some(Self::Unspecified),
-            "FEATURE_CAPABILITY_SKILL_TEXT_INPUT" => Some(Self::SkillTextInput),
-            _ => None,
-        }
-    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

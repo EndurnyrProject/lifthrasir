@@ -31,7 +31,6 @@ pub fn quic_send_hello(
         let hello = Body::Hello(Hello {
             protocol_version: 1,
             build: state.pending.build.clone(),
-            capabilities: Vec::new(),
         });
         if let Err(e) = state.conn.send(client.connection_mut(), CONTROL, hello) {
             error!("failed to send Hello: {e}");
