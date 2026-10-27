@@ -1275,7 +1275,10 @@ mod tests {
             .unwrap();
         assert_eq!(pending.unit_id, 1);
         assert_eq!(pending.lines, [(501, 3)]);
-        app.world_mut().insert_resource(session(ShopTab::Buy));
+        let mut replacement = session(ShopTab::Buy);
+        replacement.cart_buy.insert(502, 1);
+        replacement.confirm_open = true;
+        app.world_mut().insert_resource(replacement);
         app.world_mut().trigger(Activate { entity: button });
         app.world_mut().flush();
         assert_eq!(app.world().resource::<Messages<BuyFromShop>>().len(), 1);

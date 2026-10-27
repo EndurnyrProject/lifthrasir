@@ -16,10 +16,17 @@ pub struct NpcDialogReceived {
 /// over `seconds`. `color` is `0xRRGGBB` (rendered verbatim; `0` is a black bar).
 /// `npc_id` owns the interaction, so the client can address the Progress/Cancel
 /// ack to the exact NPC even when no dialogue window is open.
-#[derive(Message, Debug, Clone, Copy)]
-#[auto_add_message(plugin = crate::NetContractPlugin)]
+#[derive(Debug, Clone, Copy)]
 pub struct ProgressBarStarted {
     pub seconds: u32,
     pub color: u32,
     pub npc_id: u32,
+}
+
+/// Progress-bar lifecycle in receive order, including same-frame replacements.
+#[derive(Message, Debug, Clone, Copy)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub enum ProgressBarIngress {
+    Started(ProgressBarStarted),
+    Aborted { npc_id: u32 },
 }

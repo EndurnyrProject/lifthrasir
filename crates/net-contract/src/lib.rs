@@ -113,7 +113,7 @@ mod tests {
         );
         assert!(
             app.world()
-                .contains_resource::<Messages<events::ProgressBarStarted>>()
+                .contains_resource::<Messages<events::ProgressBarIngress>>()
         );
         assert!(
             app.world()

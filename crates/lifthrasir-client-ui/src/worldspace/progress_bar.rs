@@ -1,12 +1,13 @@
 //! NPC `progressbar`: a screen-projected fill bar above the local player's head.
 //!
-//! Spawned on [`ProgressBarStarted`] (the `progressbar` script buildin), the bar
+//! Lifecycle arrives through [`ProgressBarIngress`]. A started bar
 //! fills over `seconds` and is tinted by the script's `color` (0xRRGGBB, rendered
 //! verbatim — `0` is a black bar). On natural completion the client acks
 //! `NpcResponse::Progress`; a movement request or ESC while it runs acks
 //! `NpcResponse::Cancel` instead, closing any open dialogue window too. The
 //! server's `npc_id` addresses the ack, so a bare `progressbar` with no dialogue
-//! window still completes and cancels correctly.
+//! window still completes and cancels correctly. A matching server abort removes
+//! the bar and acknowledges `Progress` before timer or local cancellation.
 //!
 //! While a bar is live, [`ActiveProgressBar`] is present; the NPC dialogue
 //! widget's own ESC handler is gated off against it so ESC fires exactly one
@@ -17,7 +18,7 @@ use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use net_contract::commands::{MoveRequested, RespondToNpc};
 use net_contract::dto::NpcResponse;
-use net_contract::events::ProgressBarStarted;
+use net_contract::events::ProgressBarIngress;
 
 use crate::widgets::npc_dialog::{ActiveNpcDialog, NpcDialogRoot};
 use crate::worldspace::{WorldCameraFilter, viewport_to_ui};
@@ -58,10 +59,10 @@ impl Plugin for NpcProgressBarPlugin {
             Update,
             (
                 spawn_progress_bar,
-                complete_progress_bar,
-                cancel_progress_bar.run_if(resource_exists::<ActiveProgressBar>),
-                fill_progress_bar,
                 follow_progress_bar,
+                complete_progress_bar,
+                cancel_progress_bar,
+                fill_progress_bar,
             )
                 .chain()
                 .run_if(in_state(GameState::InGame)),
@@ -78,70 +79,103 @@ fn bar_color(rgb: u32) -> Color {
     Color::srgb_u8(r, g, b)
 }
 
-/// Spawn the bar on the invoking player's head. A new bar replaces any live one
-/// (the player's script suspends on a single bar), and `ActiveProgressBar` is
-/// (re)inserted so the dialogue widget yields ESC.
+/// Apply lifecycle messages in order, tracking even entities queued in this pass.
 fn spawn_progress_bar(
-    mut events: MessageReader<ProgressBarStarted>,
+    mut events: MessageReader<ProgressBarIngress>,
     mut commands: Commands,
     player: Query<Entity, With<LocalPlayer>>,
-    existing: Query<Entity, With<NpcProgressBar>>,
+    existing: Query<(Entity, &NpcProgressBar)>,
+    mut respond: MessageWriter<RespondToNpc>,
+    mut keys: ResMut<ButtonInput<KeyCode>>,
 ) {
-    for event in events.read() {
-        if event.seconds == 0 {
-            continue;
+    if events.is_empty() {
+        return;
+    }
+    let mut current = existing
+        .iter()
+        .next()
+        .map(|(entity, bar)| (entity, bar.npc_id));
+    for update in events.read() {
+        match update {
+            ProgressBarIngress::Started(event) => {
+                if event.seconds == 0 {
+                    continue;
+                }
+                let Ok(target) = player.single() else {
+                    continue;
+                };
+                if let Some((entity, _)) = current.take() {
+                    commands.entity(entity).despawn();
+                }
+                let entity = spawn_bar(
+                    &mut commands,
+                    target,
+                    event.npc_id,
+                    event.seconds,
+                    event.color,
+                );
+                current = Some((entity, event.npc_id));
+            }
+            ProgressBarIngress::Aborted { npc_id } => {
+                if let Some((entity, owner)) = current.filter(|(_, owner)| owner == npc_id) {
+                    commands.entity(entity).despawn();
+                    current = None;
+                    respond.write(RespondToNpc {
+                        npc_id: owner,
+                        response: NpcResponse::Progress,
+                    });
+                    keys.clear_just_pressed(KeyCode::Escape);
+                }
+            }
         }
-        let Ok(target) = player.single() else {
-            continue;
-        };
-        for bar in &existing {
-            commands.entity(bar).despawn();
-        }
-        spawn_bar(
-            &mut commands,
-            target,
-            event.npc_id,
-            event.seconds,
-            event.color,
-        );
-        commands.insert_resource(ActiveProgressBar {
-            npc_id: event.npc_id,
-        });
+    }
+    if let Some((_, npc_id)) = current {
+        commands.insert_resource(ActiveProgressBar { npc_id });
+    } else {
+        commands.remove_resource::<ActiveProgressBar>();
     }
 }
 
-fn spawn_bar(commands: &mut Commands, target: Entity, npc_id: u32, seconds: u32, color: u32) {
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            width: Val::Px(BAR_WIDTH),
-            height: Val::Px(BAR_HEIGHT),
-            border: UiRect::all(Val::Px(1.0)),
-            border_radius: BorderRadius::all(Val::Px(3.0)),
-            ..default()
-        },
-        BackgroundColor(lifthrasir_ui::theme::FIELD),
-        BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT),
-        GlobalZIndex(BAR_Z),
-        Visibility::Hidden,
-        Pickable::IGNORE,
-        NpcProgressBar {
-            target,
-            npc_id,
-            timer: Timer::from_seconds(seconds as f32, TimerMode::Once),
-        },
-        children![(
+fn spawn_bar(
+    commands: &mut Commands,
+    target: Entity,
+    npc_id: u32,
+    seconds: u32,
+    color: u32,
+) -> Entity {
+    commands
+        .spawn((
             Node {
-                width: Val::Percent(0.0),
-                height: Val::Percent(100.0),
-                border_radius: BorderRadius::all(Val::Px(2.0)),
+                position_type: PositionType::Absolute,
+                width: Val::Px(BAR_WIDTH),
+                height: Val::Px(BAR_HEIGHT),
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(3.0)),
                 ..default()
             },
-            BackgroundColor(bar_color(color)),
-            ProgressBarFill,
+            BackgroundColor(lifthrasir_ui::theme::FIELD),
+            BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT),
+            GlobalZIndex(BAR_Z),
+            Visibility::Hidden,
             Pickable::IGNORE,
-        )],
-    ));
+            NpcProgressBar {
+                target,
+                npc_id,
+                timer: Timer::from_seconds(seconds as f32, TimerMode::Once),
+            },
+            children![(
+                Node {
+                    width: Val::Percent(0.0),
+                    height: Val::Percent(100.0),
+                    border_radius: BorderRadius::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(bar_color(color)),
+                ProgressBarFill,
+                Pickable::IGNORE,
+            )],
+        ))
+        .id()
 }
 
 /// Advance the timer; on completion ack `Progress`, despawn, and drop the gate.
@@ -168,7 +202,8 @@ fn complete_progress_bar(
 /// A movement request or ESC while the bar runs acks `Cancel`, despawns the bar,
 /// and closes any open dialogue window. The triggering move is left in its
 /// Messages buffer, so the network send system still dispatches it — the player
-/// walks. Gated on `ActiveProgressBar`, so it only fires while a bar is live.
+/// walks. Drain movement even while no bar is live, so old requests cannot cancel
+/// a subsequently started bar.
 fn cancel_progress_bar(
     keys: Res<ButtonInput<KeyCode>>,
     mut moves: MessageReader<MoveRequested>,
@@ -178,7 +213,12 @@ fn cancel_progress_bar(
     mut commands: Commands,
     mut respond: MessageWriter<RespondToNpc>,
 ) {
-    let moved = moves.read().next().is_some();
+    if bars.is_empty() {
+        moves.clear();
+        return;
+    }
+    let moved = !moves.is_empty();
+    moves.clear();
     if !moved && !keys.just_pressed(KeyCode::Escape) {
         return;
     }
@@ -227,12 +267,14 @@ fn follow_progress_bar(
     mut bars: Query<(Entity, &NpcProgressBar, &mut Node, &mut Visibility)>,
     mut commands: Commands,
 ) {
-    let Ok((camera, camera_transform)) = camera.single() else {
-        return;
-    };
+    let camera = camera.single().ok();
     for (entity, bar, mut node, mut visibility) in &mut bars {
         let Ok(target_transform) = targets.get(bar.target) else {
             commands.entity(entity).despawn();
+            commands.remove_resource::<ActiveProgressBar>();
+            continue;
+        };
+        let Some((camera, camera_transform)) = camera else {
             continue;
         };
         match camera.world_to_viewport(camera_transform, target_transform.translation()) {
@@ -257,6 +299,161 @@ fn despawn_all_progress_bars(mut commands: Commands, bars: Query<Entity, With<Np
 #[cfg(test)]
 mod tests {
     use super::*;
+    use net_contract::events::ProgressBarStarted;
+
+    fn lifecycle_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::state::app::StatesPlugin));
+        app.init_state::<GameState>();
+        app.add_message::<ProgressBarIngress>()
+            .add_message::<RespondToNpc>()
+            .add_message::<MoveRequested>();
+        app.init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<UiScale>();
+        app.add_plugins(NpcProgressBarPlugin);
+        app.world_mut()
+            .spawn((LocalPlayer, GlobalTransform::default()));
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(GameState::InGame);
+        app.update();
+        app
+    }
+
+    #[test]
+    fn same_frame_start_abort_replacement_keeps_only_the_last_bar() {
+        let mut app = lifecycle_app();
+        for event in [
+            ProgressBarIngress::Started(ProgressBarStarted {
+                seconds: 3,
+                color: 0,
+                npc_id: 7,
+            }),
+            ProgressBarIngress::Aborted { npc_id: 7 },
+            ProgressBarIngress::Aborted { npc_id: 7 },
+            ProgressBarIngress::Started(ProgressBarStarted {
+                seconds: 5,
+                color: 0,
+                npc_id: 9,
+            }),
+        ] {
+            app.world_mut().write_message(event);
+        }
+        app.update();
+        let world = app.world_mut();
+        let bars: Vec<_> = world.query::<&NpcProgressBar>().iter(world).collect();
+        assert_eq!(bars.len(), 1);
+        assert_eq!(bars[0].npc_id, 9);
+        assert_eq!(world.resource::<ActiveProgressBar>().npc_id, 9);
+        let acks: Vec<_> = world
+            .resource::<Messages<RespondToNpc>>()
+            .iter_current_update_messages()
+            .collect();
+        assert_eq!(acks.len(), 1);
+        assert_eq!(acks[0].npc_id, 7);
+        assert_eq!(acks[0].response, NpcResponse::Progress);
+    }
+
+    #[test]
+    fn abort_wins_over_expiry_escape_and_movement_but_ignores_other_npcs() {
+        let mut app = lifecycle_app();
+        app.world_mut()
+            .write_message(ProgressBarIngress::Started(ProgressBarStarted {
+                seconds: 3,
+                color: 0,
+                npc_id: 7,
+            }));
+        app.update();
+        app.world_mut()
+            .write_message(ProgressBarIngress::Aborted { npc_id: 99 });
+        app.update();
+        assert!(app.world().contains_resource::<ActiveProgressBar>());
+        assert!(app.world().resource::<Messages<RespondToNpc>>().is_empty());
+        let world = app.world_mut();
+        world
+            .query::<&mut NpcProgressBar>()
+            .single_mut(world)
+            .unwrap()
+            .timer
+            .set_elapsed(std::time::Duration::from_secs(3));
+        world
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Escape);
+        world.write_message(MoveRequested {
+            dest_x: 1,
+            dest_y: 2,
+        });
+        world.write_message(ProgressBarIngress::Aborted { npc_id: 7 });
+        world.write_message(ProgressBarIngress::Aborted { npc_id: 7 });
+        app.update();
+        let world = app.world_mut();
+        assert_eq!(world.query::<&NpcProgressBar>().iter(world).count(), 0);
+        assert!(!world.contains_resource::<ActiveProgressBar>());
+        let acks: Vec<_> = world
+            .resource::<Messages<RespondToNpc>>()
+            .iter_current_update_messages()
+            .collect();
+        assert_eq!(acks.len(), 1);
+        assert_eq!(acks[0].response, NpcResponse::Progress);
+        assert!(
+            !world
+                .resource::<ButtonInput<KeyCode>>()
+                .just_pressed(KeyCode::Escape)
+        );
+    }
+
+    #[test]
+    fn lost_target_clears_the_gate_without_a_camera_or_acknowledgment() {
+        let mut app = lifecycle_app();
+        app.world_mut()
+            .write_message(ProgressBarIngress::Started(ProgressBarStarted {
+                seconds: 3,
+                color: 0,
+                npc_id: 7,
+            }));
+        app.update();
+        let world = app.world_mut();
+        let target = world
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .single(world)
+            .unwrap();
+        world.despawn(target);
+        app.update();
+        let world = app.world_mut();
+        assert!(!world.contains_resource::<ActiveProgressBar>());
+        assert_eq!(world.query::<&NpcProgressBar>().iter(world).count(), 0);
+        assert!(world.resource::<Messages<RespondToNpc>>().is_empty());
+    }
+
+    #[test]
+    fn old_movement_does_not_cancel_the_next_bar() {
+        let mut app = lifecycle_app();
+        app.world_mut()
+            .write_message(ProgressBarIngress::Started(ProgressBarStarted {
+                seconds: 3,
+                color: 0,
+                npc_id: 7,
+            }));
+        app.update();
+        app.world_mut().write_message(MoveRequested {
+            dest_x: 1,
+            dest_y: 2,
+        });
+        app.world_mut().write_message(MoveRequested {
+            dest_x: 3,
+            dest_y: 4,
+        });
+        app.update();
+        assert!(!app.world().contains_resource::<ActiveProgressBar>());
+        app.world_mut()
+            .write_message(ProgressBarIngress::Started(ProgressBarStarted {
+                seconds: 3,
+                color: 0,
+                npc_id: 9,
+            }));
+        app.update();
+        assert_eq!(app.world().resource::<ActiveProgressBar>().npc_id, 9);
+    }
 
     #[test]
     fn bar_color_decodes_rrggbb() {
@@ -269,18 +466,20 @@ mod tests {
     fn zero_duration_bar_is_ignored() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
-        app.add_message::<ProgressBarStarted>();
+        app.add_message::<ProgressBarIngress>()
+            .add_message::<RespondToNpc>()
+            .init_resource::<ButtonInput<KeyCode>>();
         let player = app.world_mut().spawn(LocalPlayer).id();
         let _ = player;
         app.add_systems(Update, spawn_progress_bar);
 
         app.world_mut()
-            .resource_mut::<Messages<ProgressBarStarted>>()
-            .write(ProgressBarStarted {
+            .resource_mut::<Messages<ProgressBarIngress>>()
+            .write(ProgressBarIngress::Started(ProgressBarStarted {
                 seconds: 0,
                 color: 0xffff00,
                 npc_id: 7,
-            });
+            }));
         app.update();
 
         let world = app.world_mut();
@@ -292,17 +491,19 @@ mod tests {
     fn started_bar_spawns_on_local_player_and_sets_gate() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
-        app.add_message::<ProgressBarStarted>();
+        app.add_message::<ProgressBarIngress>()
+            .add_message::<RespondToNpc>()
+            .init_resource::<ButtonInput<KeyCode>>();
         let player = app.world_mut().spawn(LocalPlayer).id();
         app.add_systems(Update, spawn_progress_bar);
 
         app.world_mut()
-            .resource_mut::<Messages<ProgressBarStarted>>()
-            .write(ProgressBarStarted {
+            .resource_mut::<Messages<ProgressBarIngress>>()
+            .write(ProgressBarIngress::Started(ProgressBarStarted {
                 seconds: 3,
                 color: 0xffff00,
                 npc_id: 150001,
-            });
+            }));
         app.update();
 
         let world = app.world_mut();
