@@ -3,6 +3,7 @@ pub mod audio;
 pub mod cart;
 pub mod combat;
 pub mod cutin;
+pub mod gameplay;
 pub mod ground;
 pub mod guild;
 pub mod handshake;

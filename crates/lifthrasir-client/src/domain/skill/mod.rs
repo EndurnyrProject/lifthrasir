@@ -2,6 +2,7 @@ pub mod cast;
 pub mod cooldown;
 pub mod feedback;
 pub mod inf;
+pub mod item;
 pub mod state;
 
 pub use crate::domain::skill::cast::{CastTarget, SkillCastRequested, SkillCastResolved};

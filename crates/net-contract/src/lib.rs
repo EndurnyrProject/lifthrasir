@@ -15,6 +15,24 @@ mod tests {
     use bevy::prelude::*;
 
     #[test]
+    fn net_contract_plugin_registers_gameplay_followups() {
+        let mut app = App::new();
+        app.add_plugins(NetContractPlugin);
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::ItemSkillOffered>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::InventoryAddRejected>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::GameplayNoticeReceived>>()
+        );
+    }
+
+    #[test]
     fn net_contract_plugin_registers_guild_progression_and_relation_commands() {
         let mut app = App::new();
         app.add_plugins(NetContractPlugin);

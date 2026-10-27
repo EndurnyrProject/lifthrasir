@@ -113,9 +113,95 @@ pub fn report_production_result(
     }
 }
 
+/// Display server rejection notices without changing authoritative gameplay state.
+#[auto_add_system(
+    plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin,
+    schedule = Update
+)]
+pub fn report_gameplay_feedback(
+    mut failures: MessageReader<net_contract::events::InventoryAddRejected>,
+    mut notices: MessageReader<net_contract::events::GameplayNoticeReceived>,
+    mut chat: MessageWriter<ChatHeard>,
+) {
+    use net_contract::dto::{GameplayNoticeKind as Notice, ItemAddFailure as Failure};
+    for failure in failures.read() {
+        let message = match failure.reason {
+            Failure::Invalid => "This item could not be added to your inventory.".into(),
+            Failure::Overweight => "You cannot carry the item: too much weight.".into(),
+            Failure::Item => "You cannot carry this item.".into(),
+            Failure::TooManyItems => "You cannot carry any more inventory items.".into(),
+            Failure::TooManyOfItem => "You cannot carry any more of this item.".into(),
+            Failure::RefusedTime => "This item cannot be obtained at this time.".into(),
+            Failure::StackLimit => "This item would exceed its stack limit.".into(),
+            Failure::Unknown(code) => format!("Cannot add item to inventory (reason {code})."),
+        };
+        chat.write(ChatHeard { gid: 0, message });
+    }
+    for notice in notices.read() {
+        let message = match notice.kind {
+            Notice::Busy => "You are busy and cannot do that right now.".into(),
+            Notice::ImpossibleSkillArea => {
+                "^00FFFFThis skill cannot be used in this area.^000000".into()
+            }
+            Notice::CannotEquipItem => {
+                "^FF0000You cannot change equipment right now.^000000".into()
+            }
+            Notice::MapCannotTeleport => "Teleporting is not allowed on this map.".into(),
+            Notice::MapCannotMemo => "You cannot memorize a location on this map.".into(),
+            Notice::MapCannotUseSkill => "This skill cannot be used on this map.".into(),
+            Notice::Unknown(code) => format!("Server notice (code {code})."),
+        };
+        chat.write(ChatHeard { gid: 0, message });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gameplay_feedback_keeps_notice_colors_and_unknown_codes() {
+        use net_contract::{
+            dto::{GameplayNoticeKind as Notice, ItemAddFailure},
+            events::{GameplayNoticeReceived, InventoryAddRejected},
+        };
+        let mut app = App::new();
+        app.add_message::<GameplayNoticeReceived>()
+            .add_message::<InventoryAddRejected>()
+            .add_message::<ChatHeard>()
+            .add_systems(Update, report_gameplay_feedback);
+        for kind in [
+            Notice::ImpossibleSkillArea,
+            Notice::CannotEquipItem,
+            Notice::Unknown(-23),
+        ] {
+            app.world_mut()
+                .write_message(GameplayNoticeReceived { kind });
+        }
+        app.world_mut().write_message(InventoryAddRejected {
+            reason: ItemAddFailure::Overweight,
+        });
+        app.update();
+        let lines: Vec<_> = app
+            .world()
+            .resource::<Messages<ChatHeard>>()
+            .iter_current_update_messages()
+            .map(|line| line.message.as_str())
+            .collect();
+        assert_eq!(lines.len(), 4);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("^00FFFF") && line.contains("area"))
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("^FF0000") && line.contains("equip"))
+        );
+        assert!(lines.iter().any(|line| line.contains("-23")));
+        assert!(lines.iter().any(|line| line.contains("weight")));
+    }
 
     fn production_chat(result: ProductionResult, item_db: Option<ItemDb>) -> Vec<ChatHeard> {
         let mut app = App::new();
