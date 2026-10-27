@@ -1,0 +1,22 @@
+[keybinds.cart.primary]
+key = "KeyW"
+modifier = "Alt"
+
+[keybinds.cart.secondary]
+
+[keybinds.party.primary]
+key = "KeyO"
+modifier = "Control"
+
+[keybinds.party.secondary]
+key = "KeyZ"
+modifier = "Shift"
+
+[[keybinds.hotbar]]
+
+[keybinds.hotbar.primary]
+key = "F1"
+
+[keybinds.hotbar.primary.modifier]
+
+[keybinds.hotbar.secondary]

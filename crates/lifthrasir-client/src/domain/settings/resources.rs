@@ -490,8 +490,13 @@ impl Default for AudioConfig {
 }
 
 /// A held modifier in a key chord, mirrored from leafwing's `ModifierKey`.
-#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug)]
+/// `None` is a variant rather than an `Option` because `bevy::settings` writes
+/// `None` as an empty TOML table and cannot read that back inside a nested
+/// struct, which panics at load.
+#[derive(Clone, Copy, PartialEq, Eq, Reflect, Debug, Default)]
 pub enum Modifier {
+    #[default]
+    None,
     Alt,
     Control,
     Shift,
@@ -499,12 +504,13 @@ pub enum Modifier {
 }
 
 impl Modifier {
-    fn to_modifier_key(self) -> ModifierKey {
+    fn to_modifier_key(self) -> Option<ModifierKey> {
         match self {
-            Modifier::Alt => ModifierKey::Alt,
-            Modifier::Control => ModifierKey::Control,
-            Modifier::Shift => ModifierKey::Shift,
-            Modifier::Super => ModifierKey::Super,
+            Modifier::None => None,
+            Modifier::Alt => Some(ModifierKey::Alt),
+            Modifier::Control => Some(ModifierKey::Control),
+            Modifier::Shift => Some(ModifierKey::Shift),
+            Modifier::Super => Some(ModifierKey::Super),
         }
     }
 }
@@ -522,43 +528,54 @@ fn key_code_from_name(name: &str) -> Option<KeyCode> {
     KeyCode::from_reflect(&DynamicEnum::new(name, ()))
 }
 
-/// A single bound key, optionally modified. `key` is a `KeyCode` name
-/// (e.g. "Insert", "KeyA"); Task 4 parses it back into a `KeyCode`.
-#[derive(Clone, PartialEq, Eq, Reflect, Debug)]
+/// A single slot binding. `key` is a `KeyCode` name (e.g. "Insert", "KeyA")
+/// parsed back into a `KeyCode` when the input map is built; an empty `key`
+/// is an unbound slot (`KeyBind::UNBOUND`). It is not an `Option` for the same
+/// `bevy::settings` round-trip reason as `Modifier::None`.
+#[derive(Clone, PartialEq, Eq, Reflect, Debug, Default)]
 pub struct KeyBind {
     pub key: String,
-    pub modifier: Option<Modifier>,
+    pub modifier: Modifier,
 }
 
 impl KeyBind {
+    pub const UNBOUND: Self = Self {
+        key: String::new(),
+        modifier: Modifier::None,
+    };
+
     pub fn new(key: impl Into<String>) -> Self {
         Self {
             key: key.into(),
-            modifier: None,
+            modifier: Modifier::None,
         }
     }
 
     pub fn modified(modifier: Modifier, key: impl Into<String>) -> Self {
         Self {
             key: key.into(),
-            modifier: Some(modifier),
+            modifier,
         }
+    }
+
+    pub fn is_bound(&self) -> bool {
+        !self.key.is_empty()
     }
 
     /// Inserts this binding into `map` for `action`. A bare `KeyCode` when
     /// unmodified, a `ButtonlikeChord::modified` when a modifier is set.
-    /// Skips with a `warn!` if the key name is unparseable.
+    /// Unbound slots are ignored; an unparseable key name is skipped with a `warn!`.
     fn insert_into(&self, map: &mut InputMap<PlayerAction>, action: PlayerAction) {
+        if !self.is_bound() {
+            return;
+        }
         let Some(key) = key_code_from_name(&self.key) else {
             warn!("unknown key code '{}' in keybinds, skipping", self.key);
             return;
         };
-        match self.modifier {
+        match self.modifier.to_modifier_key() {
             Some(modifier) => {
-                map.insert(
-                    action,
-                    ButtonlikeChord::modified(modifier.to_modifier_key(), key),
-                );
+                map.insert(action, ButtonlikeChord::modified(modifier, key));
             }
             None => {
                 map.insert(action, key);
@@ -570,26 +587,22 @@ impl KeyBind {
 /// Primary + secondary slot for one action.
 #[derive(Clone, PartialEq, Eq, Reflect, Debug, Default)]
 pub struct ActionBinds {
-    pub primary: Option<KeyBind>,
-    pub secondary: Option<KeyBind>,
+    pub primary: KeyBind,
+    pub secondary: KeyBind,
 }
 
 impl ActionBinds {
     fn insert_into(&self, map: &mut InputMap<PlayerAction>, action: PlayerAction) {
-        if let Some(bind) = &self.primary {
-            bind.insert_into(map, action);
-        }
-        if let Some(bind) = &self.secondary {
-            bind.insert_into(map, action);
-        }
+        self.primary.insert_into(map, action);
+        self.secondary.insert_into(map, action);
     }
 }
 
 /// Default binds for the twelve hotbar slots: F1..F12, unmodified.
 fn default_hotbar_binds() -> [ActionBinds; 12] {
     std::array::from_fn(|i| ActionBinds {
-        primary: Some(KeyBind::new(format!("F{}", i + 1))),
-        secondary: None,
+        primary: KeyBind::new(format!("F{}", i + 1)),
+        secondary: KeyBind::UNBOUND,
     })
 }
 
@@ -617,40 +630,40 @@ impl Default for Keybinds {
     fn default() -> Self {
         Self {
             sit: ActionBinds {
-                primary: Some(KeyBind::new("Insert")),
-                secondary: Some(KeyBind::new("Help")),
+                primary: KeyBind::new("Insert"),
+                secondary: KeyBind::new("Help"),
             },
             status: ActionBinds {
-                primary: Some(KeyBind::modified(Modifier::Alt, "KeyA")),
-                secondary: None,
+                primary: KeyBind::modified(Modifier::Alt, "KeyA"),
+                secondary: KeyBind::UNBOUND,
             },
             inventory: ActionBinds {
-                primary: Some(KeyBind::modified(Modifier::Alt, "KeyE")),
-                secondary: None,
+                primary: KeyBind::modified(Modifier::Alt, "KeyE"),
+                secondary: KeyBind::UNBOUND,
             },
             skills: ActionBinds {
-                primary: Some(KeyBind::modified(Modifier::Alt, "KeyS")),
-                secondary: None,
+                primary: KeyBind::modified(Modifier::Alt, "KeyS"),
+                secondary: KeyBind::UNBOUND,
             },
             equipment: ActionBinds {
-                primary: Some(KeyBind::modified(Modifier::Alt, "KeyQ")),
-                secondary: None,
+                primary: KeyBind::modified(Modifier::Alt, "KeyQ"),
+                secondary: KeyBind::UNBOUND,
             },
             cart: ActionBinds {
-                primary: Some(KeyBind::modified(Modifier::Alt, "KeyW")),
-                secondary: None,
+                primary: KeyBind::modified(Modifier::Alt, "KeyW"),
+                secondary: KeyBind::UNBOUND,
             },
             party: ActionBinds {
-                primary: Some(KeyBind::new("KeyP")),
-                secondary: None,
+                primary: KeyBind::new("KeyP"),
+                secondary: KeyBind::UNBOUND,
             },
             guild: ActionBinds {
-                primary: Some(KeyBind::modified(Modifier::Alt, "KeyG")),
-                secondary: None,
+                primary: KeyBind::modified(Modifier::Alt, "KeyG"),
+                secondary: KeyBind::UNBOUND,
             },
             emote: ActionBinds {
-                primary: Some(KeyBind::modified(Modifier::Alt, "KeyM")),
-                secondary: None,
+                primary: KeyBind::modified(Modifier::Alt, "KeyM"),
+                secondary: KeyBind::UNBOUND,
             },
             hotbar: default_hotbar_binds(),
         }
@@ -701,8 +714,8 @@ mod tests {
         assert_eq!(
             Keybinds::default().equipment,
             ActionBinds {
-                primary: Some(KeyBind::modified(Modifier::Alt, "KeyQ")),
-                secondary: None,
+                primary: KeyBind::modified(Modifier::Alt, "KeyQ"),
+                secondary: KeyBind::UNBOUND,
             }
         );
     }
@@ -768,8 +781,8 @@ mod tests {
         assert_eq!(
             keybinds.party,
             ActionBinds {
-                primary: Some(KeyBind::new("KeyP")),
-                secondary: None,
+                primary: KeyBind::new("KeyP"),
+                secondary: KeyBind::UNBOUND,
             }
         );
 
@@ -784,12 +797,9 @@ mod tests {
         ];
         let mut seen: Vec<&KeyBind> = Vec::new();
         for action_binds in non_hotbar {
-            for bind in [
-                action_binds.primary.as_ref(),
-                action_binds.secondary.as_ref(),
-            ]
-            .into_iter()
-            .flatten()
+            for bind in [&action_binds.primary, &action_binds.secondary]
+                .into_iter()
+                .filter(|bind| bind.is_bound())
             {
                 assert!(!seen.contains(&bind), "duplicate default keybind {bind:?}");
                 seen.push(bind);
@@ -987,8 +997,8 @@ mod tests {
 
         let binds = Keybinds {
             sit: ActionBinds {
-                primary: Some(KeyBind::new("NotAKey")),
-                secondary: Some(KeyBind::new("Insert")),
+                primary: KeyBind::new("NotAKey"),
+                secondary: KeyBind::new("Insert"),
             },
             status: ActionBinds::default(),
             inventory: ActionBinds::default(),

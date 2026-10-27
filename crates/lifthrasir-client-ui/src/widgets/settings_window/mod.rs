@@ -701,14 +701,14 @@ fn action_binds_mut(
 }
 
 /// The slot of an `ActionBinds` a `BindSlot` selects.
-fn slot_mut(binds: &mut ActionBinds, slot: BindSlot) -> &mut Option<KeyBind> {
+fn slot_mut(binds: &mut ActionBinds, slot: BindSlot) -> &mut KeyBind {
     match slot {
         BindSlot::Primary => &mut binds.primary,
         BindSlot::Secondary => &mut binds.secondary,
     }
 }
 
-fn slot_ref(binds: &ActionBinds, slot: BindSlot) -> &Option<KeyBind> {
+fn slot_ref(binds: &ActionBinds, slot: BindSlot) -> &KeyBind {
     match slot {
         BindSlot::Primary => &binds.primary,
         BindSlot::Secondary => &binds.secondary,
@@ -716,19 +716,19 @@ fn slot_ref(binds: &ActionBinds, slot: BindSlot) -> &Option<KeyBind> {
 }
 
 /// The held modifier (Alt/Ctrl/Shift/Super) to fold into a captured chord, or
-/// `None` when no modifier is down. First match wins; chords carry one modifier.
-fn held_modifier(keys: &ButtonInput<KeyCode>) -> Option<Modifier> {
+/// `Modifier::None` when no modifier is down. First match wins; chords carry one modifier.
+fn held_modifier(keys: &ButtonInput<KeyCode>) -> Modifier {
     let pressed = |a, b| keys.pressed(a) || keys.pressed(b);
     if pressed(KeyCode::AltLeft, KeyCode::AltRight) {
-        Some(Modifier::Alt)
+        Modifier::Alt
     } else if pressed(KeyCode::ControlLeft, KeyCode::ControlRight) {
-        Some(Modifier::Control)
+        Modifier::Control
     } else if pressed(KeyCode::ShiftLeft, KeyCode::ShiftRight) {
-        Some(Modifier::Shift)
+        Modifier::Shift
     } else if pressed(KeyCode::SuperLeft, KeyCode::SuperRight) {
-        Some(Modifier::Super)
+        Modifier::Super
     } else {
-        None
+        Modifier::None
     }
 }
 
@@ -751,12 +751,8 @@ fn is_modifier_key(key: KeyCode) -> bool {
 /// Builds a `KeyBind` from a captured key + held modifier. The key is stored as
 /// its `KeyCode` reflect name (`format!("{:?}", key)`, e.g. "KeyA"/"Insert") —
 /// the exact format `key_code_from_name` parses back when the bind is applied.
-fn keybind_from_capture(modifier: Option<Modifier>, key: KeyCode) -> KeyBind {
-    let name = format!("{key:?}");
-    match modifier {
-        Some(modifier) => KeyBind::modified(modifier, name),
-        None => KeyBind::new(name),
-    }
+fn keybind_from_capture(modifier: Modifier, key: KeyCode) -> KeyBind {
+    KeyBind::modified(modifier, format!("{key:?}"))
 }
 
 /// Human-readable name for a stored key. Strips the `Key`/`Digit` prefixes the
@@ -770,25 +766,27 @@ fn key_display(name: &str) -> &str {
 
 /// The keycap label for a slot: the bound key (with modifier prefix, e.g.
 /// "Alt + A"), or "—" when the slot is empty.
-fn keycap_label(bind: &Option<KeyBind>) -> String {
-    let Some(bind) = bind else {
+fn keycap_label(bind: &KeyBind) -> String {
+    if !bind.is_bound() {
         return "—".to_string();
-    };
+    }
     let key = key_display(&bind.key);
-    match bind.modifier {
-        Some(modifier) => format!("{} + {key}", modifier_label(modifier)),
+    match modifier_label(bind.modifier) {
+        Some(modifier) => format!("{modifier} + {key}"),
         None => key.to_string(),
     }
 }
 
-/// Short label for a modifier in a chord display.
-fn modifier_label(modifier: Modifier) -> &'static str {
-    match modifier {
+/// Short label for a modifier in a chord display; `None` for an unmodified key.
+fn modifier_label(modifier: Modifier) -> Option<&'static str> {
+    let label = match modifier {
+        Modifier::None => return None,
         Modifier::Alt => "Alt",
         Modifier::Control => "Ctrl",
         Modifier::Shift => "Shift",
         Modifier::Super => "Super",
-    }
+    };
+    Some(label)
 }
 
 /// Whether a rebind capture is in progress (gates `capture_rebind`).
@@ -849,7 +847,7 @@ fn capture_rebind(mut keys: ResMut<ButtonInput<KeyCode>>, mut ui: ResMut<Setting
     let modifier = held_modifier(&keys);
     keys.clear_just_pressed(key);
     *slot_mut(action_binds_mut(&mut ui.draft.keybinds, action), slot) =
-        Some(keybind_from_capture(modifier, key));
+        keybind_from_capture(modifier, key);
     ui.listening = None;
 }
 
@@ -1195,8 +1193,8 @@ mod tests {
     fn plain_capture_round_trips_through_the_input_map() {
         let binds = Keybinds {
             sit: ActionBinds {
-                primary: Some(keybind_from_capture(None, KeyCode::Insert)),
-                secondary: None,
+                primary: keybind_from_capture(Modifier::None, KeyCode::Insert),
+                secondary: KeyBind::UNBOUND,
             },
             status: ActionBinds::default(),
             inventory: ActionBinds::default(),
@@ -1223,8 +1221,8 @@ mod tests {
         let binds = Keybinds {
             sit: ActionBinds::default(),
             status: ActionBinds {
-                primary: Some(keybind_from_capture(Some(Modifier::Alt), KeyCode::KeyA)),
-                secondary: None,
+                primary: keybind_from_capture(Modifier::Alt, KeyCode::KeyA),
+                secondary: KeyBind::UNBOUND,
             },
             inventory: ActionBinds::default(),
             skills: ActionBinds::default(),
@@ -1249,27 +1247,33 @@ mod tests {
 
     #[test]
     fn keybind_from_capture_stores_the_reflect_name() {
-        assert_eq!(keybind_from_capture(None, KeyCode::KeyA).key, "KeyA");
-        assert_eq!(keybind_from_capture(None, KeyCode::Insert).key, "Insert");
-        let chord = keybind_from_capture(Some(Modifier::Alt), KeyCode::KeyE);
+        assert_eq!(
+            keybind_from_capture(Modifier::None, KeyCode::KeyA).key,
+            "KeyA"
+        );
+        assert_eq!(
+            keybind_from_capture(Modifier::None, KeyCode::Insert).key,
+            "Insert"
+        );
+        let chord = keybind_from_capture(Modifier::Alt, KeyCode::KeyE);
         assert_eq!(chord.key, "KeyE");
-        assert_eq!(chord.modifier, Some(Modifier::Alt));
+        assert_eq!(chord.modifier, Modifier::Alt);
     }
 
     #[test]
     fn keycap_label_renders_keys_chords_and_empty() {
-        assert_eq!(keycap_label(&Some(KeyBind::new("Insert"))), "Insert");
-        assert_eq!(keycap_label(&Some(KeyBind::new("KeyA"))), "A");
-        assert_eq!(keycap_label(&Some(KeyBind::new("Digit1"))), "1");
+        assert_eq!(keycap_label(&KeyBind::new("Insert")), "Insert");
+        assert_eq!(keycap_label(&KeyBind::new("KeyA")), "A");
+        assert_eq!(keycap_label(&KeyBind::new("Digit1")), "1");
         assert_eq!(
-            keycap_label(&Some(KeyBind::modified(Modifier::Alt, "KeyA"))),
+            keycap_label(&KeyBind::modified(Modifier::Alt, "KeyA")),
             "Alt + A"
         );
         assert_eq!(
-            keycap_label(&Some(KeyBind::modified(Modifier::Control, "KeyE"))),
+            keycap_label(&KeyBind::modified(Modifier::Control, "KeyE")),
             "Ctrl + E"
         );
-        assert_eq!(keycap_label(&None), "—");
+        assert_eq!(keycap_label(&KeyBind::UNBOUND), "—");
     }
 
     #[test]

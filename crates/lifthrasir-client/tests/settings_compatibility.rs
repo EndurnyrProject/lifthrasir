@@ -57,12 +57,44 @@ fn pre_workspace_settings_load_with_original_groups_and_values() {
     assert_eq!(
         app.world().resource::<Keybinds>().party,
         ActionBinds {
-            primary: Some(KeyBind::modified(Modifier::Control, "KeyO")),
-            secondary: Some(KeyBind::modified(Modifier::Shift, "KeyZ")),
+            primary: KeyBind::modified(Modifier::Control, "KeyO"),
+            secondary: KeyBind::modified(Modifier::Shift, "KeyZ"),
         }
     );
     assert_eq!(
         app.world().resource::<Keybinds>().hotbar,
         Keybinds::default().hotbar
     );
+}
+
+/// Files written while `KeyBind`/`Modifier` were `Option`s hold `None` as an empty
+/// table. Loading one must not panic: bound slots load, empty tables stay unbound,
+/// and the hotbar (whose `modifier = {}` cannot deserialize) falls back to defaults.
+#[test]
+fn legacy_option_keybinds_load_without_panicking() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        temp.path().join("settings.toml"),
+        include_str!("fixtures/settings/legacy_option_keybinds.toml"),
+    )
+    .unwrap();
+    let mut app = App::new();
+    app.register_type::<Keybinds>()
+        .add_plugins(SettingsPlugin::new(temp.path().to_str().unwrap()));
+    let keybinds = app.world().resource::<Keybinds>();
+    assert_eq!(
+        keybinds.cart,
+        ActionBinds {
+            primary: KeyBind::modified(Modifier::Alt, "KeyW"),
+            secondary: KeyBind::UNBOUND,
+        }
+    );
+    assert_eq!(
+        keybinds.party,
+        ActionBinds {
+            primary: KeyBind::modified(Modifier::Control, "KeyO"),
+            secondary: KeyBind::modified(Modifier::Shift, "KeyZ"),
+        }
+    );
+    assert_eq!(keybinds.hotbar, Keybinds::default().hotbar);
 }
