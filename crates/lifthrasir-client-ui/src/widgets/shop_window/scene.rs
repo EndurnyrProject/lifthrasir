@@ -400,6 +400,7 @@ pub fn body(
     zeny: u32,
     item_db: Option<&ItemDb>,
     inventory: &Inventory,
+    pending_deal: bool,
 ) -> impl Scene + use<> {
     let tab = session.tab;
     let buy = tab == ShopTab::Buy;
@@ -411,7 +412,11 @@ pub fn body(
     } else {
         session.sell_subtotal()
     };
-    let footer_data = footer_view(session, zeny);
+    let mut footer_data = footer_view(session, zeny);
+    if pending_deal {
+        footer_data.cta_enabled = false;
+        footer_data.cta_label = "Waiting for previous deal".into();
+    }
     let overlay = session
         .confirm_open
         .then(|| EntityScene(confirm_overlay(buy, lines.clone(), total)));
@@ -1486,9 +1491,8 @@ mod tests {
             cart_sell: HashMap::new(),
             selected: None,
             pending_qty: 1,
-            banner: None,
             confirm_open: false,
-            awaiting: false,
+            retired: false,
         }
     }
 

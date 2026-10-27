@@ -85,6 +85,13 @@ pub struct EmoteSent {
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct MemoRequested;
 
+/// Close the current NPC shop without submitting a deal.
+#[derive(Message, Debug, Clone, Copy)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct CloseNpcShop {
+    pub unit_id: u64,
+}
+
 /// Request to cast a single-target skill (`skill_id` at `level`) at `target_id`.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

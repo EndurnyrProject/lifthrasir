@@ -1,11 +1,8 @@
-//! NPC shop window: the `ShopSession` resource and its pure cart logic, plus the
-//! open/close lifecycle (design `2026-07-07-npc-shops`). `on_shop_opened` spawns
-//! the chrome and force-closes any active NPC dialog; `close_shop`/the titlebar
-//! close button despawn it locally (no packet). The body projection and cart
-//! interactions land in later tasks.
+//! Single-use NPC shop drafts, cart controls and authoritative deal feedback.
 
 use std::collections::HashMap;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
@@ -16,14 +13,17 @@ use lifthrasir_client::domain::entities::components::EntityName;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::entities::registry::EntityRegistry;
 use lifthrasir_client::domain::inventory::Inventory;
-use net_contract::commands::{BuyFromShop, SellToShop};
-use net_contract::dto::{BuyEntry, SellEntry, ShopBuyItem, ShopResult, ShopSellItem};
-use net_contract::events::{ChatHeard, ShopBuyResulted, ShopOpened, ShopSellResulted};
+use net_contract::commands::{BuyFromShop, CloseNpcShop, SellToShop};
+use net_contract::dto::{BuyEntry, SellEntry, ShopBuyItem, ShopSellItem};
+use net_contract::events::ShopOpened;
 
 use crate::widgets::info_modal::{InfoContent, ItemAction, ShowInfoModal, view};
 use crate::widgets::npc_dialog::{ActiveNpcDialog, NpcDialogRoot};
 
+mod lifecycle;
 pub mod scene;
+
+use lifecycle::{PendingShopDeal, ShopDeal, on_shop_result};
 
 /// Which tab of the shop window is active.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -83,7 +83,7 @@ pub struct ShopWindowTitlebar;
 const FALLBACK_TITLE: &str = "Shop";
 
 /// Single source of truth for an open shop: the server's buy/sell snapshots, the
-/// two cart maps, the active tab, the selection, and any result banner. The
+/// two cart maps, the active tab and selection. The
 /// window is a pure projection of this resource.
 #[derive(Resource, Clone, Debug)]
 pub struct ShopSession {
@@ -97,15 +97,11 @@ pub struct ShopSession {
     /// The quantity staged in the detail panel's stepper, added to the active
     /// cart by `AddToCart`. Defaults to 1; reset to 1 on `Select`/`SwitchTab`.
     pub pending_qty: u32,
-    pub banner: Option<ShopResult>,
     /// Whether the confirm-trade overlay is showing. `rebuild_body` renders it
     /// as part of the body region on every `ShopSession` change.
     pub confirm_open: bool,
-    /// Set the instant `ConfirmTrade` emits the batched command; cleared when
-    /// its result arrives. Models the design's `Await` state (§5.4): while
-    /// true, `on_shop_button` ignores every cart-editing/re-confirm action so a
-    /// tab switch or a second confirm can't race the in-flight request.
-    pub awaiting: bool,
+    /// Retirement latch prevents duplicate actions before deferred removal.
+    pub(super) retired: bool,
 }
 
 impl ShopSession {
@@ -253,25 +249,25 @@ pub struct ShopWindowPlugin;
 
 impl Plugin for ShopWindowPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, on_shop_opened.run_if(in_state(GameState::InGame)));
+        app.init_resource::<PendingShopDeal>();
         app.add_systems(
             Update,
-            close_shop.run_if(in_state(GameState::InGame).and_then(resource_exists::<ShopSession>)),
+            (
+                on_shop_result,
+                on_shop_opened,
+                close_shop.run_if(resource_exists::<ShopSession>),
+                rebuild_body.run_if(resource_exists::<ShopSession>),
+            )
+                .chain()
+                .run_if(in_state(GameState::InGame)),
         );
         app.add_systems(
-            Update,
-            rebuild_body.run_if(
-                in_state(GameState::InGame).and_then(resource_exists_and_changed::<ShopSession>),
-            ),
+            OnExit(GameState::InGame),
+            |mut commands: Commands, mut pending: ResMut<PendingShopDeal>| {
+                commands.remove_resource::<ShopSession>();
+                pending.0 = None;
+            },
         );
-        app.add_systems(
-            Update,
-            on_shop_result
-                .run_if(in_state(GameState::InGame).and_then(resource_exists::<ShopSession>)),
-        );
-        app.add_systems(OnExit(GameState::InGame), |mut commands: Commands| {
-            commands.remove_resource::<ShopSession>()
-        });
     }
 }
 
@@ -326,9 +322,8 @@ fn on_shop_opened(
         cart_sell: HashMap::new(),
         selected: None,
         pending_qty: 1,
-        banner: None,
         confirm_open: false,
-        awaiting: false,
+        retired: false,
     });
 }
 
@@ -345,11 +340,15 @@ fn on_shop_opened(
 fn rebuild_body(
     mut commands: Commands,
     session: Res<ShopSession>,
+    pending: Res<PendingShopDeal>,
     bodies: Query<(Entity, Option<&Children>), With<ShopWindowBody>>,
     item_db: Option<Res<ItemDb>>,
     inventory: Res<Inventory>,
     player: Query<&CharacterStatus, With<LocalPlayer>>,
 ) {
+    if !session.is_changed() && !pending.is_changed() {
+        return;
+    }
     let Ok((body, children)) = bodies.single() else {
         return;
     };
@@ -368,18 +367,26 @@ fn rebuild_body(
             status.zeny,
             item_db.as_deref(),
             &inventory,
+            pending.0.is_some(),
         ))
         .insert(ChildOf(body));
 }
 
-/// Despawns the shop window and clears [`ShopSession`]. Shared by the titlebar
-/// close button and the Escape key; sends no packet — the server holds no
-/// shop-open state to close (design §4).
-fn close_shop_window(commands: &mut Commands, roots: &Query<Entity, With<ShopWindowRoot>>) {
-    if let Ok(root) = roots.single() {
+/// Retire synchronously before queuing removal, so duplicate activations cannot send twice.
+fn close_shop_window(
+    commands: &mut Commands,
+    roots: &Query<Entity, With<ShopWindowRoot>>,
+    session: &mut ShopSession,
+) -> bool {
+    if session.retired {
+        return false;
+    }
+    session.retired = true;
+    for root in roots {
         commands.entity(root).despawn();
     }
     commands.remove_resource::<ShopSession>();
+    true
 }
 
 /// ESC ends the shop exactly like the titlebar close button: despawn the window
@@ -389,41 +396,39 @@ fn close_shop_window(commands: &mut Commands, roots: &Query<Entity, With<ShopWin
 fn close_shop(
     keys: Res<ButtonInput<KeyCode>>,
     roots: Query<Entity, With<ShopWindowRoot>>,
+    mut session: Option<ResMut<ShopSession>>,
+    mut close: MessageWriter<CloseNpcShop>,
     mut commands: Commands,
 ) {
     if !keys.just_pressed(KeyCode::Escape) {
         return;
     }
-    close_shop_window(&mut commands, &roots);
+    let Some(session) = session.as_deref_mut() else {
+        return;
+    };
+    if close_shop_window(&mut commands, &roots, session) {
+        close.write(CloseNpcShop {
+            unit_id: session.unit_id,
+        });
+    }
 }
 
 /// Titlebar close button: same effect as Escape.
 pub(super) fn on_shop_close_button(
     _: On<Activate>,
     roots: Query<Entity, With<ShopWindowRoot>>,
+    mut session: Option<ResMut<ShopSession>>,
+    mut close: MessageWriter<CloseNpcShop>,
     mut commands: Commands,
 ) {
-    close_shop_window(&mut commands, &roots);
-}
-
-/// Whether `action` must be ignored while a trade round-trip is in flight
-/// (`ShopSession.awaiting`, design §5.4's `Await` state): every cart edit and
-/// (re-)confirm is blocked so a tab switch or a second confirm can't race the
-/// in-flight request. `Select`, `CancelConfirm`, the titlebar close button,
-/// and Escape stay live — closing/looking around while waiting is harmless.
-fn blocked_while_awaiting(action: ShopButtonAction) -> bool {
-    matches!(
-        action,
-        ShopButtonAction::SwitchTab(_)
-            | ShopButtonAction::IncQty(_)
-            | ShopButtonAction::DecQty(_)
-            | ShopButtonAction::RemoveLine(_)
-            | ShopButtonAction::PendingDec
-            | ShopButtonAction::PendingInc
-            | ShopButtonAction::AddToCart
-            | ShopButtonAction::OpenConfirm
-            | ShopButtonAction::ConfirmTrade
-    )
+    let Some(session) = session.as_deref_mut() else {
+        return;
+    };
+    if close_shop_window(&mut commands, &roots, session) {
+        close.write(CloseNpcShop {
+            unit_id: session.unit_id,
+        });
+    }
 }
 
 /// The key (`nameid` on Buy, `inventory_index` on Sell) of the currently
@@ -442,6 +447,15 @@ fn clamp_pending(qty: u32, cap: u32) -> u32 {
     qty.clamp(1, cap.max(1))
 }
 
+#[derive(SystemParam)]
+pub(super) struct ShopRequests<'w, 's> {
+    pending: ResMut<'w, PendingShopDeal>,
+    buy: MessageWriter<'w, BuyFromShop>,
+    sell: MessageWriter<'w, SellToShop>,
+    commands: Commands<'w, 's>,
+    roots: Query<'w, 's, Entity, With<ShopWindowRoot>>,
+}
+
 /// Shared handler for every interactive shop-window node: tab switch, select,
 /// cart +/-/remove mutate `ShopSession` directly; `PendingDec`/`PendingInc`
 /// step `pending_qty` (clamped via [`clamp_pending`], capped at the selected
@@ -449,10 +463,8 @@ fn clamp_pending(qty: u32, cap: u32) -> u32 {
 /// selected item to the active cart; `OpenConfirm` re-checks the same guard
 /// the CTA's disabled look already encodes (a race between render and click
 /// is possible, since the CTA has no `InteractionDisabled`) before opening the
-/// overlay; `ConfirmTrade` emits the batched command for the active tab, sets
-/// `awaiting`, and closes the overlay, leaving the cart intact until the
-/// result arrives; `CancelConfirm` just closes the overlay. While `awaiting`
-/// is set, [`blocked_while_awaiting`] actions are ignored outright.
+/// overlay; `ConfirmTrade` records one pending deal and closes the window.
+/// A replacement draft cannot submit until that deal settles.
 ///
 /// `bevy_ui_widgets`' `Button` fires `Activate` on release of *any* pointer
 /// button (`button_on_pointer_click` has no button check), so a right-click
@@ -464,11 +476,10 @@ fn clamp_pending(qty: u32, cap: u32) -> u32 {
 pub(super) fn on_shop_button(
     activate: On<Activate>,
     actions: Query<&ShopButtonAction>,
-    mut session: ResMut<ShopSession>,
+    mut session: Option<ResMut<ShopSession>>,
     player: Query<&CharacterStatus, With<LocalPlayer>>,
     mouse: Res<ButtonInput<MouseButton>>,
-    mut buy_writer: MessageWriter<BuyFromShop>,
-    mut sell_writer: MessageWriter<SellToShop>,
+    mut requests: ShopRequests,
 ) {
     if mouse.just_released(MouseButton::Right) {
         return;
@@ -476,7 +487,16 @@ pub(super) fn on_shop_button(
     let Ok(action) = actions.get(activate.entity) else {
         return;
     };
-    if session.awaiting && blocked_while_awaiting(*action) {
+    let Some(session) = session.as_deref_mut() else {
+        return;
+    };
+    if session.retired
+        || (requests.pending.0.is_some()
+            && matches!(
+                action,
+                ShopButtonAction::OpenConfirm | ShopButtonAction::ConfirmTrade
+            ))
+    {
         return;
     }
 
@@ -484,7 +504,6 @@ pub(super) fn on_shop_button(
         ShopButtonAction::SwitchTab(tab) => {
             session.tab = tab;
             session.selected = None;
-            session.banner = None;
             session.pending_qty = 1;
         }
         ShopButtonAction::Select(selection) => {
@@ -523,29 +542,52 @@ pub(super) fn on_shop_button(
                 warn!("shop confirm requested with no LocalPlayer/CharacterStatus present");
                 return;
             };
-            if !scene::cta_enabled(&session, status.zeny) {
+            if !scene::cta_enabled(session, status.zeny) {
                 return;
             }
             session.confirm_open = true;
         }
         ShopButtonAction::ConfirmTrade => {
+            let Ok(status) = player.single() else {
+                return;
+            };
+            if !session.confirm_open || !scene::cta_enabled(session, status.zeny) {
+                return;
+            }
             let unit_id = session.unit_id;
-            match session.tab {
+            let buy = session.tab == ShopTab::Buy;
+            let lines = match session.tab {
                 ShopTab::Buy => {
-                    buy_writer.write(BuyFromShop {
-                        unit_id,
-                        items: session.to_buy_entries(),
-                    });
+                    let items = session.to_buy_entries();
+                    let lines = items
+                        .iter()
+                        .map(|entry| (entry.nameid, entry.amount))
+                        .collect();
+                    requests.buy.write(BuyFromShop { unit_id, items });
+                    lines
                 }
                 ShopTab::Sell => {
-                    sell_writer.write(SellToShop {
-                        unit_id,
-                        items: session.to_sell_entries(),
-                    });
+                    let items = session.to_sell_entries();
+                    let lines = items
+                        .iter()
+                        .filter_map(|entry| {
+                            session
+                                .sell_items
+                                .iter()
+                                .find(|item| item.inventory_index == entry.inventory_index)
+                                .map(|item| (item.nameid, entry.amount))
+                        })
+                        .collect();
+                    requests.sell.write(SellToShop { unit_id, items });
+                    lines
                 }
-            }
-            session.confirm_open = false;
-            session.awaiting = true;
+            };
+            requests.pending.0 = Some(ShopDeal {
+                unit_id,
+                buy,
+                lines,
+            });
+            close_shop_window(&mut requests.commands, &requests.roots, session);
         }
         ShopButtonAction::CancelConfirm => {
             session.confirm_open = false;
@@ -625,90 +667,13 @@ fn trade_summary(buy: bool, lines: &[(u32, u32)], item_db: Option<&ItemDb>) -> S
     format!("{verb} {}", parts.join(", "))
 }
 
-/// Applies one buy/sell result to `session`, returning the chat summary to
-/// post on success (`None` on error, once `banner` is set). `Ok`: builds the
-/// trade summary from the entries about to be cleared, decrements the sell
-/// snapshot for a sell, then clears the cart for `buy`'s tab specifically —
-/// **not** `clear_active_cart()`/`session.tab`, since the player may have
-/// switched tabs while the request was in flight (design §5.4's `Await`
-/// state); clearing the active tab instead of the traded one would leave a
-/// just-bought/-sold cart line alive for a re-send and wipe the untraded
-/// tab's cart instead. Any error sets `banner` to the mapped reason and
-/// preserves the cart for retry. Either way, closes the confirm overlay and
-/// clears `awaiting` — the request that opened them has now settled.
-fn apply_result(
-    session: &mut ShopSession,
-    buy: bool,
-    result: ShopResult,
-    item_db: Option<&ItemDb>,
-) -> Option<String> {
-    session.confirm_open = false;
-    session.awaiting = false;
-    if result != ShopResult::Ok {
-        session.banner = Some(result);
-        return None;
-    }
-
-    let message = if buy {
-        let lines: Vec<(u32, u32)> = session
-            .to_buy_entries()
-            .into_iter()
-            .map(|entry| (entry.nameid, entry.amount))
-            .collect();
-        trade_summary(true, &lines, item_db)
-    } else {
-        let sold = session.to_sell_entries();
-        let lines: Vec<(u32, u32)> = sold
-            .iter()
-            .filter_map(|entry| {
-                session
-                    .sell_items
-                    .iter()
-                    .find(|item| item.inventory_index == entry.inventory_index)
-                    .map(|item| (item.nameid, entry.amount))
-            })
-            .collect();
-        let message = trade_summary(false, &lines, item_db);
-        session.apply_sold(&sold);
-        message
-    };
-
-    if buy {
-        session.cart_buy.clear();
-    } else {
-        session.cart_sell.clear();
-    }
-    session.banner = None;
-    Some(message)
-}
-
-/// Reads every `ShopBuyResulted`/`ShopSellResulted` this frame and applies each
-/// to `ShopSession` via [`apply_result`], posting a `ChatHeard` line on
-/// success. Inventory/zeny themselves refresh via the existing
-/// `ItemAdded`/`ItemRemoved`/`ParamChange` paths (design §5.4) — this system
-/// never touches `Inventory`/`Status`.
-fn on_shop_result(
-    mut buy_results: MessageReader<ShopBuyResulted>,
-    mut sell_results: MessageReader<ShopSellResulted>,
-    mut session: ResMut<ShopSession>,
-    item_db: Option<Res<ItemDb>>,
-    mut chat: MessageWriter<ChatHeard>,
-) {
-    for event in buy_results.read() {
-        if let Some(message) = apply_result(&mut session, true, event.result, item_db.as_deref()) {
-            chat.write(ChatHeard { gid: 0, message });
-        }
-    }
-    for event in sell_results.read() {
-        if let Some(message) = apply_result(&mut session, false, event.result, item_db.as_deref()) {
-            chat.write(ChatHeard { gid: 0, message });
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use net_contract::{
+        dto::ShopResult,
+        events::{ChatHeard, ShopBuyResulted, ShopSellResulted},
+    };
 
     fn session(tab: ShopTab) -> ShopSession {
         ShopSession {
@@ -742,10 +707,38 @@ mod tests {
             cart_sell: HashMap::new(),
             selected: None,
             pending_qty: 1,
-            banner: None,
             confirm_open: false,
-            awaiting: false,
+            retired: false,
         }
+    }
+
+    #[test]
+    fn escape_closes_the_server_shop_exactly_once() {
+        let mut app = App::new();
+        app.insert_resource(session(ShopTab::Buy));
+        app.add_message::<net_contract::commands::CloseNpcShop>();
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(KeyCode::Escape);
+        app.insert_resource(keys);
+        app.add_systems(Update, close_shop);
+        let root = app.world_mut().spawn(ShopWindowRoot).id();
+        app.update();
+        assert!(app.world().get_entity(root).is_err());
+        assert!(!app.world().contains_resource::<ShopSession>());
+        let requests: Vec<_> = app
+            .world()
+            .resource::<Messages<net_contract::commands::CloseNpcShop>>()
+            .iter_current_update_messages()
+            .collect();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].unit_id, 1);
+        app.update();
+        assert_eq!(
+            app.world()
+                .resource::<Messages<net_contract::commands::CloseNpcShop>>()
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -936,82 +929,51 @@ mod tests {
     }
 
     #[test]
-    fn apply_result_ok_clears_cart_and_returns_summary() {
-        let mut s = session(ShopTab::Buy);
-        s.cart_buy.insert(501, 3);
-        s.confirm_open = true;
-        let message = apply_result(&mut s, true, ShopResult::Ok, None);
-        assert_eq!(message, Some("Purchased 3x #501".to_string()));
-        assert!(s.cart_buy.is_empty());
-        assert_eq!(s.banner, None);
-        assert!(!s.confirm_open);
-    }
-
-    #[test]
-    fn apply_result_ok_sell_decrements_snapshot_and_clears_cart() {
-        let mut s = session(ShopTab::Sell);
-        s.cart_sell.insert(0, 5);
-        s.confirm_open = true;
-        let message = apply_result(&mut s, false, ShopResult::Ok, None);
-        assert_eq!(message, Some("Sold 5x #501".to_string()));
-        assert!(s.cart_sell.is_empty());
-        assert!(!s.sell_items.iter().any(|item| item.inventory_index == 0));
-    }
-
-    #[test]
-    fn apply_result_error_sets_banner_and_preserves_cart() {
-        let mut s = session(ShopTab::Buy);
-        s.cart_buy.insert(501, 3);
-        s.confirm_open = true;
-        let message = apply_result(&mut s, true, ShopResult::NotEnoughZeny, None);
-        assert_eq!(message, None);
-        assert_eq!(s.banner, Some(ShopResult::NotEnoughZeny));
-        assert_eq!(s.cart_buy.get(&501), Some(&3));
-        assert!(!s.confirm_open);
-    }
-
-    #[test]
-    fn apply_result_ok_clears_by_result_tab_not_active_tab() {
-        // Player confirmed a Buy, then switched to Sell before the result
-        // arrived: `session.tab` is now Sell, but the result is still `buy`.
-        let mut s = session(ShopTab::Sell);
-        s.cart_buy.insert(501, 3);
-        s.cart_sell.insert(0, 2);
-        s.awaiting = true;
-        let message = apply_result(&mut s, true, ShopResult::Ok, None);
-        assert_eq!(message, Some("Purchased 3x #501".to_string()));
-        assert!(s.cart_buy.is_empty());
-        assert_eq!(s.cart_sell.get(&0), Some(&2));
-    }
-
-    #[test]
-    fn apply_result_clears_awaiting_on_both_ok_and_error() {
-        let mut ok = session(ShopTab::Buy);
-        ok.cart_buy.insert(501, 3);
-        ok.awaiting = true;
-        apply_result(&mut ok, true, ShopResult::Ok, None);
-        assert!(!ok.awaiting);
-
-        let mut err = session(ShopTab::Buy);
-        err.cart_buy.insert(501, 3);
-        err.awaiting = true;
-        apply_result(&mut err, true, ShopResult::NotEnoughZeny, None);
-        assert!(!err.awaiting);
-    }
-
-    #[test]
-    fn blocked_while_awaiting_covers_cart_edits_and_confirm() {
-        assert!(blocked_while_awaiting(ShopButtonAction::SwitchTab(
-            ShopTab::Sell
-        )));
-        assert!(blocked_while_awaiting(ShopButtonAction::IncQty(501)));
-        assert!(blocked_while_awaiting(ShopButtonAction::DecQty(501)));
-        assert!(blocked_while_awaiting(ShopButtonAction::RemoveLine(501)));
-        assert!(blocked_while_awaiting(ShopButtonAction::PendingDec));
-        assert!(blocked_while_awaiting(ShopButtonAction::PendingInc));
-        assert!(blocked_while_awaiting(ShopButtonAction::AddToCart));
-        assert!(blocked_while_awaiting(ShopButtonAction::OpenConfirm));
-        assert!(blocked_while_awaiting(ShopButtonAction::ConfirmTrade));
+    fn pending_result_reports_after_close_without_touching_a_replacement() {
+        for result in [ShopResult::Ok, ShopResult::NotEnoughZeny] {
+            let mut app = App::new();
+            let mut replacement = session(ShopTab::Sell);
+            replacement.unit_id = 9;
+            replacement.cart_buy.insert(502, 2);
+            replacement.cart_sell.insert(1, 1);
+            app.insert_resource(replacement);
+            app.insert_resource(PendingShopDeal(Some(ShopDeal {
+                unit_id: 1,
+                buy: true,
+                lines: vec![(501, 3)],
+            })));
+            app.add_message::<ShopBuyResulted>()
+                .add_message::<ShopSellResulted>()
+                .add_message::<ChatHeard>()
+                .add_systems(Update, on_shop_result);
+            app.world_mut().write_message(ShopSellResulted {
+                result: ShopResult::Ok,
+            });
+            app.update();
+            assert!(app.world().resource::<PendingShopDeal>().0.is_some());
+            app.world_mut().write_message(ShopBuyResulted { result });
+            app.update();
+            let draft = app.world().resource::<ShopSession>();
+            assert_eq!(draft.unit_id, 9);
+            assert_eq!(draft.cart_buy.get(&502), Some(&2));
+            assert_eq!(draft.cart_sell.get(&1), Some(&1));
+            assert!(!draft.retired);
+            assert!(!draft.confirm_open);
+            assert!(app.world().resource::<PendingShopDeal>().0.is_none());
+            let lines: Vec<_> = app
+                .world()
+                .resource::<Messages<ChatHeard>>()
+                .iter_current_update_messages()
+                .collect();
+            assert_eq!(lines.len(), 1);
+            if result == ShopResult::Ok {
+                assert_eq!(lines[0].message, "Purchased 3x #501");
+            }
+            app.world_mut().remove_resource::<ShopSession>();
+            app.world_mut().write_message(ShopBuyResulted { result });
+            app.update();
+            assert_eq!(app.world().resource::<Messages<ChatHeard>>().len(), 1);
+        }
     }
 
     #[test]
@@ -1039,14 +1001,6 @@ mod tests {
     #[test]
     fn clamp_pending_treats_zero_cap_as_one() {
         assert_eq!(clamp_pending(5, 0), 1);
-    }
-
-    #[test]
-    fn blocked_while_awaiting_allows_select_and_cancel() {
-        assert!(!blocked_while_awaiting(ShopButtonAction::Select(
-            Selection::Buy(501)
-        )));
-        assert!(!blocked_while_awaiting(ShopButtonAction::CancelConfirm));
     }
 
     /// Regression: the `ShopSession`-driven systems must short-circuit when the
@@ -1270,6 +1224,7 @@ mod tests {
 
         let mut app = App::new();
         app.add_plugins(ButtonPlugin);
+        app.init_resource::<PendingShopDeal>();
         app.add_message::<ShowInfoModal>();
         app.add_message::<BuyFromShop>();
         app.add_message::<SellToShop>();
@@ -1286,6 +1241,44 @@ mod tests {
         );
         app.insert_resource(session);
         app
+    }
+
+    #[test]
+    fn submitting_a_deal_closes_its_window_and_blocks_resubmission() {
+        let mut draft = session(ShopTab::Buy);
+        draft.cart_buy.insert(501, 3);
+        draft.confirm_open = true;
+        let mut app = real_button_pipeline_app(draft);
+        app.world_mut().spawn((
+            LocalPlayer,
+            CharacterStatus {
+                zeny: 100,
+                ..default()
+            },
+        ));
+        let root = app.world_mut().spawn(ShopWindowRoot).id();
+        let button = app
+            .world_mut()
+            .spawn(ShopButtonAction::ConfirmTrade)
+            .observe(on_shop_button)
+            .id();
+        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut().flush();
+        assert!(!app.world().contains_resource::<ShopSession>());
+        assert!(app.world().get_entity(root).is_err());
+        assert_eq!(app.world().resource::<Messages<BuyFromShop>>().len(), 1);
+        let pending = app
+            .world()
+            .resource::<PendingShopDeal>()
+            .0
+            .as_ref()
+            .unwrap();
+        assert_eq!(pending.unit_id, 1);
+        assert_eq!(pending.lines, [(501, 3)]);
+        app.world_mut().insert_resource(session(ShopTab::Buy));
+        app.world_mut().trigger(Activate { entity: button });
+        app.world_mut().flush();
+        assert_eq!(app.world().resource::<Messages<BuyFromShop>>().len(), 1);
     }
 
     #[test]

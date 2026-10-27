@@ -1,11 +1,13 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::{QuinnetClient, client_connected};
-use net_contract::commands::{BuyFromShop, SellToShop};
+use net_contract::commands::{BuyFromShop, CloseNpcShop, SellToShop};
 
 use crate::channels::GAMEPLAY;
 use crate::envelope::Body;
-use crate::proto::aesir::net::{NpcBuyEntry, NpcBuyRequest, NpcSellEntry, NpcSellRequest};
+use crate::proto::aesir::net::{
+    NpcBuyEntry, NpcBuyRequest, NpcSellEntry, NpcSellRequest, NpcShopClose,
+};
 use crate::zone::{QuicZoneState, ZonePhase};
 
 fn buy_body(c: &BuyFromShop) -> Body {
@@ -78,10 +80,44 @@ pub fn send_shop_sell(
     }
 }
 
+fn close_shop_body(command: &CloseNpcShop) -> Body {
+    Body::NpcShopClose(NpcShopClose {
+        unit_id: command.unit_id,
+    })
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_shop_close(
+    mut events: MessageReader<CloseNpcShop>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        events.clear();
+        return;
+    }
+    for event in events.read() {
+        if let Err(error) = zone.send(&mut client, GAMEPLAY, close_shop_body(event)) {
+            error!("failed to send NpcShopClose: {error}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use net_contract::dto::{BuyEntry, SellEntry};
+
+    #[test]
+    fn close_preserves_the_full_shop_identity() {
+        let unit_id = u64::MAX - 1;
+        assert!(matches!(close_shop_body(&CloseNpcShop { unit_id }),
+            Body::NpcShopClose(close) if close.unit_id == unit_id));
+    }
 
     #[test]
     fn buy_body_maps_unit_id_and_entries() {

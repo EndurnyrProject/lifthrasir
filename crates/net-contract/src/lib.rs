@@ -24,6 +24,10 @@ mod tests {
         );
         assert!(
             app.world()
+                .contains_resource::<Messages<commands::CloseNpcShop>>()
+        );
+        assert!(
+            app.world()
                 .contains_resource::<Messages<events::ItemSkillOffered>>()
         );
         assert!(
