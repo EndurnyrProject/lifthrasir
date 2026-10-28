@@ -129,7 +129,7 @@ mod tests {
             .0
             .write_blocking()
             .push(Box::new(StandardMaterialHandler));
-        app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
+        app.register_asset_loader(ImageLoader::new(CompressedImageFormats::BC));
         app.init_asset::<RoAltitudeAsset>()
             // `PbrPlugin`'s job in the real app; the terrain materials the glb
             // carries have nowhere to land without it, and the scene spawner

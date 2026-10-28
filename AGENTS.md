@@ -108,7 +108,9 @@ carrying chunked indexed terrain meshes, baked `KHR_lights_punctual` lighting
 water parameters **plus its baked water tile mask**, and the original `.gat`
 bytes verbatim in the binary chunk. Ground textures are shared across maps in
 the `ground/tex/` pool and referenced by absolute `ro://ground/tex/<name>.ktx2`
-URI; prop textures stay in `models/tex/`.
+URI; prop textures stay in `models/tex/`. Both pools write **BC7 KTX2**, so a
+headless host that loads one needs `CompressedImageFormats::BC` (the windowed
+`RenderPlugin` sets it from the device features).
 
 Consequences worth knowing before changing map code:
 

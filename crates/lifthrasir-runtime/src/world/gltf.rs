@@ -403,7 +403,7 @@ mod tests {
             GltfPlugin::default(),
             MapGltfPlugin,
         ));
-        app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
+        app.register_asset_loader(ImageLoader::new(CompressedImageFormats::BC));
         app.init_asset::<StandardMaterial>();
         // `GltfPlugin` only registers the real loader in `finish`, which
         // `App::update` never calls on its own.

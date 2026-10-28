@@ -27,6 +27,8 @@ Convert the data tables, then convert maps to glTF. Map conversion is required: 
 
 Ground textures are pooled run-wide under `ground/tex/` (`--ground-dir`, default `assets/data/ground`) and referenced by absolute `ro://ground/tex/<name>.ktx2` URI; a map no longer carries its own `tex/` folder, and `convert-maps` removes a stale one left by older converters. Prop textures stay in `models/tex/`.
 
+The pool writes each texture once and rejects a pooled file whose bytes differ, so delete `assets/data/ground` and `assets/data/models/tex` before re-running the converter after a texture-encoder change. Textures are BC7-compressed KTX2; the runtime loads them through `CompressedImageFormats::BC`.
+
 The runtime loads maps and props as converted GLBs. GND/RSW/RSM/RSM2 parsing is offline-only; the converted map embeds its original GAT data for runtime grounding, raycasts, and pathfinding. Water tile masks are baked during conversion. A missing or invalid map GLB fails to load.
 
 Use `--force-models` after a `lif::MODEL_FORMAT_VERSION` change. Props are cached in `assets/data/models`, and stale models are rejected at runtime. Map and model format versions are independent: bump `lif::MAP_FORMAT_VERSION` for a map schema change and `lif::MODEL_FORMAT_VERSION` for a prop change.

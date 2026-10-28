@@ -781,17 +781,8 @@ mod tests {
                 (reader.header().pixel_width, reader.header().pixel_height),
                 (2, 2)
             );
-            assert_eq!(reader.header().format, Some(ktx2::Format::R8G8B8A8_SRGB));
-            let level = reader.levels().next().expect("base level");
-            let pixels =
-                zstd::bulk::decompress(level.data, level.uncompressed_byte_length as usize)
-                    .expect("decompress base level");
-            assert_eq!(
-                pixels,
-                [
-                    255, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 255, 255,
-                ]
-            );
+            assert_eq!(reader.header().format, Some(ktx2::Format::BC7_SRGB_BLOCK));
+            assert_eq!(ktx2, fallback_texture_ktx2().expect("placeholder"));
         }
     }
 

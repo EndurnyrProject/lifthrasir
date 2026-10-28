@@ -166,7 +166,7 @@ fn app_with_source(source: CompositeAssetSource) -> App {
         MapEmittersPlugin,
     ))
     .init_asset::<StandardMaterial>();
-    app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
+    app.register_asset_loader(ImageLoader::new(CompressedImageFormats::BC));
     app
 }
 

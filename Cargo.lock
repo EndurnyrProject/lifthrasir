@@ -3144,6 +3144,66 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctt"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c119cc328a986d0bae3a1753941595f1dc6a0f2d938b5f49edf8937bd606fa9"
+dependencies = [
+ "bytemuck",
+ "ctt-bc7enc-rdo",
+ "ctt-intel-texture-compressor",
+ "ddsfile",
+ "fast_image_resize",
+ "flate2",
+ "half",
+ "ktx2",
+ "log",
+ "miniz_oxide 0.8.9",
+ "profiling",
+ "thiserror 2.0.21",
+ "zstd 0.13.3",
+]
+
+[[package]]
+name = "ctt-bc7enc-rdo"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a4ad8fcbfcafc39a9e02bfb344fd517dd0bcd7adabcc25de19e9703eb3b99a3"
+dependencies = [
+ "ctt-bc7enc-rdo-prebuilt",
+ "ispc-build-utils",
+]
+
+[[package]]
+name = "ctt-bc7enc-rdo-prebuilt"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f27a2776bbafcc2d335c0621aa9dbd40ecfecdb02a636d3fcd2a2379f96f7472"
+dependencies = [
+ "ispc-build-utils",
+]
+
+[[package]]
+name = "ctt-intel-texture-compressor"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "452985b4223f1a68da0722161ff9a7dbb33bcb32cd30f341b541fd980c58fb26"
+dependencies = [
+ "cc",
+ "ctt-intel-texture-compressor-prebuilt",
+ "ispc-build-utils",
+]
+
+[[package]]
+name = "ctt-intel-texture-compressor-prebuilt"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa4031e53991b02e2b9fb903f3bb458ab9a2afcec99320800d4d4092dc43d33c"
+dependencies = [
+ "ispc-build-utils",
+]
+
+[[package]]
 name = "cursor-icon"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3201,6 +3261,18 @@ name = "data-url"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
+
+[[package]]
+name = "ddsfile"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8be425797f9962624aba78dee473dad28c15999e6ee6feb28ad3ee7928a3bc5b"
+dependencies = [
+ "bitflags 2.13.1",
+ "byteorder",
+ "enum-primitive-derive",
+ "num-traits 0.2.19",
+]
 
 [[package]]
 name = "deprecate-until"
@@ -3479,6 +3551,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "enum-primitive-derive"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba7795da175654fe16979af73f81f26a8ea27638d8d9823d317016888a63dc4c"
+dependencies = [
+ "num-traits 0.2.19",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "enum_dispatch"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3666,6 +3749,18 @@ name = "extended"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
+
+[[package]]
+name = "fast_image_resize"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9c50201dc184ba6553da1695aac20a042efffbe2d84542cee31917c86c3ab1e"
+dependencies = [
+ "cfg-if",
+ "document-features",
+ "num-traits 0.2.19",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "fastbloom"
@@ -4690,6 +4785,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
+name = "ispc-build-utils"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4cda913ddb107b9bb5c46769855e3849e62daa52fc7e70de0080ca4e6cfd030"
+dependencies = [
+ "find-msvc-tools",
+]
+
+[[package]]
 name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5223,6 +5327,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "blake3",
+ "ctt",
  "encoding_rs",
  "gag",
  "glam 0.33.5",
@@ -5243,7 +5348,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
- "zstd",
+ "zstd 0.14.3",
 ]
 
 [[package]]
@@ -10297,7 +10402,7 @@ dependencies = [
  "nix",
  "typed-path",
  "windows-sys 0.61.2",
- "zstd",
+ "zstd 0.14.3",
 ]
 
 [[package]]
@@ -10314,11 +10419,29 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zstd"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
+dependencies = [
+ "zstd-safe 7.3.0",
+]
+
+[[package]]
+name = "zstd"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db3ae9bf90af6e40197bef767eeefc46ad6397420fe873830bd85e5fbbfb3c70"
 dependencies = [
- "zstd-safe",
+ "zstd-safe 8.2.0",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "7.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64d80649ab6db9d9f6f9c80a40becd948eda4714a0a5ac8c4d157a32231c7882"
+dependencies = [
+ "zstd-sys",
 ]
 
 [[package]]

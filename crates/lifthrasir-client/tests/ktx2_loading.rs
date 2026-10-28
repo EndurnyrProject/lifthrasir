@@ -12,7 +12,7 @@ const FIXTURES: &str = concat!(
 );
 
 #[test]
-fn loads_zstd_ktx2_fixture() {
+fn loads_bc7_ktx2_fixture() {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins,
@@ -22,7 +22,7 @@ fn loads_zstd_ktx2_fixture() {
         },
         ImagePlugin::default(),
     ));
-    app.register_asset_loader(ImageLoader::new(CompressedImageFormats::NONE));
+    app.register_asset_loader(ImageLoader::new(CompressedImageFormats::BC));
 
     let handle: Handle<Image> = app
         .world()
@@ -55,6 +55,6 @@ fn loads_zstd_ktx2_fixture() {
     assert_eq!(image.texture_descriptor.mip_level_count, 3);
     assert_eq!(
         image.texture_descriptor.format,
-        TextureFormat::Rgba8UnormSrgb
+        TextureFormat::Bc7RgbaUnormSrgb
     );
 }

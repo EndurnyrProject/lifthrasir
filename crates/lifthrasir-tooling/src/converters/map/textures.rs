@@ -41,47 +41,49 @@ pub fn pool_textures(
         .collect()
 }
 
-/// Normalizes one GRF texture into RGBA KTX2 the way the runtime loaders would.
+/// Normalizes one GRF texture into the RGBA the runtime loaders would produce.
 ///
 /// The extension picks the semantics, mirroring the asset-server dispatch:
 /// BMPs are magenta-keyed (`bmp_loader.rs`), TGAs carry real 8-bit alpha and
 /// are taken verbatim (`tga_loader.rs`). RSM props reference both; GND ground
 /// textures are BMP only.
-pub fn texture_bytes_to_ktx2(source_name: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+pub fn texture_bytes_to_rgba(source_name: &str, bytes: &[u8]) -> anyhow::Result<RgbaImage> {
     let extension = source_name
         .rsplit_once('.')
         .map_or(String::new(), |(_, ext)| ext.to_ascii_lowercase());
 
     match extension.as_str() {
-        "bmp" => bmp_bytes_to_keyed_ktx2(bytes),
-        "tga" => decoded_to_ktx2(
-            image::load_from_memory_with_format(bytes, ImageFormat::Tga).context("decoding TGA")?,
-        ),
+        "bmp" => bmp_bytes_to_keyed_rgba(bytes),
+        "tga" => Ok(image::load_from_memory_with_format(bytes, ImageFormat::Tga)
+            .context("decoding TGA")?
+            .to_rgba8()),
         // Everything else reaches Bevy's stock `ImageLoader` at runtime, which
         // keys nothing: JPEG cannot carry an exact key colour through lossy
         // compression, and PNG carries its own alpha.
-        "jpg" | "jpeg" => decoded_to_ktx2(
+        "jpg" | "jpeg" => Ok(
             image::load_from_memory_with_format(bytes, ImageFormat::Jpeg)
-                .context("decoding JPEG")?,
+                .context("decoding JPEG")?
+                .to_rgba8(),
         ),
-        "png" => decoded_to_ktx2(
-            image::load_from_memory_with_format(bytes, ImageFormat::Png).context("decoding PNG")?,
-        ),
+        "png" => Ok(image::load_from_memory_with_format(bytes, ImageFormat::Png)
+            .context("decoding PNG")?
+            .to_rgba8()),
         other => bail!("unsupported texture format '{other}' for '{source_name}'"),
     }
 }
 
-pub fn bmp_bytes_to_keyed_ktx2(bmp_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+/// Block-compresses that RGBA into the KTX2 the runtime loads.
+pub fn texture_bytes_to_ktx2(source_name: &str, bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+    encode_ktx2(&texture_bytes_to_rgba(source_name, bytes)?, true)
+}
+
+fn bmp_bytes_to_keyed_rgba(bmp_bytes: &[u8]) -> anyhow::Result<RgbaImage> {
     let mut image = image::load_from_memory_with_format(bmp_bytes, ImageFormat::Bmp)
         .context("decoding BMP")?
         .to_rgba8();
     apply_magenta_transparency(&mut image);
 
-    encode_ktx2(&image, true)
-}
-
-fn decoded_to_ktx2(image: image::DynamicImage) -> anyhow::Result<Vec<u8>> {
-    encode_ktx2(&image.to_rgba8(), true)
+    Ok(image)
 }
 
 /// Zeroes RGB and alpha on magenta-keyed pixels, alpha 255 everywhere else.
@@ -164,22 +166,13 @@ mod tests {
         bytes
     }
 
-    fn decode_base_level(bytes: &[u8]) -> RgbaImage {
-        let reader = ktx2::Reader::new(bytes).expect("parse KTX2");
-        let header = reader.header();
-        let level = reader.levels().next().expect("base level");
-        let pixels = zstd::bulk::decompress(level.data, level.uncompressed_byte_length as usize)
-            .expect("decompress base level");
-        RgbaImage::from_raw(header.pixel_width, header.pixel_height, pixels).expect("RGBA pixels")
-    }
-
     #[test]
     fn magenta_pixels_become_transparent_others_stay_opaque() {
         let magenta = [255, 0, 255, 255];
         let green = [10, 200, 10, 255];
         let bmp = encode_bmp(&[magenta, green], 2, 1);
 
-        let decoded = decode_base_level(&bmp_bytes_to_keyed_ktx2(&bmp).expect("convert"));
+        let decoded = bmp_bytes_to_keyed_rgba(&bmp).expect("convert");
 
         assert_eq!(decoded.get_pixel(0, 0).0, [0, 0, 0, 0]);
         assert_eq!(decoded.get_pixel(1, 0).0, [10, 200, 10, 255]);
@@ -190,7 +183,7 @@ mod tests {
         let near_magenta = [245, 10, 250, 255];
         let bmp = encode_bmp(&[near_magenta], 1, 1);
 
-        let decoded = decode_base_level(&bmp_bytes_to_keyed_ktx2(&bmp).expect("convert"));
+        let decoded = bmp_bytes_to_keyed_rgba(&bmp).expect("convert");
 
         assert_eq!(decoded.get_pixel(0, 0).0, [0, 0, 0, 0]);
     }
@@ -211,9 +204,9 @@ mod tests {
 
         let ktx2_bytes = texture_bytes_to_ktx2("iz_rookie_06.tga", &tga).expect("convert");
         let reader = ktx2::Reader::new(&ktx2_bytes).expect("parse KTX2");
-        let decoded = decode_base_level(&ktx2_bytes);
+        let decoded = texture_bytes_to_rgba("iz_rookie_06.tga", &tga).expect("decode");
 
-        assert_eq!(reader.header().format, Some(ktx2::Format::R8G8B8A8_SRGB));
+        assert_eq!(reader.header().format, Some(ktx2::Format::BC7_SRGB_BLOCK));
         assert_eq!(decoded.get_pixel(0, 0).0, magenta);
         assert_eq!(decoded.get_pixel(1, 0).0, translucent);
     }
@@ -332,7 +325,7 @@ mod tests {
                 .write_to(&mut Cursor::new(&mut bytes), format)
                 .expect("encode source");
 
-            let decoded = decode_base_level(&texture_bytes_to_ktx2(name, &bytes).expect("convert"));
+            let decoded = texture_bytes_to_rgba(name, &bytes).expect("convert");
 
             assert_eq!(decoded.get_pixel(0, 0).0[3], 255, "{name} must stay opaque");
         }
