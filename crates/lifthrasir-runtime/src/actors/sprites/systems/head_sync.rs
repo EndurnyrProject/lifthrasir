@@ -52,8 +52,15 @@ pub(crate) fn head_billboard_delta(screen_offset: Vec2, body_layer_pos: Vec2) ->
     screen_offset - body_layer_pos
 }
 
+/// Whether the head must stay on frame 0 of its action. Idle and sit both
+/// cycle the doridori poses on the body, and a head driven by that cycle
+/// flickers (mirrored frames) every 100 ms.
+fn pins_head_to_first_frame(action_type: ActionType) -> bool {
+    matches!(action_type, ActionType::Idle | ActionType::Sit)
+}
+
 /// Attach point and layer position from frame 0 of the body's current action.
-fn body_idle_attach(
+fn body_first_frame_attach(
     animations: &Assets<RoAnimationAsset>,
     body_render_layer: &RenderLayer,
     action_index: usize,
@@ -68,7 +75,7 @@ fn body_idle_attach(
 
 /// Synchronizes the head layer with the body: texture, scale, and position all
 /// come from the same frame so the head follows the body during walk/attack.
-/// Idle stays on frame 0 to avoid the doridori head cycle.
+/// Idle and sit stay on frame 0 to avoid the doridori head cycle.
 ///
 /// Body and head are separate billboard quads, so the head offset must be
 /// applied in billboard space (rotated by the camera rotation). A parent-space
@@ -120,7 +127,9 @@ pub fn sync_player_head_layer(
             continue;
         }
 
-        let head_frame_index = if ro_sprite.action_type == ActionType::Idle {
+        let pins_frame = pins_head_to_first_frame(ro_sprite.action_type);
+
+        let head_frame_index = if pins_frame {
             0
         } else {
             body_attach
@@ -158,11 +167,11 @@ pub fn sync_player_head_layer(
             continue;
         };
 
-        // During idle the head is pinned to frame 0, so the body attach data
-        // must come from frame 0 too: the published attach point cycles
-        // through the doridori poses and would make the pinned head twitch.
-        let (body_attach_point, body_layer_pos) = if ro_sprite.action_type == ActionType::Idle {
-            body_idle_attach(&animations, body_render_layer, action_index)
+        // While the head is pinned to frame 0, the body attach data must come
+        // from frame 0 too: the published attach point cycles through the
+        // doridori poses and would make the pinned head twitch.
+        let (body_attach_point, body_layer_pos) = if pins_frame {
+            body_first_frame_attach(&animations, body_render_layer, action_index)
                 .unwrap_or((body_attach.attach_point, body_attach.layer_pos))
         } else {
             (body_attach.attach_point, body_attach.layer_pos)
@@ -218,6 +227,13 @@ mod tests {
             head_screen_offset(head_layer_pos, attach, attach),
             head_layer_pos
         );
+    }
+
+    #[test]
+    fn test_head_is_pinned_for_still_actions_only() {
+        assert!(pins_head_to_first_frame(ActionType::Idle));
+        assert!(pins_head_to_first_frame(ActionType::Sit));
+        assert!(!pins_head_to_first_frame(ActionType::Walk));
     }
 
     #[test]
