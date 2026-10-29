@@ -69,7 +69,7 @@ pub fn on_sprite_over(
         commands.entity(root).try_insert(HoveredEntity);
         commands.trigger(EntityHoverEntered {
             entity: root,
-            entity_id: net.aid,
+            entity_id: net.gid,
         });
     } else if kinds.get(root).map(|(_, _, item)| item).unwrap_or(false) {
         hovered_item.0 = Some(root);

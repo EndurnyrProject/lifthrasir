@@ -1,3 +1,4 @@
+use crate::domain::entities::name_request_system::name_request_observer;
 use crate::domain::entities::picking::*;
 use bevy::{
     camera::{ImageRenderTarget, NormalizedRenderTarget},
@@ -6,7 +7,26 @@ use bevy::{
         pointer::{Location, PointerId},
     },
 };
+use net_contract::commands::NameRequested;
 use std::time::Duration;
+
+/// Build the pointer hover event Bevy's picking emits when the pointer enters an entity.
+fn pointer_over(entity: Entity) -> PointerOver {
+    PointerOver {
+        entity,
+        pointer: Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Image(ImageRenderTarget {
+                    handle: Handle::default(),
+                    scale_factor: 1.0,
+                }),
+                position: Vec2::ZERO,
+            },
+        ),
+        hit: HitData::new(Entity::PLACEHOLDER, 0.0, None, None),
+    }
+}
 
 /// Build the pointer click event Bevy's picking emits for the primary button.
 fn pointer_click(entity: Entity) -> PointerClick {
@@ -56,6 +76,34 @@ fn client_attaches_interaction_to_explicit_visual_root_mappings() {
     let requests: Vec<_> = messages.iter_current_update_messages().collect();
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].target_id, 42);
+}
+
+#[test]
+fn hover_requests_the_name_for_the_hovered_unit_id() {
+    let mut app = App::new();
+    app.init_resource::<CurrentlyHoveredEntity>()
+        .init_resource::<HoveredFloorItem>()
+        .add_message::<CursorChangeRequest>()
+        .add_message::<NameRequested>()
+        .add_observer(name_request_observer);
+    // aesir keys NameRequest on char_id (`gid`), never on the account id (`aid`).
+    let owner = app
+        .world_mut()
+        .spawn(NetworkEntity::new(2_000_001, 150_042, ObjectType::Pc))
+        .id();
+    let body = app
+        .world_mut()
+        .spawn(ActorVisualRoot(owner))
+        .observe(on_sprite_over)
+        .id();
+
+    app.world_mut().trigger(pointer_over(body));
+    app.world_mut().flush();
+
+    let messages = app.world().resource::<Messages<NameRequested>>();
+    let requests: Vec<_> = messages.iter_current_update_messages().collect();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].gid, 150_042);
 }
 
 #[test]
