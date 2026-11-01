@@ -60,8 +60,13 @@ pub(super) fn build(file: &Gr2File, clips: &[(&str, &Gr2File)]) -> anyhow::Resul
         } else {
             format!("texture_{index}")
         };
+        let (alpha_mode, alpha_cutoff) = match (texture.has_alpha(), is_emblem) {
+            (false, _) => ("OPAQUE", None),
+            (true, true) => ("BLEND", None),
+            (true, false) => ("MASK", Some(0.5)),
+        };
         root.materials.push(serde_json::from_value(json!({
-            "name": name, "doubleSided":true, "alphaMode": if texture.has_alpha() { "BLEND" } else { "OPAQUE" },
+            "name": name, "doubleSided":true, "alphaMode": alpha_mode, "alphaCutoff": alpha_cutoff,
             "pbrMetallicRoughness":{"baseColorTexture":{"index":index}, "metallicFactor":0, "roughnessFactor":1},
             "extensions":{"KHR_materials_unlit":{}}
         }))?);
