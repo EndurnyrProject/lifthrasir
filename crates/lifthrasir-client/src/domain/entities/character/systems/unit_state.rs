@@ -42,18 +42,19 @@ impl UnitState {
 /// Consumes the legacy `UnitStateChange` channel: stores all four state fields
 /// on [`UnitState`] and renders the cheap high-value subset.
 ///
-/// ponytail: only hide/cloak visibility (option) renders here. Deliberately
-/// deferred and stored-only:
+/// Visibility renders here. The shared effects systems handle the other
+/// presentation channels:
 /// - freeze/stone body poses (opt1) render in `domain/effects/status_visuals.rs`
 ///   (`body_state_visuals`): tint + `AnimationPaused`, off the combat
 ///   `AnimationState` machine so the HitStun revert can't fight them.
 /// - sleep (opt1) renders there too (`SleepOverlay`): a looping `sleep.str`
 ///   child, with no tint and no `AnimationPaused`.
-/// - stun body pose (opt1): still stored-only; no visual yet.
-/// - poison/curse/silence tint (health_state/opt2).
-/// - mount/orc-head and the other option bits. (The cart bits are consumed by
-///   `apply_cart_mount` in the sprite-rendering domain.)
-/// - virtue (opt3).
+/// - stun (opt1) and poison/curse/silence (opt2) render in
+///   `domain/effects/ailment_visuals.rs`: head attachments and health-state tint,
+///   without pausing the body animation.
+/// - mount/orc-head and the other option bits are stored-only here. Cart, falcon
+///   and Peco mount rendering consume their bits in the sprite-rendering domain.
+/// - virtue (opt3) tint renders in `status_visuals.rs`.
 #[auto_add_system(
     plugin = crate::domain::entities::character::UnifiedCharacterEntityPlugin,
     schedule = Update

@@ -24,7 +24,7 @@ use lifthrasir_assets::animation::asset::{FramePart, RoAnimationAsset};
 use lifthrasir_assets::animation::processor::RoAnimationProcessor;
 use lifthrasir_assets::loaders::{RoActAsset, RoSpriteAsset};
 
-/// Effect sprites carry one action; the classic client plays it on a loop.
+/// Effect sprites default to their first action.
 const EFFECT_SPRITE_ACTION: usize = 0;
 
 /// Request to dress `entity` with the looping SPR/ACT animation at `path` (a
@@ -35,6 +35,11 @@ pub struct EffectSprite {
     pub path: String,
     pub tint: Color,
 }
+
+/// Selects an ACT action for an effect sprite; absent means action zero.
+/// May change during playback, for example for a directional attachment.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct EffectSpriteAction(pub usize);
 
 /// One ACT-layer quad of a spawned [`EffectSprite`]. `part` indexes into the
 /// current frame's `parts`; the handle is kept per part so several different
@@ -102,13 +107,14 @@ pub fn spawn_effect_sprites(
     mut bank: SpriteAssetBank,
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_quad: Option<Res<SharedSpriteQuad>>,
-    requests: Query<(Entity, &EffectSprite)>,
+    requests: Query<(Entity, &EffectSprite, Option<&EffectSpriteAction>)>,
 ) {
     let Some(shared_quad) = shared_quad else {
         return;
     };
 
-    for (entity, request) in &requests {
+    for (entity, request, selected_action) in &requests {
+        let action_index = selected_action.map_or(EFFECT_SPRITE_ACTION, |action| action.0);
         let Some(animation) = resolve_animation(
             &asset_server,
             &mut assets,
@@ -124,22 +130,22 @@ pub fn spawn_effect_sprites(
             continue;
         };
 
-        let Some(action) = bank
-            .animations
-            .get(&animation)
-            .and_then(|a| a.actions.get(EFFECT_SPRITE_ACTION))
-        else {
+        let Some(animation_data) = bank.animations.get(&animation) else {
+            continue;
+        };
+        if animation_data.actions.get(action_index).is_none() {
             warn!(
-                "Effect sprite {} has no action {EFFECT_SPRITE_ACTION}; skipping visual",
+                "Effect sprite {} has no action {action_index}; skipping visual",
                 request.path
             );
             commands.entity(entity).remove::<EffectSprite>();
             continue;
         };
 
-        let parts = action
-            .frames
+        let parts = animation_data
+            .actions
             .iter()
+            .flat_map(|action| &action.frames)
             .map(|frame| frame.parts.len())
             .max()
             .unwrap_or(0);
@@ -227,14 +233,16 @@ fn resolve_animation(
 }
 
 /// Drives every spawned effect-sprite part off the global clock, looping
-/// [`EFFECT_SPRITE_ACTION`] the way the classic client does. A part with no data
-/// at the current frame hides rather than showing stale geometry.
+/// the selected ACT action. A part with no data at the current frame hides
+/// rather than showing stale geometry.
 pub fn sync_effect_sprites(
     time: Res<Time>,
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    selected_actions: Query<&EffectSpriteAction>,
     mut parts: Query<(
         &EffectSpritePart,
+        &ChildOf,
         &MeshMaterial3d<StandardMaterial>,
         &mut Transform,
         &mut Visibility,
@@ -242,14 +250,19 @@ pub fn sync_effect_sprites(
 ) {
     let game_time_ms = time.elapsed_secs() * 1000.0;
 
-    for (sprite_part, material_handle, transform, mut visibility) in &mut parts {
+    for (sprite_part, parent, material_handle, transform, mut visibility) in &mut parts {
         let Some(animation) = animations.get(&sprite_part.animation) else {
             continue;
         };
-        let Some(action) = animation.actions.get(EFFECT_SPRITE_ACTION) else {
+        let action_index = selected_actions
+            .get(parent.parent())
+            .map_or(EFFECT_SPRITE_ACTION, |action| action.0);
+        let Some(action) = animation.actions.get(action_index) else {
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
         if action.frames.is_empty() {
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
 
@@ -282,6 +295,104 @@ mod tests {
         animation::{ActionData, FrameData},
     };
     use std::time::Duration;
+
+    #[test]
+    fn selected_action_controls_both_part_spawning_and_playback() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Mesh>()
+            .init_asset::<Image>()
+            .init_asset::<StandardMaterial>()
+            .add_plugins((ContentAssetsPlugin, RuntimeCorePlugin))
+            .init_resource::<EffectSpriteAssets>()
+            .add_systems(Update, (spawn_effect_sprites, sync_effect_sprites).chain());
+        let texture = app
+            .world_mut()
+            .resource_mut::<Assets<Image>>()
+            .add(Image::default());
+        let animation = app
+            .world_mut()
+            .resource_mut::<Assets<RoAnimationAsset>>()
+            .add(RoAnimationAsset {
+                textures: vec![texture.clone()],
+                actions: vec![
+                    ActionData {
+                        frames: vec![],
+                        delay_ms: 100.0,
+                    },
+                    ActionData {
+                        frames: vec![FrameData {
+                            parts: vec![FramePart {
+                                texture_index: 0,
+                                transform: Mat4::IDENTITY,
+                                position: Vec2::ZERO,
+                                scale: Vec2::ONE,
+                                texture_size: Vec2::ONE,
+                                color: Color::WHITE,
+                                mirror: false,
+                            }],
+                            ..default()
+                        }],
+                        delay_ms: 100.0,
+                    },
+                ],
+                layer: LAYER_EFFECT,
+                sounds: vec![],
+            });
+        app.world_mut()
+            .resource_mut::<EffectSpriteAssets>()
+            .ready
+            .insert("selected".into(), animation);
+        let root = app
+            .world_mut()
+            .spawn((
+                EffectSprite {
+                    path: "selected".into(),
+                    tint: Color::WHITE,
+                },
+                EffectSpriteAction(1),
+            ))
+            .id();
+        app.update();
+        let children = app
+            .world()
+            .get::<Children>(root)
+            .expect("selected action spawns a part");
+        assert_eq!(children.len(), 1);
+        let child = children.iter().next().unwrap();
+        assert_eq!(
+            *app.world().get::<Visibility>(child).unwrap(),
+            Visibility::Inherited
+        );
+        let material = app
+            .world()
+            .get::<MeshMaterial3d<StandardMaterial>>(child)
+            .unwrap();
+        assert_eq!(
+            app.world()
+                .resource::<Assets<StandardMaterial>>()
+                .get(&material.0)
+                .unwrap()
+                .base_color_texture,
+            Some(texture)
+        );
+        app.world_mut()
+            .entity_mut(root)
+            .insert(EffectSpriteAction(0));
+        app.update();
+        assert_eq!(
+            *app.world().get::<Visibility>(child).unwrap(),
+            Visibility::Hidden
+        );
+        app.world_mut()
+            .entity_mut(root)
+            .insert(EffectSpriteAction(1));
+        app.update();
+        assert_eq!(
+            *app.world().get::<Visibility>(child).unwrap(),
+            Visibility::Inherited
+        );
+    }
 
     #[test]
     fn synthetic_sprite_animates_and_requeues_held_material_without_gameplay_resources() {

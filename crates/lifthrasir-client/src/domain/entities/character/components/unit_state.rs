@@ -4,8 +4,8 @@ use bevy::prelude::*;
 ///
 /// This is the older `opt1`/`opt2`/`option`/`opt3` channel, distinct from the
 /// modern EFST `StatusEffects` channel. All four fields are stored verbatim so
-/// the render subset can be recomputed deterministically; only body poses and
-/// hide/cloak visibility are rendered today (see `apply_unit_state`).
+/// the render subset can be recomputed deterministically. Body poses, health-state
+/// ailments and hide/cloak visibility have presentation paths (see `apply_unit_state`).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct UnitState {
     /// `opt1` — single-valued sprite body state (stone/freeze/stun/sleep/...).

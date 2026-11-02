@@ -1,8 +1,12 @@
+pub mod ailment_visuals;
 pub mod map_effects;
 pub mod spirit_spheres;
 pub mod status_visuals;
 pub mod triggers;
 
+pub use crate::domain::effects::ailment_visuals::{
+    PendingAilments, ailment_visuals, clear_pending_ailments, sync_curse_direction,
+};
 pub use crate::domain::effects::spirit_spheres::{PendingSpiritSpheres, spirit_sphere_visuals};
 pub use crate::domain::effects::status_visuals::{
     PendingBodyStates, PendingEffectStates, PendingVirtues, StatusAura, body_state_visuals,

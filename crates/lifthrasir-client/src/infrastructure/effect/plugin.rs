@@ -1,7 +1,9 @@
+use crate::core::GameState;
 use crate::domain::effects::{
-    PendingBodyStates, PendingEffectStates, PendingSpiritSpheres, PendingVirtues,
-    body_state_visuals, efst_auras, on_ground_skill, on_skill_damage, on_skill_effect,
-    on_special_effect, option_visuals, spirit_sphere_visuals, virtue_visuals,
+    PendingAilments, PendingBodyStates, PendingEffectStates, PendingSpiritSpheres, PendingVirtues,
+    ailment_visuals, body_state_visuals, clear_pending_ailments, efst_auras, on_ground_skill,
+    on_skill_damage, on_skill_effect, on_special_effect, option_visuals, spirit_sphere_visuals,
+    sync_curse_direction, virtue_visuals,
 };
 use crate::domain::system_sets::EntityLifecycleSystems;
 use bevy::prelude::*;
@@ -12,10 +14,12 @@ pub struct EffectsPlugin;
 
 impl Plugin for EffectsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PendingBodyStates>()
+        app.init_resource::<PendingAilments>()
+            .init_resource::<PendingBodyStates>()
             .init_resource::<PendingEffectStates>()
             .init_resource::<PendingVirtues>()
             .init_resource::<PendingSpiritSpheres>()
+            .add_systems(OnExit(GameState::InGame), clear_pending_ailments)
             .add_systems(
                 Update,
                 (
@@ -29,6 +33,14 @@ impl Plugin for EffectsPlugin {
             .add_systems(
                 Update,
                 (
+                    ailment_visuals
+                        .after(EntityLifecycleSystems::Spawning)
+                        .before(lifthrasir_runtime::effects::sprites::spawn_effect_sprites)
+                        .before(lifthrasir_runtime::effects::overlays::apply_body_state_tint),
+                    sync_curse_direction
+                        .after(ailment_visuals)
+                        .after(lifthrasir_runtime::rendering::SpriteRenderingSystems::AnimationSync)
+                        .before(lifthrasir_runtime::effects::sprites::spawn_effect_sprites),
                     body_state_visuals.after(EntityLifecycleSystems::Spawning),
                     virtue_visuals.after(EntityLifecycleSystems::Spawning),
                     option_visuals.after(EntityLifecycleSystems::Spawning),

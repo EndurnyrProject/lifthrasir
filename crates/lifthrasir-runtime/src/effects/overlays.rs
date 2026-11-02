@@ -43,9 +43,8 @@ pub struct AnimationPaused {
 }
 
 /// Multiplies each sprite layer's material `base_color` by its parent unit's
-/// tint — the combination of its [`BodyStateTint`] (opt1 freeze/stone) and
-/// [`Opt3Tint`] (opt3 Fury/Steel Body), multiplied together so both can apply at
-/// once — or resets it to white when the unit has neither. This rides the same
+/// tint: [`BodyStateTint`] (opt1), [`HealthStateTint`] (opt2) and [`Opt3Tint`]
+/// multiply together, or reset to white when none apply. This rides the same
 /// per-frame path as the layer texture write, because those materials are
 /// rewritten unconditionally every frame (retained-phase re-queue) — a one-shot
 /// tint write would be lost. Covers every layer uniformly (body, head, weapon,
@@ -55,16 +54,19 @@ pub fn apply_body_state_tint(
     layers: Query<(&MeshMaterial3d<StandardMaterial>, &ChildOf), With<RenderLayer>>,
     tints: Query<&BodyStateTint>,
     opt3_tints: Query<&Opt3Tint>,
+    health_tints: Query<&HealthStateTint>,
 ) {
     for (material_handle, child_of) in &layers {
         let parent = child_of.parent();
-        let body = tints.get(parent).ok().map(|t| t.0);
-        let opt3 = opt3_tints.get(parent).ok().map(|t| t.0);
-        let desired = match (body, opt3) {
-            (None, None) => Color::WHITE,
-            (Some(c), None) | (None, Some(c)) => c,
-            (Some(a), Some(b)) => multiply_colors(a, b),
-        };
+        let desired = [
+            tints.get(parent).ok().map(|t| t.0),
+            health_tints.get(parent).ok().map(|t| t.0),
+            opt3_tints.get(parent).ok().map(|t| t.0),
+        ]
+        .into_iter()
+        .flatten()
+        .reduce(multiply_colors)
+        .unwrap_or(Color::WHITE);
 
         // Read before mutating: `get_mut` marks the material changed (a retained-
         // phase re-queue) every call, so touch it only when the colour actually
@@ -86,6 +88,10 @@ pub fn apply_body_state_tint(
 /// [`apply_body_state_tint`]. Absent means no opt3 recolour.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct Opt3Tint(pub Color);
+
+/// Colour contributed by health-state ailments, independent of body and opt3 tints.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct HealthStateTint(pub Color);
 
 /// Channel-wise sRGB multiply of two tints (white is the identity), matching how
 /// `base_color` multiplies into the sprite texture.
