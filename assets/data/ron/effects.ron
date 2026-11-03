@@ -78,6 +78,7 @@
         282: (success_only: true), // SA_LIGHTNINGLOADER
         283: (success_only: true), // SA_SEISMICWEAPON
         289: (success_only: true), // SA_DISPELL
+        358: (motion: None), // LK_TENSIONRELAX: the server seats the caster.
     },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
@@ -1546,6 +1547,63 @@
             visuals: [Str("adrenaline.str")],
             sound: None,
             placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        // --- Lord Knight (LK_*) ---------------------------------------------
+        355: ( // LK_AURABLADE -- approximate the hardcoded cast flash.
+            visuals: [Str("overthrust.strfx.ron")],
+            sound: Some("effect/오라 블레이드.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        356: ( // LK_PARRYING -- approximate the weapon-guard cast flash.
+            visuals: [Str("sword.str")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        357: ( // LK_CONCENTRATION -- EF_LKCONCENTRATION uses twohand.str.
+            visuals: [Str("twohand.str")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        358: ( // LK_TENSIONRELAX -- server-owned sitting pose; no established burst.
+            visuals: [],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        359: ( // LK_BERSERK -- approximate the cast, not a persistent aura.
+            visuals: [Str("explosion_spirits.strfx.ron")],
+            sound: Some("effect/버서크.wav"),
+            placement: Caster,
+            color: (1.0, 0.65, 0.65, 1.0),
+            repeating: false,
+        ),
+        397: ( // LK_SPIRALPIERCE -- one authored five-pulse target impact.
+            visuals: [Str("lord_knight_spiral_pierce.strfx.ron")],
+            sound: Some("attack_spear.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        398: ( // LK_HEADCRUSH -- approximate strike with dedicated sound.
+            visuals: [Str("bash.strfx.ron")],
+            sound: Some("effect/헤드 크러쉬.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        399: ( // LK_JOINTBEAT -- approximate spear strike with dedicated sound.
+            visuals: [Str("spearstab.str")],
+            sound: Some("effect/비트 조인트.wav"),
+            placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),

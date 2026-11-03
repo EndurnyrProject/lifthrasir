@@ -1,0 +1,34 @@
+// Spiral Pierce: approximate the five-hit spear impact in one damage event.
+// Damage numbers are staggered separately by the skill-damage handler.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 245.0), quad: (35.0, 80.0), color: (220, 235, 255, 0), angle: 0.0),
+                (at: 4, offset: (319.0, 245.0), quad: (120.0, 150.0), color: (220, 235, 255, 210), angle: 384.0),
+                (at: 12, offset: (319.0, 245.0), quad: (165.0, 190.0), color: (200, 220, 255, 180), angle: 1152.0),
+                (at: 24, offset: (319.0, 245.0), quad: (200.0, 225.0), color: (180, 205, 255, 0), angle: 2304.0),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
+                (at: 1, offset: (319.0, 245.0), quad: (105.0, 105.0), color: (255, 255, 255, 235)),
+                (at: 3, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
+                (at: 5, offset: (319.0, 245.0), quad: (105.0, 105.0), color: (255, 255, 255, 235)),
+                (at: 7, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
+                (at: 10, offset: (319.0, 245.0), quad: (105.0, 105.0), color: (255, 255, 255, 235)),
+                (at: 12, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
+                (at: 14, offset: (319.0, 245.0), quad: (105.0, 105.0), color: (255, 255, 255, 235)),
+                (at: 16, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
+                (at: 19, offset: (319.0, 245.0), quad: (125.0, 125.0), color: (255, 255, 255, 255)),
+                (at: 23, offset: (319.0, 245.0), quad: (150.0, 150.0), color: (225, 235, 255, 0)),
+            ],
+        ),
+    ],
+)

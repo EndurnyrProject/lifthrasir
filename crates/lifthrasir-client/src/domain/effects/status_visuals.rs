@@ -185,13 +185,13 @@ fn apply_body_state(
 /// aesir `OPT3_*` (`virtue`) sprite-recolor bits (`Aesir.ZoneServer.Mmo.Opt3`,
 /// the rAthena `e_sc_opt3` table). Unlike `body_state`/opt1 this is a *bitmask*:
 /// `UnitStateChanged.virtue` is the bitwise-OR of every active opt3 status on the
-/// unit, so more than one bit can be set at once. Only the Monk states that
-/// recolour the sprite are handled; Blade Stop (32) is an icon-only pose with no
-/// recolour, and the other bits (quicken, overthrust, ...) carry no tint here.
+/// unit, so more than one bit can be set at once. Blade Stop (32) has no
+/// recolour; Aura Blade (64) and the other unhandled bits carry no tint here.
 const OPT3_EXPLOSIONSPIRITS: u32 = 8;
 const OPT3_STEELBODY: u32 = 16;
+const OPT3_BERSERK: u32 = 128;
 
-/// Fury (Explosion Spirits) tint: an enraged red flush.
+/// Fury and Berserk tint: an enraged red flush.
 const FURY_RED: Color = Color::srgb(1.0, 0.5, 0.42);
 /// Mental Strength (Steel Body) tint: the iconic golden metal body.
 const STEEL_GOLD: Color = Color::srgb(1.0, 0.8, 0.28);
@@ -209,6 +209,7 @@ fn virtue_tint(virtue: u32) -> Option<Color> {
     [
         (OPT3_EXPLOSIONSPIRITS, FURY_RED),
         (OPT3_STEELBODY, STEEL_GOLD),
+        (OPT3_BERSERK, FURY_RED),
     ]
     .into_iter()
     .filter(|(bit, _)| virtue & bit != 0)
