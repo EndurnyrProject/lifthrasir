@@ -1,0 +1,44 @@
+// Adrenaline Rush: authored haste burst for the hardcoded EF_HASTEUP.
+// Gold rings and rising streaks approximate the cast, not a persistent aura.
+// The separate native adrenaline.str belongs to Advanced Adrenaline Rush.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 285.0), quad: (30.0, 18.0), color: (255, 220, 100, 0)),
+                (at: 5, offset: (319.0, 275.0), quad: (160.0, 65.0), color: (255, 230, 120, 230), angle: 128.0),
+                (at: 18, offset: (319.0, 235.0), quad: (200.0, 80.0), color: (255, 200, 80, 0), angle: 512.0),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                (at: 4, offset: (319.0, 270.0), quad: (35.0, 20.0), color: (255, 230, 120, 0)),
+                (at: 9, offset: (319.0, 255.0), quad: (140.0, 60.0), color: (255, 240, 150, 200), angle: -128.0),
+                (at: 24, offset: (319.0, 205.0), quad: (180.0, 75.0), color: (255, 210, 100, 0), angle: -512.0),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/lens_y.bmp"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (290.0, 285.0), quad: (18.0, 35.0), color: (255, 225, 100, 0)),
+                (at: 6, offset: (290.0, 250.0), quad: (28.0, 110.0), color: (255, 235, 140, 200)),
+                (at: 20, offset: (290.0, 195.0), quad: (15.0, 65.0), color: (255, 210, 80, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/lens_y.bmp"],
+            blend: Add,
+            keys: [
+                (at: 3, offset: (348.0, 285.0), quad: (18.0, 35.0), color: (255, 225, 100, 0)),
+                (at: 9, offset: (348.0, 250.0), quad: (28.0, 110.0), color: (255, 235, 140, 200)),
+                (at: 23, offset: (348.0, 195.0), quad: (15.0, 65.0), color: (255, 210, 80, 0)),
+            ],
+        ),
+    ],
+)

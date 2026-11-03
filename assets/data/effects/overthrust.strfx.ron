@@ -1,0 +1,35 @@
+// Power-Thrust: authored red weapon-empowerment cast flash for EF_OVERTHRUST.
+// The reference establishes the sound but no native STR; this is an approximation,
+// not a duration-bound weapon tint or status aura.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/ring_red.tga"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 291.0), quad: (25.0, 15.0), color: (255, 180, 140, 0)),
+                (at: 5, offset: (319.0, 291.0), quad: (150.0, 65.0), color: (255, 200, 170, 220)),
+                (at: 20, offset: (319.0, 291.0), quad: (210.0, 90.0), color: (255, 140, 100, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 250.0), quad: (20.0, 30.0), color: (255, 90, 50, 0)),
+                (at: 6, offset: (319.0, 245.0), quad: (110.0, 150.0), color: (255, 110, 60, 200)),
+                (at: 24, offset: (319.0, 220.0), quad: (135.0, 175.0), color: (255, 60, 30, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/black_sword.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 2, offset: (319.0, 260.0), quad: (45.0, 65.0), color: (255, 160, 110, 0)),
+                (at: 7, offset: (319.0, 240.0), quad: (70.0, 100.0), color: (255, 190, 140, 245)),
+                (at: 22, offset: (319.0, 205.0), quad: (80.0, 115.0), color: (255, 110, 70, 0)),
+            ],
+        ),
+    ],
+)

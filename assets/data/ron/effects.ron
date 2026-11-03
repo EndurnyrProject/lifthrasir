@@ -411,6 +411,13 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        42: ( // MC_MAMMONITE -- native coin-bag impact (EF_COIN, roBrowser).
+            visuals: [Str("maemor.str")],
+            sound: Some("effect/ef_coin2.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         45: ( // AC_CONCENTRATION (Improve Concentration)
             visuals: [Str("ac_concentration.str")],
             sound: Some("effect/ac_concentration.wav"),
@@ -768,6 +775,44 @@
         // no dedicated sound found in the GRF. Intentionally omitted: a
         // catalog miss here logs a harmless warn! and plays no visual, which is
         // correct for a skill that genuinely has none.
+        110: ( // BS_HAMMERFALL -- one ground cast, not a persistent skill unit.
+               // The native hammer lands before Aesir's delayed stun attempt.
+            visuals: [Str("crashearth.str")],
+            sound: Some("effect/black_hammerfall.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        111: ( // BS_ADRENALINE -- authored haste burst for hardcoded EF_HASTEUP.
+               // NOTE: only the main _b sound; add the _a intro when cast audio supports sequencing.
+            visuals: [Str("adrenaline_rush.strfx.ron")],
+            sound: Some("effect/black_adrenalinerush_b.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        112: ( // BS_WEAPONPERFECT -- native cast flash, not a duration aura.
+            visuals: [Str("weaponperfection.str")],
+            sound: Some("effect/black_weapon_perfection.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        113: ( // BS_OVERTHRUST -- authored empowerment flash; EF_OVERTHRUST sound.
+            visuals: [Str("overthrust.strfx.ron")],
+            sound: Some("effect/black_overthrust.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        114: ( // BS_MAXIMIZE -- native one-shot feedback for the toggle cast.
+               // NOTE: sword sound only; add the pre-cast circle when cast audio supports sequencing.
+            visuals: [Str("maximizepower.str")],
+            sound: Some("effect/black_maximize_power_sword.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         115: ( // HT_SKIDTRAP (Skid Trap) -- armed prop, then retail detonation.
             visuals: [Model("외부소품/트랩02")],
             sound: Some("effect/hunter_trap_on.wav"),
@@ -940,6 +985,21 @@
             visuals: [Shader("stone_fling")],
             sound: Some("effect/_stone.wav"),
             placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        153: ( // MC_CARTREVOLUTION -- native impact on each splash victim.
+               // NOTE: hit feedback only; add the caster burst when cast-start VFX are supported.
+            visuals: [Str("cartrevolution.str")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        155: ( // MC_LOUD -- native megaphone burst; no dedicated reference wav.
+            visuals: [Str("loud.str")],
+            sound: None,
+            placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
@@ -1360,6 +1420,14 @@
             color: (0.7, 0.8, 1.0, 1.0),
             repeating: false,
         ),
+        459: ( // BS_ADRENALINE2 -- native advanced-rush STR (roBrowserLegacy).
+               // Aesir currently rejects the missing empowerment prerequisite.
+            visuals: [Str("adrenaline.str")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         495: ( // KN_ONEHAND (One-Hand Quicken) -- no STR of its own; the classic
                // client reuses the Two-Hand Quicken flash and wav.
             visuals: [Str("twohand.str")],
@@ -1420,6 +1488,14 @@
             visuals: [Str("wink_charm.strfx.ron")],
             sound: None,
             placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1013: ( // BS_GREED -- reference is sound-only (ef_greed_sound).
+                // Inventory/ground-item events own the pickup feedback.
+            visuals: [],
+            sound: Some("effect/ef_entry.wav"),
+            placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
