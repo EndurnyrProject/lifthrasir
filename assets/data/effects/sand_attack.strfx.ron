@@ -1,0 +1,34 @@
+// Sand Attack (TF_SPRINKLESAND): retail sand grains scatter across the target.
+// A brief authored impact, independent of the server's Blind status roll.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/sand1.bmp"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (303.0, 249.0), quad: (25.0, 25.0), color: (210, 180, 120, 0)),
+                (at: 2, offset: (300.0, 239.0), quad: (65.0, 65.0), color: (210, 180, 120, 230)),
+                (at: 13, offset: (275.0, 254.0), quad: (110.0, 110.0), color: (180, 150, 100, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/sand2.bmp"],
+            blend: Add,
+            keys: [
+                (at: 1, offset: (331.0, 246.0), quad: (25.0, 25.0), color: (220, 195, 135, 0)),
+                (at: 3, offset: (337.0, 232.0), quad: (70.0, 70.0), color: (220, 195, 135, 230)),
+                (at: 15, offset: (363.0, 250.0), quad: (120.0, 120.0), color: (190, 160, 110, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/sand3.bmp"],
+            blend: Add,
+            keys: [
+                (at: 2, offset: (319.0, 242.0), quad: (25.0, 25.0), color: (225, 200, 145, 0)),
+                (at: 4, offset: (319.0, 223.0), quad: (65.0, 65.0), color: (225, 200, 145, 210)),
+                (at: 16, offset: (324.0, 248.0), quad: (115.0, 115.0), color: (190, 165, 115, 0)),
+            ],
+        ),
+    ],
+)

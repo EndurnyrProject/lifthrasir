@@ -2,8 +2,8 @@ use crate::core::GameState;
 use crate::domain::effects::{
     PendingAilments, PendingBodyStates, PendingEffectStates, PendingSpiritSpheres, PendingVirtues,
     ailment_visuals, body_state_visuals, clear_pending_ailments, efst_auras, on_ground_skill,
-    on_skill_damage, on_skill_effect, on_special_effect, option_visuals, spirit_sphere_visuals,
-    sync_curse_direction, virtue_visuals,
+    on_performance_skill, on_skill_damage, on_skill_effect, on_special_effect, option_visuals,
+    spirit_sphere_visuals, sync_curse_direction, virtue_visuals,
 };
 use crate::domain::system_sets::EntityLifecycleSystems;
 use bevy::prelude::*;
@@ -23,7 +23,8 @@ impl Plugin for EffectsPlugin {
             .add_systems(
                 Update,
                 (
-                    on_skill_effect
+                    on_skill_effect,
+                    on_performance_skill
                         .before(lifthrasir_runtime::audio::controlled_sfx::control_skill_sfx),
                     on_skill_damage,
                     on_ground_skill,

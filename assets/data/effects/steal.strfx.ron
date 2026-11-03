@@ -1,0 +1,35 @@
+// Steal (TF_STEAL): a short gold sparkle burst on the robbed target.
+// Reference: EF_STEAL uses particle7 and ef_steal.wav (roBrowser EffectTable).
+// Authored approximation of the hardcoded burst, not a looping status aura.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/pika02.bmp"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (300.0, 250.0), quad: (12.0, 12.0), color: (255, 230, 130, 0)),
+                (at: 3, offset: (288.0, 240.0), quad: (35.0, 35.0), color: (255, 230, 130, 255)),
+                (at: 14, offset: (270.0, 218.0), quad: (12.0, 12.0), color: (255, 215, 100, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pika02.bmp"],
+            blend: Add,
+            keys: [
+                (at: 2, offset: (336.0, 242.0), quad: (12.0, 12.0), color: (255, 240, 155, 0)),
+                (at: 5, offset: (346.0, 228.0), quad: (42.0, 42.0), color: (255, 240, 155, 255)),
+                (at: 16, offset: (363.0, 208.0), quad: (14.0, 14.0), color: (255, 220, 110, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pika02.bmp"],
+            blend: Add,
+            keys: [
+                (at: 4, offset: (319.0, 232.0), quad: (10.0, 10.0), color: (255, 240, 160, 0)),
+                (at: 7, offset: (319.0, 217.0), quad: (38.0, 38.0), color: (255, 240, 160, 255)),
+                (at: 20, offset: (319.0, 190.0), quad: (12.0, 12.0), color: (255, 225, 120, 0)),
+            ],
+        ),
+    ],
+)

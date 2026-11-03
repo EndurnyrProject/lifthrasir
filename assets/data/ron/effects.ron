@@ -1,4 +1,4 @@
-// Unified effect catalog. Five sections, four of them descriptor tables keyed
+// Unified effect catalog. Six sections, four of them descriptor tables keyed
 // by id namespaces (`skills` and `skill_units` share the skill id; the others
 // are DISTINCT) that overlap numerically but mean different things
 // (86 is the WZ_WATERBALL *skill* and the EFST_EXPLOSIONSPIRITS *status*; 89 is
@@ -22,6 +22,9 @@
 //                 packets (`on_special_effect`, fire-and-forget at the source
 //                 unit); see aesir `Aesir.ZoneServer.Mmo.EffectId`. `placement`
 //                 is ignored -- these always anchor at their own position.
+//   `skill_presentation` -- no-damage success/motion policy keyed by skill id,
+//                 independent of whether the skill has artwork. Defaults:
+//                 success_only: false, motion: Attack.
 //   `shader_fx`-- name-keyed procedural burst table the `Shader(key)` layers
 //                 resolve against.
 //
@@ -61,6 +64,11 @@
 //     logs to discover which ids real maps actually reference, then add them
 //     here.
 (
+    skill_presentation: {
+        50: (success_only: true), // TF_STEAL
+        53: (success_only: true), // TF_DETOXIFY
+        150: (success_only: true, motion: None), // TF_BACKSLIDING
+    },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
         // barrier shimmer, driven by StatusEffectChanged(on=true/false). Uses
@@ -426,6 +434,27 @@
              // the volley anchored on each victim hit.
             visuals: [Str("arrow_shower.strfx.ron")],
             sound: Some("arrowstorm.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        50: ( // TF_STEAL: one-shot success sparkles, also reused by Gank.
+            visuals: [Str("steal.strfx.ron")],
+            sound: Some("effect/ef_steal.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        52: ( // TF_POISON: native Envenom hit, not the persistent poison state.
+            visuals: [Str("thief_invenom.str")],
+            sound: Some("effect/thief_invenom.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        53: ( // TF_DETOXIFY: native cleansing burst on the recipient.
+            visuals: [Str("detoxication.str")],
+            sound: Some("effect/ef_detoxication.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -888,6 +917,28 @@
         131: ( // HT_SPRINGTRAP (Spring Trap) -- native target STR and dedicated retail wav.
             visuals: [Str("spring.str")],
             sound: Some("effect/hunter_springtrap.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        149: ( // TF_SPRINKLESAND: impact only, not a Blind status aura.
+            visuals: [Str("sand_attack.strfx.ron")],
+            // No dedicated reference sound established; do not borrow Sandman's.
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        150: ( // TF_BACKSLIDING: foot dust; KnockedBack owns the displacement.
+            visuals: [Str("back_slide.strfx.ron")],
+            sound: Some("effect/b_sideslide.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        152: ( // TF_THROWSTONE: one stone travels to the target, then chips scatter.
+            visuals: [Shader("stone_fling")],
+            sound: Some("effect/_stone.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -1840,6 +1891,20 @@
             )),
             garnish: Some((
                 tint: (1.2, 1.8, 3.6, 1.0),
+            )),
+        ),
+        "stone_fling": (
+            kind: 6,
+            primary: (1.0, 0.9, 0.75, 1.0),
+            secondary: (0.6, 0.5, 0.4, 1.0),
+            shape: (3.0, 8.0, 0.15, 0.0),
+            duration: 0.28,
+            scale: 4.0,
+            texture: Some("data/texture/effect/stone_part.bmp"),
+            travel: Some((
+                speed: 65.0,
+                scale: 1.5,
+                texture: Some("data/texture/effect/stone64.bmp"),
             )),
         ),
         "earth_spike": ( // WZ_EARTHSPIKE — stone shards erupting under the target.

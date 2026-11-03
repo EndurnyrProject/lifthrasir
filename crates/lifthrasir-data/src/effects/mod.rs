@@ -19,6 +19,23 @@ pub enum EffectPlacement {
     Ground,
 }
 
+/// Caster motion for a no-damage skill response, independent of its artwork.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SkillMotion {
+    #[default]
+    Attack,
+    None,
+}
+
+/// No-damage skill feedback policy. Omitted fields preserve ordinary attack motion
+/// and feedback on any result, even when the skill has no visual descriptor.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SkillPresentation {
+    pub success_only: bool,
+    pub motion: SkillMotion,
+}
+
 /// Where a ground skill's persistent visual anchors within its server footprint.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GroundAnchor {
@@ -234,6 +251,9 @@ pub struct ShaderFxEntry {
 pub struct EffectData {
     /// Skill-cast descriptors, keyed by rAthena skill id.
     pub skills: BTreeMap<u32, EffectDescriptor>,
+    /// No-damage skill feedback policy, keyed by skill id independently of artwork.
+    #[serde(default)]
+    pub skill_presentation: BTreeMap<u32, SkillPresentation>,
     /// The rAthena `e_special_effects` (`EF_*`) namespace, serving BOTH the RSW
     /// map `EFFECT` objects and aesir's `SpecialEffect` packets — they key on
     /// the same ids.

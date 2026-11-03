@@ -12,9 +12,10 @@
 //! missing entity or missing catalog entry with a `debug!`, never panicking and
 //! never inventing defaults.
 
+use super::performance::is_performance;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use lifthrasir_data::{EffectDescriptor, EffectPlacement, GroundAnchor};
+use lifthrasir_data::{EffectDescriptor, EffectPlacement, SkillMotion};
 use lifthrasir_runtime::effects::{descriptor_tint, load_effect};
 use moonshine_behavior::prelude::BehaviorMut;
 
@@ -27,7 +28,7 @@ use lifthrasir_assets::catalogs::{effect::EffectCatalog, shader_fx::ShaderFxCata
 #[cfg(test)]
 use lifthrasir_assets::effects::asset::LoadedEffectAsset;
 use lifthrasir_assets::loaders::RoAltitudeAsset;
-use lifthrasir_runtime::audio::events::{ControlSkillSfx, PlaySkillSfx};
+use lifthrasir_runtime::audio::events::PlaySkillSfx;
 use lifthrasir_runtime::effects::EffectAnchor;
 use lifthrasir_runtime::effects::events::PlayProceduralVfx;
 use lifthrasir_runtime::effects::playback::spawn_effect;
@@ -210,7 +211,6 @@ pub struct EffectSpawnCtx<'w, 's> {
     behaviors: Query<'w, 's, BehaviorMut<AnimationState>>,
     transforms: Query<'w, 's, &'static Transform>,
     sfx: MessageWriter<'w, PlaySkillSfx>,
-    controlled_sfx: MessageWriter<'w, ControlSkillSfx>,
 }
 
 /// `SkillEffectShown` — a no-damage skill effect: spawn anchored per placement,
@@ -223,10 +223,20 @@ pub fn on_skill_effect(
 ) {
     let shader_fx = shader_fx.as_deref();
     for event in events.read() {
+        let presentation = ctx
+            .catalog
+            .as_ref()
+            .map(|catalog| catalog.skill_presentation(event.skill_id))
+            .unwrap_or_default();
+        if presentation.success_only && event.result != 1 {
+            continue;
+        }
         let src = resolve_gid(&ctx.registry, event.src_id);
         let target = resolve_gid(&ctx.registry, event.target_id);
 
-        if let Some(src) = src {
+        if presentation.motion == SkillMotion::Attack
+            && let Some(src) = src
+        {
             start_attack_animation(
                 &mut ctx.commands,
                 &mut ctx.behaviors,
@@ -237,19 +247,8 @@ pub fn on_skill_effect(
             );
         }
 
-        // Adaptation has no cast artwork, but its successful server response
-        // must still end this caster's performance audio.
-        if event.skill_id == 304 {
-            if event.result == 1
-                && let Some(emitter) = src
-            {
-                ctx.controlled_sfx.write(ControlSkillSfx::Stop { emitter });
-            }
-            continue;
-        }
-
         let Some(descriptor) = ctx.catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
-            warn!("No effect catalog entry for skill {}", event.skill_id);
+            debug!("No effect catalog entry for skill {}", event.skill_id);
             continue;
         };
 
@@ -277,25 +276,7 @@ pub fn on_skill_effect(
             None,
         );
 
-        let performance = ctx
-            .catalog
-            .as_ref()
-            .and_then(|catalog| catalog.skill_unit(event.skill_id))
-            .is_some_and(|field| field.ground_anchor == GroundAnchor::Footprint);
-        if performance {
-            if event.result == 1
-                && let Some(emitter) = src
-            {
-                let request = match &descriptor.sound {
-                    Some(sound) => ControlSkillSfx::Play {
-                        emitter,
-                        sound: sound.clone(),
-                    },
-                    None => ControlSkillSfx::Stop { emitter },
-                };
-                ctx.controlled_sfx.write(request);
-            }
-        } else {
+        if !is_performance(ctx.catalog.as_deref(), event.skill_id) {
             play_procedural_sound(&mut ctx.sfx, shader_fx, descriptor, emitter);
         }
         emit_procedural_vfx(
@@ -548,10 +529,12 @@ pub fn on_special_effect(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::effects::on_performance_skill;
     use crate::domain::entities::components::NetworkEntity;
     use crate::domain::entities::types::ObjectType;
     use bevy::time::TimeUpdateStrategy;
     use lifthrasir_assets::catalogs::effect::EffectDataAsset;
+    use lifthrasir_runtime::audio::events::ControlSkillSfx;
     use lifthrasir_runtime::effects::playback::despawn_finished_effects;
     use lifthrasir_runtime::effects::{ActiveEffect, EffectLifetime};
     use std::time::Duration;
@@ -627,7 +610,7 @@ mod tests {
     #[test]
     fn performance_sound_is_not_fire_and_forget() {
         let mut app = test_app();
-        app.add_systems(Update, on_skill_effect);
+        app.add_systems(Update, (on_skill_effect, on_performance_skill));
         let caster = spawn_unit(&mut app, 100);
         app.world_mut().write_message(SkillEffectShown {
             skill_id: 322,
@@ -656,7 +639,7 @@ mod tests {
     #[test]
     fn only_successful_adaptation_stops_its_casters_sound_without_a_catalog() {
         let mut app = test_app();
-        app.add_systems(Update, on_skill_effect);
+        app.add_systems(Update, (on_skill_effect, on_performance_skill));
         spawn_unit(&mut app, 100);
         let other_caster = spawn_unit(&mut app, 200);
         app.world_mut().remove_resource::<EffectCatalog>();

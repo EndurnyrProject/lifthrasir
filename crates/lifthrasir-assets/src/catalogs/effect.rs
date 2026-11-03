@@ -4,7 +4,7 @@ use bevy::prelude::*;
 #[cfg(test)]
 use lifthrasir_data::Visual;
 use lifthrasir_data::effects::{
-    EffectData, EffectDescriptor, ResolvedEffectCatalog, resolve_effect_catalog,
+    EffectData, EffectDescriptor, ResolvedEffectCatalog, SkillPresentation, resolve_effect_catalog,
 };
 use serde::Deserialize;
 
@@ -25,6 +25,10 @@ impl EffectCatalog {
 
     pub fn skill(&self, skill_id: u32) -> Option<&EffectDescriptor> {
         self.0.skill(skill_id)
+    }
+
+    pub fn skill_presentation(&self, skill_id: u32) -> SkillPresentation {
+        self.0.skill_presentation(skill_id)
     }
 
     pub fn skill_unit(&self, skill_id: u32) -> Option<&EffectDescriptor> {

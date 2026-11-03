@@ -1,6 +1,6 @@
 //! Pure effect recipe composition and descriptor validation.
 
-use super::{EffectData, EffectDescriptor, ShaderFxEntry, Visual};
+use super::{EffectData, EffectDescriptor, ShaderFxEntry, SkillPresentation, Visual};
 use std::collections::{BTreeMap, HashMap};
 use thiserror::Error;
 
@@ -29,6 +29,7 @@ pub fn resolve_effect_catalog(
 #[derive(Debug)]
 pub struct ResolvedEffectCatalog {
     skills: HashMap<u32, EffectDescriptor>,
+    skill_presentation: HashMap<u32, SkillPresentation>,
     skill_units: HashMap<u32, EffectDescriptor>,
     special: BTreeMap<u32, EffectDescriptor>,
     efsts: HashMap<u32, EffectDescriptor>,
@@ -72,6 +73,11 @@ impl ResolvedEffectCatalog {
 
         Ok(Self {
             skills: skills.into_iter().collect(),
+            skill_presentation: data
+                .skill_presentation
+                .iter()
+                .map(|(&id, &policy)| (id, policy))
+                .collect(),
             skill_units: skill_units.into_iter().collect(),
             special,
             efsts: data.efsts.clone().into_iter().collect(),
@@ -80,6 +86,14 @@ impl ResolvedEffectCatalog {
 
     pub fn skill(&self, skill_id: u32) -> Option<&EffectDescriptor> {
         self.skills.get(&skill_id)
+    }
+
+    /// Feedback policy remains available for a skill with no visual descriptor.
+    pub fn skill_presentation(&self, skill_id: u32) -> SkillPresentation {
+        self.skill_presentation
+            .get(&skill_id)
+            .copied()
+            .unwrap_or_default()
     }
 
     /// The persistent visual of a skill-unit group: its `skill_units` entry,
