@@ -89,9 +89,13 @@
         378: (success_only: true), // ASC_EDP
         380: (success_only: true), // SN_SIGHT
         383: (success_only: true), // SN_WINDWALK
+        389: (success_only: true, motion: None), // ST_CHASEWALK: toggle, visibility is server-owned.
+        390: (success_only: true, motion: None), // ST_REJECTSWORD: cast and counter use the same event.
         401: (success_only: true), // CH_SOULCOLLECT
         403: (success_only: true), // PF_MEMORIZE
         405: (success_only: true), // PF_SPIDERWEB
+        475: (success_only: true), // ST_PRESERVE
+        476: (success_only: true), // ST_FULLSTRIP
         482: (success_only: true), // PF_DOUBLECASTING
     },
     efsts: {
@@ -1757,6 +1761,20 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        389: ( // ST_CHASEWALK -- cloak option owns visibility, including toggle-off.
+            visuals: [],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        390: ( // ST_REJECTSWORD -- native EF_REJECTSWORD on cast and counter.
+            visuals: [Str("sword.str")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         397: ( // LK_SPIRALPIERCE -- one authored five-pulse target impact.
             visuals: [Str("lord_knight_spiral_pierce.strfx.ron")],
             sound: Some("attack_spear.wav"),
@@ -1823,6 +1841,20 @@
         406: ( // ASC_METEORASSAULT -- approximate per-victim strike, not a caster burst.
             visuals: [Str("sonicblow.str")],
             sound: Some("effect/메테오 어썰트.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        475: ( // ST_PRESERVE -- authored seal, not a persistent aura.
+            visuals: [Str("stalker_preserve.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        476: ( // ST_FULLSTRIP -- approximate with all four Divest effects.
+            visuals: [Str("strip_weapon.str"), Str("strip_shield.str"), Str("strip_armor.str"), Str("strip_helm.str")],
+            sound: Some("effect/t_벽튕김.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,

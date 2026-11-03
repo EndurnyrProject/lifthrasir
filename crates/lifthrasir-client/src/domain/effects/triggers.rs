@@ -15,8 +15,8 @@
 use super::performance::is_performance;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use lifthrasir_data::{EffectDescriptor, EffectPlacement, SkillMotion};
-use lifthrasir_runtime::effects::{descriptor_tint, load_effect};
+use lifthrasir_data::{EffectDescriptor, EffectPlacement, SkillMotion, Visual};
+use lifthrasir_runtime::effects::{descriptor_tint, load_effect, load_str_effect};
 use moonshine_behavior::prelude::BehaviorMut;
 
 use crate::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
@@ -171,17 +171,22 @@ fn spawn_str_or_fallback(
     fallback: Entity,
     lifetime: Option<Timer>,
 ) -> Entity {
-    match load_effect(asset_server, descriptor) {
-        Some(effect) => spawn_effect(
+    let mut emitter = None;
+    for visual in &descriptor.visuals {
+        let Visual::Str(name) = visual else {
+            continue;
+        };
+        let effect = spawn_effect(
             commands,
-            effect,
+            load_str_effect(asset_server, name),
             anchor,
             descriptor.repeating,
             descriptor_tint(descriptor),
-            lifetime,
-        ),
-        None => fallback,
+            lifetime.clone(),
+        );
+        emitter.get_or_insert(effect);
     }
+    emitter.unwrap_or(fallback)
 }
 
 /// Play the descriptor's sound (if any) anchored to `emitter`.

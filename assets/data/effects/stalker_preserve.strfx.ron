@@ -1,0 +1,24 @@
+// Preserve: an approximate one-shot seal around the copied skill.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 275.0), quad: (130.0, 55.0), color: (130, 160, 255, 0), angle: 0.0),
+                (at: 8, offset: (319.0, 260.0), quad: (105.0, 45.0), color: (170, 200, 255, 200), angle: 256.0),
+                (at: 24, offset: (319.0, 250.0), quad: (75.0, 32.0), color: (130, 160, 255, 0), angle: 512.0),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/spell_04.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (319.0, 270.0), quad: (28.0, 28.0), color: (180, 200, 255, 0)),
+                (at: 8, offset: (319.0, 245.0), quad: (60.0, 60.0), color: (200, 220, 255, 220)),
+                (at: 25, offset: (319.0, 220.0), quad: (45.0, 45.0), color: (180, 200, 255, 0)),
+            ],
+        ),
+    ],
+)
