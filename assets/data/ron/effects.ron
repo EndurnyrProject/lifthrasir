@@ -87,6 +87,7 @@
         378: (success_only: true), // ASC_EDP
         380: (success_only: true), // SN_SIGHT
         383: (success_only: true), // SN_WINDWALK
+        401: (success_only: true), // CH_SOULCOLLECT
     },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
@@ -1648,6 +1649,28 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Champion (CH_*) -------------------------------------------------
+        370: ( // CH_PALMSTRIKE -- approximate delayed impact and borrowed sound.
+            visuals: [Str("ki_impact.strfx.ron")],
+            sound: Some("effect/mon_침투경.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        371: ( // CH_TIGERFIST -- approximate strike with retail-named sound.
+            visuals: [Str("ki_impact.strfx.ron")],
+            sound: Some("effect/복호격.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        372: ( // CH_CHAINCRUSH -- approximate flurry; hit count varies by level.
+            visuals: [Str("ki_strike.strfx.ron")],
+            sound: Some("effect/연주붕격.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         // --- Assassin Cross (ASC_*) ------------------------------------------
         378: ( // ASC_EDP -- approximate cast burst, not a persistent weapon aura.
             visuals: [Str("enchant_poison.strfx.ron")],
@@ -1732,6 +1755,13 @@
             visuals: [Shader("soul_strike")],
             sound: Some("effect/ef_napalmbeat.wav"),
             placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        401: ( // CH_SOULCOLLECT -- summon flourish; sphere state owns the orbit.
+            visuals: [Str("call_spirits.strfx.ron")],
+            sound: None,
+            placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
