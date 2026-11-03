@@ -81,6 +81,7 @@
         358: (motion: None), // LK_TENSIONRELAX: the server seats the caster.
         361: (success_only: true), // HP_ASSUMPTIO
         362: (motion: None), // HP_BASILICA: placement owns cast motion.
+        366: (success_only: true), // HW_MAGICPOWER
     },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
@@ -1604,6 +1605,21 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- High Wizard (HW_*) ---------------------------------------------
+        365: ( // HW_MAGICCRASHER -- approximate magic impact with dedicated sound.
+            visuals: [Shader("soul_strike")],
+            sound: Some("effect/매직 크래쉬.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        366: ( // HW_MAGICPOWER -- approximate self-buff flash, not a status aura.
+            visuals: [Str("adrenaline_rush.strfx.ron")],
+            sound: Some("effect/마법력 증폭.wav"),
+            placement: Caster,
+            color: (0.7, 0.65, 1.0, 1.0),
+            repeating: false,
+        ),
         397: ( // LK_SPIRALPIERCE -- one authored five-pulse target impact.
             visuals: [Str("lord_knight_spiral_pierce.strfx.ron")],
             sound: Some("attack_spear.wav"),
@@ -1622,6 +1638,27 @@
             visuals: [Str("spearstab.str")],
             sound: Some("effect/비트 조인트.wav"),
             placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        400: ( // HW_NAPALMVULCAN -- approximate ghost hit for each victim.
+            visuals: [Shader("soul_strike")],
+            sound: Some("effect/ef_napalmbeat.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        483: ( // HW_GANBANTEIN -- approximate the one-shot area-clearing attempt.
+            visuals: [Str("heavens_drive.strfx.ron")],
+            sound: Some("effect/wizard_earthspike.wav"), // Approximation.
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        484: ( // HW_GRAVITATION -- persistent field belongs to skill_units.
+            visuals: [],
+            sound: Some("effect/hyper_novice/hn_ground_gravitation.wav"), // Approximation.
+            placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
@@ -1852,6 +1889,14 @@
         ),
     },
     skill_units: {
+        484: ( // HW_GRAVITATION -- approximate vortex per surviving field cell.
+            ground_anchor: Footprint,
+            visuals: [Str("high_wizard_gravitation.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         362: ( // HP_BASILICA -- approximate holy field; server owns group lifetime.
             ground_anchor: Group,
             visuals: [Str("magnus.str")],

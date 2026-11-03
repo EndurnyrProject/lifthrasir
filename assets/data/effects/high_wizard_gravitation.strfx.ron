@@ -1,0 +1,16 @@
+// Gravitation Field: approximate one pulsing vortex per server footprint cell.
+// Skill-unit cell parenting owns the lifetime and partial removal.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/ring_white.tga"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 285.0), quad: (28.0, 14.0), color: (155, 110, 220, 110), angle: 0.0),
+                (at: 30, offset: (319.0, 279.0), quad: (45.0, 22.0), color: (180, 135, 255, 170), angle: 512.0),
+                (at: 60, offset: (319.0, 285.0), quad: (28.0, 14.0), color: (155, 110, 220, 110), angle: 1024.0),
+            ],
+        ),
+    ],
+)
