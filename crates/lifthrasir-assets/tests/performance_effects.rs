@@ -10,10 +10,15 @@ fn performance_artwork_renders_one_centered_motif_per_cell() {
         ron::from_str(include_str!("../../../assets/data/ron/effects.ron")).unwrap();
     let options =
         ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
-    for descriptor in catalog.0.skill_units.values() {
-        if descriptor.ground_anchor != GroundAnchor::Footprint {
-            continue;
-        }
+    for id in [
+        306, 307, 308, 309, 310, 311, 312, 313, 317, 319, 320, 321, 322, 325, 327, 328, 329, 330,
+    ] {
+        let descriptor = &catalog.0.skill_units[&id];
+        assert_eq!(
+            descriptor.ground_anchor,
+            GroundAnchor::Footprint,
+            "skill {id}"
+        );
         let name = descriptor.str_name().expect("performance artwork");
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../assets/data/effects")
